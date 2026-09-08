@@ -61,14 +61,29 @@ export default function ChatSidebar() {
       .catch(() => setLoading(false))
   }, [session])
 
-  // Load messages + poll — only while the panel is open and the tab is
-  // visible. Polls are incremental (?after=) so idle polls are near-empty.
+  // Load messages: realtime via Pusher when configured, otherwise poll.
+  // Polls are incremental (?after=) so idle polls are near-empty.
   const lastTsRef = useRef<string | null>(null)
   useEffect(() => {
     if (!session || !room || !isOpen) return
 
     let cancelled = false
     let timer: ReturnType<typeof setTimeout> | null = null
+    let cleanupPusher: (() => void) | null = null
+
+    const mergeFresh = (fresh: Message[]) => {
+      if (fresh.length === 0) return false
+      lastTsRef.current = fresh[fresh.length - 1].createdAt
+      let changed = false
+      setMessages(prev => {
+        const seen = new Set(prev.map(m => m.id))
+        const added = fresh.filter(m => !seen.has(m.id))
+        if (!added.length) return prev
+        changed = true
+        return [...prev, ...added].slice(-100)
+      })
+      return changed
+    }
 
     const load = async () => {
       if (cancelled || document.hidden) return
@@ -79,33 +94,45 @@ export default function ChatSidebar() {
         const res = await fetch(url)
         if (!res.ok) return
         const data = await res.json()
-        const fresh: Message[] = data.messages || []
-        if (fresh.length === 0) return
-        lastTsRef.current = fresh[fresh.length - 1].createdAt
-        setMessages(prev => {
-          // On first load replace; afterwards append only unseen ids
-          const seen = new Set(prev.map(m => m.id))
-          const added = fresh.filter(m => !seen.has(m.id))
-          return added.length ? [...prev, ...added].slice(-100) : prev
-        })
-        scrollToBottom()
+        if (mergeFresh(data.messages || [])) scrollToBottom()
       } catch { /* ignore transient errors */ }
     }
 
+    const pusherKey = process.env.NEXT_PUBLIC_PUSHER_KEY
+    const pusherCluster = process.env.NEXT_PUBLIC_PUSHER_CLUSTER
+    const realtime = !!(pusherKey && pusherCluster)
+
     const tick = async () => {
       await load()
-      // 3s while open; skip rounds while the tab is hidden
-      if (!cancelled) timer = setTimeout(tick, 3000)
+      if (cancelled) return
+      // With realtime push, a slow 30s poll is just a missed-message safety net
+      timer = setTimeout(tick, realtime ? 30000 : 3000)
     }
+
+    const subscribe = async () => {
+      if (!realtime) return
+      try {
+        const { default: Pusher } = await import("pusher-js")
+        const p = new Pusher(pusherKey!, { cluster: pusherCluster! })
+        const channel = p.subscribe(`chat-${room.id}`)
+        channel.bind("new-message", (m: Message) => {
+          if (!cancelled && mergeFresh([m])) scrollToBottom()
+        })
+        cleanupPusher = () => { p.unsubscribe(`chat-${room.id}`); p.disconnect() }
+      } catch { /* stay on polling */ }
+    }
+
     const onVisible = () => { if (!document.hidden) load() }
     document.addEventListener("visibilitychange", onVisible)
 
     lastTsRef.current = null
+    subscribe()
     tick()
 
     return () => {
       cancelled = true
       if (timer) clearTimeout(timer)
+      cleanupPusher?.()
       document.removeEventListener("visibilitychange", onVisible)
     }
   }, [session, room, isOpen])

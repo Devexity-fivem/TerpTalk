@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma"
 import { unauthorized, publicUserSelect, LIMITS, getClientIp, logSecurityEvent, isBanned, forbidden } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
 import { notifyMentions } from "@/lib/mentions"
+import { getPusher } from "@/lib/pusher"
 
 export async function GET(request: Request) {
   try {
@@ -129,6 +130,9 @@ export async function POST(request: Request) {
       "/",
       "community chat"
     ).catch(() => {})
+
+    // Realtime fan-out when Pusher is configured (clients fall back to polling)
+    getPusher()?.trigger(`chat-${roomId}`, "new-message", message).catch(() => {})
 
     return NextResponse.json({ message }, { status: 201 })
   } catch (error) {
