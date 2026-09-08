@@ -13,9 +13,7 @@ interface PublicProfile {
   bio: string | null
   location: string | null
   website: string | null
-  avatarEmoji: string | null
   avatarUrl: string | null
-  bannerColor: string | null
   growExperience: string | null
   favoriteStrain: string | null
   growSpace: string | null
@@ -84,25 +82,16 @@ export default function PublicProfilePage() {
   return (
     <div className="min-h-screen bg-background">
       <div className="max-w-4xl mx-auto px-4 py-8">
-        <div className="bg-card rounded-lg border border-border overflow-hidden mb-6">
-          <div
-            className="h-24 w-full"
-            style={{ background: profile.bannerColor || "#16a34a" }}
-          />
-          <div className="p-6 -mt-12">
-            <div className="flex items-start gap-6 flex-wrap">
-              <div className="w-24 h-24 bg-card border-4 border-card rounded-full flex items-center justify-center shrink-0 overflow-hidden shadow-md">
-                {profile.avatarUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={profile.avatarUrl} alt="avatar" className="w-full h-full object-cover" />
-                ) : profile.avatarEmoji ? (
-                  <span className="text-5xl">{profile.avatarEmoji}</span>
-                ) : (
-                  <div className="w-full h-full bg-primary/10 flex items-center justify-center">
-                    <User className="w-12 h-12 text-primary" />
-                  </div>
-                )}
-              </div>
+        <div className="bg-card rounded-lg border border-border p-6 mb-6">
+          <div className="flex items-start gap-6 flex-wrap">
+            <div className="w-24 h-24 bg-primary/10 rounded-full flex items-center justify-center shrink-0 overflow-hidden">
+              {profile.avatarUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={profile.avatarUrl} alt="avatar" className="w-full h-full object-cover" />
+              ) : (
+                <User className="w-12 h-12 text-primary" />
+              )}
+            </div>
             <div className="flex-1 min-w-0">
               <div className="flex items-start justify-between gap-4 flex-wrap">
                 <div>
@@ -152,7 +141,6 @@ export default function PublicProfilePage() {
                 </div>
               </div>
             </div>
-          </div>
           </div>
         </div>
 

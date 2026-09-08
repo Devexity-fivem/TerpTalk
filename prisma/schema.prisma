@@ -59,9 +59,7 @@ model Profile {
   bio            String?
   location       String?
   website        String?
-  avatarEmoji    String?
   avatarUrl      String?
-  bannerColor    String?
   growExperience String?
   favoriteStrain String?
   joinDate     DateTime @default(now())

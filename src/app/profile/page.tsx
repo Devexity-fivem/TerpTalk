@@ -21,9 +21,7 @@ interface ProfileData {
     bio: string | null
     location: string | null
     website: string | null
-    avatarEmoji: string | null
     avatarUrl: string | null
-    bannerColor: string | null
     growExperience: string | null
     favoriteStrain: string | null
     growSpace: string | null
@@ -55,11 +53,28 @@ interface ProfileData {
   }>
 }
 
-const AVATAR_EMOJIS = ["🌱","🌿","🍀","🌲","🌳","🌵","🌻","🌷","🍄","🌾","🍁","🍃","🔥","💧","☀️","🌙","⭐","🌈","⚡","🦋","🐛","🐢","🦎","🍇","🍋","🍓","🥭","🍍","🥑","🌶️"]
-
-const BANNER_COLORS = ["#22c55e","#16a34a","#059669","#0d9488","#0891b2","#3b82f6","#8b5cf6","#d946ef","#ec4899","#f43f5e","#f97316","#eab308","#84cc16","#64748b"]
-
 const EXPERIENCE_LEVELS = ["Just starting out", "First grow", "A few grows in", "Experienced", "Veteran grower", "Commercial"]
+
+// Resize an image file to a 128x128 data URI for avatar upload
+function resizeImage(file: File, size = 128): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const img = new Image()
+    img.onload = () => {
+      const canvas = document.createElement("canvas")
+      const min = Math.min(img.width, img.height)
+      const sx = (img.width - min) / 2
+      const sy = (img.height - min) / 2
+      canvas.width = size
+      canvas.height = size
+      const ctx = canvas.getContext("2d")
+      if (!ctx) return reject(new Error("no canvas"))
+      ctx.drawImage(img, sx, sy, min, min, 0, 0, size, size)
+      resolve(canvas.toDataURL("image/webp", 0.85))
+    }
+    img.onerror = reject
+    img.src = URL.createObjectURL(file)
+  })
+}
 
 export default function ProfilePage() {
   const { data: session, status } = useSession()
@@ -72,9 +87,7 @@ export default function ProfilePage() {
     bio: "",
     location: "",
     website: "",
-    avatarEmoji: "",
     avatarUrl: "",
-    bannerColor: "",
     growExperience: "",
     favoriteStrain: "",
     growSpace: "",
@@ -121,25 +134,16 @@ export default function ProfilePage() {
     <div className="min-h-screen bg-background">
       <div className="max-w-4xl mx-auto px-4 py-8">
         {/* Profile Header */}
-        <div className="bg-card rounded-lg border border-border overflow-hidden mb-6">
-          <div
-            className="h-24 w-full"
-            style={{ background: profileData.profile?.bannerColor || "#16a34a" }}
-          />
-          <div className="p-6 -mt-12">
-            <div className="flex items-start gap-6">
-              <div className="w-24 h-24 bg-card border-4 border-card rounded-full flex items-center justify-center shrink-0 overflow-hidden shadow-md">
-                {profileData.profile?.avatarUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={profileData.profile.avatarUrl} alt="avatar" className="w-full h-full object-cover" />
-                ) : profileData.profile?.avatarEmoji ? (
-                  <span className="text-5xl">{profileData.profile.avatarEmoji}</span>
-                ) : (
-                  <div className="w-full h-full bg-primary/10 flex items-center justify-center">
-                    <User className="w-12 h-12 text-primary" />
-                  </div>
-                )}
-              </div>
+        <div className="bg-card rounded-lg border border-border p-6 mb-6">
+          <div className="flex items-start gap-6">
+            <div className="w-24 h-24 bg-primary/10 rounded-full flex items-center justify-center shrink-0 overflow-hidden">
+              {profileData.profile?.avatarUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={profileData.profile.avatarUrl} alt="avatar" className="w-full h-full object-cover" />
+              ) : (
+                <User className="w-12 h-12 text-primary" />
+              )}
+            </div>
               <div className="flex-1">
                 <div className="flex items-start justify-between gap-4 flex-wrap">
                   <div>
@@ -175,9 +179,7 @@ export default function ProfilePage() {
                         bio: p?.bio || "",
                         location: p?.location || "",
                         website: p?.website || "",
-                        avatarEmoji: p?.avatarEmoji || "",
                         avatarUrl: p?.avatarUrl || "",
-                        bannerColor: p?.bannerColor || "",
                         growExperience: p?.growExperience || "",
                         favoriteStrain: p?.favoriteStrain || "",
                         growSpace: p?.growSpace || "",
@@ -213,7 +215,6 @@ export default function ProfilePage() {
                 </div>
               </div>
             </div>
-          </div>
         </div>
 
         {/* Edit Profile Modal */}
@@ -223,50 +224,44 @@ export default function ProfilePage() {
               <h2 className="text-lg font-semibold mb-4">Edit Profile</h2>
               <div className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium mb-1">Avatar Emoji</label>
-                  <div className="flex flex-wrap gap-1">
-                    {AVATAR_EMOJIS.map((e) => (
-                      <button
-                        key={e}
-                        type="button"
-                        onClick={() => setEditForm({ ...editForm, avatarEmoji: e, avatarUrl: "" })}
-                        className={`text-xl p-1.5 rounded-lg transition-colors ${editForm.avatarEmoji === e ? "bg-primary/20 ring-2 ring-primary" : "hover:bg-secondary"}`}
-                      >
-                        {e}
-                      </button>
-                    ))}
-                    <button
-                      type="button"
-                      onClick={() => setEditForm({ ...editForm, avatarEmoji: "" })}
-                      className="px-2 text-xs text-muted-foreground hover:text-foreground"
-                    >
-                      clear
-                    </button>
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-1">Or Avatar Image URL</label>
-                  <input
-                    type="url"
-                    value={editForm.avatarUrl}
-                    onChange={(e) => setEditForm({ ...editForm, avatarUrl: e.target.value, avatarEmoji: "" })}
-                    placeholder="https://example.com/avatar.png"
-                    className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-1">Banner Color</label>
-                  <div className="flex flex-wrap gap-2">
-                    {BANNER_COLORS.map((c) => (
-                      <button
-                        key={c}
-                        type="button"
-                        onClick={() => setEditForm({ ...editForm, bannerColor: c })}
-                        className={`w-8 h-8 rounded-full transition-transform ${editForm.bannerColor === c ? "ring-2 ring-offset-2 ring-offset-card ring-foreground scale-110" : ""}`}
-                        style={{ background: c }}
-                        aria-label={c}
+                  <label className="block text-sm font-medium mb-1">Profile Photo</label>
+                  <div className="flex items-center gap-4">
+                    <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center overflow-hidden shrink-0">
+                      {editForm.avatarUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={editForm.avatarUrl} alt="preview" className="w-full h-full object-cover" />
+                      ) : (
+                        <User className="w-8 h-8 text-primary" />
+                      )}
+                    </div>
+                    <div className="space-y-2">
+                      <input
+                        type="file"
+                        accept="image/png,image/jpeg,image/webp,image/gif"
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0]
+                          if (!file) return
+                          if (file.size > 5 * 1024 * 1024) { alert("Image must be under 5MB"); return }
+                          try {
+                            const dataUri = await resizeImage(file)
+                            setEditForm({ ...editForm, avatarUrl: dataUri })
+                          } catch {
+                            alert("Could not process that image")
+                          }
+                        }}
+                        className="text-sm text-muted-foreground file:mr-3 file:px-3 file:py-1.5 file:rounded-lg file:border-0 file:bg-primary file:text-primary-foreground file:text-xs file:font-medium hover:file:bg-primary/90"
                       />
-                    ))}
+                      <p className="text-xs text-muted-foreground">JPG, PNG, WebP or GIF — cropped to a square, max 5MB</p>
+                      {editForm.avatarUrl && (
+                        <button
+                          type="button"
+                          onClick={() => setEditForm({ ...editForm, avatarUrl: "" })}
+                          className="text-xs text-destructive hover:underline"
+                        >
+                          Remove photo
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
                 <div>

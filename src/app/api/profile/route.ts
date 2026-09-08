@@ -114,33 +114,23 @@ export async function PATCH(request: Request) {
       bio,
       location,
       website,
-      avatarEmoji,
       avatarUrl,
-      bannerColor,
       growExperience,
       favoriteStrain,
       growSpace,
     } = body
 
-    // Validate avatar URL — must be https image link or empty
+    // Validate avatar — https URL, or data URI from client-side image upload (max ~200KB encoded)
     if (avatarUrl !== undefined && avatarUrl !== null && avatarUrl !== "") {
+      const isDataUri = /^data:image\/(png|jpe?g|webp|gif);base64,/.test(avatarUrl)
+      const isHttps = /^https:\/\/.+/i.test(avatarUrl)
       if (
         typeof avatarUrl !== "string" ||
-        avatarUrl.length > 500 ||
-        !/^https:\/\/.+/i.test(avatarUrl)
+        avatarUrl.length > 300_000 ||
+        (!isDataUri && !isHttps)
       ) {
         return NextResponse.json(
-          { error: "Avatar must be a valid https:// image URL" },
-          { status: 400 }
-        )
-      }
-    }
-
-    // Validate banner color — hex color or empty
-    if (bannerColor !== undefined && bannerColor !== null && bannerColor !== "") {
-      if (typeof bannerColor !== "string" || !/^#[0-9a-fA-F]{6}$/.test(bannerColor)) {
-        return NextResponse.json(
-          { error: "Banner color must be a hex color like #22c55e" },
+          { error: "Avatar must be an image upload or a valid https:// image URL" },
           { status: 400 }
         )
       }
@@ -155,9 +145,7 @@ export async function PATCH(request: Request) {
         bio: clean(bio, 500),
         location: clean(location, 100),
         website: clean(website, 200),
-        avatarEmoji: avatarEmoji ? String(avatarEmoji).slice(0, 8) : null,
-        avatarUrl: avatarUrl ? String(avatarUrl).slice(0, 500) : null,
-        bannerColor: bannerColor ? String(bannerColor) : null,
+        avatarUrl: avatarUrl ? String(avatarUrl).slice(0, 300_000) : null,
         growExperience: clean(growExperience, 50),
         favoriteStrain: clean(favoriteStrain, 100),
         growSpace: clean(growSpace, 100),
