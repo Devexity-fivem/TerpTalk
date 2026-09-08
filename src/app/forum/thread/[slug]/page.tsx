@@ -6,6 +6,7 @@ import Link from "next/link"
 import ReplyForm from "@/components/reply-form"
 import PostActions from "@/components/post-actions"
 import RoleBadge from "@/components/role-badge"
+import ThreadModActions from "@/components/thread-mod-actions"
 
 async function getThreadData(slug: string) {
   const thread = await prisma.thread.findUnique({
@@ -63,6 +64,7 @@ export default async function ThreadPage({ params }: { params: Promise<{ slug: s
             {thread.locked && (
               <span className="text-xs text-muted-foreground px-2 py-1 bg-secondary rounded">Locked</span>
             )}
+            <ThreadModActions threadId={thread.id} authorId={thread.authorId} pinned={thread.pinned} locked={thread.locked} />
           </div>
           <h1 className="text-3xl font-bold mb-2 break-words">{thread.title}</h1>
           <div className="flex items-center gap-4 text-sm text-muted-foreground flex-wrap">

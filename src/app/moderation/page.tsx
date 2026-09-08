@@ -3,8 +3,24 @@
 import { useEffect, useState } from "react"
 import { useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
-import { Shield, Flag, Loader2, CheckCircle, XCircle, Trash2, Ban } from "lucide-react"
+import { Shield, Flag, Loader2, CheckCircle, XCircle, Trash2, Ban, AlertTriangle, Search, UserCheck, ScrollText, ListChecks } from "lucide-react"
 import Link from "next/link"
+
+interface LookupUser {
+  id: string
+  username: string
+  role: string
+  banned: boolean
+  bannedReason: string | null
+  joined: string
+  lastSeen: string | null
+  reputation: number
+  stats: { posts: number; threadCreator: number; chatMessages: number }
+  openReports: number
+}
+interface LookupHistory {
+  id: string; type: string; reason: string; moderator: string; createdAt: string
+}
 
 interface ReportTarget {
   id?: string
@@ -46,6 +62,11 @@ export default function ModerationPage() {
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState("")
+  const [tab, setTab] = useState<"queue" | "lookup" | "log">("queue")
+  const [lookupName, setLookupName] = useState("")
+  const [lookupUser, setLookupUser] = useState<LookupUser | null>(null)
+  const [lookupHistory, setLookupHistory] = useState<LookupHistory[]>([])
+  const [lookupLoading, setLookupLoading] = useState(false)
   const role = (session?.user as { role?: string })?.role
   const isMod = role === "MODERATOR" || role === "ADMINISTRATOR"
   const isAdminUser = role === "ADMINISTRATOR"
@@ -139,22 +160,157 @@ export default function ModerationPage() {
     } finally { setBusy(null) }
   }
 
+  const lookup = async () => {
+    if (!lookupName.trim()) return
+    setLookupLoading(true)
+    setError("")
+    setLookupUser(null)
+    try {
+      const res = await fetch(`/api/moderation/user?username=${encodeURIComponent(lookupName.trim())}`)
+      const d = await res.json()
+      if (!res.ok) setError(d.error || "Not found")
+      else { setLookupUser(d.user); setLookupHistory(d.history || []) }
+    } finally { setLookupLoading(false) }
+  }
+
+  // Warn / ban / unban directly on a user id (from lookup or report)
+  const actOnUser = async (userId: string, actionType: string, reasonDefault: string) => {
+    const reason = prompt(reasonDefault)?.trim()
+    if (!reason) return
+    setBusy(userId)
+    setError("")
+    try {
+      const res = await fetch("/api/moderation/actions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ actionType, targetUserId: userId, reason }),
+      })
+      if (res.ok) { if (lookupUser) lookup() }
+      else { const d = await res.json(); setError(d.error || "Action failed") }
+    } finally { setBusy(null) }
+  }
+
   const pending = reports.filter((r) => r.status === "PENDING" || r.status === "REVIEWING")
   const resolved = reports.filter((r) => r.status === "RESOLVED" || r.status === "DISMISSED")
 
   return (
     <div className="min-h-screen bg-background">
       <div className="max-w-5xl mx-auto px-4 py-8">
-        <div className="flex items-center gap-3 mb-8">
+        <div className="flex items-center gap-3 mb-6">
           <Shield className="w-8 h-8 text-primary" />
           <div>
-            <h1 className="text-2xl font-bold">Moderation Queue</h1>
+            <h1 className="text-2xl font-bold">Moderation</h1>
             <p className="text-muted-foreground text-sm">{pending.length} open report{pending.length !== 1 ? "s" : ""}</p>
           </div>
         </div>
 
+        {/* Tabs */}
+        <div className="flex gap-2 mb-6">
+          {([
+            { id: "queue", label: "Report Queue", icon: ListChecks },
+            { id: "lookup", label: "User Lookup", icon: Search },
+            { id: "log", label: "Mod Log", icon: ScrollText },
+          ] as const).map(({ id, label, icon: Icon }) => (
+            <button
+              key={id}
+              onClick={() => setTab(id)}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                tab === id ? "bg-primary text-primary-foreground" : "bg-card border border-border hover:bg-secondary"
+              }`}
+            >
+              <Icon className="w-4 h-4" /> {label}
+            </button>
+          ))}
+        </div>
+
         {error && <div className="bg-destructive/10 text-destructive px-4 py-2 rounded-lg text-sm mb-4">{error}</div>}
 
+        {/* USER LOOKUP */}
+        {tab === "lookup" && (
+          <div className="space-y-4 mb-10">
+            <div className="bg-card rounded-lg border border-border p-4 flex gap-3">
+              <input
+                value={lookupName}
+                onChange={(e) => setLookupName(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && lookup()}
+                placeholder="Search username..."
+                className="flex-1 px-4 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+              />
+              <button onClick={lookup} disabled={lookupLoading}
+                className="px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm hover:bg-primary/90 disabled:opacity-50 flex items-center gap-2">
+                {lookupLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+                Look up
+              </button>
+            </div>
+
+            {lookupUser && (
+              <div className="bg-card rounded-lg border border-border p-5">
+                <div className="flex items-start justify-between gap-4 flex-wrap">
+                  <div>
+                    <div className="flex items-center gap-2 mb-1 flex-wrap">
+                      <Link href={`/u/${lookupUser.username}`} className="font-semibold text-lg hover:text-primary">
+                        @{lookupUser.username}
+                      </Link>
+                      {lookupUser.role !== "MEMBER" && (
+                        <span className="text-[10px] px-1.5 py-0.5 bg-blue-500/15 text-blue-500 rounded font-semibold">{lookupUser.role}</span>
+                      )}
+                      {lookupUser.banned && (
+                        <span className="text-[10px] px-1.5 py-0.5 bg-destructive/15 text-destructive rounded font-semibold">BANNED</span>
+                      )}
+                      {lookupUser.openReports > 0 && (
+                        <span className="text-[10px] px-1.5 py-0.5 bg-amber-500/15 text-amber-500 rounded font-semibold">
+                          {lookupUser.openReports} open report{lookupUser.openReports !== 1 ? "s" : ""}
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-sm text-muted-foreground">
+                      {lookupUser.stats.posts} posts · {lookupUser.stats.threadCreator} threads · {lookupUser.stats.chatMessages} chat msgs · rep {lookupUser.reputation} · joined {new Date(lookupUser.joined).toLocaleDateString()}
+                    </div>
+                    {lookupUser.bannedReason && (
+                      <div className="text-xs text-destructive mt-1">Ban reason: {lookupUser.bannedReason}</div>
+                    )}
+                  </div>
+                  {lookupUser.role !== "ADMINISTRATOR" && (
+                    <div className="flex gap-2 flex-wrap">
+                      <button onClick={() => actOnUser(lookupUser.id, "WARNING", "Warning reason:")} disabled={busy === lookupUser.id}
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-amber-500/10 text-amber-500 rounded-lg hover:bg-amber-500/20 disabled:opacity-50">
+                        <AlertTriangle className="w-4 h-4" /> Warn
+                      </button>
+                      {isAdminUser && !lookupUser.banned && (
+                        <button onClick={() => actOnUser(lookupUser.id, "PERMANENT_BAN", "Ban reason:")} disabled={busy === lookupUser.id}
+                          className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-destructive text-destructive-foreground rounded-lg hover:bg-destructive/90 disabled:opacity-50">
+                          <Ban className="w-4 h-4" /> Ban
+                        </button>
+                      )}
+                      {isAdminUser && lookupUser.banned && (
+                        <button onClick={() => actOnUser(lookupUser.id, "UNBAN", "Unban note:")} disabled={busy === lookupUser.id}
+                          className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-primary/10 text-primary rounded-lg hover:bg-primary/20 disabled:opacity-50">
+                          <UserCheck className="w-4 h-4" /> Unban
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+                {lookupHistory.length > 0 && (
+                  <div className="mt-4 pt-4 border-t border-border">
+                    <div className="text-xs font-medium text-muted-foreground mb-2">Action history</div>
+                    <div className="space-y-1">
+                      {lookupHistory.map((h) => (
+                        <div key={h.id} className="text-xs flex items-center justify-between gap-2">
+                          <span><span className="font-medium">{h.type.replace(/_/g, " ")}</span> by @{h.moderator} — {h.reason}</span>
+                          <span className="text-muted-foreground shrink-0">{new Date(h.createdAt).toLocaleDateString()}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* QUEUE */}
+        {tab === "queue" && (<>
         <div className="space-y-4 mb-10">
           {pending.length === 0 && (
             <div className="bg-card rounded-lg border border-border p-8 text-center text-muted-foreground">
@@ -196,6 +352,13 @@ export default function ModerationPage() {
                     className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-destructive/10 text-destructive rounded-lg hover:bg-destructive/20 disabled:opacity-50"
                   >
                     <Trash2 className="w-4 h-4" /> Remove content
+                  </button>
+                  <button
+                    onClick={() => actOnUser(r.reportedUserId, "WARNING", "Warning reason:")}
+                    disabled={busy === r.id}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-amber-500/10 text-amber-500 rounded-lg hover:bg-amber-500/20 disabled:opacity-50"
+                  >
+                    <AlertTriangle className="w-4 h-4" /> Warn user
                   </button>
                   {isAdminUser && (
                     <button
@@ -241,17 +404,20 @@ export default function ModerationPage() {
             </div>
           </>
         )}
+        </>)}
 
-        <h2 className="text-lg font-semibold mb-4">Moderation Log</h2>
+        {/* MOD LOG */}
+        {tab === "log" && (
         <div className="bg-card rounded-lg border border-border divide-y divide-border">
           {actions.length === 0 && <p className="p-4 text-sm text-muted-foreground">No moderation actions recorded.</p>}
-          {actions.slice(0, 20).map((a) => (
+          {actions.map((a) => (
             <div key={a.id} className="p-3 text-sm flex items-center justify-between flex-wrap gap-2">
               <span><span className="font-medium">@{a.moderator}</span> — {a.type.replace(/_/g, " ")}: {a.reason}</span>
               <span className="text-xs text-muted-foreground">{new Date(a.createdAt).toLocaleString()}</span>
             </div>
           ))}
         </div>
+        )}
       </div>
     </div>
   )

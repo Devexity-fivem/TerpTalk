@@ -5,7 +5,10 @@ import { prisma } from "@/lib/prisma"
 import { unauthorized, isModerator, isAdmin, forbidden, getClientIp, logSecurityEvent } from "@/lib/security"
 
 const CONTENT_TYPES = new Set(["THREAD", "POST", "CHAT_MESSAGE", "DIARY", "SETUP"])
-const ACTION_TYPES = new Set(["WARNING", "CONTENT_DELETION", "TEMPORARY_BAN", "PERMANENT_BAN", "UNBAN"])
+const ACTION_TYPES = new Set([
+  "WARNING", "CONTENT_DELETION", "TEMPORARY_BAN", "PERMANENT_BAN", "UNBAN",
+  "PIN_THREAD", "LOCK_THREAD",
+])
 
 // POST — take a moderation action (moderators/admins only)
 // { actionType, targetType?, targetId?, targetUserId, reason, durationDays? }
@@ -92,6 +95,21 @@ export async function POST(request: Request) {
     await prisma.user.update({
       where: { id: targetUserId },
       data: { banned: true, bannedReason: reason.trim() },
+    })
+  }
+
+  // Thread pin/lock toggles — moderators+, need targetId (thread id); targetUserId still required (thread author)
+  if (actionType === "PIN_THREAD" || actionType === "LOCK_THREAD") {
+    if (typeof targetId !== "string" || !targetId) {
+      return NextResponse.json({ error: "targetId (thread id) required" }, { status: 400 })
+    }
+    const thread = await prisma.thread.findUnique({ where: { id: targetId }, select: { pinned: true, locked: true } })
+    if (!thread) {
+      return NextResponse.json({ error: "Thread not found" }, { status: 404 })
+    }
+    await prisma.thread.update({
+      where: { id: targetId },
+      data: actionType === "PIN_THREAD" ? { pinned: !thread.pinned } : { locked: !thread.locked },
     })
   }
 
