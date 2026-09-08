@@ -7,7 +7,7 @@ const prisma = new PrismaClient()
 async function main() {
   // Create forum categories
   const categories = [
-    { name: "Grow Journals", description: "Share your complete grow journeys from seed to harvest", slug: "grow-journals", order: 1 },
+    { name: "New Grower Questions", description: "Beginner help — no question is too basic", slug: "new-grower-questions", order: 1 },
     { name: "Indoor Growing", description: "Indoor cultivation techniques, setups, and equipment", slug: "indoor-growing", order: 2 },
     { name: "Outdoor Growing", description: "Outdoor cultivation tips and seasonal growing", slug: "outdoor-growing", order: 3 },
     { name: "Greenhouse Growing", description: "Greenhouse cultivation and climate control", slug: "greenhouse-growing", order: 4 },
@@ -24,7 +24,7 @@ async function main() {
     { name: "Harvest & Curing", description: "Harvest timing, drying, and curing techniques", slug: "harvest-curing", order: 15 },
     { name: "Advanced Growing", description: "Advanced techniques and experimental methods", slug: "advanced-growing", order: 16 },
     { name: "DIY & Equipment", description: "DIY projects and equipment modifications", slug: "diy-equipment", order: 17 },
-    { name: "Grow Setup Showcases", description: "Show off your grow room and equipment", slug: "grow-setup-showcases", order: 18 },
+    { name: "Smoke Reports & Strain Reviews", description: "Post-harvest reviews — flavor, effects, and how the grow went", slug: "smoke-reports", order: 18 },
     { name: "General Cannabis Discussion", description: "General cannabis discussions and news", slug: "general-cannabis-discussion", order: 19 },
     { name: "Cannabis Memes", description: "Funny cannabis-related content", slug: "cannabis-memes", order: 20 },
     { name: "Off Topic", description: "Non-cannabis related discussions", slug: "off-topic", order: 21 },
