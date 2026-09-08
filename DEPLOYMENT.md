@@ -31,8 +31,13 @@ vercel          # link the project (first run)
 vercel --prod
 ```
 
-The `vercel-build` script runs automatically: `prisma generate && prisma migrate deploy && next build`.
-Migrations are applied at build time against Neon — `migrate deploy` is non-destructive and safe to re-run.
+The `vercel-build` script runs automatically: `prisma generate && next build`.
+Migrations are applied manually (avoids Neon advisory-lock timeouts on suspended DBs):
+
+```bash
+# After merging a migration, apply it to prod once:
+npm run migrate:deploy   # reads DATABASE_URL from .env
+```
 
 ### 5. Seed the production DB (once, from your machine)
 
