@@ -2,13 +2,13 @@ import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { isModerator, forbidden, getClientIp, logSecurityEvent } from "@/lib/security"
+import { unauthorized, isModerator, forbidden, getClientIp, logSecurityEvent } from "@/lib/security"
 
 // GET — moderation queue (moderators/admins only)
 export async function GET() {
   const session = await getServerSession(authOptions)
   if (!session?.user?.id) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    return unauthorized()
   }
   if (!isModerator(session.user.role)) {
     return forbidden()
@@ -110,7 +110,7 @@ export async function GET() {
 export async function PATCH(request: Request) {
   const session = await getServerSession(authOptions)
   if (!session?.user?.id) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    return unauthorized()
   }
   if (!isModerator(session.user.role)) {
     return forbidden()

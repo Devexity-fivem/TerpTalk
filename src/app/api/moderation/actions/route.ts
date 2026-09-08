@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { isModerator, isAdmin, forbidden, getClientIp, logSecurityEvent } from "@/lib/security"
+import { unauthorized, isModerator, isAdmin, forbidden, getClientIp, logSecurityEvent } from "@/lib/security"
 
 const CONTENT_TYPES = new Set(["THREAD", "POST", "CHAT_MESSAGE", "DIARY", "SETUP"])
 const ACTION_TYPES = new Set(["WARNING", "CONTENT_DELETION", "TEMPORARY_BAN", "PERMANENT_BAN", "UNBAN"])
@@ -12,7 +12,7 @@ const ACTION_TYPES = new Set(["WARNING", "CONTENT_DELETION", "TEMPORARY_BAN", "P
 export async function POST(request: Request) {
   const session = await getServerSession(authOptions)
   if (!session?.user?.id) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    return unauthorized()
   }
   if (!isModerator(session.user.role)) {
     await logSecurityEvent("AUTHORIZATION_FAILURE", {
@@ -135,7 +135,7 @@ export async function POST(request: Request) {
 export async function GET() {
   const session = await getServerSession(authOptions)
   if (!session?.user?.id) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    return unauthorized()
   }
   if (!isModerator(session.user.role)) {
     return forbidden()

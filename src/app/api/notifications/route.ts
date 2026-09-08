@@ -2,12 +2,13 @@ import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { unauthorized } from "@/lib/security"
 
 // GET — my notifications (most recent 50)
 export async function GET() {
   const session = await getServerSession(authOptions)
   if (!session?.user?.id) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    return unauthorized()
   }
 
   const [notifications, unreadCount] = await Promise.all([
@@ -37,7 +38,7 @@ export async function GET() {
 export async function PATCH(request: Request) {
   const session = await getServerSession(authOptions)
   if (!session?.user?.id) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    return unauthorized()
   }
 
   const body = await request.json().catch(() => ({}))

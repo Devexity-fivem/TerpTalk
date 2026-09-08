@@ -33,20 +33,6 @@ export async function isBanned(userId: string): Promise<boolean> {
 
 // ─── Blocking helpers ───────────────────────────────────────────────
 
-/** IDs of users that `userId` has blocked AND users who blocked `userId`. */
-export async function getBlockRelatedIds(userId: string): Promise<string[]> {
-  const rows = await prisma.block.findMany({
-    where: { OR: [{ blockerId: userId }, { blockedId: userId }] },
-    select: { blockerId: true, blockedId: true },
-  })
-  const ids = new Set<string>()
-  for (const r of rows) {
-    if (r.blockerId !== userId) ids.add(r.blockerId)
-    if (r.blockedId !== userId) ids.add(r.blockedId)
-  }
-  return [...ids]
-}
-
 /** True if a block exists in either direction between two users. */
 export async function blockExistsBetween(a: string, b: string): Promise<boolean> {
   const row = await prisma.block.findFirst({
@@ -75,11 +61,6 @@ export const publicUserSelect = {
       username: true,
     },
   },
-} as const
-
-export const publicUserSelectWithRole = {
-  ...publicUserSelect,
-  role: true,
 } as const
 
 // ─── Input limits (server-side enforcement) ─────────────────────────

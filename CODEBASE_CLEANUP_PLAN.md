@@ -1,67 +1,39 @@
-# Codebase Cleanup Plan
+# Codebase Cleanup Plan — Pass 2 (Maintainability)
 
-Audit performed: full traversal of `src/`, `prisma/`, `scripts/`, root config, dependencies, and import graph.
+Pass 1 (deploy prep) already removed: duplicate reply-form, unused reaction-button, `utils.ts`, template SVGs, `skills-lock.json`, 12 unused dependencies, tool-skill dirs from git. This pass covers what remains.
 
-## 1. Files safe to remove
+## Audit findings (current state)
 
-| File | Reason |
-|---|---|
-| `src/app/forum/thread/[slug]/reply-form.tsx` | Exact duplicate — page imports `@/components/reply-form` |
-| `src/components/reaction-button.tsx` | Zero imports; superseded by `post-actions.tsx` |
-| `src/lib/utils.ts` | `cn()` helper has zero callers |
-| `public/file.svg`, `globe.svg`, `next.svg`, `vercel.svg`, `window.svg` | Unreferenced Next.js template assets |
-| `skills-lock.json` | Tool artifact, not project code |
-| `prisma7.config.ts` | Referenced in history; does not exist — confirmed absent |
+### Dead code
+| Item | Evidence | Action |
+|---|---|---|
+| `getBlockRelatedIds` (security.ts:37) | Zero call sites | Remove |
+| `publicUserSelectWithRole` (security.ts:80) | Zero call sites | Remove |
+| `prisma/migrations-sqlite-archive/` | Superseded by Postgres baseline | Keep — documented history, harmless |
 
-## 2. Files kept after investigation
+### Duplication to consolidate
+| Pattern | Occurrences | Action |
+|---|---|---|
+| `NextResponse.json({ error: "Unauthorized" }, { status: 401 })` | 32 sites, ~18 route files | Replace with existing `unauthorized()` helper |
 
-| File | Why kept |
-|---|---|
-| `src/components/chat-sidebar.tsx` | Used in `layout.tsx` |
-| `src/components/update-form.tsx` | Used in `diaries/[id]/page.tsx` |
-| `src/components/user-actions.tsx` | Used in `u/[username]/page.tsx` |
-| `scripts/e2e-test.mjs` | Active regression suite |
-| `scripts/backup.ts` | Active backup tool |
-| All `SECURITY_*.md` / `PRIVACY_AUDIT.md` / etc. | Required audit record for beta; consolidated index added to README |
-| `.claude/`, `.agents/`, `.windsurf/`, `.devin/` | User's local tool configs — not ours to delete |
-| `components.json` | shadcn/ui manifest — kept for future component additions |
+### Naming / metadata
+- `package.json` name is `forums` → rename to `terptalk`
+- Directory + file naming is otherwise consistent (kebab-case routes, PascalCase components)
 
-## 3. Unused dependencies to remove
+### Verified clean already
+- No secrets in tracked files (`.env` gitignored, never committed)
+- No `any` types in `src/`
+- All `console.*` calls are legitimate `console.error` server-side error logging — kept intentionally
+- ESLint clean, no unused imports
+- `cleanupRateLimits()` kept — referenced in VERCEL_COST_CONTROL.md as the future cron hook
+- `blockExistsBetween` IS used (`/api/users/[username]`) — kept
+- Future-feature Prisma models (Bookmark, Follow, DirectMessage, Badge, DiaryFollow) — kept intentionally
 
-| Package | Evidence |
-|---|---|
-| `socket.io`, `socket.io-client`, `@types/socket.io` | Zero imports; chat is HTTP polling |
-| `ioredis`, `@types/ioredis` | Zero imports; rate limiting is DB-backed |
-| `react-hook-form`, `@hookform/resolvers` | Zero imports; forms are controlled state |
-| `zod` | Zero imports; manual validation is consistent |
-| `date-fns` | Zero imports; `toLocaleDateString` used |
-| `class-variance-authority` | Zero imports |
-| `clsx`, `tailwind-merge` | Only used by the unused `utils.ts` |
+### Documentation
+- Keep all audit/beta docs — they serve distinct purposes
+- Create `DEVELOPER_GUIDE.md` (conventions + where code goes)
+- `ARCHITECTURE.md` already exists — refresh if needed
 
-## 4. Duplicate functionality
-
-- Reply form existed twice → keep `src/components/reply-form.tsx` only.
-- Reaction UI existed twice → keep the like logic inside `post-actions.tsx`.
-- Authz helpers already consolidated in `src/lib/security.ts` (`isModerator`, `isAdmin`, `isBanned`, `forbidden`, `unauthorized`, block helpers) — no further abstraction needed.
-
-## 5. Project organization
-
-Current structure is already clean and predictable:
-
-```
-src/app/          — routes (App Router conventions)
-src/components/   — 8 focused client components
-src/lib/          — auth.ts, prisma.ts, rate-limit.ts, security.ts
-src/types/        — next-auth.d.ts
-prisma/           — schema, migrations, seed
-scripts/          — backup, e2e-test
-```
-
-No reorganization needed; documented in `ARCHITECTURE.md`.
-
-## 6. Risks
-
-- **SQLite → Postgres**: migrations are provider-specific; a fresh Postgres baseline migration replaces SQLite history (dev.db is disposable; seed recreates it).
-- **Prisma 5 + Next 16**: `params` must be awaited — already fixed.
-- **Vercel serverless**: DB rate limiter and JWT sessions are serverless-safe; chat polling is stateless. No filesystem state used.
-- **Seed**: writes admin/mod credentials — env-driven, prints to console only on dev seed.
+## Risks
+- `unauthorized()` consolidation is mechanical; risk = missed import. Mitigation: lint + tsc + build after.
+- No functional changes intended; E2E suite re-run to confirm.

@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { rateLimit } from "@/lib/rate-limit"
-import { getClientIp, logSecurityEvent } from "@/lib/security"
+import { unauthorized, getClientIp, logSecurityEvent } from "@/lib/security"
 
 const REPORT_TYPES = new Set([
   "THREAD",
@@ -28,7 +28,7 @@ const REPORT_REASONS = new Set([
 export async function POST(request: Request) {
   const session = await getServerSession(authOptions)
   if (!session?.user?.id) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    return unauthorized()
   }
 
   const rl = await rateLimit(`report:${session.user.id}`, 10, 60 * 60 * 1000)
