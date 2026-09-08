@@ -4,20 +4,16 @@ import { useCallback, useEffect, useState } from "react"
 import { useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
 import {
-  ShieldCheck, Loader2, Plus, Copy, Check, Users as UsersIcon,
-  Megaphone, ShieldAlert, Ticket, Ban, UserCheck, Search,
+  ShieldCheck, Loader2, Users as UsersIcon,
+  Megaphone, ShieldAlert, Ban, UserCheck, Search,
 } from "lucide-react"
 import Link from "next/link"
 
 interface Stats {
   users: number; activeUsers: number; bannedUsers: number; threads: number
   posts: number; openReports: number; totalReports: number
-  moderationActions: number; invites: number; usedInvites: number
+  moderationActions: number
   securityEvents24h: number
-}
-interface Invite {
-  id: string; code: string; note: string | null
-  usedById: string | null; usedAt: string | null; createdAt: string
 }
 interface AdminUser {
   id: string; username: string; role: string; banned: boolean
@@ -34,7 +30,6 @@ const TABS = [
   { id: "users", label: "Users", icon: UsersIcon },
   { id: "announce", label: "Announce", icon: Megaphone },
   { id: "security", label: "Security", icon: ShieldAlert },
-  { id: "invites", label: "Invites", icon: Ticket },
 ] as const
 
 export default function AdminPage() {
@@ -44,13 +39,10 @@ export default function AdminPage() {
 
   const [tab, setTab] = useState<string>("overview")
   const [stats, setStats] = useState<Stats | null>(null)
-  const [invites, setInvites] = useState<Invite[]>([])
   const [users, setUsers] = useState<AdminUser[]>([])
   const [events, setEvents] = useState<SecEvent[]>([])
   const [loading, setLoading] = useState(true)
   const [denied, setDenied] = useState(false)
-  const [copied, setCopied] = useState<string | null>(null)
-  const [creating, setCreating] = useState(false)
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState("")
   const [notice, setNotice] = useState("")
@@ -67,11 +59,8 @@ export default function AdminPage() {
     fetch("/api/admin/stats").then(async (res) => {
       if (!res.ok) { setDenied(true); setLoading(false); return }
       const d = await res.json(); setStats(d.stats)
-    }).catch(() => setDenied(true))
-    fetch("/api/admin/invites").then(async (res) => {
-      if (res.ok) { const d = await res.json(); setInvites(d.invites || []) }
       setLoading(false)
-    }).catch(() => setLoading(false))
+    }).catch(() => { setDenied(true); setLoading(false) })
   }, [])
 
   const loadUsers = useCallback(() => {
@@ -99,24 +88,6 @@ export default function AdminPage() {
   }, [tab, loadUsers, loadSecurity])
 
   const flash = (msg: string) => { setNotice(msg); setTimeout(() => setNotice(""), 3000) }
-
-  const createInvite = async () => {
-    setCreating(true)
-    try {
-      const res = await fetch("/api/admin/invites", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ count: 1 }),
-      })
-      if (res.ok) { load(); flash("Invite generated") }
-    } finally { setCreating(false) }
-  }
-
-  const copyCode = (code: string) => {
-    navigator.clipboard.writeText(code)
-    setCopied(code)
-    setTimeout(() => setCopied(null), 2000)
-  }
 
   const setUserRole = async (userId: string, newRole: string) => {
     if (!confirm(`Change this user's role to ${newRole}?`)) return
@@ -382,51 +353,6 @@ export default function AdminPage() {
                     <span className="text-muted-foreground truncate">@{e.user}</span>
                   </div>
                   <span className="text-xs text-muted-foreground shrink-0">{new Date(e.createdAt).toLocaleString()}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* INVITES */}
-        {tab === "invites" && (
-          <div className="bg-card rounded-xl border border-border p-6">
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <h2 className="text-lg font-semibold">Beta Invites</h2>
-                <p className="text-sm text-muted-foreground">
-                  {stats ? `${stats.usedInvites}/${stats.invites} used` : ""}
-                </p>
-              </div>
-              <button
-                onClick={createInvite}
-                disabled={creating}
-                className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-50 text-sm"
-              >
-                {creating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-                Generate invite
-              </button>
-            </div>
-            <div className="divide-y divide-border max-h-96 overflow-y-auto">
-              {invites.length === 0 && <p className="py-4 text-sm text-muted-foreground">No invites yet.</p>}
-              {invites.map((inv) => (
-                <div key={inv.id} className="py-3 flex items-center justify-between gap-3">
-                  <div className="min-w-0">
-                    <code className="text-sm font-mono">{inv.code}</code>
-                    {inv.note && <span className="text-xs text-muted-foreground ml-2">{inv.note}</span>}
-                    <div className="text-xs text-muted-foreground">
-                      {inv.usedById ? `Used ${new Date(inv.usedAt!).toLocaleDateString()}` : "Available"}
-                    </div>
-                  </div>
-                  {!inv.usedById && (
-                    <button
-                      onClick={() => copyCode(inv.code)}
-                      className="flex items-center gap-1 px-2 py-1 text-xs bg-secondary rounded hover:bg-secondary/80 shrink-0"
-                    >
-                      {copied === inv.code ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
-                      Copy
-                    </button>
-                  )}
                 </div>
               ))}
             </div>

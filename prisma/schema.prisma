@@ -596,17 +596,3 @@ model Captcha {
 
   @@index([expiresAt])
 }
-
-// Invite-only beta access
-model BetaInvite {
-  id          String    @id @default(cuid())
-  code        String    @unique
-  note        String?
-  createdById String?
-  usedById    String?
-  usedAt      DateTime?
-  expiresAt   DateTime?
-  createdAt   DateTime  @default(now())
-
-  @@index([code])
-}

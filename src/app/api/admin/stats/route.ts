@@ -22,8 +22,6 @@ export async function GET() {
     openReports,
     totalReports,
     moderationActions,
-    invites,
-    usedInvites,
     securityEvents24h,
   ] = await Promise.all([
     prisma.user.count(),
@@ -33,8 +31,6 @@ export async function GET() {
     prisma.report.count({ where: { status: { in: ["PENDING", "REVIEWING"] } } }),
     prisma.report.count(),
     prisma.moderationAction.count(),
-    prisma.betaInvite.count(),
-    prisma.betaInvite.count({ where: { usedById: { not: null } } }),
     prisma.securityEvent.count({
       where: { createdAt: { gt: new Date(Date.now() - 24 * 60 * 60 * 1000) } },
     }),
@@ -61,8 +57,6 @@ export async function GET() {
       openReports,
       totalReports,
       moderationActions,
-      invites,
-      usedInvites,
       securityEvents24h,
     },
   })

@@ -126,18 +126,6 @@ async function main() {
     }
   }
 
-  // Generate starter invite codes if none exist
-  const inviteCount = await prisma.betaInvite.count()
-  if (inviteCount === 0) {
-    for (let i = 0; i < 10; i++) {
-      const code = `TERP-${randomBytes(4).toString('hex').toUpperCase()}`
-      await prisma.betaInvite.create({ data: { code, note: 'Seed-generated invite' } })
-    }
-    const codes = await prisma.betaInvite.findMany({ select: { code: true } })
-    console.log('✔ Generated 10 invite codes:')
-    codes.forEach((c) => console.log(`   ${c.code}`))
-  }
-
   console.log("Database seeded successfully!")
 }
 
