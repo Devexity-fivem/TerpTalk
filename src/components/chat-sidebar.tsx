@@ -61,23 +61,54 @@ export default function ChatSidebar() {
       .catch(() => setLoading(false))
   }, [session])
 
-  // Load messages + poll
+  // Load messages + poll — only while the panel is open and the tab is
+  // visible. Polls are incremental (?after=) so idle polls are near-empty.
+  const lastTsRef = useRef<string | null>(null)
   useEffect(() => {
-    if (!session || !room) return
+    if (!session || !room || !isOpen) return
 
-    const load = () =>
-      fetch(`/api/chat/messages?roomId=${room.id}`)
-        .then(res => res.json())
-        .then(data => {
-          setMessages(data.messages || [])
-          scrollToBottom()
+    let cancelled = false
+    let timer: ReturnType<typeof setTimeout> | null = null
+
+    const load = async () => {
+      if (cancelled || document.hidden) return
+      try {
+        const url = lastTsRef.current
+          ? `/api/chat/messages?roomId=${room.id}&after=${encodeURIComponent(lastTsRef.current)}`
+          : `/api/chat/messages?roomId=${room.id}`
+        const res = await fetch(url)
+        if (!res.ok) return
+        const data = await res.json()
+        const fresh: Message[] = data.messages || []
+        if (fresh.length === 0) return
+        lastTsRef.current = fresh[fresh.length - 1].createdAt
+        setMessages(prev => {
+          // On first load replace; afterwards append only unseen ids
+          const seen = new Set(prev.map(m => m.id))
+          const added = fresh.filter(m => !seen.has(m.id))
+          return added.length ? [...prev, ...added].slice(-100) : prev
         })
-        .catch(() => {})
+        scrollToBottom()
+      } catch { /* ignore transient errors */ }
+    }
 
-    load()
-    const interval = setInterval(load, 3000)
-    return () => clearInterval(interval)
-  }, [session, room])
+    const tick = async () => {
+      await load()
+      // 3s while open; skip rounds while the tab is hidden
+      if (!cancelled) timer = setTimeout(tick, 3000)
+    }
+    const onVisible = () => { if (!document.hidden) load() }
+    document.addEventListener("visibilitychange", onVisible)
+
+    lastTsRef.current = null
+    tick()
+
+    return () => {
+      cancelled = true
+      if (timer) clearTimeout(timer)
+      document.removeEventListener("visibilitychange", onVisible)
+    }
+  }, [session, room, isOpen])
 
   const insertEmoji = (emoji: string) => {
     const el = inputRef.current

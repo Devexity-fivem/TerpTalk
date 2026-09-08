@@ -24,17 +24,27 @@ export async function GET(request: Request) {
       )
     }
 
-    // Get recent messages
+    // Get recent messages — or incrementally: ?after=<ISO date> returns only new ones
+    const after = searchParams.get("after")
+    const afterDate = after ? new Date(after) : null
+    if (after && (!afterDate || isNaN(afterDate.getTime()))) {
+      return NextResponse.json({ error: "Invalid after param" }, { status: 400 })
+    }
+
     const messages = await prisma.chatMessage.findMany({
-      where: { roomId, deleted: false },
-      take: 50,
-      orderBy: { createdAt: "desc" },
+      where: {
+        roomId,
+        deleted: false,
+        ...(afterDate && { createdAt: { gt: afterDate } }),
+      },
+      take: afterDate ? 100 : 50,
+      orderBy: { createdAt: afterDate ? "asc" : "desc" },
       include: {
         author: { select: publicUserSelect },
       },
     })
 
-    return NextResponse.json({ messages: messages.reverse() })
+    return NextResponse.json({ messages: afterDate ? messages : messages.reverse() })
   } catch (error) {
     console.error("Failed to fetch messages:", error)
     return NextResponse.json(
