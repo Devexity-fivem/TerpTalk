@@ -33,6 +33,7 @@ model User {
   diaryCreator  GrowDiary[]
   diaryUpdates  DiaryUpdate[]
   setupCreator  GrowSetup[]
+  setupComments SetupComment[]
   chatMessages  ChatMessage[]
   sentMessages  DirectMessage[]      @relation("SentMessages")
   receivedMessages DirectMessage[]   @relation("ReceivedMessages")
@@ -341,6 +342,7 @@ model SetupComment {
   updatedAt DateTime @updatedAt
 
   setup     GrowSetup @relation(fields: [setupId], references: [id], onDelete: Cascade)
+  author    User      @relation(fields: [authorId], references: [id], onDelete: Cascade)
 
   @@index([setupId])
   @@index([authorId])

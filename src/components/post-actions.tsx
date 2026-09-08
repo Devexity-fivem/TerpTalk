@@ -17,6 +17,8 @@ export default function PostActions({ postId, authorId, initialContent, initialL
   const { data: session } = useSession()
   const router = useRouter()
   const [liked, setLiked] = useState(initialLiked)
+  const [reactionType, setReactionType] = useState<string | null>(initialLiked ? "LIKE" : null)
+  const [showPicker, setShowPicker] = useState(false)
   const [count, setCount] = useState(initialLikeCount)
   const [editing, setEditing] = useState(false)
   const [content, setContent] = useState(initialContent)
@@ -35,22 +37,27 @@ export default function PostActions({ postId, authorId, initialContent, initialL
     return <p className="text-sm text-muted-foreground italic">This post was removed.</p>
   }
 
-  const handleLike = async () => {
+  const handleReact = async (type: string) => {
     if (!session || busy) return
     setBusy(true)
+    setShowPicker(false)
     try {
       const res = await fetch("/api/reactions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type: "LIKE", postId }),
+        body: JSON.stringify({ type, postId }),
       })
       if (res.ok) {
         const data = await res.json()
-        if (data.action === "added") { setLiked(true); setCount(c => c + 1) }
-        else { setLiked(false); setCount(c => c - 1) }
+        if (data.action === "added") { setLiked(true); setReactionType(type); setCount(c => c + 1) }
+        else if (data.action === "switched") { setReactionType(type) }
+        else { setLiked(false); setReactionType(null); setCount(c => c - 1) }
       }
     } finally { setBusy(false) }
   }
+
+  const REACTIONS: [string, string][] = [["LIKE", "❤️"], ["FIRE", "🔥"], ["THUMBS_UP", "👍"], ["LAUGH", "😂"]]
+  const activeEmoji = reactionType ? REACTIONS.find(([t]) => t === reactionType)?.[1] : null
 
   const handleEdit = async () => {
     if (content.trim().length < 10) { setMessage("Post must be at least 10 characters"); return }
@@ -116,14 +123,30 @@ export default function PostActions({ postId, authorId, initialContent, initialL
       ) : null}
 
       <div className="flex items-center gap-4">
-        <button
-          onClick={handleLike}
-          disabled={!session || busy}
-          className={`flex items-center gap-1 text-sm transition-colors ${liked ? "text-red-500" : "text-muted-foreground hover:text-foreground"} disabled:opacity-50`}
-        >
-          <Heart className={`w-4 h-4 ${liked ? "fill-current" : ""}`} />
-          {count > 0 ? count : "Like"}
-        </button>
+        <div className="relative">
+          <button
+            onClick={() => (reactionType ? handleReact(reactionType) : setShowPicker(!showPicker))}
+            disabled={!session || busy}
+            className={`flex items-center gap-1 text-sm transition-colors ${liked ? "text-red-500" : "text-muted-foreground hover:text-foreground"} disabled:opacity-50`}
+          >
+            {activeEmoji ? <span>{activeEmoji}</span> : <Heart className="w-4 h-4" />}
+            {count > 0 ? count : "React"}
+          </button>
+          {showPicker && (
+            <div className="absolute bottom-8 left-0 flex gap-1 bg-card border border-border rounded-full px-2 py-1 shadow-lg z-10">
+              {REACTIONS.map(([type, emoji]) => (
+                <button
+                  key={type}
+                  onClick={() => handleReact(type)}
+                  className="text-lg hover:scale-125 transition-transform px-1"
+                  title={type.toLowerCase()}
+                >
+                  {emoji}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
         {isOwner && !editing && (
           <>
             <button onClick={() => setEditing(true)} className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors">

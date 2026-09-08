@@ -2,7 +2,8 @@
 
 import { useState } from "react"
 import { useSession } from "next-auth/react"
-import { Flag, Ban, Check, Loader2, UserPlus, UserCheck } from "lucide-react"
+import { Flag, Ban, Check, Loader2, UserPlus, UserCheck, Mail } from "lucide-react"
+import Link from "next/link"
 
 export default function UserActions({ userId, username, initiallyBlocked, initiallyFollowing }: { userId: string; username: string; initiallyBlocked: boolean; initiallyFollowing?: boolean }) {
   const { data: session } = useSession()
@@ -83,6 +84,12 @@ export default function UserActions({ userId, username, initiallyBlocked, initia
           {following ? <UserCheck className="w-4 h-4" /> : <UserPlus className="w-4 h-4" />}
           {following ? "Following" : "Follow"}
         </button>
+        <Link
+          href={`/messages?with=${userId}`}
+          className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg border border-border hover:bg-secondary transition-colors"
+        >
+          <Mail className="w-4 h-4" /> Message
+        </Link>
         <button
           onClick={toggleBlock}
           disabled={busy}

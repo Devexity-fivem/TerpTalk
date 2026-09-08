@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma"
 import { unauthorized, publicUserSelect, LIMITS, getClientIp, logSecurityEvent, isModerator, isBanned, forbidden } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
 import { awardReputation, REP_POINTS } from "@/lib/reputation"
+import { notifyMentions } from "@/lib/mentions"
 
 // Helper function to create a slug from a string
 function createSlug(text: string): string {
@@ -119,6 +120,15 @@ export async function POST(request: Request) {
       REP_POINTS.THREAD_CREATED,
       `Created thread "${title.slice(0, 60)}"`
     ).catch(() => {})
+
+    // Notify @mentions in the opening post
+    await notifyMentions(
+      content,
+      session.user.id,
+      session.user.name || "Someone",
+      `/forum/thread/${thread.slug}`,
+      `the thread "${title.slice(0, 60)}"`
+    )
 
     return NextResponse.json({ thread }, { status: 201 })
   } catch (error) {

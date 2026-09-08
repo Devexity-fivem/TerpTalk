@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma"
 import { unauthorized, publicUserSelect, LIMITS, getClientIp, logSecurityEvent, isModerator, isBanned, forbidden } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
 import { awardReputation, REP_POINTS } from "@/lib/reputation"
+import { notifyMentions } from "@/lib/mentions"
 
 export async function POST(request: Request) {
   try {
@@ -102,6 +103,15 @@ export async function POST(request: Request) {
         },
       }).catch(() => {})
     }
+
+    // Notify @mentions in the reply
+    await notifyMentions(
+      content,
+      session.user.id,
+      session.user.name || "Someone",
+      `/forum/thread/${thread.slug}`,
+      `a reply in "${thread.title.slice(0, 60)}"`
+    )
 
     return NextResponse.json({ post }, { status: 201 })
   } catch (error) {

@@ -9,9 +9,11 @@ export const metadata = {
   description: "Community-maintained cannabis strain database — genetics, breeders, growing info, and grower photos.",
 }
 
-async function getStrains() {
+async function getStrains(q?: string) {
+  const contains = q && q.trim() ? { contains: q.trim(), mode: "insensitive" as const } : undefined
   const strains = await prisma.strain.findMany({
-    take: 24,
+    where: contains ? { OR: [{ name: contains }, { genetics: contains }, { breeder: contains }] } : undefined,
+    take: 48,
     orderBy: { name: "asc" },
     include: {
       photos: { take: 1, orderBy: { createdAt: "desc" } },
@@ -22,8 +24,9 @@ async function getStrains() {
   return strains
 }
 
-export default async function StrainsPage() {
-  const strains = await getStrains()
+export default async function StrainsPage({ searchParams }: { searchParams: Promise<{ q?: string }> }) {
+  const { q } = await searchParams
+  const strains = await getStrains(q)
 
   return (
     <div className="min-h-screen bg-background">
@@ -35,19 +38,21 @@ export default async function StrainsPage() {
         </div>
 
         {/* Search */}
-        <div className="mb-6">
+        <form action="/strains" className="mb-6">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
             <input
               type="text"
-              placeholder="Search strains..."
+              name="q"
+              defaultValue={q || ""}
+              placeholder="Search strains, genetics, breeders..."
               className="w-full pl-10 pr-4 py-2 rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary"
             />
           </div>
-        </div>
+        </form>
 
         <div className="flex justify-between items-center mb-6">
-          <h2 className="text-xl font-semibold">All Strains</h2>
+          <h2 className="text-xl font-semibold">{q ? `Results for "${q}"` : "All Strains"}</h2>
           <Link
             href="/strains/new"
             className="bg-primary text-primary-foreground px-4 py-2 rounded-lg hover:bg-primary/90 transition-colors text-sm flex items-center gap-2"

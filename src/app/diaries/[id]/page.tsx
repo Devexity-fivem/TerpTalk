@@ -59,6 +59,22 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
       }))
     : false
 
+  // Grow progress: day count + stage position
+  const STAGES = ["GERMINATION", "SEEDLING", "VEGETATIVE", "FLOWER", "HARVEST", "DRYING", "CURING", "COMPLETED"]
+  // eslint-disable-next-line react-hooks/purity
+  const dayCount = Math.max(0, Math.floor((Date.now() - new Date(diary.startDate).getTime()) / 86400000))
+  const stageIdx = Math.max(0, STAGES.indexOf(diary.stage))
+  const progress = Math.round(((stageIdx + 1) / STAGES.length) * 100)
+
+  // Update streak: consecutive days with updates (most recent run)
+  const days = [...new Set(diary.updates.map((u) => new Date(u.createdAt).toDateString()))].map((d) => new Date(d).getTime()).sort((a, b) => b - a)
+  let streak = 0
+  for (let i = 0; i < days.length; i++) {
+    const expected = days[0] - i * 86400000
+    if (Math.abs(days[i] - expected) < 43200000) streak++
+    else break
+  }
+
   return (
     <div className="min-h-screen bg-background">
       <div className="max-w-7xl mx-auto px-4 py-8">
@@ -101,6 +117,25 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
                   <Users className="w-4 h-4" />
                   {diary._count.followers} followers
                 </span>
+                <span className="flex items-center gap-1 font-medium text-primary">
+                  <Calendar className="w-4 h-4" />
+                  Day {dayCount}
+                </span>
+                {streak >= 2 && (
+                  <span className="flex items-center gap-1 text-amber-500 font-medium">
+                    🔥 {streak}-day streak
+                  </span>
+                )}
+              </div>
+              {/* Stage progress */}
+              <div className="mt-3">
+                <div className="flex justify-between text-[11px] text-muted-foreground mb-1">
+                  <span>{diary.stage.replace("_", " ")}</span>
+                  <span>{progress}% to harvest</span>
+                </div>
+                <div className="h-1.5 bg-secondary rounded-full overflow-hidden">
+                  <div className="h-full bg-primary rounded-full transition-all" style={{ width: `${progress}%` }} />
+                </div>
               </div>
             </div>
             <div className="flex gap-2 items-start">

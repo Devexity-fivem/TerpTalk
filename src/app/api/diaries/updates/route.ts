@@ -141,6 +141,47 @@ export async function POST(request: Request) {
       })
     }
 
+    // Award 7-day streak badge if earned
+    const recentUpdates = await prisma.diaryUpdate.findMany({
+      where: { authorId: session.user.id },
+      orderBy: { createdAt: "desc" },
+      take: 30,
+      select: { createdAt: true },
+    })
+    const days = [...new Set(recentUpdates.map((u) => u.createdAt.toDateString()))].map((d) => new Date(d).getTime()).sort((a, b) => b - a)
+    let streak = 0
+    for (let i = 0; i < days.length; i++) {
+      if (Math.abs(days[i] - (days[0] - i * 86400000)) < 43200000) streak++
+      else break
+    }
+    if (streak >= 7) {
+      const badge = await prisma.badge.upsert({
+        where: { name: "Dedicated Grower" },
+        update: {},
+        create: {
+          name: "Dedicated Grower",
+          description: "Posted grow updates 7 days in a row",
+          icon: "🔥",
+          requirement: "Update diaries on 7 consecutive days",
+        },
+      })
+      const has = await prisma.userBadge.findUnique({
+        where: { userId_badgeId: { userId: session.user.id, badgeId: badge.id } },
+      })
+      if (!has) {
+        await prisma.userBadge.create({ data: { userId: session.user.id, badgeId: badge.id } })
+        await prisma.notification.create({
+          data: {
+            userId: session.user.id,
+            type: "BADGE",
+            title: "Badge earned: 🔥 Dedicated Grower",
+            content: "7 days of updates in a row — impressive consistency!",
+            link: "/profile",
+          },
+        }).catch(() => {})
+      }
+    }
+
     // Notify diary followers (not the author)
     const followers = await prisma.diaryFollow.findMany({
       where: { diaryId, userId: { not: session.user.id } },

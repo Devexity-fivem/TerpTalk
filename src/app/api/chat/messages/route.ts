@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { unauthorized, publicUserSelect, LIMITS, getClientIp, logSecurityEvent, isBanned, forbidden } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
+import { notifyMentions } from "@/lib/mentions"
 
 export async function GET(request: Request) {
   try {
@@ -109,6 +110,15 @@ export async function POST(request: Request) {
         author: { select: publicUserSelect },
       },
     })
+
+    // Notify @mentions in chat (fire-and-forget)
+    notifyMentions(
+      content,
+      session.user.id,
+      session.user.name || "Someone",
+      "/",
+      "community chat"
+    ).catch(() => {})
 
     return NextResponse.json({ message }, { status: 201 })
   } catch (error) {

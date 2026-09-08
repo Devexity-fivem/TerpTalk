@@ -6,7 +6,7 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import {
   Leaf, User, LogOut, MessageCircle, Home, Calendar,
-  Settings, Dna, Bell, Shield, Menu, X,
+  Settings, Dna, Bell, Shield, Menu, X, Mail, Search,
 } from "lucide-react"
 import CannabisLeaf from "@/components/cannabis-leaf"
 
@@ -88,10 +88,34 @@ export function Navigation() {
 
           {/* Right side */}
           <div className="flex items-center gap-2">
+            <form
+              action="/search"
+              className="hidden md:block"
+              onSubmit={(e) => {
+                const input = (e.currentTarget.elements.namedItem("q") as HTMLInputElement)
+                if (!input.value.trim()) e.preventDefault()
+              }}
+            >
+              <div className="relative">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <input
+                  name="q"
+                  placeholder="Search..."
+                  className="pl-8 pr-3 py-1.5 w-40 lg:w-52 text-sm rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary"
+                />
+              </div>
+            </form>
             {status === "loading" ? (
               <div className="w-8 h-8 bg-secondary rounded-full animate-pulse" />
             ) : session ? (
               <>
+                <Link
+                  href="/messages"
+                  className="p-2 hover:bg-secondary rounded-lg transition-colors"
+                  title="Messages"
+                >
+                  <Mail className="w-5 h-5" />
+                </Link>
                 <Link
                   href="/notifications"
                   className="relative p-2 hover:bg-secondary rounded-lg transition-colors"

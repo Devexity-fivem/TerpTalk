@@ -57,15 +57,17 @@ export async function POST(request: Request) {
     })
 
     if (existingReaction) {
-      // Remove existing reaction
-      await prisma.reaction.delete({
+      if (existingReaction.type === type) {
+        // Same type — toggle off
+        await prisma.reaction.delete({ where: { id: existingReaction.id } })
+        return NextResponse.json({ reaction: null, action: "removed" })
+      }
+      // Different type — switch reaction
+      const updated = await prisma.reaction.update({
         where: { id: existingReaction.id },
+        data: { type },
       })
-
-      return NextResponse.json({ 
-        reaction: null, 
-        action: "removed" 
-      })
+      return NextResponse.json({ reaction: updated, action: "switched" })
     }
 
     // Create new reaction
