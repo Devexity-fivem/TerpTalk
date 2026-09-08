@@ -4,7 +4,7 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { unauthorized, isAdmin, forbidden, getClientIp, logSecurityEvent } from "@/lib/security"
 
-const ASSIGNABLE_ROLES = new Set(["MEMBER", "VERIFIED_MEMBER", "MODERATOR"])
+const ASSIGNABLE_ROLES = new Set(["MEMBER", "VERIFIED_MEMBER", "MODERATOR", "ADMINISTRATOR"])
 
 // GET — list/search users (ADMINISTRATOR only)
 export async function GET(request: Request) {
@@ -113,9 +113,11 @@ export async function PATCH(request: Request) {
       content:
         role === "MODERATOR"
           ? "You've been promoted to Moderator. You can now access the moderation queue."
-          : role === "VERIFIED_MEMBER"
-            ? "Your account has been verified by the team."
-            : "Your staff role has been removed.",
+          : role === "ADMINISTRATOR"
+            ? "You've been promoted to Administrator. You now have full admin access."
+            : role === "VERIFIED_MEMBER"
+              ? "Your account has been verified by the team."
+              : "Your staff role has been removed.",
     },
   }).catch(() => {})
 

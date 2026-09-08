@@ -275,6 +275,15 @@ export default function AdminPage() {
                           <UserCheck className="w-3 h-3" /> Verify
                         </button>
                       )}
+                      <button
+                        onClick={() => {
+                          if (!confirm(`Promote this user to ADMINISTRATOR? They will have full access to everything — user management, bans, announcements, and security logs. This cannot be undone from the panel.`)) return
+                          setUserRole(u.id, "ADMINISTRATOR")
+                        }}
+                        disabled={busy === u.id}
+                        className="px-2.5 py-1.5 text-xs bg-amber-500/10 text-amber-500 rounded-lg hover:bg-amber-500/20 disabled:opacity-50">
+                        Make Admin
+                      </button>
                       {u.banned ? (
                         <button onClick={() => banUser(u.id, true)} disabled={busy === u.id}
                           className="px-2.5 py-1.5 text-xs bg-primary/10 text-primary rounded-lg hover:bg-primary/20 disabled:opacity-50">
