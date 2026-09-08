@@ -4,6 +4,10 @@ import { useState, useEffect, useRef } from "react"
 import { useSession } from "next-auth/react"
 import { MessageCircle, Send, X, Loader2, Smile } from "lucide-react"
 import RoleBadge from "@/components/role-badge"
+import dynamic from "next/dynamic"
+
+// Full emoji picker — lazy-loaded so it doesn't bloat the initial bundle
+const EmojiPicker = dynamic(() => import("emoji-picker-react"), { ssr: false })
 
 interface Room {
   id: string
@@ -23,15 +27,6 @@ interface Message {
     profile: { username: string }
   }
 }
-
-const EMOJIS = [
-  "😀","😂","😊","😍","🤩","😎","🤔","😅","😴","😭","😡","🥳",
-  "👍","👎","👏","🙌","🙏","💪","✌️","🤝","👋","🖖",
-  "🌱","🌿","🍀","🌲","🌳","🌵","🌻","🌷","🍁","🍃","🍄","🌾",
-  "🔥","💧","💦","☀️","🌙","⭐","🌈","⚡","❄️","🌊","💨","🌪️",
-  "💚","❤️","🧡","💛","💙","💜","🖤","🤍","💯","✅","🎉","🎊",
-  "🍕","🍔","🌮","🍩","🍪","☕","🍺","🥂","🍾","🎂","🍰","🧁",
-]
 
 export default function ChatSidebar() {
   const { data: session } = useSession()
@@ -208,21 +203,19 @@ export default function ChatSidebar() {
             <div ref={messagesEndRef} />
           </div>
 
-          {/* Emoji picker */}
+          {/* Emoji picker — full emoji set with search */}
           {showEmoji && (
-            <div className="border-t border-border p-2 shrink-0 max-h-40 overflow-y-auto">
-              <div className="grid grid-cols-9 gap-1">
-                {EMOJIS.map((emoji) => (
-                  <button
-                    key={emoji}
-                    type="button"
-                    onClick={() => insertEmoji(emoji)}
-                    className="text-lg p-1 rounded hover:bg-secondary transition-colors"
-                  >
-                    {emoji}
-                  </button>
-                ))}
-              </div>
+            <div className="border-t border-border shrink-0">
+              <EmojiPicker
+                onEmojiClick={(data) => insertEmoji(data.emoji)}
+                theme={"dark" as never}
+                height={320}
+                width="100%"
+                searchPlaceholder="Search emojis..."
+                previewConfig={{ showPreview: false }}
+                skinTonesDisabled
+                lazyLoadEmojis
+              />
             </div>
           )}
 
