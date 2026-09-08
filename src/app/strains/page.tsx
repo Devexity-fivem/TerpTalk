@@ -4,6 +4,11 @@ import Link from "next/link"
 
 export const dynamic = "force-dynamic"
 
+export const metadata = {
+  title: "Strain Database",
+  description: "Community-maintained cannabis strain database — genetics, breeders, growing info, and grower photos.",
+}
+
 async function getStrains() {
   const strains = await prisma.strain.findMany({
     take: 24,

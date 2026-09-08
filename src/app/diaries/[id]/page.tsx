@@ -5,6 +5,20 @@ import { Leaf, Calendar, Users, Heart, Share2, Bookmark } from "lucide-react"
 import Link from "next/link"
 import UpdateForm from "@/components/update-form"
 
+export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params
+  const diary = await prisma.growDiary.findUnique({
+    where: { id },
+    select: { title: true, description: true, strain: true, deleted: true },
+  })
+  if (!diary || diary.deleted) return { title: "Diary not found" }
+  return {
+    title: diary.title,
+    description: diary.description.slice(0, 155) || `Cannabis grow diary${diary.strain ? ` — ${diary.strain}` : ""} on TerpTalk.`,
+    openGraph: { title: diary.title, type: "article" },
+  }
+}
+
 async function getDiaryData(id: string) {
   const diary = await prisma.growDiary.findUnique({
     where: { id },

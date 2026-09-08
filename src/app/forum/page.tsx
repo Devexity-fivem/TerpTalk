@@ -6,6 +6,11 @@ import RoleBadge from "@/components/role-badge"
 
 export const dynamic = "force-dynamic"
 
+export const metadata = {
+  title: "Grower Discussions",
+  description: "Cannabis growing forum — techniques, equipment, genetics, troubleshooting and more with the TerpTalk community.",
+}
+
 async function getForumData() {
   const categories = await prisma.category.findMany({
     where: { hidden: false },

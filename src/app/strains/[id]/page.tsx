@@ -5,8 +5,21 @@ import Link from "next/link"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import StrainPhotoUpload from "@/components/strain-photo-upload"
+import ShareButtons from "@/components/share-buttons"
 
 export const dynamic = "force-dynamic"
+
+export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params
+  const strain = await prisma.strain.findUnique({
+    where: { id },
+    select: { name: true, description: true, genetics: true, type: true },
+  })
+  if (!strain) return { title: "Strain not found" }
+  const desc = strain.description?.slice(0, 155)
+    || `${strain.name}${strain.type ? ` (${strain.type})` : ""}${strain.genetics ? ` — ${strain.genetics}` : ""}. Cannabis strain info and grower photos on TerpTalk.`
+  return { title: `${strain.name} Strain`, description: desc }
+}
 
 export default async function StrainPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -55,6 +68,9 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
                     {strain.createdBy.profile?.username || strain.createdBy.name}
                   </span>
                 )}
+              </div>
+              <div className="mt-3">
+                <ShareButtons path={`/strains/${strain.id}`} title={`${strain.name} strain — TerpTalk`} />
               </div>
             </div>
           </div>

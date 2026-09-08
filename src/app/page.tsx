@@ -177,10 +177,13 @@ export default async function Home() {
             <span className="font-semibold text-foreground">TerpTalk</span>
             <span>— 21+ cannabis community</span>
           </div>
-          <div className="flex items-center gap-6">
+          <div className="flex items-center gap-5 flex-wrap">
+            <Link href="/about" className="hover:text-foreground transition-colors">About</Link>
             <Link href="/forum" className="hover:text-foreground transition-colors">Discussions</Link>
             <Link href="/diaries" className="hover:text-foreground transition-colors">Diaries</Link>
             <Link href="/strains" className="hover:text-foreground transition-colors">Strains</Link>
+            <Link href="/terms" className="hover:text-foreground transition-colors">Terms</Link>
+            <Link href="/privacy" className="hover:text-foreground transition-colors">Privacy</Link>
           </div>
         </div>
       </footer>

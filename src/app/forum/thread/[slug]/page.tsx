@@ -7,6 +7,21 @@ import ReplyForm from "@/components/reply-form"
 import PostActions from "@/components/post-actions"
 import RoleBadge from "@/components/role-badge"
 import ThreadModActions from "@/components/thread-mod-actions"
+import ShareButtons from "@/components/share-buttons"
+
+export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }) {
+  const { slug } = await params
+  const thread = await prisma.thread.findUnique({
+    where: { slug },
+    select: { title: true, content: true, deleted: true },
+  })
+  if (!thread || thread.deleted) return { title: "Thread not found" }
+  return {
+    title: thread.title,
+    description: thread.content.slice(0, 155),
+    openGraph: { title: thread.title, description: thread.content.slice(0, 155), type: "article" },
+  }
+}
 
 async function getThreadData(slug: string) {
   const thread = await prisma.thread.findUnique({
@@ -88,6 +103,7 @@ export default async function ThreadPage({ params }: { params: Promise<{ slug: s
               <Users className="w-4 h-4" />
               {thread.views} views
             </span>
+            <ShareButtons path={`/forum/thread/${thread.slug}`} title={thread.title} />
           </div>
         </div>
 

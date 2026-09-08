@@ -6,6 +6,11 @@ import RoleBadge from "@/components/role-badge"
 
 export const dynamic = "force-dynamic"
 
+export const metadata = {
+  title: "Community Feed",
+  description: "Latest grow diary updates, discussions and new diaries from the TerpTalk community.",
+}
+
 async function getFeedData() {
   // Get recent activity from various sources
   const recentDiaryUpdates = await prisma.diaryUpdate.findMany({
