@@ -100,6 +100,80 @@ export async function GET() {
   }
 }
 
+// Profile customization — update own profile fields
+export async function PATCH(request: Request) {
+  try {
+    const session = await getServerSession(authOptions)
+
+    if (!session?.user?.id) {
+      return unauthorized()
+    }
+
+    const body = await request.json().catch(() => ({}))
+    const {
+      bio,
+      location,
+      website,
+      avatarEmoji,
+      avatarUrl,
+      bannerColor,
+      growExperience,
+      favoriteStrain,
+      growSpace,
+    } = body
+
+    // Validate avatar URL — must be https image link or empty
+    if (avatarUrl !== undefined && avatarUrl !== null && avatarUrl !== "") {
+      if (
+        typeof avatarUrl !== "string" ||
+        avatarUrl.length > 500 ||
+        !/^https:\/\/.+/i.test(avatarUrl)
+      ) {
+        return NextResponse.json(
+          { error: "Avatar must be a valid https:// image URL" },
+          { status: 400 }
+        )
+      }
+    }
+
+    // Validate banner color — hex color or empty
+    if (bannerColor !== undefined && bannerColor !== null && bannerColor !== "") {
+      if (typeof bannerColor !== "string" || !/^#[0-9a-fA-F]{6}$/.test(bannerColor)) {
+        return NextResponse.json(
+          { error: "Banner color must be a hex color like #22c55e" },
+          { status: 400 }
+        )
+      }
+    }
+
+    const clean = (v: unknown, max: number) =>
+      typeof v === "string" ? v.trim().slice(0, max) || null : null
+
+    const updated = await prisma.profile.update({
+      where: { userId: session.user.id },
+      data: {
+        bio: clean(bio, 500),
+        location: clean(location, 100),
+        website: clean(website, 200),
+        avatarEmoji: avatarEmoji ? String(avatarEmoji).slice(0, 8) : null,
+        avatarUrl: avatarUrl ? String(avatarUrl).slice(0, 500) : null,
+        bannerColor: bannerColor ? String(bannerColor) : null,
+        growExperience: clean(growExperience, 50),
+        favoriteStrain: clean(favoriteStrain, 100),
+        growSpace: clean(growSpace, 100),
+      },
+    })
+
+    return NextResponse.json({ profile: updated })
+  } catch (error) {
+    console.error("Profile update error:", error)
+    return NextResponse.json(
+      { error: "Failed to update profile" },
+      { status: 500 }
+    )
+  }
+}
+
 // Account deletion — privacy-by-design right to erasure
 export async function DELETE(request: Request) {
   const ip = getClientIp(request)

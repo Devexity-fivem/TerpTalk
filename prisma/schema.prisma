@@ -56,9 +56,14 @@ model Profile {
   id           String   @id @default(cuid())
   userId       String   @unique
   username     String   @unique
-  bio          String?
-  location     String?
-  website      String?
+  bio            String?
+  location       String?
+  website        String?
+  avatarEmoji    String?
+  avatarUrl      String?
+  bannerColor    String?
+  growExperience String?
+  favoriteStrain String?
   joinDate     DateTime @default(now())
   reputation   Int      @default(0)
   growSpace    String?

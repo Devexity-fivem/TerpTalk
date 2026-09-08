@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import { useSession } from "next-auth/react"
 import { useParams } from "next/navigation"
-import { User, MessageSquare, Loader2 } from "lucide-react"
+import { User, MessageSquare, Loader2, MapPin, Globe, Sprout, Dna, Leaf } from "lucide-react"
 import Link from "next/link"
 import UserActions from "@/components/user-actions"
 
@@ -13,6 +13,12 @@ interface PublicProfile {
   bio: string | null
   location: string | null
   website: string | null
+  avatarEmoji: string | null
+  avatarUrl: string | null
+  bannerColor: string | null
+  growExperience: string | null
+  favoriteStrain: string | null
+  growSpace: string | null
   image: string | null
   joinDate: string
   reputation: number
@@ -78,11 +84,25 @@ export default function PublicProfilePage() {
   return (
     <div className="min-h-screen bg-background">
       <div className="max-w-4xl mx-auto px-4 py-8">
-        <div className="bg-card rounded-lg border border-border p-6 mb-6">
-          <div className="flex items-start gap-6 flex-wrap">
-            <div className="w-24 h-24 bg-primary/10 rounded-full flex items-center justify-center shrink-0">
-              <User className="w-12 h-12 text-primary" />
-            </div>
+        <div className="bg-card rounded-lg border border-border overflow-hidden mb-6">
+          <div
+            className="h-24 w-full"
+            style={{ background: profile.bannerColor || "#16a34a" }}
+          />
+          <div className="p-6 -mt-12">
+            <div className="flex items-start gap-6 flex-wrap">
+              <div className="w-24 h-24 bg-card border-4 border-card rounded-full flex items-center justify-center shrink-0 overflow-hidden shadow-md">
+                {profile.avatarUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={profile.avatarUrl} alt="avatar" className="w-full h-full object-cover" />
+                ) : profile.avatarEmoji ? (
+                  <span className="text-5xl">{profile.avatarEmoji}</span>
+                ) : (
+                  <div className="w-full h-full bg-primary/10 flex items-center justify-center">
+                    <User className="w-12 h-12 text-primary" />
+                  </div>
+                )}
+              </div>
             <div className="flex-1 min-w-0">
               <div className="flex items-start justify-between gap-4 flex-wrap">
                 <div>
@@ -90,11 +110,22 @@ export default function PublicProfilePage() {
                   <p className="text-muted-foreground text-sm mb-2">Member since {joinDate}</p>
                   {profile.bio && <p className="text-sm mb-3 break-words whitespace-pre-wrap">{profile.bio}</p>}
                   <div className="flex gap-4 text-sm text-muted-foreground flex-wrap">
-                    {profile.location && <span>{profile.location}</span>}
+                    {profile.location && (
+                      <span className="flex items-center gap-1"><MapPin className="w-3.5 h-3.5" />{profile.location}</span>
+                    )}
                     {profile.website && (
-                      <a href={profile.website} target="_blank" rel="noopener noreferrer nofollow" className="text-primary hover:underline">
-                        {profile.website.replace(/^https?:\/\//, "").slice(0, 40)}
+                      <a href={profile.website} target="_blank" rel="noopener noreferrer nofollow" className="flex items-center gap-1 text-primary hover:underline">
+                        <Globe className="w-3.5 h-3.5" />{profile.website.replace(/^https?:\/\//, "").slice(0, 40)}
                       </a>
+                    )}
+                    {profile.growExperience && (
+                      <span className="flex items-center gap-1"><Sprout className="w-3.5 h-3.5" />{profile.growExperience}</span>
+                    )}
+                    {profile.favoriteStrain && (
+                      <span className="flex items-center gap-1"><Dna className="w-3.5 h-3.5" />{profile.favoriteStrain}</span>
+                    )}
+                    {profile.growSpace && (
+                      <span className="flex items-center gap-1"><Leaf className="w-3.5 h-3.5" />{profile.growSpace}</span>
                     )}
                   </div>
                 </div>
@@ -121,6 +152,7 @@ export default function PublicProfilePage() {
                 </div>
               </div>
             </div>
+          </div>
           </div>
         </div>
 
