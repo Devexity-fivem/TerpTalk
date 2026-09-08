@@ -8,6 +8,9 @@ import PostActions from "@/components/post-actions"
 import RoleBadge from "@/components/role-badge"
 import ThreadModActions from "@/components/thread-mod-actions"
 import ShareButtons from "@/components/share-buttons"
+import BookmarkButton from "@/components/bookmark-button"
+import { getServerSession } from "next-auth"
+import { authOptions } from "@/lib/auth"
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params
@@ -56,6 +59,13 @@ async function getThreadData(slug: string) {
 export default async function ThreadPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params
   const thread = await getThreadData(slug)
+  const session = await getServerSession(authOptions)
+  const saved = session?.user?.id
+    ? !!(await prisma.bookmark.findUnique({
+        where: { userId_threadId: { userId: session.user.id, threadId: thread.id } },
+        select: { id: true },
+      }))
+    : false
 
   return (
     <div className="min-h-screen bg-background">
@@ -103,6 +113,7 @@ export default async function ThreadPage({ params }: { params: Promise<{ slug: s
               <Users className="w-4 h-4" />
               {thread.views} views
             </span>
+            <BookmarkButton threadId={thread.id} initiallySaved={saved} />
             <ShareButtons path={`/forum/thread/${thread.slug}`} title={thread.title} />
           </div>
         </div>

@@ -2,7 +2,25 @@
 
 import { useState } from "react"
 import { useSession } from "next-auth/react"
-import { Plus, Loader2, X } from "lucide-react"
+import { Plus, Loader2, X, Camera } from "lucide-react"
+
+function resizeImage(file: File, max = 800): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const img = new Image()
+    img.onload = () => {
+      const scale = Math.min(1, max / Math.max(img.width, img.height))
+      const canvas = document.createElement("canvas")
+      canvas.width = Math.round(img.width * scale)
+      canvas.height = Math.round(img.height * scale)
+      const ctx = canvas.getContext("2d")
+      if (!ctx) return reject(new Error("no canvas"))
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
+      resolve(canvas.toDataURL("image/webp", 0.82))
+    }
+    img.onerror = reject
+    img.src = URL.createObjectURL(file)
+  })
+}
 
 interface UpdateFormProps {
   diaryId: string
@@ -13,6 +31,7 @@ export default function UpdateForm({ diaryId }: UpdateFormProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
+  const [photos, setPhotos] = useState<string[]>([])
   const [formData, setFormData] = useState({
     title: "",
     content: "",
@@ -58,6 +77,7 @@ export default function UpdateForm({ diaryId }: UpdateFormProps) {
           vpd: formData.vpd ? parseFloat(formData.vpd) : null,
           ph: formData.ph ? parseFloat(formData.ph) : null,
           ec: formData.ec ? parseFloat(formData.ec) : null,
+          images: photos,
         }),
       })
 
@@ -247,6 +267,46 @@ export default function UpdateForm({ diaryId }: UpdateFormProps) {
                 placeholder="LST, topping, defoliation..."
                 rows={2}
               />
+            </div>
+          </div>
+
+          {/* Photos */}
+          <div>
+            <label className="block text-sm font-medium mb-1">Photos (up to 4)</label>
+            <div className="flex items-center gap-3 flex-wrap">
+              {photos.map((p, i) => (
+                <div key={i} className="relative group">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={p} alt="" className="w-20 h-20 object-cover rounded-lg border border-border" />
+                  <button
+                    type="button"
+                    onClick={() => setPhotos(photos.filter((_, j) => j !== i))}
+                    className="absolute -top-2 -right-2 w-5 h-5 bg-destructive text-destructive-foreground rounded-full text-xs flex items-center justify-center"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
+              ))}
+              {photos.length < 4 && (
+                <label className="w-20 h-20 border-2 border-dashed border-border rounded-lg flex flex-col items-center justify-center cursor-pointer hover:border-primary/50 transition-colors text-muted-foreground">
+                  <Camera className="w-5 h-5" />
+                  <span className="text-[10px]">Add</span>
+                  <input
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp"
+                    className="hidden"
+                    onChange={async (e) => {
+                      const f = e.target.files?.[0]
+                      if (!f) return
+                      if (f.size > 10 * 1024 * 1024) { setError("Image must be under 10MB"); return }
+                      try {
+                        setPhotos([...photos, await resizeImage(f)])
+                      } catch { setError("Could not process image") }
+                      e.target.value = ""
+                    }}
+                  />
+                </label>
+              )}
             </div>
           </div>
 

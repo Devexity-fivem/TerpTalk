@@ -1,9 +1,13 @@
 import { prisma } from "@/lib/prisma"
 import { publicUserSelect } from "@/lib/security"
 import { notFound } from "next/navigation"
-import { Leaf, Calendar, Users, Heart, Share2, Bookmark } from "lucide-react"
+import { Leaf, Calendar, Users } from "lucide-react"
 import Link from "next/link"
+import { getServerSession } from "next-auth"
+import { authOptions } from "@/lib/auth"
 import UpdateForm from "@/components/update-form"
+import DiaryFollowButton from "@/components/diary-follow-button"
+import ShareButtons from "@/components/share-buttons"
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -47,6 +51,13 @@ async function getDiaryData(id: string) {
 export default async function DiaryPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const diary = await getDiaryData(id)
+  const session = await getServerSession(authOptions)
+  const following = session?.user?.id
+    ? !!(await prisma.diaryFollow.findUnique({
+        where: { userId_diaryId: { userId: session.user.id, diaryId: diary.id } },
+        select: { id: true },
+      }))
+    : false
 
   return (
     <div className="min-h-screen bg-background">
@@ -92,16 +103,9 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
                 </span>
               </div>
             </div>
-            <div className="flex gap-2">
-              <button className="p-2 hover:bg-secondary rounded-lg transition-colors" title="Follow">
-                <Users className="w-5 h-5" />
-              </button>
-              <button className="p-2 hover:bg-secondary rounded-lg transition-colors" title="Bookmark">
-                <Bookmark className="w-5 h-5" />
-              </button>
-              <button className="p-2 hover:bg-secondary rounded-lg transition-colors" title="Share">
-                <Share2 className="w-5 h-5" />
-              </button>
+            <div className="flex gap-2 items-start">
+              <DiaryFollowButton diaryId={diary.id} initiallyFollowing={following} />
+              <ShareButtons path={`/diaries/${diary.id}`} title={`${diary.title} — grow diary on TerpTalk`} />
             </div>
           </div>
         </div>
@@ -271,24 +275,20 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
                       {update.images.length > 0 && (
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-4">
                           {update.images.map((image) => (
-                            <div key={image.id} className="aspect-square bg-secondary rounded-lg overflow-hidden">
-                              <div className="w-full h-full flex items-center justify-center text-muted-foreground">
-                                <Leaf className="w-8 h-8" />
-                              </div>
-                            </div>
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              key={image.id}
+                              src={image.url}
+                              alt={image.caption || "Grow update photo"}
+                              className="aspect-square object-cover rounded-lg border border-border"
+                            />
                           ))}
                         </div>
                       )}
 
                       {/* Actions */}
                       <div className="flex items-center gap-4">
-                        <button className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors">
-                          <Heart className="w-4 h-4" />
-                          Like
-                        </button>
-                        <button className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors">
-                          Share
-                        </button>
+                        <ShareButtons path={`/diaries/${diary.id}`} title={`${diary.title} — grow diary`} />
                       </div>
                     </div>
                   </div>

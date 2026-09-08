@@ -45,7 +45,7 @@ export default function PublicProfilePage() {
   const params = useParams()
   const { data: session } = useSession()
   const username = decodeURIComponent(String(params.username))
-  const [data, setData] = useState<{ profile: PublicProfile; viewerBlocked: boolean; recentThreads: Thread[] } | null>(null)
+  const [data, setData] = useState<{ profile: PublicProfile; viewerBlocked: boolean; viewerFollowing: boolean; recentThreads: Thread[] } | null>(null)
   const [loading, setLoading] = useState(true)
   const [notFound, setNotFound] = useState(false)
 
@@ -79,7 +79,7 @@ export default function PublicProfilePage() {
     )
   }
 
-  const { profile, viewerBlocked, recentThreads } = data
+  const { profile, viewerBlocked, viewerFollowing, recentThreads } = data
   const joinDate = new Date(profile.joinDate).toLocaleDateString("en-US", { year: "numeric", month: "long" })
 
   return (
@@ -122,7 +122,7 @@ export default function PublicProfilePage() {
                   </div>
                 </div>
                 {session && session.user?.id !== profile.id && (
-                  <UserActions userId={profile.id} username={profile.username} initiallyBlocked={viewerBlocked} />
+                  <UserActions userId={profile.id} username={profile.username} initiallyBlocked={viewerBlocked} initiallyFollowing={viewerFollowing} />
                 )}
               </div>
               <div className="flex gap-6 mt-4">

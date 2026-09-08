@@ -1,6 +1,8 @@
 import { prisma } from "@/lib/prisma"
 import { publicUserSelect } from "@/lib/security"
-import { Leaf, MessageSquare, TrendingUp, Calendar, Users } from "lucide-react"
+import { getServerSession } from "next-auth"
+import { authOptions } from "@/lib/auth"
+import { Leaf, MessageSquare, TrendingUp, Calendar, Users, UserPlus } from "lucide-react"
 import Link from "next/link"
 import RoleBadge from "@/components/role-badge"
 
@@ -11,11 +13,33 @@ export const metadata = {
   description: "Latest grow diary updates, discussions and new diaries from the TerpTalk community.",
 }
 
-async function getFeedData() {
+async function getFeedData(userId?: string, followingOnly = false) {
+  // Resolve follow sets when the Following tab is active
+  let followingIds: string[] = []
+  let followedDiaryIds: string[] = []
+  if (userId && followingOnly) {
+    const [follows, diaryFollows] = await Promise.all([
+      prisma.follow.findMany({ where: { followerId: userId }, select: { followingId: true } }),
+      prisma.diaryFollow.findMany({ where: { userId }, select: { diaryId: true } }),
+    ])
+    followingIds = follows.map((f) => f.followingId)
+    followedDiaryIds = diaryFollows.map((f) => f.diaryId)
+  }
+
+  const updateWhere = followingOnly
+    ? { diary: { deleted: false }, OR: [{ authorId: { in: followingIds } }, { diaryId: { in: followedDiaryIds } }] }
+    : { diary: { deleted: false } }
+  const threadWhere = followingOnly
+    ? { deleted: false, authorId: { in: followingIds } }
+    : { deleted: false }
+  const diaryWhere = followingOnly
+    ? { deleted: false, OR: [{ authorId: { in: followingIds } }, { followers: { some: { userId } } }] }
+    : { deleted: false }
+
   // Get recent activity from various sources
   const recentDiaryUpdates = await prisma.diaryUpdate.findMany({
-    where: { diary: { deleted: false } },
-    take: 5,
+    where: updateWhere,
+    take: 10,
     orderBy: { createdAt: "desc" },
     include: {
       diary: {
@@ -24,12 +48,13 @@ async function getFeedData() {
         },
       },
       author: { select: publicUserSelect },
+      images: { take: 1 },
     },
   })
 
   const recentThreads = await prisma.thread.findMany({
-    where: { deleted: false },
-    take: 5,
+    where: threadWhere,
+    take: 10,
     orderBy: { createdAt: "desc" },
     include: {
       author: { select: publicUserSelect },
@@ -41,7 +66,7 @@ async function getFeedData() {
   })
 
   const trendingDiaries = await prisma.growDiary.findMany({
-    where: { deleted: false },
+    where: diaryWhere,
     take: 5,
     orderBy: [
       { featured: "desc" },
@@ -78,8 +103,15 @@ async function getFeedData() {
   }
 }
 
-export default async function FeedPage() {
-  const { recentDiaryUpdates, recentThreads, trendingDiaries, memberCount, threadCount, diaryCount, popularCategories } = await getFeedData()
+export default async function FeedPage({ searchParams }: { searchParams: Promise<{ tab?: string }> }) {
+  const { tab } = await searchParams
+  const session = await getServerSession(authOptions)
+  const followingOnly = tab === "following" && !!session?.user?.id
+  const { recentDiaryUpdates, recentThreads, trendingDiaries, memberCount, threadCount, diaryCount, popularCategories } =
+    await getFeedData(session?.user?.id, followingOnly)
+
+  const tabCls = (active: boolean) =>
+    `px-4 py-2 text-sm font-medium transition-colors ${active ? "border-b-2 border-primary text-primary" : "text-muted-foreground hover:text-foreground"}`
 
   return (
     <div className="min-h-screen bg-background">
@@ -92,15 +124,8 @@ export default async function FeedPage() {
 
         {/* Feed Tabs */}
         <div className="flex gap-4 mb-6 border-b border-border">
-          <span className="px-4 py-2 border-b-2 border-primary text-primary font-medium">
-            Latest
-          </span>
-          <span className="px-4 py-2 text-muted-foreground text-sm flex items-center gap-1">
-            Trending <span className="text-xs bg-secondary px-1.5 py-0.5 rounded">Soon</span>
-          </span>
-          <span className="px-4 py-2 text-muted-foreground text-sm flex items-center gap-1">
-            Following <span className="text-xs bg-secondary px-1.5 py-0.5 rounded">Soon</span>
-          </span>
+          <Link href="/feed" className={tabCls(!followingOnly)}>Latest</Link>
+          <Link href="/feed?tab=following" className={tabCls(followingOnly)}>Following</Link>
         </div>
 
         <div className="grid lg:grid-cols-3 gap-6">
@@ -204,6 +229,19 @@ export default async function FeedPage() {
             {/* Empty State */}
             {recentDiaryUpdates.length === 0 && recentThreads.length === 0 && (
               <div className="bg-card rounded-lg border border-border p-12 text-center">
+                {followingOnly ? (
+                  <>
+                    <UserPlus className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
+                    <h3 className="text-lg font-semibold mb-2">Nothing from your follows yet</h3>
+                    <p className="text-muted-foreground mb-4">
+                      Follow growers on their profiles or follow diaries you like — their activity shows up here.
+                    </p>
+                    <Link href="/diaries" className="bg-primary text-primary-foreground px-6 py-2 rounded-lg hover:bg-primary/90 transition-colors inline-block">
+                      Browse Diaries
+                    </Link>
+                  </>
+                ) : (
+                <>
                 <Calendar className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
                 <h3 className="text-lg font-semibold mb-2">No recent activity</h3>
                 <p className="text-muted-foreground mb-4">
@@ -223,6 +261,8 @@ export default async function FeedPage() {
                     Start Discussion
                   </Link>
                 </div>
+                </>
+                )}
               </div>
             )}
           </div>
@@ -292,6 +332,9 @@ export default async function FeedPage() {
                     {c.name}
                   </Link>
                 ))}
+                <Link href="/leaderboard" className="block text-sm text-primary hover:underline mt-2">
+                  🏆 Top growers leaderboard →
+                </Link>
                 <Link href="/forum" className="block text-sm text-primary hover:underline mt-2">
                   View all categories →
                 </Link>

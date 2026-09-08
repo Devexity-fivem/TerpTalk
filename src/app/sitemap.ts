@@ -7,7 +7,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const base = process.env.NEXT_PUBLIC_SITE_URL || "https://terp-talk.vercel.app"
 
   const staticRoutes: MetadataRoute.Sitemap = [
-    "", "/forum", "/diaries", "/setups", "/strains", "/feed", "/about", "/terms", "/privacy",
+    "", "/forum", "/diaries", "/setups", "/strains", "/feed", "/about", "/terms", "/privacy", "/leaderboard",
   ].map((path) => ({
     url: `${base}${path}`,
     lastModified: new Date(),

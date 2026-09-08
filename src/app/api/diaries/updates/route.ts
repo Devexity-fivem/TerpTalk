@@ -29,6 +29,7 @@ export async function POST(request: Request) {
       ec,
       feeding,
       training,
+      images,
     } = body
 
     if (typeof title !== "string" || !title.trim() ||
@@ -38,6 +39,14 @@ export async function POST(request: Request) {
         { error: "Missing required fields" },
         { status: 400 }
       )
+    }
+
+    // Validate any uploaded images are data URIs
+    const validImages = Array.isArray(images)
+      ? images.filter((i: unknown) => typeof i === "string" && /^data:image\/(png|jpe?g|webp);base64,/.test(i) && i.length <= 400_000).slice(0, 4)
+      : []
+    if (Array.isArray(images) && images.length > 0 && validImages.length === 0) {
+      return NextResponse.json({ error: "Invalid image format" }, { status: 400 })
     }
 
     if (title.length > LIMITS.TITLE_MAX || content.length > LIMITS.POST_CONTENT_MAX) {
@@ -101,9 +110,19 @@ export async function POST(request: Request) {
         ec,
         feeding,
         training,
+        // Attach up to 4 client-resized photos
+        ...(validImages.length > 0 && {
+          images: {
+            create: validImages.map((url: string, i: number) => ({
+              url,
+              order: i,
+            })),
+          },
+        }),
       },
       include: {
         author: { select: publicUserSelect },
+        images: true,
       },
     })
 
@@ -120,6 +139,24 @@ export async function POST(request: Request) {
         where: { id: diaryId },
         data: { stage },
       })
+    }
+
+    // Notify diary followers (not the author)
+    const followers = await prisma.diaryFollow.findMany({
+      where: { diaryId, userId: { not: session.user.id } },
+      select: { userId: true },
+    })
+    if (followers.length > 0) {
+      const authorName = session.user.name || "Someone"
+      await prisma.notification.createMany({
+        data: followers.map((f) => ({
+          userId: f.userId,
+          type: "DIARY_UPDATE",
+          title: "Diary updated",
+          content: `${authorName} added "${update.title.slice(0, 60)}" to "${diary.title.slice(0, 50)}"`,
+          link: `/diaries/${diaryId}`,
+        })),
+      }).catch(() => {})
     }
 
     return NextResponse.json({ update }, { status: 201 })

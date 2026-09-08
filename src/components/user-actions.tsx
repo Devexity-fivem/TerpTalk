@@ -2,11 +2,12 @@
 
 import { useState } from "react"
 import { useSession } from "next-auth/react"
-import { Flag, Ban, Check, Loader2 } from "lucide-react"
+import { Flag, Ban, Check, Loader2, UserPlus, UserCheck } from "lucide-react"
 
-export default function UserActions({ userId, username, initiallyBlocked }: { userId: string; username: string; initiallyBlocked: boolean }) {
+export default function UserActions({ userId, username, initiallyBlocked, initiallyFollowing }: { userId: string; username: string; initiallyBlocked: boolean; initiallyFollowing?: boolean }) {
   const { data: session } = useSession()
   const [blocked, setBlocked] = useState(initiallyBlocked)
+  const [following, setFollowing] = useState(!!initiallyFollowing)
   const [showReport, setShowReport] = useState(false)
   const [reason, setReason] = useState("HARASSMENT")
   const [desc, setDesc] = useState("")
@@ -52,6 +53,36 @@ export default function UserActions({ userId, username, initiallyBlocked }: { us
   return (
     <div className="space-y-2">
       <div className="flex gap-2">
+        <button
+          onClick={async () => {
+            if (busy) return
+            setBusy(true)
+            try {
+              const res = await fetch("/api/follows", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ userId }),
+              })
+              if (res.ok) {
+                const d = await res.json()
+                setFollowing(d.following)
+                setMessage(d.following ? `Following @${username}` : `Unfollowed @${username}`)
+              } else {
+                const d = await res.json()
+                setMessage(d.error || "Failed")
+              }
+            } finally { setBusy(false) }
+          }}
+          disabled={busy || blocked}
+          className={`flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg font-medium transition-colors disabled:opacity-50 ${
+            following
+              ? "bg-primary/10 text-primary border border-primary/30"
+              : "bg-primary text-primary-foreground hover:bg-primary/90"
+          }`}
+        >
+          {following ? <UserCheck className="w-4 h-4" /> : <UserPlus className="w-4 h-4" />}
+          {following ? "Following" : "Follow"}
+        </button>
         <button
           onClick={toggleBlock}
           disabled={busy}

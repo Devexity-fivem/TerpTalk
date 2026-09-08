@@ -57,6 +57,7 @@ export async function GET(
   const session = await getServerSession(authOptions)
   let viewerBlocked = false
   let blockedMe = false
+  let viewerFollowing = false
   if (session?.user?.id && session.user.id !== profile.user.id) {
     viewerBlocked = !!(await prisma.block.findUnique({
       where: {
@@ -68,6 +69,15 @@ export async function GET(
       select: { id: true },
     }))
     blockedMe = await blockExistsBetween(profile.user.id, session.user.id)
+    viewerFollowing = !!(await prisma.follow.findUnique({
+      where: {
+        followerId_followingId: {
+          followerId: session.user.id,
+          followingId: profile.user.id,
+        },
+      },
+      select: { id: true },
+    }))
   }
 
   if (blockedMe) {
@@ -111,6 +121,7 @@ export async function GET(
       stats: profile.user._count,
     },
     viewerBlocked,
+    viewerFollowing,
     recentThreads,
   })
 }

@@ -34,6 +34,8 @@ export function Navigation() {
       .then((res) => (res.ok ? res.json() : null))
       .then((d) => setUnread(d?.unreadCount || 0))
       .catch(() => {})
+    // Presence ping — updates lastSeenAt/online status (server throttled)
+    fetch("/api/ping", { method: "POST" }).catch(() => {})
   }, [session])
 
   // Close mobile menu on navigation

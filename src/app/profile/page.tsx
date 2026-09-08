@@ -7,6 +7,7 @@ import { User, Calendar, Award, MessageSquare, Leaf, Loader2, Download, Trash2, 
 import { signOut } from "next-auth/react"
 import Link from "next/link"
 import RoleBadge from "@/components/role-badge"
+import SavedThreads from "@/components/saved-threads"
 
 interface ProfileData {
   user: {
@@ -454,6 +455,9 @@ export default function ProfilePage() {
               </div>
             )}
           </div>
+
+          {/* Saved Threads */}
+          <SavedThreads />
 
           {/* Referrals */}
           <div className="bg-card rounded-lg border border-border p-6">
