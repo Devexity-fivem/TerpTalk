@@ -1,7 +1,21 @@
 import { Leaf, Users, MessageSquare, Award } from "lucide-react"
 import Link from "next/link"
+import { prisma } from "@/lib/prisma"
 
-export default function Home() {
+export const dynamic = "force-dynamic"
+
+async function getStats() {
+  const [members, diaries, threads, posts] = await Promise.all([
+    prisma.user.count({ where: { banned: false } }),
+    prisma.growDiary.count({ where: { deleted: false } }),
+    prisma.thread.count({ where: { deleted: false } }),
+    prisma.post.count({ where: { deleted: false } }),
+  ])
+  return { members, diaries, discussions: threads + posts }
+}
+
+export default async function Home() {
+  const stats = await getStats()
   return (
     <div className="flex flex-col min-h-screen bg-background">
       {/* Hero Section */}
@@ -32,22 +46,18 @@ export default function Home() {
       {/* Community Stats */}
       <section className="py-16 px-4 sm:px-6 lg:px-8 bg-secondary/50">
         <div className="max-w-7xl mx-auto">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-8">
             <div className="text-center">
-              <div className="text-3xl font-bold text-primary mb-2">15,284</div>
+              <div className="text-3xl font-bold text-primary mb-2">{stats.members.toLocaleString()}</div>
               <div className="text-muted-foreground">Members</div>
             </div>
             <div className="text-center">
-              <div className="text-3xl font-bold text-primary mb-2">2,431</div>
+              <div className="text-3xl font-bold text-primary mb-2">{stats.diaries.toLocaleString()}</div>
               <div className="text-muted-foreground">Grow Diaries</div>
             </div>
             <div className="text-center">
-              <div className="text-3xl font-bold text-primary mb-2">84,291</div>
+              <div className="text-3xl font-bold text-primary mb-2">{stats.discussions.toLocaleString()}</div>
               <div className="text-muted-foreground">Discussions</div>
-            </div>
-            <div className="text-center">
-              <div className="text-3xl font-bold text-primary mb-2">327</div>
-              <div className="text-muted-foreground">Growers Online</div>
             </div>
           </div>
         </div>
@@ -73,16 +83,16 @@ export default function Home() {
               </div>
               <h3 className="text-xl font-semibold mb-2">Grow Diaries</h3>
               <p className="text-muted-foreground">
-                Document your entire grow journey from seed to harvest with detailed updates, photos, and environmental data.
+                Document your entire grow journey from seed to harvest with detailed updates and environmental data.
               </p>
             </div>
             <div className="bg-card p-6 rounded-lg border border-border">
               <div className="bg-primary/10 w-12 h-12 rounded-lg flex items-center justify-center mb-4">
                 <MessageSquare className="w-6 h-6 text-primary" />
               </div>
-              <h3 className="text-xl font-semibold mb-2">Live Chat</h3>
+              <h3 className="text-xl font-semibold mb-2">Community Chat</h3>
               <p className="text-muted-foreground">
-                Connect with growers in real-time through our live chat rooms. Get instant answers and share experiences.
+                Connect with growers in community chat rooms. Get answers and share experiences.
               </p>
             </div>
             <div className="bg-card p-6 rounded-lg border border-border">
@@ -119,12 +129,12 @@ export default function Home() {
       {/* CTA Section */}
       <section className="py-20 px-4 sm:px-6 lg:px-8 bg-primary/10">
         <div className="max-w-4xl mx-auto text-center">
-          <h2 className="text-3xl font-bold mb-4">Join TerpTalk Today</h2>
+          <h2 className="text-3xl font-bold mb-4">Join the TerpTalk Beta</h2>
           <p className="text-xl text-muted-foreground mb-8">
-            Join thousands of growers sharing knowledge and experiences. Your next great grow starts here.
+            We&apos;re in private beta — an invite code is required to join. Get one from an existing member or the team.
           </p>
           <Link href="/auth/signup" className="inline-block bg-primary text-primary-foreground px-8 py-3 rounded-lg font-medium hover:bg-primary/90 transition-colors">
-            Create Free Account
+            Join with Invite Code
           </Link>
         </div>
       </section>

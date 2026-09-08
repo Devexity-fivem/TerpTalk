@@ -34,11 +34,23 @@ async function getForumData() {
     },
   })
 
-  return { categories, recentThreads }
+  const [threadCount, postCount, memberCount, trendingThreads] = await Promise.all([
+    prisma.thread.count({ where: { deleted: false } }),
+    prisma.post.count({ where: { deleted: false } }),
+    prisma.user.count({ where: { banned: false } }),
+    prisma.thread.findMany({
+      where: { deleted: false, views: { gt: 0 } },
+      take: 5,
+      orderBy: { views: "desc" },
+      select: { slug: true, title: true, views: true },
+    }),
+  ])
+
+  return { categories, recentThreads, threadCount, postCount, memberCount, trendingThreads }
 }
 
 export default async function ForumPage() {
-  const { categories, recentThreads } = await getForumData()
+  const { categories, recentThreads, threadCount, postCount, memberCount, trendingThreads } = await getForumData()
 
   return (
     <div className="min-h-screen bg-background">
@@ -138,15 +150,15 @@ export default async function ForumPage() {
               <div className="space-y-3">
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Total Threads</span>
-                  <span className="font-semibold">0</span>
+                  <span className="font-semibold">{threadCount.toLocaleString()}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Total Posts</span>
-                  <span className="font-semibold">0</span>
+                  <span className="font-semibold">{postCount.toLocaleString()}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Members</span>
-                  <span className="font-semibold">0</span>
+                  <span className="font-semibold">{memberCount.toLocaleString()}</span>
                 </div>
               </div>
             </div>
@@ -157,20 +169,17 @@ export default async function ForumPage() {
                 <TrendingUp className="w-4 h-4" />
                 Trending Topics
               </h3>
-              <div className="space-y-2">
-                <Link href="#" className="block text-sm text-muted-foreground hover:text-foreground">
-                  LED vs HPS lighting
-                </Link>
-                <Link href="#" className="block text-sm text-muted-foreground hover:text-foreground">
-                  Organic nutrients guide
-                </Link>
-                <Link href="#" className="block text-sm text-muted-foreground hover:text-foreground">
-                  Low stress training techniques
-                </Link>
-                <Link href="#" className="block text-sm text-muted-foreground hover:text-foreground">
-                  pH and EC management
-                </Link>
-              </div>
+              {trendingThreads.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No trending topics yet.</p>
+              ) : (
+                <div className="space-y-2">
+                  {trendingThreads.map((t) => (
+                    <Link key={t.slug} href={`/forum/thread/${t.slug}`} className="block text-sm text-muted-foreground hover:text-foreground">
+                      {t.title} <span className="text-xs">({t.views} views)</span>
+                    </Link>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* Quick Actions */}

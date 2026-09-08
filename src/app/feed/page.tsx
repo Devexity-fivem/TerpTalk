@@ -49,10 +49,16 @@ async function getFeedData() {
     },
   })
 
-  const [memberCount, threadCount, diaryCount] = await Promise.all([
+  const [memberCount, threadCount, diaryCount, popularCategories] = await Promise.all([
     prisma.user.count({ where: { banned: false } }),
     prisma.thread.count({ where: { deleted: false } }),
     prisma.growDiary.count({ where: { deleted: false } }),
+    prisma.category.findMany({
+      where: { hidden: false },
+      take: 4,
+      orderBy: { threads: { _count: "desc" } },
+      select: { slug: true, name: true },
+    }),
   ])
 
   return {
@@ -62,11 +68,12 @@ async function getFeedData() {
     memberCount,
     threadCount,
     diaryCount,
+    popularCategories,
   }
 }
 
 export default async function FeedPage() {
-  const { recentDiaryUpdates, recentThreads, trendingDiaries, memberCount, threadCount, diaryCount } = await getFeedData()
+  const { recentDiaryUpdates, recentThreads, trendingDiaries, memberCount, threadCount, diaryCount, popularCategories } = await getFeedData()
 
   return (
     <div className="min-h-screen bg-background">
@@ -271,18 +278,11 @@ export default async function FeedPage() {
             <div className="bg-card rounded-lg border border-border p-6">
               <h3 className="font-semibold mb-4">Popular Categories</h3>
               <div className="space-y-2">
-                <Link href="/forum/category/indoor-growing" className="block text-sm text-muted-foreground hover:text-foreground">
-                  Indoor Growing
-                </Link>
-                <Link href="/forum/category/plant-problems" className="block text-sm text-muted-foreground hover:text-foreground">
-                  Plant Problems
-                </Link>
-                <Link href="/forum/category/nutrients" className="block text-sm text-muted-foreground hover:text-foreground">
-                  Nutrients
-                </Link>
-                <Link href="/forum/category/genetics-breeding" className="block text-sm text-muted-foreground hover:text-foreground">
-                  Genetics & Breeding
-                </Link>
+                {popularCategories.map((c) => (
+                  <Link key={c.slug} href={`/forum/category/${c.slug}`} className="block text-sm text-muted-foreground hover:text-foreground">
+                    {c.name}
+                  </Link>
+                ))}
                 <Link href="/forum" className="block text-sm text-primary hover:underline mt-2">
                   View all categories →
                 </Link>

@@ -4,7 +4,7 @@
  * Usage: node scripts/e2e-test.mjs  (dev server must be running on :3000)
  * Requires test invite code + admin/mod credentials seeded via env.
  */
-const BASE = "http://localhost:3000"
+const BASE = process.env.E2E_BASE || "http://localhost:3000"
 const results = []
 const pass = (name) => { results.push([name, "PASS"]); console.log(`  ✓ ${name}`) }
 const fail = (name, info) => { results.push([name, "FAIL", info]); console.log(`  ✗ ${name} — ${info}`) }
