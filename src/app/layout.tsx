@@ -21,10 +21,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className="min-h-screen flex flex-col">
         <Providers>
           <Navigation />
-          <div className="flex-1 flex flex-col lg:flex-row relative">
-            <main className="flex-1 w-full lg:w-auto">{children}</main>
-            <ChatSidebar />
-          </div>
+          <main className="flex-1">{children}</main>
+          <ChatSidebar />
         </Providers>
       </body>
     </html>
