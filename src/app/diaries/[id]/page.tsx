@@ -8,7 +8,7 @@ import { authOptions } from "@/lib/auth"
 import UpdateForm from "@/components/update-form"
 import DiaryFollowButton from "@/components/diary-follow-button"
 import ShareButtons from "@/components/share-buttons"
-import EnvChart from "@/components/env-chart"
+import EnvCharts from "@/components/env-chart"
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -66,6 +66,35 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
   const dayCount = Math.max(0, Math.floor((Date.now() - new Date(diary.startDate).getTime()) / 86400000))
   const stageIdx = Math.max(0, STAGES.indexOf(diary.stage))
   const progress = Math.round(((stageIdx + 1) / STAGES.length) * 100)
+
+  // Stage timeline — consecutive day-runs per stage from updates
+  const stageRuns: { stage: string; days: number }[] = []
+  let prevDay = -1
+  for (const u of diary.updates) {
+    const d = Math.floor((new Date(u.createdAt).getTime() - new Date(diary.startDate).getTime()) / 86400000)
+    const last = stageRuns[stageRuns.length - 1]
+    if (last && last.stage === u.stage && d === prevDay + 1) last.days++
+    else if (!last || last.stage !== u.stage) stageRuns.push({ stage: u.stage, days: 1 })
+    prevDay = d
+  }
+  const STAGE_COLORS: Record<string, string> = {
+    GERMINATION: "bg-stone-500", SEEDLING: "bg-lime-400", VEGETATIVE: "bg-green-500",
+    FLOWER: "bg-amber-500", HARVEST: "bg-orange-500", DRYING: "bg-yellow-700",
+    CURING: "bg-purple-500", COMPLETED: "bg-yellow-400",
+  }
+
+  // Harvest estimate — first FLOWER update + 9 weeks typical flower time
+  const flip = diary.updates.find((u) => u.stage === "FLOWER")
+  const harvestEta = flip
+    // eslint-disable-next-line react-hooks/purity
+    ? Math.round((new Date(flip.createdAt).getTime() + 63 * 86400000 - Date.now()) / 86400000)
+    : null
+
+  // Env vitals — averages across updates
+  const temps = diary.updates.map((u) => u.temperature).filter((v): v is number => v != null)
+  const rhs = diary.updates.map((u) => u.humidity).filter((v): v is number => v != null)
+  const avgTemp = temps.length ? (temps.reduce((a, b) => a + b, 0) / temps.length).toFixed(1) : null
+  const avgRh = rhs.length ? Math.round(rhs.reduce((a, b) => a + b, 0) / rhs.length) : null
 
   // Update streak: consecutive days with updates (most recent run)
   const days = [...new Set(diary.updates.map((u) => new Date(u.createdAt).toDateString()))].map((d) => new Date(d).getTime()).sort((a, b) => b - a)
@@ -138,6 +167,44 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
                   <div className="h-full bg-primary rounded-full transition-all" style={{ width: `${progress}%` }} />
                 </div>
               </div>
+
+              {/* Vitals row */}
+              {(avgTemp || avgRh || harvestEta !== null) && (
+                <div className="flex flex-wrap gap-4 mt-4 text-sm">
+                  {avgTemp && <span className="text-muted-foreground">avg temp <span className="text-foreground font-medium">{avgTemp}°</span></span>}
+                  {avgRh && <span className="text-muted-foreground">avg RH <span className="text-foreground font-medium">{avgRh}%</span></span>}
+                  {harvestEta !== null && harvestEta > 0 && (
+                    <span className="text-muted-foreground">est. harvest in <span className="text-primary font-medium">{harvestEta}d</span></span>
+                  )}
+                  {harvestEta !== null && harvestEta <= 0 && (
+                    <span className="text-primary font-medium">🌾 Past estimated harvest window</span>
+                  )}
+                </div>
+              )}
+
+              {/* Stage timeline */}
+              {stageRuns.length > 1 && (
+                <div className="mt-4">
+                  <div className="flex h-2 rounded-full overflow-hidden">
+                    {stageRuns.map((r, i) => (
+                      <div
+                        key={i}
+                        className={`${STAGE_COLORS[r.stage] || "bg-secondary"} h-full`}
+                        style={{ width: `${(r.days / Math.max(1, stageRuns.reduce((a, b) => a + b.days, 0))) * 100}%` }}
+                        title={`${r.stage} — ${r.days}d`}
+                      />
+                    ))}
+                  </div>
+                  <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1.5">
+                    {stageRuns.map((r, i) => (
+                      <span key={i} className="text-[10px] text-muted-foreground flex items-center gap-1">
+                        <span className={`w-2 h-2 rounded-sm ${STAGE_COLORS[r.stage] || "bg-secondary"}`} />
+                        {r.stage.toLowerCase()} {r.days}d
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
             <div className="flex gap-2 items-start">
               <DiaryFollowButton diaryId={diary.id} initiallyFollowing={following} />
@@ -208,12 +275,14 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
             <UpdateForm diaryId={diary.id} />
           </div>
 
-          <EnvChart
+          <EnvCharts
             updates={diary.updates.map((u) => ({
               createdAt: u.createdAt.toISOString(),
               temperature: u.temperature,
               humidity: u.humidity,
               vpd: u.vpd,
+              ph: u.ph,
+              ec: u.ec,
             }))}
           />
 
