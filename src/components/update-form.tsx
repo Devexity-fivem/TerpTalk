@@ -3,6 +3,7 @@
 import { useState } from "react"
 import { useSession } from "next-auth/react"
 import { Plus, Loader2, X, Camera } from "lucide-react"
+import { STAGE_TIPS } from "@/lib/stage-tips"
 
 function resizeImage(file: File, max = 800): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -175,6 +176,14 @@ export default function UpdateForm({ diaryId }: UpdateFormProps) {
               <option value="CURING">Curing</option>
               <option value="COMPLETED">Completed</option>
             </select>
+            {STAGE_TIPS[formData.stage] && (
+              <div className="mt-2 bg-primary/5 border border-primary/20 rounded-lg p-3">
+                <p className="text-xs font-semibold text-primary mb-1">💡 {formData.stage.toLowerCase()} tips</p>
+                <ul className="text-xs text-muted-foreground space-y-1 list-disc list-inside">
+                  {STAGE_TIPS[formData.stage].map((t, i) => <li key={i}>{t}</li>)}
+                </ul>
+              </div>
+            )}
           </div>
 
           <div>

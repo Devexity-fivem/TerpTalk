@@ -37,6 +37,7 @@ model User {
   setupComments SetupComment[]
   contestEntries ContestEntry[]
   contestVotes   ContestVote[]
+  guides         Guide[]
   chatMessages  ChatMessage[]
   sentMessages  DirectMessage[]      @relation("SentMessages")
   receivedMessages DirectMessage[]   @relation("ReceivedMessages")
@@ -602,4 +603,23 @@ model ContestVote {
 
   @@unique([entryId, userId])
   @@index([entryId])
+}
+
+// Staff-authored grow guides
+model Guide {
+  id        String   @id @default(cuid())
+  title     String
+  slug      String   @unique
+  excerpt   String
+  content   String
+  topic     String   // e.g. BASICS, NUTRIENTS, HARVEST, PESTS
+  published Boolean  @default(true)
+  authorId  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  author    User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@index([slug])
+  @@index([published])
 }

@@ -6,7 +6,7 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import {
   Leaf, User, LogOut, MessageCircle, Home, Calendar,
-  Settings, Dna, Bell, Shield, Menu, X, Mail, Search, Trophy,
+  Settings, Dna, Bell, Shield, Menu, X, Mail, Search, Trophy, BookOpen, Stethoscope,
 } from "lucide-react"
 import CannabisLeaf from "@/components/cannabis-leaf"
 
@@ -18,6 +18,8 @@ const NAV_LINKS = [
   { href: "/setups", label: "Setups", icon: Settings },
   { href: "/strains", label: "Strains", icon: Dna },
   { href: "/contest", label: "Contest", icon: Trophy },
+  { href: "/guides", label: "Guides", icon: BookOpen },
+  { href: "/help", label: "Plant Help", icon: Stethoscope },
 ]
 
 export function Navigation() {
