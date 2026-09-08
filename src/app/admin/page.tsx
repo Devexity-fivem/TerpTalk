@@ -5,9 +5,10 @@ import { useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
 import {
   ShieldCheck, Loader2, Users as UsersIcon,
-  Megaphone, ShieldAlert, Ban, UserCheck, Search,
+  Megaphone, ShieldAlert, Ban, UserCheck, Search, Percent,
 } from "lucide-react"
 import Link from "next/link"
+import AdminAffiliates from "@/components/admin-affiliates"
 
 interface Stats {
   users: number; activeUsers: number; bannedUsers: number; threads: number
@@ -30,6 +31,7 @@ const TABS = [
   { id: "users", label: "Users", icon: UsersIcon },
   { id: "announce", label: "Announce", icon: Megaphone },
   { id: "security", label: "Security", icon: ShieldAlert },
+  { id: "affiliates", label: "Affiliates", icon: Percent },
 ] as const
 
 export default function AdminPage() {
@@ -367,6 +369,7 @@ export default function AdminPage() {
             </div>
           </div>
         )}
+        {tab === "affiliates" && <AdminAffiliates />}
       </div>
     </div>
   )

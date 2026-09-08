@@ -38,6 +38,7 @@ model User {
   contestEntries ContestEntry[]
   contestVotes   ContestVote[]
   guides         Guide[]
+  affiliateClicks AffiliateClick[]
   chatMessages  ChatMessage[]
   sentMessages  DirectMessage[]      @relation("SentMessages")
   receivedMessages DirectMessage[]   @relation("ReceivedMessages")
@@ -622,4 +623,82 @@ model Guide {
 
   @@index([slug])
   @@index([published])
+}
+
+// --- Affiliate System ---
+model AffiliatePartner {
+  id           String   @id @default(cuid())
+  name         String
+  slug         String   @unique
+  logoUrl      String?
+  websiteUrl   String
+  affiliateUrl String   // default partner-level affiliate URL
+  promoCode    String?
+  description  String
+  promoText    String?  // current promotion text
+  promoStart   DateTime?
+  promoEnd     DateTime?
+  active       Boolean  @default(true)
+  featured     Boolean  @default(false)
+  adminNotes   String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  products     AffiliateProduct[]
+  clicks       AffiliateClick[]
+
+  @@index([active])
+  @@index([featured])
+}
+
+model AffiliateProduct {
+  id             String   @id @default(cuid())
+  name           String
+  slug           String   @unique
+  partnerId      String
+  productUrl     String?  // plain product page
+  affiliateUrl   String?  // falls back to partner.affiliateUrl
+  imageUrl       String?
+  description    String
+  category       String
+  pros           String?  // one per line
+  cons           String?  // one per line
+  recommendedFor String?
+  price          String?  // free text, e.g. ".99"
+  promoCode      String?  // falls back to partner.promoCode
+  active         Boolean  @default(true)
+  featured       Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  partner        AffiliatePartner @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  clicks         AffiliateClick[]
+
+  @@index([partnerId])
+  @@index([category])
+  @@index([active])
+}
+
+model AffiliateClick {
+  id        String   @id @default(cuid())
+  partnerId String
+  productId String?
+  page      String?  // referring path e.g. /deals or /forum/thread/x
+  userId    String?  // only if logged in; no PII beyond account id
+  createdAt DateTime @default(now())
+
+  partner   AffiliatePartner  @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  product   AffiliateProduct? @relation(fields: [productId], references: [id], onDelete: SetNull)
+  user      User?             @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([partnerId])
+  @@index([productId])
+  @@index([createdAt])
+}
+
+// Simple key/value site config (affiliate disclosure, etc.)
+model Setting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
 }

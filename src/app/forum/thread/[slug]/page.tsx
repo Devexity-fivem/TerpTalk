@@ -9,6 +9,7 @@ import RoleBadge from "@/components/role-badge"
 import ThreadModActions from "@/components/thread-mod-actions"
 import ShareButtons from "@/components/share-buttons"
 import BookmarkButton from "@/components/bookmark-button"
+import PostContent from "@/components/post-content"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 
@@ -157,7 +158,7 @@ export default async function ThreadPage({ params }: { params: Promise<{ slug: s
                       </span>
                     </div>
                     <div className="prose prose-invert max-w-none mb-4">
-                      <p className="whitespace-pre-wrap break-words">{post.content}</p>
+                      <PostContent content={post.content} authorRole={post.author.role} pagePath={`/forum/thread/${thread.slug}`} />
                     </div>
                     <PostActions
                       postId={post.id}
