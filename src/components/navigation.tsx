@@ -8,6 +8,7 @@ import {
   Leaf, User, LogOut, MessageCircle, Home, Calendar,
   Settings, Dna, Bell, Shield, Menu, X,
 } from "lucide-react"
+import CannabisLeaf from "@/components/cannabis-leaf"
 
 const NAV_LINKS = [
   { href: "/", label: "Home", icon: Home },
@@ -52,12 +53,12 @@ export function Navigation() {
         <div className="flex justify-between items-center h-16">
           {/* Logo */}
           <Link href="/" className="flex items-center gap-2 shrink-0">
-            <div className="bg-primary/10 p-2 rounded-lg">
-              <Leaf className="w-6 h-6 text-primary" />
+            <div className="bg-primary/15 p-2 rounded-xl ring-1 ring-primary/30">
+              <CannabisLeaf className="w-6 h-6 text-primary" />
             </div>
-            <span className="font-bold text-lg">TerpTalk</span>
-            <span className="text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded font-medium">
-              BETA
+            <span className="font-bold text-lg tracking-tight">TerpTalk</span>
+            <span className="text-[10px] bg-amber-500/15 text-amber-500 px-1.5 py-0.5 rounded font-semibold uppercase tracking-wide">
+              Beta
             </span>
           </Link>
 
