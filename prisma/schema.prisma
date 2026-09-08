@@ -24,6 +24,7 @@ model User {
   ageVerified   Boolean   @default(false)
   banned        Boolean   @default(false)
   bannedReason  String?
+  recoveryPhraseHash String?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 

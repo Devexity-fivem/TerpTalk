@@ -8,6 +8,7 @@ import { signOut } from "next-auth/react"
 import Link from "next/link"
 import RoleBadge from "@/components/role-badge"
 import SavedThreads from "@/components/saved-threads"
+import RecoveryPhraseCard from "@/components/recovery-phrase-card"
 
 interface ProfileData {
   user: {
@@ -486,6 +487,9 @@ export default function ProfilePage() {
               </button>
             </div>
           </div>
+
+          {/* Account Recovery */}
+          <RecoveryPhraseCard />
 
           {/* Account Controls */}
           <div className="bg-card rounded-lg border border-border p-6">

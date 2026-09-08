@@ -116,6 +116,9 @@ export type SecurityEventType =
   | "RATE_LIMIT_EXCEEDED"
   | "AUTHORIZATION_FAILURE"
   | "SUSPICIOUS_ACTIVITY"
+  | "RECOVERY_PHRASE_GENERATED"
+  | "RECOVERY_FAILED"
+  | "RECOVERY_SUCCESS"
 
 export async function logSecurityEvent(
   type: SecurityEventType,

@@ -112,6 +112,12 @@ export default function SignInPage() {
             Sign up
           </Link>
         </p>
+        <p className="text-center text-sm text-muted-foreground mt-2">
+          Lost access?{" "}
+          <Link href="/auth/recover" className="text-primary hover:underline">
+            Recover with your phrase
+          </Link>
+        </p>
       </div>
     </div>
   )
