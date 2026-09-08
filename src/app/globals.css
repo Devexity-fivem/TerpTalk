@@ -105,3 +105,15 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: var(--muted-foreground);
 }
+
+/* Prevent iOS auto-zoom on focus � inputs under 16px trigger it */
+@media (max-width: 640px) {
+  input, textarea, select {
+    font-size: 16px;
+  }
+}
+
+/* Respect bottom safe-area on notched phones (chat button, sticky bars) */
+.safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom);
+}

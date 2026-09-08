@@ -181,6 +181,17 @@ export function Navigation() {
       {mobileOpen && (
         <div className="lg:hidden border-t border-border bg-card">
           <div className="max-w-7xl mx-auto px-4 py-3 space-y-1">
+            {/* Mobile search */}
+            <form action="/search" onSubmit={(e) => {
+              const input = (e.currentTarget.elements.namedItem("q") as HTMLInputElement)
+              if (!input.value.trim()) e.preventDefault()
+              else setMobileOpen(false)
+            }} className="pb-2">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <input name="q" placeholder="Search threads, strains, members..." className="w-full pl-9 pr-3 py-2.5 rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary" />
+              </div>
+            </form>
             {NAV_LINKS.map(({ href, label, icon: Icon }) => (
               <Link key={href} href={href} className={linkClass(href)} onClick={() => setMobileOpen(false)}>
                 <Icon className="w-4 h-4" />
