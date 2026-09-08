@@ -72,33 +72,29 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json()
-    const { username, password, captchaId, captchaAnswer, ageVerified, inviteCode } = body
+    const { username, password, captchaId, captchaAnswer, ageVerified, referralCode } = body
 
-    if (!username || !password || !captchaId || !captchaAnswer || !inviteCode) {
+    if (!username || !password || !captchaId || !captchaAnswer) {
       return NextResponse.json(
         { error: "Missing required fields" },
         { status: 400 }
       )
     }
 
-    // Invite-only beta: validate invite code server-side (single-use)
-    const invite = await prisma.betaInvite.findUnique({
-      where: { code: String(inviteCode).trim().toUpperCase() },
-    })
-    if (
-      !invite ||
-      invite.usedById ||
-      (invite.expiresAt && invite.expiresAt < new Date())
-    ) {
-      await logSecurityEvent("REGISTRATION_FAILED", {
-        ip,
-        userAgent,
-        metadata: { reason: "invalid_invite" },
+    // Optional referral — a referrer's username; validate it exists if provided
+    let referrerId: string | null = null
+    if (referralCode && typeof referralCode === "string" && referralCode.trim()) {
+      const referrer = await prisma.profile.findUnique({
+        where: { username: referralCode.trim() },
+        select: { id: true },
       })
-      return NextResponse.json(
-        { error: "Invalid or expired invite code" },
-        { status: 400 }
-      )
+      if (!referrer) {
+        return NextResponse.json(
+          { error: "Referral username not found" },
+          { status: 400 }
+        )
+      }
+      referrerId = referrer.id
     }
 
     // Age verification — must be an explicit true attestation
@@ -188,7 +184,10 @@ export async function POST(request: Request) {
         password: hashedPassword,
         ageVerified: true,
         profile: {
-          create: { username },
+          create: {
+            username,
+            referredById: referrerId,
+          },
         },
       },
       include: {
@@ -198,16 +197,11 @@ export async function POST(request: Request) {
       },
     })
 
-    // Burn the invite — single use
-    await prisma.betaInvite.update({
-      where: { id: invite.id },
-      data: { usedById: user.id, usedAt: new Date() },
-    })
-
     await logSecurityEvent("REGISTRATION", {
       userId: user.id,
       ip,
       userAgent,
+      metadata: referrerId ? { referredById: referrerId } : undefined,
     })
 
     return NextResponse.json(

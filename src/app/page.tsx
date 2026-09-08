@@ -129,12 +129,12 @@ export default async function Home() {
       {/* CTA Section */}
       <section className="py-20 px-4 sm:px-6 lg:px-8 bg-primary/10">
         <div className="max-w-4xl mx-auto text-center">
-          <h2 className="text-3xl font-bold mb-4">Join the TerpTalk Beta</h2>
+          <h2 className="text-3xl font-bold mb-4">Join TerpTalk Today</h2>
           <p className="text-xl text-muted-foreground mb-8">
-            We&apos;re in private beta — an invite code is required to join. Get one from an existing member or the team.
+            Create your account and start growing with the community. Refer friends with your personal link.
           </p>
           <Link href="/auth/signup" className="inline-block bg-primary text-primary-foreground px-8 py-3 rounded-lg font-medium hover:bg-primary/90 transition-colors">
-            Join with Invite Code
+            Create Free Account
           </Link>
         </div>
       </section>

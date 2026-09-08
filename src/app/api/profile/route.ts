@@ -65,6 +65,10 @@ export async function GET() {
       },
     })
 
+    const referralCount = user.profile
+      ? await prisma.profile.count({ where: { referredById: user.profile.id } })
+      : 0
+
     return NextResponse.json({
       user: {
         id: user.id,
@@ -82,6 +86,7 @@ export async function GET() {
         following: user.following.length,
         badges: user.badges.length,
         reputation: user.profile?.reputation || 0,
+        referrals: referralCount,
       },
       recentThreads,
       recentDiaries,

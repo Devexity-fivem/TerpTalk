@@ -10,14 +10,19 @@ export default function SignUpPage() {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
-  const [formData, setFormData] = useState({
-    inviteCode: "",
-    username: "",
-    password: "",
-    confirmPassword: "",
-    ageVerified: false,
-    captchaAnswer: "",
-    captchaId: "",
+  const [formData, setFormData] = useState(() => {
+    const ref = typeof window !== "undefined"
+      ? new URLSearchParams(window.location.search).get("ref") || ""
+      : ""
+    return {
+      referralCode: ref,
+      username: "",
+      password: "",
+      confirmPassword: "",
+      ageVerified: false,
+      captchaAnswer: "",
+      captchaId: "",
+    }
   })
   const [captchaQuestion, setCaptchaQuestion] = useState("Loading...")
 
@@ -37,11 +42,6 @@ export default function SignUpPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError("")
-
-    if (!formData.inviteCode.trim()) {
-      setError("An invite code is required to join the beta")
-      return
-    }
 
     if (!formData.ageVerified) {
       setError("You must verify you are 21+ years old to join")
@@ -75,7 +75,7 @@ export default function SignUpPage() {
           captchaId: formData.captchaId,
           captchaAnswer: formData.captchaAnswer,
           ageVerified: formData.ageVerified,
-          inviteCode: formData.inviteCode,
+          referralCode: formData.referralCode,
         }),
       })
 
@@ -114,22 +114,21 @@ export default function SignUpPage() {
             </div>
           </div>
           <h1 className="text-2xl font-bold">Join TerpTalk</h1>
-          <p className="text-muted-foreground mt-2">Private beta — invite code required</p>
+          <p className="text-muted-foreground mt-2">Create your account — 21+ only</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label htmlFor="inviteCode" className="block text-sm font-medium mb-2">
-              Invite Code *
+            <label htmlFor="referralCode" className="block text-sm font-medium mb-2">
+              Referral Username <span className="text-muted-foreground">(optional)</span>
             </label>
             <input
-              id="inviteCode"
+              id="referralCode"
               type="text"
-              required
-              value={formData.inviteCode}
-              onChange={(e) => setFormData({ ...formData, inviteCode: e.target.value.toUpperCase() })}
+              value={formData.referralCode}
+              onChange={(e) => setFormData({ ...formData, referralCode: e.target.value })}
               className="w-full px-4 py-2 rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary"
-              placeholder="TERP-XXXXXXXX"
+              placeholder="Who invited you?"
               maxLength={20}
             />
           </div>

@@ -31,6 +31,7 @@ interface ProfileData {
     following: number
     badges: number
     reputation: number
+    referrals: number
   }
   recentThreads: Array<{
     id: string
@@ -200,6 +201,34 @@ export default function ProfilePage() {
                 {profileData.stats.badges} badges earned
               </div>
             )}
+          </div>
+
+          {/* Referrals */}
+          <div className="bg-card rounded-lg border border-border p-6">
+            <div className="flex items-center gap-2 mb-4">
+              <User className="w-5 h-5 text-primary" />
+              <h2 className="text-lg font-semibold">Referrals</h2>
+            </div>
+            <p className="text-sm text-muted-foreground mb-3">
+              Share your link — you&apos;ve referred <span className="font-semibold text-foreground">{profileData.stats.referrals}</span> member{profileData.stats.referrals !== 1 ? "s" : ""}.
+            </p>
+            <div className="flex gap-2">
+              <input
+                readOnly
+                value={typeof window !== "undefined" ? `${window.location.origin}/auth/signup?ref=${profileData.profile?.username || profileData.user.name}` : ""}
+                className="flex-1 px-3 py-2 text-xs rounded-lg border border-border bg-background text-muted-foreground"
+                onFocus={(e) => e.target.select()}
+              />
+              <button
+                onClick={() => {
+                  const link = `${window.location.origin}/auth/signup?ref=${profileData.profile?.username || profileData.user.name}`
+                  navigator.clipboard.writeText(link)
+                }}
+                className="px-3 py-2 text-xs font-medium bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
+              >
+                Copy
+              </button>
+            </div>
           </div>
 
           {/* Account Controls */}

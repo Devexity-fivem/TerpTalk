@@ -62,9 +62,13 @@ model Profile {
   joinDate     DateTime @default(now())
   reputation   Int      @default(0)
   growSpace    String?
+  referredById String?
+  referredBy   Profile?  @relation("ProfileReferrals", fields: [referredById], references: [id])
+  referrals    Profile[] @relation("ProfileReferrals")
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([username])
+  @@index([referredById])
 }
 
 // Forum Categories
