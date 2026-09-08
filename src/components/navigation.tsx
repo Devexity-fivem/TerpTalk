@@ -6,7 +6,7 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import {
   Leaf, User, LogOut, MessageCircle, Home, Calendar,
-  Settings, Dna, Bell, Shield, Menu, X, Mail, Search, Trophy, BookOpen, Stethoscope,
+  Settings, Dna, Bell, Shield, Menu, X, Mail, Search, Trophy, BookOpen, Stethoscope, Tag, Award,
 } from "lucide-react"
 import CannabisLeaf from "@/components/cannabis-leaf"
 
@@ -20,6 +20,8 @@ const NAV_LINKS = [
   { href: "/contest", label: "Contest", icon: Trophy },
   { href: "/guides", label: "Guides", icon: BookOpen },
   { href: "/help", label: "Plant Help", icon: Stethoscope },
+  { href: "/deals", label: "Deals", icon: Tag },
+  { href: "/leaderboard", label: "Leaderboard", icon: Award },
 ]
 
 export function Navigation() {
@@ -67,22 +69,16 @@ export function Navigation() {
             </span>
           </Link>
 
-          {/* Desktop nav links */}
+          {/* Desktop: minimal nav — all destinations live on the homepage hub */}
           <div className="hidden lg:flex items-center gap-1">
-            {NAV_LINKS.map(({ href, label, icon: Icon }) => (
-              <Link key={href} href={href} className={linkClass(href)} onClick={() => setMobileOpen(false)}>
-                <Icon className="w-4 h-4" />
-                {label}
-              </Link>
-            ))}
             {isMod && (
-              <Link href="/moderation" className={`${linkClass("/moderation")} !text-amber-500`} onClick={() => setMobileOpen(false)}>
+              <Link href="/moderation" className={`${linkClass("/moderation")} !text-amber-500`}>
                 <Shield className="w-4 h-4" />
                 Moderation
               </Link>
             )}
             {isAdmin && (
-              <Link href="/admin" className={`${linkClass("/admin")} !text-amber-500`} onClick={() => setMobileOpen(false)}>
+              <Link href="/admin" className={`${linkClass("/admin")} !text-amber-500`}>
                 <Shield className="w-4 h-4" />
                 Admin
               </Link>

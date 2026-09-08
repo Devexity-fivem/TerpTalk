@@ -1,4 +1,4 @@
-import { MessageSquare, Award, MessageCircle, Dna, Sprout } from "lucide-react"
+import { MessageSquare, Award, MessageCircle, Dna, Sprout, Calendar, Settings, Trophy, BookOpen, Stethoscope, Tag, Medal } from "lucide-react"
 import Link from "next/link"
 import { prisma } from "@/lib/prisma"
 import CannabisLeaf from "@/components/cannabis-leaf"
@@ -18,39 +18,75 @@ async function getStats() {
 const FEATURES = [
   {
     icon: MessageSquare,
-    title: "Community Forums",
-    desc: "Engage in discussions about growing techniques, equipment, genetics, and more with experienced cultivators.",
+    title: "Discussions",
+    desc: "Ask questions, trade techniques, and talk shop with experienced cultivators.",
     href: "/forum",
+  },
+  {
+    icon: Calendar,
+    title: "Feed",
+    desc: "The latest posts, updates, and content from growers you follow.",
+    href: "/feed",
   },
   {
     icon: Sprout,
     title: "Grow Diaries",
-    desc: "Document your entire grow journey from seed to harvest with detailed updates and environmental data.",
+    desc: "Document your grow from seed to harvest — with environment charts, stage tracking, and harvest estimates.",
     href: "/diaries",
   },
   {
-    icon: MessageCircle,
-    title: "Community Chat",
-    desc: "Hang out in the community chat. Get quick answers and share experiences in real time.",
-    href: null,
-  },
-  {
-    icon: Award,
-    title: "Reputation & Staff Badges",
-    desc: "Earn reputation through helpful contributions. Admins and mods are clearly badged so you know who's legit.",
-    href: null,
-  },
-  {
-    icon: Sprout,
+    icon: Settings,
     title: "Setup Showcases",
-    desc: "Share your grow setup and equipment. Get feedback and inspiration from the community.",
+    desc: "Show off your grow space and equipment. Get feedback and inspiration.",
     href: "/setups",
   },
   {
     icon: Dna,
     title: "Strain Database",
-    desc: "Explore and contribute to our community-maintained strain database with genetics and growing characteristics.",
+    desc: "Community-maintained genetics — lineage, growing traits, and grower photos.",
     href: "/strains",
+  },
+  {
+    icon: Trophy,
+    title: "Budshot of the Week",
+    desc: "Weekly photo contest. Submit your best shot, community votes, winner earns a badge.",
+    href: "/contest",
+  },
+  {
+    icon: BookOpen,
+    title: "Grow Guides",
+    desc: "Staff-written guides covering everything from germination to curing.",
+    href: "/guides",
+  },
+  {
+    icon: Stethoscope,
+    title: "Plant Problem Solver",
+    desc: "Interactive diagnostic tool — describe the symptoms, get likely causes and fixes.",
+    href: "/help",
+  },
+  {
+    icon: Tag,
+    title: "Deals",
+    desc: "Community-recommended gear with partner discounts. Supports the site at no extra cost.",
+    href: "/deals",
+  },
+  {
+    icon: Medal,
+    title: "Leaderboard",
+    desc: "Top contributors by reputation — see who's growing the community.",
+    href: "/leaderboard",
+  },
+  {
+    icon: MessageCircle,
+    title: "Community Chat",
+    desc: "Hang out in real-time chat — quick answers and good company, bottom-right of any page.",
+    href: null,
+  },
+  {
+    icon: Award,
+    title: "Reputation & Badges",
+    desc: "Earn rep through helpful contributions, unlock badges, and climb the ranks.",
+    href: "/leaderboard",
   },
 ]
 
@@ -125,9 +161,9 @@ export default async function Home() {
       {/* Features Section */}
       <section className="py-20 px-4 sm:px-6 lg:px-8">
         <div className="max-w-7xl mx-auto">
-          <h2 className="text-3xl font-bold text-center mb-3 tracking-tight">Everything You Need to Grow</h2>
+          <h2 className="text-3xl font-bold text-center mb-3 tracking-tight">Explore TerpTalk</h2>
           <p className="text-center text-muted-foreground mb-12 max-w-xl mx-auto">
-            Built by growers, for growers — every tool you need in one place.
+            Everything the community offers — pick a path and dig in.
           </p>
           <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-6">
             {FEATURES.map(({ icon: Icon, title, desc, href }) => {
