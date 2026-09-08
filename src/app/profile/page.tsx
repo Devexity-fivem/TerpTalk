@@ -6,6 +6,7 @@ import { useEffect, useState } from "react"
 import { User, Calendar, Award, MessageSquare, Leaf, Loader2, Download, Trash2, Pencil, MapPin, Globe, Sprout, Dna } from "lucide-react"
 import { signOut } from "next-auth/react"
 import Link from "next/link"
+import RoleBadge from "@/components/role-badge"
 
 interface ProfileData {
   user: {
@@ -147,7 +148,7 @@ export default function ProfilePage() {
               <div className="flex-1">
                 <div className="flex items-start justify-between gap-4 flex-wrap">
                   <div>
-                    <h1 className="text-2xl font-bold mb-1">{profileData.profile?.username || profileData.user.name}</h1>
+                    <h1 className="text-2xl font-bold mb-1 flex items-center gap-2">{profileData.profile?.username || profileData.user.name} <RoleBadge role={profileData.user.role} /></h1>
                     <p className="text-muted-foreground text-sm mb-2">Member since {joinDate}</p>
                     {profileData.profile?.bio && (
                       <p className="text-sm mb-3 whitespace-pre-wrap break-words">{profileData.profile.bio}</p>

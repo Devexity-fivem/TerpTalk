@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma"
 import { publicUserSelect } from "@/lib/security"
 import { Settings, Plus, Users } from "lucide-react"
 import Link from "next/link"
+import RoleBadge from "@/components/role-badge"
 
 export const dynamic = "force-dynamic"
 
@@ -74,6 +75,7 @@ export default async function SetupsPage() {
                     <span className="flex items-center gap-1">
                       <Users className="w-3 h-3" />
                       {setup.author.profile?.username || setup.author.name}
+                      <RoleBadge role={setup.author.role} />
                     </span>
                     <span>{setup._count.comments} comments</span>
                   </div>

@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react"
 import { useSession } from "next-auth/react"
 import { MessageCircle, Send, X, Loader2, Smile } from "lucide-react"
+import RoleBadge from "@/components/role-badge"
 
 interface Room {
   id: string
@@ -18,6 +19,7 @@ interface Message {
   createdAt: string
   author: {
     name: string
+    role?: string
     profile: { username: string }
   }
 }
@@ -192,6 +194,7 @@ export default function ChatSidebar() {
                     <span className="font-semibold text-xs">
                       {msg.author.profile?.username || msg.author.name}
                     </span>
+                    <RoleBadge role={msg.author.role} />
                     <span className="text-xs text-muted-foreground">
                       {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </span>

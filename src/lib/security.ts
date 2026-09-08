@@ -56,6 +56,7 @@ export const publicUserSelect = {
   id: true,
   name: true,
   image: true,
+  role: true,
   profile: {
     select: {
       username: true,

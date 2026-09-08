@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma"
 import { publicUserSelect } from "@/lib/security"
 import { Leaf, Calendar, TrendingUp, Users } from "lucide-react"
 import Link from "next/link"
+import RoleBadge from "@/components/role-badge"
 
 export const dynamic = "force-dynamic"
 
@@ -68,6 +69,7 @@ export default async function DiariesPage() {
                       <span className="flex items-center gap-1">
                         <Users className="w-3 h-3" />
                         {diary.author.profile?.username || diary.author.name}
+                        <RoleBadge role={diary.author.role} />
                       </span>
                       <span className="flex items-center gap-1">
                         <Calendar className="w-3 h-3" />
@@ -136,6 +138,7 @@ export default async function DiariesPage() {
                       <span className="flex items-center gap-1">
                         <Users className="w-3 h-3" />
                         {diary.author.profile?.username || diary.author.name}
+                        <RoleBadge role={diary.author.role} />
                       </span>
                       <span className="flex items-center gap-1">
                         <Calendar className="w-3 h-3" />

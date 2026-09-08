@@ -5,6 +5,7 @@ import { MessageSquare, Users, Clock } from "lucide-react"
 import Link from "next/link"
 import ReplyForm from "@/components/reply-form"
 import PostActions from "@/components/post-actions"
+import RoleBadge from "@/components/role-badge"
 
 async function getThreadData(slug: string) {
   const thread = await prisma.thread.findUnique({
@@ -72,6 +73,7 @@ export default async function ThreadPage({ params }: { params: Promise<{ slug: s
               <Users className="w-4 h-4" />
               {thread.author.profile?.username || thread.author.name}
             </Link>
+            <RoleBadge role={thread.author.role} />
             <span className="flex items-center gap-1">
               <Clock className="w-4 h-4" />
               {new Date(thread.createdAt).toLocaleDateString()}
@@ -113,6 +115,7 @@ export default async function ThreadPage({ params }: { params: Promise<{ slug: s
                         >
                           {post.author.profile?.username || post.author.name}
                         </Link>
+                        <RoleBadge role={post.author.role} />
                         {index === 0 && (
                           <span className="ml-2 text-xs text-muted-foreground">(Original Poster)</span>
                         )}

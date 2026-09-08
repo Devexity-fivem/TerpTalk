@@ -31,6 +31,7 @@ export async function GET(
         select: {
           id: true,
           image: true,
+          role: true,
           createdAt: true,
           banned: true,
           _count: {
@@ -89,6 +90,7 @@ export async function GET(
   return NextResponse.json({
     profile: {
       id: profile.user.id,
+      role: profile.user.role,
       username: profile.username,
       bio: profile.bio,
       location: profile.location,

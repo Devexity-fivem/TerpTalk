@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma"
 import { publicUserSelect } from "@/lib/security"
 import { Leaf, MessageSquare, TrendingUp, Calendar, Users } from "lucide-react"
 import Link from "next/link"
+import RoleBadge from "@/components/role-badge"
 
 export const dynamic = "force-dynamic"
 
@@ -122,6 +123,7 @@ export default async function FeedPage() {
                           <div className="flex items-center gap-2 mb-1">
                             <span className="font-semibold text-sm">
                               {update.author.profile?.username || update.author.name}
+                              <RoleBadge role={update.author.role} />
                             </span>
                             <span className="text-xs text-muted-foreground">
                               updated their diary
@@ -169,6 +171,7 @@ export default async function FeedPage() {
                           <div className="flex items-center gap-2 mb-1">
                             <span className="font-semibold text-sm">
                               {thread.author.profile?.username || thread.author.name}
+                              <RoleBadge role={thread.author.role} />
                             </span>
                             <span className="text-xs text-muted-foreground">
                               started a discussion
@@ -244,6 +247,7 @@ export default async function FeedPage() {
                           <span className="flex items-center gap-1">
                             <Users className="w-3 h-3" />
                             {diary.author.profile?.username || diary.author.name}
+                              <RoleBadge role={diary.author.role} />
                           </span>
                           <span>•</span>
                           <span>{diary._count.updates} updates</span>

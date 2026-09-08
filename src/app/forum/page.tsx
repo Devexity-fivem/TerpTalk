@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma"
 import { publicUserSelect } from "@/lib/security"
 import { MessageSquare, Users, Clock, TrendingUp } from "lucide-react"
 import Link from "next/link"
+import RoleBadge from "@/components/role-badge"
 
 export const dynamic = "force-dynamic"
 
@@ -121,6 +122,7 @@ export default async function ForumPage() {
                           <span className="flex items-center gap-1">
                             <Users className="w-4 h-4" />
                             {thread.author.profile?.username || thread.author.name}
+                            <RoleBadge role={thread.author.role} />
                           </span>
                           <span className="flex items-center gap-1">
                             <MessageSquare className="w-4 h-4" />
