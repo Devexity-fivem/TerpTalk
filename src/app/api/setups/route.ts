@@ -27,6 +27,7 @@ export async function POST(request: Request) {
       nutrients,
       controllers,
       equipment,
+      images,
     } = body
 
     if (typeof title !== "string" || !title.trim()) {
@@ -61,6 +62,14 @@ export async function POST(request: Request) {
       return forbidden("Your account is suspended")
     }
 
+    // Validate any uploaded images are data URIs (client-resized, max 6)
+    const validImages = Array.isArray(images)
+      ? images.filter((i: unknown) => typeof i === "string" && /^data:image\/(png|jpe?g|webp);base64,/.test(i) && i.length <= 400_000).slice(0, 6)
+      : []
+    if (Array.isArray(images) && images.length > 0 && validImages.length === 0) {
+      return NextResponse.json({ error: "Invalid image format" }, { status: 400 })
+    }
+
     // Create grow setup
     const setup = await prisma.growSetup.create({
       data: {
@@ -77,6 +86,11 @@ export async function POST(request: Request) {
         controllers,
         equipment,
         authorId: session.user.id,
+        ...(validImages.length > 0 && {
+          images: {
+            create: validImages.map((url: string, i: number) => ({ url, order: i })),
+          },
+        }),
       },
       include: {
         author: { select: publicUserSelect },

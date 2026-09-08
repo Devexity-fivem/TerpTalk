@@ -18,6 +18,7 @@ async function getSetups() {
     orderBy: { createdAt: "desc" },
     include: {
       author: { select: publicUserSelect },
+      images: { take: 1, orderBy: { order: "asc" } },
       _count: {
         select: { comments: true },
       },
@@ -70,9 +71,14 @@ export default async function SetupsPage() {
                 href={`/setups/${setup.id}`}
                 className="bg-card rounded-lg border border-border overflow-hidden hover:border-primary/50 transition-colors"
               >
-                <div className="aspect-video bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center">
-                  <Settings className="w-16 h-16 text-primary/30" />
-                </div>
+                {setup.images.length > 0 ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={setup.images[0].url} alt={setup.title} className="aspect-video w-full object-cover" />
+                ) : (
+                  <div className="aspect-video bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center">
+                    <Settings className="w-16 h-16 text-primary/30" />
+                  </div>
+                )}
                 <div className="p-4">
                   <h3 className="font-semibold mb-1">{setup.title}</h3>
                   <p className="text-sm text-muted-foreground mb-3 line-clamp-2">{setup.description}</p>

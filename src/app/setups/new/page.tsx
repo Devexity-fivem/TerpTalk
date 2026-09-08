@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
-import { Settings, Loader2 } from "lucide-react"
+import { Settings, Loader2, Camera, X } from "lucide-react"
 import Link from "next/link"
 
 export default function NewSetupPage() {
@@ -12,6 +12,7 @@ export default function NewSetupPage() {
   
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
+  const [photos, setPhotos] = useState<string[]>([])
   const [formData, setFormData] = useState({
     title: "",
     description: "",
@@ -55,7 +56,7 @@ export default function NewSetupPage() {
       const response = await fetch("/api/setups", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formData),
+        body: JSON.stringify({ ...formData, images: photos }),
       })
 
       if (!response.ok) {
@@ -266,6 +267,61 @@ export default function NewSetupPage() {
                   placeholder="List any additional equipment like timers, meters, pH pens, etc."
                   rows={3}
                 />
+              </div>
+            </div>
+
+            {/* Photos */}
+            <div>
+              <label className="block text-sm font-medium mb-2">Photos (up to 6)</label>
+              <div className="flex items-center gap-3 flex-wrap">
+                {photos.map((p, i) => (
+                  <div key={i} className="relative">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={p} alt="" className="w-24 h-24 object-cover rounded-lg border border-border" />
+                    <button
+                      type="button"
+                      onClick={() => setPhotos(photos.filter((_, j) => j !== i))}
+                      className="absolute -top-2 -right-2 w-5 h-5 bg-destructive text-destructive-foreground rounded-full flex items-center justify-center"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+                ))}
+                {photos.length < 6 && (
+                  <label className="w-24 h-24 border-2 border-dashed border-border rounded-lg flex flex-col items-center justify-center cursor-pointer hover:border-primary/50 transition-colors text-muted-foreground">
+                    <Camera className="w-6 h-6" />
+                    <span className="text-[10px]">Add photo</span>
+                    <input
+                      type="file"
+                      accept="image/png,image/jpeg,image/webp"
+                      className="hidden"
+                      onChange={async (e) => {
+                        const f = e.target.files?.[0]
+                        if (!f) return
+                        if (f.size > 10 * 1024 * 1024) { setError("Image must be under 10MB"); return }
+                        try {
+                          const img = new Image()
+                          const dataUrl = await new Promise<string>((resolve, reject) => {
+                            img.onload = () => {
+                              const scale = Math.min(1, 1000 / Math.max(img.width, img.height))
+                              const canvas = document.createElement("canvas")
+                              canvas.width = Math.round(img.width * scale)
+                              canvas.height = Math.round(img.height * scale)
+                              const ctx = canvas.getContext("2d")
+                              if (!ctx) return reject(new Error("no canvas"))
+                              ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
+                              resolve(canvas.toDataURL("image/webp", 0.82))
+                            }
+                            img.onerror = reject
+                            img.src = URL.createObjectURL(f)
+                          })
+                          setPhotos([...photos, dataUrl])
+                        } catch { setError("Could not process image") }
+                        e.target.value = ""
+                      }}
+                    />
+                  </label>
+                )}
               </div>
             </div>
 
