@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma"
 import { unauthorized, publicUserSelect, LIMITS, getClientIp, logSecurityEvent, isBanned, forbidden } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
 import { awardReputation, REP_POINTS } from "@/lib/reputation"
+import { storeImage } from "@/lib/blob"
 
 export async function POST(request: Request) {
   try {
@@ -48,6 +49,8 @@ export async function POST(request: Request) {
     if (Array.isArray(images) && images.length > 0 && validImages.length === 0) {
       return NextResponse.json({ error: "Invalid image format" }, { status: 400 })
     }
+    // Offload to Blob storage when configured (keeps DB rows small)
+    const storedImages = await Promise.all(validImages.map((i: string) => storeImage(i, "diary-updates")))
 
     if (title.length > LIMITS.TITLE_MAX || content.length > LIMITS.POST_CONTENT_MAX) {
       return NextResponse.json(
@@ -111,9 +114,9 @@ export async function POST(request: Request) {
         feeding,
         training,
         // Attach up to 4 client-resized photos
-        ...(validImages.length > 0 && {
+        ...(storedImages.length > 0 && {
           images: {
-            create: validImages.map((url: string, i: number) => ({
+            create: storedImages.map((url: string, i: number) => ({
               url,
               order: i,
             })),

@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma"
 import { unauthorized, getClientIp, logSecurityEvent, isBanned, forbidden } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
 import { awardReputation, REP_POINTS } from "@/lib/reputation"
+import { storeImage } from "@/lib/blob"
 
 const VALID_KINDS = new Set(["PLANT", "FLOWER"])
 
@@ -62,7 +63,7 @@ export async function POST(request: Request) {
         strainId,
         userId: session.user.id,
         kind,
-        imageUrl: image,
+        imageUrl: await storeImage(image, "strains"),
         caption: typeof caption === "string" ? caption.trim().slice(0, 200) || null : null,
       },
       include: {

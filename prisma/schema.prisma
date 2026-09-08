@@ -141,6 +141,7 @@ model Post {
   @@index([threadId])
   @@index([authorId])
   @@index([createdAt])
+  @@index([threadId, createdAt])
 }
 
 // Reactions
@@ -382,6 +383,7 @@ model ChatMessage {
   @@index([roomId])
   @@index([authorId])
   @@index([createdAt])
+  @@index([roomId, createdAt])
 }
 
 // Direct Messages
@@ -401,6 +403,7 @@ model DirectMessage {
   @@index([senderId])
   @@index([receiverId])
   @@index([createdAt])
+  @@index([senderId, receiverId])
 }
 
 // Notifications
@@ -419,6 +422,7 @@ model Notification {
   @@index([userId])
   @@index([read])
   @@index([createdAt])
+  @@index([userId, read])
 }
 
 // Strain Database

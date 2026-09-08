@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { unauthorized, getClientIp, logSecurityEvent } from "@/lib/security"
+import { storeImage } from "@/lib/blob"
 
 export async function GET() {
   try {
@@ -116,11 +117,11 @@ export async function PATCH(request: Request) {
     }
 
     const body = await request.json().catch(() => ({}))
+    let { avatarUrl } = body
     const {
       bio,
       location,
       website,
-      avatarUrl,
       growExperience,
       favoriteStrain,
       growSpace,
@@ -140,6 +141,10 @@ export async function PATCH(request: Request) {
           { status: 400 }
         )
       }
+      // Move data-URI uploads into Blob storage when configured
+      if (isDataUri) {
+        avatarUrl = await storeImage(avatarUrl, "avatars")
+      }
     }
 
     const clean = (v: unknown, max: number) =>
@@ -151,7 +156,7 @@ export async function PATCH(request: Request) {
         bio: clean(bio, 500),
         location: clean(location, 100),
         website: clean(website, 200),
-        avatarUrl: avatarUrl ? String(avatarUrl).slice(0, 300_000) : null,
+        avatarUrl: avatarUrl ? String(avatarUrl).slice(0, 500) : null,
         growExperience: clean(growExperience, 50),
         favoriteStrain: clean(favoriteStrain, 100),
         growSpace: clean(growSpace, 100),
