@@ -4,6 +4,7 @@ import "./globals.css";
 import { Providers } from "@/components/providers";
 import { Navigation } from "@/components/navigation";
 import ChatSidebar from "@/components/chat-sidebar";
+import ServiceWorkerRegister from "@/components/sw-register";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -49,6 +50,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <Navigation />
           <main className="flex-1">{children}</main>
           <ChatSidebar />
+          <ServiceWorkerRegister />
         </Providers>
       </body>
     </html>

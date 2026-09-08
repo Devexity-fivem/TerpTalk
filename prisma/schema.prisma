@@ -35,6 +35,8 @@ model User {
   diaryUpdates  DiaryUpdate[]
   setupCreator  GrowSetup[]
   setupComments SetupComment[]
+  contestEntries ContestEntry[]
+  contestVotes   ContestVote[]
   chatMessages  ChatMessage[]
   sentMessages  DirectMessage[]      @relation("SentMessages")
   receivedMessages DirectMessage[]   @relation("ReceivedMessages")
@@ -571,4 +573,33 @@ model Captcha {
   used      Boolean  @default(false)
 
   @@index([expiresAt])
+}
+
+// Weekly contest � Budshot of the Week
+model ContestEntry {
+  id        String   @id @default(cuid())
+  week      String   // e.g. "2026-W37"
+  imageUrl  String
+  caption   String?
+  userId    String
+  createdAt DateTime @default(now())
+
+  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  votes     ContestVote[]
+
+  @@unique([userId, week])
+  @@index([week])
+}
+
+model ContestVote {
+  id        String   @id @default(cuid())
+  entryId   String
+  userId    String
+  createdAt DateTime @default(now())
+
+  entry     ContestEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([entryId, userId])
+  @@index([entryId])
 }

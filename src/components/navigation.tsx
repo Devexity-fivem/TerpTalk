@@ -6,7 +6,7 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import {
   Leaf, User, LogOut, MessageCircle, Home, Calendar,
-  Settings, Dna, Bell, Shield, Menu, X, Mail, Search,
+  Settings, Dna, Bell, Shield, Menu, X, Mail, Search, Trophy,
 } from "lucide-react"
 import CannabisLeaf from "@/components/cannabis-leaf"
 
@@ -17,6 +17,7 @@ const NAV_LINKS = [
   { href: "/diaries", label: "Grow Diaries", icon: Leaf },
   { href: "/setups", label: "Setups", icon: Settings },
   { href: "/strains", label: "Strains", icon: Dna },
+  { href: "/contest", label: "Contest", icon: Trophy },
 ]
 
 export function Navigation() {

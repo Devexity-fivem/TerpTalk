@@ -26,7 +26,8 @@
     "pusher": "^5.2.0",
     "pusher-js": "^8.4.0",
     "react": "19.2.8",
-    "react-dom": "19.2.8"
+    "react-dom": "19.2.8",
+    "recharts": "^3.2.1"
   },
   "overrides": {
     "cookie": "^0.7.2",

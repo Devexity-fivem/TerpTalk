@@ -8,6 +8,7 @@ import { authOptions } from "@/lib/auth"
 import UpdateForm from "@/components/update-form"
 import DiaryFollowButton from "@/components/diary-follow-button"
 import ShareButtons from "@/components/share-buttons"
+import EnvChart from "@/components/env-chart"
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -206,6 +207,15 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
             <h2 className="text-xl font-semibold">Grow Timeline</h2>
             <UpdateForm diaryId={diary.id} />
           </div>
+
+          <EnvChart
+            updates={diary.updates.map((u) => ({
+              createdAt: u.createdAt.toISOString(),
+              temperature: u.temperature,
+              humidity: u.humidity,
+              vpd: u.vpd,
+            }))}
+          />
 
           {diary.updates.length === 0 ? (
             <div className="bg-card rounded-lg border border-border p-12 text-center">
