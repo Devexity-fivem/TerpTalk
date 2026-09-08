@@ -500,37 +500,6 @@ model ReputationEvent {
   @@index([createdAt])
 }
 
-// Grow Calendar
-model CalendarEvent {
-  id        String   @id @default(cuid())
-  type      String   // GERMINATION, PLANTING, TRANSPLANT, TRAINING, FEEDING, DEFOLIATION, FLIP, FLOWER, HARVEST, DRY, CURE
-  title     String
-  notes     String?
-  eventDate DateTime
-  diaryId   String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([diaryId])
-  @@index([eventDate])
-}
-
-// Environment Tracking
-model EnvironmentReading {
-  id          String   @id @default(cuid())
-  temperature Float?
-  humidity    Float?
-  vpd         Float?
-  ph          Float?
-  ec          Float?
-  lightSchedule String?
-  diaryId     String
-  recordedAt  DateTime @default(now())
-
-  @@index([diaryId])
-  @@index([recordedAt])
-}
-
 // Reports and Moderation
 model Report {
   id          String   @id @default(cuid())
