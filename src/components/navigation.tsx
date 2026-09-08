@@ -71,6 +71,10 @@ export function Navigation() {
 
           {/* Desktop: minimal nav — all destinations live on the homepage hub */}
           <div className="hidden lg:flex items-center gap-1">
+            <Link href="/deals" className={linkClass("/deals")}>
+              <Tag className="w-4 h-4" />
+              Deals
+            </Link>
             {isMod && (
               <Link href="/moderation" className={`${linkClass("/moderation")} !text-amber-500`}>
                 <Shield className="w-4 h-4" />
