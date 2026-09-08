@@ -29,7 +29,7 @@ export async function GET() {
           select: { id: true },
         },
         badges: {
-          select: { id: true },
+          include: { badge: true },
         },
       },
     })
@@ -90,6 +90,12 @@ export async function GET() {
       },
       recentThreads,
       recentDiaries,
+      badges: user.badges.map((b) => ({
+        name: b.badge.name,
+        description: b.badge.description,
+        icon: b.badge.icon,
+        earnedAt: b.earnedAt,
+      })),
     })
   } catch (error) {
     console.error("Profile fetch error:", error)

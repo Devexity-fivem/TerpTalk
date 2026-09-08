@@ -22,6 +22,7 @@ interface PublicProfile {
   image: string | null
   joinDate: string
   reputation: number
+  badges: Array<{ name: string; description: string; icon: string | null }>
   stats: {
     threadCreator: number
     posts: number
@@ -142,6 +143,20 @@ export default function PublicProfilePage() {
                   <div className="text-xs text-muted-foreground">Diaries</div>
                 </div>
               </div>
+              {profile.badges?.length > 0 && (
+                <div className="flex flex-wrap gap-2 mt-4">
+                  {profile.badges.map((b) => (
+                    <span
+                      key={b.name}
+                      title={b.description}
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-amber-500/10 text-amber-500 border border-amber-500/20 rounded-full text-xs font-medium"
+                    >
+                      {b.icon && <span>{b.icon}</span>}
+                      {b.name}
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </div>

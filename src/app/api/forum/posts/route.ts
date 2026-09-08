@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { unauthorized, publicUserSelect, LIMITS, getClientIp, logSecurityEvent, isModerator, isBanned, forbidden } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
+import { awardReputation, REP_POINTS } from "@/lib/reputation"
 
 export async function POST(request: Request) {
   try {
@@ -81,6 +82,13 @@ export async function POST(request: Request) {
         author: { select: publicUserSelect },
       },
     })
+
+    await awardReputation(
+      session.user.id,
+      "POST_CREATED",
+      REP_POINTS.POST_CREATED,
+      `Replied in "${thread.title.slice(0, 60)}"`
+    ).catch(() => {})
 
     // Notify the thread author (if not self-reply)
     if (thread.authorId !== session.user.id) {

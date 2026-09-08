@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { unauthorized, publicUserSelect, LIMITS, getClientIp, logSecurityEvent, isModerator, isBanned, forbidden } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
+import { awardReputation, REP_POINTS } from "@/lib/reputation"
 
 // Helper function to create a slug from a string
 function createSlug(text: string): string {
@@ -111,6 +112,13 @@ export async function POST(request: Request) {
         },
       },
     })
+
+    await awardReputation(
+      session.user.id,
+      "THREAD_CREATED",
+      REP_POINTS.THREAD_CREATED,
+      `Created thread "${title.slice(0, 60)}"`
+    ).catch(() => {})
 
     return NextResponse.json({ thread }, { status: 201 })
   } catch (error) {

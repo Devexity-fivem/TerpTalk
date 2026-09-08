@@ -34,6 +34,7 @@ export async function GET(
           role: true,
           createdAt: true,
           banned: true,
+          badges: { include: { badge: true } },
           _count: {
             select: {
               threadCreator: true,
@@ -102,6 +103,11 @@ export async function GET(
       image: profile.user.image,
       joinDate: profile.joinDate,
       reputation: profile.reputation,
+      badges: profile.user.badges.map((b) => ({
+        name: b.badge.name,
+        description: b.badge.description,
+        icon: b.badge.icon,
+      })),
       stats: profile.user._count,
     },
     viewerBlocked,

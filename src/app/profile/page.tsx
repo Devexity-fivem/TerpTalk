@@ -38,6 +38,7 @@ interface ProfileData {
     reputation: number
     referrals: number
   }
+  badges: Array<{ name: string; description: string; icon: string | null; earnedAt: string }>
   recentThreads: Array<{
     id: string
     title: string
@@ -436,11 +437,20 @@ export default function ProfilePage() {
               <Award className="w-5 h-5 text-primary" />
               <h2 className="text-lg font-semibold">Badges</h2>
             </div>
-            {profileData.stats.badges === 0 ? (
-              <p className="text-muted-foreground">No badges earned yet</p>
+            {profileData.badges.length === 0 ? (
+              <p className="text-muted-foreground">No badges earned yet — post, grow, and share to earn them</p>
             ) : (
               <div className="flex flex-wrap gap-2">
-                {profileData.stats.badges} badges earned
+                {profileData.badges.map((b) => (
+                  <span
+                    key={b.name}
+                    title={b.description}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-500/10 text-amber-500 border border-amber-500/20 rounded-full text-xs font-medium"
+                  >
+                    {b.icon && <span>{b.icon}</span>}
+                    {b.name}
+                  </span>
+                ))}
               </div>
             )}
           </div>

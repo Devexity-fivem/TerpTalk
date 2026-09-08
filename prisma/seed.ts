@@ -38,14 +38,21 @@ async function main() {
     })
   }
 
-  // Create some badges
+  // Create some badges — names must match BADGE_RULES in src/lib/reputation.ts
   const badges = [
-    { name: "New Grower", description: "Just started your growing journey", icon: "🌱", requirement: "Complete profile registration" },
+    { name: "New Grower", description: "Made your first contribution", icon: "🌱", requirement: "Create a thread, post, or diary" },
+    { name: "First Post", description: "Posted your first reply", icon: "✉️", requirement: "Create 1 post" },
+    { name: "Conversation Starter", description: "Keeps discussions flowing", icon: "💬", requirement: "Create 5 threads" },
     { name: "Active Grower", description: "Regular contributor to the community", icon: "🌿", requirement: "Create 10 forum posts" },
     { name: "Diary Master", description: "Created detailed grow diaries", icon: "📖", requirement: "Create 5 grow diaries" },
-    { name: "Helpful Grower", description: "Provided helpful answers", icon: "💡", requirement: "Receive 20 helpful votes" },
-    { name: "Top Contributor", description: "Outstanding community contributor", icon: "🏆", requirement: "Earn 1000 reputation" },
+    { name: "Strain Hunter", description: "Contributed to the strain database", icon: "🧬", requirement: "Add 3 strains" },
+    { name: "Grow Photographer", description: "Shares grow photos with the community", icon: "📸", requirement: "Upload 5 strain photos" },
+    { name: "Social Butterfly", description: "Active in community chat", icon: "🦋", requirement: "Send 25 chat messages" },
+    { name: "Recruiter", description: "Brings new members to the community", icon: "🤝", requirement: "Refer 3 members" },
+    { name: "Liked", description: "Content appreciated by the community", icon: "👍", requirement: "Receive 10 likes" },
+    { name: "Helpful Grower", description: "Provided helpful answers", icon: "💡", requirement: "Receive 20 likes" },
     { name: "Community Favorite", description: "Beloved by the community", icon: "🔥", requirement: "Receive 100 likes" },
+    { name: "Top Contributor", description: "Outstanding community contributor", icon: "🏆", requirement: "Earn 1000 reputation" },
   ]
 
   for (const badge of badges) {

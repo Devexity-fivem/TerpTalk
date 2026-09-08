@@ -8,6 +8,10 @@ async function getStrains() {
   const strains = await prisma.strain.findMany({
     take: 24,
     orderBy: { name: "asc" },
+    include: {
+      photos: { take: 1, orderBy: { createdAt: "desc" } },
+      _count: { select: { photos: true } },
+    },
   })
 
   return strains
@@ -69,13 +73,21 @@ export default async function StrainsPage() {
                 className="bg-card rounded-lg border border-border p-4 hover:border-primary/50 transition-colors"
               >
                 <div className="flex items-center gap-3 mb-3">
-                  <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center">
-                    <Leaf className="w-6 h-6 text-primary" />
+                  <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center overflow-hidden shrink-0">
+                    {strain.photos[0] ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={strain.photos[0].imageUrl} alt={strain.name} className="w-full h-full object-cover" />
+                    ) : (
+                      <Leaf className="w-6 h-6 text-primary" />
+                    )}
                   </div>
                   <div>
                     <h3 className="font-semibold">{strain.name}</h3>
                     {strain.breeder && (
                       <p className="text-xs text-muted-foreground">{strain.breeder}</p>
+                    )}
+                    {strain._count.photos > 0 && (
+                      <p className="text-xs text-primary">{strain._count.photos} photo{strain._count.photos !== 1 ? "s" : ""}</p>
                     )}
                   </div>
                 </div>

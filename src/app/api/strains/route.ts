@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { unauthorized, LIMITS, getClientIp, logSecurityEvent, isBanned, forbidden } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
+import { awardReputation, REP_POINTS } from "@/lib/reputation"
 
 export async function POST(request: Request) {
   try {
@@ -76,8 +77,16 @@ export async function POST(request: Request) {
         type,
         description,
         growingInfo,
+        createdById: session.user.id,
       },
     })
+
+    await awardReputation(
+      session.user.id,
+      "STRAIN_CREATED",
+      REP_POINTS.STRAIN_CREATED,
+      `Added strain "${name.slice(0, 60)}"`
+    ).catch(() => {})
 
     return NextResponse.json({ strain }, { status: 201 })
   } catch (error) {

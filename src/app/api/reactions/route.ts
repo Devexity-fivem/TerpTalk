@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { unauthorized, getClientIp, logSecurityEvent } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
+import { awardReputation, REP_POINTS } from "@/lib/reputation"
 
 const VALID_REACTION_TYPES = new Set(["LIKE", "LOVE", "LAUGH", "THINKING", "FIRE", "THUMBS_UP", "THUMBS_DOWN"])
 
@@ -76,6 +77,21 @@ export async function POST(request: Request) {
         ...(diaryId && { diaryId }),
       },
     })
+
+    // Award the content author for a LIKE (not for self-likes)
+    if (type === "LIKE") {
+      const target = postId
+        ? await prisma.post.findUnique({ where: { id: postId }, select: { authorId: true } })
+        : await prisma.growDiary.findUnique({ where: { id: diaryId }, select: { authorId: true } })
+      if (target && target.authorId !== session.user.id) {
+        await awardReputation(
+          target.authorId,
+          "LIKE_RECEIVED",
+          REP_POINTS.LIKE_RECEIVED,
+          "Someone liked your content"
+        ).catch(() => {})
+      }
+    }
 
     return NextResponse.json({ reaction, action: "added" }, { status: 201 })
   } catch (error) {

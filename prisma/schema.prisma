@@ -42,6 +42,8 @@ model User {
   following     Follow[]             @relation("Follower")
   badges        UserBadge[]
   reputation    ReputationEvent[]
+  strainsCreated Strain[]
+  strainPhotos  StrainPhoto[]
   reports       Report[]
   moderatorActions ModerationAction[]
   blockedUsers  Block[]              @relation("Blocker")
@@ -425,10 +427,30 @@ model Strain {
   type        String?
   description String?
   growingInfo String?
+  createdById String?
+  createdBy   User?    @relation(fields: [createdById], references: [id])
+  photos      StrainPhoto[]
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
   @@index([name])
+}
+
+// Community photos of a strain — plant shots and harvested flower
+model StrainPhoto {
+  id        String   @id @default(cuid())
+  kind      String   // PLANT | FLOWER
+  imageUrl  String   // data URI (client-resized)
+  caption   String?
+  strainId  String
+  userId    String
+  createdAt DateTime @default(now())
+
+  strain    Strain   @relation(fields: [strainId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([strainId])
+  @@index([userId])
 }
 
 // Badges System

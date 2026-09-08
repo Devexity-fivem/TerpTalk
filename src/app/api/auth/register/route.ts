@@ -10,6 +10,7 @@ import {
   hashIp,
   logSecurityEvent,
 } from "@/lib/security"
+import { awardReputation, REP_POINTS } from "@/lib/reputation"
 import { randomInt } from "crypto"
 
 // Generate a captcha persisted in the database (works across serverless instances)
@@ -83,10 +84,11 @@ export async function POST(request: Request) {
 
     // Optional referral — a referrer's username; validate it exists if provided
     let referrerId: string | null = null
+    let referrerUserId: string | null = null
     if (referralCode && typeof referralCode === "string" && referralCode.trim()) {
       const referrer = await prisma.profile.findUnique({
         where: { username: referralCode.trim() },
-        select: { id: true },
+        select: { id: true, userId: true },
       })
       if (!referrer) {
         return NextResponse.json(
@@ -95,6 +97,7 @@ export async function POST(request: Request) {
         )
       }
       referrerId = referrer.id
+      referrerUserId = referrer.userId
     }
 
     // Age verification — must be an explicit true attestation
@@ -203,6 +206,25 @@ export async function POST(request: Request) {
       userAgent,
       metadata: referrerId ? { referredById: referrerId } : undefined,
     })
+
+    // Reward the referrer
+    if (referrerUserId) {
+      await awardReputation(
+        referrerUserId,
+        "REFERRAL",
+        REP_POINTS.REFERRAL,
+        `Referred new member ${username}`
+      ).catch(() => {})
+      await prisma.notification.create({
+        data: {
+          userId: referrerUserId,
+          type: "REFERRAL",
+          title: "New referral",
+          content: `${username} joined using your referral link`,
+          link: "/profile",
+        },
+      }).catch(() => {})
+    }
 
     return NextResponse.json(
       {
