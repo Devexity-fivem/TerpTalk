@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react"
 import { useSession } from "next-auth/react"
-import { MessageCircle, Send, X, Loader2 } from "lucide-react"
+import { MessageCircle, Send, X, Loader2, Smile } from "lucide-react"
 
 interface Room {
   id: string
@@ -22,17 +22,27 @@ interface Message {
   }
 }
 
+const EMOJIS = [
+  "😀","😂","😊","😍","🤩","😎","🤔","😅","😴","😭","😡","🥳",
+  "👍","👎","👏","🙌","🙏","💪","✌️","🤝","👋","🖖",
+  "🌱","🌿","🍀","🌲","🌳","🌵","🌻","🌷","🍁","🍃","🍄","🌾",
+  "🔥","💧","💦","☀️","🌙","⭐","🌈","⚡","❄️","🌊","💨","🌪️",
+  "💚","❤️","🧡","💛","💙","💜","🖤","🤍","💯","✅","🎉","🎊",
+  "🍕","🍔","🌮","🍩","🍪","☕","🍺","🥂","🍾","🎂","🍰","🧁",
+]
+
 export default function ChatSidebar() {
   const { data: session } = useSession()
   const [isOpen, setIsOpen] = useState(false)
-  const [selectedRoom, setSelectedRoom] = useState("general")
+  const [showEmoji, setShowEmoji] = useState(false)
   const [message, setMessage] = useState("")
   const [messages, setMessages] = useState<Message[]>([])
-  const [rooms, setRooms] = useState<Room[]>([])
+  const [room, setRoom] = useState<Room | null>(null)
   const [loading, setLoading] = useState(true)
   const [sending, setSending] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const messagesContainerRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
 
   const scrollToBottom = () => {
     if (messagesEndRef.current) {
@@ -40,56 +50,57 @@ export default function ChatSidebar() {
     }
   }
 
-  // Load rooms
+  // Load the general room (single community chat)
   useEffect(() => {
     if (!session) return
 
     fetch("/api/chat/rooms")
       .then(res => res.json())
       .then(data => {
-        setRooms(data.rooms || [])
-        if (data.rooms?.length > 0) {
-          setSelectedRoom(data.rooms[0].slug)
-        }
+        const all: Room[] = data.rooms || []
+        setRoom(all.find(r => r.slug === "general") || all[0] || null)
         setLoading(false)
       })
       .catch(() => setLoading(false))
   }, [session])
 
-  // Load messages when room changes
+  // Load messages + poll
   useEffect(() => {
-    if (!session || !selectedRoom) return
+    if (!session || !room) return
 
-    const room = rooms.find(r => r.slug === selectedRoom)
-    if (!room) return
-
-    fetch(`/api/chat/messages?roomId=${room.id}`)
-      .then(res => res.json())
-      .then(data => {
-        setMessages(data.messages || [])
-        scrollToBottom()
-      })
-      .catch(() => setMessages([]))
-
-    // Poll for new messages every 3 seconds
-    const interval = setInterval(() => {
+    const load = () =>
       fetch(`/api/chat/messages?roomId=${room.id}`)
         .then(res => res.json())
         .then(data => {
           setMessages(data.messages || [])
+          scrollToBottom()
         })
         .catch(() => {})
-    }, 3000)
 
+    load()
+    const interval = setInterval(load, 3000)
     return () => clearInterval(interval)
-  }, [session, selectedRoom, rooms])
+  }, [session, room])
+
+  const insertEmoji = (emoji: string) => {
+    const el = inputRef.current
+    if (!el) {
+      setMessage(prev => prev + emoji)
+      return
+    }
+    const start = el.selectionStart ?? message.length
+    const end = el.selectionEnd ?? message.length
+    const next = message.slice(0, start) + emoji + message.slice(end)
+    setMessage(next)
+    requestAnimationFrame(() => {
+      el.focus()
+      el.setSelectionRange(start + emoji.length, start + emoji.length)
+    })
+  }
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!message.trim() || !session || sending) return
-
-    const room = rooms.find(r => r.slug === selectedRoom)
-    if (!room) return
+    if (!message.trim() || !session || sending || !room) return
 
     setSending(true)
     try {
@@ -103,6 +114,7 @@ export default function ChatSidebar() {
         const data = await response.json()
         setMessages(prev => [...prev, data.message])
         setMessage("")
+        setShowEmoji(false)
         scrollToBottom()
       }
     } catch (error) {
@@ -115,8 +127,6 @@ export default function ChatSidebar() {
   if (!session) {
     return null
   }
-
-  const currentRoom = rooms.find(r => r.slug === selectedRoom)
 
   return (
     <>
@@ -145,10 +155,12 @@ export default function ChatSidebar() {
         <div className="p-4 border-b border-border flex items-center justify-between shrink-0">
           <div className="flex items-center gap-2">
             <MessageCircle className="w-5 h-5 text-primary" />
-            <h2 className="font-semibold">Live Chat</h2>
-            <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded">
-              {rooms.length} rooms
-            </span>
+            <h2 className="font-semibold">General Chat</h2>
+            {room && (
+              <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded">
+                {room._count.messages} messages
+              </span>
+            )}
           </div>
           <button
             onClick={() => setIsOpen(false)}
@@ -159,54 +171,17 @@ export default function ChatSidebar() {
           </button>
         </div>
 
-        {/* Room List */}
-        <div className="overflow-y-auto border-b border-border max-h-36 shrink-0">
-          <div className="p-2">
-            {loading ? (
-              <div className="flex justify-center py-4">
-                <Loader2 className="w-5 h-5 animate-spin text-primary" />
-              </div>
-            ) : rooms.length === 0 ? (
-              <div className="text-center py-4 text-muted-foreground text-sm">
-                No chat rooms available
-              </div>
-            ) : (
-              rooms.map((room) => (
-                <button
-                  key={room.id}
-                  onClick={() => setSelectedRoom(room.slug)}
-                  className={`
-                    w-full text-left px-3 py-2 rounded-lg mb-0.5 transition-colors
-                    ${selectedRoom === room.slug
-                      ? "bg-primary/10 text-primary"
-                      : "hover:bg-secondary"
-                    }
-                  `}
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium">{room.name}</span>
-                    <span className="text-xs text-muted-foreground">
-                      {room._count.messages}
-                    </span>
-                  </div>
-                </button>
-              ))
-            )}
-          </div>
-        </div>
-
         {/* Messages */}
         <div className="flex-1 flex flex-col min-h-0">
-          <div className="px-3 py-2 border-b border-border shrink-0">
-            <h3 className="font-medium text-sm">{currentRoom?.name || "Chat"}</h3>
-            <p className="text-xs text-muted-foreground">{currentRoom?.description}</p>
-          </div>
-
           <div
             ref={messagesContainerRef}
             className="flex-1 overflow-y-auto p-3 space-y-3"
           >
-            {messages.length === 0 ? (
+            {loading ? (
+              <div className="flex justify-center py-8">
+                <Loader2 className="w-5 h-5 animate-spin text-primary" />
+              </div>
+            ) : messages.length === 0 ? (
               <div className="text-center py-8 text-muted-foreground text-sm">
                 No messages yet. Start the conversation!
               </div>
@@ -230,10 +205,37 @@ export default function ChatSidebar() {
             <div ref={messagesEndRef} />
           </div>
 
+          {/* Emoji picker */}
+          {showEmoji && (
+            <div className="border-t border-border p-2 shrink-0 max-h-40 overflow-y-auto">
+              <div className="grid grid-cols-9 gap-1">
+                {EMOJIS.map((emoji) => (
+                  <button
+                    key={emoji}
+                    type="button"
+                    onClick={() => insertEmoji(emoji)}
+                    className="text-lg p-1 rounded hover:bg-secondary transition-colors"
+                  >
+                    {emoji}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Message Input */}
           <form onSubmit={handleSendMessage} className="p-3 border-t border-border shrink-0">
-            <div className="flex gap-2">
+            <div className="flex gap-2 items-center">
+              <button
+                type="button"
+                onClick={() => setShowEmoji(!showEmoji)}
+                className={`p-2 rounded-lg transition-colors ${showEmoji ? "bg-primary/10 text-primary" : "hover:bg-secondary text-muted-foreground"}`}
+                aria-label="Emoji picker"
+              >
+                <Smile className="w-5 h-5" />
+              </button>
               <input
+                ref={inputRef}
                 type="text"
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
