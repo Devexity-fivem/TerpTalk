@@ -165,10 +165,10 @@ export function Navigation() {
               </>
             )}
 
-            {/* Mobile hamburger */}
+            {/* Hamburger — all screen sizes */}
             <button
               onClick={() => setMobileOpen(!mobileOpen)}
-              className="lg:hidden p-2 hover:bg-secondary rounded-lg transition-colors"
+              className="p-2 hover:bg-secondary rounded-lg transition-colors"
               aria-label="Toggle menu"
             >
               {mobileOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
@@ -177,16 +177,16 @@ export function Navigation() {
         </div>
       </div>
 
-      {/* Mobile menu */}
+      {/* Dropdown menu — all screen sizes */}
       {mobileOpen && (
-        <div className="lg:hidden border-t border-border bg-card">
-          <div className="max-w-7xl mx-auto px-4 py-3 space-y-1">
-            {/* Mobile search */}
+        <div className="border-t border-border bg-card">
+          <div className="max-w-7xl mx-auto px-4 py-3 space-y-1 lg:grid lg:grid-cols-3 lg:gap-1 lg:space-y-0">
+            {/* Search */}
             <form action="/search" onSubmit={(e) => {
               const input = (e.currentTarget.elements.namedItem("q") as HTMLInputElement)
               if (!input.value.trim()) e.preventDefault()
               else setMobileOpen(false)
-            }} className="pb-2">
+            }} className="pb-2 lg:hidden">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <input name="q" placeholder="Search threads, strains, members..." className="w-full pl-9 pr-3 py-2.5 rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary" />
