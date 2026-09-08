@@ -1,13 +1,13 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#22c55e">
-  <rect width="24" height="24" rx="5" fill="#0a120d"/>
-  <g transform="translate(0,-0.5)">
-    <g transform="rotate(-66 12 20)"><path d="M12 20 C 10.6 14.5, 10.2 8, 12 1.5 C 13.8 8, 13.4 14.5, 12 20 Z" fill="#22c55e"/></g>
-    <g transform="rotate(-44 12 20)"><path d="M12 20 C 10.6 14.5, 10.2 8, 12 1.5 C 13.8 8, 13.4 14.5, 12 20 Z" fill="#22c55e"/></g>
-    <g transform="rotate(-22 12 20)"><path d="M12 20 C 10.6 14.5, 10.2 8, 12 1.5 C 13.8 8, 13.4 14.5, 12 20 Z" fill="#22c55e"/></g>
-    <path d="M12 20 C 10.6 14.5, 10.2 8, 12 1.5 C 13.8 8, 13.4 14.5, 12 20 Z" fill="#4ade80"/>
-    <g transform="rotate(22 12 20)"><path d="M12 20 C 10.6 14.5, 10.2 8, 12 1.5 C 13.8 8, 13.4 14.5, 12 20 Z" fill="#22c55e"/></g>
-    <g transform="rotate(44 12 20)"><path d="M12 20 C 10.6 14.5, 10.2 8, 12 1.5 C 13.8 8, 13.4 14.5, 12 20 Z" fill="#22c55e"/></g>
-    <g transform="rotate(66 12 20)"><path d="M12 20 C 10.6 14.5, 10.2 8, 12 1.5 C 13.8 8, 13.4 14.5, 12 20 Z" fill="#22c55e"/></g>
-    <path d="M11.5 20 L12.5 20 L12.5 23.5 L11.5 23.5 Z" fill="#22c55e"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <rect width="100" height="100" rx="22" fill="#0a120d"/>
+  <g fill="#34d399">
+    <g transform="translate(50 88) rotate(-75) scale(0.55) translate(-50 -88)"><path d="M50 88 C 44 68, 43 46, 50 8 C 57 46, 56 68, 50 88 Z"/></g>
+    <g transform="translate(50 88) rotate(-50) scale(0.7) translate(-50 -88)"><path d="M50 88 C 44 68, 43 46, 50 8 C 57 46, 56 68, 50 88 Z"/></g>
+    <g transform="translate(50 88) rotate(-25) scale(0.85) translate(-50 -88)"><path d="M50 88 C 44 68, 43 46, 50 8 C 57 46, 56 68, 50 88 Z"/></g>
+    <path d="M50 88 C 44 68, 43 46, 50 8 C 57 46, 56 68, 50 88 Z" fill="#4ade80"/>
+    <g transform="translate(50 88) rotate(25) scale(0.85) translate(-50 -88)"><path d="M50 88 C 44 68, 43 46, 50 8 C 57 46, 56 68, 50 88 Z"/></g>
+    <g transform="translate(50 88) rotate(50) scale(0.7) translate(-50 -88)"><path d="M50 88 C 44 68, 43 46, 50 8 C 57 46, 56 68, 50 88 Z"/></g>
+    <g transform="translate(50 88) rotate(75) scale(0.55) translate(-50 -88)"><path d="M50 88 C 44 68, 43 46, 50 8 C 57 46, 56 68, 50 88 Z"/></g>
+    <path d="M48 88 L52 88 L52 97 L48 97 Z"/>
   </g>
 </svg>
