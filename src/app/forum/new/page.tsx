@@ -1,0 +1,201 @@
+"use client"
+
+import { useState, useEffect } from "react"
+import { useSession } from "next-auth/react"
+import { useRouter } from "next/navigation"
+import { MessageSquare, Loader2 } from "lucide-react"
+import Link from "next/link"
+
+interface Category {
+  id: string
+  name: string
+  slug: string
+}
+
+export default function NewThreadPage() {
+  const { data: session, status } = useSession()
+  const router = useRouter()
+  
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState("")
+  const [categories, setCategories] = useState<Category[]>([])
+  const [formData, setFormData] = useState({
+    title: "",
+    content: "",
+    categoryId: "",
+  })
+
+  useEffect(() => {
+    fetch("/api/categories")
+      .then(res => res.json())
+      .then(data => setCategories(data.categories || []))
+      .catch(() => setError("Failed to load categories"))
+  }, [])
+
+  if (status === "loading") {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+      </div>
+    )
+  }
+
+  if (!session) {
+    router.push("/auth/signin")
+    return null
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setError("")
+
+    if (!formData.title.trim() || !formData.content.trim() || !formData.categoryId) {
+      setError("Please fill in all required fields")
+      return
+    }
+
+    setLoading(true)
+
+    try {
+      const response = await fetch("/api/forum/threads", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(formData),
+      })
+
+      if (!response.ok) {
+        const data = await response.json()
+        throw new Error(data.error || "Failed to create thread")
+      }
+
+      const data = await response.json()
+      router.push(`/forum/thread/${data.thread.slug}`)
+    } catch (error: unknown) {
+      setError((error as Error).message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="min-h-screen bg-background">
+      <div className="max-w-4xl mx-auto px-4 py-8">
+        {/* Header */}
+        <div className="mb-8">
+          <Link href="/forum" className="text-sm text-muted-foreground hover:text-foreground mb-2 block">
+            ← Back to Discussions
+          </Link>
+          <h1 className="text-3xl font-bold mb-2">Create New Discussion</h1>
+          <p className="text-muted-foreground">Start a new discussion in the community</p>
+        </div>
+
+        {/* Form */}
+        <div className="bg-card rounded-lg border border-border p-6">
+          <form onSubmit={handleSubmit} className="space-y-6">
+            <div>
+              <label htmlFor="category" className="block text-sm font-medium mb-2">
+                Category *
+              </label>
+              <select
+                id="category"
+                required
+                value={formData.categoryId}
+                onChange={(e) => setFormData({ ...formData, categoryId: e.target.value })}
+                className="w-full px-4 py-2 rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary"
+              >
+                <option value="">Select a category</option>
+                {categories.map((category) => (
+                  <option key={category.id} value={category.id}>
+                    {category.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label htmlFor="title" className="block text-sm font-medium mb-2">
+                Title *
+              </label>
+              <input
+                id="title"
+                type="text"
+                required
+                value={formData.title}
+                onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                className="w-full px-4 py-2 rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary"
+                placeholder="Enter a descriptive title for your thread"
+                maxLength={200}
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                {formData.title.length}/200 characters
+              </p>
+            </div>
+
+            <div>
+              <label htmlFor="content" className="block text-sm font-medium mb-2">
+                Content *
+              </label>
+              <textarea
+                id="content"
+                required
+                value={formData.content}
+                onChange={(e) => setFormData({ ...formData, content: e.target.value })}
+                className="w-full px-4 py-2 rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary resize-none"
+                placeholder="Share your thoughts, questions, or experiences..."
+                rows={12}
+                minLength={10}
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                Minimum 10 characters. Be descriptive and helpful.
+              </p>
+            </div>
+
+            {error && (
+              <div className="bg-destructive/10 text-destructive px-4 py-2 rounded-lg text-sm">
+                {error}
+              </div>
+            )}
+
+            <div className="flex gap-4">
+              <button
+                type="submit"
+                disabled={loading}
+                className="flex-1 bg-primary text-primary-foreground py-3 rounded-lg font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              >
+                {loading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Creating discussion...
+                  </>
+                ) : (
+                  <>
+                    <MessageSquare className="w-4 h-4" />
+                    Create Discussion
+                  </>
+                )}
+              </button>
+              <Link
+                href="/forum"
+                className="px-6 py-3 border border-border rounded-lg hover:bg-secondary transition-colors text-center"
+              >
+                Cancel
+              </Link>
+            </div>
+          </form>
+        </div>
+
+        {/* Guidelines */}
+        <div className="mt-6 bg-secondary/50 rounded-lg p-4">
+          <h3 className="font-semibold mb-2">Community Guidelines</h3>
+          <ul className="text-sm text-muted-foreground space-y-1">
+            <li>• Be respectful and constructive in your discussions</li>
+            <li>• Search before posting to avoid duplicate threads</li>
+            <li>• Use descriptive titles that help others understand your topic</li>
+            <li>• Include relevant details in your content for better responses</li>
+            <li>• Stay on topic and post in the appropriate category</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  )
+}

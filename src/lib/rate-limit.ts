@@ -1,0 +1,61 @@
+import { prisma } from "@/lib/prisma"
+
+/**
+ * Database-backed rate limiter.
+ * Works correctly across serverless instances (unlike in-memory maps).
+ *
+ * Usage:
+ *   const allowed = await rateLimit(`register:${ip}`, 5, 15 * 60 * 1000)
+ *   if (!allowed) return 429
+ */
+export async function rateLimit(
+  key: string,
+  limit: number,
+  windowMs: number
+): Promise<{ allowed: boolean; remaining: number; retryAfterSeconds: number }> {
+  const now = Date.now()
+  const expiresAt = new Date(now + windowMs)
+
+  try {
+    // Atomically upsert + increment
+    const record = await prisma.rateLimit.upsert({
+      where: { key },
+      create: { key, count: 1, expiresAt },
+      update: { count: { increment: 1 } },
+    })
+
+    // Window expired — reset
+    if (record.expiresAt.getTime() < now) {
+      await prisma.rateLimit.update({
+        where: { key },
+        data: { count: 1, expiresAt },
+      })
+      return { allowed: true, remaining: limit - 1, retryAfterSeconds: 0 }
+    }
+
+    const allowed = record.count <= limit
+    return {
+      allowed,
+      remaining: Math.max(0, limit - record.count),
+      retryAfterSeconds: allowed
+        ? 0
+        : Math.ceil((record.expiresAt.getTime() - now) / 1000),
+    }
+  } catch (error) {
+    // Fail closed on mutation endpoints would be safer, but failing open
+    // prevents a DB hiccup from breaking the app. Log for monitoring.
+    console.error("[rate-limit] error:", error)
+    return { allowed: true, remaining: limit, retryAfterSeconds: 0 }
+  }
+}
+
+/** Periodic cleanup of expired rows (call from a cron or opportunistically) */
+export async function cleanupRateLimits() {
+  try {
+    await prisma.rateLimit.deleteMany({
+      where: { expiresAt: { lt: new Date() } },
+    })
+  } catch {
+    // non-fatal
+  }
+}

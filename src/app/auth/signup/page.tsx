@@ -1,0 +1,244 @@
+"use client"
+
+import { useState, useEffect } from "react"
+import { signIn } from "next-auth/react"
+import { useRouter } from "next/navigation"
+import Link from "next/link"
+import { Leaf, Loader2 } from "lucide-react"
+
+export default function SignUpPage() {
+  const router = useRouter()
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState("")
+  const [formData, setFormData] = useState({
+    inviteCode: "",
+    username: "",
+    password: "",
+    confirmPassword: "",
+    ageVerified: false,
+    captchaAnswer: "",
+    captchaId: "",
+  })
+  const [captchaQuestion, setCaptchaQuestion] = useState("Loading...")
+
+  // Fetch captcha from server
+  useEffect(() => {
+    fetch("/api/auth/register")
+      .then(res => res.json())
+      .then(data => {
+        setCaptchaQuestion(data.captcha.question)
+        setFormData(prev => ({ ...prev, captchaId: data.captcha.id }))
+      })
+      .catch(() => {
+        setError("Failed to load security check")
+      })
+  }, [])
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setError("")
+
+    if (!formData.inviteCode.trim()) {
+      setError("An invite code is required to join the beta")
+      return
+    }
+
+    if (!formData.ageVerified) {
+      setError("You must verify you are 21+ years old to join")
+      return
+    }
+
+    if (!formData.captchaAnswer || !formData.captchaId) {
+      setError("Security check required")
+      return
+    }
+
+    if (formData.password !== formData.confirmPassword) {
+      setError("Passwords do not match")
+      return
+    }
+
+    if (formData.password.length < 8) {
+      setError("Password must be at least 8 characters")
+      return
+    }
+
+    setLoading(true)
+
+    try {
+      const response = await fetch("/api/auth/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          username: formData.username,
+          password: formData.password,
+          captchaId: formData.captchaId,
+          captchaAnswer: formData.captchaAnswer,
+          ageVerified: formData.ageVerified,
+          inviteCode: formData.inviteCode,
+        }),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || "Registration failed")
+      }
+
+      // Auto sign in after registration
+      const result = await signIn("credentials", {
+        username: formData.username,
+        password: formData.password,
+        redirect: false,
+      })
+
+      if (result?.error) {
+        throw new Error("Registration successful but login failed")
+      }
+
+      router.push("/profile/complete")
+    } catch (error: unknown) {
+      setError((error as Error).message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-background px-4">
+      <div className="max-w-md w-full">
+        <div className="text-center mb-8">
+          <div className="flex justify-center mb-4">
+            <div className="bg-primary/10 p-3 rounded-full">
+              <Leaf className="w-8 h-8 text-primary" />
+            </div>
+          </div>
+          <h1 className="text-2xl font-bold">Join TerpTalk</h1>
+          <p className="text-muted-foreground mt-2">Private beta — invite code required</p>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label htmlFor="inviteCode" className="block text-sm font-medium mb-2">
+              Invite Code *
+            </label>
+            <input
+              id="inviteCode"
+              type="text"
+              required
+              value={formData.inviteCode}
+              onChange={(e) => setFormData({ ...formData, inviteCode: e.target.value.toUpperCase() })}
+              className="w-full px-4 py-2 rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary"
+              placeholder="TERP-XXXXXXXX"
+              maxLength={20}
+            />
+          </div>
+
+          <div>
+            <label htmlFor="username" className="block text-sm font-medium mb-2">
+              Username *
+            </label>
+            <input
+              id="username"
+              type="text"
+              required
+              value={formData.username}
+              onChange={(e) => setFormData({ ...formData, username: e.target.value })}
+              className="w-full px-4 py-2 rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary"
+              placeholder="Choose a username"
+              minLength={3}
+              maxLength={20}
+            />
+          </div>
+
+          <div>
+            <label htmlFor="password" className="block text-sm font-medium mb-2">
+              Password *
+            </label>
+            <input
+              id="password"
+              type="password"
+              required
+              value={formData.password}
+              onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+              className="w-full px-4 py-2 rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary"
+              placeholder="Minimum 8 characters"
+            />
+          </div>
+
+          <div>
+            <label htmlFor="confirmPassword" className="block text-sm font-medium mb-2">
+              Confirm Password *
+            </label>
+            <input
+              id="confirmPassword"
+              type="password"
+              required
+              value={formData.confirmPassword}
+              onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
+              className="w-full px-4 py-2 rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary"
+              placeholder="Confirm your password"
+            />
+          </div>
+
+          <div>
+            <label htmlFor="captcha" className="block text-sm font-medium mb-2">
+              Security Check: {captchaQuestion}
+            </label>
+            <input
+              id="captcha"
+              type="number"
+              required
+              value={formData.captchaAnswer}
+              onChange={(e) => setFormData({ ...formData, captchaAnswer: e.target.value })}
+              className="w-full px-4 py-2 rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary"
+              placeholder="Enter the answer"
+            />
+          </div>
+
+          <div className="flex items-center">
+            <input
+              id="ageVerified"
+              type="checkbox"
+              required
+              checked={formData.ageVerified}
+              onChange={(e) => setFormData({ ...formData, ageVerified: e.target.checked })}
+              className="w-4 h-4 rounded border-border text-primary focus:ring-primary"
+            />
+            <label htmlFor="ageVerified" className="ml-2 text-sm">
+              I verify that I am 21+ years old
+            </label>
+          </div>
+
+          {error && (
+            <div className="bg-destructive/10 text-destructive px-4 py-2 rounded-lg text-sm">
+              {error}
+            </div>
+          )}
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full bg-primary text-primary-foreground py-3 rounded-lg font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+          >
+            {loading ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Creating account...
+              </>
+            ) : (
+              "Create Account"
+            )}
+          </button>
+        </form>
+
+        <p className="text-center text-sm text-muted-foreground mt-6">
+          Already have an account?{" "}
+          <Link href="/auth/signin" className="text-primary hover:underline">
+            Sign in
+          </Link>
+        </p>
+      </div>
+    </div>
+  )
+}

@@ -1,0 +1,583 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// User and Authentication
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String?    @unique
+  emailVerified DateTime?
+  image         String?
+  password      String?
+  role          String    @default("MEMBER") // MEMBER, VERIFIED_MEMBER, MODERATOR, ADMINISTRATOR
+  status        String    @default("OFFLINE") // ONLINE, AWAY, OFFLINE
+  lastSeenAt    DateTime?
+  ageVerified   Boolean   @default(false)
+  banned        Boolean   @default(false)
+  bannedReason  String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  profile       Profile?
+  posts         Post[]
+  threadCreator Thread[] @relation("ThreadAuthor")
+  diaryCreator  GrowDiary[]
+  diaryUpdates  DiaryUpdate[]
+  setupCreator  GrowSetup[]
+  chatMessages  ChatMessage[]
+  sentMessages  DirectMessage[]      @relation("SentMessages")
+  receivedMessages DirectMessage[]   @relation("ReceivedMessages")
+  notifications Notification[]
+  reactions     Reaction[]
+  followers     Follow[]             @relation("Following")
+  following     Follow[]             @relation("Follower")
+  badges        UserBadge[]
+  reputation    ReputationEvent[]
+  reports       Report[]
+  moderatorActions ModerationAction[]
+  blockedUsers  Block[]              @relation("Blocker")
+  blockedBy     Block[]              @relation("Blocked")
+
+  @@index([role])
+  @@index([status])
+}
+
+// User Profile
+model Profile {
+  id           String   @id @default(cuid())
+  userId       String   @unique
+  username     String   @unique
+  bio          String?
+  location     String?
+  website      String?
+  joinDate     DateTime @default(now())
+  reputation   Int      @default(0)
+  growSpace    String?
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([username])
+}
+
+// Forum Categories
+model Category {
+  id          String   @id @default(cuid())
+  name        String
+  description String
+  slug        String   @unique
+  icon        String?
+  color       String?
+  order       Int      @default(0)
+  hidden      Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  threads     Thread[]
+
+  @@index([slug])
+  @@index([order])
+}
+
+// Forum Threads
+model Thread {
+  id         String   @id @default(cuid())
+  title      String
+  slug       String   @unique
+  content    String
+  categoryId String
+  authorId   String
+  pinned     Boolean  @default(false)
+  locked     Boolean  @default(false)
+  deleted    Boolean  @default(false)
+  views      Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  category   Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  author     User     @relation("ThreadAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+  posts      Post[]
+  bookmarks  Bookmark[]
+
+  @@index([categoryId])
+  @@index([authorId])
+  @@index([slug])
+  @@index([createdAt])
+}
+
+// Forum Posts
+model Post {
+  id        String   @id @default(cuid())
+  content   String
+  threadId  String
+  authorId  String
+  edited    Boolean  @default(false)
+  deleted   Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  thread    Thread   @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  author    User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  reactions Reaction[]
+
+  @@index([threadId])
+  @@index([authorId])
+  @@index([createdAt])
+}
+
+// Reactions
+model Reaction {
+  id        String   @id @default(cuid())
+  type      String   // LIKE, LOVE, LAUGH, THINKING, FIRE, THUMBS_UP, THUMBS_DOWN
+  userId    String
+  postId    String?
+  diaryId   String?
+  createdAt DateTime @default(now())
+
+  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post      Post?        @relation(fields: [postId], references: [id], onDelete: Cascade)
+  diary     GrowDiary?   @relation(fields: [diaryId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, postId])
+  @@unique([userId, diaryId])
+  @@index([postId])
+  @@index([diaryId])
+}
+
+// Bookmarks
+model Bookmark {
+  id        String   @id @default(cuid())
+  userId    String
+  threadId  String
+  createdAt DateTime @default(now())
+
+  thread    Thread   @relation(fields: [threadId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, threadId])
+  @@index([userId])
+  @@index([threadId])
+}
+
+// Follow System
+model Follow {
+  id          String   @id @default(cuid())
+  followerId  String
+  followingId String
+  createdAt   DateTime @default(now())
+
+  follower    User     @relation("Following", fields: [followerId], references: [id], onDelete: Cascade)
+  following   User     @relation("Follower", fields: [followingId], references: [id], onDelete: Cascade)
+
+  @@unique([followerId, followingId])
+  @@index([followerId])
+  @@index([followingId])
+}
+
+// Block System
+model Block {
+  id        String   @id @default(cuid())
+  blockerId String
+  blockedId String
+  createdAt DateTime @default(now())
+
+  blocker   User     @relation("Blocker", fields: [blockerId], references: [id], onDelete: Cascade)
+  blocked   User     @relation("Blocked", fields: [blockedId], references: [id], onDelete: Cascade)
+
+  @@unique([blockerId, blockedId])
+  @@index([blockerId])
+  @@index([blockedId])
+}
+
+// Grow Diaries
+model GrowDiary {
+  id            String   @id @default(cuid())
+  title         String
+  description   String
+  strain        String?
+  genetics      String?
+  growType      String   // INDOOR, OUTDOOR, GREENHOUSE
+  startDate     DateTime
+  medium        String?
+  containerSize String?
+  lighting      String?
+  nutrients     String?
+  equipment     String?
+  spaceDimensions String?
+  authorId      String
+  featured      Boolean  @default(false)
+  deleted       Boolean  @default(false)
+  stage         String   @default("GERMINATION") // GERMINATION, SEEDLING, VEGETATIVE, FLOWER, HARVEST, DRYING, CURING, COMPLETED
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  author        User        @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  updates       DiaryUpdate[]
+  reactions     Reaction[]
+  followers     DiaryFollow[]
+
+  @@index([authorId])
+  @@index([strain])
+  @@index([featured])
+  @@index([createdAt])
+}
+
+model DiaryUpdate {
+  id           String   @id @default(cuid())
+  title        String
+  content      String
+  dayNumber    Int?
+  weekNumber   Int?
+  stage        String   // GERMINATION, SEEDLING, VEGETATIVE, FLOWER, HARVEST, DRYING, CURING, COMPLETED
+  temperature  Float?
+  humidity     Float?
+  vpd          Float?
+  ph           Float?
+  ec           Float?
+  feeding      String?
+  training     String?
+  diaryId      String
+  authorId     String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  diary        GrowDiary   @relation(fields: [diaryId], references: [id], onDelete: Cascade)
+  author       User        @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  images       DiaryImage[]
+
+  @@index([diaryId])
+  @@index([authorId])
+  @@index([createdAt])
+}
+
+model DiaryImage {
+  id        String   @id @default(cuid())
+  url       String
+  caption   String?
+  updateId  String
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
+
+  update    DiaryUpdate @relation(fields: [updateId], references: [id], onDelete: Cascade)
+
+  @@index([updateId])
+}
+
+model DiaryFollow {
+  id        String   @id @default(cuid())
+  userId    String
+  diaryId   String
+  createdAt DateTime @default(now())
+
+  diary     GrowDiary @relation(fields: [diaryId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, diaryId])
+  @@index([userId])
+  @@index([diaryId])
+}
+
+// Grow Setups
+model GrowSetup {
+  id          String   @id @default(cuid())
+  title       String
+  description String
+  space       String?
+  tent        String?
+  lighting    String?
+  ventilation String?
+  fans        String?
+  containers  String?
+  medium      String?
+  nutrients   String?
+  controllers String?
+  equipment   String?
+  authorId    String
+  deleted     Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  author      User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  images      SetupImage[]
+  comments    SetupComment[]
+
+  @@index([authorId])
+  @@index([createdAt])
+}
+
+model SetupImage {
+  id        String   @id @default(cuid())
+  url       String
+  caption   String?
+  setupId   String
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
+
+  setup     GrowSetup @relation(fields: [setupId], references: [id], onDelete: Cascade)
+
+  @@index([setupId])
+}
+
+model SetupComment {
+  id        String   @id @default(cuid())
+  content   String
+  setupId   String
+  authorId  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  setup     GrowSetup @relation(fields: [setupId], references: [id], onDelete: Cascade)
+
+  @@index([setupId])
+  @@index([authorId])
+}
+
+// Chat System
+model ChatRoom {
+  id          String        @id @default(cuid())
+  name        String
+  description String?
+  slug        String        @unique
+  order       Int           @default(0)
+  isPrivate   Boolean       @default(false)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  messages    ChatMessage[]
+
+  @@index([slug])
+  @@index([order])
+}
+
+model ChatMessage {
+  id        String   @id @default(cuid())
+  content   String
+  roomId    String
+  authorId  String
+  edited    Boolean  @default(false)
+  deleted   Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  room      ChatRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  author    User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@index([roomId])
+  @@index([authorId])
+  @@index([createdAt])
+}
+
+// Direct Messages
+model DirectMessage {
+  id        String   @id @default(cuid())
+  content   String
+  senderId  String
+  receiverId String
+  read      Boolean  @default(false)
+  deleted   Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  sender    User     @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
+  receiver  User     @relation("ReceivedMessages", fields: [receiverId], references: [id], onDelete: Cascade)
+
+  @@index([senderId])
+  @@index([receiverId])
+  @@index([createdAt])
+}
+
+// Notifications
+model Notification {
+  id        String   @id @default(cuid())
+  type      String   // LIKE, COMMENT, REPLY, MENTION, FOLLOW, DIARY_UPDATE, DIRECT_MESSAGE, THREAD_ACTIVITY, MODERATOR_ANNOUNCEMENT
+  userId    String
+  title     String
+  content   String
+  link      String?
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([read])
+  @@index([createdAt])
+}
+
+// Strain Database
+model Strain {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  genetics    String?
+  breeder     String?
+  type        String?
+  description String?
+  growingInfo String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([name])
+}
+
+// Badges System
+model Badge {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String
+  icon        String?
+  color       String?
+  requirement String
+  createdAt   DateTime @default(now())
+
+  userBadges  UserBadge[]
+
+  @@index([name])
+}
+
+model UserBadge {
+  id        String   @id @default(cuid())
+  userId    String
+  badgeId   String
+  earnedAt  DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  badge     Badge    @relation(fields: [badgeId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, badgeId])
+  @@index([userId])
+  @@index([badgeId])
+}
+
+// Reputation System
+model ReputationEvent {
+  id        String   @id @default(cuid())
+  type      String   // POST_CREATED, COMMENT_CREATED, DIARY_CREATED, DIARY_UPDATE, HELPFUL_ANSWER, COMMUNITY_CONTRIBUTION
+  userId    String
+  amount    Int
+  reason    String
+  createdAt DateTime @default(now())
+
+  user      User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([createdAt])
+}
+
+// Grow Calendar
+model CalendarEvent {
+  id        String   @id @default(cuid())
+  type      String   // GERMINATION, PLANTING, TRANSPLANT, TRAINING, FEEDING, DEFOLIATION, FLIP, FLOWER, HARVEST, DRY, CURE
+  title     String
+  notes     String?
+  eventDate DateTime
+  diaryId   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([diaryId])
+  @@index([eventDate])
+}
+
+// Environment Tracking
+model EnvironmentReading {
+  id          String   @id @default(cuid())
+  temperature Float?
+  humidity    Float?
+  vpd         Float?
+  ph          Float?
+  ec          Float?
+  lightSchedule String?
+  diaryId     String
+  recordedAt  DateTime @default(now())
+
+  @@index([diaryId])
+  @@index([recordedAt])
+}
+
+// Reports and Moderation
+model Report {
+  id          String   @id @default(cuid())
+  type        String   // POST, COMMENT, CHAT_MESSAGE, PROFILE, DIRECT_MESSAGE, DIARY, SETUP
+  reason      String
+  description String?
+  reporterId  String
+  reportedId  String
+  targetId    String?  // ID of the reported content (thread/post/message id)
+  status      String   @default("PENDING") // PENDING, REVIEWING, RESOLVED, DISMISSED
+  resolution  String?  // Moderator note on resolution
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  reporter    User        @relation(fields: [reporterId], references: [id], onDelete: Cascade)
+
+  @@index([reporterId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model ModerationAction {
+  id          String   @id @default(cuid())
+  type        String   // WARNING, TEMPORARY_BAN, PERMANENT_BAN, CONTENT_DELETION, CONTENT_EDIT
+  reason      String
+  targetUserId String
+  moderatorId String
+  duration    Int?     // in days for temporary bans
+  createdAt   DateTime @default(now())
+
+  moderator   User                 @relation(fields: [moderatorId], references: [id], onDelete: Cascade)
+
+  @@index([targetUserId])
+  @@index([moderatorId])
+  @@index([createdAt])
+}
+
+// Security Infrastructure
+model SecurityEvent {
+  id        String   @id @default(cuid())
+  type      String   // LOGIN_SUCCESS, LOGIN_FAILURE, REGISTRATION, PASSWORD_CHANGE, ACCOUNT_DELETED, RATE_LIMIT_EXCEEDED, SUSPICIOUS_ACTIVITY, AUTHORIZATION_FAILURE
+  userId    String?
+  ipHash    String?  // SHA-256 hash of IP (never store raw IP for privacy)
+  userAgent String?
+  metadata  String?  // JSON string with non-sensitive context
+  createdAt DateTime @default(now())
+
+  @@index([type])
+  @@index([userId])
+  @@index([createdAt])
+}
+
+model RateLimit {
+  key       String   @id
+  count     Int      @default(0)
+  expiresAt DateTime
+
+  @@index([expiresAt])
+}
+
+model Captcha {
+  id        String   @id @default(cuid())
+  answer    String
+  expiresAt DateTime
+  used      Boolean  @default(false)
+
+  @@index([expiresAt])
+}
+
+// Invite-only beta access
+model BetaInvite {
+  id          String    @id @default(cuid())
+  code        String    @unique
+  note        String?
+  createdById String?
+  usedById    String?
+  usedAt      DateTime?
+  expiresAt   DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([code])
+}
