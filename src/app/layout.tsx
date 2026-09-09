@@ -4,6 +4,7 @@ import "./globals.css";
 import { Providers } from "@/components/providers";
 import { Navigation } from "@/components/navigation";
 import ChatSidebar from "@/components/chat-sidebar";
+import QuickPostButton from "@/components/quick-post-button";
 import ServiceWorkerRegister from "@/components/sw-register";
 import { buildMetadata } from "@/lib/seo";
 import { JsonLd } from "@/components/json-ld";
@@ -67,6 +68,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <Navigation />
           <main id="main-content" className="flex-1">{children}</main>
           <ChatSidebar />
+          <QuickPostButton />
           <ServiceWorkerRegister />
         </Providers>
       </body>
