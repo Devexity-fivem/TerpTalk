@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import { useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
-import { Shield, Flag, Loader2, CheckCircle, XCircle, Trash2, Ban, AlertTriangle, Search, UserCheck, ScrollText, ListChecks } from "lucide-react"
+import { Shield, Flag, Loader2, CheckCircle, XCircle, Trash2, Ban, AlertTriangle, Search, UserCheck, ScrollText, ListChecks, Layers } from "lucide-react"
 import Link from "next/link"
 
 interface LookupUser {
@@ -62,11 +62,16 @@ export default function ModerationPage() {
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState("")
-  const [tab, setTab] = useState<"queue" | "lookup" | "log">("queue")
+  const [tab, setTab] = useState<"queue" | "lookup" | "log" | "bulk">("queue")
   const [lookupName, setLookupName] = useState("")
   const [lookupUser, setLookupUser] = useState<LookupUser | null>(null)
   const [lookupHistory, setLookupHistory] = useState<LookupHistory[]>([])
   const [lookupLoading, setLookupLoading] = useState(false)
+  const [bulkIds, setBulkIds] = useState("")
+  const [bulkAction, setBulkAction] = useState("lock")
+  const [bulkReason, setBulkReason] = useState("")
+  const [bulkLoading, setBulkLoading] = useState(false)
+  const [bulkResult, setBulkResult] = useState<string | null>(null)
   const role = (session?.user as { role?: string })?.role
   const isMod = role === "MODERATOR" || role === "ADMINISTRATOR"
   const isAdminUser = role === "ADMINISTRATOR"
@@ -210,6 +215,7 @@ export default function ModerationPage() {
             { id: "queue", label: "Report Queue", icon: ListChecks },
             { id: "lookup", label: "User Lookup", icon: Search },
             { id: "log", label: "Mod Log", icon: ScrollText },
+            { id: "bulk", label: "Bulk Threads", icon: Layers },
           ] as const).map(({ id, label, icon: Icon }) => (
             <button
               key={id}
@@ -224,6 +230,78 @@ export default function ModerationPage() {
         </div>
 
         {error && <div className="bg-destructive/10 text-destructive px-4 py-2 rounded-lg text-sm mb-4">{error}</div>}
+
+        {/* BULK THREAD ACTIONS */}
+        {tab === "bulk" && isMod && (
+          <div className="space-y-4 mb-10">
+            <div className="bg-card rounded-lg border border-border p-4 space-y-3">
+              <div>
+                <label className="block text-sm font-medium mb-1">Thread IDs (one per line or comma-separated)</label>
+                <textarea
+                  value={bulkIds}
+                  onChange={(e) => setBulkIds(e.target.value)}
+                  rows={4}
+                  placeholder="Thread IDs from /api/forum/threads or the database"
+                  className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary resize-none"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium mb-1">Action</label>
+                  <select
+                    value={bulkAction}
+                    onChange={(e) => setBulkAction(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                  >
+                    <option value="lock">Lock</option>
+                    <option value="unlock">Unlock</option>
+                    <option value="pin">Pin</option>
+                    <option value="unpin">Unpin</option>
+                    <option value="delete">Delete</option>
+                    <option value="restore">Restore</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1">Reason</label>
+                  <input
+                    type="text"
+                    value={bulkReason}
+                    onChange={(e) => setBulkReason(e.target.value)}
+                    placeholder="Bulk action reason"
+                    className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                  />
+                </div>
+              </div>
+              <button
+                disabled={bulkLoading || !bulkIds.trim()}
+                onClick={async () => {
+                  const ids = bulkIds.split(/[\n,]+/).map((id) => id.trim()).filter(Boolean)
+                  if (ids.length === 0) return
+                  setBulkLoading(true)
+                  setBulkResult(null)
+                  setError("")
+                  try {
+                    const res = await fetch("/api/moderation/bulk", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ ids, action: bulkAction, reason: bulkReason }),
+                    })
+                    const d = await res.json()
+                    if (res.ok) {
+                      setBulkResult(`Updated ${d.updated} threads`)
+                    } else {
+                      setError(d.error || "Bulk action failed")
+                    }
+                  } finally { setBulkLoading(false) }
+                }}
+                className="w-full bg-primary text-primary-foreground py-2 rounded-lg font-medium hover:bg-primary/90 transition-colors disabled:opacity-50"
+              >
+                {bulkLoading ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : "Run Bulk Action"}
+              </button>
+              {bulkResult && <p className="text-sm text-green-600">{bulkResult}</p>}
+            </div>
+          </div>
+        )}
 
         {/* USER LOOKUP */}
         {tab === "lookup" && (
