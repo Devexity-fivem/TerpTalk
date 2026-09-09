@@ -1,10 +1,11 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, Suspense } from "react"
 import { useSession } from "next-auth/react"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { MessageSquare, Loader2 } from "lucide-react"
 import Link from "next/link"
+import { WIZARD_RESULTS } from "@/lib/problem-wizard"
 
 interface Category {
   id: string
@@ -12,17 +13,33 @@ interface Category {
   slug: string
 }
 
-export default function NewThreadPage() {
+function NewThreadForm() {
   const { data: session, status } = useSession()
   const router = useRouter()
+  const searchParams = useSearchParams()
   
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
   const [categories, setCategories] = useState<Category[]>([])
-  const [formData, setFormData] = useState({
-    title: "",
-    content: "",
-    categoryId: "",
+  const [formData, setFormData] = useState(() => {
+    const resultId = searchParams?.get("result")
+    const result = resultId ? WIZARD_RESULTS[resultId] : null
+    return {
+      title: result ? `Help: ${result.title}` : "",
+      content: result
+        ? [
+            `I used the TerpTalk plant problem wizard and it suggested this might be **${result.title}**.`,
+            "",
+            `**Likely cause:** ${result.cause}`,
+            "",
+            "**Suggested fixes:**",
+            ...result.fixes.map((f) => `- ${f}`),
+            "",
+            "What do you think? Any photos or extra details I should add?",
+          ].join("\n")
+        : "",
+      categoryId: "",
+    }
   })
 
   useEffect(() => {
@@ -45,11 +62,16 @@ export default function NewThreadPage() {
     return null
   }
 
+  const prefillCategoryId =
+    searchParams?.get("category") ? categories.find((c) => c.slug === searchParams!.get("category"))?.id : ""
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError("")
 
-    if (!formData.title.trim() || !formData.content.trim() || !formData.categoryId) {
+    const categoryId = formData.categoryId || prefillCategoryId
+
+    if (!formData.title.trim() || !formData.content.trim() || !categoryId) {
       setError("Please fill in all required fields")
       return
     }
@@ -60,7 +82,7 @@ export default function NewThreadPage() {
       const response = await fetch("/api/forum/threads", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formData),
+        body: JSON.stringify({ ...formData, categoryId }),
       })
 
       if (!response.ok) {
@@ -99,7 +121,7 @@ export default function NewThreadPage() {
               <select
                 id="category"
                 required
-                value={formData.categoryId}
+                value={formData.categoryId || prefillCategoryId || ""}
                 onChange={(e) => setFormData({ ...formData, categoryId: e.target.value })}
                 className="w-full px-4 py-2 rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary"
               >
@@ -197,5 +219,21 @@ export default function NewThreadPage() {
         </div>
       </div>
     </div>
+  )
+}
+
+function Loading() {
+  return (
+    <div className="min-h-screen flex items-center justify-center">
+      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary" />
+    </div>
+  )
+}
+
+export default function NewThreadPage() {
+  return (
+    <Suspense fallback={<Loading />}>
+      <NewThreadForm />
+    </Suspense>
   )
 }

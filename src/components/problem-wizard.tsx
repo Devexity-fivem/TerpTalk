@@ -44,7 +44,7 @@ export default function ProblemWizard() {
             <button onClick={reset} className="flex items-center gap-1.5 px-4 py-2 bg-secondary rounded-lg text-sm hover:bg-secondary/80">
               <RotateCcw className="w-4 h-4" /> Diagnose another issue
             </button>
-            <Link href="/forum/category/plant-problems" className="flex items-center gap-1.5 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm hover:bg-primary/90">
+            <Link href={`/forum/new?category=plant-problems&result=${encodeURIComponent(resultId || "")}`} className="flex items-center gap-1.5 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm hover:bg-primary/90">
               Ask in Plant Problems <ArrowRight className="w-4 h-4" />
             </Link>
           </div>
