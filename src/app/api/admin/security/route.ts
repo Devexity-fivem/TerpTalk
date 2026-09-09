@@ -1,14 +1,12 @@
 import { NextResponse } from "next/server"
-import { getServerSession } from "next-auth"
-import { authOptions } from "@/lib/auth"
+import { requireAdmin } from "@/lib/require-staff"
 import { prisma } from "@/lib/prisma"
-import { unauthorized, isAdmin, forbidden } from "@/lib/security"
+import { forbidden } from "@/lib/security"
 
 // GET — recent security events (ADMINISTRATOR only)
 export async function GET() {
-  const session = await getServerSession(authOptions)
-  if (!session?.user?.id) return unauthorized()
-  if (!isAdmin(session.user.role)) return forbidden()
+  const session = { user: await requireAdmin() }
+  if (!session.user) return forbidden()
 
   const events = await prisma.securityEvent.findMany({
     orderBy: { createdAt: "desc" },

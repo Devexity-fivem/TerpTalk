@@ -22,7 +22,8 @@ const securityHeaders = [
       "style-src 'self' 'unsafe-inline'", // Tailwind requires inline styles
       "img-src 'self' data: blob: https:",
       "font-src 'self' data:",
-      "connect-src 'self' ws: wss:",
+      "connect-src 'self' https://*.pusher.com wss://*.pusher.com" +
+        (process.env.NODE_ENV === "development" ? " ws: wss:" : ""), // Next HMR in dev only
       "frame-ancestors 'none'",
       "base-uri 'self'",
       "form-action 'self'",

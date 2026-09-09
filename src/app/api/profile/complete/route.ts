@@ -2,7 +2,8 @@ import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { unauthorized, LIMITS, USERNAME_REGEX, RESERVED_USERNAMES } from "@/lib/security"
+import { unauthorized, LIMITS, USERNAME_REGEX, RESERVED_USERNAMES, getClientIp, logSecurityEvent } from "@/lib/security"
+import { rateLimit } from "@/lib/rate-limit"
 
 export async function POST(request: Request) {
   try {
@@ -10,6 +11,14 @@ export async function POST(request: Request) {
 
     if (!session?.user?.id) {
       return unauthorized()
+    }
+
+    const rl = await rateLimit(`profile-complete:${session.user.id}`, 15, 60 * 60 * 1000)
+    if (!rl.allowed) {
+      await logSecurityEvent("RATE_LIMIT_EXCEEDED", {
+        userId: session.user.id, ip: getClientIp(request), metadata: { endpoint: "profile/complete" },
+      })
+      return NextResponse.json({ error: "Too many attempts" }, { status: 429 })
     }
 
     const body = await request.json()
@@ -37,7 +46,7 @@ export async function POST(request: Request) {
       }
 
       const existingProfile = await prisma.profile.findFirst({
-        where: { username: { equals: username } },
+        where: { username: { equals: username, mode: "insensitive" } },
       })
 
       if (existingProfile && existingProfile.userId !== session.user.id) {
@@ -63,7 +72,7 @@ export async function POST(request: Request) {
     if (website) {
       try {
         const url = new URL(website)
-        if (!["http:", "https:"].includes(url.protocol)) {
+        if (url.protocol !== "https:") {
           return NextResponse.json({ error: "Invalid website URL" }, { status: 400 })
         }
       } catch {

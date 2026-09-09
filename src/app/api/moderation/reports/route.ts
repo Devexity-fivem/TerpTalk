@@ -1,18 +1,11 @@
 import { NextResponse } from "next/server"
-import { getServerSession } from "next-auth"
-import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { unauthorized, isModerator, forbidden, getClientIp, logSecurityEvent } from "@/lib/security"
+import { forbidden, getClientIp, logSecurityEvent } from "@/lib/security"
+import { requireModerator } from "@/lib/require-staff"
 
-// GET — moderation queue (moderators/admins only)
+// GET — moderation queue (DB-verified moderators/admins only)
 export async function GET() {
-  const session = await getServerSession(authOptions)
-  if (!session?.user?.id) {
-    return unauthorized()
-  }
-  if (!isModerator(session.user.role)) {
-    return forbidden()
-  }
+  if (!(await requireModerator())) return forbidden()
 
   const reports = await prisma.report.findMany({
     orderBy: { createdAt: "desc" },
@@ -106,15 +99,10 @@ export async function GET() {
   return NextResponse.json({ reports: enriched })
 }
 
-// PATCH — resolve or dismiss a report (moderators/admins only)
+// PATCH — resolve or dismiss a report (DB-verified moderators/admins only)
 export async function PATCH(request: Request) {
-  const session = await getServerSession(authOptions)
-  if (!session?.user?.id) {
-    return unauthorized()
-  }
-  if (!isModerator(session.user.role)) {
-    return forbidden()
-  }
+  const staff = await requireModerator()
+  if (!staff) return forbidden()
 
   const body = await request.json().catch(() => ({}))
   const { reportId, status, resolution } = body
@@ -146,12 +134,12 @@ export async function PATCH(request: Request) {
       type: `REPORT_${status}`,
       reason: resolution?.trim() || `Report marked ${status.toLowerCase()}`,
       targetUserId: report.reportedId,
-      moderatorId: session.user.id,
+      moderatorId: staff.id,
     },
   })
 
   await logSecurityEvent("SUSPICIOUS_ACTIVITY", {
-    userId: session.user.id,
+    userId: staff.id,
     ip: getClientIp(request),
     metadata: { action: `report_${status.toLowerCase()}`, reportId },
   })

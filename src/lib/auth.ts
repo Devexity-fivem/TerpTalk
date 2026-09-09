@@ -47,7 +47,9 @@ export const authOptions: NextAuthOptions = {
         const user = await prisma.user.findFirst({
           where: {
             profile: {
-              username: credentials.username,
+              // Case-insensitive — registration enforces unique-insensitive
+              // usernames, so this can't match the wrong account
+              username: { equals: credentials.username.trim(), mode: "insensitive" },
             },
           },
           include: {

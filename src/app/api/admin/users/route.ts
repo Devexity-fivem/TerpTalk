@@ -1,16 +1,13 @@
 import { NextResponse } from "next/server"
-import { getServerSession } from "next-auth"
-import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { unauthorized, isAdmin, forbidden, getClientIp, logSecurityEvent } from "@/lib/security"
+import { forbidden, getClientIp, logSecurityEvent } from "@/lib/security"
+import { requireAdmin } from "@/lib/require-staff"
 
 const ASSIGNABLE_ROLES = new Set(["MEMBER", "VERIFIED_MEMBER", "MODERATOR", "ADMINISTRATOR"])
 
 // GET — list/search users (ADMINISTRATOR only)
 export async function GET(request: Request) {
-  const session = await getServerSession(authOptions)
-  if (!session?.user?.id) return unauthorized()
-  if (!isAdmin(session.user.role)) return forbidden()
+  if (!(await requireAdmin())) return forbidden()
 
   const { searchParams } = new URL(request.url)
   const q = (searchParams.get("q") || "").trim().slice(0, 60)
@@ -69,9 +66,8 @@ export async function GET(request: Request) {
 // PATCH — change a user's role or verification (ADMINISTRATOR only)
 // { userId, role } — admins can't be changed via this endpoint
 export async function PATCH(request: Request) {
-  const session = await getServerSession(authOptions)
-  if (!session?.user?.id) return unauthorized()
-  if (!isAdmin(session.user.role)) return forbidden()
+  const admin = await requireAdmin()
+  if (!admin) return forbidden()
 
   const body = await request.json().catch(() => ({}))
   const { userId, role } = body
@@ -79,7 +75,7 @@ export async function PATCH(request: Request) {
   if (typeof userId !== "string" || !userId || !ASSIGNABLE_ROLES.has(role)) {
     return NextResponse.json({ error: "Invalid request" }, { status: 400 })
   }
-  if (userId === session.user.id) {
+  if (userId === admin.id) {
     return NextResponse.json({ error: "Cannot change your own role" }, { status: 400 })
   }
 
@@ -101,7 +97,7 @@ export async function PATCH(request: Request) {
       type: "ROLE_CHANGE",
       reason: `Role changed: ${target.role} → ${role}`,
       targetUserId: userId,
-      moderatorId: session.user.id,
+      moderatorId: admin.id,
     },
   })
 
@@ -122,7 +118,7 @@ export async function PATCH(request: Request) {
   }).catch(() => {})
 
   await logSecurityEvent("SUSPICIOUS_ACTIVITY", {
-    userId: session.user.id,
+    userId: admin.id,
     ip: getClientIp(request),
     metadata: { adminAction: "role_change", targetUserId: userId, newRole: role },
   })

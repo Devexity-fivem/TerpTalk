@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { unauthorized, getClientIp, logSecurityEvent } from "@/lib/security"
 import { storeImage } from "@/lib/blob"
+import { rateLimit } from "@/lib/rate-limit"
 
 export async function GET() {
   try {
@@ -150,12 +151,30 @@ export async function PATCH(request: Request) {
     const clean = (v: unknown, max: number) =>
       typeof v === "string" ? v.trim().slice(0, max) || null : null
 
+    // Website must be an https:// URL — blocks javascript:/data: stored-XSS links
+    const cleanWebsite = clean(website, 200)
+    if (cleanWebsite && !/^https:\/\/.+/i.test(cleanWebsite)) {
+      return NextResponse.json(
+        { error: "Website must be an https:// URL" },
+        { status: 400 }
+      )
+    }
+    // Avatar validation above already restricts to https:// or data URI
+
+    const rl = await rateLimit(`profile-update:${session.user.id}`, 20, 60 * 60 * 1000)
+    if (!rl.allowed) {
+      await logSecurityEvent("RATE_LIMIT_EXCEEDED", {
+        userId: session.user.id, ip: getClientIp(request), metadata: { endpoint: "profile" },
+      })
+      return NextResponse.json({ error: "Too many updates" }, { status: 429 })
+    }
+
     const updated = await prisma.profile.update({
       where: { userId: session.user.id },
       data: {
         bio: clean(bio, 500),
         location: clean(location, 100),
-        website: clean(website, 200),
+        website: cleanWebsite,
         avatarUrl: avatarUrl ? String(avatarUrl).slice(0, 500) : null,
         growExperience: clean(growExperience, 50),
         favoriteStrain: clean(favoriteStrain, 100),

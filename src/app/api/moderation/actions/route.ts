@@ -2,7 +2,8 @@ import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { unauthorized, isModerator, isAdmin, forbidden, getClientIp, logSecurityEvent } from "@/lib/security"
+import { unauthorized, isAdmin, forbidden, getClientIp, logSecurityEvent } from "@/lib/security"
+import { requireModerator } from "@/lib/require-staff"
 
 const CONTENT_TYPES = new Set(["THREAD", "POST", "CHAT_MESSAGE", "DIARY", "SETUP"])
 const ACTION_TYPES = new Set([
@@ -13,18 +14,20 @@ const ACTION_TYPES = new Set([
 // POST — take a moderation action (moderators/admins only)
 // { actionType, targetType?, targetId?, targetUserId, reason, durationDays? }
 export async function POST(request: Request) {
-  const session = await getServerSession(authOptions)
-  if (!session?.user?.id) {
-    return unauthorized()
+  // Fresh DB check — a demoted or banned mod loses access immediately
+  const staff = await requireModerator()
+  if (!staff) {
+    const session = await getServerSession(authOptions).catch(() => null)
+    if (session?.user?.id) {
+      await logSecurityEvent("AUTHORIZATION_FAILURE", {
+        userId: session.user.id,
+        ip: getClientIp(request),
+        metadata: { endpoint: "moderation/actions" },
+      })
+    }
+    return session?.user?.id ? forbidden() : unauthorized()
   }
-  if (!isModerator(session.user.role)) {
-    await logSecurityEvent("AUTHORIZATION_FAILURE", {
-      userId: session.user.id,
-      ip: getClientIp(request),
-      metadata: { endpoint: "moderation/actions" },
-    })
-    return forbidden()
-  }
+  const session = { user: staff }
 
   const body = await request.json().catch(() => ({}))
   const { actionType, targetType, targetId, targetUserId, reason, durationDays } = body
@@ -149,15 +152,9 @@ export async function POST(request: Request) {
   return NextResponse.json({ ok: true })
 }
 
-// GET — recent moderation actions (moderators see action log; no sensitive data)
+// GET — recent moderation actions (fresh DB-verified staff check)
 export async function GET() {
-  const session = await getServerSession(authOptions)
-  if (!session?.user?.id) {
-    return unauthorized()
-  }
-  if (!isModerator(session.user.role)) {
-    return forbidden()
-  }
+  if (!(await requireModerator())) return forbidden()
 
   const actions = await prisma.moderationAction.findMany({
     orderBy: { createdAt: "desc" },

@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { unauthorized } from "@/lib/security"
+import { rateLimit } from "@/lib/rate-limit"
 
 // POST — toggle bookmark on a thread: { threadId }
 // GET — my bookmarked threads
@@ -10,6 +11,11 @@ export async function POST(request: Request) {
   try {
     const session = await getServerSession(authOptions)
     if (!session?.user?.id) return unauthorized()
+
+    const rl = await rateLimit(`bookmark:${session.user.id}`, 60, 10 * 60 * 1000)
+    if (!rl.allowed) {
+      return NextResponse.json({ error: "Slow down" }, { status: 429 })
+    }
 
     const { threadId } = await request.json().catch(() => ({}))
     if (typeof threadId !== "string" || !threadId) {

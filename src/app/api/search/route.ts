@@ -1,10 +1,19 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
+import { getClientIp, hashIp } from "@/lib/security"
+import { rateLimit } from "@/lib/rate-limit"
 
 // GET ?q= — global search across threads, strains, users, diaries (public data only)
 export async function GET(request: Request) {
+  // Rate limit — search runs 4 LIKE queries per request; cap by IP
+  const ip = getClientIp(request)
+  const rl = await rateLimit(`search:${hashIp(ip)}`, 30, 60 * 1000)
+  if (!rl.allowed) {
+    return NextResponse.json({ error: "Too many searches" }, { status: 429 })
+  }
+
   const { searchParams } = new URL(request.url)
-  const q = (searchParams.get("q") || "").trim()
+  const q = (searchParams.get("q") || "").trim().slice(0, 100)
   if (q.length < 2) {
     return NextResponse.json({ threads: [], strains: [], users: [], diaries: [] })
   }

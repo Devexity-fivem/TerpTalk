@@ -2,6 +2,8 @@ import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { getClientIp, hashIp } from "@/lib/security"
+import { rateLimit } from "@/lib/rate-limit"
 
 // GET /go/[slug]?from=/page — records the click, then redirects to the
 // affiliate URL. Works for product slugs and partner slugs.
@@ -12,6 +14,12 @@ export async function GET(
   const { slug } = await params
   const from = new URL(request.url).searchParams.get("from")?.slice(0, 200) || null
   const session = await getServerSession(authOptions).catch(() => null)
+
+  // Rate-limit click tracking so analytics can't be inflated
+  const rl = await rateLimit(`affclick:${hashIp(getClientIp(request))}`, 30, 10 * 60 * 1000)
+  if (!rl.allowed) {
+    return NextResponse.redirect(new URL("/deals", request.url))
+  }
 
   // Product slug first, then partner slug
   const product = await prisma.affiliateProduct.findUnique({

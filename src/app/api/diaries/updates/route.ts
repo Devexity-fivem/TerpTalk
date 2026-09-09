@@ -42,6 +42,19 @@ export async function POST(request: Request) {
       )
     }
 
+    // Validate controlled fields — stage must be a real stage, numbers must be numbers
+    const VALID_STAGES = new Set(["GERMINATION", "SEEDLING", "VEGETATIVE", "FLOWER", "HARVEST", "DRYING", "CURING", "COMPLETED"])
+    if (stage !== undefined && stage !== null && !VALID_STAGES.has(stage)) {
+      return NextResponse.json({ error: "Invalid stage" }, { status: 400 })
+    }
+    for (const n of [dayNumber, weekNumber, temperature, humidity, vpd, ph, ec]) {
+      if (n !== undefined && n !== null && typeof n !== "number") {
+        return NextResponse.json({ error: "Numeric fields must be numbers" }, { status: 400 })
+      }
+    }
+    const cleanStr = (v: unknown, max: number) =>
+      typeof v === "string" ? v.trim().slice(0, max) || null : null
+
     // Validate any uploaded images are data URIs
     const validImages = Array.isArray(images)
       ? images.filter((i: unknown) => typeof i === "string" && /^data:image\/(png|jpe?g|webp);base64,/.test(i) && i.length <= 400_000).slice(0, 4)
@@ -103,16 +116,16 @@ export async function POST(request: Request) {
         content,
         diaryId,
         authorId: session.user.id,
-        dayNumber,
-        weekNumber,
-        stage,
-        temperature,
-        humidity,
-        vpd,
-        ph,
-        ec,
-        feeding,
-        training,
+        dayNumber: typeof dayNumber === "number" ? dayNumber : null,
+        weekNumber: typeof weekNumber === "number" ? weekNumber : null,
+        stage: stage || diary.stage,
+        temperature: typeof temperature === "number" ? temperature : null,
+        humidity: typeof humidity === "number" ? humidity : null,
+        vpd: typeof vpd === "number" ? vpd : null,
+        ph: typeof ph === "number" ? ph : null,
+        ec: typeof ec === "number" ? ec : null,
+        feeding: cleanStr(feeding, 300),
+        training: cleanStr(training, 300),
         // Attach up to 4 client-resized photos
         ...(storedImages.length > 0 && {
           images: {

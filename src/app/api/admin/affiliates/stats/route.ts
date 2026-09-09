@@ -1,15 +1,11 @@
 import { NextResponse } from "next/server"
-import { getServerSession } from "next-auth"
-import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { unauthorized, isAdmin } from "@/lib/security"
+import { forbidden } from "@/lib/security"
+import { requireAdmin } from "@/lib/require-staff"
 
-// GET — affiliate click analytics (admin only)
+// GET — affiliate click analytics (DB-verified admin only)
 export async function GET() {
-  const session = await getServerSession(authOptions)
-  if (!session?.user?.id || !isAdmin((session.user as { role?: string }).role)) {
-    return unauthorized()
-  }
+  if (!(await requireAdmin())) return forbidden()
 
   const [total, byPartner, byProduct, byPage, recent] = await Promise.all([
     prisma.affiliateClick.count(),

@@ -1,14 +1,11 @@
 import { NextResponse } from "next/server"
-import { getServerSession } from "next-auth"
-import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { unauthorized, isModerator, forbidden } from "@/lib/security"
+import { forbidden } from "@/lib/security"
+import { requireModerator } from "@/lib/require-staff"
 
 // GET ?username= — staff lookup of a member's moderation-relevant profile
 export async function GET(request: Request) {
-  const session = await getServerSession(authOptions)
-  if (!session?.user?.id) return unauthorized()
-  if (!isModerator(session.user.role)) return forbidden()
+  if (!(await requireModerator())) return forbidden()
 
   const { searchParams } = new URL(request.url)
   const username = (searchParams.get("username") || "").trim().slice(0, 30)

@@ -1,19 +1,13 @@
 import { NextResponse } from "next/server"
-import { getServerSession } from "next-auth"
-import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { unauthorized, publicUserSelect, isBanned, forbidden } from "@/lib/security"
-
-const STAFF = new Set(["MODERATOR", "ADMINISTRATOR"])
+import { publicUserSelect, forbidden } from "@/lib/security"
+import { requireModerator } from "@/lib/require-staff"
 
 // POST — staff creates a guide: { title, excerpt, content, topic }
 export async function POST(request: Request) {
   try {
-    const session = await getServerSession(authOptions)
-    if (!session?.user?.id) return unauthorized()
-    const role = (session.user as { role?: string }).role
-    if (!STAFF.has(role || "")) return forbidden("Staff only")
-    if (await isBanned(session.user.id)) return forbidden()
+    const staff = await requireModerator()
+    if (!staff) return forbidden("Staff only")
 
     const { title, excerpt, content, topic } = await request.json().catch(() => ({}))
     if (!title || !excerpt || !content || !topic) {
@@ -30,7 +24,7 @@ export async function POST(request: Request) {
     }
 
     const guide = await prisma.guide.create({
-      data: { title: String(title).slice(0, 120), slug, excerpt: String(excerpt).slice(0, 300), content: String(content), topic: String(topic).slice(0, 40), authorId: session.user.id },
+      data: { title: String(title).slice(0, 120), slug, excerpt: String(excerpt).slice(0, 300), content: String(content), topic: String(topic).slice(0, 40), authorId: staff.id },
       include: { author: { select: publicUserSelect } },
     })
     return NextResponse.json({ guide }, { status: 201 })

@@ -1,15 +1,8 @@
 import { NextResponse } from "next/server"
-import { getServerSession } from "next-auth"
-import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { unauthorized, isAdmin, forbidden } from "@/lib/security"
+import { unauthorized, forbidden } from "@/lib/security"
+import { requireAdmin } from "@/lib/require-staff"
 import { isValidUrl, slugify, cleanText } from "@/lib/affiliate"
-
-async function requireAdmin() {
-  const session = await getServerSession(authOptions)
-  if (!session?.user?.id || !isAdmin((session.user as { role?: string }).role)) return null
-  return session
-}
 
 // GET — all products with partner + click counts
 export async function GET() {

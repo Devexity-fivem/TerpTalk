@@ -2,15 +2,25 @@ import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { unauthorized } from "@/lib/security"
+import { unauthorized, getClientIp, logSecurityEvent } from "@/lib/security"
+import { rateLimit } from "@/lib/rate-limit"
 
 // GDPR-style data export: returns all data associated with the user
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const session = await getServerSession(authOptions)
 
     if (!session?.user?.id) {
       return unauthorized()
+    }
+
+    // Heavy query — 5 exports per hour per user
+    const rl = await rateLimit(`export:${session.user.id}`, 5, 60 * 60 * 1000)
+    if (!rl.allowed) {
+      await logSecurityEvent("RATE_LIMIT_EXCEEDED", {
+        userId: session.user.id, ip: getClientIp(request), metadata: { endpoint: "profile/export" },
+      })
+      return NextResponse.json({ error: "Too many export requests" }, { status: 429 })
     }
 
     const userId = session.user.id

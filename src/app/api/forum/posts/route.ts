@@ -2,7 +2,8 @@ import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { unauthorized, publicUserSelect, LIMITS, getClientIp, logSecurityEvent, isModerator, isBanned, forbidden } from "@/lib/security"
+import { unauthorized, publicUserSelect, LIMITS, getClientIp, logSecurityEvent, isBanned, forbidden } from "@/lib/security"
+import { requireModerator } from "@/lib/require-staff"
 import { rateLimit } from "@/lib/rate-limit"
 import { awardReputation, REP_POINTS } from "@/lib/reputation"
 import { notifyMentions } from "@/lib/mentions"
@@ -191,7 +192,7 @@ export async function DELETE(request: Request) {
     if (!post || post.deleted) {
       return NextResponse.json({ error: "Post not found" }, { status: 404 })
     }
-    if (post.authorId !== session.user.id && !isModerator(session.user.role)) {
+    if (post.authorId !== session.user.id && !(await requireModerator())) {
       return forbidden()
     }
 

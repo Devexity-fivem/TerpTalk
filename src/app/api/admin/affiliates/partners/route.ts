@@ -1,16 +1,8 @@
 import { NextResponse } from "next/server"
-import { getServerSession } from "next-auth"
-import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { unauthorized, isAdmin, forbidden } from "@/lib/security"
+import { unauthorized, forbidden } from "@/lib/security"
+import { requireAdmin } from "@/lib/require-staff"
 import { isValidUrl, slugify, cleanText, DEFAULT_DISCLOSURE } from "@/lib/affiliate"
-
-async function requireAdmin() {
-  const session = await getServerSession(authOptions)
-  if (!session?.user?.id) return null
-  if (!isAdmin((session.user as { role?: string }).role)) return null
-  return session
-}
 
 // GET — all partners (admin view incl. inactive)
 export async function GET() {

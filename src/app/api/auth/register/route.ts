@@ -169,7 +169,7 @@ export async function POST(request: Request) {
 
     // Uniqueness (case-insensitive to prevent lookalike impersonation)
     const existingProfile = await prisma.profile.findFirst({
-      where: { username: { equals: username } },
+      where: { username: { equals: username, mode: "insensitive" } },
     })
 
     if (existingProfile) {
