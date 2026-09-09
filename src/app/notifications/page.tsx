@@ -39,6 +39,9 @@ export default function NotificationsPage() {
       body: JSON.stringify({ all: true }),
     })
     setNotifications((prev) => prev.map((n) => ({ ...n, read: true })))
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("tt-notifications-read"))
+    }
   }
 
   if (status === "loading" || loading) {

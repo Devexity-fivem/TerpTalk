@@ -36,12 +36,18 @@ export function Navigation() {
 
   useEffect(() => {
     if (!session) return
-    fetch("/api/notifications")
-      .then((res) => (res.ok ? res.json() : null))
-      .then((d) => setUnread(d?.unreadCount || 0))
-      .catch(() => {})
+    const refresh = () => {
+      fetch("/api/notifications")
+        .then((res) => (res.ok ? res.json() : null))
+        .then((d) => setUnread(d?.unreadCount || 0))
+        .catch(() => {})
+    }
+    refresh()
+    const onRead = () => refresh()
+    window.addEventListener("tt-notifications-read", onRead)
     // Presence ping — updates lastSeenAt/online status (server throttled)
     fetch("/api/ping", { method: "POST" }).catch(() => {})
+    return () => window.removeEventListener("tt-notifications-read", onRead)
   }, [session])
 
   // Close mobile menu on navigation
