@@ -298,6 +298,7 @@ export default function ChatSidebar() {
                 ref={inputRef}
                 type="text"
                 maxLength={1000}
+                title="Maximum 1000 characters"
                 placeholder="Type a message..."
                 className="flex-1 px-3 py-2 rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary text-sm"
                 disabled={sending}

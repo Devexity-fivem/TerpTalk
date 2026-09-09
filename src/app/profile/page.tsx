@@ -305,6 +305,7 @@ export default function ProfilePage() {
                     onBlur={(e) => setEditForm(prev => ({ ...prev, bio: e.target.value }))}
                     rows={3}
                     maxLength={150}
+                    title="Maximum 150 characters"
                     placeholder="Tell the community about yourself..."
                     className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary resize-none"
                   />
