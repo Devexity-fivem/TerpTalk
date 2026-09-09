@@ -1,17 +1,16 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { signIn } from "next-auth/react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
-import { GoogleReCaptchaProvider, useGoogleReCaptcha } from "react-google-recaptcha-v3"
 import { Leaf, Loader2 } from "lucide-react"
 
-const RECAPTCHA_SITE_KEY = process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY || "6Le-FbMtAAAAAB0IFWqe3WCPtuSyc7irvRLZ4gOK"
+const RECAPTCHA_SITE_KEY = "6Le-FbMtAAAAAB0IFWqe3WCPtuSyc7irvRLZ4gOK"
 
 function SignUpForm() {
   const router = useRouter()
-  const { executeRecaptcha } = useGoogleReCaptcha()
+  const [recaptchaReady, setRecaptchaReady] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
   const [formData, setFormData] = useState(() => {
@@ -27,6 +26,26 @@ function SignUpForm() {
     }
   })
 
+  useEffect(() => {
+    if (typeof window === "undefined" || document.getElementById("recaptcha-v3")) return
+
+    const script = document.createElement("script")
+    script.id = "recaptcha-v3"
+    script.src = `https://www.google.com/recaptcha/api.js?render=${RECAPTCHA_SITE_KEY}`
+    script.async = true
+    script.defer = true
+    script.onload = () => {
+      const grecaptcha = (window as { grecaptcha?: { ready: (cb: () => void) => void } }).grecaptcha
+      if (grecaptcha) {
+        grecaptcha.ready(() => setRecaptchaReady(true))
+      } else {
+        setRecaptchaReady(false)
+      }
+    }
+    script.onerror = () => setRecaptchaReady(false)
+    document.head.appendChild(script)
+  }, [])
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError("")
@@ -36,7 +55,7 @@ function SignUpForm() {
       return
     }
 
-    if (!executeRecaptcha) {
+    if (!recaptchaReady) {
       setError("Security check not ready. Please wait a moment and try again.")
       return
     }
@@ -54,11 +73,19 @@ function SignUpForm() {
     setLoading(true)
 
     try {
-      const recaptchaToken = await executeRecaptcha("signup")
+      const grecaptcha = (window as { grecaptcha?: { ready: (cb: () => void) => void; execute: (key: string, opts: { action: string }) => Promise<string> } }).grecaptcha
+      if (!grecaptcha) {
+        throw new Error("Security check not ready. Please wait a moment and try again.")
+      }
+
+      const recaptchaToken = await new Promise<string>((resolve, reject) => {
+        grecaptcha.ready(() => {
+          grecaptcha.execute(RECAPTCHA_SITE_KEY, { action: "signup" }).then(resolve).catch(reject)
+        })
+      })
 
       if (!recaptchaToken) {
-        setError("Security check failed. Please try again.")
-        return
+        throw new Error("Security check failed. Please try again.")
       }
 
       const response = await fetch("/api/auth/register", {
@@ -196,7 +223,7 @@ function SignUpForm() {
 
           <button
             type="submit"
-            disabled={loading}
+            disabled={loading || !recaptchaReady}
             className="w-full bg-primary text-primary-foreground py-3 rounded-lg font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >
             {loading ? (
@@ -222,16 +249,5 @@ function SignUpForm() {
 }
 
 export default function SignUpPage() {
-  return (
-    <GoogleReCaptchaProvider
-      reCaptchaKey={RECAPTCHA_SITE_KEY}
-      scriptProps={{
-        async: false,
-        defer: false,
-        appendTo: "head",
-      }}
-    >
-      <SignUpForm />
-    </GoogleReCaptchaProvider>
-  )
+  return <SignUpForm />
 }
