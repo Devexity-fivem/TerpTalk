@@ -21,7 +21,7 @@ export async function verifyHcaptcha(token: string, remoteIp?: string): Promise<
     ...(remoteIp ? { remoteip: remoteIp } : {}),
   })
 
-  const res = await fetch("https://hcaptcha.com/siteverify", {
+  const res = await fetch("https://api.hcaptcha.com/siteverify", {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: params.toString(),

@@ -1,18 +1,22 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { signIn } from "next-auth/react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { Leaf, Loader2 } from "lucide-react"
 
 const HCAPTCHA_SITE_KEY = "0504ab56-5d20-4ae2-abe0-f444d09edeea"
+const HCAPTCHA_CONTAINER_ID = "hcaptcha-widget"
 
 declare global {
   interface Window {
     onHCaptchaVerify?: (token: string) => void
     onHCaptchaExpired?: () => void
-    hcaptcha?: { reset: () => void }
+    hcaptcha?: {
+      render: (container: string, options: Record<string, unknown>) => number
+      reset: (widgetId?: number) => void
+    }
   }
 }
 
@@ -21,6 +25,7 @@ export default function SignUpPage() {
   const [captchaToken, setCaptchaToken] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
+  const widgetIdRef = useRef<number | null>(null)
   const [formData, setFormData] = useState(() => {
     const ref = typeof window !== "undefined"
       ? new URLSearchParams(window.location.search).get("ref") || ""
@@ -51,6 +56,16 @@ export default function SignUpPage() {
     script.src = "https://js.hcaptcha.com/1/api.js"
     script.async = true
     script.defer = true
+    script.onload = () => {
+      const container = document.getElementById(HCAPTCHA_CONTAINER_ID)
+      if (container && !container.hasChildNodes() && window.hcaptcha) {
+        widgetIdRef.current = window.hcaptcha.render(HCAPTCHA_CONTAINER_ID, {
+          sitekey: HCAPTCHA_SITE_KEY,
+          callback: "onHCaptchaVerify",
+          "expired-callback": "onHCaptchaExpired",
+        })
+      }
+    }
     document.head.appendChild(script)
   }, [])
 
@@ -113,7 +128,9 @@ export default function SignUpPage() {
     } catch (error: unknown) {
       setError((error as Error).message)
       setCaptchaToken(null)
-      window.hcaptcha?.reset()
+      if (widgetIdRef.current && window.hcaptcha) {
+        window.hcaptcha.reset(widgetIdRef.current)
+      }
     } finally {
       setLoading(false)
     }
@@ -196,10 +213,8 @@ export default function SignUpPage() {
           </div>
 
           <div
-            className="h-captcha"
-            data-sitekey={HCAPTCHA_SITE_KEY}
-            data-callback="onHCaptchaVerify"
-            data-expired-callback="onHCaptchaExpired"
+            id={HCAPTCHA_CONTAINER_ID}
+            className="min-h-[78px] flex items-center justify-center"
           />
 
           <div className="flex items-center">
