@@ -10,6 +10,7 @@ export async function GET() {
   try {
     const session = await getServerSession(authOptions)
     if (!session?.user?.id) return unauthorized()
+    if (await isBanned(session.user.id)) return forbidden()
 
     const searches = await prisma.savedSearch.findMany({
       where: { userId: session.user.id },
@@ -80,6 +81,7 @@ export async function DELETE(request: Request) {
   try {
     const session = await getServerSession(authOptions)
     if (!session?.user?.id) return unauthorized()
+    if (await isBanned(session.user.id)) return forbidden()
 
     const body = await request.json().catch(() => ({}))
     const { id } = body

@@ -2,6 +2,13 @@ import Link from "next/link"
 
 type Crumb = { label: string; href?: string }
 
+function safeJsonLd(obj: unknown): string {
+  return JSON.stringify(obj)
+    .replace(/</g, "\\u003c")
+    .replace(/\u2028/g, "\\u2028")
+    .replace(/\u2029/g, "\\u2029")
+}
+
 export function Breadcrumbs({ items }: { items: Crumb[] }) {
   const structured = {
     "@context": "https://schema.org",
@@ -32,7 +39,7 @@ export function Breadcrumbs({ items }: { items: Crumb[] }) {
       </ol>
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(structured) }}
+        dangerouslySetInnerHTML={{ __html: safeJsonLd(structured) }}
       />
     </nav>
   )

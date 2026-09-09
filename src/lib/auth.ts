@@ -2,10 +2,31 @@ import { NextAuthOptions } from "next-auth"
 import CredentialsProvider from "next-auth/providers/credentials"
 import { prisma } from "@/lib/prisma"
 import { rateLimit } from "@/lib/rate-limit"
-import { logSecurityEvent } from "@/lib/security"
+import { logSecurityEvent, getClientIp, hashIp } from "@/lib/security"
 import bcrypt from "bcryptjs"
 
 export const authOptions: NextAuthOptions = {
+  useSecureCookies: process.env.NEXTAUTH_URL?.startsWith("https://") || !!process.env.VERCEL,
+  cookies: {
+    sessionToken: {
+      name: "__Host-next-auth.session-token",
+      options: {
+        httpOnly: true,
+        secure: true,
+        sameSite: "strict",
+        path: "/",
+      },
+    },
+    csrfToken: {
+      name: "__Host-next-auth.csrf-token",
+      options: {
+        httpOnly: true,
+        secure: true,
+        sameSite: "strict",
+        path: "/",
+      },
+    },
+  },
   session: {
     strategy: "jwt",
     maxAge: 7 * 24 * 60 * 60, // 7 days
@@ -44,6 +65,18 @@ export const authOptions: NextAuthOptions = {
           throw new Error("Too many attempts. Please try again later.")
         }
 
+        // Also rate limit by IP to stop distributed credential stuffing
+        const ip = getClientIp(req as unknown as Request)
+        const ipRl = await rateLimit(`login-ip:${hashIp(ip)}`, 30, 15 * 60 * 1000)
+        if (!ipRl.allowed) {
+          await logSecurityEvent("RATE_LIMIT_EXCEEDED", {
+            ip,
+            userAgent: (req?.headers as Record<string, string> | undefined)?.["user-agent"] ?? null,
+            metadata: { endpoint: "auth/callback/credentials", scope: "ip" },
+          })
+          throw new Error("Too many attempts. Please try again later.")
+        }
+
         const user = await prisma.user.findFirst({
           where: {
             profile: {
@@ -52,8 +85,15 @@ export const authOptions: NextAuthOptions = {
               username: { equals: credentials.username.trim(), mode: "insensitive" },
             },
           },
-          include: {
-            profile: true,
+          select: {
+            id: true,
+            name: true,
+            image: true,
+            role: true,
+            sessionVersion: true,
+            password: true,
+            banned: true,
+            profile: { select: { username: true } },
           },
         })
 
@@ -99,6 +139,7 @@ export const authOptions: NextAuthOptions = {
           name: user.profile?.username || user.name,
           image: user.image,
           role: user.role,
+          sessionVersion: user.sessionVersion,
         }
       },
     }),
@@ -109,14 +150,23 @@ export const authOptions: NextAuthOptions = {
         token.id = user.id
         token.username = user.name || undefined
         token.role = (user as { role?: string }).role
+        token.sessionVersion = (user as { sessionVersion?: number }).sessionVersion ?? 0
       }
       return token
     },
     async session({ session, token }) {
-      if (session.user) {
-        (session.user as { id?: string }).id = token.id as string
-        (session.user as { username?: string }).username = token.username as string
-        (session.user as { role?: string }).role = token.role as string
+      if (session.user && token.id) {
+        // Fresh DB check: reject banned users and stale role/version tokens
+        const user = await prisma.user.findUnique({
+          where: { id: token.id as string },
+          select: { banned: true, role: true, sessionVersion: true },
+        })
+        if (!user || user.banned || (user.sessionVersion ?? 0) !== (token.sessionVersion ?? 0)) {
+          return { ...session, user: {} as typeof session.user }
+        }
+        ;(session.user as { id?: string }).id = token.id as string
+        ;(session.user as { username?: string }).username = token.username as string
+        ;(session.user as { role?: string }).role = user.role
       }
       return session
     },

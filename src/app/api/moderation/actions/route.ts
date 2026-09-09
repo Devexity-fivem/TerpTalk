@@ -44,8 +44,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Invalid request" }, { status: 400 })
     }
 
-    if (durationDays !== undefined && durationDays !== null && (!Number.isInteger(durationDays) || durationDays <= 0)) {
-      return NextResponse.json({ error: "durationDays must be a positive integer" }, { status: 400 })
+    if (durationDays !== undefined && durationDays !== null && (!Number.isInteger(durationDays) || durationDays <= 0 || durationDays > 365)) {
+      return NextResponse.json({ error: "durationDays must be a positive integer up to 365" }, { status: 400 })
     }
 
     if (targetUserId === staff.id) {
@@ -58,23 +58,23 @@ export async function POST(request: Request) {
         select: { id: true, role: true, banned: true },
       })
       if (!target) {
-        throw new Error("User not found")
+        throw new Error("USER_NOT_FOUND")
       }
 
       if (target.role === "ADMINISTRATOR") {
-        throw new Error("Cannot take action on an administrator")
+        throw new Error("FORBIDDEN")
       }
       if (target.role === "MODERATOR" && !isAdmin(staff.role)) {
-        throw new Error("Only administrators can moderate moderators")
+        throw new Error("FORBIDDEN")
       }
 
       if (["TEMPORARY_BAN", "PERMANENT_BAN", "UNBAN"].includes(actionType) && !isAdmin(staff.role)) {
-        throw new Error("Bans require administrator role")
+        throw new Error("FORBIDDEN")
       }
 
       if (actionType === "CONTENT_DELETION") {
         if (!targetType || !CONTENT_TYPES.has(targetType) || typeof targetId !== "string" || !targetId) {
-          throw new Error("targetType and targetId required for content deletion")
+          throw new Error("INVALID_REQUEST")
         }
         let ok = false
         switch (targetType) {
@@ -95,7 +95,7 @@ export async function POST(request: Request) {
             break
         }
         if (!ok) {
-          throw new Error("Content not found or author mismatch")
+          throw new Error("CONTENT_NOT_FOUND")
         }
       }
 
@@ -108,11 +108,11 @@ export async function POST(request: Request) {
 
       if (actionType === "PIN_THREAD" || actionType === "LOCK_THREAD") {
         if (typeof targetId !== "string" || !targetId) {
-          throw new Error("targetId (thread id) required")
+          throw new Error("INVALID_REQUEST")
         }
         const thread = await tx.thread.findUnique({ where: { id: targetId }, select: { pinned: true, locked: true, authorId: true } })
         if (!thread) {
-          throw new Error("Thread not found")
+          throw new Error("CONTENT_NOT_FOUND")
         }
         await tx.thread.update({
           where: { id: targetId },
@@ -156,11 +156,12 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true })
   } catch (error) {
     console.error("Moderation action error:", error)
-    if (error instanceof Error && error.message === "User not found") {
+    if (error instanceof Error && error.message === "USER_NOT_FOUND") {
       return NextResponse.json({ error: "User not found" }, { status: 404 })
     }
-    if (error instanceof Error && ["Cannot take action on an administrator", "Only administrators can moderate moderators", "Bans require administrator role"].includes(error.message)) {
-      return NextResponse.json({ error: error.message }, { status: 403 })
+    if (error instanceof Error && ["FORBIDDEN", "INVALID_REQUEST", "CONTENT_NOT_FOUND"].includes(error.message)) {
+      // Do not leak whether a target is an admin/moderator or why an action failed.
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
     return NextResponse.json({ error: "Failed" }, { status: 500 })
   }

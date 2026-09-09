@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { unauthorized, LIMITS, USERNAME_REGEX, RESERVED_USERNAMES, getClientIp, logSecurityEvent } from "@/lib/security"
+import { unauthorized, LIMITS, USERNAME_REGEX, RESERVED_USERNAMES, getClientIp, logSecurityEvent, isBanned, forbidden } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
 
 export async function POST(request: Request) {
@@ -21,8 +21,17 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Too many attempts" }, { status: 429 })
     }
 
-    const body = await request.json().catch(() => ({}))
-    const { username, bio, location, website } = body
+    if (await isBanned(session.user.id)) return forbidden()
+
+    const body = await request.json().catch(() => null)
+    if (!body || typeof body !== "object") {
+      return NextResponse.json({ error: "Invalid request body" }, { status: 400 })
+    }
+    const { username, bio, location, website } = body as Record<string, unknown>
+
+    if (Object.keys(body as Record<string, unknown>).length === 0) {
+      return NextResponse.json({ error: "No fields provided" }, { status: 400 })
+    }
 
     // Validate username if provided
     if (username !== undefined) {
@@ -46,7 +55,7 @@ export async function POST(request: Request) {
       }
 
       const existingProfile = await prisma.profile.findFirst({
-        where: { username: { equals: username, mode: "insensitive" } },
+        where: { username: { equals: username.trim(), mode: "insensitive" } },
       })
 
       if (existingProfile && existingProfile.userId !== session.user.id) {
@@ -57,26 +66,25 @@ export async function POST(request: Request) {
       }
     }
 
-    // Validate lengths
-    if (bio && bio.length > LIMITS.BIO_MAX) {
-      return NextResponse.json({ error: "Bio too long" }, { status: 400 })
-    }
-    if (location && location.length > 100) {
-      return NextResponse.json({ error: "Location too long" }, { status: 400 })
-    }
-    if (website && website.length > LIMITS.URL_MAX) {
-      return NextResponse.json({ error: "Website URL too long" }, { status: 400 })
-    }
-
-    // Basic URL validation
-    if (website) {
-      try {
-        const url = new URL(website)
-        if (url.protocol !== "https:") {
+    const cleanBio = typeof bio === "string" ? bio.trim().slice(0, LIMITS.BIO_MAX) || null : bio === undefined ? undefined : null
+    const cleanLocation = typeof location === "string" ? location.trim().slice(0, 100) || null : location === undefined ? undefined : null
+    let cleanWebsite: string | null | undefined = undefined
+    if (website !== undefined) {
+      if (website !== null && (typeof website !== "string" || website.length > LIMITS.URL_MAX)) {
+        return NextResponse.json({ error: "Website URL too long" }, { status: 400 })
+      }
+      if (typeof website === "string" && website.trim()) {
+        try {
+          const url = new URL(website.trim())
+          if (url.protocol !== "https:") {
+            return NextResponse.json({ error: "Invalid website URL" }, { status: 400 })
+          }
+          cleanWebsite = url.toString().slice(0, LIMITS.URL_MAX)
+        } catch {
           return NextResponse.json({ error: "Invalid website URL" }, { status: 400 })
         }
-      } catch {
-        return NextResponse.json({ error: "Invalid website URL" }, { status: 400 })
+      } else {
+        cleanWebsite = null
       }
     }
 
@@ -84,10 +92,10 @@ export async function POST(request: Request) {
     const profile = await prisma.profile.update({
       where: { userId: session.user.id },
       data: {
-        ...(username && { username }),
-        ...(bio !== undefined && { bio }),
-        ...(location !== undefined && { location }),
-        ...(website !== undefined && { website }),
+        ...(typeof username === "string" && { username: username.trim() }),
+        ...(cleanBio !== undefined && { bio: cleanBio }),
+        ...(cleanLocation !== undefined && { location: cleanLocation }),
+        ...(cleanWebsite !== undefined && { website: cleanWebsite }),
       },
       select: {
         username: true,

@@ -1,5 +1,5 @@
 -- DropIndex
-DROP INDEX "Thread_replyCount_idx";
+DROP INDEX IF EXISTS "Thread_replyCount_idx";
 
 -- AlterTable
 ALTER TABLE "AffiliatePartner" ALTER COLUMN "updatedAt" DROP DEFAULT;

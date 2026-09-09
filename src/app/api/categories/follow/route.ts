@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { unauthorized, getClientIp, logSecurityEvent, isBanned, forbidden } from "@/lib/security"
+import { unauthorized, getClientIp, logSecurityEvent, isBanned, forbidden, isModerator } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
 
 export async function POST(request: Request) {
@@ -29,8 +29,17 @@ export async function POST(request: Request) {
 
     if (await isBanned(session.user.id)) return forbidden("Your account is suspended")
 
+    const currentUser = await prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: { role: true },
+    })
+
     const category = await prisma.category.findUnique({ where: { id: categoryId } })
     if (!category) {
+      return NextResponse.json({ error: "Category not found" }, { status: 404 })
+    }
+
+    if (category.hidden && !isModerator(currentUser?.role)) {
       return NextResponse.json({ error: "Category not found" }, { status: 404 })
     }
 

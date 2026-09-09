@@ -47,6 +47,28 @@ export async function POST(request: Request) {
       )
     }
 
+    // Verify the target exists and is not deleted
+    let targetAuthorId: string | null = null
+    if (hasPostId) {
+      const post = await prisma.post.findUnique({
+        where: { id: postId, deleted: false },
+        select: { authorId: true, thread: { select: { deleted: true, category: { select: { hidden: true } } } } },
+      })
+      if (!post || post.thread?.deleted || post.thread?.category?.hidden) {
+        return NextResponse.json({ error: "Post not found" }, { status: 404 })
+      }
+      targetAuthorId = post.authorId
+    } else if (hasDiaryId) {
+      const diary = await prisma.growDiary.findUnique({
+        where: { id: diaryId, deleted: false },
+        select: { authorId: true },
+      })
+      if (!diary) {
+        return NextResponse.json({ error: "Diary not found" }, { status: 404 })
+      }
+      targetAuthorId = diary.authorId
+    }
+
     // Check if reaction already exists
     const existingReaction = await prisma.reaction.findFirst({
       where: {
@@ -81,18 +103,13 @@ export async function POST(request: Request) {
     })
 
     // Award the content author for a LIKE (not for self-likes)
-    if (type === "LIKE") {
-      const target = hasPostId
-        ? await prisma.post.findUnique({ where: { id: postId }, select: { authorId: true } })
-        : await prisma.growDiary.findUnique({ where: { id: diaryId }, select: { authorId: true } })
-      if (target && target.authorId !== session.user.id) {
-        await awardReputation(
-          target.authorId,
-          "LIKE_RECEIVED",
-          REP_POINTS.LIKE_RECEIVED,
-          "Someone liked your content"
-        ).catch(() => {})
-      }
+    if (type === "LIKE" && targetAuthorId && targetAuthorId !== session.user.id) {
+      await awardReputation(
+        targetAuthorId,
+        "LIKE_RECEIVED",
+        REP_POINTS.LIKE_RECEIVED,
+        "Someone liked your content"
+      ).catch(() => {})
     }
 
     return NextResponse.json({ reaction, action: "added" }, { status: 201 })

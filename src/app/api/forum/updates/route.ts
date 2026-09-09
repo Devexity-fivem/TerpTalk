@@ -6,18 +6,34 @@ export const dynamic = "force-dynamic"
 // Lightweight "are there new threads?" endpoint. The forum page polls this
 // and calls router.refresh() when it sees a new latest thread ID.
 export async function GET() {
-  const [threadCount, latest] = await Promise.all([
-    prisma.thread.count({ where: { deleted: false } }),
-    prisma.thread.findFirst({
-      where: { deleted: false },
-      orderBy: { createdAt: "desc" },
-      select: { id: true, createdAt: true },
-    }),
-  ])
+  try {
+    const [threadCount, latest] = await Promise.all([
+      prisma.thread.count({
+        where: {
+          deleted: false,
+          category: { hidden: false },
+        },
+      }),
+      prisma.thread.findFirst({
+        where: {
+          deleted: false,
+          category: { hidden: false },
+        },
+        orderBy: { createdAt: "desc" },
+        select: { id: true, createdAt: true },
+      }),
+    ])
 
-  return NextResponse.json({
-    threadCount,
-    latestThreadId: latest?.id ?? null,
-    latestThreadAt: latest?.createdAt ?? null,
-  })
+    return NextResponse.json({
+      threadCount,
+      latestThreadId: latest?.id ?? null,
+      latestThreadAt: latest?.createdAt ?? null,
+    })
+  } catch (error) {
+    console.error("Forum updates error:", error)
+    return NextResponse.json(
+      { threadCount: 0, latestThreadId: null, latestThreadAt: null },
+      { status: 500 }
+    )
+  }
 }

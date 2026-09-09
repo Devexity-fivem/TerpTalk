@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { unauthorized, getClientIp, logSecurityEvent, isBanned, forbidden } from "@/lib/security"
+import { unauthorized, getClientIp, logSecurityEvent, isBanned, forbidden, blockExistsBetween } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
 
 // POST — toggle follow on a user: { userId }  (or diary: { diaryId })
@@ -35,15 +35,16 @@ export async function POST(request: Request) {
       if (userId === session.user.id) {
         return NextResponse.json({ error: "Cannot follow yourself" }, { status: 400 })
       }
-      const blocked = await prisma.block.findFirst({
-        where: {
-          OR: [
-            { blockerId: session.user.id, blockedId: userId },
-            { blockerId: userId, blockedId: session.user.id },
-          ],
-        },
+
+      const targetUser = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { banned: true },
       })
-      if (blocked) return forbidden()
+      if (!targetUser || targetUser.banned) {
+        return NextResponse.json({ error: "User not found" }, { status: 404 })
+      }
+
+      if (await blockExistsBetween(session.user.id, userId)) return forbidden()
 
       const existing = await prisma.follow.findUnique({
         where: { followerId_followingId: { followerId: session.user.id, followingId: userId } },
@@ -68,6 +69,15 @@ export async function POST(request: Request) {
     }
 
     // ---- Diary follow ----
+    const diary = await prisma.growDiary.findUnique({
+      where: { id: diaryId, deleted: false },
+      select: { authorId: true },
+    })
+    if (!diary) {
+      return NextResponse.json({ error: "Diary not found" }, { status: 404 })
+    }
+    if (await blockExistsBetween(session.user.id, diary.authorId)) return forbidden()
+
     const existing = await prisma.diaryFollow.findUnique({
       where: { userId_diaryId: { userId: session.user.id, diaryId } },
     })

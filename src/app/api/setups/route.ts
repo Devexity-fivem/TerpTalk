@@ -39,11 +39,20 @@ export async function POST(request: Request) {
       )
     }
 
+    const stringFields = [description, space, tent, lighting, ventilation, fans, containers, medium, nutrients, controllers, equipment, strain]
+    if (stringFields.some((f) => typeof f === "string" && f.length > 500)) {
+      return NextResponse.json({ error: "A field exceeds maximum length" }, { status: 400 })
+    }
+
     if (title.length > LIMITS.TITLE_MAX || (description && description.length > LIMITS.DESCRIPTION_MAX)) {
       return NextResponse.json(
         { error: "Content exceeds maximum length" },
         { status: 400 }
       )
+    }
+
+    if (Array.isArray(images) && images.length > 30) {
+      return NextResponse.json({ error: "Too many images" }, { status: 400 })
     }
 
     // Rate limit: 5 setups per day per user

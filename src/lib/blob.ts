@@ -21,17 +21,18 @@ const MAGIC: Record<string, (b: Buffer) => boolean> = {
 }
 
 export async function storeImage(dataUri: string, folder: string): Promise<string> {
-  if (!process.env.BLOB_READ_WRITE_TOKEN) return dataUri // graceful fallback
+  if (!process.env.BLOB_READ_WRITE_TOKEN) {
+    if (process.env.NODE_ENV === "development") return dataUri
+    throw new Error("Image storage is not configured")
+  }
 
   const m = dataUri.match(DATA_URI)
-  if (!m) return dataUri
+  if (!m) throw new Error("Invalid image format")
   const ext = m[1] === "jpeg" ? "jpg" : m[1]
   const buf = Buffer.from(m[2], "base64")
 
   // Content must match the declared type — rejects spoofed payloads.
-  // Fallback keeps it as a data URI (img-src data: can't execute for
-  // raster types; SVG is already blocked by the DATA_URI regex).
-  if (!MAGIC[ext]?.(buf)) return dataUri
+  if (!MAGIC[ext]?.(buf)) throw new Error("Image content does not match declared type")
 
   const { url } = await put(`${folder}/${randomBytes(8).toString("hex")}.${ext}`, buf, {
     access: "public",

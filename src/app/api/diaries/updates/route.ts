@@ -34,11 +34,20 @@ export async function POST(request: Request) {
       images,
     } = body
 
-    if (typeof title !== "string" || !title.trim() ||
-        typeof content !== "string" || !content.trim() ||
-        typeof diaryId !== "string" || !diaryId) {
+    if (
+      typeof title !== "string" || !title.trim() ||
+      typeof content !== "string" || !content.trim() ||
+      typeof diaryId !== "string" || !diaryId
+    ) {
       return NextResponse.json(
         { error: "Missing required fields" },
+        { status: 400 }
+      )
+    }
+
+    if (title.length > LIMITS.DIARY_TITLE_MAX || content.length > LIMITS.POST_CONTENT_MAX) {
+      return NextResponse.json(
+        { error: "Content exceeds maximum length" },
         { status: 400 }
       )
     }
@@ -53,27 +62,18 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: "Numeric fields must be numbers" }, { status: 400 })
       }
     }
+
     const cleanStr = (v: unknown, max: number) =>
       typeof v === "string" ? v.trim().slice(0, max) || null : null
 
-    // Validate any uploaded images are data URIs
+    if (Array.isArray(images) && images.length > 20) {
+      return NextResponse.json({ error: "Too many images" }, { status: 400 })
+    }
     const validImages = Array.isArray(images)
       ? images.filter((i: unknown) => typeof i === "string" && /^data:image\/(png|jpe?g|webp);base64,/.test(i) && i.length <= 400_000).slice(0, 4)
       : []
-    if (Array.isArray(images) && images.length > 0 && validImages.length === 0) {
-      return NextResponse.json({ error: "Invalid image format" }, { status: 400 })
-    }
-    // Offload to Blob storage when configured (keeps DB rows small)
-    const storedImages = await Promise.all(validImages.map((i: string) => storeImage(i, "diary-updates")))
 
-    if (title.length > LIMITS.TITLE_MAX || content.length > LIMITS.POST_CONTENT_MAX) {
-      return NextResponse.json(
-        { error: "Content exceeds maximum length" },
-        { status: 400 }
-      )
-    }
-
-    // Rate limit: 30 updates per hour per user
+    // Rate limit + ban check before any expensive work
     const rl = await rateLimit(`diary-update:${session.user.id}`, 30, 60 * 60 * 1000)
     if (!rl.allowed) {
       await logSecurityEvent("RATE_LIMIT_EXCEEDED", {
@@ -109,6 +109,10 @@ export async function POST(request: Request) {
         { status: 403 }
       )
     }
+
+    // Offload to Blob storage when configured (keeps DB rows small)
+    const storedImages = await Promise.all(validImages.map((i: string) => storeImage(i, "diary-updates")))
+      .catch(() => [])
 
     // Create update
     const update = await prisma.diaryUpdate.create({

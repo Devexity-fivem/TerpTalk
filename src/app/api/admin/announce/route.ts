@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { requireAdmin } from "@/lib/require-staff"
 import { prisma } from "@/lib/prisma"
 import { forbidden, getClientIp, logSecurityEvent } from "@/lib/security"
+import { rateLimit } from "@/lib/rate-limit"
 
 // POST — broadcast an announcement to all users (ADMINISTRATOR only)
 // { title, content, link? }
@@ -9,6 +10,11 @@ export async function POST(request: Request) {
   try {
     const user = await requireAdmin()
     if (!user) return forbidden()
+
+    const rl = await rateLimit(`admin-announce:${user.id}`, 10, 60 * 60 * 1000)
+    if (!rl.allowed) {
+      return NextResponse.json({ error: "Too many announcements" }, { status: 429 })
+    }
 
     const body = await request.json().catch(() => ({}))
     const { title, content, link } = body

@@ -41,9 +41,21 @@ export async function POST(request: Request) {
 
     const thread = await prisma.thread.findUnique({
       where: { id: threadId },
-      select: { id: true, authorId: true, acceptedAnswerId: true, title: true },
+      select: {
+        id: true,
+        authorId: true,
+        acceptedAnswerId: true,
+        title: true,
+        locked: true,
+        deleted: true,
+        category: { select: { hidden: true } },
+      },
     })
     if (!thread) return NextResponse.json({ error: "Thread not found" }, { status: 404 })
+
+    if (thread.deleted || thread.locked || (thread.category?.hidden && !isModerator(user.role))) {
+      return NextResponse.json({ error: "Thread is locked" }, { status: 403 })
+    }
 
     // Only thread author or moderator can set accepted answer
     const canSet = thread.authorId === user.id || isModerator(user.role)

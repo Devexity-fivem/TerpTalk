@@ -93,9 +93,6 @@ export const publicUserSelect = {
   profile: {
     select: {
       username: true,
-      businessName: true,
-      businessType: true,
-      businessUrl: true,
     },
   },
 } as const
@@ -128,10 +125,23 @@ export const RESERVED_USERNAMES = new Set([
 
 // ─── Client IP (privacy-conscious: hashed, never stored raw) ────────
 
-export function getClientIp(request: Request): string {
-  const forwarded = request.headers.get("x-forwarded-for")
-  if (forwarded) return forwarded.split(",")[0].trim()
-  return request.headers.get("x-real-ip") || "unknown"
+export function getClientIp(request: { headers: Headers | Record<string, string | undefined> }): string {
+  const headers = request.headers
+  const get = (name: string): string | undefined | null => {
+    if (headers instanceof Headers) return headers.get(name)
+    const value = (headers as Record<string, string | undefined>)[name.toLowerCase()] ?? (headers as Record<string, string | undefined>)[name]
+    return value ?? null
+  }
+  // Trust platform-specific headers when available (Vercel, Cloudflare)
+  const platformIp = get("x-vercel-forwarded-for") || get("cf-connecting-ip")
+  if (platformIp) return platformIp.split(",")[0].trim()
+  // Otherwise use the rightmost entry of X-Forwarded-For, which is the closest trusted proxy
+  const forwarded = get("x-forwarded-for")
+  if (forwarded) {
+    const parts = forwarded.split(",").map((s) => s.trim()).filter(Boolean)
+    return parts[parts.length - 1] || forwarded.split(",")[0].trim()
+  }
+  return get("x-real-ip") || "unknown"
 }
 
 export function hashIp(ip: string): string {

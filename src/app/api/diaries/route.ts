@@ -44,12 +44,26 @@ export async function POST(request: Request) {
       )
     }
 
+    const VALID_GROW_TYPES = new Set(["INDOOR", "OUTDOOR", "GREENHOUSE", "HYDROPONIC", "OTHER"])
+    if (typeof growType !== "string" || !VALID_GROW_TYPES.has(growType)) {
+      return NextResponse.json({ error: "Invalid grow type" }, { status: 400 })
+    }
+
+    const stringFields = [strain, genetics, medium, containerSize, lighting, nutrients, equipment, spaceDimensions]
+    if (stringFields.some((f) => typeof f === "string" && f.length > 500)) {
+      return NextResponse.json({ error: "A field exceeds maximum length" }, { status: 400 })
+    }
+
     const parsedStartDate = new Date(startDate)
     if (isNaN(parsedStartDate.getTime())) {
       return NextResponse.json(
         { error: "Invalid start date" },
         { status: 400 }
       )
+    }
+    const now = new Date()
+    if (parsedStartDate.getTime() > now.getTime() + 365 * 24 * 60 * 60 * 1000 || parsedStartDate.getFullYear() < 1970) {
+      return NextResponse.json({ error: "Invalid start date" }, { status: 400 })
     }
 
     // Rate limit: 5 diaries per day per user

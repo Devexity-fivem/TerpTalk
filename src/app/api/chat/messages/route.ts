@@ -7,6 +7,32 @@ import { rateLimit } from "@/lib/rate-limit"
 import { notifyMentions } from "@/lib/mentions"
 import { getPusher } from "@/lib/pusher"
 
+const ISO_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,3})?Z$/
+
+type ChatMessageWithAuthor = {
+  id: string
+  content: string
+  createdAt: Date
+  author: {
+    name?: string | null
+    image?: string | null
+    profile?: { username?: string | null } | null
+  }
+}
+
+function messageDto(m: ChatMessageWithAuthor) {
+  return {
+    id: m.id,
+    content: m.content,
+    createdAt: m.createdAt,
+    author: {
+      name: m.author.name,
+      username: m.author.profile?.username ?? null,
+      image: m.author.image ?? null,
+    },
+  }
+}
+
 export async function GET(request: Request) {
   try {
     const session = await getServerSession(authOptions)
@@ -16,6 +42,11 @@ export async function GET(request: Request) {
     }
 
     if (await isBanned(session.user.id)) return forbidden("Your account is suspended")
+
+    const rl = await rateLimit(`chat-read:${session.user.id}`, 120, 60 * 1000)
+    if (!rl.allowed) {
+      return NextResponse.json({ error: "Too many requests" }, { status: 429 })
+    }
 
     const { searchParams } = new URL(request.url)
     const roomId = searchParams.get("roomId")
@@ -42,9 +73,15 @@ export async function GET(request: Request) {
 
     // Get recent messages — or incrementally: ?after=<ISO date> returns only new ones
     const after = searchParams.get("after")
-    const afterDate = after ? new Date(after) : null
-    if (after && (!afterDate || isNaN(afterDate.getTime()))) {
-      return NextResponse.json({ error: "Invalid after param" }, { status: 400 })
+    let afterDate: Date | null = null
+    if (after) {
+      if (!ISO_RE.test(after)) {
+        return NextResponse.json({ error: "Invalid after param" }, { status: 400 })
+      }
+      afterDate = new Date(after)
+      if (isNaN(afterDate.getTime())) {
+        return NextResponse.json({ error: "Invalid after param" }, { status: 400 })
+      }
     }
 
     const messages = await prisma.chatMessage.findMany({
@@ -60,7 +97,7 @@ export async function GET(request: Request) {
       },
     })
 
-    return NextResponse.json({ messages: afterDate ? messages : messages.reverse() })
+    return NextResponse.json({ messages: (afterDate ? messages : messages.reverse()).map(messageDto) })
   } catch (error) {
     console.error("Failed to fetch messages:", error)
     return NextResponse.json(
@@ -135,6 +172,8 @@ export async function POST(request: Request) {
       },
     })
 
+    const dto = messageDto(message)
+
     // Notify @mentions in chat (fire-and-forget)
     notifyMentions(
       content,
@@ -145,9 +184,9 @@ export async function POST(request: Request) {
     ).catch(() => {})
 
     // Realtime fan-out when Pusher is configured (clients fall back to polling)
-    getPusher()?.trigger(`private-chat-${roomId}`, "new-message", message).catch(() => {})
+    getPusher()?.trigger(`private-chat-${roomId}`, "new-message", dto).catch(() => {})
 
-    return NextResponse.json({ message }, { status: 201 })
+    return NextResponse.json({ message: dto }, { status: 201 })
   } catch (error) {
     console.error("Failed to create message:", error)
     return NextResponse.json(

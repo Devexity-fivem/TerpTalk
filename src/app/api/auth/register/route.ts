@@ -112,9 +112,8 @@ export async function POST(request: Request) {
     const captcha = await prisma.captcha.findUnique({ where: { id: captchaId } })
     if (
       !captcha ||
-      captcha.used ||
       captcha.expiresAt < new Date() ||
-      String(captchaAnswer).trim() !== captcha.answer
+      String(captchaAnswer).trim().toLowerCase() !== captcha.answer.toLowerCase()
     ) {
       if (captcha) {
         await prisma.captcha.delete({ where: { id: captcha.id } }).catch(() => {})
@@ -129,11 +128,17 @@ export async function POST(request: Request) {
         { status: 400 }
       )
     }
-    // Burn the captcha — single use
-    await prisma.captcha.update({
-      where: { id: captcha.id },
+    // Burn the captcha atomically
+    const burned = await prisma.captcha.updateMany({
+      where: { id: captcha.id, used: false },
       data: { used: true },
     })
+    if (burned.count === 0) {
+      return NextResponse.json(
+        { error: "Invalid or expired security check" },
+        { status: 400 }
+      )
+    }
 
     // Username format
     if (

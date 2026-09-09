@@ -31,11 +31,20 @@ export async function POST(request: Request) {
       )
     }
 
-    if (name.length > LIMITS.STRAIN_NAME_MAX || (description && description.length > LIMITS.DESCRIPTION_MAX)) {
-      return NextResponse.json(
-        { error: "Content exceeds maximum length" },
-        { status: 400 }
-      )
+    const cleanName = name.trim().slice(0, LIMITS.STRAIN_NAME_MAX)
+
+    const VALID_TYPES = new Set(["SATIVA", "INDICA", "HYBRID", "RUDERALIS", "AUTO_FLOWER", "CBD", "OTHER"])
+    if (typeof type !== "string" || !VALID_TYPES.has(type.toUpperCase())) {
+      return NextResponse.json({ error: "Invalid strain type" }, { status: 400 })
+    }
+
+    if (
+      (genetics && typeof genetics === "string" && genetics.length > 200) ||
+      (breeder && typeof breeder === "string" && breeder.length > 200) ||
+      (description && typeof description === "string" && description.length > LIMITS.DESCRIPTION_MAX) ||
+      (growingInfo && typeof growingInfo === "string" && growingInfo.length > LIMITS.DESCRIPTION_MAX)
+    ) {
+      return NextResponse.json({ error: "Content exceeds maximum length" }, { status: 400 })
     }
 
     // Rate limit: 10 strains per day per user
@@ -56,9 +65,9 @@ export async function POST(request: Request) {
       return forbidden("Your account is suspended")
     }
 
-    // Check if strain already exists
-    const existingStrain = await prisma.strain.findUnique({
-      where: { name },
+    // Check if strain already exists (case-insensitive)
+    const existingStrain = await prisma.strain.findFirst({
+      where: { name: { equals: cleanName, mode: "insensitive" } },
     })
 
     if (existingStrain) {
@@ -71,12 +80,12 @@ export async function POST(request: Request) {
     // Create strain
     const strain = await prisma.strain.create({
       data: {
-        name,
-        genetics,
-        breeder,
-        type,
-        description,
-        growingInfo,
+        name: cleanName,
+        genetics: typeof genetics === "string" ? genetics.trim().slice(0, 200) : null,
+        breeder: typeof breeder === "string" ? breeder.trim().slice(0, 200) : null,
+        type: type.toUpperCase(),
+        description: typeof description === "string" ? description.trim().slice(0, LIMITS.DESCRIPTION_MAX) : null,
+        growingInfo: typeof growingInfo === "string" ? growingInfo.trim().slice(0, LIMITS.DESCRIPTION_MAX) : null,
         createdById: session.user.id,
       },
     })

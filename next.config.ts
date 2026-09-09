@@ -4,7 +4,7 @@ const securityHeaders = [
   { key: "X-DNS-Prefetch-Control", value: "on" },
   { key: "X-Frame-Options", value: "DENY" },
   { key: "X-Content-Type-Options", value: "nosniff" },
-  { key: "X-XSS-Protection", value: "1; mode=block" },
+  { key: "X-XSS-Protection", value: "0" },
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
   {
     key: "Permissions-Policy",
@@ -19,12 +19,14 @@ const securityHeaders = [
     value: [
       "default-src 'self'",
       `script-src 'self'${process.env.NODE_ENV === "development" ? " 'unsafe-eval' 'unsafe-inline'" : ""}`,
-      "style-src 'self' 'unsafe-inline'", // Tailwind requires inline styles
-      "img-src 'self' data: blob: https:",
+      "style-src 'self' 'unsafe-inline'", // required while some pages use inline styles; review migrating to Tailwind utilities
+      "img-src 'self' data: blob: https:", // relies on API-validated image URLs; consider allow-listing blob host + iconify in future
       "font-src 'self' data:",
       "connect-src 'self' https://*.pusher.com wss://*.pusher.com" +
-        (process.env.NODE_ENV === "development" ? " ws: wss:" : ""), // Next HMR in dev only
+        (process.env.NODE_ENV === "development" ? " ws: wss:" : ""),
       "frame-ancestors 'none'",
+      "frame-src 'none'",
+      "object-src 'none'",
       "base-uri 'self'",
       "form-action 'self'",
     ].join("; "),

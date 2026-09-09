@@ -2,9 +2,10 @@ import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { unauthorized, getClientIp, logSecurityEvent } from "@/lib/security"
+import { unauthorized, forbidden, getClientIp, logSecurityEvent, LIMITS, isBanned } from "@/lib/security"
 import { storeImage } from "@/lib/blob"
 import { rateLimit } from "@/lib/rate-limit"
+import bcrypt from "bcryptjs"
 
 export async function GET() {
   try {
@@ -112,6 +113,9 @@ export async function GET() {
 
 // Profile customization — update own profile fields
 export async function PATCH(request: Request) {
+  const ip = getClientIp(request)
+  const userAgent = request.headers.get("user-agent")
+
   try {
     const session = await getServerSession(authOptions)
 
@@ -119,7 +123,31 @@ export async function PATCH(request: Request) {
       return unauthorized()
     }
 
-    const body = await request.json().catch(() => ({}))
+    const userId = session.user.id
+
+    if (await isBanned(userId)) {
+      return forbidden()
+    }
+
+    const rl = await rateLimit(`profile-update:${userId}`, 20, 60 * 60 * 1000)
+    if (!rl.allowed) {
+      await logSecurityEvent("RATE_LIMIT_EXCEEDED", {
+        userId,
+        ip,
+        userAgent,
+        metadata: { endpoint: "profile" },
+      })
+      return NextResponse.json(
+        { error: "Too many updates" },
+        { status: 429, headers: { "Retry-After": String(rl.retryAfterSeconds) } }
+      )
+    }
+
+    const body = await request.json().catch(() => null)
+    if (!body || typeof body !== "object") {
+      return NextResponse.json({ error: "Invalid request body" }, { status: 400 })
+    }
+
     let { avatarUrl } = body
     const {
       bio,
@@ -137,43 +165,52 @@ export async function PATCH(request: Request) {
       notifyOnMessage,
       notifyOnComment,
       emailDigestFrequency,
-    } = body
+    } = body as Record<string, unknown>
+
+    const clean = (v: unknown, max: number) => {
+      if (v === undefined) return undefined
+      if (typeof v !== "string") return v === null ? null : undefined
+      const trimmed = v.trim()
+      if (!trimmed) return null
+      return trimmed.slice(0, max)
+    }
 
     // Validate avatar — https URL, or data URI from client-side image upload (max ~200KB encoded)
-    if (avatarUrl !== undefined && avatarUrl !== null && avatarUrl !== "") {
-      const isDataUri = /^data:image\/(png|jpe?g|webp|gif);base64,/.test(avatarUrl)
-      const isHttps = /^https:\/\/.+/i.test(avatarUrl)
-      if (
-        typeof avatarUrl !== "string" ||
-        avatarUrl.length > 300_000 ||
-        (!isDataUri && !isHttps)
-      ) {
-        return NextResponse.json(
-          { error: "Avatar must be an image upload or a valid https:// image URL" },
-          { status: 400 }
-        )
-      }
-      // Move data-URI uploads into Blob storage when configured
-      if (isDataUri) {
-        avatarUrl = await storeImage(avatarUrl, "avatars")
+    if (avatarUrl !== undefined && avatarUrl !== null) {
+      if (avatarUrl === "") {
+        avatarUrl = null
+      } else {
+        if (typeof avatarUrl !== "string" || avatarUrl.length > 300_000) {
+          return NextResponse.json(
+            { error: "Avatar must be an image upload or a valid https:// image URL" },
+            { status: 400 }
+          )
+        }
+        const isDataUri = /^data:image\/(png|jpe?g|webp);base64,/.test(avatarUrl)
+        const isHttps = /^https:\/\/.+/i.test(avatarUrl)
+        if (!isDataUri && !isHttps) {
+          return NextResponse.json(
+            { error: "Avatar must be an image upload or a valid https:// image URL" },
+            { status: 400 }
+          )
+        }
+        if (isDataUri) {
+          avatarUrl = await storeImage(avatarUrl, "avatars")
+        }
       }
     }
 
-    const clean = (v: unknown, max: number) =>
-      typeof v === "string" ? v.trim().slice(0, max) || null : null
-
     // Website must be an https:// URL — blocks javascript:/data: stored-XSS links
     const cleanWebsite = clean(website, 200)
-    if (cleanWebsite && !/^https:\/\/.+/i.test(cleanWebsite)) {
+    if (cleanWebsite !== undefined && cleanWebsite !== null && !/^https:\/\/.+/i.test(cleanWebsite)) {
       return NextResponse.json(
         { error: "Website must be an https:// URL" },
         { status: 400 }
       )
     }
-    // Avatar validation above already restricts to https:// or data URI
 
     const cleanBusinessUrl = clean(businessUrl, 200)
-    if (cleanBusinessUrl && !/^https:\/\/.+/i.test(cleanBusinessUrl)) {
+    if (cleanBusinessUrl !== undefined && cleanBusinessUrl !== null && !/^https:\/\/.+/i.test(cleanBusinessUrl)) {
       return NextResponse.json(
         { error: "Business URL must be an https:// URL" },
         { status: 400 }
@@ -181,43 +218,74 @@ export async function PATCH(request: Request) {
     }
 
     const BUSINESS_TYPES = new Set(["BREEDER", "VENDOR", "GROW_SHOP", "BRAND"])
-    const cleanBusinessType = typeof businessType === "string" && BUSINESS_TYPES.has(businessType.toUpperCase())
-      ? businessType.toUpperCase()
-      : null
+    const cleanBusinessType =
+      typeof businessType === "string" && BUSINESS_TYPES.has(businessType.toUpperCase())
+        ? businessType.toUpperCase()
+        : businessType === undefined
+        ? undefined
+        : null
     const cleanBusinessName = clean(businessName, 80)
 
     const DIGEST_OPTIONS = new Set(["DAILY", "WEEKLY", "NEVER"])
-    const cleanDigest = typeof emailDigestFrequency === "string" && DIGEST_OPTIONS.has(emailDigestFrequency.toUpperCase())
-      ? emailDigestFrequency.toUpperCase()
-      : null
+    const cleanDigest =
+      typeof emailDigestFrequency === "string" && DIGEST_OPTIONS.has(emailDigestFrequency.toUpperCase())
+        ? emailDigestFrequency.toUpperCase()
+        : emailDigestFrequency === undefined
+        ? undefined
+        : null
 
-    const rl = await rateLimit(`profile-update:${session.user.id}`, 20, 60 * 60 * 1000)
-    if (!rl.allowed) {
-      await logSecurityEvent("RATE_LIMIT_EXCEEDED", {
-        userId: session.user.id, ip: getClientIp(request), metadata: { endpoint: "profile" },
-      })
-      return NextResponse.json({ error: "Too many updates" }, { status: 429 })
+    const updateData: Record<string, unknown> = {}
+    const setIfDefined = (key: string, value: unknown) => {
+      if (value !== undefined) updateData[key] = value
+    }
+
+    setIfDefined("bio", clean(bio, 500))
+    setIfDefined("location", clean(location, 100))
+    setIfDefined("website", cleanWebsite)
+    setIfDefined("growExperience", clean(growExperience, 50))
+    setIfDefined("favoriteStrain", clean(favoriteStrain, 100))
+    setIfDefined("growSpace", clean(growSpace, 100))
+    setIfDefined("businessName", cleanBusinessName)
+    setIfDefined("businessType", cleanBusinessType)
+    setIfDefined("businessUrl", cleanBusinessUrl)
+
+    if (typeof notifyOnReply === "boolean") updateData.notifyOnReply = notifyOnReply
+    if (typeof notifyOnMention === "boolean") updateData.notifyOnMention = notifyOnMention
+    if (typeof notifyOnCategoryFollow === "boolean") updateData.notifyOnCategoryFollow = notifyOnCategoryFollow
+    if (typeof notifyOnMessage === "boolean") updateData.notifyOnMessage = notifyOnMessage
+    if (typeof notifyOnComment === "boolean") updateData.notifyOnComment = notifyOnComment
+
+    setIfDefined("emailDigestFrequency", cleanDigest)
+
+    if (avatarUrl !== undefined) {
+      updateData.avatarUrl = avatarUrl ? String(avatarUrl).slice(0, 500) : null
+    }
+
+    if (Object.keys(updateData).length === 0) {
+      return NextResponse.json({ error: "No valid fields to update" }, { status: 400 })
     }
 
     const updated = await prisma.profile.update({
-      where: { userId: session.user.id },
-      data: {
-        bio: clean(bio, 500),
-        location: clean(location, 100),
-        website: cleanWebsite,
-        avatarUrl: avatarUrl ? String(avatarUrl).slice(0, 500) : null,
-        growExperience: clean(growExperience, 50),
-        favoriteStrain: clean(favoriteStrain, 100),
-        growSpace: clean(growSpace, 100),
-        businessName: cleanBusinessName,
-        businessType: cleanBusinessType,
-        businessUrl: cleanBusinessUrl,
-        notifyOnReply: typeof notifyOnReply === "boolean" ? notifyOnReply : undefined,
-        notifyOnMention: typeof notifyOnMention === "boolean" ? notifyOnMention : undefined,
-        notifyOnCategoryFollow: typeof notifyOnCategoryFollow === "boolean" ? notifyOnCategoryFollow : undefined,
-        notifyOnMessage: typeof notifyOnMessage === "boolean" ? notifyOnMessage : undefined,
-        notifyOnComment: typeof notifyOnComment === "boolean" ? notifyOnComment : undefined,
-        emailDigestFrequency: cleanDigest,
+      where: { userId },
+      data: updateData,
+      select: {
+        username: true,
+        bio: true,
+        location: true,
+        website: true,
+        avatarUrl: true,
+        growExperience: true,
+        favoriteStrain: true,
+        growSpace: true,
+        businessName: true,
+        businessType: true,
+        businessUrl: true,
+        notifyOnReply: true,
+        notifyOnMention: true,
+        notifyOnCategoryFollow: true,
+        notifyOnMessage: true,
+        notifyOnComment: true,
+        emailDigestFrequency: true,
       },
     })
 
@@ -244,16 +312,35 @@ export async function DELETE(request: Request) {
     }
 
     const body = await request.json().catch(() => ({}))
-    const { confirmUsername } = body
+    const { confirmUsername, password } = body
+
+    if (
+      typeof confirmUsername !== "string" ||
+      typeof password !== "string" ||
+      password.length < LIMITS.PASSWORD_MIN ||
+      password.length > LIMITS.PASSWORD_MAX
+    ) {
+      return NextResponse.json({ error: "Current password and username confirmation are required" }, { status: 400 })
+    }
+
+    // Rate limit: 3 deletion attempts per hour per user
+    const rl = await rateLimit(`account-delete:${session.user.id}`, 3, 60 * 60 * 1000)
+    if (!rl.allowed) {
+      return NextResponse.json({ error: "Too many attempts. Try again later." }, { status: 429 })
+    }
 
     // Require typed username confirmation for destructive action
     const user = await prisma.user.findUnique({
       where: { id: session.user.id },
-      include: { profile: true },
+      include: { profile: { select: { username: true } } },
     })
 
     if (!user) {
       return NextResponse.json({ error: "User not found" }, { status: 404 })
+    }
+
+    if (!(await bcrypt.compare(password, user.password || ""))) {
+      return NextResponse.json({ error: "Invalid password" }, { status: 403 })
     }
 
     if (confirmUsername !== user.profile?.username) {
@@ -267,7 +354,6 @@ export async function DELETE(request: Request) {
       userId: user.id,
       ip,
       userAgent,
-      metadata: { username: user.profile?.username },
     })
 
     // Cascade delete handles: profile, posts, threads, diaries, setups,

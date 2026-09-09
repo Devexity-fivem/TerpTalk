@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { unauthorized, publicUserSelect, LIMITS, getClientIp, logSecurityEvent, isBanned, forbidden, containsExternalLink, isTrustedForLinks } from "@/lib/security"
+import { unauthorized, publicUserSelect, LIMITS, getClientIp, logSecurityEvent, isBanned, forbidden, containsExternalLink, isTrustedForLinks, isModerator } from "@/lib/security"
 import { requireModerator } from "@/lib/require-staff"
 import { rateLimit } from "@/lib/rate-limit"
 import { awardReputation, REP_POINTS } from "@/lib/reputation"
@@ -14,6 +14,14 @@ export async function POST(request: Request) {
 
     if (!session?.user?.id) {
       return unauthorized()
+    }
+
+    const currentUser = await prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: { role: true, banned: true },
+    })
+    if (!currentUser || currentUser.banned) {
+      return forbidden("Your account is suspended")
     }
 
     const body = await request.json().catch(() => ({}))
@@ -50,9 +58,12 @@ export async function POST(request: Request) {
       )
     }
 
-    // Validate thread exists and is not locked
+    // Validate thread exists and is not locked/deleted/hidden
     const thread = await prisma.thread.findUnique({
       where: { id: threadId },
+      include: {
+        category: { select: { hidden: true } },
+      },
     })
 
     if (!thread) {
@@ -62,15 +73,11 @@ export async function POST(request: Request) {
       )
     }
 
-    if (thread.locked || thread.deleted) {
+    if (thread.locked || thread.deleted || (thread.category?.hidden && !isModerator(currentUser.role))) {
       return NextResponse.json(
         { error: "Thread is locked" },
         { status: 403 }
       )
-    }
-
-    if (await isBanned(session.user.id)) {
-      return forbidden("Your account is suspended")
     }
 
     if (containsExternalLink(content) && !(await isTrustedForLinks(session.user.id))) {
@@ -155,6 +162,14 @@ export async function PATCH(request: Request) {
       return unauthorized()
     }
 
+    const currentUser = await prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: { role: true, banned: true },
+    })
+    if (!currentUser || currentUser.banned) {
+      return forbidden("Your account is suspended")
+    }
+
     const body = await request.json().catch(() => ({}))
     const { id, content } = body
 
@@ -171,7 +186,12 @@ export async function PATCH(request: Request) {
 
     const post = await prisma.post.findUnique({
       where: { id },
-      select: { id: true, authorId: true, deleted: true },
+      select: {
+        id: true,
+        authorId: true,
+        deleted: true,
+        thread: { select: { locked: true, deleted: true, category: { select: { hidden: true } } } },
+      },
     })
     if (!post || post.deleted) {
       return NextResponse.json({ error: "Post not found" }, { status: 404 })
@@ -179,7 +199,13 @@ export async function PATCH(request: Request) {
     if (post.authorId !== session.user.id) {
       return forbidden()
     }
-    if (await isBanned(session.user.id)) return forbidden("Your account is suspended")
+    if (
+      post.thread.locked ||
+      post.thread.deleted ||
+      (post.thread.category?.hidden && !isModerator(currentUser.role))
+    ) {
+      return NextResponse.json({ error: "Thread is locked" }, { status: 403 })
+    }
 
     const updated = await prisma.post.update({
       where: { id },

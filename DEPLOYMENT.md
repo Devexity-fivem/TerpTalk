@@ -18,14 +18,36 @@ vercel          # link the project (first run)
 
 ### 3. Environment variables (Vercel dashboard → Settings → Environment Variables, or `vercel env add`)
 
-| Variable | Value |
-|---|---|
-| `DATABASE_URL` | Neon pooled string — `postgresql://…-pooler…?sslmode=require` |
-| `NEXTAUTH_URL` | `https://<your-domain>.vercel.app` |
-| `NEXTAUTH_SECRET` | `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"` — **fresh, not the dev value** |
-| `IP_HASH_SALT` | fresh generated salt |
+## Required environment variables
 
-### 4. Deploy
+Set these in Vercel (Settings → Environment Variables) or `vercel env add`:
+
+| Variable | Purpose |
+|---|---|
+| `DATABASE_URL` | Neon pooled connection string (`postgresql://…-pooler…?sslmode=require`) |
+| `NEXTAUTH_URL` | Production URL (`https://<your-domain>.vercel.app`) |
+| `NEXTAUTH_SECRET` | 64-character random hex for JWT signing — **generate a fresh secret for prod** |
+| `IP_HASH_SALT` | Random salt for hashing IP addresses (does not need to rotate with every session) |
+| `BLOB_READ_WRITE_TOKEN` | Vercel Blob token for image uploads |
+| `PUSHER_APP_ID` | Pusher app ID |
+| `PUSHER_KEY` | Pusher app key |
+| `PUSHER_SECRET` | Pusher app secret |
+| `PUSHER_CLUSTER` | Pusher cluster, e.g. `us2` |
+| `NEXT_PUBLIC_PUSHER_KEY` | Same as `PUSHER_KEY` (public) |
+| `NEXT_PUBLIC_PUSHER_CLUSTER` | Same as `PUSHER_CLUSTER` (public) |
+| `NEXT_PUBLIC_SITE_URL` | Public site URL for sitemap/OpenGraph (`https://<your-domain>.vercel.app`) |
+
+For seeding, you also need:
+
+| Variable | Purpose |
+|---|---|
+| `ADMIN_PASSWORD` | Initial administrator account password (single-run) |
+| `MOD_PASSWORD` | Initial moderator account password (single-run) |
+
+```bash
+# Generate a fresh secret
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+```
 
 ```bash
 vercel --prod

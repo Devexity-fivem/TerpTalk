@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { unauthorized, publicUserSelect, LIMITS, getClientIp, logSecurityEvent, isBanned, forbidden, containsExternalLink, isTrustedForLinks } from "@/lib/security"
+import { unauthorized, publicUserSelect, LIMITS, getClientIp, logSecurityEvent, forbidden, containsExternalLink, isTrustedForLinks, isModerator } from "@/lib/security"
 import { requireModerator } from "@/lib/require-staff"
 import { rateLimit } from "@/lib/rate-limit"
 import { awardReputation, REP_POINTS } from "@/lib/reputation"
@@ -24,6 +24,14 @@ export async function POST(request: Request) {
 
     if (!session?.user?.id) {
       return unauthorized()
+    }
+
+    const currentUser = await prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: { role: true, banned: true },
+    })
+    if (!currentUser || currentUser.banned) {
+      return forbidden("Your account is suspended")
     }
 
     const body = await request.json().catch(() => ({}))
@@ -61,9 +69,10 @@ export async function POST(request: Request) {
       )
     }
 
-    // Validate category exists
+    // Validate category exists and is visible to the user
     const category = await prisma.category.findUnique({
       where: { id: categoryId },
+      select: { id: true, hidden: true, name: true },
     })
 
     if (!category) {
@@ -73,8 +82,8 @@ export async function POST(request: Request) {
       )
     }
 
-    if (await isBanned(session.user.id)) {
-      return forbidden("Your account is suspended")
+    if (category.hidden && !isModerator(currentUser.role)) {
+      return forbidden()
     }
 
     if ((containsExternalLink(title) || containsExternalLink(content)) && !(await isTrustedForLinks(session.user.id))) {
