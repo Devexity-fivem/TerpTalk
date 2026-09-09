@@ -7,6 +7,8 @@ import Link from "next/link"
 import { GoogleReCaptchaProvider, useGoogleReCaptcha } from "react-google-recaptcha-v3"
 import { Leaf, Loader2 } from "lucide-react"
 
+const RECAPTCHA_SITE_KEY = process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY || "6Le-FbMtAAAAAB0IFWqe3WCPtuSyc7irvRLZ4gOK"
+
 function SignUpForm() {
   const router = useRouter()
   const { executeRecaptcha } = useGoogleReCaptcha()
@@ -222,7 +224,7 @@ function SignUpForm() {
 export default function SignUpPage() {
   return (
     <GoogleReCaptchaProvider
-      reCaptchaKey={process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY || ""}
+      reCaptchaKey={RECAPTCHA_SITE_KEY}
       scriptProps={{
         async: false,
         defer: false,
