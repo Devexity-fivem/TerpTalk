@@ -43,10 +43,17 @@ export default function ChatSidebar() {
   const inputRef = useRef<HTMLInputElement>(null)
 
   const scrollToBottom = () => {
-    if (messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({ behavior: "smooth" })
+    const container = messagesContainerRef.current
+    if (container) {
+      container.scrollTo({ top: container.scrollHeight, behavior: "smooth" })
     }
   }
+
+  useEffect(() => {
+    if (isOpen && messages.length > 0) {
+      scrollToBottom()
+    }
+  }, [messages, isOpen])
 
   // Load the general room (single community chat)
   useEffect(() => {
@@ -96,7 +103,7 @@ export default function ChatSidebar() {
         const res = await fetch(url)
         if (!res.ok) return
         const data = await res.json()
-        if (mergeFresh(data.messages || [])) scrollToBottom()
+        mergeFresh(data.messages || [])
       } catch { /* ignore transient errors */ }
     }
 
@@ -121,7 +128,7 @@ export default function ChatSidebar() {
         })
         const channel = p.subscribe(`private-chat-${room.id}`)
         channel.bind("new-message", (m: Message) => {
-          if (!cancelled && mergeFresh([m])) scrollToBottom()
+          if (!cancelled) mergeFresh([m])
         })
         cleanupPusher = () => { p.unsubscribe(`private-chat-${room.id}`); p.disconnect() }
       } catch { /* stay on polling */ }
@@ -176,7 +183,6 @@ export default function ChatSidebar() {
         setMessages(prev => [...prev, data.message])
         if (inputRef.current) inputRef.current.value = ""
         setShowEmoji(false)
-        scrollToBottom()
       }
     } catch (error) {
       console.error("Failed to send message:", error)
