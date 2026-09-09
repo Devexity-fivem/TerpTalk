@@ -14,8 +14,7 @@ datasource db {
 model User {
   id            String    @id @default(cuid())
   name          String?
-  email         String?    @unique
-  emailVerified DateTime?
+  // No email field — registration is username-only by design (data minimization)
   image         String?
   password      String?
   role          String    @default("MEMBER") // MEMBER, VERIFIED_MEMBER, MODERATOR, ADMINISTRATOR

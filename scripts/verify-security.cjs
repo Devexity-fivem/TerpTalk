@@ -87,6 +87,22 @@ const apiFiles = () => {
   check("schema: username unique", /@unique/.test(schema) && /username\s+String\s+@unique/.test(schema));
   check("schema: cascade deletes on user-owned content", (schema.match(/onDelete: Cascade/g) || []).length > 10);
 
+  // ── 10. Privacy invariants ──
+  check("no client-side storage (localStorage/sessionStorage)", !allSrc.some((f) => /localStorage|sessionStorage|indexedDB/i.test(fs.readFileSync(f, "utf8"))));
+  check("no raw IP storage (schema has ipHash, not ip)", /ipHash/.test(schema) && !/\bip\s+String\b/.test(schema));
+  const sec = read("app/api/admin/security/route.ts");
+  check("admin/security: ipHash/userAgent not in response", !sec.includes("e.ipHash") && !sec.includes("e.userAgent"));
+  check("security events: retention enforced", sec.includes("RETENTION_DAYS"));
+  check("service worker: never caches api/auth", fs.existsSync("public/sw.js") && fs.readFileSync("public/sw.js", "utf8").includes('startsWith("/api/")'));
+  // Public-facing queries must not return sensitive user fields
+  for (const r of ["users/[username]", "search", "messages", "notifications"]) {
+    const c = read(`app/api/${r}/route.ts`);
+    check(`${r}: no password/email/ip fields`, !/\b(password|recoveryPhraseHash|ipHash|bannedReason)\s*:\s*true/.test(c));
+  }
+  // Schema must not have an email field (username-only = data minimization)
+  check("schema: no email collection", !/\bemail\s+String/.test(schema));
+  check("schema: IP stored hashed only", !/\bip\s+String\b/.test(schema) || /ipHash/.test(schema));
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })().catch((e) => { console.error(e); process.exit(1); }).finally(() => p.$disconnect());
