@@ -433,3 +433,15 @@ This document inventories all user data collected by TerpTalk, where it's stored
 **Last Updated:** 2026-09-08  
 **Version:** 1.0  
 **Owner:** Development Team
+
+## Privacy Data Flow (added in privacy audit)
+
+USER -> FRONTEND -> API -> POSTGRES (Neon) -> THIRD PARTIES
+
+- Public data: username, avatar, bio, posts, diaries, setups, strain photos, reputation
+- Private data (owner-only): notifications, bookmarks, DMs, follows list, profile export
+- Sensitive (server-only): password hash, recovery phrase hash, role, ban status
+- Security data: SecurityEvent (hashed IP, truncated UA, 90-day auto-purge), RateLimit rows
+- Third parties: Vercel Blob (image binaries only), Pusher (message fan-out), Mars Hydro (outbound affiliate clicks only)
+- No email, no IP in plaintext, no analytics trackers, no client-side storage of personal data
+
