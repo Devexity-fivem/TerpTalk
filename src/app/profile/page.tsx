@@ -2,7 +2,7 @@
 
 import { useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { User, Calendar, Award, MessageSquare, Leaf, Loader2, Download, Trash2, Pencil, MapPin, Globe, Sprout, Dna, Store } from "lucide-react"
 import { signOut } from "next-auth/react"
 import Link from "next/link"
@@ -97,6 +97,7 @@ export default function ProfilePage() {
   const [loading, setLoading] = useState(true)
   const [editing, setEditing] = useState(false)
   const [saving, setSaving] = useState(false)
+  const bioRef = useRef<HTMLTextAreaElement>(null)
   const [editForm, setEditForm] = useState({
     bio: "",
     location: "",
@@ -299,8 +300,9 @@ export default function ProfilePage() {
                 <div>
                   <label className="block text-sm font-medium mb-1">Bio</label>
                   <textarea
-                    value={editForm.bio}
-                    onChange={(e) => setEditForm({ ...editForm, bio: e.target.value })}
+                    ref={bioRef}
+                    defaultValue={editForm.bio}
+                    onBlur={(e) => setEditForm(prev => ({ ...prev, bio: e.target.value }))}
                     rows={3}
                     maxLength={150}
                     placeholder="Tell the community about yourself..."
@@ -475,10 +477,11 @@ export default function ProfilePage() {
                     disabled={saving}
                     onClick={async () => {
                       setSaving(true)
+                      const payload = { ...editForm, bio: bioRef.current?.value ?? editForm.bio }
                       const res = await fetch("/api/profile", {
                         method: "PATCH",
                         headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify(editForm),
+                        body: JSON.stringify(payload),
                       })
                       setSaving(false)
                       if (res.ok) {
