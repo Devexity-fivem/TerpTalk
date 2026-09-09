@@ -118,6 +118,7 @@ export default function CompleteProfilePage() {
                 rows={4}
                 value={formData.bio}
                 onChange={(e) => setFormData({ ...formData, bio: e.target.value })}
+                maxLength={150}
                 className="w-full px-4 py-2 rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary resize-none"
                 placeholder="Tell us about your growing experience, interests, and what you hope to share with the community..."
               />

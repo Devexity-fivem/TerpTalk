@@ -239,7 +239,7 @@ export async function PATCH(request: Request) {
       if (value !== undefined) updateData[key] = value
     }
 
-    setIfDefined("bio", clean(bio, 500))
+    setIfDefined("bio", clean(bio, LIMITS.BIO_MAX))
     setIfDefined("location", clean(location, 100))
     setIfDefined("website", cleanWebsite)
     setIfDefined("growExperience", clean(growExperience, 50))

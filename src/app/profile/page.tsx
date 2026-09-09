@@ -302,7 +302,7 @@ export default function ProfilePage() {
                     value={editForm.bio}
                     onChange={(e) => setEditForm({ ...editForm, bio: e.target.value })}
                     rows={3}
-                    maxLength={500}
+                    maxLength={150}
                     placeholder="Tell the community about yourself..."
                     className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary resize-none"
                   />
