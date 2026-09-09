@@ -1,23 +1,30 @@
 import { prisma } from "@/lib/prisma"
 
-// Open-source Twemoji SVGs (CC-BY 4.0) used as badge images.
-// https://github.com/twitter/twemoji — free for commercial use.
+// Open-source Game Icons SVGs (CC BY 3.0) used as badge images.
+// https://game-icons.net / https://github.com/game-icons/icons — free for commercial use.
+// Hosted via Iconify: https://iconify.design/
 export const BADGE_ICONS: Record<string, string> = {
-  "New Grower": "https://cdn.jsdelivr.net/npm/twemoji@14.0.2/dist/svg/1f331.svg",
-  "First Post": "https://cdn.jsdelivr.net/npm/twemoji@14.0.2/dist/svg/1f4dd.svg",
-  "Conversation Starter": "https://cdn.jsdelivr.net/npm/twemoji@14.0.2/dist/svg/1f4ac.svg",
-  "Active Grower": "https://cdn.jsdelivr.net/npm/twemoji@14.0.2/dist/svg/1f33f.svg",
-  "Diary Master": "https://cdn.jsdelivr.net/npm/twemoji@14.0.2/dist/svg/1f4d3.svg",
-  "Strain Hunter": "https://cdn.jsdelivr.net/npm/twemoji@14.0.2/dist/svg/1f50e.svg",
-  "Grow Photographer": "https://cdn.jsdelivr.net/npm/twemoji@14.0.2/dist/svg/1f4f7.svg",
-  "Social Butterfly": "https://cdn.jsdelivr.net/npm/twemoji@14.0.2/dist/svg/1f98b.svg",
-  "Recruiter": "https://cdn.jsdelivr.net/npm/twemoji@14.0.2/dist/svg/1f91d.svg",
-  "Liked": "https://cdn.jsdelivr.net/npm/twemoji@14.0.2/dist/svg/1f44d.svg",
-  "Helpful Grower": "https://cdn.jsdelivr.net/npm/twemoji@14.0.2/dist/svg/1f4a1.svg",
-  "Community Favorite": "https://cdn.jsdelivr.net/npm/twemoji@14.0.2/dist/svg/1f3c6.svg",
-  "Top Contributor": "https://cdn.jsdelivr.net/npm/twemoji@14.0.2/dist/svg/2b50.svg",
-  "Dedicated Grower": "https://cdn.jsdelivr.net/npm/twemoji@14.0.2/dist/svg/1f525.svg",
-  "Beta Tester": "https://cdn.jsdelivr.net/npm/twemoji@14.0.2/dist/svg/1f9ea.svg",
+  // Core participation
+  "New Grower": "https://api.iconify.design/game-icons/hemp.svg",
+  "First Post": "https://api.iconify.design/game-icons/bud.svg",
+  "Conversation Starter": "https://api.iconify.design/game-icons/leaf-swirl.svg",
+  "Active Grower": "https://api.iconify.design/game-icons/flamed-leaf.svg",
+  // Content / collection
+  "Diary Master": "https://api.iconify.design/game-icons/notebook.svg",
+  "Strain Hunter": "https://api.iconify.design/game-icons/magnifying-glass.svg",
+  "Grow Photographer": "https://api.iconify.design/game-icons/photo-camera.svg",
+  // Social
+  "Social Butterfly": "https://api.iconify.design/game-icons/butterfly.svg",
+  "Recruiter": "https://api.iconify.design/game-icons/shaking-hands.svg",
+  "Liked": "https://api.iconify.design/game-icons/heart.svg",
+  "Helpful Grower": "https://api.iconify.design/game-icons/light-bulb.svg",
+  // Top honors
+  "Community Favorite": "https://api.iconify.design/game-icons/laurels-trophy.svg",
+  "Top Contributor": "https://api.iconify.design/game-icons/star.svg",
+  // Special / streaks
+  "Dedicated Grower": "https://api.iconify.design/game-icons/fire.svg",
+  "Beta Tester": "https://api.iconify.design/game-icons/test-tube-held.svg",
+  "Weekly Winner": "https://api.iconify.design/game-icons/laurels-trophy.svg",
 }
 
 export const BADGE_DESCRIPTIONS: Record<string, string> = {
@@ -36,6 +43,7 @@ export const BADGE_DESCRIPTIONS: Record<string, string> = {
   "Top Contributor": "Reached 1,000 reputation points.",
   "Dedicated Grower": "Posted grow updates 7 days in a row.",
   "Beta Tester": "Joined TerpTalk during the beta and helped shape the community.",
+  "Weekly Winner": "Won Budshot of the Week.",
 }
 
 // Seed all open-source badges. Safe to re-run — it updates icons/descriptions.
