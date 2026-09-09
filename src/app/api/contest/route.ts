@@ -15,6 +15,7 @@ export async function GET() {
   const entries = await prisma.contestEntry.findMany({
     where: { week },
     orderBy: { votes: { _count: "desc" } },
+    take: 200, // weekly entries are bounded; cap anyway
     include: {
       user: { select: publicUserSelect },
       _count: { select: { votes: true } },

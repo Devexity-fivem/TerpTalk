@@ -113,12 +113,15 @@ export default function ChatSidebar() {
       if (!realtime) return
       try {
         const { default: Pusher } = await import("pusher-js")
-        const p = new Pusher(pusherKey!, { cluster: pusherCluster! })
-        const channel = p.subscribe(`chat-${room.id}`)
+        const p = new Pusher(pusherKey!, {
+          cluster: pusherCluster!,
+          authEndpoint: "/api/pusher/auth", // private channels need a session
+        })
+        const channel = p.subscribe(`private-chat-${room.id}`)
         channel.bind("new-message", (m: Message) => {
           if (!cancelled && mergeFresh([m])) scrollToBottom()
         })
-        cleanupPusher = () => { p.unsubscribe(`chat-${room.id}`); p.disconnect() }
+        cleanupPusher = () => { p.unsubscribe(`private-chat-${room.id}`); p.disconnect() }
       } catch { /* stay on polling */ }
     }
 

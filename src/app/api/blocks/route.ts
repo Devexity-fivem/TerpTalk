@@ -15,6 +15,7 @@ export async function GET() {
   const blocks = await prisma.block.findMany({
     where: { blockerId: session.user.id },
     orderBy: { createdAt: "desc" },
+    take: 500, // hard cap — a user's block list is naturally small
     select: {
       id: true,
       createdAt: true,

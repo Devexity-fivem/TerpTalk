@@ -132,7 +132,7 @@ export async function POST(request: Request) {
     ).catch(() => {})
 
     // Realtime fan-out when Pusher is configured (clients fall back to polling)
-    getPusher()?.trigger(`chat-${roomId}`, "new-message", message).catch(() => {})
+    getPusher()?.trigger(`private-chat-${roomId}`, "new-message", message).catch(() => {})
 
     return NextResponse.json({ message }, { status: 201 })
   } catch (error) {

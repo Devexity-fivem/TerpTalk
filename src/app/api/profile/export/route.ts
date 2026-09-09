@@ -40,17 +40,19 @@ export async function GET(request: Request) {
           },
         }),
         prisma.profile.findUnique({ where: { userId } }),
-        prisma.thread.findMany({ where: { authorId: userId } }),
-        prisma.post.findMany({ where: { authorId: userId } }),
-        prisma.growDiary.findMany({ where: { authorId: userId } }),
-        prisma.diaryUpdate.findMany({ where: { authorId: userId } }),
-        prisma.growSetup.findMany({ where: { authorId: userId } }),
-        prisma.chatMessage.findMany({ where: { authorId: userId } }),
-        prisma.directMessage.findMany({ where: { senderId: userId } }),
-        prisma.directMessage.findMany({ where: { receiverId: userId } }),
-        prisma.reaction.findMany({ where: { userId } }),
-        prisma.userBadge.findMany({ where: { userId }, include: { badge: true } }),
-        prisma.reputationEvent.findMany({ where: { userId } }),
+        // Per-collection caps keep a power user's export from being a
+        // multi-hundred-MB response; rate-limited to 5/hr above.
+        prisma.thread.findMany({ where: { authorId: userId }, take: 10_000, orderBy: { createdAt: "desc" } }),
+        prisma.post.findMany({ where: { authorId: userId }, take: 10_000, orderBy: { createdAt: "desc" } }),
+        prisma.growDiary.findMany({ where: { authorId: userId }, take: 10_000, orderBy: { createdAt: "desc" } }),
+        prisma.diaryUpdate.findMany({ where: { authorId: userId }, take: 10_000, orderBy: { createdAt: "desc" } }),
+        prisma.growSetup.findMany({ where: { authorId: userId }, take: 10_000, orderBy: { createdAt: "desc" } }),
+        prisma.chatMessage.findMany({ where: { authorId: userId }, take: 10_000, orderBy: { createdAt: "desc" } }),
+        prisma.directMessage.findMany({ where: { senderId: userId }, take: 10_000, orderBy: { createdAt: "desc" } }),
+        prisma.directMessage.findMany({ where: { receiverId: userId }, take: 10_000, orderBy: { createdAt: "desc" } }),
+        prisma.reaction.findMany({ where: { userId }, take: 10_000, orderBy: { createdAt: "desc" } }),
+        prisma.userBadge.findMany({ where: { userId }, include: { badge: true }, take: 1_000 }),
+        prisma.reputationEvent.findMany({ where: { userId }, take: 10_000, orderBy: { createdAt: "desc" } }),
       ])
 
     if (!user) {
