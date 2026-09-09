@@ -4,7 +4,12 @@ import { notFound } from "next/navigation"
 import { MessageSquare, Users, Clock, Pin, Lock } from "lucide-react"
 import Link from "next/link"
 
-async function getCategoryData(slug: string) {
+// Public category listing — cached at the edge for 60s
+export const revalidate = 60
+
+const THREADS_PER_PAGE = 30
+
+async function getCategoryData(slug: string, page: number) {
   const category = await prisma.category.findUnique({
     where: { slug },
     include: {
@@ -20,7 +25,10 @@ async function getCategoryData(slug: string) {
           { pinned: "desc" },
           { createdAt: "desc" },
         ],
+        skip: (page - 1) * THREADS_PER_PAGE,
+        take: THREADS_PER_PAGE,
       },
+      _count: { select: { threads: { where: { deleted: false } } } },
     },
   })
 
@@ -31,9 +39,17 @@ async function getCategoryData(slug: string) {
   return category
 }
 
-export default async function CategoryPage({ params }: { params: Promise<{ slug: string }> }) {
+export default async function CategoryPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ slug: string }>
+  searchParams: Promise<{ page?: string }>
+}) {
   const { slug } = await params
-  const category = await getCategoryData(slug)
+  const { page: pageParam } = await searchParams
+  const page = Math.max(1, Math.min(10_000, parseInt(pageParam || "1") || 1))
+  const category = await getCategoryData(slug, page)
 
   return (
     <div className="min-h-screen bg-background">
@@ -106,6 +122,23 @@ export default async function CategoryPage({ params }: { params: Promise<{ slug:
               ))}
             </div>
           )}
+
+          {/* Pagination — 30 threads per page */}
+          {(() => {
+            const totalPages = Math.ceil(category._count.threads / THREADS_PER_PAGE)
+            if (totalPages <= 1) return null
+            return (
+              <div className="flex items-center justify-center gap-2 p-4 text-sm border-t border-border">
+                {page > 1 && (
+                  <Link href={`/forum/category/${category.slug}?page=${page - 1}`} className="px-3 py-1.5 rounded-md bg-secondary hover:bg-secondary/70">← Previous</Link>
+                )}
+                <span className="text-muted-foreground">Page {page} of {totalPages}</span>
+                {page < totalPages && (
+                  <Link href={`/forum/category/${category.slug}?page=${page + 1}`} className="px-3 py-1.5 rounded-md bg-secondary hover:bg-secondary/70">Next →</Link>
+                )}
+              </div>
+            )
+          })()}
         </div>
       </div>
     </div>

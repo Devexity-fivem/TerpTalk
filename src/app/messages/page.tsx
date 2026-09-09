@@ -49,12 +49,28 @@ function MessagesInner() {
       .catch(() => setLoading(false))
   }, [])
 
+  const messagesRef = useRef<Msg[]>([])
+  useEffect(() => { messagesRef.current = messages }, [messages])
+
   const loadThread = useCallback((uid: string) => {
-    fetch(`/api/messages?with=${uid}`)
+    // Incremental poll — only fetch messages newer than the newest we hold
+    const latest = messagesRef.current[messagesRef.current.length - 1]
+    const qs = latest?.createdAt
+      ? `&after=${encodeURIComponent(latest.createdAt)}`
+      : ""
+    fetch(`/api/messages?with=${uid}${qs}`)
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
-        setMessages(d?.messages || [])
-        setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }), 50)
+        if (!d) return
+        if (d.incremental) {
+          if (d.messages?.length) {
+            setMessages((prev) => [...prev, ...d.messages])
+            setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }), 50)
+          }
+        } else {
+          setMessages(d.messages || [])
+          setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }), 50)
+        }
       })
       .catch(() => {})
   }, [])

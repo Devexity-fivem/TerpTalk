@@ -3,7 +3,8 @@ import { DEFAULT_DISCLOSURE } from "@/lib/affiliate"
 import { Tag, ExternalLink, Percent } from "lucide-react"
 import DealsBrowser from "@/components/deals-browser"
 
-export const dynamic = "force-dynamic"
+// Cached 5 min — admin-edited affiliate data propagates quickly enough
+export const revalidate = 300
 
 export const metadata = {
   title: "TerpTalk Deals — Grow Equipment",

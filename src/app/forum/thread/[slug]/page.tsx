@@ -27,7 +27,9 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   }
 }
 
-async function getThreadData(slug: string) {
+const POSTS_PER_PAGE = 50
+
+async function getThreadData(slug: string, page: number) {
   const thread = await prisma.thread.findUnique({
     where: { slug },
     include: {
@@ -40,7 +42,10 @@ async function getThreadData(slug: string) {
           reactions: { select: { userId: true, type: true } },
         },
         orderBy: { createdAt: "asc" },
+        skip: (page - 1) * POSTS_PER_PAGE,
+        take: POSTS_PER_PAGE,
       },
+      _count: { select: { posts: { where: { deleted: false } } } },
     },
   })
 
@@ -57,9 +62,17 @@ async function getThreadData(slug: string) {
   return thread
 }
 
-export default async function ThreadPage({ params }: { params: Promise<{ slug: string }> }) {
+export default async function ThreadPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ slug: string }>
+  searchParams: Promise<{ page?: string }>
+}) {
   const { slug } = await params
-  const thread = await getThreadData(slug)
+  const { page: pageParam } = await searchParams
+  const page = Math.max(1, Math.min(10_000, parseInt(pageParam || "1") || 1))
+  const thread = await getThreadData(slug, page)
   const session = await getServerSession(authOptions)
   const saved = session?.user?.id
     ? !!(await prisma.bookmark.findUnique({
@@ -172,6 +185,24 @@ export default async function ThreadPage({ params }: { params: Promise<{ slug: s
             )
           })}
         </div>
+
+        {/* Pagination — threads are capped at 50 posts per page */}
+        {(() => {
+          const total = thread._count.posts
+          const totalPages = Math.ceil(total / POSTS_PER_PAGE)
+          if (totalPages <= 1) return null
+          return (
+            <div className="flex items-center justify-center gap-2 mt-6 mb-2 text-sm">
+              {page > 1 && (
+                <Link href={`/forum/thread/${thread.slug}?page=${page - 1}`} className="px-3 py-1.5 rounded-md bg-secondary hover:bg-secondary/70">← Earlier replies</Link>
+              )}
+              <span className="text-muted-foreground">Page {page} of {totalPages}</span>
+              {page < totalPages && (
+                <Link href={`/forum/thread/${thread.slug}?page=${page + 1}`} className="px-3 py-1.5 rounded-md bg-secondary hover:bg-secondary/70">Later replies →</Link>
+              )}
+            </div>
+          )
+        })()}
 
         {/* Reply Form */}
         {!thread.locked && (

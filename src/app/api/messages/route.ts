@@ -12,8 +12,35 @@ export async function GET(request: Request) {
 
   const { searchParams } = new URL(request.url)
   const withId = searchParams.get("with")
+  const after = searchParams.get("after") // ISO timestamp for incremental polling
 
   if (withId) {
+    // Incremental mode: only fetch messages newer than `after` — the
+    // 5s poll then transfers near-empty payloads instead of the whole thread
+    if (after && !isNaN(Date.parse(after))) {
+      const fresh = await prisma.directMessage.findMany({
+        where: {
+          deleted: false,
+          createdAt: { gt: new Date(after) },
+          OR: [
+            { senderId: session.user.id, receiverId: withId },
+            { senderId: withId, receiverId: session.user.id },
+          ],
+        },
+        orderBy: { createdAt: "asc" },
+        take: 50,
+        include: { sender: { select: publicUserSelect } },
+      })
+      // Still mark incoming as read
+      if (fresh.some((m) => m.senderId === withId && !m.read)) {
+        await prisma.directMessage.updateMany({
+          where: { senderId: withId, receiverId: session.user.id, read: false, deleted: false },
+          data: { read: true },
+        })
+      }
+      return NextResponse.json({ messages: fresh, incremental: true })
+    }
+
     // Mark their messages to me as read
     await prisma.directMessage.updateMany({
       where: { senderId: withId, receiverId: session.user.id, read: false, deleted: false },

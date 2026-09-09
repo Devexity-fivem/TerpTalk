@@ -5,7 +5,7 @@ import { Trophy } from "lucide-react"
 import Link from "next/link"
 import ContestBoard from "@/components/contest-board"
 
-export const dynamic = "force-dynamic"
+export const revalidate = 60 // public content, edge-cached
 
 export const metadata = {
   title: "Budshot of the Week",

@@ -4,7 +4,9 @@ import { MessageSquare, Users, Clock, TrendingUp } from "lucide-react"
 import Link from "next/link"
 import RoleBadge from "@/components/role-badge"
 
-export const dynamic = "force-dynamic"
+// Cached at the edge for 60s — this page renders identical content for
+// everyone and is the top traffic target; ISR prevents a DB hit per request.
+export const revalidate = 60
 
 export const metadata = {
   title: "Grower Discussions",

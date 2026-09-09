@@ -2,7 +2,7 @@ import { prisma } from "@/lib/prisma"
 import { Leaf, Plus, Search } from "lucide-react"
 import Link from "next/link"
 
-export const dynamic = "force-dynamic"
+export const revalidate = 60 // public content, edge-cached
 
 export const metadata = {
   title: "Strain Database",

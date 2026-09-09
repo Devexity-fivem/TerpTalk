@@ -30,15 +30,20 @@ export async function POST(request: Request) {
     select: { id: true },
   })
 
-  await prisma.notification.createMany({
-    data: users.map((u) => ({
-      userId: u.id,
-      type: "MODERATOR_ANNOUNCEMENT",
-      title: title.trim(),
-      content: content.trim(),
-      link: link?.trim() || null,
-    })),
-  })
+  // Chunked inserts — a single createMany over a large user base
+  // would blow the query size limit
+  const BATCH = 500
+  for (let i = 0; i < users.length; i += BATCH) {
+    await prisma.notification.createMany({
+      data: users.slice(i, i + BATCH).map((u) => ({
+        userId: u.id,
+        type: "MODERATOR_ANNOUNCEMENT",
+        title: title.trim(),
+        content: content.trim(),
+        link: link?.trim() || null,
+      })),
+    })
+  }
 
   await prisma.moderationAction.create({
     data: {
