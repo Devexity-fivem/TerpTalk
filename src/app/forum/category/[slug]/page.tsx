@@ -160,7 +160,7 @@ export default async function CategoryPage({
                         </span>
                         <span className="flex items-center gap-1">
                           <MessageSquare className="w-4 h-4" />
-                          {thread._count.posts} replies
+                          {thread.replyCount} repl{thread.replyCount === 1 ? "y" : "ies"}
                         </span>
                         <span className="flex items-center gap-1">
                           <Clock className="w-4 h-4" />

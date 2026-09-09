@@ -48,10 +48,9 @@ export async function GET() {
     include: {
       thread: {
         select: {
-          id: true, title: true, slug: true, createdAt: true, deleted: true,
+          id: true, title: true, slug: true, createdAt: true, deleted: true, replyCount: true,
           category: { select: { name: true } },
           author: { select: { profile: { select: { username: true } }, name: true } },
-          _count: { select: { posts: true } },
         },
       },
     },
@@ -65,7 +64,7 @@ export async function GET() {
       slug: b.thread.slug,
       category: b.thread.category.name,
       author: b.thread.author.profile?.username ?? b.thread.author.name,
-      replies: b.thread._count.posts,
+      replies: b.thread.replyCount,
       savedAt: b.createdAt,
     })),
   })

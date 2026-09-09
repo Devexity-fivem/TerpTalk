@@ -48,11 +48,13 @@ export async function GET() {
       where: { authorId: user.id },
       take: 5,
       orderBy: { createdAt: "desc" },
-      include: {
-        category: true,
-        _count: {
-          select: { posts: true },
-        },
+      select: {
+        id: true,
+        title: true,
+        slug: true,
+        createdAt: true,
+        replyCount: true,
+        category: { select: { name: true } },
       },
     })
 

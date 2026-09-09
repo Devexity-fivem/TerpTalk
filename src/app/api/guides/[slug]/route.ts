@@ -48,16 +48,16 @@ export async function PATCH(
     }
 
     // Permission: author, moderator, or established+ community member
-    let canEdit = guide.authorId === session.user.id || isModerator(session.user.role)
-    if (!canEdit) {
-      const user = await prisma.user.findUnique({
-        where: { id: session.user.id },
-        select: { createdAt: true, banned: true, role: true, profile: { select: { reputation: true } } },
-      })
-      if (!user || user.banned) return forbidden()
-      const level = getTrustLevel(user.createdAt, user.profile?.reputation ?? 0)
-      canEdit = ["Established", "Veteran", "Expert"].includes(level) || isModerator(user.role)
-    }
+    const user = await prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: { createdAt: true, banned: true, role: true, profile: { select: { reputation: true } } },
+    })
+    if (!user || user.banned) return forbidden()
+
+    const level = getTrustLevel(user.createdAt, user.profile?.reputation ?? 0)
+    const canEdit = guide.authorId === session.user.id ||
+      isModerator(user.role) ||
+      ["Established", "Veteran", "Expert"].includes(level)
 
     if (!canEdit) {
       return forbidden("You need Established trust or higher to edit guides")

@@ -26,7 +26,7 @@ export async function POST(request: Request) {
       return unauthorized()
     }
 
-    const body = await request.json()
+    const body = await request.json().catch(() => ({}))
     const { title, content, categoryId } = body
 
     if (

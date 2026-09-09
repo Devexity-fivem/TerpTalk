@@ -214,7 +214,7 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
                               {thread.category.name}
                             </span>
                             <span>•</span>
-                            <span>{thread._count.posts} replies</span>
+                            <span>{thread.replyCount} repl{thread.replyCount === 1 ? "y" : "ies"}</span>
                             <span>•</span>
                             <span>{new Date(thread.createdAt).toLocaleDateString()}</span>
                           </div>

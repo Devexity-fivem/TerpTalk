@@ -16,7 +16,7 @@ export async function POST(request: Request) {
       return unauthorized()
     }
 
-    const body = await request.json()
+    const body = await request.json().catch(() => ({}))
     const { content, threadId } = body
 
     if (
@@ -179,6 +179,7 @@ export async function PATCH(request: Request) {
     if (post.authorId !== session.user.id) {
       return forbidden()
     }
+    if (await isBanned(session.user.id)) return forbidden("Your account is suspended")
 
     const updated = await prisma.post.update({
       where: { id },
@@ -210,16 +211,27 @@ export async function DELETE(request: Request) {
 
     const post = await prisma.post.findUnique({
       where: { id },
-      select: { id: true, authorId: true, deleted: true },
+      select: { id: true, authorId: true, deleted: true, threadId: true },
     })
     if (!post || post.deleted) {
       return NextResponse.json({ error: "Post not found" }, { status: 404 })
     }
-    if (post.authorId !== session.user.id && !(await requireModerator())) {
+    const mod = await requireModerator()
+    if (post.authorId !== session.user.id && !mod) {
       return forbidden()
     }
+    if (post.authorId === session.user.id && (await isBanned(session.user.id))) {
+      return forbidden("Your account is suspended")
+    }
 
-    await prisma.post.update({ where: { id }, data: { deleted: true } })
+    await prisma.$transaction(async (tx) => {
+      await tx.post.update({ where: { id }, data: { deleted: true } })
+      const remaining = await tx.post.count({ where: { threadId: post.threadId, deleted: false } })
+      await tx.thread.update({
+        where: { id: post.threadId },
+        data: { replyCount: Math.max(0, remaining - 1) },
+      })
+    })
 
     return NextResponse.json({ deleted: true })
   } catch (error) {

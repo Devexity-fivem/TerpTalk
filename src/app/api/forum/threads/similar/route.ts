@@ -52,8 +52,8 @@ export async function GET(request: Request) {
       slug: true,
       title: true,
       createdAt: true,
+      replyCount: true,
       category: { select: { name: true, slug: true } },
-      _count: { select: { posts: true } },
     },
   })
 

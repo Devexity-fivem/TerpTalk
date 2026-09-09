@@ -55,7 +55,7 @@ interface ProfileData {
     slug: string
     createdAt: string
     category: { name: string }
-    _count: { posts: number }
+    replyCount: number
   }>
   recentDiaries: Array<{
     id: string
@@ -534,7 +534,7 @@ export default function ProfilePage() {
                     <div className="flex items-center gap-2 text-xs text-muted-foreground">
                       <span>{thread.category.name}</span>
                       <span>•</span>
-                      <span>{thread._count.posts} replies</span>
+                      <span>{thread.replyCount} repl{thread.replyCount === 1 ? "y" : "ies"}</span>
                       <span>•</span>
                       <span>{new Date(thread.createdAt).toLocaleDateString()}</span>
                     </div>

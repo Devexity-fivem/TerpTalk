@@ -5,6 +5,13 @@ import { authOptions } from "@/lib/auth"
 import { blockExistsBetween } from "@/lib/security"
 import { getTrustLevel } from "@/lib/security"
 
+function safeUrl(url: string | null | undefined): string | null {
+  if (!url) return null
+  if (/^https?:\/\//i.test(url)) return url
+  if (/^\/\//i.test(url)) return `https:${url}`
+  return `https://${url}`
+}
+
 // GET — public profile by username (safe fields only)
 export async function GET(
   _request: Request,
@@ -98,7 +105,7 @@ export async function GET(
       slug: true,
       createdAt: true,
       category: { select: { name: true } },
-      _count: { select: { posts: true } },
+      replyCount: true,
     },
   })
 
@@ -109,14 +116,14 @@ export async function GET(
       username: profile.username,
       bio: profile.bio,
       location: profile.location,
-      website: profile.website,
+      website: safeUrl(profile.website),
       avatarUrl: profile.avatarUrl,
       growExperience: profile.growExperience,
       favoriteStrain: profile.favoriteStrain,
       growSpace: profile.growSpace,
       businessName: profile.businessName,
       businessType: profile.businessType,
-      businessUrl: profile.businessUrl,
+      businessUrl: safeUrl(profile.businessUrl),
       image: profile.user.image,
       joinDate: profile.joinDate,
       reputation: profile.reputation,

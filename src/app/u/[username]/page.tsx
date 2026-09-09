@@ -42,7 +42,7 @@ interface Thread {
   slug: string
   createdAt: string
   category: { name: string }
-  _count: { posts: number }
+  replyCount: number
 }
 
 export default function PublicProfilePage() {
@@ -202,7 +202,7 @@ export default function PublicProfilePage() {
                   <div className="flex items-center gap-2 text-xs text-muted-foreground">
                     <span>{t.category.name}</span>
                     <span>•</span>
-                    <span>{t._count.posts} replies</span>
+                    <span>{t.replyCount} repl{t.replyCount === 1 ? "y" : "ies"}</span>
                     <span>•</span>
                     <span>{new Date(t.createdAt).toLocaleDateString()}</span>
                   </div>

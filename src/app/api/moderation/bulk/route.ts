@@ -22,6 +22,9 @@ export async function POST(request: Request) {
     if (typeof action !== "string" || !BULK_ACTIONS.has(action)) {
       return NextResponse.json({ error: "Invalid action" }, { status: 400 })
     }
+    if (typeof reason !== "string" || !reason.trim() || reason.length > 500) {
+      return NextResponse.json({ error: "Reason is required (max 500 chars)" }, { status: 400 })
+    }
     if (ids.some((id) => typeof id !== "string" || !id)) {
       return NextResponse.json({ error: "Invalid id" }, { status: 400 })
     }

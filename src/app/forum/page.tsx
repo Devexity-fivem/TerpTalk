@@ -135,7 +135,7 @@ export default async function ForumPage() {
                           </span>
                           <span className="flex items-center gap-1">
                             <MessageSquare className="w-4 h-4" />
-                            {thread._count.posts} replies
+                            {thread.replyCount} repl{thread.replyCount === 1 ? "y" : "ies"}
                           </span>
                           <span className="flex items-center gap-1">
                             <Clock className="w-4 h-4" />
@@ -204,7 +204,7 @@ export default async function ForumPage() {
                   Create New Thread
                 </Link>
                 <Link
-                  href="/forum/search"
+                  href="/search"
                   className="block w-full text-center border border-border px-4 py-2 rounded-lg hover:bg-secondary transition-colors"
                 >
                   Search Forum

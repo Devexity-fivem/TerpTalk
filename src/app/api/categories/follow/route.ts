@@ -29,6 +29,11 @@ export async function POST(request: Request) {
 
     if (await isBanned(session.user.id)) return forbidden("Your account is suspended")
 
+    const category = await prisma.category.findUnique({ where: { id: categoryId } })
+    if (!category) {
+      return NextResponse.json({ error: "Category not found" }, { status: 404 })
+    }
+
     const existing = await prisma.categoryFollow.findUnique({
       where: { userId_categoryId: { userId: session.user.id, categoryId } },
     })

@@ -33,10 +33,11 @@ export async function isBanned(userId: string): Promise<boolean> {
 
 // ─── Anti-spam: link restrictions for new/low-trust users ─────────────
 
-const LINK_RE = /(?:https?:\/\/|www\.)|(?:\b[a-z0-9-]+\.[a-z]{2,}\b)/gi
+const LINK_RE = /(?:https?:\/\/|www\.)|(?:\b[a-z0-9-]+\.[a-z]{2,}\b)/i
 
 /** Returns true if text contains a likely external link. */
 export function containsExternalLink(text: string): boolean {
+  LINK_RE.lastIndex = 0
   return LINK_RE.test(text)
 }
 

@@ -72,7 +72,7 @@ export async function POST(request: Request) {
       )
     }
 
-    const body = await request.json()
+    const body = await request.json().catch(() => ({}))
     const { username, password, captchaId, captchaAnswer, ageVerified, referralCode } = body
 
     if (!username || !password || !captchaId || !captchaAnswer) {

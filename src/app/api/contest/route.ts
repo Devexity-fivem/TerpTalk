@@ -76,6 +76,18 @@ export async function POST(request: Request) {
 
     if (action === "vote") {
       const { entryId } = body
+      if (typeof entryId !== "string" || !entryId) {
+        return NextResponse.json({ error: "Invalid entry id" }, { status: 400 })
+      }
+
+      const rl = await rateLimit(`contest-vote:${session.user.id}`, 20, 60 * 1000)
+      if (!rl.allowed) {
+        await logSecurityEvent("RATE_LIMIT_EXCEEDED", {
+          userId: session.user.id, ip: getClientIp(request), metadata: { endpoint: "contest", action: "vote" },
+        })
+        return NextResponse.json({ error: "Too many attempts" }, { status: 429 })
+      }
+
       const entry = await prisma.contestEntry.findUnique({
         where: { id: entryId },
         select: { id: true, week: true, userId: true },
@@ -86,19 +98,18 @@ export async function POST(request: Request) {
       if (entry.userId === session.user.id) {
         return NextResponse.json({ error: "Can't vote for your own entry" }, { status: 400 })
       }
-      // One vote per week per user
-      const existing = await prisma.contestVote.findFirst({
-        where: { userId: session.user.id, entry: { week: entry.week } },
-        select: { id: true, entryId: true },
+
+      // One vote per week per user, atomically swap
+      const currentWeek = currentWeekKey()
+      const vote = await prisma.$transaction(async (tx) => {
+        await tx.contestVote.deleteMany({
+          where: { userId: session.user.id, entry: { week: currentWeek } },
+        })
+        return tx.contestVote.create({
+          data: { entryId, userId: session.user.id },
+        })
       })
-      if (existing) {
-        await prisma.contestVote.delete({ where: { id: existing!.id } })
-        if (existing!.entryId === entryId) {
-          return NextResponse.json({ voted: false }) // un-vote
-        }
-      }
-      await prisma.contestVote.create({ data: { entryId, userId: session.user.id } })
-      return NextResponse.json({ voted: true })
+      return NextResponse.json({ voted: true, voteId: vote.id })
     }
 
     return NextResponse.json({ error: "Invalid action" }, { status: 400 })

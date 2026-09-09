@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { unauthorized, getClientIp, logSecurityEvent } from "@/lib/security"
+import { unauthorized, forbidden, getClientIp, logSecurityEvent, isBanned } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
 import { awardReputation, REP_POINTS } from "@/lib/reputation"
 
@@ -16,21 +16,21 @@ export async function POST(request: Request) {
       return unauthorized()
     }
 
-    const body = await request.json()
+    if (await isBanned(session.user.id)) return forbidden()
+
+    const body = await request.json().catch(() => ({}))
     const { type, postId, diaryId } = body
 
-    if (typeof type !== "string" || !VALID_REACTION_TYPES.has(type) || (!postId && !diaryId)) {
-      return NextResponse.json(
-        { error: "Invalid request" },
-        { status: 400 }
-      )
-    }
+    const hasPostId = typeof postId === "string" && postId.length > 0
+    const hasDiaryId = typeof diaryId === "string" && diaryId.length > 0
 
-    if (postId && diaryId) {
-      return NextResponse.json(
-        { error: "Reaction can only target one resource" },
-        { status: 400 }
-      )
+    if (
+      typeof type !== "string" ||
+      !VALID_REACTION_TYPES.has(type) ||
+      (!hasPostId && !hasDiaryId) ||
+      (hasPostId && hasDiaryId)
+    ) {
+      return NextResponse.json({ error: "Invalid request" }, { status: 400 })
     }
 
     // Rate limit: 120 reactions per 10 minutes per user
@@ -51,8 +51,8 @@ export async function POST(request: Request) {
     const existingReaction = await prisma.reaction.findFirst({
       where: {
         userId: session.user.id,
-        ...(postId && { postId }),
-        ...(diaryId && { diaryId }),
+        ...(hasPostId ? { postId } : {}),
+        ...(hasDiaryId ? { diaryId } : {}),
       },
     })
 
@@ -75,14 +75,14 @@ export async function POST(request: Request) {
       data: {
         type,
         userId: session.user.id,
-        ...(postId && { postId }),
-        ...(diaryId && { diaryId }),
+        ...(hasPostId ? { postId } : {}),
+        ...(hasDiaryId ? { diaryId } : {}),
       },
     })
 
     // Award the content author for a LIKE (not for self-likes)
     if (type === "LIKE") {
-      const target = postId
+      const target = hasPostId
         ? await prisma.post.findUnique({ where: { id: postId }, select: { authorId: true } })
         : await prisma.growDiary.findUnique({ where: { id: diaryId }, select: { authorId: true } })
       if (target && target.authorId !== session.user.id) {

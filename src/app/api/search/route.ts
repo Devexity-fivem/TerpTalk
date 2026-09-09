@@ -26,9 +26,8 @@ export async function GET(request: Request) {
       take: 10,
       orderBy: { createdAt: "desc" },
       select: {
-        id: true, title: true, slug: true, createdAt: true,
+        id: true, title: true, slug: true, createdAt: true, replyCount: true,
         category: { select: { name: true } },
-        _count: { select: { posts: { where: { deleted: false } } } },
       },
     }),
     prisma.strain.findMany({

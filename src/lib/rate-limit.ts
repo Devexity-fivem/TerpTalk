@@ -11,7 +11,8 @@ import { prisma } from "@/lib/prisma"
 export async function rateLimit(
   key: string,
   limit: number,
-  windowMs: number
+  windowMs: number,
+  failOpen = false
 ): Promise<{ allowed: boolean; remaining: number; retryAfterSeconds: number }> {
   const now = Date.now()
   const expiresAt = new Date(now + windowMs)
@@ -42,10 +43,10 @@ export async function rateLimit(
         : Math.ceil((record.expiresAt.getTime() - now) / 1000),
     }
   } catch (error) {
-    // Fail closed on mutation endpoints would be safer, but failing open
-    // prevents a DB hiccup from breaking the app. Log for monitoring.
+    // Mutations should fail closed by default; reads can opt into fail-open
+    // if they explicitly pass failOpen = true.
     console.error("[rate-limit] error:", error)
-    return { allowed: true, remaining: limit, retryAfterSeconds: 0 }
+    return { allowed: failOpen, remaining: limit, retryAfterSeconds: 0 }
   }
 }
 

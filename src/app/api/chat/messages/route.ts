@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { unauthorized, publicUserSelect, LIMITS, getClientIp, logSecurityEvent, isBanned, forbidden } from "@/lib/security"
+import { unauthorized, publicUserSelect, LIMITS, getClientIp, logSecurityEvent, isBanned, forbidden, isModerator } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
 import { notifyMentions } from "@/lib/mentions"
 import { getPusher } from "@/lib/pusher"
@@ -15,14 +15,29 @@ export async function GET(request: Request) {
       return unauthorized()
     }
 
+    if (await isBanned(session.user.id)) return forbidden("Your account is suspended")
+
     const { searchParams } = new URL(request.url)
     const roomId = searchParams.get("roomId")
 
-    if (!roomId) {
+    if (!roomId || typeof roomId !== "string") {
       return NextResponse.json(
         { error: "Room ID required" },
         { status: 400 }
       )
+    }
+
+    const room = await prisma.chatRoom.findUnique({ where: { id: roomId } })
+    if (!room) {
+      return NextResponse.json({ error: "Room not found" }, { status: 404 })
+    }
+
+    // Public rooms are open; private rooms require moderator access until a membership model exists
+    if (room.isPrivate) {
+      const user = await prisma.user.findUnique({ where: { id: session.user.id }, select: { role: true } })
+      if (!isModerator(user?.role)) {
+        return forbidden("Private room")
+      }
     }
 
     // Get recent messages — or incrementally: ?after=<ISO date> returns only new ones
@@ -63,7 +78,9 @@ export async function POST(request: Request) {
       return unauthorized()
     }
 
-    const body = await request.json()
+    if (await isBanned(session.user.id)) return forbidden("Your account is suspended")
+
+    const body = await request.json().catch(() => ({}))
     const { content, roomId } = body
 
     if (typeof content !== "string" || !content.trim() || typeof roomId !== "string" || !roomId) {
@@ -104,10 +121,6 @@ export async function POST(request: Request) {
         { error: "Room not found" },
         { status: 404 }
       )
-    }
-
-    if (await isBanned(session.user.id)) {
-      return forbidden("Your account is suspended")
     }
 
     // Create message

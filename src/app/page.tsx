@@ -230,7 +230,7 @@ export default async function Home() {
                       <span>•</span>
                       <span>{thread.author.profile?.username || thread.author.name}</span>
                       <span>•</span>
-                      <span>{thread._count.posts} repl{thread._count.posts === 1 ? "y" : "ies"}</span>
+                      <span>{thread.replyCount} repl{thread.replyCount === 1 ? "y" : "ies"}</span>
                     </div>
                   </Link>
                 ))}

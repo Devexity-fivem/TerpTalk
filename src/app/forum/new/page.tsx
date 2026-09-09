@@ -19,7 +19,7 @@ interface SimilarThread {
   title: string
   createdAt: string
   category: { name: string; slug: string }
-  _count: { posts: number }
+  replyCount: number
 }
 
 function NewThreadForm() {
@@ -191,7 +191,7 @@ function NewThreadForm() {
                       >
                         {t.title}
                       </Link>
-                      <span className="text-xs text-muted-foreground ml-2">in {t.category.name} · {t._count.posts - 1} replies</span>
+                      <span className="text-xs text-muted-foreground ml-2">in {t.category.name} · {t.replyCount} repl{t.replyCount === 1 ? "y" : "ies"}</span>
                     </li>
                   ))}
                 </ul>

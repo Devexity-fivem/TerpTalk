@@ -7,7 +7,7 @@ import Link from "next/link"
 import { Search, MessageSquare, Leaf, Dna, User, Loader2, Bookmark } from "lucide-react"
 
 interface Results {
-  threads: { id: string; title: string; slug: string; category: { name: string }; _count: { posts: number } }[]
+  threads: { id: string; title: string; slug: string; category: { name: string }; replyCount: number }[]
   strains: { id: string; name: string; type: string | null; genetics: string | null }[]
   users: { username: string; avatarUrl: string | null; bio: string | null; reputation: number }[]
   diaries: { id: string; title: string; strain: string | null; stage: string; _count: { updates: number } }[]
@@ -86,7 +86,7 @@ export default function SearchResults() {
                 {results.threads.map((t) => (
                   <Link key={t.id} href={`/forum/thread/${t.slug}`} className="block p-3 hover:bg-secondary/50 transition-colors">
                     <div className="font-medium text-sm">{t.title}</div>
-                    <div className="text-xs text-muted-foreground">{t.category.name} · {t._count.posts} replies</div>
+                    <div className="text-xs text-muted-foreground">{t.category.name} · {t.replyCount} repl{t.replyCount === 1 ? "y" : "ies"}</div>
                   </Link>
                 ))}
               </div>

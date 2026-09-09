@@ -42,6 +42,7 @@ async function getThreadData(slug: string, page: number) {
       author: { select: publicUserSelect },
       category: true,
       acceptedAnswer: {
+        where: { deleted: false },
         include: {
           author: { select: publicUserSelect },
           reactions: { select: { userId: true, type: true } },
@@ -89,7 +90,7 @@ export default async function ThreadPage({
     where: { deleted: false, categoryId: thread.categoryId, id: { not: thread.id } },
     take: 5,
     orderBy: { createdAt: "desc" },
-    select: { id: true, slug: true, title: true, _count: { select: { posts: true } } },
+    select: { id: true, slug: true, title: true, replyCount: true },
   })
   const session = await getServerSession(authOptions)
   const saved = session?.user?.id
@@ -134,7 +135,7 @@ export default async function ThreadPage({
       name: "TerpTalk",
       url: baseUrl,
     },
-    answerCount: Math.max(0, thread.posts.length - 1),
+    answerCount: thread.replyCount,
   }
 
   const visiblePosts = thread.acceptedAnswer
@@ -177,7 +178,7 @@ export default async function ThreadPage({
             </span>
             <span className="flex items-center gap-1">
               <MessageSquare className="w-4 h-4" />
-              {Math.max(0, thread.posts.length - 1)} replies
+              {thread.replyCount} repl{thread.replyCount === 1 ? "y" : "ies"}
             </span>
             <span className="flex items-center gap-1">
               <Users className="w-4 h-4" />
@@ -336,7 +337,7 @@ export default async function ThreadPage({
                     className="text-sm hover:text-primary hover:underline"
                   >
                     {t.title}
-                    <span className="ml-2 text-xs text-muted-foreground">({t._count.posts - 1} replies)</span>
+                    <span className="ml-2 text-xs text-muted-foreground">({t.replyCount} repl{t.replyCount === 1 ? "y" : "ies"})</span>
                   </Link>
                 </li>
               ))}

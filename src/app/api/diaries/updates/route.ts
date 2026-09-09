@@ -16,7 +16,7 @@ export async function POST(request: Request) {
       return unauthorized()
     }
 
-    const body = await request.json()
+    const body = await request.json().catch(() => ({}))
     const {
       diaryId,
       title,
@@ -96,7 +96,7 @@ export async function POST(request: Request) {
       where: { id: diaryId },
     })
 
-    if (!diary) {
+    if (!diary || diary.deleted) {
       return NextResponse.json(
         { error: "Diary not found" },
         { status: 404 }

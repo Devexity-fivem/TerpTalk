@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { unauthorized, getClientIp, logSecurityEvent, isBanned, forbidden } from "@/lib/security"
+import { unauthorized, getClientIp, logSecurityEvent, isBanned, forbidden, isModerator } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
 import { awardReputation, REP_POINTS } from "@/lib/reputation"
 import { storeImage } from "@/lib/blob"
@@ -17,7 +17,7 @@ export async function POST(request: Request) {
       return unauthorized()
     }
 
-    const body = await request.json()
+    const body = await request.json().catch(() => ({}))
     const { strainId, kind, image, caption } = body
 
     if (typeof strainId !== "string" || !strainId || !VALID_KINDS.has(kind)) {
@@ -107,8 +107,13 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ error: "Photo not found" }, { status: 404 })
     }
 
-    const role = (session.user as { role?: string }).role
-    if (photo.userId !== session.user.id && role !== "MODERATOR" && role !== "ADMINISTRATOR") {
+    const user = await prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: { role: true, banned: true },
+    })
+    if (!user || user.banned) return forbidden()
+
+    if (photo.userId !== session.user.id && !isModerator(user.role)) {
       return forbidden()
     }
 
