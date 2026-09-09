@@ -47,6 +47,20 @@ export async function GET(request: Request) {
     },
   })
 
+  // One extra query for the Beta Tester badge membership of this page
+  const betaBadge = await prisma.badge.findUnique({
+    where: { name: "Beta Tester" },
+    select: { id: true },
+  })
+  let betaUserIds = new Set<string>()
+  if (betaBadge) {
+    const rows = await prisma.userBadge.findMany({
+      where: { badgeId: betaBadge.id, userId: { in: users.map((u) => u.id) } },
+      select: { userId: true },
+    })
+    betaUserIds = new Set(rows.map((r) => r.userId))
+  }
+
   return NextResponse.json({
     users: users.map((u) => ({
       id: u.id,
@@ -59,20 +73,21 @@ export async function GET(request: Request) {
       reputation: u.profile?.reputation ?? 0,
       referrals: u.profile?._count.referrals ?? 0,
       stats: u._count,
+      isBeta: betaUserIds.has(u.id),
     })),
   })
 }
 
-// PATCH — change a user's role or verification (ADMINISTRATOR only)
-// { userId, role } — admins can't be changed via this endpoint
+// PATCH — change a user's role or beta badge (ADMINISTRATOR only)
+// { userId, role } or { userId, beta: boolean }
 export async function PATCH(request: Request) {
   const admin = await requireAdmin()
   if (!admin) return forbidden()
 
   const body = await request.json().catch(() => ({}))
-  const { userId, role } = body
+  const { userId, role, beta } = body
 
-  if (typeof userId !== "string" || !userId || !ASSIGNABLE_ROLES.has(role)) {
+  if (typeof userId !== "string" || !userId) {
     return NextResponse.json({ error: "Invalid request" }, { status: 400 })
   }
   if (userId === admin.id) {
@@ -90,38 +105,79 @@ export async function PATCH(request: Request) {
     return forbidden("Cannot change an administrator's role")
   }
 
-  await prisma.user.update({ where: { id: userId }, data: { role } })
+  // Role change path
+  if (role !== undefined) {
+    if (!ASSIGNABLE_ROLES.has(role)) {
+      return NextResponse.json({ error: "Invalid role" }, { status: 400 })
+    }
 
-  await prisma.moderationAction.create({
-    data: {
-      type: "ROLE_CHANGE",
-      reason: `Role changed: ${target.role} → ${role}`,
-      targetUserId: userId,
-      moderatorId: admin.id,
-    },
-  })
+    await prisma.user.update({ where: { id: userId }, data: { role } })
 
-  await prisma.notification.create({
-    data: {
-      userId,
-      type: "MODERATOR_ANNOUNCEMENT",
-      title: "Role updated",
-      content:
-        role === "MODERATOR"
-          ? "You've been promoted to Moderator. You can now access the moderation queue."
-          : role === "ADMINISTRATOR"
-            ? "You've been promoted to Administrator. You now have full admin access."
-            : role === "VERIFIED_MEMBER"
-              ? "Your account has been verified by the team."
-              : "Your staff role has been removed.",
-    },
-  }).catch(() => {})
+    await prisma.moderationAction.create({
+      data: {
+        type: "ROLE_CHANGE",
+        reason: `Role changed: ${target.role} → ${role}`,
+        targetUserId: userId,
+        moderatorId: admin.id,
+      },
+    })
 
-  await logSecurityEvent("SUSPICIOUS_ACTIVITY", {
-    userId: admin.id,
-    ip: getClientIp(request),
-    metadata: { adminAction: "role_change", targetUserId: userId, newRole: role },
-  })
+    await prisma.notification.create({
+      data: {
+        userId,
+        type: "MODERATOR_ANNOUNCEMENT",
+        title: "Role updated",
+        content:
+          role === "MODERATOR"
+            ? "You've been promoted to Moderator. You can now access the moderation queue."
+            : role === "ADMINISTRATOR"
+              ? "You've been promoted to Administrator. You now have full admin access."
+              : role === "VERIFIED_MEMBER"
+                ? "Your account has been verified by the team."
+                : "Your staff role has been removed.",
+      },
+    }).catch(() => {})
 
-  return NextResponse.json({ ok: true })
+    await logSecurityEvent("SUSPICIOUS_ACTIVITY", {
+      userId: admin.id,
+      ip: getClientIp(request),
+      metadata: { adminAction: "role_change", targetUserId: userId, newRole: role },
+    })
+
+    return NextResponse.json({ ok: true })
+  }
+
+  // Beta badge toggle path
+  if (typeof beta === "boolean") {
+    const badge = await prisma.badge.upsert({
+      where: { name: "Beta Tester" },
+      create: {
+        name: "Beta Tester",
+        description: "Joined TerpTalk during the beta and helped shape the community.",
+        icon: "🌱",
+        requirement: "Early access member",
+      },
+      update: {},
+    })
+
+    if (beta) {
+      await prisma.userBadge.upsert({
+        where: { userId_badgeId: { userId, badgeId: badge.id } },
+        create: { userId, badgeId: badge.id },
+        update: {},
+      })
+    } else {
+      await prisma.userBadge.deleteMany({ where: { userId, badgeId: badge.id } })
+    }
+
+    await logSecurityEvent("SUSPICIOUS_ACTIVITY", {
+      userId: admin.id,
+      ip: getClientIp(request),
+      metadata: { adminAction: "beta_badge", targetUserId: userId, awarded: beta },
+    })
+
+    return NextResponse.json({ ok: true, isBeta: beta })
+  }
+
+  return NextResponse.json({ error: "Invalid request" }, { status: 400 })
 }

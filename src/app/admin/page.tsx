@@ -5,7 +5,7 @@ import { useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
 import {
   ShieldCheck, Loader2, Users as UsersIcon,
-  Megaphone, ShieldAlert, Ban, UserCheck, Search, Percent,
+  Megaphone, ShieldAlert, Ban, UserCheck, Search, Percent, Award,
 } from "lucide-react"
 import Link from "next/link"
 import AdminAffiliates from "@/components/admin-affiliates"
@@ -21,6 +21,7 @@ interface AdminUser {
   bannedReason: string | null; joined: string; lastSeen: string | null
   reputation: number; referrals: number
   stats: { posts: number; threadCreator: number; diaryCreator: number; reports: number }
+  isBeta: boolean
 }
 interface SecEvent {
   id: string; type: string; user: string; metadata: string | null; createdAt: string
@@ -102,6 +103,20 @@ export default function AdminPage() {
         body: JSON.stringify({ userId, role: newRole }),
       })
       if (res.ok) { loadUsers(); flash("Role updated") }
+      else { const d = await res.json(); setError(d.error || "Failed") }
+    } finally { setBusy(null) }
+  }
+
+  const toggleBeta = async (userId: string, isBeta: boolean) => {
+    setBusy(userId)
+    setError("")
+    try {
+      const res = await fetch("/api/admin/users", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId, beta: !isBeta }),
+      })
+      if (res.ok) { loadUsers(); flash(isBeta ? "Beta badge removed" : "Beta badge awarded") }
       else { const d = await res.json(); setError(d.error || "Failed") }
     } finally { setBusy(null) }
   }
@@ -251,6 +266,7 @@ export default function AdminPage() {
                       {u.role === "ADMINISTRATOR" && <span className="text-[10px] px-1.5 py-0.5 bg-amber-500/15 text-amber-500 rounded font-semibold">ADMIN</span>}
                       {u.role === "MODERATOR" && <span className="text-[10px] px-1.5 py-0.5 bg-blue-500/15 text-blue-500 rounded font-semibold">MOD</span>}
                       {u.role === "VERIFIED_MEMBER" && <span className="text-[10px] px-1.5 py-0.5 bg-primary/15 text-primary rounded font-semibold">VERIFIED</span>}
+                      {u.isBeta && <span className="text-[10px] px-1.5 py-0.5 bg-purple-500/15 text-purple-500 rounded font-semibold">BETA</span>}
                       {u.banned && <span className="text-[10px] px-1.5 py-0.5 bg-destructive/15 text-destructive rounded font-semibold">BANNED</span>}
                     </div>
                     <div className="text-xs text-muted-foreground mt-1">
@@ -286,6 +302,17 @@ export default function AdminPage() {
                         className="px-2.5 py-1.5 text-xs bg-amber-500/10 text-amber-500 rounded-lg hover:bg-amber-500/20 disabled:opacity-50">
                         Make Admin
                       </button>
+                      {u.isBeta ? (
+                        <button onClick={() => toggleBeta(u.id, true)} disabled={busy === u.id}
+                          className="px-2.5 py-1.5 text-xs bg-secondary rounded-lg hover:bg-secondary/80 disabled:opacity-50 flex items-center gap-1">
+                          <Award className="w-3 h-3" /> Remove Beta
+                        </button>
+                      ) : (
+                        <button onClick={() => toggleBeta(u.id, false)} disabled={busy === u.id}
+                          className="px-2.5 py-1.5 text-xs bg-purple-500/10 text-purple-500 rounded-lg hover:bg-purple-500/20 disabled:opacity-50 flex items-center gap-1">
+                          <Award className="w-3 h-3" /> Beta Tester
+                        </button>
+                      )}
                       {u.banned ? (
                         <button onClick={() => banUser(u.id, true)} disabled={busy === u.id}
                           className="px-2.5 py-1.5 text-xs bg-primary/10 text-primary rounded-lg hover:bg-primary/20 disabled:opacity-50">
