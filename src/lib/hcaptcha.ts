@@ -6,6 +6,8 @@ export interface HCaptchaVerifyResult {
   "error-codes"?: string[]
 }
 
+const HCAPTCHA_SITE_KEY = process.env.NEXT_PUBLIC_HCAPTCHA_SITE_KEY || "0504ab56-5d20-4ae2-abe0-f444d09edeea"
+
 export async function verifyHcaptcha(token: string, remoteIp?: string): Promise<HCaptchaVerifyResult> {
   const secret = process.env.HCAPTCHA_SECRET_KEY
   if (!secret) {
@@ -15,6 +17,7 @@ export async function verifyHcaptcha(token: string, remoteIp?: string): Promise<
   const params = new URLSearchParams({
     secret,
     response: token,
+    sitekey: HCAPTCHA_SITE_KEY,
     ...(remoteIp ? { remoteip: remoteIp } : {}),
   })
 
