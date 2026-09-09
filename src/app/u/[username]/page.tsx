@@ -150,7 +150,7 @@ export default function PublicProfilePage() {
                     <span
                       key={b.name}
                       title={b.description}
-                      className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-amber-500/10 text-amber-500 border border-amber-500/20 rounded-full text-xs font-medium"
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-amber-500/15 text-amber-400 border border-amber-500/30 rounded-full text-xs font-medium"
                     >
                       {b.icon && <BadgeIcon icon={b.icon} name={b.name} />}
                       {b.name}

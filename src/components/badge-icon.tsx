@@ -8,7 +8,7 @@ export function BadgeIcon({ icon, name }: { icon: string | null; name: string })
         alt={name}
         width={20}
         height={20}
-        className="inline-block w-5 h-5 object-contain"
+        className="inline-block w-5 h-5 object-contain invert drop-shadow-sm"
         loading="lazy"
       />
     )
