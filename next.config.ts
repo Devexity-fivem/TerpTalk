@@ -18,7 +18,7 @@ const securityHeaders = [
     key: "Content-Security-Policy",
     value: [
       "default-src 'self'",
-      `script-src 'self'${process.env.NODE_ENV === "development" ? " 'unsafe-eval' 'unsafe-inline'" : ""}`,
+      `script-src 'self' 'unsafe-inline'${process.env.NODE_ENV === "development" ? " 'unsafe-eval'" : ""}`,
       "style-src 'self' 'unsafe-inline'", // required while some pages use inline styles; review migrating to Tailwind utilities
       "img-src 'self' data: blob: https:", // relies on API-validated image URLs; consider allow-listing blob host + iconify in future
       "font-src 'self' data:",
