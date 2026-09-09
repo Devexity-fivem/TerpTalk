@@ -114,11 +114,13 @@ model Thread {
   views      Int      @default(0)
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
+  acceptedAnswerId String? @unique
 
   category   Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
   author     User     @relation("ThreadAuthor", fields: [authorId], references: [id], onDelete: Cascade)
   posts      Post[]
   bookmarks  Bookmark[]
+  acceptedAnswer Post?  @relation("ThreadAcceptedAnswer", fields: [acceptedAnswerId], references: [id], onDelete: SetNull)
 
   @@index([categoryId])
   @@index([authorId])
@@ -140,6 +142,7 @@ model Post {
   thread    Thread   @relation(fields: [threadId], references: [id], onDelete: Cascade)
   author    User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
   reactions Reaction[]
+  acceptedAnswerFor Thread? @relation("ThreadAcceptedAnswer")
 
   @@index([threadId])
   @@index([authorId])

@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma"
-import { publicUserSelect } from "@/lib/security"
+import { publicUserSelect, isModerator } from "@/lib/security"
 import { notFound } from "next/navigation"
-import { MessageSquare, Users, Clock } from "lucide-react"
+import { MessageSquare, Users, Clock, CheckCircle2 } from "lucide-react"
 import Link from "next/link"
 import ReplyForm from "@/components/reply-form"
 import PostActions from "@/components/post-actions"
@@ -15,6 +15,7 @@ import { authOptions } from "@/lib/auth"
 import { buildMetadata, snippet } from "@/lib/seo"
 import { Breadcrumbs } from "@/components/breadcrumbs"
 import { JsonLd } from "@/components/json-ld"
+import { AcceptAnswerButton } from "@/components/accept-answer-button"
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params
@@ -40,6 +41,12 @@ async function getThreadData(slug: string, page: number) {
     include: {
       author: { select: publicUserSelect },
       category: true,
+      acceptedAnswer: {
+        include: {
+          author: { select: publicUserSelect },
+          reactions: { select: { userId: true, type: true } },
+        },
+      },
       posts: {
         where: { deleted: false },
         include: {
@@ -86,6 +93,11 @@ export default async function ThreadPage({
       }))
     : false
 
+  const currentUserId = session?.user?.id
+  const canSetAnswer = !!currentUserId && (
+    currentUserId === thread.authorId || isModerator(session?.user?.role)
+  ) && !thread.locked
+
   const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://terp-talk.vercel.app"
   const canonical = `${baseUrl}/forum/thread/${thread.slug}`
 
@@ -116,7 +128,14 @@ export default async function ThreadPage({
       name: "TerpTalk",
       url: baseUrl,
     },
+    answerCount: Math.max(0, thread.posts.length - 1),
   }
+
+  const visiblePosts = thread.acceptedAnswer
+    ? thread.posts.filter((p) => p.id !== thread.acceptedAnswer!.id)
+    : thread.posts
+
+  const acceptedPost = thread.acceptedAnswer
 
   return (
     <div className="min-h-screen bg-background">
@@ -163,15 +182,67 @@ export default async function ThreadPage({
           </div>
         </div>
 
+        {/* Accepted answer */}
+        {acceptedPost && (
+          <div className="bg-card rounded-lg border-2 border-green-500/50 p-6 mb-6 ring-1 ring-green-500/20">
+            <div className="flex items-center gap-2 text-green-400 text-sm font-medium mb-4">
+              <CheckCircle2 className="w-4 h-4" />
+              <span>Accepted answer</span>
+            </div>
+            <div className="flex items-start gap-4">
+              <div className="flex-shrink-0">
+                <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center">
+                  <Users className="w-6 h-6 text-primary" />
+                </div>
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between mb-2 gap-2">
+                  <div className="min-w-0">
+                    <Link
+                      href={`/u/${acceptedPost.author.profile?.username || acceptedPost.author.name}`}
+                      className="font-semibold hover:text-primary truncate"
+                    >
+                      {acceptedPost.author.profile?.username || acceptedPost.author.name}
+                    </Link>
+                    <RoleBadge role={acceptedPost.author.role} />
+                  </div>
+                  <span className="text-sm text-muted-foreground shrink-0">
+                    {new Date(acceptedPost.createdAt).toLocaleString()}
+                  </span>
+                </div>
+                <div className="prose prose-invert max-w-none mb-4">
+                  <PostContent content={acceptedPost.content} authorRole={acceptedPost.author.role} pagePath={`/forum/thread/${thread.slug}`} />
+                </div>
+                <div className="flex flex-wrap items-center gap-3">
+                  <PostActions
+                    postId={acceptedPost.id}
+                    authorId={acceptedPost.author.id}
+                    initialContent={acceptedPost.content}
+                    initialLikeCount={acceptedPost.reactions.filter((r) => r.type === "LIKE").length}
+                  />
+                  <AcceptAnswerButton
+                    postId={acceptedPost.id}
+                    threadId={thread.id}
+                    isAnswer
+                    canAccept={canSetAnswer}
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Posts */}
         <div className="space-y-6">
-          {thread.posts.map((post, index) => {
+          {visiblePosts.map((post, index) => {
             const likeCount = post.reactions.filter((r) => r.type === "LIKE").length
+            const isOp = index === 0
+            const eligibleForAnswer = !isOp && post.authorId !== thread.authorId
             return (
               <div
                 key={post.id}
                 className={`bg-card rounded-lg border border-border p-6 ${
-                  index === 0 ? "ring-2 ring-primary/20" : ""
+                  isOp ? "ring-2 ring-primary/20" : ""
                 }`}
               >
                 <div className="flex items-start gap-4">
@@ -190,7 +261,7 @@ export default async function ThreadPage({
                           {post.author.profile?.username || post.author.name}
                         </Link>
                         <RoleBadge role={post.author.role} />
-                        {index === 0 && (
+                        {isOp && (
                           <span className="ml-2 text-xs text-muted-foreground">(Original Poster)</span>
                         )}
                         {post.edited && (
@@ -204,12 +275,22 @@ export default async function ThreadPage({
                     <div className="prose prose-invert max-w-none mb-4">
                       <PostContent content={post.content} authorRole={post.author.role} pagePath={`/forum/thread/${thread.slug}`} />
                     </div>
-                    <PostActions
-                      postId={post.id}
-                      authorId={post.author.id}
-                      initialContent={post.content}
-                      initialLikeCount={likeCount}
-                    />
+                    <div className="flex flex-wrap items-center gap-3">
+                      <PostActions
+                        postId={post.id}
+                        authorId={post.author.id}
+                        initialContent={post.content}
+                        initialLikeCount={likeCount}
+                      />
+                      {eligibleForAnswer && (
+                        <AcceptAnswerButton
+                          postId={post.id}
+                          threadId={thread.id}
+                          isAnswer={false}
+                          canAccept={canSetAnswer}
+                        />
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
