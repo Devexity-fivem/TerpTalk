@@ -29,6 +29,7 @@
     "pusher-js": "^8.4.0",
     "react": "19.2.8",
     "react-dom": "19.2.8",
+    "react-google-recaptcha": "^3.1.0",
     "recharts": "^3.2.1"
   },
   "overrides": {
@@ -41,6 +42,7 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@types/react-google-recaptcha": "^2.1.9",
     "eslint": "^9",
     "eslint-config-next": "16.3.4",
     "tailwindcss": "^4",

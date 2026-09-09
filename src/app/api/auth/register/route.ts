@@ -11,6 +11,7 @@ import {
   logSecurityEvent,
 } from "@/lib/security"
 import { awardReputation, REP_POINTS } from "@/lib/reputation"
+import { verifyRecaptcha } from "@/lib/recaptcha"
 
 export async function POST(request: Request) {
   const ip = getClientIp(request)
@@ -33,42 +34,34 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json().catch(() => ({}))
-    const { username, password, ageVerified, referralCode, website, formStart } = body
+    const { username, password, ageVerified, referralCode, recaptchaToken } = body
 
-    if (!username || !password) {
+    if (!username || !password || !recaptchaToken) {
       return NextResponse.json(
         { error: "Missing required fields" },
         { status: 400 }
       )
     }
 
-    // Honeypot — must be empty
-    if (website) {
-      await logSecurityEvent("REGISTRATION_FAILED", {
-        ip,
-        userAgent,
-        metadata: { reason: "honeypot" },
-      })
+    // Verify reCAPTCHA token
+    try {
+      const recaptcha = await verifyRecaptcha(recaptchaToken, ip)
+      if (!recaptcha.success) {
+        await logSecurityEvent("REGISTRATION_FAILED", {
+          ip,
+          userAgent,
+          metadata: { reason: "recaptcha" },
+        })
+        return NextResponse.json(
+          { error: "Security check failed. Please try again." },
+          { status: 400 }
+        )
+      }
+    } catch (error) {
+      console.error("reCAPTCHA verification error:", error)
       return NextResponse.json(
-        { error: "Registration failed" },
-        { status: 400 }
-      )
-    }
-
-    // Time gating — reject forms completed too fast or too stale
-    const started = Number(formStart)
-    const now = Date.now()
-    const minMs = 3000
-    const maxMs = 30 * 60 * 1000
-    if (!started || Number.isNaN(started) || now - started < minMs || now - started > maxMs) {
-      await logSecurityEvent("REGISTRATION_FAILED", {
-        ip,
-        userAgent,
-        metadata: { reason: "time_gate" },
-      })
-      return NextResponse.json(
-        { error: "Invalid or expired security check" },
-        { status: 400 }
+        { error: "Security check unavailable. Please try again." },
+        { status: 500 }
       )
     }
 

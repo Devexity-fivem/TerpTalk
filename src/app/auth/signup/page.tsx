@@ -1,13 +1,16 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useRef } from "react"
 import { signIn } from "next-auth/react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
+import ReCAPTCHA from "react-google-recaptcha"
 import { Leaf, Loader2 } from "lucide-react"
 
 export default function SignUpPage() {
   const router = useRouter()
+  const recaptchaRef = useRef<ReCAPTCHA>(null)
+  const [recaptchaToken, setRecaptchaToken] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
   const [formData, setFormData] = useState(() => {
@@ -20,8 +23,6 @@ export default function SignUpPage() {
       password: "",
       confirmPassword: "",
       ageVerified: false,
-      website: "",
-      formStart: Date.now(),
     }
   })
 
@@ -34,8 +35,8 @@ export default function SignUpPage() {
       return
     }
 
-    if (formData.website) {
-      setError("Registration failed")
+    if (!recaptchaToken) {
+      setError("Please complete the security check")
       return
     }
 
@@ -60,8 +61,7 @@ export default function SignUpPage() {
           password: formData.password,
           ageVerified: formData.ageVerified,
           referralCode: formData.referralCode,
-          website: formData.website,
-          formStart: formData.formStart,
+          recaptchaToken,
         }),
       })
 
@@ -85,6 +85,8 @@ export default function SignUpPage() {
       router.push("/profile/complete")
     } catch (error: unknown) {
       setError((error as Error).message)
+      recaptchaRef.current?.reset()
+      setRecaptchaToken(null)
     } finally {
       setLoading(false)
     }
@@ -166,21 +168,11 @@ export default function SignUpPage() {
             />
           </div>
 
-          {/* Honeypot field — must be left blank */}
-          <div className="absolute -left-[9999px] w-0 h-0 overflow-hidden" aria-hidden="true">
-            <input
-              id="website"
-              name="website"
-              type="text"
-              tabIndex={-1}
-              autoComplete="off"
-              value={formData.website}
-              onChange={(e) => setFormData({ ...formData, website: e.target.value })}
-              className="w-0 h-0"
-            />
-          </div>
-
-          <input type="hidden" name="formStart" value={formData.formStart} readOnly />
+          <ReCAPTCHA
+            ref={recaptchaRef}
+            sitekey={process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY || ""}
+            onChange={(token) => setRecaptchaToken(token)}
+          />
 
           <div className="flex items-center">
             <input
