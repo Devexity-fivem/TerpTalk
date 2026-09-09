@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import { useSession } from "next-auth/react"
 import { useParams } from "next/navigation"
-import { User, MessageSquare, Loader2, MapPin, Globe, Sprout, Dna, Leaf } from "lucide-react"
+import { User, MessageSquare, Loader2, MapPin, Globe, Sprout, Dna, Leaf, Store } from "lucide-react"
 import Link from "next/link"
 import UserActions from "@/components/user-actions"
 import RoleBadge from "@/components/role-badge"
@@ -19,6 +19,9 @@ interface PublicProfile {
   growExperience: string | null
   favoriteStrain: string | null
   growSpace: string | null
+  businessName: string | null
+  businessType: string | null
+  businessUrl: string | null
   image: string | null
   joinDate: string
   reputation: number
@@ -123,6 +126,20 @@ export default function PublicProfilePage() {
                 </div>
                 {session && session.user?.id !== profile.id && (
                   <UserActions userId={profile.id} username={profile.username} initiallyBlocked={viewerBlocked} initiallyFollowing={viewerFollowing} />
+                )}
+                {profile.businessName && (
+                  <div className="mt-4 p-3 bg-primary/5 rounded-lg border border-primary/20">
+                    <div className="flex items-center gap-2 text-sm font-medium">
+                      <Store className="w-4 h-4 text-primary" />
+                      <span>{profile.businessName}</span>
+                      {profile.businessType && <span className="text-xs text-muted-foreground">({profile.businessType})</span>}
+                    </div>
+                    {profile.businessUrl && (
+                      <a href={profile.businessUrl} target="_blank" rel="noopener noreferrer nofollow" className="text-xs text-primary hover:underline">
+                        {profile.businessUrl.replace(/^https?:\/\//, "").slice(0, 40)}
+                      </a>
+                    )}
+                  </div>
                 )}
               </div>
               <div className="flex gap-6 mt-4">

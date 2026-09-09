@@ -126,6 +126,9 @@ export async function PATCH(request: Request) {
       growExperience,
       favoriteStrain,
       growSpace,
+      businessName,
+      businessType,
+      businessUrl,
     } = body
 
     // Validate avatar — https URL, or data URI from client-side image upload (max ~200KB encoded)
@@ -161,6 +164,20 @@ export async function PATCH(request: Request) {
     }
     // Avatar validation above already restricts to https:// or data URI
 
+    const cleanBusinessUrl = clean(businessUrl, 200)
+    if (cleanBusinessUrl && !/^https:\/\/.+/i.test(cleanBusinessUrl)) {
+      return NextResponse.json(
+        { error: "Business URL must be an https:// URL" },
+        { status: 400 }
+      )
+    }
+
+    const BUSINESS_TYPES = new Set(["BREEDER", "VENDOR", "GROW_SHOP", "BRAND"])
+    const cleanBusinessType = typeof businessType === "string" && BUSINESS_TYPES.has(businessType.toUpperCase())
+      ? businessType.toUpperCase()
+      : null
+    const cleanBusinessName = clean(businessName, 80)
+
     const rl = await rateLimit(`profile-update:${session.user.id}`, 20, 60 * 60 * 1000)
     if (!rl.allowed) {
       await logSecurityEvent("RATE_LIMIT_EXCEEDED", {
@@ -179,6 +196,9 @@ export async function PATCH(request: Request) {
         growExperience: clean(growExperience, 50),
         favoriteStrain: clean(favoriteStrain, 100),
         growSpace: clean(growSpace, 100),
+        businessName: cleanBusinessName,
+        businessType: cleanBusinessType,
+        businessUrl: cleanBusinessUrl,
       },
     })
 

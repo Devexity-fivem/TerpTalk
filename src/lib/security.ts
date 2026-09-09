@@ -81,6 +81,9 @@ export const publicUserSelect = {
   profile: {
     select: {
       username: true,
+      businessName: true,
+      businessType: true,
+      businessUrl: true,
     },
   },
 } as const

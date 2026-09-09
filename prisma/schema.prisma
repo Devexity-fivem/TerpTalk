@@ -76,6 +76,9 @@ model Profile {
   referredById String?
   referredBy   Profile?  @relation("ProfileReferrals", fields: [referredById], references: [id])
   referrals    Profile[] @relation("ProfileReferrals")
+  businessName String?
+  businessType String?
+  businessUrl  String?
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([username])

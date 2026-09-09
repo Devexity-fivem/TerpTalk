@@ -25,6 +25,9 @@ export async function GET(
       growExperience: true,
       favoriteStrain: true,
       growSpace: true,
+      businessName: true,
+      businessType: true,
+      businessUrl: true,
       joinDate: true,
       reputation: true,
       user: {
