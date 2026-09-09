@@ -11,7 +11,7 @@ import {
   logSecurityEvent,
 } from "@/lib/security"
 import { awardReputation, REP_POINTS } from "@/lib/reputation"
-import { verifyRecaptcha } from "@/lib/recaptcha"
+import { verifyHcaptcha } from "@/lib/hcaptcha"
 
 export async function POST(request: Request) {
   const ip = getClientIp(request)
@@ -34,23 +34,23 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json().catch(() => ({}))
-    const { username, password, ageVerified, referralCode, recaptchaToken } = body
+    const { username, password, ageVerified, referralCode, captchaToken } = body
 
-    if (!username || !password || !recaptchaToken) {
+    if (!username || !password || !captchaToken) {
       return NextResponse.json(
         { error: "Missing required fields" },
         { status: 400 }
       )
     }
 
-    // Verify reCAPTCHA token (v3 score-based)
+    // Verify hCaptcha token
     try {
-      const recaptcha = await verifyRecaptcha(recaptchaToken, ip)
-      if (!recaptcha.success || (recaptcha.score !== undefined && recaptcha.score < 0.3)) {
+      const captcha = await verifyHcaptcha(captchaToken, ip)
+      if (!captcha.success) {
         await logSecurityEvent("REGISTRATION_FAILED", {
           ip,
           userAgent,
-          metadata: { reason: "recaptcha", score: recaptcha.score },
+          metadata: { reason: "hcaptcha" },
         })
         return NextResponse.json(
           { error: "Security check failed. Please try again." },
@@ -58,7 +58,7 @@ export async function POST(request: Request) {
         )
       }
     } catch (error) {
-      console.error("reCAPTCHA verification error:", error)
+      console.error("hCaptcha verification error:", error)
       return NextResponse.json(
         { error: "Security check unavailable. Please try again." },
         { status: 500 }

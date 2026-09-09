@@ -1,16 +1,18 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useRef } from "react"
 import { signIn } from "next-auth/react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
+import HCaptcha from "@hcaptcha/react-hcaptcha"
 import { Leaf, Loader2 } from "lucide-react"
 
-const RECAPTCHA_SITE_KEY = "6Le-FbMtAAAAAB0IFWqe3WCPtuSyc7irvRLZ4gOK"
+const HCAPTCHA_SITE_KEY = process.env.NEXT_PUBLIC_HCAPTCHA_SITE_KEY || "0504ab56-5d20-4ae2-abe0-f444d09edeea"
 
-function SignUpForm() {
+export default function SignUpPage() {
   const router = useRouter()
-  const [recaptchaReady, setRecaptchaReady] = useState(false)
+  const captchaRef = useRef<HCaptcha>(null)
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
   const [formData, setFormData] = useState(() => {
@@ -26,26 +28,6 @@ function SignUpForm() {
     }
   })
 
-  useEffect(() => {
-    if (typeof window === "undefined" || document.getElementById("recaptcha-v3")) return
-
-    const script = document.createElement("script")
-    script.id = "recaptcha-v3"
-    script.src = `https://www.google.com/recaptcha/api.js?render=${RECAPTCHA_SITE_KEY}`
-    script.async = true
-    script.defer = true
-    script.onload = () => {
-      const grecaptcha = (window as { grecaptcha?: { ready: (cb: () => void) => void } }).grecaptcha
-      if (grecaptcha) {
-        grecaptcha.ready(() => setRecaptchaReady(true))
-      } else {
-        setRecaptchaReady(false)
-      }
-    }
-    script.onerror = () => setRecaptchaReady(false)
-    document.head.appendChild(script)
-  }, [])
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError("")
@@ -55,8 +37,8 @@ function SignUpForm() {
       return
     }
 
-    if (!recaptchaReady) {
-      setError("Security check not ready. Please wait a moment and try again.")
+    if (!captchaToken) {
+      setError("Please complete the security check")
       return
     }
 
@@ -73,21 +55,6 @@ function SignUpForm() {
     setLoading(true)
 
     try {
-      const grecaptcha = (window as { grecaptcha?: { ready: (cb: () => void) => void; execute: (key: string, opts: { action: string }) => Promise<string> } }).grecaptcha
-      if (!grecaptcha) {
-        throw new Error("Security check not ready. Please wait a moment and try again.")
-      }
-
-      const recaptchaToken = await new Promise<string>((resolve, reject) => {
-        grecaptcha.ready(() => {
-          grecaptcha.execute(RECAPTCHA_SITE_KEY, { action: "signup" }).then(resolve).catch(reject)
-        })
-      })
-
-      if (!recaptchaToken) {
-        throw new Error("Security check failed. Please try again.")
-      }
-
       const response = await fetch("/api/auth/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -96,7 +63,7 @@ function SignUpForm() {
           password: formData.password,
           ageVerified: formData.ageVerified,
           referralCode: formData.referralCode,
-          recaptchaToken,
+          captchaToken,
         }),
       })
 
@@ -120,6 +87,8 @@ function SignUpForm() {
       router.push("/profile/complete")
     } catch (error: unknown) {
       setError((error as Error).message)
+      setCaptchaToken(null)
+      captchaRef.current?.resetCaptcha()
     } finally {
       setLoading(false)
     }
@@ -201,6 +170,16 @@ function SignUpForm() {
             />
           </div>
 
+          <HCaptcha
+            ref={captchaRef}
+            sitekey={HCAPTCHA_SITE_KEY}
+            onVerify={(token) => setCaptchaToken(token)}
+            onExpire={() => {
+              setCaptchaToken(null)
+              captchaRef.current?.resetCaptcha()
+            }}
+          />
+
           <div className="flex items-center">
             <input
               id="ageVerified"
@@ -223,7 +202,7 @@ function SignUpForm() {
 
           <button
             type="submit"
-            disabled={loading || !recaptchaReady}
+            disabled={loading}
             className="w-full bg-primary text-primary-foreground py-3 rounded-lg font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >
             {loading ? (
@@ -246,8 +225,4 @@ function SignUpForm() {
       </div>
     </div>
   )
-}
-
-export default function SignUpPage() {
-  return <SignUpForm />
 }
