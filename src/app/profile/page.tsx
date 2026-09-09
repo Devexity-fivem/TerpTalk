@@ -3,7 +3,7 @@
 import { useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
 import { useEffect, useState } from "react"
-import { User, Calendar, Award, MessageSquare, Leaf, Loader2, Download, Trash2, Pencil, MapPin, Globe, Sprout, Dna } from "lucide-react"
+import { User, Calendar, Award, MessageSquare, Leaf, Loader2, Download, Trash2, Pencil, MapPin, Globe, Sprout, Dna, Store } from "lucide-react"
 import { signOut } from "next-auth/react"
 import Link from "next/link"
 import RoleBadge from "@/components/role-badge"
@@ -28,6 +28,9 @@ interface ProfileData {
     growExperience: string | null
     favoriteStrain: string | null
     growSpace: string | null
+    businessName: string | null
+    businessType: string | null
+    businessUrl: string | null
     joinDate: string
     reputation: number
   } | null
@@ -95,6 +98,9 @@ export default function ProfilePage() {
     growExperience: "",
     favoriteStrain: "",
     growSpace: "",
+    businessName: "",
+    businessType: "",
+    businessUrl: "",
   })
 
   useEffect(() => {
@@ -187,6 +193,9 @@ export default function ProfilePage() {
                         growExperience: p?.growExperience || "",
                         favoriteStrain: p?.favoriteStrain || "",
                         growSpace: p?.growSpace || "",
+                        businessName: p?.businessName || "",
+                        businessType: p?.businessType || "",
+                        businessUrl: p?.businessUrl || "",
                       })
                       setEditing(true)
                     }}
@@ -333,6 +342,49 @@ export default function ProfilePage() {
                       placeholder="e.g. Northern Lights"
                       className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                     />
+                  </div>
+                  <div className="col-span-2 border-t border-border pt-4 mt-2">
+                    <h3 className="text-sm font-medium mb-3 flex items-center gap-2">
+                      <Store className="w-4 h-4 text-primary" /> Business / Breeder Profile
+                    </h3>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-sm font-medium mb-1">Business Name</label>
+                        <input
+                          type="text"
+                          value={editForm.businessName}
+                          onChange={(e) => setEditForm({ ...editForm, businessName: e.target.value })}
+                          maxLength={80}
+                          placeholder="e.g. Mephisto Genetics"
+                          className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium mb-1">Business Type</label>
+                        <select
+                          value={editForm.businessType}
+                          onChange={(e) => setEditForm({ ...editForm, businessType: e.target.value })}
+                          className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                        >
+                          <option value="">—</option>
+                          <option value="BREEDER">Breeder</option>
+                          <option value="VENDOR">Vendor</option>
+                          <option value="GROW_SHOP">Grow Shop</option>
+                          <option value="BRAND">Brand</option>
+                        </select>
+                      </div>
+                      <div className="col-span-2">
+                        <label className="block text-sm font-medium mb-1">Business URL</label>
+                        <input
+                          type="url"
+                          value={editForm.businessUrl}
+                          onChange={(e) => setEditForm({ ...editForm, businessUrl: e.target.value })}
+                          maxLength={200}
+                          placeholder="https://..."
+                          className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                        />
+                      </div>
+                    </div>
                   </div>
                 </div>
                 <div className="flex gap-3 pt-2">
