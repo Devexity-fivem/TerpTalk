@@ -35,6 +35,8 @@ interface ProfileData {
     notifyOnReply: boolean
     notifyOnMention: boolean
     notifyOnCategoryFollow: boolean
+    notifyOnMessage: boolean
+    notifyOnComment: boolean
     emailDigestFrequency: string | null
     joinDate: string
     reputation: number
@@ -109,6 +111,8 @@ export default function ProfilePage() {
     notifyOnReply: true,
     notifyOnMention: true,
     notifyOnCategoryFollow: true,
+    notifyOnMessage: true,
+    notifyOnComment: true,
     emailDigestFrequency: "",
   })
 
@@ -208,6 +212,8 @@ export default function ProfilePage() {
                         notifyOnReply: p?.notifyOnReply ?? true,
                         notifyOnMention: p?.notifyOnMention ?? true,
                         notifyOnCategoryFollow: p?.notifyOnCategoryFollow ?? true,
+                        notifyOnMessage: p?.notifyOnMessage ?? true,
+                        notifyOnComment: p?.notifyOnComment ?? true,
                         emailDigestFrequency: p?.emailDigestFrequency || "",
                       })
                       setEditing(true)
@@ -429,6 +435,24 @@ export default function ProfilePage() {
                           className="rounded border-border bg-background text-primary"
                         />
                         Notify me about new threads in followed categories
+                      </label>
+                      <label className="flex items-center gap-2 text-sm">
+                        <input
+                          type="checkbox"
+                          checked={editForm.notifyOnMessage}
+                          onChange={(e) => setEditForm({ ...editForm, notifyOnMessage: e.target.checked })}
+                          className="rounded border-border bg-background text-primary"
+                        />
+                        Notify me about direct messages
+                      </label>
+                      <label className="flex items-center gap-2 text-sm">
+                        <input
+                          type="checkbox"
+                          checked={editForm.notifyOnComment}
+                          onChange={(e) => setEditForm({ ...editForm, notifyOnComment: e.target.checked })}
+                          className="rounded border-border bg-background text-primary"
+                        />
+                        Notify me about comments on my setups and diaries
                       </label>
                       <div className="flex items-center gap-3">
                         <label className="text-sm whitespace-nowrap">Email digest</label>

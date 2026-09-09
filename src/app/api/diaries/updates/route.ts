@@ -205,16 +205,25 @@ export async function POST(request: Request) {
       select: { userId: true },
     })
     if (followers.length > 0) {
-      const authorName = session.user.name || "Someone"
-      await prisma.notification.createMany({
-        data: followers.map((f) => ({
-          userId: f.userId,
-          type: "DIARY_UPDATE",
-          title: "Diary updated",
-          content: `${authorName} added "${update.title.slice(0, 60)}" to "${diary.title.slice(0, 50)}"`,
-          link: `/diaries/${diaryId}`,
-        })),
-      }).catch(() => {})
+      const followerIds = followers.map((f) => f.userId)
+      const profiles = await prisma.profile.findMany({
+        where: { userId: { in: followerIds } },
+        select: { userId: true, notifyOnComment: true },
+      })
+      const allowSet = new Set(profiles.filter((p) => p.notifyOnComment !== false).map((p) => p.userId))
+      const allowed = followers.filter((f) => allowSet.has(f.userId))
+      if (allowed.length > 0) {
+        const authorName = session.user.name || "Someone"
+        await prisma.notification.createMany({
+          data: allowed.map((f) => ({
+            userId: f.userId,
+            type: "DIARY_UPDATE",
+            title: "Diary updated",
+            content: `${authorName} added "${update.title.slice(0, 60)}" to "${diary.title.slice(0, 50)}"`,
+            link: `/diaries/${diaryId}`,
+          })),
+        }).catch(() => {})
+      }
     }
 
     return NextResponse.json({ update }, { status: 201 })

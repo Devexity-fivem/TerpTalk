@@ -134,6 +134,8 @@ export async function PATCH(request: Request) {
       notifyOnReply,
       notifyOnMention,
       notifyOnCategoryFollow,
+      notifyOnMessage,
+      notifyOnComment,
       emailDigestFrequency,
     } = body
 
@@ -213,6 +215,8 @@ export async function PATCH(request: Request) {
         notifyOnReply: typeof notifyOnReply === "boolean" ? notifyOnReply : undefined,
         notifyOnMention: typeof notifyOnMention === "boolean" ? notifyOnMention : undefined,
         notifyOnCategoryFollow: typeof notifyOnCategoryFollow === "boolean" ? notifyOnCategoryFollow : undefined,
+        notifyOnMessage: typeof notifyOnMessage === "boolean" ? notifyOnMessage : undefined,
+        notifyOnComment: typeof notifyOnComment === "boolean" ? notifyOnComment : undefined,
         emailDigestFrequency: cleanDigest,
       },
     })

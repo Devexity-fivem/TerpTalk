@@ -31,7 +31,13 @@ export async function POST(request: Request) {
 
     const setup = await prisma.growSetup.findUnique({
       where: { id: setupId },
-      select: { id: true, title: true, authorId: true, deleted: true },
+      select: {
+        id: true,
+        title: true,
+        authorId: true,
+        deleted: true,
+        author: { select: { profile: { select: { notifyOnComment: true } } } },
+      },
     })
     if (!setup || setup.deleted) {
       return NextResponse.json({ error: "Setup not found" }, { status: 404 })
@@ -43,7 +49,7 @@ export async function POST(request: Request) {
       include: { author: { select: publicUserSelect } },
     })
 
-    if (setup.authorId !== session.user.id) {
+    if (setup.authorId !== session.user.id && setup.author.profile?.notifyOnComment !== false) {
       await prisma.notification.create({
         data: {
           userId: setup.authorId,

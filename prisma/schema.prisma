@@ -84,6 +84,8 @@ model Profile {
   notifyOnReply        Boolean  @default(true)
   notifyOnMention      Boolean  @default(true)
   notifyOnCategoryFollow Boolean @default(true)
+  notifyOnMessage      Boolean  @default(true)
+  notifyOnComment      Boolean  @default(true)
   emailDigestFrequency String?
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 

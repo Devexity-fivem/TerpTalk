@@ -123,7 +123,10 @@ export async function POST(request: Request) {
       return forbidden("You cannot message this user")
     }
 
-    const target = await prisma.user.findUnique({ where: { id: to }, select: { id: true, banned: true } })
+    const target = await prisma.user.findUnique({
+      where: { id: to },
+      select: { id: true, banned: true, profile: { select: { notifyOnMessage: true } } },
+    })
     if (!target || target.banned) {
       return NextResponse.json({ error: "User not found" }, { status: 404 })
     }
@@ -133,15 +136,17 @@ export async function POST(request: Request) {
       include: { sender: { select: publicUserSelect } },
     })
 
-    await prisma.notification.create({
-      data: {
-        userId: to,
-        type: "DIRECT_MESSAGE",
-        title: "New message",
-        content: `${session.user.name || "Someone"} sent you a message`,
-        link: `/messages?with=${session.user.id}`,
-      },
-    }).catch(() => {})
+    if (target.profile?.notifyOnMessage !== false) {
+      await prisma.notification.create({
+        data: {
+          userId: to,
+          type: "DIRECT_MESSAGE",
+          title: "New message",
+          content: `${session.user.name || "Someone"} sent you a message`,
+          link: `/messages?with=${session.user.id}`,
+        },
+      }).catch(() => {})
+    }
 
     return NextResponse.json({ message }, { status: 201 })
   } catch (error) {
