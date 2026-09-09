@@ -6,7 +6,7 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import {
   Leaf, User, LogOut, MessageCircle, Home, Calendar,
-  Settings, Dna, Bell, Shield, Menu, X, Mail, Search, Trophy, BookOpen, Stethoscope, Tag, Award, Calculator,
+  Settings, Dna, Bell, Shield, Menu, X, Mail, Search, Trophy, BookOpen, Stethoscope, Tag, Award, Calculator, Package,
 } from "lucide-react"
 import CannabisLeaf from "@/components/cannabis-leaf"
 
@@ -21,6 +21,7 @@ const NAV_LINKS = [
   { href: "/guides", label: "Guides", icon: BookOpen },
   { href: "/help", label: "Plant Help", icon: Stethoscope },
   { href: "/deals", label: "Deals", icon: Tag },
+  { href: "/marketplace", label: "Marketplace", icon: Package },
   { href: "/leaderboard", label: "Leaderboard", icon: Award },
   { href: "/calculator", label: "Calculator", icon: Calculator },
 ]
@@ -79,6 +80,10 @@ export function Navigation() {
             <Link href="/deals" className={linkClass("/deals")}>
               <Tag className="w-4 h-4" />
               Deals
+            </Link>
+            <Link href="/marketplace" className={linkClass("/marketplace")}>
+              <Package className="w-4 h-4" />
+              Marketplace
             </Link>
             {isMod && (
               <Link href="/moderation" className={`${linkClass("/moderation")} !text-amber-500`}>
