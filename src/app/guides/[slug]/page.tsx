@@ -1,9 +1,13 @@
 import { prisma } from "@/lib/prisma"
 import { notFound } from "next/navigation"
-import { BookOpen } from "lucide-react"
+import { BookOpen, Pencil } from "lucide-react"
+import Link from "next/link"
 import ShareButtons from "@/components/share-buttons"
 import { buildMetadata, snippet } from "@/lib/seo"
 import { Breadcrumbs } from "@/components/breadcrumbs"
+import { getServerSession } from "next-auth"
+import { authOptions } from "@/lib/auth"
+import { isModerator, getTrustLevel } from "@/lib/security"
 
 export const dynamic = "force-dynamic"
 
@@ -22,11 +26,26 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
 
 export default async function GuidePage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params
-  const guide = await prisma.guide.findUnique({
-    where: { slug },
-    include: { author: { select: { name: true, role: true, profile: { select: { username: true } } } } },
-  })
+  const [guide, session] = await Promise.all([
+    prisma.guide.findUnique({
+      where: { slug },
+      include: { author: { select: { name: true, role: true, profile: { select: { username: true } } } } },
+    }),
+    getServerSession(authOptions),
+  ])
   if (!guide || !guide.published) notFound()
+
+  let canEdit = guide.authorId === session?.user?.id || isModerator(session?.user?.role)
+  if (!canEdit && session?.user?.id) {
+    const user = await prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: { createdAt: true, banned: true, role: true, profile: { select: { reputation: true } } },
+    })
+    if (user && !user.banned) {
+      const level = getTrustLevel(user.createdAt, user.profile?.reputation ?? 0)
+      canEdit = ["Established", "Veteran", "Expert"].includes(level) || isModerator(user.role)
+    }
+  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -43,6 +62,14 @@ export default async function GuidePage({ params }: { params: Promise<{ slug: st
             <span>by {guide.author.profile?.username || guide.author.name}</span>
             <span>·</span>
             <span>{new Date(guide.createdAt).toLocaleDateString()}</span>
+            {canEdit && (
+              <>
+                <span>·</span>
+                <Link href={`/guides/${guide.slug}/edit`} className="inline-flex items-center gap-1 text-primary hover:underline">
+                  <Pencil className="w-3 h-3" /> Edit
+                </Link>
+              </>
+            )}
           </div>
           <h1 className="text-3xl font-bold mb-6">{guide.title}</h1>
           <div className="prose prose-invert max-w-none text-foreground whitespace-pre-wrap leading-relaxed">

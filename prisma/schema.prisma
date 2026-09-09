@@ -53,6 +53,7 @@ model User {
   moderatorActions ModerationAction[]
   categoryFollows CategoryFollow[]
   savedSearches  SavedSearch[]
+  guideEdits    GuideEdit[]
   blockedUsers  Block[]              @relation("Blocker")
   blockedBy     Block[]              @relation("Blocked")
 
@@ -661,10 +662,25 @@ model Guide {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  author    User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  author    User       @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  edits     GuideEdit[]
 
   @@index([slug])
   @@index([published])
+}
+
+model GuideEdit {
+  id        String   @id @default(cuid())
+  guideId   String
+  editorId  String
+  content   String
+  createdAt DateTime @default(now())
+
+  guide     Guide    @relation(fields: [guideId], references: [id], onDelete: Cascade)
+  editor    User     @relation(fields: [editorId], references: [id], onDelete: Cascade)
+
+  @@index([guideId])
+  @@index([editorId])
 }
 
 // --- Affiliate System ---
