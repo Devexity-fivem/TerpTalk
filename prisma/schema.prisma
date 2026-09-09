@@ -54,8 +54,6 @@ model User {
   categoryFollows CategoryFollow[]
   savedSearches  SavedSearch[]
   guideEdits    GuideEdit[]
-  listings      Listing[]
-  inquiries     ListingInquiry[]
   blockedUsers  Block[]              @relation("Blocker")
   blockedBy     Block[]              @relation("Blocked")
 
@@ -761,51 +759,4 @@ model Setting {
   key       String   @id
   value     String
   updatedAt DateTime @updatedAt
-}
-
-// Marketplace / gear classifieds
-model Listing {
-  id          String   @id @default(cuid())
-  title       String
-  description String
-  price       Float?
-  condition   String?  // NEW, LIKE_NEW, GOOD, FAIR, PARTS
-  location    String?
-  category    String   // EQUIPMENT, SEEDS, NUTRIENTS, CLOTHING, GEAR, OTHER
-  status      String   @default("ACTIVE") // ACTIVE, SOLD, REMOVED
-  sellerId    String
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  seller      User             @relation(fields: [sellerId], references: [id], onDelete: Cascade)
-  images      ListingImage[]
-  inquiries   ListingInquiry[]
-
-  @@index([status, category])
-  @@index([sellerId])
-  @@index([createdAt])
-}
-
-model ListingImage {
-  id        String  @id @default(cuid())
-  listingId String
-  url       String
-  sortOrder Int     @default(0)
-  listing   Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
-
-  @@index([listingId])
-}
-
-model ListingInquiry {
-  id        String   @id @default(cuid())
-  listingId String
-  senderId  String
-  message   String
-  createdAt DateTime @default(now())
-
-  listing   Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
-  sender    User    @relation(fields: [senderId], references: [id], onDelete: Cascade)
-
-  @@index([listingId])
-  @@index([senderId])
 }
