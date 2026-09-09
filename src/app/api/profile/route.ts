@@ -129,6 +129,10 @@ export async function PATCH(request: Request) {
       businessName,
       businessType,
       businessUrl,
+      notifyOnReply,
+      notifyOnMention,
+      notifyOnCategoryFollow,
+      emailDigestFrequency,
     } = body
 
     // Validate avatar — https URL, or data URI from client-side image upload (max ~200KB encoded)
@@ -178,6 +182,11 @@ export async function PATCH(request: Request) {
       : null
     const cleanBusinessName = clean(businessName, 80)
 
+    const DIGEST_OPTIONS = new Set(["DAILY", "WEEKLY", "NEVER"])
+    const cleanDigest = typeof emailDigestFrequency === "string" && DIGEST_OPTIONS.has(emailDigestFrequency.toUpperCase())
+      ? emailDigestFrequency.toUpperCase()
+      : null
+
     const rl = await rateLimit(`profile-update:${session.user.id}`, 20, 60 * 60 * 1000)
     if (!rl.allowed) {
       await logSecurityEvent("RATE_LIMIT_EXCEEDED", {
@@ -199,6 +208,10 @@ export async function PATCH(request: Request) {
         businessName: cleanBusinessName,
         businessType: cleanBusinessType,
         businessUrl: cleanBusinessUrl,
+        notifyOnReply: typeof notifyOnReply === "boolean" ? notifyOnReply : undefined,
+        notifyOnMention: typeof notifyOnMention === "boolean" ? notifyOnMention : undefined,
+        notifyOnCategoryFollow: typeof notifyOnCategoryFollow === "boolean" ? notifyOnCategoryFollow : undefined,
+        emailDigestFrequency: cleanDigest,
       },
     })
 

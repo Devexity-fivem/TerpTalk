@@ -31,6 +31,10 @@ interface ProfileData {
     businessName: string | null
     businessType: string | null
     businessUrl: string | null
+    notifyOnReply: boolean
+    notifyOnMention: boolean
+    notifyOnCategoryFollow: boolean
+    emailDigestFrequency: string | null
     joinDate: string
     reputation: number
   } | null
@@ -101,6 +105,10 @@ export default function ProfilePage() {
     businessName: "",
     businessType: "",
     businessUrl: "",
+    notifyOnReply: true,
+    notifyOnMention: true,
+    notifyOnCategoryFollow: true,
+    emailDigestFrequency: "",
   })
 
   useEffect(() => {
@@ -196,6 +204,10 @@ export default function ProfilePage() {
                         businessName: p?.businessName || "",
                         businessType: p?.businessType || "",
                         businessUrl: p?.businessUrl || "",
+                        notifyOnReply: p?.notifyOnReply ?? true,
+                        notifyOnMention: p?.notifyOnMention ?? true,
+                        notifyOnCategoryFollow: p?.notifyOnCategoryFollow ?? true,
+                        emailDigestFrequency: p?.emailDigestFrequency || "",
                       })
                       setEditing(true)
                     }}
@@ -383,6 +395,52 @@ export default function ProfilePage() {
                           placeholder="https://..."
                           className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                         />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="col-span-2 border-t border-border pt-4 mt-2">
+                    <h3 className="text-sm font-medium mb-3">Notifications</h3>
+                    <div className="space-y-3">
+                      <label className="flex items-center gap-2 text-sm">
+                        <input
+                          type="checkbox"
+                          checked={editForm.notifyOnReply}
+                          onChange={(e) => setEditForm({ ...editForm, notifyOnReply: e.target.checked })}
+                          className="rounded border-border bg-background text-primary"
+                        />
+                        Notify me when someone replies to my thread
+                      </label>
+                      <label className="flex items-center gap-2 text-sm">
+                        <input
+                          type="checkbox"
+                          checked={editForm.notifyOnMention}
+                          onChange={(e) => setEditForm({ ...editForm, notifyOnMention: e.target.checked })}
+                          className="rounded border-border bg-background text-primary"
+                        />
+                        Notify me when I am mentioned
+                      </label>
+                      <label className="flex items-center gap-2 text-sm">
+                        <input
+                          type="checkbox"
+                          checked={editForm.notifyOnCategoryFollow}
+                          onChange={(e) => setEditForm({ ...editForm, notifyOnCategoryFollow: e.target.checked })}
+                          className="rounded border-border bg-background text-primary"
+                        />
+                        Notify me about new threads in followed categories
+                      </label>
+                      <div className="flex items-center gap-3">
+                        <label className="text-sm whitespace-nowrap">Email digest</label>
+                        <select
+                          value={editForm.emailDigestFrequency}
+                          onChange={(e) => setEditForm({ ...editForm, emailDigestFrequency: e.target.value })}
+                          className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                        >
+                          <option value="">—</option>
+                          <option value="DAILY">Daily</option>
+                          <option value="WEEKLY">Weekly</option>
+                          <option value="NEVER">Never</option>
+                        </select>
                       </div>
                     </div>
                   </div>

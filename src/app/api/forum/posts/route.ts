@@ -109,17 +109,23 @@ export async function POST(request: Request) {
       `Replied in "${thread.title.slice(0, 60)}"`
     ).catch(() => {})
 
-    // Notify the thread author (if not self-reply)
+    // Notify the thread author (if not self-reply and they haven't opted out)
     if (thread.authorId !== session.user.id) {
-      await prisma.notification.create({
-        data: {
-          type: "REPLY",
-          userId: thread.authorId,
-          title: "New reply to your thread",
-          content: `Someone replied to "${thread.title.slice(0, 80)}"`,
-          link: `/forum/thread/${thread.slug}`,
-        },
-      }).catch(() => {})
+      const authorPrefs = await prisma.profile.findUnique({
+        where: { userId: thread.authorId },
+        select: { notifyOnReply: true },
+      })
+      if (authorPrefs?.notifyOnReply !== false) {
+        await prisma.notification.create({
+          data: {
+            type: "REPLY",
+            userId: thread.authorId,
+            title: "New reply to your thread",
+            content: `Someone replied to "${thread.title.slice(0, 80)}"`,
+            link: `/forum/thread/${thread.slug}`,
+          },
+        }).catch(() => {})
+      }
     }
 
     // Notify @mentions in the reply

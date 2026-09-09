@@ -146,12 +146,18 @@ export async function POST(request: Request) {
     // Notify category followers (one notification per follower)
     const followers = await prisma.categoryFollow.findMany({
       where: { categoryId: category.id },
-      select: { userId: true },
+      include: {
+        user: {
+          include: {
+            profile: { select: { notifyOnCategoryFollow: true } },
+          },
+        },
+      },
     })
     const followerNotifications = followers
-      .filter((f) => f.userId !== session.user.id)
+      .filter((f) => f.user.id !== session.user.id && f.user.profile?.notifyOnCategoryFollow !== false)
       .map((f) => ({
-        userId: f.userId,
+        userId: f.user.id,
         type: "THREAD_ACTIVITY",
         title: `New thread in ${category.name}`,
         content: `A new discussion "${title.slice(0, 60)}" was posted in a category you follow.`,

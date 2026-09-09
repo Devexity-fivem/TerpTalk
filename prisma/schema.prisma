@@ -79,6 +79,10 @@ model Profile {
   businessName String?
   businessType String?
   businessUrl  String?
+  notifyOnReply        Boolean  @default(true)
+  notifyOnMention      Boolean  @default(true)
+  notifyOnCategoryFollow Boolean @default(true)
+  emailDigestFrequency String?
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([username])

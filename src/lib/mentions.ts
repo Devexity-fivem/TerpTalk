@@ -18,10 +18,10 @@ export async function notifyMentions(
     const unique = [...new Set(handles)].slice(0, 10)
     const users = await prisma.profile.findMany({
       where: { username: { in: unique, mode: "insensitive" } },
-      select: { userId: true, username: true },
+      select: { userId: true, username: true, notifyOnMention: true },
     })
 
-    const targets = users.filter((u) => u.userId !== actorId)
+    const targets = users.filter((u) => u.userId !== actorId && u.notifyOnMention !== false)
     if (targets.length === 0) return
 
     await prisma.notification.createMany({
