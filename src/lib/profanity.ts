@@ -1,11 +1,11 @@
-import { Filter } from "bad-words"
+import { ProfanityEngine } from "profanity-guard"
 
-const filter = new Filter()
+const engine = new ProfanityEngine({ language: "all" })
 
 export function censorText(text: string): string {
-  return filter.clean(text)
+  return engine.censor(text)
 }
 
 export function isProfane(text: string): boolean {
-  return filter.isProfane(text)
+  return engine.check(text)
 }
