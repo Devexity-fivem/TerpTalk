@@ -28,7 +28,7 @@ async function awardLastWeek() {
     create: {
       name: "Weekly Winner",
       description: "Won Budshot of the Week",
-      icon: "🏆",
+      icon: "https://cdn.jsdelivr.net/npm/twemoji@14.0.2/dist/svg/1f3c6.svg",
       requirement: "Win a weekly photo contest",
     },
   })

@@ -6,6 +6,7 @@ import { unauthorized, publicUserSelect, LIMITS, getClientIp, logSecurityEvent, 
 import { rateLimit } from "@/lib/rate-limit"
 import { awardReputation, REP_POINTS } from "@/lib/reputation"
 import { storeImage } from "@/lib/blob"
+import { BADGE_ICONS } from "@/lib/badges"
 
 export async function POST(request: Request) {
   try {
@@ -177,7 +178,7 @@ export async function POST(request: Request) {
         create: {
           name: "Dedicated Grower",
           description: "Posted grow updates 7 days in a row",
-          icon: "🔥",
+          icon: BADGE_ICONS["Dedicated Grower"],
           requirement: "Update diaries on 7 consecutive days",
         },
       })

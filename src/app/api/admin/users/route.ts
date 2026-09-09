@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { forbidden, getClientIp, logSecurityEvent } from "@/lib/security"
 import { requireAdmin } from "@/lib/require-staff"
+import { BADGE_ICONS } from "@/lib/badges"
 
 const ASSIGNABLE_ROLES = new Set(["MEMBER", "VERIFIED_MEMBER", "MODERATOR", "ADMINISTRATOR"])
 
@@ -154,7 +155,7 @@ export async function PATCH(request: Request) {
       create: {
         name: "Beta Tester",
         description: "Joined TerpTalk during the beta and helped shape the community.",
-        icon: "🌱",
+        icon: BADGE_ICONS["Beta Tester"],
         requirement: "Early access member",
       },
       update: {},

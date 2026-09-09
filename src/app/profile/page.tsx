@@ -9,6 +9,7 @@ import Link from "next/link"
 import RoleBadge from "@/components/role-badge"
 import SavedThreads from "@/components/saved-threads"
 import RecoveryPhraseCard from "@/components/recovery-phrase-card"
+import { BadgeIcon } from "@/components/badge-icon"
 
 interface ProfileData {
   user: {
@@ -449,7 +450,7 @@ export default function ProfilePage() {
                     title={b.description}
                     className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-500/10 text-amber-500 border border-amber-500/20 rounded-full text-xs font-medium"
                   >
-                    {b.icon && <span>{b.icon}</span>}
+                    {b.icon && <BadgeIcon icon={b.icon} name={b.name} />}
                     {b.name}
                   </span>
                 ))}
