@@ -3,10 +3,11 @@ import { publicUserSelect } from "@/lib/security"
 import { MessageSquare, Users, Clock, TrendingUp } from "lucide-react"
 import Link from "next/link"
 import RoleBadge from "@/components/role-badge"
+import { ForumLiveRefresh } from "@/components/forum-live-refresh"
 
-// Cached at the edge for 60s — this page renders identical content for
-// everyone and is the top traffic target; ISR prevents a DB hit per request.
-export const revalidate = 60
+// Dynamic: the client polls for new threads and calls router.refresh(),
+// so this page must not serve stale ISR when refreshed.
+export const dynamic = "force-dynamic"
 
 export const metadata = {
   title: "Grower Discussions",
@@ -62,6 +63,7 @@ export default async function ForumPage() {
 
   return (
     <div className="min-h-screen bg-background">
+      <ForumLiveRefresh latestThreadId={recentThreads[0]?.id ?? null} />
       <div className="max-w-7xl mx-auto px-4 py-8">
         {/* Header */}
         <div className="mb-8">
