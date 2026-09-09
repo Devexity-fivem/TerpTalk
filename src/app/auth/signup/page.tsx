@@ -26,17 +26,21 @@ export default function SignUpPage() {
   })
   const [captchaQuestion, setCaptchaQuestion] = useState("Loading...")
 
-  // Fetch captcha from server
-  useEffect(() => {
+  const loadCaptcha = () => {
     fetch("/api/auth/register")
       .then(res => res.json())
       .then(data => {
         setCaptchaQuestion(data.captcha.question)
-        setFormData(prev => ({ ...prev, captchaId: data.captcha.id }))
+        setFormData(prev => ({ ...prev, captchaId: data.captcha.id, captchaAnswer: "" }))
       })
       .catch(() => {
         setError("Failed to load security check")
       })
+  }
+
+  // Fetch captcha from server
+  useEffect(() => {
+    loadCaptcha()
   }, [])
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -82,6 +86,7 @@ export default function SignUpPage() {
       const data = await response.json()
 
       if (!response.ok) {
+        loadCaptcha()
         throw new Error(data.error || "Registration failed")
       }
 

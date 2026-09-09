@@ -31,7 +31,7 @@ export async function GET(request: Request) {
     const captcha = await prisma.captcha.create({
       data: {
         answer: String(num1 + num2),
-        expiresAt: new Date(Date.now() + 5 * 60 * 1000), // 5 min
+        expiresAt: new Date(Date.now() + 15 * 60 * 1000), // 15 min
       },
     })
 
