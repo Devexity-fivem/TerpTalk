@@ -173,10 +173,16 @@ export function Navigation() {
             {/* Hamburger — all screen sizes */}
             <button
               onClick={() => setMobileOpen(!mobileOpen)}
-              className="p-2 hover:bg-secondary rounded-lg transition-colors"
-              aria-label="Toggle menu"
+              className={`flex items-center gap-2 px-3 py-2 rounded-lg border transition-colors ${
+                mobileOpen
+                  ? "bg-secondary border-border text-foreground"
+                  : "bg-card border-border hover:bg-secondary"
+              }`}
+              aria-label="Open navigation menu"
+              aria-expanded={mobileOpen}
             >
               {mobileOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+              <span className="hidden sm:inline text-sm font-medium">Menu</span>
             </button>
           </div>
         </div>
