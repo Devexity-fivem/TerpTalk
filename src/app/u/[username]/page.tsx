@@ -7,7 +7,6 @@ import { User, MessageSquare, Loader2, MapPin, Globe, Sprout, Dna, Leaf } from "
 import Link from "next/link"
 import UserActions from "@/components/user-actions"
 import RoleBadge from "@/components/role-badge"
-import { BadgeIcon } from "@/components/badge-icon"
 
 interface PublicProfile {
   id: string
@@ -152,7 +151,6 @@ export default function PublicProfilePage() {
                       title={b.description}
                       className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-amber-500/15 text-amber-400 border border-amber-500/30 rounded-full text-xs font-medium"
                     >
-                      {b.icon && <BadgeIcon icon={b.icon} name={b.name} />}
                       {b.name}
                     </span>
                   ))}
