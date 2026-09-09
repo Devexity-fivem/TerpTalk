@@ -21,6 +21,8 @@ export const BADGE_ICONS: Record<string, string> = {
   // Top honors
   "Community Favorite": "https://api.iconify.design/game-icons/laurels-trophy.svg",
   "Top Contributor": "https://api.iconify.design/game-icons/star.svg",
+  "Helper": "https://api.iconify.design/game-icons/hand.svg",
+  "Top Helper": "https://api.iconify.design/game-icons/trophy.svg",
   // Special / streaks
   "Dedicated Grower": "https://api.iconify.design/game-icons/fire.svg",
   "Beta Tester": "https://api.iconify.design/game-icons/test-tube-held.svg",
@@ -41,6 +43,8 @@ export const BADGE_DESCRIPTIONS: Record<string, string> = {
   "Helpful Grower": "Received 20 likes on your posts and diaries.",
   "Community Favorite": "Received 100 likes on your posts and diaries.",
   "Top Contributor": "Reached 1,000 reputation points.",
+  "Helper": "Your reply was marked as an accepted answer.",
+  "Top Helper": "5 of your replies were marked as accepted answers.",
   "Dedicated Grower": "Posted grow updates 7 days in a row.",
   "Beta Tester": "Joined TerpTalk during the beta and helped shape the community.",
   "Weekly Winner": "Won Budshot of the Week.",

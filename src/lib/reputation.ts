@@ -21,6 +21,7 @@ interface UserStats {
   strains: number
   strainPhotos: number
   likesReceived: number
+  acceptedAnswers: number
   referrals: number
   reputation: number
 }
@@ -41,10 +42,12 @@ const BADGE_RULES: Record<string, (s: UserStats) => boolean> = {
   "Helpful Grower": (s) => s.likesReceived >= 20,
   "Community Favorite": (s) => s.likesReceived >= 100,
   "Top Contributor": (s) => s.reputation >= 1000,
+  "Helper": (s) => s.acceptedAnswers >= 1,
+  "Top Helper": (s) => s.acceptedAnswers >= 5,
 }
 
 async function getUserStats(userId: string): Promise<UserStats> {
-  const [posts, threads, diaries, diaryUpdates, chatMessages, strains, strainPhotos, likesReceived, user] =
+  const [posts, threads, diaries, diaryUpdates, chatMessages, strains, strainPhotos, likesReceived, acceptedAnswers, user] =
     await Promise.all([
       prisma.post.count({ where: { authorId: userId, deleted: false } }),
       prisma.thread.count({ where: { authorId: userId, deleted: false } }),
@@ -57,6 +60,13 @@ async function getUserStats(userId: string): Promise<UserStats> {
         where: {
           type: "LIKE",
           OR: [{ post: { authorId: userId } }, { diary: { authorId: userId } }],
+        },
+      }),
+      prisma.post.count({
+        where: {
+          authorId: userId,
+          deleted: false,
+          acceptedAnswerFor: { isNot: null },
         },
       }),
       prisma.user.findUnique({
@@ -74,6 +84,7 @@ async function getUserStats(userId: string): Promise<UserStats> {
     strains,
     strainPhotos,
     likesReceived,
+    acceptedAnswers,
     referrals: user?.profile?._count.referrals ?? 0,
     reputation: user?.profile?.reputation ?? 0,
   }
