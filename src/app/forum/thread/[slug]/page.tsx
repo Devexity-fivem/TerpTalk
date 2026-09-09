@@ -85,6 +85,12 @@ export default async function ThreadPage({
   const { page: pageParam } = await searchParams
   const page = Math.max(1, Math.min(10_000, parseInt(pageParam || "1") || 1))
   const thread = await getThreadData(slug, page)
+  const relatedThreads = await prisma.thread.findMany({
+    where: { deleted: false, categoryId: thread.categoryId, id: { not: thread.id } },
+    take: 5,
+    orderBy: { createdAt: "desc" },
+    select: { id: true, slug: true, title: true, _count: { select: { posts: true } } },
+  })
   const session = await getServerSession(authOptions)
   const saved = session?.user?.id
     ? !!(await prisma.bookmark.findUnique({
@@ -315,6 +321,28 @@ export default async function ThreadPage({
             </div>
           )
         })()}
+
+        {relatedThreads.length > 0 && (
+          <div className="mt-8 bg-card rounded-lg border border-border p-6">
+            <div className="flex items-center gap-2 mb-4">
+              <MessageSquare className="w-4 h-4 text-primary" />
+              <h2 className="font-semibold">Related discussions</h2>
+            </div>
+            <ul className="space-y-2">
+              {relatedThreads.map((t) => (
+                <li key={t.id}>
+                  <Link
+                    href={`/forum/thread/${t.slug}`}
+                    className="text-sm hover:text-primary hover:underline"
+                  >
+                    {t.title}
+                    <span className="ml-2 text-xs text-muted-foreground">({t._count.posts - 1} replies)</span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
 
         {/* Reply Form */}
         {!thread.locked && (

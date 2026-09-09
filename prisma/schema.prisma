@@ -51,6 +51,7 @@ model User {
   strainPhotos  StrainPhoto[]
   reports       Report[]
   moderatorActions ModerationAction[]
+  categoryFollows CategoryFollow[]
   blockedUsers  Block[]              @relation("Blocker")
   blockedBy     Block[]              @relation("Blocked")
 
@@ -95,9 +96,24 @@ model Category {
   updatedAt   DateTime @updatedAt
 
   threads     Thread[]
+  followers   CategoryFollow[]
 
   @@index([slug])
   @@index([order])
+}
+
+model CategoryFollow {
+  id         String   @id @default(cuid())
+  userId     String
+  categoryId String
+  createdAt  DateTime @default(now())
+
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category   Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, categoryId])
+  @@index([categoryId])
+  @@index([userId])
 }
 
 // Forum Threads

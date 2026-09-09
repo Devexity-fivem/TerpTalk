@@ -5,9 +5,11 @@ import { MessageSquare, Users, Clock, Pin, Lock } from "lucide-react"
 import Link from "next/link"
 import { buildMetadata } from "@/lib/seo"
 import { Breadcrumbs } from "@/components/breadcrumbs"
+import { getServerSession } from "next-auth"
+import { authOptions } from "@/lib/auth"
+import CategoryFollowButton from "@/components/category-follow-button"
 
-// Public category listing — cached at the edge for 60s
-export const revalidate = 60
+export const dynamic = "force-dynamic"
 
 const THREADS_PER_PAGE = 30
 
@@ -67,6 +69,13 @@ export default async function CategoryPage({
   const { page: pageParam } = await searchParams
   const page = Math.max(1, Math.min(10_000, parseInt(pageParam || "1") || 1))
   const category = await getCategoryData(slug, page)
+  const session = await getServerSession(authOptions)
+  const isFollowing = session?.user?.id
+    ? !!(await prisma.categoryFollow.findUnique({
+        where: { userId_categoryId: { userId: session.user.id, categoryId: category.id } },
+        select: { id: true },
+      }))
+    : false
 
   return (
     <div className="min-h-screen bg-background">
@@ -77,8 +86,13 @@ export default async function CategoryPage({
         ]} />
         {/* Header */}
         <div className="mb-8">
-          <h1 className="text-3xl font-bold mb-2">{category.name}</h1>
-          <p className="text-muted-foreground">{category.description}</p>
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h1 className="text-3xl font-bold mb-2">{category.name}</h1>
+              <p className="text-muted-foreground">{category.description}</p>
+            </div>
+            <CategoryFollowButton categoryId={category.id} initiallyFollowing={isFollowing} />
+          </div>
         </div>
 
         {/* Threads List */}

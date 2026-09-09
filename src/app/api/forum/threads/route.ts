@@ -131,6 +131,24 @@ export async function POST(request: Request) {
       `the thread "${title.slice(0, 60)}"`
     )
 
+    // Notify category followers (one notification per follower)
+    const followers = await prisma.categoryFollow.findMany({
+      where: { categoryId: category.id },
+      select: { userId: true },
+    })
+    const followerNotifications = followers
+      .filter((f) => f.userId !== session.user.id)
+      .map((f) => ({
+        userId: f.userId,
+        type: "THREAD_ACTIVITY",
+        title: `New thread in ${category.name}`,
+        content: `A new discussion "${title.slice(0, 60)}" was posted in a category you follow.`,
+        link: `/forum/thread/${thread.slug}`,
+      }))
+    if (followerNotifications.length > 0) {
+      await prisma.notification.createMany({ data: followerNotifications }).catch(() => {})
+    }
+
     return NextResponse.json({ thread }, { status: 201 })
   } catch (error) {
     console.error("Thread creation error:", error)
