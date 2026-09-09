@@ -33,7 +33,6 @@ export default function ChatSidebar() {
   const { data: session } = useSession()
   const [isOpen, setIsOpen] = useState(false)
   const [showEmoji, setShowEmoji] = useState(false)
-  const [message, setMessage] = useState("")
   const [messages, setMessages] = useState<Message[]>([])
   const [room, setRoom] = useState<Room | null>(null)
   const [loading, setLoading] = useState(true)
@@ -144,13 +143,13 @@ export default function ChatSidebar() {
   const insertEmoji = (emoji: string) => {
     const el = inputRef.current
     if (!el) {
-      setMessage(prev => prev + emoji)
       return
     }
-    const start = el.selectionStart ?? message.length
-    const end = el.selectionEnd ?? message.length
-    const next = message.slice(0, start) + emoji + message.slice(end)
-    setMessage(next)
+    const value = el.value
+    const start = el.selectionStart ?? value.length
+    const end = el.selectionEnd ?? value.length
+    const next = value.slice(0, start) + emoji + value.slice(end)
+    el.value = next
     requestAnimationFrame(() => {
       el.focus()
       el.setSelectionRange(start + emoji.length, start + emoji.length)
@@ -159,20 +158,21 @@ export default function ChatSidebar() {
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!message.trim() || !session || sending || !room) return
+    const content = inputRef.current?.value.trim() ?? ""
+    if (!content || !session || sending || !room) return
 
     setSending(true)
     try {
       const response = await fetch("/api/chat/messages", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content: message, roomId: room.id }),
+        body: JSON.stringify({ content, roomId: room.id }),
       })
 
       if (response.ok) {
         const data = await response.json()
         setMessages(prev => [...prev, data.message])
-        setMessage("")
+        if (inputRef.current) inputRef.current.value = ""
         setShowEmoji(false)
         scrollToBottom()
       }
@@ -295,15 +295,14 @@ export default function ChatSidebar() {
               <input
                 ref={inputRef}
                 type="text"
-                value={message}
-                onChange={(e) => setMessage(e.target.value)}
+                maxLength={1000}
                 placeholder="Type a message..."
                 className="flex-1 px-3 py-2 rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary text-sm"
                 disabled={sending}
               />
               <button
                 type="submit"
-                disabled={sending || !message.trim()}
+                disabled={sending}
                 className="bg-primary text-primary-foreground p-2 rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {sending ? (
