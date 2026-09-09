@@ -1,11 +1,12 @@
 import { prisma } from "@/lib/prisma"
 import { notFound } from "next/navigation"
 import { Leaf, Dna, Sprout, ImageIcon } from "lucide-react"
-import Link from "next/link"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import StrainPhotoUpload from "@/components/strain-photo-upload"
 import ShareButtons from "@/components/share-buttons"
+import { buildMetadata, snippet } from "@/lib/seo"
+import { Breadcrumbs } from "@/components/breadcrumbs"
 
 export const dynamic = "force-dynamic"
 
@@ -15,10 +16,16 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
     where: { id },
     select: { name: true, description: true, genetics: true, type: true },
   })
-  if (!strain) return { title: "Strain not found" }
-  const desc = strain.description?.slice(0, 155)
-    || `${strain.name}${strain.type ? ` (${strain.type})` : ""}${strain.genetics ? ` — ${strain.genetics}` : ""}. Cannabis strain info and grower photos on TerpTalk.`
-  return { title: `${strain.name} Strain`, description: desc }
+  if (!strain) return buildMetadata({ title: "Strain not found", robots: { index: false } })
+  const desc = strain.description
+    ? snippet(strain.description)
+    : `${strain.name}${strain.type ? ` (${strain.type})` : ""}${strain.genetics ? ` — ${strain.genetics}` : ""}. Cannabis strain info and grower photos on TerpTalk.`
+  return buildMetadata({
+    title: `${strain.name} Cannabis Strain — Reviews & Grower Photos`,
+    description: desc,
+    keywords: [strain.name, "cannabis strain", "strain review", "cannabis genetics"],
+    pathname: `/strains/${id}`,
+  })
 }
 
 export default async function StrainPage({ params }: { params: Promise<{ id: string }> }) {
@@ -47,9 +54,10 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
   return (
     <div className="min-h-screen bg-background">
       <div className="max-w-4xl mx-auto px-4 py-8">
-        <Link href="/strains" className="text-sm text-muted-foreground hover:text-foreground mb-4 block">
-          ← Back to Strains
-        </Link>
+        <Breadcrumbs items={[
+          { label: "Strains", href: "/strains" },
+          { label: strain.name },
+        ]} />
 
         {/* Header */}
         <div className="bg-card rounded-xl border border-border p-6 mb-6">

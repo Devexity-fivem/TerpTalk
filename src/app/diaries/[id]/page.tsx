@@ -2,12 +2,13 @@ import { prisma } from "@/lib/prisma"
 import { publicUserSelect } from "@/lib/security"
 import { notFound } from "next/navigation"
 import { Leaf, Calendar, Users } from "lucide-react"
-import Link from "next/link"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import UpdateForm from "@/components/update-form"
 import DiaryFollowButton from "@/components/diary-follow-button"
 import ShareButtons from "@/components/share-buttons"
+import { buildMetadata, snippet } from "@/lib/seo"
+import { Breadcrumbs } from "@/components/breadcrumbs"
 import EnvCharts from "@/components/env-chart"
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
@@ -16,12 +17,14 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
     where: { id },
     select: { title: true, description: true, strain: true, deleted: true },
   })
-  if (!diary || diary.deleted) return { title: "Diary not found" }
-  return {
-    title: diary.title,
-    description: diary.description.slice(0, 155) || `Cannabis grow diary${diary.strain ? ` — ${diary.strain}` : ""} on TerpTalk.`,
-    openGraph: { title: diary.title, type: "article" },
-  }
+  if (!diary || diary.deleted) return buildMetadata({ title: "Diary not found", robots: { index: false } })
+  return buildMetadata({
+    title: `${diary.title} — Cannabis Grow Diary${diary.strain ? ` (${diary.strain})` : ""}`,
+    description: snippet(diary.description || `Cannabis grow diary${diary.strain ? ` — ${diary.strain}` : ""} on TerpTalk.`),
+    keywords: [diary.strain || "cannabis", "grow diary", "grow journal"],
+    pathname: `/diaries/${id}`,
+    og: { type: "article" },
+  })
 }
 
 async function getDiaryData(id: string) {
@@ -108,11 +111,12 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
   return (
     <div className="min-h-screen bg-background">
       <div className="max-w-7xl mx-auto px-4 py-8">
+        <Breadcrumbs items={[
+          { label: "Grow Diaries", href: "/diaries" },
+          { label: diary.title },
+        ]} />
         {/* Header */}
         <div className="mb-8">
-          <Link href="/diaries" className="text-sm text-muted-foreground hover:text-foreground mb-2 block">
-            ← Back to Diaries
-          </Link>
           <div className="flex items-start justify-between gap-4">
             <div className="flex-1">
               <div className="flex items-center gap-2 mb-2">

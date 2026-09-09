@@ -1,16 +1,23 @@
 import { prisma } from "@/lib/prisma"
 import { notFound } from "next/navigation"
 import { BookOpen } from "lucide-react"
-import Link from "next/link"
 import ShareButtons from "@/components/share-buttons"
+import { buildMetadata, snippet } from "@/lib/seo"
+import { Breadcrumbs } from "@/components/breadcrumbs"
 
 export const dynamic = "force-dynamic"
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params
-  const guide = await prisma.guide.findUnique({ where: { slug }, select: { title: true, excerpt: true, published: true } })
-  if (!guide || !guide.published) return { title: "Guide not found" }
-  return { title: guide.title, description: guide.excerpt }
+  const guide = await prisma.guide.findUnique({ where: { slug }, select: { title: true, excerpt: true, published: true, topic: true } })
+  if (!guide || !guide.published) return buildMetadata({ title: "Guide not found", robots: { index: false } })
+  return buildMetadata({
+    title: `${guide.title} — Cannabis Grow Guide`,
+    description: snippet(guide.excerpt),
+    keywords: [guide.topic, "cannabis grow guide", "how to grow cannabis"],
+    pathname: `/guides/${slug}`,
+    og: { type: "article" },
+  })
 }
 
 export default async function GuidePage({ params }: { params: Promise<{ slug: string }> }) {
@@ -24,7 +31,10 @@ export default async function GuidePage({ params }: { params: Promise<{ slug: st
   return (
     <div className="min-h-screen bg-background">
       <div className="max-w-3xl mx-auto px-4 py-8">
-        <Link href="/guides" className="text-sm text-muted-foreground hover:text-foreground mb-4 block">← All guides</Link>
+        <Breadcrumbs items={[
+          { label: "Grow Guides", href: "/guides" },
+          { label: guide.title },
+        ]} />
         <div className="bg-card rounded-xl border border-border p-6 md:p-8">
           <div className="flex items-center gap-2 text-xs text-muted-foreground mb-3">
             <BookOpen className="w-4 h-4 text-primary" />

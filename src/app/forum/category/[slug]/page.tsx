@@ -3,11 +3,28 @@ import { publicUserSelect } from "@/lib/security"
 import { notFound } from "next/navigation"
 import { MessageSquare, Users, Clock, Pin, Lock } from "lucide-react"
 import Link from "next/link"
+import { buildMetadata } from "@/lib/seo"
+import { Breadcrumbs } from "@/components/breadcrumbs"
 
 // Public category listing — cached at the edge for 60s
 export const revalidate = 60
 
 const THREADS_PER_PAGE = 30
+
+export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }) {
+  const { slug } = await params
+  const category = await prisma.category.findUnique({
+    where: { slug },
+    select: { name: true, description: true, hidden: true },
+  })
+  if (!category || category.hidden) return buildMetadata({ title: "Category not found", robots: { index: false } })
+  return buildMetadata({
+    title: `${category.name} — Cannabis Growing Forum`,
+    description: `Discussions about ${category.name} on TerpTalk. ${category.description || ""}`.trim(),
+    keywords: [category.name, "cannabis growing", "cannabis forum"],
+    pathname: `/forum/category/${slug}`,
+  })
+}
 
 async function getCategoryData(slug: string, page: number) {
   const category = await prisma.category.findUnique({
@@ -54,11 +71,12 @@ export default async function CategoryPage({
   return (
     <div className="min-h-screen bg-background">
       <div className="max-w-7xl mx-auto px-4 py-8">
+        <Breadcrumbs items={[
+          { label: "Forum", href: "/forum" },
+          { label: category.name },
+        ]} />
         {/* Header */}
         <div className="mb-8">
-          <Link href="/forum" className="text-sm text-muted-foreground hover:text-foreground mb-2 block">
-            ← Back to Discussions
-          </Link>
           <h1 className="text-3xl font-bold mb-2">{category.name}</h1>
           <p className="text-muted-foreground">{category.description}</p>
         </div>

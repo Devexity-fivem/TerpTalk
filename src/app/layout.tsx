@@ -5,57 +5,67 @@ import { Providers } from "@/components/providers";
 import { Navigation } from "@/components/navigation";
 import ChatSidebar from "@/components/chat-sidebar";
 import ServiceWorkerRegister from "@/components/sw-register";
+import { buildMetadata } from "@/lib/seo";
+import { JsonLd } from "@/components/json-ld";
 
 const inter = Inter({
   subsets: ["latin"],
   variable: "--font-inter",
 });
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://terp-talk.vercel.app"
+const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://terp-talk.vercel.app"
 
-export const metadata: Metadata = {
-  metadataBase: new URL(SITE_URL),
-  title: {
-    default: "TerpTalk — Cannabis Growing Community, Forum & Strain Database",
-    template: "%s | TerpTalk",
-  },
+export const metadata: Metadata = buildMetadata({
+  title: "TerpTalk — Cannabis Growing Community, Forum & Strain Database",
   description:
     "TerpTalk is a 21+ community for cannabis growers — grow journals, strain database, setup showcases, forums, and live chat. Share your grow, learn from others.",
-  keywords: [
-    "cannabis forum", "grow journal", "grow diary", "strain database",
-    "cannabis community", "grow setup", "marijuana growing", "cultivation",
-  ],
-  openGraph: {
-    type: "website",
-    siteName: "TerpTalk",
-    title: "TerpTalk — Cannabis Growing Community",
-    description:
-      "Grow journals, strain database, setup showcases and forums — a 21+ community for cannabis growers.",
-    url: SITE_URL,
-  },
-  twitter: {
-    card: "summary_large_image",
-    title: "TerpTalk — Cannabis Growing Community",
-    description:
-      "Grow journals, strain database, setup showcases and forums — a 21+ community for cannabis growers.",
-  },
-  robots: { index: true, follow: true },
-};
+})
 
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  viewportFit: "cover", // use full screen on notched phones (PWA)
+  viewportFit: "cover",
   themeColor: "#16a34a",
 };
+
+const siteJsonLd = [
+  {
+    "@context": "https://schema.org",
+    "@type": "WebSite",
+    name: "TerpTalk",
+    url: baseUrl,
+    description:
+      "A 21+ community for cannabis growers — grow journals, strain database, setup showcases, forums, and live chat.",
+    publisher: {
+      "@type": "Organization",
+      name: "TerpTalk",
+      url: baseUrl,
+      logo: {
+        "@type": "ImageObject",
+        url: `${baseUrl}/logo.png`,
+      },
+    },
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "Organization",
+    name: "TerpTalk",
+    url: baseUrl,
+    logo: `${baseUrl}/logo.png`,
+    sameAs: [
+      baseUrl,
+    ],
+  },
+]
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className={`${inter.variable} h-full antialiased`}>
       <body className="min-h-screen flex flex-col">
+        <JsonLd data={siteJsonLd} />
         <Providers>
           <Navigation />
-          <main className="flex-1">{children}</main>
+          <main id="main-content" className="flex-1">{children}</main>
           <ChatSidebar />
           <ServiceWorkerRegister />
         </Providers>

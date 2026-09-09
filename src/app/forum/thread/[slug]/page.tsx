@@ -12,19 +12,24 @@ import BookmarkButton from "@/components/bookmark-button"
 import PostContent from "@/components/post-content"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
+import { buildMetadata, snippet } from "@/lib/seo"
+import { Breadcrumbs } from "@/components/breadcrumbs"
+import { JsonLd } from "@/components/json-ld"
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params
   const thread = await prisma.thread.findUnique({
     where: { slug },
-    select: { title: true, content: true, deleted: true },
+    select: { title: true, content: true, deleted: true, category: { select: { name: true, slug: true } } },
   })
-  if (!thread || thread.deleted) return { title: "Thread not found" }
-  return {
+  if (!thread || thread.deleted) return buildMetadata({ title: "Thread not found", robots: { index: false } })
+  return buildMetadata({
     title: thread.title,
-    description: thread.content.slice(0, 155),
-    openGraph: { title: thread.title, description: thread.content.slice(0, 155), type: "article" },
-  }
+    description: snippet(thread.content),
+    keywords: [thread.category.name, "cannabis forum", "cannabis growing"],
+    pathname: `/forum/thread/${slug}`,
+    og: { type: "article" },
+  })
 }
 
 const POSTS_PER_PAGE = 50
@@ -81,18 +86,44 @@ export default async function ThreadPage({
       }))
     : false
 
+  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://terp-talk.vercel.app"
+  const canonical = `${baseUrl}/forum/thread/${thread.slug}`
+
+  const breadcrumbs = [
+    { label: "Forum", href: "/forum" },
+    { label: thread.category.name, href: `/forum/category/${thread.category.slug}` },
+    { label: thread.title },
+  ]
+
+  const discussionSchema = {
+    "@context": "https://schema.org",
+    "@type": "DiscussionForumPosting",
+    headline: thread.title,
+    description: snippet(thread.content),
+    author: {
+      "@type": "Person",
+      name: thread.author.profile?.username || thread.author.name,
+      url: `${baseUrl}/u/${thread.author.profile?.username || thread.author.name}`,
+    },
+    datePublished: thread.createdAt.toISOString(),
+    url: canonical,
+    mainEntityOfPage: {
+      "@type": "WebPage",
+      "@id": canonical,
+    },
+    publisher: {
+      "@type": "Organization",
+      name: "TerpTalk",
+      url: baseUrl,
+    },
+  }
+
   return (
     <div className="min-h-screen bg-background">
       <div className="max-w-4xl mx-auto px-4 py-8">
-        {/* Header */}
+        <JsonLd data={discussionSchema} />
+        <Breadcrumbs items={breadcrumbs} />
         <div className="mb-8">
-          <div className="flex items-center gap-2 text-sm text-muted-foreground mb-2">
-            <Link href="/forum" className="hover:text-foreground">Discussions</Link>
-            <span>/</span>
-            <Link href={`/forum/category/${thread.category.slug}`} className="hover:text-foreground">
-              {thread.category.name}
-            </Link>
-          </div>
           <div className="flex items-center gap-2 mb-2">
             <span className="text-xs text-muted-foreground px-2 py-1 bg-secondary rounded">
               {thread.category.name}

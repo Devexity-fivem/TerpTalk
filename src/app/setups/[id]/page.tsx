@@ -1,3 +1,5 @@
+import { buildMetadata, snippet } from "@/lib/seo"
+import { Breadcrumbs } from "@/components/breadcrumbs"
 import { prisma } from "@/lib/prisma"
 import { publicUserSelect } from "@/lib/security"
 import { notFound } from "next/navigation"
@@ -15,8 +17,13 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
     where: { id },
     select: { title: true, description: true, deleted: true },
   })
-  if (!setup || setup.deleted) return { title: "Setup not found" }
-  return { title: `${setup.title} — Grow Setup`, description: setup.description.slice(0, 155) }
+  if (!setup || setup.deleted) return buildMetadata({ title: "Setup not found", robots: { index: false } })
+  return buildMetadata({
+    title: `${setup.title} — Cannabis Grow Setup`,
+    description: snippet(setup.description),
+    keywords: ["grow setup", "grow tent", "grow lights", "cannabis setup"],
+    pathname: `/setups/${id}`,
+  })
 }
 
 export default async function SetupPage({ params }: { params: Promise<{ id: string }> }) {
@@ -49,9 +56,10 @@ export default async function SetupPage({ params }: { params: Promise<{ id: stri
   return (
     <div className="min-h-screen bg-background">
       <div className="max-w-4xl mx-auto px-4 py-8">
-        <Link href="/setups" className="text-sm text-muted-foreground hover:text-foreground mb-4 block">
-          ← Back to Setups
-        </Link>
+        <Breadcrumbs items={[
+          { label: "Setup Showcases", href: "/setups" },
+          { label: setup.title },
+        ]} />
 
         <div className="bg-card rounded-xl border border-border p-6 mb-6">
           <h1 className="text-3xl font-bold mb-2">{setup.title}</h1>

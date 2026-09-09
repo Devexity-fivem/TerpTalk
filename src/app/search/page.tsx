@@ -1,10 +1,12 @@
 import { Suspense } from "react"
+import { buildMetadata } from "@/lib/seo"
 import SearchResults from "@/components/search-results"
 
-export const metadata = {
+export const metadata = buildMetadata({
   title: "Search",
   description: "Search threads, strains, growers, and grow diaries on TerpTalk.",
-}
+  robots: { index: false, follow: false },
+})
 
 export default async function SearchPage({ searchParams }: { searchParams: Promise<{ q?: string }> }) {
   const { q } = await searchParams

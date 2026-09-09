@@ -6,12 +6,14 @@ import Link from "next/link"
 import ContestBoard from "@/components/contest-board"
 import { BADGE_ICONS } from "@/lib/badges"
 
-export const revalidate = 60 // public content, edge-cached
+import { buildMetadata } from "@/lib/seo"
 
-export const metadata = {
+export const dynamic = "force-dynamic"
+export const metadata = buildMetadata({
   title: "Budshot of the Week",
   description: "Weekly photo contest — submit your best budshot, the community votes, winner gets the Weekly Winner badge.",
-}
+  pathname: "/contest",
+})
 
 // Lazily award the previous week's winner badge (idempotent)
 async function awardLastWeek() {
