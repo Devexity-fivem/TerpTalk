@@ -24,7 +24,8 @@ Set these in Vercel (Settings → Environment Variables) or `vercel env add`:
 
 | Variable | Purpose |
 |---|---|
-| `DATABASE_URL` | Neon pooled connection string (`postgresql://…-pooler…?sslmode=require`) |
+| `DATABASE_URL` | Neon **pooled** connection string (`postgresql://…-pooler…?sslmode=require`) for app queries |
+| `DIRECT_URL` | (Optional) Neon **direct** non-pooled connection string for running migrations manually |
 | `NEXTAUTH_URL` | Production URL (`https://<your-domain>.vercel.app`) |
 | `NEXTAUTH_SECRET` | 64-character random hex for JWT signing — **generate a fresh secret for prod** |
 | `IP_HASH_SALT` | Random salt for hashing IP addresses (does not need to rotate with every session) |
@@ -57,8 +58,10 @@ The `vercel-build` script runs automatically: `prisma generate && next build`.
 Migrations are applied manually (avoids Neon advisory-lock timeouts on suspended DBs):
 
 ```bash
-# After merging a migration, apply it to prod once:
-npm run migrate:deploy   # reads DATABASE_URL from .env
+# After merging a migration, apply it to prod once from your machine:
+# Use the direct (non-pooled) Neon URL if available, because the pooled
+# pooler does not support Prisma advisory locks.
+npx prisma migrate deploy   # or: DIRECT_URL="<direct-url>" npx prisma migrate deploy
 ```
 
 ### 5. Seed the production DB (once, from your machine)
@@ -76,7 +79,7 @@ vercel --prod              # deploy
 npm run backup             # local pg_dump (requires pg_dump on PATH)
 ```
 
-Schema changes: `npx prisma migrate dev` locally against a Neon dev branch → commit → deploy (migrate deploy applies automatically).
+Schema changes: `npx prisma migrate dev` locally against a Neon dev branch → commit → apply migrations manually with `npx prisma migrate deploy` → deploy.
 
 ## Rollback
 
