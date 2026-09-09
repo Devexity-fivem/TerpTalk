@@ -13,6 +13,15 @@ interface Category {
   slug: string
 }
 
+interface SimilarThread {
+  id: string
+  slug: string
+  title: string
+  createdAt: string
+  category: { name: string; slug: string }
+  _count: { posts: number }
+}
+
 function NewThreadForm() {
   const { data: session, status } = useSession()
   const router = useRouter()
@@ -42,12 +51,28 @@ function NewThreadForm() {
     }
   })
 
+  const [similarThreads, setSimilarThreads] = useState<SimilarThread[]>([])
+
   useEffect(() => {
     fetch("/api/categories")
       .then(res => res.json())
       .then(data => setCategories(data.categories || []))
       .catch(() => setError("Failed to load categories"))
   }, [])
+
+  useEffect(() => {
+    const t = setTimeout(() => {
+      if (formData.title.trim().length < 4) {
+        setSimilarThreads([])
+        return
+      }
+      fetch(`/api/forum/threads/similar?title=${encodeURIComponent(formData.title)}&categoryId=${encodeURIComponent(formData.categoryId || "")}`)
+        .then((res) => res.json())
+        .then((data) => setSimilarThreads(data.threads || []))
+        .catch(() => setSimilarThreads([]))
+    }, 400)
+    return () => clearTimeout(t)
+  }, [formData.title, formData.categoryId])
 
   if (status === "loading") {
     return (
@@ -152,6 +177,26 @@ function NewThreadForm() {
                 {formData.title.length}/200 characters
               </p>
             </div>
+
+            {similarThreads.length > 0 && (
+              <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-4">
+                <p className="text-sm font-medium text-amber-400 mb-2">Similar discussions already exist</p>
+                <ul className="space-y-2">
+                  {similarThreads.map((t) => (
+                    <li key={t.id}>
+                      <Link
+                        href={`/forum/thread/${t.slug}`}
+                        target="_blank"
+                        className="text-sm text-amber-300 hover:underline"
+                      >
+                        {t.title}
+                      </Link>
+                      <span className="text-xs text-muted-foreground ml-2">in {t.category.name} · {t._count.posts - 1} replies</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
 
             <div>
               <label htmlFor="content" className="block text-sm font-medium mb-2">
