@@ -1,16 +1,15 @@
 "use client"
 
-import { useState, useRef } from "react"
+import { useState } from "react"
 import { signIn } from "next-auth/react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
-import ReCAPTCHA from "react-google-recaptcha"
+import { GoogleReCaptchaProvider, useGoogleReCaptcha } from "react-google-recaptcha-v3"
 import { Leaf, Loader2 } from "lucide-react"
 
-export default function SignUpPage() {
+function SignUpForm() {
   const router = useRouter()
-  const recaptchaRef = useRef<ReCAPTCHA>(null)
-  const [recaptchaToken, setRecaptchaToken] = useState<string | null>(null)
+  const { executeRecaptcha } = useGoogleReCaptcha()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
   const [formData, setFormData] = useState(() => {
@@ -35,8 +34,8 @@ export default function SignUpPage() {
       return
     }
 
-    if (!recaptchaToken) {
-      setError("Please complete the security check")
+    if (!executeRecaptcha) {
+      setError("Security check not ready. Please wait a moment and try again.")
       return
     }
 
@@ -53,6 +52,13 @@ export default function SignUpPage() {
     setLoading(true)
 
     try {
+      const recaptchaToken = await executeRecaptcha("signup")
+
+      if (!recaptchaToken) {
+        setError("Security check failed. Please try again.")
+        return
+      }
+
       const response = await fetch("/api/auth/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -85,8 +91,6 @@ export default function SignUpPage() {
       router.push("/profile/complete")
     } catch (error: unknown) {
       setError((error as Error).message)
-      recaptchaRef.current?.reset()
-      setRecaptchaToken(null)
     } finally {
       setLoading(false)
     }
@@ -168,12 +172,6 @@ export default function SignUpPage() {
             />
           </div>
 
-          <ReCAPTCHA
-            ref={recaptchaRef}
-            sitekey={process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY || ""}
-            onChange={(token) => setRecaptchaToken(token)}
-          />
-
           <div className="flex items-center">
             <input
               id="ageVerified"
@@ -218,5 +216,20 @@ export default function SignUpPage() {
         </p>
       </div>
     </div>
+  )
+}
+
+export default function SignUpPage() {
+  return (
+    <GoogleReCaptchaProvider
+      reCaptchaKey={process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY || ""}
+      scriptProps={{
+        async: false,
+        defer: false,
+        appendTo: "head",
+      }}
+    >
+      <SignUpForm />
+    </GoogleReCaptchaProvider>
   )
 }

@@ -43,14 +43,14 @@ export async function POST(request: Request) {
       )
     }
 
-    // Verify reCAPTCHA token
+    // Verify reCAPTCHA token (v3 score-based)
     try {
       const recaptcha = await verifyRecaptcha(recaptchaToken, ip)
-      if (!recaptcha.success) {
+      if (!recaptcha.success || (recaptcha.score !== undefined && recaptcha.score < 0.3)) {
         await logSecurityEvent("REGISTRATION_FAILED", {
           ip,
           userAgent,
-          metadata: { reason: "recaptcha" },
+          metadata: { reason: "recaptcha", score: recaptcha.score },
         })
         return NextResponse.json(
           { error: "Security check failed. Please try again." },
