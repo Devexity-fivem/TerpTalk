@@ -22,21 +22,28 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "Too many requests" }, { status: 429 })
     }
 
-    const rooms = await prisma.chatRoom.findMany({
-      where: { isPrivate: false },
-      orderBy: { order: "asc" },
-      select: {
-        id: true,
-        name: true,
-        slug: true,
-        description: true,
-        _count: {
-          select: { messages: true },
+    const [rooms, onlineCount] = await Promise.all([
+      prisma.chatRoom.findMany({
+        where: { isPrivate: false },
+        orderBy: { order: "asc" },
+        select: {
+          id: true,
+          name: true,
+          slug: true,
+          description: true,
+          _count: {
+            select: { messages: true },
+          },
         },
-      },
-    })
+      }),
+      prisma.user.count({
+        where: {
+          lastSeenAt: { gte: new Date(Date.now() - 15 * 60 * 1000) },
+        },
+      }),
+    ])
 
-    return NextResponse.json({ rooms })
+    return NextResponse.json({ rooms, onlineCount })
   } catch (error) {
     console.error("Failed to fetch chat rooms:", error)
     return NextResponse.json(

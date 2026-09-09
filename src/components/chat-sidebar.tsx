@@ -35,6 +35,7 @@ export default function ChatSidebar() {
   const [showEmoji, setShowEmoji] = useState(false)
   const [messages, setMessages] = useState<Message[]>([])
   const [room, setRoom] = useState<Room | null>(null)
+  const [onlineCount, setOnlineCount] = useState(0)
   const [loading, setLoading] = useState(true)
   const [sending, setSending] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -56,6 +57,7 @@ export default function ChatSidebar() {
       .then(data => {
         const all: Room[] = data.rooms || []
         setRoom(all.find(r => r.slug === "general") || all[0] || null)
+        setOnlineCount(data.onlineCount || 0)
         setLoading(false)
       })
       .catch(() => setLoading(false))
@@ -217,7 +219,7 @@ export default function ChatSidebar() {
             <h2 className="font-semibold">General Chat</h2>
             {room && (
               <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded">
-                {room._count.messages} messages
+                {onlineCount} users online
               </span>
             )}
           </div>
