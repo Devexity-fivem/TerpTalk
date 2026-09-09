@@ -1,17 +1,23 @@
 "use client"
 
-import { useState, useRef } from "react"
+import { useState, useEffect } from "react"
 import { signIn } from "next-auth/react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
-import HCaptcha from "@hcaptcha/react-hcaptcha"
 import { Leaf, Loader2 } from "lucide-react"
 
-const HCAPTCHA_SITE_KEY = process.env.NEXT_PUBLIC_HCAPTCHA_SITE_KEY || "0504ab56-5d20-4ae2-abe0-f444d09edeea"
+const HCAPTCHA_SITE_KEY = "0504ab56-5d20-4ae2-abe0-f444d09edeea"
+
+declare global {
+  interface Window {
+    onHCaptchaVerify?: (token: string) => void
+    onHCaptchaExpired?: () => void
+    hcaptcha?: { reset: () => void }
+  }
+}
 
 export default function SignUpPage() {
   const router = useRouter()
-  const captchaRef = useRef<HCaptcha>(null)
   const [captchaToken, setCaptchaToken] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
@@ -27,6 +33,26 @@ export default function SignUpPage() {
       ageVerified: false,
     }
   })
+
+  useEffect(() => {
+    if (typeof window === "undefined") return
+
+    window.onHCaptchaVerify = (token) => {
+      setCaptchaToken(token)
+    }
+    window.onHCaptchaExpired = () => {
+      setCaptchaToken(null)
+    }
+
+    if (document.getElementById("hcaptcha-script")) return
+
+    const script = document.createElement("script")
+    script.id = "hcaptcha-script"
+    script.src = "https://js.hcaptcha.com/1/api.js"
+    script.async = true
+    script.defer = true
+    document.head.appendChild(script)
+  }, [])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -73,7 +99,6 @@ export default function SignUpPage() {
         throw new Error(data.error || "Registration failed")
       }
 
-      // Auto sign in after registration
       const result = await signIn("credentials", {
         username: formData.username,
         password: formData.password,
@@ -88,7 +113,7 @@ export default function SignUpPage() {
     } catch (error: unknown) {
       setError((error as Error).message)
       setCaptchaToken(null)
-      captchaRef.current?.resetCaptcha()
+      window.hcaptcha?.reset()
     } finally {
       setLoading(false)
     }
@@ -170,14 +195,11 @@ export default function SignUpPage() {
             />
           </div>
 
-          <HCaptcha
-            ref={captchaRef}
-            sitekey={HCAPTCHA_SITE_KEY}
-            onVerify={(token) => setCaptchaToken(token)}
-            onExpire={() => {
-              setCaptchaToken(null)
-              captchaRef.current?.resetCaptcha()
-            }}
+          <div
+            className="h-captcha"
+            data-sitekey={HCAPTCHA_SITE_KEY}
+            data-callback="onHCaptchaVerify"
+            data-expired-callback="onHCaptchaExpired"
           />
 
           <div className="flex items-center">
