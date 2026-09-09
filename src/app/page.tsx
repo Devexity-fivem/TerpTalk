@@ -3,6 +3,7 @@ import Link from "next/link"
 import { prisma } from "@/lib/prisma"
 import { publicUserSelect } from "@/lib/security"
 import CannabisLeaf from "@/components/cannabis-leaf"
+import LiveStats from "@/components/live-stats"
 
 export const dynamic = "force-dynamic"
 
@@ -154,26 +155,7 @@ export default async function Home() {
       {/* Community Stats */}
       <section className="py-14 px-4 sm:px-6 lg:px-8 border-y border-border bg-secondary/30">
         <div className="max-w-7xl mx-auto">
-          <div className="grid grid-cols-3 gap-8">
-            <div className="text-center">
-              <div className="text-3xl sm:text-4xl font-bold text-primary mb-1 tabular-nums">
-                {stats.members.toLocaleString()}
-              </div>
-              <div className="text-sm text-muted-foreground uppercase tracking-wide">Members</div>
-            </div>
-            <div className="text-center">
-              <div className="text-3xl sm:text-4xl font-bold text-primary mb-1 tabular-nums">
-                {stats.diaries.toLocaleString()}
-              </div>
-              <div className="text-sm text-muted-foreground uppercase tracking-wide">Grow Diaries</div>
-            </div>
-            <div className="text-center">
-              <div className="text-3xl sm:text-4xl font-bold text-primary mb-1 tabular-nums">
-                {stats.discussions.toLocaleString()}
-              </div>
-              <div className="text-sm text-muted-foreground uppercase tracking-wide">Discussions</div>
-            </div>
-          </div>
+          <LiveStats initial={stats} />
         </div>
       </section>
 
