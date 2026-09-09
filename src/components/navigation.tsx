@@ -6,7 +6,7 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import {
   Leaf, User, LogOut, MessageCircle, Home, Calendar,
-  Settings, Dna, Bell, Shield, Menu, X, Mail, Search, Trophy, BookOpen, Stethoscope, Tag, Award,
+  Settings, Dna, Bell, Shield, Menu, X, Mail, Search, Trophy, BookOpen, Stethoscope, Tag, Award, Calculator,
 } from "lucide-react"
 import CannabisLeaf from "@/components/cannabis-leaf"
 
@@ -22,6 +22,7 @@ const NAV_LINKS = [
   { href: "/help", label: "Plant Help", icon: Stethoscope },
   { href: "/deals", label: "Deals", icon: Tag },
   { href: "/leaderboard", label: "Leaderboard", icon: Award },
+  { href: "/calculator", label: "Calculator", icon: Calculator },
 ]
 
 export function Navigation() {
@@ -71,6 +72,10 @@ export function Navigation() {
 
           {/* Desktop: minimal nav — all destinations live on the homepage hub */}
           <div className="hidden lg:flex items-center gap-1">
+            <Link href="/calculator" className={linkClass("/calculator")}>
+              <Calculator className="w-4 h-4" />
+              Calculator
+            </Link>
             <Link href="/deals" className={linkClass("/deals")}>
               <Tag className="w-4 h-4" />
               Deals
