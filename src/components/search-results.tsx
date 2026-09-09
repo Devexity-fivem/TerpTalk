@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from "react"
 import { useSearchParams } from "next/navigation"
+import { useSession } from "next-auth/react"
 import Link from "next/link"
-import { Search, MessageSquare, Leaf, Dna, User, Loader2 } from "lucide-react"
+import { Search, MessageSquare, Leaf, Dna, User, Loader2, Bookmark } from "lucide-react"
 
 interface Results {
   threads: { id: string; title: string; slug: string; category: { name: string }; _count: { posts: number } }[]
@@ -13,10 +14,12 @@ interface Results {
 }
 
 export default function SearchResults() {
+  const { data: session } = useSession()
   const params = useSearchParams()
   const q = params.get("q") || ""
   const [results, setResults] = useState<Results | null>(null)
   const [loading, setLoading] = useState(q.trim().length >= 2)
+  const [saved, setSaved] = useState(false)
 
   useEffect(() => {
     if (q.trim().length < 2) return
@@ -44,6 +47,27 @@ export default function SearchResults() {
           />
         </div>
       </form>
+
+      {session && q.trim().length >= 2 && !saved && (
+        <button
+          onClick={async () => {
+            const name = window.prompt("Name this saved search?")
+            if (!name) return
+            const res = await fetch("/api/saved-searches", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ name, query: q }),
+            })
+            if (res.ok) setSaved(true)
+          }}
+          className="mb-4 inline-flex items-center gap-2 text-sm text-primary hover:underline"
+        >
+          <Bookmark className="w-4 h-4" /> Save this search
+        </button>
+      )}
+      {session && saved && (
+        <p className="mb-4 text-sm text-muted-foreground">Search saved.</p>
+      )}
 
       {loading && <div className="flex justify-center py-8"><Loader2 className="w-6 h-6 animate-spin text-primary" /></div>}
 

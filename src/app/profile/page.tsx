@@ -8,6 +8,7 @@ import { signOut } from "next-auth/react"
 import Link from "next/link"
 import RoleBadge from "@/components/role-badge"
 import SavedThreads from "@/components/saved-threads"
+import SavedSearches from "@/components/saved-searches"
 import RecoveryPhraseCard from "@/components/recovery-phrase-card"
 
 interface ProfileData {
@@ -568,6 +569,9 @@ export default function ProfilePage() {
 
           {/* Saved Threads */}
           <SavedThreads />
+
+          {/* Saved Searches */}
+          <SavedSearches />
 
           {/* Referrals */}
           <div className="bg-card rounded-lg border border-border p-6">

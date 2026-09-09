@@ -52,6 +52,7 @@ model User {
   reports       Report[]
   moderatorActions ModerationAction[]
   categoryFollows CategoryFollow[]
+  savedSearches  SavedSearch[]
   blockedUsers  Block[]              @relation("Blocker")
   blockedBy     Block[]              @relation("Blocked")
 
@@ -120,6 +121,19 @@ model CategoryFollow {
 
   @@unique([userId, categoryId])
   @@index([categoryId])
+  @@index([userId])
+}
+
+model SavedSearch {
+  id        String   @id @default(cuid())
+  userId    String
+  name      String
+  query     String
+  filters   String   @default("{}")
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   @@index([userId])
 }
 
