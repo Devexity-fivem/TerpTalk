@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import { useSession } from "next-auth/react"
 import { useParams } from "next/navigation"
-import { User, MessageSquare, Loader2, MapPin, Globe, Sprout, Dna, Leaf, Store } from "lucide-react"
+import { User, MessageSquare, Loader2, MapPin, Globe, Sprout, Dna, Leaf, Store, Award } from "lucide-react"
 import Link from "next/link"
 import UserActions from "@/components/user-actions"
 import RoleBadge from "@/components/role-badge"
@@ -25,6 +25,7 @@ interface PublicProfile {
   image: string | null
   joinDate: string
   reputation: number
+  trustLevel: string
   badges: Array<{ name: string; description: string; icon: string | null }>
   stats: {
     threadCreator: number
@@ -102,7 +103,12 @@ export default function PublicProfilePage() {
               <div className="flex items-start justify-between gap-4 flex-wrap">
                 <div>
                   <h1 className="text-2xl font-bold mb-1 break-words flex items-center gap-2">@{profile.username} <RoleBadge role={profile.role} /></h1>
-                  <p className="text-muted-foreground text-sm mb-2">Member since {joinDate}</p>
+                  <p className="text-muted-foreground text-sm mb-2 flex items-center gap-2">
+                    <span>Member since {joinDate}</span>
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary/10 text-primary text-xs font-medium">
+                      <Award className="w-3 h-3" />{profile.trustLevel}
+                    </span>
+                  </p>
                   {profile.bio && <p className="text-sm mb-3 break-words whitespace-pre-wrap">{profile.bio}</p>}
                   <div className="flex gap-4 text-sm text-muted-foreground flex-wrap">
                     {profile.location && (

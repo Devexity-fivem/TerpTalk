@@ -52,6 +52,17 @@ export async function isTrustedForLinks(userId: string): Promise<boolean> {
   return ageHours >= 24 && (user.profile?.reputation ?? 0) >= 10
 }
 
+export type TrustLevel = "New Grower" | "Member" | "Established" | "Veteran" | "Expert"
+
+export function getTrustLevel(createdAt: Date | string, reputation: number): TrustLevel {
+  const ageDays = (Date.now() - new Date(createdAt).getTime()) / (1000 * 60 * 60 * 24)
+  if (ageDays >= 90 && reputation >= 1000) return "Expert"
+  if (ageDays >= 30 && reputation >= 500) return "Veteran"
+  if (ageDays >= 7 && reputation >= 100) return "Established"
+  if (ageDays >= 1 && reputation >= 10) return "Member"
+  return "New Grower"
+}
+
 // ─── Blocking helpers ───────────────────────────────────────────────
 
 /** True if a block exists in either direction between two users. */

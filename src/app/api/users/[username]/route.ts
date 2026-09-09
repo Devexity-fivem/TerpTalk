@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { blockExistsBetween } from "@/lib/security"
+import { getTrustLevel } from "@/lib/security"
 
 // GET — public profile by username (safe fields only)
 export async function GET(
@@ -113,9 +114,13 @@ export async function GET(
       growExperience: profile.growExperience,
       favoriteStrain: profile.favoriteStrain,
       growSpace: profile.growSpace,
+      businessName: profile.businessName,
+      businessType: profile.businessType,
+      businessUrl: profile.businessUrl,
       image: profile.user.image,
       joinDate: profile.joinDate,
       reputation: profile.reputation,
+      trustLevel: getTrustLevel(profile.user.createdAt, profile.reputation),
       badges: profile.user.badges.map((b) => ({
         name: b.badge.name,
         description: b.badge.description,
