@@ -1,4 +1,4 @@
-import { MessageSquare, Award, MessageCircle, Dna, Sprout, Calendar, Settings, Trophy, BookOpen, Stethoscope, Tag, Medal, Menu } from "lucide-react"
+import { MessageSquare, Award, MessageCircle, Dna, Sprout, Calendar, Settings, Trophy, BookOpen, Stethoscope, Tag, Medal, Menu, PenLine, ArrowRight, Calculator } from "lucide-react"
 import Link from "next/link"
 import { prisma } from "@/lib/prisma"
 import { publicUserSelect } from "@/lib/security"
@@ -37,78 +37,37 @@ async function getLatestDiscussions() {
   return { categories, latest }
 }
 
-const FEATURES = [
+const NAV_SECTIONS = [
   {
-    icon: MessageSquare,
-    title: "Discussions",
-    desc: "Ask questions, trade techniques, and talk shop with experienced cultivators.",
-    href: "/forum",
+    title: "Grow",
+    description: "Track, document, and improve your cultivation",
+    items: [
+      { icon: Sprout, title: "Grow Diaries", desc: "Document your grow from seed to harvest.", href: "/diaries" },
+      { icon: Settings, title: "Setup Showcases", desc: "Show off your tent, lights, and gear.", href: "/setups" },
+      { icon: Dna, title: "Strain Database", desc: "Compare genetics and grower photos.", href: "/strains" },
+      { icon: Stethoscope, title: "Plant Problem Solver", desc: "Diagnose symptoms and find fixes.", href: "/help" },
+    ],
   },
   {
-    icon: Calendar,
-    title: "Feed",
-    desc: "The latest posts, updates, and content from growers you follow.",
-    href: "/feed",
+    title: "Community",
+    description: "Talk, share, and connect with other growers",
+    items: [
+      { icon: MessageSquare, title: "Discussions", desc: "Ask questions and trade techniques.", href: "/forum" },
+      { icon: Calendar, title: "Feed", desc: "Latest posts from growers you follow.", href: "/feed" },
+      { icon: MessageCircle, title: "Community Chat", desc: "Real-time help and hangout.", href: null },
+      { icon: Trophy, title: "Budshot of the Week", desc: "Photo contest and community votes.", href: "/contest" },
+      { icon: Medal, title: "Leaderboard", desc: "Top contributors by reputation.", href: "/leaderboard" },
+    ],
   },
   {
-    icon: Sprout,
-    title: "Grow Diaries",
-    desc: "Document your grow from seed to harvest — with environment charts, stage tracking, and harvest estimates.",
-    href: "/diaries",
-  },
-  {
-    icon: Settings,
-    title: "Setup Showcases",
-    desc: "Show off your grow space and equipment. Get feedback and inspiration.",
-    href: "/setups",
-  },
-  {
-    icon: Dna,
-    title: "Strain Database",
-    desc: "Community-maintained genetics — lineage, growing traits, and grower photos.",
-    href: "/strains",
-  },
-  {
-    icon: Trophy,
-    title: "Budshot of the Week",
-    desc: "Weekly photo contest. Submit your best shot, community votes, winner earns a badge.",
-    href: "/contest",
-  },
-  {
-    icon: BookOpen,
-    title: "Grow Guides",
-    desc: "Staff-written guides covering everything from germination to curing.",
-    href: "/guides",
-  },
-  {
-    icon: Stethoscope,
-    title: "Plant Problem Solver",
-    desc: "Interactive diagnostic tool — describe the symptoms, get likely causes and fixes.",
-    href: "/help",
-  },
-  {
-    icon: Tag,
-    title: "Deals",
-    desc: "Community-recommended gear with partner discounts. Supports the site at no extra cost.",
-    href: "/deals",
-  },
-  {
-    icon: Medal,
-    title: "Leaderboard",
-    desc: "Top contributors by reputation — see who's growing the community.",
-    href: "/leaderboard",
-  },
-  {
-    icon: MessageCircle,
-    title: "Community Chat",
-    desc: "Hang out in real-time chat — quick answers and good company, bottom-right of any page.",
-    href: null,
-  },
-  {
-    icon: Award,
-    title: "Reputation & Badges",
-    desc: "Earn rep through helpful contributions, unlock badges, and climb the ranks.",
-    href: "/leaderboard",
+    title: "Learn & Save",
+    description: "Guides, tools, and partner deals",
+    items: [
+      { icon: BookOpen, title: "Grow Guides", desc: "Staff guides from germination to curing.", href: "/guides" },
+      { icon: Tag, title: "Deals", desc: "Partner gear and discount codes.", href: "/deals" },
+      { icon: Calculator, title: "Grow Light Calculator", desc: "Estimate electricity costs.", href: "/calculator" },
+      { icon: Award, title: "Reputation & Badges", desc: "Earn rep and unlock badges.", href: "/leaderboard" },
+    ],
   },
 ]
 
@@ -137,16 +96,50 @@ export default async function Home() {
           <p className="text-lg sm:text-xl text-muted-foreground max-w-2xl mx-auto mb-4">
             A 21+ community built around cannabis cultivation. Ask questions, share your grow, compare genetics, troubleshoot problems, and learn from other growers.
           </p>
-          <p className="text-sm text-muted-foreground max-w-xl mx-auto mb-10 flex items-center justify-center gap-2">
+          <p className="text-sm text-muted-foreground max-w-xl mx-auto mb-6 flex items-center justify-center gap-2">
             <Menu className="w-4 h-4" />
-            Open the menu to explore grow diaries, setup showcases, the strain database, deals, and more.
+            Open the menu or jump below to explore every corner of the community.
           </p>
+
+          {/* Quick-start actions */}
+          <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-3 mb-8">
+            <Link
+              href="/forum/new"
+              className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-lg bg-card border border-border hover:border-primary/40 hover:bg-secondary transition-colors"
+            >
+              <PenLine className="w-4 h-4" />
+              Start a thread
+            </Link>
+            <Link
+              href="/diaries/new"
+              className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-lg bg-card border border-border hover:border-primary/40 hover:bg-secondary transition-colors"
+            >
+              <Sprout className="w-4 h-4" />
+              New diary
+            </Link>
+            <Link
+              href="/setups/new"
+              className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-lg bg-card border border-border hover:border-primary/40 hover:bg-secondary transition-colors"
+            >
+              <Settings className="w-4 h-4" />
+              Share setup
+            </Link>
+            <Link
+              href="/strains/new"
+              className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-lg bg-card border border-border hover:border-primary/40 hover:bg-secondary transition-colors"
+            >
+              <Dna className="w-4 h-4" />
+              Add strain
+            </Link>
+          </div>
+
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Link
               href="/forum"
-              className="bg-primary text-primary-foreground px-8 py-3 rounded-xl font-semibold hover:bg-primary/90 transition-all shadow-lg shadow-primary/25 hover:shadow-primary/40 text-center"
+              className="bg-primary text-primary-foreground px-8 py-3 rounded-xl font-semibold hover:bg-primary/90 transition-all shadow-lg shadow-primary/25 hover:shadow-primary/40 text-center inline-flex items-center justify-center gap-2"
             >
               Browse the Forums
+              <ArrowRight className="w-4 h-4" />
             </Link>
             <Link
               href="/auth/signup"
@@ -250,27 +243,45 @@ export default async function Home() {
       {/* Features Section */}
       <section className="py-20 px-4 sm:px-6 lg:px-8">
         <div className="max-w-7xl mx-auto">
-          <h2 className="text-3xl font-bold text-center mb-3 tracking-tight">Explore TerpTalk</h2>
-          <p className="text-center text-muted-foreground mb-12 max-w-xl mx-auto">
-            Everything the community offers — pick a path and dig in.
+          <h2 className="text-3xl font-bold text-center mb-3 tracking-tight">Find your way around</h2>
+          <p className="text-center text-muted-foreground mb-14 max-w-xl mx-auto">
+            Every feature, organized by what you want to do.
           </p>
-          <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-6">
-            {FEATURES.map(({ icon: Icon, title, desc, href }) => {
-              const card = (
-                <div className="bg-card p-6 rounded-xl border border-border h-full transition-all hover:border-primary/40 hover:-translate-y-1 hover:shadow-lg hover:shadow-primary/10">
-                  <div className="bg-primary/10 w-12 h-12 rounded-xl flex items-center justify-center mb-4 ring-1 ring-primary/20">
-                    <Icon className="w-6 h-6 text-primary" />
-                  </div>
-                  <h3 className="text-lg font-semibold mb-2">{title}</h3>
-                  <p className="text-sm text-muted-foreground leading-relaxed">{desc}</p>
+          <div className="space-y-16">
+            {NAV_SECTIONS.map((section) => (
+              <div key={section.title}>
+                <div className="mb-6">
+                  <h3 className="text-xl font-semibold flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-primary" />
+                    {section.title}
+                  </h3>
+                  <p className="text-sm text-muted-foreground ml-4">{section.description}</p>
                 </div>
-              )
-              return href ? (
-                <Link key={title} href={href}>{card}</Link>
-              ) : (
-                <div key={title}>{card}</div>
-              )
-            })}
+                <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                  {section.items.map(({ icon: Icon, title, desc, href }) => {
+                    const card = (
+                      <div className="bg-card p-5 rounded-xl border border-border h-full transition-all hover:border-primary/40 hover:-translate-y-1 hover:shadow-lg hover:shadow-primary/10 flex flex-col">
+                        <div className="bg-primary/10 w-10 h-10 rounded-lg flex items-center justify-center mb-3 ring-1 ring-primary/20">
+                          <Icon className="w-5 h-5 text-primary" />
+                        </div>
+                        <h4 className="text-base font-semibold mb-1">{title}</h4>
+                        <p className="text-sm text-muted-foreground leading-relaxed flex-1">{desc}</p>
+                        {href && (
+                          <div className="mt-3 flex items-center gap-1 text-xs font-medium text-primary">
+                            Open <ArrowRight className="w-3 h-3" />
+                          </div>
+                        )}
+                      </div>
+                    )
+                    return href ? (
+                      <Link key={title} href={href} className="block">{card}</Link>
+                    ) : (
+                      <div key={title}>{card}</div>
+                    )
+                  })}
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       </section>
