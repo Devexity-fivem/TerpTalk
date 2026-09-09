@@ -5,7 +5,7 @@ import { useSession } from "next-auth/react"
 import { MessageCircle, Send, X, Loader2, Smile } from "lucide-react"
 import RoleBadge from "@/components/role-badge"
 import dynamic from "next/dynamic"
-import { Theme } from "emoji-picker-react"
+import { Theme, EmojiStyle } from "emoji-picker-react"
 
 // Full emoji picker — lazy-loaded so it doesn't bloat the initial bundle
 const EmojiPicker = dynamic(() => import("emoji-picker-react"), { ssr: false })
@@ -271,7 +271,7 @@ export default function ChatSidebar() {
               <EmojiPicker
                 onEmojiClick={(emoji) => insertEmoji(emoji.emoji)}
                 theme={"dark" as Theme}
-                emojiStyle="native"
+                emojiStyle={"native" as EmojiStyle}
                 height={320}
                 width="100%"
                 searchPlaceholder="Search emojis..."
