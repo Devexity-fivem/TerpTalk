@@ -85,6 +85,11 @@ export async function POST(request: Request) {
       },
     })
 
+    await prisma.thread.update({
+      where: { id: threadId },
+      data: { replyCount: { increment: 1 } },
+    })
+
     await awardReputation(
       session.user.id,
       "POST_CREATED",

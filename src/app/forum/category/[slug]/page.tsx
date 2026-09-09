@@ -28,12 +28,13 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   })
 }
 
-async function getCategoryData(slug: string, page: number) {
+async function getCategoryData(slug: string, page: number, unanswered = false) {
+  const where = { deleted: false, ...(unanswered ? { replyCount: 0 } : {}) }
   const category = await prisma.category.findUnique({
     where: { slug },
     include: {
       threads: {
-        where: { deleted: false },
+        where,
         include: {
           author: { select: publicUserSelect },
           _count: {
@@ -47,7 +48,7 @@ async function getCategoryData(slug: string, page: number) {
         skip: (page - 1) * THREADS_PER_PAGE,
         take: THREADS_PER_PAGE,
       },
-      _count: { select: { threads: { where: { deleted: false } } } },
+      _count: { select: { threads: { where } } },
     },
   })
 
@@ -63,12 +64,13 @@ export default async function CategoryPage({
   searchParams,
 }: {
   params: Promise<{ slug: string }>
-  searchParams: Promise<{ page?: string }>
+  searchParams: Promise<{ page?: string; filter?: string }>
 }) {
   const { slug } = await params
-  const { page: pageParam } = await searchParams
+  const { page: pageParam, filter: filterParam } = await searchParams
   const page = Math.max(1, Math.min(10_000, parseInt(pageParam || "1") || 1))
-  const category = await getCategoryData(slug, page)
+  const unanswered = filterParam === "unanswered"
+  const category = await getCategoryData(slug, page, unanswered)
   const session = await getServerSession(authOptions)
   const isFollowing = session?.user?.id
     ? !!(await prisma.categoryFollow.findUnique({
@@ -97,8 +99,25 @@ export default async function CategoryPage({
 
         {/* Threads List */}
         <div className="bg-card rounded-lg border border-border">
-          <div className="p-6 border-b border-border flex justify-between items-center">
-            <h2 className="text-xl font-semibold">Discussions</h2>
+          <div className="p-4 border-b border-border flex flex-wrap gap-2 items-center justify-between">
+            <div className="flex gap-2">
+              <Link
+                href={`/forum/category/${category.slug}`}
+                className={`px-3 py-1.5 rounded-md text-sm transition-colors ${
+                  !unanswered ? "bg-primary text-primary-foreground" : "bg-secondary hover:bg-secondary/80"
+                }`}
+              >
+                All
+              </Link>
+              <Link
+                href={`/forum/category/${category.slug}?filter=unanswered`}
+                className={`px-3 py-1.5 rounded-md text-sm transition-colors ${
+                  unanswered ? "bg-primary text-primary-foreground" : "bg-secondary hover:bg-secondary/80"
+                }`}
+              >
+                Unanswered
+              </Link>
+            </div>
             <Link
               href={`/forum/new?category=${category.slug}`}
               className="bg-primary text-primary-foreground px-4 py-2 rounded-lg hover:bg-primary/90 transition-colors text-sm"
