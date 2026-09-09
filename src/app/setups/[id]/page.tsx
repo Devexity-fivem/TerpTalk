@@ -15,13 +15,13 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   const { id } = await params
   const setup = await prisma.growSetup.findUnique({
     where: { id },
-    select: { title: true, description: true, deleted: true },
+    select: { title: true, description: true, deleted: true, strain: true },
   })
   if (!setup || setup.deleted) return buildMetadata({ title: "Setup not found", robots: { index: false } })
   return buildMetadata({
-    title: `${setup.title} — Cannabis Grow Setup`,
+    title: `${setup.title} ${setup.strain ? `(${setup.strain})` : ""} — Cannabis Grow Setup`,
     description: snippet(setup.description),
-    keywords: ["grow setup", "grow tent", "grow lights", "cannabis setup"],
+    keywords: ["grow setup", "grow tent", "grow lights", "cannabis setup", setup.strain || ""].filter(Boolean),
     pathname: `/setups/${id}`,
   })
 }
@@ -51,6 +51,7 @@ export default async function SetupPage({ params }: { params: Promise<{ id: stri
     ["Containers", setup.containers],
     ["Medium", setup.medium],
     ["Nutrients", setup.nutrients],
+    ["Strain", setup.strain],
   ]
 
   return (

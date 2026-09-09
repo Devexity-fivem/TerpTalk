@@ -26,6 +26,7 @@ export default function NewSetupPage() {
     nutrients: "",
     controllers: "",
     equipment: "",
+    strain: "",
   })
 
   if (status === "loading") {
@@ -119,6 +120,21 @@ export default function NewSetupPage() {
                   className="w-full px-4 py-2 rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary resize-none"
                   placeholder="Describe your setup, what you're growing, and your goals..."
                   rows={4}
+                />
+              </div>
+
+              <div>
+                <label htmlFor="strain" className="block text-sm font-medium mb-2">
+                  Primary Strain (optional)
+                </label>
+                <input
+                  id="strain"
+                  type="text"
+                  value={formData.strain}
+                  onChange={(e) => setFormData({ ...formData, strain: e.target.value })}
+                  className="w-full px-4 py-2 rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary"
+                  placeholder="e.g., Blue Dream, OG Kush"
+                  maxLength={80}
                 />
               </div>
             </div>

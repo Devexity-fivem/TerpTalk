@@ -1,12 +1,14 @@
 import { prisma } from "@/lib/prisma"
 import { notFound } from "next/navigation"
-import { Leaf, Dna, Sprout, ImageIcon } from "lucide-react"
+import { Leaf, Dna, Sprout, ImageIcon, BookOpen, Wrench } from "lucide-react"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import StrainPhotoUpload from "@/components/strain-photo-upload"
 import ShareButtons from "@/components/share-buttons"
 import { buildMetadata, snippet } from "@/lib/seo"
 import { Breadcrumbs } from "@/components/breadcrumbs"
+import { publicUserSelect } from "@/lib/security"
+import Link from "next/link"
 
 export const dynamic = "force-dynamic"
 
@@ -48,8 +50,32 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
 
   if (!strain) notFound()
 
+  const [relatedDiaries, relatedSetups] = await Promise.all([
+    prisma.growDiary.findMany({
+      where: { deleted: false, strain: { contains: strain.name, mode: "insensitive" } },
+      orderBy: { updatedAt: "desc" },
+      take: 6,
+      include: {
+        author: { select: publicUserSelect },
+        updates: { take: 1, orderBy: { createdAt: "desc" }, include: { images: { take: 1 } } },
+      },
+    }),
+    prisma.growSetup.findMany({
+      where: { deleted: false, strain: { contains: strain.name, mode: "insensitive" } },
+      orderBy: { createdAt: "desc" },
+      take: 6,
+      include: { author: { select: publicUserSelect }, images: { take: 1 } },
+    }),
+  ])
+
   const plantPhotos = strain.photos.filter((p) => p.kind === "PLANT")
   const flowerPhotos = strain.photos.filter((p) => p.kind === "FLOWER")
+
+  const diaryThumb = (d: typeof relatedDiaries[0]) =>
+    d.updates[0]?.images[0]?.url
+
+  const setupThumb = (s: typeof relatedSetups[0]) =>
+    s.images[0]?.url
 
   return (
     <div className="min-h-screen bg-background">
@@ -109,6 +135,74 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
           <div className="bg-card rounded-xl border border-border p-5 mb-6">
             <h2 className="font-semibold mb-2">Description</h2>
             <p className="text-sm text-muted-foreground whitespace-pre-wrap">{strain.description}</p>
+          </div>
+        )}
+
+        {/* Community diaries for this strain */}
+        {relatedDiaries.length > 0 && (
+          <div className="bg-card rounded-xl border border-border p-5 mb-6">
+            <div className="flex items-center gap-2 mb-4">
+              <BookOpen className="w-4 h-4 text-primary" />
+              <h2 className="font-semibold">Grows with this strain</h2>
+            </div>
+            <div className="grid sm:grid-cols-2 gap-3">
+              {relatedDiaries.map((d) => (
+                <Link
+                  key={d.id}
+                  href={`/diaries/${d.id}`}
+                  className="flex items-center gap-3 p-3 rounded-lg border border-border hover:bg-secondary/50 transition-colors"
+                >
+                  <div className="w-16 h-16 bg-secondary rounded-lg overflow-hidden shrink-0">
+                    {diaryThumb(d) ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={diaryThumb(d)} alt="" className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-muted-foreground">
+                        <BookOpen className="w-5 h-5" />
+                      </div>
+                    )}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="font-medium text-sm truncate">{d.title}</p>
+                    <p className="text-xs text-muted-foreground truncate">by {d.author.profile?.username || d.author.name}</p>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Community setups for this strain */}
+        {relatedSetups.length > 0 && (
+          <div className="bg-card rounded-xl border border-border p-5 mb-6">
+            <div className="flex items-center gap-2 mb-4">
+              <Wrench className="w-4 h-4 text-primary" />
+              <h2 className="font-semibold">Setups growing this strain</h2>
+            </div>
+            <div className="grid sm:grid-cols-2 gap-3">
+              {relatedSetups.map((s) => (
+                <Link
+                  key={s.id}
+                  href={`/setups/${s.id}`}
+                  className="flex items-center gap-3 p-3 rounded-lg border border-border hover:bg-secondary/50 transition-colors"
+                >
+                  <div className="w-16 h-16 bg-secondary rounded-lg overflow-hidden shrink-0">
+                    {setupThumb(s) ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={setupThumb(s)} alt="" className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-muted-foreground">
+                        <Wrench className="w-5 h-5" />
+                      </div>
+                    )}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="font-medium text-sm truncate">{s.title}</p>
+                    <p className="text-xs text-muted-foreground truncate">by {s.author.profile?.username || s.author.name}</p>
+                  </div>
+                </Link>
+              ))}
+            </div>
           </div>
         )}
 

@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma"
 import { publicUserSelect } from "@/lib/security"
 import { notFound } from "next/navigation"
 import { Leaf, Calendar, Users } from "lucide-react"
+import Link from "next/link"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import UpdateForm from "@/components/update-form"
@@ -56,12 +57,20 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
   const { id } = await params
   const diary = await getDiaryData(id)
   const session = await getServerSession(authOptions)
-  const following = session?.user?.id
-    ? !!(await prisma.diaryFollow.findUnique({
-        where: { userId_diaryId: { userId: session.user.id, diaryId: diary.id } },
-        select: { id: true },
-      }))
-    : false
+  const [following, linkedStrain] = await Promise.all([
+    session?.user?.id
+      ? !!(await prisma.diaryFollow.findUnique({
+          where: { userId_diaryId: { userId: session.user.id, diaryId: diary.id } },
+          select: { id: true },
+        }))
+      : false,
+    diary.strain
+      ? prisma.strain.findFirst({
+          where: { name: { contains: diary.strain, mode: "insensitive" } },
+          select: { id: true, name: true },
+        })
+      : null,
+  ])
 
   // Grow progress: day count + stage position
   const STAGES = ["GERMINATION", "SEEDLING", "VEGETATIVE", "FLOWER", "HARVEST", "DRYING", "CURING", "COMPLETED"]
@@ -224,7 +233,13 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
             {diary.strain && (
               <div>
                 <span className="text-sm text-muted-foreground">Strain:</span>
-                <p className="font-medium">{diary.strain}</p>
+                {linkedStrain ? (
+                  <Link href={`/strains/${linkedStrain.id}`} className="font-medium text-primary hover:underline block">
+                    {diary.strain}
+                  </Link>
+                ) : (
+                  <p className="font-medium">{diary.strain}</p>
+                )}
               </div>
             )}
             {diary.genetics && (

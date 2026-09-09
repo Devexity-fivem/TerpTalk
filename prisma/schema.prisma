@@ -312,6 +312,7 @@ model GrowSetup {
   nutrients   String?
   controllers String?
   equipment   String?
+  strain      String?
   authorId    String
   deleted     Boolean  @default(false)
   createdAt   DateTime @default(now())
@@ -323,6 +324,7 @@ model GrowSetup {
 
   @@index([authorId])
   @@index([createdAt])
+  @@index([strain])
 }
 
 model SetupImage {

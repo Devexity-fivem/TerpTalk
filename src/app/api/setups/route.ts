@@ -28,6 +28,7 @@ export async function POST(request: Request) {
       nutrients,
       controllers,
       equipment,
+      strain,
       images,
     } = body
 
@@ -88,6 +89,7 @@ export async function POST(request: Request) {
         nutrients,
         controllers,
         equipment,
+        strain,
         authorId: session.user.id,
         ...(storedImages.length > 0 && {
           images: {
