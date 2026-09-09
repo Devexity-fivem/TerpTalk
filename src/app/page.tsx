@@ -1,6 +1,7 @@
-import { MessageSquare, Award, MessageCircle, Dna, Sprout, Calendar, Settings, Trophy, BookOpen, Stethoscope, Tag, Medal } from "lucide-react"
+import { MessageSquare, Award, MessageCircle, Dna, Sprout, Calendar, Settings, Trophy, BookOpen, Stethoscope, Tag, Medal, Menu } from "lucide-react"
 import Link from "next/link"
 import { prisma } from "@/lib/prisma"
+import { publicUserSelect } from "@/lib/security"
 import CannabisLeaf from "@/components/cannabis-leaf"
 
 export const dynamic = "force-dynamic"
@@ -13,6 +14,27 @@ async function getStats() {
     prisma.post.count({ where: { deleted: false } }),
   ])
   return { members, diaries, discussions: threads + posts }
+}
+
+async function getLatestDiscussions() {
+  const [categories, latest] = await Promise.all([
+    prisma.category.findMany({
+      where: { hidden: false },
+      orderBy: { order: "asc" },
+      select: { name: true, slug: true, description: true, _count: { select: { threads: { where: { deleted: false } } } } },
+    }),
+    prisma.thread.findMany({
+      where: { deleted: false },
+      orderBy: { createdAt: "desc" },
+      take: 6,
+      include: {
+        author: { select: publicUserSelect },
+        category: { select: { name: true, slug: true } },
+        _count: { select: { posts: { where: { deleted: false } } } },
+      },
+    }),
+  ])
+  return { categories, latest }
 }
 
 const FEATURES = [
@@ -91,7 +113,7 @@ const FEATURES = [
 ]
 
 export default async function Home() {
-  const stats = await getStats()
+  const [stats, { categories, latest }] = await Promise.all([getStats(), getLatestDiscussions()])
   return (
     <div className="flex flex-col min-h-screen bg-background">
       {/* Hero Section */}
@@ -112,21 +134,25 @@ export default async function Home() {
               TerpTalk
             </span>
           </h1>
-          <p className="text-lg sm:text-xl text-muted-foreground max-w-2xl mx-auto mb-10">
-            The community for cannabis growers — share grow diaries, trade setups, talk genetics, and learn together.
+          <p className="text-lg sm:text-xl text-muted-foreground max-w-2xl mx-auto mb-4">
+            A 21+ community built around cannabis cultivation. Ask questions, share your grow, compare genetics, troubleshoot problems, and learn from other growers.
+          </p>
+          <p className="text-sm text-muted-foreground max-w-xl mx-auto mb-10 flex items-center justify-center gap-2">
+            <Menu className="w-4 h-4" />
+            Open the menu to explore grow diaries, setup showcases, the strain database, deals, and more.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Link
-              href="/auth/signup"
+              href="/forum"
               className="bg-primary text-primary-foreground px-8 py-3 rounded-xl font-semibold hover:bg-primary/90 transition-all shadow-lg shadow-primary/25 hover:shadow-primary/40 text-center"
             >
-              Join Community
+              Browse the Forums
             </Link>
             <Link
-              href="/diaries"
+              href="/auth/signup"
               className="border border-border bg-card/60 backdrop-blur px-8 py-3 rounded-xl font-semibold hover:bg-secondary transition-colors text-center"
             >
-              Explore Grow Diaries
+              Join Community
             </Link>
           </div>
         </div>
@@ -153,6 +179,69 @@ export default async function Home() {
                 {stats.discussions.toLocaleString()}
               </div>
               <div className="text-sm text-muted-foreground uppercase tracking-wide">Discussions</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Forum Preview */}
+      <section className="py-14 px-4 sm:px-6 lg:px-8 border-y border-border bg-secondary/20">
+        <div className="max-w-7xl mx-auto">
+          <h2 className="text-3xl font-bold mb-3 tracking-tight">What are the TerpTalk forums about?</h2>
+          <p className="text-muted-foreground mb-8 max-w-2xl">
+            The forums are where the community lives — ask questions, share experiences, compare genetics, troubleshoot grow problems, and talk shop with other cultivators. Jump into a category or join the latest conversation below.
+          </p>
+
+          <div className="grid md:grid-cols-2 gap-8">
+            {/* Categories */}
+            <div>
+              <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                <MessageSquare className="w-5 h-5 text-primary" />
+                Forum Categories
+              </h3>
+              <div className="space-y-3">
+                {categories.map((cat) => (
+                  <Link
+                    key={cat.slug}
+                    href={`/forum/category/${cat.slug}`}
+                    className="flex items-center justify-between p-4 bg-card rounded-xl border border-border hover:border-primary/40 transition-colors"
+                  >
+                    <div>
+                      <div className="font-medium">{cat.name}</div>
+                      <div className="text-sm text-muted-foreground">{cat.description}</div>
+                    </div>
+                    <div className="text-sm text-muted-foreground whitespace-nowrap">
+                      {cat._count.threads} thread{cat._count.threads === 1 ? "" : "s"}
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            </div>
+
+            {/* Latest discussions */}
+            <div>
+              <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                <Calendar className="w-5 h-5 text-primary" />
+                Latest Discussions
+              </h3>
+              <div className="space-y-3">
+                {latest.map((thread) => (
+                  <Link
+                    key={thread.id}
+                    href={`/forum/thread/${thread.slug}`}
+                    className="block p-4 bg-card rounded-xl border border-border hover:border-primary/40 transition-colors"
+                  >
+                    <div className="font-medium mb-1 line-clamp-1">{thread.title}</div>
+                    <div className="text-sm text-muted-foreground flex items-center flex-wrap gap-2">
+                      <span className="text-primary">{thread.category.name}</span>
+                      <span>•</span>
+                      <span>{thread.author.profile?.username || thread.author.name}</span>
+                      <span>•</span>
+                      <span>{thread._count.posts} repl{thread._count.posts === 1 ? "y" : "ies"}</span>
+                    </div>
+                  </Link>
+                ))}
+              </div>
             </div>
           </div>
         </div>
