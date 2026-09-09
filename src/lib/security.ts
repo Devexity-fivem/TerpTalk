@@ -31,6 +31,27 @@ export async function isBanned(userId: string): Promise<boolean> {
   return !user || user.banned
 }
 
+// ─── Anti-spam: link restrictions for new/low-trust users ─────────────
+
+const LINK_RE = /(?:https?:\/\/|www\.)|(?:\b[a-z0-9-]+\.[a-z]{2,}\b)/gi
+
+/** Returns true if text contains a likely external link. */
+export function containsExternalLink(text: string): boolean {
+  return LINK_RE.test(text)
+}
+
+/** Moderators and users older than 24h with at least 10 reputation can post links. */
+export async function isTrustedForLinks(userId: string): Promise<boolean> {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { role: true, createdAt: true, profile: { select: { reputation: true } } },
+  })
+  if (!user) return false
+  if (isModerator(user.role)) return true
+  const ageHours = (Date.now() - new Date(user.createdAt).getTime()) / (1000 * 60 * 60)
+  return ageHours >= 24 && (user.profile?.reputation ?? 0) >= 10
+}
+
 // ─── Blocking helpers ───────────────────────────────────────────────
 
 /** True if a block exists in either direction between two users. */
@@ -119,6 +140,7 @@ export type SecurityEventType =
   | "RECOVERY_PHRASE_GENERATED"
   | "RECOVERY_FAILED"
   | "RECOVERY_SUCCESS"
+  | "NEWBIE_LINK_BLOCKED"
 
 export async function logSecurityEvent(
   type: SecurityEventType,

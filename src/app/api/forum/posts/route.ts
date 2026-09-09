@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { unauthorized, publicUserSelect, LIMITS, getClientIp, logSecurityEvent, isBanned, forbidden } from "@/lib/security"
+import { unauthorized, publicUserSelect, LIMITS, getClientIp, logSecurityEvent, isBanned, forbidden, containsExternalLink, isTrustedForLinks } from "@/lib/security"
 import { requireModerator } from "@/lib/require-staff"
 import { rateLimit } from "@/lib/rate-limit"
 import { awardReputation, REP_POINTS } from "@/lib/reputation"
@@ -71,6 +71,18 @@ export async function POST(request: Request) {
 
     if (await isBanned(session.user.id)) {
       return forbidden("Your account is suspended")
+    }
+
+    if (containsExternalLink(content) && !(await isTrustedForLinks(session.user.id))) {
+      await logSecurityEvent("NEWBIE_LINK_BLOCKED", {
+        userId: session.user.id,
+        ip: getClientIp(request),
+        metadata: { endpoint: "forum/posts", threadId },
+      })
+      return NextResponse.json(
+        { error: "New users need 24 hours and 10 reputation before posting links. Share plain text in the meantime." },
+        { status: 403 }
+      )
     }
 
     // Create post
