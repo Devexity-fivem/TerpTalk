@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
+import { Analytics } from "@vercel/analytics/next";
 import { Providers } from "@/components/providers";
 import { Navigation } from "@/components/navigation";
 import ChatSidebar from "@/components/chat-sidebar";
@@ -71,6 +72,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <QuickPostButton />
           <ServiceWorkerRegister />
         </Providers>
+        <Analytics />
       </body>
     </html>
   );
