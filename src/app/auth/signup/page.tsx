@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import { signIn } from "next-auth/react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
@@ -20,28 +20,10 @@ export default function SignUpPage() {
       password: "",
       confirmPassword: "",
       ageVerified: false,
-      captchaAnswer: "",
-      captchaId: "",
+      website: "",
+      formStart: Date.now(),
     }
   })
-  const [captchaQuestion, setCaptchaQuestion] = useState("Loading...")
-
-  const loadCaptcha = () => {
-    fetch("/api/auth/register")
-      .then(res => res.json())
-      .then(data => {
-        setCaptchaQuestion(data.captcha.question)
-        setFormData(prev => ({ ...prev, captchaId: data.captcha.id, captchaAnswer: "" }))
-      })
-      .catch(() => {
-        setError("Failed to load security check")
-      })
-  }
-
-  // Fetch captcha from server
-  useEffect(() => {
-    loadCaptcha()
-  }, [])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -52,8 +34,8 @@ export default function SignUpPage() {
       return
     }
 
-    if (!formData.captchaAnswer || !formData.captchaId) {
-      setError("Security check required")
+    if (formData.website) {
+      setError("Registration failed")
       return
     }
 
@@ -76,17 +58,16 @@ export default function SignUpPage() {
         body: JSON.stringify({
           username: formData.username,
           password: formData.password,
-          captchaId: formData.captchaId,
-          captchaAnswer: formData.captchaAnswer,
           ageVerified: formData.ageVerified,
           referralCode: formData.referralCode,
+          website: formData.website,
+          formStart: formData.formStart,
         }),
       })
 
       const data = await response.json()
 
       if (!response.ok) {
-        loadCaptcha()
         throw new Error(data.error || "Registration failed")
       }
 
@@ -185,20 +166,21 @@ export default function SignUpPage() {
             />
           </div>
 
-          <div>
-            <label htmlFor="captcha" className="block text-sm font-medium mb-2">
-              Security Check: {captchaQuestion}
-            </label>
+          {/* Honeypot field — must be left blank */}
+          <div className="absolute -left-[9999px] w-0 h-0 overflow-hidden" aria-hidden="true">
             <input
-              id="captcha"
-              type="number"
-              required
-              value={formData.captchaAnswer}
-              onChange={(e) => setFormData({ ...formData, captchaAnswer: e.target.value })}
-              className="w-full px-4 py-2 rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary"
-              placeholder="Enter the answer"
+              id="website"
+              name="website"
+              type="text"
+              tabIndex={-1}
+              autoComplete="off"
+              value={formData.website}
+              onChange={(e) => setFormData({ ...formData, website: e.target.value })}
+              className="w-0 h-0"
             />
           </div>
+
+          <input type="hidden" name="formStart" value={formData.formStart} readOnly />
 
           <div className="flex items-center">
             <input

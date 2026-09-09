@@ -11,46 +11,6 @@ import {
   logSecurityEvent,
 } from "@/lib/security"
 import { awardReputation, REP_POINTS } from "@/lib/reputation"
-import { randomInt } from "crypto"
-
-// Generate a captcha persisted in the database (works across serverless instances)
-export async function GET(request: Request) {
-  try {
-    const ip = getClientIp(request)
-    const rl = await rateLimit(`captcha:${hashIp(ip)}`, 20, 10 * 60 * 1000)
-    if (!rl.allowed) {
-      return NextResponse.json(
-        { error: "Too many requests. Please try again later." },
-        { status: 429 }
-      )
-    }
-
-    const num1 = randomInt(1, 11)
-    const num2 = randomInt(1, 11)
-
-    const captcha = await prisma.captcha.create({
-      data: {
-        answer: String(num1 + num2),
-        expiresAt: new Date(Date.now() + 15 * 60 * 1000), // 15 min
-      },
-    })
-
-    // Opportunistic cleanup of expired captchas
-    prisma.captcha
-      .deleteMany({ where: { expiresAt: { lt: new Date() } } })
-      .catch(() => {})
-
-    return NextResponse.json({
-      captcha: { id: captcha.id, question: `${num1} + ${num2} = ?` },
-    })
-  } catch (error) {
-    console.error("Captcha generation error:", error)
-    return NextResponse.json(
-      { error: "Failed to generate captcha" },
-      { status: 500 }
-    )
-  }
-}
 
 export async function POST(request: Request) {
   const ip = getClientIp(request)
@@ -73,11 +33,41 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json().catch(() => ({}))
-    const { username, password, captchaId, captchaAnswer, ageVerified, referralCode } = body
+    const { username, password, ageVerified, referralCode, website, formStart } = body
 
-    if (!username || !password || !captchaId || !captchaAnswer) {
+    if (!username || !password) {
       return NextResponse.json(
         { error: "Missing required fields" },
+        { status: 400 }
+      )
+    }
+
+    // Honeypot — must be empty
+    if (website) {
+      await logSecurityEvent("REGISTRATION_FAILED", {
+        ip,
+        userAgent,
+        metadata: { reason: "honeypot" },
+      })
+      return NextResponse.json(
+        { error: "Registration failed" },
+        { status: 400 }
+      )
+    }
+
+    // Time gating — reject forms completed too fast or too stale
+    const started = Number(formStart)
+    const now = Date.now()
+    const minMs = 3000
+    const maxMs = 30 * 60 * 1000
+    if (!started || Number.isNaN(started) || now - started < minMs || now - started > maxMs) {
+      await logSecurityEvent("REGISTRATION_FAILED", {
+        ip,
+        userAgent,
+        metadata: { reason: "time_gate" },
+      })
+      return NextResponse.json(
+        { error: "Invalid or expired security check" },
         { status: 400 }
       )
     }
@@ -108,37 +98,7 @@ export async function POST(request: Request) {
       )
     }
 
-    // Validate captcha server-side (single-use, expiring)
-    const captcha = await prisma.captcha.findUnique({ where: { id: captchaId } })
-    if (
-      !captcha ||
-      captcha.expiresAt < new Date() ||
-      String(captchaAnswer).trim().toLowerCase() !== captcha.answer.toLowerCase()
-    ) {
-      if (captcha) {
-        await prisma.captcha.delete({ where: { id: captcha.id } }).catch(() => {})
-      }
-      await logSecurityEvent("REGISTRATION_FAILED", {
-        ip,
-        userAgent,
-        metadata: { reason: "captcha" },
-      })
-      return NextResponse.json(
-        { error: "Invalid or expired security check" },
-        { status: 400 }
-      )
-    }
-    // Burn the captcha atomically
-    const burned = await prisma.captcha.updateMany({
-      where: { id: captcha.id, used: false },
-      data: { used: true },
-    })
-    if (burned.count === 0) {
-      return NextResponse.json(
-        { error: "Invalid or expired security check" },
-        { status: 400 }
-      )
-    }
+    // Security checks passed (honeypot + time gate + rate limit)
 
     // Username format
     if (
