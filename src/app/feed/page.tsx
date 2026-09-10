@@ -53,6 +53,7 @@ async function getFeedData(userId?: string, tab = "latest") {
       diary: {
         include: {
           author: { select: publicUserSelect },
+          _count: { select: { followers: true, updates: true } },
         },
       },
       author: { select: publicUserSelect },
@@ -72,6 +73,30 @@ async function getFeedData(userId?: string, tab = "latest") {
       },
     },
   })
+
+  // For personalized tabs, build a ranked, mixed feed from followed users and categories.
+  const feedItems: { type: "thread" | "update"; score: number; data: (typeof recentDiaryUpdates)[number] | (typeof recentThreads)[number] }[] = []
+  if (personal) {
+    const now = Date.now()
+    const weekMs = 7 * 24 * 60 * 60 * 1000
+    const threadItems = recentThreads.map((t) => {
+      const age = now - new Date(t.createdAt).getTime()
+      const recency = Math.max(0, 1 - age / weekMs)
+      const engagement = Math.min(1, (t.replyCount + t.views) / 100)
+      return { type: "thread" as const, score: recency * 0.6 + engagement * 0.4, data: t }
+    })
+    const updateItems = recentDiaryUpdates.map((u) => {
+      const age = now - new Date(u.createdAt).getTime()
+      const recency = Math.max(0, 1 - age / weekMs)
+      const diaryFollowers = u.diary._count?.followers ?? 0
+      const diaryUpdates = u.diary._count?.updates ?? 0
+      const engagement = Math.min(1, (diaryFollowers + diaryUpdates) / 20)
+      return { type: "update" as const, score: recency * 0.6 + engagement * 0.4, data: u }
+    })
+    feedItems.push(...threadItems, ...updateItems)
+    feedItems.sort((a, b) => b.score - a.score)
+    feedItems.splice(12)
+  }
 
   const trendingDiaries = await prisma.growDiary.findMany({
     where: diaryWhere,
@@ -103,6 +128,7 @@ async function getFeedData(userId?: string, tab = "latest") {
   return {
     recentDiaryUpdates,
     recentThreads,
+    feedItems,
     trendingDiaries,
     memberCount,
     threadCount,
@@ -117,7 +143,7 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
   const { tab } = await searchParams
   const session = await getServerSession(authOptions)
   const activeTab = TABS.includes((tab || "") as (typeof TABS)[number]) ? (tab as (typeof TABS)[number]) : "latest"
-  const { recentDiaryUpdates, recentThreads, trendingDiaries, memberCount, threadCount, diaryCount, popularCategories } =
+  const { recentDiaryUpdates, recentThreads, feedItems, trendingDiaries, memberCount, threadCount, diaryCount, popularCategories } =
     await getFeedData(session?.user?.id, activeTab)
 
   const tabCls = (t: string) =>
@@ -142,6 +168,70 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
         <div className="grid lg:grid-cols-3 gap-6">
           {/* Main Feed */}
           <div className="lg:col-span-2 space-y-6">
+            {/* Top Picks for You */}
+            {activeTab === "for-you" && feedItems.length > 0 && (
+              <div className="bg-card rounded-lg border border-border">
+                <div className="p-4 border-b border-border flex items-center gap-2">
+                  <TrendingUp className="w-5 h-5 text-primary" />
+                  <h2 className="font-semibold">Top Picks for You</h2>
+                </div>
+                <div className="divide-y divide-border">
+                  {feedItems.map((item) => {
+                    if (item.type === "thread") {
+                      const t = item.data as (typeof recentThreads)[number]
+                      return (
+                        <Link
+                          key={`t-${t.id}`}
+                          href={`/forum/thread/${t.slug}`}
+                          className="block p-4 hover:bg-secondary/50 transition-colors"
+                        >
+                          <div className="flex items-start gap-3">
+                            <div className="flex-shrink-0 w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center">
+                              <MessageSquare className="w-5 h-5 text-primary" />
+                            </div>
+                            <div className="flex-1">
+                              <div className="font-semibold text-sm mb-1">{t.title}</div>
+                              <div className="text-xs text-muted-foreground flex items-center gap-2 flex-wrap">
+                                <span>{t.category.name}</span>
+                                <span>•</span>
+                                <span>{t.replyCount} repl{t.replyCount === 1 ? "y" : "ies"}</span>
+                                <span>•</span>
+                                <span>{new Date(t.createdAt).toLocaleDateString()}</span>
+                              </div>
+                            </div>
+                          </div>
+                        </Link>
+                      )
+                    } else {
+                      const u = item.data as (typeof recentDiaryUpdates)[number]
+                      return (
+                        <Link
+                          key={`u-${u.id}`}
+                          href={`/diaries/${u.diary.id}`}
+                          className="block p-4 hover:bg-secondary/50 transition-colors"
+                        >
+                          <div className="flex items-start gap-3">
+                            <div className="flex-shrink-0 w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center">
+                              <Leaf className="w-5 h-5 text-primary" />
+                            </div>
+                            <div className="flex-1">
+                              <div className="font-semibold text-sm mb-1">{u.title}</div>
+                              <p className="text-xs text-muted-foreground line-clamp-1 mb-1">{u.content}</p>
+                              <div className="text-xs text-muted-foreground flex items-center gap-2 flex-wrap">
+                                <span>{u.diary.title}</span>
+                                <span>•</span>
+                                <span>{new Date(u.createdAt).toLocaleDateString()}</span>
+                              </div>
+                            </div>
+                          </div>
+                        </Link>
+                      )
+                    }
+                  })}
+                </div>
+              </div>
+            )}
+
             {/* Recent Diary Updates */}
             {recentDiaryUpdates.length > 0 && (
               <div className="bg-card rounded-lg border border-border">
