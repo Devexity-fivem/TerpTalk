@@ -78,7 +78,7 @@ export default function ProfileClient() {
   const [notFound, setNotFound] = useState(false)
 
   useEffect(() => {
-    fetch(`/api/users/${encodeURIComponent(username)}`)
+    fetch(`/api/users/${encodeURIComponent(username)}`, { cache: "no-store" })
       .then(async (res) => {
         if (!res.ok) { setNotFound(true); setLoading(false); return }
         const d = await res.json()
