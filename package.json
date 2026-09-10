@@ -19,6 +19,7 @@
     "@vercel/blob": "^2.8.0",
     "bcryptjs": "^3.0.3",
     "bip39": "^3.1.0",
+    "clsx": "^2.1.1",
     "emoji-picker-react": "^4.12.3",
     "lucide-react": "^1.41.0",
     "next": "16.3.4",
@@ -29,7 +30,8 @@
     "pusher-js": "^8.4.0",
     "react": "19.2.8",
     "react-dom": "19.2.8",
-    "recharts": "^3.2.1"
+    "recharts": "^3.2.1",
+    "tailwind-merge": "^3.6.0"
   },
   "overrides": {
     "cookie": "^0.7.2",
