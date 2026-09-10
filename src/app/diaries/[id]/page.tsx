@@ -12,6 +12,7 @@ import { buildMetadata, snippet } from "@/lib/seo"
 import { Breadcrumbs } from "@/components/breadcrumbs"
 import EnvCharts from "@/components/env-chart"
 import HarvestForm from "@/components/harvest-form"
+import StageTimeline from "@/components/stage-timeline"
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -73,12 +74,8 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
       : null,
   ])
 
-  // Grow progress: day count + stage position
-  const STAGES = ["GERMINATION", "SEEDLING", "VEGETATIVE", "FLOWER", "HARVEST", "DRYING", "CURING", "COMPLETED"]
   // eslint-disable-next-line react-hooks/purity
   const dayCount = Math.max(0, Math.floor((Date.now() - new Date(diary.startDate).getTime()) / 86400000))
-  const stageIdx = Math.max(0, STAGES.indexOf(diary.stage))
-  const progress = Math.round(((stageIdx + 1) / STAGES.length) * 100)
 
   // Stage timeline — consecutive day-runs per stage from updates
   const stageRuns: { stage: string; days: number }[] = []
@@ -89,11 +86,6 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
     if (last && last.stage === u.stage && d === prevDay + 1) last.days++
     else if (!last || last.stage !== u.stage) stageRuns.push({ stage: u.stage, days: 1 })
     prevDay = d
-  }
-  const STAGE_COLORS: Record<string, string> = {
-    GERMINATION: "bg-stone-500", SEEDLING: "bg-lime-400", VEGETATIVE: "bg-green-500",
-    FLOWER: "bg-amber-500", HARVEST: "bg-orange-500", DRYING: "bg-yellow-700",
-    CURING: "bg-purple-500", COMPLETED: "bg-yellow-400",
   }
 
   // Harvest estimate — first FLOWER update + 9 weeks typical flower time
@@ -178,16 +170,7 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
                   </span>
                 )}
               </div>
-              {/* Stage progress */}
-              <div className="mt-3">
-                <div className="flex justify-between text-[11px] text-muted-foreground mb-1">
-                  <span>{diary.stage.replace("_", " ")}</span>
-                  <span>{progress}% to harvest</span>
-                </div>
-                <div className="h-1.5 bg-secondary rounded-full overflow-hidden">
-                  <div className="h-full bg-primary rounded-full transition-all" style={{ width: `${progress}%` }} />
-                </div>
-              </div>
+              <StageTimeline current={diary.stage} runs={stageRuns} />
 
               {/* Vitals row */}
               {(avgTemp || avgRh || harvestEta !== null) && (
@@ -203,29 +186,7 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
                 </div>
               )}
 
-              {/* Stage timeline */}
-              {stageRuns.length > 1 && (
-                <div className="mt-4">
-                  <div className="flex h-2 rounded-full overflow-hidden">
-                    {stageRuns.map((r, i) => (
-                      <div
-                        key={i}
-                        className={`${STAGE_COLORS[r.stage] || "bg-secondary"} h-full`}
-                        style={{ width: `${(r.days / Math.max(1, stageRuns.reduce((a, b) => a + b.days, 0))) * 100}%` }}
-                        title={`${r.stage} — ${r.days}d`}
-                      />
-                    ))}
-                  </div>
-                  <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1.5">
-                    {stageRuns.map((r, i) => (
-                      <span key={i} className="text-[10px] text-muted-foreground flex items-center gap-1">
-                        <span className={`w-2 h-2 rounded-sm ${STAGE_COLORS[r.stage] || "bg-secondary"}`} />
-                        {r.stage.toLowerCase()} {r.days}d
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
+
             </div>
             <div className="flex gap-2 items-start">
               <DiaryFollowButton diaryId={diary.id} initiallyFollowing={following} />

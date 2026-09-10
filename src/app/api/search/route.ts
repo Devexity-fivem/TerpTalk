@@ -46,12 +46,24 @@ export async function GET(request: Request) {
 
     const threadOrderBy = sort === "popular" ? { views: "desc" as const } : { createdAt: "desc" as const }
 
+    const postThreadIds = (t === "all" || t === "threads")
+      ? await prisma.post.findMany({
+          where: {
+            deleted: false,
+            content: contains,
+            thread: { deleted: false, category: { hidden: false, ...(categoryId ? { id: categoryId } : {}) } },
+          },
+          take: 20,
+          select: { threadId: true },
+        }).then((posts) => posts.map((p) => p.threadId))
+      : []
+
     const [threads, strains, users, diaries] = await Promise.all([
       (t === "all" || t === "threads") ? prisma.thread.findMany({
         where: {
           deleted: false,
           category: { hidden: false, ...(categoryId ? { id: categoryId } : {}) },
-          OR: [{ title: contains }, { content: contains }],
+          OR: [{ title: contains }, { content: contains }, { id: { in: postThreadIds } }],
         },
         take: 10,
         orderBy: threadOrderBy,
