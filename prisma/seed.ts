@@ -1,6 +1,5 @@
 import { PrismaClient } from '@prisma/client'
 import bcrypt from 'bcryptjs'
-import { randomBytes } from 'crypto'
 
 const prisma = new PrismaClient()
 
@@ -89,46 +88,38 @@ async function main() {
     })
   }
 
-  // Bootstrap admin + moderator accounts (env-configured, dev/beta only)
-  const adminPassword = process.env.ADMIN_PASSWORD || randomBytes(16).toString('hex')
-  const adminUsername = process.env.ADMIN_USERNAME || 'ttadmin'
-
-  const existingAdmin = await prisma.profile.findUnique({ where: { username: adminUsername } })
-  if (!existingAdmin) {
-    const hashed = await bcrypt.hash(adminPassword, 12)
-    await prisma.user.create({
-      data: {
-        name: adminUsername,
-        password: hashed,
-        role: 'ADMINISTRATOR',
-        ageVerified: true,
-        profile: { create: { username: adminUsername, bio: 'TerpTalk administration' } },
-      },
-    })
-    console.log(`✔ Admin account created: ${adminUsername}`)
-    if (!process.env.ADMIN_PASSWORD) {
-      console.log(`  ⚠ No ADMIN_PASSWORD env set — generated: ${adminPassword}`)
-      console.log('  Set ADMIN_PASSWORD/ADMIN_USERNAME env vars and re-run to control credentials.')
+  // Bootstrap admin + moderator accounts only when explicit env credentials are provided.
+  if (process.env.ADMIN_USERNAME && process.env.ADMIN_PASSWORD) {
+    const existingAdmin = await prisma.profile.findUnique({ where: { username: process.env.ADMIN_USERNAME } })
+    if (!existingAdmin) {
+      const hashed = await bcrypt.hash(process.env.ADMIN_PASSWORD, 12)
+      await prisma.user.create({
+        data: {
+          name: process.env.ADMIN_USERNAME,
+          password: hashed,
+          role: 'ADMINISTRATOR',
+          ageVerified: true,
+          profile: { create: { username: process.env.ADMIN_USERNAME, bio: 'TerpTalk administration' } },
+        },
+      })
+      console.log(`✔ Admin account created: ${process.env.ADMIN_USERNAME}`)
     }
   }
 
-  const modUsername = process.env.MOD_USERNAME || 'ttmoderator'
-  const existingMod = await prisma.profile.findUnique({ where: { username: modUsername } })
-  if (!existingMod) {
-    const modPassword = process.env.MOD_PASSWORD || randomBytes(16).toString('hex')
-    const hashed = await bcrypt.hash(modPassword, 12)
-    await prisma.user.create({
-      data: {
-        name: modUsername,
-        password: hashed,
-        role: 'MODERATOR',
-        ageVerified: true,
-        profile: { create: { username: modUsername, bio: 'TerpTalk moderation team' } },
-      },
-    })
-    console.log(`✔ Moderator account created: ${modUsername}`)
-    if (!process.env.MOD_PASSWORD) {
-      console.log(`  ⚠ No MOD_PASSWORD env set — generated: ${modPassword}`)
+  if (process.env.MOD_USERNAME && process.env.MOD_PASSWORD) {
+    const existingMod = await prisma.profile.findUnique({ where: { username: process.env.MOD_USERNAME } })
+    if (!existingMod) {
+      const hashed = await bcrypt.hash(process.env.MOD_PASSWORD, 12)
+      await prisma.user.create({
+        data: {
+          name: process.env.MOD_USERNAME,
+          password: hashed,
+          role: 'MODERATOR',
+          ageVerified: true,
+          profile: { create: { username: process.env.MOD_USERNAME, bio: 'TerpTalk moderation team' } },
+        },
+      })
+      console.log(`✔ Moderator account created: ${process.env.MOD_USERNAME}`)
     }
   }
 
