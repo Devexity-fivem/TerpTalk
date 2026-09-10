@@ -6,7 +6,7 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import {
   Leaf, User, LogOut, MessageCircle, Home, Calendar,
-  Settings, Dna, Bell, Shield, Menu, X, Mail, Search, Trophy, BookOpen, Stethoscope, Tag, Award, Calculator, Info, FileText, Video, PenLine,
+  Settings, Dna, Bell, Shield, Menu, X, Mail, Search, Trophy, BookOpen, Stethoscope, Tag, Award, Calculator, Info, FileText, Video, PenLine, TrendingUp,
 } from "lucide-react"
 import CannabisLeaf from "@/components/cannabis-leaf"
 import MobileNav from "@/components/mobile-nav"
@@ -15,6 +15,7 @@ import { cn } from "@/lib/utils"
 
 const NAV_LINKS = [
   { href: "/", label: "Home", icon: Home },
+  { href: "/discover", label: "Discover", icon: TrendingUp },
   { href: "/feed", label: "Feed", icon: Calendar },
   { href: "/forum", label: "Discussions", icon: MessageCircle },
   { href: "/diaries", label: "Grow Diaries", icon: Leaf },
@@ -34,10 +35,10 @@ const NAV_LINKS = [
 
 // Shown inline on large screens; the full list stays in the drawer.
 const DESKTOP_LINKS = [
+  { href: "/discover", label: "Discover", icon: TrendingUp },
   { href: "/forum", label: "Discussions", icon: MessageCircle },
   { href: "/diaries", label: "Diaries", icon: Leaf },
   { href: "/strains", label: "Strains", icon: Dna },
-  { href: "/leaderboard", label: "Leaderboard", icon: Award },
 ]
 
 export function Navigation() {
