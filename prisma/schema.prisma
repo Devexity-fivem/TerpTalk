@@ -317,6 +317,7 @@ model GrowDiary {
   @@index([strain])
   @@index([featured])
   @@index([createdAt])
+  @@index([harvested, harvestedAt])
 }
 
 model DiaryUpdate {

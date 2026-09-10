@@ -37,6 +37,7 @@ export default async function YieldLeaderboardPage() {
     },
     include: { author: { select: publicUserSelect } },
     orderBy: { harvestedAt: "desc" },
+    take: 200,
   })
 
   type Diary = (typeof diaries)[number]

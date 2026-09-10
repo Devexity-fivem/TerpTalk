@@ -107,7 +107,7 @@ export async function GET(request: Request) {
         OR: [{ senderId: userId }, { receiverId: userId }],
       },
       orderBy: { createdAt: "desc" },
-      take: 300,
+      take: 100,
       include: {
         sender: { select: publicUserSelect },
         receiver: { select: publicUserSelect },

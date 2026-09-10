@@ -1,6 +1,7 @@
 -- Add indexes to support high-traffic public pages and sorting
 CREATE INDEX IF NOT EXISTS "Profile_reputation_idx" ON "Profile" ("reputation" DESC);
 CREATE INDEX IF NOT EXISTS "User_lastSeenAt_idx" ON "User" ("lastSeenAt" DESC);
+CREATE INDEX IF NOT EXISTS "GrowDiary_harvested_harvestedAt_idx" ON "GrowDiary" ("harvested" ASC, "harvestedAt" DESC);
 
 -- Enable trigram search for case-insensitive substring matching
 CREATE EXTENSION IF NOT EXISTS pg_trgm;
