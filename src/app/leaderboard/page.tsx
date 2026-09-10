@@ -4,6 +4,7 @@ import Link from "next/link"
 import RoleBadge from "@/components/role-badge"
 import EmptyState from "@/components/ui/empty-state"
 import { getReputationTier } from "@/lib/reputation"
+import { Avatar } from "@/components/ui/avatar"
 
 export const revalidate = 60 // public content, edge-cached
 
@@ -68,16 +69,17 @@ export default async function LeaderboardPage() {
                 className="flex items-center gap-4 p-4 hover:bg-secondary/50 transition-colors"
               >
                 <div className="w-8 flex justify-center shrink-0">{medal(i)}</div>
-                <div className="w-10 h-10 rounded-full bg-primary/10 overflow-hidden flex items-center justify-center shrink-0">
-                  {p.avatarUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={p.avatarUrl} alt="" className="w-full h-full object-cover" />
-                  ) : (
+                <Avatar
+                  src={p.avatarUrl}
+                  alt=""
+                  size="md"
+                  className="w-10 h-10 bg-primary/10"
+                  fallback={
                     <span className="text-primary font-bold">
                       {(p.username || p.user.name || "?")[0].toUpperCase()}
                     </span>
-                  )}
-                </div>
+                  }
+                />
                 <div className="flex-1 min-w-0">
                   <div className="font-semibold truncate flex items-center">
                     {p.username || p.user.name}

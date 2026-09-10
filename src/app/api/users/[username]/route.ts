@@ -3,6 +3,8 @@ import { prisma } from "@/lib/prisma"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { blockExistsBetween, getTrustLevel, getClientIp, hashIp } from "@/lib/security"
+
+const NO_STORE = { "Cache-Control": "no-store, max-age=0, must-revalidate" }
 import { getReputationTier, getTierProgress } from "@/lib/reputation"
 import { getGrowStreak } from "@/lib/grow-streak"
 import { rateLimit } from "@/lib/rate-limit"
@@ -155,7 +157,7 @@ export async function GET(
         businessName: profile.businessName,
         businessType: profile.businessType,
         businessUrl: safeUrl(profile.businessUrl),
-        image: profile.user.image,
+        image: profile.user.image || profile.avatarUrl,
         joinDate: profile.joinDate,
         reputation: profile.reputation,
         trustLevel: getTrustLevel(profile.user.createdAt, profile.reputation),
@@ -175,7 +177,7 @@ export async function GET(
       viewerFollowing,
       recentThreads,
       growDiaries,
-    })
+    }, { headers: NO_STORE })
   } catch (error) {
     console.error("Public profile error:", error)
     return NextResponse.json({ error: "Failed to load profile" }, { status: 500 })

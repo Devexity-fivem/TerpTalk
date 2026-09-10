@@ -5,6 +5,7 @@ import { useSearchParams, useRouter } from "next/navigation"
 import { useSession } from "next-auth/react"
 import Link from "next/link"
 import { Search, MessageSquare, Leaf, Dna, User, Tag, Loader2, Bookmark, ArrowUpDown } from "lucide-react"
+import { Avatar } from "@/components/ui/avatar"
 
 interface Results {
   threads: { id: string; title: string; slug: string; category: { name: string }; replyCount: number; views: number }[]
@@ -245,14 +246,13 @@ export default function SearchResults() {
               <div className="divide-y divide-border">
                 {results.users.map((u) => (
                   <Link key={u.username} href={`/u/${u.username}`} className="flex items-center gap-3 p-3 hover:bg-secondary/50 transition-colors">
-                    <div className="w-9 h-9 rounded-full bg-primary/10 overflow-hidden flex items-center justify-center shrink-0">
-                      {u.avatarUrl ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={u.avatarUrl} alt="" className="w-full h-full object-cover" />
-                      ) : (
-                        <span className="text-primary font-bold text-sm">{u.username[0].toUpperCase()}</span>
-                      )}
-                    </div>
+                    <Avatar
+                      src={u.avatarUrl}
+                      alt=""
+                      size="md"
+                      className="w-9 h-9 bg-primary/10"
+                      fallback={<span className="text-primary font-bold text-sm">{u.username[0].toUpperCase()}</span>}
+                    />
                     <div className="min-w-0">
                       <div className="font-medium text-sm">{u.username} <span className="text-xs text-amber-500">{u.reputation} rep</span></div>
                       {u.bio && <div className="text-xs text-muted-foreground truncate">{u.bio}</div>}

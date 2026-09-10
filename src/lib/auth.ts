@@ -98,7 +98,7 @@ export const authOptions: NextAuthOptions = {
             sessionVersion: true,
             password: true,
             banned: true,
-            profile: { select: { username: true } },
+            profile: { select: { username: true, avatarUrl: true } },
           },
         })
 
@@ -142,7 +142,7 @@ export const authOptions: NextAuthOptions = {
         return {
           id: user.id,
           name: user.profile?.username || user.name,
-          image: user.image,
+          image: user.profile?.avatarUrl || user.image,
           role: user.role,
           sessionVersion: user.sessionVersion,
         }
@@ -164,7 +164,7 @@ export const authOptions: NextAuthOptions = {
         // Fresh DB check: reject banned users and stale role/version tokens
         const user = await prisma.user.findUnique({
           where: { id: token.id as string },
-          select: { banned: true, role: true, sessionVersion: true },
+          select: { banned: true, role: true, sessionVersion: true, image: true, profile: { select: { avatarUrl: true } } },
         })
         if (!user || user.banned || (user.sessionVersion ?? 0) !== (token.sessionVersion ?? 0)) {
           return { ...session, user: {} as typeof session.user }
@@ -172,6 +172,7 @@ export const authOptions: NextAuthOptions = {
         ;(session.user as { id?: string }).id = token.id as string
         ;(session.user as { username?: string }).username = token.username as string
         ;(session.user as { role?: string }).role = user.role
+        ;(session.user as { image?: string | null }).image = user.profile?.avatarUrl || user.image
       }
       return session
     },

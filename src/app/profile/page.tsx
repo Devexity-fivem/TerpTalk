@@ -12,6 +12,7 @@ import { REP_POINTS } from "@/lib/reputation-config"
 import SavedThreads from "@/components/saved-threads"
 import SavedSearches from "@/components/saved-searches"
 import RecoveryPhraseCard from "@/components/recovery-phrase-card"
+import { Avatar } from "@/components/ui/avatar"
 
 interface ProfileData {
   user: {
@@ -140,7 +141,7 @@ export default function ProfilePage() {
 
   useEffect(() => {
     if (status === "authenticated") {
-      fetch("/api/profile")
+      fetch("/api/profile", { cache: "no-store" })
         .then(res => res.json())
         .then(data => {
           setProfileData(data)
@@ -175,14 +176,13 @@ export default function ProfilePage() {
         {/* Profile Header */}
         <div className="bg-card rounded-lg border border-border p-6 mb-6">
           <div className="flex items-start gap-6">
-            <div className="w-24 h-24 bg-primary/10 rounded-full flex items-center justify-center shrink-0 overflow-hidden">
-              {profileData.profile?.avatarUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={profileData.profile.avatarUrl} alt="avatar" className="w-full h-full object-cover" />
-              ) : (
-                <User className="w-12 h-12 text-primary" />
-              )}
-            </div>
+            <Avatar
+              src={profileData.profile?.avatarUrl}
+              alt="avatar"
+              size="xl"
+              className="w-24 h-24 bg-primary/10 text-primary"
+              fallback={<User className="w-12 h-12 text-primary" />}
+            />
               <div className="flex-1">
                 <div className="flex items-start justify-between gap-4 flex-wrap">
                   <div>
@@ -274,14 +274,13 @@ export default function ProfilePage() {
                 <div>
                   <label className="block text-sm font-medium mb-1">Profile Photo</label>
                   <div className="flex items-center gap-4">
-                    <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center overflow-hidden shrink-0">
-                      {editForm.avatarUrl ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={editForm.avatarUrl} alt="preview" className="w-full h-full object-cover" />
-                      ) : (
-                        <User className="w-8 h-8 text-primary" />
-                      )}
-                    </div>
+                    <Avatar
+                      src={editForm.avatarUrl}
+                      alt="preview"
+                      size="xl"
+                      className="w-16 h-16 bg-primary/10 text-primary"
+                      fallback={<User className="w-8 h-8 text-primary" />}
+                    />
                     <div className="space-y-2">
                       <input
                         type="file"

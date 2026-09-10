@@ -8,6 +8,8 @@ import { getReputationTier, getTierProgress } from "@/lib/reputation"
 import { rateLimit } from "@/lib/rate-limit"
 import bcrypt from "bcryptjs"
 
+const NO_STORE = { "Cache-Control": "no-store, max-age=0, must-revalidate" }
+
 export async function GET() {
   try {
     const session = await getServerSession(authOptions)
@@ -79,7 +81,7 @@ export async function GET() {
       user: {
         id: user.id,
         name: user.name,
-        image: user.image,
+        image: user.profile?.avatarUrl || user.image,
         role: user.role,
         ageVerified: user.ageVerified,
         createdAt: user.createdAt,
@@ -104,7 +106,7 @@ export async function GET() {
         icon: b.badge.icon,
         earnedAt: b.earnedAt,
       })),
-    })
+    }, { headers: NO_STORE })
   } catch (error) {
     console.error("Profile fetch error:", error)
     return NextResponse.json(
@@ -281,31 +283,42 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ error: "No valid fields to update" }, { status: 400 })
     }
 
-    const updated = await prisma.profile.update({
-      where: { userId },
-      data: updateData,
-      select: {
-        username: true,
-        bio: true,
-        location: true,
-        website: true,
-        avatarUrl: true,
-        growExperience: true,
-        favoriteStrain: true,
-        growSpace: true,
-        businessName: true,
-        businessType: true,
-        businessUrl: true,
-        notifyOnReply: true,
-        notifyOnMention: true,
-        notifyOnCategoryFollow: true,
-        notifyOnMessage: true,
-        notifyOnComment: true,
-        emailDigestFrequency: true,
-      },
-    })
+    const [updated] = await prisma.$transaction([
+      prisma.profile.update({
+        where: { userId },
+        data: updateData,
+        select: {
+          username: true,
+          bio: true,
+          location: true,
+          website: true,
+          avatarUrl: true,
+          growExperience: true,
+          favoriteStrain: true,
+          growSpace: true,
+          businessName: true,
+          businessType: true,
+          businessUrl: true,
+          notifyOnReply: true,
+          notifyOnMention: true,
+          notifyOnCategoryFollow: true,
+          notifyOnMessage: true,
+          notifyOnComment: true,
+          emailDigestFrequency: true,
+        },
+      }),
+      ...(avatarUrl !== undefined
+        ? [
+            prisma.user.update({
+              where: { id: userId },
+              data: { image: updateData.avatarUrl as string | null },
+              select: { id: true },
+            }),
+          ]
+        : []),
+    ])
 
-    return NextResponse.json({ profile: updated })
+    return NextResponse.json({ profile: updated }, { headers: NO_STORE })
   } catch (error) {
     console.error("Profile update error:", error)
     const message = error instanceof Error ? error.message : "Failed to update profile"

@@ -7,6 +7,7 @@ import { User, MessageSquare, Loader2, MapPin, Globe, Sprout, Dna, Leaf, Store, 
 import Link from "next/link"
 import UserActions from "@/components/user-actions"
 import RoleBadge from "@/components/role-badge"
+import { Avatar } from "@/components/ui/avatar"
 
 interface PublicProfile {
   id: string
@@ -115,14 +116,13 @@ export default function ProfileClient() {
       <div className="max-w-4xl mx-auto px-4 py-8">
         <div className="bg-card rounded-lg border border-border p-6 mb-6">
           <div className="flex items-start gap-6 flex-wrap">
-            <div className="w-24 h-24 bg-primary/10 rounded-full flex items-center justify-center shrink-0 overflow-hidden">
-              {profile.avatarUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={profile.avatarUrl} alt="avatar" className="w-full h-full object-cover" />
-              ) : (
-                <User className="w-12 h-12 text-primary" />
-              )}
-            </div>
+            <Avatar
+              src={profile.avatarUrl}
+              alt="avatar"
+              size="xl"
+              className="w-24 h-24 bg-primary/10 text-primary"
+              fallback={<User className="w-12 h-12 text-primary" />}
+            />
             <div className="flex-1 min-w-0">
               <div className="flex items-start justify-between gap-4 flex-wrap">
                 <div>
