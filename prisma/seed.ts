@@ -52,7 +52,13 @@ async function main() {
     { name: "Liked", description: "Content appreciated by the community", icon: "👍", requirement: "Receive 10 likes" },
     { name: "Helpful Grower", description: "Provided helpful answers", icon: "💡", requirement: "Receive 20 likes" },
     { name: "Community Favorite", description: "Beloved by the community", icon: "🔥", requirement: "Receive 100 likes" },
-    { name: "Top Contributor", description: "Outstanding community contributor", icon: "🏆", requirement: "Earn 1000 reputation" },
+    { name: "Top Contributor", description: "Outstanding community contributor", icon: "🏆", requirement: "Earn 5,000 reputation" },
+    { name: "Sprout", description: "Reached 50 reputation", icon: "🌿", requirement: "Earn 50 reputation" },
+    { name: "Seedling", description: "Reached 150 reputation", icon: "🌱", requirement: "Earn 150 reputation" },
+    { name: "Grower", description: "Reached 300 reputation", icon: "🌲", requirement: "Earn 300 reputation" },
+    { name: "Cultivator", description: "Reached 600 reputation", icon: "🌿", requirement: "Earn 600 reputation" },
+    { name: "Master Grower", description: "Reached 1,000 reputation", icon: "🏆", requirement: "Earn 1,000 reputation" },
+    { name: "Legendary Grower", description: "Reached 2,500 reputation", icon: "👑", requirement: "Earn 2,500 reputation" },
   ]
 
   for (const badge of badges) {

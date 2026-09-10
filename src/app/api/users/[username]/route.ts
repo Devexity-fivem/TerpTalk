@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { blockExistsBetween, getTrustLevel, getClientIp, hashIp } from "@/lib/security"
+import { getReputationTier, getTierProgress } from "@/lib/reputation"
 import { rateLimit } from "@/lib/rate-limit"
 
 function safeUrl(url: string | null | undefined): string | null {
@@ -141,6 +142,8 @@ export async function GET(
         joinDate: profile.joinDate,
         reputation: profile.reputation,
         trustLevel: getTrustLevel(profile.user.createdAt, profile.reputation),
+        reputationTier: getReputationTier(profile.reputation),
+        tierProgress: getTierProgress(profile.reputation),
         badges: profile.user.badges.map((b) => ({
           name: b.badge.name,
           description: b.badge.description,

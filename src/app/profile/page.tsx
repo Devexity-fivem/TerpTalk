@@ -3,7 +3,7 @@
 import { useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
 import { useEffect, useRef, useState } from "react"
-import { User, Calendar, Award, MessageSquare, Leaf, Loader2, Download, Trash2, Pencil, MapPin, Globe, Sprout, Dna, Store } from "lucide-react"
+import { User, Calendar, Award, MessageSquare, Leaf, Loader2, Download, Trash2, Pencil, MapPin, Globe, Sprout, Dna, Store, TrendingUp } from "lucide-react"
 import { signOut } from "next-auth/react"
 import Link from "next/link"
 import RoleBadge from "@/components/role-badge"
@@ -48,6 +48,18 @@ interface ProfileData {
     following: number
     badges: number
     reputation: number
+    reputationTier: {
+      name: string
+      color: string
+      bg: string
+      icon: string
+      benefit: string
+    }
+    tierProgress: {
+      current: number
+      next: number
+      percent: number
+    }
     referrals: number
   }
   badges: Array<{ name: string; description: string; icon: string | null; earnedAt: string }>
@@ -593,6 +605,34 @@ export default function ProfilePage() {
                 ))}
               </div>
             )}
+          </div>
+
+          {/* Reputation Tier */}
+          <div className="bg-card rounded-lg border border-border p-6">
+            <div className="flex items-center gap-2 mb-4">
+              <TrendingUp className="w-5 h-5 text-primary" />
+              <h2 className="text-lg font-semibold">Reputation Tier</h2>
+            </div>
+            <div className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full ${profileData.stats.reputationTier.bg} ${profileData.stats.reputationTier.color} text-sm font-medium mb-3`}>
+              <span>{profileData.stats.reputationTier.icon}</span>
+              {profileData.stats.reputationTier.name}
+            </div>
+            <p className="text-sm text-muted-foreground mb-4">{profileData.stats.reputationTier.benefit}</p>
+            <div className="mb-2">
+              <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
+                <span>{profileData.stats.reputation} / {profileData.stats.tierProgress.next} rep</span>
+                <span>{profileData.stats.tierProgress.percent}% to next tier</span>
+              </div>
+              <div className="h-2.5 w-full bg-secondary rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-primary transition-all"
+                  style={{ width: `${profileData.stats.tierProgress.percent}%` }}
+                />
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Earn rep by posting, journaling, adding strains, and getting likes. Verified members earn 2x rep.
+            </p>
           </div>
 
           {/* Saved Threads */}

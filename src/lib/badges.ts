@@ -28,6 +28,13 @@ export const BADGE_ICONS: Record<string, string> = {
   "Beta Tester": "https://api.iconify.design/game-icons/test-tube-held.svg",
   "Weekly Winner": "https://api.iconify.design/game-icons/laurels-trophy.svg",
   "Verified YouTuber": "https://api.iconify.design/game-icons/video-camera.svg",
+  // Reputation tiers
+  "Sprout": "https://api.iconify.design/game-icons/seedling.svg",
+  "Seedling": "https://api.iconify.design/game-icons/plant-seed.svg",
+  "Grower": "https://api.iconify.design/game-icons/palm-tree.svg",
+  "Cultivator": "https://api.iconify.design/game-icons/gardening-shears.svg",
+  "Master Grower": "https://api.iconify.design/game-icons/laurel-crown.svg",
+  "Legendary Grower": "https://api.iconify.design/game-icons/crowned-heart.svg",
 }
 
 export const BADGE_DESCRIPTIONS: Record<string, string> = {
@@ -43,13 +50,19 @@ export const BADGE_DESCRIPTIONS: Record<string, string> = {
   "Liked": "Received 10 likes on your posts and diaries.",
   "Helpful Grower": "Received 20 likes on your posts and diaries.",
   "Community Favorite": "Received 100 likes on your posts and diaries.",
-  "Top Contributor": "Reached 1,000 reputation points.",
+  "Top Contributor": "Reached 5,000 reputation points.",
   "Helper": "Your reply was marked as an accepted answer.",
   "Top Helper": "5 of your replies were marked as accepted answers.",
   "Dedicated Grower": "Posted grow updates 7 days in a row.",
   "Beta Tester": "Joined TerpTalk during the beta and helped shape the community.",
   "Weekly Winner": "Won Budshot of the Week.",
   "Verified YouTuber": "A featured cannabis grow content creator on YouTube.",
+  "Sprout": "Reached 50 reputation.",
+  "Seedling": "Reached 150 reputation.",
+  "Grower": "Reached 300 reputation.",
+  "Cultivator": "Reached 600 reputation.",
+  "Master Grower": "Reached 1,000 reputation.",
+  "Legendary Grower": "Reached 2,500 reputation.",
 }
 
 // Seed all open-source badges. Safe to re-run — it updates icons/descriptions.

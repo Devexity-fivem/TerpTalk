@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma"
 import { Trophy, Medal, Award } from "lucide-react"
 import Link from "next/link"
 import RoleBadge from "@/components/role-badge"
+import { getReputationTier } from "@/lib/reputation"
 
 export const revalidate = 60 // public content, edge-cached
 
@@ -76,6 +77,9 @@ export default async function LeaderboardPage() {
                   <div className="font-semibold truncate flex items-center">
                     {p.username || p.user.name}
                     <RoleBadge role={p.user.role} />
+                    <span className={`ml-2 inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full ${getReputationTier(p.reputation).bg} ${getReputationTier(p.reputation).color}`}>
+                      {getReputationTier(p.reputation).icon} {getReputationTier(p.reputation).name}
+                    </span>
                   </div>
                   <div className="text-xs text-muted-foreground">
                     {p.user._count.threadCreator} threads · {p.user._count.posts} posts · {p.user._count.diaryCreator} diaries · {p.user._count.followers} followers

@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { unauthorized, forbidden, getClientIp, logSecurityEvent, LIMITS, isBanned } from "@/lib/security"
 import { storeImage } from "@/lib/blob"
+import { getReputationTier, getTierProgress } from "@/lib/reputation"
 import { rateLimit } from "@/lib/rate-limit"
 import bcrypt from "bcryptjs"
 
@@ -91,6 +92,8 @@ export async function GET() {
         following: user.following.length,
         badges: user.badges.length,
         reputation: user.profile?.reputation || 0,
+        reputationTier: getReputationTier(user.profile?.reputation || 0),
+        tierProgress: getTierProgress(user.profile?.reputation || 0),
         referrals: referralCount,
       },
       recentThreads,
