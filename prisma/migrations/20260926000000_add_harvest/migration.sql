@@ -1,0 +1,4 @@
+ALTER TABLE "GrowDiary" ADD COLUMN "harvested" BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE "GrowDiary" ADD COLUMN "harvestedAt" TIMESTAMP(3);
+ALTER TABLE "GrowDiary" ADD COLUMN "yieldAmount" DOUBLE PRECISION;
+ALTER TABLE "GrowDiary" ADD COLUMN "yieldUnit" TEXT;

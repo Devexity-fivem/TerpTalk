@@ -11,6 +11,7 @@ import ShareButtons from "@/components/share-buttons"
 import { buildMetadata, snippet } from "@/lib/seo"
 import { Breadcrumbs } from "@/components/breadcrumbs"
 import EnvCharts from "@/components/env-chart"
+import HarvestForm from "@/components/harvest-form"
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -117,6 +118,8 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
     else break
   }
 
+  const canEdit = session?.user?.id === diary.author.id || (session?.user as { role?: string } | undefined)?.role === "ADMINISTRATOR"
+
   return (
     <div className="min-h-screen bg-background">
       <div className="max-w-7xl mx-auto px-4 py-8">
@@ -140,6 +143,11 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
                 <span className="text-xs text-muted-foreground px-2 py-1 bg-secondary rounded">
                   {diary.stage}
                 </span>
+                {diary.harvested && (
+                  <span className="text-xs text-emerald-500 px-2 py-1 bg-emerald-500/10 rounded">
+                    Harvested
+                  </span>
+                )}
               </div>
               <h1 className="text-3xl font-bold mb-2">{diary.title}</h1>
               <p className="text-muted-foreground mb-4">{diary.description}</p>
@@ -225,6 +233,15 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
             </div>
           </div>
         </div>
+
+        <HarvestForm
+          diaryId={diary.id}
+          canEdit={canEdit}
+          initialHarvested={diary.harvested}
+          initialAmount={diary.yieldAmount}
+          initialUnit={diary.yieldUnit}
+          initialAt={diary.harvestedAt}
+        />
 
         {/* Grow Setup Info */}
         <div className="bg-card rounded-lg border border-border p-6 mb-8">

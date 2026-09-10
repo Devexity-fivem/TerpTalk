@@ -299,6 +299,10 @@ model GrowDiary {
   featured      Boolean  @default(false)
   deleted       Boolean  @default(false)
   stage         String   @default("GERMINATION") // GERMINATION, SEEDLING, VEGETATIVE, FLOWER, HARVEST, DRYING, CURING, COMPLETED
+  harvested     Boolean  @default(false)
+  harvestedAt   DateTime?
+  yieldAmount   Float?
+  yieldUnit     String?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
