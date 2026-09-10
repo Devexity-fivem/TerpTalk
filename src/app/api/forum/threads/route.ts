@@ -7,6 +7,7 @@ import { requireModerator } from "@/lib/require-staff"
 import { rateLimit } from "@/lib/rate-limit"
 import { awardReputation, REP_POINTS, REP_TIERS } from "@/lib/reputation"
 import { notifyMentions } from "@/lib/mentions"
+import { storeImages } from "@/lib/blob"
 
 // Helper function to create a slug from a string
 function createSlug(text: string): string {
@@ -35,7 +36,7 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json().catch(() => ({}))
-    const { title, content, categoryId } = body
+    const { title, content, categoryId, images } = body
 
     if (
       typeof title !== "string" || !title.trim() ||
@@ -98,6 +99,18 @@ export async function POST(request: Request) {
       )
     }
 
+    // Upload attachments before creating the thread so a storage failure
+    // cannot leave a thread with half its images.
+    let imageUrls: string[] = []
+    try {
+      imageUrls = await storeImages(images, "forum")
+    } catch (err) {
+      return NextResponse.json(
+        { error: err instanceof Error ? err.message : "Image upload failed" },
+        { status: 400 }
+      )
+    }
+
     // Create slug
     let slug = createSlug(title)
     
@@ -123,6 +136,9 @@ export async function POST(request: Request) {
             content,
             authorId: session.user.id,
           },
+        },
+        images: {
+          create: imageUrls.map((url, order) => ({ url, order })),
         },
       },
       include: {

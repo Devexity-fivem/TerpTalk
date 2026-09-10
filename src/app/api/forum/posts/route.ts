@@ -6,6 +6,7 @@ import { unauthorized, publicUserSelect, LIMITS, getClientIp, logSecurityEvent, 
 import { requireModerator } from "@/lib/require-staff"
 import { rateLimit } from "@/lib/rate-limit"
 import { awardReputation, REP_POINTS, REP_TIERS } from "@/lib/reputation"
+import { storeImages } from "@/lib/blob"
 import { notifyMentions } from "@/lib/mentions"
 
 export async function POST(request: Request) {
@@ -25,7 +26,7 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json().catch(() => ({}))
-    const { content, threadId } = body
+    const { content, threadId, images } = body
 
     if (
       typeof content !== "string" || !content.trim() ||
@@ -92,15 +93,31 @@ export async function POST(request: Request) {
       )
     }
 
+    // Upload attachments first so a storage failure cannot leave a reply
+    // with only some of its images.
+    let imageUrls: string[] = []
+    try {
+      imageUrls = await storeImages(images, "forum")
+    } catch (err) {
+      return NextResponse.json(
+        { error: err instanceof Error ? err.message : "Image upload failed" },
+        { status: 400 }
+      )
+    }
+
     // Create post
     const post = await prisma.post.create({
       data: {
         content,
         threadId,
         authorId: session.user.id,
+        images: {
+          create: imageUrls.map((url, order) => ({ url, order })),
+        },
       },
       include: {
         author: { select: publicUserSelect },
+        images: { orderBy: { order: "asc" } },
       },
     })
 

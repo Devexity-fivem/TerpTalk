@@ -4,6 +4,7 @@ import { useState, useEffect, Suspense } from "react"
 import { useSession } from "next-auth/react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { MessageSquare, Loader2 } from "lucide-react"
+import ImageUploader from "@/components/image-uploader"
 import Link from "next/link"
 import { WIZARD_RESULTS } from "@/lib/problem-wizard"
 
@@ -52,6 +53,7 @@ function NewThreadForm() {
   })
 
   const [similarThreads, setSimilarThreads] = useState<SimilarThread[]>([])
+  const [images, setImages] = useState<string[]>([])
 
   useEffect(() => {
     fetch("/api/categories")
@@ -107,7 +109,7 @@ function NewThreadForm() {
       const response = await fetch("/api/forum/threads", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...formData, categoryId }),
+        body: JSON.stringify({ ...formData, categoryId, images }),
       })
 
       if (!response.ok) {
@@ -215,6 +217,11 @@ function NewThreadForm() {
               <p className="text-xs text-muted-foreground mt-1">
                 Minimum 10 characters. Be descriptive and helpful.
               </p>
+            </div>
+
+            <div>
+              <span className="block text-sm font-medium mb-2">Images</span>
+              <ImageUploader value={images} onChange={setImages} disabled={loading} />
             </div>
 
             {error && (

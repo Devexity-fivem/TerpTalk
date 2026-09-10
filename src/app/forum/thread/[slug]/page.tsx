@@ -10,6 +10,7 @@ import ThreadModActions from "@/components/thread-mod-actions"
 import ShareButtons from "@/components/share-buttons"
 import BookmarkButton from "@/components/bookmark-button"
 import PostContent from "@/components/post-content"
+import ImageGallery from "@/components/image-gallery"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { buildMetadata, snippet } from "@/lib/seo"
@@ -41,11 +42,13 @@ async function getThreadData(slug: string, page: number) {
     include: {
       author: { select: publicUserSelect },
       category: true,
+      images: { orderBy: { order: "asc" } },
       acceptedAnswer: {
         where: { deleted: false },
         include: {
           author: { select: publicUserSelect },
           reactions: { select: { userId: true, type: true } },
+          images: { orderBy: { order: "asc" } },
         },
       },
       posts: {
@@ -53,6 +56,7 @@ async function getThreadData(slug: string, page: number) {
         include: {
           author: { select: publicUserSelect },
           reactions: { select: { userId: true, type: true } },
+          images: { orderBy: { order: "asc" } },
         },
         orderBy: { createdAt: "asc" },
         skip: (page - 1) * POSTS_PER_PAGE,
@@ -187,6 +191,8 @@ export default async function ThreadPage({
             <BookmarkButton threadId={thread.id} initiallySaved={saved} />
             <ShareButtons path={`/forum/thread/${thread.slug}`} title={thread.title} />
           </div>
+          {/* Photos attached when the thread was opened */}
+          <ImageGallery images={thread.images} />
         </div>
 
         {/* Accepted answer */}
@@ -219,6 +225,7 @@ export default async function ThreadPage({
                 </div>
                 <div className="prose prose-invert max-w-none mb-4">
                   <PostContent content={acceptedPost.content} authorRole={acceptedPost.author.role} pagePath={`/forum/thread/${thread.slug}`} />
+                  <ImageGallery images={acceptedPost.images} />
                 </div>
                 <div className="flex flex-wrap items-center gap-3">
                   <PostActions
@@ -281,6 +288,7 @@ export default async function ThreadPage({
                     </div>
                     <div className="prose prose-invert max-w-none mb-4">
                       <PostContent content={post.content} authorRole={post.author.role} pagePath={`/forum/thread/${thread.slug}`} />
+                      <ImageGallery images={post.images} />
                     </div>
                     <div className="flex flex-wrap items-center gap-3">
                       <PostActions

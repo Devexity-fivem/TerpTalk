@@ -3,6 +3,8 @@
 import { useState } from "react"
 import { useSession } from "next-auth/react"
 import { MessageSquare, Loader2 } from "lucide-react"
+import ImageUploader from "@/components/image-uploader"
+import { useToast } from "@/components/ui/toast"
 
 interface ReplyFormProps {
   threadId: string
@@ -10,9 +12,11 @@ interface ReplyFormProps {
 
 export default function ReplyForm({ threadId }: ReplyFormProps) {
   const { data: session } = useSession()
+  const { toast } = useToast()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
   const [content, setContent] = useState("")
+  const [images, setImages] = useState<string[]>([])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -34,7 +38,7 @@ export default function ReplyForm({ threadId }: ReplyFormProps) {
       const response = await fetch("/api/forum/posts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content, threadId }),
+        body: JSON.stringify({ content, threadId, images }),
       })
 
       if (!response.ok) {
@@ -45,7 +49,9 @@ export default function ReplyForm({ threadId }: ReplyFormProps) {
       // Refresh the page to show the new post
       window.location.reload()
     } catch (error: unknown) {
-      setError((error as Error).message)
+      const message = (error as Error).message
+      setError(message)
+      toast(message, "error")
     } finally {
       setLoading(false)
     }
@@ -68,6 +74,7 @@ export default function ReplyForm({ threadId }: ReplyFormProps) {
             rows={6}
             minLength={10}
           />
+          <ImageUploader value={images} onChange={setImages} disabled={loading} />
           {error && (
             <div className="bg-destructive/10 text-destructive px-4 py-2 rounded-lg text-sm">
               {error}

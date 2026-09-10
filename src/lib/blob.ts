@@ -20,6 +20,27 @@ const MAGIC: Record<string, (b: Buffer) => boolean> = {
   webp: (b) => b.length > 12 && b.toString("ascii", 0, 4) === "RIFF" && b.toString("ascii", 8, 12) === "WEBP",
 }
 
+export const MAX_POST_IMAGES = 4
+
+/**
+ * Validate and store a batch of client-resized data URIs.
+ * Enforces the count and format limits server-side — the client uploader's
+ * own checks are only a convenience and cannot be trusted.
+ */
+export async function storeImages(
+  input: unknown,
+  folder: string,
+  max = MAX_POST_IMAGES
+): Promise<string[]> {
+  if (input === undefined || input === null) return []
+  if (!Array.isArray(input)) throw new Error("Images must be an array")
+  if (input.length === 0) return []
+  if (input.length > max) throw new Error(`You can attach at most ${max} images`)
+  if (!input.every(isValidImageDataUri)) throw new Error("One or more images are invalid or too large")
+
+  return Promise.all(input.map((uri) => storeImage(uri, folder)))
+}
+
 export async function storeImage(dataUri: string, folder: string): Promise<string> {
   if (!process.env.BLOB_READ_WRITE_TOKEN) {
     if (process.env.NODE_ENV === "development") return dataUri
