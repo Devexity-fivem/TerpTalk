@@ -11,7 +11,6 @@ import {
   logSecurityEvent,
 } from "@/lib/security"
 import { awardReputation, REP_POINTS } from "@/lib/reputation"
-import { verifyHcaptcha } from "@/lib/hcaptcha"
 
 export async function POST(request: Request) {
   const ip = getClientIp(request)
@@ -34,38 +33,42 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json().catch(() => ({}))
-    const { username, password, ageVerified, referralCode, captchaToken } = body
+    const { username, password, ageVerified, referralCode, captchaId, captchaAnswer } = body
 
-    if (!username || !password || !captchaToken) {
+    if (!username || !password || !captchaId || !captchaAnswer) {
       return NextResponse.json(
         { error: "Missing required fields" },
         { status: 400 }
       )
     }
 
-    // Verify hCaptcha token
-    try {
-      const captcha = await verifyHcaptcha(captchaToken, ip)
-      if (!captcha.success) {
-        console.error("hCaptcha verification failed:", captcha["error-codes"], captcha)
-        await logSecurityEvent("REGISTRATION_FAILED", {
-          ip,
-          userAgent,
-          metadata: { reason: "hcaptcha", errorCodes: captcha["error-codes"] },
-        })
-        const code = captcha["error-codes"]?.[0] || "unknown"
-        return NextResponse.json(
-          { error: `Security check failed: ${code}. Please try again.` },
-          { status: 400 }
-        )
-      }
-    } catch (error) {
-      console.error("hCaptcha verification error:", error)
+    // Verify math captcha
+    const captcha = await prisma.captcha.findUnique({
+      where: { id: captchaId },
+    })
+
+    if (!captcha || captcha.used || captcha.expiresAt < new Date()) {
       return NextResponse.json(
-        { error: "Security check unavailable. Please try again." },
-        { status: 500 }
+        { error: "Challenge expired. Please refresh and try again." },
+        { status: 400 }
       )
     }
+
+    if (captcha.answer !== String(captchaAnswer).trim()) {
+      await prisma.captcha.update({
+        where: { id: captchaId },
+        data: { used: true },
+      })
+      return NextResponse.json(
+        { error: "Security check failed. Please try again." },
+        { status: 400 }
+      )
+    }
+
+    await prisma.captcha.update({
+      where: { id: captchaId },
+      data: { used: true },
+    })
 
     // Optional referral — a referrer's username; validate it exists if provided
     let referrerId: string | null = null

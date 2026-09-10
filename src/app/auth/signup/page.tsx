@@ -4,24 +4,17 @@ import { useState, useEffect } from "react"
 import { signIn } from "next-auth/react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
-import { Leaf, Loader2 } from "lucide-react"
+import { Leaf, Loader2, RefreshCw } from "lucide-react"
 
-const HCAPTCHA_SITE_KEY =
-  process.env.NEXT_PUBLIC_HCAPTCHA_SITE_KEY || "0504ab56-5d20-4ae2-abe0-f444d09edeea"
-
-declare global {
-  interface Window {
-    onHCaptchaVerify?: (token: string) => void
-    onHCaptchaExpired?: () => void
-    hcaptcha?: {
-      reset: (widgetId?: number) => void
-    }
-  }
+interface Captcha {
+  id: string
+  question: string
 }
 
 export default function SignUpPage() {
   const router = useRouter()
-  const [captchaToken, setCaptchaToken] = useState<string | null>(null)
+  const [captcha, setCaptcha] = useState<Captcha | null>(null)
+  const [captchaAnswer, setCaptchaAnswer] = useState("")
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
   const [formData, setFormData] = useState(() => {
@@ -37,24 +30,24 @@ export default function SignUpPage() {
     }
   })
 
+  const loadCaptcha = async () => {
+    try {
+      const res = await fetch("/api/captcha")
+      const data = await res.json()
+      if (res.ok && data.id && data.question) {
+        setCaptcha({ id: data.id, question: data.question })
+      } else {
+        throw new Error(data.error || "Failed to load challenge")
+      }
+    } catch (err) {
+      console.error("Captcha load error:", err)
+      setCaptcha(null)
+    }
+  }
+
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => {
-    if (typeof window === "undefined") return
-
-    window.onHCaptchaVerify = (token) => {
-      setCaptchaToken(token)
-    }
-    window.onHCaptchaExpired = () => {
-      setCaptchaToken(null)
-    }
-
-    if (document.getElementById("hcaptcha-script")) return
-
-    const script = document.createElement("script")
-    script.id = "hcaptcha-script"
-    script.src = "https://js.hcaptcha.com/1/api.js"
-    script.async = true
-    script.defer = true
-    document.head.appendChild(script)
+    loadCaptcha()
   }, [])
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -66,8 +59,13 @@ export default function SignUpPage() {
       return
     }
 
-    if (!captchaToken) {
-      setError("Please complete the security check")
+    if (!captcha) {
+      setError("Challenge not loaded. Please refresh the page.")
+      return
+    }
+
+    if (!captchaAnswer.trim()) {
+      setError("Please answer the security question")
       return
     }
 
@@ -92,7 +90,8 @@ export default function SignUpPage() {
           password: formData.password,
           ageVerified: formData.ageVerified,
           referralCode: formData.referralCode,
-          captchaToken,
+          captchaId: captcha.id,
+          captchaAnswer,
         }),
       })
 
@@ -115,8 +114,8 @@ export default function SignUpPage() {
       router.push("/profile/complete")
     } catch (error: unknown) {
       setError((error as Error).message)
-      setCaptchaToken(null)
-      window.hcaptcha?.reset?.()
+      setCaptchaAnswer("")
+      loadCaptcha()
     } finally {
       setLoading(false)
     }
@@ -198,13 +197,35 @@ export default function SignUpPage() {
             />
           </div>
 
-          <div
-            className="h-captcha"
-            data-sitekey={HCAPTCHA_SITE_KEY}
-            data-callback="onHCaptchaVerify"
-            data-expired-callback="onHCaptchaExpired"
-            data-theme="dark"
-          />
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <label htmlFor="captchaAnswer" className="block text-sm font-medium">
+                Security Question *
+              </label>
+              <button
+                type="button"
+                onClick={loadCaptcha}
+                disabled={!captcha}
+                className="text-xs text-primary hover:underline flex items-center gap-1 disabled:opacity-50"
+              >
+                <RefreshCw className="w-3 h-3" />
+                New question
+              </button>
+            </div>
+            <p className="text-sm text-muted-foreground mb-2">
+              {captcha ? captcha.question : "Loading..."}
+            </p>
+            <input
+              id="captchaAnswer"
+              type="text"
+              required
+              value={captchaAnswer}
+              onChange={(e) => setCaptchaAnswer(e.target.value)}
+              className="w-full px-4 py-2 rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary"
+              placeholder="Enter the answer"
+              autoComplete="off"
+            />
+          </div>
 
           <div className="flex items-center">
             <input
