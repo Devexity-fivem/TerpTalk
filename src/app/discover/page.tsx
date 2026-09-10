@@ -21,14 +21,7 @@ function threadScore(t: { views: number; replyCount: number; createdAt: Date }) 
 }
 
 async function getDiscoverData(tab: string, userId?: string) {
-  const select = {
-    id: true,
-    title: true,
-    slug: true,
-    content: true,
-    views: true,
-    replyCount: true,
-    createdAt: true,
+  const include = {
     author: { select: publicUserSelect },
     category: { select: { name: true, slug: true } },
     _count: { select: { posts: { where: { deleted: false } } } },
@@ -44,7 +37,7 @@ async function getDiscoverData(tab: string, userId?: string) {
       where: { deleted: false, authorId: { in: followingIds } },
       take: 50,
       orderBy: { createdAt: "desc" },
-      select,
+      include,
     })
     return { threads }
   }
@@ -54,7 +47,7 @@ async function getDiscoverData(tab: string, userId?: string) {
     const candidates = await prisma.thread.findMany({
       where: { deleted: false, createdAt: { gte: oneWeekAgo } },
       take: 200,
-      select,
+      include,
     })
     const scored = candidates
       .map((t) => ({ ...t, score: threadScore(t) }))
@@ -68,7 +61,7 @@ async function getDiscoverData(tab: string, userId?: string) {
     where: { deleted: false },
     take: 50,
     orderBy: { createdAt: "desc" },
-    select,
+    include,
   })
   return { threads }
 }
@@ -141,7 +134,6 @@ export default async function DiscoverPage({
                     </div>
                   </div>
                   <h3 className="font-semibold mb-2 break-words group-hover:text-primary transition-colors">{thread.title}</h3>
-                  <p className="text-sm text-muted-foreground line-clamp-2 mb-4 flex-1">{thread.content}</p>
                   <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground mt-auto">
                     <span className="flex items-center gap-1"><Clock className="w-3.5 h-3.5" /> {new Date(thread.createdAt).toLocaleDateString()}</span>
                     <span className="flex items-center gap-1"><Eye className="w-3.5 h-3.5" /> {thread.views}</span>
