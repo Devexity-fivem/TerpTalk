@@ -10,6 +10,7 @@ const sessionCookieName = secureCookies ? "__Host-next-auth.session-token" : "ne
 const csrfCookieName = secureCookies ? "__Host-next-auth.csrf-token" : "next-auth.csrf-token"
 
 export const authOptions: NextAuthOptions = {
+  secret: process.env.NEXTAUTH_SECRET,
   useSecureCookies: secureCookies,
   cookies: {
     sessionToken: {
