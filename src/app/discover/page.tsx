@@ -71,7 +71,6 @@ export default async function DiscoverPage({
 }: {
   searchParams: Promise<{ tab?: string }>
 }) {
-  try {
   const { tab } = (await searchParams) || {}
   const activeTab = ["latest", "trending", "following"].includes(tab || "") ? (tab as string) : "latest"
   const session = await getServerSession(authOptions)
@@ -148,7 +147,4 @@ export default async function DiscoverPage({
       </div>
     </div>
   )
-  } catch (error: any) {
-    return <div className="p-10 text-destructive">Discover error: {error?.message || String(error)}</div>
-  }
 }
