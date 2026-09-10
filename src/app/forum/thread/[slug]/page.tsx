@@ -42,6 +42,7 @@ async function getThreadData(slug: string, page: number) {
     include: {
       author: { select: publicUserSelect },
       category: true,
+      tags: { include: { tag: true } },
       images: { orderBy: { order: "asc" } },
       acceptedAnswer: {
         where: { deleted: false },
@@ -167,6 +168,20 @@ export default async function ThreadPage({
             <ThreadModActions threadId={thread.id} authorId={thread.authorId} pinned={thread.pinned} locked={thread.locked} />
           </div>
           <h1 className="text-3xl font-bold mb-2 break-words">{thread.title}</h1>
+          {thread.tags.length > 0 && (
+            <div className="flex flex-wrap gap-2 mb-3">
+              {thread.tags.map((tt) => (
+                <Link
+                  key={tt.tagId}
+                  href={`/forum/tags/${tt.tag.slug}`}
+                  className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-secondary hover:bg-primary/10 transition-colors"
+                  style={tt.tag.color ? { backgroundColor: tt.tag.color } : undefined}
+                >
+                  #{tt.tag.name}
+                </Link>
+              ))}
+            </div>
+          )}
           <div className="flex items-center gap-4 text-sm text-muted-foreground flex-wrap">
             <Link
               href={`/u/${thread.author.profile?.username || thread.author.name}`}

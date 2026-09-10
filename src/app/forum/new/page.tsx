@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation"
 import { MessageSquare, Loader2 } from "lucide-react"
 import ImageUploader from "@/components/image-uploader"
 import MarkdownComposer from "@/components/markdown-composer"
+import TagInput from "@/components/tag-input"
 import Link from "next/link"
 import { WIZARD_RESULTS } from "@/lib/problem-wizard"
 
@@ -55,6 +56,7 @@ function NewThreadForm() {
 
   const [similarThreads, setSimilarThreads] = useState<SimilarThread[]>([])
   const [images, setImages] = useState<string[]>([])
+  const [tags, setTags] = useState<string[]>([])
 
   useEffect(() => {
     fetch("/api/categories")
@@ -110,7 +112,7 @@ function NewThreadForm() {
       const response = await fetch("/api/forum/threads", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...formData, categoryId, images }),
+        body: JSON.stringify({ ...formData, categoryId, images, tags }),
       })
 
       if (!response.ok) {
@@ -215,6 +217,8 @@ function NewThreadForm() {
             <p className="text-xs text-muted-foreground">
               Minimum 10 characters. Be descriptive and helpful.
             </p>
+
+            <TagInput value={tags} onChange={setTags} disabled={loading} />
 
             <div>
               <span className="block text-sm font-medium mb-2">Images</span>

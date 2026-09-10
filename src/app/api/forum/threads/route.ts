@@ -19,6 +19,16 @@ function createSlug(text: string): string {
     .trim()
 }
 
+function createTagSlug(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '')
+    .slice(0, 40)
+}
+
+const MAX_TAGS = 5
+
 export async function POST(request: Request) {
   try {
     const session = await getServerSession(authOptions)
@@ -37,6 +47,7 @@ export async function POST(request: Request) {
 
     const body = await request.json().catch(() => ({}))
     const { title, content, categoryId, images } = body
+    const tagInputs = Array.isArray(body.tags) ? body.tags.filter((t: unknown): t is string => typeof t === "string").map((t: string) => t.trim()).filter(Boolean) : []
 
     if (
       typeof title !== "string" || !title.trim() ||
@@ -54,6 +65,10 @@ export async function POST(request: Request) {
         { error: "Content exceeds maximum length" },
         { status: 400 }
       )
+    }
+
+    if (tagInputs.length > MAX_TAGS) {
+      return NextResponse.json({ error: `Maximum ${MAX_TAGS} tags per thread` }, { status: 400 })
     }
 
     // Rate limit: 10 threads per hour per user
@@ -111,6 +126,24 @@ export async function POST(request: Request) {
       )
     }
 
+    // Resolve tags: reuse existing slugs or create new ones.
+    const threadTags = [] as { tag: { connect: { id: string } } }[]
+    for (const name of tagInputs) {
+      if (!name || name.length > 30 || name.length < 2) {
+        return NextResponse.json({ error: `Invalid tag name: ${name.slice(0, 20)}` }, { status: 400 })
+      }
+      const slug = createTagSlug(name)
+      if (!slug || slug.length < 2) {
+        return NextResponse.json({ error: `Invalid tag: ${name.slice(0, 20)}` }, { status: 400 })
+      }
+      const tag = await prisma.tag.upsert({
+        where: { slug },
+        update: {},
+        create: { name: name.toLowerCase(), slug, color: null },
+      })
+      threadTags.push({ tag: { connect: { id: tag.id } } })
+    }
+
     // Create slug
     let slug = createSlug(title)
     
@@ -140,10 +173,12 @@ export async function POST(request: Request) {
         images: {
           create: imageUrls.map((url, order) => ({ url, order })),
         },
+        tags: { create: threadTags },
       },
       include: {
         author: { select: publicUserSelect },
         category: true,
+        tags: { include: { tag: true } },
         posts: {
           include: {
             author: { select: publicUserSelect },
