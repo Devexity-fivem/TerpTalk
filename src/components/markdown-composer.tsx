@@ -122,10 +122,7 @@ export default function MarkdownComposer({
   }, [value, session])
 
   useEffect(() => {
-    if (!mention || !mention.query) {
-      if (mention) setMention(null)
-      return
-    }
+    if (!mention?.query) return
     const controller = new AbortController()
     const timeout = setTimeout(async () => {
       try {

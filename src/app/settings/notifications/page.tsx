@@ -16,7 +16,7 @@ const TOGGLES = [
 type Prefs = Record<(typeof TOGGLES)[number]["key"], boolean> & { emailDigestFrequency: string | null }
 
 export default function NotificationSettingsPage() {
-  const { data: session, status } = useSession()
+  const { status } = useSession()
   const router = useRouter()
   const [prefs, setPrefs] = useState<Prefs | null>(null)
   const [loading, setLoading] = useState(true)
@@ -91,7 +91,7 @@ export default function NotificationSettingsPage() {
             <label className="block text-sm font-medium mb-1.5">Email digest frequency</label>
             <select
               value={prefs.emailDigestFrequency || ""}
-              onChange={(e) => handleToggle("emailDigestFrequency" as keyof Prefs, e.target.value as any)}
+              onChange={(e) => setPrefs({ ...prefs, emailDigestFrequency: e.target.value || null })}
               className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm"
             >
               <option value="">Never</option>

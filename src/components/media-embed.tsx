@@ -18,7 +18,9 @@ interface MediaEmbedProps {
 
 export default function MediaEmbed({ url, className }: MediaEmbedProps) {
   const video = getVideoId(url)
-  if (!video) return <a href={url} className="text-primary hover:underline break-words" target="_blank" rel="noopener noreferrer">{url}</a>
+  // EMBED_RE only produces YouTube/Vimeo URLs, but if getVideoId somehow fails
+  // (shortened/corrupted URL), do not use the raw URL as an unvalidated href.
+  if (!video) return <span className="text-primary break-words">{url}</span>
 
   const src =
     video.provider === "youtube"

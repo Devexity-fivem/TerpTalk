@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { unauthorized, forbidden, isBanned } from "@/lib/security"
+import { Prisma } from "@prisma/client"
 
 export async function GET() {
   const session = await getServerSession(authOptions)
@@ -49,7 +50,7 @@ export async function PATCH(request: Request) {
 
   await prisma.profile.update({
     where: { userId: session.user.id },
-    data: data as any,
+    data: data as unknown as Prisma.ProfileUpdateInput,
   })
 
   return NextResponse.json({ ok: true })

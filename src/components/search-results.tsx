@@ -43,11 +43,8 @@ export default function SearchResults() {
   const suggestionTimeout = useRef<number | null>(null)
 
   useEffect(() => {
-    if (q.trim().length < 2) {
-      setResults(null)
-      setLoading(false)
-      return
-    }
+    if (q.trim().length < 2) return
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoading(true)
     let cancelled = false
     fetch(`/api/search?q=${encodeURIComponent(q)}&type=${type}&sort=${sort}`)

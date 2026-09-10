@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import { useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
-import { ToggleLeft, Loader2, Save } from "lucide-react"
+import { ToggleLeft, Loader2 } from "lucide-react"
 import Link from "next/link"
 
 interface Feature {
