@@ -1,8 +1,17 @@
 "use client"
 
-import { useState, useRef, useCallback } from "react"
-import { Bold, Italic, Heading, Quote, Link as LinkIcon, List, ListOrdered, Code, Eye, Pencil } from "lucide-react"
+import { useState, useRef, useCallback, useEffect } from "react"
+import { Bold, Italic, Heading, Quote, Link as LinkIcon, List, ListOrdered, Code, Eye, Pencil, AtSign } from "lucide-react"
 import { MarkdownRenderer } from "@/lib/markdown"
+import { useSession } from "next-auth/react"
+import { Avatar } from "@/components/ui/avatar"
+
+interface User {
+  id: string
+  name: string | null
+  image: string | null
+  profile?: { username: string | null } | null
+}
 
 interface MarkdownComposerProps {
   id?: string
@@ -38,6 +47,13 @@ function ToolbarButton({ onClick, title, disabled, children }: ToolbarButtonProp
   )
 }
 
+function getMentionMatch(text: string, cursor: number) {
+  const before = text.slice(0, cursor)
+  const match = before.match(/(?:^|\s)@(\w*)$/)
+  if (!match) return null
+  return { start: match.index ?? 0, end: cursor, query: match[1] }
+}
+
 export default function MarkdownComposer({
   id,
   value,
@@ -52,6 +68,8 @@ export default function MarkdownComposer({
 }: MarkdownComposerProps) {
   const [mode, setMode] = useState<"write" | "preview">("write")
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const [mention, setMention] = useState<{ start: number; end: number; query: string; index: number; suggestions: User[] } | null>(null)
+  const { data: session } = useSession()
 
   const insertAtCursor = useCallback((before: string, after: string = "", placeholderText = "") => {
     const el = textareaRef.current
@@ -92,10 +110,79 @@ export default function MarkdownComposer({
     })
   }, [value, onChange, insertAtCursor])
 
+  const checkMention = useCallback(() => {
+    const el = textareaRef.current
+    if (!el) return
+    const match = getMentionMatch(value, el.selectionStart)
+    if (!match || !session) {
+      setMention(null)
+      return
+    }
+    setMention({ ...match, index: 0, suggestions: [] })
+  }, [value, session])
+
+  useEffect(() => {
+    if (!mention || !mention.query) {
+      if (mention) setMention(null)
+      return
+    }
+    const controller = new AbortController()
+    const timeout = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/users/search?q=${encodeURIComponent(mention.query)}`, { signal: controller.signal })
+        if (!res.ok) return
+        const data = await res.json()
+        setMention((m) => (m ? { ...m, suggestions: (data.users || []) as User[], index: 0 } : null))
+      } catch {
+        // ignore aborted or failed
+      }
+    }, 200)
+    return () => {
+      clearTimeout(timeout)
+      controller.abort()
+    }
+  }, [mention?.query])
+
+  const selectMention = (user: User) => {
+    if (!mention || !textareaRef.current) return
+    const username = user.profile?.username || user.name
+    if (!username) return
+    const before = value.slice(0, mention.start)
+    const after = value.slice(mention.end)
+    const newValue = `${before}@${username} ${after}`
+    onChange(newValue)
+    const cursor = mention.start + username.length + 2
+    requestAnimationFrame(() => {
+      const el = textareaRef.current
+      if (!el) return
+      el.focus()
+      el.setSelectionRange(cursor, cursor)
+    })
+    setMention(null)
+  }
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (!mention || mention.suggestions.length === 0) return
+    if (e.key === "ArrowDown") {
+      e.preventDefault()
+      setMention((m) => (m ? { ...m, index: (m.index + 1) % m.suggestions.length } : null))
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault()
+      setMention((m) => (m ? { ...m, index: (m.index - 1 + m.suggestions.length) % m.suggestions.length } : null))
+    } else if (e.key === "Enter" || e.key === "Tab") {
+      e.preventDefault()
+      const user = mention.suggestions[mention.index]
+      if (user) selectMention(user)
+    } else if (e.key === "Escape") {
+      e.preventDefault()
+      setMention(null)
+    }
+  }
+
   const toolbarDisabled = disabled || mode === "preview"
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-2 relative">
       {label && <label htmlFor={id} className="block text-sm font-medium">{label}</label>}
       <div className="rounded-lg border border-border bg-background overflow-hidden">
         <div className="flex items-center justify-between border-b border-border bg-secondary/30 px-2 py-1.5">
@@ -124,6 +211,9 @@ export default function MarkdownComposer({
             <ToolbarButton title="Code block" onClick={() => insertAtCursor("```\n", "\n```", "code")} disabled={toolbarDisabled}>
               <Code className="w-4 h-4" />
             </ToolbarButton>
+            <ToolbarButton title="Mention" onClick={() => insertAtCursor("@", "", "")} disabled={toolbarDisabled}>
+              <AtSign className="w-4 h-4" />
+            </ToolbarButton>
           </div>
           {!hidePreview && (
             <div className="flex items-center bg-secondary rounded-md p-0.5">
@@ -145,19 +235,42 @@ export default function MarkdownComposer({
           )}
         </div>
         {mode === "write" ? (
-          <textarea
-            id={id}
-            ref={textareaRef}
-            value={value}
-            onChange={(e) => onChange(e.target.value)}
-            placeholder={placeholder}
-            rows={rows}
-            minLength={minLength}
-            maxLength={maxLength}
-            disabled={disabled}
-            className="w-full px-4 py-3 bg-background text-foreground focus:outline-none resize-none font-mono text-sm leading-relaxed"
-            style={{ minHeight: rows * 24 }}
-          />
+          <div className="relative">
+            <textarea
+              id={id}
+              ref={textareaRef}
+              value={value}
+              onChange={(e) => {
+                onChange(e.target.value)
+                checkMention()
+              }}
+              onClick={checkMention}
+              onKeyUp={checkMention}
+              onKeyDown={handleKeyDown}
+              placeholder={placeholder}
+              rows={rows}
+              minLength={minLength}
+              maxLength={maxLength}
+              disabled={disabled}
+              className="w-full px-4 py-3 bg-background text-foreground focus:outline-none resize-none font-mono text-sm leading-relaxed"
+              style={{ minHeight: rows * 24 }}
+            />
+            {mention && mention.suggestions.length > 0 && (
+              <div className="absolute z-10 left-2 right-2 bottom-2 bg-card border border-border rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                {mention.suggestions.map((user, i) => (
+                  <button
+                    key={user.id}
+                    onClick={() => selectMention(user)}
+                    className={`w-full flex items-center gap-2 px-3 py-2 text-left text-sm hover:bg-secondary ${i === mention.index ? "bg-secondary" : ""}`}
+                    type="button"
+                  >
+                    <Avatar src={user.image ?? undefined} size="sm" alt={user.profile?.username ?? user.name ?? undefined} />
+                    <span className="font-medium">{user.profile?.username || user.name}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         ) : (
           <div className="px-4 py-3 min-h-[144px] max-h-[400px] overflow-y-auto post-content">
             {value.trim() ? <MarkdownRenderer content={value} /> : <p className="text-muted-foreground italic">Nothing to preview yet.</p>}

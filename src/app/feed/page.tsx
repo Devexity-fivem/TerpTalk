@@ -13,26 +13,34 @@ export const metadata = {
   description: "Latest grow diary updates, discussions and new diaries from the TerpTalk community.",
 }
 
-async function getFeedData(userId?: string, followingOnly = false) {
-  // Resolve follow sets when the Following tab is active
+async function getFeedData(userId?: string, tab = "latest") {
+  // Resolve follow sets when the Following / For You tabs are active
+  const personal = tab === "following" || tab === "for-you"
   let followingIds: string[] = []
   let followedDiaryIds: string[] = []
-  if (userId && followingOnly) {
-    const [follows, diaryFollows] = await Promise.all([
+  let followedCategoryIds: string[] = []
+  if (userId && personal) {
+    const [follows, diaryFollows, categoryFollows] = await Promise.all([
       prisma.follow.findMany({ where: { followerId: userId }, select: { followingId: true } }),
       prisma.diaryFollow.findMany({ where: { userId }, select: { diaryId: true } }),
+      tab === "for-you"
+        ? prisma.categoryFollow.findMany({ where: { userId }, select: { categoryId: true } })
+        : Promise.resolve([] as { categoryId: string }[]),
     ])
     followingIds = follows.map((f) => f.followingId)
     followedDiaryIds = diaryFollows.map((f) => f.diaryId)
+    followedCategoryIds = categoryFollows.map((f) => f.categoryId)
   }
 
-  const updateWhere = followingOnly
+  const updateWhere = personal
     ? { diary: { deleted: false }, OR: [{ authorId: { in: followingIds } }, { diaryId: { in: followedDiaryIds } }] }
     : { diary: { deleted: false } }
-  const threadWhere = followingOnly
+  const threadWhere = tab === "following"
     ? { deleted: false, authorId: { in: followingIds } }
+    : tab === "for-you"
+    ? { deleted: false, OR: [{ authorId: { in: followingIds } }, { categoryId: { in: followedCategoryIds } }] }
     : { deleted: false }
-  const diaryWhere = followingOnly
+  const diaryWhere = personal
     ? { deleted: false, OR: [{ authorId: { in: followingIds } }, { followers: { some: { userId } } }] }
     : { deleted: false }
 
@@ -103,15 +111,17 @@ async function getFeedData(userId?: string, followingOnly = false) {
   }
 }
 
+const TABS = ["latest", "following", "for-you"] as const
+
 export default async function FeedPage({ searchParams }: { searchParams: Promise<{ tab?: string }> }) {
   const { tab } = await searchParams
   const session = await getServerSession(authOptions)
-  const followingOnly = tab === "following" && !!session?.user?.id
+  const activeTab = TABS.includes((tab || "") as (typeof TABS)[number]) ? (tab as (typeof TABS)[number]) : "latest"
   const { recentDiaryUpdates, recentThreads, trendingDiaries, memberCount, threadCount, diaryCount, popularCategories } =
-    await getFeedData(session?.user?.id, followingOnly)
+    await getFeedData(session?.user?.id, activeTab)
 
-  const tabCls = (active: boolean) =>
-    `px-4 py-2 text-sm font-medium transition-colors ${active ? "border-b-2 border-primary text-primary" : "text-muted-foreground hover:text-foreground"}`
+  const tabCls = (t: string) =>
+    `px-4 py-2 text-sm font-medium transition-colors ${activeTab === t ? "border-b-2 border-primary text-primary" : "text-muted-foreground hover:text-foreground"}`
 
   return (
     <div className="min-h-screen bg-background">
@@ -124,8 +134,9 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
 
         {/* Feed Tabs */}
         <div className="flex gap-4 mb-6 border-b border-border">
-          <Link href="/feed" className={tabCls(!followingOnly)}>Latest</Link>
-          <Link href="/feed?tab=following" className={tabCls(followingOnly)}>Following</Link>
+          <Link href="/feed" className={tabCls("latest")}>Latest</Link>
+          <Link href="/feed?tab=following" className={tabCls("following")}>Following</Link>
+          <Link href="/feed?tab=for-you" className={tabCls("for-you")}>For You</Link>
         </div>
 
         <div className="grid lg:grid-cols-3 gap-6">
@@ -229,7 +240,7 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
             {/* Empty State */}
             {recentDiaryUpdates.length === 0 && recentThreads.length === 0 && (
               <div className="bg-card rounded-lg border border-border p-12 text-center">
-                {followingOnly ? (
+                {activeTab === "following" || activeTab === "for-you" ? (
                   <>
                     <UserPlus className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
                     <h3 className="text-lg font-semibold mb-2">Nothing from your follows yet</h3>
