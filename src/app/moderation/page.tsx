@@ -72,6 +72,8 @@ export default function ModerationPage() {
   const [bulkReason, setBulkReason] = useState("")
   const [bulkLoading, setBulkLoading] = useState(false)
   const [bulkResult, setBulkResult] = useState<string | null>(null)
+  const [queueFilter, setQueueFilter] = useState<"ALL" | "PENDING" | "REVIEWING">("ALL")
+  const [queueSort, setQueueSort] = useState<"newest" | "oldest">("oldest")
   const role = (session?.user as { role?: string })?.role
   const isMod = role === "MODERATOR" || role === "ADMINISTRATOR"
   const isAdminUser = role === "ADMINISTRATOR"
@@ -197,6 +199,13 @@ export default function ModerationPage() {
 
   const pending = reports.filter((r) => r.status === "PENDING" || r.status === "REVIEWING")
   const resolved = reports.filter((r) => r.status === "RESOLVED" || r.status === "DISMISSED")
+  const queueReports = pending
+    .filter((r) => queueFilter === "ALL" || r.status === queueFilter)
+    .sort((a, b) => {
+      const ta = new Date(a.createdAt).getTime()
+      const tb = new Date(b.createdAt).getTime()
+      return queueSort === "oldest" ? ta - tb : tb - ta
+    })
 
   return (
     <div className="min-h-screen bg-background">
@@ -389,14 +398,38 @@ export default function ModerationPage() {
 
         {/* QUEUE */}
         {tab === "queue" && (<>
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+          <div className="flex items-center gap-2">
+            {(["ALL", "PENDING", "REVIEWING"] as const).map((s) => (
+              <button
+                key={s}
+                onClick={() => setQueueFilter(s)}
+                className={`px-3 py-1.5 rounded-lg text-sm transition-colors ${
+                  queueFilter === s ? "bg-primary text-primary-foreground" : "bg-card border border-border hover:bg-secondary"
+                }`}
+              >
+                {s === "ALL" ? "All open" : s.toLowerCase()}
+                <span className="ml-1.5 text-xs opacity-80">{s === "ALL" ? pending.length : pending.filter((p) => p.status === s).length}</span>
+              </button>
+            ))}
+          </div>
+          <select
+            value={queueSort}
+            onChange={(e) => setQueueSort(e.target.value as "newest" | "oldest")}
+            className="px-3 py-1.5 rounded-lg border border-border bg-card text-sm"
+          >
+            <option value="oldest">Oldest first</option>
+            <option value="newest">Newest first</option>
+          </select>
+        </div>
         <div className="space-y-4 mb-10">
-          {pending.length === 0 && (
+          {queueReports.length === 0 && (
             <div className="bg-card rounded-lg border border-border p-8 text-center text-muted-foreground">
               <CheckCircle className="w-10 h-10 mx-auto mb-2 text-primary" />
               Queue is clear. No pending reports.
             </div>
           )}
-          {pending.map((r) => (
+          {queueReports.map((r) => (
             <div key={r.id} className="bg-card rounded-lg border border-border p-5">
               <div className="flex items-start justify-between gap-4 flex-wrap">
                 <div className="min-w-0 flex-1">
