@@ -83,7 +83,7 @@ function resizeImage(file: File, size = 128): Promise<string> {
       const ctx = canvas.getContext("2d")
       if (!ctx) return reject(new Error("no canvas"))
       ctx.drawImage(img, sx, sy, min, min, 0, 0, size, size)
-      resolve(canvas.toDataURL("image/webp", 0.85))
+      resolve(canvas.toDataURL("image/png"))
     }
     img.onerror = reject
     img.src = URL.createObjectURL(file)
