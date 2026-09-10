@@ -62,7 +62,6 @@ export default function Poll({ poll, initialCounts, initialTotal, userVoteOption
           const count = counts[opt.id] || 0
           const percent = total > 0 ? Math.round((count / total) * 100) : 0
           const isVoted = votedOption === opt.id
-          const hasResult = total > 0
           return (
             <div key={opt.id} className="relative">
               {showResults ? (

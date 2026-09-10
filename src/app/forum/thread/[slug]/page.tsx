@@ -38,7 +38,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
 
 const POSTS_PER_PAGE = 50
 
-async function getThreadData(slug: string, page: number, userId?: string) {
+async function getThreadData(slug: string, page: number) {
   const thread = await prisma.thread.findUnique({
     where: { slug },
     include: {
@@ -100,7 +100,7 @@ export default async function ThreadPage({
   const page = Math.max(1, Math.min(10_000, parseInt(pageParam || "1") || 1))
   const session = await getServerSession(authOptions)
   const currentUserId = session?.user?.id
-  const thread = await getThreadData(slug, page, currentUserId)
+  const thread = await getThreadData(slug, page)
   const tagIds = thread.tags.map((tt) => tt.tagId)
   const relatedThreads = await prisma.thread.findMany({
     where: {

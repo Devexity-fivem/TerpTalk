@@ -4,9 +4,7 @@
 import { prisma } from "@/lib/prisma"
 import {
   VERIFIED_MULTIPLIER,
-  REP_TIERS,
   getReputationTier,
-  getTierProgress,
 } from "@/lib/reputation-config"
 
 // Re-exported for existing server-side callers.

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { Video, Check, X, Loader2 } from "lucide-react"
+import { Avatar } from "@/components/ui/avatar"
 
 interface Youtuber {
   id: string
@@ -77,11 +78,7 @@ export default function AdminYoutubersPage() {
               >
                 <div className="flex items-center gap-3">
                   {y.avatarUrl ? (
-                    <img
-                      src={y.avatarUrl}
-                      alt={y.username}
-                      className="w-10 h-10 rounded-full object-cover"
-                    />
+                    <Avatar src={y.avatarUrl} alt={y.username} size="md" />
                   ) : (
                     <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
                       <Video className="w-5 h-5 text-primary" />

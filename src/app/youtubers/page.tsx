@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma"
 import Link from "next/link"
 import { Video } from "lucide-react"
+import { Avatar } from "@/components/ui/avatar"
 
 export const revalidate = 60
 
@@ -104,11 +105,7 @@ export default async function YoutubersPage() {
               >
                 <div className="flex items-center gap-3 mb-3">
                   {user.profile?.avatarUrl ? (
-                    <img
-                      src={user.profile.avatarUrl}
-                      alt={user.profile.username}
-                      className="w-12 h-12 rounded-full object-cover"
-                    />
+                    <Avatar src={user.profile.avatarUrl} alt={user.profile.username || undefined} size="lg" className="w-12 h-12" />
                   ) : (
                     <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
                       <Video className="w-6 h-6 text-primary" />
