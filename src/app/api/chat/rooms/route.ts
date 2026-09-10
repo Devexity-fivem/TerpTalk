@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getToken } from "next-auth/jwt"
 import { prisma } from "@/lib/prisma"
-import { unauthorized, forbidden, isBanned, getClientIp, hashIp } from "@/lib/security"
+import { unauthorized, forbidden, isSessionValid, getClientIp, hashIp } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
 
 // Get chat rooms
@@ -11,7 +11,7 @@ export async function GET(request: NextRequest) {
     const userId = token?.id as string | undefined
     if (!userId) return unauthorized()
 
-    if (await isBanned(userId)) return forbidden()
+    if (!(await isSessionValid(userId, token?.sessionVersion as number | undefined))) return forbidden()
 
     const ip = getClientIp(request)
     const rl = await rateLimit(`chat-rooms:${hashIp(ip)}`, 60, 60 * 1000)

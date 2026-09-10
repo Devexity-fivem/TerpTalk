@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { getToken } from "next-auth/jwt"
 import { unstable_cache } from "next/cache"
 import { prisma } from "@/lib/prisma"
-import { blockExistsBetween, getTrustLevel, getClientIp, hashIp } from "@/lib/security"
+import { blockExistsBetween, getTrustLevel, getClientIp, hashIp, isSessionValid } from "@/lib/security"
 import { getReputationTier, getTierProgress } from "@/lib/reputation"
 import { getGrowStreak } from "@/lib/grow-streak"
 import { rateLimit } from "@/lib/rate-limit"
@@ -132,7 +132,10 @@ export async function GET(
 
     // Use JWT token for the viewer instead of a full DB session lookup.
     const token = await getToken({ req: request, secret: process.env.NEXTAUTH_SECRET })
-    const viewerId = token?.id as string | undefined
+    let viewerId = token?.id as string | undefined
+    if (viewerId && !(await isSessionValid(viewerId, token?.sessionVersion as number | undefined))) {
+      viewerId = undefined
+    }
 
     let viewerBlocked = false
     let blockedMe = false

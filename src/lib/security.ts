@@ -32,6 +32,21 @@ export async function isBanned(userId: string): Promise<boolean> {
   return !user || user.banned
 }
 
+/**
+ * Validates that the JWT session is still valid for the user.
+ * Use after `getToken` to match `getServerSession` behavior: rejects banned users
+ * and tokens issued before the user's sessionVersion was incremented (password
+ * change, forced logout, etc.).
+ */
+export async function isSessionValid(userId: string, tokenSessionVersion?: number): Promise<boolean> {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { banned: true, sessionVersion: true },
+  })
+  if (!user || user.banned) return false
+  return (tokenSessionVersion ?? 0) === (user.sessionVersion ?? 0)
+}
+
 // ─── Anti-spam: link restrictions for new/low-trust users ─────────────
 
 const LINK_RE = /(?:https?:\/\/|www\.)|(?:\b[a-z0-9-]+\.[a-z]{2,}\b)/i

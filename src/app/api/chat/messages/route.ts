@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getToken } from "next-auth/jwt"
 import { prisma } from "@/lib/prisma"
-import { unauthorized, publicUserSelect, LIMITS, getClientIp, logSecurityEvent, isBanned, forbidden, isModerator } from "@/lib/security"
+import { unauthorized, publicUserSelect, LIMITS, getClientIp, logSecurityEvent, isSessionValid, forbidden, isModerator } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
 import { notifyMentions } from "@/lib/mentions"
 import { getPusher } from "@/lib/pusher"
@@ -38,7 +38,7 @@ export async function GET(request: NextRequest) {
     const userId = token?.id as string | undefined
     if (!userId) return unauthorized()
 
-    if (await isBanned(userId)) return forbidden("Your account is suspended")
+    if (!(await isSessionValid(userId, token?.sessionVersion as number | undefined))) return forbidden("Your account is suspended")
 
     const rl = await rateLimit(`chat-read:${userId}`, 120, 60 * 1000)
     if (!rl.allowed) {
@@ -110,7 +110,7 @@ export async function POST(request: NextRequest) {
     const userId = token?.id as string | undefined
     if (!token || !userId) return unauthorized()
 
-    if (await isBanned(userId)) return forbidden("Your account is suspended")
+    if (!(await isSessionValid(userId, token?.sessionVersion as number | undefined))) return forbidden("Your account is suspended")
 
     const body = await request.json().catch(() => ({}))
     const { content, roomId } = body

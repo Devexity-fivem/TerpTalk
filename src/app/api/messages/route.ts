@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getToken } from "next-auth/jwt"
 import { prisma } from "@/lib/prisma"
-import { unauthorized, publicUserSelect, getClientIp, logSecurityEvent, isBanned, forbidden, blockExistsBetween, hashIp } from "@/lib/security"
+import { unauthorized, publicUserSelect, getClientIp, logSecurityEvent, isSessionValid, forbidden, blockExistsBetween, hashIp } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
 
 function senderDto(user: { id?: string; name?: string | null; image?: string | null; profile?: { username?: string | null } | null }) {
@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
     const token = await getToken({ req: request, secret: process.env.NEXTAUTH_SECRET })
     const userId = token?.id as string | undefined
     if (!userId) return unauthorized()
-    if (await isBanned(userId)) return forbidden()
+    if (!(await isSessionValid(userId, token?.sessionVersion as number | undefined))) return forbidden()
 
     const ip = getClientIp(request)
     const rl = await rateLimit(`messages-read:${userId}:${hashIp(ip)}`, 120, 60 * 1000)
@@ -163,7 +163,7 @@ export async function POST(request: NextRequest) {
       })
       return NextResponse.json({ error: "Slow down." }, { status: 429 })
     }
-    if (await isBanned(userId)) return forbidden("Your account is suspended")
+    if (!(await isSessionValid(userId, token?.sessionVersion as number | undefined))) return forbidden("Your account is suspended")
     if (await blockExistsBetween(userId, to)) {
       return forbidden("You cannot message this user")
     }
