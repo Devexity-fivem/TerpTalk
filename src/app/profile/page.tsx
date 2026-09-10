@@ -631,7 +631,7 @@ export default function ProfilePage() {
               </div>
             </div>
             <p className="text-xs text-muted-foreground">
-              Earn rep by posting, journaling, adding strains, and getting likes. Verified members earn 2x rep.
+              Earn rep by posting, journaling, adding strains, and getting likes. Verified members earn 1.5x rep.
             </p>
           </div>
 

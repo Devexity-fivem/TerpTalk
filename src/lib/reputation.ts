@@ -1,17 +1,17 @@
 import { prisma } from "@/lib/prisma"
 
-const VERIFIED_MULTIPLIER = 2
+const VERIFIED_MULTIPLIER = 1.5
 
 // Point values for community actions
 export const REP_POINTS = {
-  THREAD_CREATED: 10,
-  POST_CREATED: 5,
-  DIARY_CREATED: 15,
-  DIARY_UPDATE: 5,
-  STRAIN_CREATED: 15,
-  STRAIN_PHOTO: 10,
-  LIKE_RECEIVED: 2,
-  REFERRAL: 25,
+  THREAD_CREATED: 5,
+  POST_CREATED: 2,
+  DIARY_CREATED: 8,
+  DIARY_UPDATE: 2,
+  STRAIN_CREATED: 8,
+  STRAIN_PHOTO: 5,
+  LIKE_RECEIVED: 1,
+  REFERRAL: 15,
 } as const
 
 export interface ReputationTier {
@@ -25,12 +25,12 @@ export interface ReputationTier {
 
 export const REP_TIERS: ReputationTier[] = [
   { threshold: 0, name: "Seed", color: "text-stone-500", bg: "bg-stone-500/10", icon: "🌱", benefit: "Welcome to the community — start growing your rep." },
-  { threshold: 50, name: "Sprout", color: "text-amber-600", bg: "bg-amber-600/10", icon: "🌿", benefit: "Your links no longer need manual approval." },
-  { threshold: 150, name: "Seedling", color: "text-green-500", bg: "bg-green-500/10", icon: "🌱", benefit: "Unlock the ability to vote in community polls." },
-  { threshold: 300, name: "Grower", color: "text-emerald-500", bg: "bg-emerald-500/10", icon: "🌲", benefit: "Appear on the public leaderboard and unlock weekly rewards." },
-  { threshold: 600, name: "Cultivator", color: "text-cyan-500", bg: "bg-cyan-500/10", icon: "🌿", benefit: "Can edit community guides and strain entries." },
-  { threshold: 1000, name: "Master Grower", color: "text-purple-500", bg: "bg-purple-500/10", icon: "🏆", benefit: "Double voting weight in contests and a legendary profile flair." },
-  { threshold: 2500, name: "Legendary Grower", color: "text-amber-400", bg: "bg-amber-400/10", icon: "👑", benefit: "Immortalized as a community elder — exclusive badge and title." },
+  { threshold: 250, name: "Sprout", color: "text-amber-600", bg: "bg-amber-600/10", icon: "🌿", benefit: "Your links no longer need manual approval." },
+  { threshold: 750, name: "Seedling", color: "text-green-500", bg: "bg-green-500/10", icon: "🌱", benefit: "Unlock the ability to vote in community polls." },
+  { threshold: 1500, name: "Grower", color: "text-emerald-500", bg: "bg-emerald-500/10", icon: "🌲", benefit: "Appear on the public leaderboard and unlock weekly rewards." },
+  { threshold: 3500, name: "Cultivator", color: "text-cyan-500", bg: "bg-cyan-500/10", icon: "🌿", benefit: "Can edit community guides and strain entries." },
+  { threshold: 7000, name: "Master Grower", color: "text-purple-500", bg: "bg-purple-500/10", icon: "🏆", benefit: "Double voting weight in contests and a legendary profile flair." },
+  { threshold: 15000, name: "Legendary Grower", color: "text-amber-400", bg: "bg-amber-400/10", icon: "👑", benefit: "Immortalized as a community elder — exclusive badge and title." },
 ]
 
 export function getReputationTier(reputation: number): ReputationTier {
@@ -93,15 +93,15 @@ const BADGE_RULES: Record<string, (s: UserStats) => boolean> = {
   "Community Favorite": (s) => s.likesReceived >= 100,
   "Helper": (s) => s.acceptedAnswers >= 1,
   "Top Helper": (s) => s.acceptedAnswers >= 5,
-  "Top Contributor": (s) => s.reputation >= 5000,
+  "Top Contributor": (s) => s.reputation >= 10000,
   "Dedicated Grower": (s) => s.diaryUpdates >= 7,
   // Reputation tier badges
-  "Sprout": (s) => s.reputation >= 50,
-  "Seedling": (s) => s.reputation >= 150,
-  "Grower": (s) => s.reputation >= 300,
-  "Cultivator": (s) => s.reputation >= 600,
-  "Master Grower": (s) => s.reputation >= 1000,
-  "Legendary Grower": (s) => s.reputation >= 2500,
+  "Sprout": (s) => s.reputation >= 250,
+  "Seedling": (s) => s.reputation >= 750,
+  "Grower": (s) => s.reputation >= 1500,
+  "Cultivator": (s) => s.reputation >= 3500,
+  "Master Grower": (s) => s.reputation >= 7000,
+  "Legendary Grower": (s) => s.reputation >= 15000,
 }
 
 async function getUserStats(userId: string): Promise<UserStats> {

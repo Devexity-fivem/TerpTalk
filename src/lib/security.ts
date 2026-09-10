@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma"
 import { createHash } from "crypto"
 import { NextResponse } from "next/server"
+import { REP_TIERS } from "@/lib/reputation"
 
 // ─── Role & status helpers ──────────────────────────────────────────
 
@@ -41,7 +42,7 @@ export function containsExternalLink(text: string): boolean {
   return LINK_RE.test(text)
 }
 
-/** Moderators and users older than 24h with at least 10 reputation can post links. */
+/** Moderators and users older than 24h who have reached the Sprout tier can post links. */
 export async function isTrustedForLinks(userId: string): Promise<boolean> {
   const user = await prisma.user.findUnique({
     where: { id: userId },
@@ -50,7 +51,8 @@ export async function isTrustedForLinks(userId: string): Promise<boolean> {
   if (!user) return false
   if (isModerator(user.role)) return true
   const ageHours = (Date.now() - new Date(user.createdAt).getTime()) / (1000 * 60 * 60)
-  return ageHours >= 24 && (user.profile?.reputation ?? 0) >= 10
+  const sproutThreshold = REP_TIERS[1]?.threshold ?? 250
+  return ageHours >= 24 && (user.profile?.reputation ?? 0) >= sproutThreshold
 }
 
 export type TrustLevel = "New Grower" | "Member" | "Established" | "Veteran" | "Expert"
