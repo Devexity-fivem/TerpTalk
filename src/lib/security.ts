@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma"
 import { createHash } from "crypto"
 import { NextResponse } from "next/server"
-import { REP_TIERS } from "@/lib/reputation"
+import { REP_TIERS } from "@/lib/reputation-config"
 
 // ─── Role & status helpers ──────────────────────────────────────────
 
