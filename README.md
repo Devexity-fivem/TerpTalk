@@ -41,16 +41,27 @@ npm run dev &                        # terminal 1
 # open http://localhost:3000 and test key user flows
 ```
 
-## Production documentation
+## Deployment workflow
 
-- `DEPLOYMENT.md` — Vercel/Neon deployment and environment setup
-- `OPERATIONS.md` — monitoring, backups, migrations, incident response
-- `SECURITY.md` — security controls, hardening, and operational guidance
-- `PRIVACY.md` — privacy policy and data handling
-- `MODERATION_GUIDE.md` — moderator and administrator workflows
-- `DEVELOPER_GUIDE.md` — code conventions and contribution notes
-- `INCIDENT_RESPONSE.md` — security incident response runbook
-- `PRODUCTION_CHECKLIST.md` — pre-launch and post-launch checks
+This project uses Vercel with two environments:
+
+- `master` → Production (`https://terp-talk.vercel.app`)
+- `pre-prod` → Preview/Pre-production environment for testing before release
+
+```bash
+# Start a change
+ git checkout -b feature/my-change pre-prod
+# ... work, commit, push to pre-prod ...
+ git push origin pre-prod
+# Vercel builds a preview. Once verified, merge to master:
+ git checkout pre-prod
+ git pull origin pre-prod
+ git checkout master
+ git merge pre-prod
+ git push origin master
+```
+
+Avoid pushing directly to `master` repeatedly. Each `master` build uses Vercel Functions Storage, and failed/skipped builds should be cleaned up from the Vercel dashboard regularly.
 
 ## Project structure
 
