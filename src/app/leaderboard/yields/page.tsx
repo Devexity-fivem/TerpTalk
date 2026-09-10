@@ -1,9 +1,10 @@
 import { prisma } from "@/lib/prisma"
 import { publicUserSelect } from "@/lib/security"
 import Link from "next/link"
-import { Trophy, Leaf, TrendingUp } from "lucide-react"
+import { Trophy, Leaf } from "lucide-react"
 import { Avatar } from "@/components/ui/avatar"
 import { buildMetadata } from "@/lib/seo"
+import EmptyState from "@/components/empty-state"
 
 export const metadata = buildMetadata({
   title: "Strain Yield Leaderboard",
@@ -114,19 +115,12 @@ export default async function YieldLeaderboardPage() {
         </div>
 
         {rows.length === 0 ? (
-          <div className="bg-card border border-border rounded-xl p-8 text-center">
-            <Leaf className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
-            <h2 className="text-lg font-semibold">No harvest records yet</h2>
-            <p className="text-muted-foreground text-sm mt-1">
-              Once growers log harvests in their diaries, this leaderboard will fill in.
-            </p>
-            <Link
-              href="/diaries"
-              className="inline-flex items-center gap-1.5 mt-4 px-4 py-2 text-sm font-medium rounded-lg bg-primary text-primary-foreground hover:bg-primary/90"
-            >
-              Browse diaries <TrendingUp className="w-4 h-4" />
-            </Link>
-          </div>
+          <EmptyState
+            icon={Leaf}
+            title="No harvest records yet"
+            description="Once growers log harvests in their diaries, this leaderboard will fill in."
+            action={{ href: "/diaries", label: "Browse diaries" }}
+          />
         ) : (
           <div className="space-y-3">
             {rows.map((row, i) => (
