@@ -21,10 +21,16 @@ function threadScore(t: { views: number; replyCount: number; createdAt: Date }) 
 }
 
 async function getDiscoverData(tab: string, userId?: string) {
-  const include = {
-    author: { select: publicUserSelect },
-    category: true,
+  const select = {
+    id: true,
+    title: true,
+    slug: true,
     content: true,
+    views: true,
+    replyCount: true,
+    createdAt: true,
+    author: { select: publicUserSelect },
+    category: { select: { name: true, slug: true } },
     _count: { select: { posts: { where: { deleted: false } } } },
   } as const
 
@@ -38,7 +44,7 @@ async function getDiscoverData(tab: string, userId?: string) {
       where: { deleted: false, authorId: { in: followingIds } },
       take: 50,
       orderBy: { createdAt: "desc" },
-      include,
+      select,
     })
     return { threads }
   }
@@ -48,7 +54,7 @@ async function getDiscoverData(tab: string, userId?: string) {
     const candidates = await prisma.thread.findMany({
       where: { deleted: false, createdAt: { gte: oneWeekAgo } },
       take: 200,
-      include,
+      select,
     })
     const scored = candidates
       .map((t) => ({ ...t, score: threadScore(t) }))
@@ -62,7 +68,7 @@ async function getDiscoverData(tab: string, userId?: string) {
     where: { deleted: false },
     take: 50,
     orderBy: { createdAt: "desc" },
-    include,
+    select,
   })
   return { threads }
 }
