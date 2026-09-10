@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma"
 import { Trophy, Medal, Award } from "lucide-react"
 import Link from "next/link"
 import RoleBadge from "@/components/role-badge"
+import EmptyState from "@/components/ui/empty-state"
 import { getReputationTier } from "@/lib/reputation"
 
 export const revalidate = 60 // public content, edge-cached
@@ -54,7 +55,11 @@ export default async function LeaderboardPage() {
         <div className="bg-card rounded-xl border border-border overflow-hidden">
           <div className="divide-y divide-border">
             {topUsers.length === 0 && (
-              <p className="p-8 text-center text-muted-foreground">No members yet.</p>
+              <EmptyState
+                icon={Trophy}
+                title="No members on the board yet"
+                description="Reputation is earned by posting, journaling, and helping other growers."
+              />
             )}
             {topUsers.map((p, i) => (
               <Link

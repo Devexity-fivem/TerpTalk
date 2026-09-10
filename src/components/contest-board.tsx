@@ -5,6 +5,7 @@ import { useSession } from "next-auth/react"
 import Link from "next/link"
 import { Trophy, Camera, Loader2, Heart } from "lucide-react"
 import RoleBadge from "@/components/role-badge"
+import EmptyState from "@/components/ui/empty-state"
 
 interface Entry {
   id: string
@@ -111,10 +112,12 @@ export default function ContestBoard() {
       {error && <p className="text-sm text-destructive mb-4">{error}</p>}
 
       {entries.length === 0 ? (
-        <div className="bg-card rounded-xl border border-border p-12 text-center">
-          <Trophy className="w-14 h-14 text-amber-500/50 mx-auto mb-4" />
-          <h3 className="font-semibold mb-1">No entries yet this week</h3>
-          <p className="text-sm text-muted-foreground">Be the first — snap your best budshot.</p>
+        <div className="bg-card rounded-xl border border-border">
+          <EmptyState
+            icon={Trophy}
+            title="No entries yet this week"
+            description="Be the first — snap your best budshot."
+          />
         </div>
       ) : (
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">

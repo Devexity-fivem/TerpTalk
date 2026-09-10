@@ -3,6 +3,7 @@ import { publicUserSelect } from "@/lib/security"
 import { Leaf, Calendar, TrendingUp, Users } from "lucide-react"
 import Link from "next/link"
 import RoleBadge from "@/components/role-badge"
+import EmptyState from "@/components/ui/empty-state"
 
 export const dynamic = "force-dynamic"
 
@@ -101,16 +102,13 @@ export default async function DiariesPage() {
           </div>
 
           {diaries.length === 0 ? (
-            <div className="bg-card rounded-lg border border-border p-12 text-center">
-              <Leaf className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
-              <h3 className="text-lg font-semibold mb-2">No grow diaries yet</h3>
-              <p className="text-muted-foreground mb-4">Be the first to document your grow journey!</p>
-              <Link
-                href="/diaries/new"
-                className="bg-primary text-primary-foreground px-6 py-2 rounded-lg hover:bg-primary/90 transition-colors"
-              >
-                Start Your First Diary
-              </Link>
+            <div className="bg-card rounded-xl border border-border">
+              <EmptyState
+                icon={Leaf}
+                title="No grow diaries yet"
+                description="Be the first to document your grow journey."
+                action={{ label: "Start your first diary", href: "/diaries/new" }}
+              />
             </div>
           ) : (
             <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">

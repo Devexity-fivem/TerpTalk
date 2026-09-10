@@ -5,6 +5,7 @@ import { useSession } from "next-auth/react"
 import { useSearchParams, useRouter } from "next/navigation"
 import { Mail, Send, Loader2, MessageCircle } from "lucide-react"
 import Link from "next/link"
+import EmptyState from "@/components/ui/empty-state"
 
 interface Convo {
   partner: { id: string; name: string | null; role: string; profile: { username: string | null } | null }
@@ -127,10 +128,11 @@ function MessagesInner() {
           {/* Conversation list */}
           <div className="bg-card border border-border rounded-xl overflow-y-auto">
             {convos.length === 0 ? (
-              <div className="p-6 text-center text-sm text-muted-foreground">
-                <MessageCircle className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                No conversations yet. Visit a member&apos;s profile and hit Message.
-              </div>
+              <EmptyState
+                icon={MessageCircle}
+                title="No conversations yet"
+                description="Visit a member's profile and hit Message to start one."
+              />
             ) : (
               <div className="divide-y divide-border">
                 {convos.map((c) => (

@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma"
 import { BookOpen, Plus } from "lucide-react"
 import Link from "next/link"
+import EmptyState from "@/components/ui/empty-state"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 
@@ -41,10 +42,12 @@ export default async function GuidesPage() {
         </div>
 
         {guides.length === 0 ? (
-          <div className="bg-card rounded-xl border border-border p-12 text-center">
-            <BookOpen className="w-14 h-14 text-muted-foreground/50 mx-auto mb-4" />
-            <h3 className="font-semibold mb-1">No guides yet</h3>
-            <p className="text-sm text-muted-foreground">Staff guides are coming soon.</p>
+          <div className="bg-card rounded-xl border border-border">
+            <EmptyState
+              icon={BookOpen}
+              title="No guides yet"
+              description="Staff guides are coming soon."
+            />
           </div>
         ) : (
           topics.map((topic) => (

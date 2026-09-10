@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma"
 import { Leaf, Plus, Search } from "lucide-react"
 import Link from "next/link"
+import EmptyState from "@/components/ui/empty-state"
 
 export const revalidate = 60 // public content, edge-cached
 
@@ -63,16 +64,13 @@ export default async function StrainsPage({ searchParams }: { searchParams: Prom
         </div>
 
         {strains.length === 0 ? (
-          <div className="bg-card rounded-lg border border-border p-12 text-center">
-            <Leaf className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
-            <h3 className="text-lg font-semibold mb-2">No strains in database yet</h3>
-            <p className="text-muted-foreground mb-4">Help build our community strain database!</p>
-            <Link
-              href="/strains/new"
-              className="bg-primary text-primary-foreground px-6 py-2 rounded-lg hover:bg-primary/90 transition-colors"
-            >
-              Add First Strain
-            </Link>
+          <div className="bg-card rounded-xl border border-border">
+            <EmptyState
+              icon={Leaf}
+              title="No strains in the database yet"
+              description="Help build the community strain database."
+              action={{ label: "Add the first strain", href: "/strains/new" }}
+            />
           </div>
         ) : (
           <div className="grid md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">

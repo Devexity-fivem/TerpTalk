@@ -3,6 +3,7 @@ import { publicUserSelect } from "@/lib/security"
 import { Settings, Plus, Users } from "lucide-react"
 import Link from "next/link"
 import RoleBadge from "@/components/role-badge"
+import EmptyState from "@/components/ui/empty-state"
 
 export const dynamic = "force-dynamic"
 
@@ -52,16 +53,13 @@ export default async function SetupsPage() {
         </div>
 
         {setups.length === 0 ? (
-          <div className="bg-card rounded-lg border border-border p-12 text-center">
-            <Settings className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
-            <h3 className="text-lg font-semibold mb-2">No setups shared yet</h3>
-            <p className="text-muted-foreground mb-4">Be the first to show off your grow setup!</p>
-            <Link
-              href="/setups/new"
-              className="bg-primary text-primary-foreground px-6 py-2 rounded-lg hover:bg-primary/90 transition-colors"
-            >
-              Share Your Setup
-            </Link>
+          <div className="bg-card rounded-xl border border-border">
+            <EmptyState
+              icon={Settings}
+              title="No setups shared yet"
+              description="Be the first to show off your grow setup."
+              action={{ label: "Share your setup", href: "/setups/new" }}
+            />
           </div>
         ) : (
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">

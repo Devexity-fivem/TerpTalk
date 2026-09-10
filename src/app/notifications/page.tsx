@@ -5,6 +5,7 @@ import { useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
 import { Bell, Loader2, CheckCheck } from "lucide-react"
 import Link from "next/link"
+import EmptyState from "@/components/ui/empty-state"
 
 interface Notification {
   id: string
@@ -70,10 +71,11 @@ export default function NotificationsPage() {
 
         <div className="bg-card rounded-lg border border-border divide-y divide-border">
           {notifications.length === 0 && (
-            <div className="p-8 text-center text-muted-foreground">
-              <Bell className="w-10 h-10 mx-auto mb-2 opacity-50" />
-              No notifications yet.
-            </div>
+            <EmptyState
+              icon={Bell}
+              title="No notifications yet"
+              description="Replies, mentions, reactions, and follows will show up here."
+            />
           )}
           {notifications.map((n) => (
             <div key={n.id} className={`p-4 ${!n.read ? "bg-primary/5" : ""}`}>
