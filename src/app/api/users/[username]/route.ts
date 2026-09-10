@@ -4,6 +4,7 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { blockExistsBetween, getTrustLevel, getClientIp, hashIp } from "@/lib/security"
 import { getReputationTier, getTierProgress } from "@/lib/reputation"
+import { getGrowStreak } from "@/lib/grow-streak"
 import { rateLimit } from "@/lib/rate-limit"
 
 function safeUrl(url: string | null | undefined): string | null {
@@ -124,6 +125,8 @@ export async function GET(
       },
     })
 
+    const { streak, totalUpdates, harvestedDiaries } = await getGrowStreak(profile.user.id)
+
     return NextResponse.json({
       profile: {
         id: profile.user.id,
@@ -144,6 +147,9 @@ export async function GET(
         trustLevel: getTrustLevel(profile.user.createdAt, profile.reputation),
         reputationTier: getReputationTier(profile.reputation),
         tierProgress: getTierProgress(profile.reputation),
+        growStreak: streak,
+        totalUpdates,
+        harvestedDiaries,
         badges: profile.user.badges.map((b) => ({
           name: b.badge.name,
           description: b.badge.description,

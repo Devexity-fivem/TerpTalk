@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import { useSession } from "next-auth/react"
 import { useParams } from "next/navigation"
-import { User, MessageSquare, Loader2, MapPin, Globe, Sprout, Dna, Leaf, Store } from "lucide-react"
+import { User, MessageSquare, Loader2, MapPin, Globe, Sprout, Dna, Leaf, Store, Flame } from "lucide-react"
 import Link from "next/link"
 import UserActions from "@/components/user-actions"
 import RoleBadge from "@/components/role-badge"
@@ -46,6 +46,9 @@ interface PublicProfile {
     followers: number
     following: number
   }
+  growStreak: number
+  totalUpdates: number
+  harvestedDiaries: number
 }
 
 interface Thread {
@@ -191,7 +194,20 @@ export default function PublicProfilePage() {
                   <div className="text-xl font-bold text-primary">{profile.stats.diaryCreator}</div>
                   <div className="text-xs text-muted-foreground">Diaries</div>
                 </div>
+                <div className="text-center">
+                  <div className="text-xl font-bold text-primary">{profile.harvestedDiaries}</div>
+                  <div className="text-xs text-muted-foreground">Harvests</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-xl font-bold text-primary">{profile.totalUpdates}</div>
+                  <div className="text-xs text-muted-foreground">Updates</div>
+                </div>
               </div>
+              {profile.growStreak >= 2 && (
+                <div className="mt-4 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-500/10 text-amber-500 text-xs font-semibold">
+                  <Flame className="w-3.5 h-3.5" /> {profile.growStreak}-day grow streak
+                </div>
+              )}
               {profile.badges?.length > 0 && (
                 <div className="flex flex-wrap gap-2 mt-4">
                   {profile.badges.map((b) => (

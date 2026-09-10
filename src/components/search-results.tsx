@@ -4,7 +4,7 @@ import { useEffect, useState, useRef } from "react"
 import { useSearchParams, useRouter } from "next/navigation"
 import { useSession } from "next-auth/react"
 import Link from "next/link"
-import { Search, MessageSquare, Leaf, Dna, User, Loader2, Bookmark, ArrowUpDown } from "lucide-react"
+import { Search, MessageSquare, Leaf, Dna, User, Tag, Loader2, Bookmark, ArrowUpDown } from "lucide-react"
 
 interface Results {
   threads: { id: string; title: string; slug: string; category: { name: string }; replyCount: number; views: number }[]
@@ -14,6 +14,7 @@ interface Results {
 }
 
 interface Suggestion {
+  type: "thread" | "strain" | "user" | "tag"
   title: string
   slug: string
 }
@@ -105,17 +106,29 @@ export default function SearchResults() {
           />
         </div>
         {showSuggestions && suggestions.length > 0 && (
-          <div className="absolute z-10 left-0 right-0 mt-1 bg-card border border-border rounded-lg shadow-lg">
-            {suggestions.map((s) => (
-              <Link
-                key={s.slug}
-                href={`/forum/thread/${s.slug}`}
-                onClick={() => setShowSuggestions(false)}
-                className="block px-4 py-2 text-sm hover:bg-secondary"
-              >
-                {s.title}
-              </Link>
-            ))}
+          <div className="absolute z-10 left-0 right-0 mt-1 bg-card border border-border rounded-lg shadow-lg overflow-hidden">
+            {suggestions.map((s) => {
+              const Icon = s.type === "thread" ? MessageSquare : s.type === "strain" ? Dna : s.type === "user" ? User : Tag
+              const href =
+                s.type === "thread" ? `/forum/thread/${s.slug}`
+                : s.type === "strain" ? `/strains/${s.slug}`
+                : s.type === "user" ? `/u/${s.slug}`
+                : `/forum/tags/${s.slug}`
+              return (
+                <Link
+                  key={`${s.type}-${s.slug}`}
+                  href={href}
+                  onClick={() => setShowSuggestions(false)}
+                  className="flex items-center gap-2 px-4 py-2 text-sm hover:bg-secondary"
+                >
+                  <Icon className="w-4 h-4 text-muted-foreground shrink-0" />
+                  <span className="truncate">{s.title}</span>
+                  <span className="ml-auto text-[10px] uppercase tracking-wide text-muted-foreground shrink-0">
+                    {s.type}
+                  </span>
+                </Link>
+              )
+            })}
           </div>
         )}
       </form>
