@@ -78,7 +78,7 @@ export default async function DiscoverPage({
 }: {
   searchParams: Promise<{ tab?: string }>
 }) {
-  const { tab } = await searchParams
+  const { tab } = (await searchParams) || {}
   const activeTab = ["latest", "trending", "following"].includes(tab || "") ? (tab as string) : "latest"
   const session = await getServerSession(authOptions)
   const { threads } = await getDiscoverData(activeTab, session?.user?.id)
