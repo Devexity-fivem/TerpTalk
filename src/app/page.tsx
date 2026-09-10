@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma"
 import { publicUserSelect } from "@/lib/security"
 import CannabisLeaf from "@/components/cannabis-leaf"
 import LiveStats from "@/components/live-stats"
+import JoinButton from "@/components/join-button"
 
 export const dynamic = "force-dynamic"
 
@@ -142,12 +143,7 @@ export default async function Home() {
               Browse the Forums
               <ArrowRight className="w-4 h-4" />
             </Link>
-            <Link
-              href="/auth/signup"
-              className="border border-border bg-card/60 backdrop-blur px-8 py-3 rounded-xl font-semibold hover:bg-secondary transition-colors text-center"
-            >
-              Join Community
-            </Link>
+            <JoinButton />
           </div>
         </div>
       </section>
