@@ -47,13 +47,15 @@ export async function POST(request: Request) {
     try {
       const captcha = await verifyHcaptcha(captchaToken, ip)
       if (!captcha.success) {
+        console.error("hCaptcha verification failed:", captcha["error-codes"], captcha)
         await logSecurityEvent("REGISTRATION_FAILED", {
           ip,
           userAgent,
-          metadata: { reason: "hcaptcha" },
+          metadata: { reason: "hcaptcha", errorCodes: captcha["error-codes"] },
         })
+        const code = captcha["error-codes"]?.[0] || "unknown"
         return NextResponse.json(
-          { error: "Security check failed. Please try again." },
+          { error: `Security check failed: ${code}. Please try again.` },
           { status: 400 }
         )
       }

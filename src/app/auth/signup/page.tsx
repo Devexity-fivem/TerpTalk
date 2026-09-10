@@ -12,6 +12,9 @@ declare global {
   interface Window {
     onHCaptchaVerify?: (token: string) => void
     onHCaptchaExpired?: () => void
+    hcaptcha?: {
+      reset: (widgetId?: number) => void
+    }
   }
 }
 
@@ -112,6 +115,7 @@ export default function SignUpPage() {
     } catch (error: unknown) {
       setError((error as Error).message)
       setCaptchaToken(null)
+      window.hcaptcha?.reset?.()
     } finally {
       setLoading(false)
     }
