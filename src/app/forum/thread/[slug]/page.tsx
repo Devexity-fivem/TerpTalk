@@ -12,6 +12,7 @@ import BookmarkButton from "@/components/bookmark-button"
 import PostContent from "@/components/post-content"
 import ImageGallery from "@/components/image-gallery"
 import Poll from "@/components/poll"
+import { Avatar } from "@/components/ui/avatar"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { buildMetadata, snippet } from "@/lib/seo"
@@ -248,9 +249,11 @@ export default async function ThreadPage({
             </div>
             <div className="flex items-start gap-4">
               <div className="flex-shrink-0">
-                <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center">
-                  <Users className="w-6 h-6 text-primary" />
-                </div>
+                <Avatar
+                  src={acceptedPost.author.image ?? undefined}
+                  alt={acceptedPost.author.profile?.username || acceptedPost.author.name || undefined}
+                  className="w-12 h-12"
+                />
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center justify-between mb-2 gap-2">
@@ -305,9 +308,11 @@ export default async function ThreadPage({
               >
                 <div className="flex items-start gap-4">
                   <div className="flex-shrink-0">
-                    <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center">
-                      <Users className="w-6 h-6 text-primary" />
-                    </div>
+                    <Avatar
+                      src={post.author.image ?? undefined}
+                      alt={post.author.profile?.username || post.author.name || undefined}
+                      className="w-12 h-12"
+                    />
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between mb-2 gap-2">

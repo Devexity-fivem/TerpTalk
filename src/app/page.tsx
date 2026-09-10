@@ -1,10 +1,11 @@
-import { MessageSquare, Award, MessageCircle, Dna, Sprout, Calendar, Settings, Trophy, BookOpen, Stethoscope, Tag, Medal, Menu, PenLine, ArrowRight, Calculator } from "lucide-react"
+import { MessageSquare, Award, MessageCircle, Dna, Sprout, Calendar, Settings, Trophy, BookOpen, Stethoscope, Tag, Medal, Menu, PenLine, ArrowRight, Calculator, TrendingUp, Users } from "lucide-react"
 import Link from "next/link"
 import { prisma } from "@/lib/prisma"
 import { publicUserSelect } from "@/lib/security"
 import CannabisLeaf from "@/components/cannabis-leaf"
 import LiveStats from "@/components/live-stats"
 import JoinButton from "@/components/join-button"
+import { Avatar } from "@/components/ui/avatar"
 
 export const dynamic = "force-dynamic"
 
@@ -37,6 +38,37 @@ async function getLatestDiscussions() {
     }),
   ])
   return { categories, latest }
+}
+
+function threadScore(t: { views: number; replyCount: number; createdAt: Date }) {
+  const hours = (Date.now() - new Date(t.createdAt).getTime()) / 36e5
+  return (t.views + t.replyCount * 5) / Math.pow(hours + 2, 1.5)
+}
+
+async function getTrendingDiscussions() {
+  const oneWeekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
+  const candidates = await prisma.thread.findMany({
+    where: { deleted: false, createdAt: { gte: oneWeekAgo } },
+    take: 100,
+    include: {
+      author: { select: publicUserSelect },
+      category: { select: { name: true, slug: true } },
+      _count: { select: { posts: { where: { deleted: false } } } },
+    },
+  })
+  return candidates
+    .map((t) => ({ ...t, score: threadScore(t) }))
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 6)
+}
+
+async function getActiveMembers() {
+  return await prisma.user.findMany({
+    where: { banned: false, status: "ONLINE" },
+    take: 12,
+    orderBy: { lastSeenAt: "desc" },
+    select: publicUserSelect,
+  })
 }
 
 const NAV_SECTIONS = [
@@ -74,7 +106,12 @@ const NAV_SECTIONS = [
 ]
 
 export default async function Home() {
-  const [stats, { categories, latest }] = await Promise.all([getStats(), getLatestDiscussions()])
+  const [stats, { categories, latest }, trending, active] = await Promise.all([
+    getStats(),
+    getLatestDiscussions(),
+    getTrendingDiscussions(),
+    getActiveMembers(),
+  ])
   return (
     <div className="flex flex-col min-h-screen bg-background">
       {/* Hero Section */}
@@ -200,15 +237,20 @@ export default async function Home() {
                   <Link
                     key={thread.id}
                     href={`/forum/thread/${thread.slug}`}
-                    className="block p-4 bg-card rounded-xl border border-border hover:border-primary/40 transition-colors"
+                    className="flex items-start gap-3 p-4 bg-card rounded-xl border border-border hover:border-primary/40 transition-colors"
                   >
-                    <div className="font-medium mb-1 line-clamp-1">{thread.title}</div>
-                    <div className="text-sm text-muted-foreground flex items-center flex-wrap gap-2">
-                      <span className="text-primary">{thread.category.name}</span>
-                      <span>•</span>
-                      <span>{thread.author.profile?.username || thread.author.name}</span>
-                      <span>•</span>
-                      <span>{thread.replyCount} repl{thread.replyCount === 1 ? "y" : "ies"}</span>
+                    <Avatar src={thread.author.image ?? undefined} size="sm" alt={thread.author.profile?.username ?? thread.author.name ?? undefined} />
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium mb-1 line-clamp-1">{thread.title}</div>
+                      <div className="text-sm text-muted-foreground flex items-center flex-wrap gap-2">
+                        <span className="text-primary">{thread.category.name}</span>
+                        <span>•</span>
+                        <span>{thread.author.profile?.username || thread.author.name}</span>
+                        <span>•</span>
+                        <span>{thread.views} views</span>
+                        <span>•</span>
+                        <span>{thread.replyCount} repl{thread.replyCount === 1 ? "y" : "ies"}</span>
+                      </div>
                     </div>
                   </Link>
                 ))}
@@ -260,6 +302,69 @@ export default async function Home() {
                 </div>
               </div>
             ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Community Pulse */}
+      <section className="py-14 px-4 sm:px-6 lg:px-8 border-y border-border bg-secondary/20">
+        <div className="max-w-7xl mx-auto">
+          <div className="grid lg:grid-cols-2 gap-8">
+            {/* Trending */}
+            <div>
+              <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                <TrendingUp className="w-5 h-5 text-primary" />
+                Trending Now
+              </h3>
+              <div className="space-y-3">
+                {trending.map((thread) => (
+                  <Link
+                    key={thread.id}
+                    href={`/forum/thread/${thread.slug}`}
+                    className="flex items-start gap-3 p-4 bg-card rounded-xl border border-border hover:border-primary/40 transition-colors"
+                  >
+                    <Avatar src={thread.author.image ?? undefined} size="sm" alt={thread.author.profile?.username ?? thread.author.name ?? undefined} />
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium mb-1 line-clamp-1">{thread.title}</div>
+                      <div className="text-sm text-muted-foreground flex items-center flex-wrap gap-2">
+                        <span className="text-primary">{thread.category.name}</span>
+                        <span>•</span>
+                        <span>{thread.author.profile?.username || thread.author.name}</span>
+                        <span>•</span>
+                        <span>{thread.views} views</span>
+                        <span>•</span>
+                        <span>{thread._count.posts} repl{thread._count.posts === 1 ? "y" : "ies"}</span>
+                      </div>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            </div>
+
+            {/* Active members */}
+            <div>
+              <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                <Users className="w-5 h-5 text-primary" />
+                Active Growers
+              </h3>
+              {active.length === 0 ? (
+                <p className="text-muted-foreground">No growers are currently online.</p>
+              ) : (
+                <div className="flex flex-wrap gap-3">
+                  {active.map((user) => (
+                    <Link
+                      key={user.id}
+                      href={`/u/${user.profile?.username || user.name}`}
+                      className="flex items-center gap-2 px-3 py-2 bg-card rounded-full border border-border hover:border-primary/40 transition-colors"
+                    >
+                      <Avatar src={user.image ?? undefined} size="sm" alt={user.profile?.username ?? user.name ?? undefined} />
+                      <span className="text-sm font-medium">{user.profile?.username || user.name}</span>
+                      <span className="w-2 h-2 rounded-full bg-green-500" aria-label="Online" />
+                    </Link>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </section>
