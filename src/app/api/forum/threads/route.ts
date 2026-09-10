@@ -71,6 +71,27 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: `Maximum ${MAX_TAGS} tags per thread` }, { status: 400 })
     }
 
+    let pollData: { question: string; options: { text: string; order: number }[] } | undefined
+    if (body.poll && typeof body.poll === "object" && !Array.isArray(body.poll)) {
+      const pollInput = body.poll as { question?: unknown; options?: unknown }
+      if (typeof pollInput.question !== "string" || !pollInput.question.trim() || pollInput.question.length > 200) {
+        return NextResponse.json({ error: "Poll question must be between 1 and 200 characters" }, { status: 400 })
+      }
+      const rawOptions = Array.isArray(pollInput.options) ? pollInput.options : []
+      if (rawOptions.length < 2 || rawOptions.length > 10) {
+        return NextResponse.json({ error: "Polls need between 2 and 10 options" }, { status: 400 })
+      }
+      const pollOptions: { text: string; order: number }[] = []
+      for (let i = 0; i < rawOptions.length; i++) {
+        const opt = rawOptions[i]
+        if (typeof opt !== "string" || !opt.trim() || opt.length > 100) {
+          return NextResponse.json({ error: `Poll option ${i + 1} is invalid` }, { status: 400 })
+        }
+        pollOptions.push({ text: opt.trim(), order: i })
+      }
+      pollData = { question: pollInput.question.trim(), options: pollOptions }
+    }
+
     // Rate limit: 10 threads per hour per user
     const rl = await rateLimit(`thread:${session.user.id}`, 10, 60 * 60 * 1000)
     if (!rl.allowed) {
@@ -174,11 +195,21 @@ export async function POST(request: Request) {
           create: imageUrls.map((url, order) => ({ url, order })),
         },
         tags: { create: threadTags },
+        poll: pollData
+          ? {
+              create: {
+                question: pollData.question,
+                multiple: false,
+                options: { create: pollData.options },
+              },
+            }
+          : undefined,
       },
       include: {
         author: { select: publicUserSelect },
         category: true,
         tags: { include: { tag: true } },
+        poll: { include: { options: { orderBy: { order: "asc" } } } },
         posts: {
           include: {
             author: { select: publicUserSelect },

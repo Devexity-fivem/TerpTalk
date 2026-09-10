@@ -55,6 +55,7 @@ model User {
   categoryFollows CategoryFollow[]
   savedSearches  SavedSearch[]
   guideEdits    GuideEdit[]
+  pollVotes     PollVote[]
   blockedUsers  Block[]              @relation("Blocker")
   blockedBy     Block[]              @relation("Blocked")
 
@@ -165,6 +166,7 @@ model Thread {
   bookmarks  Bookmark[]
   images     PostImage[]
   tags       ThreadTag[]
+  poll       Poll?
   acceptedAnswer Post?  @relation("ThreadAcceptedAnswer", fields: [acceptedAnswerId], references: [id], onDelete: SetNull)
 
   @@index([categoryId])
@@ -785,6 +787,52 @@ model Setting {
   key       String   @id
   value     String
   updatedAt DateTime @updatedAt
+}
+
+// ─── Polls (one per thread) ─────────────────────────────────────────
+
+model Poll {
+  id        String   @id @default(cuid())
+  threadId  String   @unique
+  question  String
+  multiple  Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  thread  Thread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  options PollOption[]
+  votes   PollVote[]
+
+  @@index([threadId])
+}
+
+model PollOption {
+  id     String @id @default(cuid())
+  pollId String
+  text   String
+  order  Int    @default(0)
+
+  poll  Poll @relation(fields: [pollId], references: [id], onDelete: Cascade)
+  votes PollVote[]
+
+  @@index([pollId])
+  @@index([pollId, order])
+}
+
+model PollVote {
+  id        String   @id @default(cuid())
+  pollId    String
+  optionId  String
+  userId    String
+  createdAt DateTime @default(now())
+
+  poll   Poll   @relation(fields: [pollId], references: [id], onDelete: Cascade)
+  option PollOption @relation(fields: [optionId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([pollId, userId])
+  @@index([optionId])
+  @@index([userId])
 }
 
 // ─── Forum Tags ─────────────────────────────────────────────────────

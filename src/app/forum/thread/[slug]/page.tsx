@@ -11,6 +11,7 @@ import ShareButtons from "@/components/share-buttons"
 import BookmarkButton from "@/components/bookmark-button"
 import PostContent from "@/components/post-content"
 import ImageGallery from "@/components/image-gallery"
+import Poll from "@/components/poll"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { buildMetadata, snippet } from "@/lib/seo"
@@ -36,7 +37,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
 
 const POSTS_PER_PAGE = 50
 
-async function getThreadData(slug: string, page: number) {
+async function getThreadData(slug: string, page: number, userId?: string) {
   const thread = await prisma.thread.findUnique({
     where: { slug },
     include: {
@@ -44,6 +45,12 @@ async function getThreadData(slug: string, page: number) {
       category: true,
       tags: { include: { tag: true } },
       images: { orderBy: { order: "asc" } },
+      poll: {
+        include: {
+          options: { orderBy: { order: "asc" }, include: { _count: { select: { votes: true } } } },
+          _count: { select: { votes: true } },
+        },
+      },
       acceptedAnswer: {
         where: { deleted: false },
         include: {
@@ -90,25 +97,32 @@ export default async function ThreadPage({
   const { slug } = await params
   const { page: pageParam } = await searchParams
   const page = Math.max(1, Math.min(10_000, parseInt(pageParam || "1") || 1))
-  const thread = await getThreadData(slug, page)
+  const session = await getServerSession(authOptions)
+  const currentUserId = session?.user?.id
+  const thread = await getThreadData(slug, page, currentUserId)
   const relatedThreads = await prisma.thread.findMany({
     where: { deleted: false, categoryId: thread.categoryId, id: { not: thread.id } },
     take: 5,
     orderBy: { createdAt: "desc" },
     select: { id: true, slug: true, title: true, replyCount: true },
   })
-  const session = await getServerSession(authOptions)
-  const saved = session?.user?.id
+  const saved = currentUserId
     ? !!(await prisma.bookmark.findUnique({
         where: { userId_threadId: { userId: session.user.id, threadId: thread.id } },
         select: { id: true },
       }))
     : false
 
-  const currentUserId = session?.user?.id
   const canSetAnswer = !!currentUserId && (
     currentUserId === thread.authorId || isModerator(session?.user?.role)
   ) && !thread.locked
+
+  const userVoteOptionId = thread.poll && currentUserId
+    ? await prisma.pollVote.findFirst({
+        where: { pollId: thread.poll.id, userId: currentUserId },
+        select: { optionId: true },
+      }).then((v) => v?.optionId ?? null)
+    : null
 
   const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://terp-talk.vercel.app"
   const canonical = `${baseUrl}/forum/thread/${thread.slug}`
@@ -208,6 +222,21 @@ export default async function ThreadPage({
           </div>
           {/* Photos attached when the thread was opened */}
           <ImageGallery images={thread.images} />
+          {thread.poll && (
+            <Poll
+              poll={{
+                id: thread.poll.id,
+                question: thread.poll.question,
+                options: thread.poll.options.map((o) => ({ id: o.id, text: o.text })),
+              }}
+              initialCounts={thread.poll.options.reduce((acc, o) => {
+                acc[o.id] = o._count.votes
+                return acc
+              }, {} as Record<string, number>)}
+              initialTotal={thread.poll._count.votes}
+              userVoteOptionId={userVoteOptionId}
+            />
+          )}
         </div>
 
         {/* Accepted answer */}

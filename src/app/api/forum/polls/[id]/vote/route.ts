@@ -1,0 +1,74 @@
+import { NextResponse } from "next/server"
+import { getServerSession } from "next-auth"
+import { authOptions } from "@/lib/auth"
+import { prisma } from "@/lib/prisma"
+import { unauthorized, forbidden } from "@/lib/security"
+
+export async function POST(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params
+    const session = await getServerSession(authOptions)
+    if (!session?.user?.id) return unauthorized()
+
+    const currentUser = await prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: { banned: true },
+    })
+    if (!currentUser || currentUser.banned) {
+      return forbidden("Your account is suspended")
+    }
+
+    const body = await request.json().catch(() => ({}))
+    const { optionId } = body
+    if (typeof optionId !== "string" || !optionId) {
+      return NextResponse.json({ error: "Missing option" }, { status: 400 })
+    }
+
+    const poll = await prisma.poll.findUnique({
+      where: { id },
+      include: {
+        thread: { select: { locked: true, deleted: true } },
+        options: { where: { id: optionId }, select: { id: true } },
+      },
+    })
+
+    if (!poll || !poll.thread || poll.thread.deleted) {
+      return NextResponse.json({ error: "Poll not found" }, { status: 404 })
+    }
+    if (poll.thread.locked) {
+      return NextResponse.json({ error: "Thread is locked" }, { status: 403 })
+    }
+    if (poll.options.length === 0) {
+      return NextResponse.json({ error: "Invalid option" }, { status: 400 })
+    }
+
+    const existing = await prisma.pollVote.findUnique({
+      where: { pollId_userId: { pollId: id, userId: session.user.id } },
+    })
+    if (existing) {
+      return NextResponse.json({ error: "You already voted in this poll" }, { status: 409 })
+    }
+
+    await prisma.pollVote.create({
+      data: { pollId: id, optionId, userId: session.user.id },
+    })
+
+    const counts = await prisma.pollVote.groupBy({
+      by: ["optionId"],
+      where: { pollId: id },
+      _count: { _all: true },
+    })
+
+    return NextResponse.json({
+      voted: { optionId },
+      counts: counts.map((c) => ({ optionId: c.optionId, count: c._count._all })),
+      total: counts.reduce((sum, c) => sum + c._count._all, 0),
+    })
+  } catch (error) {
+    console.error("Poll vote error:", error)
+    return NextResponse.json({ error: "Failed to record vote" }, { status: 500 })
+  }
+}
