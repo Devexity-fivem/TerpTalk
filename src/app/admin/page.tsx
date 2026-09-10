@@ -5,7 +5,7 @@ import { useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
 import {
   ShieldCheck, Loader2, Users as UsersIcon,
-  Megaphone, ShieldAlert, Ban, UserCheck, Search, Percent, Award,
+  Megaphone, ShieldAlert, Ban, UserCheck, Search, Percent, Award, Video,
 } from "lucide-react"
 import Link from "next/link"
 import AdminAffiliates from "@/components/admin-affiliates"
@@ -189,6 +189,9 @@ export default function AdminPage() {
           </div>
           <Link href="/moderation" className="text-sm text-primary hover:underline flex items-center gap-1">
             <ShieldAlert className="w-4 h-4" /> Moderation queue
+          </Link>
+          <Link href="/admin/youtubers" className="text-sm text-primary hover:underline flex items-center gap-1">
+            <Video className="w-4 h-4" /> YouTuber applications
           </Link>
         </div>
 
