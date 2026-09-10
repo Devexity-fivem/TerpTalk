@@ -60,11 +60,20 @@ interface Thread {
   replyCount: number
 }
 
+interface GrowDiary {
+  id: string
+  title: string
+  strain: string | null
+  stage: string
+  featured: boolean
+  _count: { updates: number; followers: number }
+}
+
 export default function PublicProfilePage() {
   const params = useParams()
   const { data: session } = useSession()
   const username = decodeURIComponent(String(params.username))
-  const [data, setData] = useState<{ profile: PublicProfile; viewerBlocked: boolean; viewerFollowing: boolean; recentThreads: Thread[] } | null>(null)
+  const [data, setData] = useState<{ profile: PublicProfile; viewerBlocked: boolean; viewerFollowing: boolean; recentThreads: Thread[]; growDiaries: GrowDiary[] } | null>(null)
   const [loading, setLoading] = useState(true)
   const [notFound, setNotFound] = useState(false)
 
@@ -98,7 +107,7 @@ export default function PublicProfilePage() {
     )
   }
 
-  const { profile, viewerBlocked, viewerFollowing, recentThreads } = data
+  const { profile, viewerBlocked, viewerFollowing, recentThreads, growDiaries } = data
   const joinDate = new Date(profile.joinDate).toLocaleDateString("en-US", { year: "numeric", month: "long" })
 
   return (
@@ -248,6 +257,31 @@ export default function PublicProfilePage() {
                     <span>•</span>
                     <span>{new Date(t.createdAt).toLocaleDateString()}</span>
                   </div>
+                </Link>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="bg-card rounded-lg border border-border p-6">
+          <div className="flex items-center gap-2 mb-4">
+            <Sprout className="w-5 h-5 text-primary" />
+            <h2 className="text-lg font-semibold">Recent Grows</h2>
+          </div>
+          {growDiaries.length === 0 ? (
+            <p className="text-muted-foreground">No grow diaries yet</p>
+          ) : (
+            <div className="space-y-2">
+              {growDiaries.map((d) => (
+                <Link
+                  key={d.id}
+                  href={`/diaries/${d.id}`}
+                  className="block p-3 rounded-lg hover:bg-secondary/50 transition-colors"
+                >
+                  <h3 className="font-medium mb-1 break-words">{d.title}</h3>
+                  <p className="text-xs text-muted-foreground">
+                    {d.stage.replace("_", " ")} {d.strain ? "• " + d.strain : ""} • {d._count.updates} updates • {d._count.followers} followers
+                  </p>
                 </Link>
               ))}
             </div>

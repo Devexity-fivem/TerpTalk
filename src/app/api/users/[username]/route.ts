@@ -127,6 +127,20 @@ export async function GET(
 
     const { streak, totalUpdates, harvestedDiaries } = await getGrowStreak(profile.user.id)
 
+    const growDiaries = await prisma.growDiary.findMany({
+      where: { authorId: profile.user.id, deleted: false },
+      orderBy: { createdAt: "desc" },
+      take: 6,
+      select: {
+        id: true,
+        title: true,
+        strain: true,
+        stage: true,
+        featured: true,
+        _count: { select: { updates: true, followers: true } },
+      },
+    })
+
     return NextResponse.json({
       profile: {
         id: profile.user.id,
@@ -160,6 +174,7 @@ export async function GET(
       viewerBlocked,
       viewerFollowing,
       recentThreads,
+      growDiaries,
     })
   } catch (error) {
     console.error("Public profile error:", error)
