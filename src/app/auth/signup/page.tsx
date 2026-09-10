@@ -11,8 +11,7 @@ const HCAPTCHA_CONTAINER_ID = "hcaptcha-widget"
 
 declare global {
   interface Window {
-    onHCaptchaVerify?: (token: string) => void
-    onHCaptchaExpired?: () => void
+    hcaptchaOnLoad?: () => void
     hcaptcha?: {
       render: (container: string, options: Record<string, unknown>) => number
       reset: (widgetId?: number) => void
@@ -41,31 +40,24 @@ export default function SignUpPage() {
 
   useEffect(() => {
     if (typeof window === "undefined") return
-
-    window.onHCaptchaVerify = (token) => {
-      setCaptchaToken(token)
-    }
-    window.onHCaptchaExpired = () => {
-      setCaptchaToken(null)
-    }
-
     if (document.getElementById("hcaptcha-script")) return
 
     const script = document.createElement("script")
     script.id = "hcaptcha-script"
-    script.src = "https://js.hcaptcha.com/1/api.js"
+    script.src = "https://js.hcaptcha.com/1/api.js?onload=hcaptchaOnLoad&render=explicit"
     script.async = true
     script.defer = true
-    script.onload = () => {
-      const container = document.getElementById(HCAPTCHA_CONTAINER_ID)
-      if (container && !container.hasChildNodes() && window.hcaptcha) {
+
+    window.hcaptchaOnLoad = () => {
+      if (window.hcaptcha) {
         widgetIdRef.current = window.hcaptcha.render(HCAPTCHA_CONTAINER_ID, {
           sitekey: HCAPTCHA_SITE_KEY,
-          callback: "onHCaptchaVerify",
-          "expired-callback": "onHCaptchaExpired",
+          callback: (token: string) => setCaptchaToken(token),
+          "expired-callback": () => setCaptchaToken(null),
         })
       }
     }
+
     document.head.appendChild(script)
   }, [])
 
