@@ -10,10 +10,45 @@ export default async function YoutubersPage() {
     select: { id: true },
   })
 
+  if (!badge) {
+    return (
+      <div className="min-h-screen py-8 px-4">
+        <div className="max-w-4xl mx-auto">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
+            <div>
+              <h1 className="text-2xl font-bold">Featured YouTubers</h1>
+              <p className="text-muted-foreground mt-1">
+                Cannabis grow content creators verified by the TerpTalk team.
+              </p>
+            </div>
+            <Link
+              href="/youtubers/apply"
+              className="inline-flex items-center justify-center gap-2 bg-primary text-primary-foreground px-4 py-2 rounded-lg font-medium hover:bg-primary/90 transition-colors"
+            >
+              <Video className="w-4 h-4" />
+              Apply to be featured
+            </Link>
+          </div>
+          <div className="text-center py-16 border border-dashed border-border rounded-lg">
+            <Video className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+            <h2 className="text-lg font-medium">No featured YouTubers yet</h2>
+            <p className="text-muted-foreground mt-2">
+              Be the first to apply and get your channel showcased.
+            </p>
+            <Link href="/youtubers/apply" className="inline-block mt-4 text-primary hover:underline">
+              Apply now
+            </Link>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   const users = await prisma.user.findMany({
-    where: badge
-      ? { badges: { some: { badgeId: badge.id } }, profile: { youtubeChannelUrl: { not: null } } }
-      : { profile: { youtubeChannelUrl: { not: null } } },
+    where: {
+      badges: { some: { badgeId: badge.id } },
+      profile: { youtubeChannelUrl: { not: null } },
+    },
     include: {
       profile: {
         select: {
