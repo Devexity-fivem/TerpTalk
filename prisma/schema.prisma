@@ -163,6 +163,7 @@ model Thread {
   author     User     @relation("ThreadAuthor", fields: [authorId], references: [id], onDelete: Cascade)
   posts      Post[]
   bookmarks  Bookmark[]
+  images     PostImage[]
   acceptedAnswer Post?  @relation("ThreadAcceptedAnswer", fields: [acceptedAnswerId], references: [id], onDelete: SetNull)
 
   @@index([categoryId])
@@ -186,12 +187,31 @@ model Post {
   thread    Thread   @relation(fields: [threadId], references: [id], onDelete: Cascade)
   author    User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
   reactions Reaction[]
+  images    PostImage[]
   acceptedAnswerFor Thread? @relation("ThreadAcceptedAnswer")
 
   @@index([threadId])
   @@index([authorId])
   @@index([createdAt])
   @@index([threadId, createdAt])
+}
+
+// Images attached to a thread's opening post or to a reply. Exactly one of
+// threadId/postId is set, mirroring how Reaction targets posts or diaries.
+model PostImage {
+  id        String   @id @default(cuid())
+  url       String
+  caption   String?
+  order     Int      @default(0)
+  threadId  String?
+  postId    String?
+  createdAt DateTime @default(now())
+
+  thread    Thread?  @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  post      Post?    @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@index([threadId])
+  @@index([postId])
 }
 
 // Reactions
