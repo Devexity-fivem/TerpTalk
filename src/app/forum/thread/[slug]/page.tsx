@@ -101,11 +101,23 @@ export default async function ThreadPage({
   const session = await getServerSession(authOptions)
   const currentUserId = session?.user?.id
   const thread = await getThreadData(slug, page, currentUserId)
+  const tagIds = thread.tags.map((tt) => tt.tagId)
   const relatedThreads = await prisma.thread.findMany({
-    where: { deleted: false, categoryId: thread.categoryId, id: { not: thread.id } },
+    where: {
+      deleted: false,
+      id: { not: thread.id },
+      OR: [
+        { categoryId: thread.categoryId },
+        ...(tagIds.length > 0 ? [{ tags: { some: { tagId: { in: tagIds } } } }] : []),
+      ],
+    },
     take: 5,
     orderBy: { createdAt: "desc" },
-    select: { id: true, slug: true, title: true, replyCount: true },
+    include: {
+      author: { select: publicUserSelect },
+      category: { select: { name: true, slug: true } },
+      _count: { select: { posts: { where: { deleted: false } } } },
+    },
   })
   const saved = currentUserId
     ? !!(await prisma.bookmark.findUnique({
@@ -279,7 +291,8 @@ export default async function ThreadPage({
                     postId={acceptedPost.id}
                     authorId={acceptedPost.author.id}
                     initialContent={acceptedPost.content}
-                    initialLikeCount={acceptedPost.reactions.filter((r) => r.type === "LIKE").length}
+                    currentUserId={currentUserId}
+                    reactions={acceptedPost.reactions}
                   />
                   <AcceptAnswerButton
                     postId={acceptedPost.id}
@@ -296,7 +309,6 @@ export default async function ThreadPage({
         {/* Posts */}
         <div className="space-y-6">
           {visiblePosts.map((post, index) => {
-            const likeCount = post.reactions.filter((r) => r.type === "LIKE").length
             const isOp = index === 0
             const eligibleForAnswer = !isOp && post.authorId !== thread.authorId
             return (
@@ -344,7 +356,8 @@ export default async function ThreadPage({
                         postId={post.id}
                         authorId={post.author.id}
                         initialContent={post.content}
-                        initialLikeCount={likeCount}
+                        currentUserId={currentUserId}
+                        reactions={post.reactions}
                       />
                       {eligibleForAnswer && (
                         <AcceptAnswerButton
@@ -394,7 +407,9 @@ export default async function ThreadPage({
                     className="text-sm hover:text-primary hover:underline"
                   >
                     {t.title}
-                    <span className="ml-2 text-xs text-muted-foreground">({t.replyCount} repl{t.replyCount === 1 ? "y" : "ies"})</span>
+                    <span className="ml-2 text-xs text-muted-foreground">
+                      {t.category.name} • {t._count.posts} repl{t._count.posts === 1 ? "y" : "ies"}
+                    </span>
                   </Link>
                 </li>
               ))}

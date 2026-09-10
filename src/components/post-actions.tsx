@@ -9,17 +9,44 @@ interface PostActionsProps {
   postId: string
   authorId: string
   initialContent: string
-  initialLikeCount?: number
-  initialLiked?: boolean
+  currentUserId?: string
+  reactions?: { userId: string; type: string }[]
 }
 
-export default function PostActions({ postId, authorId, initialContent, initialLikeCount = 0, initialLiked = false }: PostActionsProps) {
+const EMOJIS: Record<string, string> = {
+  LIKE: "❤️",
+  LOVE: "🩷",
+  LAUGH: "😂",
+  THINKING: "🤔",
+  FIRE: "🔥",
+  THUMBS_UP: "👍",
+  THUMBS_DOWN: "👎",
+}
+
+const ORDER = ["LIKE", "LOVE", "LAUGH", "THINKING", "FIRE", "THUMBS_UP", "THUMBS_DOWN"]
+
+function countByType(reactions?: { type: string }[]) {
+  const counts: Record<string, number> = {}
+  for (const r of reactions || []) {
+    counts[r.type] = (counts[r.type] || 0) + 1
+  }
+  return counts
+}
+
+export default function PostActions({
+  postId,
+  authorId,
+  initialContent,
+  currentUserId,
+  reactions = [],
+}: PostActionsProps) {
   const { data: session } = useSession()
   const router = useRouter()
-  const [liked, setLiked] = useState(initialLiked)
-  const [reactionType, setReactionType] = useState<string | null>(initialLiked ? "LIKE" : null)
+  const userId = currentUserId ?? session?.user?.id
+  const initialUserReaction = reactions.find((r) => r.userId === userId)?.type || null
+  const [reactionType, setReactionType] = useState<string | null>(initialUserReaction)
+  const [counts, setCounts] = useState<Record<string, number>>(() => countByType(reactions))
   const [showPicker, setShowPicker] = useState(false)
-  const [count, setCount] = useState(initialLikeCount)
   const [editing, setEditing] = useState(false)
   const [content, setContent] = useState(initialContent)
   const [showReport, setShowReport] = useState(false)
@@ -49,15 +76,27 @@ export default function PostActions({ postId, authorId, initialContent, initialL
       })
       if (res.ok) {
         const data = await res.json()
-        if (data.action === "added") { setLiked(true); setReactionType(type); setCount(c => c + 1) }
-        else if (data.action === "switched") { setReactionType(type) }
-        else { setLiked(false); setReactionType(null); setCount(c => c - 1) }
+        const next = { ...counts }
+        const old = reactionType
+        if (data.action === "added") {
+          next[type] = (next[type] || 0) + 1
+          setReactionType(type)
+        } else if (data.action === "switched" && old) {
+          next[old] = Math.max(0, (next[old] || 0) - 1)
+          if (next[old] === 0) delete next[old]
+          next[type] = (next[type] || 0) + 1
+          setReactionType(type)
+        } else if (data.action === "removed" && old) {
+          next[old] = Math.max(0, (next[old] || 0) - 1)
+          if (next[old] === 0) delete next[old]
+          setReactionType(null)
+        }
+        setCounts(next)
       }
-    } finally { setBusy(false) }
+    } finally {
+      setBusy(false)
+    }
   }
-
-  const REACTIONS: [string, string][] = [["LIKE", "❤️"], ["FIRE", "🔥"], ["THUMBS_UP", "👍"], ["LAUGH", "😂"]]
-  const activeEmoji = reactionType ? REACTIONS.find(([t]) => t === reactionType)?.[1] : null
 
   const handleEdit = async () => {
     if (content.trim().length < 10) { setMessage("Post must be at least 10 characters"); return }
@@ -101,6 +140,9 @@ export default function PostActions({ postId, authorId, initialContent, initialL
     } finally { setBusy(false) }
   }
 
+  const activeEmoji = reactionType ? EMOJIS[reactionType] : null
+  const hasReactions = Object.values(counts).some((c) => c > 0)
+
   return (
     <div className="space-y-3">
       {editing ? (
@@ -122,26 +164,26 @@ export default function PostActions({ postId, authorId, initialContent, initialL
         </div>
       ) : null}
 
-      <div className="flex items-center gap-4">
+      <div className="flex flex-wrap items-center gap-4">
         <div className="relative">
           <button
             onClick={() => (reactionType ? handleReact(reactionType) : setShowPicker(!showPicker))}
             disabled={!session || busy}
-            className={`flex items-center gap-1 text-sm transition-colors ${liked ? "text-red-500" : "text-muted-foreground hover:text-foreground"} disabled:opacity-50`}
+            className={`flex items-center gap-1 text-sm transition-colors ${reactionType ? "text-red-500" : "text-muted-foreground hover:text-foreground"} disabled:opacity-50`}
           >
             {activeEmoji ? <span>{activeEmoji}</span> : <Heart className="w-4 h-4" />}
-            {count > 0 ? count : "React"}
+            <span>React</span>
           </button>
           {showPicker && (
             <div className="absolute bottom-8 left-0 flex gap-1 bg-card border border-border rounded-full px-2 py-1 shadow-lg z-10">
-              {REACTIONS.map(([type, emoji]) => (
+              {ORDER.map((type) => (
                 <button
                   key={type}
                   onClick={() => handleReact(type)}
                   className="text-lg hover:scale-125 transition-transform px-1"
                   title={type.toLowerCase()}
                 >
-                  {emoji}
+                  {EMOJIS[type]}
                 </button>
               ))}
             </div>
@@ -168,6 +210,31 @@ export default function PostActions({ postId, authorId, initialContent, initialL
           </button>
         )}
       </div>
+
+      {hasReactions && (
+        <div className="flex flex-wrap items-center gap-2">
+          {ORDER.filter((t) => counts[t] > 0)
+            .sort((a, b) => (counts[b] || 0) - (counts[a] || 0))
+            .map((type) => {
+              const isActive = reactionType === type
+              return (
+                <button
+                  key={type}
+                  onClick={() => session && handleReact(type)}
+                  disabled={!session || busy}
+                  className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-sm border transition-colors disabled:opacity-50 ${
+                    isActive
+                      ? "bg-primary/10 border-primary text-primary"
+                      : "bg-secondary border-transparent text-muted-foreground hover:bg-secondary/80"
+                  }`}
+                >
+                  <span>{EMOJIS[type]}</span>
+                  <span className="font-medium">{counts[type]}</span>
+                </button>
+              )
+            })}
+        </div>
+      )}
 
       {showReport && (
         <div className="p-3 bg-secondary/50 rounded-lg space-y-2">
