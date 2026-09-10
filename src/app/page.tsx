@@ -1,4 +1,4 @@
-import { MessageSquare, Award, MessageCircle, Dna, Sprout, Calendar, Settings, Trophy, BookOpen, Stethoscope, Tag, Medal, Menu, PenLine, ArrowRight, Calculator, TrendingUp, Users } from "lucide-react"
+import { MessageSquare, Award, MessageCircle, Dna, Sprout, Calendar, Settings, Trophy, BookOpen, Stethoscope, Tag, Medal, Menu, PenLine, ArrowRight, Calculator, TrendingUp, Users, Leaf } from "lucide-react"
 import Link from "next/link"
 import { prisma } from "@/lib/prisma"
 import { publicUserSelect } from "@/lib/security"
@@ -20,7 +20,7 @@ async function getStats() {
 }
 
 async function getLatestDiscussions() {
-  const [categories, latest] = await Promise.all([
+  const [categories, latest, diaryUpdates] = await Promise.all([
     prisma.category.findMany({
       where: { hidden: false },
       orderBy: { order: "asc" },
@@ -36,8 +36,23 @@ async function getLatestDiscussions() {
         _count: { select: { posts: { where: { deleted: false } } } },
       },
     }),
+    prisma.diaryUpdate.findMany({
+      where: { diary: { deleted: false } },
+      orderBy: { createdAt: "desc" },
+      take: 4,
+      include: {
+        diary: {
+          include: {
+            author: { select: publicUserSelect },
+            _count: { select: { followers: true } },
+          },
+        },
+        author: { select: publicUserSelect },
+        images: { take: 1 },
+      },
+    }),
   ])
-  return { categories, latest }
+  return { categories, latest, diaryUpdates }
 }
 
 function threadScore(t: { views: number; replyCount: number; createdAt: Date }) {
@@ -114,7 +129,7 @@ const NAV_SECTIONS = [
 ]
 
 export default async function Home() {
-  const [stats, { categories, latest }, trending, active, growerOfWeek] = await Promise.all([
+  const [stats, { categories, latest, diaryUpdates }, trending, active, growerOfWeek] = await Promise.all([
     getStats(),
     getLatestDiscussions(),
     getTrendingDiscussions(),
@@ -201,20 +216,22 @@ export default async function Home() {
         </div>
       </section>
 
-      {/* Forum Preview */}
+      {/* Community Stream */}
       <section className="py-14 px-4 sm:px-6 lg:px-8 border-y border-border bg-secondary/20">
         <div className="max-w-7xl mx-auto">
-          <h2 className="text-3xl font-bold mb-3 tracking-tight">What are the TerpTalk forums about?</h2>
-          <p className="text-muted-foreground mb-8 max-w-2xl">
-            The forums are where the community lives — ask questions, share experiences, compare genetics, troubleshoot grow problems, and talk shop with other cultivators. Jump into a category or join the latest conversation below.
-          </p>
+          <div className="mb-8">
+            <h2 className="text-3xl font-bold mb-2 tracking-tight">The TerpTalk Stream</h2>
+            <p className="text-muted-foreground max-w-2xl">
+              Real-time community activity — discussions, grow updates, and new diaries in one place.
+            </p>
+          </div>
 
-          <div className="grid md:grid-cols-2 gap-8">
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
             {/* Categories */}
             <div>
               <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
                 <MessageSquare className="w-5 h-5 text-primary" />
-                Forum Categories
+                Explore Topics
               </h3>
               <div className="space-y-3">
                 {categories.map((cat) => (
@@ -259,6 +276,46 @@ export default async function Home() {
                         <span>{thread.views} views</span>
                         <span>•</span>
                         <span>{thread.replyCount} repl{thread.replyCount === 1 ? "y" : "ies"}</span>
+                      </div>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            </div>
+
+            {/* Fresh grow updates */}
+            <div>
+              <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                <Leaf className="w-5 h-5 text-primary" />
+                Fresh Grow Updates
+              </h3>
+              <div className="space-y-3">
+                {diaryUpdates.map((update) => (
+                  <Link
+                    key={update.id}
+                    href={`/diaries/${update.diary.id}`}
+                    className="flex items-start gap-3 p-4 bg-card rounded-xl border border-border hover:border-primary/40 transition-colors"
+                  >
+                    {update.images[0]?.url ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={update.images[0].url}
+                        alt={update.title}
+                        className="w-12 h-12 rounded-lg object-cover shrink-0"
+                      />
+                    ) : (
+                      <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                        <Leaf className="w-5 h-5 text-primary" />
+                      </div>
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium mb-1 line-clamp-1">{update.title}</div>
+                      <div className="text-sm text-muted-foreground flex items-center flex-wrap gap-2">
+                        <span className="text-emerald-500">{update.diary.title}</span>
+                        <span>•</span>
+                        <span>{update.author.profile?.username || update.author.name}</span>
+                        <span>•</span>
+                        <span>{new Date(update.createdAt).toLocaleDateString()}</span>
                       </div>
                     </div>
                   </Link>
