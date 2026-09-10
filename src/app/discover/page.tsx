@@ -3,8 +3,10 @@ import { publicUserSelect } from "@/lib/security"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import Link from "next/link"
-import { MessageSquare, TrendingUp, Clock, Users, Flame } from "lucide-react"
+import { MessageSquare, TrendingUp, Clock, Users, Flame, Eye } from "lucide-react"
 import RoleBadge from "@/components/role-badge"
+import { Avatar } from "@/components/ui/avatar"
+import EmptyState from "@/components/empty-state"
 
 export const dynamic = "force-dynamic"
 
@@ -22,6 +24,7 @@ async function getDiscoverData(tab: string, userId?: string) {
   const include = {
     author: { select: publicUserSelect },
     category: true,
+    content: true,
     _count: { select: { posts: { where: { deleted: false } } } },
   } as const
 
@@ -96,53 +99,52 @@ export default async function DiscoverPage({
           <Link href="/discover?tab=following" className={tabCls("following")}><Users className="w-4 h-4 inline mr-1" /> Following</Link>
         </div>
 
-        <div className="bg-card rounded-lg border border-border">
-          <div className="p-4 border-b border-border flex items-center gap-2">
+        <div className="bg-card rounded-xl border border-border p-4">
+          <div className="flex items-center gap-2 mb-4">
             {icon}
             <h2 className="font-semibold">{heading}</h2>
           </div>
-          <div className="divide-y divide-border">
-            {threads.length === 0 ? (
-              <div className="p-8 text-center text-muted-foreground">
-                {activeTab === "following" ? (
-                  <p>You are not following anyone yet. Follow growers to see their threads here.</p>
-                ) : (
-                  <p>No discussions found.</p>
-                )}
-              </div>
-            ) : (
-              threads.map((thread) => (
+          {threads.length === 0 ? (
+            <EmptyState
+              icon={MessageSquare}
+              title={activeTab === "following" ? "No follows yet" : "No discussions found"}
+              description={
+                activeTab === "following"
+                  ? "Follow growers to see their threads here."
+                  : "Be the first to start a conversation."
+              }
+              action={{ href: "/forum/new", label: "Start a discussion" }}
+            />
+          ) : (
+            <div className="grid sm:grid-cols-2 gap-4">
+              {threads.map((thread) => (
                 <Link
                   key={thread.id}
                   href={`/forum/thread/${thread.slug}`}
-                  className="block p-4 hover:bg-secondary/50 transition-colors"
+                  className="group flex flex-col p-5 bg-secondary/30 rounded-xl border border-border hover:border-primary/40 hover:bg-secondary/50 transition-all"
                 >
-                  <div className="flex items-start gap-3">
-                    <div className="flex-shrink-0 w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center">
-                      <Users className="w-5 h-5 text-primary" />
-                    </div>
+                  <div className="flex items-start gap-3 mb-3">
+                    <Avatar src={thread.author.image ?? undefined} size="sm" alt={thread.author.profile?.username ?? thread.author.name ?? undefined} />
                     <div className="flex-1 min-w-0">
-                      <h3 className="font-semibold mb-1 break-words">{thread.title}</h3>
-                      <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-                        <span className="flex items-center gap-1">
-                          {thread.author.profile?.username || thread.author.name}
-                          <RoleBadge role={thread.author.role} />
-                        </span>
+                      <div className="flex items-center gap-1.5 text-xs text-muted-foreground flex-wrap">
+                        <span className="font-medium text-foreground">{thread.author.profile?.username || thread.author.name}</span>
+                        <RoleBadge role={thread.author.role} />
                         <span>•</span>
-                        <span>{thread.category.name}</span>
-                        <span>•</span>
-                        <span className="flex items-center gap-1"><Clock className="w-3 h-3" /> {new Date(thread.createdAt).toLocaleDateString()}</span>
-                        <span>•</span>
-                        <span className="flex items-center gap-1"><TrendingUp className="w-3 h-3" /> {thread.views} views</span>
-                        <span>•</span>
-                        <span className="flex items-center gap-1"><MessageSquare className="w-3 h-3" /> {thread._count.posts} repl{thread._count.posts === 1 ? "y" : "ies"}</span>
+                        <span className="text-primary">{thread.category.name}</span>
                       </div>
                     </div>
                   </div>
+                  <h3 className="font-semibold mb-2 break-words group-hover:text-primary transition-colors">{thread.title}</h3>
+                  <p className="text-sm text-muted-foreground line-clamp-2 mb-4 flex-1">{thread.content}</p>
+                  <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground mt-auto">
+                    <span className="flex items-center gap-1"><Clock className="w-3.5 h-3.5" /> {new Date(thread.createdAt).toLocaleDateString()}</span>
+                    <span className="flex items-center gap-1"><Eye className="w-3.5 h-3.5" /> {thread.views}</span>
+                    <span className="flex items-center gap-1"><MessageSquare className="w-3.5 h-3.5" /> {thread._count.posts}</span>
+                  </div>
                 </Link>
-              ))
-            )}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </div>
