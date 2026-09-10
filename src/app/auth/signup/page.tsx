@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { signIn } from "next-auth/react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
@@ -30,7 +30,7 @@ export default function SignUpPage() {
     }
   })
 
-  const loadCaptcha = async () => {
+  const loadCaptcha = useCallback(async () => {
     try {
       const res = await fetch("/api/captcha")
       const data = await res.json()
@@ -43,11 +43,22 @@ export default function SignUpPage() {
       console.error("Captcha load error:", err)
       setCaptcha(null)
     }
-  }
+  }, [])
 
-  // eslint-disable-next-line react-hooks/set-state-in-effect
+  // Fetch the initial challenge. State is set from promise callbacks rather
+  // than synchronously in the effect body, and the request is aborted on
+  // unmount so a late response cannot update a stale component.
   useEffect(() => {
-    loadCaptcha()
+    const controller = new AbortController()
+    fetch("/api/captcha", { signal: controller.signal })
+      .then((res) => res.json().then((data) => ({ ok: res.ok, data })))
+      .then(({ ok, data }) => {
+        setCaptcha(ok && data.id && data.question ? { id: data.id, question: data.question } : null)
+      })
+      .catch(() => {
+        /* Aborted or offline — the refresh button lets the user retry */
+      })
+    return () => controller.abort()
   }, [])
 
   const handleSubmit = async (e: React.FormEvent) => {

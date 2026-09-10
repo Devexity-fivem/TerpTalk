@@ -2,13 +2,11 @@
 
 import { useState } from "react"
 import { useSession } from "next-auth/react"
-import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { Video, Loader2 } from "lucide-react"
 
 export default function ApplyYoutuberPage() {
   const { status } = useSession()
-  const router = useRouter()
   const [url, setUrl] = useState("")
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")

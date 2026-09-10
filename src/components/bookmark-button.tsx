@@ -3,9 +3,11 @@
 import { useState } from "react"
 import { useSession } from "next-auth/react"
 import { Bookmark, BookmarkCheck, Loader2 } from "lucide-react"
+import { useToast } from "@/components/ui/toast"
 
 export default function BookmarkButton({ threadId, initiallySaved }: { threadId: string; initiallySaved: boolean }) {
   const { data: session } = useSession()
+  const { toast } = useToast()
   const [saved, setSaved] = useState(initiallySaved)
   const [busy, setBusy] = useState(false)
 
@@ -25,10 +27,16 @@ export default function BookmarkButton({ threadId, initiallySaved }: { threadId:
           if (res.ok) {
             const d = await res.json()
             setSaved(d.bookmarked)
+            toast(d.bookmarked ? "Thread saved" : "Bookmark removed")
+          } else {
+            toast("Could not update your bookmark. Try again.", "error")
           }
+        } catch {
+          toast("Network error — check your connection.", "error")
         } finally { setBusy(false) }
       }}
       disabled={busy}
+      aria-pressed={saved}
       className={`flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg transition-colors disabled:opacity-50 ${
         saved ? "bg-primary/10 text-primary" : "bg-secondary hover:bg-secondary/80"
       }`}

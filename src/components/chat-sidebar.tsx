@@ -200,8 +200,9 @@ export default function ChatSidebar() {
       {/* Floating toggle button */}
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="fixed bottom-[max(1rem,env(safe-area-inset-bottom))] right-4 z-50 bg-primary text-primary-foreground p-3 rounded-full shadow-lg hover:bg-primary/90 transition-colors"
+        className="fixed bottom-[calc(4.5rem+env(safe-area-inset-bottom))] right-4 z-50 bg-primary text-primary-foreground p-3 rounded-full shadow-lg hover:bg-primary/90 transition-colors lg:bottom-[max(1rem,env(safe-area-inset-bottom))]"
         aria-label="Toggle chat"
+        aria-expanded={isOpen}
       >
         <MessageCircle className="w-6 h-6" />
       </button>
@@ -209,7 +210,7 @@ export default function ChatSidebar() {
       {/* Floating chat panel */}
       <aside
         className={`
-          fixed bottom-20 right-4 z-50
+          fixed bottom-[calc(8rem+env(safe-area-inset-bottom))] right-4 z-50 lg:bottom-20
           w-[calc(100vw-2rem)] sm:w-96
           h-[70vh] max-h-[600px]
           bg-card border border-border rounded-xl shadow-2xl

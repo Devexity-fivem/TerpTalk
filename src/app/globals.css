@@ -1,51 +1,121 @@
 @import "tailwindcss";
 
+/* ── Palettes: single source of truth for every colour value ───────── */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-  --card: #ffffff;
-  --card-foreground: #171717;
-  --popover: #ffffff;
-  --popover-foreground: #171717;
-  --primary: #16a34a;
-  --primary-foreground: #ffffff;
-  --secondary: #f3f4f6;
-  --secondary-foreground: #171717;
-  --muted: #f3f4f6;
-  --muted-foreground: #6b7280;
-  --accent: #16a34a;
-  --accent-foreground: #ffffff;
-  --destructive: #ef4444;
-  --destructive-foreground: #ffffff;
-  --border: #e5e7eb;
-  --input: #e5e7eb;
-  --ring: #16a34a;
+  /* Light */
+  --light-background: #ffffff;
+  --light-foreground: #171717;
+  --light-card: #ffffff;
+  --light-card-foreground: #171717;
+  --light-popover: #ffffff;
+  --light-popover-foreground: #171717;
+  --light-primary: #16a34a;
+  --light-primary-foreground: #ffffff;
+  --light-secondary: #f3f4f6;
+  --light-secondary-foreground: #171717;
+  --light-muted: #f3f4f6;
+  --light-muted-foreground: #6b7280;
+  --light-accent: #16a34a;
+  --light-accent-foreground: #ffffff;
+  --light-destructive: #ef4444;
+  --light-destructive-foreground: #ffffff;
+  --light-border: #e5e7eb;
+  --light-input: #e5e7eb;
+  --light-ring: #16a34a;
+
+  /* Cannabis dark — deep forest-tinted blacks */
+  --dark-background: #0a0f0b;
+  --dark-foreground: #e8f0e9;
+  --dark-card: #111a13;
+  --dark-card-foreground: #e8f0e9;
+  --dark-popover: #111a13;
+  --dark-popover-foreground: #e8f0e9;
+  --dark-primary: #34d399;
+  --dark-primary-foreground: #04120b;
+  --dark-secondary: #1a241c;
+  --dark-secondary-foreground: #e8f0e9;
+  --dark-muted: #1a241c;
+  --dark-muted-foreground: #8fa392;
+  --dark-accent: #fbbf24;
+  --dark-accent-foreground: #04120b;
+  --dark-destructive: #ef4444;
+  --dark-destructive-foreground: #ffffff;
+  --dark-border: #223126;
+  --dark-input: #223126;
+  --dark-ring: #34d399;
+
   --radius: 0.5rem;
 }
 
+/* Light is the default theme */
+:root {
+  --background: var(--light-background);
+  --foreground: var(--light-foreground);
+  --card: var(--light-card);
+  --card-foreground: var(--light-card-foreground);
+  --popover: var(--light-popover);
+  --popover-foreground: var(--light-popover-foreground);
+  --primary: var(--light-primary);
+  --primary-foreground: var(--light-primary-foreground);
+  --secondary: var(--light-secondary);
+  --secondary-foreground: var(--light-secondary-foreground);
+  --muted: var(--light-muted);
+  --muted-foreground: var(--light-muted-foreground);
+  --accent: var(--light-accent);
+  --accent-foreground: var(--light-accent-foreground);
+  --destructive: var(--light-destructive);
+  --destructive-foreground: var(--light-destructive-foreground);
+  --border: var(--light-border);
+  --input: var(--light-input);
+  --ring: var(--light-ring);
+}
+
+/* Follow the OS when the user has not made an explicit choice */
 @media (prefers-color-scheme: dark) {
-  :root {
-    /* Cannabis dark — deep forest-tinted blacks */
-    --background: #0a0f0b;
-    --foreground: #e8f0e9;
-    --card: #111a13;
-    --card-foreground: #e8f0e9;
-    --popover: #111a13;
-    --popover-foreground: #e8f0e9;
-    --primary: #34d399;
-    --primary-foreground: #04120b;
-    --secondary: #1a241c;
-    --secondary-foreground: #e8f0e9;
-    --muted: #1a241c;
-    --muted-foreground: #8fa392;
-    --accent: #fbbf24;
-    --accent-foreground: #04120b;
-    --destructive: #ef4444;
-    --destructive-foreground: #ffffff;
-    --border: #223126;
-    --input: #223126;
-    --ring: #34d399;
+  :root:not([data-theme="light"]) {
+    --background: var(--dark-background);
+    --foreground: var(--dark-foreground);
+    --card: var(--dark-card);
+    --card-foreground: var(--dark-card-foreground);
+    --popover: var(--dark-popover);
+    --popover-foreground: var(--dark-popover-foreground);
+    --primary: var(--dark-primary);
+    --primary-foreground: var(--dark-primary-foreground);
+    --secondary: var(--dark-secondary);
+    --secondary-foreground: var(--dark-secondary-foreground);
+    --muted: var(--dark-muted);
+    --muted-foreground: var(--dark-muted-foreground);
+    --accent: var(--dark-accent);
+    --accent-foreground: var(--dark-accent-foreground);
+    --destructive: var(--dark-destructive);
+    --destructive-foreground: var(--dark-destructive-foreground);
+    --border: var(--dark-border);
+    --input: var(--dark-input);
+    --ring: var(--dark-ring);
   }
+}
+
+/* Explicit user choice always wins */
+:root[data-theme="dark"] {
+  --background: var(--dark-background);
+  --foreground: var(--dark-foreground);
+  --card: var(--dark-card);
+  --card-foreground: var(--dark-card-foreground);
+  --popover: var(--dark-popover);
+  --popover-foreground: var(--dark-popover-foreground);
+  --primary: var(--dark-primary);
+  --primary-foreground: var(--dark-primary-foreground);
+  --secondary: var(--dark-secondary);
+  --secondary-foreground: var(--dark-secondary-foreground);
+  --muted: var(--dark-muted);
+  --muted-foreground: var(--dark-muted-foreground);
+  --accent: var(--dark-accent);
+  --accent-foreground: var(--dark-accent-foreground);
+  --destructive: var(--dark-destructive);
+  --destructive-foreground: var(--dark-destructive-foreground);
+  --border: var(--dark-border);
+  --input: var(--dark-input);
+  --ring: var(--dark-ring);
 }
 
 @theme inline {
@@ -106,7 +176,13 @@ body {
   background: var(--muted-foreground);
 }
 
-/* Prevent iOS auto-zoom on focus � inputs under 16px trigger it */
+/* Always show a clear focus ring for keyboard users */
+:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+/* Prevent iOS auto-zoom on focus — inputs under 16px trigger it */
 @media (max-width: 640px) {
   input, textarea, select {
     font-size: 16px;
@@ -116,4 +192,32 @@ body {
 /* Respect bottom safe-area on notched phones (chat button, sticky bars) */
 .safe-bottom {
   padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* Entrance animation for toasts and popovers */
+@keyframes tt-slide-in {
+  from {
+    opacity: 0;
+    transform: translateY(-0.5rem) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.animate-in {
+  animation: tt-slide-in 150ms ease-out;
+}
+
+/* Honour users who ask for less motion */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

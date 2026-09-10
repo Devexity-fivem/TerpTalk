@@ -7,6 +7,7 @@ import { User, Calendar, Award, MessageSquare, Leaf, Loader2, Download, Trash2, 
 import { signOut } from "next-auth/react"
 import Link from "next/link"
 import RoleBadge from "@/components/role-badge"
+import { useToast } from "@/components/ui/toast"
 import { REP_POINTS } from "@/lib/reputation"
 import SavedThreads from "@/components/saved-threads"
 import SavedSearches from "@/components/saved-searches"
@@ -106,6 +107,7 @@ function resizeImage(file: File, size = 128): Promise<string> {
 export default function ProfilePage() {
   const { data: session, status } = useSession()
   const router = useRouter()
+  const { toast } = useToast()
   const [profileData, setProfileData] = useState<ProfileData | null>(null)
   const [loading, setLoading] = useState(true)
   const [editing, setEditing] = useState(false)
@@ -659,9 +661,14 @@ export default function ProfilePage() {
                 onFocus={(e) => e.target.select()}
               />
               <button
-                onClick={() => {
+                onClick={async () => {
                   const link = `${window.location.origin}/auth/signup?ref=${profileData.profile?.username || profileData.user.name}`
-                  navigator.clipboard.writeText(link)
+                  try {
+                    await navigator.clipboard.writeText(link)
+                    toast("Referral link copied")
+                  } catch {
+                    toast("Could not copy — select the link and copy manually.", "error")
+                  }
                 }}
                 className="px-3 py-2 text-xs font-medium bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
               >
