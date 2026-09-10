@@ -198,7 +198,7 @@ export default function UpdateForm({ diaryId }: UpdateFormProps) {
             />
           </div>
 
-          <div className="grid grid-cols-5 gap-2">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2">
             <div>
               <label className="block text-xs font-medium mb-1">Temp (°F)</label>
               <input
@@ -206,7 +206,7 @@ export default function UpdateForm({ diaryId }: UpdateFormProps) {
                 step="0.1"
                 value={formData.temperature}
                 onChange={(e) => setFormData({ ...formData, temperature: e.target.value })}
-                className="w-full px-2 py-1 rounded border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary text-xs"
+                className="w-full px-2 py-2 sm:py-1 rounded border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary text-xs"
                 placeholder="75"
               />
             </div>
@@ -217,7 +217,7 @@ export default function UpdateForm({ diaryId }: UpdateFormProps) {
                 step="0.1"
                 value={formData.humidity}
                 onChange={(e) => setFormData({ ...formData, humidity: e.target.value })}
-                className="w-full px-2 py-1 rounded border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary text-xs"
+                className="w-full px-2 py-2 sm:py-1 rounded border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary text-xs"
                 placeholder="50"
               />
             </div>
@@ -228,7 +228,7 @@ export default function UpdateForm({ diaryId }: UpdateFormProps) {
                 step="0.01"
                 value={formData.vpd}
                 onChange={(e) => setFormData({ ...formData, vpd: e.target.value })}
-                className="w-full px-2 py-1 rounded border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary text-xs"
+                className="w-full px-2 py-2 sm:py-1 rounded border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary text-xs"
                 placeholder="1.2"
               />
             </div>
@@ -239,7 +239,7 @@ export default function UpdateForm({ diaryId }: UpdateFormProps) {
                 step="0.1"
                 value={formData.ph}
                 onChange={(e) => setFormData({ ...formData, ph: e.target.value })}
-                className="w-full px-2 py-1 rounded border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary text-xs"
+                className="w-full px-2 py-2 sm:py-1 rounded border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary text-xs"
                 placeholder="6.5"
               />
             </div>
@@ -250,7 +250,7 @@ export default function UpdateForm({ diaryId }: UpdateFormProps) {
                 step="0.1"
                 value={formData.ec}
                 onChange={(e) => setFormData({ ...formData, ec: e.target.value })}
-                className="w-full px-2 py-1 rounded border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary text-xs"
+                className="w-full px-2 py-2 sm:py-1 rounded border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary text-xs"
                 placeholder="1.5"
               />
             </div>

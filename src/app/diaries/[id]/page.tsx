@@ -352,7 +352,7 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
 
                       {/* Environmental Data */}
                       {(update.temperature || update.humidity || update.vpd || update.ph || update.ec) && (
-                        <div className="grid grid-cols-5 gap-4 mb-4 p-4 bg-secondary/50 rounded-lg">
+                        <div className="grid grid-cols-3 sm:grid-cols-5 gap-3 sm:gap-4 mb-4 p-4 bg-secondary/50 rounded-lg">
                           {update.temperature && (
                             <div className="text-center">
                               <div className="text-xs text-muted-foreground">Temp</div>
