@@ -61,6 +61,7 @@ model User {
 
   @@index([role])
   @@index([status])
+  @@index([lastSeenAt])
 }
 
 // User Profile
@@ -93,6 +94,7 @@ model Profile {
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([username])
+  @@index([reputation])
   @@index([referredById])
 }
 
