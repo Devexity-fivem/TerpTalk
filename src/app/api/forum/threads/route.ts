@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma"
 import { unauthorized, publicUserSelect, LIMITS, getClientIp, logSecurityEvent, forbidden, containsExternalLink, isTrustedForLinks, isModerator } from "@/lib/security"
 import { requireModerator } from "@/lib/require-staff"
 import { rateLimit } from "@/lib/rate-limit"
-import { awardReputation, REP_POINTS } from "@/lib/reputation"
+import { awardReputation, REP_POINTS, REP_TIERS } from "@/lib/reputation"
 import { notifyMentions } from "@/lib/mentions"
 
 // Helper function to create a slug from a string
@@ -93,7 +93,7 @@ export async function POST(request: Request) {
         metadata: { endpoint: "forum/threads", title: title.slice(0, 120) },
       })
       return NextResponse.json(
-        { error: "New users need 24 hours and 10 reputation before posting links. Share plain text in the meantime." },
+        { error: `New users need 24 hours and ${REP_TIERS[1].threshold} reputation (Sprout tier) before posting links. Share plain text in the meantime.` },
         { status: 403 }
       )
     }

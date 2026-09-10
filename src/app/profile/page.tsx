@@ -7,6 +7,7 @@ import { User, Calendar, Award, MessageSquare, Leaf, Loader2, Download, Trash2, 
 import { signOut } from "next-auth/react"
 import Link from "next/link"
 import RoleBadge from "@/components/role-badge"
+import { REP_POINTS } from "@/lib/reputation"
 import SavedThreads from "@/components/saved-threads"
 import SavedSearches from "@/components/saved-searches"
 import RecoveryPhraseCard from "@/components/recovery-phrase-card"
@@ -648,7 +649,7 @@ export default function ProfilePage() {
               <h2 className="text-lg font-semibold">Referrals</h2>
             </div>
             <p className="text-sm text-muted-foreground mb-3">
-              Invite growers — earn <span className="font-semibold text-amber-500">+25 reputation</span> per signup and unlock the <span className="font-semibold text-amber-500">🤝 Recruiter</span> badge at 3 referrals. You&apos;ve referred <span className="font-semibold text-foreground">{profileData.stats.referrals}</span> member{profileData.stats.referrals !== 1 ? "s" : ""}.
+              Invite growers — earn <span className="font-semibold text-amber-500">+{REP_POINTS.REFERRAL} reputation</span> per signup and unlock the <span className="font-semibold text-amber-500">🤝 Recruiter</span> badge at 3 referrals. You&apos;ve referred <span className="font-semibold text-foreground">{profileData.stats.referrals}</span> member{profileData.stats.referrals !== 1 ? "s" : ""}.
             </p>
             <div className="flex gap-2">
               <input
