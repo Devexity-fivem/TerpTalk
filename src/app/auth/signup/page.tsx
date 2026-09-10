@@ -1,21 +1,17 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect } from "react"
 import { signIn } from "next-auth/react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { Leaf, Loader2 } from "lucide-react"
 
 const HCAPTCHA_SITE_KEY = "0504ab56-5d20-4ae2-abe0-f444d09edeea"
-const HCAPTCHA_CONTAINER_ID = "hcaptcha-widget"
 
 declare global {
   interface Window {
-    hcaptchaOnLoad?: () => void
-    hcaptcha?: {
-      render: (container: string, options: Record<string, unknown>) => number
-      reset: (widgetId?: number) => void
-    }
+    onHCaptchaVerify?: (token: string) => void
+    onHCaptchaExpired?: () => void
   }
 }
 
@@ -24,7 +20,6 @@ export default function SignUpPage() {
   const [captchaToken, setCaptchaToken] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
-  const widgetIdRef = useRef<number | null>(null)
   const [formData, setFormData] = useState(() => {
     const ref = typeof window !== "undefined"
       ? new URLSearchParams(window.location.search).get("ref") || ""
@@ -40,24 +35,21 @@ export default function SignUpPage() {
 
   useEffect(() => {
     if (typeof window === "undefined") return
+
+    window.onHCaptchaVerify = (token) => {
+      setCaptchaToken(token)
+    }
+    window.onHCaptchaExpired = () => {
+      setCaptchaToken(null)
+    }
+
     if (document.getElementById("hcaptcha-script")) return
 
     const script = document.createElement("script")
     script.id = "hcaptcha-script"
-    script.src = "https://js.hcaptcha.com/1/api.js?onload=hcaptchaOnLoad&render=explicit"
+    script.src = "https://js.hcaptcha.com/1/api.js"
     script.async = true
     script.defer = true
-
-    window.hcaptchaOnLoad = () => {
-      if (window.hcaptcha) {
-        widgetIdRef.current = window.hcaptcha.render(HCAPTCHA_CONTAINER_ID, {
-          sitekey: HCAPTCHA_SITE_KEY,
-          callback: (token: string) => setCaptchaToken(token),
-          "expired-callback": () => setCaptchaToken(null),
-        })
-      }
-    }
-
     document.head.appendChild(script)
   }, [])
 
@@ -120,9 +112,6 @@ export default function SignUpPage() {
     } catch (error: unknown) {
       setError((error as Error).message)
       setCaptchaToken(null)
-      if (widgetIdRef.current && window.hcaptcha) {
-        window.hcaptcha.reset(widgetIdRef.current)
-      }
     } finally {
       setLoading(false)
     }
@@ -205,8 +194,11 @@ export default function SignUpPage() {
           </div>
 
           <div
-            id={HCAPTCHA_CONTAINER_ID}
-            className="min-h-[78px] flex items-center justify-center"
+            className="h-captcha"
+            data-sitekey={HCAPTCHA_SITE_KEY}
+            data-callback="onHCaptchaVerify"
+            data-expired-callback="onHCaptchaExpired"
+            data-theme="dark"
           />
 
           <div className="flex items-center">
