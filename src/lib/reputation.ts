@@ -1,5 +1,7 @@
 import { prisma } from "@/lib/prisma"
 
+const VERIFIED_MULTIPLIER = 2
+
 // Point values for community actions
 export const REP_POINTS = {
   THREAD_CREATED: 10,
@@ -97,12 +99,19 @@ export async function awardReputation(
   amount: number,
   reason: string
 ) {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { role: true },
+  })
+  const multiplier = user?.role === "VERIFIED_MEMBER" ? VERIFIED_MULTIPLIER : 1
+  const adjusted = amount * multiplier
+
   await prisma.reputationEvent.create({
-    data: { userId, type, amount, reason },
+    data: { userId, type, amount: adjusted, reason },
   })
   await prisma.profile.update({
     where: { userId },
-    data: { reputation: { increment: amount } },
+    data: { reputation: { increment: adjusted } },
   })
   await checkBadges(userId)
 }
