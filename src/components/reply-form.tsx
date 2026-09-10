@@ -4,6 +4,7 @@ import { useState } from "react"
 import { useSession } from "next-auth/react"
 import { MessageSquare, Loader2 } from "lucide-react"
 import ImageUploader from "@/components/image-uploader"
+import MarkdownComposer from "@/components/markdown-composer"
 import { useToast } from "@/components/ui/toast"
 
 interface ReplyFormProps {
@@ -66,13 +67,14 @@ export default function ReplyForm({ threadId }: ReplyFormProps) {
         </p>
       ) : (
         <form onSubmit={handleSubmit} className="space-y-4">
-          <textarea
+          <MarkdownComposer
             value={content}
-            onChange={(e) => setContent(e.target.value)}
-            className="w-full px-4 py-2 rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary resize-none"
+            onChange={setContent}
             placeholder="Share your thoughts..."
             rows={6}
             minLength={10}
+            maxLength={10000}
+            disabled={loading}
           />
           <ImageUploader value={images} onChange={setImages} disabled={loading} />
           {error && (
