@@ -6,7 +6,8 @@ import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { Leaf, Loader2 } from "lucide-react"
 
-const HCAPTCHA_SITE_KEY = "0504ab56-5d20-4ae2-abe0-f444d09edeea"
+const HCAPTCHA_SITE_KEY =
+  process.env.NEXT_PUBLIC_HCAPTCHA_SITE_KEY || "0504ab56-5d20-4ae2-abe0-f444d09edeea"
 
 declare global {
   interface Window {
