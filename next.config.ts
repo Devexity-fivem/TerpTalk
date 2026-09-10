@@ -18,14 +18,14 @@ const securityHeaders = [
     key: "Content-Security-Policy",
     value: [
       "default-src 'self'",
-      `script-src 'self' 'unsafe-inline'${process.env.NODE_ENV === "development" ? " 'unsafe-eval'" : ""}`,
-      "style-src 'self' 'unsafe-inline'", // required while some pages use inline styles; review migrating to Tailwind utilities
-      "img-src 'self' data: blob: https:", // relies on API-validated image URLs; consider allow-listing blob host + iconify in future
+      `script-src 'self' 'unsafe-inline' https://*.hcaptcha.com${process.env.NODE_ENV === "development" ? " 'unsafe-eval'" : ""}`,
+      "style-src 'self' 'unsafe-inline'",
+      "img-src 'self' data: blob: https:",
       "font-src 'self' data:",
-      "connect-src 'self' https://*.pusher.com wss://*.pusher.com" +
+      "connect-src 'self' https://*.hcaptcha.com https://*.pusher.com wss://*.pusher.com" +
         (process.env.NODE_ENV === "development" ? " ws: wss:" : ""),
       "frame-ancestors 'none'",
-      "frame-src 'none'",
+      "frame-src https://*.hcaptcha.com",
       "object-src 'none'",
       "base-uri 'self'",
       "form-action 'self'",
