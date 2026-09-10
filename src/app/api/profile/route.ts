@@ -305,8 +305,9 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ profile: updated })
   } catch (error) {
     console.error("Profile update error:", error)
+    const message = error instanceof Error ? error.message : "Failed to update profile"
     return NextResponse.json(
-      { error: "Failed to update profile" },
+      { error: message },
       { status: 500 }
     )
   }
