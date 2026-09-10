@@ -6,11 +6,12 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import {
   Leaf, User, LogOut, MessageCircle, Home, Calendar,
-  Settings, Dna, Bell, Shield, Menu, X, Mail, Search, Trophy, BookOpen, Stethoscope, Tag, Award, Calculator, Info, FileText, Video, PenLine, TrendingUp,
+  Settings, Dna, Bell, Shield, Menu, X, Mail, Search, Trophy, BookOpen, Stethoscope, Tag, Award, Calculator, Info, FileText, Video, TrendingUp,
 } from "lucide-react"
 import CannabisLeaf from "@/components/cannabis-leaf"
 import MobileNav from "@/components/mobile-nav"
 import ThemeToggle from "@/components/theme-toggle"
+import CreateMenu from "@/components/create-menu"
 import { cn } from "@/lib/utils"
 
 const NAV_LINKS = [
@@ -165,13 +166,7 @@ export function Navigation() {
                 <div className="h-8 w-8 animate-pulse rounded-full bg-secondary" />
               ) : session ? (
                 <>
-                  <Link
-                    href="/forum/new"
-                    className="hidden items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 sm:inline-flex"
-                  >
-                    <PenLine className="h-4 w-4" />
-                    Post
-                  </Link>
+                  <CreateMenu />
                   <Link
                     href="/messages"
                     className="hidden rounded-lg p-2 transition-colors hover:bg-secondary lg:block"
