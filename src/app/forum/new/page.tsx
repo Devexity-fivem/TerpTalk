@@ -83,7 +83,7 @@ function NewThreadForm() {
 
   if (status === "loading") {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div role="status" aria-label="Loading" className="min-h-screen flex items-center justify-center">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
       </div>
     )
@@ -281,7 +281,7 @@ function NewThreadForm() {
 
 function Loading() {
   return (
-    <div className="min-h-screen flex items-center justify-center">
+    <div role="status" aria-label="Loading" className="min-h-screen flex items-center justify-center">
       <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary" />
     </div>
   )

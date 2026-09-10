@@ -182,6 +182,7 @@ export default function PostActions({
                   onClick={() => handleReact(type)}
                   className="text-lg hover:scale-125 transition-transform px-1"
                   title={type.toLowerCase()}
+                  aria-label={`React with ${type.toLowerCase()}`}
                 >
                   {EMOJIS[type]}
                 </button>
@@ -264,7 +265,7 @@ export default function PostActions({
         </div>
       )}
 
-      {message && <p className="text-sm text-muted-foreground">{message}</p>}
+      {message && <p role="status" aria-live="polite" className="text-sm text-muted-foreground">{message}</p>}
     </div>
   )
 }
