@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma"
+import { unstable_cache } from "next/cache"
 import { Trophy, Medal, Award } from "lucide-react"
 import Link from "next/link"
 import RoleBadge from "@/components/role-badge"
@@ -6,35 +7,43 @@ import EmptyState from "@/components/ui/empty-state"
 import { getReputationTier } from "@/lib/reputation"
 import { Avatar } from "@/components/ui/avatar"
 
-export const revalidate = 60 // public content, edge-cached
+export const revalidate = 300 // public content, edge-cached
 
 export const metadata = {
   title: "Leaderboard",
   description: "Top contributors in the TerpTalk cannabis growing community.",
 }
 
-export default async function LeaderboardPage() {
-  const topUsers = await prisma.profile.findMany({
-    where: { user: { banned: false } },
-    orderBy: { reputation: "desc" },
-    take: 25,
-    select: {
-      username: true,
-      avatarUrl: true,
-      reputation: true,
-      user: {
-        select: {
-          id: true,
-          name: true,
-          role: true,
-          createdAt: true,
-          _count: {
-            select: { threadCreator: true, posts: true, diaryCreator: true, followers: true },
+const getTopUsers = unstable_cache(
+  async () => {
+    return prisma.profile.findMany({
+      where: { user: { banned: false } },
+      orderBy: { reputation: "desc" },
+      take: 25,
+      select: {
+        username: true,
+        avatarUrl: true,
+        reputation: true,
+        user: {
+          select: {
+            id: true,
+            name: true,
+            role: true,
+            createdAt: true,
+            _count: {
+              select: { threadCreator: true, posts: true, diaryCreator: true, followers: true },
+            },
           },
         },
       },
-    },
-  })
+    })
+  },
+  ["leaderboard-users"],
+  { revalidate: 300, tags: ["leaderboard"] }
+)
+
+export default async function LeaderboardPage() {
+  const topUsers = await getTopUsers()
 
   const medal = (i: number) =>
     i === 0 ? <Trophy className="w-5 h-5 text-amber-400" /> :

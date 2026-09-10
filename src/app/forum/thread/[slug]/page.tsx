@@ -19,6 +19,7 @@ import { buildMetadata, snippet } from "@/lib/seo"
 import { Breadcrumbs } from "@/components/breadcrumbs"
 import { JsonLd } from "@/components/json-ld"
 import { AcceptAnswerButton } from "@/components/accept-answer-button"
+import ViewTracker from "@/components/view-tracker"
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params
@@ -78,12 +79,6 @@ async function getThreadData(slug: string, page: number) {
   if (!thread || thread.deleted) {
     notFound()
   }
-
-  // Increment view count
-  await prisma.thread.update({
-    where: { id: thread.id },
-    data: { views: { increment: 1 } },
-  })
 
   return thread
 }
@@ -180,6 +175,7 @@ export default async function ThreadPage({
     <div className="min-h-screen bg-background">
       <div className="max-w-4xl mx-auto px-4 py-8">
         <JsonLd data={discussionSchema} />
+        <ViewTracker threadId={thread.id} />
         <Breadcrumbs items={breadcrumbs} />
         <div className="mb-8">
           <div className="flex items-center gap-2 mb-2">

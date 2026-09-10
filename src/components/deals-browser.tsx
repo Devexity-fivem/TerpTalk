@@ -60,7 +60,7 @@ export default function DealsBrowser({ products }: { products: Deal[] }) {
             <div key={p.slug} className="bg-card border border-border rounded-xl p-4 flex flex-col">
               {p.imageUrl && (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={p.imageUrl} alt={p.name} className="w-full aspect-video object-cover rounded-lg mb-3" />
+                <img src={p.imageUrl} alt={p.name} loading="lazy" decoding="async" className="w-full aspect-video object-cover rounded-lg mb-3" />
               )}
               <div className="flex items-center gap-2 flex-wrap">
                 <h3 className="font-semibold text-sm">{p.name}</h3>

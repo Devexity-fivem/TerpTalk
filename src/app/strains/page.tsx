@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma"
+import { unstable_cache } from "next/cache"
 import { Leaf, Plus, Search } from "lucide-react"
 import Link from "next/link"
 import EmptyState from "@/components/ui/empty-state"
@@ -10,20 +11,24 @@ export const metadata = {
   description: "Community-maintained cannabis strain database — genetics, breeders, growing info, and grower photos.",
 }
 
-async function getStrains(q?: string) {
-  const contains = q && q.trim() ? { contains: q.trim(), mode: "insensitive" as const } : undefined
-  const strains = await prisma.strain.findMany({
-    where: contains ? { OR: [{ name: contains }, { genetics: contains }, { breeder: contains }] } : undefined,
-    take: 48,
-    orderBy: { name: "asc" },
-    include: {
-      photos: { take: 1, orderBy: { createdAt: "desc" } },
-      _count: { select: { photos: true } },
-    },
-  })
+const getStrains = unstable_cache(
+  async (q?: string) => {
+    const contains = q && q.trim() ? { contains: q.trim(), mode: "insensitive" as const } : undefined
+    const strains = await prisma.strain.findMany({
+      where: contains ? { OR: [{ name: contains }, { genetics: contains }, { breeder: contains }] } : undefined,
+      take: 48,
+      orderBy: { name: "asc" },
+      include: {
+        photos: { take: 1, orderBy: { createdAt: "desc" } },
+        _count: { select: { photos: true } },
+      },
+    })
 
-  return strains
-}
+    return strains
+  },
+  ["strains-list"],
+  { revalidate: 300, tags: ["strains"] }
+)
 
 export default async function StrainsPage({ searchParams }: { searchParams: Promise<{ q?: string }> }) {
   const { q } = await searchParams
@@ -84,7 +89,7 @@ export default async function StrainsPage({ searchParams }: { searchParams: Prom
                   <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center overflow-hidden shrink-0">
                     {strain.photos[0] ? (
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img src={strain.photos[0].imageUrl} alt={strain.name} className="w-full h-full object-cover" />
+                      <img src={strain.photos[0].imageUrl} alt={strain.name} loading="lazy" decoding="async" className="w-full h-full object-cover" />
                     ) : (
                       <Leaf className="w-6 h-6 text-primary" />
                     )}

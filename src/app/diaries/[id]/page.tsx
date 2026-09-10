@@ -38,12 +38,13 @@ async function getDiaryData(id: string) {
       updates: {
         include: {
           author: { select: publicUserSelect },
-          images: true,
+          images: { take: 12 },
         },
-        orderBy: { createdAt: "asc" },
+        orderBy: { createdAt: "desc" },
+        take: 100,
       },
       _count: {
-        select: { followers: true },
+        select: { followers: true, updates: true },
       },
     },
   })
@@ -58,6 +59,8 @@ async function getDiaryData(id: string) {
 export default async function DiaryPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const diary = await getDiaryData(id)
+  // Fetch the most recent 100 updates and restore chronological order for the timeline.
+  const updates = [...diary.updates].reverse()
   const session = await getServerSession(authOptions)
   const [following, linkedStrain] = await Promise.all([
     session?.user?.id
@@ -80,7 +83,7 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
   // Stage timeline — consecutive day-runs per stage from updates
   const stageRuns: { stage: string; days: number }[] = []
   let prevDay = -1
-  for (const u of diary.updates) {
+  for (const u of updates) {
     const d = Math.floor((new Date(u.createdAt).getTime() - new Date(diary.startDate).getTime()) / 86400000)
     const last = stageRuns[stageRuns.length - 1]
     if (last && last.stage === u.stage && d === prevDay + 1) last.days++
@@ -89,20 +92,20 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
   }
 
   // Harvest estimate — first FLOWER update + 9 weeks typical flower time
-  const flip = diary.updates.find((u) => u.stage === "FLOWER")
+  const flip = updates.find((u) => u.stage === "FLOWER")
   const harvestEta = flip
     // eslint-disable-next-line react-hooks/purity
     ? Math.round((new Date(flip.createdAt).getTime() + 63 * 86400000 - Date.now()) / 86400000)
     : null
 
   // Env vitals — averages across updates
-  const temps = diary.updates.map((u) => u.temperature).filter((v): v is number => v != null)
-  const rhs = diary.updates.map((u) => u.humidity).filter((v): v is number => v != null)
+  const temps = updates.map((u) => u.temperature).filter((v): v is number => v != null)
+  const rhs = updates.map((u) => u.humidity).filter((v): v is number => v != null)
   const avgTemp = temps.length ? (temps.reduce((a, b) => a + b, 0) / temps.length).toFixed(1) : null
   const avgRh = rhs.length ? Math.round(rhs.reduce((a, b) => a + b, 0) / rhs.length) : null
 
   // Update streak: consecutive days with updates (most recent run)
-  const days = [...new Set(diary.updates.map((u) => new Date(u.createdAt).toDateString()))].map((d) => new Date(d).getTime()).sort((a, b) => b - a)
+  const days = [...new Set(updates.map((u) => new Date(u.createdAt).toDateString()))].map((d) => new Date(d).getTime()).sort((a, b) => b - a)
   let streak = 0
   for (let i = 0; i < days.length; i++) {
     const expected = days[0] - i * 86400000
@@ -154,7 +157,7 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
                 </span>
                 <span className="flex items-center gap-1">
                   <Leaf className="w-4 h-4" />
-                  {diary.updates.length} updates
+                  {diary._count.updates} updates
                 </span>
                 <span className="flex items-center gap-1">
                   <Users className="w-4 h-4" />
@@ -273,7 +276,7 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
           </div>
 
           <EnvCharts
-            updates={diary.updates.map((u) => ({
+            updates={updates.map((u) => ({
               createdAt: u.createdAt.toISOString(),
               temperature: u.temperature,
               humidity: u.humidity,
@@ -283,7 +286,7 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
             }))}
           />
 
-          {diary.updates.length === 0 ? (
+          {updates.length === 0 ? (
             <div className="bg-card rounded-lg border border-border p-12 text-center">
               <Leaf className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
               <h3 className="text-lg font-semibold mb-2">No updates yet</h3>
@@ -296,7 +299,7 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
 
               {/* Timeline items */}
               <div className="space-y-6">
-                {diary.updates.map((update) => (
+                {updates.map((update) => (
                   <div key={update.id} className="relative pl-16">
                     {/* Timeline dot */}
                     <div className="absolute left-4 w-4 h-4 bg-primary rounded-full border-4 border-background"></div>
@@ -391,6 +394,8 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
                               key={image.id}
                               src={image.url}
                               alt={image.caption || "Grow update photo"}
+                              loading="lazy"
+                              decoding="async"
                               className="aspect-square object-cover rounded-lg border border-border"
                             />
                           ))}

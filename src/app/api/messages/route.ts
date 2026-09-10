@@ -71,11 +71,6 @@ export async function GET(request: NextRequest) {
         })
       }
 
-      // Mark their messages to me as read
-      await prisma.directMessage.updateMany({
-        where: { senderId: withId, receiverId: userId, read: false, deleted: false },
-        data: { read: true },
-      })
       const messages = await prisma.directMessage.findMany({
         where: {
           deleted: false,
@@ -88,6 +83,15 @@ export async function GET(request: NextRequest) {
         take: 100,
         include: { sender: { select: publicUserSelect } },
       })
+
+      // Only write when there are actually unread messages from the other user.
+      if (messages.some((m) => m.senderId === withId && !m.read)) {
+        await prisma.directMessage.updateMany({
+          where: { senderId: withId, receiverId: userId, read: false, deleted: false },
+          data: { read: true },
+        })
+      }
+
       return NextResponse.json({
         messages: messages.map((m) => ({
           id: m.id,

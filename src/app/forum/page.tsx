@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma"
 import { publicUserSelect } from "@/lib/security"
+import { unstable_cache } from "next/cache"
 import { MessageSquare, Users, Clock, TrendingUp } from "lucide-react"
 import Link from "next/link"
 import RoleBadge from "@/components/role-badge"
@@ -14,49 +15,53 @@ export const metadata = {
   description: "Cannabis growing forum — techniques, equipment, genetics, troubleshooting and more with the TerpTalk community.",
 }
 
-async function getForumData() {
-  const categories = await prisma.category.findMany({
-    where: { hidden: false },
-    orderBy: { order: "asc" },
-    include: {
-      threads: {
-        where: { deleted: false },
-        take: 1,
-        orderBy: { createdAt: "desc" },
+const getForumData = unstable_cache(
+  async () => {
+    const categories = await prisma.category.findMany({
+      where: { hidden: false },
+      orderBy: { order: "asc" },
+      include: {
+        threads: {
+          where: { deleted: false },
+          take: 1,
+          orderBy: { createdAt: "desc" },
+        },
+        _count: {
+          select: { threads: { where: { deleted: false } } },
+        },
       },
-      _count: {
-        select: { threads: { where: { deleted: false } } },
-      },
-    },
-  })
+    })
 
-  const recentThreads = await prisma.thread.findMany({
-    where: { deleted: false },
-    take: 5,
-    orderBy: { createdAt: "desc" },
-    include: {
-      author: { select: publicUserSelect },
-      category: true,
-      _count: {
-        select: { posts: true },
-      },
-    },
-  })
-
-  const [threadCount, postCount, memberCount, trendingThreads] = await Promise.all([
-    prisma.thread.count({ where: { deleted: false } }),
-    prisma.post.count({ where: { deleted: false } }),
-    prisma.user.count({ where: { banned: false } }),
-    prisma.thread.findMany({
-      where: { deleted: false, views: { gt: 0 } },
+    const recentThreads = await prisma.thread.findMany({
+      where: { deleted: false },
       take: 5,
-      orderBy: { views: "desc" },
-      select: { slug: true, title: true, views: true },
-    }),
-  ])
+      orderBy: { createdAt: "desc" },
+      include: {
+        author: { select: publicUserSelect },
+        category: true,
+        _count: {
+          select: { posts: true },
+        },
+      },
+    })
 
-  return { categories, recentThreads, threadCount, postCount, memberCount, trendingThreads }
-}
+    const [threadCount, postCount, memberCount, trendingThreads] = await Promise.all([
+      prisma.thread.count({ where: { deleted: false } }),
+      prisma.post.count({ where: { deleted: false } }),
+      prisma.user.count({ where: { banned: false } }),
+      prisma.thread.findMany({
+        where: { deleted: false, views: { gt: 0 } },
+        take: 5,
+        orderBy: { views: "desc" },
+        select: { slug: true, title: true, views: true },
+      }),
+    ])
+
+    return { categories, recentThreads, threadCount, postCount, memberCount, trendingThreads }
+  },
+  ["forum-data"],
+  { revalidate: 60, tags: ["forum"] }
+)
 
 export default async function ForumPage() {
   const { categories, recentThreads, threadCount, postCount, memberCount, trendingThreads } = await getForumData()

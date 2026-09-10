@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma"
 import { publicUserSelect } from "@/lib/security"
+import { unstable_cache } from "next/cache"
 import { notFound } from "next/navigation"
 import { MessageSquare, Users, Clock, Pin, Lock } from "lucide-react"
 import Link from "next/link"
@@ -28,36 +29,40 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   })
 }
 
-async function getCategoryData(slug: string, page: number, unanswered = false) {
-  const where = { deleted: false, ...(unanswered ? { replyCount: 0 } : {}) }
-  const category = await prisma.category.findUnique({
-    where: { slug },
-    include: {
-      threads: {
-        where,
-        include: {
-          author: { select: publicUserSelect },
-          _count: {
-            select: { posts: { where: { deleted: false } } },
+const getCategoryData = unstable_cache(
+  async (slug: string, page: number, unanswered = false) => {
+    const where = { deleted: false, ...(unanswered ? { replyCount: 0 } : {}) }
+    const category = await prisma.category.findUnique({
+      where: { slug },
+      include: {
+        threads: {
+          where,
+          include: {
+            author: { select: publicUserSelect },
+            _count: {
+              select: { posts: { where: { deleted: false } } },
+            },
           },
+          orderBy: [
+            { pinned: "desc" },
+            { createdAt: "desc" },
+          ],
+          skip: (page - 1) * THREADS_PER_PAGE,
+          take: THREADS_PER_PAGE,
         },
-        orderBy: [
-          { pinned: "desc" },
-          { createdAt: "desc" },
-        ],
-        skip: (page - 1) * THREADS_PER_PAGE,
-        take: THREADS_PER_PAGE,
+        _count: { select: { threads: { where } } },
       },
-      _count: { select: { threads: { where } } },
-    },
-  })
+    })
 
-  if (!category) {
-    notFound()
-  }
+    if (!category) {
+      notFound()
+    }
 
-  return category
-}
+    return category
+  },
+  ["forum-category"],
+  { revalidate: 60, tags: ["forum"] }
+)
 
 export default async function CategoryPage({
   params,

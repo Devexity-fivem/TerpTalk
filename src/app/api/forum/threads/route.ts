@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { revalidateTag } from "next/cache"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
@@ -258,6 +259,8 @@ export async function POST(request: Request) {
       await prisma.notification.createMany({ data: followerNotifications }).catch(() => {})
     }
 
+    revalidateTag("forum", { expire: 0 })
+
     return NextResponse.json({ thread }, { status: 201 })
   } catch (error) {
     console.error("Thread creation error:", error)
@@ -295,6 +298,8 @@ export async function DELETE(request: Request) {
     }
 
     await prisma.thread.update({ where: { id }, data: { deleted: true } })
+
+    revalidateTag("forum", { expire: 0 })
 
     return NextResponse.json({ deleted: true })
   } catch (error) {

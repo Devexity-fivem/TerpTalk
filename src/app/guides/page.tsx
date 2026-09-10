@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma"
+import { unstable_cache } from "next/cache"
 import { BookOpen, Plus } from "lucide-react"
 import Link from "next/link"
 import EmptyState from "@/components/ui/empty-state"
@@ -12,15 +13,23 @@ export const metadata = {
   description: "Staff-written guides for cannabis growers — from first germination to harvest and curing.",
 }
 
+const getGuides = unstable_cache(
+  async () => {
+    return prisma.guide.findMany({
+      where: { published: true },
+      orderBy: { createdAt: "desc" },
+      include: { author: { select: { name: true, profile: { select: { username: true } } } } },
+    })
+  },
+  ["guides-list"],
+  { revalidate: 300, tags: ["guides"] }
+)
+
 export default async function GuidesPage() {
   const session = await getServerSession(authOptions)
   const isStaff = ["MODERATOR", "ADMINISTRATOR"].includes((session?.user as { role?: string })?.role || "")
 
-  const guides = await prisma.guide.findMany({
-    where: { published: true },
-    orderBy: { createdAt: "desc" },
-    include: { author: { select: { name: true, profile: { select: { username: true } } } } },
-  })
+  const guides = await getGuides()
 
   const topics = [...new Set(guides.map((g) => g.topic))]
 

@@ -39,6 +39,7 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
         createdBy: { select: { profile: { select: { username: true } }, name: true } },
         photos: {
           orderBy: { createdAt: "desc" },
+          take: 100,
           include: {
             user: { select: { profile: { select: { username: true } }, name: true } },
           },
@@ -155,7 +156,7 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
                   <div className="w-16 h-16 bg-secondary rounded-lg overflow-hidden shrink-0">
                     {diaryThumb(d) ? (
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img src={diaryThumb(d)} alt="" className="w-full h-full object-cover" />
+                      <img src={diaryThumb(d)} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center text-muted-foreground">
                         <BookOpen className="w-5 h-5" />
@@ -189,7 +190,7 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
                   <div className="w-16 h-16 bg-secondary rounded-lg overflow-hidden shrink-0">
                     {setupThumb(s) ? (
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img src={setupThumb(s)} alt="" className="w-full h-full object-cover" />
+                      <img src={setupThumb(s)} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center text-muted-foreground">
                         <Wrench className="w-5 h-5" />
@@ -231,6 +232,8 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
                       <img
                         src={photo.imageUrl}
                         alt={photo.caption || `${strain.name} ${kind.toLowerCase()}`}
+                        loading="lazy"
+                        decoding="async"
                         className="w-full aspect-square object-cover rounded-lg border border-border"
                       />
                       <div className="absolute bottom-0 inset-x-0 bg-black/60 text-[10px] text-white px-2 py-1 rounded-b-lg opacity-0 group-hover:opacity-100 transition-opacity">

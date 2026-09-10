@@ -1,33 +1,38 @@
 import { prisma } from "@/lib/prisma"
 import { publicUserSelect } from "@/lib/security"
+import { unstable_cache } from "next/cache"
 import { Settings, Plus, Users } from "lucide-react"
 import Link from "next/link"
 import RoleBadge from "@/components/role-badge"
 import EmptyState from "@/components/ui/empty-state"
 
-export const dynamic = "force-dynamic"
+export const revalidate = 300
 
 export const metadata = {
   title: "Grow Setup Showcases",
   description: "Cannabis grow room and tent setups — lighting, tents, and equipment shared by TerpTalk growers.",
 }
 
-async function getSetups() {
-  const setups = await prisma.growSetup.findMany({
-    where: { deleted: false },
-    take: 12,
-    orderBy: { createdAt: "desc" },
-    include: {
-      author: { select: publicUserSelect },
-      images: { take: 1, orderBy: { order: "asc" } },
-      _count: {
-        select: { comments: true },
+const getSetups = unstable_cache(
+  async () => {
+    const setups = await prisma.growSetup.findMany({
+      where: { deleted: false },
+      take: 12,
+      orderBy: { createdAt: "desc" },
+      include: {
+        author: { select: publicUserSelect },
+        images: { take: 1, orderBy: { order: "asc" } },
+        _count: {
+          select: { comments: true },
+        },
       },
-    },
-  })
+    })
 
-  return setups
-}
+    return setups
+  },
+  ["setups-list"],
+  { revalidate: 300, tags: ["setups"] }
+)
 
 export default async function SetupsPage() {
   const setups = await getSetups()
@@ -71,7 +76,7 @@ export default async function SetupsPage() {
               >
                 {setup.images.length > 0 ? (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={setup.images[0].url} alt={setup.title} className="aspect-video w-full object-cover" />
+                  <img src={setup.images[0].url} alt={setup.title} loading="lazy" decoding="async" className="aspect-video w-full object-cover" />
                 ) : (
                   <div className="aspect-video bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center">
                     <Settings className="w-16 h-16 text-primary/30" />

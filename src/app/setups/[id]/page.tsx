@@ -32,10 +32,14 @@ export default async function SetupPage({ params }: { params: Promise<{ id: stri
     where: { id },
     include: {
       author: { select: publicUserSelect },
-      images: { orderBy: { order: "asc" } },
+      images: { orderBy: { order: "asc" }, take: 50 },
       comments: {
         orderBy: { createdAt: "asc" },
+        take: 50,
         include: { author: { select: publicUserSelect } },
+      },
+      _count: {
+        select: { comments: true },
       },
     },
   })
@@ -82,7 +86,7 @@ export default async function SetupPage({ params }: { params: Promise<{ id: stri
             <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mt-5">
               {setup.images.map((img) => (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img key={img.id} src={img.url} alt={img.caption || "Setup photo"} className="aspect-video object-cover rounded-lg border border-border" />
+                <img key={img.id} src={img.url} alt={img.caption || "Setup photo"} loading="lazy" decoding="async" className="aspect-video object-cover rounded-lg border border-border" />
               ))}
             </div>
           )}
@@ -109,7 +113,7 @@ export default async function SetupPage({ params }: { params: Promise<{ id: stri
         {/* Comments */}
         <div className="bg-card rounded-xl border border-border p-6">
           <h2 className="font-semibold mb-4 flex items-center gap-2">
-            <MessageSquare className="w-5 h-5 text-primary" /> Comments ({setup.comments.length})
+            <MessageSquare className="w-5 h-5 text-primary" /> Comments ({setup._count.comments})
           </h2>
           <div className="space-y-4 mb-6">
             {setup.comments.map((c) => (

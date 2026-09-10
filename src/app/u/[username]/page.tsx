@@ -1,22 +1,31 @@
 import { notFound } from "next/navigation"
 import { prisma } from "@/lib/prisma"
+import { unstable_cache } from "next/cache"
 import { buildMetadata, snippet } from "@/lib/seo"
 import ProfileClient from "./profile-client"
+
+const getProfileForMetadata = unstable_cache(
+  async (username: string) => {
+    return prisma.profile.findUnique({
+      where: { username },
+      select: {
+        username: true,
+        bio: true,
+        avatarUrl: true,
+        reputation: true,
+        user: { select: { image: true } },
+      },
+    })
+  },
+  ["profile-metadata"],
+  { revalidate: 300, tags: ["profiles"] }
+)
 
 export async function generateMetadata({ params }: { params: Promise<{ username: string }> }) {
   const { username } = await params
   const decoded = decodeURIComponent(username)
 
-  const profile = await prisma.profile.findUnique({
-    where: { username: decoded },
-    select: {
-      username: true,
-      bio: true,
-      avatarUrl: true,
-      reputation: true,
-      user: { select: { image: true } },
-    },
-  })
+  const profile = await getProfileForMetadata(decoded)
 
   if (!profile) {
     return buildMetadata({ title: "Profile not found", robots: { index: false } })
@@ -38,6 +47,17 @@ export async function generateMetadata({ params }: { params: Promise<{ username:
   })
 }
 
+const getProfileId = unstable_cache(
+  async (username: string) => {
+    return prisma.profile.findUnique({
+      where: { username },
+      select: { id: true },
+    })
+  },
+  ["profile-id"],
+  { revalidate: 300, tags: ["profiles"] }
+)
+
 export default async function PublicProfilePage({
   params,
 }: {
@@ -46,10 +66,7 @@ export default async function PublicProfilePage({
   const { username } = await params
   const decoded = decodeURIComponent(username)
 
-  const profile = await prisma.profile.findUnique({
-    where: { username: decoded },
-    select: { id: true },
-  })
+  const profile = await getProfileId(decoded)
 
   if (!profile) {
     notFound()

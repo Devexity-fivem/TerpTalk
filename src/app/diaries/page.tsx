@@ -1,35 +1,40 @@
 import { prisma } from "@/lib/prisma"
 import { publicUserSelect } from "@/lib/security"
+import { unstable_cache } from "next/cache"
 import { Leaf, Calendar, TrendingUp, Users } from "lucide-react"
 import Link from "next/link"
 import RoleBadge from "@/components/role-badge"
 import EmptyState from "@/components/ui/empty-state"
 
-export const dynamic = "force-dynamic"
+export const revalidate = 300
 
 export const metadata = {
   title: "Grow Diaries",
   description: "Follow real cannabis grow journals — seed to harvest updates, environment data, and results from TerpTalk growers.",
 }
 
-async function getDiaries() {
-  const diaries = await prisma.growDiary.findMany({
-    where: { deleted: false },
-    take: 12,
-    orderBy: [
-      { featured: "desc" },
-      { createdAt: "desc" },
-    ],
-    include: {
-      author: { select: publicUserSelect },
-      _count: {
-        select: { updates: true, followers: true },
+const getDiaries = unstable_cache(
+  async () => {
+    const diaries = await prisma.growDiary.findMany({
+      where: { deleted: false },
+      take: 12,
+      orderBy: [
+        { featured: "desc" },
+        { createdAt: "desc" },
+      ],
+      include: {
+        author: { select: publicUserSelect },
+        _count: {
+          select: { updates: true, followers: true },
+        },
       },
-    },
-  })
+    })
 
-  return diaries
-}
+    return diaries
+  },
+  ["diaries-list"],
+  { revalidate: 300, tags: ["diaries"] }
+)
 
 export default async function DiariesPage() {
   const diaries = await getDiaries()

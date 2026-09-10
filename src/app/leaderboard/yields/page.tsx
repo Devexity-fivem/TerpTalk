@@ -1,10 +1,13 @@
 import { prisma } from "@/lib/prisma"
 import { publicUserSelect } from "@/lib/security"
+import { unstable_cache } from "next/cache"
 import Link from "next/link"
 import { Trophy, Leaf } from "lucide-react"
 import { Avatar } from "@/components/ui/avatar"
 import { buildMetadata } from "@/lib/seo"
 import EmptyState from "@/components/empty-state"
+
+export const revalidate = 300
 
 export const metadata = buildMetadata({
   title: "Strain Yield Leaderboard",
@@ -27,18 +30,26 @@ function toOz(grams: number) {
   return grams / TO_GRAMS.oz
 }
 
+const getYieldDiaries = unstable_cache(
+  async () => {
+    return prisma.growDiary.findMany({
+      where: {
+        harvested: true,
+        deleted: false,
+        yieldAmount: { not: null },
+        strain: { not: null },
+      },
+      include: { author: { select: publicUserSelect } },
+      orderBy: { harvestedAt: "desc" },
+      take: 100,
+    })
+  },
+  ["leaderboard-yields"],
+  { revalidate: 300, tags: ["leaderboard"] }
+)
+
 export default async function YieldLeaderboardPage() {
-  const diaries = await prisma.growDiary.findMany({
-    where: {
-      harvested: true,
-      deleted: false,
-      yieldAmount: { not: null },
-      strain: { not: null },
-    },
-    include: { author: { select: publicUserSelect } },
-    orderBy: { harvestedAt: "desc" },
-    take: 200,
-  })
+  const diaries = await getYieldDiaries()
 
   type Diary = (typeof diaries)[number]
 

@@ -46,7 +46,7 @@ async function getDiscoverData(tab: string, userId?: string) {
     const oneWeekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
     const candidates = await prisma.thread.findMany({
       where: { deleted: false, createdAt: { gte: oneWeekAgo } },
-      take: 200,
+      take: 100,
       include,
     })
     const scored = candidates

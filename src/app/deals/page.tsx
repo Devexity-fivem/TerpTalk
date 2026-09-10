@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma"
+import { unstable_cache } from "next/cache"
 import { DEFAULT_DISCLOSURE } from "@/lib/affiliate"
 import { Tag, ExternalLink, Percent } from "lucide-react"
 import DealsBrowser from "@/components/deals-browser"
@@ -11,20 +12,30 @@ export const metadata = {
   description: "Recommended grow lights, tents, fans, controllers and equipment from TerpTalk's affiliate partners. Community-tested gear with promo codes.",
 }
 
+const getDealsData = unstable_cache(
+  async () => {
+    const [partners, products, setting] = await Promise.all([
+      prisma.affiliatePartner.findMany({
+        where: { active: true },
+        orderBy: [{ featured: "desc" }, { name: "asc" }],
+        include: { _count: { select: { products: true } } },
+      }),
+      prisma.affiliateProduct.findMany({
+        where: { active: true, partner: { active: true } },
+        orderBy: [{ featured: "desc" }, { name: "asc" }],
+        take: 200,
+        include: { partner: { select: { name: true, slug: true, promoCode: true, affiliateUrl: true } } },
+      }),
+      prisma.setting.findUnique({ where: { key: "affiliateDisclosure" } }),
+    ])
+    return { partners, products, setting }
+  },
+  ["deals-data"],
+  { revalidate: 300, tags: ["deals"] }
+)
+
 export default async function DealsPage() {
-  const [partners, products, setting] = await Promise.all([
-    prisma.affiliatePartner.findMany({
-      where: { active: true },
-      orderBy: [{ featured: "desc" }, { name: "asc" }],
-      include: { _count: { select: { products: true } } },
-    }),
-    prisma.affiliateProduct.findMany({
-      where: { active: true, partner: { active: true } },
-      orderBy: [{ featured: "desc" }, { name: "asc" }],
-      include: { partner: { select: { name: true, slug: true, promoCode: true, affiliateUrl: true } } },
-    }),
-    prisma.setting.findUnique({ where: { key: "affiliateDisclosure" } }),
-  ])
+  const { partners, products, setting } = await getDealsData()
   const disclosure = setting?.value || DEFAULT_DISCLOSURE
   const featured = partners.filter((p) => p.featured)
 

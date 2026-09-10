@@ -125,7 +125,7 @@ export default function ContestBoard() {
             <div key={e.id} className="bg-card border border-border rounded-xl overflow-hidden">
               <div className="relative">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={e.imageUrl} alt={e.caption || "Budshot entry"} className="w-full aspect-square object-cover" />
+                <img src={e.imageUrl} alt={e.caption || "Budshot entry"} loading="lazy" decoding="async" className="w-full aspect-square object-cover" />
                 {i === 0 && e.votes > 0 && (
                   <span className="absolute top-2 left-2 bg-amber-500 text-black text-xs font-bold px-2 py-1 rounded-full flex items-center gap-1">
                     <Trophy className="w-3 h-3" /> Leading

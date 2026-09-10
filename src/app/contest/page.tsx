@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma"
 import { publicUserSelect } from "@/lib/security"
+import { unstable_cache } from "next/cache"
 import { previousWeekKey } from "@/lib/week"
 import { Trophy } from "lucide-react"
 import Link from "next/link"
@@ -15,46 +16,50 @@ export const metadata = buildMetadata({
   pathname: "/contest",
 })
 
-// Lazily award the previous week's winner badge (idempotent)
-async function awardLastWeek() {
-  const prev = previousWeekKey()
-  const top = await prisma.contestEntry.findFirst({
-    where: { week: prev },
-    orderBy: { votes: { _count: "desc" } },
-    include: { user: { select: publicUserSelect }, _count: { select: { votes: true } } },
-  })
-  if (!top || top._count.votes === 0) return null
+// Lazily award the previous week's winner badge (idempotent).
+// Cached per week so the badge is not re-awarded on every page view.
+const getLastWeekWinner = unstable_cache(
+  async (week: string) => {
+    const top = await prisma.contestEntry.findFirst({
+      where: { week },
+      orderBy: { votes: { _count: "desc" } },
+      include: { user: { select: publicUserSelect }, _count: { select: { votes: true } } },
+    })
+    if (!top || top._count.votes === 0) return null
 
-  const badge = await prisma.badge.upsert({
-    where: { name: "Weekly Winner" },
-    update: {},
-    create: {
-      name: "Weekly Winner",
-      description: "Won Budshot of the Week",
-      icon: BADGE_ICONS["Weekly Winner"],
-      requirement: "Win a weekly photo contest",
-    },
-  })
-  const has = await prisma.userBadge.findUnique({
-    where: { userId_badgeId: { userId: top.userId, badgeId: badge.id } },
-  })
-  if (!has) {
-    await prisma.userBadge.create({ data: { userId: top.userId, badgeId: badge.id } }).catch(() => {})
-    await prisma.notification.create({
-      data: {
-        userId: top.userId,
-        type: "BADGE",
-        title: "🏆 You won Budshot of the Week!",
-        content: "Your photo took the top spot. Check your new badge.",
-        link: "/contest",
+    const badge = await prisma.badge.upsert({
+      where: { name: "Weekly Winner" },
+      update: {},
+      create: {
+        name: "Weekly Winner",
+        description: "Won Budshot of the Week",
+        icon: BADGE_ICONS["Weekly Winner"],
+        requirement: "Win a weekly photo contest",
       },
-    }).catch(() => {})
-  }
-  return top
-}
+    })
+    const has = await prisma.userBadge.findUnique({
+      where: { userId_badgeId: { userId: top.userId, badgeId: badge.id } },
+    })
+    if (!has) {
+      await prisma.userBadge.create({ data: { userId: top.userId, badgeId: badge.id } }).catch(() => {})
+      await prisma.notification.create({
+        data: {
+          userId: top.userId,
+          type: "BADGE",
+          title: "🏆 You won Budshot of the Week!",
+          content: "Your photo took the top spot. Check your new badge.",
+          link: "/contest",
+        },
+      }).catch(() => {})
+    }
+    return top
+  },
+  ["contest-last-winner"],
+  { revalidate: 3600, tags: ["contest"] }
+)
 
 export default async function ContestPage() {
-  const lastWinner = await awardLastWeek()
+  const lastWinner = await getLastWeekWinner(previousWeekKey())
 
   return (
     <div className="min-h-screen bg-background">
@@ -71,7 +76,7 @@ export default async function ContestPage() {
         {lastWinner && (
           <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-4 mb-6 flex items-center gap-4">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={lastWinner.imageUrl} alt="Last week's winner" className="w-16 h-16 rounded-lg object-cover" />
+            <img src={lastWinner.imageUrl} alt="Last week's winner" loading="lazy" decoding="async" className="w-16 h-16 rounded-lg object-cover" />
             <div>
               <p className="text-xs text-amber-500 font-semibold uppercase tracking-wide">Last week&apos;s winner</p>
               <Link
