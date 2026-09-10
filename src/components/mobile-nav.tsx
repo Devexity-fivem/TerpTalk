@@ -3,7 +3,7 @@
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { useSession } from "next-auth/react"
-import { Home, MessageCircle, Leaf, Bell, User, Search } from "lucide-react"
+import { Home, MessageCircle, Leaf, Bell, User, Search, Plus } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 interface MobileNavProps {
@@ -32,10 +32,18 @@ export default function MobileNav({ unread }: MobileNavProps) {
   const accountLabel = session ? "You" : "Sign in"
 
   return (
-    <nav
-      aria-label="Primary"
-      className="safe-bottom fixed bottom-0 left-0 right-0 z-50 border-t border-border bg-card/95 backdrop-blur lg:hidden"
-    >
+    <>
+      <Link
+        href="/forum/new"
+        aria-label="Create post"
+        className="fixed bottom-20 right-4 z-50 flex h-14 w-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg shadow-primary/30 transition-transform hover:scale-105 active:scale-95 lg:hidden"
+      >
+        <Plus className="h-6 w-6" />
+      </Link>
+      <nav
+        aria-label="Primary"
+        className="safe-bottom fixed bottom-0 left-0 right-0 z-40 border-t border-border bg-card/95 backdrop-blur lg:hidden"
+      >
       <ul className="flex items-stretch">
         {ITEMS.map(({ href, label, icon: Icon, exact }) => {
           const active = isActive(href, exact)
@@ -95,5 +103,6 @@ export default function MobileNav({ unread }: MobileNavProps) {
         </li>
       </ul>
     </nav>
+    </>
   )
 }
