@@ -1,20 +1,20 @@
-import { NextResponse } from "next/server"
-import { getServerSession } from "next-auth"
-import { authOptions } from "@/lib/auth"
+import { NextRequest, NextResponse } from "next/server"
+import { getToken } from "next-auth/jwt"
 import { prisma } from "@/lib/prisma"
 import { unauthorized, forbidden, isBanned } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
 
 // GET — my notifications (most recent 50)
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions)
-    if (!session?.user?.id) return unauthorized()
-    if (await isBanned(session.user.id)) return forbidden()
+    const token = await getToken({ req: request, secret: process.env.NEXTAUTH_SECRET })
+    const userId = token?.id as string | undefined
+    if (!userId) return unauthorized()
+    if (await isBanned(userId)) return forbidden()
 
     const [notifications, unreadCount] = await Promise.all([
       prisma.notification.findMany({
-        where: { userId: session.user.id },
+        where: { userId },
         orderBy: { createdAt: "desc" },
         take: 50,
         select: {
@@ -28,7 +28,7 @@ export async function GET() {
         },
       }),
       prisma.notification.count({
-        where: { userId: session.user.id, read: false },
+        where: { userId, read: false },
       }),
     ])
 
@@ -40,13 +40,14 @@ export async function GET() {
 }
 
 // PATCH — mark notifications read: { ids?: string[] } or { all: true }
-export async function PATCH(request: Request) {
+export async function PATCH(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions)
-    if (!session?.user?.id) return unauthorized()
-    if (await isBanned(session.user.id)) return forbidden()
+    const token = await getToken({ req: request, secret: process.env.NEXTAUTH_SECRET })
+    const userId = token?.id as string | undefined
+    if (!userId) return unauthorized()
+    if (await isBanned(userId)) return forbidden()
 
-    const rl = await rateLimit(`notifications:${session.user.id}`, 60, 60 * 1000)
+    const rl = await rateLimit(`notifications-patch:${userId}`, 60, 60 * 1000)
     if (!rl.allowed) {
       return NextResponse.json({ error: "Too many requests" }, { status: 429 })
     }
@@ -55,7 +56,7 @@ export async function PATCH(request: Request) {
 
     if (body.all === true) {
       await prisma.notification.updateMany({
-        where: { userId: session.user.id, read: false },
+        where: { userId, read: false },
         data: { read: true },
       })
     } else if (Array.isArray(body.ids)) {
@@ -63,7 +64,7 @@ export async function PATCH(request: Request) {
         .filter((i: unknown) => typeof i === "string" && i.length > 0)
         .slice(0, 100)
       await prisma.notification.updateMany({
-        where: { userId: session.user.id, id: { in: ids } },
+        where: { userId, id: { in: ids } },
         data: { read: true },
       })
     } else {

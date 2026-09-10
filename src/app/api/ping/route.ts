@@ -1,26 +1,32 @@
-import { NextResponse } from "next/server"
-import { getServerSession } from "next-auth"
-import { authOptions } from "@/lib/auth"
+import { NextRequest, NextResponse } from "next/server"
+import { getToken } from "next-auth/jwt"
 import { prisma } from "@/lib/prisma"
 
 // POST — lightweight presence ping; updates lastSeenAt + ONLINE status.
-// Called once per session from the navigation component.
-export async function POST() {
+// Uses JWT verification instead of getServerSession to avoid an extra DB round-trip.
+export async function POST(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions)
-    if (!session?.user?.id) {
+    const token = await getToken({ req: request, secret: process.env.NEXTAUTH_SECRET })
+    const userId = token?.id as string | undefined
+    if (!userId) {
       return NextResponse.json({ ok: false }, { status: 401 })
     }
 
-    // Only write if lastSeen is stale (>15 min) to avoid write-per-request
+    // Fetch banned + lastSeenAt in one query; only write when stale (>15 min)
     const user = await prisma.user.findUnique({
-      where: { id: session.user.id },
-      select: { lastSeenAt: true },
+      where: { id: userId },
+      select: { banned: true, lastSeenAt: true },
     })
-    const stale = !user?.lastSeenAt || Date.now() - user.lastSeenAt.getTime() > 15 * 60 * 1000
+    if (!user || user.banned) {
+      return NextResponse.json({ ok: false }, { status: 403 })
+    }
+
+    const stale =
+      !user.lastSeenAt ||
+      Date.now() - user.lastSeenAt.getTime() > 15 * 60 * 1000
     if (stale) {
       await prisma.user.update({
-        where: { id: session.user.id },
+        where: { id: userId },
         data: { lastSeenAt: new Date(), status: "ONLINE" },
       })
     }

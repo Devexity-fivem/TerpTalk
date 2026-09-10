@@ -4,6 +4,8 @@ export async function getGrowStreak(userId: string): Promise<{ streak: number; t
   const [updates, harvestedDiaries] = await Promise.all([
     prisma.diaryUpdate.findMany({
       where: { authorId: userId, diary: { deleted: false } },
+      orderBy: { createdAt: "desc" },
+      take: 1000,
       select: { createdAt: true },
     }),
     prisma.growDiary.count({

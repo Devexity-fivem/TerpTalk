@@ -8,7 +8,9 @@ import LiveStats from "@/components/live-stats"
 import JoinButton from "@/components/join-button"
 import { Avatar } from "@/components/ui/avatar"
 
-export const dynamic = "force-dynamic"
+// Public landing page — prerendered and revalidated every 60s. User-specific UI
+// (e.g. JoinButton) is rendered client-side, so the shell can be edge-cached.
+export const revalidate = 60
 
 const getStats = unstable_cache(
   async () => {
@@ -24,80 +26,96 @@ const getStats = unstable_cache(
   { revalidate: 60 }
 )
 
-async function getLatestDiscussions() {
-  const [categories, latest, diaryUpdates] = await Promise.all([
-    prisma.category.findMany({
-      where: { hidden: false },
-      orderBy: { order: "asc" },
-      select: { name: true, slug: true, description: true, _count: { select: { threads: { where: { deleted: false } } } } },
-    }),
-    prisma.thread.findMany({
-      where: { deleted: false },
-      orderBy: { createdAt: "desc" },
-      take: 6,
-      include: {
-        author: { select: publicUserSelect },
-        category: { select: { name: true, slug: true } },
-        _count: { select: { posts: { where: { deleted: false } } } },
-      },
-    }),
-    prisma.diaryUpdate.findMany({
-      where: { diary: { deleted: false } },
-      orderBy: { createdAt: "desc" },
-      take: 4,
-      include: {
-        diary: {
-          include: {
-            author: { select: publicUserSelect },
-            _count: { select: { followers: true } },
-          },
+const getLatestDiscussions = unstable_cache(
+  async () => {
+    const [categories, latest, diaryUpdates] = await Promise.all([
+      prisma.category.findMany({
+        where: { hidden: false },
+        orderBy: { order: "asc" },
+        select: { name: true, slug: true, description: true, _count: { select: { threads: { where: { deleted: false } } } } },
+      }),
+      prisma.thread.findMany({
+        where: { deleted: false },
+        orderBy: { createdAt: "desc" },
+        take: 6,
+        include: {
+          author: { select: publicUserSelect },
+          category: { select: { name: true, slug: true } },
+          _count: { select: { posts: { where: { deleted: false } } } },
         },
-        author: { select: publicUserSelect },
-        images: { take: 1 },
-      },
-    }),
-  ])
-  return { categories, latest, diaryUpdates }
-}
+      }),
+      prisma.diaryUpdate.findMany({
+        where: { diary: { deleted: false } },
+        orderBy: { createdAt: "desc" },
+        take: 4,
+        include: {
+          diary: {
+            include: {
+              author: { select: publicUserSelect },
+              _count: { select: { followers: true } },
+            },
+          },
+          author: { select: publicUserSelect },
+          images: { take: 1 },
+        },
+      }),
+    ])
+    return { categories, latest, diaryUpdates }
+  },
+  ["home-latest"],
+  { revalidate: 60 }
+)
 
 function threadScore(t: { views: number; replyCount: number; createdAt: Date }) {
   const hours = (Date.now() - new Date(t.createdAt).getTime()) / 36e5
   return (t.views + t.replyCount * 5) / Math.pow(hours + 2, 1.5)
 }
 
-async function getTrendingDiscussions() {
-  const oneWeekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
-  const candidates = await prisma.thread.findMany({
-    where: { deleted: false, createdAt: { gte: oneWeekAgo } },
-    take: 100,
-    include: {
-      author: { select: publicUserSelect },
-      category: { select: { name: true, slug: true } },
-      _count: { select: { posts: { where: { deleted: false } } } },
-    },
-  })
-  return candidates
-    .map((t) => ({ ...t, score: threadScore(t) }))
-    .sort((a, b) => b.score - a.score)
-    .slice(0, 6)
-}
+const getTrendingDiscussions = unstable_cache(
+  async () => {
+    const oneWeekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
+    const candidates = await prisma.thread.findMany({
+      where: { deleted: false, createdAt: { gte: oneWeekAgo } },
+      take: 100,
+      include: {
+        author: { select: publicUserSelect },
+        category: { select: { name: true, slug: true } },
+        _count: { select: { posts: { where: { deleted: false } } } },
+      },
+    })
+    return candidates
+      .map((t) => ({ ...t, score: threadScore(t) }))
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 6)
+  },
+  ["home-trending"],
+  { revalidate: 60 }
+)
 
-async function getActiveMembers() {
-  return await prisma.user.findMany({
-    where: { banned: false, status: "ONLINE" },
-    take: 12,
-    orderBy: { lastSeenAt: "desc" },
-    select: publicUserSelect,
-  })
-}
+const getActiveMembers = unstable_cache(
+  async () => {
+    return await prisma.user.findMany({
+      where: { banned: false, status: "ONLINE" },
+      take: 12,
+      orderBy: { lastSeenAt: "desc" },
+      select: publicUserSelect,
+    })
+  },
+  ["home-active"],
+  { revalidate: 60 }
+)
 
-async function getGrowerOfWeek() {
-  return await prisma.profile.findFirst({
-    where: { user: { banned: false, role: { not: "ADMINISTRATOR" } } },
-    orderBy: { reputation: "desc" },
-    include: { user: { select: { id: true, image: true, createdAt: true } } },
-  })
-}
+const getGrowerOfWeek = unstable_cache(
+  async () => {
+    return await prisma.profile.findFirst({
+      where: { user: { banned: false, role: { not: "ADMINISTRATOR" } } },
+      orderBy: { reputation: "desc" },
+      include: { user: { select: { id: true, image: true, createdAt: true } } },
+    })
+  },
+  ["home-grower-of-week"],
+  { revalidate: 300 }
+)
 
 const NAV_SECTIONS = [
   {

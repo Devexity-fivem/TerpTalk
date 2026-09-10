@@ -1,13 +1,13 @@
-import { NextResponse } from "next/server"
+import { NextRequest, NextResponse } from "next/server"
+import { getToken } from "next-auth/jwt"
+import { unstable_cache } from "next/cache"
 import { prisma } from "@/lib/prisma"
-import { getServerSession } from "next-auth"
-import { authOptions } from "@/lib/auth"
 import { blockExistsBetween, getTrustLevel, getClientIp, hashIp } from "@/lib/security"
-
-const NO_STORE = { "Cache-Control": "no-store, max-age=0, must-revalidate" }
 import { getReputationTier, getTierProgress } from "@/lib/reputation"
 import { getGrowStreak } from "@/lib/grow-streak"
 import { rateLimit } from "@/lib/rate-limit"
+
+const NO_STORE = { "Cache-Control": "no-store, max-age=0, must-revalidate" }
 
 function safeUrl(url: string | null | undefined): string | null {
   if (!url) return null
@@ -20,23 +20,8 @@ function safeUrl(url: string | null | undefined): string | null {
   }
 }
 
-// GET — public profile by username (safe fields only)
-export async function GET(
-  request: Request,
-  { params }: { params: Promise<{ username: string }> }
-) {
-  const ip = getClientIp(request)
-  const rl = await rateLimit(`public-profile:${hashIp(ip)}`, 60, 60 * 1000)
-  if (!rl.allowed) {
-    return NextResponse.json({ error: "Too many requests" }, { status: 429 })
-  }
-
-  try {
-    const { username } = await params
-    if (typeof username !== "string" || username.length > 30) {
-      return NextResponse.json({ error: "Invalid username" }, { status: 400 })
-    }
-
+const getPublicProfileData = unstable_cache(
+  async (username: string) => {
     const profile = await prisma.profile.findUnique({
       where: { username },
       select: {
@@ -74,40 +59,7 @@ export async function GET(
       },
     })
 
-    if (!profile || profile.user.banned) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 })
-    }
-
-    // Privacy: don't reveal block state except whether *I* blocked them / they blocked me
-    const session = await getServerSession(authOptions)
-    let viewerBlocked = false
-    let blockedMe = false
-    let viewerFollowing = false
-    if (session?.user?.id && session.user.id !== profile.user.id) {
-      viewerBlocked = !!(await prisma.block.findUnique({
-        where: {
-          blockerId_blockedId: {
-            blockerId: session.user.id,
-            blockedId: profile.user.id,
-          },
-        },
-        select: { id: true },
-      }))
-      blockedMe = await blockExistsBetween(profile.user.id, session.user.id)
-      viewerFollowing = !!(await prisma.follow.findUnique({
-        where: {
-          followerId_followingId: {
-            followerId: session.user.id,
-            followingId: profile.user.id,
-          },
-        },
-        select: { id: true },
-      }))
-    }
-
-    if (blockedMe) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 })
-    }
+    if (!profile || profile.user.banned) return null
 
     const recentThreads = await prisma.thread.findMany({
       where: {
@@ -143,6 +95,78 @@ export async function GET(
       },
     })
 
+    return {
+      profile,
+      recentThreads,
+      growDiaries,
+      growStreak: { streak, totalUpdates, harvestedDiaries },
+    }
+  },
+  ["public-profile"],
+  { revalidate: 60 }
+)
+
+// GET — public profile by username (safe fields only)
+export async function GET(
+  request: NextRequest,
+  { params }: { params: Promise<{ username: string }> }
+) {
+  const ip = getClientIp(request)
+  const rl = await rateLimit(`public-profile:${hashIp(ip)}`, 60, 60 * 1000)
+  if (!rl.allowed) {
+    return NextResponse.json({ error: "Too many requests" }, { status: 429 })
+  }
+
+  try {
+    const { username } = await params
+    if (typeof username !== "string" || username.length > 30) {
+      return NextResponse.json({ error: "Invalid username" }, { status: 400 })
+    }
+
+    const data = await getPublicProfileData(username)
+    if (!data) {
+      return NextResponse.json({ error: "User not found" }, { status: 404 })
+    }
+
+    const { profile, recentThreads, growDiaries, growStreak } = data
+
+    // Use JWT token for the viewer instead of a full DB session lookup.
+    const token = await getToken({ req: request, secret: process.env.NEXTAUTH_SECRET })
+    const viewerId = token?.id as string | undefined
+
+    let viewerBlocked = false
+    let blockedMe = false
+    let viewerFollowing = false
+    if (viewerId && viewerId !== profile.user.id) {
+      const [block, follow] = await Promise.all([
+        prisma.block.findUnique({
+          where: {
+            blockerId_blockedId: {
+              blockerId: viewerId,
+              blockedId: profile.user.id,
+            },
+          },
+          select: { id: true },
+        }),
+        prisma.follow.findUnique({
+          where: {
+            followerId_followingId: {
+              followerId: viewerId,
+              followingId: profile.user.id,
+            },
+          },
+          select: { id: true },
+        }),
+      ])
+      viewerBlocked = !!block
+      viewerFollowing = !!follow
+      blockedMe = await blockExistsBetween(profile.user.id, viewerId)
+    }
+
+    if (blockedMe) {
+      return NextResponse.json({ error: "User not found" }, { status: 404 })
+    }
+
     return NextResponse.json({
       profile: {
         id: profile.user.id,
@@ -163,9 +187,9 @@ export async function GET(
         trustLevel: getTrustLevel(profile.user.createdAt, profile.reputation),
         reputationTier: getReputationTier(profile.reputation),
         tierProgress: getTierProgress(profile.reputation),
-        growStreak: streak,
-        totalUpdates,
-        harvestedDiaries,
+        growStreak: growStreak.streak,
+        totalUpdates: growStreak.totalUpdates,
+        harvestedDiaries: growStreak.harvestedDiaries,
         badges: profile.user.badges.map((b) => ({
           name: b.badge.name,
           description: b.badge.description,

@@ -8,6 +8,10 @@ interface Stats {
   discussions: number
 }
 
+// How often the client re-fetches live stats. Kept in sync with the server
+// cache revalidation (60s) so we don't waste function invocations.
+const REFRESH_INTERVAL_MS = 60 * 1000
+
 export default function LiveStats({ initial }: { initial: Stats }) {
   const [stats, setStats] = useState<Stats>(initial)
 
@@ -16,6 +20,7 @@ export default function LiveStats({ initial }: { initial: Stats }) {
     let timer: ReturnType<typeof setInterval> | null = null
 
     const fetchStats = async () => {
+      if (document.hidden) return
       try {
         const res = await fetch("/api/stats", { cache: "no-store" })
         if (!res.ok) return
@@ -26,18 +31,34 @@ export default function LiveStats({ initial }: { initial: Stats }) {
       }
     }
 
-    // Refresh on mount and then every 10 seconds
-    fetchStats()
-    timer = setInterval(fetchStats, 10000)
+    const startPolling = () => {
+      fetchStats()
+      if (timer) clearInterval(timer)
+      timer = setInterval(fetchStats, REFRESH_INTERVAL_MS)
+    }
 
-    // Refresh when the tab becomes visible again
-    const onVisible = () => { if (!document.hidden) fetchStats() }
-    document.addEventListener("visibilitychange", onVisible)
+    const stopPolling = () => {
+      if (timer) {
+        clearInterval(timer)
+        timer = null
+      }
+    }
+
+    const onVisibilityChange = () => {
+      if (document.hidden) {
+        stopPolling()
+      } else {
+        startPolling()
+      }
+    }
+
+    startPolling()
+    document.addEventListener("visibilitychange", onVisibilityChange)
 
     return () => {
       cancelled = true
-      if (timer) clearInterval(timer)
-      document.removeEventListener("visibilitychange", onVisible)
+      stopPolling()
+      document.removeEventListener("visibilitychange", onVisibilityChange)
     }
   }, [])
 

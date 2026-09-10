@@ -1,6 +1,5 @@
-import { NextResponse } from "next/server"
-import { getServerSession } from "next-auth"
-import { authOptions } from "@/lib/auth"
+import { NextRequest, NextResponse } from "next/server"
+import { getToken } from "next-auth/jwt"
 import { prisma } from "@/lib/prisma"
 import { unauthorized, publicUserSelect, getClientIp, logSecurityEvent, isBanned, forbidden, blockExistsBetween, hashIp } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
@@ -16,12 +15,11 @@ function senderDto(user: { id?: string; name?: string | null; image?: string | n
 const ISO_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,3})?Z$/
 
 // GET — list conversations, or ?with=<userId> for a thread (marks it read)
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions)
-    if (!session?.user?.id) return unauthorized()
-
-    const userId = session.user.id
+    const token = await getToken({ req: request, secret: process.env.NEXTAUTH_SECRET })
+    const userId = token?.id as string | undefined
+    if (!userId) return unauthorized()
     if (await isBanned(userId)) return forbidden()
 
     const ip = getClientIp(request)
@@ -36,7 +34,7 @@ export async function GET(request: Request) {
 
     if (withId) {
       // Incremental mode: only fetch messages newer than `after` — the
-      // 5s poll then transfers near-empty payloads instead of the whole thread
+      // poll then transfers near-empty payloads instead of the whole thread
       if (after && ISO_RE.test(after)) {
         const afterDate = new Date(after)
         if (isNaN(afterDate.getTime())) {
@@ -141,12 +139,11 @@ export async function GET(request: Request) {
 }
 
 // POST — send a DM: { to, content }
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions)
-    if (!session?.user?.id) return unauthorized()
-
-    const userId = session.user.id
+    const token = await getToken({ req: request, secret: process.env.NEXTAUTH_SECRET })
+    const userId = token?.id as string | undefined
+    if (!token || !userId) return unauthorized()
 
     const { to, content } = await request.json().catch(() => ({}))
     if (typeof to !== "string" || typeof content !== "string" || !content.trim()) {
@@ -190,7 +187,7 @@ export async function POST(request: Request) {
           userId: to,
           type: "DIRECT_MESSAGE",
           title: "New message",
-          content: `${session.user.name || "Someone"} sent you a message`,
+          content: `${((token as { name?: string | null }).name) ?? "Someone"} sent you a message`,
           link: `/messages?with=${userId}`,
         },
       }).catch(() => {})

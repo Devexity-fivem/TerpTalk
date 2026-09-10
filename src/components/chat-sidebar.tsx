@@ -114,8 +114,9 @@ export default function ChatSidebar() {
     const tick = async () => {
       await load()
       if (cancelled) return
-      // With realtime push, a slow 30s poll is just a missed-message safety net
-      timer = setTimeout(tick, realtime ? 30000 : 3000)
+      // With realtime push, a slow 30s poll is just a missed-message safety net.
+      // Without Pusher, poll every 10s to keep function invocations sane on the free tier.
+      timer = setTimeout(tick, realtime ? 30000 : 10000)
     }
 
     const subscribe = async () => {

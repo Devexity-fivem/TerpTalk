@@ -1,6 +1,5 @@
-import { NextResponse } from "next/server"
-import { getServerSession } from "next-auth"
-import { authOptions } from "@/lib/auth"
+import { NextRequest, NextResponse } from "next/server"
+import { getToken } from "next-auth/jwt"
 import { prisma } from "@/lib/prisma"
 import { unauthorized, publicUserSelect, LIMITS, getClientIp, logSecurityEvent, isBanned, forbidden, isModerator } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
@@ -33,17 +32,15 @@ function messageDto(m: ChatMessageWithAuthor) {
   }
 }
 
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions)
+    const token = await getToken({ req: request, secret: process.env.NEXTAUTH_SECRET })
+    const userId = token?.id as string | undefined
+    if (!userId) return unauthorized()
 
-    if (!session?.user?.id) {
-      return unauthorized()
-    }
+    if (await isBanned(userId)) return forbidden("Your account is suspended")
 
-    if (await isBanned(session.user.id)) return forbidden("Your account is suspended")
-
-    const rl = await rateLimit(`chat-read:${session.user.id}`, 120, 60 * 1000)
+    const rl = await rateLimit(`chat-read:${userId}`, 120, 60 * 1000)
     if (!rl.allowed) {
       return NextResponse.json({ error: "Too many requests" }, { status: 429 })
     }
@@ -65,7 +62,7 @@ export async function GET(request: Request) {
 
     // Public rooms are open; private rooms require moderator access until a membership model exists
     if (room.isPrivate) {
-      const user = await prisma.user.findUnique({ where: { id: session.user.id }, select: { role: true } })
+      const user = await prisma.user.findUnique({ where: { id: userId }, select: { role: true } })
       if (!isModerator(user?.role)) {
         return forbidden("Private room")
       }
@@ -107,15 +104,13 @@ export async function GET(request: Request) {
   }
 }
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions)
+    const token = await getToken({ req: request, secret: process.env.NEXTAUTH_SECRET })
+    const userId = token?.id as string | undefined
+    if (!token || !userId) return unauthorized()
 
-    if (!session?.user?.id) {
-      return unauthorized()
-    }
-
-    if (await isBanned(session.user.id)) return forbidden("Your account is suspended")
+    if (await isBanned(userId)) return forbidden("Your account is suspended")
 
     const body = await request.json().catch(() => ({}))
     const { content, roomId } = body
@@ -135,10 +130,10 @@ export async function POST(request: Request) {
     }
 
     // Rate limit: 30 messages per minute per user
-    const rl = await rateLimit(`chat:${session.user.id}`, 30, 60 * 1000)
+    const rl = await rateLimit(`chat:${userId}`, 30, 60 * 1000)
     if (!rl.allowed) {
       await logSecurityEvent("RATE_LIMIT_EXCEEDED", {
-        userId: session.user.id,
+        userId,
         ip: getClientIp(request),
         metadata: { endpoint: "chat/messages" },
       })
@@ -165,7 +160,7 @@ export async function POST(request: Request) {
       data: {
         content,
         roomId,
-        authorId: session.user.id,
+        authorId: userId,
       },
       include: {
         author: { select: publicUserSelect },
@@ -175,10 +170,14 @@ export async function POST(request: Request) {
     const dto = messageDto(message)
 
     // Notify @mentions in chat (fire-and-forget)
+    const actorName =
+      ((token as { name?: string | null }).name) ??
+      ((token as { username?: string | null }).username) ??
+      "Someone"
     notifyMentions(
       content,
-      session.user.id,
-      session.user.name || "Someone",
+      userId,
+      actorName,
       "/",
       "community chat"
     ).catch(() => {})

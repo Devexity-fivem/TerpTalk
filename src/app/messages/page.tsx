@@ -82,10 +82,18 @@ function MessagesInner() {
   }, [status, router, loadConvos])
 
   useEffect(() => {
-    if (withId && session) {
+    if (!withId || !session) return
+    loadThread(withId)
+    const poll = () => {
+      if (document.hidden) return
       loadThread(withId)
-      const t = setInterval(() => loadThread(withId), 5000)
-      return () => clearInterval(t)
+    }
+    const t = setInterval(poll, 10000)
+    const onVisibility = () => { if (!document.hidden) loadThread(withId) }
+    document.addEventListener("visibilitychange", onVisibility)
+    return () => {
+      clearInterval(t)
+      document.removeEventListener("visibilitychange", onVisibility)
     }
   }, [withId, session, loadThread])
 
