@@ -125,6 +125,11 @@ export async function PATCH(request: Request) {
 
     const userId = session.user.id
 
+    const current = await prisma.profile.findUnique({
+      where: { userId },
+      select: { avatarUrl: true },
+    })
+
     if (await isBanned(userId)) {
       return forbidden()
     }
@@ -177,8 +182,8 @@ export async function PATCH(request: Request) {
 
     // Validate avatar — https URL, or data URI from client-side image upload (max ~200KB encoded)
     if (avatarUrl !== undefined && avatarUrl !== null) {
-      if (avatarUrl === "") {
-        avatarUrl = null
+      if (avatarUrl === "" || avatarUrl === current?.avatarUrl) {
+        avatarUrl = avatarUrl === "" ? null : current?.avatarUrl
       } else {
         if (typeof avatarUrl !== "string" || avatarUrl.length > 300_000) {
           return NextResponse.json(
@@ -201,20 +206,28 @@ export async function PATCH(request: Request) {
     }
 
     // Website must be an https:// URL — blocks javascript:/data: stored-XSS links
-    const cleanWebsite = clean(website, 200)
-    if (cleanWebsite !== undefined && cleanWebsite !== null && !/^https:\/\/.+/i.test(cleanWebsite)) {
-      return NextResponse.json(
-        { error: "Website must be an https:// URL" },
-        { status: 400 }
-      )
+    let cleanWebsite = clean(website, 200)
+    if (cleanWebsite !== undefined && cleanWebsite !== null) {
+      if (/^https:\/\/?$/i.test(cleanWebsite)) {
+        cleanWebsite = null
+      } else if (!/^https:\/\/.+/i.test(cleanWebsite)) {
+        return NextResponse.json(
+          { error: "Website must be an https:// URL" },
+          { status: 400 }
+        )
+      }
     }
 
-    const cleanBusinessUrl = clean(businessUrl, 200)
-    if (cleanBusinessUrl !== undefined && cleanBusinessUrl !== null && !/^https:\/\/.+/i.test(cleanBusinessUrl)) {
-      return NextResponse.json(
-        { error: "Business URL must be an https:// URL" },
-        { status: 400 }
-      )
+    let cleanBusinessUrl = clean(businessUrl, 200)
+    if (cleanBusinessUrl !== undefined && cleanBusinessUrl !== null) {
+      if (/^https:\/\/?$/i.test(cleanBusinessUrl)) {
+        cleanBusinessUrl = null
+      } else if (!/^https:\/\/.+/i.test(cleanBusinessUrl)) {
+        return NextResponse.json(
+          { error: "Business URL must be an https:// URL" },
+          { status: 400 }
+        )
+      }
     }
 
     const BUSINESS_TYPES = new Set(["BREEDER", "VENDOR", "GROW_SHOP", "BRAND"])
