@@ -71,6 +71,14 @@ async function getActiveMembers() {
   })
 }
 
+async function getGrowerOfWeek() {
+  return await prisma.profile.findFirst({
+    where: { user: { banned: false, role: { not: "ADMINISTRATOR" } } },
+    orderBy: { reputation: "desc" },
+    include: { user: { select: { id: true, image: true, createdAt: true } } },
+  })
+}
+
 const NAV_SECTIONS = [
   {
     title: "Grow",
@@ -106,11 +114,12 @@ const NAV_SECTIONS = [
 ]
 
 export default async function Home() {
-  const [stats, { categories, latest }, trending, active] = await Promise.all([
+  const [stats, { categories, latest }, trending, active, growerOfWeek] = await Promise.all([
     getStats(),
     getLatestDiscussions(),
     getTrendingDiscussions(),
     getActiveMembers(),
+    getGrowerOfWeek(),
   ])
   return (
     <div className="flex flex-col min-h-screen bg-background">
@@ -355,10 +364,10 @@ export default async function Home() {
                     <Link
                       key={user.id}
                       href={`/u/${user.profile?.username || user.name}`}
-                      className="flex items-center gap-2 px-3 py-2 bg-card rounded-full border border-border hover:border-primary/40 transition-colors"
+                      className="flex items-center gap-2 px-3 py-2 bg-card rounded-full border border-border hover:border-primary/40 transition-colors min-w-0"
                     >
                       <Avatar src={user.image ?? undefined} size="sm" alt={user.profile?.username ?? user.name ?? undefined} />
-                      <span className="text-sm font-medium">{user.profile?.username || user.name}</span>
+                      <span className="text-sm font-medium truncate">{user.profile?.username || user.name}</span>
                       <span className="w-2 h-2 rounded-full bg-green-500" aria-label="Online" />
                     </Link>
                   ))}
@@ -368,6 +377,49 @@ export default async function Home() {
           </div>
         </div>
       </section>
+
+      {/* Grower of the Week */}
+      {growerOfWeek && (
+        <section className="py-14 px-4 sm:px-6 lg:px-8 border-y border-border bg-secondary/20">
+          <div className="max-w-7xl mx-auto">
+            <div className="bg-card rounded-2xl border border-border p-6 sm:p-8 overflow-hidden relative">
+              <div className="absolute top-0 right-0 p-3">
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-500/10 text-amber-500 text-xs font-semibold uppercase tracking-wide">
+                  <Award className="w-3.5 h-3.5" />
+                  Grower of the Week
+                </span>
+              </div>
+              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-5">
+                <Avatar src={growerOfWeek.user.image ?? undefined} size="xl" alt={growerOfWeek.username ?? undefined} />
+                <div className="flex-1 min-w-0">
+                  <h3 className="text-2xl font-bold mb-1">{growerOfWeek.username}</h3>
+                  <p className="text-muted-foreground text-sm mb-3 max-w-xl">
+                    {growerOfWeek.bio || `A dedicated cultivator sharing ${growerOfWeek.favoriteStrain ? `their love for ${growerOfWeek.favoriteStrain}` : "their grow journey"} with the community.`}
+                  </p>
+                  <div className="flex flex-wrap items-center gap-3 text-sm">
+                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-primary/10 text-primary font-medium">
+                      <Trophy className="w-4 h-4" />
+                      {growerOfWeek.reputation} rep
+                    </span>
+                    {growerOfWeek.favoriteStrain && (
+                      <span className="text-muted-foreground">Favorite strain: <span className="text-foreground font-medium">{growerOfWeek.favoriteStrain}</span></span>
+                    )}
+                    {growerOfWeek.growExperience && (
+                      <span className="text-muted-foreground">Experience: <span className="text-foreground font-medium">{growerOfWeek.growExperience}</span></span>
+                    )}
+                  </div>
+                </div>
+                <Link
+                  href={`/u/${growerOfWeek.username}`}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors shrink-0"
+                >
+                  View profile <ArrowRight className="w-4 h-4" />
+                </Link>
+              </div>
+            </div>
+          </div>
+        </section>
+      )}
 
       {/* CTA Section */}
       <section className="relative overflow-hidden py-20 px-4 sm:px-6 lg:px-8">
