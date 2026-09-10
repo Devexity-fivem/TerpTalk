@@ -40,7 +40,7 @@ export function buildMetadata({
   og?: { title?: string; description?: string; image?: string; type?: "website" | "article" }
   twitter?: { title?: string; description?: string; image?: string }
 } = {}): Metadata {
-  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://terp-talk.vercel.app"
+  const baseUrl = "https://terp-talk.vercel.app"
   const fullTitle = title ? `${title} | ${SITE_NAME}` : DEFAULT_TITLE
   const fullDescription = description || DEFAULT_DESCRIPTION
 
