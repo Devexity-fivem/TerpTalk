@@ -27,6 +27,7 @@ export const BADGE_ICONS: Record<string, string> = {
   "Dedicated Grower": "https://api.iconify.design/game-icons/fire.svg",
   "Beta Tester": "https://api.iconify.design/game-icons/test-tube-held.svg",
   "Weekly Winner": "https://api.iconify.design/game-icons/laurels-trophy.svg",
+  "Verified YouTuber": "https://api.iconify.design/game-icons/video-camera.svg",
 }
 
 export const BADGE_DESCRIPTIONS: Record<string, string> = {
@@ -48,6 +49,7 @@ export const BADGE_DESCRIPTIONS: Record<string, string> = {
   "Dedicated Grower": "Posted grow updates 7 days in a row.",
   "Beta Tester": "Joined TerpTalk during the beta and helped shape the community.",
   "Weekly Winner": "Won Budshot of the Week.",
+  "Verified YouTuber": "A featured cannabis grow content creator on YouTube.",
 }
 
 // Seed all open-source badges. Safe to re-run — it updates icons/descriptions.

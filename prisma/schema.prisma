@@ -82,6 +82,7 @@ model Profile {
   businessName String?
   businessType String?
   businessUrl  String?
+  youtubeChannelUrl String?
   notifyOnReply        Boolean  @default(true)
   notifyOnMention      Boolean  @default(true)
   notifyOnCategoryFollow Boolean @default(true)
