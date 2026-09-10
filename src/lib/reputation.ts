@@ -165,6 +165,37 @@ async function checkTierChange(userId: string, oldRep: number, newRep: number) {
   }).catch(() => {})
 }
 
+// Automatically promote trusted, active members to VERIFIED_MEMBER.
+const VERIFIED_MIN_REPUTATION = 1500
+const VERIFIED_MIN_AGE_DAYS = 7
+
+async function autoVerify(
+  userId: string,
+  newRep: number,
+  user: { role: string | null; createdAt: Date; banned: boolean } | null
+) {
+  if (!user || user.banned) return
+  if (user.role !== "MEMBER") return
+
+  const ageDays = (Date.now() - new Date(user.createdAt).getTime()) / (1000 * 60 * 60 * 24)
+  if (ageDays < VERIFIED_MIN_AGE_DAYS || newRep < VERIFIED_MIN_REPUTATION) return
+
+  await prisma.user.update({
+    where: { id: userId },
+    data: { role: "VERIFIED_MEMBER" },
+  })
+
+  await prisma.notification.create({
+    data: {
+      userId,
+      type: "REPUTATION",
+      title: "Verified Member",
+      content: "You automatically earned the Verified Member tag for reaching 1,500 reputation and being active for 7 days. Enjoy 1.5x reputation gains.",
+      link: "/profile",
+    },
+  }).catch(() => {})
+}
+
 // Award reputation points and re-check badge eligibility.
 export async function awardReputation(
   userId: string,
@@ -174,7 +205,7 @@ export async function awardReputation(
 ) {
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { role: true },
+    select: { role: true, createdAt: true, banned: true },
   })
   const multiplier = user?.role === "VERIFIED_MEMBER" ? VERIFIED_MULTIPLIER : 1
   const adjusted = amount * multiplier
@@ -194,6 +225,7 @@ export async function awardReputation(
     data: { reputation: { increment: adjusted } },
   })
   await checkTierChange(userId, oldRep, newRep)
+  await autoVerify(userId, newRep, user)
   await checkBadges(userId)
 }
 
