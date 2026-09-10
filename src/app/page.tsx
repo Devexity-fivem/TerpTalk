@@ -1,6 +1,7 @@
 import { MessageSquare, Award, MessageCircle, Dna, Sprout, Calendar, Settings, Trophy, BookOpen, Stethoscope, Tag, Medal, Menu, PenLine, ArrowRight, Calculator, TrendingUp, Users, Leaf } from "lucide-react"
 import Link from "next/link"
 import { prisma } from "@/lib/prisma"
+import { unstable_cache } from "next/cache"
 import { publicUserSelect } from "@/lib/security"
 import CannabisLeaf from "@/components/cannabis-leaf"
 import LiveStats from "@/components/live-stats"
@@ -9,15 +10,19 @@ import { Avatar } from "@/components/ui/avatar"
 
 export const dynamic = "force-dynamic"
 
-async function getStats() {
-  const [members, diaries, threads, posts] = await Promise.all([
-    prisma.user.count({ where: { banned: false } }),
-    prisma.growDiary.count({ where: { deleted: false } }),
-    prisma.thread.count({ where: { deleted: false } }),
-    prisma.post.count({ where: { deleted: false } }),
-  ])
-  return { members, diaries, discussions: threads + posts }
-}
+const getStats = unstable_cache(
+  async () => {
+    const [members, diaries, threads, posts] = await Promise.all([
+      prisma.user.count({ where: { banned: false } }),
+      prisma.growDiary.count({ where: { deleted: false } }),
+      prisma.thread.count({ where: { deleted: false } }),
+      prisma.post.count({ where: { deleted: false } }),
+    ])
+    return { members, diaries, discussions: threads + posts }
+  },
+  ["home-stats"],
+  { revalidate: 60 }
+)
 
 async function getLatestDiscussions() {
   const [categories, latest, diaryUpdates] = await Promise.all([
