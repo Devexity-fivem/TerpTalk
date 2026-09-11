@@ -1,4 +1,4 @@
-import { MessageSquare, Award, MessageCircle, Dna, Sprout, Calendar, Settings, Trophy, BookOpen, Stethoscope, Tag, Medal, Menu, PenLine, ArrowRight, Calculator, TrendingUp, Users, Leaf } from "lucide-react"
+import { MessageSquare, Award, Dna, Sprout, Calendar, Trophy, BookOpen, Tag, PenLine, ArrowRight, TrendingUp, Users, Leaf } from "lucide-react"
 import Link from "next/link"
 import { prisma } from "@/lib/prisma"
 import { unstable_cache } from "next/cache"
@@ -117,38 +117,13 @@ const getGrowerOfWeek = unstable_cache(
   { revalidate: 300 }
 )
 
-const NAV_SECTIONS = [
-  {
-    title: "Grow",
-    description: "Track, document, and improve your cultivation",
-    items: [
-      { icon: Sprout, title: "Grow Diaries", desc: "Document your grow from seed to harvest.", href: "/diaries" },
-      { icon: Settings, title: "Setup Showcases", desc: "Show off your tent, lights, and gear.", href: "/setups" },
-      { icon: Dna, title: "Strain Database", desc: "Compare genetics and grower photos.", href: "/strains" },
-      { icon: Stethoscope, title: "Plant Problem Solver", desc: "Diagnose symptoms and find fixes.", href: "/help" },
-    ],
-  },
-  {
-    title: "Community",
-    description: "Talk, share, and connect with other growers",
-    items: [
-      { icon: MessageSquare, title: "Discussions", desc: "Ask questions and trade techniques.", href: "/forum" },
-      { icon: Calendar, title: "Feed", desc: "Latest posts from growers you follow.", href: "/feed" },
-      { icon: MessageCircle, title: "Community Chat", desc: "Real-time help and hangout.", href: null },
-      { icon: Trophy, title: "Budshot of the Week", desc: "Photo contest and community votes.", href: "/contest" },
-      { icon: Medal, title: "Leaderboard", desc: "Top contributors by reputation.", href: "/leaderboard" },
-    ],
-  },
-  {
-    title: "Learn & Save",
-    description: "Guides, tools, and partner deals",
-    items: [
-      { icon: BookOpen, title: "Grow Guides", desc: "Staff guides from germination to curing.", href: "/guides" },
-      { icon: Tag, title: "Deals", desc: "Partner gear and discount codes.", href: "/deals" },
-      { icon: Calculator, title: "Grow Light Calculator", desc: "Estimate electricity costs.", href: "/calculator" },
-      { icon: Award, title: "Reputation & Badges", desc: "Earn rep and unlock badges.", href: "/leaderboard" },
-    ],
-  },
+const EXPLORE_CARDS = [
+  { icon: Sprout, title: "Grow Diaries", desc: "Document your grow from seed to harvest.", href: "/diaries" },
+  { icon: MessageSquare, title: "Discussions", desc: "Ask questions and trade techniques.", href: "/forum" },
+  { icon: Dna, title: "Strain Database", desc: "Compare genetics and grower photos.", href: "/strains" },
+  { icon: Trophy, title: "Budshot of the Week", desc: "Photo contest and community votes.", href: "/contest" },
+  { icon: BookOpen, title: "Grow Guides", desc: "Staff guides from germination to curing.", href: "/guides" },
+  { icon: Tag, title: "Deals", desc: "Partner gear and discount codes.", href: "/deals" },
 ]
 
 export default async function Home() {
@@ -182,50 +157,30 @@ export default async function Home() {
           <p className="text-lg sm:text-xl text-muted-foreground max-w-2xl mx-auto mb-4">
             A 21+ community built around cannabis cultivation. Ask questions, share your grow, compare genetics, troubleshoot problems, and learn from other growers.
           </p>
-          <p className="text-sm text-muted-foreground max-w-xl mx-auto mb-6 flex items-center justify-center gap-2">
-            <Menu className="w-4 h-4" />
-            Open the menu or jump below to explore every corner of the community.
-          </p>
-
-          {/* Quick-start actions */}
-          <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-3 mb-8">
+          {/* Primary and secondary actions */}
+          <div className="flex flex-col sm:flex-row gap-4 justify-center mb-6">
             <Link
               href="/forum/new"
-              className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-lg bg-card border border-border hover:border-primary/40 hover:bg-secondary transition-colors"
+              className="inline-flex items-center justify-center gap-2 bg-primary text-primary-foreground px-8 py-3 rounded-xl font-semibold hover:bg-primary/90 transition-all shadow-lg shadow-primary/25 hover:shadow-primary/40"
             >
               <PenLine className="w-4 h-4" />
-              Start a thread
+              Start a discussion
             </Link>
+            <Link
+              href="/forum"
+              className="inline-flex items-center justify-center gap-2 px-8 py-3 rounded-xl font-semibold border border-border bg-card hover:bg-secondary transition-colors"
+            >
+              Browse the forums
+              <ArrowRight className="w-4 h-4" />
+            </Link>
+          </div>
+          <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-3">
             <Link
               href="/diaries/new"
               className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-lg bg-card border border-border hover:border-primary/40 hover:bg-secondary transition-colors"
             >
               <Sprout className="w-4 h-4" />
               New diary
-            </Link>
-            <Link
-              href="/setups/new"
-              className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-lg bg-card border border-border hover:border-primary/40 hover:bg-secondary transition-colors"
-            >
-              <Settings className="w-4 h-4" />
-              Share setup
-            </Link>
-            <Link
-              href="/strains/new"
-              className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-lg bg-card border border-border hover:border-primary/40 hover:bg-secondary transition-colors"
-            >
-              <Dna className="w-4 h-4" />
-              Add strain
-            </Link>
-          </div>
-
-          <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Link
-              href="/forum"
-              className="bg-primary text-primary-foreground px-8 py-3 rounded-xl font-semibold hover:bg-primary/90 transition-all shadow-lg shadow-primary/25 hover:shadow-primary/40 text-center inline-flex items-center justify-center gap-2"
-            >
-              Browse the Forums
-              <ArrowRight className="w-4 h-4" />
             </Link>
             <JoinButton />
           </div>
@@ -349,47 +304,27 @@ export default async function Home() {
         </div>
       </section>
 
-      {/* Features Section */}
+      {/* Explore Section */}
       <section className="py-20 px-4 sm:px-6 lg:px-8">
         <div className="max-w-7xl mx-auto">
-          <h2 className="text-3xl font-bold text-center mb-3 tracking-tight">Find your way around</h2>
-          <p className="text-center text-muted-foreground mb-14 max-w-xl mx-auto">
-            Every feature, organized by what you want to do.
+          <h2 className="text-3xl font-bold text-center mb-3 tracking-tight">Explore the community</h2>
+          <p className="text-center text-muted-foreground mb-10 max-w-xl mx-auto">
+            The main places to grow, discuss, and discover.
           </p>
-          <div className="space-y-16">
-            {NAV_SECTIONS.map((section) => (
-              <div key={section.title}>
-                <div className="mb-6">
-                  <h3 className="text-xl font-semibold flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-primary" />
-                    {section.title}
-                  </h3>
-                  <p className="text-sm text-muted-foreground ml-4">{section.description}</p>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {EXPLORE_CARDS.map(({ icon: Icon, title, desc, href }) => (
+              <Link key={title} href={href} className="block group">
+                <div className="bg-card p-5 rounded-xl border border-border h-full transition-all hover:border-primary/40 hover:-translate-y-1 hover:shadow-lg hover:shadow-primary/10 flex flex-col">
+                  <div className="bg-primary/10 w-10 h-10 rounded-lg flex items-center justify-center mb-3 ring-1 ring-primary/20">
+                    <Icon className="w-5 h-5 text-primary" />
+                  </div>
+                  <h4 className="text-base font-semibold mb-1">{title}</h4>
+                  <p className="text-sm text-muted-foreground leading-relaxed flex-1">{desc}</p>
+                  <div className="mt-3 flex items-center gap-1 text-xs font-medium text-primary">
+                    Open <ArrowRight className="w-3 h-3" />
+                  </div>
                 </div>
-                <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                  {section.items.map(({ icon: Icon, title, desc, href }) => {
-                    const card = (
-                      <div className="bg-card p-5 rounded-xl border border-border h-full transition-all hover:border-primary/40 hover:-translate-y-1 hover:shadow-lg hover:shadow-primary/10 flex flex-col">
-                        <div className="bg-primary/10 w-10 h-10 rounded-lg flex items-center justify-center mb-3 ring-1 ring-primary/20">
-                          <Icon className="w-5 h-5 text-primary" />
-                        </div>
-                        <h4 className="text-base font-semibold mb-1">{title}</h4>
-                        <p className="text-sm text-muted-foreground leading-relaxed flex-1">{desc}</p>
-                        {href && (
-                          <div className="mt-3 flex items-center gap-1 text-xs font-medium text-primary">
-                            Open <ArrowRight className="w-3 h-3" />
-                          </div>
-                        )}
-                      </div>
-                    )
-                    return href ? (
-                      <Link key={title} href={href} className="block">{card}</Link>
-                    ) : (
-                      <div key={title}>{card}</div>
-                    )
-                  })}
-                </div>
-              </div>
+              </Link>
             ))}
           </div>
         </div>

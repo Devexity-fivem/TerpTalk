@@ -220,14 +220,20 @@ function NewThreadForm() {
               Minimum 10 characters. Be descriptive and helpful.
             </p>
 
-            <TagInput value={tags} onChange={setTags} disabled={loading} />
-
-            <PollComposer value={poll} onChange={setPoll} disabled={loading} />
-
-            <div>
-              <span className="block text-sm font-medium mb-2">Images</span>
-              <ImageUploader value={images} onChange={setImages} disabled={loading} />
-            </div>
+            <details className="border border-border rounded-lg p-4 group">
+              <summary className="text-sm font-medium cursor-pointer select-none list-none flex items-center justify-between">
+                <span>Images, tags, or poll (optional)</span>
+                <span aria-hidden="true" className="group-open:rotate-180 transition-transform">▼</span>
+              </summary>
+              <div className="pt-4 space-y-4">
+                <div>
+                  <span className="block text-sm font-medium mb-2">Images</span>
+                  <ImageUploader value={images} onChange={setImages} disabled={loading} />
+                </div>
+                <TagInput value={tags} onChange={setTags} disabled={loading} />
+                <PollComposer value={poll} onChange={setPoll} disabled={loading} />
+              </div>
+            </details>
 
             {error && (
               <div className="bg-destructive/10 text-destructive px-4 py-2 rounded-lg text-sm">

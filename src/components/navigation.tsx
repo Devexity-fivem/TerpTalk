@@ -6,7 +6,7 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import {
   Leaf, User, LogOut, MessageCircle, Home, Calendar,
-  Settings, Dna, Bell, Shield, Menu, X, Mail, Search, Trophy, BookOpen, Stethoscope, Tag, Award, Calculator, Info, FileText, Video, TrendingUp,
+  Settings, Dna, Bell, Shield, Menu, X, Mail, Search, Trophy, BookOpen, Stethoscope, Tag, TrendingUp,
 } from "lucide-react"
 import CannabisLeaf from "@/components/cannabis-leaf"
 import MobileNav from "@/components/mobile-nav"
@@ -24,14 +24,8 @@ const NAV_LINKS = [
   { href: "/strains", label: "Strains", icon: Dna },
   { href: "/contest", label: "Contest", icon: Trophy },
   { href: "/guides", label: "Guides", icon: BookOpen },
-  { href: "/help", label: "Plant Help", icon: Stethoscope },
   { href: "/deals", label: "Deals", icon: Tag },
-  { href: "/leaderboard", label: "Leaderboard", icon: Award },
-  { href: "/calculator", label: "Calculator", icon: Calculator },
-  { href: "/youtubers", label: "YouTubers", icon: Video },
-  { href: "/about", label: "About", icon: Info },
-  { href: "/terms", label: "Terms", icon: FileText },
-  { href: "/privacy", label: "Privacy", icon: Shield },
+  { href: "/help", label: "Plant Help", icon: Stethoscope },
 ]
 
 // Shown inline on large screens; the full list stays in the drawer.
