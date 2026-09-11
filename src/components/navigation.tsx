@@ -16,18 +16,20 @@ import CreateMenu from "@/components/create-menu"
 import { cn } from "@/lib/utils"
 
 const NAV_LINKS = [
-  { href: "/", label: "Home", icon: Home },
-  { href: "/discover", label: "Discover", icon: TrendingUp },
-  { href: "/feed", label: "Feed", icon: Calendar },
-  { href: "/forum", label: "Discussions", icon: MessageCircle },
-  { href: "/diaries", label: "Grow Diaries", icon: Leaf },
-  { href: "/setups", label: "Setups", icon: Settings },
-  { href: "/strains", label: "Strains", icon: Dna },
-  { href: "/contest", label: "Contest", icon: Trophy },
-  { href: "/guides", label: "Guides", icon: BookOpen },
-  { href: "/deals", label: "Deals", icon: Tag },
-  { href: "/help", label: "Plant Help", icon: Stethoscope },
+  { href: "/", label: "Home", icon: Home, section: "Explore" },
+  { href: "/discover", label: "Discover", icon: TrendingUp, section: "Explore" },
+  { href: "/feed", label: "Feed", icon: Calendar, section: "Explore" },
+  { href: "/forum", label: "Discussions", icon: MessageCircle, section: "Community" },
+  { href: "/diaries", label: "Grow Diaries", icon: Leaf, section: "Community" },
+  { href: "/setups", label: "Setups", icon: Settings, section: "Community" },
+  { href: "/guides", label: "Guides", icon: BookOpen, section: "Community" },
+  { href: "/help", label: "Plant Help", icon: Stethoscope, section: "Community" },
+  { href: "/strains", label: "Strains", icon: Dna, section: "Library" },
+  { href: "/contest", label: "Contest", icon: Trophy, section: "Library" },
+  { href: "/deals", label: "Deals", icon: Tag, section: "Library" },
 ]
+
+const NAV_SECTIONS = ["Explore", "Community", "Library"]
 
 // Shown inline on large screens; the full list stays in the drawer.
 const DESKTOP_LINKS = [
@@ -237,7 +239,7 @@ export function Navigation() {
         {/* Drawer */}
         {menuOpen && (
           <div id="tt-nav-drawer" className="max-h-[calc(100vh-4rem)] overflow-y-auto border-t border-border bg-card">
-            <div className="mx-auto max-w-7xl space-y-1 px-4 py-3 lg:grid lg:grid-cols-3 lg:gap-1 lg:space-y-0">
+            <div className="mx-auto grid max-w-7xl auto-rows-min grid-cols-1 gap-6 px-4 py-3 md:grid-cols-2 lg:grid-cols-3">
               <form
                 action="/search"
                 onSubmit={(e) => {
@@ -258,42 +260,53 @@ export function Navigation() {
                 </label>
               </form>
 
-              {NAV_LINKS.map(({ href, label, icon: Icon }) => (
-                <Link key={href} href={href} className={linkClass(href)} onClick={() => setMenuOpen(false)}>
-                  <Icon className="h-4 w-4" />
-                  {label}
-                </Link>
+              {NAV_SECTIONS.map((section) => (
+                <div key={section} className="space-y-1">
+                  <div className="px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    {section}
+                  </div>
+                  {NAV_LINKS.filter((l) => l.section === section).map(({ href, label, icon: Icon }) => (
+                    <Link key={href} href={href} className={linkClass(href)} onClick={() => setMenuOpen(false)}>
+                      <Icon className="h-4 w-4" />
+                      {label}
+                    </Link>
+                  ))}
+                </div>
               ))}
 
-              <button
-                onClick={() => { openChat(); setMenuOpen(false) }}
-                className={cn(
-                  "flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-medium transition-colors",
-                  "text-muted-foreground hover:bg-secondary hover:text-foreground"
+              <div className="space-y-1">
+                <div className="px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  Connect
+                </div>
+                <button
+                  onClick={() => { openChat(); setMenuOpen(false) }}
+                  className={cn(
+                    "flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-medium transition-colors",
+                    "text-muted-foreground hover:bg-secondary hover:text-foreground"
+                  )}
+                >
+                  <MessageCircle className="h-4 w-4" />
+                  Chat
+                </button>
+                {session && (
+                  <>
+                    <Link href="/messages" className={linkClass("/messages")} onClick={() => setMenuOpen(false)}>
+                      <Mail className="h-4 w-4" />
+                      Messages
+                    </Link>
+                    <Link href="/profile" className={linkClass("/profile")} onClick={() => setMenuOpen(false)}>
+                      <User className="h-4 w-4" />
+                      Profile
+                    </Link>
+                  </>
                 )}
-              >
-                <MessageCircle className="h-4 w-4" />
-                Chat
-              </button>
-
-              {session && (
-                <>
-                  <Link href="/messages" className={linkClass("/messages")} onClick={() => setMenuOpen(false)}>
-                    <Mail className="h-4 w-4" />
-                    Messages
-                  </Link>
-                  <Link href="/profile" className={linkClass("/profile")} onClick={() => setMenuOpen(false)}>
-                    <User className="h-4 w-4" />
-                    Profile
-                  </Link>
-                </>
-              )}
+              </div>
               {isStaff && (
-                <div className="pt-2">
+                <div className="space-y-1 md:col-span-2 lg:col-span-3">
                   <div className="px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-amber-500/80">
                     Staff Tools
                   </div>
-                  <div className="mt-1 space-y-1">
+                  <div className="grid grid-cols-1 gap-1 md:grid-cols-2 lg:grid-cols-3">
                     {isMod && (
                       <Link href="/moderation" className={cn(linkClass("/moderation"), "!text-amber-500")} onClick={() => setMenuOpen(false)}>
                         <Shield className="h-4 w-4" />
