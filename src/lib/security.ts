@@ -173,7 +173,14 @@ export function getClientIp(request: { headers: Headers | Record<string, string 
 }
 
 export function hashIp(ip: string): string {
-  const salt = process.env.IP_HASH_SALT || process.env.NEXTAUTH_SECRET || "ip-salt"
+  const salt = process.env.IP_HASH_SALT || process.env.NEXTAUTH_SECRET
+  if (!salt) {
+    if (process.env.NODE_ENV === "production") {
+      throw new Error("IP_HASH_SALT or NEXTAUTH_SECRET must be set in production")
+    }
+    // Dev-only fallback so local testing still works; not safe for production.
+    return createHash("sha256").update(`ip-salt:${ip}`).digest("hex").slice(0, 32)
+  }
   return createHash("sha256").update(`${salt}:${ip}`).digest("hex").slice(0, 32)
 }
 

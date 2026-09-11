@@ -2,13 +2,23 @@ import { NextResponse } from "next/server"
 import { requireAdmin } from "@/lib/require-staff"
 import { prisma } from "@/lib/prisma"
 import { forbidden } from "@/lib/security"
+import { rateLimit } from "@/lib/rate-limit"
+
+const MAX_DAYS = 90
+const MAX_PAGE_SIZE = 100
 
 // GET — centralized admin audit log (ADMINISTRATOR only)
 // Combines moderation actions and security events, newest first.
+// ?from=ISO&to=ISO&page=1&limit=100
 export async function GET(request: Request) {
   const admin = await requireAdmin()
   if (!admin) {
     return forbidden()
+  }
+
+  const rl = await rateLimit(`admin-audit:${admin.id}`, 30, 60 * 1000)
+  if (!rl.allowed) {
+    return NextResponse.json({ error: "Too many requests" }, { status: 429 })
   }
 
   const { searchParams } = new URL(request.url)
@@ -16,11 +26,27 @@ export async function GET(request: Request) {
   const dateFrom = searchParams.get("from")
   const dateTo = searchParams.get("to")
 
-  const fromDate = dateFrom ? new Date(dateFrom) : undefined
-  const toDate = dateTo ? new Date(dateTo) : undefined
-  if ((dateFrom && isNaN(fromDate?.getTime() ?? 0)) || (dateTo && isNaN(toDate?.getTime() ?? 0))) {
-    return NextResponse.json({ error: "Invalid date" }, { status: 400 })
+  let fromDate: Date | undefined
+  let toDate: Date | undefined
+  if (dateFrom) {
+    fromDate = new Date(dateFrom)
+    if (isNaN(fromDate.getTime())) {
+      return NextResponse.json({ error: "Invalid date" }, { status: 400 })
+    }
   }
+  if (dateTo) {
+    toDate = new Date(dateTo)
+    if (isNaN(toDate.getTime())) {
+      return NextResponse.json({ error: "Invalid date" }, { status: 400 })
+    }
+  }
+  if (fromDate && toDate && toDate.getTime() - fromDate.getTime() > MAX_DAYS * 24 * 60 * 60 * 1000) {
+    return NextResponse.json({ error: `Date range must be within ${MAX_DAYS} days` }, { status: 400 })
+  }
+
+  const page = Math.max(1, Number(searchParams.get("page")) || 1)
+  const limit = Math.min(MAX_PAGE_SIZE, Math.max(1, Number(searchParams.get("limit")) || 100))
+  const skip = (page - 1) * limit
 
   const where = {
     createdAt: {
@@ -33,13 +59,15 @@ export async function GET(request: Request) {
     prisma.moderationAction.findMany({
       where,
       orderBy: { createdAt: "desc" },
-      take: 100,
+      take: limit,
+      skip,
       include: { moderator: { select: { profile: { select: { username: true } } } } },
     }),
     prisma.securityEvent.findMany({
       where,
       orderBy: { createdAt: "desc" },
-      take: 100,
+      take: limit,
+      skip,
     }),
   ])
 

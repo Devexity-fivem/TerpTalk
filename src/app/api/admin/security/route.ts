@@ -2,16 +2,28 @@ import { NextResponse } from "next/server"
 import { requireAdmin } from "@/lib/require-staff"
 import { prisma } from "@/lib/prisma"
 import { forbidden } from "@/lib/security"
+import { rateLimit } from "@/lib/rate-limit"
 
 // GET — recent security events (ADMINISTRATOR only)
 // Note: ipHash/userAgent stay in the DB for abuse correlation but are
 // never returned to the UI. Events are auto-purged after 90 days —
 // security telemetry doesn't need indefinite retention.
 const RETENTION_DAYS = 90
+const MAX_PAGE_SIZE = 100
 
-export async function GET() {
-  const session = { user: await requireAdmin() }
-  if (!session.user) return forbidden()
+export async function GET(request: Request) {
+  const admin = await requireAdmin()
+  if (!admin) return forbidden()
+
+  const rl = await rateLimit(`admin-security:${admin.id}`, 30, 60 * 1000)
+  if (!rl.allowed) {
+    return NextResponse.json({ error: "Too many requests" }, { status: 429 })
+  }
+
+  const { searchParams } = new URL(request.url)
+  const page = Math.max(1, Number(searchParams.get("page")) || 1)
+  const limit = Math.min(MAX_PAGE_SIZE, Math.max(1, Number(searchParams.get("limit")) || 50))
+  const skip = (page - 1) * limit
 
   // Opportunistic retention enforcement
   prisma.securityEvent
@@ -23,7 +35,8 @@ export async function GET() {
 
   const events = await prisma.securityEvent.findMany({
     orderBy: { createdAt: "desc" },
-    take: 50,
+    take: limit,
+    skip,
   })
 
   const userIds = [...new Set(events.map((e) => e.userId).filter(Boolean))] as string[]

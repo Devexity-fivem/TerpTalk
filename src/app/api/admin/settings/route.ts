@@ -21,6 +21,11 @@ export async function GET() {
   const admin = await requireAdmin()
   if (!admin) return forbidden()
 
+  const rl = await rateLimit(`admin-settings-read:${admin.id}`, 60, 60 * 1000)
+  if (!rl.allowed) {
+    return NextResponse.json({ error: "Too many requests" }, { status: 429 })
+  }
+
   const rows = await prisma.setting.findMany({
     where: { key: { in: Object.values(SITE_SETTINGS) } },
     select: { key: true, value: true, updatedAt: true },

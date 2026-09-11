@@ -12,6 +12,11 @@ export async function GET(request: Request) {
   const admin = await requireAdmin()
   if (!admin) return forbidden()
 
+  const rl = await rateLimit(`admin-media:${admin.id}`, 30, 60 * 1000)
+  if (!rl.allowed) {
+    return NextResponse.json({ error: "Too many requests" }, { status: 429 })
+  }
+
   const { searchParams } = new URL(request.url)
   const q = (searchParams.get("q") || "").trim().slice(0, 60)
   const type = (searchParams.get("type") as MediaType | null) || undefined

@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { unauthorized, isAdmin, forbidden, getClientIp, logSecurityEvent } from "@/lib/security"
 import { requireModerator } from "@/lib/require-staff"
+import { rateLimit } from "@/lib/rate-limit"
 
 const CONTENT_TYPES = new Set(["THREAD", "POST", "CHAT_MESSAGE", "DIARY", "SETUP"])
 const ACTION_TYPES = new Set([
@@ -189,12 +190,24 @@ export async function POST(request: Request) {
 }
 
 // GET — recent moderation actions (fresh DB-verified staff check)
-export async function GET() {
-  if (!(await requireModerator())) return forbidden()
+export async function GET(request: Request) {
+  const staff = await requireModerator()
+  if (!staff) return forbidden()
+
+  const rl = await rateLimit(`mod-actions:${staff.id}`, 30, 60 * 1000)
+  if (!rl.allowed) {
+    return NextResponse.json({ error: "Too many requests" }, { status: 429 })
+  }
+
+  const { searchParams } = new URL(request.url)
+  const page = Math.max(1, Number(searchParams.get("page")) || 1)
+  const limit = Math.min(100, Math.max(1, Number(searchParams.get("limit")) || 50))
+  const skip = (page - 1) * limit
 
   const actions = await prisma.moderationAction.findMany({
     orderBy: { createdAt: "desc" },
-    take: 100,
+    take: limit,
+    skip,
     include: {
       moderator: {
         select: { profile: { select: { username: true } } },

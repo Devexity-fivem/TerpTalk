@@ -3,13 +3,26 @@ import { prisma } from "@/lib/prisma"
 import { forbidden } from "@/lib/security"
 import { requireAdmin } from "@/lib/require-staff"
 import { getBadgeByName } from "@/lib/badge-registry"
+import { rateLimit } from "@/lib/rate-limit"
 
 const BADGE_NAME = "Verified YouTuber"
+const MAX_PAGE_SIZE = 100
 
 // GET — list YouTuber applicants and verified creators (ADMINISTRATOR only)
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    if (!(await requireAdmin())) return forbidden()
+    const admin = await requireAdmin()
+    if (!admin) return forbidden()
+
+    const rl = await rateLimit(`admin-youtubers:${admin.id}`, 30, 60 * 1000)
+    if (!rl.allowed) {
+      return NextResponse.json({ error: "Too many requests" }, { status: 429 })
+    }
+
+    const { searchParams } = new URL(request.url)
+    const page = Math.max(1, Number(searchParams.get("page")) || 1)
+    const limit = Math.min(MAX_PAGE_SIZE, Math.max(1, Number(searchParams.get("limit")) || 50))
+    const skip = (page - 1) * limit
 
     const users = await prisma.user.findMany({
       where: { profile: { youtubeChannelUrl: { not: null } } },
@@ -28,7 +41,8 @@ export async function GET() {
         },
       },
       orderBy: { createdAt: "desc" },
-      take: 100,
+      take: limit,
+      skip,
     })
 
     return NextResponse.json({
@@ -52,7 +66,13 @@ export async function GET() {
 // POST — approve / toggle Verified YouTuber badge (ADMINISTRATOR only)
 export async function POST(request: Request) {
   try {
-    if (!(await requireAdmin())) return forbidden()
+    const admin = await requireAdmin()
+    if (!admin) return forbidden()
+
+    const rl = await rateLimit(`admin-youtubers:${admin.id}`, 60, 60 * 60 * 1000)
+    if (!rl.allowed) {
+      return NextResponse.json({ error: "Too many requests" }, { status: 429 })
+    }
 
     const body = await request.json().catch(() => ({}))
     const { userId } = body

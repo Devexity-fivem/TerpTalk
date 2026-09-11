@@ -2,12 +2,31 @@ import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { forbidden } from "@/lib/security"
 import { requireAdmin } from "@/lib/require-staff"
+import { rateLimit } from "@/lib/rate-limit"
+
+const MAX_DAYS = 90
+const MAX_CLICKS_WINDOW = 5000
 
 // GET — affiliate click analytics (DB-verified admin only)
-export async function GET() {
-  if (!(await requireAdmin())) return forbidden()
+// ?days=7|30|90 (default 30)
+export async function GET(request: Request) {
+  const admin = await requireAdmin()
+  if (!admin) return forbidden()
 
-  const [total, byPartner, byProduct, byPage, recent] = await Promise.all([
+  const rl = await rateLimit(`admin-affiliate-stats:${admin.id}`, 10, 60 * 1000)
+  if (!rl.allowed) {
+    return NextResponse.json({ error: "Too many requests" }, { status: 429 })
+  }
+
+  const { searchParams } = new URL(request.url)
+  const rawDays = searchParams.get("days")
+  const days = Math.min(
+    Number.isInteger(Number(rawDays)) && Number(rawDays) > 0 ? Number(rawDays) : 30,
+    MAX_DAYS
+  )
+  const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000)
+
+  const [total, byPartner, byProduct, byPage, recent, clicks] = await Promise.all([
     prisma.affiliateClick.count(),
     prisma.affiliateClick.groupBy({ by: ["partnerId"], _count: true }),
     prisma.affiliateClick.groupBy({ by: ["productId"], _count: true }),
@@ -17,6 +36,12 @@ export async function GET() {
       take: 20,
       select: { page: true, createdAt: true, partner: { select: { name: true } }, product: { select: { name: true } } },
     }),
+    prisma.affiliateClick.findMany({
+      where: { createdAt: { gte: since } },
+      orderBy: { createdAt: "desc" },
+      take: MAX_CLICKS_WINDOW,
+      select: { createdAt: true },
+    }),
   ])
 
   const partners = await prisma.affiliatePartner.findMany({ select: { id: true, name: true } })
@@ -24,12 +49,6 @@ export async function GET() {
   const pName = Object.fromEntries(partners.map((p) => [p.id, p.name]))
   const prName = Object.fromEntries(products.map((p) => [p.id, p.name]))
 
-  // Clicks per day, last 30 days
-  const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000)
-  const clicks = await prisma.affiliateClick.findMany({
-    where: { createdAt: { gte: thirtyDaysAgo } },
-    select: { createdAt: true },
-  })
   const byDay: Record<string, number> = {}
   for (const c of clicks) {
     const day = c.createdAt.toISOString().slice(0, 10)

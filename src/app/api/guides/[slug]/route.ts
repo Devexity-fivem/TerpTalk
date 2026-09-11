@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { unauthorized, forbidden, getClientIp, logSecurityEvent, isModerator, getTrustLevel } from "@/lib/security"
+import { unauthorized, forbidden, getClientIp, logSecurityEvent, isModerator } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
 import { checkMaintenance } from "@/lib/maintenance"
 
@@ -58,13 +58,10 @@ export async function PATCH(
     })
     if (!user || user.banned) return forbidden()
 
-    const level = getTrustLevel(user.createdAt, user.profile?.reputation ?? 0)
-    const canEdit = guide.authorId === session.user.id ||
-      isModerator(user.role) ||
-      ["Established", "Veteran", "Expert"].includes(level)
+    const canEdit = guide.authorId === session.user.id || isModerator(user.role)
 
     if (!canEdit) {
-      return forbidden("You need Established trust or higher to edit guides")
+      return forbidden("Only the guide author or a moderator can edit this guide")
     }
 
     const updated = await prisma.$transaction(async (tx) => {

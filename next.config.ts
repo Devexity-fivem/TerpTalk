@@ -20,7 +20,7 @@ const securityHeaders = [
       "default-src 'self'",
       `script-src 'self' 'unsafe-inline' https://*.hcaptcha.com${process.env.NODE_ENV === "development" ? " 'unsafe-eval'" : ""}`,
       "style-src 'self' 'unsafe-inline'",
-      "img-src 'self' data: blob: https: https://*.vercel-storage.com",
+      "img-src 'self' data: blob: https://*.vercel-storage.com https://*.public.blob.vercel-storage.com",
       "font-src 'self' data:",
       "connect-src 'self' https://*.hcaptcha.com https://*.pusher.com wss://*.pusher.com" +
         (process.env.NODE_ENV === "development" ? " ws: wss:" : ""),

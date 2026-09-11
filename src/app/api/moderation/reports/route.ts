@@ -2,13 +2,21 @@ import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { forbidden, getClientIp, logSecurityEvent } from "@/lib/security"
 import { requireModerator, requireStaff } from "@/lib/require-staff"
+import { rateLimit } from "@/lib/rate-limit"
 
 const VALID_REPORT_STATUSES = ["PENDING", "REVIEWING", "ESCALATED", "RESOLVED", "DISMISSED"]
+const MAX_DAYS = 90
+const MAX_PAGE_SIZE = 100
 
 // GET — moderation queue (DB-verified staff: support, moderators, admins)
 export async function GET(request: Request) {
   const staff = await requireStaff()
   if (!staff) return forbidden()
+
+  const rl = await rateLimit(`mod-reports:${staff.id}`, 30, 60 * 1000)
+  if (!rl.allowed) {
+    return NextResponse.json({ error: "Too many requests" }, { status: 429 })
+  }
 
   const { searchParams } = new URL(request.url)
   const status = searchParams.get("status") || undefined
@@ -21,6 +29,13 @@ export async function GET(request: Request) {
   if ((dateFrom && isNaN(fromDate?.getTime() ?? 0)) || (dateTo && isNaN(toDate?.getTime() ?? 0))) {
     return NextResponse.json({ error: "Invalid date" }, { status: 400 })
   }
+  if (fromDate && toDate && toDate.getTime() - fromDate.getTime() > MAX_DAYS * 24 * 60 * 60 * 1000) {
+    return NextResponse.json({ error: `Date range must be within ${MAX_DAYS} days` }, { status: 400 })
+  }
+
+  const page = Math.max(1, Number(searchParams.get("page")) || 1)
+  const limit = Math.min(MAX_PAGE_SIZE, Math.max(1, Number(searchParams.get("limit")) || 50))
+  const skip = (page - 1) * limit
 
   const where: Record<string, unknown> = {
     createdAt: {
@@ -39,7 +54,8 @@ export async function GET(request: Request) {
   const reports = await prisma.report.findMany({
     where,
     orderBy: { createdAt: "desc" },
-    take: 100,
+    take: limit,
+    skip,
     include: {
       reporter: {
         select: { id: true, profile: { select: { username: true } } },

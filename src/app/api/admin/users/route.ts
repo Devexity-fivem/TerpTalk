@@ -15,9 +15,18 @@ function escapeLike(str: string): string {
 }
 
 // GET — list/search users (ADMINISTRATOR only)
+const MAX_PAGE_SIZE = 100
+
+// GET — list/search users (ADMINISTRATOR only)
 export async function GET(request: Request) {
   try {
-    if (!(await requireAdmin())) return forbidden()
+    const admin = await requireAdmin()
+    if (!admin) return forbidden()
+
+    const rl = await rateLimit(`admin-users:${admin.id}`, 30, 60 * 1000)
+    if (!rl.allowed) {
+      return NextResponse.json({ error: "Too many requests" }, { status: 429 })
+    }
 
     const { searchParams } = new URL(request.url)
     const q = (searchParams.get("q") || "").trim().slice(0, 60)
@@ -26,6 +35,10 @@ export async function GET(request: Request) {
     if (!["all", "banned", "staff"].includes(filter)) {
       return NextResponse.json({ error: "Invalid filter" }, { status: 400 })
     }
+
+    const page = Math.max(1, Number(searchParams.get("page")) || 1)
+    const limit = Math.min(MAX_PAGE_SIZE, Math.max(1, Number(searchParams.get("limit")) || 50))
+    const skip = (page - 1) * limit
 
     const contains = q ? { contains: escapeLike(q), mode: "insensitive" as const } : undefined
 
@@ -41,7 +54,8 @@ export async function GET(request: Request) {
         ...(filter === "staff" && { role: { in: ["MODERATOR", "ADMINISTRATOR"] } }),
       },
       orderBy: { createdAt: "desc" },
-      take: 50,
+      take: limit,
+      skip,
       select: {
         id: true,
         name: true,

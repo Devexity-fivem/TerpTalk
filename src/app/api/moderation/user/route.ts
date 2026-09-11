@@ -2,10 +2,17 @@ import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { forbidden } from "@/lib/security"
 import { requireStaff } from "@/lib/require-staff"
+import { rateLimit } from "@/lib/rate-limit"
 
 // GET ?username= — staff lookup of a member's moderation-relevant profile
 export async function GET(request: Request) {
-  if (!(await requireStaff())) return forbidden()
+  const staff = await requireStaff()
+  if (!staff) return forbidden()
+
+  const rl = await rateLimit(`mod-user:${staff.id}`, 60, 60 * 1000)
+  if (!rl.allowed) {
+    return NextResponse.json({ error: "Too many requests" }, { status: 429 })
+  }
 
   const { searchParams } = new URL(request.url)
   const username = (searchParams.get("username") || "").trim().slice(0, 30)

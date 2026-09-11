@@ -2,13 +2,29 @@ import { NextResponse } from "next/server"
 import { requireAdmin } from "@/lib/require-staff"
 import { prisma } from "@/lib/prisma"
 import { forbidden } from "@/lib/security"
+import { rateLimit } from "@/lib/rate-limit"
+
+const MAX_PAGE_SIZE = 100
 
 // GET — detailed user data for admin user detail page
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const admin = await requireAdmin()
   if (!admin) return forbidden()
 
+  const rl = await rateLimit(`admin-user-detail:${admin.id}`, 60, 60 * 1000)
+  if (!rl.allowed) {
+    return NextResponse.json({ error: "Too many requests" }, { status: 429 })
+  }
+
   const { id } = await params
+  if (!id || typeof id !== "string") {
+    return NextResponse.json({ error: "Invalid user id" }, { status: 400 })
+  }
+
+  const { searchParams } = new URL(request.url)
+  const page = Math.max(1, Number(searchParams.get("page")) || 1)
+  const limit = Math.min(MAX_PAGE_SIZE, Math.max(1, Number(searchParams.get("limit")) || 50))
+  const skip = (page - 1) * limit
 
   const user = await prisma.user.findUnique({
     where: { id },
@@ -51,7 +67,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     prisma.moderationAction.findMany({
       where: { targetUserId: id },
       orderBy: { createdAt: "desc" },
-      take: 50,
+      take: limit,
+      skip,
       include: { moderator: { select: { profile: { select: { username: true } } } } },
     }),
     prisma.report.count({ where: { reportedId: id } }),
