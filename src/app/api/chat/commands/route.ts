@@ -18,6 +18,7 @@ import {
 import { rateLimit } from "@/lib/rate-limit"
 import { checkMaintenance } from "@/lib/maintenance"
 import { getPusher } from "@/lib/pusher"
+import { postBotMessage } from "@/lib/terpbot"
 
 type ChatMessageWithAuthor = {
   id: string
@@ -83,24 +84,6 @@ export async function POST(request: NextRequest) {
     const admin = isAdmin(user.role)
     const displayName = user.profile?.username || user.name || "Staff"
 
-    const getOrCreateBot = async () => {
-      const existing = await prisma.user.findFirst({
-        where: { profile: { username: "terpbot" } },
-        select: { id: true },
-      })
-      if (existing) return existing
-      const created = await prisma.user.create({
-        data: {
-          name: "TerpBot",
-          ageVerified: true,
-          status: "ONLINE",
-          profile: { create: { username: "terpbot" } },
-        },
-        select: { id: true },
-      })
-      return created
-    }
-
     const toChatDto = (message: ChatMessageWithAuthor) => {
       const author = message.author as unknown as {
         id: string
@@ -124,16 +107,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const postBot = async (text: string) => {
-      const bot = await getOrCreateBot()
-      const message = await prisma.chatMessage.create({
-        data: { roomId, authorId: bot.id, content: text },
-        include: { author: { select: publicUserSelect } },
-      })
-      const dto = toChatDto(message)
-      getPusher()?.trigger(`private-chat-${roomId}`, "new-message", dto).catch(() => {})
-      return dto
-    }
+    const postBot = (text: string) => postBotMessage(roomId, text)
 
     const resolveTarget = async (raw?: string) => {
       if (!raw) return null

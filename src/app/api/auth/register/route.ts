@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server"
+import { NextResponse, after } from "next/server"
 import { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
 import bcrypt from "bcryptjs"
@@ -14,6 +14,7 @@ import {
 import { awardReputation, REP_POINTS } from "@/lib/reputation"
 import { getBooleanSetting, SITE_SETTINGS } from "@/lib/settings"
 import { checkMaintenance } from "@/lib/maintenance"
+import { announceNewMember } from "@/lib/terpbot"
 
 export async function POST(request: Request) {
   const ip = getClientIp(request)
@@ -188,6 +189,10 @@ export async function POST(request: Request) {
       userAgent,
       metadata: referrerId ? { referredById: referrerId } : undefined,
     })
+
+    // TerpBot welcomes the new member in community chat — deferred so the
+    // signup response isn't delayed by the post.
+    after(() => announceNewMember(username).then(() => {}))
 
     // Reward the referrer
     if (referrerUserId) {

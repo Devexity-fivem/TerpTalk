@@ -8,6 +8,7 @@ import {
   getReputationTier,
 } from "@/lib/reputation-config"
 import { seedBadges } from "@/lib/badges"
+import { announceBadges, announceTierUp } from "@/lib/terpbot"
 
 // Re-exported for existing server-side callers.
 export {
@@ -190,6 +191,14 @@ async function checkTierChange(userId: string, oldRep: number, newRep: number) {
       link: "/profile",
     },
   }).catch(() => {})
+
+  const profile = await prisma.profile.findUnique({
+    where: { userId },
+    select: { username: true },
+  })
+  if (profile?.username) {
+    await announceTierUp(profile.username, newTier.name, newRep).catch(() => null)
+  }
 }
 
 // Automatically promote trusted, active members to VERIFIED_MEMBER.
@@ -283,6 +292,7 @@ export async function checkBadges(userId: string) {
   })
   const earnedIds = new Set(earned.map((b) => b.badgeId))
 
+  const newlyEarned: string[] = []
   for (const badge of allBadges) {
     if (earnedIds.has(badge.id)) continue
     const rule = BADGE_RULES[badge.name]
@@ -291,6 +301,7 @@ export async function checkBadges(userId: string) {
     await prisma.userBadge.create({
       data: { userId, badgeId: badge.id },
     })
+    newlyEarned.push(badge.name)
     await prisma.notification.create({
       data: {
         userId,
@@ -300,5 +311,16 @@ export async function checkBadges(userId: string) {
         link: "/profile",
       },
     }).catch(() => {})
+  }
+
+  // Celebrate new badges in community chat (one message, not one per badge).
+  if (newlyEarned.length > 0) {
+    const profile = await prisma.profile.findUnique({
+      where: { userId },
+      select: { username: true },
+    })
+    if (profile?.username) {
+      await announceBadges(profile.username, newlyEarned).catch(() => null)
+    }
   }
 }

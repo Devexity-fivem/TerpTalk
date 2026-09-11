@@ -1,10 +1,11 @@
-import { NextResponse } from "next/server"
+import { NextResponse, after } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { unauthorized, forbidden, isBanned, isAdmin } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
 import { checkMaintenance } from "@/lib/maintenance"
+import { announceHarvest } from "@/lib/terpbot"
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await getServerSession(authOptions)
@@ -85,9 +86,19 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     where: { id },
     data,
     include: {
-      author: { select: { id: true, name: true } },
+      author: { select: { id: true, name: true, profile: { select: { username: true } } } },
     },
   })
+
+  // TerpBot celebrates the harvest in community chat.
+  if (harvested) {
+    const username = updated.author.profile?.username || updated.author.name || "a member"
+    const yieldText =
+      updated.yieldAmount != null && updated.yieldUnit
+        ? `${updated.yieldAmount}${updated.yieldUnit}`
+        : undefined
+    after(() => announceHarvest(username, updated.title, yieldText).then(() => {}))
+  }
 
   return NextResponse.json({ diary: updated })
 }
