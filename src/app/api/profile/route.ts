@@ -6,6 +6,7 @@ import { unauthorized, forbidden, getClientIp, logSecurityEvent, LIMITS, isBanne
 import { storeImage, deleteImagesIfUnreferenced } from "@/lib/blob"
 import { getReputationTier, getTierProgress } from "@/lib/reputation"
 import { rateLimit } from "@/lib/rate-limit"
+import { checkMaintenance } from "@/lib/maintenance"
 import bcrypt from "bcryptjs"
 
 const NO_STORE = { "Cache-Control": "no-store, max-age=0, must-revalidate" }
@@ -123,6 +124,9 @@ export async function PATCH(request: Request) {
   let newAvatarBlobUrl: string | undefined
 
   try {
+    const maintenance = await checkMaintenance()
+    if (maintenance) return maintenance
+
     const session = await getServerSession(authOptions)
 
     if (!session?.user?.id) {
@@ -345,6 +349,9 @@ export async function DELETE(request: Request) {
   const userAgent = request.headers.get("user-agent")
 
   try {
+    const maintenance = await checkMaintenance()
+    if (maintenance) return maintenance
+
     const session = await getServerSession(authOptions)
 
     if (!session?.user?.id) {

@@ -5,11 +5,15 @@ import { prisma } from "@/lib/prisma"
 import { unauthorized, publicUserSelect, LIMITS, getClientIp, logSecurityEvent, isBanned, forbidden } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
 import { storeImages, deleteImagesIfUnreferenced } from "@/lib/blob"
+import { checkMaintenance } from "@/lib/maintenance"
 
 export async function POST(request: Request) {
   let storedImages: string[] = []
 
   try {
+    const maintenance = await checkMaintenance()
+    if (maintenance) return maintenance
+
     const session = await getServerSession(authOptions)
 
     if (!session?.user?.id) {

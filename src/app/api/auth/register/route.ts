@@ -12,6 +12,7 @@ import {
 } from "@/lib/security"
 import { awardReputation, REP_POINTS } from "@/lib/reputation"
 import { getBooleanSetting, SITE_SETTINGS } from "@/lib/settings"
+import { checkMaintenance } from "@/lib/maintenance"
 
 export async function POST(request: Request) {
   const ip = getClientIp(request)
@@ -19,6 +20,9 @@ export async function POST(request: Request) {
   const userAgent = request.headers.get("user-agent")
 
   try {
+    const maintenance = await checkMaintenance()
+    if (maintenance) return maintenance
+
     if (!(await getBooleanSetting(SITE_SETTINGS.REGISTRATION_ENABLED, true))) {
       return NextResponse.json({ error: "Registration is currently disabled" }, { status: 403 })
     }

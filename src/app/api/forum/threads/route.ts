@@ -10,6 +10,7 @@ import { awardReputation, REP_POINTS, REP_TIERS } from "@/lib/reputation"
 import { notifyMentions } from "@/lib/mentions"
 import { storeImages, deleteImagesIfUnreferenced } from "@/lib/blob"
 import { getBooleanSetting, SITE_SETTINGS } from "@/lib/settings"
+import { checkMaintenance } from "@/lib/maintenance"
 
 // Helper function to create a slug from a string
 function createSlug(text: string): string {
@@ -40,6 +41,9 @@ export async function POST(request: Request) {
     if (!session?.user?.id) {
       return unauthorized()
     }
+
+    const maintenance = await checkMaintenance()
+    if (maintenance) return maintenance
 
     if (!(await getBooleanSetting(SITE_SETTINGS.NEW_THREADS_ENABLED, true)) && !isModerator(session.user.role)) {
       return forbidden("New thread creation is temporarily disabled")

@@ -6,6 +6,7 @@ import { unauthorized, getClientIp, logSecurityEvent, isBanned, forbidden, isMod
 import { rateLimit } from "@/lib/rate-limit"
 import { awardReputation, REP_POINTS } from "@/lib/reputation"
 import { storeImage, deleteImagesIfUnreferenced } from "@/lib/blob"
+import { checkMaintenance } from "@/lib/maintenance"
 
 const VALID_KINDS = new Set(["PLANT", "FLOWER"])
 
@@ -14,6 +15,9 @@ export async function POST(request: Request) {
   let imageUrl: string | undefined
 
   try {
+    const maintenance = await checkMaintenance()
+    if (maintenance) return maintenance
+
     const session = await getServerSession(authOptions)
     if (!session?.user?.id) {
       return unauthorized()

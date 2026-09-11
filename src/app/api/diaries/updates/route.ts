@@ -6,12 +6,16 @@ import { unauthorized, publicUserSelect, LIMITS, getClientIp, logSecurityEvent, 
 import { rateLimit } from "@/lib/rate-limit"
 import { awardReputation, REP_POINTS } from "@/lib/reputation"
 import { storeImages, deleteImagesIfUnreferenced } from "@/lib/blob"
+import { checkMaintenance } from "@/lib/maintenance"
 import { BADGE_ICONS } from "@/lib/badges"
 
 export async function POST(request: Request) {
   let storedImages: string[] = []
 
   try {
+    const maintenance = await checkMaintenance()
+    if (maintenance) return maintenance
+
     const session = await getServerSession(authOptions)
 
     if (!session?.user?.id) {

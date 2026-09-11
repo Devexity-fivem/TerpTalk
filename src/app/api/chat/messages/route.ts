@@ -5,6 +5,8 @@ import { unauthorized, publicUserSelect, LIMITS, getClientIp, logSecurityEvent, 
 import { rateLimit } from "@/lib/rate-limit"
 import { notifyMentions } from "@/lib/mentions"
 import { getPusher } from "@/lib/pusher"
+import { getBooleanSetting, SITE_SETTINGS } from "@/lib/settings"
+import { checkMaintenance } from "@/lib/maintenance"
 
 const ISO_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,3})?Z$/
 
@@ -106,11 +108,18 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    const maintenance = await checkMaintenance()
+    if (maintenance) return maintenance
+
     const token = await getToken({ req: request, secret: process.env.NEXTAUTH_SECRET })
     const userId = token?.id as string | undefined
     if (!token || !userId) return unauthorized()
 
     if (!(await isSessionValid(userId, token?.sessionVersion as number | undefined))) return forbidden("Your account is suspended")
+
+    if (!(await getBooleanSetting(SITE_SETTINGS.CHAT_ENABLED, true))) {
+      return forbidden("Chat is temporarily disabled")
+    }
 
     const body = await request.json().catch(() => ({}))
     const { content, roomId } = body
