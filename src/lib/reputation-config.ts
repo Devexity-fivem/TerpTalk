@@ -18,6 +18,7 @@ export const REP_POINTS = {
   STRAIN_PHOTO: 5,
   LIKE_RECEIVED: 1,
   REFERRAL: 15,
+  DAILY_LOGIN: 1,
 } as const
 
 export interface ReputationTier {

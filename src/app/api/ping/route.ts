@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { getToken } from "next-auth/jwt"
 import { prisma } from "@/lib/prisma"
 import { forbidden, unauthorized } from "@/lib/security"
+import { awardReputation } from "@/lib/reputation"
 
 // POST — lightweight presence ping; updates lastSeenAt + ONLINE status.
 // Uses JWT verification instead of getServerSession to avoid an extra DB round-trip.
@@ -28,6 +29,16 @@ export async function POST(request: NextRequest) {
         where: { id: userId },
         data: { lastSeenAt: new Date(), status: "ONLINE" },
       })
+
+      // Award a small daily check-in rep once per 24 hours.
+      const dayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000)
+      const recentLogin = await prisma.reputationEvent.findFirst({
+        where: { userId, type: "DAILY_LOGIN", createdAt: { gte: dayAgo } },
+        orderBy: { createdAt: "desc" },
+      })
+      if (!recentLogin) {
+        await awardReputation(userId, "DAILY_LOGIN", 1, "Daily check-in")
+      }
     }
 
     return NextResponse.json({ ok: true })

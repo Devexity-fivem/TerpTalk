@@ -8,6 +8,8 @@ import { signOut } from "next-auth/react"
 import Link from "next/link"
 import RoleBadge from "@/components/role-badge"
 import AchievementBadge from "@/components/achievement-badge"
+import ReputationRoadmap from "@/components/reputation-roadmap"
+import ReputationEarn from "@/components/reputation-earn"
 import { useToast } from "@/components/ui/toast"
 import { getBadgeByName, BADGE_RARITIES } from "@/lib/badge-registry"
 import { REP_POINTS } from "@/lib/reputation-config"
@@ -684,6 +686,11 @@ export default function ProfilePage() {
             <p className="text-xs text-muted-foreground">
               Earn rep by posting, journaling, adding strains, and getting likes. Verified members earn 1.5x rep.
             </p>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <ReputationRoadmap reputation={profileData.stats.reputation} />
+            <ReputationEarn />
           </div>
 
           {/* Saved Threads */}
