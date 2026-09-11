@@ -82,6 +82,65 @@ export const BADGE_REGISTRY: BadgeDefinition[] = [
   { name: "Trusted Member", description: "Recognized by staff as a trusted community member.", requirement: "Awarded by staff.", rarity: r("epic"), icon: "ShieldCheck" },
   { name: "Moderator", description: "Helps keep the community safe.", requirement: "Hold the moderator role.", rarity: r("rare"), icon: "Shield" },
   { name: "Staff", description: "A member of the TerpTalk team.", requirement: "Hold the administrator or staff role.", rarity: r("legendary"), icon: "ShieldCheck" },
+
+  // First steps
+  { name: "First Thread", description: "Started your first discussion thread.", requirement: "Create one thread.", rarity: r("common"), icon: "SquarePen" },
+  { name: "First Strain", description: "Added your first strain to the database.", requirement: "Add one strain.", rarity: r("common"), icon: "Dna" },
+
+  // Post milestones
+  { name: "Prolific Poster", description: "Made 250 forum posts.", requirement: "Publish 250 posts.", rarity: r("rare"), icon: "MessageCircle" },
+  { name: "Thread Weaver", description: "Created 100 discussion threads.", requirement: "Create 100 threads.", rarity: r("rare"), icon: "PenLine" },
+  { name: "Community Pillar", description: "Made 500 combined posts and threads.", requirement: "Publish 500 posts or threads.", rarity: r("epic"), icon: "MessageSquare" },
+  { name: "Century Poster", description: "Made 100 forum posts.", requirement: "Publish 100 posts.", rarity: r("rare"), icon: "MessageCircle" },
+  { name: "Veteran Poster", description: "Made 500 forum posts.", requirement: "Publish 500 posts.", rarity: r("epic"), icon: "MessageSquare" },
+  { name: "Master Poster", description: "Made 1,000 forum posts.", requirement: "Publish 1,000 posts.", rarity: r("epic"), icon: "MessageSquare" },
+  { name: "Grand Poster", description: "Made 2,500 forum posts.", requirement: "Publish 2,500 posts.", rarity: r("legendary"), icon: "PenTool" },
+  { name: "Legendary Poster", description: "Made 5,000 forum posts.", requirement: "Publish 5,000 posts.", rarity: r("legendary"), icon: "PenTool" },
+  { name: "Mythic Poster", description: "Made 10,000 forum posts.", requirement: "Publish 10,000 posts.", rarity: r("legendary"), icon: "PenTool" },
+
+  // Diary milestones
+  { name: "Master Gardener", description: "Created 25 grow diaries.", requirement: "Create 25 grow diaries.", rarity: r("epic"), icon: "BookOpen" },
+  { name: "Diary Legend", description: "Created 50 grow diaries.", requirement: "Create 50 grow diaries.", rarity: r("legendary"), icon: "BookMarked" },
+
+  // Strain milestones
+  { name: "Strain Master", description: "Added 25 strains to the database.", requirement: "Add 25 strains.", rarity: r("epic"), icon: "Dna" },
+  { name: "Strain Legend", description: "Added 50 strains to the database.", requirement: "Add 50 strains.", rarity: r("legendary"), icon: "Dna" },
+  { name: "Strain God", description: "Added 100 strains to the database.", requirement: "Add 100 strains.", rarity: r("legendary"), icon: "Dna" },
+
+  // Photo milestones
+  { name: "Shutterbug", description: "Shared 50 photos.", requirement: "Upload 50 photos.", rarity: r("epic"), icon: "Aperture" },
+  { name: "Photo Legend", description: "Shared 100 photos.", requirement: "Upload 100 photos.", rarity: r("legendary"), icon: "Aperture" },
+  { name: "Photo God", description: "Shared 250 photos.", requirement: "Upload 250 photos.", rarity: r("legendary"), icon: "Aperture" },
+
+  // Chat milestones
+  { name: "Socialite", description: "Sent 100 chat messages.", requirement: "Send 100 chat messages.", rarity: r("rare"), icon: "MessageCircle" },
+  { name: "Talk of the Town", description: "Sent 500 chat messages.", requirement: "Send 500 chat messages.", rarity: r("epic"), icon: "MessageCircle" },
+  { name: "Chat Legend", description: "Sent 1,000 chat messages.", requirement: "Send 1,000 chat messages.", rarity: r("legendary"), icon: "MessageCircle" },
+
+  // Referral milestones
+  { name: "Ambassador", description: "Brought 25 new members to the community.", requirement: "Have 25 successful referrals.", rarity: r("epic"), icon: "Users" },
+  { name: "Founder", description: "Brought 50 new members to the community.", requirement: "Have 50 successful referrals.", rarity: r("legendary"), icon: "Users" },
+
+  // Like milestones
+  { name: "Influencer", description: "Received 500 likes.", requirement: "Earn 500 likes.", rarity: r("epic"), icon: "Heart" },
+  { name: "Celebrity", description: "Received 1,000 likes.", requirement: "Earn 1,000 likes.", rarity: r("legendary"), icon: "Heart" },
+
+  // Accepted-answer milestones
+  { name: "Sage Answer", description: "Had 50 replies marked as accepted answers.", requirement: "Have 50 replies accepted.", rarity: r("epic"), icon: "ScrollText" },
+  { name: "Oracle", description: "Had 100 replies marked as accepted answers.", requirement: "Have 100 replies accepted.", rarity: r("legendary"), icon: "ScrollText" },
+
+  // High reputation tiers
+  { name: "Grand Master Grower", description: "Reached 30,000 reputation.", requirement: "Earn 30,000 reputation.", rarity: r("legendary"), icon: "Star" },
+  { name: "Sage", description: "Reached 75,000 reputation.", requirement: "Earn 75,000 reputation.", rarity: r("legendary"), icon: "Sparkles" },
+  { name: "Elder", description: "Reached 150,000 reputation.", requirement: "Earn 150,000 reputation.", rarity: r("legendary"), icon: "Leaf" },
+  { name: "Mythic", description: "Reached 300,000 reputation.", requirement: "Earn 300,000 reputation.", rarity: r("legendary"), icon: "Zap" },
+  { name: "Titan", description: "Reached 600,000 reputation.", requirement: "Earn 600,000 reputation.", rarity: r("legendary"), icon: "Gem" },
+  { name: "Celestial", description: "Reached 1,000,000 reputation.", requirement: "Earn 1,000,000 reputation.", rarity: r("legendary"), icon: "Crown" },
+
+  // Overall contribution
+  { name: "Elite Contributor", description: "Reached 25,000 reputation.", requirement: "Earn 25,000 reputation.", rarity: r("epic"), icon: "TrendingUp" },
+  { name: "Legendary Contributor", description: "Reached 50,000 reputation.", requirement: "Earn 50,000 reputation.", rarity: r("legendary"), icon: "TrendingUp" },
+  { name: "Mythic Contributor", description: "Reached 100,000 reputation.", requirement: "Earn 100,000 reputation.", rarity: r("legendary"), icon: "TrendingUp" },
 ]
 
 const BADGE_BY_NAME = new Map(BADGE_REGISTRY.map((b) => [b.name, b]))

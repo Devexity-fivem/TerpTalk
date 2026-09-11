@@ -36,22 +36,77 @@ interface UserStats {
 // Badge rules — evaluated against live user stats. Badge names must match the
 // Badge rows seeded in the database.
 const BADGE_RULES: Record<string, (s: UserStats) => boolean> = {
+  // First steps
   "New Grower": (s) => s.posts + s.threads + s.diaries >= 1,
   "First Post": (s) => s.posts >= 1,
-  "Conversation Starter": (s) => s.threads >= 5,
+  "First Thread": (s) => s.threads >= 1,
+  "First Grow Diary": (s) => s.diaries >= 1,
+  "First Photo": (s) => s.strainPhotos >= 1,
+  "First Strain": (s) => s.strains >= 1,
+
+  // Post milestones
   "Active Grower": (s) => s.posts >= 10,
+  "Conversation Starter": (s) => s.threads >= 5,
+  "Forum Regular": (s) => s.posts + s.threads >= 100,
+  "Prolific Poster": (s) => s.posts >= 250,
+  "Thread Weaver": (s) => s.threads >= 100,
+  "Community Pillar": (s) => s.posts + s.threads >= 500,
+  "Century Poster": (s) => s.posts >= 100,
+  "Veteran Poster": (s) => s.posts >= 500,
+  "Master Poster": (s) => s.posts >= 1000,
+  "Grand Poster": (s) => s.posts >= 2500,
+  "Legendary Poster": (s) => s.posts >= 5000,
+  "Mythic Poster": (s) => s.posts >= 10000,
+
+  // Diary milestones
   "Diary Master": (s) => s.diaries >= 5,
+  "Garden Veteran": (s) => s.diaries >= 10,
+  "Master Gardener": (s) => s.diaries >= 25,
+  "Diary Legend": (s) => s.diaries >= 50,
+  "Dedicated Grower": (s) => s.diaryUpdates >= 7,
+
+  // Strain milestones
   "Strain Hunter": (s) => s.strains >= 3,
+  "Strain Explorer": (s) => s.strains >= 10,
+  "Strain Master": (s) => s.strains >= 25,
+  "Strain Legend": (s) => s.strains >= 50,
+  "Strain God": (s) => s.strains >= 100,
+
+  // Photo milestones
   "Grow Photographer": (s) => s.strainPhotos >= 5,
+  "Photo Pro": (s) => s.strainPhotos >= 25,
+  "Shutterbug": (s) => s.strainPhotos >= 50,
+  "Photo Legend": (s) => s.strainPhotos >= 100,
+  "Photo God": (s) => s.strainPhotos >= 250,
+
+  // Social / chat
   "Social Butterfly": (s) => s.chatMessages >= 25,
+  "Socialite": (s) => s.chatMessages >= 100,
+  "Talk of the Town": (s) => s.chatMessages >= 500,
+  "Chat Legend": (s) => s.chatMessages >= 1000,
+
+  // Referrals
   "Recruiter": (s) => s.referrals >= 3,
+  "Community Builder": (s) => s.referrals >= 10,
+  "Ambassador": (s) => s.referrals >= 25,
+  "Founder": (s) => s.referrals >= 50,
+
+  // Likes received
   "Liked": (s) => s.likesReceived >= 10,
+  "Helpful Member": (s) => s.likesReceived >= 50,
   "Helpful Grower": (s) => s.likesReceived >= 20,
   "Community Favorite": (s) => s.likesReceived >= 100,
+  "Popular Grower": (s) => s.likesReceived >= 250,
+  "Influencer": (s) => s.likesReceived >= 500,
+  "Celebrity": (s) => s.likesReceived >= 1000,
+
+  // Accepted answers
   "Helper": (s) => s.acceptedAnswers >= 1,
   "Top Helper": (s) => s.acceptedAnswers >= 5,
-  "Top Contributor": (s) => s.reputation >= 10000,
-  "Dedicated Grower": (s) => s.diaryUpdates >= 7,
+  "Mentor": (s) => s.acceptedAnswers >= 25,
+  "Sage Answer": (s) => s.acceptedAnswers >= 50,
+  "Oracle": (s) => s.acceptedAnswers >= 100,
+
   // Reputation tier badges
   "Sprout": (s) => s.reputation >= 250,
   "Seedling": (s) => s.reputation >= 750,
@@ -59,17 +114,18 @@ const BADGE_RULES: Record<string, (s: UserStats) => boolean> = {
   "Cultivator": (s) => s.reputation >= 3500,
   "Master Grower": (s) => s.reputation >= 7000,
   "Legendary Grower": (s) => s.reputation >= 15000,
-  // New milestone rules
-  "First Grow Diary": (s) => s.diaries >= 1,
-  "First Photo": (s) => s.strainPhotos >= 1,
-  "Strain Explorer": (s) => s.strains >= 10,
-  "Photo Pro": (s) => s.strainPhotos >= 25,
-  "Garden Veteran": (s) => s.diaries >= 10,
-  "Forum Regular": (s) => s.posts + s.threads >= 100,
-  "Helpful Member": (s) => s.likesReceived >= 50,
-  "Popular Grower": (s) => s.likesReceived >= 250,
-  "Mentor": (s) => s.acceptedAnswers >= 25,
-  "Community Builder": (s) => s.referrals >= 10,
+  "Grand Master Grower": (s) => s.reputation >= 30000,
+  "Sage": (s) => s.reputation >= 75000,
+  "Elder": (s) => s.reputation >= 150000,
+  "Mythic": (s) => s.reputation >= 300000,
+  "Titan": (s) => s.reputation >= 600000,
+  "Celestial": (s) => s.reputation >= 1000000,
+
+  // Overall contribution
+  "Top Contributor": (s) => s.reputation >= 10000,
+  "Elite Contributor": (s) => s.reputation >= 25000,
+  "Legendary Contributor": (s) => s.reputation >= 50000,
+  "Mythic Contributor": (s) => s.reputation >= 100000,
 }
 
 let badgeSeedComplete = false
