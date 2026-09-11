@@ -688,7 +688,7 @@ export default function ProfilePage() {
             </p>
           </div>
 
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className="grid gap-4">
             <ReputationRoadmap reputation={profileData.stats.reputation} />
             <ReputationEarn />
           </div>

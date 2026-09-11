@@ -20,7 +20,7 @@ export default function ReputationEarn({ compact }: { compact?: boolean }) {
   return (
     <div className={cn("bg-card rounded-lg border border-border p-6", compact && "p-4")}>
       <h3 className={cn("font-semibold mb-4", compact ? "text-base" : "text-lg")}>How to earn reputation</h3>
-      <div className="grid gap-2 sm:grid-cols-2">
+      <div className="grid gap-2">
         {ACTIONS.map((a) => (
           <div
             key={a.key}
