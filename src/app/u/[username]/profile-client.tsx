@@ -3,10 +3,11 @@
 import { useEffect, useState } from "react"
 import { useSession } from "next-auth/react"
 import { useParams } from "next/navigation"
-import { User, MessageSquare, Loader2, MapPin, Globe, Sprout, Dna, Leaf, Store, Flame } from "lucide-react"
+import { User, MessageSquare, Loader2, MapPin, Globe, Sprout, Dna, Leaf, Store, Flame, ChevronDown, ChevronUp } from "lucide-react"
 import Link from "next/link"
 import UserActions from "@/components/user-actions"
 import RoleBadge from "@/components/role-badge"
+import AchievementBadge from "@/components/achievement-badge"
 import { Avatar } from "@/components/ui/avatar"
 
 interface PublicProfile {
@@ -77,6 +78,7 @@ export default function ProfileClient() {
   const [data, setData] = useState<{ profile: PublicProfile; viewerBlocked: boolean; viewerFollowing: boolean; recentThreads: Thread[]; growDiaries: GrowDiary[] } | null>(null)
   const [loading, setLoading] = useState(true)
   const [notFound, setNotFound] = useState(false)
+  const [showAllBadges, setShowAllBadges] = useState(false)
 
   useEffect(() => {
     fetch(`/api/users/${encodeURIComponent(username)}`, { cache: "no-store" })
@@ -218,16 +220,24 @@ export default function ProfileClient() {
                 </div>
               )}
               {profile.badges?.length > 0 && (
-                <div className="flex flex-wrap gap-2 mt-4">
-                  {profile.badges.map((b) => (
-                    <span
-                      key={b.name}
-                      title={b.description}
-                      className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-amber-500/15 text-amber-400 border border-amber-500/30 rounded-full text-xs font-medium"
+                <div className="mt-4">
+                  <div className="flex flex-wrap gap-2">
+                    {(showAllBadges ? profile.badges : profile.badges.slice(0, 6)).map((b) => (
+                      <AchievementBadge key={b.name} name={b.name} mode="profile" />
+                    ))}
+                  </div>
+                  {profile.badges.length > 6 && (
+                    <button
+                      onClick={() => setShowAllBadges((v) => !v)}
+                      className="mt-2 inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded px-1"
                     >
-                      {b.name}
-                    </span>
-                  ))}
+                      {showAllBadges ? (
+                        <>Show less <ChevronUp className="w-3 h-3" /></>
+                      ) : (
+                        <>View all {profile.badges.length} badges <ChevronDown className="w-3 h-3" /></>
+                      )}
+                    </button>
+                  )}
                 </div>
               )}
             </div>

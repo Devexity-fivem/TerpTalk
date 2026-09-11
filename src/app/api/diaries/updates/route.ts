@@ -7,7 +7,7 @@ import { rateLimit } from "@/lib/rate-limit"
 import { awardReputation, REP_POINTS } from "@/lib/reputation"
 import { storeImages, deleteImagesIfUnreferenced } from "@/lib/blob"
 import { checkMaintenance } from "@/lib/maintenance"
-import { BADGE_ICONS } from "@/lib/badges"
+import { getBadgeByName } from "@/lib/badge-registry"
 
 export async function POST(request: Request) {
   let storedImages: string[] = []
@@ -181,14 +181,16 @@ export async function POST(request: Request) {
       else break
     }
     if (streak >= 7) {
+      const def = getBadgeByName("Dedicated Grower")
       const badge = await prisma.badge.upsert({
         where: { name: "Dedicated Grower" },
         update: {},
         create: {
           name: "Dedicated Grower",
-          description: "Posted grow updates 7 days in a row",
-          icon: BADGE_ICONS["Dedicated Grower"],
-          requirement: "Update diaries on 7 consecutive days",
+          description: def?.description ?? "Posted grow updates 7 days in a row",
+          icon: def?.icon ?? "Flame",
+          color: def?.rarity ?? "epic",
+          requirement: def?.requirement ?? "Update diaries on 7 consecutive days",
         },
       })
       const has = await prisma.userBadge.findUnique({

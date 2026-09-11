@@ -7,6 +7,7 @@ import {
   VERIFIED_MULTIPLIER,
   getReputationTier,
 } from "@/lib/reputation-config"
+import { seedBadges } from "@/lib/badges"
 
 // Re-exported for existing server-side callers.
 export {
@@ -58,7 +59,20 @@ const BADGE_RULES: Record<string, (s: UserStats) => boolean> = {
   "Cultivator": (s) => s.reputation >= 3500,
   "Master Grower": (s) => s.reputation >= 7000,
   "Legendary Grower": (s) => s.reputation >= 15000,
+  // New milestone rules
+  "First Grow Diary": (s) => s.diaries >= 1,
+  "First Photo": (s) => s.strainPhotos >= 1,
+  "Strain Explorer": (s) => s.strains >= 10,
+  "Photo Pro": (s) => s.strainPhotos >= 25,
+  "Garden Veteran": (s) => s.diaries >= 10,
+  "Forum Regular": (s) => s.posts + s.threads >= 100,
+  "Helpful Member": (s) => s.likesReceived >= 50,
+  "Popular Grower": (s) => s.likesReceived >= 250,
+  "Mentor": (s) => s.acceptedAnswers >= 25,
+  "Community Builder": (s) => s.referrals >= 10,
 }
+
+let badgeSeedComplete = false
 
 async function getUserStats(userId: string): Promise<UserStats> {
   const [posts, threads, diaries, diaryUpdates, chatMessages, strains, strainPhotos, likesReceived, acceptedAnswers, user] =
@@ -200,6 +214,10 @@ export async function awardReputation(
 
 // Evaluate all badge rules and grant any newly earned badges (+ notification).
 export async function checkBadges(userId: string) {
+  if (!badgeSeedComplete) {
+    await seedBadges()
+    badgeSeedComplete = true
+  }
   const stats = await getUserStats(userId)
   const allBadges = await prisma.badge.findMany()
   const earned = await prisma.userBadge.findMany({

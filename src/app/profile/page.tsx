@@ -2,17 +2,79 @@
 
 import { useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
-import { useEffect, useRef, useState } from "react"
-import { User, Calendar, Award, MessageSquare, Leaf, Loader2, Download, Trash2, Pencil, MapPin, Globe, Sprout, Dna, Store, TrendingUp } from "lucide-react"
+import { useEffect, useMemo, useRef, useState } from "react"
+import { User, Calendar, Award, MessageSquare, Leaf, Loader2, Download, Trash2, Pencil, MapPin, Globe, Sprout, Dna, Store, TrendingUp, ChevronDown, ChevronUp } from "lucide-react"
 import { signOut } from "next-auth/react"
 import Link from "next/link"
 import RoleBadge from "@/components/role-badge"
+import AchievementBadge from "@/components/achievement-badge"
 import { useToast } from "@/components/ui/toast"
+import { getBadgeByName, BADGE_RARITIES } from "@/lib/badge-registry"
 import { REP_POINTS } from "@/lib/reputation-config"
 import SavedThreads from "@/components/saved-threads"
 import SavedSearches from "@/components/saved-searches"
 import RecoveryPhraseCard from "@/components/recovery-phrase-card"
 import { Avatar } from "@/components/ui/avatar"
+
+function ProfileBadges({
+  badges,
+  showAll,
+  setShowAll,
+}: {
+  badges: Array<{ name: string; description: string; icon: string | null; earnedAt?: string }>
+  showAll: boolean
+  setShowAll: (v: boolean) => void
+}) {
+  const sortedBadges = useMemo(
+    () =>
+      [...badges].sort((a, b) => {
+        const ra = BADGE_RARITIES.indexOf(getBadgeByName(a.name)?.rarity ?? "common")
+        const rb = BADGE_RARITIES.indexOf(getBadgeByName(b.name)?.rarity ?? "common")
+        return rb - ra
+      }),
+    [badges]
+  )
+  const visible = showAll ? sortedBadges : sortedBadges.slice(0, 6)
+  const hasMore = sortedBadges.length > 6
+
+  if (badges.length === 0) {
+    return (
+      <div className="bg-card rounded-lg border border-border p-6">
+        <div className="flex items-center gap-2 mb-4">
+          <Award className="w-5 h-5 text-primary" />
+          <h2 className="text-lg font-semibold">Badges</h2>
+        </div>
+        <p className="text-muted-foreground">No badges earned yet — post, grow, and share to earn them</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="bg-card rounded-lg border border-border p-6">
+      <div className="flex items-center gap-2 mb-4">
+        <Award className="w-5 h-5 text-primary" />
+        <h2 className="text-lg font-semibold">Badges</h2>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        {visible.map((b) => (
+          <AchievementBadge key={b.name} name={b.name} mode="profile" />
+        ))}
+      </div>
+      {hasMore && (
+        <button
+          onClick={() => setShowAll(!showAll)}
+          className="mt-3 inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded px-1"
+        >
+          {showAll ? (
+            <>Show less <ChevronUp className="w-3 h-3" /></>
+          ) : (
+            <>View all {sortedBadges.length} badges <ChevronDown className="w-3 h-3" /></>
+          )}
+        </button>
+      )}
+    </div>
+  )
+}
 
 interface ProfileData {
   user: {
@@ -113,6 +175,7 @@ export default function ProfilePage() {
   const [loading, setLoading] = useState(true)
   const [editing, setEditing] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [showAllBadges, setShowAllBadges] = useState(false)
   const bioRef = useRef<HTMLTextAreaElement>(null)
   const [editForm, setEditForm] = useState({
     bio: "",
@@ -587,27 +650,13 @@ export default function ProfilePage() {
           </div>
 
           {/* Badges */}
-          <div className="bg-card rounded-lg border border-border p-6">
-            <div className="flex items-center gap-2 mb-4">
-              <Award className="w-5 h-5 text-primary" />
-              <h2 className="text-lg font-semibold">Badges</h2>
-            </div>
-            {profileData.badges.length === 0 ? (
-              <p className="text-muted-foreground">No badges earned yet — post, grow, and share to earn them</p>
-            ) : (
-              <div className="flex flex-wrap gap-2">
-                {profileData.badges.map((b) => (
-                  <span
-                    key={b.name}
-                    title={b.description}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-500/15 text-amber-400 border border-amber-500/30 rounded-full text-xs font-medium"
-                  >
-                    {b.name}
-                  </span>
-                ))}
-              </div>
-            )}
-          </div>
+          {profileData && (
+            <ProfileBadges
+              badges={profileData.badges}
+              showAll={showAllBadges}
+              setShowAll={setShowAllBadges}
+            />
+          )}
 
           {/* Reputation Tier */}
           <div className="bg-card rounded-lg border border-border p-6">

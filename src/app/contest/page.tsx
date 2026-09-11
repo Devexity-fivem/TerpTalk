@@ -5,7 +5,7 @@ import { previousWeekKey } from "@/lib/week"
 import { Trophy } from "lucide-react"
 import Link from "next/link"
 import ContestBoard from "@/components/contest-board"
-import { BADGE_ICONS } from "@/lib/badges"
+import { getBadgeByName } from "@/lib/badge-registry"
 
 import { buildMetadata } from "@/lib/seo"
 
@@ -27,14 +27,16 @@ const getLastWeekWinner = unstable_cache(
     })
     if (!top || top._count.votes === 0) return null
 
+    const def = getBadgeByName("Weekly Winner")
     const badge = await prisma.badge.upsert({
       where: { name: "Weekly Winner" },
       update: {},
       create: {
         name: "Weekly Winner",
-        description: "Won Budshot of the Week",
-        icon: BADGE_ICONS["Weekly Winner"],
-        requirement: "Win a weekly photo contest",
+        description: def?.description ?? "Won Budshot of the Week",
+        icon: def?.icon ?? "Trophy",
+        color: def?.rarity ?? "legendary",
+        requirement: def?.requirement ?? "Win a weekly photo contest",
       },
     })
     const has = await prisma.userBadge.findUnique({

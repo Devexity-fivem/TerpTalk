@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { forbidden, getClientIp, logSecurityEvent } from "@/lib/security"
 import { requireAdmin } from "@/lib/require-staff"
-import { BADGE_ICONS } from "@/lib/badges"
+import { getBadgeByName } from "@/lib/badge-registry"
 import { rateLimit } from "@/lib/rate-limit"
 
 const ASSIGNABLE_ROLES = new Set(["MEMBER", "VERIFIED_MEMBER", "MODERATOR", "ADMINISTRATOR"])
@@ -175,13 +175,15 @@ export async function PATCH(request: Request) {
 
     // Beta badge toggle path
     if (typeof beta === "boolean") {
+      const def = getBadgeByName("Beta Tester")
       const badge = await prisma.badge.upsert({
         where: { name: "Beta Tester" },
         create: {
           name: "Beta Tester",
-          description: "Joined TerpTalk during the beta and helped shape the community.",
-          icon: BADGE_ICONS["Beta Tester"],
-          requirement: "Early access member",
+          description: def?.description ?? "Joined TerpTalk during the beta.",
+          icon: def?.icon ?? "Rocket",
+          color: def?.rarity ?? "rare",
+          requirement: def?.requirement ?? "Early access member",
         },
         update: {},
       })

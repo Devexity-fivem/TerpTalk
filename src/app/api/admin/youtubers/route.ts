@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { forbidden } from "@/lib/security"
 import { requireAdmin } from "@/lib/require-staff"
-import { BADGE_ICONS, BADGE_DESCRIPTIONS } from "@/lib/badges"
+import { getBadgeByName } from "@/lib/badge-registry"
 
 const BADGE_NAME = "Verified YouTuber"
 
@@ -61,13 +61,15 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "userId is required" }, { status: 400 })
     }
 
+    const def = getBadgeByName(BADGE_NAME)
     const badge = await prisma.badge.upsert({
       where: { name: BADGE_NAME },
       create: {
         name: BADGE_NAME,
-        description: BADGE_DESCRIPTIONS[BADGE_NAME] || BADGE_NAME,
-        icon: BADGE_ICONS[BADGE_NAME],
-        requirement: BADGE_DESCRIPTIONS[BADGE_NAME] || BADGE_NAME,
+        description: def?.description ?? BADGE_NAME,
+        icon: def?.icon ?? "Video",
+        color: def?.rarity ?? "epic",
+        requirement: def?.requirement ?? BADGE_NAME,
       },
       update: {},
     })
