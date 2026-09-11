@@ -31,7 +31,9 @@ const getTopUsers = unstable_cache(
             role: true,
             createdAt: true,
             _count: {
-              select: { threadCreator: true, posts: true, diaryCreator: true, followers: true },
+              // "following" counts this user's followers (schema relation
+              // names are inverted — see api/users/[username]).
+              select: { threadCreator: true, posts: true, diaryCreator: true, following: true },
             },
           },
         },
@@ -98,7 +100,7 @@ export default async function LeaderboardPage() {
                     </span>
                   </div>
                   <div className="text-xs text-muted-foreground">
-                    {p.user._count.threadCreator} threads · {p.user._count.posts} posts · {p.user._count.diaryCreator} diaries · {p.user._count.followers} followers
+                    {p.user._count.threadCreator} threads · {p.user._count.posts} posts · {p.user._count.diaryCreator} diaries · {p.user._count.following} followers
                   </div>
                 </div>
                 <div className="text-right shrink-0">

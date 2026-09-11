@@ -91,8 +91,11 @@ export async function GET() {
       stats: {
         diaries: user.diaryCreator.length,
         posts: user.posts.length,
-        followers: user.followers.length,
-        following: user.following.length,
+        // Follow relation names are inverted in the schema — see the note in
+        // api/users/[username]. "following" counts followers, "followers"
+        // counts who the user follows.
+        followers: user.following.length,
+        following: user.followers.length,
         badges: user.badges.length,
         reputation: user.profile?.reputation || 0,
         reputationTier: getReputationTier(user.profile?.reputation || 0),

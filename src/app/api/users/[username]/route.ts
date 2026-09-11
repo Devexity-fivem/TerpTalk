@@ -194,7 +194,15 @@ export async function GET(
           description: b.badge.description,
           icon: b.badge.icon,
         })),
-        stats: profile.user._count,
+        // NOTE: the schema's Follow relation names are counterintuitive —
+        // _count.following counts rows where this user is the *target*
+        // (their followers) and _count.followers counts rows where they are
+        // the follower (who they follow). Mapped back to the real meaning here.
+        stats: {
+          ...profile.user._count,
+          followers: profile.user._count.following,
+          following: profile.user._count.followers,
+        },
       },
       viewerBlocked,
       viewerFollowing,
