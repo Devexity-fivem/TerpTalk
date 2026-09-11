@@ -107,7 +107,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const postBot = (text: string) => postBotMessage(roomId, text)
+    const postBot = (text: string) => postBotMessage(roomId, text, { awardRep: true })
 
     const resolveTarget = async (raw?: string) => {
       if (!raw) return null

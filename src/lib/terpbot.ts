@@ -9,14 +9,30 @@ export const TERPBOT_USERNAME = "terpbot"
 
 let cachedBotId: string | null = null
 
+const BOT_PROFILE = {
+  bio: "🤖 TerpTalk's resident bot. I welcome new members, celebrate your milestones, post the daily digest, and keep chat tidy. Type /help in chat to see my commands.",
+  location: "The Garden",
+  growSpace: "Server rack",
+  growExperience: "Eternal — I watch every grow",
+  favoriteStrain: "Blue Dream (compiled)",
+  avatarUrl: "/terpbot.svg",
+}
+
 async function getOrCreateBot(): Promise<string> {
   if (cachedBotId) return cachedBotId
   const existing = await prisma.user.findFirst({
     where: { profile: { username: TERPBOT_USERNAME } },
-    select: { id: true },
+    select: { id: true, profile: { select: { id: true, bio: true, avatarUrl: true } } },
   })
   if (existing) {
     cachedBotId = existing.id
+    // Self-heal: fill in the bot's profile the first time it posts.
+    if (existing.profile && (!existing.profile.bio || !existing.profile.avatarUrl)) {
+      await prisma.profile.update({
+        where: { id: existing.profile.id },
+        data: BOT_PROFILE,
+      }).catch(() => {})
+    }
     return existing.id
   }
   const created = await prisma.user.create({
@@ -24,7 +40,7 @@ async function getOrCreateBot(): Promise<string> {
       name: "TerpBot",
       ageVerified: true,
       status: "ONLINE",
-      profile: { create: { username: TERPBOT_USERNAME } },
+      profile: { create: { username: TERPBOT_USERNAME, ...BOT_PROFILE } },
     },
     select: { id: true },
   })
@@ -34,7 +50,13 @@ async function getOrCreateBot(): Promise<string> {
 
 // Post a message to a room as TerpBot and push it over Pusher when configured.
 // Returns the chat DTO used by the sidebar, or null if posting failed.
-export async function postBotMessage(roomId: string, text: string) {
+// awardRep lets the bot slowly earn reputation for its work — but must stay
+// false for announcement posts so a rep check can never re-announce and loop.
+export async function postBotMessage(
+  roomId: string,
+  text: string,
+  { awardRep = false }: { awardRep?: boolean } = {}
+) {
   try {
     const authorId = await getOrCreateBot()
     const message = await prisma.chatMessage.create({
@@ -55,6 +77,11 @@ export async function postBotMessage(roomId: string, text: string) {
       replyTo: null,
     }
     getPusher()?.trigger(`private-chat-${roomId}`, "new-message", dto).catch(() => {})
+    if (awardRep) {
+      // Lazy import: reputation.ts already imports this module.
+      const { awardReputation } = await import("@/lib/reputation")
+      await awardReputation(authorId, "BOT_MESSAGE", 1, "Community bot post")
+    }
     return dto
   } catch (error) {
     console.error("[terpbot] post failed:", error)

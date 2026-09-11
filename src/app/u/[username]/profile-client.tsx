@@ -128,7 +128,12 @@ export default function ProfileClient() {
             <div className="flex-1 min-w-0">
               <div className="flex items-start justify-between gap-4 flex-wrap">
                 <div>
-                  <h1 className="text-xl font-bold mb-1 break-words flex items-center gap-2">@{profile.username} <RoleBadge role={profile.role} /></h1>
+                  <h1 className="text-xl font-bold mb-1 break-words flex items-center gap-2">@{profile.username} <RoleBadge role={profile.role} />
+                      {profile.username === "terpbot" && (
+                        <span className="inline-flex items-center text-[10px] font-bold uppercase tracking-wider bg-primary/15 text-primary px-1.5 py-0.5 rounded">
+                          Bot
+                        </span>
+                      )}</h1>
                   <p className="text-muted-foreground text-sm mb-2 flex items-center gap-2 flex-wrap">
                     <span>Member since {joinDate}</span>
                     <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full ${profile.reputationTier.bg} ${profile.reputationTier.color} text-xs font-medium`}>
