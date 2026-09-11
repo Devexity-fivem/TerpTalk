@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getToken } from "next-auth/jwt"
 import { sessionCookieName } from "@/lib/auth"
-import { unstable_cache } from "next/cache"
 import { prisma } from "@/lib/prisma"
 import { blockExistsBetween, getTrustLevel, getClientIp, hashIp, isSessionValid } from "@/lib/security"
 import { getReputationTier, getTierProgress } from "@/lib/reputation"
@@ -21,9 +20,8 @@ function safeUrl(url: string | null | undefined): string | null {
   }
 }
 
-const getPublicProfileData = unstable_cache(
-  async (username: string) => {
-    const profile = await prisma.profile.findUnique({
+async function getPublicProfileData(username: string) {
+  const profile = await prisma.profile.findUnique({
       where: { username },
       select: {
         username: true,
@@ -102,10 +100,7 @@ const getPublicProfileData = unstable_cache(
       growDiaries,
       growStreak: { streak, totalUpdates, harvestedDiaries },
     }
-  },
-  ["public-profile"],
-  { revalidate: 60 }
-)
+  }
 
 // GET — public profile by username (safe fields only)
 export async function GET(
