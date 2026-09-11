@@ -2,7 +2,10 @@
 
 import { useState, useEffect, useRef } from "react"
 import { useSession } from "next-auth/react"
-import { MessageCircle, Send, X, Loader2, Smile, RefreshCw } from "lucide-react"
+import {
+  MessageCircle, Send, X, Loader2, Smile, RefreshCw, MoreVertical,
+  Trash2, AlertTriangle, Clock, Shield, User as UserIcon,
+} from "lucide-react"
 import RoleBadge from "@/components/role-badge"
 import { useToast } from "@/components/ui/toast"
 import { cn } from "@/lib/utils"
@@ -25,15 +28,20 @@ interface Message {
   content: string
   createdAt: string
   author: {
+    id: string
     name: string
-    role?: string
-    profile: { username: string }
+    username?: string | null
+    role?: string | null
+    image?: string | null
   }
 }
 
 export default function ChatSidebar() {
   const { data: session } = useSession()
   const { toast } = useToast()
+  const myRole = (session?.user as { role?: string } | undefined)?.role
+  const isStaff = myRole === "MODERATOR" || myRole === "ADMINISTRATOR"
+  const isAdmin = myRole === "ADMINISTRATOR"
   const [isOpen, setIsOpen] = useState(false)
   const [showEmoji, setShowEmoji] = useState(false)
   const [messages, setMessages] = useState<Message[]>([])
@@ -43,6 +51,7 @@ export default function ChatSidebar() {
   const [fetchError, setFetchError] = useState<string | null>(null)
   const [retryCount, setRetryCount] = useState(0)
   const [sending, setSending] = useState(false)
+  const [activeMenu, setActiveMenu] = useState<string | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const messagesContainerRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -245,6 +254,42 @@ export default function ChatSidebar() {
     }
   }
 
+  const takeModerationAction = async (
+    actionType: string,
+    targetUserId: string,
+    opts?: { targetType?: string; targetId?: string; durationDays?: number }
+  ) => {
+    const reason = window.prompt(`Reason for ${actionType.replace(/_/g, " ").toLowerCase()}:`)
+    if (!reason || !reason.trim()) return
+    try {
+      const res = await fetch("/api/moderation/actions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          actionType,
+          targetUserId,
+          reason: reason.trim().slice(0, 500),
+          ...(opts?.targetType && { targetType: opts.targetType }),
+          ...(opts?.targetId && { targetId: opts.targetId }),
+          ...(opts?.durationDays && { durationDays: opts.durationDays }),
+        }),
+      })
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        throw new Error(body.error || `HTTP ${res.status}`)
+      }
+      toast("Moderation action applied", "success")
+      if (actionType === "CONTENT_DELETION" && opts?.targetId) {
+        setMessages(prev => prev.map(m => m.id === opts.targetId ? { ...m, content: "[deleted]" } : m))
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Moderation action failed"
+      toast(message, "error")
+    } finally {
+      setActiveMenu(null)
+    }
+  }
+
   if (!session) {
     return null
   }
@@ -338,20 +383,81 @@ export default function ChatSidebar() {
                 <p className="text-xs text-muted-foreground">Start the conversation with the TerpTalk community.</p>
               </div>
             ) : (
-              messages.map((msg) => (
-                <div key={msg.id} className="group">
-                  <div className="flex items-center gap-1.5 mb-0.5">
-                    <span className="font-semibold text-xs">
-                      {msg.author.profile?.username || msg.author.name}
-                    </span>
-                    <RoleBadge role={msg.author.role} />
-                    <span className="text-[10px] text-muted-foreground opacity-70 group-hover:opacity-100 transition-opacity">
-                      {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    </span>
+              messages.map((msg) => {
+                const isMenuOpen = activeMenu === msg.id
+                const canManage = isStaff && msg.author.id !== (session?.user as { id?: string } | undefined)?.id
+                const isDeleted = msg.content === "[deleted]"
+                return (
+                  <div key={msg.id} className="group relative">
+                    <div className="flex items-center gap-1.5 mb-0.5">
+                      <span className="font-semibold text-xs">
+                        {msg.author.username || msg.author.name}
+                      </span>
+                      <RoleBadge role={msg.author.role} />
+                      <span className="text-[10px] text-muted-foreground opacity-70 group-hover:opacity-100 transition-opacity">
+                        {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                      {canManage && (
+                        <button
+                          onClick={() => setActiveMenu(isMenuOpen ? null : msg.id)}
+                          className="ml-auto p-1 rounded hover:bg-secondary text-muted-foreground"
+                          aria-label="Moderate message"
+                          title="Moderate message"
+                        >
+                          <MoreVertical className="w-3 h-3" />
+                        </button>
+                      )}
+                    </div>
+                    <p className="text-sm pl-0.5">{isDeleted ? <span className="italic text-muted-foreground">{msg.content}</span> : msg.content}</p>
+
+                    {isMenuOpen && canManage && (
+                      <div className="mt-1 rounded-lg border border-border bg-card shadow-lg p-1.5 space-y-1 z-10">
+                        <button
+                          onClick={() => takeModerationAction("CONTENT_DELETION", msg.author.id, { targetType: "CHAT_MESSAGE", targetId: msg.id })}
+                          className="w-full flex items-center gap-1.5 px-2 py-1 rounded text-xs text-left hover:bg-secondary text-foreground"
+                        >
+                          <Trash2 className="w-3 h-3 text-destructive" /> Delete message
+                        </button>
+                        <button
+                          onClick={() => takeModerationAction("WARNING", msg.author.id)}
+                          className="w-full flex items-center gap-1.5 px-2 py-1 rounded text-xs text-left hover:bg-secondary text-foreground"
+                        >
+                          <AlertTriangle className="w-3 h-3 text-amber-500" /> Warn user
+                        </button>
+                        {isAdmin && (
+                          <>
+                            <button
+                              onClick={() => takeModerationAction("TEMPORARY_BAN", msg.author.id, { durationDays: 1 })}
+                              className="w-full flex items-center gap-1.5 px-2 py-1 rounded text-xs text-left hover:bg-secondary text-foreground"
+                            >
+                              <Clock className="w-3 h-3 text-blue-400" /> 1-day timeout
+                            </button>
+                            <button
+                              onClick={() => takeModerationAction("TEMPORARY_BAN", msg.author.id, { durationDays: 7 })}
+                              className="w-full flex items-center gap-1.5 px-2 py-1 rounded text-xs text-left hover:bg-secondary text-foreground"
+                            >
+                              <Clock className="w-3 h-3 text-blue-400" /> 7-day timeout
+                            </button>
+                            <button
+                              onClick={() => takeModerationAction("PERMANENT_BAN", msg.author.id)}
+                              className="w-full flex items-center gap-1.5 px-2 py-1 rounded text-xs text-left hover:bg-secondary text-foreground"
+                            >
+                              <Shield className="w-3 h-3 text-destructive" /> Ban user
+                            </button>
+                          </>
+                        )}
+                        <a
+                          href={`/u/${msg.author.username || msg.author.name}`}
+                          onClick={() => setIsOpen(false)}
+                          className="w-full flex items-center gap-1.5 px-2 py-1 rounded text-xs text-left hover:bg-secondary text-foreground"
+                        >
+                          <UserIcon className="w-3 h-3 text-primary" /> View profile
+                        </a>
+                      </div>
+                    )}
                   </div>
-                  <p className="text-sm pl-0.5">{msg.content}</p>
-                </div>
-              ))
+                )
+              })
             )}
             <div ref={messagesEndRef} />
           </div>

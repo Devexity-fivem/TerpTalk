@@ -16,8 +16,10 @@ type ChatMessageWithAuthor = {
   content: string
   createdAt: Date
   author: {
+    id?: string | null
     name?: string | null
     image?: string | null
+    role?: string | null
     profile?: { username?: string | null } | null
   }
 }
@@ -28,9 +30,11 @@ function messageDto(m: ChatMessageWithAuthor) {
     content: m.content,
     createdAt: m.createdAt,
     author: {
+      id: m.author.id,
       name: m.author.name,
       username: m.author.profile?.username ?? null,
       image: m.author.image ?? null,
+      role: m.author.role ?? null,
     },
   }
 }
