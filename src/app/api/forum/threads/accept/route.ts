@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma"
 import { isBanned, isModerator, forbidden, unauthorized, getClientIp, logSecurityEvent } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
 import { awardReputation } from "@/lib/reputation"
+import { checkMaintenance } from "@/lib/maintenance"
 
 export async function POST(request: Request) {
   try {
@@ -27,6 +28,9 @@ export async function POST(request: Request) {
     if (await isBanned(user.id) || user.banned) {
       return forbidden("Your account is suspended")
     }
+
+    const maintenance = await checkMaintenance()
+    if (maintenance) return maintenance
 
     // Rate limit: 30 accept actions per hour per user
     const rl = await rateLimit(`accept-answer:${user.id}`, 30, 60 * 60 * 1000)

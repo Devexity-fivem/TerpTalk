@@ -1,7 +1,6 @@
-// Service worker: offline shell + same-origin static assets only.
-// Never caches API responses, auth pages, or cross-origin resources (avatars/CDN).
-const CACHE = "terptalk-v2"
-const STATIC = ["/", "/logo.png", "/manifest.webmanifest"]
+// Service worker: static assets only. Never caches API, auth, or user-specific HTML.
+const CACHE = "terptalk-v3"
+const STATIC = ["/logo.png", "/manifest.webmanifest"]
 
 self.addEventListener("install", (e) => {
   e.waitUntil(
@@ -16,7 +15,7 @@ self.addEventListener("activate", (e) => {
   e.waitUntil(
     caches
       .keys()
-      .then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))))
+      .then((keys) => Promise.all(keys.map((k) => k !== CACHE ? caches.delete(k) : Promise.resolve())))
       .then(() => self.clients.claim())
   )
 })
@@ -34,15 +33,15 @@ self.addEventListener("fetch", (e) => {
     return
   }
 
+  // Cache only same-origin static assets. Dynamic HTML is fetched from the network
+  // and is never placed in the service-worker cache.
   const isStatic = url.pathname.match(/\.(png|jpg|jpeg|webp|svg|ico|js|css|woff2?)$/)
 
   if (isStatic) {
-    // Stale-while-revalidate for same-origin static files.
     e.respondWith(
       caches.open(CACHE).then(async (c) => {
         const cached = await c.match(e.request)
         const network = fetch(e.request).then(async (res) => {
-          // Only cache valid, same-origin responses to avoid broken opaque responses.
           if (res && res.type === "basic" && res.ok) {
             await c.put(e.request, res.clone())
           }
@@ -54,10 +53,7 @@ self.addEventListener("fetch", (e) => {
     return
   }
 
-  // Network-first for pages; fall back to cached shell only when offline.
-  e.respondWith(
-    fetch(e.request)
-      .then((res) => res)
-      .catch(() => caches.match(e.request).then((hit) => hit || caches.match("/")))
-  )
+  // HTML and other dynamic routes: network-only. This prevents private user pages
+  // (profiles, messages, settings, etc.) from being persisted in the browser cache.
+  e.respondWith(fetch(e.request))
 })

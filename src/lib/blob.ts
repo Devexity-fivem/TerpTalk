@@ -4,6 +4,7 @@
 // BLOB_READ_WRITE_TOKEN isn't configured so nothing breaks locally.
 import { put, del } from "@vercel/blob"
 import { randomBytes } from "crypto"
+import sharp from "sharp"
 import { prisma } from "@/lib/prisma"
 import { getBooleanSetting, SITE_SETTINGS } from "@/lib/settings"
 
@@ -83,9 +84,22 @@ export async function storeImage(dataUri: string, folder: string): Promise<strin
   // Content must match the declared type — rejects spoofed payloads.
   if (!MAGIC[ext]?.(buf)) throw new Error("Image content does not match declared type")
 
-  const { url } = await put(`${folder}/${randomBytes(8).toString("hex")}.${ext}`, buf, {
+  // Re-encode server-side to strip all EXIF/GPS/XMP metadata. The canvas-based
+  // client uploader already strips most metadata, but this is the authoritative
+  // sanitization step. All uploads are normalized to WebP.
+  let processed: Buffer
+  try {
+    processed = await sharp(buf)
+      .rotate() // auto-orient, consuming any EXIF orientation data
+      .webp({ quality: 82, effort: 4 })
+      .toBuffer()
+  } catch {
+    throw new Error("Image could not be sanitized")
+  }
+
+  const { url } = await put(`${folder}/${randomBytes(8).toString("hex")}.webp`, processed, {
     access: "public",
-    contentType: `image/${m[1]}`,
+    contentType: "image/webp",
   })
   return url
 }

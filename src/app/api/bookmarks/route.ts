@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { unauthorized, forbidden, isBanned } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
+import { checkMaintenance } from "@/lib/maintenance"
 
 // POST — toggle bookmark on a thread: { threadId }
 // GET — my bookmarked threads
@@ -14,6 +15,9 @@ export async function POST(request: Request) {
 
     const userId = session.user.id
     if (await isBanned(userId)) return forbidden()
+
+    const maintenance = await checkMaintenance()
+    if (maintenance) return maintenance
 
     const rl = await rateLimit(`bookmark:${userId}`, 60, 10 * 60 * 1000)
     if (!rl.allowed) {

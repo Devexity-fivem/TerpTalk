@@ -4,12 +4,16 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { unauthorized, forbidden, isBanned, isAdmin } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
+import { checkMaintenance } from "@/lib/maintenance"
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await getServerSession(authOptions)
   if (!session?.user?.id) return unauthorized()
 
   if (await isBanned(session.user.id)) return forbidden()
+
+  const maintenance = await checkMaintenance()
+  if (maintenance) return maintenance
 
   const { id } = await params
   const diary = await prisma.growDiary.findUnique({

@@ -3,6 +3,8 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { unauthorized, forbidden } from "@/lib/security"
+import { rateLimit } from "@/lib/rate-limit"
+import { checkMaintenance } from "@/lib/maintenance"
 
 export async function POST(
   request: Request,
@@ -19,6 +21,14 @@ export async function POST(
     })
     if (!currentUser || currentUser.banned) {
       return forbidden("Your account is suspended")
+    }
+
+    const maintenance = await checkMaintenance()
+    if (maintenance) return maintenance
+
+    const rl = await rateLimit(`poll-vote:${session.user.id}:${id}`, 10, 60 * 1000)
+    if (!rl.allowed) {
+      return NextResponse.json({ error: "Too many poll votes" }, { status: 429 })
     }
 
     const body = await request.json().catch(() => ({}))

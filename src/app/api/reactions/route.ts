@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma"
 import { unauthorized, forbidden, getClientIp, logSecurityEvent, isBanned } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
 import { awardReputation, REP_POINTS } from "@/lib/reputation"
+import { checkMaintenance } from "@/lib/maintenance"
 
 const VALID_REACTION_TYPES = new Set(["LIKE", "LOVE", "LAUGH", "THINKING", "FIRE", "THUMBS_UP", "THUMBS_DOWN"])
 
@@ -17,6 +18,9 @@ export async function POST(request: Request) {
     }
 
     if (await isBanned(session.user.id)) return forbidden()
+
+    const maintenance = await checkMaintenance()
+    if (maintenance) return maintenance
 
     const body = await request.json().catch(() => ({}))
     const { type, postId, diaryId } = body

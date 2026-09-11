@@ -3,6 +3,7 @@ import { getToken } from "next-auth/jwt"
 import { prisma } from "@/lib/prisma"
 import { unauthorized, publicUserSelect, getClientIp, logSecurityEvent, isSessionValid, forbidden, blockExistsBetween, hashIp } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
+import { checkMaintenance } from "@/lib/maintenance"
 
 function senderDto(user: { id?: string; name?: string | null; image?: string | null; profile?: { username?: string | null } | null }) {
   return {
@@ -148,6 +149,11 @@ export async function POST(request: NextRequest) {
     const token = await getToken({ req: request, secret: process.env.NEXTAUTH_SECRET })
     const userId = token?.id as string | undefined
     if (!token || !userId) return unauthorized()
+
+    if (!(await isSessionValid(userId, token?.sessionVersion as number | undefined))) return forbidden()
+
+    const maintenance = await checkMaintenance()
+    if (maintenance) return maintenance
 
     const { to, content } = await request.json().catch(() => ({}))
     if (typeof to !== "string" || typeof content !== "string" || !content.trim()) {

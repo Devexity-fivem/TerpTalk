@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { rateLimit } from "@/lib/rate-limit"
 import { unauthorized, forbidden, isBanned } from "@/lib/security"
+import { checkMaintenance } from "@/lib/maintenance"
 
 // GET — list users I have blocked (private to requester)
 export async function GET() {
@@ -52,6 +53,9 @@ export async function POST(request: Request) {
       return unauthorized()
     }
     if (await isBanned(session.user.id)) return forbidden()
+
+    const maintenance = await checkMaintenance()
+    if (maintenance) return maintenance
 
     const rl = await rateLimit(`block:${session.user.id}`, 30, 60 * 60 * 1000)
     if (!rl.allowed) {

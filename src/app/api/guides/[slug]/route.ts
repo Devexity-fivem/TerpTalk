@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { unauthorized, forbidden, getClientIp, logSecurityEvent, isModerator, getTrustLevel } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
+import { checkMaintenance } from "@/lib/maintenance"
 
 const TOPICS = new Set(["BASICS", "NUTRIENTS", "HARVEST", "PESTS", "ENVIRONMENT", "GENETICS", "TRAINING", "LAW"])
 
@@ -14,6 +15,9 @@ export async function PATCH(
   try {
     const session = await getServerSession(authOptions)
     if (!session?.user?.id) return unauthorized()
+
+    const maintenance = await checkMaintenance()
+    if (maintenance) return maintenance
 
     const { slug } = await params
 

@@ -16,41 +16,52 @@ export async function GET(request: Request) {
   const q = (searchParams.get("q") || "").trim().slice(0, 60)
   const type = (searchParams.get("type") as MediaType | null) || undefined
 
+  const page = Math.max(1, parseInt(searchParams.get("page") || "1", 10) || 1)
+  const limit = Math.min(100, Math.max(1, parseInt(searchParams.get("limit") || "25", 10) || 25))
+  const skip = type ? (page - 1) * limit : 0
+  const take = type ? limit : 100
+
   const [postImages, diaryImages, setupImages, strainPhotos, contestEntries, profiles] = await Promise.all([
     type && type !== "post" ? [] : prisma.postImage.findMany({
       where: q ? { url: { contains: q, mode: "insensitive" as const } } : undefined,
       orderBy: { createdAt: "desc" },
-      take: 100,
+      skip,
+      take,
       include: { post: { select: { author: { select: { profile: { select: { username: true } } } } } } },
     }),
     type && type !== "diary" ? [] : prisma.diaryImage.findMany({
       where: q ? { url: { contains: q, mode: "insensitive" as const } } : undefined,
       orderBy: { createdAt: "desc" },
-      take: 100,
+      skip,
+      take,
       include: { update: { select: { author: { select: { profile: { select: { username: true } } } } } } },
     }),
     type && type !== "setup" ? [] : prisma.setupImage.findMany({
       where: q ? { url: { contains: q, mode: "insensitive" as const } } : undefined,
       orderBy: { createdAt: "desc" },
-      take: 100,
+      skip,
+      take,
       include: { setup: { select: { author: { select: { profile: { select: { username: true } } } } } } },
     }),
     type && type !== "strain" ? [] : prisma.strainPhoto.findMany({
       where: q ? { imageUrl: { contains: q, mode: "insensitive" as const } } : undefined,
       orderBy: { createdAt: "desc" },
-      take: 100,
+      skip,
+      take,
       include: { user: { select: { profile: { select: { username: true } } } } },
     }),
     type && type !== "contest" ? [] : prisma.contestEntry.findMany({
       where: q ? { imageUrl: { contains: q, mode: "insensitive" as const } } : undefined,
       orderBy: { createdAt: "desc" },
-      take: 100,
+      skip,
+      take,
       include: { user: { select: { profile: { select: { username: true } } } } },
     }),
     type && type !== "avatar" ? [] : prisma.profile.findMany({
       where: q ? { avatarUrl: { contains: q, mode: "insensitive" as const } } : {},
       orderBy: { joinDate: "desc" },
-      take: 100,
+      skip,
+      take,
       select: { userId: true, avatarUrl: true, joinDate: true, username: true },
     }),
   ])
@@ -62,9 +73,11 @@ export async function GET(request: Request) {
     ...strainPhotos.map((i) => ({ id: i.id, type: "strain" as const, url: i.imageUrl, createdAt: i.createdAt, author: i.user?.profile?.username ?? "unknown" })),
     ...contestEntries.map((i) => ({ id: i.id, type: "contest" as const, url: i.imageUrl, createdAt: i.createdAt, author: i.user?.profile?.username ?? "unknown" })),
     ...profiles.map((p) => ({ id: p.userId, type: "avatar" as const, url: p.avatarUrl ?? "", createdAt: p.joinDate, author: p.username ?? "unknown" })),
-  ].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 100)
+  ].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, take)
 
-  return NextResponse.json({ items, total: items.length })
+  const hasMore = type ? items.length === take : false
+
+  return NextResponse.json({ items, page: type ? page : 1, limit, hasMore })
 }
 
 // POST — delete a media record and its Blob object

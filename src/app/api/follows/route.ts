@@ -4,12 +4,18 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { unauthorized, getClientIp, logSecurityEvent, isBanned, forbidden, blockExistsBetween } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
+import { checkMaintenance } from "@/lib/maintenance"
 
 // POST — toggle follow on a user: { userId }  (or diary: { diaryId })
 export async function POST(request: Request) {
   try {
     const session = await getServerSession(authOptions)
     if (!session?.user?.id) return unauthorized()
+
+    if (await isBanned(session.user.id)) return forbidden()
+
+    const maintenance = await checkMaintenance()
+    if (maintenance) return maintenance
 
     const body = await request.json().catch(() => ({}))
     const { userId, diaryId } = body

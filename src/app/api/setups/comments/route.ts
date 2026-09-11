@@ -5,12 +5,18 @@ import { prisma } from "@/lib/prisma"
 import { unauthorized, publicUserSelect, getClientIp, logSecurityEvent, isBanned, forbidden, blockExistsBetween } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
 import { notifyMentions } from "@/lib/mentions"
+import { checkMaintenance } from "@/lib/maintenance"
 
 // POST — comment on a setup: { setupId, content }
 export async function POST(request: Request) {
   try {
     const session = await getServerSession(authOptions)
     if (!session?.user?.id) return unauthorized()
+
+    if (await isBanned(session.user.id)) return forbidden()
+
+    const maintenance = await checkMaintenance()
+    if (maintenance) return maintenance
 
     const { setupId, content } = await request.json().catch(() => ({}))
     if (typeof setupId !== "string" || typeof content !== "string" || content.trim().length < 2) {

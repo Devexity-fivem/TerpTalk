@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from "react"
 import { useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
-import { ShieldCheck, Loader2, ImageIcon, Trash2 } from "lucide-react"
+import { ShieldCheck, Loader2, ImageIcon, Trash2, ChevronLeft, ChevronRight } from "lucide-react"
 
 interface MediaItem {
   id: string
@@ -13,6 +13,8 @@ interface MediaItem {
   author: string
 }
 
+const LIMIT = 24
+
 export default function AdminMediaPage() {
   const { data: session, status } = useSession()
   const router = useRouter()
@@ -21,23 +23,34 @@ export default function AdminMediaPage() {
   const [items, setItems] = useState<MediaItem[]>([])
   const [type, setType] = useState("")
   const [q, setQ] = useState("")
+  const [page, setPage] = useState(1)
+  const [hasMore, setHasMore] = useState(false)
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState<string | null>(null)
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (p: number) => {
     const params = new URLSearchParams()
     if (type) params.set("type", type)
     if (q) params.set("q", q)
+    params.set("page", String(p))
+    params.set("limit", String(LIMIT))
     const res = await fetch(`/api/admin/media?${params.toString()}`)
     const d = res.ok ? await res.json() : { items: [] }
     setItems(d.items || [])
+    setHasMore(d.hasMore || false)
     setLoading(false)
   }, [type, q])
 
   useEffect(() => {
     if (status === "unauthenticated") router.push("/auth/signin")
-    else if (status === "authenticated") { const t = setTimeout(load, 0); return () => clearTimeout(t) }
+    else if (status === "authenticated") { const t = setTimeout(() => { setPage(1); load(1) }, 0); return () => clearTimeout(t) }
   }, [status, router, load])
+
+  useEffect(() => {
+    if (status === "authenticated") { const t = setTimeout(() => load(page), 0); return () => clearTimeout(t) }
+  }, [page, load, status])
+
+  const search = () => { setPage(1); const t = setTimeout(() => load(1), 0); return () => clearTimeout(t) }
 
   const remove = async (id: string, itemType: string) => {
     if (!confirm("Delete this image and its Blob? This cannot be undone.")) return
@@ -48,7 +61,7 @@ export default function AdminMediaPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "delete", id, type: itemType }),
       })
-      if (res.ok) { load() }
+      if (res.ok) { const t = setTimeout(() => load(page), 0); return () => clearTimeout(t) }
     } finally { setBusy(null) }
   }
 
@@ -83,12 +96,12 @@ export default function AdminMediaPage() {
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && load()}
+            onKeyDown={(e) => e.key === "Enter" && search()}
             placeholder="Search URL or author..."
             className="flex-1 min-w-48 px-3 py-2 rounded-lg border border-border bg-background text-sm"
           />
-          <select value={type} onChange={(e) => setType(e.target.value)} className="px-3 py-2 rounded-lg border border-border bg-background text-sm">
-            <option value="">All types</option>
+          <select value={type} onChange={(e) => { setType(e.target.value); setPage(1) }} className="px-3 py-2 rounded-lg border border-border bg-background text-sm">
+            <option value="">All types (latest 100)</option>
             <option value="post">Posts</option>
             <option value="diary">Diaries</option>
             <option value="setup">Setups</option>
@@ -96,7 +109,7 @@ export default function AdminMediaPage() {
             <option value="contest">Contest</option>
             <option value="avatar">Avatars</option>
           </select>
-          <button onClick={load} className="px-4 py-2 bg-secondary rounded-lg text-sm hover:bg-secondary/80">Search</button>
+          <button onClick={search} className="px-4 py-2 bg-secondary rounded-lg text-sm hover:bg-secondary/80">Search</button>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
@@ -117,6 +130,26 @@ export default function AdminMediaPage() {
             </div>
           ))}
         </div>
+
+        {type && (
+          <div className="mt-6 flex items-center justify-between">
+            <button
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={page === 1}
+              className="flex items-center gap-1 px-4 py-2 rounded-lg border border-border bg-card disabled:opacity-50"
+            >
+              <ChevronLeft className="w-4 h-4" /> Previous
+            </button>
+            <span className="text-sm text-muted-foreground">Page {page}</span>
+            <button
+              onClick={() => setPage((p) => p + 1)}
+              disabled={!hasMore}
+              className="flex items-center gap-1 px-4 py-2 rounded-lg border border-border bg-card disabled:opacity-50"
+            >
+              Next <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
+        )}
       </div>
     </div>
   )
