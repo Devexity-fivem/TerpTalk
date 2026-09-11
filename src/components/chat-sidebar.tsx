@@ -2,9 +2,10 @@
 
 import { useState, useEffect, useRef } from "react"
 import { useSession } from "next-auth/react"
-import { MessageCircle, Send, X, Loader2, Smile } from "lucide-react"
+import { MessageCircle, Send, X, Loader2, Smile, RefreshCw } from "lucide-react"
 import RoleBadge from "@/components/role-badge"
 import { useToast } from "@/components/ui/toast"
+import { cn } from "@/lib/utils"
 import dynamic from "next/dynamic"
 import { Theme, EmojiStyle } from "emoji-picker-react"
 
@@ -39,6 +40,8 @@ export default function ChatSidebar() {
   const [room, setRoom] = useState<Room | null>(null)
   const [onlineCount, setOnlineCount] = useState(0)
   const [loading, setLoading] = useState(true)
+  const [fetchError, setFetchError] = useState<string | null>(null)
+  const [retryCount, setRetryCount] = useState(0)
   const [sending, setSending] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const messagesContainerRef = useRef<HTMLDivElement>(null)
@@ -72,22 +75,36 @@ export default function ChatSidebar() {
   useEffect(() => {
     if (!session || !isOpen) return
 
+    let cancelled = false
+
     fetch("/api/chat/rooms")
       .then(async res => {
-        if (!res.ok) throw new Error(`HTTP ${res.status}`)
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}))
+          throw new Error(body.error || `HTTP ${res.status}`)
+        }
         return res.json()
       })
       .then(data => {
+        if (cancelled) return
         const all: Room[] = data.rooms || []
         setRoom(all.find(r => r.slug === "general") || all[0] || null)
         setOnlineCount(data.onlineCount || 0)
-        setLoading(false)
+        setFetchError(null)
       })
-      .catch((err) => {
+      .catch(err => {
+        if (cancelled) return
+        const message = err?.message || "Failed to load chat"
         console.error("Failed to load chat room:", err)
-        setLoading(false)
+        setFetchError(message)
+        toast(message, "error")
       })
-  }, [session, isOpen])
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+
+    return () => { cancelled = true }
+  }, [session, isOpen, retryCount, toast])
 
   // Load messages: realtime via Pusher when configured, otherwise poll.
   // Polls are incremental (?after=) so idle polls are near-empty.
@@ -284,6 +301,17 @@ export default function ChatSidebar() {
               </div>
             </div>
           </div>
+          {(!room || fetchError) && (
+            <button
+              onClick={() => setRetryCount(c => c + 1)}
+              disabled={loading}
+              className="p-1.5 hover:bg-secondary rounded-lg transition-colors disabled:opacity-50 mr-1"
+              aria-label="Retry loading chat"
+              title="Retry loading chat"
+            >
+              <RefreshCw className={cn("w-4 h-4", loading && "animate-spin")} />
+            </button>
+          )}
           <button
             onClick={() => setIsOpen(false)}
             className="p-1.5 hover:bg-secondary rounded-lg transition-colors"
