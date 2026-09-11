@@ -130,26 +130,6 @@ export function Navigation() {
                   {label}
                 </Link>
               ))}
-              {isMod && (
-                <Link
-                  href="/moderation"
-                  className={cn(linkClass("/moderation"), "!px-2 !text-amber-500")}
-                  aria-label="Moderation"
-                  title="Moderation"
-                >
-                  <Shield className="h-5 w-5" />
-                </Link>
-              )}
-              {isAdmin && (
-                <Link
-                  href="/admin"
-                  className={cn(linkClass("/admin"), "!px-2 !text-amber-500")}
-                  aria-label="Admin"
-                  title="Admin"
-                >
-                  <Shield className="h-5 w-5" />
-                </Link>
-              )}
             </div>
 
             {/* Right side */}
