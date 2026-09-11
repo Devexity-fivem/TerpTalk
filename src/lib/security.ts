@@ -148,6 +148,7 @@ export const USERNAME_REGEX = /^[a-zA-Z0-9_]+$/
 export const RESERVED_USERNAMES = new Set([
   "admin", "administrator", "moderator", "mod", "system", "support",
   "root", "terptalk", "staff", "help", "api", "www", "null", "undefined",
+  "terpbot",
 ])
 
 // ─── Client IP (privacy-conscious: hashed, never stored raw) ────────

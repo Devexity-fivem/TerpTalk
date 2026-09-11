@@ -212,6 +212,11 @@ export async function PATCH(request: Request) {
         if (isDataUri) {
           avatarUrl = await storeImage(avatarUrl, "avatars")
           newAvatarBlobUrl = avatarUrl
+        } else if (isHttps) {
+          return NextResponse.json(
+            { error: "Avatar must be uploaded, not linked from an external URL" },
+            { status: 400 }
+          )
         }
       }
     }

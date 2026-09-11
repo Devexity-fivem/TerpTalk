@@ -89,22 +89,31 @@ export async function POST(request: Request) {
     }
 
     // Update profile
-    const profile = await prisma.profile.update({
-      where: { userId: session.user.id },
-      data: {
-        ...(typeof username === "string" && { username: username.trim() }),
-        ...(cleanBio !== undefined && { bio: cleanBio }),
-        ...(cleanLocation !== undefined && { location: cleanLocation }),
-        ...(cleanWebsite !== undefined && { website: cleanWebsite }),
-      },
-      select: {
-        username: true,
-        bio: true,
-        location: true,
-        website: true,
-        reputation: true,
-      },
-    })
+    let profile
+    try {
+      profile = await prisma.profile.update({
+        where: { userId: session.user.id },
+        data: {
+          ...(typeof username === "string" && { username: username.trim() }),
+          ...(cleanBio !== undefined && { bio: cleanBio }),
+          ...(cleanLocation !== undefined && { location: cleanLocation }),
+          ...(cleanWebsite !== undefined && { website: cleanWebsite }),
+        },
+        select: {
+          username: true,
+          bio: true,
+          location: true,
+          website: true,
+          reputation: true,
+        },
+      })
+    } catch (e) {
+      const err = e as { code?: string }
+      if (err.code === "P2002") {
+        return NextResponse.json({ error: "Username already taken" }, { status: 400 })
+      }
+      throw e
+    }
 
     return NextResponse.json({ profile }, { status: 200 })
   } catch (error) {

@@ -58,7 +58,7 @@ export async function POST(request: Request) {
 
     await prisma.user.update({
       where: { id: session.user.id },
-      data: { recoveryPhraseHash: hash },
+      data: { recoveryPhraseHash: hash, sessionVersion: { increment: 1 } },
     })
 
     await logSecurityEvent("RECOVERY_PHRASE_GENERATED", {

@@ -13,6 +13,7 @@ import {
   hashIp,
   publicUserSelect,
   LIMITS,
+  USERNAME_REGEX,
 } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
 import { checkMaintenance } from "@/lib/maintenance"
@@ -50,11 +51,6 @@ export async function POST(request: NextRequest) {
       return forbidden("Your account is suspended")
     }
 
-    const rl = await rateLimit(`chat-commands:${hashIp(getClientIp(request))}`, 30, 60 * 1000)
-    if (!rl.allowed) {
-      return NextResponse.json({ error: "Too many commands" }, { status: 429 })
-    }
-
     const body = await request.json().catch(() => ({}))
     const { roomId, content } = body
 
@@ -75,6 +71,12 @@ export async function POST(request: NextRequest) {
       select: { role: true, name: true, profile: { select: { username: true } } },
     })
     if (!user) return forbidden()
+
+    const userRl = await rateLimit(`chat-commands-user:${userId}`, 30, 60 * 1000)
+    const ipRl = await rateLimit(`chat-commands:${hashIp(getClientIp(request))}`, 30, 60 * 1000)
+    if (!userRl.allowed || !ipRl.allowed) {
+      return NextResponse.json({ error: "Too many commands" }, { status: 429 })
+    }
 
     const staff = isStaff(user.role)
     const moderator = isModerator(user.role)
@@ -136,7 +138,9 @@ export async function POST(request: NextRequest) {
     const resolveTarget = async (raw?: string) => {
       if (!raw) return null
       const username = raw.replace(/^@/, "")
-      if (!username) return null
+      if (!username || username.length < LIMITS.USERNAME_MIN || username.length > LIMITS.USERNAME_MAX || !USERNAME_REGEX.test(username)) {
+        return null
+      }
       const target = await prisma.user.findFirst({
         where: { profile: { username: { equals: username, mode: "insensitive" } } },
         select: { id: true, role: true, name: true, banned: true, suspendedUntil: true, profile: { select: { username: true } } },
@@ -162,17 +166,17 @@ export async function POST(request: NextRequest) {
         if (actionType === "TEMPORARY_BAN" && typeof durationDays === "number" && durationDays > 0) {
           await tx.user.update({
             where: { id: targetUserId },
-            data: { suspendedUntil: new Date(Date.now() + durationDays * 24 * 60 * 60 * 1000) },
+            data: { suspendedUntil: new Date(Date.now() + durationDays * 24 * 60 * 60 * 1000), sessionVersion: { increment: 1 } },
           })
         } else if (actionType === "PERMANENT_BAN") {
           await tx.user.update({
             where: { id: targetUserId },
-            data: { banned: true, suspendedUntil: null },
+            data: { banned: true, suspendedUntil: null, sessionVersion: { increment: 1 } },
           })
         } else if (actionType === "UNBAN") {
           await tx.user.update({
             where: { id: targetUserId },
-            data: { banned: false, suspendedUntil: null, bannedReason: null },
+            data: { banned: false, suspendedUntil: null, bannedReason: null, sessionVersion: { increment: 1 } },
           })
         }
 
@@ -239,6 +243,18 @@ export async function POST(request: NextRequest) {
         if (!rest) {
           return NextResponse.json({ error: "Usage: /me <action>" }, { status: 400 })
         }
+        if (room.locked && !staff) {
+          return forbidden("Chat is locked")
+        }
+        if (room.slowModeSeconds > 0 && !staff) {
+          const last = await prisma.chatMessage.findFirst({
+            where: { roomId, authorId: userId, deleted: false },
+            orderBy: { createdAt: "desc" },
+          })
+          if (last && Date.now() - last.createdAt.getTime() < room.slowModeSeconds * 1000) {
+            return NextResponse.json({ error: `Slow mode: wait ${room.slowModeSeconds}s` }, { status: 429 })
+          }
+        }
         const message = await prisma.chatMessage.create({
           data: {
             roomId,
@@ -288,8 +304,11 @@ export async function POST(request: NextRequest) {
 
       case "clear": {
         if (!moderator) return forbidden()
+        const where = admin
+          ? { roomId, deleted: false }
+          : { roomId, deleted: false, author: { role: { in: ["MEMBER", "VERIFIED_MEMBER"] } } }
         const result = await prisma.chatMessage.updateMany({
-          where: { roomId, deleted: false },
+          where,
           data: { deleted: true },
         })
         const bot = await postBot(`Cleared ${result.count} message(s) by @${displayName}`)

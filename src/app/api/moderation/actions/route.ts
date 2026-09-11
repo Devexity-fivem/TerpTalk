@@ -110,14 +110,14 @@ export async function POST(request: Request) {
         const suspendedUntil = new Date(Date.now() + durationDays * 24 * 60 * 60 * 1000)
         await tx.user.update({
           where: { id: targetUserId },
-          data: { suspendedUntil, bannedReason: reason.trim() },
+          data: { suspendedUntil, bannedReason: reason.trim(), sessionVersion: { increment: 1 } },
         })
       }
 
       if (actionType === "PERMANENT_BAN") {
         await tx.user.update({
           where: { id: targetUserId },
-          data: { banned: true, suspendedUntil: null, bannedReason: reason.trim() },
+          data: { banned: true, suspendedUntil: null, bannedReason: reason.trim(), sessionVersion: { increment: 1 } },
         })
       }
 
@@ -125,9 +125,15 @@ export async function POST(request: Request) {
         if (typeof targetId !== "string" || !targetId) {
           throw new Error("INVALID_REQUEST")
         }
-        const thread = await tx.thread.findUnique({ where: { id: targetId }, select: { pinned: true, locked: true, authorId: true } })
+        const thread = await tx.thread.findUnique({
+          where: { id: targetId },
+          select: { pinned: true, locked: true, authorId: true, author: { select: { role: true } } },
+        })
         if (!thread) {
           throw new Error("CONTENT_NOT_FOUND")
+        }
+        if (!isAdmin(staff.role) && !["MEMBER", "VERIFIED_MEMBER"].includes(thread.author.role)) {
+          throw new Error("FORBIDDEN")
         }
         await tx.thread.update({
           where: { id: targetId },
@@ -138,7 +144,7 @@ export async function POST(request: Request) {
       if (actionType === "UNBAN" || actionType === "REMOVE_SUSPENSION") {
         await tx.user.update({
           where: { id: targetUserId },
-          data: { banned: false, suspendedUntil: null, bannedReason: null },
+          data: { banned: false, suspendedUntil: null, bannedReason: null, sessionVersion: { increment: 1 } },
         })
       }
 

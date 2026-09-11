@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { unauthorized, publicUserSelect, LIMITS, getClientIp, logSecurityEvent, isBanned, forbidden, containsExternalLink, isTrustedForLinks, isModerator } from "@/lib/security"
+import { unauthorized, publicUserSelect, LIMITS, getClientIp, logSecurityEvent, isBanned, forbidden, containsExternalLink, isTrustedForLinks, isModerator, isAdmin } from "@/lib/security"
 import { requireModerator } from "@/lib/require-staff"
 import { rateLimit } from "@/lib/rate-limit"
 import { awardReputation, REP_POINTS, REP_TIERS } from "@/lib/reputation"
@@ -261,16 +261,20 @@ export async function DELETE(request: Request) {
 
     const post = await prisma.post.findUnique({
       where: { id },
-      select: { id: true, authorId: true, deleted: true, threadId: true },
+      select: { id: true, authorId: true, deleted: true, threadId: true, author: { select: { id: true, role: true } } },
     })
     if (!post || post.deleted) {
       return NextResponse.json({ error: "Post not found" }, { status: 404 })
     }
     const mod = await requireModerator()
-    if (post.authorId !== session.user.id && !mod) {
+    const isOwn = post.authorId === session.user.id
+    if (!isOwn && !mod) {
       return forbidden()
     }
-    if (post.authorId === session.user.id && (await isBanned(session.user.id))) {
+    if (!isOwn && mod && !isAdmin(mod.role) && !["MEMBER", "VERIFIED_MEMBER"].includes(post.author.role)) {
+      return forbidden()
+    }
+    if (isOwn && (await isBanned(session.user.id))) {
       return forbidden("Your account is suspended")
     }
 

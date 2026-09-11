@@ -133,7 +133,7 @@ let badgeSeedComplete = false
 async function getUserStats(userId: string): Promise<UserStats> {
   const [posts, threads, diaries, diaryUpdates, chatMessages, strains, strainPhotos, likesReceived, acceptedAnswers, user] =
     await Promise.all([
-      prisma.post.count({ where: { authorId: userId, deleted: false } }),
+      prisma.post.count({ where: { authorId: userId, deleted: false, thread: { deleted: false } } }),
       prisma.thread.count({ where: { authorId: userId, deleted: false } }),
       prisma.growDiary.count({ where: { authorId: userId, deleted: false } }),
       prisma.diaryUpdate.count({ where: { authorId: userId, diary: { deleted: false } } }),
@@ -143,13 +143,14 @@ async function getUserStats(userId: string): Promise<UserStats> {
       prisma.reaction.count({
         where: {
           type: "LIKE",
-          OR: [{ post: { authorId: userId, deleted: false } }, { diary: { authorId: userId, deleted: false } }],
+          OR: [{ post: { authorId: userId, deleted: false, thread: { deleted: false } } }, { diary: { authorId: userId, deleted: false } }],
         },
       }),
       prisma.post.count({
         where: {
           authorId: userId,
           deleted: false,
+          thread: { deleted: false },
           acceptedAnswerFor: { isNot: null },
         },
       }),
