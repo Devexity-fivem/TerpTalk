@@ -8,13 +8,14 @@ import {
   forbidden,
   isStaff,
   isModerator,
+  isAdmin,
   getClientIp,
   hashIp,
+  publicUserSelect,
 } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
 import { checkMaintenance } from "@/lib/maintenance"
 import { getPusher } from "@/lib/pusher"
-import { publicUserSelect } from "@/lib/security"
 
 const MAX_SLOW = 300
 
@@ -60,7 +61,72 @@ export async function POST(request: NextRequest) {
 
     const staff = isStaff(user.role)
     const moderator = isModerator(user.role)
+    const admin = isAdmin(user.role)
     const displayName = user.profile?.username || user.name || "Staff"
+
+    const resolveTarget = async (raw?: string) => {
+      if (!raw) return null
+      const username = raw.replace(/^@/, "")
+      if (!username) return null
+      const target = await prisma.user.findFirst({
+        where: { profile: { username } },
+        select: { id: true, role: true, name: true, banned: true, suspendedUntil: true, profile: { select: { username: true } } },
+      })
+      return target
+    }
+
+    const applyModeration = async (
+      actionType: "WARNING" | "TEMPORARY_BAN" | "PERMANENT_BAN" | "UNBAN",
+      targetUserId: string,
+      reason: string,
+      durationDays?: number
+    ) => {
+      await prisma.$transaction(async (tx) => {
+        const target = await tx.user.findUnique({
+          where: { id: targetUserId },
+          select: { role: true },
+        })
+        if (!target) throw new Error("USER_NOT_FOUND")
+        if (target.role === "ADMINISTRATOR") throw new Error("FORBIDDEN")
+        if (target.role === "MODERATOR" && !admin) throw new Error("FORBIDDEN")
+
+        if (actionType === "TEMPORARY_BAN" && typeof durationDays === "number" && durationDays > 0) {
+          await tx.user.update({
+            where: { id: targetUserId },
+            data: { suspendedUntil: new Date(Date.now() + durationDays * 24 * 60 * 60 * 1000) },
+          })
+        } else if (actionType === "PERMANENT_BAN") {
+          await tx.user.update({
+            where: { id: targetUserId },
+            data: { banned: true, suspendedUntil: null },
+          })
+        } else if (actionType === "UNBAN") {
+          await tx.user.update({
+            where: { id: targetUserId },
+            data: { banned: false, suspendedUntil: null, bannedReason: null },
+          })
+        }
+
+        await tx.moderationAction.create({
+          data: {
+            type: actionType,
+            reason: reason.trim().slice(0, 500),
+            targetUserId,
+            moderatorId: userId,
+            duration: typeof durationDays === "number" ? durationDays : null,
+          },
+        })
+
+        await tx.notification.create({
+          data: {
+            type: "MODERATOR_ANNOUNCEMENT",
+            userId: targetUserId,
+            title: `Moderation action: ${actionType.replace(/_/g, " ").toLowerCase()}`,
+            content: `A moderator took action on your account or content. Reason: ${reason.trim().slice(0, 200)}`,
+          },
+        }).catch(() => {})
+      })
+    }
 
     const text = content.trim().slice(1)
     const [command, ...args] = text.split(/\s+/)
@@ -75,10 +141,23 @@ export async function POST(request: NextRequest) {
         const staffCmds = staff
           ? ["/slowmode <0-300> - set seconds between messages", "/lock - prevent non-staff from posting", "/unlock - re-enable posting"]
           : []
-        const modCmds = moderator ? ["/clear - soft-delete all messages", "/announce <message> - post a system-style message"] : []
+        const modCmds = moderator
+          ? [
+              "/clear - soft-delete all messages",
+              "/announce <message> - post a system-style message",
+              "/warn <@user> <reason> - warn a user",
+            ]
+          : []
+        const adminCmds = admin
+          ? [
+              "/mute <@user> <days> <reason> - temporarily suspend a user",
+              "/ban <@user> <reason> - permanently ban a user",
+              "/unban <@user> - lift a permanent ban",
+            ]
+          : []
         return NextResponse.json({
           ok: true,
-          message: [...base, ...staffCmds, ...modCmds].join("\n"),
+          message: [...base, ...staffCmds, ...modCmds, ...adminCmds].join("\n"),
         })
       }
 
@@ -181,6 +260,58 @@ export async function POST(request: NextRequest) {
         }
         getPusher()?.trigger(`private-chat-${roomId}`, "new-message", dto).catch(() => {})
         return NextResponse.json({ ok: true, message: dto })
+      }
+
+      case "warn": {
+        if (!moderator) return forbidden()
+        const targetUsername = args[0]
+        const reason = args.slice(1).join(" ")
+        if (!targetUsername || !reason) {
+          return NextResponse.json({ error: "Usage: /warn <@user> <reason>" }, { status: 400 })
+        }
+        const target = await resolveTarget(targetUsername)
+        if (!target) return NextResponse.json({ error: "User not found" }, { status: 404 })
+        await applyModeration("WARNING", target.id, reason)
+        return NextResponse.json({ ok: true, message: `Warned @${target.profile?.username || target.name}` })
+      }
+
+      case "mute": {
+        if (!admin) return forbidden()
+        const targetUsername = args[0]
+        const days = parseInt(args[1] || "1", 10)
+        const reason = args.slice(2).join(" ") || "Chat moderation"
+        if (!targetUsername || Number.isNaN(days) || days <= 0 || days > 365) {
+          return NextResponse.json({ error: "Usage: /mute <@user> <days> [reason]" }, { status: 400 })
+        }
+        const target = await resolveTarget(targetUsername)
+        if (!target) return NextResponse.json({ error: "User not found" }, { status: 404 })
+        await applyModeration("TEMPORARY_BAN", target.id, reason, days)
+        return NextResponse.json({ ok: true, message: `Muted @${target.profile?.username || target.name} for ${days} day(s)` })
+      }
+
+      case "ban": {
+        if (!admin) return forbidden()
+        const targetUsername = args[0]
+        const reason = args.slice(1).join(" ") || "Chat moderation"
+        if (!targetUsername) {
+          return NextResponse.json({ error: "Usage: /ban <@user> <reason>" }, { status: 400 })
+        }
+        const target = await resolveTarget(targetUsername)
+        if (!target) return NextResponse.json({ error: "User not found" }, { status: 404 })
+        await applyModeration("PERMANENT_BAN", target.id, reason)
+        return NextResponse.json({ ok: true, message: `Banned @${target.profile?.username || target.name}` })
+      }
+
+      case "unban": {
+        if (!admin) return forbidden()
+        const targetUsername = args[0]
+        if (!targetUsername) {
+          return NextResponse.json({ error: "Usage: /unban <@user>" }, { status: 400 })
+        }
+        const target = await resolveTarget(targetUsername)
+        if (!target) return NextResponse.json({ error: "User not found" }, { status: 404 })
+        await applyModeration("UNBAN", target.id, "Chat unban")
+        return NextResponse.json({ ok: true, message: `Unbanned @${target.profile?.username || target.name}` })
       }
 
       default:

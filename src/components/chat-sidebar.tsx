@@ -252,10 +252,20 @@ export default function ChatSidebar() {
       )
     }
     if (isModerator) {
-      list.push({ name: "clear", desc: "Clear all messages" })
+      list.push(
+        { name: "clear", desc: "Clear all messages" },
+        { name: "warn", desc: "Warn a user" }
+      )
+    }
+    if (isAdmin) {
+      list.push(
+        { name: "mute", desc: "Temporarily suspend a user" },
+        { name: "ban", desc: "Permanently ban a user" },
+        { name: "unban", desc: "Lift a permanent ban" }
+      )
     }
     return list
-  }, [isStaff, isModerator])
+  }, [isStaff, isModerator, isAdmin])
 
   const commandSuggestions = slashQuery
     ? commandList.filter(c => c.name.startsWith(slashQuery)).slice(0, 6)
