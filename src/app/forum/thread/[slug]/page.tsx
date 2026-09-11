@@ -282,7 +282,7 @@ export default async function ThreadPage({
                   <PostContent content={acceptedPost.content} authorRole={acceptedPost.author.role} pagePath={`/forum/thread/${thread.slug}`} />
                   <ImageGallery images={acceptedPost.images} />
                 </div>
-                <div className="flex flex-wrap items-center gap-3">
+                <div className="flex flex-wrap items-center gap-2">
                   <PostActions
                     postId={acceptedPost.id}
                     authorId={acceptedPost.author.id}
@@ -347,7 +347,7 @@ export default async function ThreadPage({
                       <PostContent content={post.content} authorRole={post.author.role} pagePath={`/forum/thread/${thread.slug}`} />
                       <ImageGallery images={post.images} />
                     </div>
-                    <div className="flex flex-wrap items-center gap-3">
+                    <div className="flex flex-wrap items-center gap-2">
                       <PostActions
                         postId={post.id}
                         authorId={post.author.id}

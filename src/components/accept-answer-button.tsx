@@ -43,25 +43,25 @@ export function AcceptAnswerButton({
     <button
       onClick={onClick}
       disabled={loading}
-      className={`flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-full transition-colors ${
+      className={`flex items-center gap-1 text-xs px-2 py-1 rounded-lg transition-colors ${
         isAnswer
-          ? "bg-green-500/20 text-green-400 hover:bg-green-500/30"
+          ? "bg-green-500/15 text-green-400 hover:bg-green-500/25"
           : "bg-secondary text-muted-foreground hover:text-foreground hover:bg-secondary/80"
       }`}
       title={isAnswer ? "Unmark as accepted answer" : "Mark as accepted answer"}
     >
       {loading ? (
-        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+        <Loader2 className="w-3 h-3 animate-spin" />
       ) : isAnswer ? (
         <>
-          <CheckCircle2 className="w-3.5 h-3.5" />
-          <span>Accepted answer</span>
-          <XCircle className="w-3.5 h-3.5 ml-1 opacity-70" />
+          <CheckCircle2 className="w-3 h-3" />
+          <span>Accepted</span>
+          <XCircle className="w-3 h-3 ml-0.5 opacity-70" />
         </>
       ) : (
         <>
-          <CheckCircle2 className="w-3.5 h-3.5" />
-          <span>Mark as answer</span>
+          <CheckCircle2 className="w-3 h-3" />
+          <span>Accept</span>
         </>
       )}
     </button>

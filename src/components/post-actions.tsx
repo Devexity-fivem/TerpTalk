@@ -144,43 +144,47 @@ export default function PostActions({
   const hasReactions = Object.values(counts).some((c) => c > 0)
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-2">
       {editing ? (
         <div className="space-y-2">
           <textarea
             value={content}
             onChange={(e) => setContent(e.target.value)}
-            className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm min-h-[100px]"
+            className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm min-h-[80px]"
             maxLength={10000}
           />
           <div className="flex gap-2">
-            <button onClick={handleEdit} disabled={busy} className="px-3 py-1.5 text-sm bg-primary text-primary-foreground rounded-lg disabled:opacity-50">
-              {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : "Save"}
+            <button onClick={handleEdit} disabled={busy} className="px-3 py-1.5 text-xs bg-primary text-primary-foreground rounded-lg disabled:opacity-50">
+              {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Save"}
             </button>
-            <button onClick={() => { setEditing(false); setContent(initialContent) }} className="px-3 py-1.5 text-sm bg-secondary rounded-lg">
+            <button onClick={() => { setEditing(false); setContent(initialContent) }} className="px-3 py-1.5 text-xs bg-secondary rounded-lg">
               Cancel
             </button>
           </div>
         </div>
       ) : null}
 
-      <div className="flex flex-wrap items-center gap-4">
+      <div className="flex flex-wrap items-center gap-1.5">
         <div className="relative">
           <button
             onClick={() => (reactionType ? handleReact(reactionType) : setShowPicker(!showPicker))}
             disabled={!session || busy}
-            className={`flex items-center gap-1 text-sm transition-colors ${reactionType ? "text-red-500" : "text-muted-foreground hover:text-foreground"} disabled:opacity-50`}
+            className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-lg transition-colors disabled:opacity-50 ${
+              reactionType
+                ? "bg-primary/10 text-primary border border-primary/20"
+                : "text-muted-foreground hover:text-foreground hover:bg-secondary"
+            }`}
           >
-            {activeEmoji ? <span>{activeEmoji}</span> : <Heart className="w-4 h-4" />}
+            {activeEmoji ? <span className="text-sm">{activeEmoji}</span> : <Heart className="w-3.5 h-3.5" />}
             <span>React</span>
           </button>
           {showPicker && (
-            <div className="absolute bottom-8 left-0 flex gap-1 bg-card border border-border rounded-full px-2 py-1 shadow-lg z-10">
+            <div className="absolute bottom-full left-0 mb-2 flex gap-1 bg-card border border-border rounded-lg px-1.5 py-1 shadow-lg z-10">
               {ORDER.map((type) => (
                 <button
                   key={type}
                   onClick={() => handleReact(type)}
-                  className="text-lg hover:scale-125 transition-transform px-1"
+                  className="w-7 h-7 flex items-center justify-center text-base hover:bg-secondary rounded-md transition-colors"
                   title={type.toLowerCase()}
                   aria-label={`React with ${type.toLowerCase()}`}
                 >
@@ -192,28 +196,28 @@ export default function PostActions({
         </div>
         {isOwner && !editing && (
           <>
-            <button onClick={() => setEditing(true)} className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors">
-              <Pencil className="w-4 h-4" /> Edit
+            <button onClick={() => setEditing(true)} aria-label="Edit post" className="p-1.5 text-muted-foreground hover:text-foreground transition-colors rounded-lg hover:bg-secondary" title="Edit">
+              <Pencil className="w-3.5 h-3.5" />
             </button>
-            <button onClick={handleDelete} className="flex items-center gap-1 text-sm text-muted-foreground hover:text-destructive transition-colors">
-              <Trash2 className="w-4 h-4" /> Delete
+            <button onClick={handleDelete} aria-label="Delete post" className="p-1.5 text-muted-foreground hover:text-destructive transition-colors rounded-lg hover:bg-secondary" title="Delete">
+              <Trash2 className="w-3.5 h-3.5" />
             </button>
           </>
         )}
         {session && !isOwner && (
-          <button onClick={() => setShowReport(!showReport)} className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors">
-            <Flag className="w-4 h-4" /> Report
+          <button onClick={() => setShowReport(!showReport)} aria-label="Report post" className="p-1.5 text-muted-foreground hover:text-foreground transition-colors rounded-lg hover:bg-secondary" title="Report">
+            <Flag className="w-3.5 h-3.5" />
           </button>
         )}
         {canModerate && !isOwner && (
-          <button onClick={handleDelete} className="flex items-center gap-1 text-sm text-amber-500 hover:text-amber-600 transition-colors">
-            <Trash2 className="w-4 h-4" /> Remove (mod)
+          <button onClick={handleDelete} aria-label="Remove post" className="p-1.5 text-amber-500 hover:text-amber-600 transition-colors rounded-lg hover:bg-amber-500/10" title="Remove (mod)">
+            <Trash2 className="w-3.5 h-3.5" />
           </button>
         )}
       </div>
 
       {hasReactions && (
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-1.5">
           {ORDER.filter((t) => counts[t] > 0)
             .sort((a, b) => (counts[b] || 0) - (counts[a] || 0))
             .map((type) => {
@@ -223,10 +227,10 @@ export default function PostActions({
                   key={type}
                   onClick={() => session && handleReact(type)}
                   disabled={!session || busy}
-                  className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-sm border transition-colors disabled:opacity-50 ${
+                  className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-xs border transition-colors disabled:opacity-50 ${
                     isActive
                       ? "bg-primary/10 border-primary text-primary"
-                      : "bg-secondary border-transparent text-muted-foreground hover:bg-secondary/80"
+                      : "bg-secondary border-border/50 text-muted-foreground hover:bg-secondary/80"
                   }`}
                 >
                   <span>{EMOJIS[type]}</span>
@@ -238,11 +242,12 @@ export default function PostActions({
       )}
 
       {showReport && (
-        <div className="p-3 bg-secondary/50 rounded-lg space-y-2">
+        <div className="p-2 bg-secondary/50 rounded-lg space-y-2 max-w-md">
+          <p className="text-xs text-muted-foreground">Why are you reporting this post?</p>
           <select
             value={reportReason}
             onChange={(e) => setReportReason(e.target.value)}
-            className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm"
+            className="w-full px-2 py-1.5 rounded-lg border border-border bg-background text-xs"
           >
             <option value="SPAM">Spam</option>
             <option value="HARASSMENT">Harassment</option>
@@ -256,16 +261,16 @@ export default function PostActions({
             value={reportDesc}
             onChange={(e) => setReportDesc(e.target.value)}
             placeholder="Optional details for moderators..."
-            className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm"
+            className="w-full px-2 py-1.5 rounded-lg border border-border bg-background text-xs"
             maxLength={1000}
           />
-          <button onClick={handleReport} disabled={busy} className="px-3 py-1.5 text-sm bg-destructive text-destructive-foreground rounded-lg disabled:opacity-50">
-            Submit report
+          <button onClick={handleReport} disabled={busy} className="px-3 py-1.5 text-xs bg-destructive text-destructive-foreground rounded-lg disabled:opacity-50">
+            Submit
           </button>
         </div>
       )}
 
-      {message && <p role="status" aria-live="polite" className="text-sm text-muted-foreground">{message}</p>}
+      {message && <p role="status" aria-live="polite" className="text-xs text-muted-foreground">{message}</p>}
     </div>
   )
 }
