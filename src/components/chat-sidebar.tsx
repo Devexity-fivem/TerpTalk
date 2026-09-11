@@ -569,12 +569,19 @@ export default function ChatSidebar() {
                 const isMenuOpen = activeMenu === msg.id
                 const canManage = isStaff && msg.author.id !== (session?.user as { id?: string } | undefined)?.id
                 const isDeleted = msg.content === "[deleted]"
+                const isBot = msg.author.username === "terpbot"
+                const isAction = !isBot && !isDeleted && /^\*.+\*$/.test(msg.content)
                 return (
                   <div key={msg.id} className="group relative">
                     <div className="flex items-center gap-1.5 mb-0.5">
                       <span className="font-semibold text-xs">
                         {msg.author.username || msg.author.name}
                       </span>
+                      {isBot && (
+                        <span className="inline-flex items-center text-[9px] font-bold uppercase tracking-wider bg-primary/15 text-primary px-1 py-px rounded">
+                          Bot
+                        </span>
+                      )}
                       <RoleBadge role={msg.author.role} />
                       <span className="text-[10px] text-muted-foreground opacity-70 group-hover:opacity-100 transition-opacity">
                         {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
@@ -597,9 +604,19 @@ export default function ChatSidebar() {
                       </div>
                     )}
 
-                    <p className="text-sm pl-0.5">
-                      {isDeleted ? <span className="italic text-muted-foreground">{msg.content}</span> : renderContent(msg.content)}
-                    </p>
+                    {isBot ? (
+                      <div className="rounded-lg border border-primary/20 bg-primary/5 px-2.5 py-2 text-xs leading-relaxed">
+                        {renderContent(msg.content)}
+                      </div>
+                    ) : isAction ? (
+                      <p className="text-sm pl-0.5 italic text-muted-foreground">
+                        {renderContent(msg.content.slice(1, -1))}
+                      </p>
+                    ) : (
+                      <p className="text-sm pl-0.5">
+                        {isDeleted ? <span className="italic text-muted-foreground">{msg.content}</span> : renderContent(msg.content)}
+                      </p>
+                    )}
 
                     {isMenuOpen && (
                       <div className="mt-1 rounded-lg border border-border bg-card shadow-lg p-1.5 space-y-1 z-10">

@@ -320,16 +320,7 @@ export async function POST(request: NextRequest) {
         if (!rest) {
           return NextResponse.json({ error: "Usage: /announce <message>" }, { status: 400 })
         }
-        const message = await prisma.chatMessage.create({
-          data: {
-            roomId,
-            authorId: userId,
-            content: `📢 ${rest}`,
-          },
-          include: { author: { select: publicUserSelect } },
-        })
-        const dto = toChatDto(message)
-        getPusher()?.trigger(`private-chat-${roomId}`, "new-message", dto).catch(() => {})
+        const dto = await postBot(`📢 ${rest}`)
         return NextResponse.json({ ok: true, message: dto })
       }
 
