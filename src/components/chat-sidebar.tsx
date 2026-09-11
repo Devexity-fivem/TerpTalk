@@ -335,13 +335,14 @@ export default function ChatSidebar() {
       <aside
         className={`
           fixed z-50
-          lg:top-16 lg:right-0 lg:bottom-0 lg:w-80 lg:left-auto
+          lg:sticky lg:top-16 lg:left-auto lg:right-auto lg:bottom-auto
+          lg:w-80
           lg:max-h-none lg:rounded-none lg:rounded-l-xl lg:border-0 lg:border-l lg:shadow-none
           left-4 right-4 bottom-[calc(6rem+env(safe-area-inset-bottom))]
           sm:left-auto sm:w-96 sm:right-4
           h-[70vh] max-h-[600px] lg:h-[calc(100vh-4rem)]
           bg-card border border-border rounded-xl lg:rounded-l-xl
-          shadow-2xl
+          shadow-2xl lg:shadow-none
           flex flex-col overflow-hidden
           transition-all duration-200
         `}

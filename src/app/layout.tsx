@@ -88,9 +88,11 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             <Providers>
               <AnnouncementBanner />
               <Navigation />
-              {/* pb-16 clears the mobile bottom nav; lg:pr-80 makes room for the desktop chat sidebar */}
-              <main id="main-content" className="flex-1 pb-16 lg:pb-0 lg:pr-80">{children}</main>
-              <ChatSidebar />
+              {/* flex-1 flex puts the desktop chat sidebar beside main content */}
+              <div className="flex flex-1 min-h-0">
+                <main id="main-content" className="flex-1 min-w-0 pb-16 lg:pb-0">{children}</main>
+                <ChatSidebar />
+              </div>
               <QuickPostButton />
               <ServiceWorkerRegister />
             </Providers>
