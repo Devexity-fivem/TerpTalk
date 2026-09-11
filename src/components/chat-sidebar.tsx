@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react"
 import { useSession } from "next-auth/react"
 import { MessageCircle, Send, X, Loader2, Smile } from "lucide-react"
 import RoleBadge from "@/components/role-badge"
+import { useToast } from "@/components/ui/toast"
 import dynamic from "next/dynamic"
 import { Theme, EmojiStyle } from "emoji-picker-react"
 
@@ -31,6 +32,7 @@ interface Message {
 
 export default function ChatSidebar() {
   const { data: session } = useSession()
+  const { toast } = useToast()
   const [isOpen, setIsOpen] = useState(false)
   const [showEmoji, setShowEmoji] = useState(false)
   const [messages, setMessages] = useState<Message[]>([])
@@ -68,18 +70,24 @@ export default function ChatSidebar() {
 
   // Load the general room (single community chat)
   useEffect(() => {
-    if (!session) return
+    if (!session || !isOpen) return
 
     fetch("/api/chat/rooms")
-      .then(res => res.json())
+      .then(async res => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`)
+        return res.json()
+      })
       .then(data => {
         const all: Room[] = data.rooms || []
         setRoom(all.find(r => r.slug === "general") || all[0] || null)
         setOnlineCount(data.onlineCount || 0)
         setLoading(false)
       })
-      .catch(() => setLoading(false))
-  }, [session])
+      .catch((err) => {
+        console.error("Failed to load chat room:", err)
+        setLoading(false)
+      })
+  }, [session, isOpen])
 
   // Load messages: realtime via Pusher when configured, otherwise poll.
   // Polls are incremental (?after=) so idle polls are near-empty.
@@ -180,7 +188,16 @@ export default function ChatSidebar() {
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault()
     const content = inputRef.current?.value.trim() ?? ""
-    if (!content || !session || sending || !room) return
+    if (!content) return
+    if (!session) {
+      toast("Sign in to chat", "error")
+      return
+    }
+    if (!room) {
+      toast("Chat room is loading. Try again in a second.", "error")
+      return
+    }
+    if (sending) return
 
     setSending(true)
     try {
@@ -195,9 +212,17 @@ export default function ChatSidebar() {
         setMessages(prev => [...prev, data.message])
         if (inputRef.current) inputRef.current.value = ""
         setShowEmoji(false)
+      } else {
+        let message = "Message failed to send"
+        try {
+          const body = await response.json()
+          if (body?.error) message = body.error
+        } catch {}
+        toast(message, "error")
       }
     } catch (error) {
       console.error("Failed to send message:", error)
+      toast("Message failed to send", "error")
     } finally {
       setSending(false)
     }
@@ -335,13 +360,13 @@ export default function ChatSidebar() {
                 type="text"
                 maxLength={1000}
                 title="Maximum 1000 characters"
-                placeholder="Message General Chat..."
+                placeholder={room ? "Message General Chat..." : "Loading chat room..."}
                 className="flex-1 px-3 py-2 rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-ring text-sm"
-                disabled={sending}
+                disabled={!room || sending}
               />
               <button
                 type="submit"
-                disabled={sending}
+                disabled={!room || sending}
                 aria-label="Send message"
                 className="bg-primary text-primary-foreground p-2 rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
