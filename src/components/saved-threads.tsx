@@ -38,7 +38,7 @@ export default function SavedThreads() {
   if (loading) return null
 
   return (
-    <div className="bg-card rounded-lg border border-border p-6">
+    <div className="h-fit self-start bg-card rounded-lg border border-border p-6">
       <div className="flex items-center gap-2 mb-4">
         <Bookmark className="w-5 h-5 text-primary" />
         <h2 className="text-lg font-semibold">Saved Threads</h2>
