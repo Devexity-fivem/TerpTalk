@@ -53,6 +53,8 @@ model User {
   strainPhotos  StrainPhoto[]
   reports       Report[]
   moderatorActions ModerationAction[]
+  staffApplications StaffApplication[]
+  reviewedApplications StaffApplication[] @relation("Reviewer")
   categoryFollows CategoryFollow[]
   savedSearches  SavedSearch[]
   guideEdits    GuideEdit[]
@@ -65,7 +67,31 @@ model User {
   @@index([lastSeenAt])
 }
 
+// Staff Applications
+
+model StaffApplication {
+  id          String   @id @default(cuid())
+  userId      String
+  role        String   // SUPPORT | MODERATOR
+  why         String
+  experience  String
+  about       String
+  status      String   @default("PENDING") // PENDING | APPROVED | REJECTED
+  reviewNote  String?
+  reviewedBy  String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  applicant   User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  reviewer    User?    @relation("Reviewer", fields: [reviewedBy], references: [id], onDelete: SetNull)
+
+  @@index([status])
+  @@index([userId])
+  @@index([role, status])
+}
+
 // User Profile
+
 model Profile {
   id           String   @id @default(cuid())
   userId       String   @unique
