@@ -92,11 +92,11 @@ export default async function CategoryPage({
           { label: category.name },
         ]} />
         {/* Header */}
-        <div className="mb-8">
-          <div className="flex items-start justify-between gap-4">
+        <div className="mb-6">
+          <div className="flex items-start justify-between gap-4 flex-wrap">
             <div>
-              <h1 className="text-3xl font-bold mb-2">{category.name}</h1>
-              <p className="text-muted-foreground">{category.description}</p>
+              <h1 className="text-2xl font-bold mb-1">{category.name}</h1>
+              <p className="text-sm text-muted-foreground">{category.description}</p>
             </div>
             <CategoryFollowButton categoryId={category.id} initiallyFollowing={isFollowing} />
           </div>
@@ -132,10 +132,10 @@ export default async function CategoryPage({
           </div>
 
           {category.threads.length === 0 ? (
-            <div className="p-12 text-center">
-              <MessageSquare className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-              <h3 className="text-lg font-semibold mb-2">No discussions yet</h3>
-              <p className="text-muted-foreground mb-4">Be the first to start a discussion in this category!</p>
+            <div className="p-8 text-center">
+              <MessageSquare className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
+              <h3 className="text-base font-semibold mb-1">No discussions yet</h3>
+              <p className="text-sm text-muted-foreground mb-3">Be the first to start a discussion in this category!</p>
               <Link
                 href={`/forum/new?category=${category.slug}`}
                 className="bg-primary text-primary-foreground px-6 py-2 rounded-lg hover:bg-primary/90 transition-colors"

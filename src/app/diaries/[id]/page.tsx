@@ -123,10 +123,10 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
           { label: diary.title },
         ]} />
         {/* Header */}
-        <div className="mb-8">
+        <div className="mb-5">
           <div className="flex items-start justify-between gap-4">
             <div className="flex-1">
-              <div className="flex items-center gap-2 mb-2">
+              <div className="flex items-center gap-2 mb-2 flex-wrap">
                 {diary.featured && (
                   <span className="text-xs text-primary px-2 py-1 bg-primary/10 rounded">
                     Featured
@@ -144,27 +144,27 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
                   </span>
                 )}
               </div>
-              <h1 className="text-3xl font-bold mb-2">{diary.title}</h1>
-              <p className="text-muted-foreground mb-4">{diary.description}</p>
-              <div className="flex items-center gap-4 text-sm text-muted-foreground">
+              <h1 className="text-2xl font-bold mb-2">{diary.title}</h1>
+              <p className="text-sm text-muted-foreground mb-3">{diary.description}</p>
+              <div className="flex items-center flex-wrap gap-x-3 gap-y-1 text-sm text-muted-foreground">
                 <span className="flex items-center gap-1">
-                  <Users className="w-4 h-4" />
+                  <Users className="w-3.5 h-3.5" />
                   {diary.author.profile?.username || diary.author.name}
                 </span>
                 <span className="flex items-center gap-1">
-                  <Calendar className="w-4 h-4" />
-                  Started: {new Date(diary.startDate).toLocaleDateString()}
+                  <Calendar className="w-3.5 h-3.5" />
+                  Started {new Date(diary.startDate).toLocaleDateString()}
                 </span>
                 <span className="flex items-center gap-1">
-                  <Leaf className="w-4 h-4" />
+                  <Leaf className="w-3.5 h-3.5" />
                   {diary._count.updates} updates
                 </span>
                 <span className="flex items-center gap-1">
-                  <Users className="w-4 h-4" />
+                  <Users className="w-3.5 h-3.5" />
                   {diary._count.followers} followers
                 </span>
                 <span className="flex items-center gap-1 font-medium text-primary">
-                  <Calendar className="w-4 h-4" />
+                  <Calendar className="w-3.5 h-3.5" />
                   Day {dayCount}
                 </span>
                 {streak >= 2 && (
@@ -208,9 +208,13 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
         />
 
         {/* Grow Setup Info */}
-        <div className="bg-card rounded-lg border border-border p-6 mb-8">
-          <h3 className="font-semibold mb-4">Grow Setup</h3>
-          <div className="grid md:grid-cols-3 gap-4">
+        <details className="bg-card rounded-lg border border-border mb-8 group">
+          <summary className="p-4 text-sm font-semibold cursor-pointer flex items-center justify-between list-none marker:content-none">
+            <span>Grow setup</span>
+            <span aria-hidden="true" className="text-muted-foreground group-open:rotate-180 transition-transform">▼</span>
+          </summary>
+          <div className="px-4 pb-4">
+            <div className="grid md:grid-cols-3 gap-4">
             {diary.strain && (
               <div>
                 <span className="text-sm text-muted-foreground">Strain:</span>
@@ -266,12 +270,13 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
               <p className="font-medium">{diary.equipment}</p>
             </div>
           )}
-        </div>
+          </div>
+        </details>
 
         {/* Timeline */}
-        <div className="space-y-6">
+        <div className="space-y-4">
           <div className="flex justify-between items-center">
-            <h2 className="text-xl font-semibold">Grow Timeline</h2>
+            <h2 className="text-lg font-semibold">Grow Timeline</h2>
             <UpdateForm diaryId={diary.id} />
           </div>
 
@@ -287,10 +292,10 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
           />
 
           {updates.length === 0 ? (
-            <div className="bg-card rounded-lg border border-border p-12 text-center">
-              <Leaf className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-              <h3 className="text-lg font-semibold mb-2">No updates yet</h3>
-              <p className="text-muted-foreground">Start documenting your grow journey with your first update!</p>
+            <div className="bg-card rounded-lg border border-border p-8 text-center">
+              <Leaf className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
+              <h3 className="text-base font-semibold mb-1">No updates yet</h3>
+              <p className="text-sm text-muted-foreground">Start documenting your grow journey with your first update!</p>
             </div>
           ) : (
             <div className="relative">
@@ -304,10 +309,10 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
                     {/* Timeline dot */}
                     <div className="absolute left-4 w-4 h-4 bg-primary rounded-full border-4 border-background"></div>
 
-                    <div className="bg-card rounded-lg border border-border p-6">
-                      <div className="flex items-start justify-between mb-4">
+                    <div className="bg-card rounded-lg border border-border p-4">
+                      <div className="flex flex-wrap items-start justify-between gap-2 mb-3">
                         <div>
-                          <div className="flex items-center gap-2 mb-2">
+                          <div className="flex items-center gap-2 mb-1.5 flex-wrap">
                             <span className="text-xs text-muted-foreground px-2 py-1 bg-secondary rounded">
                               {update.stage}
                             </span>
@@ -322,9 +327,9 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
                               </span>
                             )}
                           </div>
-                          <h3 className="font-semibold">{update.title}</h3>
+                          <h3 className="font-semibold text-sm">{update.title}</h3>
                         </div>
-                        <span className="text-sm text-muted-foreground">
+                        <span className="text-xs text-muted-foreground">
                           {new Date(update.createdAt).toLocaleDateString()}
                         </span>
                       </div>

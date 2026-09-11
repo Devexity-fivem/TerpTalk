@@ -114,19 +114,19 @@ export default function ProfileClient() {
   return (
     <div className="min-h-screen bg-background">
       <div className="max-w-4xl mx-auto px-4 py-8">
-        <div className="bg-card rounded-lg border border-border p-6 mb-6">
-          <div className="flex items-start gap-6 flex-wrap">
+        <div className="bg-card rounded-lg border border-border p-4 mb-5">
+          <div className="flex items-start gap-4 flex-wrap">
             <Avatar
               src={profile.avatarUrl}
               alt="avatar"
               size="xl"
-              className="w-24 h-24 bg-primary/10 text-primary"
-              fallback={<User className="w-12 h-12 text-primary" />}
+              className="w-20 h-20 bg-primary/10 text-primary"
+              fallback={<User className="w-10 h-10 text-primary" />}
             />
             <div className="flex-1 min-w-0">
               <div className="flex items-start justify-between gap-4 flex-wrap">
                 <div>
-                  <h1 className="text-2xl font-bold mb-1 break-words flex items-center gap-2">@{profile.username} <RoleBadge role={profile.role} /></h1>
+                  <h1 className="text-xl font-bold mb-1 break-words flex items-center gap-2">@{profile.username} <RoleBadge role={profile.role} /></h1>
                   <p className="text-muted-foreground text-sm mb-2 flex items-center gap-2 flex-wrap">
                     <span>Member since {joinDate}</span>
                     <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full ${profile.reputationTier.bg} ${profile.reputationTier.color} text-xs font-medium`}>
@@ -186,29 +186,29 @@ export default function ProfileClient() {
                   </div>
                 )}
               </div>
-              <div className="flex gap-6 mt-4">
+              <div className="flex gap-4 mt-4 flex-wrap">
                 <div className="text-center">
-                  <div className="text-xl font-bold text-primary">{profile.reputation}</div>
+                  <div className="text-lg font-bold text-primary">{profile.reputation}</div>
                   <div className="text-xs text-muted-foreground">Reputation</div>
                 </div>
                 <div className="text-center">
-                  <div className="text-xl font-bold text-primary">{profile.stats.threadCreator}</div>
+                  <div className="text-lg font-bold text-primary">{profile.stats.threadCreator}</div>
                   <div className="text-xs text-muted-foreground">Threads</div>
                 </div>
                 <div className="text-center">
-                  <div className="text-xl font-bold text-primary">{profile.stats.posts}</div>
+                  <div className="text-lg font-bold text-primary">{profile.stats.posts}</div>
                   <div className="text-xs text-muted-foreground">Posts</div>
                 </div>
                 <div className="text-center">
-                  <div className="text-xl font-bold text-primary">{profile.stats.diaryCreator}</div>
+                  <div className="text-lg font-bold text-primary">{profile.stats.diaryCreator}</div>
                   <div className="text-xs text-muted-foreground">Diaries</div>
                 </div>
                 <div className="text-center">
-                  <div className="text-xl font-bold text-primary">{profile.harvestedDiaries}</div>
+                  <div className="text-lg font-bold text-primary">{profile.harvestedDiaries}</div>
                   <div className="text-xs text-muted-foreground">Harvests</div>
                 </div>
                 <div className="text-center">
-                  <div className="text-xl font-bold text-primary">{profile.totalUpdates}</div>
+                  <div className="text-lg font-bold text-primary">{profile.totalUpdates}</div>
                   <div className="text-xs text-muted-foreground">Updates</div>
                 </div>
               </div>
@@ -234,9 +234,9 @@ export default function ProfileClient() {
           </div>
         </div>
 
-        <div className="bg-card rounded-lg border border-border p-6">
-          <div className="flex items-center gap-2 mb-4">
-            <MessageSquare className="w-5 h-5 text-primary" />
+        <div className="bg-card rounded-lg border border-border p-4 mb-4">
+          <div className="flex items-center gap-2 mb-3">
+            <MessageSquare className="w-4 h-4 text-primary" />
             <h2 className="text-lg font-semibold">Recent Discussions</h2>
           </div>
           {recentThreads.length === 0 ? (
@@ -263,9 +263,9 @@ export default function ProfileClient() {
           )}
         </div>
 
-        <div className="bg-card rounded-lg border border-border p-6">
-          <div className="flex items-center gap-2 mb-4">
-            <Sprout className="w-5 h-5 text-primary" />
+        <div className="bg-card rounded-lg border border-border p-4 mb-4">
+          <div className="flex items-center gap-2 mb-3">
+            <Sprout className="w-4 h-4 text-primary" />
             <h2 className="text-lg font-semibold">Recent Grows</h2>
           </div>
           {growDiaries.length === 0 ? (

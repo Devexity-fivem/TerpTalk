@@ -43,19 +43,19 @@ export default async function DiariesPage() {
     <div className="min-h-screen bg-background">
       <div className="max-w-7xl mx-auto px-4 py-8">
         {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold mb-2">Grow Diaries</h1>
-          <p className="text-muted-foreground">Document and share your complete grow journey from seed to harvest</p>
+        <div className="mb-6">
+          <h1 className="text-2xl font-bold mb-1">Grow Diaries</h1>
+          <p className="text-sm text-muted-foreground">Document and share your complete grow journey from seed to harvest</p>
         </div>
 
         {/* Featured Diaries */}
         {diaries.filter(d => d.featured).length > 0 && (
-          <div className="mb-8">
-            <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
-              <TrendingUp className="w-5 h-5 text-primary" />
+          <div className="mb-6">
+            <h2 className="text-lg font-semibold mb-3 flex items-center gap-2">
+              <TrendingUp className="w-4 h-4 text-primary" />
               Featured Diaries
             </h2>
-            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
               {diaries.filter(d => d.featured).map((diary) => (
                 <Link
                   key={diary.id}
@@ -63,7 +63,7 @@ export default async function DiariesPage() {
                   className="bg-card rounded-lg border border-border overflow-hidden hover:border-primary/50 transition-colors"
                 >
                   <div className="aspect-video bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center">
-                    <Leaf className="w-16 h-16 text-primary/30" />
+                    <Leaf className="w-10 h-10 text-primary/30" />
                   </div>
                   <div className="p-4">
                     <div className="flex items-center gap-2 mb-2">
@@ -96,8 +96,8 @@ export default async function DiariesPage() {
 
         {/* All Diaries */}
         <div>
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-xl font-semibold">All Diaries</h2>
+          <div className="flex justify-between items-center mb-3">
+            <h2 className="text-lg font-semibold">All Diaries</h2>
             <Link
               href="/diaries/new"
               className="bg-primary text-primary-foreground px-4 py-2 rounded-lg hover:bg-primary/90 transition-colors text-sm"
@@ -116,7 +116,7 @@ export default async function DiariesPage() {
               />
             </div>
           ) : (
-            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
               {diaries.map((diary) => (
                 <Link
                   key={diary.id}
@@ -124,7 +124,7 @@ export default async function DiariesPage() {
                   className="bg-card rounded-lg border border-border overflow-hidden hover:border-primary/50 transition-colors"
                 >
                   <div className="aspect-video bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center">
-                    <Leaf className="w-16 h-16 text-primary/30" />
+                    <Leaf className="w-10 h-10 text-primary/30" />
                   </div>
                   <div className="p-4">
                     <div className="flex items-center gap-2 mb-2">

@@ -71,9 +71,9 @@ export default async function ForumPage() {
       <ForumLiveRefresh latestThreadId={recentThreads[0]?.id ?? null} />
       <div className="max-w-7xl mx-auto px-4 py-8">
         {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold mb-2">TerpTalk Discussions</h1>
-          <p className="text-muted-foreground">Join discussions, share knowledge, and connect with fellow growers</p>
+        <div className="mb-6">
+          <h1 className="text-2xl font-bold mb-1">Discussions</h1>
+          <p className="text-sm text-muted-foreground">Join discussions, share knowledge, and connect with fellow growers</p>
         </div>
 
         <div className="grid lg:grid-cols-3 gap-6">
@@ -81,15 +81,15 @@ export default async function ForumPage() {
           <div className="lg:col-span-2 space-y-6">
             {/* Categories */}
             <div className="bg-card rounded-lg border border-border">
-              <div className="p-6 border-b border-border">
-                <h2 className="text-xl font-semibold">Categories</h2>
+              <div className="p-4 border-b border-border">
+                <h2 className="text-lg font-semibold">Categories</h2>
               </div>
               <div className="divide-y divide-border">
                 {categories.map((category) => (
                   <Link
                     key={category.id}
                     href={`/forum/category/${category.slug}`}
-                    className="block p-6 hover:bg-secondary/50 transition-colors"
+                    className="block p-4 hover:bg-secondary/50 transition-colors"
                   >
                     <div className="flex items-start gap-4">
                       <div className="bg-primary/10 p-3 rounded-lg">
@@ -119,8 +119,8 @@ export default async function ForumPage() {
 
             {/* Recent Threads */}
             <div className="bg-card rounded-lg border border-border">
-              <div className="p-6 border-b border-border">
-                <h2 className="text-xl font-semibold">Recent Discussions</h2>
+              <div className="p-4 border-b border-border">
+                <h2 className="text-lg font-semibold">Recent Discussions</h2>
               </div>
               <div className="divide-y divide-border">
                 {recentThreads.map((thread) => (
@@ -161,8 +161,8 @@ export default async function ForumPage() {
           {/* Sidebar */}
           <div className="space-y-6">
             {/* Forum Stats */}
-            <div className="bg-card rounded-lg border border-border p-6">
-              <h3 className="font-semibold mb-4">Forum Statistics</h3>
+            <div className="bg-card rounded-lg border border-border p-4">
+              <h3 className="text-base font-semibold mb-3">Forum Statistics</h3>
               <div className="space-y-3">
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Total Threads</span>
@@ -180,8 +180,8 @@ export default async function ForumPage() {
             </div>
 
             {/* Trending Topics */}
-            <div className="bg-card rounded-lg border border-border p-6">
-              <h3 className="font-semibold mb-4 flex items-center gap-2">
+            <div className="bg-card rounded-lg border border-border p-4">
+              <h3 className="text-base font-semibold mb-3 flex items-center gap-2">
                 <TrendingUp className="w-4 h-4" />
                 Trending Topics
               </h3>
@@ -199,8 +199,8 @@ export default async function ForumPage() {
             </div>
 
             {/* Quick Actions */}
-            <div className="bg-card rounded-lg border border-border p-6">
-              <h3 className="font-semibold mb-4">Quick Actions</h3>
+            <div className="bg-card rounded-lg border border-border p-4">
+              <h3 className="text-base font-semibold mb-3">Quick Actions</h3>
               <div className="space-y-2">
                 <Link
                   href="/forum/new"

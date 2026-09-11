@@ -177,8 +177,8 @@ export default async function ThreadPage({
         <JsonLd data={discussionSchema} />
         <ViewTracker threadId={thread.id} />
         <Breadcrumbs items={breadcrumbs} />
-        <div className="mb-8">
-          <div className="flex items-center gap-2 mb-2">
+        <div className="mb-5">
+          <div className="flex items-center gap-2 mb-2 flex-wrap">
             <span className="text-xs text-muted-foreground px-2 py-1 bg-secondary rounded">
               {thread.category.name}
             </span>
@@ -190,14 +190,14 @@ export default async function ThreadPage({
             )}
             <ThreadModActions threadId={thread.id} authorId={thread.authorId} pinned={thread.pinned} locked={thread.locked} />
           </div>
-          <h1 className="text-3xl font-bold mb-2 break-words">{thread.title}</h1>
+          <h1 className="text-2xl font-bold mb-2 break-words">{thread.title}</h1>
           {thread.tags.length > 0 && (
-            <div className="flex flex-wrap gap-2 mb-3">
+            <div className="flex flex-wrap gap-2 mb-2">
               {thread.tags.map((tt) => (
                 <Link
                   key={tt.tagId}
                   href={`/forum/tags/${tt.tag.slug}`}
-                  className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-secondary hover:bg-primary/10 transition-colors"
+                  className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-secondary hover:bg-primary/10 transition-colors"
                   style={tt.tag.color ? { backgroundColor: tt.tag.color } : undefined}
                 >
                   #{tt.tag.name}
@@ -205,25 +205,25 @@ export default async function ThreadPage({
               ))}
             </div>
           )}
-          <div className="flex items-center gap-4 text-sm text-muted-foreground flex-wrap">
+          <div className="flex items-center gap-x-3 gap-y-1 text-xs text-muted-foreground flex-wrap">
             <Link
               href={`/u/${thread.author.profile?.username || thread.author.name}`}
               className="flex items-center gap-1 hover:text-foreground"
             >
-              <Users className="w-4 h-4" />
+              <Users className="w-3.5 h-3.5" />
               {thread.author.profile?.username || thread.author.name}
             </Link>
             <RoleBadge role={thread.author.role} />
             <span className="flex items-center gap-1">
-              <Clock className="w-4 h-4" />
+              <Clock className="w-3.5 h-3.5" />
               {new Date(thread.createdAt).toLocaleDateString()}
             </span>
             <span className="flex items-center gap-1">
-              <MessageSquare className="w-4 h-4" />
+              <MessageSquare className="w-3.5 h-3.5" />
               {thread.replyCount} repl{thread.replyCount === 1 ? "y" : "ies"}
             </span>
             <span className="flex items-center gap-1">
-              <Users className="w-4 h-4" />
+              <Users className="w-3.5 h-3.5" />
               {thread.views} views
             </span>
             <BookmarkButton threadId={thread.id} initiallySaved={saved} />
@@ -250,17 +250,17 @@ export default async function ThreadPage({
 
         {/* Accepted answer */}
         {acceptedPost && (
-          <div className="bg-card rounded-lg border-2 border-green-500/50 p-6 mb-6 ring-1 ring-green-500/20">
-            <div className="flex items-center gap-2 text-green-400 text-sm font-medium mb-4">
-              <CheckCircle2 className="w-4 h-4" />
+          <div className="bg-card rounded-lg border-2 border-green-500/50 p-4 mb-4 ring-1 ring-green-500/20">
+            <div className="flex items-center gap-2 text-green-400 text-xs font-medium mb-3">
+              <CheckCircle2 className="w-3.5 h-3.5" />
               <span>Accepted answer</span>
             </div>
-            <div className="flex items-start gap-4">
+            <div className="flex items-start gap-3">
               <div className="flex-shrink-0">
                 <Avatar
                   src={acceptedPost.author.image ?? undefined}
                   alt={acceptedPost.author.profile?.username || acceptedPost.author.name || undefined}
-                  className="w-12 h-12"
+                  className="w-10 h-10"
                 />
               </div>
               <div className="flex-1 min-w-0">
@@ -268,17 +268,17 @@ export default async function ThreadPage({
                   <div className="min-w-0">
                     <Link
                       href={`/u/${acceptedPost.author.profile?.username || acceptedPost.author.name}`}
-                      className="font-semibold hover:text-primary truncate"
+                      className="font-semibold hover:text-primary truncate text-sm"
                     >
                       {acceptedPost.author.profile?.username || acceptedPost.author.name}
                     </Link>
                     <RoleBadge role={acceptedPost.author.role} />
                   </div>
-                  <span className="text-sm text-muted-foreground shrink-0">
+                  <span className="text-xs text-muted-foreground shrink-0">
                     {new Date(acceptedPost.createdAt).toLocaleString()}
                   </span>
                 </div>
-                <div className="prose prose-invert max-w-none mb-4">
+                <div className="prose prose-invert max-w-none mb-3">
                   <PostContent content={acceptedPost.content} authorRole={acceptedPost.author.role} pagePath={`/forum/thread/${thread.slug}`} />
                   <ImageGallery images={acceptedPost.images} />
                 </div>
@@ -303,23 +303,23 @@ export default async function ThreadPage({
         )}
 
         {/* Posts */}
-        <div className="space-y-6">
+        <div className="space-y-4">
           {visiblePosts.map((post, index) => {
             const isOp = index === 0
             const eligibleForAnswer = !isOp && post.authorId !== thread.authorId
             return (
               <div
                 key={post.id}
-                className={`bg-card rounded-lg border border-border p-6 ${
+                className={`bg-card rounded-lg border border-border p-4 ${
                   isOp ? "ring-2 ring-primary/20" : ""
                 }`}
               >
-                <div className="flex items-start gap-4">
+                <div className="flex items-start gap-3">
                   <div className="flex-shrink-0">
                     <Avatar
                       src={post.author.image ?? undefined}
                       alt={post.author.profile?.username || post.author.name || undefined}
-                      className="w-12 h-12"
+                      className="w-10 h-10"
                     />
                   </div>
                   <div className="flex-1 min-w-0">
@@ -327,7 +327,7 @@ export default async function ThreadPage({
                       <div className="min-w-0">
                         <Link
                           href={`/u/${post.author.profile?.username || post.author.name}`}
-                          className="font-semibold hover:text-primary truncate"
+                          className="font-semibold hover:text-primary truncate text-sm"
                         >
                           {post.author.profile?.username || post.author.name}
                         </Link>
@@ -339,11 +339,11 @@ export default async function ThreadPage({
                           <span className="ml-2 text-xs text-muted-foreground">(edited)</span>
                         )}
                       </div>
-                      <span className="text-sm text-muted-foreground shrink-0">
+                      <span className="text-xs text-muted-foreground shrink-0">
                         {new Date(post.createdAt).toLocaleString()}
                       </span>
                     </div>
-                    <div className="prose prose-invert max-w-none mb-4">
+                    <div className="prose prose-invert max-w-none mb-3">
                       <PostContent content={post.content} authorRole={post.author.role} pagePath={`/forum/thread/${thread.slug}`} />
                       <ImageGallery images={post.images} />
                     </div>
@@ -390,10 +390,10 @@ export default async function ThreadPage({
         })()}
 
         {relatedThreads.length > 0 && (
-          <div className="mt-8 bg-card rounded-lg border border-border p-6">
-            <div className="flex items-center gap-2 mb-4">
-              <MessageSquare className="w-4 h-4 text-primary" />
-              <h2 className="font-semibold">Related discussions</h2>
+          <div className="mt-6 bg-card rounded-lg border border-border p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <MessageSquare className="w-3.5 h-3.5 text-primary" />
+              <h2 className="text-base font-semibold">Related discussions</h2>
             </div>
             <ul className="space-y-2">
               {relatedThreads.map((t) => (
