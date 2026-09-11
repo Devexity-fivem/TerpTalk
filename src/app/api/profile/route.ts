@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { unauthorized, forbidden, getClientIp, logSecurityEvent, LIMITS, isBanned } from "@/lib/security"
-import { storeImage, deleteImage } from "@/lib/blob"
+import { storeImage, deleteImagesIfUnreferenced } from "@/lib/blob"
 import { getReputationTier, getTierProgress } from "@/lib/reputation"
 import { rateLimit } from "@/lib/rate-limit"
 import bcrypt from "bcryptjs"
@@ -120,6 +120,7 @@ export async function GET() {
 export async function PATCH(request: Request) {
   const ip = getClientIp(request)
   const userAgent = request.headers.get("user-agent")
+  let newAvatarBlobUrl: string | undefined
 
   try {
     const session = await getServerSession(authOptions)
@@ -206,6 +207,7 @@ export async function PATCH(request: Request) {
         }
         if (isDataUri) {
           avatarUrl = await storeImage(avatarUrl, "avatars")
+          newAvatarBlobUrl = avatarUrl
         }
       }
     }
@@ -321,11 +323,13 @@ export async function PATCH(request: Request) {
     // Best-effort cleanup of the previous avatar blob when it is replaced or removed.
     const oldAvatar = current?.avatarUrl
     if (oldAvatar && oldAvatar !== updateData.avatarUrl) {
-      deleteImage(oldAvatar).catch(() => {})
+      deleteImagesIfUnreferenced([oldAvatar]).catch(() => {})
     }
 
     return NextResponse.json({ profile: updated }, { headers: NO_STORE })
   } catch (error) {
+    // Clean up the new avatar Blob if the profile update could not be saved.
+    deleteImagesIfUnreferenced([newAvatarBlobUrl]).catch(() => {})
     console.error("Profile update error:", error)
     const message = error instanceof Error ? error.message : "Failed to update profile"
     return NextResponse.json(
@@ -368,7 +372,7 @@ export async function DELETE(request: Request) {
     // Require typed username confirmation for destructive action
     const user = await prisma.user.findUnique({
       where: { id: session.user.id },
-      include: { profile: { select: { username: true } } },
+      include: { profile: { select: { username: true, avatarUrl: true } } },
     })
 
     if (!user) {
@@ -392,10 +396,61 @@ export async function DELETE(request: Request) {
       userAgent,
     })
 
+    // Collect all Vercel Blob URLs owned by this user before cascading deletion.
+    const [
+      postImages,
+      diaryImages,
+      setupImages,
+      strainPhotos,
+      contestImages,
+    ] = await Promise.all([
+      prisma.postImage.findMany({
+        where: {
+          OR: [
+            { thread: { authorId: user.id } },
+            { post: { authorId: user.id } },
+          ],
+        },
+        select: { url: true },
+      }),
+      prisma.diaryImage.findMany({
+        where: { update: { authorId: user.id } },
+        select: { url: true },
+      }),
+      prisma.setupImage.findMany({
+        where: { setup: { authorId: user.id } },
+        select: { url: true },
+      }),
+      prisma.strainPhoto.findMany({
+        where: { userId: user.id },
+        select: { imageUrl: true },
+      }),
+      prisma.contestEntry.findMany({
+        where: { userId: user.id },
+        select: { imageUrl: true },
+      }),
+    ])
+
+    const ownedImageUrls = [
+      ...postImages.map((i) => i.url),
+      ...diaryImages.map((i) => i.url),
+      ...setupImages.map((i) => i.url),
+      ...strainPhotos.map((i) => i.imageUrl),
+      ...contestImages.map((i) => i.imageUrl),
+      user.profile?.avatarUrl,
+    ]
+
     // Cascade delete handles: profile, posts, threads, diaries, setups,
     // chat messages, DMs, notifications, reactions, follows, badges,
     // reputation events, reports filed, moderation actions, blocks
     await prisma.user.delete({ where: { id: user.id } })
+
+    // Best-effort cleanup of owned Blob objects after the DB records are gone.
+    try {
+      await deleteImagesIfUnreferenced(ownedImageUrls)
+    } catch {
+      // Cleanup failure must not roll back the account deletion.
+    }
 
     return NextResponse.json({ deleted: true })
   } catch (error) {

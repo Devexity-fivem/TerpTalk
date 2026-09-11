@@ -5,10 +5,12 @@ import { prisma } from "@/lib/prisma"
 import { unauthorized, publicUserSelect, LIMITS, getClientIp, logSecurityEvent, isBanned, forbidden } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
 import { awardReputation, REP_POINTS } from "@/lib/reputation"
-import { storeImage } from "@/lib/blob"
+import { storeImage, deleteImagesIfUnreferenced } from "@/lib/blob"
 import { BADGE_ICONS } from "@/lib/badges"
 
 export async function POST(request: Request) {
+  let storedImages: string[] = []
+
   try {
     const session = await getServerSession(authOptions)
 
@@ -111,7 +113,7 @@ export async function POST(request: Request) {
     }
 
     // Offload to Blob storage when configured (keeps DB rows small)
-    const storedImages = await Promise.all(validImages.map((i: string) => storeImage(i, "diary-updates")))
+    storedImages = await Promise.all(validImages.map((i: string) => storeImage(i, "diary-updates")))
       .catch(() => [])
 
     // Create update
@@ -232,6 +234,8 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ update }, { status: 201 })
   } catch (error) {
+    // Clean up any already-uploaded Blob objects if the diary update could not be created.
+    deleteImagesIfUnreferenced(storedImages).catch(() => {})
     console.error("Update creation error:", error)
     return NextResponse.json(
       { error: "Failed to create update" },

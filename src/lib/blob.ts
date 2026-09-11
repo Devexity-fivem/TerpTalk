@@ -4,6 +4,7 @@
 // BLOB_READ_WRITE_TOKEN isn't configured so nothing breaks locally.
 import { put, del } from "@vercel/blob"
 import { randomBytes } from "crypto"
+import { prisma } from "@/lib/prisma"
 
 const DATA_URI = /^data:image\/(png|jpe?g|webp);base64,(.+)$/
 export const MAX_DATA_URI_LEN = 400_000 // ~300KB binary
@@ -82,4 +83,38 @@ export async function deleteImage(url: string | null | undefined): Promise<void>
  */
 export async function deleteImages(urls: (string | null | undefined)[]): Promise<void> {
   await Promise.all(urls.filter((u): u is string => typeof u === "string" && u.startsWith("https://")).map(deleteImage))
+}
+
+// Models and fields that store Vercel Blob image URLs. Used to verify a Blob
+// is no longer referenced before deleting it (shared-image protection).
+/**
+ * Delete images from Vercel Blob only when no database record references them.
+ * Safe for replacement flows and account cleanup where multiple records may
+ * have existed for the same user.
+ */
+export async function deleteImagesIfUnreferenced(urls: (string | null | undefined)[]): Promise<void> {
+  const candidates = urls.filter((u): u is string => typeof u === "string" && u.startsWith("https://"))
+  if (!candidates.length || !process.env.BLOB_READ_WRITE_TOKEN) return
+
+  const [postImages, diaryImages, setupImages, strainPhotos, contestImages, profiles] = await Promise.all([
+    prisma.postImage.findMany({ where: { url: { in: candidates } }, select: { url: true } }),
+    prisma.diaryImage.findMany({ where: { url: { in: candidates } }, select: { url: true } }),
+    prisma.setupImage.findMany({ where: { url: { in: candidates } }, select: { url: true } }),
+    prisma.strainPhoto.findMany({ where: { imageUrl: { in: candidates } }, select: { imageUrl: true } }),
+    prisma.contestEntry.findMany({ where: { imageUrl: { in: candidates } }, select: { imageUrl: true } }),
+    prisma.profile.findMany({ where: { avatarUrl: { in: candidates } }, select: { avatarUrl: true } }),
+  ])
+
+  const inUse = new Set<string>(
+    [
+      ...postImages.map((i) => i.url),
+      ...diaryImages.map((i) => i.url),
+      ...setupImages.map((i) => i.url),
+      ...strainPhotos.map((i) => i.imageUrl),
+      ...contestImages.map((i) => i.imageUrl),
+      ...profiles.map((p) => p.avatarUrl),
+    ].filter((u): u is string => typeof u === "string")
+  )
+
+  await deleteImages(candidates.filter((u) => !inUse.has(u)))
 }

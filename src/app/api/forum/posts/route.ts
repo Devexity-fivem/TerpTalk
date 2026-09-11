@@ -6,10 +6,12 @@ import { unauthorized, publicUserSelect, LIMITS, getClientIp, logSecurityEvent, 
 import { requireModerator } from "@/lib/require-staff"
 import { rateLimit } from "@/lib/rate-limit"
 import { awardReputation, REP_POINTS, REP_TIERS } from "@/lib/reputation"
-import { storeImages } from "@/lib/blob"
+import { storeImages, deleteImagesIfUnreferenced } from "@/lib/blob"
 import { notifyMentions } from "@/lib/mentions"
 
 export async function POST(request: Request) {
+  let imageUrls: string[] = []
+
   try {
     const session = await getServerSession(authOptions)
 
@@ -95,7 +97,6 @@ export async function POST(request: Request) {
 
     // Upload attachments first so a storage failure cannot leave a reply
     // with only some of its images.
-    let imageUrls: string[] = []
     try {
       imageUrls = await storeImages(images, "forum")
     } catch (err) {
@@ -163,6 +164,8 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ post }, { status: 201 })
   } catch (error) {
+    // Clean up any already-uploaded Blob objects if the post could not be created.
+    deleteImagesIfUnreferenced(imageUrls).catch(() => {})
     console.error("Post creation error:", error)
     return NextResponse.json(
       { error: "Failed to create post" },

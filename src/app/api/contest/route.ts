@@ -4,7 +4,7 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { unauthorized, publicUserSelect, getClientIp, hashIp, logSecurityEvent, isBanned, forbidden } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
-import { storeImage } from "@/lib/blob"
+import { storeImage, deleteImagesIfUnreferenced } from "@/lib/blob"
 import { currentWeekKey } from "@/lib/week"
 
 function userDto(u: { id?: string; name?: string | null; image?: string | null; profile?: { username?: string | null } | null; role?: string | null }) {
@@ -61,6 +61,8 @@ export async function GET(request: Request) {
 
 // POST — { action: "enter", image, caption } or { action: "vote", entryId }
 export async function POST(request: Request) {
+  let imageUrl: string | undefined
+
   try {
     const session = await getServerSession(authOptions)
     if (!session?.user?.id) return unauthorized()
@@ -91,7 +93,7 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: "You have already entered this week" }, { status: 409 })
       }
 
-      const imageUrl = await storeImage(image, "contest")
+      imageUrl = await storeImage(image, "contest")
       const entry = await prisma.contestEntry.create({
         data: {
           week: currentWeek,
@@ -143,6 +145,8 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ error: "Invalid action" }, { status: 400 })
   } catch (error) {
+    // Clean up the uploaded Blob if the contest entry could not be recorded.
+    deleteImagesIfUnreferenced([imageUrl]).catch(() => {})
     console.error("Contest error:", error)
     return NextResponse.json({ error: "Failed" }, { status: 500 })
   }

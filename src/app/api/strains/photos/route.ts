@@ -5,12 +5,14 @@ import { prisma } from "@/lib/prisma"
 import { unauthorized, getClientIp, logSecurityEvent, isBanned, forbidden, isModerator } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
 import { awardReputation, REP_POINTS } from "@/lib/reputation"
-import { storeImage } from "@/lib/blob"
+import { storeImage, deleteImagesIfUnreferenced } from "@/lib/blob"
 
 const VALID_KINDS = new Set(["PLANT", "FLOWER"])
 
 // POST — upload a photo for a strain (client-resized data URI)
 export async function POST(request: Request) {
+  let imageUrl: string | undefined
+
   try {
     const session = await getServerSession(authOptions)
     if (!session?.user?.id) {
@@ -58,12 +60,13 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Strain not found" }, { status: 404 })
     }
 
+    imageUrl = await storeImage(image, "strains")
     const photo = await prisma.strainPhoto.create({
       data: {
         strainId,
         userId: session.user.id,
         kind,
-        imageUrl: await storeImage(image, "strains"),
+        imageUrl,
         caption: typeof caption === "string" ? caption.trim().slice(0, 200) || null : null,
       },
       include: {
@@ -80,6 +83,8 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ photo }, { status: 201 })
   } catch (error) {
+    // Clean up the uploaded Blob if the photo record could not be created.
+    deleteImagesIfUnreferenced([imageUrl]).catch(() => {})
     console.error("Strain photo upload error:", error)
     return NextResponse.json({ error: "Failed to upload photo" }, { status: 500 })
   }
@@ -101,7 +106,7 @@ export async function DELETE(request: Request) {
 
     const photo = await prisma.strainPhoto.findUnique({
       where: { id },
-      select: { id: true, userId: true },
+      select: { id: true, userId: true, imageUrl: true },
     })
     if (!photo) {
       return NextResponse.json({ error: "Photo not found" }, { status: 404 })
@@ -118,6 +123,7 @@ export async function DELETE(request: Request) {
     }
 
     await prisma.strainPhoto.delete({ where: { id } })
+    deleteImagesIfUnreferenced([photo.imageUrl]).catch(() => {})
     return NextResponse.json({ deleted: true })
   } catch (error) {
     console.error("Strain photo delete error:", error)

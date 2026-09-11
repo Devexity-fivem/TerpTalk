@@ -8,7 +8,7 @@ import { requireModerator } from "@/lib/require-staff"
 import { rateLimit } from "@/lib/rate-limit"
 import { awardReputation, REP_POINTS, REP_TIERS } from "@/lib/reputation"
 import { notifyMentions } from "@/lib/mentions"
-import { storeImages } from "@/lib/blob"
+import { storeImages, deleteImagesIfUnreferenced } from "@/lib/blob"
 
 // Helper function to create a slug from a string
 function createSlug(text: string): string {
@@ -31,6 +31,8 @@ function createTagSlug(text: string): string {
 const MAX_TAGS = 5
 
 export async function POST(request: Request) {
+  let imageUrls: string[] = []
+
   try {
     const session = await getServerSession(authOptions)
 
@@ -138,7 +140,6 @@ export async function POST(request: Request) {
 
     // Upload attachments before creating the thread so a storage failure
     // cannot leave a thread with half its images.
-    let imageUrls: string[] = []
     try {
       imageUrls = await storeImages(images, "forum")
     } catch (err) {
@@ -263,6 +264,8 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ thread }, { status: 201 })
   } catch (error) {
+    // Clean up any already-uploaded Blob objects if the thread could not be created.
+    deleteImagesIfUnreferenced(imageUrls).catch(() => {})
     console.error("Thread creation error:", error)
     return NextResponse.json(
       { error: "Failed to create thread" },

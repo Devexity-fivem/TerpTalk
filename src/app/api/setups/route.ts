@@ -4,9 +4,11 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { unauthorized, publicUserSelect, LIMITS, getClientIp, logSecurityEvent, isBanned, forbidden } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
-import { storeImage } from "@/lib/blob"
+import { storeImage, deleteImagesIfUnreferenced } from "@/lib/blob"
 
 export async function POST(request: Request) {
+  let storedImages: string[] = []
+
   try {
     const session = await getServerSession(authOptions)
 
@@ -81,7 +83,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Invalid image format" }, { status: 400 })
     }
     // Offload to Blob storage when configured
-    const storedImages = await Promise.all(validImages.map((i: string) => storeImage(i, "setups")))
+    storedImages = await Promise.all(validImages.map((i: string) => storeImage(i, "setups")))
 
     // Create grow setup
     const setup = await prisma.growSetup.create({
@@ -113,6 +115,8 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ setup }, { status: 201 })
   } catch (error) {
+    // Clean up any already-uploaded Blob objects if the setup could not be created.
+    deleteImagesIfUnreferenced(storedImages).catch(() => {})
     console.error("Setup creation error:", error)
     return NextResponse.json(
       { error: "Failed to create setup" },
