@@ -6,6 +6,7 @@ import { unauthorized, publicUserSelect, LIMITS, getClientIp, logSecurityEvent, 
 import { rateLimit } from "@/lib/rate-limit"
 import { notifyMentions } from "@/lib/mentions"
 import { getPusher } from "@/lib/pusher"
+import { postBotMessage, TERPBOT_USERNAME } from "@/lib/terpbot"
 import { getBooleanSetting, SITE_SETTINGS } from "@/lib/settings"
 import { checkMaintenance } from "@/lib/maintenance"
 
@@ -273,6 +274,23 @@ export async function POST(request: NextRequest) {
 
     // Realtime fan-out when Pusher is configured (clients fall back to polling)
     getPusher()?.trigger(`private-chat-${roomId}`, "new-message", dto).catch(() => {})
+
+    // TerpBot answers direct pings — at most once a minute so it can't be
+    // spammed into flooding the room.
+    if (/@terpbot\b/i.test(content)) {
+      const lastBot = await prisma.chatMessage.findFirst({
+        where: { roomId, author: { profile: { username: TERPBOT_USERNAME } }, deleted: false },
+        orderBy: { createdAt: "desc" },
+        select: { createdAt: true },
+      })
+      if (!lastBot || Date.now() - lastBot.createdAt.getTime() > 60 * 1000) {
+        postBotMessage(
+          roomId,
+          `🤖 You pinged me! Try /help for commands — /tip, /stats, /top, /strain <name>, /guide <search>, /ask <question>, /contest, /flip, /roll.`,
+          { awardRep: true }
+        ).catch(() => {})
+      }
+    }
 
     return NextResponse.json({ message: dto }, { status: 201 })
   } catch (error) {

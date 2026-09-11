@@ -243,6 +243,16 @@ export default function ChatSidebar() {
     const list: { name: string; desc: string }[] = [
       { name: "help", desc: "Show chat commands" },
       { name: "me", desc: "Roleplay an action" },
+      { name: "tip", desc: "Grow tip" },
+      { name: "stats", desc: "Community stats" },
+      { name: "top", desc: "Top growers" },
+      { name: "strain", desc: "Look up a strain" },
+      { name: "guide", desc: "Find a grow guide" },
+      { name: "ask", desc: "Search strains + guides" },
+      { name: "contest", desc: "Contest status" },
+      { name: "rules", desc: "Community rules" },
+      { name: "flip", desc: "Flip a coin" },
+      { name: "roll", desc: "Roll a die" },
     ]
     if (isStaff) {
       list.push(

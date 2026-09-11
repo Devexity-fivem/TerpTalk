@@ -1,28 +1,11 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { postToGeneral } from "@/lib/terpbot"
+import { postToGeneral, GROW_TIPS } from "@/lib/terpbot"
 import { currentWeekKey, previousWeekKey } from "@/lib/week"
 
 // Daily TerpBot job — digests, grow tips, and contest-winner announcements.
 // Invoked by the Vercel cron configured in vercel.json. Idempotent via
 // Setting rows, so a duplicate invocation never double-posts.
-
-const GROW_TIPS = [
-  "Check runoff pH weekly — nutrient lockout usually shows up there first.",
-  "LST beats topping for small tents: same yields, less recovery time.",
-  "Water less, more often is a myth — water to ~10-20% runoff, then wait for the pot to feel light.",
-  "A steady 75-80°F in flower keeps terps happy; big day/night swings stress the plant.",
-  "Defoliate lightly at week 3 of flower — light penetration matters more than leaf count.",
-  "Drying slow (60°F / 60% RH) preserves more terpenes than a warm, fast dry.",
-  "Label every cut and seed — future you will forget which pheno was which.",
-  "If leaves canoe up, your light or VPD is too hot before your nutrients are wrong.",
-  "Silica early in veg = stronger branches for heavy flowers later.",
-  "Don't harvest by calendar — check trichomes with a loupe: cloudy > amber for most growers.",
-  "Airflow fixes more problems than nutrients do. Add a fan before you add a bottle.",
-  "Take clone cuts before flipping to flower — it's nearly impossible after.",
-  "Cure in jars with daily burps for week one; patience doubles the flavor.",
-  "Calibrate your pH pen monthly — a drifting meter causes phantom deficiencies.",
-]
 
 async function wasDone(key: string): Promise<boolean> {
   const row = await prisma.setting.findUnique({ where: { key }, select: { value: true } })
