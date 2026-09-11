@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma"
 import { publicUserSelect, isModerator } from "@/lib/security"
 import { notFound } from "next/navigation"
-import { MessageSquare, Users, Clock, CheckCircle2 } from "lucide-react"
+import { MessageSquare, Users, Clock, CheckCircle2, Eye } from "lucide-react"
 import Link from "next/link"
 import ReplyForm from "@/components/reply-form"
 import PostActions from "@/components/post-actions"
@@ -223,7 +223,7 @@ export default async function ThreadPage({
               {thread.replyCount} repl{thread.replyCount === 1 ? "y" : "ies"}
             </span>
             <span className="flex items-center gap-1">
-              <Users className="w-3.5 h-3.5" />
+              <Eye className="w-3.5 h-3.5" />
               {thread.views} views
             </span>
             <BookmarkButton threadId={thread.id} initiallySaved={saved} />
@@ -278,7 +278,7 @@ export default async function ThreadPage({
                     {new Date(acceptedPost.createdAt).toLocaleString()}
                   </span>
                 </div>
-                <div className="prose prose-invert max-w-none mb-3">
+                <div className="max-w-none mb-3">
                   <PostContent content={acceptedPost.content} authorRole={acceptedPost.author.role} pagePath={`/forum/thread/${thread.slug}`} />
                   <ImageGallery images={acceptedPost.images} />
                 </div>
@@ -343,7 +343,7 @@ export default async function ThreadPage({
                         {new Date(post.createdAt).toLocaleString()}
                       </span>
                     </div>
-                    <div className="prose prose-invert max-w-none mb-3">
+                    <div className="max-w-none mb-3">
                       <PostContent content={post.content} authorRole={post.author.role} pagePath={`/forum/thread/${thread.slug}`} />
                       <ImageGallery images={post.images} />
                     </div>

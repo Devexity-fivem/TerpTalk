@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import Link from "next/link"
-import { Bookmark, Trash2, Loader2 } from "lucide-react"
+import { Bookmark, Trash2 } from "lucide-react"
 
 interface SavedSearch {
   id: string
@@ -35,11 +35,10 @@ export default function SavedSearches() {
     }
   }
 
-  if (loading) {
-    return <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
-  }
-
-  if (searches.length === 0) return null
+  // Render nothing while loading to avoid a layout shift in the grid —
+  // once loaded the card stays mounted even when empty so the two-column
+  // profile grid keeps its symmetric pairing.
+  if (loading) return null
 
   return (
     <div className="bg-card rounded-lg border border-border p-6">
@@ -47,7 +46,12 @@ export default function SavedSearches() {
         <Bookmark className="w-5 h-5 text-primary" />
         <h2 className="text-lg font-semibold">Saved Searches</h2>
       </div>
-      <ul className="space-y-2">
+      {searches.length === 0 ? (
+        <p className="text-sm text-muted-foreground">
+          No saved searches. Use Save on the search page to pin a query here.
+        </p>
+      ) : (
+      <ul className="space-y-2 max-h-80 overflow-y-auto">
         {searches.map((s) => (
           <li key={s.id} className="flex items-center justify-between gap-3">
             <Link
@@ -66,6 +70,7 @@ export default function SavedSearches() {
           </li>
         ))}
       </ul>
+      )}
     </div>
   )
 }

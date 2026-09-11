@@ -5,12 +5,21 @@ import { useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
 import { BookOpen, Loader2 } from "lucide-react"
 
-const TOPICS = ["Basics", "Nutrients", "Environment", "Training", "Pests & Problems", "Harvest & Cure", "Equipment"]
+const TOPICS = [
+  { value: "BASICS", label: "Basics" },
+  { value: "NUTRIENTS", label: "Nutrients" },
+  { value: "HARVEST", label: "Harvest" },
+  { value: "PESTS", label: "Pests" },
+  { value: "ENVIRONMENT", label: "Environment" },
+  { value: "GENETICS", label: "Genetics" },
+  { value: "TRAINING", label: "Training" },
+  { value: "LAW", label: "Law" },
+]
 
 export default function NewGuidePage() {
   const { data: session, status } = useSession()
   const router = useRouter()
-  const [form, setForm] = useState({ title: "", excerpt: "", topic: TOPICS[0], content: "" })
+  const [form, setForm] = useState({ title: "", excerpt: "", topic: TOPICS[0].value, content: "" })
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState("")
 
@@ -54,7 +63,7 @@ export default function NewGuidePage() {
           <div>
             <label className="block text-sm font-medium mb-1">Topic</label>
             <select value={form.topic} onChange={(e) => setForm({ ...form, topic: e.target.value })} className={inputCls}>
-              {TOPICS.map((t) => <option key={t}>{t}</option>)}
+              {TOPICS.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
             </select>
           </div>
           <div>

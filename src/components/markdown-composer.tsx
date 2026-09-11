@@ -39,6 +39,7 @@ function ToolbarButton({ onClick, title, disabled, children }: ToolbarButtonProp
       type="button"
       onClick={onClick}
       title={title}
+      aria-label={title}
       disabled={disabled}
       className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
     >
@@ -182,8 +183,8 @@ export default function MarkdownComposer({
     <div className="space-y-2 relative">
       {label && <label htmlFor={id} className="block text-sm font-medium">{label}</label>}
       <div className="rounded-lg border border-border bg-background overflow-hidden">
-        <div className="flex items-center justify-between border-b border-border bg-secondary/30 px-2 py-1.5">
-          <div className="flex items-center gap-0.5">
+        <div className="flex flex-wrap items-center justify-between gap-1 border-b border-border bg-secondary/30 px-2 py-1.5">
+          <div className="flex flex-wrap items-center gap-0.5">
             <ToolbarButton title="Bold" onClick={() => insertAtCursor("**", "**", "bold text")} disabled={toolbarDisabled}>
               <Bold className="w-4 h-4" />
             </ToolbarButton>

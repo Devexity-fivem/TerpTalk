@@ -35,20 +35,20 @@ export default function SavedThreads() {
     if (res.ok) setItems(items.filter((i) => i.id !== item.id))
   }
 
-  if (loading) return null
-
   return (
-    <div className="h-fit self-start bg-card rounded-lg border border-border p-6">
+    <div className="bg-card rounded-lg border border-border p-6">
       <div className="flex items-center gap-2 mb-4">
         <Bookmark className="w-5 h-5 text-primary" />
         <h2 className="text-lg font-semibold">Saved Threads</h2>
       </div>
-      {items.length === 0 ? (
+      {loading ? (
+        <p className="text-sm text-muted-foreground">Loading…</p>
+      ) : items.length === 0 ? (
         <p className="text-sm text-muted-foreground">
           No saved threads. Use the Save button on any thread to keep it here.
         </p>
       ) : (
-        <div className="divide-y divide-border">
+        <div className="divide-y divide-border max-h-80 overflow-y-auto">
           {items.map((t) => (
             <div key={t.id} className="py-3 flex items-center justify-between gap-3">
               <Link href={`/forum/thread/${t.slug}`} className="min-w-0 hover:text-primary transition-colors">

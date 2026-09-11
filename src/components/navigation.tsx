@@ -218,6 +218,19 @@ export function Navigation() {
                 </>
               )}
 
+              {/* Chat shortcut — on <lg screens the sidebar is closed by
+                  default, so this is the most visible entry point. */}
+              {session && (
+                <button
+                  onClick={openChat}
+                  className="rounded-lg p-2 transition-colors hover:bg-secondary lg:hidden"
+                  aria-label="Open live chat"
+                  title="Live Chat"
+                >
+                  <MessageCircle className="h-5 w-5" />
+                </button>
+              )}
+
               {/* Drawer trigger */}
               <button
                 onClick={() => setMenuOpen(!menuOpen)}

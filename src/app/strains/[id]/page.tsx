@@ -111,7 +111,7 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
           </div>
         </div>
 
-        <div className="grid md:grid-cols-2 gap-6 mb-6">
+        <div className="grid md:grid-cols-2 gap-6 mb-6 items-start">
           {strain.genetics && (
             <div className="bg-card rounded-xl border border-border p-5">
               <div className="flex items-center gap-2 mb-2">

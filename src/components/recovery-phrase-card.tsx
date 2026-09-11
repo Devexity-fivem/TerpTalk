@@ -32,7 +32,7 @@ export default function RecoveryPhraseCard() {
 
   return (
     <div className="bg-card rounded-lg border border-border p-6">
-      <div className="flex items-center gap-2 mb-3">
+      <div className="flex items-center gap-2 mb-4">
         <KeyRound className="w-5 h-5 text-primary" />
         <h2 className="text-lg font-semibold">Account Recovery</h2>
       </div>

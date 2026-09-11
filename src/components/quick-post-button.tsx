@@ -19,11 +19,11 @@ export default function QuickPostButton() {
   if (!session) return null
 
   return (
-    /* Bottom-left so it clears the chat button on the right, and lifted above
-       the mobile bottom navigation. */
-    <div className="md:hidden fixed bottom-[calc(4.5rem+env(safe-area-inset-bottom))] left-4 z-40">
+    /* Bottom-right, opposite the chat FAB on the left, lifted above the
+       mobile bottom navigation. */
+    <div className="lg:hidden fixed bottom-[calc(4.5rem+env(safe-area-inset-bottom))] right-4 z-40">
       {open && (
-        <div className="absolute bottom-14 left-0 bg-card border border-border rounded-2xl shadow-lg p-2 space-y-1 min-w-[10rem]">
+        <div className="absolute bottom-14 right-0 bg-card border border-border rounded-2xl shadow-lg p-2 space-y-1 min-w-[10rem]">
           {OPTIONS.map((opt) => (
             <Link
               key={opt.href}

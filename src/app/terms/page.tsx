@@ -10,7 +10,7 @@ export default function TermsPage() {
         <h1 className="text-3xl font-bold mb-2">Terms of Service</h1>
         <p className="text-sm text-muted-foreground mb-8">Last updated: {new Date().toLocaleDateString()}</p>
 
-        <div className="prose prose-invert max-w-none space-y-6 text-sm text-muted-foreground leading-relaxed">
+        <div className="space-y-6 text-sm text-muted-foreground leading-relaxed break-words">
           <section>
             <h2 className="text-lg font-semibold text-foreground mb-2">1. Age requirement</h2>
             <p>TerpTalk is a cannabis-related community intended only for adults aged 21 or older (or the age of majority for cannabis in your jurisdiction, whichever is higher). By creating an account you attest that you meet this requirement. Accounts found to belong to underage users will be removed.</p>

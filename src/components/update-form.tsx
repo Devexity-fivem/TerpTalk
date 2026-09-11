@@ -286,10 +286,11 @@ export default function UpdateForm({ diaryId }: UpdateFormProps) {
               {photos.map((p, i) => (
                 <div key={i} className="relative group">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={p} alt="" className="w-20 h-20 object-cover rounded-lg border border-border" />
+                  <img src={p} alt={`Update photo ${i + 1}`} className="w-20 h-20 object-cover rounded-lg border border-border" />
                   <button
                     type="button"
                     onClick={() => setPhotos(photos.filter((_, j) => j !== i))}
+                    aria-label="Remove photo"
                     className="absolute -top-2 -right-2 w-5 h-5 bg-destructive text-destructive-foreground rounded-full text-xs flex items-center justify-center"
                   >
                     <X className="w-3 h-3" />

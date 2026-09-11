@@ -150,12 +150,12 @@ export default function AdminAffiliates() {
                 <p className="text-[10px] text-muted-foreground">{p._count.products} products · {p._count.clicks} clicks · slug: {p.slug}</p>
               </div>
               <div className="flex gap-1.5 shrink-0">
-                <button onClick={() => patchPartner(p.id, { featured: !p.featured })} className="p-1.5 rounded hover:bg-secondary" title="Toggle featured">
+                <button onClick={() => patchPartner(p.id, { featured: !p.featured })} className="p-1.5 rounded hover:bg-secondary" title="Toggle featured" aria-label={`Toggle featured for ${p.name}`}>
                   {p.featured ? <StarOff className="w-4 h-4 text-amber-500" /> : <Star className="w-4 h-4" />}
                 </button>
-                <button onClick={() => { setEditPartner(p.id); setPartnerForm({ name: p.name, websiteUrl: p.websiteUrl, affiliateUrl: p.affiliateUrl, promoCode: p.promoCode || "", description: p.description, promoText: p.promoText || "", featured: p.featured }) }} className="p-1.5 rounded hover:bg-secondary"><Pencil className="w-4 h-4" /></button>
+                <button onClick={() => { setEditPartner(p.id); setPartnerForm({ name: p.name, websiteUrl: p.websiteUrl, affiliateUrl: p.affiliateUrl, promoCode: p.promoCode || "", description: p.description, promoText: p.promoText || "", featured: p.featured }) }} className="p-1.5 rounded hover:bg-secondary" aria-label={`Edit ${p.name}`} title="Edit partner"><Pencil className="w-4 h-4" /></button>
                 <button onClick={() => patchPartner(p.id, { active: !p.active })} className="px-2 py-1 text-xs rounded bg-secondary hover:bg-secondary/80">{p.active ? "Disable" : "Enable"}</button>
-                <button onClick={() => confirm(`Delete ${p.name} and all its products?`) && fetch(`/api/admin/affiliates/partners?id=${p.id}`, { method: "DELETE" }).then(load)} className="p-1.5 rounded hover:bg-destructive/15 text-destructive"><Trash2 className="w-4 h-4" /></button>
+                <button onClick={() => confirm(`Delete ${p.name} and all its products?`) && fetch(`/api/admin/affiliates/partners?id=${p.id}`, { method: "DELETE" }).then(load)} className="p-1.5 rounded hover:bg-destructive/15 text-destructive" aria-label={`Delete ${p.name}`} title="Delete partner"><Trash2 className="w-4 h-4" /></button>
               </div>
             </div>
           ))}
@@ -195,9 +195,9 @@ export default function AdminAffiliates() {
                 <p className="text-[10px] text-muted-foreground">{p.category} · {p._count.clicks} clicks · slug: {p.slug} · shortcode: [affiliate_product id=&quot;{p.slug}&quot;]</p>
               </div>
               <div className="flex gap-1.5 shrink-0">
-                <a href={`/go/${p.slug}`} target="_blank" rel="noreferrer" className="p-1.5 rounded hover:bg-secondary" title="Test link"><ExternalLink className="w-4 h-4" /></a>
+                <a href={`/go/${p.slug}`} target="_blank" rel="noreferrer" className="p-1.5 rounded hover:bg-secondary" title="Test link" aria-label={`Test affiliate link for ${p.name}`}><ExternalLink className="w-4 h-4" /></a>
                 <button onClick={() => patchProduct(p.id, { active: !p.active })} className="px-2 py-1 text-xs rounded bg-secondary hover:bg-secondary/80">{p.active ? "Disable" : "Enable"}</button>
-                <button onClick={() => confirm(`Delete ${p.name}?`) && fetch(`/api/admin/affiliates/products?id=${p.id}`, { method: "DELETE" }).then(load)} className="p-1.5 rounded hover:bg-destructive/15 text-destructive"><Trash2 className="w-4 h-4" /></button>
+                <button onClick={() => confirm(`Delete ${p.name}?`) && fetch(`/api/admin/affiliates/products?id=${p.id}`, { method: "DELETE" }).then(load)} className="p-1.5 rounded hover:bg-destructive/15 text-destructive" aria-label={`Delete ${p.name}`} title="Delete product"><Trash2 className="w-4 h-4" /></button>
               </div>
             </div>
           ))}

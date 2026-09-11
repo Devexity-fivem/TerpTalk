@@ -7,6 +7,7 @@ import { Navigation } from "@/components/navigation";
 import ChatSidebar from "@/components/chat-sidebar";
 import QuickPostButton from "@/components/quick-post-button";
 import ServiceWorkerRegister from "@/components/sw-register";
+import Footer from "@/components/footer";
 import { buildMetadata } from "@/lib/seo";
 import { JsonLd } from "@/components/json-ld";
 import { THEME_INIT_SCRIPT } from "@/lib/theme";
@@ -93,6 +94,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                 <main id="main-content" className="flex-1 min-w-0 pb-16 lg:pb-0">{children}</main>
                 <ChatSidebar />
               </div>
+              <Footer />
               <QuickPostButton />
               <ServiceWorkerRegister />
             </Providers>

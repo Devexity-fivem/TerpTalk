@@ -63,7 +63,7 @@ export default function LiveStats({ initial }: { initial: Stats }) {
   }, [])
 
   return (
-    <div className="grid grid-cols-3 gap-8">
+    <div className="grid grid-cols-3 gap-4 sm:gap-8">
       <div className="text-center">
         <div className="text-3xl sm:text-4xl font-bold text-primary mb-1 tabular-nums">
           {stats.members.toLocaleString()}

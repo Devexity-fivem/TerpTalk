@@ -132,7 +132,7 @@ export default async function ForumPage() {
                     <div className="flex items-start gap-4">
                       <div className="flex-1">
                         <h3 className="font-semibold mb-1">{thread.title}</h3>
-                        <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
                           <span className="flex items-center gap-1">
                             <Users className="w-4 h-4" />
                             {thread.author.profile?.username || thread.author.name}

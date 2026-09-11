@@ -10,7 +10,7 @@ export default function PrivacyPage() {
         <h1 className="text-3xl font-bold mb-2">Privacy Policy</h1>
         <p className="text-sm text-muted-foreground mb-8">Last updated: {new Date().toLocaleDateString()}</p>
 
-        <div className="prose prose-invert max-w-none space-y-6 text-sm text-muted-foreground leading-relaxed">
+        <div className="space-y-6 text-sm text-muted-foreground leading-relaxed break-words">
           <section>
             <h2 className="text-lg font-semibold text-foreground mb-2">What we collect</h2>
             <p>Account data: username, hashed password, profile fields you choose to fill in (bio, location, website, avatar photo, grow details). Content you post: threads, replies, diaries, photos, chat messages. Technical data: we store only a salted hash of your IP address for rate limiting and abuse prevention — never your raw IP.</p>

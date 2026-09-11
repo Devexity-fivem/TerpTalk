@@ -120,7 +120,7 @@ export default function ProfileClient() {
           <div className="flex items-start gap-4 flex-wrap">
             <Avatar
               src={profile.avatarUrl}
-              alt="avatar"
+              alt={`${profile.username} avatar`}
               size="xl"
               className="w-20 h-20 bg-primary/10 text-primary"
               fallback={<User className="w-10 h-10 text-primary" />}
@@ -200,6 +200,14 @@ export default function ProfileClient() {
                 <div className="text-center">
                   <div className="text-lg font-bold text-primary">{profile.stats.posts}</div>
                   <div className="text-xs text-muted-foreground">Posts</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-lg font-bold text-primary">{profile.stats.followers}</div>
+                  <div className="text-xs text-muted-foreground">Followers</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-lg font-bold text-primary">{profile.stats.following}</div>
+                  <div className="text-xs text-muted-foreground">Following</div>
                 </div>
                 <div className="text-center">
                   <div className="text-lg font-bold text-primary">{profile.stats.diaryCreator}</div>

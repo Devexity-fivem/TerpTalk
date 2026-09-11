@@ -46,7 +46,7 @@ function ProfileBadges({
           <Award className="w-5 h-5 text-primary" />
           <h2 className="text-lg font-semibold">Badges</h2>
         </div>
-        <p className="text-muted-foreground">No badges earned yet — post, grow, and share to earn them</p>
+        <p className="text-sm text-muted-foreground">No badges earned yet — post, grow, and share to earn them</p>
       </div>
     )
   }
@@ -204,6 +204,16 @@ export default function ProfilePage() {
     }
   }, [status, router])
 
+  // Close the edit-profile dialog on Escape
+  useEffect(() => {
+    if (!editing) return
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setEditing(false)
+    }
+    window.addEventListener("keydown", onKeyDown)
+    return () => window.removeEventListener("keydown", onKeyDown)
+  }, [editing])
+
   useEffect(() => {
     if (status === "authenticated") {
       fetch("/api/profile", { cache: "no-store" })
@@ -240,10 +250,10 @@ export default function ProfilePage() {
       <div className="max-w-4xl mx-auto px-4 py-8">
         {/* Profile Header */}
         <div className="bg-card rounded-lg border border-border p-6 mb-6">
-          <div className="flex items-start gap-6">
+          <div className="flex items-start gap-4 sm:gap-6">
             <Avatar
               src={profileData.profile?.avatarUrl}
-              alt="avatar"
+              alt={`${profileData.profile?.username || profileData.user.name} avatar`}
               size="xl"
               className="w-24 h-24 bg-primary/10 text-primary"
               fallback={<User className="w-12 h-12 text-primary" />}
@@ -304,7 +314,7 @@ export default function ProfilePage() {
                     <Pencil className="w-4 h-4" /> Edit Profile
                   </button>
                 </div>
-                <div className="flex gap-6 mt-4">
+                <div className="flex flex-wrap gap-4 sm:gap-6 mt-4">
                   <div className="text-center">
                     <div className="text-2xl font-bold text-primary">{profileData.stats.reputation}</div>
                     <div className="text-sm text-muted-foreground">Reputation</div>
@@ -333,8 +343,14 @@ export default function ProfilePage() {
         {/* Edit Profile Modal */}
         {editing && (
           <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4" onClick={() => setEditing(false)}>
-            <div className="bg-card border border-border rounded-xl w-full max-w-lg max-h-[85vh] overflow-y-auto p-6" onClick={(e) => e.stopPropagation()}>
-              <h2 className="text-lg font-semibold mb-4">Edit Profile</h2>
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="edit-profile-title"
+              className="bg-card border border-border rounded-xl w-full max-w-lg max-h-[85vh] overflow-y-auto p-6"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h2 id="edit-profile-title" className="text-lg font-semibold mb-4">Edit Profile</h2>
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium mb-1">Profile Photo</label>
@@ -389,7 +405,7 @@ export default function ProfilePage() {
                     className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary resize-none"
                   />
                 </div>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="block text-sm font-medium mb-1">Location</label>
                     <input
@@ -433,7 +449,7 @@ export default function ProfilePage() {
                       className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                     />
                   </div>
-                  <div className="col-span-2">
+                  <div className="sm:col-span-2">
                     <label className="block text-sm font-medium mb-1">Favorite Strain</label>
                     <input
                       type="text"
@@ -444,11 +460,11 @@ export default function ProfilePage() {
                       className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                     />
                   </div>
-                  <div className="col-span-2 border-t border-border pt-4 mt-2">
+                  <div className="sm:col-span-2 border-t border-border pt-4 mt-2">
                     <h3 className="text-sm font-medium mb-3 flex items-center gap-2">
                       <Store className="w-4 h-4 text-primary" /> Business / Breeder Profile
                     </h3>
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div>
                         <label className="block text-sm font-medium mb-1">Business Name</label>
                         <input
@@ -474,7 +490,7 @@ export default function ProfilePage() {
                           <option value="BRAND">Brand</option>
                         </select>
                       </div>
-                      <div className="col-span-2">
+                      <div className="sm:col-span-2">
                         <label className="block text-sm font-medium mb-1">Business URL</label>
                         <input
                           type="url"
@@ -488,7 +504,7 @@ export default function ProfilePage() {
                     </div>
                   </div>
 
-                  <div className="col-span-2 border-t border-border pt-4 mt-2">
+                  <div className="sm:col-span-2 border-t border-border pt-4 mt-2">
                     <h3 className="text-sm font-medium mb-3">Notifications</h3>
                     <div className="space-y-3">
                       <label className="flex items-center gap-2 text-sm">
@@ -589,8 +605,9 @@ export default function ProfilePage() {
           </div>
         )}
 
-        {/* Profile Sections */}
-        <div className="grid md:grid-cols-2 gap-6">
+        {/* Profile Sections — default stretch gives every row equal card
+            heights; cards are ordered so row-mates carry similar content. */}
+        <div className="grid md:grid-cols-2 gap-4 md:gap-6">
           {/* Grow Diaries */}
           <div className="bg-card rounded-lg border border-border p-6">
             <div className="flex items-center gap-2 mb-4">
@@ -598,7 +615,7 @@ export default function ProfilePage() {
               <h2 className="text-lg font-semibold">Grow Diaries</h2>
             </div>
             {profileData.recentDiaries.length === 0 ? (
-              <p className="text-muted-foreground">No grow diaries yet</p>
+              <p className="text-sm text-muted-foreground">No grow diaries yet</p>
             ) : (
               <div className="space-y-3">
                 {profileData.recentDiaries.map((diary) => (
@@ -628,7 +645,7 @@ export default function ProfilePage() {
               <h2 className="text-lg font-semibold">Recent Discussions</h2>
             </div>
             {profileData.recentThreads.length === 0 ? (
-              <p className="text-muted-foreground">No discussion posts yet</p>
+              <p className="text-sm text-muted-foreground">No discussion posts yet</p>
             ) : (
               <div className="space-y-3">
                 {profileData.recentThreads.map((thread) => (
@@ -688,11 +705,6 @@ export default function ProfilePage() {
             </p>
           </div>
 
-          <div className="grid gap-4">
-            <ReputationRoadmap reputation={profileData.stats.reputation} />
-            <ReputationEarn />
-          </div>
-
           {/* Saved Threads */}
           <SavedThreads />
 
@@ -711,6 +723,7 @@ export default function ProfilePage() {
             <div className="flex gap-2">
               <input
                 readOnly
+                aria-label="Your referral link"
                 value={typeof window !== "undefined" ? `${window.location.origin}/auth/signup?ref=${profileData.profile?.username || profileData.user.name}` : ""}
                 className="flex-1 px-3 py-2 text-xs rounded-lg border border-border bg-background text-muted-foreground"
                 onFocus={(e) => e.target.select()}
@@ -803,7 +816,7 @@ export default function ProfilePage() {
               <h2 className="text-lg font-semibold">Recent Activity</h2>
             </div>
             {profileData.recentThreads.length === 0 && profileData.recentDiaries.length === 0 ? (
-              <p className="text-muted-foreground">No recent activity</p>
+              <p className="text-sm text-muted-foreground">No recent activity</p>
             ) : (
               <div className="space-y-2 text-sm text-muted-foreground">
                 {profileData.recentThreads.length > 0 && (
@@ -815,6 +828,11 @@ export default function ProfilePage() {
               </div>
             )}
           </div>
+
+          {/* Reputation detail widgets — the two tallest cards, paired in the
+              final row so neither forces a shorter card to stretch. */}
+          <ReputationRoadmap reputation={profileData.stats.reputation} />
+          <ReputationEarn />
         </div>
       </div>
     </div>

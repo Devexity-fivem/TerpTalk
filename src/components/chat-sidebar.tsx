@@ -107,9 +107,10 @@ export default function ChatSidebar() {
     return () => m.removeEventListener("change", onChange)
   }, [])
 
-  // Load the general room (single community chat)
+  // Load the general room (single community chat). Runs even while the panel
+  // is closed so the toggle button can show the live online indicator.
   useEffect(() => {
-    if (!session || !isOpen) return
+    if (!session) return
 
     let cancelled = false
 
@@ -487,7 +488,7 @@ export default function ChatSidebar() {
         aria-expanded={isOpen}
       >
         <MessageCircle className="w-4 h-4" />
-        <span className="hidden sm:inline">Chat</span>
+        <span>Live Chat</span>
         {onlineCount > 0 && (
           <span className="ml-0.5 flex h-2 w-2 rounded-full bg-green-400" aria-hidden="true" />
         )}

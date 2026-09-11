@@ -53,7 +53,7 @@ export default function UserActions({ userId, username, initiallyBlocked, initia
 
   return (
     <div className="space-y-2">
-      <div className="flex gap-2">
+      <div className="flex flex-wrap gap-2">
         <button
           onClick={async () => {
             if (busy) return

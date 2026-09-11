@@ -49,6 +49,7 @@ export default function SetupComments({ setupId }: { setupId: string }) {
             value={content}
             onChange={(e) => setContent(e.target.value)}
             placeholder="Nice setup! Ask about their gear, environment, or results..."
+            aria-label="Comment"
             maxLength={2000}
             rows={2}
             className="w-full pl-9 pr-3 py-2 rounded-lg border border-border bg-background text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary"
@@ -56,6 +57,7 @@ export default function SetupComments({ setupId }: { setupId: string }) {
         </div>
         <button
           onClick={submit}
+          aria-label="Post comment"
           disabled={busy || content.trim().length < 2}
           className="self-end px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-50 transition-colors"
         >

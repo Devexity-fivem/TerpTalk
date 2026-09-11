@@ -132,7 +132,7 @@ function MessagesInner() {
           <Mail className="w-6 h-6 text-primary" /> Messages
         </h1>
 
-        <div className="grid md:grid-cols-3 gap-4" style={{ height: "70vh" }}>
+        <div className="grid md:grid-cols-3 gap-4 h-[70dvh] min-h-[320px]">
           {/* Conversation list */}
           <div className="bg-card border border-border rounded-xl overflow-y-auto">
             {convos.length === 0 ? (

@@ -17,7 +17,7 @@ export default async function AffiliateCard({ slug, from }: { slug: string; from
   const pros = product.pros?.split("\n").filter(Boolean) || []
 
   return (
-    <div className="bg-card border border-border rounded-xl p-4 my-3 not-prose">
+    <div className="bg-card border border-border rounded-xl p-4 my-3">
       <div className="flex gap-4">
         {product.imageUrl && (
           // eslint-disable-next-line @next/next/no-img-element

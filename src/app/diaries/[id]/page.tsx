@@ -334,7 +334,7 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
                         </span>
                       </div>
 
-                      <p className="text-muted-foreground mb-4 whitespace-pre-wrap">{update.content}</p>
+                      <p className="text-muted-foreground mb-4 whitespace-pre-wrap break-words">{update.content}</p>
 
                       {/* Environmental Data */}
                       {(update.temperature || update.humidity || update.vpd || update.ph || update.ec) && (

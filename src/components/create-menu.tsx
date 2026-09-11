@@ -40,6 +40,7 @@ export default function CreateMenu() {
       <button
         onClick={() => setOpen(!open)}
         className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
+        aria-label="Create"
         aria-expanded={open}
         aria-haspopup="menu"
       >

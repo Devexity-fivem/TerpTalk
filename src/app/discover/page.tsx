@@ -112,7 +112,11 @@ export default async function DiscoverPage({
                   ? "Follow growers to see their threads here."
                   : "Be the first to start a conversation."
               }
-              action={{ href: "/forum/new", label: "Start a discussion" }}
+              action={
+                activeTab === "following"
+                  ? { href: "/search?type=users", label: "Find growers to follow" }
+                  : { href: "/forum/new", label: "Start a discussion" }
+              }
             />
           ) : (
             <div className="grid sm:grid-cols-2 gap-4">
