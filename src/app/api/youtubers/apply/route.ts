@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { unauthorized, getClientIp, hashIp } from "@/lib/security"
+import { unauthorized, getClientIp, hashIp, isBanned, forbidden } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
 
 const YOUTUBE_PATTERNS = [
@@ -19,6 +19,9 @@ export async function POST(request: Request) {
     const session = await getServerSession(authOptions)
     if (!session?.user?.id) {
       return unauthorized()
+    }
+    if (await isBanned(session.user.id)) {
+      return forbidden()
     }
 
     const rl = await rateLimit(`youtube-apply:${ipHash}`, 5, 15 * 60 * 1000)

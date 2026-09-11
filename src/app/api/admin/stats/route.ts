@@ -2,6 +2,9 @@ import { NextResponse } from "next/server"
 import { requireAdmin } from "@/lib/require-staff"
 import { prisma } from "@/lib/prisma"
 import { forbidden } from "@/lib/security"
+import { rateLimit } from "@/lib/rate-limit"
+
+const ALLOWED_RANGES = new Set(["today", "7", "30", "all"])
 
 // GET — admin dashboard stats with time-range support (ADMINISTRATOR only)
 // ?range=today | 7 | 30 | all
@@ -11,8 +14,16 @@ export async function GET(request: Request) {
     return forbidden()
   }
 
+  const rl = await rateLimit(`admin-stats:${admin.id}`, 10, 60 * 1000)
+  if (!rl.allowed) {
+    return NextResponse.json({ error: "Too many requests" }, { status: 429 })
+  }
+
   const { searchParams } = new URL(request.url)
   const range = searchParams.get("range") || "7"
+  if (!ALLOWED_RANGES.has(range)) {
+    return NextResponse.json({ error: "Invalid range" }, { status: 400 })
+  }
   const now = new Date()
   let since = new Date(0)
 

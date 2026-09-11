@@ -53,10 +53,13 @@ export async function POST(request: NextRequest) {
 
     const thread = await prisma.thread.findUnique({
       where: { id: threadId },
-      select: { id: true, deleted: true },
+      select: { id: true, deleted: true, category: { select: { hidden: true } } },
     })
     if (!thread || thread.deleted) {
       return NextResponse.json({ error: "Thread not found" }, { status: 404 })
+    }
+    if (thread.category?.hidden) {
+      return NextResponse.json({ ok: true, incremented: false })
     }
 
     const cookieStore = await cookies()

@@ -13,7 +13,7 @@ function escapeLike(str: string): string {
 
 export async function GET(request: Request) {
   const ip = getClientIp(request)
-  const rl = await rateLimit(`search:${hashIp(ip)}`, 60, 60 * 1000)
+  const rl = await rateLimit(`search-suggest:${hashIp(ip)}`, 60, 60 * 1000)
   if (!rl.allowed) {
     return NextResponse.json({ suggestions: [] }, { status: 429 })
   }

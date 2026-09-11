@@ -2,7 +2,15 @@ import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { publicUserSelect } from "@/lib/security"
+import { publicUserSelect, isBanned, getClientIp, hashIp } from "@/lib/security"
+import { rateLimit } from "@/lib/rate-limit"
+
+function escapeLike(str: string): string {
+  return str
+    .replace(/\\/g, "\\\\")
+    .replace(/%/g, "\\%")
+    .replace(/_/g, "\\_")
+}
 
 export async function GET(request: Request) {
   const session = await getServerSession(authOptions)
@@ -10,11 +18,24 @@ export async function GET(request: Request) {
     return NextResponse.json({ users: [] }, { status: 401 })
   }
 
+  const userId = session.user.id
+  if (await isBanned(userId)) {
+    return NextResponse.json({ users: [] }, { status: 403 })
+  }
+
+  const rl = await rateLimit(`users-search:${userId}`, 30, 60 * 1000)
+  const ipRl = await rateLimit(`users-search-ip:${hashIp(getClientIp(request))}`, 60, 60 * 1000)
+  if (!rl.allowed || !ipRl.allowed) {
+    return NextResponse.json({ users: [] }, { status: 429 })
+  }
+
   const { searchParams } = new URL(request.url)
-  const q = searchParams.get("q") || ""
-  if (!q || q.length < 1) {
+  const raw = (searchParams.get("q") || "").trim().slice(0, 60)
+  if (!raw) {
     return NextResponse.json({ users: [] })
   }
+
+  const q = escapeLike(raw)
 
   const users = await prisma.user.findMany({
     where: {
