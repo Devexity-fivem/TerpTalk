@@ -1,6 +1,7 @@
 // Server-side reputation logic. Anything that touches Prisma lives here;
 // the isomorphic values and tier maths live in reputation-config so client
 // components can import them without pulling PrismaClient into the browser.
+import { after } from "next/server"
 import { prisma } from "@/lib/prisma"
 import {
   VERIFIED_MULTIPLIER,
@@ -152,36 +153,44 @@ async function autoVerify(
 }
 
 // Award reputation points and re-check badge eligibility.
+// This is deferred with `after()` so the user's request is not blocked
+// by ~15 profile/badge/notification DB operations.
 export async function awardReputation(
   userId: string,
   type: string,
   amount: number,
   reason: string
 ) {
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { role: true, createdAt: true, banned: true },
-  })
-  const multiplier = user?.role === "VERIFIED_MEMBER" ? VERIFIED_MULTIPLIER : 1
-  const adjusted = amount * multiplier
+  after(async () => {
+    try {
+      const user = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { role: true, createdAt: true, banned: true },
+      })
+      const multiplier = user?.role === "VERIFIED_MEMBER" ? VERIFIED_MULTIPLIER : 1
+      const adjusted = amount * multiplier
 
-  const profile = await prisma.profile.findUnique({
-    where: { userId },
-    select: { reputation: true },
-  })
-  const oldRep = profile?.reputation ?? 0
-  const newRep = oldRep + adjusted
+      const profile = await prisma.profile.findUnique({
+        where: { userId },
+        select: { reputation: true },
+      })
+      const oldRep = profile?.reputation ?? 0
+      const newRep = oldRep + adjusted
 
-  await prisma.reputationEvent.create({
-    data: { userId, type, amount: adjusted, reason },
+      await prisma.reputationEvent.create({
+        data: { userId, type, amount: adjusted, reason },
+      })
+      await prisma.profile.update({
+        where: { userId },
+        data: { reputation: { increment: adjusted } },
+      })
+      await checkTierChange(userId, oldRep, newRep)
+      await autoVerify(userId, newRep, user)
+      await checkBadges(userId)
+    } catch (error) {
+      console.error("[awardReputation] background error:", error)
+    }
   })
-  await prisma.profile.update({
-    where: { userId },
-    data: { reputation: { increment: adjusted } },
-  })
-  await checkTierChange(userId, oldRep, newRep)
-  await autoVerify(userId, newRep, user)
-  await checkBadges(userId)
 }
 
 // Evaluate all badge rules and grant any newly earned badges (+ notification).

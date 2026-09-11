@@ -31,7 +31,7 @@ export async function GET(request: Request) {
     const entries = await prisma.contestEntry.findMany({
       where: { week },
       orderBy: { votes: { _count: "desc" } },
-      take: 200,
+      take: 50,
       include: {
         user: { select: publicUserSelect },
         _count: { select: { votes: true } },

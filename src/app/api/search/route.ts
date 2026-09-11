@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
+import { unstable_cache } from "next/cache"
 import { getClientIp, hashIp } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
 
@@ -11,32 +12,9 @@ function escapeLike(str: string): string {
     .replace(/_/g, "\\_")
 }
 
-// GET ?q= — global search across threads, strains, users, diaries (public data only)
-export async function GET(request: Request) {
-  const ip = getClientIp(request)
-
-  // Rate limit — search runs up to 4 LIKE queries per request; cap by hashed IP
-  const rl = await rateLimit(`search:${hashIp(ip)}`, 30, 60 * 1000)
-  if (!rl.allowed) {
-    return NextResponse.json({ error: "Too many searches" }, { status: 429 })
-  }
-
-  try {
-    const { searchParams } = new URL(request.url)
-    const raw = (searchParams.get("q") || "").trim().slice(0, 100)
-    const type = searchParams.get("type") || "all"
-    const sort = searchParams.get("sort") || "latest"
-    const categorySlug = searchParams.get("category") || ""
-
-    if (raw.length < 2) {
-      return NextResponse.json({ threads: [], strains: [], users: [], diaries: [] })
-    }
-
-    const q = escapeLike(raw)
+const getSearchResults = unstable_cache(
+  async (q: string, t: string, sort: string, categorySlug: string) => {
     const contains = { contains: q, mode: "insensitive" as const }
-
-    const selectedTypes = new Set<string>(["all", "threads", "strains", "users", "diaries"])
-    const t = selectedTypes.has(type) ? type : "all"
 
     let categoryId: string | undefined
     if (categorySlug) {
@@ -53,7 +31,7 @@ export async function GET(request: Request) {
             content: contains,
             thread: { deleted: false, category: { hidden: false, ...(categoryId ? { id: categoryId } : {}) } },
           },
-          take: 20,
+          take: 10,
           select: { threadId: true },
         }).then((posts) => posts.map((p) => p.threadId))
       : []
@@ -109,7 +87,43 @@ export async function GET(request: Request) {
       }) : [],
     ])
 
-    return NextResponse.json({ threads, strains, users, diaries })
+    return { threads, strains, users, diaries }
+  },
+  ["search-results"],
+  { revalidate: 60, tags: ["search"] }
+)
+
+// GET ?q= — global search across threads, strains, users, diaries (public data only)
+export async function GET(request: Request) {
+  const ip = getClientIp(request)
+
+  // Rate limit — search runs up to 4 LIKE queries per request; cap by hashed IP
+  const rl = await rateLimit(`search:${hashIp(ip)}`, 30, 60 * 1000)
+  if (!rl.allowed) {
+    return NextResponse.json({ error: "Too many searches" }, { status: 429 })
+  }
+
+  try {
+    const { searchParams } = new URL(request.url)
+    const raw = (searchParams.get("q") || "").trim().slice(0, 100)
+    const type = searchParams.get("type") || "all"
+    const sort = searchParams.get("sort") || "latest"
+    const categorySlug = searchParams.get("category") || ""
+
+    if (raw.length < 2) {
+      return NextResponse.json({ threads: [], strains: [], users: [], diaries: [] })
+    }
+
+    const q = escapeLike(raw)
+
+    const selectedTypes = new Set<string>(["all", "threads", "strains", "users", "diaries"])
+    const t = selectedTypes.has(type) ? type : "all"
+
+    const { threads, strains, users, diaries } = await getSearchResults(q, t, sort, categorySlug)
+
+    return NextResponse.json({ threads, strains, users, diaries }, {
+      headers: { "Cache-Control": "public, max-age=60, s-maxage=60" },
+    })
   } catch (error) {
     console.error("Search error:", error)
     return NextResponse.json({ error: "Search failed" }, { status: 500 })
