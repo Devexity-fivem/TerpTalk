@@ -1,14 +1,21 @@
 import { NextRequest, NextResponse } from "next/server"
+import { after } from "next/server"
 import { getToken } from "next-auth/jwt"
 import { prisma } from "@/lib/prisma"
+import { sessionCookieName } from "@/lib/auth"
 import { forbidden, unauthorized } from "@/lib/security"
 import { awardReputation } from "@/lib/reputation"
+import { pruneChatMessagesIfDue } from "@/lib/chat-cleanup"
 
 // POST — lightweight presence ping; updates lastSeenAt + ONLINE status.
 // Uses JWT verification instead of getServerSession to avoid an extra DB round-trip.
 export async function POST(request: NextRequest) {
   try {
-    const token = await getToken({ req: request, secret: process.env.NEXTAUTH_SECRET })
+    const token = await getToken({
+      req: request,
+      secret: process.env.NEXTAUTH_SECRET,
+      cookieName: sessionCookieName,
+    })
     const userId = token?.id as string | undefined
     if (!userId) return unauthorized()
 
@@ -40,6 +47,11 @@ export async function POST(request: NextRequest) {
         await awardReputation(userId, "DAILY_LOGIN", 1, "Daily check-in")
       }
     }
+
+    // Prune old chat messages in the background, throttled to once per hour.
+    after(async () => {
+      await pruneChatMessagesIfDue()
+    })
 
     return NextResponse.json({ ok: true })
   } catch (error) {
