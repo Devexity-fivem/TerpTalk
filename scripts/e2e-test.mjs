@@ -80,11 +80,15 @@ async function main() {
 
   // ── 3. Auth: seeded admin/moderator ──
   console.log("[3] Authentication")
-  const adminUser = process.env.ADMIN_USERNAME || "ttadmin"
-  const modUser = process.env.MOD_USERNAME || "ttmoderator"
-  const admin = await login(adminUser, process.env.ADMIN_PASSWORD || "TestAdmin123!", "admin")
+  const adminUser = process.env.ADMIN_USERNAME
+  if (!adminUser || !process.env.ADMIN_PASSWORD) {
+    throw new Error("Set ADMIN_USERNAME and ADMIN_PASSWORD env vars before running e2e tests")
+  }
+  const admin = await login(adminUser, process.env.ADMIN_PASSWORD, "admin")
   admin ? pass(`admin login (${admin.name})`) : fail("admin login", "no session")
-  const mod = await login(modUser, process.env.MOD_PASSWORD || "TestMod123!", "mod")
+  const mod = process.env.MOD_USERNAME && process.env.MOD_PASSWORD
+    ? await login(process.env.MOD_USERNAME, process.env.MOD_PASSWORD, "mod")
+    : null
   const hasMod = !!mod
   mod ? pass(`moderator login (${mod.name})`) : console.log("  — no moderator account; mod-dependent checks skipped")
 
