@@ -46,6 +46,8 @@ export async function GET(request: NextRequest) {
           name: true,
           slug: true,
           description: true,
+          slowModeSeconds: true,
+          locked: true,
           _count: {
             select: { messages: true },
           },

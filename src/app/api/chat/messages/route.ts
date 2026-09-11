@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { getToken } from "next-auth/jwt"
 import { sessionCookieName } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { unauthorized, publicUserSelect, LIMITS, getClientIp, logSecurityEvent, isSessionValid, forbidden, isModerator } from "@/lib/security"
+import { unauthorized, publicUserSelect, LIMITS, getClientIp, logSecurityEvent, isSessionValid, forbidden, isModerator, isStaff } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
 import { notifyMentions } from "@/lib/mentions"
 import { getPusher } from "@/lib/pusher"
@@ -15,6 +15,7 @@ type ChatMessageWithAuthor = {
   id: string
   content: string
   createdAt: Date
+  deleted: boolean
   author: {
     id?: string | null
     name?: string | null
@@ -22,12 +23,27 @@ type ChatMessageWithAuthor = {
     role?: string | null
     profile?: { username?: string | null } | null
   }
+  replyTo: ChatMessageWithAuthor | null
 }
 
 function messageDto(m: ChatMessageWithAuthor) {
+  const content = m.deleted ? "[deleted]" : m.content
+  const replyTo = m.replyTo
+    ? {
+        id: m.replyTo.id,
+        content: m.replyTo.deleted ? "[deleted]" : m.replyTo.content,
+        author: {
+          id: m.replyTo.author.id,
+          name: m.replyTo.author.name,
+          username: m.replyTo.author.profile?.username ?? null,
+          image: m.replyTo.author.image ?? null,
+          role: m.replyTo.author.role ?? null,
+        },
+      }
+    : null
   return {
     id: m.id,
-    content: m.content,
+    content,
     createdAt: m.createdAt,
     author: {
       id: m.author.id,
@@ -36,6 +52,7 @@ function messageDto(m: ChatMessageWithAuthor) {
       image: m.author.image ?? null,
       role: m.author.role ?? null,
     },
+    replyTo,
   }
 }
 
@@ -102,10 +119,17 @@ export async function GET(request: NextRequest) {
       orderBy: { createdAt: afterDate ? "asc" : "desc" },
       include: {
         author: { select: publicUserSelect },
+        replyTo: {
+          include: { author: { select: publicUserSelect } },
+        },
       },
     })
 
-    return NextResponse.json({ messages: (afterDate ? messages : messages.reverse()).map(messageDto) })
+    return NextResponse.json({
+      messages: (afterDate ? messages : messages.reverse()).map((m) =>
+        messageDto(m as unknown as ChatMessageWithAuthor)
+      ),
+    })
   } catch (error) {
     console.error("Failed to fetch messages:", error)
     return NextResponse.json(
@@ -165,7 +189,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Validate room exists
+    // Validate room exists and get latest room settings
     const room = await prisma.chatRoom.findUnique({
       where: { id: roomId },
     })
@@ -177,19 +201,62 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    const { replyToId } = body
+    if (replyToId && (typeof replyToId !== "string" || !/^[a-z0-9]{25}$/.test(replyToId))) {
+      return NextResponse.json({ error: "Invalid reply" }, { status: 400 })
+    }
+    if (replyToId) {
+      const parent = await prisma.chatMessage.findFirst({
+        where: { id: replyToId, roomId, deleted: false },
+      })
+      if (!parent) {
+        return NextResponse.json({ error: "Reply not found" }, { status: 404 })
+      }
+    }
+
+    const [user, lastMessage] = await Promise.all([
+      prisma.user.findUnique({ where: { id: userId }, select: { role: true } }),
+      prisma.chatMessage.findFirst({
+        where: { roomId, authorId: userId, deleted: false },
+        orderBy: { createdAt: "desc" },
+      }),
+    ])
+    if (!user) return forbidden()
+    const staff = isStaff(user.role)
+
+    if (room.locked && !staff) {
+      return forbidden("Chat is locked")
+    }
+
+    if (
+      room.slowModeSeconds > 0 &&
+      !staff &&
+      lastMessage &&
+      Date.now() - lastMessage.createdAt.getTime() < room.slowModeSeconds * 1000
+    ) {
+      return NextResponse.json(
+        { error: `Slow mode: wait ${room.slowModeSeconds}s between messages` },
+        { status: 429 }
+      )
+    }
+
     // Create message
     const message = await prisma.chatMessage.create({
       data: {
         content,
         roomId,
         authorId: userId,
+        ...(replyToId ? { replyToId } : {}),
       },
       include: {
         author: { select: publicUserSelect },
+        replyTo: {
+          include: { author: { select: publicUserSelect } },
+        },
       },
     })
 
-    const dto = messageDto(message)
+    const dto = messageDto(message as unknown as ChatMessageWithAuthor)
 
     // Notify @mentions in chat (fire-and-forget)
     const actorName =

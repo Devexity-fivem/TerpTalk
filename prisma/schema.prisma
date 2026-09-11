@@ -435,14 +435,16 @@ model SetupComment {
 
 // Chat System
 model ChatRoom {
-  id          String        @id @default(cuid())
-  name        String
-  description String?
-  slug        String        @unique
-  order       Int           @default(0)
-  isPrivate   Boolean       @default(false)
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
+  id              String        @id @default(cuid())
+  name            String
+  description     String?
+  slug            String        @unique
+  order           Int           @default(0)
+  isPrivate       Boolean       @default(false)
+  slowModeSeconds Int           @default(0)
+  locked          Boolean       @default(false)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
 
   messages    ChatMessage[]
 
@@ -455,18 +457,22 @@ model ChatMessage {
   content   String
   roomId    String
   authorId  String
+  replyToId String?
   edited    Boolean  @default(false)
   deleted   Boolean  @default(false)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  room      ChatRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
-  author    User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  room      ChatRoom     @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  author    User         @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  replyTo   ChatMessage? @relation("ChatMessageReply", fields: [replyToId], references: [id], onDelete: SetNull)
+  replies   ChatMessage[] @relation("ChatMessageReply")
 
   @@index([roomId])
   @@index([authorId])
   @@index([createdAt])
   @@index([roomId, createdAt])
+  @@index([replyToId])
 }
 
 // Direct Messages

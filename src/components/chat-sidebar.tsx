@@ -1,10 +1,10 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, useMemo } from "react"
 import { useSession } from "next-auth/react"
 import {
   MessageCircle, Send, X, Loader2, Smile, RefreshCw, MoreVertical,
-  Trash2, AlertTriangle, Clock, Shield, User as UserIcon,
+  Trash2, AlertTriangle, Clock, Shield, User as UserIcon, MessageSquare,
 } from "lucide-react"
 import RoleBadge from "@/components/role-badge"
 import { useToast } from "@/components/ui/toast"
@@ -20,27 +20,33 @@ interface Room {
   name: string
   slug: string
   description: string
+  slowModeSeconds: number
+  locked: boolean
   _count: { messages: number }
+}
+
+interface Author {
+  id: string
+  name: string
+  username?: string | null
+  role?: string | null
+  image?: string | null
 }
 
 interface Message {
   id: string
   content: string
   createdAt: string
-  author: {
-    id: string
-    name: string
-    username?: string | null
-    role?: string | null
-    image?: string | null
-  }
+  author: Author
+  replyTo: { id: string; content: string; author: Author } | null
 }
 
 export default function ChatSidebar() {
   const { data: session } = useSession()
   const { toast } = useToast()
   const myRole = (session?.user as { role?: string } | undefined)?.role
-  const isStaff = myRole === "MODERATOR" || myRole === "ADMINISTRATOR"
+  const isStaff = myRole === "SUPPORT" || myRole === "MODERATOR" || myRole === "ADMINISTRATOR"
+  const isModerator = myRole === "MODERATOR" || myRole === "ADMINISTRATOR"
   const isAdmin = myRole === "ADMINISTRATOR"
   const [isOpen, setIsOpen] = useState(
     typeof window !== "undefined" ? window.innerWidth >= 1024 : true
@@ -54,9 +60,15 @@ export default function ChatSidebar() {
   const [retryCount, setRetryCount] = useState(0)
   const [sending, setSending] = useState(false)
   const [activeMenu, setActiveMenu] = useState<string | null>(null)
+  const [inputValue, setInputValue] = useState("")
+  const [cursor, setCursor] = useState(0)
+  const [replyingTo, setReplyingTo] = useState<Message | null>(null)
+  const [mentionQuery, setMentionQuery] = useState("")
+  const [slashQuery, setSlashQuery] = useState("")
+  const [showMentions, setShowMentions] = useState(false)
+  const [showCommands, setShowCommands] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const messagesContainerRef = useRef<HTMLDivElement>(null)
-  const inputRef = useRef<HTMLInputElement>(null)
 
   const scrollToBottom = () => {
     const container = messagesContainerRef.current
@@ -210,25 +222,123 @@ export default function ChatSidebar() {
     }
   }, [session, room, isOpen])
 
+  const mentionUsers = useMemo(() => {
+    const seen = new Map<string, Author>()
+    messages.forEach(m => {
+      if (!seen.has(m.author.id)) {
+        seen.set(m.author.id, m.author)
+      }
+    })
+    return Array.from(seen.values())
+  }, [messages])
+
+  const mentionSuggestions = mentionQuery
+    ? mentionUsers.filter(a =>
+        (a.username || a.name).toLowerCase().includes(mentionQuery)
+      ).slice(0, 5)
+    : []
+
+  const commandList = useMemo(() => {
+    const list: { name: string; desc: string }[] = [
+      { name: "help", desc: "Show chat commands" },
+      { name: "me", desc: "Roleplay an action" },
+    ]
+    if (isStaff) {
+      list.push(
+        { name: "slowmode", desc: "Set slow mode (0-300s)" },
+        { name: "lock", desc: "Lock the chat" },
+        { name: "unlock", desc: "Unlock the chat" },
+        { name: "announce", desc: "Post an announcement" }
+      )
+    }
+    if (isModerator) {
+      list.push({ name: "clear", desc: "Clear all messages" })
+    }
+    return list
+  }, [isStaff, isModerator])
+
+  const commandSuggestions = slashQuery
+    ? commandList.filter(c => c.name.startsWith(slashQuery)).slice(0, 6)
+    : commandList.slice(0, 6)
+
+  const renderContent = (text: string) => {
+    const parts = text.split(/(@[a-zA-Z0-9_-]+)/gi)
+    return (
+      <>
+        {parts.map((part, i) => {
+          if (part.startsWith("@")) {
+            return (
+              <span key={i} className="font-medium text-primary hover:underline cursor-pointer">
+                {part}
+              </span>
+            )
+          }
+          return <span key={i}>{part}</span>
+        })}
+      </>
+    )
+  }
+
+  const onMentionSelect = (username: string) => {
+    const before = inputValue.slice(0, cursor)
+    const at = before.lastIndexOf("@")
+    if (at >= 0) {
+      const next = inputValue.slice(0, at) + "@" + username + " " + inputValue.slice(cursor)
+      setInputValue(next)
+      setCursor(at + username.length + 2)
+      setMentionQuery("")
+      setShowMentions(false)
+      setShowCommands(false)
+    }
+  }
+
+  const onCommandSelect = (name: string) => {
+    const next = `/${name} `
+    setInputValue(next)
+    setCursor(next.length)
+    setSlashQuery("")
+    setShowCommands(false)
+    setMentionQuery("")
+  }
+
   const insertEmoji = (emoji: string) => {
-    const el = inputRef.current
-    if (!el) {
+    const start = cursor
+    const end = cursor
+    const next = inputValue.slice(0, start) + emoji + inputValue.slice(end)
+    setInputValue(next)
+    setCursor(start + emoji.length)
+    setShowMentions(false)
+    setShowCommands(false)
+  }
+
+  const handleInputChange = (value: string, newCursor = value.length) => {
+    setInputValue(value)
+    setCursor(newCursor)
+    setShowMentions(false)
+    setShowCommands(false)
+    setMentionQuery("")
+    setSlashQuery("")
+
+    if (value.startsWith("/") && !value.includes(" ")) {
+      setSlashQuery(value.slice(1).toLowerCase())
+      setShowCommands(true)
       return
     }
-    const value = el.value
-    const start = el.selectionStart ?? value.length
-    const end = el.selectionEnd ?? value.length
-    const next = value.slice(0, start) + emoji + value.slice(end)
-    el.value = next
-    requestAnimationFrame(() => {
-      el.focus()
-      el.setSelectionRange(start + emoji.length, start + emoji.length)
-    })
+
+    const before = value.slice(0, cursor)
+    const at = before.lastIndexOf("@")
+    if (at >= 0) {
+      const query = before.slice(at + 1)
+      if (!query.includes(" ")) {
+        setMentionQuery(query.toLowerCase())
+        setShowMentions(true)
+      }
+    }
   }
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault()
-    const content = inputRef.current?.value.trim() ?? ""
+    const content = inputValue.trim()
     if (!content) return
     if (!session) {
       toast("Sign in to chat", "error")
@@ -242,28 +352,64 @@ export default function ChatSidebar() {
 
     setSending(true)
     try {
-      const response = await fetch("/api/chat/messages", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content, roomId: room.id }),
-      })
+      if (content.startsWith("/")) {
+        const response = await fetch("/api/chat/commands", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ roomId: room.id, content }),
+        })
 
-      if (response.ok) {
-        const data = await response.json()
-        setMessages(prev => [...prev, data.message])
-        if (inputRef.current) inputRef.current.value = ""
-        setShowEmoji(false)
+        if (!response.ok) {
+          const body = await response.json().catch(() => ({}))
+          toast(body.error || "Command failed", "error")
+        } else {
+          const data = await response.json()
+          if (data.message) {
+            if (data.ok && typeof data.message === "string") {
+              toast(data.message, "info")
+            } else if (data.message) {
+              setMessages(prev => [...prev, data.message])
+            }
+          }
+          if (data.cleared !== undefined) {
+            setMessages([])
+            toast(`Cleared ${data.cleared} messages`, "success")
+          }
+          if (data.room) {
+            setRoom(prev => prev ? { ...prev, ...data.room } : prev)
+          }
+        }
       } else {
-        let message = "Message failed to send"
-        try {
-          const body = await response.json()
-          if (body?.error) message = body.error
-        } catch {}
-        toast(message, "error")
+        const response = await fetch("/api/chat/messages", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            content,
+            roomId: room.id,
+            ...(replyingTo ? { replyToId: replyingTo.id } : {}),
+          }),
+        })
+
+        if (response.ok) {
+          const data = await response.json()
+          setMessages(prev => [...prev, data.message])
+        } else {
+          let message = "Message failed to send"
+          try {
+            const body = await response.json()
+            if (body?.error) message = body.error
+          } catch {}
+          toast(message, "error")
+        }
       }
+      setInputValue("")
+      setReplyingTo(null)
+      setShowEmoji(false)
+      setShowMentions(false)
+      setShowCommands(false)
     } catch (error) {
       console.error("Failed to send message:", error)
-      toast("Message failed to send", "error")
+      toast("Failed to send", "error")
     } finally {
       setSending(false)
     }
@@ -416,55 +562,39 @@ export default function ChatSidebar() {
                       <span className="text-[10px] text-muted-foreground opacity-70 group-hover:opacity-100 transition-opacity">
                         {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                       </span>
-                      {canManage && (
-                        <button
-                          onClick={() => setActiveMenu(isMenuOpen ? null : msg.id)}
-                          className="ml-auto p-1 rounded hover:bg-secondary text-muted-foreground"
-                          aria-label="Moderate message"
-                          title="Moderate message"
-                        >
-                          <MoreVertical className="w-3 h-3" />
-                        </button>
-                      )}
+                      <button
+                        onClick={() => setActiveMenu(isMenuOpen ? null : msg.id)}
+                        className="ml-auto p-1 rounded hover:bg-secondary text-muted-foreground"
+                        aria-label="Message options"
+                        title="Message options"
+                      >
+                        <MoreVertical className="w-3 h-3" />
+                      </button>
                     </div>
-                    <p className="text-sm pl-0.5">{isDeleted ? <span className="italic text-muted-foreground">{msg.content}</span> : msg.content}</p>
 
-                    {isMenuOpen && canManage && (
+                    {msg.replyTo && (
+                      <div className="mb-1 pl-2 border-l-2 border-primary/30 text-xs text-muted-foreground line-clamp-1">
+                        <MessageSquare className="w-3 h-3 inline mr-1" />
+                        <span className="font-medium">{msg.replyTo.author.username || msg.replyTo.author.name}:</span>{" "}
+                        {msg.replyTo.content}
+                      </div>
+                    )}
+
+                    <p className="text-sm pl-0.5">
+                      {isDeleted ? <span className="italic text-muted-foreground">{msg.content}</span> : renderContent(msg.content)}
+                    </p>
+
+                    {isMenuOpen && (
                       <div className="mt-1 rounded-lg border border-border bg-card shadow-lg p-1.5 space-y-1 z-10">
                         <button
-                          onClick={() => takeModerationAction("CONTENT_DELETION", msg.author.id, { targetType: "CHAT_MESSAGE", targetId: msg.id })}
+                          onClick={() => {
+                            setReplyingTo(msg)
+                            setActiveMenu(null)
+                          }}
                           className="w-full flex items-center gap-1.5 px-2 py-1 rounded text-xs text-left hover:bg-secondary text-foreground"
                         >
-                          <Trash2 className="w-3 h-3 text-destructive" /> Delete message
+                          <MessageSquare className="w-3 h-3 text-primary" /> Reply
                         </button>
-                        <button
-                          onClick={() => takeModerationAction("WARNING", msg.author.id)}
-                          className="w-full flex items-center gap-1.5 px-2 py-1 rounded text-xs text-left hover:bg-secondary text-foreground"
-                        >
-                          <AlertTriangle className="w-3 h-3 text-amber-500" /> Warn user
-                        </button>
-                        {isAdmin && (
-                          <>
-                            <button
-                              onClick={() => takeModerationAction("TEMPORARY_BAN", msg.author.id, { durationDays: 1 })}
-                              className="w-full flex items-center gap-1.5 px-2 py-1 rounded text-xs text-left hover:bg-secondary text-foreground"
-                            >
-                              <Clock className="w-3 h-3 text-blue-400" /> 1-day timeout
-                            </button>
-                            <button
-                              onClick={() => takeModerationAction("TEMPORARY_BAN", msg.author.id, { durationDays: 7 })}
-                              className="w-full flex items-center gap-1.5 px-2 py-1 rounded text-xs text-left hover:bg-secondary text-foreground"
-                            >
-                              <Clock className="w-3 h-3 text-blue-400" /> 7-day timeout
-                            </button>
-                            <button
-                              onClick={() => takeModerationAction("PERMANENT_BAN", msg.author.id)}
-                              className="w-full flex items-center gap-1.5 px-2 py-1 rounded text-xs text-left hover:bg-secondary text-foreground"
-                            >
-                              <Shield className="w-3 h-3 text-destructive" /> Ban user
-                            </button>
-                          </>
-                        )}
                         <a
                           href={`/u/${msg.author.username || msg.author.name}`}
                           onClick={() => {
@@ -476,6 +606,45 @@ export default function ChatSidebar() {
                         >
                           <UserIcon className="w-3 h-3 text-primary" /> View profile
                         </a>
+                        {canManage && (
+                          <>
+                            <div className="border-t border-border my-1" />
+                            <button
+                              onClick={() => takeModerationAction("CONTENT_DELETION", msg.author.id, { targetType: "CHAT_MESSAGE", targetId: msg.id })}
+                              className="w-full flex items-center gap-1.5 px-2 py-1 rounded text-xs text-left hover:bg-secondary text-foreground"
+                            >
+                              <Trash2 className="w-3 h-3 text-destructive" /> Delete message
+                            </button>
+                            <button
+                              onClick={() => takeModerationAction("WARNING", msg.author.id)}
+                              className="w-full flex items-center gap-1.5 px-2 py-1 rounded text-xs text-left hover:bg-secondary text-foreground"
+                            >
+                              <AlertTriangle className="w-3 h-3 text-amber-500" /> Warn user
+                            </button>
+                            {isAdmin && (
+                              <>
+                                <button
+                                  onClick={() => takeModerationAction("TEMPORARY_BAN", msg.author.id, { durationDays: 1 })}
+                                  className="w-full flex items-center gap-1.5 px-2 py-1 rounded text-xs text-left hover:bg-secondary text-foreground"
+                                >
+                                  <Clock className="w-3 h-3 text-blue-400" /> 1-day timeout
+                                </button>
+                                <button
+                                  onClick={() => takeModerationAction("TEMPORARY_BAN", msg.author.id, { durationDays: 7 })}
+                                  className="w-full flex items-center gap-1.5 px-2 py-1 rounded text-xs text-left hover:bg-secondary text-foreground"
+                                >
+                                  <Clock className="w-3 h-3 text-blue-400" /> 7-day timeout
+                                </button>
+                                <button
+                                  onClick={() => takeModerationAction("PERMANENT_BAN", msg.author.id)}
+                                  className="w-full flex items-center gap-1.5 px-2 py-1 rounded text-xs text-left hover:bg-secondary text-foreground"
+                                >
+                                  <Shield className="w-3 h-3 text-destructive" /> Ban user
+                                </button>
+                              </>
+                            )}
+                          </>
+                        )}
                       </div>
                     )}
                   </div>
@@ -502,7 +671,60 @@ export default function ChatSidebar() {
           )}
 
           {/* Message Input */}
-          <form onSubmit={handleSendMessage} className="p-2 border-t border-border shrink-0">
+          <form onSubmit={handleSendMessage} className="p-2 border-t border-border shrink-0 relative">
+            {replyingTo && (
+              <div className="mb-1.5 flex items-center gap-1.5 text-xs text-muted-foreground">
+                <MessageSquare className="w-3 h-3" />
+                <span className="flex-1 truncate">
+                  Replying to {replyingTo.author.username || replyingTo.author.name}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setReplyingTo(null)}
+                  className="p-1 hover:bg-secondary rounded"
+                  aria-label="Cancel reply"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </div>
+            )}
+
+            {(showMentions || showCommands) && (
+              <div className="mb-1.5 rounded-lg border border-border bg-card shadow-lg max-h-40 overflow-y-auto">
+                {showMentions && mentionSuggestions.length > 0 && (
+                  mentionSuggestions.map((u, i) => (
+                    <button
+                      key={u.id}
+                      type="button"
+                      onClick={() => onMentionSelect(u.username || u.name)}
+                      className={cn(
+                        "w-full text-left px-2 py-1.5 text-xs flex items-center gap-2 hover:bg-secondary",
+                        i === 0 && "bg-secondary/50"
+                      )}
+                    >
+                      <span className="font-medium">@{u.username || u.name}</span>
+                    </button>
+                  ))
+                )}
+                {showCommands && (
+                  commandSuggestions.map((c, i) => (
+                    <button
+                      key={c.name}
+                      type="button"
+                      onClick={() => onCommandSelect(c.name)}
+                      className={cn(
+                        "w-full text-left px-2 py-1.5 text-xs flex items-center justify-between hover:bg-secondary",
+                        i === 0 && "bg-secondary/50"
+                      )}
+                    >
+                      <span className="font-medium">/{c.name}</span>
+                      <span className="text-muted-foreground">{c.desc}</span>
+                    </button>
+                  ))
+                )}
+              </div>
+            )}
+
             <div className="flex gap-1.5 items-center">
               <button
                 type="button"
@@ -513,17 +735,32 @@ export default function ChatSidebar() {
                 <Smile className="w-5 h-5" />
               </button>
               <input
-                ref={inputRef}
                 type="text"
                 maxLength={1000}
                 title="Maximum 1000 characters"
-                placeholder={room ? "Message General Chat..." : "Loading chat room..."}
+                placeholder={
+                  !room
+                    ? "Loading chat room..."
+                    : room.locked && !isStaff
+                    ? "Chat is locked"
+                    : replyingTo
+                    ? `Reply to ${replyingTo.author.username || replyingTo.author.name}...`
+                    : "Message General Chat..."
+                }
                 className="flex-1 px-3 py-2 rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-ring text-sm"
-                disabled={!room || sending}
+                disabled={!room || sending || (room?.locked && !isStaff)}
+                value={inputValue}
+                onChange={(e) => handleInputChange(e.target.value, e.target.selectionStart ?? undefined)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault()
+                    handleSendMessage(e)
+                  }
+                }}
               />
               <button
                 type="submit"
-                disabled={!room || sending}
+                disabled={!room || sending || (room?.locked && !isStaff)}
                 aria-label="Send message"
                 className="bg-primary text-primary-foreground p-2 rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
