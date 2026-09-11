@@ -90,8 +90,13 @@ export async function storeImage(dataUri: string, folder: string): Promise<strin
   // sanitization step. All uploads are normalized to WebP.
   let processed: Buffer
   try {
-    processed = await sharp(buf)
+    // limitInputPixels caps decompression-bomb decodes (sharp's default is
+    // ~268MP, far beyond any legitimate client-resized upload). pages: 1 keeps
+    // animated inputs to a single frame. Output is capped at the largest
+    // client resize target (1400px) to bound stored image size.
+    processed = await sharp(buf, { limitInputPixels: 16_777_216, pages: 1 })
       .rotate() // auto-orient, consuming any EXIF orientation data
+      .resize({ width: 1400, height: 1400, fit: "inside", withoutEnlargement: true })
       .webp({ quality: 82, effort: 4 })
       .toBuffer()
   } catch {

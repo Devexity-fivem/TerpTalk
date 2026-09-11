@@ -1,7 +1,8 @@
 import { strict as assert } from "node:assert"
 import { prisma } from "@/lib/prisma"
 import { isBanned, isSessionValid, isAdmin, isModerator, isStaff, isSupport, hashIp, getTrustLevel } from "@/lib/security"
-import { isValidImageDataUri } from "@/lib/blob"
+import { isValidImageDataUri, storeImage } from "@/lib/blob"
+import sharp from "sharp"
 import { isTrustedForLinks, containsExternalLink } from "@/lib/security"
 
 const TEST_USERNAME = `__test_security_${Date.now()}`
@@ -80,6 +81,28 @@ async function run() {
     assert.equal(isValidImageDataUri(tinyPngDataUri()), true, "valid PNG data URI should pass")
     assert.equal(isValidImageDataUri("data:text/html;base64,SGVsbG8="), false, "non-image data URI should fail")
     assert.equal(isValidImageDataUri("not a data uri"), false, "malformed data URI should fail")
+
+    // Pixel-bomb guard: a format-valid image with extreme dimensions must be
+    // rejected by the sharp input-pixel cap before it reaches Blob storage.
+    const originalBlobToken = process.env.BLOB_READ_WRITE_TOKEN
+    process.env.BLOB_READ_WRITE_TOKEN = "test-token-pixel-limit"
+    try {
+      const bigBuf = await sharp({
+        create: { width: 4500, height: 4500, channels: 3, background: { r: 200, g: 0, b: 0 } },
+      })
+        .png()
+        .toBuffer()
+      const bigUri = `data:image/png;base64,${bigBuf.toString("base64")}`
+      assert.equal(isValidImageDataUri(bigUri), true, "oversized-pixel PNG should pass format checks")
+      await assert.rejects(
+        () => storeImage(bigUri, "test"),
+        /Image could not be sanitized/,
+        "storeImage should reject images exceeding the input pixel limit"
+      )
+    } finally {
+      if (originalBlobToken === undefined) delete process.env.BLOB_READ_WRITE_TOKEN
+      else process.env.BLOB_READ_WRITE_TOKEN = originalBlobToken
+    }
 
     // External link detection
     assert.equal(containsExternalLink("visit example.com"), true, "should detect domain link")
