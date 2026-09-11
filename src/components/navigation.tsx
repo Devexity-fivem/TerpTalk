@@ -115,7 +115,7 @@ export function Navigation() {
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="flex h-16 items-center justify-between gap-2">
             {/* Logo */}
-            <Link href="/" className="flex shrink-0 items-center gap-2">
+            <Link href="/" className="flex shrink-0 items-center gap-2" aria-label="TerpTalk home" title="Go to homepage">
               <div className="rounded-xl bg-primary/15 p-2 ring-1 ring-primary/30">
                 <CannabisLeaf className="h-6 w-6 text-primary" />
               </div>
