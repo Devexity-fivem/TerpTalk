@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { unauthorized, forbidden, getClientIp, logSecurityEvent, LIMITS, isBanned } from "@/lib/security"
-import { storeImage } from "@/lib/blob"
+import { storeImage, deleteImage } from "@/lib/blob"
 import { getReputationTier, getTierProgress } from "@/lib/reputation"
 import { rateLimit } from "@/lib/rate-limit"
 import bcrypt from "bcryptjs"
@@ -317,6 +317,12 @@ export async function PATCH(request: Request) {
           ]
         : []),
     ])
+
+    // Best-effort cleanup of the previous avatar blob when it is replaced or removed.
+    const oldAvatar = current?.avatarUrl
+    if (oldAvatar && oldAvatar !== updateData.avatarUrl) {
+      deleteImage(oldAvatar).catch(() => {})
+    }
 
     return NextResponse.json({ profile: updated }, { headers: NO_STORE })
   } catch (error) {

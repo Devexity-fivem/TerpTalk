@@ -2,7 +2,7 @@
 // Accepts client-resized data URIs; stores them in Blob and returns a
 // small https URL so DB rows stay tiny. Falls back to the data URI when
 // BLOB_READ_WRITE_TOKEN isn't configured so nothing breaks locally.
-import { put } from "@vercel/blob"
+import { put, del } from "@vercel/blob"
 import { randomBytes } from "crypto"
 
 const DATA_URI = /^data:image\/(png|jpe?g|webp);base64,(.+)$/
@@ -60,4 +60,26 @@ export async function storeImage(dataUri: string, folder: string): Promise<strin
     contentType: `image/${m[1]}`,
   })
   return url
+}
+
+/**
+ * Delete a single image from Vercel Blob by its URL.
+ * No-ops if the token is not configured or the URL is not a real Blob URL.
+ * Swallows errors so cleanup failures do not break deletions.
+ */
+export async function deleteImage(url: string | null | undefined): Promise<void> {
+  if (!url || !url.startsWith("https://")) return
+  if (!process.env.BLOB_READ_WRITE_TOKEN) return
+  try {
+    await del(url)
+  } catch (error) {
+    console.error("Failed to delete blob:", url, error)
+  }
+}
+
+/**
+ * Delete multiple images from Vercel Blob by their URLs.
+ */
+export async function deleteImages(urls: (string | null | undefined)[]): Promise<void> {
+  await Promise.all(urls.filter((u): u is string => typeof u === "string" && u.startsWith("https://")).map(deleteImage))
 }
