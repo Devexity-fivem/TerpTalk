@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { forbidden } from "@/lib/security"
-import { requireModerator } from "@/lib/require-staff"
+import { requireStaff } from "@/lib/require-staff"
 
 // GET ?username= — staff lookup of a member's moderation-relevant profile
 export async function GET(request: Request) {
-  if (!(await requireModerator())) return forbidden()
+  if (!(await requireStaff())) return forbidden()
 
   const { searchParams } = new URL(request.url)
   const username = (searchParams.get("username") || "").trim().slice(0, 30)

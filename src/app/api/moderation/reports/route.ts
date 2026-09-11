@@ -1,13 +1,13 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { forbidden, getClientIp, logSecurityEvent } from "@/lib/security"
-import { requireModerator } from "@/lib/require-staff"
+import { requireModerator, requireStaff } from "@/lib/require-staff"
 
 const VALID_REPORT_STATUSES = ["PENDING", "REVIEWING", "ESCALATED", "RESOLVED", "DISMISSED"]
 
-// GET — moderation queue (DB-verified moderators/admins only)
+// GET — moderation queue (DB-verified staff: support, moderators, admins)
 export async function GET(request: Request) {
-  const staff = await requireModerator()
+  const staff = await requireStaff()
   if (!staff) return forbidden()
 
   const { searchParams } = new URL(request.url)

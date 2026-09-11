@@ -75,7 +75,7 @@ export default function ModerationPage() {
   const [queueFilter, setQueueFilter] = useState<"ALL" | "PENDING" | "REVIEWING" | "ESCALATED">("ALL")
   const [queueSort, setQueueSort] = useState<"newest" | "oldest">("oldest")
   const role = (session?.user as { role?: string })?.role
-  const isMod = role === "MODERATOR" || role === "ADMINISTRATOR"
+  const isMod = role === "SUPPORT" || role === "MODERATOR" || role === "ADMINISTRATOR"
   const isAdminUser = role === "ADMINISTRATOR"
 
   const load = () => {

@@ -7,6 +7,7 @@ import { usePathname, useRouter } from "next/navigation"
 import {
   Leaf, User, LogOut, MessageCircle, Home, Calendar,
   Settings, Dna, Bell, Shield, Menu, X, Mail, Search, Trophy, BookOpen, Stethoscope, Tag, TrendingUp,
+  ScrollText, Image as ImageIcon, Video,
 } from "lucide-react"
 import CannabisLeaf from "@/components/cannabis-leaf"
 import MobileNav from "@/components/mobile-nav"
@@ -45,6 +46,8 @@ export function Navigation() {
   const role = (session?.user as { role?: string } | undefined)?.role
   const isMod = role === "MODERATOR" || role === "ADMINISTRATOR"
   const isAdmin = role === "ADMINISTRATOR"
+  const isSupport = role === "SUPPORT"
+  const isStaff = isMod || isSupport
 
   useEffect(() => {
     if (!session) return
@@ -285,17 +288,54 @@ export function Navigation() {
                   </Link>
                 </>
               )}
-              {isMod && (
-                <Link href="/moderation" className={cn(linkClass("/moderation"), "!text-amber-500")} onClick={() => setMenuOpen(false)}>
-                  <Shield className="h-4 w-4" />
-                  Moderation
-                </Link>
-              )}
-              {isAdmin && (
-                <Link href="/admin" className={cn(linkClass("/admin"), "!text-amber-500")} onClick={() => setMenuOpen(false)}>
-                  <Shield className="h-4 w-4" />
-                  Admin
-                </Link>
+              {isStaff && (
+                <div className="pt-2">
+                  <div className="px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-amber-500/80">
+                    Staff Tools
+                  </div>
+                  <div className="mt-1 space-y-1">
+                    {isMod && (
+                      <Link href="/moderation" className={cn(linkClass("/moderation"), "!text-amber-500")} onClick={() => setMenuOpen(false)}>
+                        <Shield className="h-4 w-4" />
+                        Moderation
+                      </Link>
+                    )}
+                    {isSupport && (
+                      <Link href="/moderation" className={cn(linkClass("/moderation"), "!text-teal-500")} onClick={() => setMenuOpen(false)}>
+                        <Shield className="h-4 w-4" />
+                        Support Queue
+                      </Link>
+                    )}
+                    {isAdmin && (
+                      <>
+                        <Link href="/admin" className={cn(linkClass("/admin"), "!text-amber-500")} onClick={() => setMenuOpen(false)}>
+                          <Shield className="h-4 w-4" />
+                          Admin Dashboard
+                        </Link>
+                        <Link href="/admin/audit" className={cn(linkClass("/admin/audit"), "!text-amber-500")} onClick={() => setMenuOpen(false)}>
+                          <ScrollText className="h-4 w-4" />
+                          Audit Log
+                        </Link>
+                        <Link href="/admin/media" className={cn(linkClass("/admin/media"), "!text-amber-500")} onClick={() => setMenuOpen(false)}>
+                          <ImageIcon className="h-4 w-4" />
+                          Media Moderation
+                        </Link>
+                        <Link href="/admin/settings" className={cn(linkClass("/admin/settings"), "!text-amber-500")} onClick={() => setMenuOpen(false)}>
+                          <Settings className="h-4 w-4" />
+                          Site Settings
+                        </Link>
+                        <Link href="/admin/features" className={cn(linkClass("/admin/features"), "!text-amber-500")} onClick={() => setMenuOpen(false)}>
+                          <Trophy className="h-4 w-4" />
+                          Feature Flags
+                        </Link>
+                        <Link href="/admin/youtubers" className={cn(linkClass("/admin/youtubers"), "!text-amber-500")} onClick={() => setMenuOpen(false)}>
+                          <Video className="h-4 w-4" />
+                          YouTubers
+                        </Link>
+                      </>
+                    )}
+                  </div>
+                </div>
               )}
             </div>
 

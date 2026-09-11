@@ -6,9 +6,18 @@ import { REP_TIERS } from "@/lib/reputation-config"
 // ─── Role & status helpers ──────────────────────────────────────────
 
 export const MODERATOR_ROLES = new Set(["MODERATOR", "ADMINISTRATOR"])
+export const STAFF_ROLES = new Set(["SUPPORT", "MODERATOR", "ADMINISTRATOR"])
 
 export function isModerator(role?: string | null) {
   return !!role && MODERATOR_ROLES.has(role)
+}
+
+export function isSupport(role?: string | null) {
+  return role === "SUPPORT"
+}
+
+export function isStaff(role?: string | null) {
+  return !!role && STAFF_ROLES.has(role)
 }
 
 export function isAdmin(role?: string | null) {

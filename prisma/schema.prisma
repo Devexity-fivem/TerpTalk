@@ -17,7 +17,7 @@ model User {
   // No email field — registration is username-only by design (data minimization)
   image         String?
   password      String?
-  role          String    @default("MEMBER") // MEMBER, VERIFIED_MEMBER, MODERATOR, ADMINISTRATOR
+  role          String    @default("MEMBER") // MEMBER, VERIFIED_MEMBER, SUPPORT, MODERATOR, ADMINISTRATOR
   status        String    @default("OFFLINE") // ONLINE, AWAY, OFFLINE
   lastSeenAt    DateTime?
   ageVerified   Boolean   @default(false)

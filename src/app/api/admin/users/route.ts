@@ -5,7 +5,7 @@ import { requireAdmin } from "@/lib/require-staff"
 import { getBadgeByName } from "@/lib/badge-registry"
 import { rateLimit } from "@/lib/rate-limit"
 
-const ASSIGNABLE_ROLES = new Set(["MEMBER", "VERIFIED_MEMBER", "MODERATOR", "ADMINISTRATOR"])
+const ASSIGNABLE_ROLES = new Set(["MEMBER", "VERIFIED_MEMBER", "SUPPORT", "MODERATOR", "ADMINISTRATOR"])
 
 function escapeLike(str: string): string {
   return str
@@ -154,13 +154,15 @@ export async function PATCH(request: Request) {
           type: "MODERATOR_ANNOUNCEMENT",
           title: "Role updated",
           content:
-            role === "MODERATOR"
-              ? "You've been promoted to Moderator. You can now access the moderation queue."
-              : role === "ADMINISTRATOR"
-                ? "You've been promoted to Administrator. You now have full admin access."
-                : role === "VERIFIED_MEMBER"
-                  ? "Your account has been verified by the team."
-                  : "Your staff role has been removed.",
+            role === "SUPPORT"
+              ? "You've been added to the support team. You can now access support tools."
+              : role === "MODERATOR"
+                ? "You've been promoted to Moderator. You can now access the moderation queue."
+                : role === "ADMINISTRATOR"
+                  ? "You've been promoted to Administrator. You now have full admin access."
+                  : role === "VERIFIED_MEMBER"
+                    ? "Your account has been verified by the team."
+                    : "Your staff role has been removed.",
         },
       }).catch(() => {})
 
