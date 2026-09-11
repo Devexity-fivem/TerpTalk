@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma"
 import { unauthorized, publicUserSelect, LIMITS, getClientIp, logSecurityEvent, isBanned, forbidden } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
 import { awardReputation, REP_POINTS } from "@/lib/reputation"
-import { storeImage, deleteImagesIfUnreferenced } from "@/lib/blob"
+import { storeImages, deleteImagesIfUnreferenced } from "@/lib/blob"
 import { BADGE_ICONS } from "@/lib/badges"
 
 export async function POST(request: Request) {
@@ -113,8 +113,7 @@ export async function POST(request: Request) {
     }
 
     // Offload to Blob storage when configured (keeps DB rows small)
-    storedImages = await Promise.all(validImages.map((i: string) => storeImage(i, "diary-updates")))
-      .catch(() => [])
+    storedImages = await storeImages(validImages, "diary-updates")
 
     // Create update
     const update = await prisma.diaryUpdate.create({

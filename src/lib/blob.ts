@@ -39,7 +39,27 @@ export async function storeImages(
   if (input.length > max) throw new Error(`You can attach at most ${max} images`)
   if (!input.every(isValidImageDataUri)) throw new Error("One or more images are invalid or too large")
 
-  return Promise.all(input.map((uri) => storeImage(uri, folder)))
+  const results = await Promise.allSettled(input.map((uri) => storeImage(uri, folder)))
+  const urls: string[] = []
+  const errors: string[] = []
+
+  for (const result of results) {
+    if (result.status === "fulfilled") {
+      urls.push(result.value)
+    } else {
+      errors.push(result.reason instanceof Error ? result.reason.message : String(result.reason))
+    }
+  }
+
+  if (errors.length > 0) {
+    // Any successful uploads are orphaned if the overall batch fails. Clean
+    // them up before reporting the error so a multi-image post cannot leave
+    // stray Blobs behind.
+    await deleteImagesIfUnreferenced(urls)
+    throw new Error(errors.join("; "))
+  }
+
+  return urls
 }
 
 export async function storeImage(dataUri: string, folder: string): Promise<string> {
