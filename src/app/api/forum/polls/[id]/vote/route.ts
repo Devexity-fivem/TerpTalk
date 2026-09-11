@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { unauthorized, forbidden } from "@/lib/security"
+import { unauthorized, forbidden, isBanned } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
 import { checkMaintenance } from "@/lib/maintenance"
 
@@ -15,11 +15,7 @@ export async function POST(
     const session = await getServerSession(authOptions)
     if (!session?.user?.id) return unauthorized()
 
-    const currentUser = await prisma.user.findUnique({
-      where: { id: session.user.id },
-      select: { banned: true },
-    })
-    if (!currentUser || currentUser.banned) {
+    if (await isBanned(session.user.id)) {
       return forbidden("Your account is suspended")
     }
 

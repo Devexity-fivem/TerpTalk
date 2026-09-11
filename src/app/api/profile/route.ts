@@ -340,9 +340,8 @@ export async function PATCH(request: Request) {
     // Clean up the new avatar Blob if the profile update could not be saved.
     deleteImagesIfUnreferenced([newAvatarBlobUrl]).catch(() => {})
     console.error("Profile update error:", error)
-    const message = error instanceof Error ? error.message : "Failed to update profile"
     return NextResponse.json(
-      { error: message },
+      { error: "Failed to update profile" },
       { status: 500 }
     )
   }

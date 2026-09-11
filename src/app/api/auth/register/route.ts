@@ -128,14 +128,15 @@ export async function POST(request: Request) {
       )
     }
 
-    // Password strength
+    // Password strength (bcrypt truncates to 72 bytes, so enforce byte length)
     if (
       typeof password !== "string" ||
       password.length < LIMITS.PASSWORD_MIN ||
-      password.length > LIMITS.PASSWORD_MAX
+      password.length > LIMITS.PASSWORD_MAX ||
+      Buffer.byteLength(password, "utf8") > 72
     ) {
       return NextResponse.json(
-        { error: `Password must be between ${LIMITS.PASSWORD_MIN} and ${LIMITS.PASSWORD_MAX} characters` },
+        { error: `Password must be between ${LIMITS.PASSWORD_MIN} and ${LIMITS.PASSWORD_MAX} characters and must not exceed 72 bytes` },
         { status: 400 }
       )
     }

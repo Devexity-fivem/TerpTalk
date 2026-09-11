@@ -104,8 +104,9 @@ export async function POST(request: Request) {
     try {
       imageUrls = await storeImages(images, "forum")
     } catch (err) {
+      console.error("Forum post image upload error:", err)
       return NextResponse.json(
-        { error: err instanceof Error ? err.message : "Image upload failed" },
+        { error: "Image upload failed" },
         { status: 400 }
       )
     }

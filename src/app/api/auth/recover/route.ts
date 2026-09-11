@@ -28,7 +28,8 @@ export async function POST(request: Request) {
       !username ||
       !phrase ||
       newPassword.length < LIMITS.PASSWORD_MIN ||
-      newPassword.length > LIMITS.PASSWORD_MAX
+      newPassword.length > LIMITS.PASSWORD_MAX ||
+      Buffer.byteLength(newPassword, "utf8") > 72
     ) {
       return NextResponse.json(
         { error: "Username, 12-word phrase, and a new password are required." },
