@@ -748,19 +748,41 @@ export default function ProfilePage() {
               <button
                 onClick={async () => {
                   const username = profileData.profile?.username || profileData.user.name
+
+                  if (!window.confirm(
+                    "This action is permanent. Deleting your account will remove all your content, data, and media. You cannot undo this. Continue?"
+                  )) {
+                    return
+                  }
+
                   const confirm = window.prompt(
-                    `Type your username "${username}" to permanently delete your account and all content:`
+                    `Type your username "${username}" to confirm account deletion:`
                   )
                   if (confirm === null) return
+                  if (confirm !== username) {
+                    alert("Username does not match.")
+                    return
+                  }
+
+                  const password = window.prompt(
+                    "Enter your current password to permanently delete your account:"
+                  )
+                  if (password === null) return
+                  if (typeof password !== "string" || password.length === 0) {
+                    alert("Password is required.")
+                    return
+                  }
+
                   const res = await fetch("/api/profile", {
                     method: "DELETE",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ confirmUsername: confirm }),
+                    body: JSON.stringify({ confirmUsername: confirm, password }),
                   })
+
                   if (res.ok) {
-                    signOut({ callbackUrl: "/" })
+                    await signOut({ callbackUrl: "/" })
                   } else {
-                    const d = await res.json()
+                    const d = await res.json().catch(() => ({}))
                     alert(d.error || "Deletion failed")
                   }
                 }}
@@ -769,7 +791,7 @@ export default function ProfilePage() {
                 <Trash2 className="w-4 h-4" /> Delete my account
               </button>
               <p className="text-xs text-muted-foreground">
-                Account deletion is permanent and removes all your content.
+                Account deletion is permanent and removes all your content. This action cannot be undone.
               </p>
             </div>
           </div>

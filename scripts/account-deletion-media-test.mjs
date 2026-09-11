@@ -99,6 +99,27 @@ async function run() {
       const publicBefore = await api(`/api/users/${username}`)
       publicBefore.status === 200 ? pass("Public profile exists before deletion") : fail("Public profile before", publicBefore.status)
 
+      const wrongPass = await api("/api/profile", {
+        method: "DELETE",
+        body: { confirmUsername: username, password: "WrongPass123!" },
+        cookie,
+      })
+      wrongPass.status === 403 ? pass("Rejects wrong password") : fail("Wrong password", wrongPass.status)
+
+      const wrongUser = await api("/api/profile", {
+        method: "DELETE",
+        body: { confirmUsername: "wronguser", password },
+        cookie,
+      })
+      wrongUser.status === 400 ? pass("Rejects wrong username") : fail("Wrong username", wrongUser.status)
+
+      const missingPass = await api("/api/profile", {
+        method: "DELETE",
+        body: { confirmUsername: username },
+        cookie,
+      })
+      missingPass.status === 400 ? pass("Rejects missing password") : fail("Missing password", missingPass.status)
+
       const delRes = await api("/api/profile", {
         method: "DELETE",
         body: { confirmUsername: username, password },
