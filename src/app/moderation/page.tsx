@@ -72,7 +72,7 @@ export default function ModerationPage() {
   const [bulkReason, setBulkReason] = useState("")
   const [bulkLoading, setBulkLoading] = useState(false)
   const [bulkResult, setBulkResult] = useState<string | null>(null)
-  const [queueFilter, setQueueFilter] = useState<"ALL" | "PENDING" | "REVIEWING">("ALL")
+  const [queueFilter, setQueueFilter] = useState<"ALL" | "PENDING" | "REVIEWING" | "ESCALATED">("ALL")
   const [queueSort, setQueueSort] = useState<"newest" | "oldest">("oldest")
   const role = (session?.user as { role?: string })?.role
   const isMod = role === "MODERATOR" || role === "ADMINISTRATOR"
@@ -197,7 +197,7 @@ export default function ModerationPage() {
     } finally { setBusy(null) }
   }
 
-  const pending = reports.filter((r) => r.status === "PENDING" || r.status === "REVIEWING")
+  const pending = reports.filter((r) => r.status === "PENDING" || r.status === "REVIEWING" || r.status === "ESCALATED")
   const resolved = reports.filter((r) => r.status === "RESOLVED" || r.status === "DISMISSED")
   const queueReports = pending
     .filter((r) => queueFilter === "ALL" || r.status === queueFilter)
@@ -400,7 +400,7 @@ export default function ModerationPage() {
         {tab === "queue" && (<>
         <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
           <div className="flex items-center gap-2">
-            {(["ALL", "PENDING", "REVIEWING"] as const).map((s) => (
+            {(["ALL", "PENDING", "REVIEWING", "ESCALATED"] as const).map((s) => (
               <button
                 key={s}
                 onClick={() => setQueueFilter(s)}
@@ -478,6 +478,15 @@ export default function ModerationPage() {
                       className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-destructive text-destructive-foreground rounded-lg hover:bg-destructive/90 disabled:opacity-50"
                     >
                       <Ban className="w-4 h-4" /> Ban user
+                    </button>
+                  )}
+                  {isAdminUser && (
+                    <button
+                      onClick={() => updateReport(r.id, "ESCALATED")}
+                      disabled={busy === r.id}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-amber-500/10 text-amber-500 rounded-lg hover:bg-amber-500/20 disabled:opacity-50"
+                    >
+                      <AlertTriangle className="w-4 h-4" /> Escalate
                     </button>
                   )}
                   <button

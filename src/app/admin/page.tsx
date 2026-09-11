@@ -11,10 +11,17 @@ import Link from "next/link"
 import AdminAffiliates from "@/components/admin-affiliates"
 
 interface Stats {
-  users: number; activeUsers: number; bannedUsers: number; threads: number
-  posts: number; openReports: number; totalReports: number
-  moderationActions: number
-  securityEvents24h: number
+  users: number; newUsers: number; activeUsers: number; bannedUsers: number
+  pendingBans: number
+  threads: number; newThreads: number
+  posts: number; newPosts: number
+  diaryUpdates: number
+  setups: number; newSetups: number
+  images: number
+  openReports: number; reviewingReports: number; escalatedReports: number
+  resolvedReports: number; dismissedReports: number
+  moderationActions: number; newModerationActions: number
+  securityEvents24h: number; newSecurityEvents: number
 }
 interface AdminUser {
   id: string; username: string; role: string; banned: boolean
@@ -41,6 +48,7 @@ export default function AdminPage() {
   const role = (session?.user as { role?: string })?.role
 
   const [tab, setTab] = useState<string>("overview")
+  const [range, setRange] = useState<"today" | "7" | "30" | "all">("7")
   const [stats, setStats] = useState<Stats | null>(null)
   const [users, setUsers] = useState<AdminUser[]>([])
   const [events, setEvents] = useState<SecEvent[]>([])
@@ -59,12 +67,12 @@ export default function AdminPage() {
   const [sending, setSending] = useState(false)
 
   const load = useCallback(() => {
-    fetch("/api/admin/stats").then(async (res) => {
+    fetch(`/api/admin/stats?range=${range}`).then(async (res) => {
       if (!res.ok) { setDenied(true); setLoading(false); return }
       const d = await res.json(); setStats(d.stats)
       setLoading(false)
     }).catch(() => { setDenied(true); setLoading(false) })
-  }, [])
+  }, [range])
 
   const loadUsers = useCallback(() => {
     fetch(`/api/admin/users?q=${encodeURIComponent(userQuery)}&filter=${userFilter}`)
@@ -215,22 +223,47 @@ export default function AdminPage() {
 
         {/* OVERVIEW */}
         {tab === "overview" && stats && (
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {[
-              { label: "Total Users", value: stats.users },
-              { label: "Active (7d)", value: stats.activeUsers },
-              { label: "Banned", value: stats.bannedUsers },
-              { label: "Threads", value: stats.threads },
-              { label: "Posts", value: stats.posts },
-              { label: "Open Reports", value: stats.openReports },
-              { label: "Mod Actions", value: stats.moderationActions },
-              { label: "Security Events (24h)", value: stats.securityEvents24h },
-            ].map((s) => (
-              <div key={s.label} className="bg-card rounded-xl border border-border p-4">
-                <div className="text-2xl font-bold text-primary tabular-nums">{s.value}</div>
-                <div className="text-xs text-muted-foreground">{s.label}</div>
+          <div className="space-y-4">
+            <div className="flex items-center justify-between flex-wrap gap-3">
+              <div className="text-sm text-muted-foreground">
+                Showing metrics for: <span className="font-medium text-foreground capitalize">{range === "7" ? "last 7 days" : range === "30" ? "last 30 days" : range}</span>
               </div>
-            ))}
+              <select
+                value={range}
+                onChange={(e) => setRange(e.target.value as typeof range)}
+                className="px-3 py-2 rounded-lg border border-border bg-background text-sm"
+              >
+                <option value="today">Today</option>
+                <option value="7">Last 7 days</option>
+                <option value="30">Last 30 days</option>
+                <option value="all">All time</option>
+              </select>
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              {[
+                { label: "Total Users", value: stats.users },
+                { label: "New Users", value: stats.newUsers },
+                { label: "Active Users", value: stats.activeUsers },
+                { label: "Banned Users", value: stats.bannedUsers },
+                { label: "Threads", value: stats.threads },
+                { label: "New Threads", value: stats.newThreads },
+                { label: "Posts", value: stats.posts },
+                { label: "New Posts", value: stats.newPosts },
+                { label: "Diary Updates", value: stats.diaryUpdates },
+                { label: "Setups", value: stats.setups },
+                { label: "New Setups", value: stats.newSetups },
+                { label: "New Images", value: stats.images },
+                { label: "Open Reports", value: stats.openReports },
+                { label: "Under Review", value: stats.reviewingReports },
+                { label: "Escalated", value: stats.escalatedReports },
+                { label: "Mod Actions", value: stats.newModerationActions },
+              ].map((s) => (
+                <div key={s.label} className="bg-card rounded-xl border border-border p-4">
+                  <div className="text-2xl font-bold text-primary tabular-nums">{s.value}</div>
+                  <div className="text-xs text-muted-foreground">{s.label}</div>
+                </div>
+              ))}
+            </div>
           </div>
         )}
 
