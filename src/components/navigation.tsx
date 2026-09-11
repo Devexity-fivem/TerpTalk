@@ -130,26 +130,24 @@ export function Navigation() {
                   {label}
                 </Link>
               ))}
-              <button
-                onClick={openChat}
-                className={cn(
-                  "flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
-                  "text-muted-foreground hover:bg-secondary hover:text-foreground"
-                )}
-              >
-                <MessageCircle className="h-4 w-4" />
-                Chat
-              </button>
               {isMod && (
-                <Link href="/moderation" className={cn(linkClass("/moderation"), "!text-amber-500")}>
-                  <Shield className="h-4 w-4" />
-                  Moderation
+                <Link
+                  href="/moderation"
+                  className={cn(linkClass("/moderation"), "!px-2 !text-amber-500")}
+                  aria-label="Moderation"
+                  title="Moderation"
+                >
+                  <Shield className="h-5 w-5" />
                 </Link>
               )}
               {isAdmin && (
-                <Link href="/admin" className={cn(linkClass("/admin"), "!text-amber-500")}>
-                  <Shield className="h-4 w-4" />
-                  Admin
+                <Link
+                  href="/admin"
+                  className={cn(linkClass("/admin"), "!px-2 !text-amber-500")}
+                  aria-label="Admin"
+                  title="Admin"
+                >
+                  <Shield className="h-5 w-5" />
                 </Link>
               )}
             </div>
@@ -202,11 +200,13 @@ export function Navigation() {
                   <Link
                     href="/profile"
                     className="hidden items-center gap-2 rounded-lg p-1 text-sm transition-colors hover:text-foreground lg:flex"
+                    aria-label="Your profile"
+                    title="Your profile"
                   >
                     <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10">
                       <User className="h-4 w-4 text-primary" />
                     </div>
-                    <span className="font-medium">{session.user?.name}</span>
+                    <span className="font-medium hidden xl:inline">{session.user?.name}</span>
                   </Link>
                   <button
                     onClick={() => signOut()}
