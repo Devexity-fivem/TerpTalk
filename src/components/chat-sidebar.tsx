@@ -283,7 +283,17 @@ export default function ChatSidebar() {
               </span>
             )
           }
-          return <span key={i}>{part}</span>
+          const lines = part.split("\n")
+          return (
+            <span key={i}>
+              {lines.map((line, j) => (
+                <span key={j}>
+                  {line}
+                  {j < lines.length - 1 && <br />}
+                </span>
+              ))}
+            </span>
+          )
         })}
       </>
     )
@@ -374,19 +384,15 @@ export default function ChatSidebar() {
           toast(body.error || "Command failed", "error")
         } else {
           const data = await response.json()
-          if (data.message) {
-            if (data.ok && typeof data.message === "string") {
-              toast(data.message, "info")
-            } else if (data.message) {
-              setMessages(prev => [...prev, data.message])
-            }
+          if (data.room) {
+            setRoom(prev => prev ? { ...prev, ...data.room } : prev)
           }
           if (data.cleared !== undefined) {
             setMessages([])
             toast(`Cleared ${data.cleared} messages`, "success")
           }
-          if (data.room) {
-            setRoom(prev => prev ? { ...prev, ...data.room } : prev)
+          if (data.message && data.message.author) {
+            setMessages(prev => [...prev, data.message])
           }
         }
       } else {

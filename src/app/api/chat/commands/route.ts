@@ -17,6 +17,19 @@ import { rateLimit } from "@/lib/rate-limit"
 import { checkMaintenance } from "@/lib/maintenance"
 import { getPusher } from "@/lib/pusher"
 
+type ChatMessageWithAuthor = {
+  id: string
+  content: string
+  createdAt: Date
+  author: {
+    id: string
+    name: string | null
+    image: string | null
+    role: string | null
+    profile: { username: string | null } | null
+  }
+}
+
 const MAX_SLOW = 300
 
 export async function POST(request: NextRequest) {
@@ -63,6 +76,58 @@ export async function POST(request: NextRequest) {
     const moderator = isModerator(user.role)
     const admin = isAdmin(user.role)
     const displayName = user.profile?.username || user.name || "Staff"
+
+    const getOrCreateBot = async () => {
+      const existing = await prisma.user.findFirst({
+        where: { profile: { username: "terpbot" } },
+        select: { id: true },
+      })
+      if (existing) return existing
+      const created = await prisma.user.create({
+        data: {
+          name: "TerpBot",
+          ageVerified: true,
+          status: "ONLINE",
+          profile: { create: { username: "terpbot" } },
+        },
+        select: { id: true },
+      })
+      return created
+    }
+
+    const toChatDto = (message: ChatMessageWithAuthor) => {
+      const author = message.author as unknown as {
+        id: string
+        name: string | null
+        image: string | null
+        role: string | null
+        profile: { username: string | null } | null
+      }
+      return {
+        id: message.id,
+        content: message.content,
+        createdAt: message.createdAt,
+        author: {
+          id: author.id,
+          name: author.name,
+          username: author.profile?.username ?? null,
+          image: author.image ?? null,
+          role: author.role ?? null,
+        },
+        replyTo: null,
+      }
+    }
+
+    const postBot = async (text: string) => {
+      const bot = await getOrCreateBot()
+      const message = await prisma.chatMessage.create({
+        data: { roomId, authorId: bot.id, content: text },
+        include: { author: { select: publicUserSelect } },
+      })
+      const dto = toChatDto(message)
+      getPusher()?.trigger(`private-chat-${roomId}`, "new-message", dto).catch(() => {})
+      return dto
+    }
 
     const resolveTarget = async (raw?: string) => {
       if (!raw) return null
@@ -155,10 +220,15 @@ export async function POST(request: NextRequest) {
               "/unban <@user> - lift a permanent ban",
             ]
           : []
-        return NextResponse.json({
-          ok: true,
-          message: [...base, ...staffCmds, ...modCmds, ...adminCmds].join("\n"),
-        })
+        const helpText = [
+          "Available commands:",
+          ...base,
+          ...staffCmds,
+          ...modCmds,
+          ...adminCmds,
+        ].join("\n")
+        const dto = await postBot(helpText)
+        return NextResponse.json({ ok: true, message: dto })
       }
 
       case "me": {
@@ -173,20 +243,7 @@ export async function POST(request: NextRequest) {
           },
           include: { author: { select: publicUserSelect } },
         })
-        const author = message.author as unknown as { id: string; name: string | null; image: string | null; role: string | null; profile: { username: string | null } | null }
-        const dto = {
-          id: message.id,
-          content: message.content,
-          createdAt: message.createdAt,
-          author: {
-            id: author.id,
-            name: author.name,
-            username: author.profile?.username ?? null,
-            image: author.image ?? null,
-            role: author.role ?? null,
-          },
-          replyTo: null,
-        }
+        const dto = toChatDto(message)
         getPusher()?.trigger(`private-chat-${roomId}`, "new-message", dto).catch(() => {})
         return NextResponse.json({ ok: true, message: dto })
       }
@@ -201,7 +258,8 @@ export async function POST(request: NextRequest) {
           where: { id: roomId },
           data: { slowModeSeconds: seconds },
         })
-        return NextResponse.json({ ok: true, room: { slowModeSeconds: updated.slowModeSeconds } })
+        const bot = await postBot(`Slow mode set to ${seconds} second(s) by @${displayName}`)
+        return NextResponse.json({ ok: true, room: { slowModeSeconds: updated.slowModeSeconds }, message: bot })
       }
 
       case "lock": {
@@ -210,7 +268,8 @@ export async function POST(request: NextRequest) {
           where: { id: roomId },
           data: { locked: true },
         })
-        return NextResponse.json({ ok: true, room: { locked: updated.locked } })
+        const bot = await postBot(`Chat locked by @${displayName}`)
+        return NextResponse.json({ ok: true, room: { locked: updated.locked }, message: bot })
       }
 
       case "unlock": {
@@ -219,7 +278,8 @@ export async function POST(request: NextRequest) {
           where: { id: roomId },
           data: { locked: false },
         })
-        return NextResponse.json({ ok: true, room: { locked: updated.locked } })
+        const bot = await postBot(`Chat unlocked by @${displayName}`)
+        return NextResponse.json({ ok: true, room: { locked: updated.locked }, message: bot })
       }
 
       case "clear": {
@@ -228,7 +288,8 @@ export async function POST(request: NextRequest) {
           where: { roomId, deleted: false },
           data: { deleted: true },
         })
-        return NextResponse.json({ ok: true, cleared: result.count })
+        const bot = await postBot(`Cleared ${result.count} message(s) by @${displayName}`)
+        return NextResponse.json({ ok: true, cleared: result.count, message: bot })
       }
 
       case "announce": {
@@ -244,20 +305,7 @@ export async function POST(request: NextRequest) {
           },
           include: { author: { select: publicUserSelect } },
         })
-        const author = message.author as unknown as { id: string; name: string | null; image: string | null; role: string | null; profile: { username: string | null } | null }
-        const dto = {
-          id: message.id,
-          content: message.content,
-          createdAt: message.createdAt,
-          author: {
-            id: author.id,
-            name: author.name,
-            username: author.profile?.username ?? null,
-            image: author.image ?? null,
-            role: author.role ?? null,
-          },
-          replyTo: null,
-        }
+        const dto = toChatDto(message)
         getPusher()?.trigger(`private-chat-${roomId}`, "new-message", dto).catch(() => {})
         return NextResponse.json({ ok: true, message: dto })
       }
@@ -272,7 +320,8 @@ export async function POST(request: NextRequest) {
         const target = await resolveTarget(targetUsername)
         if (!target) return NextResponse.json({ error: "User not found" }, { status: 404 })
         await applyModeration("WARNING", target.id, reason)
-        return NextResponse.json({ ok: true, message: `Warned @${target.profile?.username || target.name}` })
+        const bot = await postBot(`Warned @${target.profile?.username || target.name} by @${displayName}: ${reason}`)
+        return NextResponse.json({ ok: true, message: bot })
       }
 
       case "mute": {
@@ -286,7 +335,8 @@ export async function POST(request: NextRequest) {
         const target = await resolveTarget(targetUsername)
         if (!target) return NextResponse.json({ error: "User not found" }, { status: 404 })
         await applyModeration("TEMPORARY_BAN", target.id, reason, days)
-        return NextResponse.json({ ok: true, message: `Muted @${target.profile?.username || target.name} for ${days} day(s)` })
+        const bot = await postBot(`Muted @${target.profile?.username || target.name} for ${days} day(s) by @${displayName}: ${reason}`)
+        return NextResponse.json({ ok: true, message: bot })
       }
 
       case "ban": {
@@ -299,7 +349,8 @@ export async function POST(request: NextRequest) {
         const target = await resolveTarget(targetUsername)
         if (!target) return NextResponse.json({ error: "User not found" }, { status: 404 })
         await applyModeration("PERMANENT_BAN", target.id, reason)
-        return NextResponse.json({ ok: true, message: `Banned @${target.profile?.username || target.name}` })
+        const bot = await postBot(`Banned @${target.profile?.username || target.name} by @${displayName}: ${reason}`)
+        return NextResponse.json({ ok: true, message: bot })
       }
 
       case "unban": {
@@ -311,7 +362,8 @@ export async function POST(request: NextRequest) {
         const target = await resolveTarget(targetUsername)
         if (!target) return NextResponse.json({ error: "User not found" }, { status: 404 })
         await applyModeration("UNBAN", target.id, "Chat unban")
-        return NextResponse.json({ ok: true, message: `Unbanned @${target.profile?.username || target.name}` })
+        const bot = await postBot(`Unbanned @${target.profile?.username || target.name} by @${displayName}`)
+        return NextResponse.json({ ok: true, message: bot })
       }
 
       default:
