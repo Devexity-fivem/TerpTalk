@@ -89,10 +89,10 @@ async function run() {
   try {
     // ── Create test accounts ──
     console.log("[Setup] Creating test accounts")
-    userA = await createUser(`sa_user_a_${Date.now()}`)
-    userB = await createUser(`sa_user_b_${Date.now()}`)
-    mod = await createUser(`sa_mod_${Date.now()}`, "MODERATOR")
-    admin = await createUser(`sa_admin_${Date.now()}`, "ADMINISTRATOR")
+    userA = await createUser(`a1${Date.now()}`)
+    userB = await createUser(`b1${Date.now()}`)
+    mod = await createUser(`m1${Date.now()}`, "MODERATOR")
+    admin = await createUser(`d1${Date.now()}`, "ADMINISTRATOR")
 
     await prisma.chatRoom.upsert({
       where: { id: chatRoomId },
