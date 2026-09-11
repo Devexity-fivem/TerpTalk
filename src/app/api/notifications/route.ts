@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import { after } from "next/server"
 import { getToken } from "next-auth/jwt"
 import { prisma } from "@/lib/prisma"
 import { unauthorized, forbidden, isSessionValid } from "@/lib/security"
@@ -39,6 +40,8 @@ export async function GET(request: NextRequest) {
   }
 }
 
+const NOTIFICATION_RETENTION_MS = 90 * 24 * 60 * 60 * 1000
+
 // PATCH — mark notifications read: { ids?: string[] } or { all: true }
 export async function PATCH(request: NextRequest) {
   try {
@@ -70,6 +73,21 @@ export async function PATCH(request: NextRequest) {
     } else {
       return NextResponse.json({ error: "Invalid request" }, { status: 400 })
     }
+
+    // Purge stale read notifications for this user after the response.
+    after(async () => {
+      try {
+        await prisma.notification.deleteMany({
+          where: {
+            userId,
+            read: true,
+            createdAt: { lt: new Date(Date.now() - NOTIFICATION_RETENTION_MS) },
+          },
+        })
+      } catch {
+        // non-fatal
+      }
+    })
 
     return NextResponse.json({ ok: true })
   } catch (error) {

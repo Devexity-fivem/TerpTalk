@@ -1,3 +1,4 @@
+import { after } from "next/server"
 import { prisma } from "@/lib/prisma"
 
 /**
@@ -35,6 +36,19 @@ export async function rateLimit(
     }
 
     const allowed = record.count <= limit
+
+    // Opportunistically clean expired rows after the response so the table
+    // does not grow forever. 0.5% chance per call keeps overhead negligible.
+    if (Math.random() < 0.005) {
+      after(async () => {
+        try {
+          await cleanupRateLimits()
+        } catch {
+          // non-fatal
+        }
+      })
+    }
+
     return {
       allowed,
       remaining: Math.max(0, limit - record.count),

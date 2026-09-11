@@ -163,27 +163,32 @@ export async function awardReputation(
 ) {
   after(async () => {
     try {
-      const user = await prisma.user.findUnique({
-        where: { id: userId },
-        select: { role: true, createdAt: true, banned: true },
-      })
-      const multiplier = user?.role === "VERIFIED_MEMBER" ? VERIFIED_MULTIPLIER : 1
-      const adjusted = amount * multiplier
+      const { user, oldRep, newRep } = await prisma.$transaction(async (tx) => {
+        const user = await tx.user.findUnique({
+          where: { id: userId },
+          select: { role: true, createdAt: true, banned: true },
+        })
+        const multiplier = user?.role === "VERIFIED_MEMBER" ? VERIFIED_MULTIPLIER : 1
+        const adjusted = amount * multiplier
 
-      const profile = await prisma.profile.findUnique({
-        where: { userId },
-        select: { reputation: true },
-      })
-      const oldRep = profile?.reputation ?? 0
-      const newRep = oldRep + adjusted
+        const profile = await tx.profile.findUnique({
+          where: { userId },
+          select: { reputation: true },
+        })
+        const oldRep = profile?.reputation ?? 0
+        const newRep = oldRep + adjusted
 
-      await prisma.reputationEvent.create({
-        data: { userId, type, amount: adjusted, reason },
+        await tx.reputationEvent.create({
+          data: { userId, type, amount: adjusted, reason },
+        })
+        await tx.profile.update({
+          where: { userId },
+          data: { reputation: { increment: adjusted } },
+        })
+
+        return { user, oldRep, newRep }
       })
-      await prisma.profile.update({
-        where: { userId },
-        data: { reputation: { increment: adjusted } },
-      })
+
       await checkTierChange(userId, oldRep, newRep)
       await autoVerify(userId, newRep, user)
       await checkBadges(userId)
