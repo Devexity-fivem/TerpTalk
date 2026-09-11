@@ -5,8 +5,8 @@ import { rateLimit } from "@/lib/rate-limit"
 import { logSecurityEvent, getClientIp, hashIp } from "@/lib/security"
 import bcrypt from "bcryptjs"
 
-const secureCookies = process.env.NEXTAUTH_URL?.startsWith("https://") || !!process.env.VERCEL
-const sessionCookieName = secureCookies ? "__Host-next-auth.session-token" : "next-auth.session-token"
+export const secureCookies = process.env.NEXTAUTH_URL?.startsWith("https://") || !!process.env.VERCEL
+export const sessionCookieName = secureCookies ? "__Host-next-auth.session-token" : "next-auth.session-token"
 const csrfCookieName = secureCookies ? "__Host-next-auth.csrf-token" : "next-auth.csrf-token"
 
 export const authOptions: NextAuthOptions = {

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getToken } from "next-auth/jwt"
+import { sessionCookieName } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { unauthorized, publicUserSelect, LIMITS, getClientIp, logSecurityEvent, isSessionValid, forbidden, isModerator } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
@@ -36,7 +37,11 @@ function messageDto(m: ChatMessageWithAuthor) {
 
 export async function GET(request: NextRequest) {
   try {
-    const token = await getToken({ req: request, secret: process.env.NEXTAUTH_SECRET })
+    const token = await getToken({
+      req: request,
+      secret: process.env.NEXTAUTH_SECRET,
+      cookieName: sessionCookieName,
+    })
     const userId = token?.id as string | undefined
     if (!userId) return unauthorized()
 
@@ -111,7 +116,11 @@ export async function POST(request: NextRequest) {
     const maintenance = await checkMaintenance()
     if (maintenance) return maintenance
 
-    const token = await getToken({ req: request, secret: process.env.NEXTAUTH_SECRET })
+    const token = await getToken({
+      req: request,
+      secret: process.env.NEXTAUTH_SECRET,
+      cookieName: sessionCookieName,
+    })
     const userId = token?.id as string | undefined
     if (!token || !userId) return unauthorized()
 

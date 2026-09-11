@@ -1,13 +1,18 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getToken } from "next-auth/jwt"
 import { prisma } from "@/lib/prisma"
+import { sessionCookieName } from "@/lib/auth"
 import { unauthorized, forbidden, isSessionValid, getClientIp, hashIp } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
 
 // Get chat rooms
 export async function GET(request: NextRequest) {
   try {
-    const token = await getToken({ req: request, secret: process.env.NEXTAUTH_SECRET })
+    const token = await getToken({
+      req: request,
+      secret: process.env.NEXTAUTH_SECRET,
+      cookieName: sessionCookieName,
+    })
     const userId = token?.id as string | undefined
     if (!userId) return unauthorized()
 
