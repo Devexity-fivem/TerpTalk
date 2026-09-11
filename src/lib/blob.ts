@@ -7,7 +7,7 @@ import { randomBytes } from "crypto"
 import { prisma } from "@/lib/prisma"
 import { getBooleanSetting, SITE_SETTINGS } from "@/lib/settings"
 
-const DATA_URI = /^data:image\/(png|jpe?g|webp);base64,(.+)$/
+const DATA_URI = /^data:image\/(png|webp);base64,(.+)$/
 export const MAX_DATA_URI_LEN = 400_000 // ~300KB binary
 
 export function isValidImageDataUri(s: unknown): s is string {
@@ -15,10 +15,10 @@ export function isValidImageDataUri(s: unknown): s is string {
 }
 
 // Verify actual file signatures — don't trust the declared MIME type.
+// Only PNG and WebP are accepted. JPEG is rejected to prevent raw EXIF/GPS
+// metadata from being stored on Vercel Blob if a client bypasses the canvas resize.
 const MAGIC: Record<string, (b: Buffer) => boolean> = {
   png: (b) => b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47,
-  jpeg: (b) => b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff,
-  jpg: (b) => MAGIC.jpeg(b),
   webp: (b) => b.length > 12 && b.toString("ascii", 0, 4) === "RIFF" && b.toString("ascii", 8, 12) === "WEBP",
 }
 
@@ -76,8 +76,8 @@ export async function storeImage(dataUri: string, folder: string): Promise<strin
   }
 
   const m = dataUri.match(DATA_URI)
-  if (!m) throw new Error("Invalid image format")
-  const ext = m[1] === "jpeg" ? "jpg" : m[1]
+  if (!m) throw new Error("Only PNG and WebP data URIs are accepted")
+  const ext = m[1]
   const buf = Buffer.from(m[2], "base64")
 
   // Content must match the declared type — rejects spoofed payloads.
