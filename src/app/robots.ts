@@ -17,6 +17,6 @@ export default function robots(): MetadataRoute.Robots {
         "/_next/",
       ],
     },
-    sitemap: "https://terptalks.com/sitemap.xml",
+    sitemap: `${process.env.NEXT_PUBLIC_SITE_URL || "https://terp-talk.vercel.app"}/sitemap.xml`,
   }
 }

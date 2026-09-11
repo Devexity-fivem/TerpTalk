@@ -1,7 +1,7 @@
 import type { MetadataRoute } from "next"
 import { prisma } from "@/lib/prisma"
 
-const baseUrl = "https://terp-talk.vercel.app"
+const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://terp-talk.vercel.app"
 
 const STATIC = [
   { url: "/", priority: 1, changeFrequency: "daily" as const },
