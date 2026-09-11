@@ -55,6 +55,17 @@ export default function ChatSidebar() {
     }
   }, [messages, isOpen])
 
+  useEffect(() => {
+    const onOpen = () => setIsOpen(true)
+    const onClose = () => setIsOpen(false)
+    window.addEventListener("tt-open-chat", onOpen)
+    window.addEventListener("tt-close-chat", onClose)
+    return () => {
+      window.removeEventListener("tt-open-chat", onOpen)
+      window.removeEventListener("tt-close-chat", onClose)
+    }
+  }, [])
+
   // Load the general room (single community chat)
   useEffect(() => {
     if (!session) return
@@ -201,11 +212,21 @@ export default function ChatSidebar() {
       {/* Floating toggle button */}
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="fixed bottom-[calc(4.5rem+env(safe-area-inset-bottom))] right-4 z-50 bg-primary text-primary-foreground p-3 rounded-full shadow-lg hover:bg-primary/90 transition-colors lg:bottom-[max(1rem,env(safe-area-inset-bottom))]"
-        aria-label="Toggle chat"
+        className={`
+          fixed z-50 inline-flex items-center gap-2 rounded-full
+          bg-primary text-primary-foreground shadow-lg shadow-primary/20
+          px-3.5 py-2.5 text-sm font-medium
+          hover:bg-primary/90 transition-colors
+          bottom-20 left-4 lg:bottom-6 lg:right-6 lg:left-auto
+        `}
+        aria-label={isOpen ? "Close chat" : "Open community chat"}
         aria-expanded={isOpen}
       >
-        <MessageCircle className="w-6 h-6" />
+        <MessageCircle className="w-4 h-4" />
+        <span className="hidden sm:inline">Chat</span>
+        {onlineCount > 0 && (
+          <span className="ml-0.5 flex h-2 w-2 rounded-full bg-green-400" aria-hidden="true" />
+        )}
       </button>
 
       {/* Floating chat panel */}
@@ -221,19 +242,26 @@ export default function ChatSidebar() {
         `}
       >
         {/* Header */}
-        <div className="p-4 border-b border-border flex items-center justify-between shrink-0">
-          <div className="flex items-center gap-2">
-            <MessageCircle className="w-5 h-5 text-primary" />
-            <h2 className="font-semibold">General Chat</h2>
-            {room && (
-              <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded">
-                {onlineCount} users online
-              </span>
-            )}
+        <div className="p-3 border-b border-border flex items-center justify-between shrink-0">
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 shrink-0">
+              <MessageCircle className="w-4 h-4 text-primary" />
+            </div>
+            <div className="min-w-0">
+              <h2 className="font-semibold text-sm leading-tight">General Chat</h2>
+              <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <span className="flex h-1.5 w-1.5 rounded-full bg-green-400" aria-hidden="true" />
+                {room ? (
+                  <span className="truncate">{onlineCount} growers online</span>
+                ) : (
+                  <span>Community live chat</span>
+                )}
+              </div>
+            </div>
           </div>
           <button
             onClick={() => setIsOpen(false)}
-            className="p-1 hover:bg-secondary rounded"
+            className="p-1.5 hover:bg-secondary rounded-lg transition-colors"
             aria-label="Close chat"
           >
             <X className="w-4 h-4" />
@@ -244,31 +272,31 @@ export default function ChatSidebar() {
         <div className="flex-1 flex flex-col min-h-0">
           <div
             ref={messagesContainerRef}
-            className="flex-1 overflow-y-auto p-3 space-y-3"
+            className="flex-1 overflow-y-auto p-3 space-y-2"
           >
             {loading ? (
               <div className="flex justify-center py-8">
                 <Loader2 className="w-5 h-5 animate-spin text-primary" />
               </div>
             ) : messages.length === 0 ? (
-              <div className="text-center py-8 text-muted-foreground text-sm">
-                No messages yet. Start the conversation!
+              <div className="text-center py-8">
+                <MessageCircle className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
+                <p className="font-medium text-sm">No messages yet</p>
+                <p className="text-xs text-muted-foreground">Start the conversation with the TerpTalk community.</p>
               </div>
             ) : (
               messages.map((msg) => (
-                <div key={msg.id} className="text-sm">
-                  <div className="flex items-center gap-2 mb-1">
+                <div key={msg.id} className="group">
+                  <div className="flex items-center gap-1.5 mb-0.5">
                     <span className="font-semibold text-xs">
                       {msg.author.profile?.username || msg.author.name}
                     </span>
                     <RoleBadge role={msg.author.role} />
-                    <span className="text-xs text-muted-foreground">
+                    <span className="text-[10px] text-muted-foreground opacity-70 group-hover:opacity-100 transition-opacity">
                       {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </span>
                   </div>
-                  <div className="text-sm bg-secondary/50 rounded-lg px-3 py-2">
-                    {msg.content}
-                  </div>
+                  <p className="text-sm pl-0.5">{msg.content}</p>
                 </div>
               ))
             )}
@@ -292,13 +320,13 @@ export default function ChatSidebar() {
           )}
 
           {/* Message Input */}
-          <form onSubmit={handleSendMessage} className="p-3 border-t border-border shrink-0">
-            <div className="flex gap-2 items-center">
+          <form onSubmit={handleSendMessage} className="p-2 border-t border-border shrink-0">
+            <div className="flex gap-1.5 items-center">
               <button
                 type="button"
                 onClick={() => setShowEmoji(!showEmoji)}
                 className={`p-2 rounded-lg transition-colors ${showEmoji ? "bg-primary/10 text-primary" : "hover:bg-secondary text-muted-foreground"}`}
-                aria-label="Emoji picker"
+                aria-label="Open emoji picker"
               >
                 <Smile className="w-5 h-5" />
               </button>
@@ -307,13 +335,14 @@ export default function ChatSidebar() {
                 type="text"
                 maxLength={1000}
                 title="Maximum 1000 characters"
-                placeholder="Type a message..."
-                className="flex-1 px-3 py-2 rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary text-sm"
+                placeholder="Message General Chat..."
+                className="flex-1 px-3 py-2 rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-ring text-sm"
                 disabled={sending}
               />
               <button
                 type="submit"
                 disabled={sending}
+                aria-label="Send message"
                 className="bg-primary text-primary-foreground p-2 rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {sending ? (

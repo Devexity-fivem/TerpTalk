@@ -3,7 +3,7 @@
 import { useSession, signOut } from "next-auth/react"
 import { useEffect, useState } from "react"
 import Link from "next/link"
-import { usePathname } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
 import {
   Leaf, User, LogOut, MessageCircle, Home, Calendar,
   Settings, Dna, Bell, Shield, Menu, X, Mail, Search, Trophy, BookOpen, Stethoscope, Tag, TrendingUp,
@@ -39,6 +39,7 @@ const DESKTOP_LINKS = [
 export function Navigation() {
   const { data: session, status } = useSession()
   const pathname = usePathname()
+  const router = useRouter()
   const [unread, setUnread] = useState(0)
   const [menuOpen, setMenuOpen] = useState(false)
   const role = (session?.user as { role?: string } | undefined)?.role
@@ -89,6 +90,14 @@ export function Navigation() {
   const isActive = (href: string) =>
     href === "/" ? pathname === "/" : pathname.startsWith(href)
 
+  const openChat = () => {
+    if (session) {
+      window.dispatchEvent(new CustomEvent("tt-open-chat"))
+    } else {
+      router.push("/auth/signin")
+    }
+  }
+
   const linkClass = (href: string) =>
     cn(
       "flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
@@ -121,6 +130,16 @@ export function Navigation() {
                   {label}
                 </Link>
               ))}
+              <button
+                onClick={openChat}
+                className={cn(
+                  "flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+                  "text-muted-foreground hover:bg-secondary hover:text-foreground"
+                )}
+              >
+                <MessageCircle className="h-4 w-4" />
+                Chat
+              </button>
               {isMod && (
                 <Link href="/moderation" className={cn(linkClass("/moderation"), "!text-amber-500")}>
                   <Shield className="h-4 w-4" />
@@ -262,6 +281,17 @@ export function Navigation() {
                   {label}
                 </Link>
               ))}
+
+              <button
+                onClick={() => { openChat(); setMenuOpen(false) }}
+                className={cn(
+                  "flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-medium transition-colors",
+                  "text-muted-foreground hover:bg-secondary hover:text-foreground"
+                )}
+              >
+                <MessageCircle className="h-4 w-4" />
+                Chat
+              </button>
 
               {session && (
                 <>

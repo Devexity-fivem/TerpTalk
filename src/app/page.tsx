@@ -1,4 +1,5 @@
 import { MessageSquare, Award, Dna, Sprout, Calendar, Trophy, BookOpen, Tag, PenLine, ArrowRight, TrendingUp, Users, Leaf } from "lucide-react"
+import { OpenChatButton } from "@/components/open-chat-button"
 import Link from "next/link"
 import { prisma } from "@/lib/prisma"
 import { unstable_cache } from "next/cache"
@@ -183,6 +184,9 @@ export default async function Home() {
               New diary
             </Link>
             <JoinButton />
+          </div>
+          <div className="mt-5 flex justify-center">
+            <OpenChatButton />
           </div>
         </div>
       </section>
