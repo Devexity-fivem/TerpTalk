@@ -42,7 +42,9 @@ export default function ChatSidebar() {
   const myRole = (session?.user as { role?: string } | undefined)?.role
   const isStaff = myRole === "MODERATOR" || myRole === "ADMINISTRATOR"
   const isAdmin = myRole === "ADMINISTRATOR"
-  const [isOpen, setIsOpen] = useState(false)
+  const [isOpen, setIsOpen] = useState(
+    typeof window !== "undefined" ? window.innerWidth >= 1024 : true
+  )
   const [showEmoji, setShowEmoji] = useState(false)
   const [messages, setMessages] = useState<Message[]>([])
   const [room, setRoom] = useState<Room | null>(null)
@@ -71,13 +73,26 @@ export default function ChatSidebar() {
 
   useEffect(() => {
     const onOpen = () => setIsOpen(true)
-    const onClose = () => setIsOpen(false)
+    const onClose = () => {
+      if (typeof window !== "undefined" && window.innerWidth < 1024) {
+        setIsOpen(false)
+      }
+    }
     window.addEventListener("tt-open-chat", onOpen)
     window.addEventListener("tt-close-chat", onClose)
     return () => {
       window.removeEventListener("tt-open-chat", onOpen)
       window.removeEventListener("tt-close-chat", onClose)
     }
+  }, [])
+
+  useEffect(() => {
+    const m = window.matchMedia("(min-width: 1024px)")
+    const onChange = (e: MediaQueryListEvent) => {
+      if (e.matches) setIsOpen(true)
+    }
+    m.addEventListener("change", onChange)
+    return () => m.removeEventListener("change", onChange)
   }, [])
 
   // Load the general room (single community chat)
@@ -300,11 +315,11 @@ export default function ChatSidebar() {
       <button
         onClick={() => setIsOpen(!isOpen)}
         className={`
-          fixed z-50 inline-flex items-center gap-2 rounded-full
+          fixed z-50 inline-flex items-center gap-2 rounded-full lg:hidden
           bg-primary text-primary-foreground shadow-lg shadow-primary/20
           px-3.5 py-2.5 text-sm font-medium
           hover:bg-primary/90 transition-colors
-          bottom-20 left-4 lg:bottom-6 lg:right-6 lg:left-auto
+          bottom-20 left-4
         `}
         aria-label={isOpen ? "Close chat" : "Open community chat"}
         aria-expanded={isOpen}
@@ -316,16 +331,19 @@ export default function ChatSidebar() {
         )}
       </button>
 
-      {/* Floating chat panel */}
+      {isOpen && (
       <aside
         className={`
-          fixed bottom-[calc(8rem+env(safe-area-inset-bottom))] right-4 z-50 lg:bottom-20
-          w-[calc(100vw-2rem)] sm:w-96
-          h-[70vh] max-h-[600px]
-          bg-card border border-border rounded-xl shadow-2xl
+          fixed z-50
+          lg:top-16 lg:right-0 lg:bottom-0 lg:w-80 lg:left-auto
+          lg:max-h-none lg:rounded-none lg:rounded-l-xl lg:border-0 lg:border-l lg:shadow-none
+          left-4 right-4 bottom-[calc(6rem+env(safe-area-inset-bottom))]
+          sm:left-auto sm:w-96 sm:right-4
+          h-[70vh] max-h-[600px] lg:h-[calc(100vh-4rem)]
+          bg-card border border-border rounded-xl lg:rounded-l-xl
+          shadow-2xl
           flex flex-col overflow-hidden
           transition-all duration-200
-          ${isOpen ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4 pointer-events-none"}
         `}
       >
         {/* Header */}
@@ -359,7 +377,7 @@ export default function ChatSidebar() {
           )}
           <button
             onClick={() => setIsOpen(false)}
-            className="p-1.5 hover:bg-secondary rounded-lg transition-colors"
+            className="p-1.5 hover:bg-secondary rounded-lg transition-colors lg:hidden"
             aria-label="Close chat"
           >
             <X className="w-4 h-4" />
@@ -448,7 +466,11 @@ export default function ChatSidebar() {
                         )}
                         <a
                           href={`/u/${msg.author.username || msg.author.name}`}
-                          onClick={() => setIsOpen(false)}
+                          onClick={() => {
+                            if (typeof window !== "undefined" && window.innerWidth < 1024) {
+                              setIsOpen(false)
+                            }
+                          }}
                           className="w-full flex items-center gap-1.5 px-2 py-1 rounded text-xs text-left hover:bg-secondary text-foreground"
                         >
                           <UserIcon className="w-3 h-3 text-primary" /> View profile
@@ -514,6 +536,7 @@ export default function ChatSidebar() {
           </form>
         </div>
       </aside>
+      )}
     </>
   )
 }

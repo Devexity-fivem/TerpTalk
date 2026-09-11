@@ -88,8 +88,8 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             <Providers>
               <AnnouncementBanner />
               <Navigation />
-              {/* pb-16 clears the mobile bottom nav; lg:pb-0 removes it on desktop */}
-              <main id="main-content" className="flex-1 pb-16 lg:pb-0">{children}</main>
+              {/* pb-16 clears the mobile bottom nav; lg:pr-80 makes room for the desktop chat sidebar */}
+              <main id="main-content" className="flex-1 pb-16 lg:pb-0 lg:pr-80">{children}</main>
               <ChatSidebar />
               <QuickPostButton />
               <ServiceWorkerRegister />
