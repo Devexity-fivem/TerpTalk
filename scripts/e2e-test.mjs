@@ -66,23 +66,24 @@ async function main() {
   const cap = await req("/api/auth/register")
   if (cap.status !== 200 || !cap.data?.captcha?.id) { fail("captcha issue", cap.status); return }
   // Solve captcha — we can't know the answer; test that wrong answer is rejected
-  const noInvite = await req("/api/auth/register", { method: "POST", body: { username: "test_bad_cap", password: "Password123!", captchaId: cap.data.captcha.id, captchaAnswer: "999", ageVerified: true } })
+  const noInvite = await req("/api/auth/register", { method: "POST", body: { username: "test_bad_cap", password: testPassword, captchaId: cap.data.captcha.id, captchaAnswer: "999", ageVerified: true } })
   noInvite.status === 400 ? pass("wrong captcha answer rejected") : fail("captcha rejection", noInvite.status)
 
   const cap2 = await req("/api/auth/register")
-  const noAge = await req("/api/auth/register", { method: "POST", body: { username: "test_no_age", password: "Password123!", captchaId: cap2.data.captcha.id, captchaAnswer: "999", ageVerified: false } })
+  const noAge = await req("/api/auth/register", { method: "POST", body: { username: "test_no_age", password: testPassword, captchaId: cap2.data.captcha.id, captchaAnswer: "999", ageVerified: false } })
   noAge.status === 400 ? pass("ageVerified=false rejected") : fail("age gate bypass", noAge.status)
 
   // Referral validation: unknown referral username rejected
   const cap3 = await req("/api/auth/register")
-  const badRef = await req("/api/auth/register", { method: "POST", body: { username: "test_bad_ref", password: "Password123!", captchaId: cap3.data.captcha.id, captchaAnswer: "5", ageVerified: true, referralCode: "nonexistent_user_xyz" } })
+  const badRef = await req("/api/auth/register", { method: "POST", body: { username: "test_bad_ref", password: testPassword, captchaId: cap3.data.captcha.id, captchaAnswer: "5", ageVerified: true, referralCode: "nonexistent_user_xyz" } })
   badRef.status === 400 && /referral/i.test(badRef.data?.error || "") ? pass("invalid referral rejected") : fail("bad referral", `${badRef.status} ${badRef.data?.error}`)
 
   // ── 3. Auth: seeded admin/moderator ──
   console.log("[3] Authentication")
   const adminUser = process.env.ADMIN_USERNAME
-  if (!adminUser || !process.env.ADMIN_PASSWORD) {
-    throw new Error("Set ADMIN_USERNAME and ADMIN_PASSWORD env vars before running e2e tests")
+  const testPassword = process.env.TEST_USER_PASSWORD
+  if (!adminUser || !process.env.ADMIN_PASSWORD || !testPassword) {
+    throw new Error("Set ADMIN_USERNAME, ADMIN_PASSWORD, and TEST_USER_PASSWORD env vars before running e2e tests")
   }
   const admin = await login(adminUser, process.env.ADMIN_PASSWORD, "admin")
   admin ? pass(`admin login (${admin.name})`) : fail("admin login", "no session")
@@ -135,20 +136,20 @@ async function main() {
   const capId = capR.data.captcha.id
   const answer = execSync(`node -e "const{PrismaClient}=require('@prisma/client');const p=new PrismaClient();p.captcha.findUnique({where:{id:'${capId}'}}).then(c=>{console.log(c.answer);process.exit(0)})"`, { cwd: process.cwd() }).toString().trim()
   const newUser = "betauser_" + Math.random().toString(36).slice(2, 8)
-  const reg = await req("/api/auth/register", { method: "POST", body: { username: newUser, password: "BetaPass123!", captchaId: capId, captchaAnswer: answer, ageVerified: true, referralCode: adminUser } })
+  const reg = await req("/api/auth/register", { method: "POST", body: { username: newUser, password: testPassword, captchaId: capId, captchaAnswer: answer, ageVerified: true, referralCode: adminUser } })
   reg.status === 201 ? pass(`registered ${newUser} (referred by ${adminUser})`) : fail("registration", `${reg.status} ${reg.data?.error}`)
 
   // Duplicate username rejected
   const capR2 = await req("/api/auth/register")
   const answer2 = execSync(`node -e "const{PrismaClient}=require('@prisma/client');const p=new PrismaClient();p.captcha.findUnique({where:{id:'${capR2.data.captcha.id}'}}).then(c=>{console.log(c.answer);process.exit(0)})"`, { cwd: process.cwd() }).toString().trim()
-  const dup = await req("/api/auth/register", { method: "POST", body: { username: newUser, password: "BetaPass123!", captchaId: capR2.data.captcha.id, captchaAnswer: answer2, ageVerified: true } })
+  const dup = await req("/api/auth/register", { method: "POST", body: { username: newUser, password: testPassword, captchaId: capR2.data.captcha.id, captchaAnswer: answer2, ageVerified: true } })
   dup.status === 400 ? pass("duplicate username rejected") : fail("dup username", dup.status)
 
   // Referral chain: second user referred by the first
   const capR3 = await req("/api/auth/register")
   const answer3 = execSync(`node -e "const{PrismaClient}=require('@prisma/client');const p=new PrismaClient();p.captcha.findUnique({where:{id:'${capR3.data.captcha.id}'}}).then(c=>{console.log(c.answer);process.exit(0)})"`, { cwd: process.cwd() }).toString().trim()
   const refUser = "referred_" + Math.random().toString(36).slice(2, 6)
-  const refReg = await req("/api/auth/register", { method: "POST", body: { username: refUser, password: "BetaPass123!", captchaId: capR3.data.captcha.id, captchaAnswer: answer3, ageVerified: true, referralCode: newUser } })
+  const refReg = await req("/api/auth/register", { method: "POST", body: { username: refUser, password: testPassword, captchaId: capR3.data.captcha.id, captchaAnswer: answer3, ageVerified: true, referralCode: newUser } })
   if (refReg.status === 201) {
     pass(`referral registration (${refUser} ← ${newUser})`)
   } else if (refReg.status === 429) {
@@ -158,7 +159,7 @@ async function main() {
   }
 
   // Login as new user
-  const u1 = await login(newUser, "BetaPass123!", "u1")
+  const u1 = await login(newUser, testPassword, "u1")
   u1 ? pass(`user login ${newUser}`) : fail("user login", "no session")
 
   // ── 6. Sensitive-data exposure check ──
