@@ -60,7 +60,7 @@ export async function PATCH(
       if (status === "APPROVED") {
         await tx.user.update({
           where: { id: application.userId },
-          data: { role: application.role },
+          data: { role: application.role, sessionVersion: { increment: 1 } },
         })
       }
 

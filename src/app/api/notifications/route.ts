@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { after } from "next/server"
 import { getToken } from "next-auth/jwt"
+import { sessionCookieName } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { unauthorized, forbidden, isSessionValid } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
@@ -8,7 +9,7 @@ import { rateLimit } from "@/lib/rate-limit"
 // GET — my notifications (most recent 50)
 export async function GET(request: NextRequest) {
   try {
-    const token = await getToken({ req: request, secret: process.env.NEXTAUTH_SECRET })
+    const token = await getToken({ req: request, secret: process.env.NEXTAUTH_SECRET, cookieName: sessionCookieName })
     const userId = token?.id as string | undefined
     if (!userId) return unauthorized()
     if (!(await isSessionValid(userId, token?.sessionVersion as number | undefined))) return forbidden()
@@ -45,7 +46,7 @@ const NOTIFICATION_RETENTION_MS = 90 * 24 * 60 * 60 * 1000
 // PATCH — mark notifications read: { ids?: string[] } or { all: true }
 export async function PATCH(request: NextRequest) {
   try {
-    const token = await getToken({ req: request, secret: process.env.NEXTAUTH_SECRET })
+    const token = await getToken({ req: request, secret: process.env.NEXTAUTH_SECRET, cookieName: sessionCookieName })
     const userId = token?.id as string | undefined
     if (!userId) return unauthorized()
     if (!(await isSessionValid(userId, token?.sessionVersion as number | undefined))) return forbidden()

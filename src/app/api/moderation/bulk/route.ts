@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { requireModerator } from "@/lib/require-staff"
-import { getClientIp, logSecurityEvent } from "@/lib/security"
+import { getClientIp, isAdmin, logSecurityEvent } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
 
 const BULK_ACTIONS = new Set(["lock", "unlock", "pin", "unpin", "delete", "restore"])
@@ -41,13 +41,17 @@ export async function POST(request: Request) {
 
     const threads = await prisma.thread.findMany({
       where: { id: { in: ids } },
-      select: { id: true, authorId: true },
+      select: { id: true, authorId: true, author: { select: { role: true } } },
     })
 
     const threadIds = new Set(threads.map((t) => t.id))
     const missing = ids.filter((id) => !threadIds.has(id))
     if (missing.length > 0) {
       return NextResponse.json({ error: "Some threads not found", missing }, { status: 400 })
+    }
+
+    if (!isAdmin(staff.role) && threads.some((t) => !["MEMBER", "VERIFIED_MEMBER"].includes(t.author.role))) {
+      return NextResponse.json({ error: "Cannot moderate protected authors" }, { status: 403 })
     }
 
     const data: Record<string, boolean> = {

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getToken } from "next-auth/jwt"
+import { sessionCookieName } from "@/lib/auth"
 import { unstable_cache } from "next/cache"
 import { prisma } from "@/lib/prisma"
 import { blockExistsBetween, getTrustLevel, getClientIp, hashIp, isSessionValid } from "@/lib/security"
@@ -131,7 +132,7 @@ export async function GET(
     const { profile, recentThreads, growDiaries, growStreak } = data
 
     // Use JWT token for the viewer instead of a full DB session lookup.
-    const token = await getToken({ req: request, secret: process.env.NEXTAUTH_SECRET })
+    const token = await getToken({ req: request, secret: process.env.NEXTAUTH_SECRET, cookieName: sessionCookieName })
     let viewerId = token?.id as string | undefined
     if (viewerId && !(await isSessionValid(viewerId, token?.sessionVersion as number | undefined))) {
       viewerId = undefined

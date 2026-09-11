@@ -136,14 +136,14 @@ async function getUserStats(userId: string): Promise<UserStats> {
       prisma.post.count({ where: { authorId: userId, deleted: false } }),
       prisma.thread.count({ where: { authorId: userId, deleted: false } }),
       prisma.growDiary.count({ where: { authorId: userId, deleted: false } }),
-      prisma.diaryUpdate.count({ where: { authorId: userId } }),
-      prisma.chatMessage.count({ where: { authorId: userId } }),
+      prisma.diaryUpdate.count({ where: { authorId: userId, diary: { deleted: false } } }),
+      prisma.chatMessage.count({ where: { authorId: userId, deleted: false } }),
       prisma.strain.count({ where: { createdById: userId } }),
       prisma.strainPhoto.count({ where: { userId } }),
       prisma.reaction.count({
         where: {
           type: "LIKE",
-          OR: [{ post: { authorId: userId } }, { diary: { authorId: userId } }],
+          OR: [{ post: { authorId: userId, deleted: false } }, { diary: { authorId: userId, deleted: false } }],
         },
       }),
       prisma.post.count({
@@ -208,7 +208,7 @@ async function autoVerify(
 
   await prisma.user.update({
     where: { id: userId },
-    data: { role: "VERIFIED_MEMBER" },
+    data: { role: "VERIFIED_MEMBER", sessionVersion: { increment: 1 } },
   })
 
   await prisma.notification.create({

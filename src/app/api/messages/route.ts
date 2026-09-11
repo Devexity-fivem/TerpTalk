@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getToken } from "next-auth/jwt"
+import { sessionCookieName } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { unauthorized, publicUserSelect, getClientIp, logSecurityEvent, isSessionValid, forbidden, blockExistsBetween, hashIp } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
@@ -18,7 +19,7 @@ const ISO_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,3})?Z$/
 // GET — list conversations, or ?with=<userId> for a thread (marks it read)
 export async function GET(request: NextRequest) {
   try {
-    const token = await getToken({ req: request, secret: process.env.NEXTAUTH_SECRET })
+    const token = await getToken({ req: request, secret: process.env.NEXTAUTH_SECRET, cookieName: sessionCookieName })
     const userId = token?.id as string | undefined
     if (!userId) return unauthorized()
     if (!(await isSessionValid(userId, token?.sessionVersion as number | undefined))) return forbidden()
@@ -146,7 +147,7 @@ export async function GET(request: NextRequest) {
 // POST — send a DM: { to, content }
 export async function POST(request: NextRequest) {
   try {
-    const token = await getToken({ req: request, secret: process.env.NEXTAUTH_SECRET })
+    const token = await getToken({ req: request, secret: process.env.NEXTAUTH_SECRET, cookieName: sessionCookieName })
     const userId = token?.id as string | undefined
     if (!token || !userId) return unauthorized()
 

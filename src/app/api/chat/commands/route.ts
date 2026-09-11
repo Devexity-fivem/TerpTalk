@@ -12,6 +12,7 @@ import {
   getClientIp,
   hashIp,
   publicUserSelect,
+  LIMITS,
 } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
 import { checkMaintenance } from "@/lib/maintenance"
@@ -59,6 +60,9 @@ export async function POST(request: NextRequest) {
 
     if (typeof roomId !== "string" || !roomId || typeof content !== "string" || !content.trim() || !content.startsWith("/")) {
       return NextResponse.json({ error: "Invalid command" }, { status: 400 })
+    }
+    if (content.length > LIMITS.CHAT_MESSAGE_MAX) {
+      return NextResponse.json({ error: "Command too long" }, { status: 400 })
     }
 
     const room = await prisma.chatRoom.findUnique({ where: { id: roomId } })
@@ -134,7 +138,7 @@ export async function POST(request: NextRequest) {
       const username = raw.replace(/^@/, "")
       if (!username) return null
       const target = await prisma.user.findFirst({
-        where: { profile: { username } },
+        where: { profile: { username: { equals: username, mode: "insensitive" } } },
         select: { id: true, role: true, name: true, banned: true, suspendedUntil: true, profile: { select: { username: true } } },
       })
       return target

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
 import bcrypt from "bcryptjs"
 import { rateLimit } from "@/lib/rate-limit"
@@ -153,24 +154,32 @@ export async function POST(request: Request) {
 
     const hashedPassword = await bcrypt.hash(password, 12)
 
-    const user = await prisma.user.create({
-      data: {
-        name: username,
-        password: hashedPassword,
-        ageVerified: true,
-        profile: {
-          create: {
-            username,
-            referredById: referrerId,
+    let user
+    try {
+      user = await prisma.user.create({
+        data: {
+          name: username,
+          password: hashedPassword,
+          ageVerified: true,
+          profile: {
+            create: {
+              username,
+              referredById: referrerId,
+            },
           },
         },
-      },
-      include: {
-        profile: {
-          select: { username: true },
+        include: {
+          profile: {
+            select: { username: true },
+          },
         },
-      },
-    })
+      })
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+        return NextResponse.json({ error: "Username already taken" }, { status: 400 })
+      }
+      throw error
+    }
 
     await logSecurityEvent("REGISTRATION", {
       userId: user.id,

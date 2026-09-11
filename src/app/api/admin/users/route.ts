@@ -137,7 +137,7 @@ export async function PATCH(request: Request) {
       }
 
       await prisma.$transaction(async (tx) => {
-        await tx.user.update({ where: { id: userId }, data: { role } })
+        await tx.user.update({ where: { id: userId }, data: { role, sessionVersion: { increment: 1 } } })
         await tx.moderationAction.create({
           data: {
             type: "ROLE_CHANGE",
