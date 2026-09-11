@@ -23,6 +23,7 @@ model User {
   ageVerified   Boolean   @default(false)
   banned        Boolean   @default(false)
   bannedReason  String?
+  suspendedUntil DateTime?
   recoveryPhraseHash String?
   sessionVersion  Int       @default(0)
   createdAt     DateTime  @default(now())

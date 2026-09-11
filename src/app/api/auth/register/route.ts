@@ -11,6 +11,7 @@ import {
   logSecurityEvent,
 } from "@/lib/security"
 import { awardReputation, REP_POINTS } from "@/lib/reputation"
+import { getBooleanSetting, SITE_SETTINGS } from "@/lib/settings"
 
 export async function POST(request: Request) {
   const ip = getClientIp(request)
@@ -18,6 +19,10 @@ export async function POST(request: Request) {
   const userAgent = request.headers.get("user-agent")
 
   try {
+    if (!(await getBooleanSetting(SITE_SETTINGS.REGISTRATION_ENABLED, true))) {
+      return NextResponse.json({ error: "Registration is currently disabled" }, { status: 403 })
+    }
+
     // Rate limit: 5 registration attempts per 15 min per IP
     const rl = await rateLimit(`register:${ipHash}`, 5, 15 * 60 * 1000)
     if (!rl.allowed) {

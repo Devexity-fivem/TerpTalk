@@ -11,9 +11,9 @@ export async function requireAdmin(): Promise<{ id: string; role: string } | nul
   if (!session?.user?.id) return null
   const user = await prisma.user.findUnique({
     where: { id: session.user.id },
-    select: { role: true, banned: true },
+    select: { role: true, banned: true, suspendedUntil: true },
   })
-  if (!user || user.banned || !isAdmin(user.role)) return null
+  if (!user || user.banned || (!!user.suspendedUntil && user.suspendedUntil > new Date()) || !isAdmin(user.role)) return null
   return { id: session.user.id, role: user.role }
 }
 
@@ -22,8 +22,8 @@ export async function requireModerator(): Promise<{ id: string; role: string } |
   if (!session?.user?.id) return null
   const user = await prisma.user.findUnique({
     where: { id: session.user.id },
-    select: { role: true, banned: true },
+    select: { role: true, banned: true, suspendedUntil: true },
   })
-  if (!user || user.banned || !isModerator(user.role)) return null
+  if (!user || user.banned || (!!user.suspendedUntil && user.suspendedUntil > new Date()) || !isModerator(user.role)) return null
   return { id: session.user.id, role: user.role }
 }

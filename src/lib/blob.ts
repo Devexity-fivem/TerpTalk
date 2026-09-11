@@ -5,6 +5,7 @@
 import { put, del } from "@vercel/blob"
 import { randomBytes } from "crypto"
 import { prisma } from "@/lib/prisma"
+import { getBooleanSetting, SITE_SETTINGS } from "@/lib/settings"
 
 const DATA_URI = /^data:image\/(png|jpe?g|webp);base64,(.+)$/
 export const MAX_DATA_URI_LEN = 400_000 // ~300KB binary
@@ -63,9 +64,15 @@ export async function storeImages(
 }
 
 export async function storeImage(dataUri: string, folder: string): Promise<string> {
-  if (!process.env.BLOB_READ_WRITE_TOKEN) {
-    if (process.env.NODE_ENV === "development") return dataUri
+  if (process.env.BLOB_READ_WRITE_TOKEN) {
+    const uploadsEnabled = await getBooleanSetting(SITE_SETTINGS.IMAGE_UPLOADS_ENABLED, true)
+    if (!uploadsEnabled) {
+      throw new Error("Image uploads are currently disabled")
+    }
+  } else if (process.env.NODE_ENV !== "development") {
     throw new Error("Image storage is not configured")
+  } else {
+    return dataUri
   }
 
   const m = dataUri.match(DATA_URI)

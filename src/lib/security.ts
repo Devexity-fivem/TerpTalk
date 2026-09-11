@@ -23,13 +23,14 @@ export function unauthorized() {
   return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 }
 
-/** Returns true if the user is banned — enforce on mutation endpoints. */
+/** Returns true if the user is banned or currently suspended. */
 export async function isBanned(userId: string): Promise<boolean> {
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { banned: true },
+    select: { banned: true, suspendedUntil: true },
   })
-  return !user || user.banned
+  if (!user || user.banned) return true
+  return !!user.suspendedUntil && user.suspendedUntil > new Date()
 }
 
 /**
@@ -41,9 +42,9 @@ export async function isBanned(userId: string): Promise<boolean> {
 export async function isSessionValid(userId: string, tokenSessionVersion?: number): Promise<boolean> {
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { banned: true, sessionVersion: true },
+    select: { banned: true, suspendedUntil: true, sessionVersion: true },
   })
-  if (!user || user.banned) return false
+  if (!user || user.banned || (!!user.suspendedUntil && user.suspendedUntil > new Date())) return false
   return (tokenSessionVersion ?? 0) === (user.sessionVersion ?? 0)
 }
 

@@ -7,7 +7,7 @@ import { requireModerator } from "@/lib/require-staff"
 
 const CONTENT_TYPES = new Set(["THREAD", "POST", "CHAT_MESSAGE", "DIARY", "SETUP"])
 const ACTION_TYPES = new Set([
-  "WARNING", "CONTENT_DELETION", "TEMPORARY_BAN", "PERMANENT_BAN", "UNBAN",
+  "WARNING", "CONTENT_DELETION", "TEMPORARY_BAN", "PERMANENT_BAN", "UNBAN", "REMOVE_SUSPENSION",
   "PIN_THREAD", "LOCK_THREAD",
 ])
 
@@ -46,6 +46,10 @@ export async function POST(request: Request) {
 
     if (durationDays !== undefined && durationDays !== null && (!Number.isInteger(durationDays) || durationDays <= 0 || durationDays > 365)) {
       return NextResponse.json({ error: "durationDays must be a positive integer up to 365" }, { status: 400 })
+    }
+
+    if (actionType === "TEMPORARY_BAN" && typeof durationDays !== "number") {
+      return NextResponse.json({ error: "durationDays is required for temporary suspensions" }, { status: 400 })
     }
 
     if (targetUserId === staff.id) {
@@ -99,10 +103,21 @@ export async function POST(request: Request) {
         }
       }
 
-      if (actionType === "TEMPORARY_BAN" || actionType === "PERMANENT_BAN") {
+      if (actionType === "TEMPORARY_BAN") {
+        if (typeof durationDays !== "number" || durationDays <= 0) {
+          throw new Error("INVALID_REQUEST")
+        }
+        const suspendedUntil = new Date(Date.now() + durationDays * 24 * 60 * 60 * 1000)
         await tx.user.update({
           where: { id: targetUserId },
-          data: { banned: true, bannedReason: reason.trim() },
+          data: { suspendedUntil, bannedReason: reason.trim() },
+        })
+      }
+
+      if (actionType === "PERMANENT_BAN") {
+        await tx.user.update({
+          where: { id: targetUserId },
+          data: { banned: true, suspendedUntil: null, bannedReason: reason.trim() },
         })
       }
 
@@ -120,10 +135,10 @@ export async function POST(request: Request) {
         })
       }
 
-      if (actionType === "UNBAN") {
+      if (actionType === "UNBAN" || actionType === "REMOVE_SUSPENSION") {
         await tx.user.update({
           where: { id: targetUserId },
-          data: { banned: false, bannedReason: null },
+          data: { banned: false, suspendedUntil: null, bannedReason: null },
         })
       }
 
