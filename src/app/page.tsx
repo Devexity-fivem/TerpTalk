@@ -195,109 +195,118 @@ export default async function Home() {
       </section>
 
       {/* Community Stream */}
-      <section className="py-14 px-4 sm:px-6 lg:px-8 border-y border-border bg-secondary/20">
+      <section className="py-10 px-4 sm:px-6 lg:px-8 border-y border-border bg-secondary/20">
         <div className="max-w-7xl mx-auto">
-          <div className="mb-8">
-            <h2 className="text-3xl font-bold mb-2 tracking-tight">The TerpTalk Stream</h2>
-            <p className="text-muted-foreground max-w-2xl">
-              Real-time community activity — discussions, grow updates, and new diaries in one place.
-            </p>
+          <div className="mb-5 flex items-end justify-between gap-4 flex-wrap">
+            <div>
+              <h2 className="text-2xl font-bold mb-1 tracking-tight">The TerpTalk Stream</h2>
+              <p className="text-sm text-muted-foreground">
+                Recent discussions, grow updates, and new diaries.
+              </p>
+            </div>
+            <Link href="/discover" className="text-sm font-medium text-primary inline-flex items-center gap-1 hover:underline">
+              View all <ArrowRight className="w-4 h-4" />
+            </Link>
           </div>
 
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
             {/* Categories */}
             <div>
-              <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                <MessageSquare className="w-5 h-5 text-primary" />
+              <h3 className="text-base font-semibold mb-3 flex items-center gap-2">
+                <MessageSquare className="w-4 h-4 text-primary" />
                 Explore Topics
               </h3>
-              <div className="space-y-3">
-                {categories.map((cat) => (
+              <div className="space-y-2">
+                {categories.slice(0, 5).map((cat) => (
                   <Link
                     key={cat.slug}
                     href={`/forum/category/${cat.slug}`}
-                    className="flex items-center justify-between p-4 bg-card rounded-xl border border-border hover:border-primary/40 transition-colors"
+                    className="flex items-center justify-between p-3 bg-card rounded-lg border border-border hover:border-primary/40 transition-colors"
                   >
                     <div>
-                      <div className="font-medium">{cat.name}</div>
-                      <div className="text-sm text-muted-foreground">{cat.description}</div>
+                      <div className="font-medium text-sm">{cat.name}</div>
+                      <div className="text-xs text-muted-foreground line-clamp-1">{cat.description}</div>
                     </div>
-                    <div className="text-sm text-muted-foreground whitespace-nowrap">
-                      {cat._count.threads} thread{cat._count.threads === 1 ? "" : "s"}
+                    <div className="text-xs text-muted-foreground whitespace-nowrap">
+                      {cat._count.threads}
                     </div>
                   </Link>
                 ))}
+                {categories.length > 5 && (
+                  <Link href="/forum" className="text-sm text-primary inline-flex items-center gap-1 hover:underline">
+                    All categories <ArrowRight className="w-3 h-3" />
+                  </Link>
+                )}
               </div>
             </div>
 
             {/* Latest discussions */}
             <div>
-              <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                <Calendar className="w-5 h-5 text-primary" />
+              <h3 className="text-base font-semibold mb-3 flex items-center gap-2">
+                <Calendar className="w-4 h-4 text-primary" />
                 Latest Discussions
               </h3>
-              <div className="space-y-3">
-                {latest.map((thread) => (
+              <div className="space-y-2">
+                {latest.slice(0, 3).map((thread) => (
                   <Link
                     key={thread.id}
                     href={`/forum/thread/${thread.slug}`}
-                    className="flex items-start gap-3 p-4 bg-card rounded-xl border border-border hover:border-primary/40 transition-colors"
+                    className="flex items-start gap-3 p-3 bg-card rounded-lg border border-border hover:border-primary/40 transition-colors"
                   >
                     <Avatar src={thread.author.image ?? undefined} size="sm" alt={thread.author.profile?.username ?? thread.author.name ?? undefined} />
                     <div className="flex-1 min-w-0">
-                      <div className="font-medium mb-1 line-clamp-1">{thread.title}</div>
-                      <div className="text-sm text-muted-foreground flex items-center flex-wrap gap-2">
+                      <div className="font-medium text-sm mb-0.5 line-clamp-1">{thread.title}</div>
+                      <div className="text-xs text-muted-foreground flex items-center flex-wrap gap-x-2 gap-y-0.5">
                         <span className="text-primary">{thread.category.name}</span>
-                        <span>•</span>
                         <span>{thread.author.profile?.username || thread.author.name}</span>
-                        <span>•</span>
-                        <span>{thread.views} views</span>
-                        <span>•</span>
                         <span>{thread.replyCount} repl{thread.replyCount === 1 ? "y" : "ies"}</span>
                       </div>
                     </div>
                   </Link>
                 ))}
+                <Link href="/forum" className="text-sm text-primary inline-flex items-center gap-1 hover:underline">
+                  View all discussions <ArrowRight className="w-3 h-3" />
+                </Link>
               </div>
             </div>
 
             {/* Fresh grow updates */}
             <div>
-              <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                <Leaf className="w-5 h-5 text-primary" />
+              <h3 className="text-base font-semibold mb-3 flex items-center gap-2">
+                <Leaf className="w-4 h-4 text-primary" />
                 Fresh Grow Updates
               </h3>
-              <div className="space-y-3">
-                {diaryUpdates.map((update) => (
+              <div className="space-y-2">
+                {diaryUpdates.slice(0, 3).map((update) => (
                   <Link
                     key={update.id}
                     href={`/diaries/${update.diary.id}`}
-                    className="flex items-start gap-3 p-4 bg-card rounded-xl border border-border hover:border-primary/40 transition-colors"
+                    className="flex items-start gap-3 p-3 bg-card rounded-lg border border-border hover:border-primary/40 transition-colors"
                   >
                     {update.images[0]?.url ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img
                         src={update.images[0].url}
                         alt={update.title}
-                        className="w-12 h-12 rounded-lg object-cover shrink-0"
+                        className="w-10 h-10 rounded-md object-cover shrink-0"
                       />
                     ) : (
-                      <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                        <Leaf className="w-5 h-5 text-primary" />
+                      <div className="w-10 h-10 rounded-md bg-primary/10 flex items-center justify-center shrink-0">
+                        <Leaf className="w-4 h-4 text-primary" />
                       </div>
                     )}
                     <div className="flex-1 min-w-0">
-                      <div className="font-medium mb-1 line-clamp-1">{update.title}</div>
-                      <div className="text-sm text-muted-foreground flex items-center flex-wrap gap-2">
+                      <div className="font-medium text-sm mb-0.5 line-clamp-1">{update.title}</div>
+                      <div className="text-xs text-muted-foreground flex items-center flex-wrap gap-x-2 gap-y-0.5">
                         <span className="text-emerald-500">{update.diary.title}</span>
-                        <span>•</span>
                         <span>{update.author.profile?.username || update.author.name}</span>
-                        <span>•</span>
-                        <span>{new Date(update.createdAt).toLocaleDateString()}</span>
                       </div>
                     </div>
                   </Link>
                 ))}
+                <Link href="/diaries" className="text-sm text-primary inline-flex items-center gap-1 hover:underline">
+                  View all diaries <ArrowRight className="w-3 h-3" />
+                </Link>
               </div>
             </div>
           </div>
