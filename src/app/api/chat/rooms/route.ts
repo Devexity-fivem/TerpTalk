@@ -19,6 +19,19 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Too many requests" }, { status: 429 })
     }
 
+    // Ensure a default public room exists so users always have somewhere to chat
+    await prisma.chatRoom.upsert({
+      where: { slug: "general" },
+      update: {},
+      create: {
+        name: "General Chat",
+        slug: "general",
+        description: "Community live chat",
+        isPrivate: false,
+        order: 1,
+      },
+    })
+
     const [rooms, onlineCount] = await Promise.all([
       prisma.chatRoom.findMany({
         where: { isPrivate: false },
