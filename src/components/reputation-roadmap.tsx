@@ -62,7 +62,7 @@ export default function ReputationRoadmap({ reputation, compact }: ReputationRoa
       </div>
       {!compact && (
         <p className="text-xs text-muted-foreground mt-4">
-          Keep contributing to climb tiers. Higher tiers unlock more community features and perks.
+          Keep growing to climb tiers. Higher tiers unlock more community features and serious bragging rights.
         </p>
       )}
     </div>

@@ -114,18 +114,18 @@ const BADGE_RULES: Record<string, (s: UserStats) => boolean> = {
   "Cultivator": (s) => s.reputation >= 3500,
   "Master Grower": (s) => s.reputation >= 7000,
   "Legendary Grower": (s) => s.reputation >= 15000,
-  "Grand Master Grower": (s) => s.reputation >= 30000,
-  "Sage": (s) => s.reputation >= 75000,
-  "Elder": (s) => s.reputation >= 150000,
-  "Mythic": (s) => s.reputation >= 300000,
-  "Titan": (s) => s.reputation >= 600000,
-  "Celestial": (s) => s.reputation >= 1000000,
+  "Head Grower": (s) => s.reputation >= 30000,
+  "Hash Maker": (s) => s.reputation >= 75000,
+  "Mother Plant": (s) => s.reputation >= 150000,
+  "Pheno Hunter": (s) => s.reputation >= 300000,
+  "Terpene Tycoon": (s) => s.reputation >= 600000,
+  "Cannabis Deity": (s) => s.reputation >= 1000000,
 
   // Overall contribution
   "Top Contributor": (s) => s.reputation >= 10000,
-  "Elite Contributor": (s) => s.reputation >= 25000,
-  "Legendary Contributor": (s) => s.reputation >= 50000,
-  "Mythic Contributor": (s) => s.reputation >= 100000,
+  "Elite Harvest": (s) => s.reputation >= 25000,
+  "Legendary Harvest": (s) => s.reputation >= 50000,
+  "Mythic Harvest": (s) => s.reputation >= 100000,
 }
 
 let badgeSeedComplete = false

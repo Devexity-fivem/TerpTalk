@@ -130,17 +130,17 @@ export const BADGE_REGISTRY: BadgeDefinition[] = [
   { name: "Oracle", description: "Had 100 replies marked as accepted answers.", requirement: "Have 100 replies accepted.", rarity: r("legendary"), icon: "ScrollText" },
 
   // High reputation tiers
-  { name: "Grand Master Grower", description: "Reached 30,000 reputation.", requirement: "Earn 30,000 reputation.", rarity: r("legendary"), icon: "Star" },
-  { name: "Sage", description: "Reached 75,000 reputation.", requirement: "Earn 75,000 reputation.", rarity: r("legendary"), icon: "Sparkles" },
-  { name: "Elder", description: "Reached 150,000 reputation.", requirement: "Earn 150,000 reputation.", rarity: r("legendary"), icon: "Leaf" },
-  { name: "Mythic", description: "Reached 300,000 reputation.", requirement: "Earn 300,000 reputation.", rarity: r("legendary"), icon: "Zap" },
-  { name: "Titan", description: "Reached 600,000 reputation.", requirement: "Earn 600,000 reputation.", rarity: r("legendary"), icon: "Gem" },
-  { name: "Celestial", description: "Reached 1,000,000 reputation.", requirement: "Earn 1,000,000 reputation.", rarity: r("legendary"), icon: "Crown" },
+  { name: "Head Grower", description: "Glowing like a perfectly frosted cola — reached 30,000 reputation.", requirement: "Earn 30,000 reputation.", rarity: r("legendary"), icon: "Star" },
+  { name: "Hash Maker", description: "Pressed to perfection — reached 75,000 reputation.", requirement: "Earn 75,000 reputation.", rarity: r("legendary"), icon: "Sparkles" },
+  { name: "Mother Plant", description: "The community grows from you — reached 150,000 reputation.", requirement: "Earn 150,000 reputation.", rarity: r("legendary"), icon: "Leaf" },
+  { name: "Pheno Hunter", description: "You always find the keeper — reached 300,000 reputation.", requirement: "Earn 300,000 reputation.", rarity: r("legendary"), icon: "Zap" },
+  { name: "Terpene Tycoon", description: "Your terp profile has its own fanbase — reached 600,000 reputation.", requirement: "Earn 600,000 reputation.", rarity: r("legendary"), icon: "Gem" },
+  { name: "Cannabis Deity", description: "A true deity of the grow room — reached 1,000,000 reputation.", requirement: "Earn 1,000,000 reputation.", rarity: r("legendary"), icon: "Crown" },
 
   // Overall contribution
-  { name: "Elite Contributor", description: "Reached 25,000 reputation.", requirement: "Earn 25,000 reputation.", rarity: r("epic"), icon: "TrendingUp" },
-  { name: "Legendary Contributor", description: "Reached 50,000 reputation.", requirement: "Earn 50,000 reputation.", rarity: r("legendary"), icon: "TrendingUp" },
-  { name: "Mythic Contributor", description: "Reached 100,000 reputation.", requirement: "Earn 100,000 reputation.", rarity: r("legendary"), icon: "TrendingUp" },
+  { name: "Elite Harvest", description: "Trimmed a serious haul — reached 25,000 reputation.", requirement: "Earn 25,000 reputation.", rarity: r("epic"), icon: "TrendingUp" },
+  { name: "Legendary Harvest", description: "Your harvests are the stuff of legends — reached 50,000 reputation.", requirement: "Earn 50,000 reputation.", rarity: r("legendary"), icon: "TrendingUp" },
+  { name: "Mythic Harvest", description: "A once-in-a-lifetime haul — reached 100,000 reputation.", requirement: "Earn 100,000 reputation.", rarity: r("legendary"), icon: "TrendingUp" },
 ]
 
 const BADGE_BY_NAME = new Map(BADGE_REGISTRY.map((b) => [b.name, b]))

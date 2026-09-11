@@ -37,13 +37,13 @@ export const REP_TIERS: ReputationTier[] = [
   { threshold: 1500, name: "Grower", color: "text-emerald-500", bg: "bg-emerald-500/10", icon: "🌲", benefit: "Appear on the public leaderboard and unlock weekly rewards." },
   { threshold: 3500, name: "Cultivator", color: "text-cyan-500", bg: "bg-cyan-500/10", icon: "🌿", benefit: "Can edit community guides and strain entries." },
   { threshold: 7000, name: "Master Grower", color: "text-purple-500", bg: "bg-purple-500/10", icon: "🏆", benefit: "Double voting weight in contests and a legendary profile flair." },
-  { threshold: 15000, name: "Legendary Grower", color: "text-amber-400", bg: "bg-amber-400/10", icon: "👑", benefit: "Immortalized as a community elder — exclusive badge and title." },
-  { threshold: 30000, name: "Grand Master Grower", color: "text-rose-400", bg: "bg-rose-500/10", icon: "🌟", benefit: "Unlock a glowing profile aura and a Grand Master title." },
-  { threshold: 75000, name: "Sage", color: "text-violet-300", bg: "bg-violet-500/10", icon: "🔮", benefit: "Unlock extra badge showcase slots and a special name color." },
-  { threshold: 150000, name: "Elder", color: "text-emerald-300", bg: "bg-emerald-600/10", icon: "🍃", benefit: "Permanently listed in the Hall of Fame and legendary title." },
-  { threshold: 300000, name: "Mythic", color: "text-fuchsia-300", bg: "bg-fuchsia-600/10", icon: "🦄", benefit: "Mythic-only recognition and double poll voting." },
-  { threshold: 600000, name: "Titan", color: "text-red-300", bg: "bg-red-600/10", icon: "🔱", benefit: "Unlock a unique Titan badge and a custom profile banner." },
-  { threshold: 1000000, name: "Celestial", color: "text-sky-300", bg: "bg-sky-500/10", icon: "🌌", benefit: "Ultimate recognition: permanent Celestial badge and lifetime VIP status." },
+  { threshold: 15000, name: "Legendary Grower", color: "text-amber-400", bg: "bg-amber-400/10", icon: "👑", benefit: "Immortalized as a community elder — exclusive leaf badge and title." },
+  { threshold: 30000, name: "Head Grower", color: "text-rose-400", bg: "bg-rose-500/10", icon: "🌟", benefit: "Glow like a perfectly frosted cola — Head Grower title and aura." },
+  { threshold: 75000, name: "Hash Maker", color: "text-violet-300", bg: "bg-violet-500/10", icon: "🔮", benefit: "Your tips cure as well as your buds — extra badge slots and name color." },
+  { threshold: 150000, name: "Mother Plant", color: "text-emerald-300", bg: "bg-emerald-600/10", icon: "🍃", benefit: "You're the mother the community grows from — Hall of Fame and legendary title." },
+  { threshold: 300000, name: "Pheno Hunter", color: "text-fuchsia-300", bg: "bg-fuchsia-600/10", icon: "🦄", benefit: "You've hunted enough phenos to know the best — Mythic-only recognition." },
+  { threshold: 600000, name: "Terpene Tycoon", color: "text-red-300", bg: "bg-red-600/10", icon: "🔱", benefit: "Terpene profile so strong it has its own fanbase — unique banner and badge." },
+  { threshold: 1000000, name: "Cannabis Deity", color: "text-sky-300", bg: "bg-sky-500/10", icon: "🌌", benefit: "A true cannabis deity — permanent badge and lifetime VIP status." },
 ]
 
 export function getReputationTier(reputation: number): ReputationTier {
