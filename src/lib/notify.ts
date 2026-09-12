@@ -229,7 +229,8 @@ export async function notify(input: NotifyInput): Promise<NotificationWithActor 
         type: input.type,
         title: input.title.slice(0, 200),
         content: input.content.slice(0, 500),
-        link: input.link ?? null,
+        // Only internal root-relative links — external/javascript: URLs are dropped.
+        link: input.link?.startsWith("/") ? input.link : null,
         actorId: input.actorId ?? null,
         groupKey: input.groupKey ?? null,
         metadata: input.metadata,
@@ -314,7 +315,8 @@ export async function notifyMany(inputs: NotifyInput[]): Promise<number> {
         type: i.type,
         title: i.title.slice(0, 200),
         content: i.content.slice(0, 500),
-        link: i.link ?? null,
+        // Only internal root-relative links — external/javascript: URLs are dropped.
+        link: i.link?.startsWith("/") ? i.link : null,
         actorId: i.actorId ?? null,
         groupKey: i.groupKey ?? null,
         metadata: i.metadata,
@@ -333,7 +335,7 @@ export async function notifyMany(inputs: NotifyInput[]): Promise<number> {
           type: i.type,
           title: i.title.slice(0, 200),
           content: i.content.slice(0, 500),
-          link: i.link ?? null,
+          link: i.link?.startsWith("/") ? i.link : null,
           read: false,
         }
         const key = JSON.stringify(dto)

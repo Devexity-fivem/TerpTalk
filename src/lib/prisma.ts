@@ -32,6 +32,7 @@ const EXCLUDED_MODELS = new Set([
   "Bookmark",
   "SavedSearch",
   "CategoryFollow",
+  "ThreadFollow",
   "Report",
 ])
 

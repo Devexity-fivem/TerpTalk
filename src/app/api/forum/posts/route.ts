@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server"
+import { NextResponse, after } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
@@ -8,7 +8,7 @@ import { rateLimit } from "@/lib/rate-limit"
 import { awardReputation, REP_POINTS } from "@/lib/reputation"
 import { storeImages, deleteImagesIfUnreferenced } from "@/lib/blob"
 import { notifyMentions } from "@/lib/mentions"
-import { notify } from "@/lib/notify"
+import { notify, notifyMany } from "@/lib/notify"
 import { checkMaintenance } from "@/lib/maintenance"
 
 export async function POST(request: Request) {
@@ -121,8 +121,16 @@ export async function POST(request: Request) {
 
     await prisma.thread.update({
       where: { id: threadId },
-      data: { replyCount: { increment: 1 } },
+      data: { replyCount: { increment: 1 }, lastActivityAt: new Date() },
     })
+
+    // Repliers auto-follow the thread (XenForo-style): silent upsert — no
+    // notification, and lastSeenAt covers everything up to their own reply.
+    await prisma.threadFollow.upsert({
+      where: { userId_threadId: { userId: session.user.id, threadId } },
+      create: { userId: session.user.id, threadId, lastSeenAt: new Date() },
+      update: { lastSeenAt: new Date() },
+    }).catch(() => {})
 
     await awardReputation(
       session.user.id,
@@ -131,7 +139,9 @@ export async function POST(request: Request) {
       `Replied in "${thread.title.slice(0, 60)}"`
     ).catch(() => {})
 
-    // Notify the thread author (if not self-reply; pref/block/ban handled by notify)
+    // Notify the thread author (if not self-reply; pref/block/ban handled by notify).
+    // groupKey+dedupeMs bound reply-bombs: the same replier can't stack more
+    // than one REPLY notification per hour on the same thread.
     if (thread.authorId !== session.user.id) {
       await notify({
         userId: thread.authorId,
@@ -140,6 +150,8 @@ export async function POST(request: Request) {
         content: `@${session.user.name || "Someone"} replied to "${thread.title.slice(0, 80)}"`,
         link: `/forum/thread/${thread.slug}`,
         actorId: session.user.id,
+        groupKey: `REPLY:thread:${threadId}`,
+        dedupeMs: 60 * 60 * 1000,
       })
     }
 
@@ -153,6 +165,56 @@ export async function POST(request: Request) {
       `a reply in "${thread.title.slice(0, 60)}"`,
       [thread.authorId]
     )
+
+    // Fan out to thread followers — throttled per follower via
+    // ThreadFollow.lastNotifiedAt (≤1 notification per 6h per thread), and
+    // never for hidden categories or deleted threads. Deferred with after()
+    // so fan-out never delays the reply response.
+    if (!thread.category?.hidden) {
+      const replierId = session.user.id
+      const replierName = session.user.name || "Someone"
+      const threadTitle = thread.title
+      const threadSlug = thread.slug
+      const authorId = thread.authorId
+      after(async () => {
+        try {
+          const cutoff = new Date(Date.now() - 6 * 60 * 60 * 1000)
+          const followers = await prisma.threadFollow.findMany({
+            where: {
+              threadId,
+              userId: { notIn: [replierId, authorId] },
+              OR: [{ lastNotifiedAt: null }, { lastNotifiedAt: { lt: cutoff } }],
+            },
+            select: { userId: true },
+            take: 2000,
+          })
+          if (followers.length === 0) return
+          const sent = await notifyMany(
+            followers.map((f) => ({
+              userId: f.userId,
+              type: "THREAD_ACTIVITY" as const,
+              title: "New reply in a thread you follow",
+              content: `@${replierName} replied in "${threadTitle.slice(0, 60)}"`,
+              link: `/forum/thread/${threadSlug}`,
+              actorId: replierId,
+              groupKey: `THREAD_ACTIVITY:thread:${threadId}`,
+              dedupeMs: 6 * 60 * 60 * 1000,
+              metadata: { threadId },
+            }))
+          )
+          // Only stamp the throttle when the fan-out actually sent — a failed
+          // send shouldn't burn a follower's 6h window.
+          if (sent > 0) {
+            await prisma.threadFollow.updateMany({
+              where: { threadId, userId: { in: followers.map((f) => f.userId) } },
+              data: { lastNotifiedAt: new Date() },
+            })
+          }
+        } catch {
+          // best-effort fan-out
+        }
+      })
+    }
 
     return NextResponse.json({ post }, { status: 201 })
   } catch (error) {

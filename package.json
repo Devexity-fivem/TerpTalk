@@ -14,7 +14,8 @@
     "backup": "tsx scripts/backup.ts",
     "test:security": "tsx scripts/security-tests.mts",
     "test:notifications": "tsx scripts/notification-2-tests.mts",
-    "test:onboarding": "node scripts/onboarding-verify.mjs"
+    "test:onboarding": "node scripts/onboarding-verify.mjs",
+    "test:forum": "node scripts/forum-verify.mjs"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",

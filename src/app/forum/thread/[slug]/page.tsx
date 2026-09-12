@@ -20,14 +20,15 @@ import { Breadcrumbs } from "@/components/breadcrumbs"
 import { JsonLd } from "@/components/json-ld"
 import { AcceptAnswerButton } from "@/components/accept-answer-button"
 import ViewTracker from "@/components/view-tracker"
+import ThreadFollowButton from "@/components/thread-follow-button"
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params
   const thread = await prisma.thread.findUnique({
     where: { slug },
-    select: { title: true, content: true, deleted: true, category: { select: { name: true, slug: true } } },
+    select: { title: true, content: true, deleted: true, category: { select: { name: true, slug: true, hidden: true } } },
   })
-  if (!thread || thread.deleted) return buildMetadata({ title: "Thread not found", robots: { index: false } })
+  if (!thread || thread.deleted || thread.category.hidden) return buildMetadata({ title: "Thread not found", robots: { index: false } })
   return buildMetadata({
     title: thread.title,
     description: snippet(thread.content),
@@ -39,7 +40,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
 
 const POSTS_PER_PAGE = 50
 
-async function getThreadData(slug: string, page: number) {
+async function getThreadData(slug: string, page: number, canSeeHidden: boolean) {
   const thread = await prisma.thread.findUnique({
     where: { slug },
     include: {
@@ -76,7 +77,9 @@ async function getThreadData(slug: string, page: number) {
     },
   })
 
-  if (!thread || thread.deleted) {
+  // Hidden-category threads are unlisted, not public — mirror the mutation
+  // routes and 404 them for non-moderators.
+  if (!thread || thread.deleted || (thread.category?.hidden && !canSeeHidden)) {
     notFound()
   }
 
@@ -95,7 +98,7 @@ export default async function ThreadPage({
   const page = Math.max(1, Math.min(10_000, parseInt(pageParam || "1") || 1))
   const session = await getServerSession(authOptions)
   const currentUserId = session?.user?.id
-  const thread = await getThreadData(slug, page)
+  const thread = await getThreadData(slug, page, isModerator(session?.user?.role))
   const tagIds = thread.tags.map((tt) => tt.tagId)
   const relatedThreads = await prisma.thread.findMany({
     where: {
@@ -120,6 +123,23 @@ export default async function ThreadPage({
         select: { id: true },
       }))
     : false
+
+  const following = currentUserId
+    ? !!(await prisma.threadFollow.findUnique({
+        where: { userId_threadId: { userId: currentUserId, threadId: thread.id } },
+        select: { id: true },
+      }))
+    : false
+
+  // Mark-seen: viewing a followed thread catches the viewer up. Only writes
+  // when the thread has newer activity than the last view — monotonic and
+  // idempotent.
+  if (currentUserId && following) {
+    await prisma.threadFollow.updateMany({
+      where: { userId: currentUserId, threadId: thread.id, lastSeenAt: { lt: thread.lastActivityAt } },
+      data: { lastSeenAt: thread.lastActivityAt },
+    })
+  }
 
   const canSetAnswer = !!currentUserId && (
     currentUserId === thread.authorId || isModerator(session?.user?.role)
@@ -227,6 +247,7 @@ export default async function ThreadPage({
               {thread.views} views
             </span>
             <BookmarkButton threadId={thread.id} initiallySaved={saved} />
+            <ThreadFollowButton threadId={thread.id} initiallyFollowing={following} />
             <ShareButtons path={`/forum/thread/${thread.slug}`} title={thread.title} />
           </div>
           {/* Photos attached when the thread was opened */}

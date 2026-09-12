@@ -154,6 +154,10 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
   const { recentDiaryUpdates, recentThreads, feedItems, trendingDiaries, memberCount, threadCount, diaryCount, popularCategories, coldStart } =
     await getFeedData(session?.user?.id, activeTab)
 
+  const userPostCount = session?.user?.id && session.user.onboardingCompletedAt
+    ? await prisma.post.count({ where: { authorId: session.user.id, deleted: false } })
+    : 0
+
   const tabCls = (t: string) =>
     `px-4 py-2 text-sm font-medium transition-colors ${activeTab === t ? "border-b-2 border-primary text-primary" : "text-muted-foreground hover:text-foreground"}`
 
@@ -198,6 +202,23 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
               <Link href="/welcome" className="text-primary hover:underline">Follow growers and topics</Link>{" "}
               to personalize it.
             </span>
+          </div>
+        )}
+
+        {/* First-action nudge — shown only to members who have never replied.
+            Disappears permanently after their first post. */}
+        {session?.user?.id && session.user.onboardingCompletedAt && userPostCount === 0 && (
+          <div className="mb-6 bg-card border border-border rounded-lg p-4 flex flex-wrap items-center gap-3">
+            <MessageSquare className="w-5 h-5 text-primary flex-shrink-0" />
+            <p className="text-sm flex-1 min-w-[200px]">
+              See something interesting? Join the conversation — your first reply helps other growers.
+            </p>
+            <Link
+              href="/forum"
+              className="min-h-11 inline-flex items-center px-4 rounded-lg bg-secondary text-sm font-semibold hover:bg-secondary/80"
+            >
+              Browse discussions
+            </Link>
           </div>
         )}
 

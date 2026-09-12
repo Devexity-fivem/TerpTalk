@@ -58,6 +58,7 @@ model User {
   staffApplications StaffApplication[]
   reviewedApplications StaffApplication[] @relation("Reviewer")
   categoryFollows CategoryFollow[]
+  threadFollows  ThreadFollow[]
   savedSearches  SavedSearch[]
   guideEdits    GuideEdit[]
   pollVotes     PollVote[]
@@ -191,6 +192,9 @@ model Thread {
   replyCount Int      @default(0)
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
+  // Bumped only when a new reply lands — updatedAt is polluted by view
+  // increments, so it can't drive unread indicators.
+  lastActivityAt DateTime @default(now())
   acceptedAnswerId String? @unique
 
   category   Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
@@ -201,12 +205,31 @@ model Thread {
   tags       ThreadTag[]
   poll       Poll?
   acceptedAnswer Post?  @relation("ThreadAcceptedAnswer", fields: [acceptedAnswerId], references: [id], onDelete: SetNull)
+  followers  ThreadFollow[]
 
   @@index([categoryId])
   @@index([authorId])
   @@index([slug])
   @@index([replyCount])
   @@index([createdAt])
+}
+
+// Followed threads — drives reply notifications (throttled via
+// lastNotifiedAt) and unread indicators (lastSeenAt vs lastActivityAt).
+model ThreadFollow {
+  id             String    @id @default(cuid())
+  userId         String
+  threadId       String
+  lastSeenAt     DateTime?
+  lastNotifiedAt DateTime?
+  createdAt      DateTime  @default(now())
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  thread Thread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, threadId])
+  @@index([threadId])
+  @@index([userId])
 }
 
 // Forum Posts

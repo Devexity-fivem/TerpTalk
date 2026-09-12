@@ -191,9 +191,14 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
 
 
             </div>
-            <div className="flex gap-2 items-start">
-              <DiaryFollowButton diaryId={diary.id} initiallyFollowing={following} />
-              <ShareButtons path={`/diaries/${diary.id}`} title={`${diary.title} — grow diary on TerpTalk`} />
+            <div className="flex flex-col items-end gap-1">
+              <div className="flex gap-2 items-start">
+                <DiaryFollowButton diaryId={diary.id} initiallyFollowing={following} />
+                <ShareButtons path={`/diaries/${diary.id}`} title={`${diary.title} — grow diary on TerpTalk`} />
+              </div>
+              {!following && (
+                <p className="text-xs text-muted-foreground">Follow this grower to see future updates.</p>
+              )}
             </div>
           </div>
         </div>

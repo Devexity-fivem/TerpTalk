@@ -125,6 +125,9 @@ export async function POST(request: Request) {
           where: { id: targetUserId },
           data: { suspendedUntil, bannedReason: reason.trim(), sessionVersion: { increment: 1 } },
         })
+        // Purge unread notifications this user triggered — a spam-bombed
+        // target shouldn't keep finding bait in their notification list.
+        await tx.notification.deleteMany({ where: { actorId: targetUserId, read: false } })
       }
 
       if (actionType === "PERMANENT_BAN") {
@@ -132,6 +135,7 @@ export async function POST(request: Request) {
           where: { id: targetUserId },
           data: { banned: true, suspendedUntil: null, bannedReason: reason.trim(), sessionVersion: { increment: 1 } },
         })
+        await tx.notification.deleteMany({ where: { actorId: targetUserId, read: false } })
       }
 
       if (actionType === "PIN_THREAD" || actionType === "LOCK_THREAD") {

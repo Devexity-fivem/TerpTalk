@@ -1,5 +1,7 @@
 import { prisma } from "@/lib/prisma"
 import { publicUserSelect } from "@/lib/security"
+import { getServerSession } from "next-auth"
+import { authOptions } from "@/lib/auth"
 import { unstable_cache } from "next/cache"
 import { MessageSquare, Users, Clock, TrendingUp } from "lucide-react"
 import Link from "next/link"
@@ -33,7 +35,7 @@ const getForumData = unstable_cache(
     })
 
     const recentThreads = await prisma.thread.findMany({
-      where: { deleted: false },
+      where: { deleted: false, category: { hidden: false } },
       take: 5,
       orderBy: { createdAt: "desc" },
       include: {
@@ -50,7 +52,7 @@ const getForumData = unstable_cache(
       prisma.post.count({ where: { deleted: false } }),
       prisma.user.count({ where: { banned: false } }),
       prisma.thread.findMany({
-        where: { deleted: false, views: { gt: 0 } },
+        where: { deleted: false, views: { gt: 0 }, category: { hidden: false } },
         take: 5,
         orderBy: { views: "desc" },
         select: { slug: true, title: true, views: true },
@@ -64,7 +66,20 @@ const getForumData = unstable_cache(
 )
 
 export default async function ForumPage() {
-  const { categories, recentThreads, threadCount, postCount, memberCount, trendingThreads } = await getForumData()
+  const [{ categories, recentThreads, threadCount, postCount, memberCount, trendingThreads }, session] =
+    await Promise.all([getForumData(), getServerSession(authOptions)])
+
+  // Per-viewer unread state lives outside the cached forum query.
+  const unreadThreadIds = new Set<string>()
+  if (session?.user?.id && recentThreads.length > 0) {
+    const follows = await prisma.threadFollow.findMany({
+      where: { userId: session.user.id, threadId: { in: recentThreads.map((t) => t.id) } },
+      select: { threadId: true, lastSeenAt: true, thread: { select: { lastActivityAt: true } } },
+    })
+    for (const f of follows) {
+      if (f.thread.lastActivityAt > (f.lastSeenAt ?? new Date(0))) unreadThreadIds.add(f.threadId)
+    }
+  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -131,7 +146,12 @@ export default async function ForumPage() {
                   >
                     <div className="flex items-start gap-4">
                       <div className="flex-1">
-                        <h3 className="font-semibold mb-1">{thread.title}</h3>
+                        <h3 className="font-semibold mb-1 flex items-center gap-2">
+                          {unreadThreadIds.has(thread.id) && (
+                            <span className="h-2 w-2 rounded-full bg-primary shrink-0" role="img" aria-label="Unread" title="New activity" />
+                          )}
+                          {thread.title}
+                        </h3>
                         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
                           <span className="flex items-center gap-1">
                             <Users className="w-4 h-4" />

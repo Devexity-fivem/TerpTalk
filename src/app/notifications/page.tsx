@@ -6,7 +6,7 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import { useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
 import {
-  Bell, Loader2, CheckCheck, Check, UserPlus, Heart, MessageSquare, AtSign,
+  Bell, BellRing, Loader2, CheckCheck, Check, UserPlus, Heart, MessageSquare, AtSign,
   MessageCircle, Leaf, Mail, CheckCircle2, Award, TrendingUp, Users, Shield,
 } from "lucide-react"
 import Link from "next/link"
@@ -36,6 +36,7 @@ const TYPE_ICONS: Record<string, typeof Bell> = {
   FOLLOW: UserPlus,
   REACTION: Heart,
   REPLY: MessageSquare,
+  THREAD_ACTIVITY: BellRing,
   MENTION: AtSign,
   COMMENT: MessageCircle,
   DIARY_UPDATE: Leaf,

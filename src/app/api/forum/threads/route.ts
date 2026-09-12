@@ -247,24 +247,37 @@ export async function POST(request: Request) {
       `the thread "${title.slice(0, 60)}"`
     )
 
+    // The author auto-follows their own thread — powers unread indicators
+    // and (via the reply fan-out) activity notifications.
+    await prisma.threadFollow.upsert({
+      where: { userId_threadId: { userId: session.user.id, threadId: thread.id } },
+      create: { userId: session.user.id, threadId: thread.id, lastSeenAt: new Date() },
+      update: { lastSeenAt: new Date() },
+    }).catch(() => {})
+
     // Notify category followers (one notification per follower)
     // notifyMany filters prefs, banned recipients, and blocks in bulk.
-    const followers = await prisma.categoryFollow.findMany({
-      where: { categoryId: category.id },
-      select: { userId: true },
-    })
-    await notifyMany(
-      followers
-        .filter((f) => f.userId !== session.user.id)
-        .map((f) => ({
-          userId: f.userId,
-          type: "THREAD_ACTIVITY" as const,
-          title: `New thread in ${category.name}`,
-          content: `@${session.user.name || "Someone"} started "${title.slice(0, 60)}" in a category you follow.`,
-          link: `/forum/thread/${thread.slug}`,
-          actorId: session.user.id,
-        }))
-    )
+    // Hidden categories never fan out — the link would leak content.
+    if (!category.hidden) {
+      const followers = await prisma.categoryFollow.findMany({
+        where: { categoryId: category.id },
+        select: { userId: true },
+      })
+      await notifyMany(
+        followers
+          .filter((f) => f.userId !== session.user.id)
+          .map((f) => ({
+            userId: f.userId,
+            type: "THREAD_ACTIVITY" as const,
+            title: `New thread in ${category.name}`,
+            content: `@${session.user.name || "Someone"} started "${title.slice(0, 60)}" in a category you follow.`,
+            link: `/forum/thread/${thread.slug}`,
+            actorId: session.user.id,
+            groupKey: `THREAD_ACTIVITY:category:${category.id}`,
+            dedupeMs: 60 * 60 * 1000,
+          }))
+      )
+    }
 
     revalidateTag("forum", { expire: 0 })
 

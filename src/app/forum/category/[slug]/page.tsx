@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma"
-import { publicUserSelect } from "@/lib/security"
+import { publicUserSelect, isModerator } from "@/lib/security"
 import { unstable_cache } from "next/cache"
 import { notFound } from "next/navigation"
 import { MessageSquare, Users, Clock, Pin, Lock } from "lucide-react"
@@ -77,12 +77,26 @@ export default async function CategoryPage({
   const unanswered = filterParam === "unanswered"
   const category = await getCategoryData(slug, page, unanswered)
   const session = await getServerSession(authOptions)
+  // Hidden categories are unlisted, not public — 404 for non-moderators.
+  if (category.hidden && !isModerator(session?.user?.role)) notFound()
   const isFollowing = session?.user?.id
     ? !!(await prisma.categoryFollow.findUnique({
         where: { userId_categoryId: { userId: session.user.id, categoryId: category.id } },
         select: { id: true },
       }))
     : false
+
+  // Per-viewer unread state lives outside the cached category query.
+  const unreadThreadIds = new Set<string>()
+  if (session?.user?.id && category.threads.length > 0) {
+    const follows = await prisma.threadFollow.findMany({
+      where: { userId: session.user.id, threadId: { in: category.threads.map((t) => t.id) } },
+      select: { threadId: true, lastSeenAt: true, thread: { select: { lastActivityAt: true } } },
+    })
+    for (const f of follows) {
+      if (f.thread.lastActivityAt > (f.lastSeenAt ?? new Date(0))) unreadThreadIds.add(f.threadId)
+    }
+  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -154,6 +168,9 @@ export default async function CategoryPage({
                   <div className="flex items-start gap-4">
                     <div className="flex-1">
                       <div className="flex items-center gap-2 mb-1">
+                        {unreadThreadIds.has(thread.id) && (
+                          <span className="h-2 w-2 rounded-full bg-primary shrink-0" role="img" aria-label="Unread" title="New activity" />
+                        )}
                         {thread.pinned && <Pin className="w-4 h-4 text-primary" />}
                         {thread.locked && <Lock className="w-4 h-4 text-muted-foreground" />}
                         <h3 className="font-semibold">{thread.title}</h3>
