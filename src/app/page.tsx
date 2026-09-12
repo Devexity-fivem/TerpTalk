@@ -96,7 +96,8 @@ const getTrendingDiscussions = unstable_cache(
 const getActiveMembers = unstable_cache(
   async () => {
     return await prisma.user.findMany({
-      where: { banned: false, status: "ONLINE" },
+      // TerpBot is permanently ONLINE — exclude it so real members lead.
+      where: { banned: false, status: "ONLINE", profile: { isNot: { username: "terpbot" } } },
       take: 12,
       orderBy: { lastSeenAt: "desc" },
       select: publicUserSelect,
@@ -109,7 +110,7 @@ const getActiveMembers = unstable_cache(
 const getGrowerOfWeek = unstable_cache(
   async () => {
     return await prisma.profile.findFirst({
-      where: { user: { banned: false, role: { not: "ADMINISTRATOR" } } },
+      where: { username: { not: "terpbot" }, user: { banned: false, role: { not: "ADMINISTRATOR" } } },
       orderBy: { reputation: "desc" },
       include: { user: { select: { id: true, image: true, createdAt: true } } },
     })

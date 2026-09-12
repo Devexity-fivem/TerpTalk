@@ -13,6 +13,8 @@ import { escapeLike, normalizeStrain, strainFieldMatches } from "@/lib/strain-st
 import { toGrams, toOz, VALID_YIELD_UNITS } from "@/lib/yield"
 import { diaryDay, diaryWeek, groupUpdatesByWeek, buildHarvestReport, diaryCompleteness, STAGE_ORDER } from "@/lib/diary-weeks"
 import { currentMonthKey, monthRange, previousMonthKey } from "@/lib/week"
+import { postBotMessage, TERPBOT_USERNAME } from "@/lib/terpbot"
+import { notifyMentions } from "@/lib/mentions"
 
 const TEST_USERNAME = `__test_security_${Date.now()}`
 const TEST_NAME = `__test_security_name_${Date.now()}`
@@ -363,6 +365,75 @@ async function run() {
     // Stage order sanity — every stage the API accepts is in the order list
     for (const s of ["GERMINATION", "SEEDLING", "VEGETATIVE", "FLOWER", "HARVEST", "DRYING", "CURING", "COMPLETED"]) {
       assert.ok((STAGE_ORDER as readonly string[]).includes(s), `${s} in STAGE_ORDER`)
+    }
+
+    // ── TerpBot boundary ───────────────────────────────────────────
+    // The bot is a least-privileged MEMBER. postBotMessage must refuse
+    // private rooms, post in public rooms, and self-heal must pin MEMBER.
+    const botRoomTag = `__bot_test_${Date.now()}`
+    const privateRoom = await prisma.chatRoom.create({
+      data: { name: botRoomTag, slug: botRoomTag, isPrivate: true },
+    })
+    const publicRoom = await prisma.chatRoom.create({
+      data: { name: `${botRoomTag}_pub`, slug: `${botRoomTag}_pub`, isPrivate: false },
+    })
+    try {
+      assert.equal(
+        await postBotMessage(privateRoom.id, "should not post"),
+        null,
+        "postBotMessage must refuse private rooms"
+      )
+      assert.equal(
+        await postBotMessage("nonexistent-room-id", "should not post"),
+        null,
+        "postBotMessage must refuse unknown rooms"
+      )
+
+      const repBefore = (
+        await prisma.profile.findUnique({ where: { username: TERPBOT_USERNAME }, select: { reputation: true } })
+      )?.reputation ?? 0
+      const dto = await postBotMessage(publicRoom.id, "bot boundary test")
+      assert.ok(dto, "postBotMessage should post in a public room")
+      assert.equal(dto!.author.username, TERPBOT_USERNAME, "bot message authored by terpbot")
+
+      const botUser = await prisma.user.findUnique({
+        where: { id: dto!.author.id },
+        select: { role: true, password: true, recoveryPhraseHash: true },
+      })
+      assert.equal(botUser?.role, "MEMBER", "TerpBot must be pinned to MEMBER")
+      assert.equal(botUser?.password, null, "TerpBot must stay passwordless")
+      assert.equal(botUser?.recoveryPhraseHash, null, "TerpBot must have no recovery credential")
+
+      // Bot posts must never earn reputation — compare against whatever the
+      // account already holds (historical rep isn't reset by this suite).
+      const repAfter = (
+        await prisma.profile.findUnique({ where: { username: TERPBOT_USERNAME }, select: { reputation: true } })
+      )?.reputation ?? 0
+      assert.equal(repAfter, repBefore, "posting must not change bot reputation")
+
+      // @terpbot must never produce a MENTION notification to the bot.
+      // Positive control uses a valid-length handle (3–20 chars).
+      const mentionableName = `m${Date.now().toString(36)}`
+      const mentionable = await prisma.user.create({
+        data: { name: `__test_ment_${Date.now()}`, ageVerified: true, profile: { create: { username: mentionableName } } },
+      })
+      try {
+        await notifyMentions(`hi @${TERPBOT_USERNAME} and @${mentionableName}`, userId, "tester", "/x", "test")
+        const botId = dto!.author.id
+        const mentionRows = await prisma.notification.findMany({
+          where: { userId: botId, type: "MENTION", createdAt: { gte: new Date(Date.now() - 60_000) } },
+        })
+        assert.equal(mentionRows.length, 0, "bot must not receive mention notifications")
+        const userMention = await prisma.notification.findFirst({
+          where: { userId: mentionable.id, type: "MENTION", createdAt: { gte: new Date(Date.now() - 60_000) } },
+        })
+        assert.ok(userMention, "real user still gets the mention notification")
+      } finally {
+        await prisma.user.delete({ where: { id: mentionable.id } }).catch(() => {})
+      }
+    } finally {
+      await prisma.chatMessage.deleteMany({ where: { roomId: { in: [privateRoom.id, publicRoom.id] } } }).catch(() => {})
+      await prisma.chatRoom.deleteMany({ where: { id: { in: [privateRoom.id, publicRoom.id] } } }).catch(() => {})
     }
 
     console.log("All security regression tests passed.")

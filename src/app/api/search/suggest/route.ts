@@ -28,7 +28,7 @@ const getSearchSuggestions = unstable_cache(
       }),
       prisma.profile.findMany({
         where: {
-          username: { contains: query, mode: "insensitive" },
+          username: { contains: query, mode: "insensitive", not: "terpbot" },
           user: { banned: false, OR: [{ suspendedUntil: null }, { suspendedUntil: { lt: new Date() } }] },
         },
         take: 3,

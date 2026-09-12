@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma"
 import { notifyMany } from "@/lib/notify"
+import { TERPBOT_USERNAME } from "@/lib/terpbot"
 
 // Parse @username mentions from text and notify each mentioned user.
 // Usernames may contain letters, numbers, underscore, hyphen.
@@ -27,7 +28,11 @@ export async function notifyMentions(
     })
 
     const excluded = new Set([actorId, ...excludeUserIds])
-    const targets = users.filter((u) => !excluded.has(u.userId))
+    // The bot never needs a MENTION notification — @terpbot pings in chat are
+    // answered by the messages route directly, and rows to the bot are dead letters.
+    const targets = users.filter(
+      (u) => !excluded.has(u.userId) && u.username !== TERPBOT_USERNAME
+    )
     if (targets.length === 0) return
 
     await notifyMany(

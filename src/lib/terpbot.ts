@@ -1,11 +1,22 @@
 // TerpBot — the community engine. Shared helpers so any route or background
 // job can post to chat as the bot without duplicating the account lookup,
 // message creation, and realtime broadcast.
+//
+// Permission boundary: the bot is a least-privileged MEMBER account with no
+// password and no session capability. Its code runs in-process with direct
+// Prisma access, so code review is the permission system — helpers here may
+// only read public-class data (publicUserSelect, published guides, public
+// content with deleted:false + activeAuthor filters) and may only write
+// ChatMessage as the bot, Setting idempotency keys, and system notifications.
+// Never read DirectMessage, Report, SecurityEvent, Block, credentials, or
+// staff-only tables from a TerpBot path; never interpolate private data into
+// a bot message; never hand the bot moderation, role, or reputation writes.
 import { prisma } from "@/lib/prisma"
 import { getPusher } from "@/lib/pusher"
 import { publicUserSelect } from "@/lib/security"
 
 export const TERPBOT_USERNAME = "terpbot"
+const BOT_ROLE = "MEMBER"
 
 let cachedBotId: string | null = null
 
@@ -22,10 +33,19 @@ async function getOrCreateBot(): Promise<string> {
   if (cachedBotId) return cachedBotId
   const existing = await prisma.user.findFirst({
     where: { profile: { username: TERPBOT_USERNAME } },
-    select: { id: true, image: true, profile: { select: { id: true, bio: true, avatarUrl: true } } },
+    select: { id: true, image: true, role: true, profile: { select: { id: true, bio: true, avatarUrl: true } } },
   })
   if (existing) {
     cachedBotId = existing.id
+    // Pin the role — the bot must never be privileged. If anything elevated
+    // the account out-of-band, demote it back to MEMBER on the next post.
+    // This only ever touches the known bot row.
+    if (existing.role !== BOT_ROLE) {
+      await prisma.user.update({
+        where: { id: existing.id },
+        data: { role: BOT_ROLE },
+      }).catch(() => {})
+    }
     // Self-heal: fill in the bot's profile the first time it posts.
     if (existing.profile && (!existing.profile.bio || !existing.profile.avatarUrl)) {
       await prisma.profile.update({
@@ -45,6 +65,7 @@ async function getOrCreateBot(): Promise<string> {
   const created = await prisma.user.create({
     data: {
       name: "TerpBot",
+      role: BOT_ROLE,
       ageVerified: true,
       status: "ONLINE",
       image: BOT_PROFILE.avatarUrl,
@@ -62,6 +83,12 @@ async function getOrCreateBot(): Promise<string> {
 // leaderboards or member rankings.
 export async function postBotMessage(roomId: string, text: string) {
   try {
+    // The bot speaks in public rooms only — never into private/staff rooms.
+    const room = await prisma.chatRoom.findUnique({
+      where: { id: roomId },
+      select: { isPrivate: true },
+    })
+    if (!room || room.isPrivate) return null
     const authorId = await getOrCreateBot()
     const message = await prisma.chatMessage.create({
       data: { roomId, authorId, content: text },

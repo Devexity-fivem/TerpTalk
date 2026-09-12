@@ -18,6 +18,7 @@ import {
 } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
 import { checkMaintenance } from "@/lib/maintenance"
+import { getBooleanSetting, SITE_SETTINGS } from "@/lib/settings"
 import { getPusher } from "@/lib/pusher"
 import { postBotMessage, randomGrowTip, TERPBOT_USERNAME } from "@/lib/terpbot"
 import { emitNotificationPush } from "@/lib/notify"
@@ -87,6 +88,22 @@ export async function POST(request: NextRequest) {
     const admin = isAdmin(user.role)
     const displayName = user.profile?.username || user.name || "Staff"
 
+    // Non-staff commands summon the bot into the room — they must respect the
+    // same chat protections as normal messages (disabled chat, locked rooms,
+    // slow mode). Staff commands stay usable since they're moderation tools.
+    if (!staff) {
+      if (!(await getBooleanSetting(SITE_SETTINGS.CHAT_ENABLED, true))) {
+        return forbidden("Chat is temporarily disabled")
+      }
+      if (room.locked) return forbidden("Chat is locked")
+      if (room.slowModeSeconds > 0) {
+        const slowRl = await rateLimit(`chat-cmd-slow:${userId}:${roomId}`, 1, room.slowModeSeconds * 1000)
+        if (!slowRl.allowed) {
+          return NextResponse.json({ error: `Slow mode: wait ${room.slowModeSeconds}s` }, { status: 429 })
+        }
+      }
+    }
+
     const toChatDto = (message: ChatMessageWithAuthor) => {
       const author = message.author as unknown as {
         id: string
@@ -122,6 +139,8 @@ export async function POST(request: NextRequest) {
         where: { profile: { username: { equals: username, mode: "insensitive" } } },
         select: { id: true, role: true, name: true, banned: true, suspendedUntil: true, profile: { select: { username: true } } },
       })
+      // The bot is never a valid moderation target.
+      if (target?.profile?.username === TERPBOT_USERNAME) return null
       return target
     }
 
@@ -503,7 +522,10 @@ export async function POST(request: NextRequest) {
         const target = await resolveTarget(targetUsername)
         if (!target) return NextResponse.json({ error: "User not found" }, { status: 404 })
         await applyModeration("WARNING", target.id, reason)
-        const bot = await postBot(`Warned @${target.profile?.username || target.name} by @${displayName}: ${reason}`)
+        // Neutral public echo — moderation is intentionally anonymous; naming
+        // the acting staff member (or the reason) in room history contradicts
+        // the anonymity the private notification promises.
+        const bot = await postBot(`⚠️ @${target.profile?.username || target.name} was warned by the moderation team`)
         return NextResponse.json({ ok: true, message: bot })
       }
 
@@ -518,7 +540,7 @@ export async function POST(request: NextRequest) {
         const target = await resolveTarget(targetUsername)
         if (!target) return NextResponse.json({ error: "User not found" }, { status: 404 })
         await applyModeration("TEMPORARY_BAN", target.id, reason, days)
-        const bot = await postBot(`Muted @${target.profile?.username || target.name} for ${days} day(s) by @${displayName}: ${reason}`)
+        const bot = await postBot(`⚠️ @${target.profile?.username || target.name} was suspended for ${days} day(s) by the moderation team`)
         return NextResponse.json({ ok: true, message: bot })
       }
 
@@ -532,7 +554,7 @@ export async function POST(request: NextRequest) {
         const target = await resolveTarget(targetUsername)
         if (!target) return NextResponse.json({ error: "User not found" }, { status: 404 })
         await applyModeration("PERMANENT_BAN", target.id, reason)
-        const bot = await postBot(`Banned @${target.profile?.username || target.name} by @${displayName}: ${reason}`)
+        const bot = await postBot(`@${target.profile?.username || target.name} was banned by the moderation team`)
         return NextResponse.json({ ok: true, message: bot })
       }
 
@@ -545,8 +567,8 @@ export async function POST(request: NextRequest) {
         const target = await resolveTarget(targetUsername)
         if (!target) return NextResponse.json({ error: "User not found" }, { status: 404 })
         await applyModeration("UNBAN", target.id, "Chat unban")
-        const bot = await postBot(`Unbanned @${target.profile?.username || target.name} by @${displayName}`)
-        return NextResponse.json({ ok: true, message: bot })
+        // No public post — announcing an unban reveals the user was banned.
+        return NextResponse.json({ ok: true })
       }
 
       default:

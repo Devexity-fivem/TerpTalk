@@ -89,6 +89,22 @@ async function main() {
   }
 
   // Bootstrap admin + moderator accounts only when explicit env credentials are provided.
+  // Never allow a reserved/system username (e.g. "terpbot") through these
+  // paths — that would create a passworded privileged account the bot would
+  // then adopt, making it a loginable admin.
+  const RESERVED = new Set([
+    "admin", "administrator", "moderator", "mod", "system", "support",
+    "root", "terptalk", "staff", "help", "api", "www", "null", "undefined",
+    "terpbot",
+  ])
+  if (process.env.ADMIN_USERNAME && RESERVED.has(process.env.ADMIN_USERNAME.toLowerCase())) {
+    console.warn(`⚠ ADMIN_USERNAME "${process.env.ADMIN_USERNAME}" is reserved — skipping admin creation`)
+    process.env.ADMIN_USERNAME = ""
+  }
+  if (process.env.MOD_USERNAME && RESERVED.has(process.env.MOD_USERNAME.toLowerCase())) {
+    console.warn(`⚠ MOD_USERNAME "${process.env.MOD_USERNAME}" is reserved — skipping moderator creation`)
+    process.env.MOD_USERNAME = ""
+  }
   if (process.env.ADMIN_USERNAME && process.env.ADMIN_PASSWORD) {
     const existingAdmin = await prisma.profile.findUnique({ where: { username: process.env.ADMIN_USERNAME } })
     if (!existingAdmin) {

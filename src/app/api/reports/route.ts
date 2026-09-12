@@ -134,9 +134,9 @@ export async function POST(request: Request) {
       },
     })
 
-    // Notify moderators
+    // Notify moderators — never TerpBot, even if its role is elevated again.
     const moderators = await prisma.user.findMany({
-      where: { role: { in: ["MODERATOR", "ADMINISTRATOR"] } },
+      where: { role: { in: ["MODERATOR", "ADMINISTRATOR"] }, profile: { isNot: { username: "terpbot" } } },
       select: { id: true },
     })
     if (moderators.length > 0) {

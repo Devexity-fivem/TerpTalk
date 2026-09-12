@@ -132,7 +132,8 @@ const getSearchResults = unstable_cache(
       }) : [],
       (t === "all" || t === "users") ? prisma.profile.findMany({
         where: {
-          username: contains,
+          // TerpBot is excluded — it's a bot, not a searchable member.
+          username: { not: "terpbot", ...contains },
           user: activeUser,
         },
         take: limit + 1,

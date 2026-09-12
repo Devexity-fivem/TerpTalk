@@ -6,6 +6,7 @@ import { unauthorized, publicUserSelect, getClientIp, logSecurityEvent, isSessio
 import { rateLimit } from "@/lib/rate-limit"
 import { checkMaintenance } from "@/lib/maintenance"
 import { notify } from "@/lib/notify"
+import { TERPBOT_USERNAME } from "@/lib/terpbot"
 
 function senderDto(user: { id?: string; name?: string | null; image?: string | null; profile?: { username?: string | null } | null }) {
   return {
@@ -191,10 +192,15 @@ export async function POST(request: NextRequest) {
 
     const target = await prisma.user.findUnique({
       where: { id: to },
-      select: { id: true, banned: true, profile: { select: { notifyOnMessage: true } } },
+      select: { id: true, banned: true, profile: { select: { notifyOnMessage: true, username: true } } },
     })
     if (!target || target.banned) {
       return NextResponse.json({ error: "User not found" }, { status: 404 })
+    }
+    // TerpBot can't be DM'd — it never reads them, so a DM is a dead letter
+    // where members might dump personal info expecting a reply.
+    if (target.profile?.username === TERPBOT_USERNAME) {
+      return NextResponse.json({ error: "TerpBot can't receive direct messages — try @terpbot or /help in chat" }, { status: 400 })
     }
 
     const message = await prisma.directMessage.create({

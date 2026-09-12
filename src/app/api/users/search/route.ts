@@ -40,6 +40,8 @@ export async function GET(request: Request) {
   const users = await prisma.user.findMany({
     where: {
       banned: false,
+      // TerpBot is a bot, not a community member — keep it out of user pickers.
+      profile: { isNot: { username: "terpbot" } },
       // Suspended accounts aren't discoverable while suspended (same rule
       // as isBanned() — mention pickers shouldn't surface them either).
       AND: [{ OR: [{ suspendedUntil: null }, { suspendedUntil: { lt: new Date() } }] }],

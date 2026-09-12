@@ -35,7 +35,8 @@ export async function POST(request: Request) {
 
     const MAX_RECIPIENTS = 5000
     const users = await prisma.user.findMany({
-      where: { banned: false, id: { not: user.id } },
+      // TerpBot never reads notifications — exclude it from broadcasts.
+      where: { banned: false, id: { not: user.id }, profile: { isNot: { username: "terpbot" } } },
       select: { id: true },
       take: MAX_RECIPIENTS + 1,
     })

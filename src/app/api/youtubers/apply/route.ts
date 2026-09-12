@@ -80,7 +80,7 @@ export async function POST(request: Request) {
     })
 
     const admins = await prisma.user.findMany({
-      where: { role: "ADMINISTRATOR", banned: false },
+      where: { role: "ADMINISTRATOR", banned: false, profile: { isNot: { username: "terpbot" } } },
       select: { id: true },
     })
     if (admins.length > 0) {

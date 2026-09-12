@@ -32,21 +32,29 @@ const prisma = new PrismaClient()
 async function main() {
   let user = await prisma.user.findFirst({
     where: { profile: { username: "terpbot" } },
-    select: { id: true, profile: { select: { id: true } } },
+    select: { id: true, role: true, profile: { select: { id: true } } },
   })
 
   if (!user) {
     user = await prisma.user.create({
       data: {
         name: "TerpBot",
+        role: "MEMBER",
         ageVerified: true,
         status: "ONLINE",
         profile: { create: { username: "terpbot", ...BOT_PROFILE } },
       },
-      select: { id: true, profile: { select: { id: true } } },
+      select: { id: true, role: true, profile: { select: { id: true } } },
     })
     console.log("Created TerpBot account with profile.")
-  } else if (user.profile) {
+  } else if (user.role !== "MEMBER") {
+    // Pin the role — the bot must never hold staff privileges, even if it was
+    // elevated out-of-band. Only ever touches the known bot row.
+    await prisma.user.update({ where: { id: user.id }, data: { role: "MEMBER" } })
+    console.log("Demoted TerpBot back to MEMBER.")
+  }
+
+  if (user.profile) {
     await prisma.profile.update({ where: { id: user.profile.id }, data: BOT_PROFILE })
     console.log("Updated existing TerpBot profile.")
   } else {
