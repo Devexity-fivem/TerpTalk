@@ -266,9 +266,9 @@ export default function ChatSidebar() {
         {parts.map((part, i) => {
           if (part.startsWith("@")) {
             return (
-              <span key={i} className="font-medium text-primary hover:underline cursor-pointer">
+              <Link key={i} href={`/u/${part.slice(1)}`} className="font-medium text-primary hover:underline">
                 {part}
-              </span>
+              </Link>
             )
           }
           if (INTERNAL_LINK_RE.test(part)) {
