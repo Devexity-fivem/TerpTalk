@@ -10,6 +10,7 @@ import {
   buildHelpText,
 } from "@/lib/chat-commands"
 import { parseTerpbotIntent, extractTerpbotQuery } from "@/lib/terpbot-intents"
+import { extractThreadRef } from "@/lib/terpbot-context"
 import { isReservedUsername } from "@/lib/security"
 import { tokenizeSearchText } from "@/lib/search-terms"
 
@@ -42,6 +43,12 @@ function run() {
     }
   }
   assert.equal(isMentionCommand("rep"), true, "rep mention-eligible")
+  assert.equal(isMentionCommand("summarize"), true, "summarize mention-eligible")
+  assert.equal(isMentionCommand("answered"), true, "answered mention-eligible")
+  assert.equal(isMentionCommand("about"), true, "about mention-eligible")
+  assert.equal(getChatCommand("tldr")?.name, "summarize", "alias tldr → summarize")
+  assert.equal(getChatCommand("recap")?.name, "summarize", "alias recap → summarize")
+  assert.equal(getChatCommand("solved")?.name, "answered", "alias solved → answered")
   assert.equal(isMentionCommand("ban"), false, "ban never mention-eligible")
   assert.equal(isMentionCommand("warn"), false, "warn never mention-eligible")
   assert.equal(isMentionCommand("me"), false, "me never mention-eligible")
@@ -106,6 +113,25 @@ function run() {
     ["@terpbot find spider mites", "ask", ["spider mites"]],
     ["hey @terpbot, what's my rep?", "rep"],
     ["@TERPBOT MY STREAK", "streak"],
+
+    // ── Thread-context intents (Phase 3) ────────────────────────────────
+    ["@terpbot summarize this", "summarize"],
+    ["@terpbot summarize this thread", "summarize"],
+    ["@terpbot tl;dr", "summarize"],
+    ["@terpbot tldr please", "summarize"],
+    ["@terpbot recap this", "summarize"],
+    ["@terpbot what's this thread about", "summarize"],
+    ["@terpbot what do people recommend here", "summarize"],
+    ["@terpbot what do they say about it", "summarize"],
+    ["@terpbot summarize /forum/thread/nutrient-burn-help", "summarize"],
+    ["@terpbot did anyone answer this?", "answered"],
+    ["@terpbot is this answered?", "answered"],
+    ["@terpbot was this solved", "answered"],
+    ["@terpbot any accepted answer?", "answered"],
+    ["@terpbot anyone reply yet?", "answered"],
+    ["@terpbot what about nutrient burn?", "about", ["nutrient burn"]],
+    ["@terpbot how about flushing", "about", ["flushing"]],
+    ["@terpbot any thoughts on dwc buckets", "about", ["dwc buckets"]],
   ]
   for (const [input, expected, args] of cases) {
     const intent = parseTerpbotIntent(input)
@@ -165,6 +191,28 @@ function run() {
   assert.equal(isReservedUsername("modern"), false, "real name containing 'mod' allowed")
   assert.equal(isReservedUsername("helper"), false, "real name containing 'help' allowed")
   assert.equal(isReservedUsername("terpfan"), false, "unrelated name allowed")
+
+  // ── Thread-ref extraction (Phase 3 context resolver, pure part) ───────
+  assert.deepEqual(
+    extractThreadRef("check this out /forum/thread/nutrient-burn-help"),
+    { slug: "nutrient-burn-help", postId: undefined },
+    "bare thread link extracts slug"
+  )
+  assert.deepEqual(
+    extractThreadRef("/forum/thread/my-grow?post=abcdefghijklmnopqrstuvwxy more text"),
+    { slug: "my-grow", postId: "abcdefghijklmnopqrstuvwxy" },
+    "?post= deep-link captured"
+  )
+  assert.equal(extractThreadRef("no link here"), null, "no link → null")
+  // An external URL containing the path extracts a slug candidate — safety
+  // is enforced by loadThreadContext's visibility gate, not the extractor.
+  assert.deepEqual(
+    extractThreadRef("https://evil.example/forum/thread/fake-slug"),
+    { slug: "fake-slug", postId: undefined },
+    "external lookalike extracts slug only (loader gates it)"
+  )
+  assert.equal(extractThreadRef("/forum/thread/x"), null, "slug shorter than 2 chars rejected")
+  assert.equal(extractThreadRef("/forum/threads/list"), null, "non-thread forum path ignored")
 
   // ── Shared tokenizer ──────────────────────────────────────────────────
   assert.deepEqual(tokenizeSearchText("how do I fix nutrient burn?"), ["fix", "nutrient", "burn"])

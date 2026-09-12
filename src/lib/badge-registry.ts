@@ -144,7 +144,30 @@ export const BADGE_REGISTRY: BadgeDefinition[] = [
   { name: "Mythic Harvest", description: "A once-in-a-lifetime haul — reached 100,000 reputation.", requirement: "Earn 100,000 reputation.", rarity: r("legendary"), icon: "TrendingUp" },
 ]
 
-const BADGE_BY_NAME = new Map(BADGE_REGISTRY.map((b) => [b.name, b]))
+// ─── TerpBot achievements ───────────────────────────────────────────
+// Bot-only badges: awarded exclusively by checkBotBadges() in
+// terpbot-events.ts from real BotEvent rows. Deliberately absent from
+// BADGE_RULES so checkBadges() can never award them to a human, and so
+// /nextbadges never teases members with goals they can't earn.
+export const BOT_BADGE_REGISTRY: BadgeDefinition[] = [
+  { name: "First Light", description: "Answered its very first command.", requirement: "Successfully answer 1 command (bot only).", rarity: r("common"), icon: "Sun" },
+  { name: "Garden Greeter", description: "Welcomed 50 new members to the garden.", requirement: "Post 50 new-member welcomes (bot only).", rarity: r("rare"), icon: "Heart" },
+  { name: "Field Guide", description: "Pointed growers to 250 threads, guides, strains, or diaries.", requirement: "Surface 250 internal links (bot only).", rarity: r("rare"), icon: "BookOpen" },
+  { name: "Budtender", description: "Helped 50 different members.", requirement: "Assist 50 unique members (bot only).", rarity: r("epic"), icon: "Users" },
+  { name: "Tireless Trimmer", description: "Answered 1,000 commands without a day off.", requirement: "Answer 1,000 commands (bot only).", rarity: r("epic"), icon: "Scissors" },
+  { name: "Evergreen", description: "Served the community on 90 different days.", requirement: "Be active on 90 distinct days (bot only).", rarity: r("epic"), icon: "TreePine" },
+  { name: "Mother Bot", description: "The whole garden leans on it — 500 members assisted.", requirement: "Assist 500 unique members (bot only).", rarity: r("legendary"), icon: "Bot" },
+]
+
+const BOT_BADGE_NAMES = new Set(BOT_BADGE_REGISTRY.map((b) => b.name))
+
+export function isBotBadge(name: string): boolean {
+  return BOT_BADGE_NAMES.has(name)
+}
+
+const BADGE_BY_NAME = new Map(
+  [...BADGE_REGISTRY, ...BOT_BADGE_REGISTRY].map((b) => [b.name, b])
+)
 
 export function getBadgeByName(name: string): BadgeDefinition | undefined {
   return BADGE_BY_NAME.get(name)

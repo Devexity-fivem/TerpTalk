@@ -6,6 +6,8 @@
 // credentials, or staff-only tables.
 import { prisma } from "@/lib/prisma"
 import { activeAuthor, blockExistsBetween, containsExternalLink, LIMITS, USERNAME_REGEX } from "@/lib/security"
+import { extractThreadRef, type ThreadRef } from "@/lib/terpbot-context"
+import { postDeepLink } from "@/lib/notify"
 import { getReputationTier, getNextTier, getTierProgress } from "@/lib/reputation-config"
 import { getGrowStreak } from "@/lib/grow-streak"
 import { BADGE_RULES, getUserStats } from "@/lib/reputation"
@@ -23,6 +25,11 @@ export interface BotCommandCtx {
   displayName: string
   args: string[]
   rest: string
+  // Optional context the dispatcher already has in hand — lets
+  // context-aware commands resolve "this thread" without extra lookups.
+  roomId?: string
+  rawContent?: string        // the full triggering message/command text
+  replyToContent?: string    // content of the message being replied to
 }
 
 export type BotCommandResult =
@@ -38,6 +45,35 @@ const err = (error: string, status = 400): BotCommandResult => ({ ok: false, err
 function sanitizeEcho(q: string): string {
   return q.replace(/@/g, "").slice(0, 60).trim()
 }
+// Two-pass public thread search shared by /thread and /about: exact
+// phrase on title/tags first (search tier-1), then tokenized title match
+// (similar-threads pattern). Visibility gate is identical to /search:
+// deleted:false + category.hidden:false.
+async function searchThreadsForBot(q: string, take = 3) {
+  const base = { deleted: false, category: { hidden: false } }
+  const select = { title: true, slug: true, replyCount: true, category: { select: { name: true } } } as const
+  let threads = await prisma.thread.findMany({
+    where: { ...base, OR: [{ title: { contains: q, mode: "insensitive" } }, { tags: { some: { tag: { name: { contains: q, mode: "insensitive" } } } } }] },
+    take,
+    orderBy: [{ pinned: "desc" }, { createdAt: "desc" }],
+    select,
+  })
+  if (threads.length < take) {
+    const words = tokenizeSearchText(q)
+    if (words.length) {
+      const more = await prisma.thread.findMany({
+        where: { ...base, OR: words.map((w) => ({ title: { contains: w, mode: "insensitive" } })) },
+        take: take * 2,
+        orderBy: [{ pinned: "desc" }, { createdAt: "desc" }],
+        select,
+      })
+      const seen = new Set(threads.map((t) => t.slug))
+      threads = [...threads, ...more.filter((t) => !seen.has(t.slug))].slice(0, take)
+    }
+  }
+  return threads
+}
+
 function hasLink(q: string): boolean {
   return containsExternalLink(q)
 }
@@ -76,6 +112,137 @@ async function memberFor(ctx: BotCommandCtx, raw?: string) {
   }
   return t
 }
+
+// ── Thread-context resolution ───────────────────────────────────────
+// Priority: explicit link in the command args → raw triggering message →
+// the replied-to message → recent room history (30 min window, preferring
+// the requester's own link). The room scan is bounded at 50 messages on
+// the existing [roomId, createdAt] index.
+async function resolveThreadRef(ctx: BotCommandCtx): Promise<ThreadRef | null> {
+  for (const text of [ctx.rest, ctx.rawContent, ctx.replyToContent]) {
+    const ref = text ? extractThreadRef(text) : null
+    if (ref) return ref
+  }
+  if (!ctx.roomId) return null
+  const recent = await prisma.chatMessage.findMany({
+    where: {
+      roomId: ctx.roomId,
+      deleted: false,
+      createdAt: { gte: new Date(Date.now() - 30 * 60 * 1000) },
+      content: { contains: "/forum/thread/" },
+    },
+    orderBy: { createdAt: "desc" },
+    take: 50,
+    select: { content: true, authorId: true },
+  })
+  const mine = recent.find((m) => m.authorId === ctx.userId)
+  const pick = mine ?? recent[0]
+  return pick ? extractThreadRef(pick.content) : null
+}
+
+interface LoadedPost {
+  id: string
+  content: string
+  author: { name: string | null; profile: { username: string | null } | null }
+  _count?: { reactions: number }
+}
+
+interface ThreadContext {
+  id: string
+  slug: string
+  title: string
+  content: string
+  replyCount: number
+  locked: boolean
+  category: { name: string }
+  authorName: string
+  answer: { id: string; content: string; authorName: string } | null
+  topReplies: LoadedPost[]
+  recentReplies: LoadedPost[]
+}
+
+// Load a bounded thread snapshot for bot summaries. The visibility gate is
+// absolute: deleted threads and hidden categories return the SAME null as
+// a nonexistent slug, so the bot is never an existence oracle.
+async function loadThreadContext(ref: ThreadRef): Promise<ThreadContext | null> {
+  const t = await prisma.thread.findFirst({
+    where: { slug: { equals: ref.slug, mode: "insensitive" }, deleted: false, category: { hidden: false } },
+    select: {
+      id: true, slug: true, title: true, content: true, replyCount: true, locked: true,
+      category: { select: { name: true } },
+      author: { select: { name: true, profile: { select: { username: true } } } },
+      acceptedAnswer: {
+        select: {
+          id: true, content: true, deleted: true,
+          author: { select: { name: true, profile: { select: { username: true } } } },
+        },
+      },
+    },
+  })
+  if (!t) return null
+
+  const postSelect = {
+    id: true, content: true,
+    author: { select: { name: true, profile: { select: { username: true } } } },
+    _count: { select: { reactions: true } },
+  } as const
+
+  const [topReplies, recentReplies] = await Promise.all([
+    prisma.post.findMany({
+      where: { threadId: t.id, deleted: false },
+      orderBy: { reactions: { _count: "desc" } },
+      take: 3,
+      select: postSelect,
+    }),
+    prisma.post.findMany({
+      where: { threadId: t.id, deleted: false },
+      orderBy: { createdAt: "desc" },
+      take: 3,
+      select: postSelect,
+    }),
+  ])
+
+  const answer =
+    t.acceptedAnswer && !t.acceptedAnswer.deleted
+      ? {
+          id: t.acceptedAnswer.id,
+          content: t.acceptedAnswer.content,
+          authorName: t.acceptedAnswer.author.profile?.username ?? t.acceptedAnswer.author.name ?? "member",
+        }
+      : null
+
+  return {
+    id: t.id,
+    slug: t.slug,
+    title: t.title,
+    content: t.content,
+    replyCount: t.replyCount,
+    locked: t.locked,
+    category: t.category,
+    authorName: t.author.profile?.username ?? t.author.name ?? "member",
+    answer,
+    topReplies,
+    recentReplies,
+  }
+}
+
+// Quoted excerpts are always capped, mention-stripped, and link-stripped —
+// the bot is trusted to post links, so it must never re-broadcast a URL a
+// low-trust member couldn't post themselves.
+function sanitizeExcerpt(text: string, max = 160): string {
+  const clean = text
+    .replace(/@/g, "")
+    .replace(/(?:https?:\/\/|www\.)\S*/gi, "")
+    .replace(/\b[a-z0-9-]+\.[a-z]{2,}\b/gi, "")
+    .replace(/\s+/g, " ")
+    .trim()
+  return clean.length > max ? `${clean.slice(0, max).trimEnd()}…` : clean
+}
+
+const NO_THREAD_HINT =
+  "🤖 Which thread? Paste its link (like /forum/thread/…) or reply to a message containing it, then ask again."
+
+const THREAD_NOT_FOUND = "I couldn't pull up that thread — the link may be old or the thread may have been removed."
 
 const RARITY_ORDER = ["common", "rare", "epic", "legendary"]
 
@@ -242,28 +409,7 @@ async function handle(name: string, ctx: BotCommandCtx): Promise<BotCommandResul
       if (!ctx.rest) return err("Usage: /thread <search>")
       if (hasLink(ctx.rest)) return ok(`I can't look that up — keywords only, no links.`)
       const q = escapeLike(sanitizeEcho(ctx.rest))
-      const base = { deleted: false, category: { hidden: false } }
-      // Pass A — exact phrase on title/tags (mirrors search tier-1).
-      let threads = await prisma.thread.findMany({
-        where: { ...base, OR: [{ title: { contains: q, mode: "insensitive" } }, { tags: { some: { tag: { name: { contains: q, mode: "insensitive" } } } } }] },
-        take: 3,
-        orderBy: [{ pinned: "desc" }, { createdAt: "desc" }],
-        select: { title: true, slug: true, replyCount: true, category: { select: { name: true } } },
-      })
-      // Pass B — tokenized title match (similar-threads pattern).
-      if (threads.length < 3) {
-        const words = tokenizeSearchText(ctx.rest)
-        if (words.length) {
-          const more = await prisma.thread.findMany({
-            where: { ...base, OR: words.map((w) => ({ title: { contains: w, mode: "insensitive" } })) },
-            take: 6,
-            orderBy: [{ pinned: "desc" }, { createdAt: "desc" }],
-            select: { title: true, slug: true, replyCount: true, category: { select: { name: true } } },
-          })
-          const seen = new Set(threads.map((t) => t.slug))
-          threads = [...threads, ...more.filter((t) => !seen.has(t.slug))].slice(0, 3)
-        }
-      }
+      const threads = await searchThreadsForBot(q, 3)
       if (!threads.length) {
         return ok(`No threads matching that — try broader keywords or browse /forum`)
       }
@@ -435,6 +581,112 @@ async function handle(name: string, ctx: BotCommandCtx): Promise<BotCommandResul
       }
       const rolled = 1 + Math.floor(Math.random() * sides)
       return ok(`🎲 @${ctx.displayName} rolled a d${sides} — ${rolled}!`)
+    }
+
+    // ── Thread-context commands ─────────────────────────────────────
+    case "summarize": {
+      const ref = await resolveThreadRef(ctx)
+      if (!ref) return ok(NO_THREAD_HINT)
+      const t = await loadThreadContext(ref)
+      if (!t) return ok(THREAD_NOT_FOUND)
+      const status = [
+        t.answer ? "✅ answered" : `${t.replyCount} repl${t.replyCount === 1 ? "y" : "ies"}`,
+        t.locked ? "locked" : null,
+      ].filter(Boolean).join(" · ")
+      const lines = [
+        `📋 "${t.title}" — ${t.category.name} (${status})`,
+        `${t.authorName} asked: ${sanitizeExcerpt(t.content, 140)}`,
+      ]
+      if (t.answer) {
+        lines.push(`✅ Accepted answer (${t.answer.authorName}): ${sanitizeExcerpt(t.answer.content, 140)}`)
+      } else {
+        const seen = new Set<string>()
+        for (const p of [...t.topReplies, ...t.recentReplies]) {
+          if (seen.has(p.id)) continue
+          seen.add(p.id)
+          const who = p.author.profile?.username ?? p.author.name ?? "member"
+          lines.push(`— ${who}: ${sanitizeExcerpt(p.content, 110)}`)
+          if (lines.length >= 5) break
+        }
+        if (seen.size === 0) lines.push(`No replies yet — be the first to help out.`)
+      }
+      lines.push(`Read it all: /forum/thread/${t.slug}${ref.postId ? `?post=${ref.postId}` : ""}`)
+      return ok(lines.join("\n"))
+    }
+    case "answered": {
+      const ref = await resolveThreadRef(ctx)
+      if (!ref) return ok(NO_THREAD_HINT)
+      const t = await loadThreadContext(ref)
+      if (!t) return ok(THREAD_NOT_FOUND)
+      if (t.answer) {
+        return ok(
+          `✅ Yes — "${t.title}" has an accepted answer from ${t.answer.authorName}: "${sanitizeExcerpt(t.answer.content, 140)}" → ${postDeepLink(t.slug, t.answer.id)}`
+        )
+      }
+      const latest = t.recentReplies[0]
+      if (latest) {
+        const who = latest.author.profile?.username ?? latest.author.name ?? "member"
+        return ok(
+          `Not yet — ${t.replyCount} repl${t.replyCount === 1 ? "y" : "ies"} on "${t.title}", none accepted. Latest from ${who}: "${sanitizeExcerpt(latest.content, 120)}" → /forum/thread/${t.slug}`
+        )
+      }
+      return ok(`No replies yet on "${t.title}" — /forum/thread/${t.slug}`)
+    }
+    case "about": {
+      const q = (ctx.rest || ctx.args.join(" ")).trim()
+      if (!q) return err(`Usage: /about <topic>`)
+      if (hasLink(q)) return err(`I can't look up links — drop the URL and tell me what you're after.`)
+      const ref = await resolveThreadRef(ctx)
+      if (ref) {
+        const t = await loadThreadContext(ref)
+        if (t) {
+          const terms = tokenizeSearchText(q).slice(0, 6)
+          const matches = terms.length
+            ? await prisma.post.findMany({
+                where: {
+                  threadId: t.id,
+                  deleted: false,
+                  OR: terms.map((w) => ({ content: { contains: w, mode: "insensitive" as const } })),
+                },
+                orderBy: { createdAt: "asc" },
+                take: 2,
+                select: {
+                  id: true, content: true,
+                  author: { select: { name: true, profile: { select: { username: true } } } },
+                },
+              })
+            : []
+          if (matches.length) {
+            const lines = matches.map((p) => {
+              const who = p.author.profile?.username ?? p.author.name ?? "member"
+              return `— ${who}: "${sanitizeExcerpt(p.content, 120)}"`
+            })
+            return ok(
+              `In "${t.title}", here's what came up about "${q}":\n${lines.join("\n")}\n→ ${postDeepLink(t.slug, matches[0].id)}`
+            )
+          }
+          return ok(
+            `Nobody's mentioned "${q}" in "${t.title}" yet — worth asking there: /forum/thread/${t.slug}. Or search wider: /search?q=${encodeURIComponent(q)}`
+          )
+        }
+      }
+      // No thread in context — fall back to a compact threads+guides lookup.
+      const [threads, guides] = await Promise.all([
+        searchThreadsForBot(q, 2),
+        prisma.guide.findMany({
+          where: { published: true, title: { contains: q, mode: "insensitive" } },
+          take: 2,
+          select: { slug: true, title: true },
+        }),
+      ])
+      if (!threads.length && !guides.length) {
+        return ok(`Nothing obvious on "${q}" yet — try /thread ${q} or start a thread yourself.`)
+      }
+      const parts = threads.map(
+        (x) => `💬 "${x.title}" (${x.replyCount} replies, ${x.category.name}) → /forum/thread/${x.slug}`
+      )
+      guides.forEach((g) => parts.push(`📖 "${g.title}" → /guides/${g.slug}`))
+      return ok(parts.join("\n"))
     }
 
     default:

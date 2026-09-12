@@ -3,7 +3,7 @@
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { useSession } from "next-auth/react"
-import { Home, MessageCircle, Leaf, Bell, User, Search } from "lucide-react"
+import { Home, MessageCircle, Leaf, Bell, User, MessagesSquare } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { signInHref } from "@/lib/callback-url"
 
@@ -15,12 +15,13 @@ const ITEMS = [
   { href: "/", label: "Home", icon: Home, exact: true },
   { href: "/forum", label: "Forums", icon: MessageCircle },
   { href: "/diaries", label: "Diaries", icon: Leaf },
-  { href: "/search", label: "Search", icon: Search },
+  { href: "/chat", label: "Chat", icon: MessagesSquare },
 ]
 
 /**
  * Purpose-built bottom navigation for touch devices. Hidden from lg upwards
  * where the header nav takes over. Targets are 56px tall for comfortable taps.
+ * Search lives in the header drawer on mobile, keeping the bar at 6 items.
  */
 export default function MobileNav({ unread }: MobileNavProps) {
   const pathname = usePathname()

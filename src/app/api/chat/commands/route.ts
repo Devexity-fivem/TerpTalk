@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server"
+import { NextRequest, NextResponse, after } from "next/server"
 import { getToken } from "next-auth/jwt"
 import { sessionCookieName } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
@@ -24,6 +24,7 @@ import { postBotMessage, TERPBOT_USERNAME } from "@/lib/terpbot"
 import { emitNotificationPush } from "@/lib/notify"
 import { getChatCommand, canUseCommand } from "@/lib/chat-commands"
 import { runBotCommand } from "@/lib/terpbot-data"
+import { recordBotEvent, countEntityLinks } from "@/lib/terpbot-events"
 
 type ChatMessageWithAuthor = {
   id: string
@@ -218,13 +219,28 @@ export async function POST(request: NextRequest) {
     if (meta) {
       if (!canUseCommand(meta, user.role)) return forbidden()
       if (meta.handledBy === "bot") {
-        const result = await runBotCommand(meta.name, { userId, role: user.role, displayName, args, rest })
+        const result = await runBotCommand(meta.name, {
+          userId, role: user.role, displayName, args, rest,
+          roomId, rawContent: content,
+        })
         if (!result.ok) {
           return NextResponse.json({ error: result.error }, { status: result.status ?? 400 })
         }
         let dto = null
         for (const message of result.messages) {
           dto = await postBot(message)
+        }
+        if (dto) {
+          const botMessageId = dto.id
+          const entities = countEntityLinks(result.messages)
+          // Telemetry after the response — failures/limits never count.
+          after(() => recordBotEvent({
+            type: "COMMAND_SLASH",
+            key: `cmd:${botMessageId}`,
+            userId,
+            command: meta.name,
+            entities,
+          }))
         }
         return NextResponse.json({ ok: true, message: dto })
       }

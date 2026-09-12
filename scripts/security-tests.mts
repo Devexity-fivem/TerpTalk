@@ -14,6 +14,10 @@ import { toGrams, toOz, VALID_YIELD_UNITS } from "@/lib/yield"
 import { diaryDay, diaryWeek, groupUpdatesByWeek, buildHarvestReport, diaryCompleteness, STAGE_ORDER } from "@/lib/diary-weeks"
 import { currentMonthKey, monthRange, previousMonthKey } from "@/lib/week"
 import { postBotMessage, TERPBOT_USERNAME } from "@/lib/terpbot"
+import { runBotCommand } from "@/lib/terpbot-data"
+import { recordBotEvent, getBotStats } from "@/lib/terpbot-events"
+import { BADGE_REGISTRY, BOT_BADGE_REGISTRY, isBotBadge } from "@/lib/badge-registry"
+import { checkBadges, BADGE_RULES } from "@/lib/reputation"
 import { notifyMentions } from "@/lib/mentions"
 
 const TEST_USERNAME = `__test_security_${Date.now()}`
@@ -442,6 +446,137 @@ async function run() {
       } finally {
         await prisma.user.delete({ where: { id: mentionable.id } }).catch(() => {})
       }
+
+      // ── Phase 3: thread-context visibility gate ──────────────────
+      // Hidden-category, deleted, and nonexistent threads must produce
+      // the SAME refusal — the bot is never an existence oracle.
+      const tag = Date.now()
+      const visCat = await prisma.category.create({
+        data: { name: `__bc_vis_${tag}`, slug: `__bc-vis-${tag}`, description: "t" },
+      })
+      const hidCat = await prisma.category.create({
+        data: { name: `__bc_hid_${tag}`, slug: `__bc-hid-${tag}`, description: "t", hidden: true },
+      })
+      const visThread = await prisma.thread.create({
+        data: {
+          title: `botctx visible ${tag}`, slug: `botctx-vis-${tag}`,
+          content: "opening post body for the context test",
+          categoryId: visCat.id, authorId: userId, replyCount: 1,
+        },
+      })
+      const visReply = await prisma.post.create({
+        data: { content: "accepted reply body", threadId: visThread.id, authorId: userId },
+      })
+      await prisma.thread.update({
+        where: { id: visThread.id },
+        data: { acceptedAnswerId: visReply.id },
+      })
+      const hidThread = await prisma.thread.create({
+        data: { title: "secret", slug: `botctx-hid-${tag}`, content: "hidden", categoryId: hidCat.id, authorId: userId },
+      })
+      const delThread = await prisma.thread.create({
+        data: { title: "gone", slug: `botctx-del-${tag}`, content: "deleted", categoryId: visCat.id, authorId: userId, deleted: true },
+      })
+      const ctxBase = {
+        userId, role: "MEMBER", displayName: TEST_USERNAME,
+        args: [] as string[], rest: "", roomId: publicRoom.id,
+      }
+      try {
+        // Visible thread summarizes with its accepted answer.
+        const okRes = await runBotCommand("summarize", { ...ctxBase, rawContent: `look /forum/thread/${visThread.slug}` })
+        assert.ok(okRes.ok, "summarize should succeed for a public thread")
+        assert.ok(okRes.messages[0].includes(visThread.title), "summary includes the thread title")
+        assert.ok(okRes.messages[0].includes("Accepted answer"), "summary includes the accepted answer")
+        assert.ok(okRes.messages[0].includes(`/forum/thread/${visThread.slug}`), "summary links the thread")
+
+        // Hidden, deleted, and nonexistent → identical refusal.
+        const refusals = await Promise.all([
+          runBotCommand("summarize", { ...ctxBase, rawContent: `/forum/thread/${hidThread.slug}` }),
+          runBotCommand("summarize", { ...ctxBase, rawContent: `/forum/thread/${delThread.slug}` }),
+          runBotCommand("summarize", { ...ctxBase, rawContent: `/forum/thread/botctx-nope-${tag}` }),
+        ])
+        for (const r of refusals) {
+          assert.ok(r.ok, "refusal is an ok result, not an error")
+          assert.ok(r.ok && r.messages[0].includes("couldn't pull up"), "uniform not-found text — no existence oracle")
+        }
+        // No context at all → the hint, not a crash.
+        const none = await runBotCommand("summarize", ctxBase)
+        assert.ok(none.ok && none.messages[0].includes("Which thread"), "no context → hint to paste a link")
+
+        // answered reports the accepted answer on the visible thread.
+        const ans = await runBotCommand("answered", { ...ctxBase, replyToContent: `see /forum/thread/${visThread.slug}` })
+        assert.ok(ans.ok && ans.messages[0].includes("Yes"), "answered resolves via replied-to message and reports the answer")
+
+        // Excerpts must strip @mentions and external URLs.
+        const leaky = await prisma.thread.create({
+          data: {
+            title: `leaky ${tag}`, slug: `botctx-leak-${tag}`,
+            content: "ping @someone visit https://evil.example/steal for details",
+            categoryId: visCat.id, authorId: userId,
+          },
+        })
+        try {
+          const leakRes = await runBotCommand("summarize", { ...ctxBase, rawContent: `/forum/thread/${leaky.slug}` })
+          assert.ok(leakRes.ok, "leak-test summarize succeeds")
+          assert.ok(leakRes.ok && !/@someone/.test(leakRes.messages[0]), "excerpt strips @mentions")
+          assert.ok(leakRes.ok && !/evil\.example|https:/.test(leakRes.messages[0]), "excerpt strips external URLs")
+        } finally {
+          await prisma.thread.delete({ where: { id: leaky.id } }).catch(() => {})
+        }
+      } finally {
+        await prisma.post.deleteMany({ where: { threadId: { in: [visThread.id, hidThread.id, delThread.id] } } }).catch(() => {})
+        await prisma.thread.deleteMany({ where: { id: { in: [visThread.id, hidThread.id, delThread.id] } } }).catch(() => {})
+        await prisma.category.deleteMany({ where: { id: { in: [visCat.id, hidCat.id] } } }).catch(() => {})
+      }
+
+      // ── Phase 3: BotEvent telemetry + bot badges + human-badge guard ──
+      const evKey = `__test:${tag}`
+      await recordBotEvent({ type: "COMMAND_SLASH", key: evKey, userId, command: "summarize", entities: 1 })
+      await recordBotEvent({ type: "COMMAND_SLASH", key: evKey, userId, command: "summarize", entities: 1 })
+      assert.equal(
+        await prisma.botEvent.count({ where: { key: evKey } }),
+        1,
+        "duplicate idempotency keys must not double-count"
+      )
+      const stats = await getBotStats()
+      assert.ok(stats.commands >= 1, "recorded command counts toward bot stats")
+      assert.ok(stats.entityLinks >= 1, "entity links are counted")
+      assert.ok(stats.daysActive >= 1, "DAY_ACTIVE stamp recorded")
+
+      // The bot never counts itself as an assisted member.
+      const botProfile = await prisma.profile.findUnique({ where: { username: TERPBOT_USERNAME }, select: { userId: true } })
+      await recordBotEvent({ type: "COMMAND_MENTION", key: `__test-self:${tag}`, userId: botProfile!.userId, command: "rep" })
+      const selfRow = await prisma.botEvent.findUnique({ where: { key: `__test-self:${tag}` } })
+      assert.equal(selfRow!.userId, null, "bot self-events must not store bot as assisted member")
+
+      // "First Light" (>=1 answered command) is granted by real events only.
+      const firstLight = await prisma.userBadge.findFirst({
+        where: { userId: botProfile!.userId, badge: { name: "First Light" } },
+      })
+      assert.ok(firstLight, "First Light bot badge awarded after a real command event")
+
+      // checkBadges must never award the bot a human badge — even though the
+      // bot's chat volume would satisfy human chat-badge rules.
+      const badgeCountBefore = await prisma.userBadge.count({ where: { userId: botProfile!.userId } })
+      await checkBadges(botProfile!.userId)
+      assert.equal(
+        await prisma.userBadge.count({ where: { userId: botProfile!.userId } }),
+        badgeCountBefore,
+        "checkBadges must early-return for the bot"
+      )
+
+      // Bot badges are unreachable by humans: absent from BADGE_REGISTRY
+      // AND absent from BADGE_RULES (the auto-award map).
+      const humanNames = new Set(BADGE_REGISTRY.map((b) => b.name))
+      for (const def of BOT_BADGE_REGISTRY) {
+        assert.ok(!humanNames.has(def.name), `bot badge "${def.name}" must not collide with human registry`)
+        assert.ok(!(def.name in BADGE_RULES), `bot badge "${def.name}" must have no human award rule`)
+        assert.ok(isBotBadge(def.name), `isBotBadge("${def.name}")`)
+      }
+
+      // Cleanup test events — they were real at write time but must not
+      // permanently inflate the public stats.
+      await prisma.botEvent.deleteMany({ where: { key: { in: [evKey, `__test-self:${tag}`] } } })
     } finally {
       await prisma.chatMessage.deleteMany({ where: { roomId: { in: [privateRoom.id, publicRoom.id] } } }).catch(() => {})
       await prisma.chatRoom.deleteMany({ where: { id: { in: [privateRoom.id, publicRoom.id] } } }).catch(() => {})

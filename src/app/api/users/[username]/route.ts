@@ -6,6 +6,8 @@ import { blockExistsBetween, getTrustLevel, getClientIp, hashIp, isSessionValid 
 import { getReputationTier, getTierProgress } from "@/lib/reputation"
 import { getGrowStreak } from "@/lib/grow-streak"
 import { rateLimit } from "@/lib/rate-limit"
+import { TERPBOT_USERNAME } from "@/lib/terpbot-constants"
+import { getBotStats } from "@/lib/terpbot-events"
 
 const NO_STORE = { "Cache-Control": "no-store, max-age=0, must-revalidate" }
 
@@ -43,6 +45,7 @@ async function getPublicProfileData(username: string) {
             image: true,
             createdAt: true,
             banned: true,
+            role: true,
             badges: { include: { badge: true } },
             _count: {
               select: {
@@ -125,6 +128,10 @@ export async function GET(
     }
 
     const { profile, recentThreads, growDiaries, growStreak } = data
+    const isBot = profile.username === TERPBOT_USERNAME
+    // Durable bot metrics come from BotEvent rows — ChatMessage hard-deletes
+    // after ~3 days so it can't power real stats.
+    const botStats = isBot ? await getBotStats() : null
 
     // Use JWT token for the viewer instead of a full DB session lookup.
     const token = await getToken({ req: request, secret: process.env.NEXTAUTH_SECRET, cookieName: sessionCookieName })
@@ -170,6 +177,8 @@ export async function GET(
       profile: {
         id: profile.user.id,
         username: profile.username,
+        isBot,
+        role: profile.user.role,
         bio: profile.bio,
         location: profile.location,
         website: safeUrl(profile.website),
@@ -203,6 +212,7 @@ export async function GET(
           followers: profile.user._count.following,
           following: profile.user._count.followers,
         },
+        botStats,
       },
       viewerBlocked,
       viewerFollowing,

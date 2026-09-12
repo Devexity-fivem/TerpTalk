@@ -55,6 +55,11 @@ export const CHAT_COMMANDS: ChatCommandMeta[] = [
   { name: "top", aliases: ["leaderboard"], usage: "/top", description: "Top growers by rep", permission: P, surfaces: BOTH, handledBy: "bot" },
   { name: "rules", usage: "/rules", description: "Community rules", permission: P, surfaces: BOTH, handledBy: "bot" },
 
+  // ── Thread context (resolve the linked/replied-to thread) ────────
+  { name: "summarize", aliases: ["tldr", "recap"], usage: "/summarize [thread link]", description: "Summarize a forum thread", permission: P, surfaces: BOTH, handledBy: "bot" },
+  { name: "answered", aliases: ["solved"], usage: "/answered [thread link]", description: "Does a thread have an answer?", permission: P, surfaces: BOTH, handledBy: "bot" },
+  { name: "about", usage: "/about <topic>", description: "Look up a topic in context", permission: P, surfaces: BOTH, handledBy: "bot" },
+
   // ── Fun ───────────────────────────────────────────────────────────
   { name: "tip", usage: "/tip", description: "Random grow tip", permission: P, surfaces: BOTH, handledBy: "bot" },
   { name: "flip", usage: "/flip", description: "Flip a coin", permission: P, surfaces: BOTH, handledBy: "bot" },

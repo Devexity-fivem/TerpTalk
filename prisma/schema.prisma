@@ -970,3 +970,23 @@ model ThreadTag {
   @@index([threadId])
   @@index([tagId])
 }
+
+// ─── TerpBot telemetry ──────────────────────────────────────────────
+// One row per real bot action. Chat messages hard-delete after 3 days, so
+// durable bot stats and achievements need their own store. Never stores
+// message contents, IPs, or request bodies — `key` is a unique idempotency
+// token so retries/duplicate invocations can never double-count, and
+// `userId` is a bare string so a member deleting their account never
+// orphans or blocks a write.
+model BotEvent {
+  id        String   @id @default(cuid())
+  type      String   // COMMAND_SLASH | COMMAND_MENTION | MENTION_HELP | MENTION_FALLBACK | MENTION_REFUSAL | ANNOUNCEMENT | DAY_ACTIVE
+  key       String   @unique
+  userId    String?  // requesting member; null for announcements/system events
+  command   String?  // canonical command name, or announcement kind (welcome/digest/contest)
+  entities  Int      @default(0) // internal thread/guide/strain/diary links surfaced in the response
+  createdAt DateTime @default(now())
+
+  @@index([type, createdAt])
+  @@index([userId])
+}

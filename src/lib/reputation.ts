@@ -10,6 +10,18 @@ import {
 import { seedBadges } from "@/lib/badges"
 import { announceBadges, announceTierUp } from "@/lib/terpbot"
 import { notify } from "@/lib/notify"
+import { TERPBOT_USERNAME } from "@/lib/terpbot-constants"
+
+// Defense in depth: TerpBot can never earn human reputation or human
+// badges — even if a future code path regresses and hands it points
+// (e.g. referral attribution). One indexed lookup per call.
+async function isBotUser(userId: string): Promise<boolean> {
+  const u = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { profile: { select: { username: true } } },
+  })
+  return u?.profile?.username === TERPBOT_USERNAME
+}
 
 // Re-exported for existing server-side callers.
 export {
@@ -242,6 +254,7 @@ export async function awardReputation(
 ) {
   after(async () => {
     try {
+      if (await isBotUser(userId)) return
       const { user, oldRep, newRep } = await prisma.$transaction(async (tx) => {
         const user = await tx.user.findUnique({
           where: { id: userId },
@@ -281,6 +294,7 @@ export async function awardReputation(
 
 // Evaluate all badge rules and grant any newly earned badges (+ notification).
 export async function checkBadges(userId: string) {
+  if (await isBotUser(userId)) return
   if (!badgeSeedComplete) {
     await seedBadges()
     badgeSeedComplete = true

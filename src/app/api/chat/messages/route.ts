@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server"
+import { NextRequest, NextResponse, after } from "next/server"
 import { getToken } from "next-auth/jwt"
 import { sessionCookieName } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
@@ -9,6 +9,7 @@ import { getPusher } from "@/lib/pusher"
 import { postBotMessage, TERPBOT_USERNAME } from "@/lib/terpbot"
 import { parseTerpbotIntent, TERPBOT_REFUSAL_TEXT, terpbotFallbackText } from "@/lib/terpbot-intents"
 import { runBotCommand } from "@/lib/terpbot-data"
+import { recordBotEvent, countEntityLinks } from "@/lib/terpbot-events"
 import { getBooleanSetting, SITE_SETTINGS } from "@/lib/settings"
 import { checkMaintenance } from "@/lib/maintenance"
 
@@ -295,15 +296,18 @@ export async function POST(request: NextRequest) {
         const intent = parseTerpbotIntent(content)
         const respond = async () => {
           if (intent.kind === "refusal") {
-            await postBotMessage(roomId, TERPBOT_REFUSAL_TEXT, message.id)
+            const dto = await postBotMessage(roomId, TERPBOT_REFUSAL_TEXT, message.id)
+            if (dto) await recordBotEvent({ type: "MENTION_REFUSAL", key: `mention:${message.id}`, userId })
           } else if (intent.kind === "fallback") {
-            await postBotMessage(roomId, terpbotFallbackText(content), message.id)
+            const dto = await postBotMessage(roomId, terpbotFallbackText(content), message.id)
+            if (dto) await recordBotEvent({ type: "MENTION_FALLBACK", key: `mention:${message.id}`, userId })
           } else if (intent.kind === "help") {
-            await postBotMessage(
+            const dto = await postBotMessage(
               roomId,
-              `🤖 You pinged me! Ask things like "my rep", "my streak", "find threads about …", "who's online" — or /help for every command.`,
+              `🤖 You pinged me! Ask things like "my rep", "summarize this", "did anyone answer this?", "find threads about …" — or /help for every command.`,
               message.id
             )
+            if (dto) await recordBotEvent({ type: "MENTION_HELP", key: `mention:${message.id}`, userId })
           } else {
             const result = await runBotCommand(intent.name, {
               userId,
@@ -311,16 +315,30 @@ export async function POST(request: NextRequest) {
               displayName: actorName,
               args: intent.args,
               rest: intent.args.join(" "),
+              roomId,
+              rawContent: content,
+              replyToContent: message.replyTo?.deleted ? undefined : message.replyTo?.content,
             })
             const texts = result.ok ? result.messages : [`🤖 ${result.error}`]
             let first = true
+            let posted = false
             for (const text of texts.slice(0, 2)) {
-              await postBotMessage(roomId, text, first ? message.id : undefined)
+              const dto = await postBotMessage(roomId, text, first ? message.id : undefined)
+              posted = posted || !!dto
               first = false
+            }
+            if (result.ok && posted) {
+              await recordBotEvent({
+                type: "COMMAND_MENTION",
+                key: `mention:${message.id}`,
+                userId,
+                command: intent.name,
+                entities: countEntityLinks(texts),
+              })
             }
           }
         }
-        respond().catch((e) => console.error("[terpbot] mention reply failed:", e))
+        after(() => respond().catch((e) => console.error("[terpbot] mention reply failed:", e)))
       }
     }
 

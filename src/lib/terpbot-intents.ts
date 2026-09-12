@@ -27,6 +27,39 @@ interface Matcher {
 }
 
 const MATCHERS: Matcher[] = [
+  // ── Thread-context intents first — "summarize this" etc. resolve
+  // the thread from the message's link/reply context at dispatch time.
+  {
+    name: "summarize",
+    patterns: [
+      /\b(summar\w*|tl[\s;]?dr|recap)\b/,
+      /\bwhat('?s| is) (this|the|that) (thread|post|discussion|topic)\b/,
+      /\bwhat do (people|they|others|growers|folks) (say|recommend|suggest|think)\b/,
+      /\bwhat happened (in|on|with) (this|the|that)\b/,
+      /\b(gist|overview|breakdown|summary) of\b/,
+      /\bexplain (this|the|that) (thread|post|discussion)\b/,
+    ],
+  },
+  {
+    name: "answered",
+    patterns: [
+      /\banyone (answer|reply|respond|help|solve|fix)\b/,
+      /\b(any|an) (accepted )?(answer|answers|solution|fix)\b/,
+      /\b(is|was|has|did|does) (this|it|that|the thread|the post)\s*(get|got|been|ever)?\s*(answered|solved|resolved|replied|answered)\b/,
+      /\baccepted answer\b/,
+      /\b(solved|resolved)\b/,
+      /\bget an? answer\b/,
+    ],
+  },
+  {
+    name: "about",
+    patterns: [
+      /\bwhat about\s+(.+)/,
+      /\bhow about\s+(.+)/,
+      /\bany (thoughts?|advice|recommendations?|ideas?|tips) (on|about|for)\s+(.+)/,
+    ],
+    args: (t, m) => [m[m.length - 1]],
+  },
   {
     name: "rep",
     patterns: [

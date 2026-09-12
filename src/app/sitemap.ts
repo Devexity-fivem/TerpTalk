@@ -1,6 +1,7 @@
 import type { MetadataRoute } from "next"
 import { prisma } from "@/lib/prisma"
 import { activeAuthor } from "@/lib/security"
+import { TERPBOT_USERNAME } from "@/lib/terpbot-constants"
 
 const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://terp-talk.vercel.app"
 
@@ -46,7 +47,8 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       select: { id: true, updatedAt: true },
     }),
     prisma.profile.findMany({
-      where: { user: { banned: false } },
+      // TerpBot excluded — its profile is a bot page, not member content.
+      where: { user: { banned: false }, username: { not: TERPBOT_USERNAME } },
       take: 50,
       orderBy: { reputation: "desc" },
       select: { username: true, joinDate: true },

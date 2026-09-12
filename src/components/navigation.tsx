@@ -5,7 +5,7 @@ import { useEffect, useState } from "react"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import {
-  Leaf, User, LogOut, MessageCircle, Home, Calendar,
+  Leaf, User, LogOut, MessageCircle, MessagesSquare, Home, Calendar,
   Settings, Dna, Bell, Shield, Menu, X, Mail, Search, Trophy, BookOpen, Stethoscope, Tag, TrendingUp,
   ScrollText, Image as ImageIcon, Video,
 } from "lucide-react"
@@ -38,6 +38,7 @@ const DESKTOP_LINKS = [
   { href: "/forum", label: "Discussions", icon: MessageCircle },
   { href: "/diaries", label: "Diaries", icon: Leaf },
   { href: "/strains", label: "Strains", icon: Dna },
+  { href: "/chat", label: "Chat", icon: MessagesSquare },
 ]
 
 export function Navigation() {
@@ -138,7 +139,7 @@ export function Navigation() {
 
   const openChat = () => {
     if (session) {
-      window.dispatchEvent(new CustomEvent("tt-open-chat"))
+      router.push("/chat")
     } else {
       router.push(signInHref(pathname))
     }
@@ -262,17 +263,17 @@ export function Navigation() {
                 </>
               )}
 
-              {/* Chat shortcut — on <lg screens the sidebar is closed by
-                  default, so this is the most visible entry point. */}
+              {/* Chat shortcut — visible on small screens where the
+                  desktop link bar is hidden. */}
               {session && (
-                <button
-                  onClick={openChat}
+                <Link
+                  href="/chat"
                   className="rounded-lg p-2 transition-colors hover:bg-secondary lg:hidden"
                   aria-label="Open live chat"
                   title="Live Chat"
                 >
-                  <MessageCircle className="h-5 w-5" />
-                </button>
+                  <MessagesSquare className="h-5 w-5" />
+                </Link>
               )}
 
               {/* Drawer trigger */}
@@ -335,16 +336,23 @@ export function Navigation() {
                 <div className="px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
                   Connect
                 </div>
-                <button
-                  onClick={() => { openChat(); setMenuOpen(false) }}
-                  className={cn(
-                    "flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-medium transition-colors",
-                    "text-muted-foreground hover:bg-secondary hover:text-foreground"
-                  )}
-                >
-                  <MessageCircle className="h-4 w-4" />
-                  Chat
-                </button>
+                {session ? (
+                  <Link href="/chat" className={linkClass("/chat")} onClick={() => setMenuOpen(false)}>
+                    <MessagesSquare className="h-4 w-4" />
+                    Chat
+                  </Link>
+                ) : (
+                  <button
+                    onClick={() => { openChat(); setMenuOpen(false) }}
+                    className={cn(
+                      "flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-medium transition-colors",
+                      "text-muted-foreground hover:bg-secondary hover:text-foreground"
+                    )}
+                  >
+                    <MessagesSquare className="h-4 w-4" />
+                    Chat
+                  </button>
+                )}
                 {session && (
                   <>
                     <Link href="/messages" className={linkClass("/messages")} onClick={() => setMenuOpen(false)}>

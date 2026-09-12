@@ -4,7 +4,6 @@ import "./globals.css";
 import { Analytics } from "@vercel/analytics/next";
 import { Providers } from "@/components/providers";
 import { Navigation } from "@/components/navigation";
-import ChatSidebar from "@/components/chat-sidebar";
 import QuickPostButton from "@/components/quick-post-button";
 import ServiceWorkerRegister from "@/components/sw-register";
 import Footer from "@/components/footer";
@@ -93,11 +92,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             <Providers>
               <AnnouncementBanner />
               <Navigation />
-              {/* flex-1 flex puts the desktop chat sidebar beside main content */}
-              <div className="flex flex-1 min-h-0">
-                <main id="main-content" className="flex-1 min-w-0 pb-16 lg:pb-0">{children}</main>
-                <ChatSidebar />
-              </div>
+              <main id="main-content" className="flex-1 min-w-0 pb-16 lg:pb-0">{children}</main>
               <Footer />
               <QuickPostButton />
               <ServiceWorkerRegister />

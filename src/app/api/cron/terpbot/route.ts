@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { postToGeneral, GROW_TIPS } from "@/lib/terpbot"
+import { recordBotEvent } from "@/lib/terpbot-events"
 import { currentWeekKey, previousWeekKey, currentMonthKey, previousMonthKey } from "@/lib/week"
 import { resolveWeeklyWinner, resolveMonthlyDiaryWinner } from "@/lib/contest-awards"
 
@@ -64,8 +65,11 @@ export async function GET(request: NextRequest) {
           : "Quiet day yesterday — start a thread or update your diary to get things going."
       // Two separate posts — combining them into one message read like a
       // merged double-post in the chat UI.
-      await postToGeneral(`📊 ${activity}`)
+      const digestDto = await postToGeneral(`📊 ${activity}`)
       await postToGeneral(`💡 Grow tip: ${tip}`)
+      if (digestDto) {
+        await recordBotEvent({ type: "ANNOUNCEMENT", key: `announce:digest:${today}`, command: "digest" }).catch(() => {})
+      }
       posted.push("digest")
     } catch (e) {
       console.error("[terpbot] digest failed:", e)
@@ -83,9 +87,12 @@ export async function GET(request: NextRequest) {
       const winner = await resolveWeeklyWinner(prevWeek)
       if (winner && winner._count.votes > 0) {
         const name = winner.user.profile?.username || winner.user.name || "a member"
-        await postToGeneral(
+        const contestDto = await postToGeneral(
           `🏆 Last week's photo contest winner: @${name} with ${winner._count.votes} vote${winner._count.votes === 1 ? "" : "s"}! This week's contest is open — submit your best budshot on the Contest page.`
         )
+        if (contestDto) {
+          await recordBotEvent({ type: "ANNOUNCEMENT", key: `announce:contest:${prevWeek}`, command: "contest" }).catch(() => {})
+        }
         posted.push("contest")
       }
     } catch (e) {
@@ -104,9 +111,12 @@ export async function GET(request: NextRequest) {
       const winner = await resolveMonthlyDiaryWinner(prevMonth)
       if (winner && winner._count.votes > 0) {
         const name = winner.user.profile?.username || winner.user.name || "a member"
-        await postToGeneral(
+        const diaryDto = await postToGeneral(
           `🏆 Last month's Diary of the Month winner: @${name} with "${winner.diary.title.slice(0, 60)}" (${winner._count.votes} vote${winner._count.votes === 1 ? "" : "s"})! This month's contest is open — enter a well-documented diary on the Contest page.`
         )
+        if (diaryDto) {
+          await recordBotEvent({ type: "ANNOUNCEMENT", key: `announce:diary-contest:${prevMonth}`, command: "diary-contest" }).catch(() => {})
+        }
         posted.push("diary-contest")
       }
     } catch (e) {

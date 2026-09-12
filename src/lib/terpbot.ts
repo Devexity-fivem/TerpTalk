@@ -14,8 +14,10 @@
 import { prisma } from "@/lib/prisma"
 import { getPusher } from "@/lib/pusher"
 import { publicUserSelect, LIMITS } from "@/lib/security"
+import { TERPBOT_USERNAME } from "@/lib/terpbot-constants"
+import { recordBotEvent } from "@/lib/terpbot-events"
 
-export const TERPBOT_USERNAME = "terpbot"
+export { TERPBOT_USERNAME }
 const BOT_ROLE = "MEMBER"
 
 let cachedBotId: string | null = null
@@ -160,9 +162,17 @@ export async function postToGeneral(text: string) {
 // ── Community events ────────────────────────────────────────────────────
 
 export async function announceNewMember(username: string) {
-  return postToGeneral(
+  const dto = await postToGeneral(
     `🌱 Welcome @${username} to TerpTalk! Say hi, show off your setup, or start a grow diary.`
   )
+  if (dto) {
+    await recordBotEvent({
+      type: "ANNOUNCEMENT",
+      key: `announce:welcome:${username.toLowerCase()}`,
+      command: "welcome",
+    }).catch(() => {})
+  }
+  return dto
 }
 
 export async function announceBadges(username: string, badgeNames: string[]) {

@@ -14,7 +14,7 @@ import {
 import { awardReputation, REP_POINTS } from "@/lib/reputation"
 import { getBooleanSetting, SITE_SETTINGS } from "@/lib/settings"
 import { checkMaintenance } from "@/lib/maintenance"
-import { announceNewMember } from "@/lib/terpbot"
+import { announceNewMember, TERPBOT_USERNAME } from "@/lib/terpbot"
 import { notify } from "@/lib/notify"
 
 export async function POST(request: Request) {
@@ -85,13 +85,15 @@ export async function POST(request: Request) {
     // Optional referral — a referrer's username; validate it exists if provided
     let referrerId: string | null = null
     let referrerUserId: string | null = null
-    if (referralCode && typeof referralCode === "string" && referralCode.trim()) {
+    if (referralCode && typeof referralCode === "string" && referralCode.trim()
+        && referralCode.trim().toLowerCase() !== TERPBOT_USERNAME) {
       const referrer = await prisma.profile.findUnique({
         where: { username: referralCode.trim() },
         select: { id: true, userId: true },
       })
       // A stale or mistyped referral link must not block signup — just
       // drop the attribution rather than hard-failing the registration.
+      // TerpBot is never a referrer — a bot can't earn human reputation.
       referrerId = referrer?.id ?? null
       referrerUserId = referrer?.userId ?? null
     }

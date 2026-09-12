@@ -79,6 +79,10 @@ async function main() {
     await prisma.rateLimit.deleteMany({
       where: { key: { startsWith: "chat" } },
     })
+    // Registration limiter too — the referral test below consumes a slot.
+    await prisma.rateLimit.deleteMany({
+      where: { key: { startsWith: "register:" } },
+    }).catch(() => {})
 
     // ── Identity ────────────────────────────────────────────────────
     const botUser = await prisma.user.findUnique({
@@ -303,6 +307,134 @@ async function main() {
     fallbackM.reply && /not sure|didn't catch|try asking/i.test(fallbackM.reply.content)
       ? pass("intent: unknown input falls back gracefully")
       : fail("intent: unknown input falls back gracefully", fallbackM.reply?.content)
+
+    // ── Phase 3: thread-context commands ──────────────────────────
+    // Fixtures: a public thread with an accepted answer, plus a hidden-
+    // category thread that must never be acknowledged.
+    const ctxCat = await prisma.category.create({
+      data: { name: `__bvctx_${TS}`, slug: `__bvctx-${TS}`, description: "t" },
+    })
+    const ctxHidCat = await prisma.category.create({
+      data: { name: `__bvctxh_${TS}`, slug: `__bvctxh-${TS}`, description: "t", hidden: true },
+    })
+    const ctxThread = await prisma.thread.create({
+      data: {
+        title: `__bvctx thread ${TS}`, slug: `bvctx-${TS}`,
+        content: "my leaves are curling up, what gives",
+        categoryId: ctxCat.id, authorId: member.id, replyCount: 1,
+      },
+    })
+    const ctxReply = await prisma.post.create({
+      data: { content: "sounds like heat stress, raise the light", threadId: ctxThread.id, authorId: mod.id },
+    })
+    await prisma.thread.update({ where: { id: ctxThread.id }, data: { acceptedAnswerId: ctxReply.id } })
+    const ctxHidden = await prisma.thread.create({
+      data: { title: "secret thread", slug: `bvctxh-${TS}`, content: "hidden", categoryId: ctxHidCat.id, authorId: member.id },
+    })
+    try {
+      // /summarize via slash command with an inline link.
+      const sumCmd = await cmd(`/summarize /forum/thread/${ctxThread.slug}`)
+      const sumText = sumCmd.data?.message?.content || ""
+      sumCmd.status === 200 && sumText.includes(ctxThread.title) && /accepted answer/i.test(sumText)
+        ? pass("/summarize describes the linked thread + accepted answer")
+        : fail("/summarize describes the linked thread", { status: sumCmd.status, data: sumCmd.data })
+
+      // Hidden thread → same refusal as a nonexistent one.
+      const hidCmd = await cmd(`/summarize /forum/thread/${ctxHidden.slug}`)
+      const hidText = hidCmd.data?.message?.content || ""
+      hidCmd.status === 200 && /couldn't pull up/i.test(hidText)
+        ? pass("hidden thread gets the uniform not-found refusal")
+        : fail("hidden thread gets the uniform not-found refusal", { status: hidCmd.status, data: hidCmd.data })
+
+      // @terpbot mention containing a link → summarize intent.
+      const linkM = await mention(`@terpbot summarize this /forum/thread/${ctxThread.slug}`)
+      linkM.reply && linkM.reply.content.includes(ctxThread.title)
+        ? pass("mention: summarize resolves link in the same message")
+        : fail("mention: summarize resolves link in the same message", linkM.reply?.content)
+
+      // @terpbot in a REPLY to a link-bearing message → resolved via replyTo.
+      const anchorRoom = await prisma.chatRoom.create({
+        data: { name: `__bv_${TS}_anchor`, slug: `__bv_${TS}_anchor`, isPrivate: false },
+      })
+      rooms.push(anchorRoom.id)
+      const anchor = await api(`/api/chat/messages`, {
+        method: "POST", body: { roomId: anchorRoom.id, content: `can anyone check /forum/thread/${ctxThread.slug}` }, cookie: memberCookie,
+      })
+      const anchorId = anchor.data?.message?.id
+      const replyM = await api(`/api/chat/messages`, {
+        method: "POST", body: { roomId: anchorRoom.id, content: "@terpbot did anyone answer this?", replyToId: anchorId }, cookie: memberCookie,
+      })
+      replyM.status === 201 || replyM.status === 200 ? pass("reply mention posted") : fail("reply mention posted", replyM.data)
+      let replyBot = null
+      for (let i = 0; i < 10 && !replyBot; i++) {
+        await new Promise((r) => setTimeout(r, 500))
+        replyBot = await prisma.chatMessage.findFirst({
+          where: { roomId: anchorRoom.id, authorId: botId, deleted: false },
+          orderBy: { createdAt: "desc" },
+        })
+      }
+      replyBot && /accepted answer/i.test(replyBot.content)
+        ? pass("mention: answered resolves thread via replied-to message")
+        : fail("mention: answered resolves thread via replied-to message", replyBot?.content)
+
+      // A successful mention records a COMMAND_MENTION BotEvent.
+      const ev = await prisma.botEvent.findFirst({
+        where: { type: "COMMAND_MENTION", command: "answered", userId: member.id },
+      })
+      ev ? pass("COMMAND_MENTION BotEvent recorded") : fail("COMMAND_MENTION BotEvent recorded", "missing")
+
+      // Slash command records COMMAND_SLASH with entity links counted.
+      const evSlash = await prisma.botEvent.findFirst({
+        where: { type: "COMMAND_SLASH", command: "summarize", userId: member.id },
+      })
+      evSlash && evSlash.entities >= 1
+        ? pass("COMMAND_SLASH BotEvent counts the thread link")
+        : fail("COMMAND_SLASH BotEvent counts the thread link", evSlash)
+    } finally {
+      await prisma.post.deleteMany({ where: { threadId: { in: [ctxThread.id, ctxHidden.id] } } }).catch(() => {})
+      await prisma.thread.deleteMany({ where: { id: { in: [ctxThread.id, ctxHidden.id] } } }).catch(() => {})
+      await prisma.category.deleteMany({ where: { id: { in: [ctxCat.id, ctxHidCat.id] } } }).catch(() => {})
+    }
+
+    // ── Phase 3: /u/terpbot profile API ───────────────────────────
+    const prof = await api(`/api/users/terpbot`, { cookie: memberCookie })
+    prof.status === 200 && prof.data?.profile?.isBot === true
+      ? pass("profile API marks terpbot as isBot")
+      : fail("profile API marks terpbot as isBot", { status: prof.status, isBot: prof.data?.profile?.isBot })
+    prof.data?.profile?.role === "MEMBER"
+      ? pass("profile API exposes bot role MEMBER")
+      : fail("profile API exposes bot role MEMBER", prof.data?.profile?.role)
+    const bs = prof.data?.profile?.botStats
+    bs && typeof bs.commands === "number" && typeof bs.membersAssisted === "number" && typeof bs.daysActive === "number"
+      ? pass("profile API returns real botStats")
+      : fail("profile API returns real botStats", bs)
+
+    // ── Phase 3: referral hole — the bot can never be a referrer ──
+    const refCaptcha = await prisma.captcha.create({
+      data: { answer: "7", expiresAt: new Date(Date.now() + 10 * 60 * 1000) },
+    })
+    const refUsername = `__bvref_${TS}`.slice(0, 20)
+    const reg = await api(`/api/auth/register`, {
+      method: "POST",
+      body: {
+        username: refUsername, password: "VerifyPass123!", ageVerified: true,
+        referralCode: "terpbot", captchaId: refCaptcha.id, captchaAnswer: "7",
+      },
+    })
+    if (reg.status === 201) {
+      const refProfile = await prisma.profile.findUnique({ where: { username: refUsername }, select: { referredById: true } })
+      refProfile && refProfile.referredById === null
+        ? pass("terpbot referral is ignored at registration")
+        : fail("terpbot referral is ignored at registration", refProfile)
+      const botRefNotif = await prisma.notification.count({
+        where: { userId: botId, type: "REFERRAL", createdAt: { gte: new Date(Date.now() - 60_000) } },
+      })
+      botRefNotif === 0 ? pass("bot received no referral notification") : fail("bot received no referral notification", botRefNotif)
+      const refUser = await prisma.user.findFirst({ where: { name: refUsername }, select: { id: true } })
+      if (refUser) await prisma.user.delete({ where: { id: refUser.id } }).catch(() => {})
+    } else {
+      fail("referral-guard registration returns 201", { status: reg.status, data: reg.data })
+    }
 
     // Bot replies must never contain the trigger — no self-loop possible.
     const allBotMsgs = await prisma.chatMessage.findMany({
