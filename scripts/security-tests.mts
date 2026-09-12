@@ -8,6 +8,7 @@ import { safeCallbackUrl, signInHref } from "@/lib/callback-url"
 import { ADMIN_ONLY_MOD_ACTIONS } from "@/lib/require-staff"
 import { recoveryPhraseUpdateData, newRecoveryPhrase, hashPhrase, verifyPhrase } from "@/lib/recovery"
 import { notifyMany } from "@/lib/notify"
+import { getSuggestedUsers } from "@/lib/onboarding"
 
 const TEST_USERNAME = `__test_security_${Date.now()}`
 const TEST_NAME = `__test_security_name_${Date.now()}`
@@ -216,6 +217,44 @@ async function run() {
       assert.equal(suppressed, 0, "notifyMany must still honor notification preferences")
     } finally {
       await prisma.user.delete({ where: { id: otherUser.id } }).catch(() => {})
+    }
+
+    // Suggested growers — exclusion rules: self, already-followed, blocked
+    // (either direction), banned/suspended, TerpBot.
+    const stamp = Date.now()
+    const mkUser = async (tag: string, extra: { banned?: boolean; suspended?: boolean } = {}) =>
+      prisma.user.create({
+        data: {
+          name: `__test_sug_${tag}_${stamp}`,
+          ageVerified: true,
+          banned: extra.banned ?? false,
+          suspendedUntil: extra.suspended ? new Date(Date.now() + 60_000) : null,
+          profile: { create: { username: `__tsug${tag}${stamp.toString(36)}`, bio: "test grower", reputation: 5000 } },
+        },
+      })
+    const sugVisible = await mkUser("v")
+    const sugFollowed = await mkUser("f")
+    const sugBanned = await mkUser("b", { banned: true })
+    const sugSuspended = await mkUser("s", { suspended: true })
+    const sugBlocked = await mkUser("x")
+    try {
+      await prisma.follow.create({ data: { followerId: userId, followingId: sugFollowed.id } })
+      await prisma.block.create({ data: { blockerId: sugBlocked.id, blockedId: userId } })
+
+      const suggestions = await getSuggestedUsers(userId, 50)
+      const ids = new Set(suggestions.map((s) => s.id))
+      assert.equal(ids.has(sugVisible.id), true, "visible grower should be suggested")
+      assert.equal(ids.has(sugFollowed.id), false, "already-followed user must be excluded")
+      assert.equal(ids.has(sugBanned.id), false, "banned user must be excluded")
+      assert.equal(ids.has(sugSuspended.id), false, "suspended user must be excluded")
+      assert.equal(ids.has(sugBlocked.id), false, "blocker must be excluded")
+      assert.equal(ids.has(userId), false, "self must be excluded")
+      const bot = await prisma.profile.findUnique({ where: { username: "terpbot" }, select: { userId: true } })
+      if (bot) assert.equal(ids.has(bot.userId), false, "TerpBot must be excluded")
+    } finally {
+      for (const id of [sugVisible.id, sugFollowed.id, sugBanned.id, sugSuspended.id, sugBlocked.id]) {
+        await prisma.user.delete({ where: { id } }).catch(() => {})
+      }
     }
 
     console.log("All security regression tests passed.")

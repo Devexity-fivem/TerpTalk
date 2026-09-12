@@ -32,15 +32,22 @@ async function getFeedData(userId?: string, tab = "latest") {
     followedCategoryIds = categoryFollows.map((f) => f.categoryId)
   }
 
-  const updateWhere = personal
+  // Cold start: a signed-in user on a personal tab with zero follows falls
+  // back to global content instead of an empty feed — decided before
+  // querying, so no extra queries run.
+  const coldStart =
+    personal && !!userId &&
+    followingIds.length === 0 && followedDiaryIds.length === 0 && followedCategoryIds.length === 0
+
+  const updateWhere = personal && !coldStart
     ? { diary: { deleted: false }, OR: [{ authorId: { in: followingIds } }, { diaryId: { in: followedDiaryIds } }] }
     : { diary: { deleted: false } }
-  const threadWhere = tab === "following"
-    ? { deleted: false, authorId: { in: followingIds } }
-    : tab === "for-you"
-    ? { deleted: false, OR: [{ authorId: { in: followingIds } }, { categoryId: { in: followedCategoryIds } }] }
+  const threadWhere = personal && !coldStart
+    ? tab === "following"
+      ? { deleted: false, authorId: { in: followingIds } }
+      : { deleted: false, OR: [{ authorId: { in: followingIds } }, { categoryId: { in: followedCategoryIds } }] }
     : { deleted: false }
-  const diaryWhere = personal
+  const diaryWhere = personal && !coldStart
     ? { deleted: false, OR: [{ authorId: { in: followingIds } }, { followers: { some: { userId } } }] }
     : { deleted: false }
 
@@ -134,6 +141,7 @@ async function getFeedData(userId?: string, tab = "latest") {
     threadCount,
     diaryCount,
     popularCategories,
+    coldStart,
   }
 }
 
@@ -143,7 +151,7 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
   const { tab } = await searchParams
   const session = await getServerSession(authOptions)
   const activeTab = TABS.includes((tab || "") as (typeof TABS)[number]) ? (tab as (typeof TABS)[number]) : "latest"
-  const { recentDiaryUpdates, recentThreads, feedItems, trendingDiaries, memberCount, threadCount, diaryCount, popularCategories } =
+  const { recentDiaryUpdates, recentThreads, feedItems, trendingDiaries, memberCount, threadCount, diaryCount, popularCategories, coldStart } =
     await getFeedData(session?.user?.id, activeTab)
 
   const tabCls = (t: string) =>
@@ -158,12 +166,40 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
           <p className="text-muted-foreground">Stay updated with the latest activity from across the community</p>
         </div>
 
+        {/* Onboarding resume banner */}
+        {session?.user?.id && !session.user.onboardingCompletedAt && (
+          <div className="mb-6 bg-primary/10 border border-primary/30 rounded-lg p-4 flex flex-wrap items-center gap-3">
+            <Leaf className="w-5 h-5 text-primary flex-shrink-0" />
+            <p className="text-sm flex-1 min-w-[200px]">
+              Finish setting up your account — pick your interests and growers to follow.
+            </p>
+            <Link
+              href="/welcome"
+              className="min-h-11 inline-flex items-center px-4 rounded-lg bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90"
+            >
+              Finish setup
+            </Link>
+          </div>
+        )}
+
         {/* Feed Tabs */}
         <div className="flex gap-4 mb-6 border-b border-border">
           <Link href="/feed" className={tabCls("latest")}>Latest</Link>
           <Link href="/feed?tab=following" className={tabCls("following")}>Following</Link>
           <Link href="/feed?tab=for-you" className={tabCls("for-you")}>For You</Link>
         </div>
+
+        {/* Cold-start note — content below is global, not personalized */}
+        {coldStart && (recentDiaryUpdates.length > 0 || recentThreads.length > 0) && (
+          <div className="mb-6 text-sm text-muted-foreground flex items-center gap-2">
+            <UserPlus className="w-4 h-4 text-primary flex-shrink-0" />
+            <span>
+              Your feed is getting started — showing community highlights.{" "}
+              <Link href="/welcome" className="text-primary hover:underline">Follow growers and topics</Link>{" "}
+              to personalize it.
+            </span>
+          </div>
+        )}
 
         <div className="grid lg:grid-cols-3 gap-6">
           {/* Main Feed */}
@@ -330,7 +366,18 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
             {/* Empty State */}
             {recentDiaryUpdates.length === 0 && recentThreads.length === 0 && (
               <div className="bg-card rounded-lg border border-border p-12 text-center">
-                {activeTab === "following" || activeTab === "for-you" ? (
+                {!session?.user?.id && (activeTab === "following" || activeTab === "for-you") ? (
+                  <>
+                    <UserPlus className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
+                    <h3 className="text-lg font-semibold mb-2">Sign in to build your feed</h3>
+                    <p className="text-muted-foreground mb-4">
+                      Follow growers, diaries and topics — their activity shows up here.
+                    </p>
+                    <Link href="/auth/signin" className="bg-primary text-primary-foreground px-6 py-2 rounded-lg hover:bg-primary/90 transition-colors inline-block">
+                      Sign in
+                    </Link>
+                  </>
+                ) : activeTab === "following" || activeTab === "for-you" ? (
                   <>
                     <UserPlus className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
                     <h3 className="text-lg font-semibold mb-2">Nothing from your follows yet</h3>

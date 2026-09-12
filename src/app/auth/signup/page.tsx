@@ -127,7 +127,7 @@ export default function SignUpPage() {
         throw new Error("Registration successful but login failed")
       }
 
-      router.push(callback ? `/profile/complete?callbackUrl=${encodeURIComponent(callback)}` : "/profile/complete")
+      router.push(callback ? `/welcome?callbackUrl=${encodeURIComponent(callback)}` : "/welcome")
     } catch (error: unknown) {
       setError((error as Error).message)
       setCaptchaAnswer("")
