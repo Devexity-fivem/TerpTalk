@@ -81,5 +81,17 @@ export async function GET(request: NextRequest) {
     }
   }
 
+  // ── Notification retention (once per UTC day) ──────────────────────
+  // Read notifications are already pruned per-user on PATCH; this sweeps
+  // the rows that never get touched — unread items and inactive users.
+  const cleanupKey = `terpbot:notification-cleanup:${today}`
+  if (!(await wasDone(cleanupKey))) {
+    await markDone(cleanupKey)
+    await prisma.notification.deleteMany({
+      where: { createdAt: { lt: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000) } },
+    })
+    posted.push("notification-cleanup")
+  }
+
   return NextResponse.json({ ok: true, posted })
 }

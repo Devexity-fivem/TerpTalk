@@ -492,7 +492,7 @@ export default function ChatSidebar() {
           bg-primary text-primary-foreground shadow-lg shadow-primary/20
           px-3.5 py-2.5 text-sm font-medium
           hover:bg-primary/90 transition-colors
-          bottom-20 left-4
+          bottom-[calc(5rem+env(safe-area-inset-bottom))] left-4
         `}
         aria-label={isOpen ? "Close chat" : "Open community chat"}
         aria-expanded={isOpen}

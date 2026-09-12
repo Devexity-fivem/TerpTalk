@@ -11,9 +11,10 @@ import { useToast } from "@/components/ui/toast"
 
 interface ReplyFormProps {
   threadId: string
+  wasFollowing?: boolean
 }
 
-export default function ReplyForm({ threadId }: ReplyFormProps) {
+export default function ReplyForm({ threadId, wasFollowing }: ReplyFormProps) {
   const { data: session } = useSession()
   const pathname = usePathname()
   const { toast } = useToast()
@@ -50,6 +51,13 @@ export default function ReplyForm({ threadId }: ReplyFormProps) {
         throw new Error(data.error || "Failed to post reply")
       }
 
+      // Replying auto-follows the thread — tell first-timers so the future
+      // "New reply in a thread you follow" notifications aren't a surprise.
+      if (!wasFollowing) {
+        toast("You're now following this discussion — tap the bell to unfollow.")
+        // Brief beat so the toast is seen before reload.
+        await new Promise((r) => setTimeout(r, 800))
+      }
       // Refresh the page to show the new post
       window.location.reload()
     } catch (error: unknown) {

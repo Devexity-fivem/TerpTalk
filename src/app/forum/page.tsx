@@ -48,8 +48,8 @@ const getForumData = unstable_cache(
     })
 
     const [threadCount, postCount, memberCount, trendingThreads] = await Promise.all([
-      prisma.thread.count({ where: { deleted: false } }),
-      prisma.post.count({ where: { deleted: false } }),
+      prisma.thread.count({ where: { deleted: false, category: { hidden: false } } }),
+      prisma.post.count({ where: { deleted: false, thread: { category: { hidden: false } } } }),
       prisma.user.count({ where: { banned: false } }),
       prisma.thread.findMany({
         where: { deleted: false, views: { gt: 0 }, category: { hidden: false } },

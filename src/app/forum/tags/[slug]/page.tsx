@@ -15,7 +15,7 @@ export default async function TagThreadsPage({
     where: { slug },
     include: {
       threads: {
-        where: { thread: { deleted: false } },
+        where: { thread: { deleted: false, category: { hidden: false } } },
         orderBy: { thread: { createdAt: "desc" } },
         take: 50,
         include: {

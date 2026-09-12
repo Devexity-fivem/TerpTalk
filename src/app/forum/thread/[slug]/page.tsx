@@ -104,6 +104,7 @@ export default async function ThreadPage({
     where: {
       deleted: false,
       id: { not: thread.id },
+      category: { hidden: false },
       OR: [
         { categoryId: thread.categoryId },
         ...(tagIds.length > 0 ? [{ tags: { some: { tagId: { in: tagIds } } } }] : []),
@@ -436,7 +437,7 @@ export default async function ThreadPage({
 
         {/* Reply Form */}
         {!thread.locked && (
-          <ReplyForm threadId={thread.id} />
+          <ReplyForm threadId={thread.id} wasFollowing={following} />
         )}
         {thread.locked && (
           <div className="mt-6 p-4 bg-secondary/50 rounded-lg text-sm text-muted-foreground text-center">

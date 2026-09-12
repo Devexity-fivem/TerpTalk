@@ -92,9 +92,25 @@ export async function POST(request: Request) {
             if (ok && t) deletedLink = `/forum/thread/${t.slug}`
             break
           }
-          case "POST":
+          case "POST": {
+            const p = await tx.post.findUnique({ where: { id: targetId }, select: { threadId: true } })
             ok = !!(await tx.post.updateMany({ where: { id: targetId, authorId: targetUserId }, data: { deleted: true } })).count
+            if (ok && p) {
+              // Keep thread.replyCount in sync — same rule as the user-facing
+              // DELETE: non-deleted posts minus a live opening post.
+              const remaining = await tx.post.count({ where: { threadId: p.threadId, deleted: false } })
+              const op = await tx.post.findFirst({
+                where: { threadId: p.threadId },
+                orderBy: { createdAt: "asc" },
+                select: { deleted: true },
+              })
+              await tx.thread.update({
+                where: { id: p.threadId },
+                data: { replyCount: Math.max(0, remaining - (op && !op.deleted ? 1 : 0)) },
+              })
+            }
             break
+          }
           case "CHAT_MESSAGE":
             ok = !!(await tx.chatMessage.updateMany({ where: { id: targetId, authorId: targetUserId }, data: { deleted: true } })).count
             break

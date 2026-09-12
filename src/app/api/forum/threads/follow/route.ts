@@ -50,17 +50,18 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Thread not found" }, { status: 404 })
     }
 
-    if (await blockExistsBetween(session.user.id, thread.authorId)) {
-      return forbidden()
-    }
-
     const key = { userId: session.user.id, threadId }
     const existing = await prisma.threadFollow.findUnique({
       where: { userId_threadId: key },
     })
+    // Unfollow is always allowed — a block must not trap a follow row.
     if (existing) {
-      await prisma.threadFollow.deleteMany({ where: { id: existing.id } })
+      await prisma.threadFollow.deleteMany({ where: key })
       return NextResponse.json({ following: false })
+    }
+
+    if (await blockExistsBetween(session.user.id, thread.authorId)) {
+      return forbidden()
     }
 
     try {

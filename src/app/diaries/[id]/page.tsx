@@ -197,7 +197,7 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
                 <ShareButtons path={`/diaries/${diary.id}`} title={`${diary.title} — grow diary on TerpTalk`} />
               </div>
               {!following && (
-                <p className="text-xs text-muted-foreground">Follow this grower to see future updates.</p>
+                <p className="text-xs text-muted-foreground">Follow this diary to get notified of new updates.</p>
               )}
             </div>
           </div>

@@ -147,6 +147,25 @@ async function run() {
     const stale = await prisma.notification.count({ where: { link: "/forum/thread/x" } })
     assert.equal(stale, 0, "invalidated links should remove notifications")
 
+    // 12. Link sanitization — external, javascript:, and protocol-relative
+    // links are dropped to null; only root-relative paths persist.
+    const lExt = await notify({ userId: recip.id, type: "REACTION", title: "t", content: "c", link: "https://evil.example/x", actorId: actor.id })
+    assert.equal(lExt?.link, null, "external link should be dropped")
+    const lJs = await notify({ userId: recip.id, type: "REACTION", title: "t", content: "c", link: "javascript:alert(1)", actorId: actor.id })
+    assert.equal(lJs?.link, null, "javascript: link should be dropped")
+    const lProto = await notify({ userId: recip.id, type: "REACTION", title: "t", content: "c", link: "//evil.example/x", actorId: actor.id })
+    assert.equal(lProto?.link, null, "protocol-relative link should be dropped")
+    const lOk = await notify({ userId: recip.id, type: "REACTION", title: "t", content: "c", link: "/forum/thread/ok", actorId: actor.id })
+    assert.equal(lOk?.link, "/forum/thread/ok", "root-relative link should persist")
+    await notifyMany([
+      { userId: recip.id, type: "REACTION", title: "t", content: "c", link: "//evil.example/batch", actorId: actor.id },
+      { userId: recip.id, type: "REACTION", title: "t", content: "c", link: "/forum/thread/batch-ok", actorId: actor.id },
+    ])
+    const badLink = await prisma.notification.count({ where: { link: "//evil.example/batch" } })
+    assert.equal(badLink, 0, "notifyMany should drop protocol-relative links")
+    const goodLink = await prisma.notification.count({ where: { link: "/forum/thread/batch-ok" } })
+    assert.equal(goodLink, 1, "notifyMany should persist root-relative links")
+
     console.log("All Notification 2.0 regression tests passed.")
   } finally {
     for (const id of ids) {

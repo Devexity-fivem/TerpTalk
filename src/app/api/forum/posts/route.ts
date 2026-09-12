@@ -126,11 +126,15 @@ export async function POST(request: Request) {
 
     // Repliers auto-follow the thread (XenForo-style): silent upsert — no
     // notification, and lastSeenAt covers everything up to their own reply.
-    await prisma.threadFollow.upsert({
-      where: { userId_threadId: { userId: session.user.id, threadId } },
-      create: { userId: session.user.id, threadId, lastSeenAt: new Date() },
-      update: { lastSeenAt: new Date() },
-    }).catch(() => {})
+    // Prisma upsert isn't atomic (select-then-write), so retry once on a
+    // concurrent-reply race before giving up.
+    const autoFollow = () =>
+      prisma.threadFollow.upsert({
+        where: { userId_threadId: { userId: session.user.id, threadId } },
+        create: { userId: session.user.id, threadId, lastSeenAt: new Date() },
+        update: { lastSeenAt: new Date() },
+      })
+    await autoFollow().catch(() => autoFollow().catch(() => {}))
 
     await awardReputation(
       session.user.id,
@@ -178,6 +182,14 @@ export async function POST(request: Request) {
       const authorId = thread.authorId
       after(async () => {
         try {
+          // Re-validate inside the deferred callback — the thread could be
+          // deleted or its category hidden between the response and now.
+          const fresh = await prisma.thread.findUnique({
+            where: { id: threadId },
+            select: { deleted: true, category: { select: { hidden: true } } },
+          })
+          if (!fresh || fresh.deleted || fresh.category?.hidden) return
+
           const cutoff = new Date(Date.now() - 6 * 60 * 60 * 1000)
           const followers = await prisma.threadFollow.findMany({
             where: {
@@ -186,10 +198,11 @@ export async function POST(request: Request) {
               OR: [{ lastNotifiedAt: null }, { lastNotifiedAt: { lt: cutoff } }],
             },
             select: { userId: true },
+            orderBy: { createdAt: "asc" },
             take: 2000,
           })
           if (followers.length === 0) return
-          const sent = await notifyMany(
+          const { sent, deliveredUserIds } = await notifyMany(
             followers.map((f) => ({
               userId: f.userId,
               type: "THREAD_ACTIVITY" as const,
@@ -202,16 +215,17 @@ export async function POST(request: Request) {
               metadata: { threadId },
             }))
           )
-          // Only stamp the throttle when the fan-out actually sent — a failed
-          // send shouldn't burn a follower's 6h window.
-          if (sent > 0) {
+          // Stamp the throttle only for followers who actually received the
+          // notification — filtered-out recipients (pref off, blocked, banned)
+          // must not burn their 6h window.
+          if (sent > 0 && deliveredUserIds.length > 0) {
             await prisma.threadFollow.updateMany({
-              where: { threadId, userId: { in: followers.map((f) => f.userId) } },
+              where: { threadId, userId: { in: deliveredUserIds } },
               data: { lastNotifiedAt: new Date() },
             })
           }
-        } catch {
-          // best-effort fan-out
+        } catch (e) {
+          console.error("Thread-follow fan-out error:", e)
         }
       })
     }
@@ -335,9 +349,16 @@ export async function DELETE(request: Request) {
     await prisma.$transaction(async (tx) => {
       await tx.post.update({ where: { id }, data: { deleted: true } })
       const remaining = await tx.post.count({ where: { threadId: post.threadId, deleted: false } })
+      // replyCount = non-deleted posts minus the opening post — but only when
+      // the OP still exists; deleting the OP must not double-subtract.
+      const op = await tx.post.findFirst({
+        where: { threadId: post.threadId },
+        orderBy: { createdAt: "asc" },
+        select: { deleted: true },
+      })
       await tx.thread.update({
         where: { id: post.threadId },
-        data: { replyCount: Math.max(0, remaining - 1) },
+        data: { replyCount: Math.max(0, remaining - (op && !op.deleted ? 1 : 0)) },
       })
     })
 

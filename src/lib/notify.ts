@@ -230,7 +230,7 @@ export async function notify(input: NotifyInput): Promise<NotificationWithActor 
         title: input.title.slice(0, 200),
         content: input.content.slice(0, 500),
         // Only internal root-relative links — external/javascript: URLs are dropped.
-        link: input.link?.startsWith("/") ? input.link : null,
+        link: input.link && /^\/(?!\/)/.test(input.link) ? input.link : null,
         actorId: input.actorId ?? null,
         groupKey: input.groupKey ?? null,
         metadata: input.metadata,
@@ -250,9 +250,11 @@ export async function notify(input: NotifyInput): Promise<NotificationWithActor 
  * followers, mentions, broadcasts). Applies the same recipient filters
  * in bulk, then createMany + per-user realtime events.
  */
-export async function notifyMany(inputs: NotifyInput[]): Promise<number> {
+export async function notifyMany(
+  inputs: NotifyInput[]
+): Promise<{ sent: number; deliveredUserIds: string[] }> {
   try {
-    if (inputs.length === 0) return 0
+    if (inputs.length === 0) return { sent: 0, deliveredUserIds: [] }
 
     const recipientIds = [...new Set(inputs.map((i) => i.userId))]
     const recipients = await loadRecipients(recipientIds)
@@ -307,7 +309,7 @@ export async function notifyMany(inputs: NotifyInput[]): Promise<number> {
       }
       return true
     })
-    if (allowed.length === 0) return 0
+    if (allowed.length === 0) return { sent: 0, deliveredUserIds: [] }
 
     const result = await prisma.notification.createMany({
       data: allowed.map((i) => ({
@@ -316,7 +318,7 @@ export async function notifyMany(inputs: NotifyInput[]): Promise<number> {
         title: i.title.slice(0, 200),
         content: i.content.slice(0, 500),
         // Only internal root-relative links — external/javascript: URLs are dropped.
-        link: i.link?.startsWith("/") ? i.link : null,
+        link: i.link && /^\/(?!\/)/.test(i.link) ? i.link : null,
         actorId: i.actorId ?? null,
         groupKey: i.groupKey ?? null,
         metadata: i.metadata,
@@ -335,7 +337,7 @@ export async function notifyMany(inputs: NotifyInput[]): Promise<number> {
           type: i.type,
           title: i.title.slice(0, 200),
           content: i.content.slice(0, 500),
-          link: i.link?.startsWith("/") ? i.link : null,
+          link: i.link && /^\/(?!\/)/.test(i.link) ? i.link : null,
           read: false,
         }
         const key = JSON.stringify(dto)
@@ -352,9 +354,9 @@ export async function notifyMany(inputs: NotifyInput[]): Promise<number> {
       await Promise.allSettled(pushes)
     }
 
-    return result.count
+    return { sent: result.count, deliveredUserIds: [...new Set(allowed.map((i) => i.userId))] }
   } catch {
-    return 0
+    return { sent: 0, deliveredUserIds: [] }
   }
 }
 

@@ -147,6 +147,17 @@ async function getFeedData(userId?: string, tab = "latest") {
 
 const TABS = ["latest", "following", "for-you"] as const
 
+// First-reply nudge eligibility: zero posts and an account under 30 days old.
+async function isEligibleForFirstReplyNudge(userId: string) {
+  const [posts, recent] = await Promise.all([
+    prisma.post.count({ where: { authorId: userId, deleted: false } }),
+    prisma.user.count({
+      where: { id: userId, createdAt: { gt: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) } },
+    }),
+  ])
+  return posts === 0 && recent > 0
+}
+
 export default async function FeedPage({ searchParams }: { searchParams: Promise<{ tab?: string }> }) {
   const { tab } = await searchParams
   const session = await getServerSession(authOptions)
@@ -154,9 +165,34 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
   const { recentDiaryUpdates, recentThreads, feedItems, trendingDiaries, memberCount, threadCount, diaryCount, popularCategories, coldStart } =
     await getFeedData(session?.user?.id, activeTab)
 
-  const userPostCount = session?.user?.id && session.user.onboardingCompletedAt
-    ? await prisma.post.count({ where: { authorId: session.user.id, deleted: false } })
-    : 0
+  // The nudge is for new members only — suppress it while the cold-start note
+  // is showing (no stacked banners) and for accounts older than 30 days.
+  const showFirstReplyNudge =
+    session?.user?.id != null &&
+    session.user.onboardingCompletedAt != null &&
+    !coldStart &&
+    (await isEligibleForFirstReplyNudge(session.user.id))
+
+  // Unread indicators on feed thread cards — same followed-thread rule as
+  // the forum lists, kept out of any cached payload.
+  const unreadThreadIds = new Set<string>()
+  if (session?.user?.id) {
+    const feedThreadIds = [
+      ...new Set([
+        ...recentThreads.map((t) => t.id),
+        ...feedItems.filter((i) => i.type === "thread").map((i) => (i.data as { id: string }).id),
+      ]),
+    ]
+    if (feedThreadIds.length > 0) {
+      const follows = await prisma.threadFollow.findMany({
+        where: { userId: session.user.id, threadId: { in: feedThreadIds } },
+        select: { threadId: true, lastSeenAt: true, thread: { select: { lastActivityAt: true } } },
+      })
+      for (const f of follows) {
+        if (f.thread.lastActivityAt > (f.lastSeenAt ?? new Date(0))) unreadThreadIds.add(f.threadId)
+      }
+    }
+  }
 
   const tabCls = (t: string) =>
     `px-4 py-2 text-sm font-medium transition-colors ${activeTab === t ? "border-b-2 border-primary text-primary" : "text-muted-foreground hover:text-foreground"}`
@@ -199,7 +235,7 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
             <UserPlus className="w-4 h-4 text-primary flex-shrink-0" />
             <span>
               Your feed is getting started — showing community highlights.{" "}
-              <Link href="/welcome" className="text-primary hover:underline">Follow growers and topics</Link>{" "}
+              <Link href="/forum" className="text-primary hover:underline">Follow growers and topics</Link>{" "}
               to personalize it.
             </span>
           </div>
@@ -207,7 +243,7 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
 
         {/* First-action nudge — shown only to members who have never replied.
             Disappears permanently after their first post. */}
-        {session?.user?.id && session.user.onboardingCompletedAt && userPostCount === 0 && (
+        {showFirstReplyNudge && (
           <div className="mb-6 bg-card border border-border rounded-lg p-4 flex flex-wrap items-center gap-3">
             <MessageSquare className="w-5 h-5 text-primary flex-shrink-0" />
             <p className="text-sm flex-1 min-w-[200px]">
@@ -247,7 +283,12 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
                               <MessageSquare className="w-5 h-5 text-primary" />
                             </div>
                             <div className="flex-1">
-                              <div className="font-semibold text-sm mb-1">{t.title}</div>
+                              <div className="font-semibold text-sm mb-1 flex items-center gap-2">
+                                {unreadThreadIds.has(t.id) && (
+                                  <span className="h-2 w-2 rounded-full bg-primary shrink-0" role="img" aria-label="Unread" title="New activity" />
+                                )}
+                                {t.title}
+                              </div>
                               <div className="text-xs text-muted-foreground flex items-center gap-2 flex-wrap">
                                 <span>{t.category.name}</span>
                                 <span>•</span>
@@ -365,7 +406,12 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
                               started a discussion
                             </span>
                           </div>
-                          <h3 className="font-medium mb-1">{thread.title}</h3>
+                          <h3 className="font-medium mb-1 flex items-center gap-2">
+                            {unreadThreadIds.has(thread.id) && (
+                              <span className="h-2 w-2 rounded-full bg-primary shrink-0" role="img" aria-label="Unread" title="New activity" />
+                            )}
+                            {thread.title}
+                          </h3>
                           <div className="flex items-center gap-2 text-xs text-muted-foreground">
                             <span className="flex items-center gap-1">
                               <MessageSquare className="w-3 h-3" />
