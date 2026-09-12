@@ -1,5 +1,7 @@
 "use client"
 
+import { signInHref } from "@/lib/callback-url"
+
 import { useEffect, useState, useCallback } from "react"
 import { useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
@@ -46,7 +48,7 @@ export default function AdminAuditPage() {
 
   useEffect(() => {
     if (status === "unauthenticated") {
-      router.push("/auth/signin")
+      router.push(signInHref(window.location.pathname + window.location.search))
     } else if (status === "authenticated") {
       const t = setTimeout(() => load(), 0)
       return () => clearTimeout(t)

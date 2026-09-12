@@ -22,7 +22,7 @@ async function getOrCreateBot(): Promise<string> {
   if (cachedBotId) return cachedBotId
   const existing = await prisma.user.findFirst({
     where: { profile: { username: TERPBOT_USERNAME } },
-    select: { id: true, profile: { select: { id: true, bio: true, avatarUrl: true } } },
+    select: { id: true, image: true, profile: { select: { id: true, bio: true, avatarUrl: true } } },
   })
   if (existing) {
     cachedBotId = existing.id
@@ -33,6 +33,13 @@ async function getOrCreateBot(): Promise<string> {
         data: BOT_PROFILE,
       }).catch(() => {})
     }
+    // Chat DTOs read User.image — keep it in sync with the profile avatar.
+    if (!existing.image) {
+      await prisma.user.update({
+        where: { id: existing.id },
+        data: { image: BOT_PROFILE.avatarUrl },
+      }).catch(() => {})
+    }
     return existing.id
   }
   const created = await prisma.user.create({
@@ -40,6 +47,7 @@ async function getOrCreateBot(): Promise<string> {
       name: "TerpBot",
       ageVerified: true,
       status: "ONLINE",
+      image: BOT_PROFILE.avatarUrl,
       profile: { create: { username: TERPBOT_USERNAME, ...BOT_PROFILE } },
     },
     select: { id: true },
@@ -50,13 +58,9 @@ async function getOrCreateBot(): Promise<string> {
 
 // Post a message to a room as TerpBot and push it over Pusher when configured.
 // Returns the chat DTO used by the sidebar, or null if posting failed.
-// awardRep lets the bot slowly earn reputation for its work — but must stay
-// false for announcement posts so a rep check can never re-announce and loop.
-export async function postBotMessage(
-  roomId: string,
-  text: string,
-  { awardRep = false }: { awardRep?: boolean } = {}
-) {
+// Bot activity never earns reputation — automated posts must not pollute
+// leaderboards or member rankings.
+export async function postBotMessage(roomId: string, text: string) {
   try {
     const authorId = await getOrCreateBot()
     const message = await prisma.chatMessage.create({
@@ -77,11 +81,6 @@ export async function postBotMessage(
       replyTo: null,
     }
     getPusher()?.trigger(`private-chat-${roomId}`, "new-message", dto).catch(() => {})
-    if (awardRep) {
-      // Lazy import: reputation.ts already imports this module.
-      const { awardReputation } = await import("@/lib/reputation")
-      await awardReputation(authorId, "BOT_MESSAGE", 1, "Community bot post")
-    }
     return dto
   } catch (error) {
     console.error("[terpbot] post failed:", error)

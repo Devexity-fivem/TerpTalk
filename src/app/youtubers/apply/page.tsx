@@ -20,7 +20,7 @@ export default function ApplyYoutuberPage() {
           <p className="text-muted-foreground mb-6">
             Sign in to submit your YouTube channel for review.
           </p>
-          <Link href="/auth/signin" className="bg-primary text-primary-foreground px-6 py-3 rounded-lg font-medium hover:bg-primary/90">
+          <Link href="/auth/signin?callbackUrl=%2Fyoutubers%2Fapply" className="bg-primary text-primary-foreground px-6 py-3 rounded-lg font-medium hover:bg-primary/90">
             Sign In
           </Link>
         </div>

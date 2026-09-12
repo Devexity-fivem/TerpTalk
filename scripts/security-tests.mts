@@ -3,7 +3,9 @@ import { prisma } from "@/lib/prisma"
 import { isBanned, isSessionValid, isAdmin, isModerator, isStaff, isSupport, hashIp, getTrustLevel } from "@/lib/security"
 import { isValidImageDataUri, storeImage } from "@/lib/blob"
 import sharp from "sharp"
-import { isTrustedForLinks, containsExternalLink } from "@/lib/security"
+import { isTrustedForLinks, containsExternalLink, enforceLinkTrust } from "@/lib/security"
+import { safeCallbackUrl, signInHref } from "@/lib/callback-url"
+import { ADMIN_ONLY_MOD_ACTIONS } from "@/lib/require-staff"
 
 const TEST_USERNAME = `__test_security_${Date.now()}`
 const TEST_NAME = `__test_security_name_${Date.now()}`
@@ -117,6 +119,51 @@ async function run() {
 
     await prisma.profile.update({ where: { id: profileId }, data: { reputation: 0 } })
     assert.equal(await isTrustedForLinks(userId), false, "same user with 0 rep should not be trusted")
+
+    // enforceLinkTrust — the shared policy used by posts, edits, chat, DMs,
+    // comments, diaries, setups, strains, contests, and profile fields.
+    const fakeReq = { headers: {} as Record<string, string | undefined> }
+    const blocked = await enforceLinkTrust("check https://spam.example out", userId, fakeReq, "test")
+    assert.equal(blocked?.status, 403, "untrusted user posting a link should get 403")
+    assert.equal(
+      await enforceLinkTrust("plain text with no links", userId, fakeReq, "test"),
+      null,
+      "untrusted user posting plain text should pass"
+    )
+    await prisma.profile.update({ where: { id: profileId }, data: { reputation: 250 } })
+    assert.equal(
+      await enforceLinkTrust("check https://ok.example out", userId, fakeReq, "test"),
+      null,
+      "trusted user posting a link should pass"
+    )
+    await prisma.profile.update({ where: { id: profileId }, data: { reputation: 0 } })
+
+    // Admin-only moderation actions — REMOVE_SUSPENSION must stay in this set
+    // so a MODERATOR can never clear ban/suspension state.
+    assert.equal(ADMIN_ONLY_MOD_ACTIONS.has("TEMPORARY_BAN"), true)
+    assert.equal(ADMIN_ONLY_MOD_ACTIONS.has("PERMANENT_BAN"), true)
+    assert.equal(ADMIN_ONLY_MOD_ACTIONS.has("UNBAN"), true)
+    assert.equal(ADMIN_ONLY_MOD_ACTIONS.has("REMOVE_SUSPENSION"), true, "REMOVE_SUSPENSION must require ADMINISTRATOR")
+    assert.equal(ADMIN_ONLY_MOD_ACTIONS.has("WARNING"), false, "WARNING stays moderator-level")
+    assert.equal(ADMIN_ONLY_MOD_ACTIONS.has("CONTENT_DELETION"), false, "CONTENT_DELETION stays moderator-level")
+
+    // Callback URL safety — only root-relative internal paths survive.
+    assert.equal(safeCallbackUrl("/forum/thread/abc"), "/forum/thread/abc")
+    assert.equal(safeCallbackUrl("/feed?tab=following"), "/feed?tab=following")
+    assert.equal(safeCallbackUrl("https://evil.example"), null, "external URL must be rejected")
+    assert.equal(safeCallbackUrl("//evil.example"), null, "protocol-relative URL must be rejected")
+    assert.equal(safeCallbackUrl("javascript:alert(1)"), null, "javascript: URL must be rejected")
+    assert.equal(safeCallbackUrl("/\\evil.example"), null, "backslash trick must be rejected")
+    assert.equal(safeCallbackUrl("/auth/signin"), null, "auth paths must be rejected")
+    assert.equal(safeCallbackUrl(null), null)
+    assert.equal(safeCallbackUrl(""), null)
+    assert.equal(safeCallbackUrl("not-a-path"), null, "bare strings without a leading slash must be rejected")
+    assert.equal(
+      signInHref("/forum"),
+      `/auth/signin?callbackUrl=${encodeURIComponent("/forum")}`,
+      "sign-in href should carry the callback"
+    )
+    assert.equal(signInHref("https://evil.example"), "/auth/signin", "unsafe callback falls back to plain sign-in")
 
     console.log("All security regression tests passed.")
   } finally {

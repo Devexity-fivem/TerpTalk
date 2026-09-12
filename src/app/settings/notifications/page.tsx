@@ -1,5 +1,7 @@
 "use client"
 
+import { signInHref } from "@/lib/callback-url"
+
 import { useEffect, useState } from "react"
 import { useSession } from "next-auth/react"
 import { Bell, Loader2, Save } from "lucide-react"
@@ -27,7 +29,7 @@ export default function NotificationSettingsPage() {
 
   useEffect(() => {
     if (status === "unauthenticated") {
-      router.push("/auth/signin")
+      router.push(signInHref(window.location.pathname + window.location.search))
       return
     }
     if (status === "loading") return

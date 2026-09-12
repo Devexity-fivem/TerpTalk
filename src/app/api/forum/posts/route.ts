@@ -2,10 +2,10 @@ import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { unauthorized, publicUserSelect, LIMITS, getClientIp, logSecurityEvent, isBanned, forbidden, containsExternalLink, isTrustedForLinks, isModerator, isAdmin } from "@/lib/security"
+import { unauthorized, publicUserSelect, LIMITS, getClientIp, logSecurityEvent, isBanned, forbidden, enforceLinkTrust, isModerator, isAdmin } from "@/lib/security"
 import { requireModerator } from "@/lib/require-staff"
 import { rateLimit } from "@/lib/rate-limit"
-import { awardReputation, REP_POINTS, REP_TIERS } from "@/lib/reputation"
+import { awardReputation, REP_POINTS } from "@/lib/reputation"
 import { storeImages, deleteImagesIfUnreferenced } from "@/lib/blob"
 import { notifyMentions } from "@/lib/mentions"
 import { notify } from "@/lib/notify"
@@ -88,17 +88,8 @@ export async function POST(request: Request) {
       )
     }
 
-    if (containsExternalLink(content) && !(await isTrustedForLinks(session.user.id))) {
-      await logSecurityEvent("NEWBIE_LINK_BLOCKED", {
-        userId: session.user.id,
-        ip: getClientIp(request),
-        metadata: { endpoint: "forum/posts", threadId },
-      })
-      return NextResponse.json(
-        { error: `New users need 24 hours and ${REP_TIERS[1].threshold} reputation (Sprout tier) before posting links. Share plain text in the meantime.` },
-        { status: 403 }
-      )
-    }
+    const linkBlock = await enforceLinkTrust(content, session.user.id, request, "forum/posts")
+    if (linkBlock) return linkBlock
 
     // Upload attachments first so a storage failure cannot leave a reply
     // with only some of its images.
@@ -227,6 +218,10 @@ export async function PATCH(request: Request) {
     ) {
       return NextResponse.json({ error: "Thread is locked" }, { status: 403 })
     }
+
+    // Same link policy as creation — edits must not be a bypass.
+    const linkBlock = await enforceLinkTrust(content, session.user.id, request, "forum/posts:edit")
+    if (linkBlock) return linkBlock
 
     const updated = await prisma.post.update({
       where: { id },

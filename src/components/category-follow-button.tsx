@@ -2,16 +2,19 @@
 
 import { useState } from "react"
 import { useSession } from "next-auth/react"
+import { usePathname } from "next/navigation"
 import { Bell, BellRing, Loader2 } from "lucide-react"
+import { signInHref } from "@/lib/callback-url"
 
 export default function CategoryFollowButton({ categoryId, initiallyFollowing }: { categoryId: string; initiallyFollowing: boolean }) {
   const { data: session } = useSession()
+  const pathname = usePathname()
   const [following, setFollowing] = useState(initiallyFollowing)
   const [busy, setBusy] = useState(false)
 
   if (!session) {
     return (
-      <a href="/auth/signin" className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors">
+      <a href={signInHref(pathname)} className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors">
         <Bell className="w-4 h-4" /> Follow
       </a>
     )

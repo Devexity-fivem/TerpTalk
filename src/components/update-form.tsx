@@ -2,7 +2,9 @@
 
 import { useState } from "react"
 import { useSession } from "next-auth/react"
+import { usePathname } from "next/navigation"
 import { Plus, Loader2, X, Camera } from "lucide-react"
+import { signInHref } from "@/lib/callback-url"
 import { STAGE_TIPS } from "@/lib/stage-tips"
 
 function resizeImage(file: File, max = 800): Promise<string> {
@@ -29,6 +31,7 @@ interface UpdateFormProps {
 
 export default function UpdateForm({ diaryId }: UpdateFormProps) {
   const { data: session } = useSession()
+  const pathname = usePathname()
   const [isOpen, setIsOpen] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
@@ -122,7 +125,7 @@ export default function UpdateForm({ diaryId }: UpdateFormProps) {
 
       {!session ? (
         <p className="text-muted-foreground">
-          Please <a href="/auth/signin" className="text-primary hover:underline">sign in</a> to add updates.
+          Please <a href={signInHref(pathname)} className="text-primary hover:underline">sign in</a> to add updates.
         </p>
       ) : (
         <form onSubmit={handleSubmit} className="space-y-4">

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { unauthorized, publicUserSelect, getClientIp, logSecurityEvent, isBanned, forbidden, blockExistsBetween } from "@/lib/security"
+import { unauthorized, publicUserSelect, getClientIp, logSecurityEvent, isBanned, forbidden, blockExistsBetween, enforceLinkTrust } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
 import { notifyMentions } from "@/lib/mentions"
 import { notify } from "@/lib/notify"
@@ -50,6 +50,9 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Setup not found" }, { status: 404 })
     }
     if (await blockExistsBetween(session.user.id, setup.authorId)) return forbidden()
+
+    const linkBlock = await enforceLinkTrust(content, session.user.id, request, "setups/comments")
+    if (linkBlock) return linkBlock
 
     const comment = await prisma.setupComment.create({
       data: { setupId, authorId: session.user.id, content: content.trim() },

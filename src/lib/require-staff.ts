@@ -3,6 +3,16 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { isAdmin, isModerator, isStaff, isSupport } from "@/lib/security"
 
+// Moderation action types that only ADMINISTRATOR may perform — ban state
+// changes and suspension removal can silently unban users, so moderators
+// must not be able to run them.
+export const ADMIN_ONLY_MOD_ACTIONS = new Set([
+  "TEMPORARY_BAN",
+  "PERMANENT_BAN",
+  "UNBAN",
+  "REMOVE_SUSPENSION",
+])
+
 // Fresh privilege check — verifies the role AND ban status from the
 // database on every call instead of trusting the JWT claim, so demoted
 // or banned staff lose access immediately (JWTs live up to 24h).

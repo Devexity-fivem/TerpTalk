@@ -2,7 +2,9 @@
 
 import { useState } from "react"
 import { useSession } from "next-auth/react"
+import { usePathname } from "next/navigation"
 import { MessageSquare, Loader2 } from "lucide-react"
+import { signInHref } from "@/lib/callback-url"
 import ImageUploader from "@/components/image-uploader"
 import MarkdownComposer from "@/components/markdown-composer"
 import { useToast } from "@/components/ui/toast"
@@ -13,6 +15,7 @@ interface ReplyFormProps {
 
 export default function ReplyForm({ threadId }: ReplyFormProps) {
   const { data: session } = useSession()
+  const pathname = usePathname()
   const { toast } = useToast()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
@@ -63,7 +66,7 @@ export default function ReplyForm({ threadId }: ReplyFormProps) {
       <h3 className="font-semibold mb-4">Add to Discussion</h3>
       {!session ? (
         <p className="text-muted-foreground">
-          Please <a href="/auth/signin" className="text-primary hover:underline">sign in</a> to reply to this discussion.
+          Please <a href={signInHref(pathname)} className="text-primary hover:underline">sign in</a> to reply to this discussion.
         </p>
       ) : (
         <form onSubmit={handleSubmit} className="space-y-4">

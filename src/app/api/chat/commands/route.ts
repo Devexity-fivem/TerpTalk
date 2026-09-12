@@ -14,11 +14,12 @@ import {
   publicUserSelect,
   LIMITS,
   USERNAME_REGEX,
+  enforceLinkTrust,
 } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
 import { checkMaintenance } from "@/lib/maintenance"
 import { getPusher } from "@/lib/pusher"
-import { postBotMessage, randomGrowTip } from "@/lib/terpbot"
+import { postBotMessage, randomGrowTip, TERPBOT_USERNAME } from "@/lib/terpbot"
 import { emitNotificationPush } from "@/lib/notify"
 import { currentWeekKey } from "@/lib/week"
 
@@ -109,7 +110,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const postBot = (text: string) => postBotMessage(roomId, text, { awardRep: true })
+    const postBot = (text: string) => postBotMessage(roomId, text)
 
     const resolveTarget = async (raw?: string) => {
       if (!raw) return null
@@ -247,6 +248,8 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: `Slow mode: wait ${room.slowModeSeconds}s` }, { status: 429 })
           }
         }
+        const linkBlock = await enforceLinkTrust(rest, userId, request, "chat/commands:/me")
+        if (linkBlock) return linkBlock
         const message = await prisma.chatMessage.create({
           data: {
             roomId,
@@ -282,7 +285,7 @@ export async function POST(request: NextRequest) {
       case "top":
       case "leaderboard": {
         const top = await prisma.profile.findMany({
-          where: { user: { banned: false } },
+          where: { user: { banned: false }, username: { not: TERPBOT_USERNAME } },
           orderBy: { reputation: "desc" },
           take: 5,
           select: { username: true, reputation: true },

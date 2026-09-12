@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { unauthorized, publicUserSelect, LIMITS, getClientIp, logSecurityEvent, isBanned, forbidden } from "@/lib/security"
+import { unauthorized, publicUserSelect, LIMITS, getClientIp, logSecurityEvent, isBanned, forbidden, enforceLinkTrust } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
 import { awardReputation, REP_POINTS } from "@/lib/reputation"
 import { storeImages, deleteImagesIfUnreferenced } from "@/lib/blob"
@@ -116,6 +116,9 @@ export async function POST(request: Request) {
         { status: 403 }
       )
     }
+
+    const linkBlock = await enforceLinkTrust(`${title}\n${content}`, session.user.id, request, "diaries/updates")
+    if (linkBlock) return linkBlock
 
     // Offload to Blob storage when configured (keeps DB rows small)
     storedImages = await storeImages(validImages, "diary-updates")

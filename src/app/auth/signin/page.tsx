@@ -5,6 +5,7 @@ import { signIn } from "next-auth/react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { Leaf, Loader2 } from "lucide-react"
+import { safeCallbackUrl } from "@/lib/callback-url"
 
 export default function SignInPage() {
   const router = useRouter()
@@ -30,7 +31,8 @@ export default function SignInPage() {
       if (result?.error) {
         setError("Invalid username or password")
       } else {
-        router.push("/")
+        const callback = safeCallbackUrl(new URLSearchParams(window.location.search).get("callbackUrl"))
+        router.push(callback ?? "/")
         router.refresh()
       }
     } catch {

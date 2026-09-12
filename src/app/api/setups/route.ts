@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { unauthorized, publicUserSelect, LIMITS, getClientIp, logSecurityEvent, isBanned, forbidden } from "@/lib/security"
+import { unauthorized, publicUserSelect, LIMITS, getClientIp, logSecurityEvent, isBanned, forbidden, enforceLinkTrust } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
 import { storeImages, deleteImagesIfUnreferenced } from "@/lib/blob"
 import { checkMaintenance } from "@/lib/maintenance"
@@ -78,6 +78,14 @@ export async function POST(request: Request) {
     if (await isBanned(session.user.id)) {
       return forbidden("Your account is suspended")
     }
+
+    const linkBlock = await enforceLinkTrust(
+      [title, description].filter((f): f is string => typeof f === "string").join("\n"),
+      session.user.id,
+      request,
+      "setups"
+    )
+    if (linkBlock) return linkBlock
 
     // Validate any uploaded images are data URIs (client-resized, max 6)
     const validImages = Array.isArray(images)

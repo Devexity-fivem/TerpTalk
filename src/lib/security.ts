@@ -67,6 +67,25 @@ export function containsExternalLink(text: string): boolean {
   return LINK_RE.test(text)
 }
 
+/**
+ * Applies the new-user link policy to a piece of user-generated content.
+ * Returns a 403 response to return early, or null when the content is allowed.
+ */
+export async function enforceLinkTrust(
+  text: string,
+  userId: string,
+  request: { headers: Headers | Record<string, string | undefined> },
+  endpoint: string,
+): Promise<NextResponse | null> {
+  if (!containsExternalLink(text) || (await isTrustedForLinks(userId))) return null
+  await logSecurityEvent("NEWBIE_LINK_BLOCKED", {
+    userId,
+    ip: getClientIp(request),
+    metadata: { endpoint },
+  })
+  return forbidden(`New users need 24 hours and ${REP_TIERS[1]?.threshold ?? 250} reputation (Sprout tier) before posting links. Share plain text in the meantime.`)
+}
+
 /** Moderators and users older than 24h who have reached the Sprout tier can post links. */
 export async function isTrustedForLinks(userId: string): Promise<boolean> {
   const user = await prisma.user.findUnique({

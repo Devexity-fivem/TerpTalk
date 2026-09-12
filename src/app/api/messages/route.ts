@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { getToken } from "next-auth/jwt"
 import { sessionCookieName } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { unauthorized, publicUserSelect, getClientIp, logSecurityEvent, isSessionValid, forbidden, blockExistsBetween, hashIp } from "@/lib/security"
+import { unauthorized, publicUserSelect, getClientIp, logSecurityEvent, isSessionValid, forbidden, blockExistsBetween, hashIp, enforceLinkTrust } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
 import { checkMaintenance } from "@/lib/maintenance"
 import { notify } from "@/lib/notify"
@@ -179,6 +179,9 @@ export async function POST(request: NextRequest) {
     if (await blockExistsBetween(userId, to)) {
       return forbidden("You cannot message this user")
     }
+
+    const linkBlock = await enforceLinkTrust(content, userId, request, "messages")
+    if (linkBlock) return linkBlock
 
     const target = await prisma.user.findUnique({
       where: { id: to },

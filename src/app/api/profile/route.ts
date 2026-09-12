@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { unauthorized, forbidden, getClientIp, logSecurityEvent, LIMITS, isBanned } from "@/lib/security"
+import { unauthorized, forbidden, getClientIp, logSecurityEvent, LIMITS, isBanned, enforceLinkTrust } from "@/lib/security"
 import { storeImage, deleteImagesIfUnreferenced } from "@/lib/blob"
 import { getReputationTier, getTierProgress } from "@/lib/reputation"
 import { rateLimit } from "@/lib/rate-limit"
@@ -249,6 +249,16 @@ export async function PATCH(request: Request) {
           { status: 400 }
         )
       }
+    }
+
+    // Public profile links are gated by the same new-user link policy used for
+    // posts — otherwise fresh accounts become an instant SEO/spam vector.
+    const linkText = [cleanWebsite, cleanBusinessUrl, typeof bio === "string" ? bio : null]
+      .filter((v): v is string => !!v)
+      .join(" ")
+    if (linkText) {
+      const linkBlock = await enforceLinkTrust(linkText, userId, request, "profile")
+      if (linkBlock) return linkBlock
     }
 
     const BUSINESS_TYPES = new Set(["BREEDER", "VENDOR", "GROW_SHOP", "BRAND"])

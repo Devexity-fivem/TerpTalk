@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation"
 import { useSession } from "next-auth/react"
 import { Home, MessageCircle, Leaf, Bell, User, Search } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { signInHref } from "@/lib/callback-url"
 
 interface MobileNavProps {
   unread: number
@@ -28,7 +29,7 @@ export default function MobileNav({ unread }: MobileNavProps) {
   const isActive = (href: string, exact?: boolean) =>
     exact ? pathname === href : pathname === href || pathname.startsWith(`${href}/`)
 
-  const accountHref = session ? "/profile" : "/auth/signin"
+  const accountHref = session ? "/profile" : signInHref("/profile")
   const accountLabel = session ? "You" : "Sign in"
 
   return (

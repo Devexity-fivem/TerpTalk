@@ -2,12 +2,14 @@
 
 import { useState } from "react"
 import { useSession } from "next-auth/react"
-import { useRouter } from "next/navigation"
+import { useRouter, usePathname } from "next/navigation"
 import { MessageSquare, Loader2, Send } from "lucide-react"
+import { signInHref } from "@/lib/callback-url"
 
 export default function SetupComments({ setupId }: { setupId: string }) {
   const { data: session } = useSession()
   const router = useRouter()
+  const pathname = usePathname()
   const [content, setContent] = useState("")
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState("")
@@ -35,7 +37,7 @@ export default function SetupComments({ setupId }: { setupId: string }) {
   if (!session) {
     return (
       <p className="text-sm text-muted-foreground">
-        <a href="/auth/signin" className="text-primary hover:underline">Sign in</a> to comment.
+        <a href={signInHref(pathname)} className="text-primary hover:underline">Sign in</a> to comment.
       </p>
     )
   }

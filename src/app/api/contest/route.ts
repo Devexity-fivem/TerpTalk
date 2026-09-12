@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { unauthorized, publicUserSelect, getClientIp, hashIp, logSecurityEvent, isBanned, forbidden } from "@/lib/security"
+import { unauthorized, publicUserSelect, getClientIp, hashIp, logSecurityEvent, isBanned, forbidden, enforceLinkTrust } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
 import { storeImage, deleteImagesIfUnreferenced } from "@/lib/blob"
 import { currentWeekKey } from "@/lib/week"
@@ -92,6 +92,10 @@ export async function POST(request: Request) {
       const { image, caption } = body
       if (typeof image !== "string" || image.length > 400_000 || !/^data:image\/(png|jpe?g|webp);base64,/.test(image)) {
         return NextResponse.json({ error: "Image must be a JPG, PNG or WebP upload" }, { status: 400 })
+      }
+      if (typeof caption === "string" && caption.trim()) {
+        const linkBlock = await enforceLinkTrust(caption, session.user.id, request, "contest")
+        if (linkBlock) return linkBlock
       }
 
       const currentWeek = currentWeekKey()

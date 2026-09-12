@@ -1,5 +1,7 @@
 "use client"
 
+import { signInHref } from "@/lib/callback-url"
+
 import { useEffect, useRef, useState, useCallback, Suspense } from "react"
 import { useSession } from "next-auth/react"
 import { useSearchParams, useRouter } from "next/navigation"
@@ -77,7 +79,7 @@ function MessagesInner() {
   }, [])
 
   useEffect(() => {
-    if (status === "unauthenticated") router.push("/auth/signin")
+    if (status === "unauthenticated") router.push(signInHref(window.location.pathname + window.location.search))
     if (status === "authenticated") loadConvos()
   }, [status, router, loadConvos])
 

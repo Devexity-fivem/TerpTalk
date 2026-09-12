@@ -1,5 +1,7 @@
 "use client"
 
+import { signInHref } from "@/lib/callback-url"
+
 import { useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
 import { useEffect, useMemo, useRef, useState } from "react"
@@ -204,7 +206,7 @@ export default function ProfilePage() {
 
   useEffect(() => {
     if (status === "unauthenticated") {
-      router.push("/auth/signin")
+      router.push(signInHref(window.location.pathname + window.location.search))
     }
   }, [status, router])
 

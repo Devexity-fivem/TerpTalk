@@ -2,10 +2,12 @@ import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { unauthorized, LIMITS, USERNAME_REGEX, RESERVED_USERNAMES, getClientIp, logSecurityEvent, isBanned, forbidden } from "@/lib/security"
+import { unauthorized, LIMITS, USERNAME_REGEX, RESERVED_USERNAMES, getClientIp, logSecurityEvent, isBanned, forbidden, enforceLinkTrust } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
+import { storeImage, deleteImagesIfUnreferenced } from "@/lib/blob"
 
 export async function POST(request: Request) {
+  let newAvatarBlobUrl: string | undefined
   try {
     const session = await getServerSession(authOptions)
 
@@ -27,7 +29,7 @@ export async function POST(request: Request) {
     if (!body || typeof body !== "object") {
       return NextResponse.json({ error: "Invalid request body" }, { status: 400 })
     }
-    const { username, bio, location, website } = body as Record<string, unknown>
+    const { username, bio, location, website, avatarUrl } = body as Record<string, unknown>
 
     if (Object.keys(body as Record<string, unknown>).length === 0) {
       return NextResponse.json({ error: "No fields provided" }, { status: 400 })
@@ -88,6 +90,32 @@ export async function POST(request: Request) {
       }
     }
 
+    // Avatar upload — same pipeline as profile PATCH: data-URI only,
+    // magic-byte check, server-side re-encode, metadata strip, Blob store.
+    let cleanAvatar: string | null | undefined = undefined
+    if (avatarUrl !== undefined) {
+      if (avatarUrl === null || avatarUrl === "") {
+        cleanAvatar = null
+      } else if (typeof avatarUrl !== "string" || avatarUrl.length > 300_000 || !/^data:image\/(png|jpe?g|webp);base64,/.test(avatarUrl)) {
+        return NextResponse.json({ error: "Avatar must be an image upload" }, { status: 400 })
+      } else {
+        try {
+          cleanAvatar = await storeImage(avatarUrl, "avatars")
+          newAvatarBlobUrl = cleanAvatar
+        } catch (err) {
+          console.error("Avatar upload error:", err)
+          return NextResponse.json({ error: "Avatar upload failed" }, { status: 400 })
+        }
+      }
+    }
+
+    // Same new-user link policy as profile PATCH — no onboarding bypass.
+    const linkText = [cleanWebsite, cleanBio].filter((v): v is string => !!v).join(" ")
+    if (linkText) {
+      const linkBlock = await enforceLinkTrust(linkText, session.user.id, request, "profile/complete")
+      if (linkBlock) return linkBlock
+    }
+
     // Update profile
     let profile
     try {
@@ -98,6 +126,7 @@ export async function POST(request: Request) {
           ...(cleanBio !== undefined && { bio: cleanBio }),
           ...(cleanLocation !== undefined && { location: cleanLocation }),
           ...(cleanWebsite !== undefined && { website: cleanWebsite }),
+          ...(cleanAvatar !== undefined && { avatarUrl: cleanAvatar }),
         },
         select: {
           username: true,
@@ -115,8 +144,17 @@ export async function POST(request: Request) {
       throw e
     }
 
+    if (cleanAvatar !== undefined) {
+      await prisma.user.update({
+        where: { id: session.user.id },
+        data: { image: cleanAvatar },
+      })
+    }
+
     return NextResponse.json({ profile }, { status: 200 })
   } catch (error) {
+    // Clean up the new avatar Blob if the profile update could not be saved.
+    deleteImagesIfUnreferenced([newAvatarBlobUrl]).catch(() => {})
     console.error("Profile update error:", error)
     return NextResponse.json(
       { error: "Failed to update profile" },

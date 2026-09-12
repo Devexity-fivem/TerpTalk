@@ -1,9 +1,31 @@
 "use client"
 
-import { useState } from "react"
+import { useRef, useState } from "react"
 import { useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
 import { User, Camera, Loader2, Check } from "lucide-react"
+import { safeCallbackUrl } from "@/lib/callback-url"
+
+// Resize an image file to a 128x128 data URI for avatar upload
+function resizeImage(file: File, size = 128): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const img = new Image()
+    img.onload = () => {
+      const canvas = document.createElement("canvas")
+      const min = Math.min(img.width, img.height)
+      const sx = (img.width - min) / 2
+      const sy = (img.height - min) / 2
+      canvas.width = size
+      canvas.height = size
+      const ctx = canvas.getContext("2d")
+      if (!ctx) return reject(new Error("no canvas"))
+      ctx.drawImage(img, sx, sy, min, min, 0, 0, size, size)
+      resolve(canvas.toDataURL("image/png"))
+    }
+    img.onerror = reject
+    img.src = URL.createObjectURL(file)
+  })
+}
 
 export default function CompleteProfilePage() {
   const { update } = useSession()
@@ -16,6 +38,29 @@ export default function CompleteProfilePage() {
     location: "",
     website: "",
   })
+  const [avatar, setAvatar] = useState("")
+  const [avatarError, setAvatarError] = useState("")
+  const avatarInputRef = useRef<HTMLInputElement>(null)
+
+  const handleAvatar = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    e.target.value = ""
+    if (!file) return
+    if (!/^image\/(png|jpe?g|webp)$/.test(file.type)) {
+      setAvatarError("Avatar must be a JPG, PNG or WebP image")
+      return
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setAvatarError("Avatar must be under 5MB")
+      return
+    }
+    try {
+      setAvatar(await resizeImage(file))
+      setAvatarError("")
+    } catch {
+      setAvatarError("Could not read that image")
+    }
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -25,7 +70,7 @@ export default function CompleteProfilePage() {
       const response = await fetch("/api/profile/complete", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formData),
+        body: JSON.stringify({ ...formData, ...(avatar ? { avatarUrl: avatar } : {}) }),
       })
 
       if (!response.ok) {
@@ -35,9 +80,10 @@ export default function CompleteProfilePage() {
       setSuccess(true)
       // Update session
       await update()
-      
+
+      const callback = safeCallbackUrl(new URLSearchParams(window.location.search).get("callbackUrl"))
       setTimeout(() => {
-        router.push("/")
+        router.push(callback ?? "/")
       }, 1500)
     } catch (error) {
       console.error("Profile update error:", error)
@@ -75,22 +121,35 @@ export default function CompleteProfilePage() {
 
         <div className="bg-card p-8 rounded-lg border border-border">
           <form onSubmit={handleSubmit} className="space-y-6">
-            {/* Avatar Upload (placeholder for now) */}
+            {/* Avatar Upload */}
             <div className="flex items-center gap-4">
-              <div className="w-20 h-20 bg-secondary rounded-full flex items-center justify-center">
-                <User className="w-10 h-10 text-muted-foreground" />
+              <div className="w-20 h-20 bg-secondary rounded-full flex items-center justify-center overflow-hidden">
+                {avatar ? (
+                  <img src={avatar} alt="Avatar preview" className="w-full h-full object-cover" />
+                ) : (
+                  <User className="w-10 h-10 text-muted-foreground" />
+                )}
               </div>
               <div>
+                <input
+                  ref={avatarInputRef}
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  className="hidden"
+                  onChange={handleAvatar}
+                />
                 <button
                   type="button"
+                  onClick={() => avatarInputRef.current?.click()}
                   className="flex items-center gap-2 px-4 py-2 bg-secondary text-secondary-foreground rounded-lg hover:bg-secondary/80 transition-colors"
                 >
                   <Camera className="w-4 h-4" />
-                  Upload Avatar
+                  {avatar ? "Change Avatar" : "Upload Avatar"}
                 </button>
                 <p className="text-sm text-muted-foreground mt-1">
-                  JPG, PNG or GIF. Max 2MB.
+                  JPG, PNG or WebP. Max 5MB.
                 </p>
+                {avatarError && <p className="text-xs text-destructive mt-1">{avatarError}</p>}
               </div>
             </div>
 
@@ -172,7 +231,7 @@ export default function CompleteProfilePage() {
 
         <div className="text-center mt-4">
           <button
-            onClick={() => router.push("/")}
+            onClick={() => router.push(safeCallbackUrl(new URLSearchParams(window.location.search).get("callbackUrl")) ?? "/")}
             className="text-sm text-muted-foreground hover:text-foreground"
           >
             Skip for now

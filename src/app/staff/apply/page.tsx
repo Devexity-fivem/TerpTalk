@@ -117,7 +117,7 @@ export default function StaffApplyPage() {
           <AlertCircle className="w-10 h-10 text-muted-foreground mx-auto mb-4" />
           <h1 className="text-2xl font-bold mb-2">Sign in to apply</h1>
           <p className="text-muted-foreground mb-6">You need an account to apply for a staff role.</p>
-          <Link href="/auth/signin" className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90">
+          <Link href="/auth/signin?callbackUrl=%2Fstaff%2Fapply" className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90">
             Sign in
           </Link>
         </div>

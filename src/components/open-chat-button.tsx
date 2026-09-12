@@ -1,5 +1,7 @@
 "use client"
 
+import { signInHref } from "@/lib/callback-url"
+
 import { useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
 import { MessageCircle } from "lucide-react"
@@ -17,7 +19,7 @@ export function OpenChatButton({ className }: OpenChatButtonProps) {
     if (session) {
       window.dispatchEvent(new CustomEvent("tt-open-chat"))
     } else {
-      router.push("/auth/signin")
+      router.push(signInHref(window.location.pathname + window.location.search))
     }
   }
 

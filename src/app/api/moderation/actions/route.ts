@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { unauthorized, isAdmin, forbidden, getClientIp, logSecurityEvent } from "@/lib/security"
-import { requireModerator } from "@/lib/require-staff"
+import { requireModerator, ADMIN_ONLY_MOD_ACTIONS } from "@/lib/require-staff"
 import { rateLimit } from "@/lib/rate-limit"
 import { emitNotificationPush } from "@/lib/notify"
 
@@ -75,7 +75,7 @@ export async function POST(request: Request) {
         throw new Error("FORBIDDEN")
       }
 
-      if (["TEMPORARY_BAN", "PERMANENT_BAN", "UNBAN"].includes(actionType) && !isAdmin(staff.role)) {
+      if (ADMIN_ONLY_MOD_ACTIONS.has(actionType) && !isAdmin(staff.role)) {
         throw new Error("FORBIDDEN")
       }
 
@@ -154,10 +154,18 @@ export async function POST(request: Request) {
         })
       }
 
-      if (actionType === "UNBAN" || actionType === "REMOVE_SUSPENSION") {
+      if (actionType === "UNBAN") {
         await tx.user.update({
           where: { id: targetUserId },
           data: { banned: false, suspendedUntil: null, bannedReason: null, sessionVersion: { increment: 1 } },
+        })
+      }
+
+      // REMOVE_SUSPENSION only lifts a temporary suspension — it must not unban.
+      if (actionType === "REMOVE_SUSPENSION") {
+        await tx.user.update({
+          where: { id: targetUserId },
+          data: { suspendedUntil: null, bannedReason: null, sessionVersion: { increment: 1 } },
         })
       }
 

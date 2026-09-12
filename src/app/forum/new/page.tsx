@@ -1,5 +1,7 @@
 "use client"
 
+import { signInHref } from "@/lib/callback-url"
+
 import { useState, useEffect, Suspense } from "react"
 import { useSession } from "next-auth/react"
 import { useRouter, useSearchParams } from "next/navigation"
@@ -90,7 +92,7 @@ function NewThreadForm() {
   }
 
   if (!session) {
-    router.push("/auth/signin")
+    router.push(signInHref(window.location.pathname + window.location.search))
     return null
   }
 

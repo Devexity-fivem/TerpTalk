@@ -7,6 +7,8 @@ import { KeyRound, Loader2, Copy, Check, AlertTriangle } from "lucide-react"
 export default function RecoveryPhraseCard() {
   const [hasPhrase, setHasPhrase] = useState<boolean | null>(null)
   const [phrase, setPhrase] = useState("")
+  const [confirming, setConfirming] = useState(false)
+  const [password, setPassword] = useState("")
   const [busy, setBusy] = useState(false)
   const [copied, setCopied] = useState(false)
   const [error, setError] = useState("")
@@ -18,16 +20,35 @@ export default function RecoveryPhraseCard() {
       .catch(() => setHasPhrase(false))
   }, [])
 
-  const generate = async () => {
+  const startGenerate = () => {
     if (hasPhrase && !confirm("Generate a NEW phrase? Your old phrase will stop working.")) return
+    setError("")
+    setConfirming(true)
+  }
+
+  const generate = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!password) return
     setBusy(true)
     setError("")
     try {
-      const res = await fetch("/api/profile/recovery", { method: "POST" })
-      const d = await res.json()
-      if (res.ok) { setPhrase(d.phrase); setHasPhrase(true) }
-      else setError(d.error || "Failed to generate phrase")
-    } finally { setBusy(false) }
+      const res = await fetch("/api/profile/recovery", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password }),
+      })
+      const d = await res.json().catch(() => ({}))
+      if (res.ok) {
+        setPhrase(d.phrase)
+        setHasPhrase(true)
+        setConfirming(false)
+      } else {
+        setError(d.error || "Failed to generate phrase")
+      }
+    } finally {
+      setPassword("")
+      setBusy(false)
+    }
   }
 
   return (
@@ -72,14 +93,51 @@ export default function RecoveryPhraseCard() {
             I&apos;ve saved it
           </button>
         </div>
+      ) : confirming ? (
+        <form onSubmit={generate} className="space-y-3">
+          <div>
+            <label htmlFor="recovery-password" className="block text-sm font-medium mb-1">
+              Confirm your password
+            </label>
+            <input
+              id="recovery-password"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              minLength={8}
+              autoComplete="current-password"
+              className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+              placeholder="Current password"
+            />
+            <p className="text-xs text-muted-foreground mt-1">
+              Generating a new phrase signs out your other sessions.
+            </p>
+          </div>
+          <div className="flex items-center gap-3">
+            <button
+              type="submit"
+              disabled={busy || !password}
+              className="px-4 py-2 text-sm bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-50 flex items-center gap-2"
+            >
+              {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+              {hasPhrase ? "Regenerate phrase" : "Generate recovery phrase"}
+            </button>
+            <button
+              type="button"
+              onClick={() => { setConfirming(false); setPassword(""); setError("") }}
+              className="px-4 py-2 text-sm bg-secondary rounded-lg hover:bg-secondary/80"
+            >
+              Cancel
+            </button>
+          </div>
+        </form>
       ) : (
         <div className="flex items-center gap-3">
           <button
-            onClick={generate}
-            disabled={busy}
-            className="px-4 py-2 text-sm bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-50 flex items-center gap-2"
+            onClick={startGenerate}
+            className="px-4 py-2 text-sm bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 flex items-center gap-2"
           >
-            {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
             {hasPhrase ? "Regenerate phrase" : "Generate recovery phrase"}
           </button>
           {hasPhrase && (

@@ -14,6 +14,7 @@ import MobileNav from "@/components/mobile-nav"
 import ThemeToggle from "@/components/theme-toggle"
 import CreateMenu from "@/components/create-menu"
 import { cn } from "@/lib/utils"
+import { signInHref } from "@/lib/callback-url"
 
 const NAV_LINKS = [
   { href: "/", label: "Home", icon: Home, section: "Explore" },
@@ -139,7 +140,7 @@ export function Navigation() {
     if (session) {
       window.dispatchEvent(new CustomEvent("tt-open-chat"))
     } else {
-      router.push("/auth/signin")
+      router.push(signInHref(pathname))
     }
   }
 
@@ -247,7 +248,7 @@ export function Navigation() {
               ) : (
                 <>
                   <Link
-                    href="/auth/signin"
+                    href={signInHref(pathname)}
                     className="px-3 py-2 text-sm font-medium transition-colors hover:text-foreground"
                   >
                     Sign In

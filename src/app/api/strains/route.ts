@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { unauthorized, LIMITS, getClientIp, logSecurityEvent, isBanned, forbidden } from "@/lib/security"
+import { unauthorized, LIMITS, getClientIp, logSecurityEvent, isBanned, forbidden, enforceLinkTrust } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
 import { awardReputation, REP_POINTS } from "@/lib/reputation"
 
@@ -64,6 +64,14 @@ export async function POST(request: Request) {
     if (await isBanned(session.user.id)) {
       return forbidden("Your account is suspended")
     }
+
+    const linkBlock = await enforceLinkTrust(
+      [description, growingInfo].filter((f): f is string => typeof f === "string").join("\n"),
+      session.user.id,
+      request,
+      "strains"
+    )
+    if (linkBlock) return linkBlock
 
     // Check if strain already exists (case-insensitive)
     const existingStrain = await prisma.strain.findFirst({

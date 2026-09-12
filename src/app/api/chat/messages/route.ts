@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { getToken } from "next-auth/jwt"
 import { sessionCookieName } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { unauthorized, publicUserSelect, LIMITS, getClientIp, logSecurityEvent, isSessionValid, forbidden, isModerator, isStaff } from "@/lib/security"
+import { unauthorized, publicUserSelect, LIMITS, getClientIp, logSecurityEvent, isSessionValid, forbidden, isModerator, isStaff, enforceLinkTrust } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
 import { notifyMentions } from "@/lib/mentions"
 import { getPusher } from "@/lib/pusher"
@@ -241,6 +241,9 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    const linkBlock = await enforceLinkTrust(content, userId, request, "chat/messages")
+    if (linkBlock) return linkBlock
+
     // Create message
     const message = await prisma.chatMessage.create({
       data: {
@@ -286,8 +289,7 @@ export async function POST(request: NextRequest) {
       if (!lastBot || Date.now() - lastBot.createdAt.getTime() > 60 * 1000) {
         postBotMessage(
           roomId,
-          `🤖 You pinged me! Try /help for commands — /tip, /stats, /top, /strain <name>, /guide <search>, /ask <question>, /contest, /flip, /roll.`,
-          { awardRep: true }
+          `🤖 You pinged me! Try /help for commands — /tip, /stats, /top, /strain <name>, /guide <search>, /ask <question>, /contest, /flip, /roll.`
         ).catch(() => {})
       }
     }

@@ -1,5 +1,7 @@
 "use client"
 
+import { signInHref } from "@/lib/callback-url"
+
 import { useState } from "react"
 import { useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
@@ -38,7 +40,7 @@ export default function NewSetupPage() {
   }
 
   if (!session) {
-    router.push("/auth/signin")
+    router.push(signInHref(window.location.pathname + window.location.search))
     return null
   }
 

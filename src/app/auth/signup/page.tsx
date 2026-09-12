@@ -5,6 +5,7 @@ import { signIn } from "next-auth/react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { Leaf, Loader2, RefreshCw } from "lucide-react"
+import { safeCallbackUrl } from "@/lib/callback-url"
 
 interface Captcha {
   id: string
@@ -122,7 +123,8 @@ export default function SignUpPage() {
         throw new Error("Registration successful but login failed")
       }
 
-      router.push("/profile/complete")
+      const callback = safeCallbackUrl(new URLSearchParams(window.location.search).get("callbackUrl"))
+      router.push(callback ? `/profile/complete?callbackUrl=${encodeURIComponent(callback)}` : "/profile/complete")
     } catch (error: unknown) {
       setError((error as Error).message)
       setCaptchaAnswer("")

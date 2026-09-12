@@ -5,6 +5,7 @@ import { useSession } from "next-auth/react"
 import { useRouter, useParams } from "next/navigation"
 import { ShieldCheck, Loader2, User, Ban, Clock, AlertTriangle } from "lucide-react"
 import Link from "next/link"
+import { signInHref } from "@/lib/callback-url"
 
 interface UserDetail {
   id: string
@@ -59,7 +60,7 @@ export default function AdminUserDetailPage() {
   }, [userId])
 
   useEffect(() => {
-    if (status === "unauthenticated") router.push("/auth/signin")
+    if (status === "unauthenticated") router.push(signInHref(window.location.pathname + window.location.search))
     else if (status === "authenticated") { const t = setTimeout(load, 0); return () => clearTimeout(t) }
   }, [status, router, load])
 
