@@ -18,6 +18,10 @@ export default function SignUpPage() {
   const [captchaAnswer, setCaptchaAnswer] = useState("")
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
+  const callback = typeof window !== "undefined"
+    ? safeCallbackUrl(new URLSearchParams(window.location.search).get("callbackUrl"))
+    : null
+  const signinHref = callback ? `/auth/signin?callbackUrl=${encodeURIComponent(callback)}` : "/auth/signin"
   const [formData, setFormData] = useState(() => {
     const ref = typeof window !== "undefined"
       ? new URLSearchParams(window.location.search).get("ref") || ""
@@ -123,7 +127,6 @@ export default function SignUpPage() {
         throw new Error("Registration successful but login failed")
       }
 
-      const callback = safeCallbackUrl(new URLSearchParams(window.location.search).get("callbackUrl"))
       router.push(callback ? `/profile/complete?callbackUrl=${encodeURIComponent(callback)}` : "/profile/complete")
     } catch (error: unknown) {
       setError((error as Error).message)
@@ -278,7 +281,10 @@ export default function SignUpPage() {
 
         <p className="text-center text-sm text-muted-foreground mt-6">
           Already have an account?{" "}
-          <Link href="/auth/signin" className="text-primary hover:underline">
+          <Link
+            href={signinHref}
+            className="text-primary hover:underline"
+          >
             Sign in
           </Link>
         </p>

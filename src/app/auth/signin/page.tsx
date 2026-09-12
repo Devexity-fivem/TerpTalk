@@ -15,6 +15,10 @@ export default function SignInPage() {
     username: "",
     password: "",
   })
+  const callback = typeof window !== "undefined"
+    ? safeCallbackUrl(new URLSearchParams(window.location.search).get("callbackUrl"))
+    : null
+  const signupHref = callback ? `/auth/signup?callbackUrl=${encodeURIComponent(callback)}` : "/auth/signup"
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -31,7 +35,6 @@ export default function SignInPage() {
       if (result?.error) {
         setError("Invalid username or password")
       } else {
-        const callback = safeCallbackUrl(new URLSearchParams(window.location.search).get("callbackUrl"))
         router.push(callback ?? "/")
         router.refresh()
       }
@@ -110,7 +113,7 @@ export default function SignInPage() {
 
         <p className="text-center text-sm text-muted-foreground mt-6">
           Don&apos;t have an account?{" "}
-          <Link href="/auth/signup" className="text-primary hover:underline">
+          <Link href={signupHref} className="text-primary hover:underline">
             Sign up
           </Link>
         </p>
