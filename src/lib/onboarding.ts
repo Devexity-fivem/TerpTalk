@@ -54,8 +54,17 @@ async function fetchCandidatePool() {
     })
 }
 
+// Normalize to JSON-safe values — unstable_cache round-trips through
+// JSON.stringify/parse, so Date objects would come back as strings.
+function toJsonSafePool(pool: Awaited<ReturnType<typeof fetchCandidatePool>>) {
+  return pool.map((p) => {
+    const { lastSeenAt, ...user } = p.user
+    return { ...p, user: { ...user, lastSeenAtMs: lastSeenAt?.getTime() ?? null } }
+  })
+}
+
 const getCachedCandidatePool = unstable_cache(
-  fetchCandidatePool,
+  async () => toJsonSafePool(await fetchCandidatePool()),
   ["onboarding-suggested-users"],
   { revalidate: 300 }
 )
@@ -63,11 +72,11 @@ const getCachedCandidatePool = unstable_cache(
 export async function getSuggestedUsers(viewerId: string, limit = 10): Promise<SuggestedUser[]> {
   // unstable_cache only works inside a Next.js request context — fall back
   // to a direct query when called from scripts/tests.
-  let pool: Awaited<ReturnType<typeof fetchCandidatePool>>
+  let pool: ReturnType<typeof toJsonSafePool>
   try {
     pool = await getCachedCandidatePool()
   } catch {
-    pool = await fetchCandidatePool()
+    pool = toJsonSafePool(await fetchCandidatePool())
   }
 
   const [follows, blocks, terpbot] = await Promise.all([
@@ -95,7 +104,7 @@ export async function getSuggestedUsers(viewerId: string, limit = 10): Promise<S
       const followers = u._count.following
       const diaries = u._count.diaryCreator
       const contributions = u._count.posts + u._count.threadCreator
-      const daysSinceSeen = u.lastSeenAt ? (now - u.lastSeenAt.getTime()) / 86_400_000 : 30
+      const daysSinceSeen = u.lastSeenAtMs != null ? (now - u.lastSeenAtMs) / 86_400_000 : 30
       const score =
         2 * Math.log(1 + p.reputation) +
         3 * Math.log(1 + followers) +

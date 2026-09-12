@@ -13,7 +13,8 @@
     "seed": "tsx prisma/seed.ts",
     "backup": "tsx scripts/backup.ts",
     "test:security": "tsx scripts/security-tests.mts",
-    "test:notifications": "tsx scripts/notification-2-tests.mts"
+    "test:notifications": "tsx scripts/notification-2-tests.mts",
+    "test:onboarding": "node scripts/onboarding-verify.mjs"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",

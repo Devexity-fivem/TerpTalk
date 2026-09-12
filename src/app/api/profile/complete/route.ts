@@ -29,7 +29,7 @@ export async function POST(request: Request) {
     if (!body || typeof body !== "object") {
       return NextResponse.json({ error: "Invalid request body" }, { status: 400 })
     }
-    const { username, bio, location, website, avatarUrl } = body as Record<string, unknown>
+    const { username, bio, location, website, avatarUrl, completeOnboarding } = body as Record<string, unknown>
 
     if (Object.keys(body as Record<string, unknown>).length === 0) {
       return NextResponse.json({ error: "No fields provided" }, { status: 400 })
@@ -144,10 +144,13 @@ export async function POST(request: Request) {
       throw e
     }
 
+    // Mark onboarding done only when the standalone completion page asks —
+    // the /welcome stepper saves profile fields mid-flow and must not flip
+    // this flag early or the user can never resume the remaining steps.
     await prisma.user.update({
       where: { id: session.user.id },
       data: {
-        onboardingCompletedAt: new Date(),
+        ...(completeOnboarding === true && { onboardingCompletedAt: new Date() }),
         ...(cleanAvatar !== undefined && { image: cleanAvatar }),
       },
     })

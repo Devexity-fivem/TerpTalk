@@ -56,7 +56,8 @@ const apiFiles = () => {
   // ── 4. Rate limiting coverage on mutation endpoints ──
   const needsRl = ["auth/register", "auth/recover", "messages", "forum/posts", "forum/threads",
     "reactions", "follows", "reports", "blocks", "bookmarks", "search", "profile",
-    "profile/complete", "profile/export", "contest", "chat/messages"];
+    "profile/complete", "profile/export", "contest", "chat/messages",
+    "onboarding/interests", "onboarding/follow", "onboarding/complete", "onboarding/suggestions"];
   for (const r of needsRl) {
     check(`${r}: rate limited`, fs.readFileSync(`src/app/api/${r}/route.ts`, "utf8").includes("rateLimit"));
   }

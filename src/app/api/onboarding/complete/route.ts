@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { unauthorized, isBanned, forbidden } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
+import { checkMaintenance } from "@/lib/maintenance"
 
 // POST — mark onboarding as completed/dismissed. The timestamp is set
 // server-side; the client only signals intent.
@@ -12,6 +13,9 @@ export async function POST() {
     const session = await getServerSession(authOptions)
     if (!session?.user?.id) return unauthorized()
     if (await isBanned(session.user.id)) return forbidden()
+
+    const maintenance = await checkMaintenance()
+    if (maintenance) return maintenance
 
     const rl = await rateLimit(`onboarding-complete:${session.user.id}`, 20, 60 * 60 * 1000)
     if (!rl.allowed) {

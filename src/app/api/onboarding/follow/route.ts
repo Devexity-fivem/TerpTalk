@@ -6,6 +6,7 @@ import { unauthorized, getClientIp, logSecurityEvent, isBanned, forbidden } from
 import { rateLimit } from "@/lib/rate-limit"
 import { checkMaintenance } from "@/lib/maintenance"
 import { notifyMany } from "@/lib/notify"
+import { TERPBOT_USERNAME } from "@/lib/terpbot"
 
 const MAX_FOLLOWS = 10
 
@@ -56,6 +57,7 @@ export async function POST(request: Request) {
           id: { in: targetIds },
           banned: false,
           OR: [{ suspendedUntil: null }, { suspendedUntil: { lt: now } }],
+          profile: { isNot: { username: TERPBOT_USERNAME } },
         },
         select: { id: true },
       }),
@@ -77,7 +79,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: true, followed: 0 })
     }
 
-    await prisma.follow.createMany({
+    const created = await prisma.follow.createMany({
       data: allowed.map((followingId) => ({ followerId: session.user.id, followingId })),
       skipDuplicates: true,
     })
@@ -97,10 +99,11 @@ export async function POST(request: Request) {
         link: actorProfile?.username ? `/u/${actorProfile.username}` : null,
         actorId: session.user.id,
         groupKey: `FOLLOW:${session.user.id}:${userId}`,
+        dedupeMs: 24 * 60 * 60 * 1000,
       }))
     )
 
-    return NextResponse.json({ ok: true, followed: allowed.length })
+    return NextResponse.json({ ok: true, followed: created.count })
   } catch (error) {
     console.error("Onboarding follow error:", error)
     return NextResponse.json({ error: "Failed" }, { status: 500 })

@@ -93,7 +93,7 @@ export default function CompleteProfilePage() {
       const response = await fetch("/api/profile/complete", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...formData, ...(avatar ? { avatarUrl: avatar } : {}) }),
+        body: JSON.stringify({ ...formData, completeOnboarding: true, ...(avatar ? { avatarUrl: avatar } : {}) }),
       })
 
       if (!response.ok) {

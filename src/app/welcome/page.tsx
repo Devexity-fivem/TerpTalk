@@ -39,7 +39,7 @@ export default async function WelcomePage({
       },
       // `followers` is the inverted relation name — these are rows where the
       // viewer is the follower.
-      followers: { select: { followingId: true } },
+      _count: { select: { followers: true } },
       categoryFollows: { select: { categoryId: true } },
     },
   })
@@ -61,7 +61,7 @@ export default async function WelcomePage({
         location: user.profile?.location ?? "",
         hasPhrase: !!user.recoveryPhraseHash,
         followedCategoryIds: user.categoryFollows.map((c) => c.categoryId),
-        followedUserCount: user.followers.length,
+        followedUserCount: user._count.followers,
       }}
       categories={categories}
     />

@@ -99,33 +99,50 @@ export default function OnboardingStepper({
   const [suggestions, setSuggestions] = useState<SuggestedUser[] | null>(null)
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [suggestError, setSuggestError] = useState("")
+  const headingRef = useRef<HTMLHeadingElement>(null)
 
   const destination = callbackUrl ?? "/feed?tab=for-you"
+
+  const loadSuggestions = () => {
+    setSuggestError("")
+    fetch("/api/onboarding/suggestions")
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error("load failed"))))
+      .then((d) => setSuggestions(d.users ?? []))
+      .catch(() => setSuggestError("Could not load suggestions"))
+  }
 
   useEffect(() => {
     if (step !== 4 || suggestions !== null) return
     let cancelled = false
     fetch("/api/onboarding/suggestions")
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error("load failed"))))
-      .then((d) => { if (!cancelled) setSuggestions(d.users ?? []) })
+      .then((d) => { if (!cancelled) { setSuggestions(d.users ?? []); setSuggestError("") } })
       .catch(() => { if (!cancelled) setSuggestError("Could not load suggestions") })
     return () => { cancelled = true }
   }, [step, suggestions])
+
+  // Keep focus and scroll position sane across step transitions — each step
+  // unmounts, so without this focus falls back to <body> and the new step's
+  // heading may sit above the viewport.
+  useEffect(() => {
+    window.scrollTo(0, 0)
+    headingRef.current?.focus()
+  }, [step])
 
   const complete = async (dest: string) => {
     setBusy(true)
     setError("")
     try {
-      await fetch("/api/onboarding/complete", { method: "POST" })
-      await update()
+      const res = await fetch("/api/onboarding/complete", { method: "POST" })
+      if (res.ok) await update()
       router.push(dest)
     } catch {
       router.push(dest)
     }
   }
 
-  const next = () => { setError(""); setStep((s) => Math.min(s + 1, STEPS.length - 1)) }
-  const back = () => { setError(""); setStep((s) => Math.max(s - 1, 0)) }
+  const next = () => { if (busy) return; setError(""); setStep((s) => Math.min(s + 1, STEPS.length - 1)) }
+  const back = () => { if (busy) return; setError(""); setStep((s) => Math.max(s - 1, 0)) }
 
   const saveInterests = async () => {
     setBusy(true)
@@ -155,8 +172,8 @@ export default function OnboardingStepper({
     try {
       const payload: Record<string, unknown> = {}
       if (username.trim() && username.trim() !== initial.username) payload.username = username.trim()
-      if (bio.trim()) payload.bio = bio
-      if (location.trim()) payload.location = location
+      if (bio.trim() !== initial.bio) payload.bio = bio.trim()
+      if (location.trim() !== initial.location) payload.location = location.trim()
       if (avatar && avatar.startsWith("data:")) payload.avatarUrl = avatar
       if (Object.keys(payload).length === 0) return next()
       const res = await fetch("/api/profile/complete", {
@@ -195,6 +212,8 @@ export default function OnboardingStepper({
       } else {
         setError(d.error || "Failed to generate phrase")
       }
+    } catch {
+      setError("Something went wrong. Please try again.")
     } finally {
       setPassword("")
       setBusy(false)
@@ -272,7 +291,7 @@ export default function OnboardingStepper({
             <span aria-current="step">Step {step + 1} of {STEPS.length}</span>
             <span>{STEPS[step]}</span>
           </div>
-          <div className="h-2 bg-secondary rounded-full overflow-hidden" role="progressbar" aria-valuenow={step + 1} aria-valuemin={1} aria-valuemax={STEPS.length}>
+          <div className="h-2 bg-secondary rounded-full overflow-hidden" role="progressbar" aria-label="Onboarding progress" aria-valuenow={step + 1} aria-valuemin={1} aria-valuemax={STEPS.length}>
             <div
               className="h-full bg-primary rounded-full transition-all"
               style={{ width: `${((step + 1) / STEPS.length) * 100}%` }}
@@ -292,7 +311,7 @@ export default function OnboardingStepper({
             <div className="bg-primary/10 p-4 rounded-full inline-flex mb-4">
               <Leaf className="w-10 h-10 text-primary" />
             </div>
-            <h1 className="text-2xl font-bold mb-3">Welcome to TerpTalk 🌱</h1>
+            <h1 ref={headingRef} tabIndex={-1} className="text-2xl font-bold mb-3 outline-none">Welcome to TerpTalk 🌱</h1>
             <p className="text-muted-foreground mb-8 max-w-md mx-auto">
               A community built for growers, breeders, and cannabis enthusiasts.
               Customize your experience so we can show you discussions, growers,
@@ -303,9 +322,10 @@ export default function OnboardingStepper({
               <button
                 onClick={() => complete(destination)}
                 disabled={busy}
-                className={btnGhost}
+                className={btnGhost + " disabled:opacity-50 flex items-center justify-center gap-2"}
               >
-                Skip onboarding
+                {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                {busy ? "Finishing up…" : "Skip onboarding"}
               </button>
             </div>
           </div>
@@ -316,7 +336,7 @@ export default function OnboardingStepper({
           <div className="bg-card border border-border rounded-xl p-6 sm:p-8">
             <div className="text-center mb-6">
               <Sparkles className="w-8 h-8 text-primary mx-auto mb-3" />
-              <h1 className="text-2xl font-bold mb-2">What are you into?</h1>
+              <h1 ref={headingRef} tabIndex={-1} className="text-2xl font-bold mb-2 outline-none">What are you into?</h1>
               <p className="text-sm text-muted-foreground">
                 Pick topics to personalize your feed. You can change these anytime.
               </p>
@@ -376,9 +396,9 @@ export default function OnboardingStepper({
               )}
             </div>
             <div className="flex flex-col-reverse sm:flex-row sm:items-center gap-3">
-              <button onClick={back} className={btnGhost}>Back</button>
+              <button onClick={back} disabled={busy} className={btnGhost + " disabled:opacity-50"}>Back</button>
               <div className="flex-1" />
-              <button onClick={next} className={btnGhost}>Skip for now</button>
+              <button onClick={next} disabled={busy} className={btnGhost + " disabled:opacity-50"}>Skip for now</button>
               <button onClick={saveInterests} disabled={busy} className={btnPrimary}>
                 {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
                 Continue
@@ -392,7 +412,7 @@ export default function OnboardingStepper({
           <div className="bg-card border border-border rounded-xl p-6 sm:p-8">
             <div className="text-center mb-6">
               <User className="w-8 h-8 text-primary mx-auto mb-3" />
-              <h1 className="text-2xl font-bold mb-2">Make it yours</h1>
+              <h1 ref={headingRef} tabIndex={-1} className="text-2xl font-bold mb-2 outline-none">Make it yours</h1>
               <p className="text-sm text-muted-foreground">Add an avatar and a short bio — all optional.</p>
             </div>
             <div className="space-y-5 mb-8">
@@ -422,7 +442,7 @@ export default function OnboardingStepper({
                     {avatar ? "Change Avatar" : "Upload Avatar"}
                   </button>
                   <p className="text-sm text-muted-foreground mt-1">JPG, PNG or WebP. Max 5MB.</p>
-                  {avatarError && <p className="text-xs text-destructive mt-1">{avatarError}</p>}
+                  {avatarError && <p role="alert" className="text-xs text-destructive mt-1">{avatarError}</p>}
                 </div>
               </div>
 
@@ -467,9 +487,9 @@ export default function OnboardingStepper({
               </div>
             </div>
             <div className="flex flex-col-reverse sm:flex-row sm:items-center gap-3">
-              <button onClick={back} className={btnGhost}>Back</button>
+              <button onClick={back} disabled={busy} className={btnGhost + " disabled:opacity-50"}>Back</button>
               <div className="flex-1" />
-              <button onClick={next} className={btnGhost}>Skip for now</button>
+              <button onClick={next} disabled={busy} className={btnGhost + " disabled:opacity-50"}>Skip for now</button>
               <button onClick={saveProfile} disabled={busy} className={btnPrimary}>
                 {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
                 Continue
@@ -483,7 +503,7 @@ export default function OnboardingStepper({
           <div className="bg-card border border-border rounded-xl p-6 sm:p-8">
             <div className="text-center mb-6">
               <KeyRound className="w-8 h-8 text-primary mx-auto mb-3" />
-              <h1 className="text-2xl font-bold mb-2">Secure your account</h1>
+              <h1 ref={headingRef} tabIndex={-1} className="text-2xl font-bold mb-2 outline-none">Secure your account</h1>
               <p className="text-sm text-muted-foreground">
                 No email needed — your 12-word recovery phrase is the only way back in if you forget your password.
               </p>
@@ -499,7 +519,7 @@ export default function OnboardingStepper({
                   <p className="text-xs text-amber-500 font-semibold mb-2 flex items-center gap-1">
                     <AlertTriangle className="w-3.5 h-3.5" /> Shown only once — write it down now
                   </p>
-                  <div className="grid grid-cols-3 gap-2 font-mono text-sm">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 font-mono text-sm">
                     {phrase.split(" ").map((w, i) => (
                       <div key={i} className="flex items-center gap-1.5">
                         <span className="text-muted-foreground text-xs w-4">{i + 1}.</span>
@@ -508,8 +528,12 @@ export default function OnboardingStepper({
                     ))}
                   </div>
                   <button
-                    onClick={() => { navigator.clipboard.writeText(phrase); setCopied(true); setTimeout(() => setCopied(false), 2000) }}
-                    className="mt-3 flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+                    onClick={() => {
+                      navigator.clipboard.writeText(phrase)
+                        .then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000) })
+                        .catch(() => setError("Could not copy — please write the phrase down manually"))
+                    }}
+                    className="mt-3 min-h-11 px-2 flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
                   >
                     {copied ? <Check className="w-3.5 h-3.5 text-primary" /> : <Copy className="w-3.5 h-3.5" />}
                     {copied ? "Copied!" : "Copy phrase"}
@@ -549,10 +573,10 @@ export default function OnboardingStepper({
             )}
 
             <div className="flex flex-col-reverse sm:flex-row sm:items-center gap-3">
-              <button onClick={back} className={btnGhost}>Back</button>
+              <button onClick={back} disabled={busy} className={btnGhost + " disabled:opacity-50"}>Back</button>
               <div className="flex-1" />
-              <button onClick={next} className={btnGhost}>Set up later</button>
-              <button onClick={next} disabled={!!phrase && !phraseSaved} className={btnPrimary}>
+              <button onClick={next} disabled={busy || (!!phrase && !phraseSaved)} className={btnGhost + " disabled:opacity-50"}>Set up later</button>
+              <button onClick={next} disabled={busy || (!!phrase && !phraseSaved)} className={btnPrimary}>
                 Continue
               </button>
             </div>
@@ -564,14 +588,17 @@ export default function OnboardingStepper({
           <div className="bg-card border border-border rounded-xl p-6 sm:p-8">
             <div className="text-center mb-6">
               <Users className="w-8 h-8 text-primary mx-auto mb-3" />
-              <h1 className="text-2xl font-bold mb-2">Growers to follow</h1>
+              <h1 ref={headingRef} tabIndex={-1} className="text-2xl font-bold mb-2 outline-none">Growers to follow</h1>
               <p className="text-sm text-muted-foreground">
                 Follow a few members so your feed starts alive.
               </p>
             </div>
 
-            {suggestError ? (
-              <p role="alert" className="text-sm text-destructive text-center mb-6">{suggestError}</p>
+            {suggestError && suggestions === null ? (
+              <div role="alert" className="text-center mb-6">
+                <p className="text-sm text-destructive mb-2">{suggestError}</p>
+                <button onClick={loadSuggestions} className={btnGhost + " border border-border"}>Try again</button>
+              </div>
             ) : suggestions === null ? (
               <div className="flex justify-center py-8">
                 <Loader2 className="w-6 h-6 animate-spin text-primary" />
@@ -629,9 +656,9 @@ export default function OnboardingStepper({
             )}
 
             <div className="flex flex-col-reverse sm:flex-row sm:items-center gap-3">
-              <button onClick={back} className={btnGhost}>Back</button>
+              <button onClick={back} disabled={busy} className={btnGhost + " disabled:opacity-50"}>Back</button>
               <div className="flex-1" />
-              <button onClick={next} className={btnGhost}>Skip for now</button>
+              <button onClick={next} disabled={busy} className={btnGhost + " disabled:opacity-50"}>Skip for now</button>
               <button onClick={followSelected} disabled={busy} className={btnPrimary}>
                 {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
                 {selected.size > 0 ? `Follow ${selected.size}` : "Continue"}
@@ -646,7 +673,7 @@ export default function OnboardingStepper({
             <div className="bg-primary/10 p-4 rounded-full inline-flex mb-4">
               <Check className="w-10 h-10 text-primary" />
             </div>
-            <h1 className="text-2xl font-bold mb-3">You&apos;re all set 🌱</h1>
+            <h1 ref={headingRef} tabIndex={-1} className="text-2xl font-bold mb-3 outline-none">You&apos;re all set 🌱</h1>
             <p className="text-muted-foreground mb-8 max-w-md mx-auto">
               Your TerpTalk feed is ready. Follow growers, join a discussion, or start your own grow diary whenever you&apos;re ready.
             </p>

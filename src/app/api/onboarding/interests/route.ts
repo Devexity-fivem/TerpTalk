@@ -6,11 +6,12 @@ import { unauthorized, getClientIp, logSecurityEvent, isBanned, forbidden } from
 import { rateLimit } from "@/lib/rate-limit"
 import { checkMaintenance } from "@/lib/maintenance"
 
-const MAX_SELECTIONS = 21
+const MAX_SELECTIONS = 30
 
-// POST — save interest selections as category follows.
+// POST — sync interest selections to category follows.
 // { categoryIds: string[] } — ids are validated server-side; only
-// non-hidden categories may be followed. Idempotent (skipDuplicates).
+// non-hidden categories may be followed. Selections are synced: deselected
+// categories are un-followed so the chips reflect reality on resume.
 export async function POST(request: Request) {
   try {
     const session = await getServerSession(authOptions)
@@ -42,16 +43,18 @@ export async function POST(request: Request) {
     }
 
     const uniqueIds = [...new Set(categoryIds)]
-    if (uniqueIds.length === 0) {
-      return NextResponse.json({ ok: true, followed: 0 })
-    }
 
     // Only real, non-hidden categories count — client ids are never trusted.
-    const valid = await prisma.category.findMany({
-      where: { id: { in: uniqueIds }, hidden: false },
-      select: { id: true },
-    })
+    const valid = uniqueIds.length > 0
+      ? await prisma.category.findMany({
+          where: { id: { in: uniqueIds }, hidden: false },
+          select: { id: true },
+        })
+      : []
 
+    await prisma.categoryFollow.deleteMany({
+      where: { userId: session.user.id, categoryId: { notIn: valid.map((c) => c.id) } },
+    })
     if (valid.length > 0) {
       await prisma.categoryFollow.createMany({
         data: valid.map((c) => ({ userId: session.user.id, categoryId: c.id })),

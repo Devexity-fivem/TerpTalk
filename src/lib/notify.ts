@@ -275,11 +275,35 @@ export async function notifyMany(inputs: NotifyInput[]): Promise<number> {
       }
     }
 
+    // Dedupe recent notifications sharing a groupKey — mirrors the single
+    // notify() path so batched sends can't spam repeats within the window.
+    const dedupeKeys = [...new Set(inputs.filter((i) => i.dedupeMs && i.groupKey).map((i) => i.groupKey!))]
+    const recentByPair = new Map<string, number>()
+    if (dedupeKeys.length > 0) {
+      const maxWindow = Math.max(...inputs.filter((i) => i.dedupeMs && i.groupKey).map((i) => i.dedupeMs!))
+      const recent = await prisma.notification.findMany({
+        where: { groupKey: { in: dedupeKeys }, createdAt: { gte: new Date(Date.now() - maxWindow) } },
+        select: { userId: true, groupKey: true, createdAt: true },
+      })
+      for (const n of recent) {
+        const k = `${n.userId}${n.groupKey}`
+        recentByPair.set(k, Math.max(recentByPair.get(k) ?? 0, n.createdAt.getTime()))
+      }
+    }
+    const seenInBatch = new Set<string>()
+
     const allowed = inputs.filter((i) => {
       if (i.actorId && i.actorId === i.userId) return false
       const state = recipients.get(i.userId)
       if (!state || recipientBlocked(state) || !prefAllows(state, i.type)) return false
       if (i.actorId && blockedPairs.has(`${i.actorId}:${i.userId}`)) return false
+      if (i.dedupeMs && i.groupKey) {
+        const pairKey = `${i.userId}${i.groupKey}`
+        if (seenInBatch.has(pairKey)) return false
+        seenInBatch.add(pairKey)
+        const last = recentByPair.get(pairKey)
+        if (last != null && last >= Date.now() - i.dedupeMs) return false
+      }
       return true
     })
     if (allowed.length === 0) return 0
