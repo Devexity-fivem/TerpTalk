@@ -82,26 +82,37 @@ export default function NotificationsPage() {
     }
   }, [status, router, load])
 
-  // Live-prepend notifications pushed over Pusher.
+  // Live-prepend notifications pushed over Pusher. Bulk fan-outs
+  // (notifyMany, admin announcements) push without a row id — refetch
+  // the first page for those instead of prepending.
   useEffect(() => {
     const onNew = (e: Event) => {
       const n = (e as CustomEvent).detail as Notification | undefined
-      if (!n?.id || seen.current.has(n.id)) return
+      if (!n?.id) {
+        load()
+          .then(({ list, nextCursor }) => {
+            setNotifications(list)
+            setNextCursor(nextCursor)
+          })
+          .catch(() => {})
+        return
+      }
+      if (seen.current.has(n.id)) return
       seen.current.add(n.id)
       setNotifications((prev) => [{ ...n, createdAt: n.createdAt }, ...prev])
     }
     window.addEventListener("tt-new-notification", onNew)
     return () => window.removeEventListener("tt-new-notification", onNew)
-  }, [])
+  }, [load])
 
   const markRead = async (ids: string[]) => {
     setNotifications((prev) => prev.map((n) => (ids.includes(n.id) ? { ...n, read: true } : n)))
-    window.dispatchEvent(new CustomEvent("tt-notifications-read"))
     await fetch("/api/notifications", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ ids }),
     }).catch(() => {})
+    window.dispatchEvent(new CustomEvent("tt-notifications-read"))
   }
 
   const markAllRead = async () => {
@@ -189,11 +200,13 @@ export default function NotificationsPage() {
 
         <ul className="divide-y divide-border rounded-lg border border-border bg-card" aria-label="Notifications">
           {notifications.length === 0 && (
-            <EmptyState
-              icon={Bell}
-              title="No notifications yet"
-              description="Replies, mentions, reactions, and follows will show up here."
-            />
+            <li className="list-none">
+              <EmptyState
+                icon={Bell}
+                title="No notifications yet"
+                description="Replies, mentions, reactions, and follows will show up here."
+              />
+            </li>
           )}
           {notifications.map((n) => {
             const Icon = typeIcon(n.type)
@@ -247,7 +260,7 @@ export default function NotificationsPage() {
                 {!n.read && (
                   <button
                     onClick={() => markRead([n.id])}
-                    className="mr-3 mt-4 shrink-0 rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground focus-visible:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
+                    className="mr-1 mt-3 flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground focus-visible:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
                     aria-label="Mark as read"
                     title="Mark as read"
                   >

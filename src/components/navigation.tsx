@@ -70,6 +70,7 @@ export function Navigation() {
     // remains the source of truth; the poll below is the fallback.
     let p: import("pusher-js").default | null = null
     let poll: ReturnType<typeof setInterval> | null = null
+    let cancelled = false
     const startPolling = () => {
       if (!poll) poll = setInterval(refresh, 60_000)
     }
@@ -79,6 +80,9 @@ export function Navigation() {
     if (userId && pusherKey && pusherCluster) {
       import("pusher-js")
         .then(({ default: Pusher }) => {
+          // Effect may have cleaned up before the import resolved —
+          // don't leave an orphaned connection behind.
+          if (cancelled) return
           p = new Pusher(pusherKey, { cluster: pusherCluster, authEndpoint: "/api/pusher/auth" })
           const ch = p.subscribe(channel)
           ch.bind("new-notification", (n: unknown) => {
@@ -93,6 +97,7 @@ export function Navigation() {
     }
 
     return () => {
+      cancelled = true
       window.removeEventListener("tt-notifications-read", onRead)
       if (poll) clearInterval(poll)
       if (p) {

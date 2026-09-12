@@ -41,7 +41,7 @@ export async function POST(request: Request) {
 
     const threads = await prisma.thread.findMany({
       where: { id: { in: ids } },
-      select: { id: true, authorId: true, author: { select: { role: true } } },
+      select: { id: true, slug: true, authorId: true, author: { select: { role: true } } },
     })
 
     const threadIds = new Set(threads.map((t) => t.id))
@@ -63,7 +63,7 @@ export async function POST(request: Request) {
       restore: { deleted: false },
     }[action] as Record<string, boolean>
 
-    await prisma.$transaction([
+    const ops = [
       prisma.thread.updateMany({
         where: { id: { in: ids } },
         data,
@@ -76,7 +76,16 @@ export async function POST(request: Request) {
           moderatorId: staff.id,
         })),
       }),
-    ])
+    ]
+    // Drop notifications whose links would now point at deleted threads.
+    if (action === "delete") {
+      ops.push(
+        prisma.notification.deleteMany({
+          where: { link: { in: threads.map((t) => `/forum/thread/${t.slug}`) } },
+        })
+      )
+    }
+    await prisma.$transaction(ops)
 
     await logSecurityEvent("SUSPICIOUS_ACTIVITY", {
       userId: staff.id,
