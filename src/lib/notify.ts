@@ -142,6 +142,16 @@ function prefAllows(state: RecipientState, type: NotificationType): boolean {
   return state.profile?.[key] !== false
 }
 
+// Only internal root-relative paths persist. `//` is blocked explicitly and
+// whitespace/backslash are excluded — `/\evil.example` would parse as
+// protocol-relative under WHATWG URL semantics.
+const SAFE_LINK = /^\/(?!\/)[^\s\\]+$/
+
+/** Deep link to a specific post inside a thread — resolved server-side. */
+export function postDeepLink(threadSlug: string, postId: string): string {
+  return `/forum/thread/${threadSlug}?post=${postId}#post-${postId}`
+}
+
 const ACTOR_INCLUDE = { actor: { select: NOTIFICATION_ACTOR_SELECT } } as const
 
 type NotificationWithActor = Prisma.NotificationGetPayload<{ include: typeof ACTOR_INCLUDE }>
@@ -229,8 +239,7 @@ export async function notify(input: NotifyInput): Promise<NotificationWithActor 
         type: input.type,
         title: input.title.slice(0, 200),
         content: input.content.slice(0, 500),
-        // Only internal root-relative links — external/javascript: URLs are dropped.
-        link: input.link && /^\/(?!\/)/.test(input.link) ? input.link : null,
+        link: input.link && SAFE_LINK.test(input.link) ? input.link : null,
         actorId: input.actorId ?? null,
         groupKey: input.groupKey ?? null,
         metadata: input.metadata,
@@ -317,8 +326,7 @@ export async function notifyMany(
         type: i.type,
         title: i.title.slice(0, 200),
         content: i.content.slice(0, 500),
-        // Only internal root-relative links — external/javascript: URLs are dropped.
-        link: i.link && /^\/(?!\/)/.test(i.link) ? i.link : null,
+        link: i.link && SAFE_LINK.test(i.link) ? i.link : null,
         actorId: i.actorId ?? null,
         groupKey: i.groupKey ?? null,
         metadata: i.metadata,
@@ -337,7 +345,7 @@ export async function notifyMany(
           type: i.type,
           title: i.title.slice(0, 200),
           content: i.content.slice(0, 500),
-          link: i.link && /^\/(?!\/)/.test(i.link) ? i.link : null,
+          link: i.link && SAFE_LINK.test(i.link) ? i.link : null,
           read: false,
         }
         const key = JSON.stringify(dto)
@@ -361,12 +369,39 @@ export async function notifyMany(
 }
 
 /**
+ * Where-clause matching a base notification link plus its deep-link
+ * variants (`?post=`, `#post-`, `?page=`). Boundary-aware: a plain
+ * startsWith on `/forum/thread/foo` would also match `/forum/thread/foobar`.
+ */
+export function notificationLinkWhere(base: string | string[]): Prisma.NotificationWhereInput {
+  const bases = Array.isArray(base) ? base : [base]
+  return {
+    OR: bases.flatMap((b) => [
+      { link: b },
+      { link: { startsWith: `${b}?` } },
+      { link: { startsWith: `${b}#` } },
+    ]),
+  }
+}
+
+/**
+ * Where-clause matching notification links that target a specific post —
+ * either `?post={id}` or `#post-{id}`. Boundary-aware so a post id can't
+ * match an unrelated slug/username inside another link.
+ */
+export function postLinkWhere(postId: string): Prisma.NotificationWhereInput {
+  return {
+    OR: [{ link: { contains: `?post=${postId}` } }, { link: { contains: `#post-${postId}` } }],
+  }
+}
+
+/**
  * Remove notifications that link to a deleted target so users never see
  * a live link to removed content. Called from content soft-delete paths.
  */
 export async function invalidateNotificationsForLink(link: string): Promise<void> {
   try {
-    await prisma.notification.deleteMany({ where: { link } })
+    await prisma.notification.deleteMany({ where: notificationLinkWhere(link) })
   } catch {
     // non-fatal
   }

@@ -205,7 +205,8 @@ async function run() {
         { userId: otherUser.id, type: "FOLLOW", title: "t", content: "c", actorId: userId },
         { userId, type: "FOLLOW", title: "t", content: "c", actorId: userId }, // self-action — must be dropped
       ])
-      assert.equal(created, 2, "notifyMany should create 2 notifications and drop the self-action")
+      assert.equal(created.sent, 2, "notifyMany should create 2 notifications and drop the self-action")
+      assert.equal(created.deliveredUserIds.length, 2, "deliveredUserIds should list both recipients")
       const rows = await prisma.notification.findMany({ where: { userId: { in: [userId, otherUser.id] } } })
       assert.equal(rows.length, 2, "exactly 2 notification rows should exist")
 
@@ -214,7 +215,8 @@ async function run() {
       const suppressed = await notifyMany([
         { userId: otherUser.id, type: "FOLLOW", title: "t", content: "c", actorId: userId },
       ])
-      assert.equal(suppressed, 0, "notifyMany must still honor notification preferences")
+      assert.equal(suppressed.sent, 0, "notifyMany must still honor notification preferences")
+      assert.equal(suppressed.deliveredUserIds.length, 0, "suppressed recipients must not be reported as delivered")
     } finally {
       await prisma.user.delete({ where: { id: otherUser.id } }).catch(() => {})
     }

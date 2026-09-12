@@ -147,6 +147,16 @@ async function run() {
     const stale = await prisma.notification.count({ where: { link: "/forum/thread/x" } })
     assert.equal(stale, 0, "invalidated links should remove notifications")
 
+    // 11b. Decorated deep links (?post=/#post-) are caught by base-path
+    // invalidation, and a prefix-similar slug (/forum/thread/xyz) is not.
+    const deep = await notify({ userId: recip.id, type: "MENTION", title: "t", content: "c", link: "/forum/thread/x?page=2#post-abc", actorId: actor.id })
+    assert.equal(deep?.link, "/forum/thread/x?page=2#post-abc", "deep link should persist through the sanitizer")
+    const neighbour = await notify({ userId: recip.id, type: "MENTION", title: "t", content: "c", link: "/forum/thread/xyz", actorId: actor.id })
+    assert.equal(neighbour?.link, "/forum/thread/xyz", "prefix-similar link should persist")
+    await invalidateNotificationsForLink("/forum/thread/x")
+    assert.equal(await prisma.notification.count({ where: { link: { contains: "post-abc" } } }), 0, "invalidation should catch decorated links")
+    assert.equal(await prisma.notification.count({ where: { link: "/forum/thread/xyz" } }), 1, "invalidation must not hit prefix-similar slugs")
+
     // 12. Link sanitization — external, javascript:, and protocol-relative
     // links are dropped to null; only root-relative paths persist.
     const lExt = await notify({ userId: recip.id, type: "REACTION", title: "t", content: "c", link: "https://evil.example/x", actorId: actor.id })
@@ -155,6 +165,8 @@ async function run() {
     assert.equal(lJs?.link, null, "javascript: link should be dropped")
     const lProto = await notify({ userId: recip.id, type: "REACTION", title: "t", content: "c", link: "//evil.example/x", actorId: actor.id })
     assert.equal(lProto?.link, null, "protocol-relative link should be dropped")
+    const lBack = await notify({ userId: recip.id, type: "REACTION", title: "t", content: "c", link: "/\\evil.example/x", actorId: actor.id })
+    assert.equal(lBack?.link, null, "backslash link should be dropped")
     const lOk = await notify({ userId: recip.id, type: "REACTION", title: "t", content: "c", link: "/forum/thread/ok", actorId: actor.id })
     assert.equal(lOk?.link, "/forum/thread/ok", "root-relative link should persist")
     await notifyMany([

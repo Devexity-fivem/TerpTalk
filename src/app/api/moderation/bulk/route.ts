@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma"
 import { requireModerator } from "@/lib/require-staff"
 import { getClientIp, isAdmin, logSecurityEvent } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
+import { notificationLinkWhere } from "@/lib/notify"
 
 const BULK_ACTIONS = new Set(["lock", "unlock", "pin", "unpin", "delete", "restore"])
 
@@ -77,11 +78,12 @@ export async function POST(request: Request) {
         })),
       }),
     ]
-    // Drop notifications whose links would now point at deleted threads.
+    // Drop notifications whose links would now point at deleted threads —
+    // prefix-aware so deep links (?post=/#post-) are caught too.
     if (action === "delete") {
       ops.push(
         prisma.notification.deleteMany({
-          where: { link: { in: threads.map((t) => `/forum/thread/${t.slug}`) } },
+          where: notificationLinkWhere(threads.map((t) => `/forum/thread/${t.slug}`)),
         })
       )
     }

@@ -46,8 +46,8 @@ export default function ReplyForm({ threadId, wasFollowing }: ReplyFormProps) {
         body: JSON.stringify({ content, threadId, images }),
       })
 
+      const data = await response.json().catch(() => ({}))
       if (!response.ok) {
-        const data = await response.json()
         throw new Error(data.error || "Failed to post reply")
       }
 
@@ -58,8 +58,11 @@ export default function ReplyForm({ threadId, wasFollowing }: ReplyFormProps) {
         // Brief beat so the toast is seen before reload.
         await new Promise((r) => setTimeout(r, 800))
       }
-      // Refresh the page to show the new post
-      window.location.reload()
+      // Land on the new post — ?post= resolves the correct page server-side.
+      const postId = data?.post?.id
+      window.location.href = postId
+        ? `${pathname}?post=${postId}#post-${postId}`
+        : pathname
     } catch (error: unknown) {
       const message = (error as Error).message
       setError(message)

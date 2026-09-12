@@ -8,7 +8,7 @@ import { requireModerator } from "@/lib/require-staff"
 import { rateLimit } from "@/lib/rate-limit"
 import { awardReputation, REP_POINTS, REP_TIERS } from "@/lib/reputation"
 import { notifyMentions } from "@/lib/mentions"
-import { notifyMany, invalidateNotificationsForLink } from "@/lib/notify"
+import { notifyMany, invalidateNotificationsForLink, postDeepLink } from "@/lib/notify"
 import { storeImages, deleteImagesIfUnreferenced } from "@/lib/blob"
 import { getBooleanSetting, SITE_SETTINGS } from "@/lib/settings"
 import { checkMaintenance } from "@/lib/maintenance"
@@ -238,12 +238,14 @@ export async function POST(request: Request) {
       `Created thread "${title.slice(0, 60)}"`
     ).catch(() => {})
 
-    // Notify @mentions in the opening post
+    // Notify @mentions in the opening post — deep link lands on the OP.
+    const opPostId = thread.posts[0]?.id
+    const opLink = opPostId ? postDeepLink(thread.slug, opPostId) : `/forum/thread/${thread.slug}`
     await notifyMentions(
       content,
       session.user.id,
       session.user.name || "Someone",
-      `/forum/thread/${thread.slug}`,
+      opLink,
       `the thread "${title.slice(0, 60)}"`
     )
 
@@ -271,7 +273,7 @@ export async function POST(request: Request) {
             type: "THREAD_ACTIVITY" as const,
             title: `New thread in ${category.name}`,
             content: `@${session.user.name || "Someone"} started "${title.slice(0, 60)}" in a category you follow.`,
-            link: `/forum/thread/${thread.slug}`,
+            link: opLink,
             actorId: session.user.id,
             groupKey: `THREAD_ACTIVITY:category:${category.id}`,
             dedupeMs: 60 * 60 * 1000,

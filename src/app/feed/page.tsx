@@ -44,9 +44,9 @@ async function getFeedData(userId?: string, tab = "latest") {
     : { diary: { deleted: false } }
   const threadWhere = personal && !coldStart
     ? tab === "following"
-      ? { deleted: false, authorId: { in: followingIds } }
-      : { deleted: false, OR: [{ authorId: { in: followingIds } }, { categoryId: { in: followedCategoryIds } }] }
-    : { deleted: false }
+      ? { deleted: false, category: { hidden: false }, authorId: { in: followingIds } }
+      : { deleted: false, category: { hidden: false }, OR: [{ authorId: { in: followingIds } }, { categoryId: { in: followedCategoryIds } }] }
+    : { deleted: false, category: { hidden: false } }
   const diaryWhere = personal && !coldStart
     ? { deleted: false, OR: [{ authorId: { in: followingIds } }, { followers: { some: { userId } } }] }
     : { deleted: false }
@@ -122,7 +122,7 @@ async function getFeedData(userId?: string, tab = "latest") {
 
   const [memberCount, threadCount, diaryCount, popularCategories] = await Promise.all([
     prisma.user.count({ where: { banned: false } }),
-    prisma.thread.count({ where: { deleted: false } }),
+    prisma.thread.count({ where: { deleted: false, category: { hidden: false } } }),
     prisma.growDiary.count({ where: { deleted: false } }),
     prisma.category.findMany({
       where: { hidden: false },

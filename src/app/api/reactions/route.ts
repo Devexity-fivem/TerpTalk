@@ -6,7 +6,7 @@ import { unauthorized, forbidden, getClientIp, logSecurityEvent, isBanned } from
 import { rateLimit } from "@/lib/rate-limit"
 import { awardReputation, REP_POINTS } from "@/lib/reputation"
 import { checkMaintenance } from "@/lib/maintenance"
-import { notify } from "@/lib/notify"
+import { notify, postDeepLink } from "@/lib/notify"
 
 const VALID_REACTION_TYPES = new Set(["LIKE", "LOVE", "LAUGH", "THINKING", "FIRE", "THUMBS_UP", "THUMBS_DOWN"])
 
@@ -78,7 +78,7 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: "Post not found" }, { status: 404 })
       }
       targetAuthorId = post.authorId
-      targetLink = post.thread ? `/forum/thread/${post.thread.slug}` : null
+      targetLink = post.thread ? postDeepLink(post.thread.slug, postId) : null
       targetTitle = post.thread?.title ?? null
     } else if (hasDiaryId) {
       const diary = await prisma.growDiary.findUnique({

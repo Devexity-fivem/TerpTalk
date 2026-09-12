@@ -87,15 +87,6 @@ const main = async () => {
     hiddenCat = await prisma.category.create({
       data: { name: `__verify_hidden_${Date.now()}`, slug: `__verify-hidden-${Date.now()}`, description: "verification", hidden: true },
     })
-    const thread = await prisma.thread.create({
-      data: {
-        title: `__verify thread ${Date.now()}`,
-        slug: `__verify-${Date.now()}`,
-        content: "verification thread content — enough chars",
-        categoryId: category.id,
-        authorId: replier.id,
-      },
-    })
     const hiddenThread = await prisma.thread.create({
       data: {
         title: `__verify hidden ${Date.now()}`,
@@ -115,7 +106,11 @@ const main = async () => {
         deleted: true,
       },
     })
-    threads.push(thread, hiddenThread, deletedThread)
+    threads.push(hiddenThread, deletedThread)
+
+    // Clear login rate limits — repeated suite runs would otherwise trip the
+    // per-IP login cap and silently produce empty cookies for later logins.
+    await prisma.rateLimit.deleteMany({ where: { key: { startsWith: "login" } } })
 
     const { cookie: followerCookie } = await login(follower.username, follower.password)
     const { cookie: replierCookie } = await login(replier.username, replier.password)
@@ -124,7 +119,23 @@ const main = async () => {
     const { cookie: authorCookie } = await login(author.username, author.password)
     const { cookie: modCookie } = await login(mod.username, mod.password)
     const { cookie: adminCookie } = await login(admin.username, admin.password)
-    followerCookie ? pass("logins work") : fail("logins", "no cookie")
+    ;[followerCookie, replierCookie, bannedCookie, freshCookie, authorCookie, modCookie, adminCookie].every(Boolean)
+      ? pass("logins work")
+      : fail("logins", "missing session cookie")
+
+    // Create the main thread through the real API — a direct prisma.create
+    // would bypass revalidateTag("forum"), leaving it invisible to the
+    // cached category list this suite asserts against.
+    const threadRes = await callApi("/api/forum/threads", {
+      method: "POST",
+      body: { title: `__verify thread ${Date.now()}`, content: "verification thread content — enough chars", categoryId: category.id },
+      cookie: replierCookie,
+    })
+    const thread = threadRes.data?.thread
+    if (thread?.id) threads.push(thread)
+    threadRes.status === 201 && thread?.slug
+      ? pass("setup: main thread created via API")
+      : fail("thread setup", { s: threadRes.status })
 
     // ── 1. Follow toggle ──
     let r = await callApi(FOLLOW_URL, { method: "POST", body: {} })
@@ -195,13 +206,25 @@ const main = async () => {
 
     // ── 3. Reply → follower notification ──
     const replyBody = () => ({ content: `Verification reply ${Date.now()} — enough content to pass the minimum.`, threadId: thread.id })
-    const notifCount = (uid) => prisma.notification.count({ where: { userId: uid, type: "THREAD_ACTIVITY", link: `/forum/thread/${thread.slug}` } })
+    // Notification links are now deep links (?post=…#post-…) — match by prefix.
+    const notifCount = (uid) => prisma.notification.count({ where: { userId: uid, type: "THREAD_ACTIVITY", link: { startsWith: `/forum/thread/${thread.slug}` } } })
 
     r = await callApi("/api/forum/posts", { method: "POST", body: replyBody(), cookie: replierCookie })
     r.status === 201 ? pass("reply: created") : fail("reply create", { s: r.status, d: r.data })
+    const replyPostId = r.data?.post?.id
 
     const got = await waitFor(() => notifCount(follower.id))
     got === 1 ? pass("notify: follower gets THREAD_ACTIVITY on reply") : fail("follower notif", got)
+
+    // Deep link — the notification must point at the triggering post, and
+    // the post anchor must exist in the rendered thread page.
+    const deepLink = await prisma.notification.findFirst({
+      where: { userId: follower.id, type: "THREAD_ACTIVITY", link: { startsWith: `/forum/thread/${thread.slug}` } },
+      select: { link: true },
+    })
+    deepLink?.link === `/forum/thread/${thread.slug}?post=${replyPostId}#post-${replyPostId}`
+      ? pass("deep link: THREAD_ACTIVITY links to the triggering post")
+      : fail("deep link", deepLink?.link)
 
     // Replier auto-followed + own reply doesn't flag unread for them
     const replierFollow = await waitFor(() =>
@@ -234,7 +257,7 @@ const main = async () => {
     // Clear the earlier notification AND lastNotifiedAt first, otherwise the
     // groupKey dedupe would mask the check (vacuous pass).
     const clearNotifs = () =>
-      prisma.notification.deleteMany({ where: { userId: follower.id, type: "THREAD_ACTIVITY", link: `/forum/thread/${thread.slug}` } })
+      prisma.notification.deleteMany({ where: { userId: follower.id, type: "THREAD_ACTIVITY", link: { startsWith: `/forum/thread/${thread.slug}` } } })
     await clearNotifs()
     await prisma.threadFollow.updateMany({ where: { userId: follower.id, threadId: thread.id }, data: { lastNotifiedAt: null } })
     await prisma.block.create({ data: { blockerId: follower.id, blockedId: replier.id } })
@@ -264,9 +287,10 @@ const main = async () => {
     // ── 3b. Unread dot renders on the category list while unread ──
     const catSlug = (await prisma.category.findUnique({ where: { id: category.id }, select: { slug: true } })).slug
     const catHtml1 = await (await fetch(`${BASE}/forum/category/${catSlug}`, { headers: { cookie: followerCookie } })).text()
+    const catDbg = { slugListed: catHtml1.includes(thread.slug), len: catHtml1.length, f: await prisma.threadFollow.findUnique({ where: { userId_threadId: { userId: follower.id, threadId: thread.id } }, select: { lastSeenAt: true } }) }
     catHtml1.includes('aria-label="Unread"')
       ? pass("unread: dot rendered on category list")
-      : fail("unread dot render", catHtml1.length)
+      : fail("unread dot render", catDbg)
 
     // ── 3c. Distinct author — REPLY to author, excluded from follower fan-out ──
     const authorThread = await prisma.thread.create({
@@ -283,16 +307,16 @@ const main = async () => {
     r = await callApi("/api/forum/posts", { method: "POST", body: replyToAuthor(), cookie: replierCookie })
     r.status === 201 ? pass("reply to authored thread: created") : fail("author reply", { s: r.status, d: r.data })
     const replyNotif = await waitFor(() =>
-      prisma.notification.count({ where: { userId: author.id, type: "REPLY", link: `/forum/thread/${authorThread.slug}` } }).then((c) => (c > 0 ? c : null)))
+      prisma.notification.count({ where: { userId: author.id, type: "REPLY", link: { startsWith: `/forum/thread/${authorThread.slug}` } } }).then((c) => (c > 0 ? c : null)))
     replyNotif === 1 ? pass("notify: author gets REPLY") : fail("author REPLY", replyNotif)
     await new Promise((res) => setTimeout(res, 1500))
-    ;(await prisma.notification.count({ where: { userId: author.id, type: "THREAD_ACTIVITY", link: `/forum/thread/${authorThread.slug}` } })) === 0
+    ;(await prisma.notification.count({ where: { userId: author.id, type: "THREAD_ACTIVITY", link: { startsWith: `/forum/thread/${authorThread.slug}` } } })) === 0
       ? pass("notify: author excluded from follower fan-out")
       : fail("author fan-out", "author got THREAD_ACTIVITY")
     // Second reply — REPLY dedupe (1h groupKey) holds
     await callApi("/api/forum/posts", { method: "POST", body: replyToAuthor(), cookie: replierCookie })
     await new Promise((res) => setTimeout(res, 1500))
-    ;(await prisma.notification.count({ where: { userId: author.id, type: "REPLY", link: `/forum/thread/${authorThread.slug}` } })) === 1
+    ;(await prisma.notification.count({ where: { userId: author.id, type: "REPLY", link: { startsWith: `/forum/thread/${authorThread.slug}` } } })) === 1
       ? pass("notify: author REPLY deduped within 1h")
       : fail("REPLY dedupe", "duplicate REPLY")
 
@@ -307,7 +331,7 @@ const main = async () => {
     r = await callApi("/api/forum/posts", { method: "POST", body: { content: "Moderator reply inside a hidden thread — verification.", threadId: hiddenThread.id }, cookie: modCookie })
     r.status === 201 ? pass("reply: moderator can post in hidden thread") : fail("mod hidden reply", { s: r.status, d: r.data })
     await new Promise((res) => setTimeout(res, 1500))
-    ;(await prisma.notification.count({ where: { userId: follower.id, link: `/forum/thread/${hiddenThread.slug}` } })) === 0
+    ;(await prisma.notification.count({ where: { userId: follower.id, link: { startsWith: `/forum/thread/${hiddenThread.slug}` } } })) === 0
       ? pass("notify: hidden-category reply never fans out")
       : fail("hidden fan-out", "notification leaked for hidden thread")
 
@@ -325,6 +349,36 @@ const main = async () => {
     r.status === 201 && autoFollow
       ? pass("auto-follow: thread author follows on create")
       : fail("author autofollow", { s: r.status, id: createdId })
+
+    // ── 3f. Post anchors, first-unread divider, followed surface ──
+    // (Follower is still unread here — they haven't viewed the thread yet.)
+    const threadHtml = await (await fetch(`${BASE}/forum/thread/${thread.slug}`, { headers: { cookie: followerCookie } })).text()
+    replyPostId && threadHtml.includes(`id="post-${replyPostId}"`)
+      ? pass("anchor: post-{id} rendered on thread page")
+      : fail("post anchor", replyPostId)
+    threadHtml.includes("New since your last visit")
+      ? pass("return: first-unread divider rendered for unread follower")
+      : fail("divider", "missing")
+    // That view caught the follower up — the affordance must now be gone.
+    const threadHtml2 = await (await fetch(`${BASE}/forum/thread/${thread.slug}`, { headers: { cookie: followerCookie } })).text()
+    !threadHtml2.includes("New since your last visit")
+      ? pass("return: divider gone once caught up")
+      : fail("divider clear", "still rendered")
+    // Rewind lastSeenAt so the section-4 mark-seen check stays meaningful.
+    await prisma.threadFollow.update({
+      where: { userId_threadId: { userId: follower.id, threadId: thread.id } },
+      data: { lastSeenAt: new Date(Date.now() - 86400000) },
+    })
+
+    // Followed-discussions surface — followed thread listed, hidden one not
+    // (the member's hidden-thread follow was seeded in section 3d).
+    const forumHtml = await (await fetch(`${BASE}/forum`, { headers: { cookie: followerCookie } })).text()
+    forumHtml.includes("Discussions You Follow") && forumHtml.includes(thread.slug)
+      ? pass("surface: followed thread listed on /forum")
+      : fail("followed surface", "missing")
+    !forumHtml.includes(hiddenThread.slug)
+      ? pass("surface: hidden-category follow not listed")
+      : fail("followed hidden", "hidden thread leaked")
 
     // ── 4. Mark-seen — viewing the thread clears unread ──
     r = await callApi(`/forum/thread/${thread.slug}`, { cookie: followerCookie })
@@ -347,6 +401,98 @@ const main = async () => {
     !catHtml2.includes('aria-label="Unread"')
       ? pass("unread: dot cleared on category list")
       : fail("unread dot cleared", "dot still rendered")
+
+    // ── 4b. Multi-page — ?post= resolves the right page; early-page views
+    // must not clear unread for posts on later pages ──
+    const bigBase = Date.now() - 120000
+    const bigThread = await prisma.thread.create({
+      data: {
+        title: `__verify big ${Date.now()}`,
+        slug: `__verify-big-${Date.now()}`,
+        content: "verification multi-page thread content",
+        categoryId: category.id,
+        authorId: author.id,
+        replyCount: 51,
+        lastActivityAt: new Date(bigBase + 51000),
+      },
+    })
+    threads.push(bigThread)
+    await prisma.post.createMany({
+      data: Array.from({ length: 50 }, (_, i) => ({
+        threadId: bigThread.id,
+        authorId: author.id,
+        content: `verification post ${i}`,
+        createdAt: new Date(bigBase + i * 1000),
+      })),
+    })
+    const lastPost = await prisma.post.create({
+      data: { threadId: bigThread.id, authorId: author.id, content: "verification post 51", createdAt: new Date(bigBase + 50000) },
+    })
+    await prisma.threadFollow.upsert({
+      where: { userId_threadId: { userId: follower.id, threadId: bigThread.id } },
+      create: { userId: follower.id, threadId: bigThread.id, lastSeenAt: new Date(bigBase + 49500) },
+      update: { lastSeenAt: new Date(bigBase + 49500) },
+    })
+    // lastSeenAt sits between post 50 and 51 → first unread is post 51 (page 2).
+    const bigHtml = await (await fetch(`${BASE}/forum/thread/${bigThread.slug}`, { headers: { cookie: followerCookie } })).text()
+    bigHtml.includes(`?page=2#post-${lastPost.id}`)
+      ? pass("return: jump-to-first-unread links to the right page")
+      : fail("jump link", "missing")
+    // That page-1 view must NOT have cleared unread — the new post isn't there.
+    const bigF1 = await prisma.threadFollow.findUnique({ where: { userId_threadId: { userId: follower.id, threadId: bigThread.id } } })
+    bigF1 && bigF1.lastSeenAt < new Date(bigBase + 51000)
+      ? pass("unread: page-1 view does not clear unseen activity")
+      : fail("partial mark-seen", bigF1?.lastSeenAt)
+    // ?post= resolver redirects to the page holding the post.
+    r = await callApi(`/forum/thread/${bigThread.slug}?post=${lastPost.id}`, { cookie: followerCookie })
+    ;(r.status === 307 || r.status === 308) && r.location?.includes(`page=2#post-${lastPost.id}`)
+      ? pass("deep link: ?post= resolves to the correct page")
+      : fail("?post= resolve", { s: r.status, loc: r.location })
+    // Viewing the last page catches up fully.
+    await callApi(`/forum/thread/${bigThread.slug}?page=2`, { cookie: followerCookie })
+    const bigF2 = await waitFor(async () => {
+      const f = await prisma.threadFollow.findUnique({ where: { userId_threadId: { userId: follower.id, threadId: bigThread.id } } })
+      const t = await prisma.thread.findUnique({ where: { id: bigThread.id }, select: { lastActivityAt: true } })
+      return f && !(t.lastActivityAt > f.lastSeenAt) ? f : null
+    })
+    bigF2 ? pass("unread: last-page view catches up fully") : fail("last-page mark-seen", "still unread")
+
+    // ── 4c. Deleted post — deep link degrades gracefully, notifications purged ──
+    const doomed = await prisma.post.create({
+      data: { threadId: thread.id, authorId: replier.id, content: "doomed verification post content" },
+    })
+    await prisma.notification.create({
+      data: { userId: follower.id, type: "THREAD_ACTIVITY", title: "t", content: "c", link: `/forum/thread/${thread.slug}?post=${doomed.id}#post-${doomed.id}` },
+    })
+    r = await callApi("/api/forum/posts", { method: "DELETE", body: { id: doomed.id }, cookie: replierCookie })
+    const doomedLeft = await prisma.notification.count({ where: { link: { contains: doomed.id } } })
+    r.status === 200 && doomedLeft === 0
+      ? pass("deep link: deleting a post purges its notifications")
+      : fail("post-delete invalidation", { s: r.status, doomedLeft })
+    r = await callApi(`/forum/thread/${thread.slug}?post=${doomed.id}`, { cookie: followerCookie })
+    r.status === 200
+      ? pass("deep link: deleted post falls back to the thread")
+      : fail("deleted post fallback", r.status)
+
+    // ── 4d. Thread delete purges decorated (deep) notification links ──
+    const doomedThread = await prisma.thread.create({
+      data: {
+        title: `__verify doomed ${Date.now()}`,
+        slug: `__verify-doomed-${Date.now()}`,
+        content: "verification thread to be deleted",
+        categoryId: category.id,
+        authorId: author.id,
+      },
+    })
+    threads.push(doomedThread)
+    await prisma.notification.create({
+      data: { userId: follower.id, type: "REPLY", title: "t", content: "c", link: `/forum/thread/${doomedThread.slug}?post=zzz#post-zzz` },
+    })
+    r = await callApi("/api/forum/threads", { method: "DELETE", body: { id: doomedThread.id }, cookie: authorCookie })
+    const doomedThreadLeft = await prisma.notification.count({ where: { link: { startsWith: `/forum/thread/${doomedThread.slug}` } } })
+    r.status === 200 && doomedThreadLeft === 0
+      ? pass("deep link: deleting a thread purges decorated links")
+      : fail("thread-delete invalidation", { s: r.status, doomedThreadLeft })
 
     // ── 5. First-action nudge — fresh user sees it, replier doesn't ──
     const feedRes = await fetch(`${BASE}/feed`, { headers: { cookie: freshCookie } })

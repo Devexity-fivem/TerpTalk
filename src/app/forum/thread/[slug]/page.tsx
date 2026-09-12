@@ -1,6 +1,7 @@
+import { Fragment } from "react"
 import { prisma } from "@/lib/prisma"
 import { publicUserSelect, isModerator } from "@/lib/security"
-import { notFound } from "next/navigation"
+import { notFound, redirect } from "next/navigation"
 import { MessageSquare, Users, Clock, CheckCircle2, Eye } from "lucide-react"
 import Link from "next/link"
 import ReplyForm from "@/components/reply-form"
@@ -91,14 +92,39 @@ export default async function ThreadPage({
   searchParams,
 }: {
   params: Promise<{ slug: string }>
-  searchParams: Promise<{ page?: string }>
+  searchParams: Promise<{ page?: string; post?: string }>
 }) {
   const { slug } = await params
-  const { page: pageParam } = await searchParams
+  const { page: pageParam, post: postParam } = await searchParams
   const page = Math.max(1, Math.min(10_000, parseInt(pageParam || "1") || 1))
   const session = await getServerSession(authOptions)
   const currentUserId = session?.user?.id
   const thread = await getThreadData(slug, page, isModerator(session?.user?.role))
+
+  // Deep-link resolution: `?post=` finds the page holding the target post
+  // and redirects there so the #post-{id} anchor exists in the rendered
+  // list. Missing/deleted/cross-thread posts degrade to the normal view;
+  // the accepted answer renders on every page so it never needs a redirect.
+  if (
+    typeof postParam === "string" && postParam.length <= 40 &&
+    postParam !== thread.acceptedAnswerId
+  ) {
+    const target = await prisma.post.findUnique({
+      where: { id: postParam },
+      select: { threadId: true, deleted: true, createdAt: true },
+    })
+    if (target && !target.deleted && target.threadId === thread.id) {
+      const before = await prisma.post.count({
+        where: { threadId: thread.id, deleted: false, createdAt: { lt: target.createdAt } },
+      })
+      const targetPage = Math.floor(before / POSTS_PER_PAGE) + 1
+      if (targetPage !== page) {
+        redirect(`/forum/thread/${thread.slug}?page=${targetPage}#post-${postParam}`)
+      }
+    }
+  }
+
+  const totalPages = Math.max(1, Math.ceil(thread._count.posts / POSTS_PER_PAGE))
   const tagIds = thread.tags.map((tt) => tt.tagId)
   const relatedThreads = await prisma.thread.findMany({
     where: {
@@ -125,22 +151,58 @@ export default async function ThreadPage({
       }))
     : false
 
-  const following = currentUserId
-    ? !!(await prisma.threadFollow.findUnique({
+  const follow = currentUserId
+    ? await prisma.threadFollow.findUnique({
         where: { userId_threadId: { userId: currentUserId, threadId: thread.id } },
-        select: { id: true },
-      }))
-    : false
+        select: { id: true, lastSeenAt: true },
+      })
+    : null
+  const following = !!follow
 
-  // Mark-seen: viewing a followed thread catches the viewer up. Only writes
-  // when the thread has newer activity than the last view — monotonic and
-  // idempotent.
-  if (currentUserId && following) {
-    await prisma.threadFollow.updateMany({
-      where: { userId: currentUserId, threadId: thread.id, lastSeenAt: { lt: thread.lastActivityAt } },
-      data: { lastSeenAt: thread.lastActivityAt },
+  // First-unread boundary — must be read BEFORE mark-seen advances
+  // lastSeenAt. A null lastSeenAt means "never seen" (practically
+  // unreachable — every creation path stamps it); treated as no affordance
+  // since someone who just followed hasn't missed anything.
+  let firstUnread: { id: string; createdAt: Date } | null = null
+  let firstUnreadPage = page
+  if (follow?.lastSeenAt && follow.lastSeenAt < thread.lastActivityAt) {
+    firstUnread = await prisma.post.findFirst({
+      where: { threadId: thread.id, deleted: false, createdAt: { gt: follow.lastSeenAt } },
+      orderBy: { createdAt: "asc" },
+      select: { id: true, createdAt: true },
     })
+    if (firstUnread) {
+      const before = await prisma.post.count({
+        where: { threadId: thread.id, deleted: false, createdAt: { lt: firstUnread.createdAt } },
+      })
+      firstUnreadPage = Math.floor(before / POSTS_PER_PAGE) + 1
+    }
   }
+
+  // Mark-seen: viewing a followed thread advances lastSeenAt only to the
+  // newest post actually rendered — landing on an early page of a multi-
+  // page thread must not clear unread state for replies on later pages.
+  // The last page catches up fully to lastActivityAt. Monotonic + idempotent.
+  if (currentUserId && following) {
+    const lastRendered = thread.posts[thread.posts.length - 1]?.createdAt
+    const onRenderedLastPage = page >= totalPages && thread.posts.length > 0
+    const seenThrough = onRenderedLastPage ? thread.lastActivityAt : lastRendered
+    if (seenThrough) {
+      await prisma.threadFollow.updateMany({
+        where: { userId: currentUserId, threadId: thread.id, lastSeenAt: { lt: seenThrough } },
+        data: { lastSeenAt: seenThrough },
+      })
+    }
+  }
+
+  // The opening post is the earliest post in the thread — resolved with one
+  // indexed lookup so the OP badge/ring is correct on every page and stays
+  // correct even if the OP is deleted or accepted answers are filtered out.
+  const opPostId = (await prisma.post.findFirst({
+    where: { threadId: thread.id },
+    orderBy: { createdAt: "asc" },
+    select: { id: true },
+  }))?.id
 
   const canSetAnswer = !!currentUserId && (
     currentUserId === thread.authorId || isModerator(session?.user?.role)
@@ -270,9 +332,9 @@ export default async function ThreadPage({
           )}
         </div>
 
-        {/* Accepted answer */}
+        {/* Accepted answer — renders on every page, so its anchor always resolves */}
         {acceptedPost && (
-          <div className="bg-card rounded-lg border-2 border-green-500/50 p-4 mb-4 ring-1 ring-green-500/20">
+          <div id={`post-${acceptedPost.id}`} tabIndex={-1} className="bg-card rounded-lg border-2 border-green-500/50 p-4 mb-4 ring-1 ring-green-500/20">
             <div className="flex items-center gap-2 text-green-400 text-xs font-medium mb-3">
               <CheckCircle2 className="w-3.5 h-3.5" />
               <span>Accepted answer</span>
@@ -324,14 +386,48 @@ export default async function ThreadPage({
           </div>
         )}
 
+        {/* Return-visit pointer when the first unread post lives on another
+            page — or is the accepted answer, which renders above this list */}
+        {firstUnread && (firstUnreadPage !== page || firstUnread.id === acceptedPost?.id) && (
+          <div className="mb-4 text-sm text-muted-foreground flex items-center gap-2">
+            <MessageSquare className="w-4 h-4 text-primary flex-shrink-0" />
+            <span>
+              New activity since your last visit —{" "}
+              <Link
+                href={
+                  firstUnread.id === acceptedPost?.id || firstUnreadPage === page
+                    ? `#post-${firstUnread.id}`
+                    : `/forum/thread/${thread.slug}?page=${firstUnreadPage}#post-${firstUnread.id}`
+                }
+                className="text-primary hover:underline font-medium"
+              >
+                jump to the first unread reply
+              </Link>
+            </span>
+          </div>
+        )}
+
         {/* Posts */}
         <div className="space-y-4">
-          {visiblePosts.map((post, index) => {
-            const isOp = index === 0
+          {visiblePosts.map((post) => {
+            const isOp = post.id === opPostId
             const eligibleForAnswer = !isOp && post.authorId !== thread.authorId
             return (
+              <Fragment key={post.id}>
+                {firstUnread && firstUnreadPage === page && post.id === firstUnread.id && (
+                  <div
+                    role="separator"
+                    aria-label="New activity since your last visit"
+                    className="flex items-center gap-3"
+                  >
+                    <span className="h-px flex-1 bg-primary/40" />
+                    <span className="text-xs font-medium text-primary">New since your last visit</span>
+                    <span className="h-px flex-1 bg-primary/40" />
+                  </div>
+                )}
               <div
-                key={post.id}
+                id={`post-${post.id}`}
+                tabIndex={-1}
                 className={`bg-card rounded-lg border border-border p-4 ${
                   isOp ? "ring-2 ring-primary/20" : ""
                 }`}
@@ -389,14 +485,13 @@ export default async function ThreadPage({
                   </div>
                 </div>
               </div>
+              </Fragment>
             )
           })}
         </div>
 
         {/* Pagination — threads are capped at 50 posts per page */}
         {(() => {
-          const total = thread._count.posts
-          const totalPages = Math.ceil(total / POSTS_PER_PAGE)
           if (totalPages <= 1) return null
           return (
             <div className="flex items-center justify-center gap-2 mt-6 mb-2 text-sm">

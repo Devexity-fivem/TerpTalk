@@ -7,6 +7,7 @@ import { MessageSquare, Users, Clock, TrendingUp } from "lucide-react"
 import Link from "next/link"
 import RoleBadge from "@/components/role-badge"
 import { ForumLiveRefresh } from "@/components/forum-live-refresh"
+import FollowedThreads from "@/components/followed-threads"
 
 // Dynamic: the client polls for new threads and calls router.refresh(),
 // so this page must not serve stale ISR when refreshed.
@@ -80,6 +81,46 @@ export default async function ForumPage() {
       if (f.thread.lastActivityAt > (f.lastSeenAt ?? new Date(0))) unreadThreadIds.add(f.threadId)
     }
   }
+
+  // "Discussions You Follow" — per-viewer, one indexed query, never cached.
+  // Deleted threads and hidden categories are excluded; unread-first sort
+  // happens in JS (cross-table column comparison isn't expressible in
+  // Prisma). Fetch 20 so unread threads slightly older than the 10th
+  // most-recent still surface.
+  const followedItems = session?.user?.id
+    ? (
+        await prisma.threadFollow.findMany({
+          where: {
+            userId: session.user.id,
+            thread: { deleted: false, category: { hidden: false } },
+          },
+          orderBy: { thread: { lastActivityAt: "desc" } },
+          take: 20,
+          select: {
+            threadId: true,
+            lastSeenAt: true,
+            thread: {
+              select: {
+                slug: true,
+                title: true,
+                lastActivityAt: true,
+                category: { select: { name: true } },
+              },
+            },
+          },
+        })
+      )
+        .map((f) => ({
+          threadId: f.threadId,
+          slug: f.thread.slug,
+          title: f.thread.title,
+          category: f.thread.category.name,
+          lastActivityAt: f.thread.lastActivityAt.toISOString(),
+          unread: f.thread.lastActivityAt > (f.lastSeenAt ?? new Date(0)),
+        }))
+        .sort((a, b) => Number(b.unread) - Number(a.unread))
+        .slice(0, 10)
+    : []
 
   return (
     <div className="min-h-screen bg-background">
@@ -180,6 +221,9 @@ export default async function ForumPage() {
 
           {/* Sidebar */}
           <div className="space-y-6">
+            {/* Followed discussions — personalized, so it outranks stats */}
+            <FollowedThreads items={followedItems} />
+
             {/* Forum Stats */}
             <div className="bg-card rounded-lg border border-border p-4">
               <h3 className="text-base font-semibold mb-3">Forum Statistics</h3>

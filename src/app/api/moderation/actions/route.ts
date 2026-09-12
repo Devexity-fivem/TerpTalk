@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma"
 import { unauthorized, isAdmin, forbidden, getClientIp, logSecurityEvent } from "@/lib/security"
 import { requireModerator, ADMIN_ONLY_MOD_ACTIONS } from "@/lib/require-staff"
 import { rateLimit } from "@/lib/rate-limit"
-import { emitNotificationPush } from "@/lib/notify"
+import { emitNotificationPush, notificationLinkWhere, postLinkWhere } from "@/lib/notify"
 
 const CONTENT_TYPES = new Set(["THREAD", "POST", "CHAT_MESSAGE", "DIARY", "SETUP"])
 const ACTION_TYPES = new Set([
@@ -95,6 +95,10 @@ export async function POST(request: Request) {
           case "POST": {
             const p = await tx.post.findUnique({ where: { id: targetId }, select: { threadId: true } })
             ok = !!(await tx.post.updateMany({ where: { id: targetId, authorId: targetUserId }, data: { deleted: true } })).count
+            if (ok) {
+              // Deep-linked notifications (?post=/#post-) would dangle.
+              await tx.notification.deleteMany({ where: postLinkWhere(targetId) })
+            }
             if (ok && p) {
               // Keep thread.replyCount in sync — same rule as the user-facing
               // DELETE: non-deleted posts minus a live opening post.
@@ -126,9 +130,10 @@ export async function POST(request: Request) {
         if (!ok) {
           throw new Error("CONTENT_NOT_FOUND")
         }
-        // Drop notifications that would now point at deleted content.
+        // Drop notifications that would now point at deleted content —
+        // prefix-aware so deep links (?post=/#post-) are caught too.
         if (deletedLink) {
-          await tx.notification.deleteMany({ where: { link: deletedLink } })
+          await tx.notification.deleteMany({ where: notificationLinkWhere(deletedLink) })
         }
       }
 

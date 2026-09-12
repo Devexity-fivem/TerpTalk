@@ -34,7 +34,7 @@ async function getDiscoverData(tab: string, userId?: string) {
     })
     const followingIds = follows.map((f) => f.followingId)
     const threads = await prisma.thread.findMany({
-      where: { deleted: false, authorId: { in: followingIds } },
+      where: { deleted: false, category: { hidden: false }, authorId: { in: followingIds } },
       take: 50,
       orderBy: { createdAt: "desc" },
       include,
@@ -45,7 +45,7 @@ async function getDiscoverData(tab: string, userId?: string) {
   if (tab === "trending") {
     const oneWeekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
     const candidates = await prisma.thread.findMany({
-      where: { deleted: false, createdAt: { gte: oneWeekAgo } },
+      where: { deleted: false, category: { hidden: false }, createdAt: { gte: oneWeekAgo } },
       take: 100,
       include,
     })
@@ -58,7 +58,7 @@ async function getDiscoverData(tab: string, userId?: string) {
 
   // default latest
   const threads = await prisma.thread.findMany({
-    where: { deleted: false },
+    where: { deleted: false, category: { hidden: false } },
     take: 50,
     orderBy: { createdAt: "desc" },
     include,

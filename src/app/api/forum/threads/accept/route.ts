@@ -6,7 +6,7 @@ import { isBanned, isModerator, forbidden, unauthorized, getClientIp, logSecurit
 import { rateLimit } from "@/lib/rate-limit"
 import { awardReputation } from "@/lib/reputation"
 import { checkMaintenance } from "@/lib/maintenance"
-import { notify } from "@/lib/notify"
+import { notify, postDeepLink } from "@/lib/notify"
 
 export async function POST(request: Request) {
   try {
@@ -105,7 +105,7 @@ export async function POST(request: Request) {
         type: "ACCEPTED_ANSWER",
         title: "Your answer was accepted",
         content: `@${session.user.name || "Someone"} marked your reply in "${thread.title.slice(0, 60)}" as the accepted answer.`,
-        link: `/forum/thread/${thread.slug}`,
+        link: postDeepLink(thread.slug, postId),
         actorId: session.user.id,
       })
     }

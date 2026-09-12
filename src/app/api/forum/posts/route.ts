@@ -8,7 +8,7 @@ import { rateLimit } from "@/lib/rate-limit"
 import { awardReputation, REP_POINTS } from "@/lib/reputation"
 import { storeImages, deleteImagesIfUnreferenced } from "@/lib/blob"
 import { notifyMentions } from "@/lib/mentions"
-import { notify, notifyMany } from "@/lib/notify"
+import { notify, notifyMany, postDeepLink, postLinkWhere } from "@/lib/notify"
 import { checkMaintenance } from "@/lib/maintenance"
 
 export async function POST(request: Request) {
@@ -152,7 +152,7 @@ export async function POST(request: Request) {
         type: "REPLY",
         title: "New reply to your thread",
         content: `@${session.user.name || "Someone"} replied to "${thread.title.slice(0, 80)}"`,
-        link: `/forum/thread/${thread.slug}`,
+        link: postDeepLink(thread.slug, post.id),
         actorId: session.user.id,
         groupKey: `REPLY:thread:${threadId}`,
         dedupeMs: 60 * 60 * 1000,
@@ -165,7 +165,7 @@ export async function POST(request: Request) {
       content,
       session.user.id,
       session.user.name || "Someone",
-      `/forum/thread/${thread.slug}`,
+      postDeepLink(thread.slug, post.id),
       `a reply in "${thread.title.slice(0, 60)}"`,
       [thread.authorId]
     )
@@ -180,6 +180,7 @@ export async function POST(request: Request) {
       const threadTitle = thread.title
       const threadSlug = thread.slug
       const authorId = thread.authorId
+      const postId = post.id
       after(async () => {
         try {
           // Re-validate inside the deferred callback — the thread could be
@@ -208,11 +209,11 @@ export async function POST(request: Request) {
               type: "THREAD_ACTIVITY" as const,
               title: "New reply in a thread you follow",
               content: `@${replierName} replied in "${threadTitle.slice(0, 60)}"`,
-              link: `/forum/thread/${threadSlug}`,
+              link: postDeepLink(threadSlug, postId),
               actorId: replierId,
               groupKey: `THREAD_ACTIVITY:thread:${threadId}`,
               dedupeMs: 6 * 60 * 60 * 1000,
-              metadata: { threadId },
+              metadata: { threadId, postId },
             }))
           )
           // Stamp the throttle only for followers who actually received the
@@ -360,6 +361,8 @@ export async function DELETE(request: Request) {
         where: { id: post.threadId },
         data: { replyCount: Math.max(0, remaining - (op && !op.deleted ? 1 : 0)) },
       })
+      // Deep links to this post would now dangle — drop the notifications.
+      await tx.notification.deleteMany({ where: postLinkWhere(post.id) })
     })
 
     return NextResponse.json({ deleted: true })
