@@ -148,6 +148,7 @@ const getSearchResults = unstable_cache(
       (t === "all" || t === "diaries") ? prisma.growDiary.findMany({
         where: {
           deleted: false,
+          author: activeUser,
           OR: [
             { title: contains },
             { strain: contains },

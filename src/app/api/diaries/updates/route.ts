@@ -9,6 +9,8 @@ import { storeImages, deleteImagesIfUnreferenced } from "@/lib/blob"
 import { checkMaintenance } from "@/lib/maintenance"
 import { getBadgeByName } from "@/lib/badge-registry"
 import { notify, notifyMany } from "@/lib/notify"
+import { revalidateTag } from "next/cache"
+import { diaryDay, diaryWeek } from "@/lib/diary-weeks"
 
 export async function POST(request: Request) {
   let storedImages: string[] = []
@@ -70,6 +72,22 @@ export async function POST(request: Request) {
       }
     }
 
+    // Sanity bounds — keep implausible readings out of charts and aggregates.
+    const RANGES: [unknown, number, number, string][] = [
+      [temperature, -40, 140, "temperature"],
+      [humidity, 0, 100, "humidity"],
+      [vpd, 0, 6, "vpd"],
+      [ph, 0, 14, "ph"],
+      [ec, 0, 15, "ec"],
+      [dayNumber, 0, 1000, "dayNumber"],
+      [weekNumber, 0, 150, "weekNumber"],
+    ]
+    for (const [v, lo, hi, name] of RANGES) {
+      if (typeof v === "number" && (v < lo || v > hi)) {
+        return NextResponse.json({ error: `${name} is out of range` }, { status: 400 })
+      }
+    }
+
     const cleanStr = (v: unknown, max: number) =>
       typeof v === "string" ? v.trim().slice(0, max) || null : null
 
@@ -123,6 +141,11 @@ export async function POST(request: Request) {
     // Offload to Blob storage when configured (keeps DB rows small)
     storedImages = await storeImages(validImages, "diary-updates")
 
+    // Derive day/week from the diary start date when the client doesn't
+    // supply them — manual entry is no longer exposed in the form.
+    const derivedDay = typeof dayNumber === "number" ? dayNumber : diaryDay(diary.startDate, new Date())
+    const derivedWeek = typeof weekNumber === "number" ? weekNumber : diaryWeek(diary.startDate, new Date())
+
     // Create update
     const update = await prisma.diaryUpdate.create({
       data: {
@@ -130,8 +153,8 @@ export async function POST(request: Request) {
         content,
         diaryId,
         authorId: session.user.id,
-        dayNumber: typeof dayNumber === "number" ? dayNumber : null,
-        weekNumber: typeof weekNumber === "number" ? weekNumber : null,
+        dayNumber: derivedDay,
+        weekNumber: derivedWeek,
         stage: stage || diary.stage,
         temperature: typeof temperature === "number" ? temperature : null,
         humidity: typeof humidity === "number" ? humidity : null,
@@ -163,13 +186,16 @@ export async function POST(request: Request) {
       `Updated diary "${diary.title.slice(0, 60)}"`
     ).catch(() => {})
 
-    // Update diary stage if needed
+    // Update diary stage only on an explicit change. The form defaults to the
+    // diary's current stage, so an untouched select never regresses it.
     if (stage && stage !== diary.stage) {
       await prisma.growDiary.update({
         where: { id: diaryId },
         data: { stage },
       })
     }
+
+    revalidateTag("diaries", { expire: 0 })
 
     // Award 7-day streak badge if earned
     const recentUpdates = await prisma.diaryUpdate.findMany({

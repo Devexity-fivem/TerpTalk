@@ -39,6 +39,8 @@ model User {
   setupComments SetupComment[]
   contestEntries ContestEntry[]
   contestVotes   ContestVote[]
+  diaryContestEntries DiaryContestEntry[]
+  diaryContestVotes   DiaryContestVote[]
   guides         Guide[]
   affiliateClicks AffiliateClick[]
   chatMessages  ChatMessage[]
@@ -366,6 +368,7 @@ model GrowDiary {
   updates       DiaryUpdate[]
   reactions     Reaction[]
   followers     DiaryFollow[]
+  diaryContestEntries DiaryContestEntry[]
 
   @@index([authorId])
   @@index([strain])
@@ -398,6 +401,7 @@ model DiaryUpdate {
   images       DiaryImage[]
 
   @@index([diaryId])
+  @@index([diaryId, createdAt])
   @@index([authorId])
   @@index([createdAt])
 }
@@ -746,6 +750,37 @@ model ContestVote {
 
   entry     ContestEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
   user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([entryId, userId])
+  @@index([entryId])
+}
+
+// Monthly contest — Diary of the Month (parallel to Budshot models;
+// kept separate so the weekly photo contest is unaffected)
+model DiaryContestEntry {
+  id        String   @id @default(cuid())
+  month     String   // e.g. "2026-05"
+  diaryId   String
+  userId    String
+  createdAt DateTime @default(now())
+
+  diary     GrowDiary          @relation(fields: [diaryId], references: [id], onDelete: Cascade)
+  user      User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  votes     DiaryContestVote[]
+
+  @@unique([userId, month])
+  @@unique([diaryId, month])
+  @@index([month])
+}
+
+model DiaryContestVote {
+  id        String   @id @default(cuid())
+  entryId   String
+  userId    String
+  createdAt DateTime @default(now())
+
+  entry     DiaryContestEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  user      User              @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([entryId, userId])
   @@index([entryId])

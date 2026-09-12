@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { postToGeneral, GROW_TIPS } from "@/lib/terpbot"
-import { currentWeekKey, previousWeekKey } from "@/lib/week"
+import { currentWeekKey, previousWeekKey, currentMonthKey, previousMonthKey } from "@/lib/week"
 
 // Daily TerpBot job — digests, grow tips, and contest-winner announcements.
 // Invoked by the Vercel cron configured in vercel.json. Idempotent via
@@ -78,6 +78,29 @@ export async function GET(request: NextRequest) {
         `🏆 Last week's photo contest winner: @${name} with ${winner._count.votes} vote${winner._count.votes === 1 ? "" : "s"}! This week's contest is open — submit your best budshot on the Contest page.`
       )
       posted.push("contest")
+    }
+  }
+
+  // ── Monthly diary contest winner (once per calendar month) ─────────
+  const prevMonth = previousMonthKey()
+  const diaryContestKey = `terpbot:diary-contest:${prevMonth}`
+  if (currentMonthKey() !== prevMonth && !(await wasDone(diaryContestKey))) {
+    await markDone(diaryContestKey)
+    const winner = await prisma.diaryContestEntry.findFirst({
+      where: { month: prevMonth, diary: { deleted: false }, user: { banned: false } },
+      orderBy: [{ votes: { _count: "desc" } }, { createdAt: "asc" }],
+      include: {
+        user: { select: { name: true, profile: { select: { username: true } } } },
+        diary: { select: { title: true } },
+        _count: { select: { votes: true } },
+      },
+    })
+    if (winner && winner._count.votes > 0) {
+      const name = winner.user.profile?.username || winner.user.name || "a member"
+      await postToGeneral(
+        `🏆 Last month's Diary of the Month winner: @${name} with "${winner.diary.title.slice(0, 60)}" (${winner._count.votes} vote${winner._count.votes === 1 ? "" : "s"})! This month's contest is open — enter a well-documented diary on the Contest page.`
+      )
+      posted.push("diary-contest")
     }
   }
 

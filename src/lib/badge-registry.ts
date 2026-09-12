@@ -75,6 +75,7 @@ export const BADGE_REGISTRY: BadgeDefinition[] = [
   { name: "Beta Tester", description: "Joined TerpTalk during the beta and helped shape the community.", requirement: "Early beta member.", rarity: r("rare"), icon: "Rocket" },
   { name: "Verified YouTuber", description: "A featured cannabis grow content creator on YouTube.", requirement: "Verified by staff as a YouTuber.", rarity: r("epic"), icon: "Video" },
   { name: "Weekly Winner", description: "Won Budshot of the Week.", requirement: "Win a weekly photo contest.", rarity: r("legendary"), icon: "Trophy" },
+  { name: "Diary of the Month", description: "Won the monthly grow diary contest.", requirement: "Win Diary of the Month.", rarity: r("legendary"), icon: "Trophy" },
   { name: "Contest Finalist", description: "Reached the final round of a community contest.", requirement: "Finish top 5 in a contest.", rarity: r("rare"), icon: "Medal" },
   { name: "Contest Winner", description: "Won a community contest.", requirement: "Place first in a contest.", rarity: r("legendary"), icon: "Trophy" },
 

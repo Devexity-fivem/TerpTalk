@@ -6,6 +6,8 @@ import { unauthorized, forbidden, isBanned, isAdmin } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
 import { checkMaintenance } from "@/lib/maintenance"
 import { announceHarvest } from "@/lib/terpbot"
+import { revalidateTag } from "next/cache"
+import { VALID_YIELD_UNITS } from "@/lib/yield"
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await getServerSession(authOptions)
@@ -19,7 +21,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const { id } = await params
   const diary = await prisma.growDiary.findUnique({
     where: { id },
-    select: { id: true, authorId: true, deleted: true },
+    select: { id: true, authorId: true, deleted: true, startDate: true },
   })
   if (!diary || diary.deleted) return NextResponse.json({ error: "Diary not found" }, { status: 404 })
 
@@ -52,7 +54,13 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   if (harvested) {
     if (harvestedAt) {
       const d = new Date(harvestedAt)
-      if (isNaN(d.getTime())) {
+      // Harvest must fall within the grow's plausible window — after the
+      // start date and not in the future (1-day slack for timezones).
+      if (
+        isNaN(d.getTime()) ||
+        d.getTime() < new Date(diary.startDate).getTime() - 86400000 ||
+        d.getTime() > Date.now() + 86400000
+      ) {
         return NextResponse.json({ error: "Invalid harvestedAt date" }, { status: 400 })
       }
       data.harvestedAt = d
@@ -69,7 +77,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       data.yieldAmount = null
     }
     if (yieldUnit) {
-      if (typeof yieldUnit !== "string" || yieldUnit.length > 20) {
+      // Unknown units would be silently treated as grams by yield math —
+      // restrict to the units the form offers.
+      if (typeof yieldUnit !== "string" || !(VALID_YIELD_UNITS as readonly string[]).includes(yieldUnit)) {
         return NextResponse.json({ error: "Invalid yield unit" }, { status: 400 })
       }
       data.yieldUnit = yieldUnit
@@ -89,6 +99,10 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       author: { select: { id: true, name: true, profile: { select: { username: true } } } },
     },
   })
+
+  revalidateTag("diaries", { expire: 0 })
+  revalidateTag("leaderboard", { expire: 0 })
+  revalidateTag("strains", { expire: 0 })
 
   // TerpBot celebrates the harvest in community chat.
   if (harvested) {

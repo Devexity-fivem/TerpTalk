@@ -9,6 +9,10 @@ import { ADMIN_ONLY_MOD_ACTIONS } from "@/lib/require-staff"
 import { recoveryPhraseUpdateData, newRecoveryPhrase, hashPhrase, verifyPhrase } from "@/lib/recovery"
 import { notifyMany } from "@/lib/notify"
 import { getSuggestedUsers } from "@/lib/onboarding"
+import { escapeLike, normalizeStrain, strainFieldMatches } from "@/lib/strain-stats"
+import { toGrams, toOz, VALID_YIELD_UNITS } from "@/lib/yield"
+import { diaryDay, diaryWeek, groupUpdatesByWeek, buildHarvestReport, diaryCompleteness, STAGE_ORDER } from "@/lib/diary-weeks"
+import { currentMonthKey, monthRange, previousMonthKey } from "@/lib/week"
 
 const TEST_USERNAME = `__test_security_${Date.now()}`
 const TEST_NAME = `__test_security_name_${Date.now()}`
@@ -257,6 +261,108 @@ async function run() {
       for (const id of [sugVisible.id, sugFollowed.id, sugBanned.id, sugSuspended.id, sugBlocked.id]) {
         await prisma.user.delete({ where: { id } }).catch(() => {})
       }
+    }
+
+    // ── Phase 6 pure-helper units ──────────────────────────────────
+
+    // LIKE escaping — user-created strain names must not inject wildcards
+    assert.equal(escapeLike("Blue%"), "Blue\\%", "% wildcard escaped")
+    assert.equal(escapeLike("_auto"), "\\_auto", "_ wildcard escaped")
+    assert.equal(escapeLike("a\\b"), "a\\\\b", "backslash escaped first")
+
+    // Strain field matching — precision over recall
+    assert.equal(normalizeStrain("Blue Dream!"), "blue dream")
+    assert.equal(strainFieldMatches("Blue Dream", "Blue Dream"), true)
+    assert.equal(strainFieldMatches("Blue Dream Auto", "Blue Dream"), true, "descriptor suffix counts")
+    assert.equal(strainFieldMatches("Blue Cheese", "Cheese"), false, "word-substring must not match")
+    assert.equal(strainFieldMatches("Blue Dream", "Blue Dream Auto"), false, "reverse direction rejected")
+    assert.equal(strainFieldMatches(null, "Blue Dream"), false)
+    assert.equal(strainFieldMatches("OG", "Blue Dream"), false)
+
+    // Yield conversions
+    assert.equal((VALID_YIELD_UNITS as readonly string[]).includes("oz"), true)
+    assert.equal((VALID_YIELD_UNITS as readonly string[]).includes("stone"), false, "arbitrary units not allowed")
+    assert.equal(Math.round(toGrams(4, "oz")), 113)
+    assert.equal(Math.round(toOz(453.592) * 10) / 10, 16, "1 lb = 16 oz")
+    assert.equal(toGrams(10, "bogus"), 10, "unknown unit falls back to grams")
+    assert.equal(toGrams(10, null), 10)
+
+    // Month keys + ranges (UTC-safe)
+    assert.match(currentMonthKey(), /^\d{4}-\d{2}$/)
+    assert.match(previousMonthKey(), /^\d{4}-\d{2}$/)
+    const mr = monthRange("2026-03")
+    assert.equal(mr.start.toISOString(), "2026-03-01T00:00:00.000Z")
+    assert.equal(mr.end.toISOString(), "2026-04-01T00:00:00.000Z")
+
+    // Diary day/week derivation — 1-based, derived from createdAt
+    const start = "2026-01-01T00:00:00.000Z"
+    assert.equal(diaryDay(start, start), 1)
+    assert.equal(diaryWeek(start, start), 1)
+    assert.equal(diaryDay(start, "2026-01-08T00:00:00.000Z"), 8)
+    assert.equal(diaryWeek(start, "2026-01-08T00:00:00.000Z"), 2)
+    assert.equal(diaryDay(start, "2025-12-31T00:00:00.000Z"), 1, "pre-start clamps to day 1")
+
+    // Week grouping — chronological, stage = furthest reached, sparse weeks skipped
+    const mkUpd = (id: string, day: number, stage: string, extra: Record<string, unknown> = {}) => ({
+      id, stage,
+      createdAt: new Date(new Date(start).getTime() + (day - 1) * 86400000),
+      ...extra,
+    })
+    const grouped = groupUpdatesByWeek([
+      mkUpd("a", 2, "SEEDLING"),
+      mkUpd("b", 5, "VEGETATIVE", { temperature: 75, images: [{ id: "i1" }] }),
+      mkUpd("c", 20, "FLOWER"),
+      mkUpd("d", 21, "VEGETATIVE"), // re-veg — week stage stays FLOWER
+    ], start)
+    assert.equal(grouped.length, 2, "empty weeks between updates collapse")
+    assert.equal(grouped[0].week, 1)
+    assert.equal(grouped[0].stage, "VEGETATIVE", "week 1 stage = furthest reached")
+    assert.equal(grouped[0].dayStart, 2)
+    assert.equal(grouped[0].dayEnd, 5)
+    assert.equal(grouped[0].photoCount, 1)
+    assert.equal(grouped[0].hasEnv, true)
+    assert.equal(grouped[1].week, 3)
+    assert.equal(grouped[1].stage, "FLOWER", "re-veg within week doesn't regress stage")
+    assert.equal(grouped[1].updates.length, 2)
+
+    // Harvest report — only when harvested; veg/flower split off first FLOWER update
+    assert.equal(buildHarvestReport({ startDate: start, harvested: false }, []), null)
+    const report = buildHarvestReport(
+      {
+        startDate: start, harvested: true,
+        harvestedAt: "2026-02-20T00:00:00.000Z",
+        yieldAmount: 100, yieldUnit: "g",
+      },
+      [
+        mkUpd("a", 10, "VEGETATIVE", { temperature: 72 }),
+        mkUpd("b", 30, "FLOWER", { temperature: 78 }),
+        mkUpd("c", 45, "FLOWER", { training: "LST, topping" }),
+      ]
+    )
+    assert.ok(report, "harvested diary produces a report")
+    assert.equal(report!.totalDays, 50)
+    assert.equal(report!.vegDays, 29, "veg = days until first FLOWER update")
+    assert.equal(report!.flowerDays, 21)
+    assert.equal(report!.updateCount, 3)
+    assert.equal(report!.avgTemp, 75)
+    assert.deepEqual(report!.trainingTechniques, ["LST", "topping"])
+    assert.ok(report!.stageDays.find((s) => s.stage === "FLOWER")!.days === 2)
+
+    // Completeness — rewards documented grows, never blocks anything
+    const full = diaryCompleteness(
+      { startDate: start, harvested: true, strain: "x", medium: "coco", stage: "COMPLETED" },
+      [mkUpd("a", 1, "FLOWER", { images: [{ id: "i" }], temperature: 70 }),
+       mkUpd("b", 2, "FLOWER"), mkUpd("c", 3, "FLOWER")]
+    )
+    assert.equal(full.percent, 100)
+    assert.equal(full.missing.length, 0)
+    const empty = diaryCompleteness({ startDate: start, harvested: false }, [])
+    assert.equal(empty.percent, 0)
+    assert.ok(empty.missing.length > 0 && empty.missing.length <= 4, "missing list stays short")
+
+    // Stage order sanity — every stage the API accepts is in the order list
+    for (const s of ["GERMINATION", "SEEDLING", "VEGETATIVE", "FLOWER", "HARVEST", "DRYING", "CURING", "COMPLETED"]) {
+      assert.ok((STAGE_ORDER as readonly string[]).includes(s), `${s} in STAGE_ORDER`)
     }
 
     console.log("All security regression tests passed.")

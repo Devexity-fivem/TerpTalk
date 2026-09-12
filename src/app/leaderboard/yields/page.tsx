@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma"
-import { publicUserSelect } from "@/lib/security"
+import { publicUserSelect, activeAuthor } from "@/lib/security"
 import { unstable_cache } from "next/cache"
+import { toGrams, toOz } from "@/lib/yield"
 import Link from "next/link"
 import { Trophy, Leaf } from "lucide-react"
 import { Avatar } from "@/components/ui/avatar"
@@ -15,27 +16,13 @@ export const metadata = buildMetadata({
   pathname: "/leaderboard/yields",
 })
 
-const TO_GRAMS: Record<string, number> = {
-  g: 1,
-  oz: 28.3495,
-  lb: 453.592,
-  kg: 1000,
-}
-
-function toGrams(amount: number, unit?: string | null) {
-  return amount * (TO_GRAMS[unit?.toLowerCase() || "g"] ?? 1)
-}
-
-function toOz(grams: number) {
-  return grams / TO_GRAMS.oz
-}
-
 const getYieldDiaries = unstable_cache(
   async () => {
     return prisma.growDiary.findMany({
       where: {
         harvested: true,
         deleted: false,
+        author: activeAuthor(),
         yieldAmount: { not: null },
         strain: { not: null },
       },

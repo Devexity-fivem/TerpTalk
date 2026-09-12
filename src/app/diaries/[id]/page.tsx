@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma"
 import { publicUserSelect } from "@/lib/security"
 import { notFound } from "next/navigation"
-import { Leaf, Calendar, Users } from "lucide-react"
+import { Leaf, Calendar, Users, ClipboardCheck, Camera } from "lucide-react"
 import Link from "next/link"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
@@ -13,6 +13,8 @@ import { Breadcrumbs } from "@/components/breadcrumbs"
 import EnvCharts from "@/components/env-chart"
 import HarvestForm from "@/components/harvest-form"
 import StageTimeline from "@/components/stage-timeline"
+import ImageGallery from "@/components/image-gallery"
+import { groupUpdatesByWeek, buildHarvestReport, diaryCompleteness, diaryDay, diaryWeek } from "@/lib/diary-weeks"
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -38,7 +40,7 @@ async function getDiaryData(id: string) {
       updates: {
         include: {
           author: { select: publicUserSelect },
-          images: { take: 12 },
+          images: { take: 12, orderBy: { order: "asc" } },
         },
         orderBy: { createdAt: "desc" },
         take: 100,
@@ -114,6 +116,12 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
   }
 
   const canEdit = session?.user?.id === diary.author.id || (session?.user as { role?: string } | undefined)?.role === "ADMINISTRATOR"
+
+  // Week-organized timeline — weeks derived from update dates vs startDate
+  const weeks = groupUpdatesByWeek(updates, diary.startDate)
+  const harvestReport = buildHarvestReport(diary, updates)
+  const completeness = canEdit ? diaryCompleteness(diary, updates) : null
+  const truncated = diary._count.updates > updates.length
 
   return (
     <div className="min-h-screen bg-background">
@@ -203,14 +211,104 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
           </div>
         </div>
 
-        <HarvestForm
-          diaryId={diary.id}
-          canEdit={canEdit}
-          initialHarvested={diary.harvested}
-          initialAmount={diary.yieldAmount}
-          initialUnit={diary.yieldUnit}
-          initialAt={diary.harvestedAt}
-        />
+        {canEdit && (
+          <HarvestForm
+            diaryId={diary.id}
+            canEdit={canEdit}
+            initialHarvested={diary.harvested}
+            initialAmount={diary.yieldAmount}
+            initialUnit={diary.yieldUnit}
+            initialAt={diary.harvestedAt}
+          />
+        )}
+
+        {/* Harvest report — the grow's final result, shown to everyone */}
+        {harvestReport && (
+          <div className="bg-card rounded-xl border border-border p-5 mt-4">
+            <div className="flex items-center gap-2 mb-4">
+              <ClipboardCheck className="w-4 h-4 text-emerald-500" />
+              <h2 className="font-semibold">Harvest Report</h2>
+              {harvestReport.yieldAmount != null && (
+                <span className="ml-auto px-2.5 py-1 rounded-lg bg-emerald-500/10 text-emerald-500 font-medium text-sm">
+                  {harvestReport.yieldAmount} {harvestReport.yieldUnit || "g"}
+                </span>
+              )}
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-center">
+              <div>
+                <div className="text-2xl font-bold text-primary">{harvestReport.totalDays}</div>
+                <div className="text-xs text-muted-foreground">total days</div>
+              </div>
+              {harvestReport.vegDays != null && (
+                <div>
+                  <div className="text-2xl font-bold">{harvestReport.vegDays}</div>
+                  <div className="text-xs text-muted-foreground">veg days</div>
+                </div>
+              )}
+              {harvestReport.flowerDays != null && (
+                <div>
+                  <div className="text-2xl font-bold">{harvestReport.flowerDays}</div>
+                  <div className="text-xs text-muted-foreground">flower days</div>
+                </div>
+              )}
+              <div>
+                <div className="text-2xl font-bold">{harvestReport.updateCount}</div>
+                <div className="text-xs text-muted-foreground">updates</div>
+              </div>
+              <div>
+                <div className="text-2xl font-bold">{harvestReport.photoCount}</div>
+                <div className="text-xs text-muted-foreground">photos</div>
+              </div>
+              {harvestReport.avgTemp != null && (
+                <div>
+                  <div className="text-2xl font-bold">{harvestReport.avgTemp}°</div>
+                  <div className="text-xs text-muted-foreground">avg temp</div>
+                </div>
+              )}
+              {harvestReport.avgHumidity != null && (
+                <div>
+                  <div className="text-2xl font-bold">{harvestReport.avgHumidity}%</div>
+                  <div className="text-xs text-muted-foreground">avg RH</div>
+                </div>
+              )}
+              {harvestReport.avgVpd != null && (
+                <div>
+                  <div className="text-2xl font-bold">{harvestReport.avgVpd}</div>
+                  <div className="text-xs text-muted-foreground">avg VPD</div>
+                </div>
+              )}
+            </div>
+            {(harvestReport.stageDays.length > 0 || harvestReport.trainingTechniques.length > 0) && (
+              <div className="mt-4 pt-4 border-t border-border flex flex-wrap gap-x-4 gap-y-2 text-xs text-muted-foreground">
+                {harvestReport.stageDays.map((s) => (
+                  <span key={s.stage}>{s.stage.toLowerCase()} {s.days}d</span>
+                ))}
+                {harvestReport.trainingTechniques.length > 0 && (
+                  <span>training: {harvestReport.trainingTechniques.join(", ")}</span>
+                )}
+              </div>
+            )}
+            <p className="text-xs text-muted-foreground mt-3">
+              Harvested {harvestReport.harvestedAt.toLocaleDateString()} · started {new Date(diary.startDate).toLocaleDateString()}
+            </p>
+          </div>
+        )}
+
+        {/* Completeness nudge — owner only, encourages better records */}
+        {completeness && !diary.harvested && completeness.percent < 100 && (
+          <div className="bg-card rounded-xl border border-border p-4 mt-4">
+            <div className="flex items-center justify-between text-sm mb-2">
+              <span className="font-medium">Log completeness</span>
+              <span className="text-muted-foreground text-xs">{completeness.percent}%</span>
+            </div>
+            <div className="h-2 bg-secondary rounded-full overflow-hidden mb-2">
+              <div className="h-full bg-primary rounded-full" style={{ width: `${completeness.percent}%` }} />
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Make this grow more useful: {completeness.missing.join(" · ")}
+            </p>
+          </div>
+        )}
 
         {/* Grow Setup Info */}
         <details className="bg-card rounded-lg border border-border mb-8 group">
@@ -278,16 +376,39 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
           </div>
         </details>
 
-        {/* Timeline */}
+        {/* Timeline — grouped by grow week */}
         <div className="space-y-4">
           <div className="flex justify-between items-center">
             <h2 className="text-lg font-semibold">Grow Timeline</h2>
-            <UpdateForm diaryId={diary.id} />
+            {canEdit && (
+              <UpdateForm
+                diaryId={diary.id}
+                currentStage={diary.stage}
+                currentDay={diaryDay(diary.startDate, new Date())}
+                currentWeek={diaryWeek(diary.startDate, new Date())}
+              />
+            )}
           </div>
+
+          {weeks.length > 1 && (
+            <nav aria-label="Jump to week" className="flex flex-wrap gap-1.5">
+              {weeks.map((w) => (
+                <a
+                  key={w.week}
+                  href={`#week-${w.week}`}
+                  className="text-xs px-2.5 py-1 rounded-full bg-secondary text-muted-foreground hover:bg-secondary/80 hover:text-foreground transition-colors"
+                >
+                  W{w.week}
+                </a>
+              ))}
+            </nav>
+          )}
 
           <EnvCharts
             updates={updates.map((u) => ({
               createdAt: u.createdAt.toISOString(),
+              day: diaryDay(diary.startDate, u.createdAt),
+              week: diaryWeek(diary.startDate, u.createdAt),
               temperature: u.temperature,
               humidity: u.humidity,
               vpd: u.vpd,
@@ -296,6 +417,12 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
             }))}
           />
 
+          {truncated && (
+            <p className="text-xs text-muted-foreground">
+              Showing the latest {updates.length} of {diary._count.updates} updates.
+            </p>
+          )}
+
           {updates.length === 0 ? (
             <div className="bg-card rounded-lg border border-border p-8 text-center">
               <Leaf className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
@@ -303,123 +430,113 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
               <p className="text-sm text-muted-foreground">Start documenting your grow journey with your first update!</p>
             </div>
           ) : (
-            <div className="relative">
-              {/* Timeline line */}
-              <div className="absolute left-6 top-0 bottom-0 w-0.5 bg-border"></div>
+            <div className="space-y-6">
+              {weeks.map((week) => (
+                <section key={week.week} id={`week-${week.week}`} className="scroll-mt-20">
+                  <div className="flex items-center gap-3 mb-3">
+                    <h3 className="text-sm font-semibold">
+                      Week {week.week}
+                      <span className="text-muted-foreground font-normal"> — {week.stage.toLowerCase()}</span>
+                    </h3>
+                    <span className="text-xs text-muted-foreground">
+                      days {week.dayStart}–{week.dayEnd}
+                    </span>
+                    <span className="text-xs text-muted-foreground flex items-center gap-2 ml-auto">
+                      {week.photoCount > 0 && (
+                        <span className="flex items-center gap-1">
+                          <Camera className="w-3 h-3" />{week.photoCount}
+                        </span>
+                      )}
+                      {week.updates.length} update{week.updates.length === 1 ? "" : "s"}
+                    </span>
+                  </div>
 
-              {/* Timeline items */}
-              <div className="space-y-6">
-                {updates.map((update) => (
-                  <div key={update.id} className="relative pl-16">
-                    {/* Timeline dot */}
-                    <div className="absolute left-4 w-4 h-4 bg-primary rounded-full border-4 border-background"></div>
-
-                    <div className="bg-card rounded-lg border border-border p-4">
-                      <div className="flex flex-wrap items-start justify-between gap-2 mb-3">
-                        <div>
-                          <div className="flex items-center gap-2 mb-1.5 flex-wrap">
-                            <span className="text-xs text-muted-foreground px-2 py-1 bg-secondary rounded">
-                              {update.stage}
-                            </span>
-                            {update.dayNumber && (
+                  <div className="space-y-4 border-l-2 border-border pl-4 sm:pl-6">
+                    {week.updates.map((update) => (
+                      <div key={update.id} className="bg-card rounded-lg border border-border p-4">
+                        <div className="flex flex-wrap items-start justify-between gap-2 mb-3">
+                          <div>
+                            <div className="flex items-center gap-2 mb-1.5 flex-wrap">
                               <span className="text-xs text-muted-foreground px-2 py-1 bg-secondary rounded">
-                                Day {update.dayNumber}
+                                {update.stage}
                               </span>
+                              <span className="text-xs text-muted-foreground px-2 py-1 bg-secondary rounded">
+                                Day {diaryDay(diary.startDate, update.createdAt)}
+                              </span>
+                            </div>
+                            <h4 className="font-semibold text-sm">{update.title}</h4>
+                          </div>
+                          <span className="text-xs text-muted-foreground">
+                            {new Date(update.createdAt).toLocaleDateString()}
+                          </span>
+                        </div>
+
+                        {update.images.length > 0 && (
+                          <ImageGallery
+                            images={update.images.map((img) => ({ id: img.id, url: img.url, caption: img.caption }))}
+                          />
+                        )}
+
+                        <p className="text-muted-foreground my-4 whitespace-pre-wrap break-words">{update.content}</p>
+
+                        {/* Environmental Data */}
+                        {(update.temperature != null || update.humidity != null || update.vpd != null || update.ph != null || update.ec != null) && (
+                          <div className="grid grid-cols-3 sm:grid-cols-5 gap-3 sm:gap-4 mb-4 p-4 bg-secondary/50 rounded-lg">
+                            {update.temperature != null && (
+                              <div className="text-center">
+                                <div className="text-xs text-muted-foreground">Temp</div>
+                                <div className="font-semibold">{update.temperature}°F</div>
+                              </div>
                             )}
-                            {update.weekNumber && (
-                              <span className="text-xs text-muted-foreground px-2 py-1 bg-secondary rounded">
-                                Week {update.weekNumber}
-                              </span>
+                            {update.humidity != null && (
+                              <div className="text-center">
+                                <div className="text-xs text-muted-foreground">Humidity</div>
+                                <div className="font-semibold">{update.humidity}%</div>
+                              </div>
+                            )}
+                            {update.vpd != null && (
+                              <div className="text-center">
+                                <div className="text-xs text-muted-foreground">VPD</div>
+                                <div className="font-semibold">{update.vpd}</div>
+                              </div>
+                            )}
+                            {update.ph != null && (
+                              <div className="text-center">
+                                <div className="text-xs text-muted-foreground">pH</div>
+                                <div className="font-semibold">{update.ph}</div>
+                              </div>
+                            )}
+                            {update.ec != null && (
+                              <div className="text-center">
+                                <div className="text-xs text-muted-foreground">EC</div>
+                                <div className="font-semibold">{update.ec}</div>
+                              </div>
                             )}
                           </div>
-                          <h3 className="font-semibold text-sm">{update.title}</h3>
-                        </div>
-                        <span className="text-xs text-muted-foreground">
-                          {new Date(update.createdAt).toLocaleDateString()}
-                        </span>
+                        )}
+
+                        {/* Additional Info */}
+                        {(update.feeding || update.training) && (
+                          <div className="space-y-2 mb-4">
+                            {update.feeding && (
+                              <div>
+                                <span className="text-sm text-muted-foreground">Feeding:</span>
+                                <p className="text-sm">{update.feeding}</p>
+                              </div>
+                            )}
+                            {update.training && (
+                              <div>
+                                <span className="text-sm text-muted-foreground">Training:</span>
+                                <p className="text-sm">{update.training}</p>
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </div>
-
-                      <p className="text-muted-foreground mb-4 whitespace-pre-wrap break-words">{update.content}</p>
-
-                      {/* Environmental Data */}
-                      {(update.temperature || update.humidity || update.vpd || update.ph || update.ec) && (
-                        <div className="grid grid-cols-3 sm:grid-cols-5 gap-3 sm:gap-4 mb-4 p-4 bg-secondary/50 rounded-lg">
-                          {update.temperature && (
-                            <div className="text-center">
-                              <div className="text-xs text-muted-foreground">Temp</div>
-                              <div className="font-semibold">{update.temperature}°F</div>
-                            </div>
-                          )}
-                          {update.humidity && (
-                            <div className="text-center">
-                              <div className="text-xs text-muted-foreground">Humidity</div>
-                              <div className="font-semibold">{update.humidity}%</div>
-                            </div>
-                          )}
-                          {update.vpd && (
-                            <div className="text-center">
-                              <div className="text-xs text-muted-foreground">VPD</div>
-                              <div className="font-semibold">{update.vpd}</div>
-                            </div>
-                          )}
-                          {update.ph && (
-                            <div className="text-center">
-                              <div className="text-xs text-muted-foreground">pH</div>
-                              <div className="font-semibold">{update.ph}</div>
-                            </div>
-                          )}
-                          {update.ec && (
-                            <div className="text-center">
-                              <div className="text-xs text-muted-foreground">EC</div>
-                              <div className="font-semibold">{update.ec}</div>
-                            </div>
-                          )}
-                        </div>
-                      )}
-
-                      {/* Additional Info */}
-                      {(update.feeding || update.training) && (
-                        <div className="space-y-2 mb-4">
-                          {update.feeding && (
-                            <div>
-                              <span className="text-sm text-muted-foreground">Feeding:</span>
-                              <p className="text-sm">{update.feeding}</p>
-                            </div>
-                          )}
-                          {update.training && (
-                            <div>
-                              <span className="text-sm text-muted-foreground">Training:</span>
-                              <p className="text-sm">{update.training}</p>
-                            </div>
-                          )}
-                        </div>
-                      )}
-
-                      {/* Images */}
-                      {update.images.length > 0 && (
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-4">
-                          {update.images.map((image) => (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img
-                              key={image.id}
-                              src={image.url}
-                              alt={image.caption || "Grow update photo"}
-                              loading="lazy"
-                              decoding="async"
-                              className="aspect-square object-cover rounded-lg border border-border"
-                            />
-                          ))}
-                        </div>
-                      )}
-
-                      {/* Actions */}
-                      <div className="flex items-center gap-4">
-                        <ShareButtons path={`/diaries/${diary.id}`} title={`${diary.title} — grow diary`} />
-                      </div>
-                    </div>
+                    ))}
                   </div>
-                ))}
-              </div>
+                </section>
+              ))}
             </div>
           )}
         </div>

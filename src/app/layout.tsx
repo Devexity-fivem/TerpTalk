@@ -22,11 +22,15 @@ const inter = Inter({
 
 const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://terp-talk.vercel.app"
 
-export const metadata: Metadata = buildMetadata({
-  title: "TerpTalk — Cannabis Growing Community, Forum & Strain Database",
-  description:
-    "TerpTalk is a 21+ community for cannabis growers — grow journals, strain database, setup showcases, forums, and live chat. Share your grow, learn from others.",
-})
+export const metadata: Metadata = {
+  ...buildMetadata({
+    title: "TerpTalk — Cannabis Growing Community, Forum & Strain Database",
+    description:
+      "TerpTalk is a 21+ community for cannabis growers — grow journals, strain database, setup showcases, forums, and live chat. Share your grow, learn from others.",
+  }),
+  // iOS Add-to-Home-Screen icon (PNG, any size is accepted)
+  icons: { apple: "/logo.png" },
+}
 
 export const viewport: Viewport = {
   width: "device-width",

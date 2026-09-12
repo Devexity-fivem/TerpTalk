@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { unauthorized, forbidden, getClientIp, logSecurityEvent, isBanned } from "@/lib/security"
+import { unauthorized, forbidden, getClientIp, logSecurityEvent, isBanned, blockExistsBetween } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
 import { awardReputation, REP_POINTS } from "@/lib/reputation"
 import { checkMaintenance } from "@/lib/maintenance"
@@ -91,6 +91,14 @@ export async function POST(request: Request) {
       targetAuthorId = diary.authorId
       targetLink = `/diaries/${diaryId}`
       targetTitle = diary.title
+    }
+
+    // Blocked users can't react to each other's content (previously only
+    // the notification was suppressed while the reaction row was written).
+    if (targetAuthorId && targetAuthorId !== session.user.id) {
+      if (await blockExistsBetween(session.user.id, targetAuthorId)) {
+        return forbidden()
+      }
     }
 
     // Check if reaction already exists

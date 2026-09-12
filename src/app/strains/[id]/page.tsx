@@ -1,13 +1,14 @@
 import { prisma } from "@/lib/prisma"
 import { notFound } from "next/navigation"
-import { Leaf, Dna, Sprout, ImageIcon, BookOpen, Wrench, MessageSquare, CheckCircle2 } from "lucide-react"
+import { Leaf, Dna, Sprout, ImageIcon, BookOpen, Wrench, MessageSquare, CheckCircle2, BarChart3 } from "lucide-react"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import StrainPhotoUpload from "@/components/strain-photo-upload"
 import ShareButtons from "@/components/share-buttons"
 import { buildMetadata, snippet } from "@/lib/seo"
 import { Breadcrumbs } from "@/components/breadcrumbs"
-import { publicUserSelect } from "@/lib/security"
+import { publicUserSelect, activeAuthor } from "@/lib/security"
+import { getStrainGrowStats, escapeLike } from "@/lib/strain-stats"
 import Link from "next/link"
 
 export const dynamic = "force-dynamic"
@@ -51,18 +52,18 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
 
   if (!strain) notFound()
 
-  const [relatedDiaries, relatedSetups, relatedThreads] = await Promise.all([
+  const [relatedDiaries, relatedSetups, relatedThreads, growStats] = await Promise.all([
     prisma.growDiary.findMany({
-      where: { deleted: false, strain: { contains: strain.name, mode: "insensitive" } },
+      where: { deleted: false, author: activeAuthor(), strain: { contains: escapeLike(strain.name), mode: "insensitive" } },
       orderBy: { updatedAt: "desc" },
       take: 6,
       include: {
         author: { select: publicUserSelect },
-        updates: { take: 1, orderBy: { createdAt: "desc" }, include: { images: { take: 1 } } },
+        updates: { take: 1, orderBy: { createdAt: "desc" }, include: { images: { take: 1, orderBy: { order: "asc" } } } },
       },
     }),
     prisma.growSetup.findMany({
-      where: { deleted: false, strain: { contains: strain.name, mode: "insensitive" } },
+      where: { deleted: false, author: activeAuthor(), strain: { contains: escapeLike(strain.name), mode: "insensitive" } },
       orderBy: { createdAt: "desc" },
       take: 6,
       include: { author: { select: publicUserSelect }, images: { take: 1 } },
@@ -77,7 +78,7 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
         OR: [
           { tags: { some: { tag: { name: { equals: strain.name, mode: "insensitive" } } } } },
           ...(strain.name.trim().length >= 4
-            ? [{ title: { contains: strain.name, mode: "insensitive" as const } }]
+            ? [{ title: { contains: escapeLike(strain.name), mode: "insensitive" as const } }]
             : []),
         ],
       },
@@ -93,6 +94,7 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
         category: { select: { name: true } },
       },
     }),
+    getStrainGrowStats(strain.name),
   ])
 
   const plantPhotos = strain.photos.filter((p) => p.kind === "PLANT")
@@ -162,6 +164,76 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
           <div className="bg-card rounded-xl border border-border p-5 mb-6">
             <h2 className="font-semibold mb-2">Description</h2>
             <p className="text-sm text-muted-foreground whitespace-pre-wrap">{strain.description}</p>
+          </div>
+        )}
+
+        {/* Community grow data — stats stay honest about sample size */}
+        {growStats.tier !== "none" && (
+          <div className="bg-card rounded-xl border border-border p-5 mb-6">
+            <div className="flex items-center gap-2 mb-4 flex-wrap">
+              <BarChart3 className="w-4 h-4 text-primary" />
+              <h2 className="font-semibold">Community grow data</h2>
+              <span className={`text-xs px-2 py-0.5 rounded ml-auto ${growStats.tier === "early" ? "bg-amber-500/10 text-amber-500" : "bg-secondary text-muted-foreground"}`}>
+                {growStats.label}
+              </span>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-center">
+              <div>
+                <div className="text-2xl font-bold text-primary">{growStats.growCount}</div>
+                <div className="text-xs text-muted-foreground">grow{growStats.growCount === 1 ? "" : "s"}</div>
+              </div>
+              <div>
+                <div className="text-2xl font-bold text-primary">{growStats.growerCount}</div>
+                <div className="text-xs text-muted-foreground">grower{growStats.growerCount === 1 ? "" : "s"}</div>
+              </div>
+              <div>
+                <div className="text-2xl font-bold text-primary">{growStats.setupCount}</div>
+                <div className="text-xs text-muted-foreground">setup{growStats.setupCount === 1 ? "" : "s"}</div>
+              </div>
+              <div>
+                <div className="text-2xl font-bold text-primary">{growStats.harvestedCount}</div>
+                <div className="text-xs text-muted-foreground">harvested</div>
+              </div>
+              {growStats.avgYieldOz != null && (
+                <div>
+                  <div className="text-2xl font-bold text-emerald-500">{growStats.avgYieldOz} oz</div>
+                  <div className="text-xs text-muted-foreground">avg yield · {growStats.yieldSample} harvests</div>
+                </div>
+              )}
+              {growStats.medianYieldOz != null && (
+                <div>
+                  <div className="text-2xl font-bold">{growStats.medianYieldOz} oz</div>
+                  <div className="text-xs text-muted-foreground">median yield</div>
+                </div>
+              )}
+              {growStats.topYieldOz != null && (
+                <div>
+                  <div className="text-2xl font-bold">{growStats.topYieldOz} oz</div>
+                  <div className="text-xs text-muted-foreground">best reported</div>
+                </div>
+              )}
+              {growStats.avgTotalDays != null && (
+                <div>
+                  <div className="text-2xl font-bold">{growStats.avgTotalDays}d</div>
+                  <div className="text-xs text-muted-foreground">avg seed→harvest · {growStats.totalDaysSample}</div>
+                </div>
+              )}
+              {growStats.avgFlowerDays != null && (
+                <div>
+                  <div className="text-2xl font-bold">{growStats.avgFlowerDays}d</div>
+                  <div className="text-xs text-muted-foreground">avg flower time · {growStats.flowerSample}</div>
+                </div>
+              )}
+            </div>
+            {(growStats.env.temp != null || growStats.env.rh != null || growStats.env.vpd != null) && (
+              <div className="mt-4 pt-4 border-t border-border flex flex-wrap gap-x-5 gap-y-1 text-xs text-muted-foreground">
+                {growStats.env.temp != null && <span>avg temp {growStats.env.temp}°F ({growStats.envSamples.temp} readings)</span>}
+                {growStats.env.rh != null && <span>avg RH {growStats.env.rh}% ({growStats.envSamples.rh})</span>}
+                {growStats.env.vpd != null && <span>avg VPD {growStats.env.vpd} kPa ({growStats.envSamples.vpd})</span>}
+                {growStats.env.ph != null && <span>avg pH {growStats.env.ph} ({growStats.envSamples.ph})</span>}
+                {growStats.env.ec != null && <span>avg EC {growStats.env.ec} ({growStats.envSamples.ec})</span>}
+              </div>
+            )}
           </div>
         )}
 

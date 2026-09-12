@@ -152,6 +152,7 @@ export default function HarvestForm({
                 <span className="text-sm font-medium">Yield amount</span>
                 <input
                   type="number"
+                  inputMode="decimal"
                   step="0.01"
                   min={0}
                   value={amount}

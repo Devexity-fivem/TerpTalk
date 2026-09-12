@@ -11,7 +11,12 @@ export default function manifest(): MetadataRoute.Manifest {
     theme_color: "#16a34a",
     icons: [
       { src: "/logo.png", sizes: "192x192", type: "image/png" },
-      { src: "/logo.png", sizes: "512x512", type: "image/png" },
+      { src: "/logo.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
+    ],
+    shortcuts: [
+      { name: "Grow diaries", url: "/diaries", description: "Browse and update grow diaries" },
+      { name: "Log an update", url: "/diaries", description: "Jump to your grow diaries" },
+      { name: "Forum", url: "/forum", description: "Latest discussions" },
     ],
   }
 }

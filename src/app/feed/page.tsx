@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma"
-import { publicUserSelect } from "@/lib/security"
+import { publicUserSelect, activeAuthor } from "@/lib/security"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { Leaf, MessageSquare, TrendingUp, Calendar, Users, UserPlus } from "lucide-react"
@@ -40,16 +40,16 @@ async function getFeedData(userId?: string, tab = "latest") {
     followingIds.length === 0 && followedDiaryIds.length === 0 && followedCategoryIds.length === 0
 
   const updateWhere = personal && !coldStart
-    ? { diary: { deleted: false }, OR: [{ authorId: { in: followingIds } }, { diaryId: { in: followedDiaryIds } }] }
-    : { diary: { deleted: false } }
+    ? { diary: { deleted: false, author: activeAuthor() }, OR: [{ authorId: { in: followingIds } }, { diaryId: { in: followedDiaryIds } }] }
+    : { diary: { deleted: false, author: activeAuthor() } }
   const threadWhere = personal && !coldStart
     ? tab === "following"
       ? { deleted: false, category: { hidden: false }, authorId: { in: followingIds } }
       : { deleted: false, category: { hidden: false }, OR: [{ authorId: { in: followingIds } }, { categoryId: { in: followedCategoryIds } }] }
     : { deleted: false, category: { hidden: false } }
   const diaryWhere = personal && !coldStart
-    ? { deleted: false, OR: [{ authorId: { in: followingIds } }, { followers: { some: { userId } } }] }
-    : { deleted: false }
+    ? { deleted: false, author: activeAuthor(), OR: [{ authorId: { in: followingIds } }, { followers: { some: { userId } } }] }
+    : { deleted: false, author: activeAuthor() }
 
   // Get recent activity from various sources
   const recentDiaryUpdates = await prisma.diaryUpdate.findMany({
@@ -123,7 +123,7 @@ async function getFeedData(userId?: string, tab = "latest") {
   const [memberCount, threadCount, diaryCount, popularCategories] = await Promise.all([
     prisma.user.count({ where: { banned: false } }),
     prisma.thread.count({ where: { deleted: false, category: { hidden: false } } }),
-    prisma.growDiary.count({ where: { deleted: false } }),
+    prisma.growDiary.count({ where: { deleted: false, author: activeAuthor() } }),
     prisma.category.findMany({
       where: { hidden: false },
       take: 4,

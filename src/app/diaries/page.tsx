@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma"
-import { publicUserSelect } from "@/lib/security"
+import { publicUserSelect, activeAuthor } from "@/lib/security"
 import { unstable_cache } from "next/cache"
 import { Leaf, Calendar, TrendingUp, Users } from "lucide-react"
 import Link from "next/link"
@@ -16,7 +16,7 @@ export const metadata = {
 const getDiaries = unstable_cache(
   async () => {
     const diaries = await prisma.growDiary.findMany({
-      where: { deleted: false },
+      where: { deleted: false, author: activeAuthor() },
       take: 12,
       orderBy: [
         { featured: "desc" },
@@ -24,6 +24,12 @@ const getDiaries = unstable_cache(
       ],
       include: {
         author: { select: publicUserSelect },
+        // Latest update's first photo becomes the card cover.
+        updates: {
+          take: 1,
+          orderBy: { createdAt: "desc" },
+          include: { images: { take: 1, orderBy: { order: "asc" } } },
+        },
         _count: {
           select: { updates: true, followers: true },
         },
@@ -62,8 +68,19 @@ export default async function DiariesPage() {
                   href={`/diaries/${diary.id}`}
                   className="bg-card rounded-lg border border-border overflow-hidden hover:border-primary/50 transition-colors"
                 >
-                  <div className="aspect-video bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center">
-                    <Leaf className="w-10 h-10 text-primary/30" />
+                  <div className="aspect-video bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center overflow-hidden">
+                    {diary.updates[0]?.images[0]?.url ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={diary.updates[0].images[0].url}
+                        alt=""
+                        loading="lazy"
+                        decoding="async"
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <Leaf className="w-10 h-10 text-primary/30" />
+                    )}
                   </div>
                   <div className="p-4">
                     <div className="flex items-center gap-2 mb-2">
@@ -123,8 +140,19 @@ export default async function DiariesPage() {
                   href={`/diaries/${diary.id}`}
                   className="bg-card rounded-lg border border-border overflow-hidden hover:border-primary/50 transition-colors"
                 >
-                  <div className="aspect-video bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center">
-                    <Leaf className="w-10 h-10 text-primary/30" />
+                  <div className="aspect-video bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center overflow-hidden">
+                    {diary.updates[0]?.images[0]?.url ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={diary.updates[0].images[0].url}
+                        alt=""
+                        loading="lazy"
+                        decoding="async"
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <Leaf className="w-10 h-10 text-primary/30" />
+                    )}
                   </div>
                   <div className="p-4">
                     <div className="flex items-center gap-2 mb-2">

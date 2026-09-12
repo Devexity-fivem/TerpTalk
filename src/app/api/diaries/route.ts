@@ -6,6 +6,7 @@ import { unauthorized, publicUserSelect, LIMITS, getClientIp, logSecurityEvent, 
 import { rateLimit } from "@/lib/rate-limit"
 import { awardReputation, REP_POINTS } from "@/lib/reputation"
 import { checkMaintenance } from "@/lib/maintenance"
+import { revalidateTag } from "next/cache"
 
 export async function POST(request: Request) {
   try {
@@ -124,6 +125,8 @@ export async function POST(request: Request) {
       REP_POINTS.DIARY_CREATED,
       `Started grow diary "${diary.title.slice(0, 60)}"`
     ).catch(() => {})
+
+    revalidateTag("diaries", { expire: 0 })
 
     return NextResponse.json({ diary }, { status: 201 })
   } catch (error) {

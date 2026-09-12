@@ -1,5 +1,6 @@
 import type { MetadataRoute } from "next"
 import { prisma } from "@/lib/prisma"
+import { activeAuthor } from "@/lib/security"
 
 const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://terp-talk.vercel.app"
 
@@ -34,7 +35,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       select: { slug: true, updatedAt: true },
     }),
     prisma.growDiary.findMany({
-      where: { deleted: false },
+      where: { deleted: false, author: activeAuthor() },
       take: 50,
       orderBy: { updatedAt: "desc" },
       select: { id: true, updatedAt: true },

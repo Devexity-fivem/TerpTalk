@@ -99,6 +99,17 @@ export async function isTrustedForLinks(userId: string): Promise<boolean> {
   return ageHours >= 24 && (user.profile?.reputation ?? 0) >= sproutThreshold
 }
 
+/**
+ * Prisma where fragment — filters relations to authors who are not banned and
+ * not currently suspended. Use for public surfaces (lists, search, stats).
+ */
+export function activeAuthor() {
+  return {
+    banned: false,
+    OR: [{ suspendedUntil: null }, { suspendedUntil: { lt: new Date() } }],
+  }
+}
+
 export type TrustLevel = "New Grower" | "Member" | "Established" | "Veteran" | "Expert"
 
 export function getTrustLevel(createdAt: Date | string, reputation: number): TrustLevel {
