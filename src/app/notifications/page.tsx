@@ -7,7 +7,7 @@ import { useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
 import {
   Bell, BellRing, Loader2, CheckCheck, Check, UserPlus, Heart, MessageSquare, AtSign,
-  MessageCircle, Leaf, Mail, CheckCircle2, Award, TrendingUp, Users, Shield,
+  MessageCircle, Leaf, Mail, CheckCircle2, Award, TrendingUp, Users, Shield, Settings,
 } from "lucide-react"
 import Link from "next/link"
 import EmptyState from "@/components/ui/empty-state"
@@ -189,6 +189,15 @@ export default function NotificationsPage() {
               </span>
             )}
           </div>
+          <div className="flex items-center gap-1">
+          <Link
+            href="/settings/notifications"
+            aria-label="Notification settings"
+            title="Notification settings"
+            className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+          >
+            <Settings className="h-4 w-4" />
+          </Link>
           {unread > 0 && (
             <button
               onClick={markAllRead}
@@ -199,6 +208,7 @@ export default function NotificationsPage() {
               Mark all read
             </button>
           )}
+          </div>
         </div>
 
         <ul className="divide-y divide-border rounded-lg border border-border bg-card" aria-label="Notifications">

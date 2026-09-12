@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { unauthorized, getClientIp, hashIp, isBanned, forbidden } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
+import { notifyMany } from "@/lib/notify"
 
 const YOUTUBE_PATTERNS = [
   "https://www.youtube.com/",
@@ -51,7 +52,7 @@ export async function POST(request: Request) {
 
     const profile = await prisma.profile.findUnique({
       where: { userId: session.user.id },
-      select: { id: true },
+      select: { id: true, youtubeChannelUrl: true },
     })
 
     if (!profile) {
@@ -61,10 +62,38 @@ export async function POST(request: Request) {
       )
     }
 
+    // A verified creator swapping their channel URL must be re-reviewed —
+    // otherwise the badge would vouch for a channel staff never saw.
+    const verifiedBadge = await prisma.badge.findUnique({
+      where: { name: "Verified YouTuber" },
+      select: { id: true },
+    })
+    if (verifiedBadge && profile.youtubeChannelUrl !== youtubeChannelUrl) {
+      await prisma.userBadge.deleteMany({
+        where: { userId: session.user.id, badgeId: verifiedBadge.id },
+      })
+    }
+
     await prisma.profile.update({
       where: { userId: session.user.id },
       data: { youtubeChannelUrl },
     })
+
+    const admins = await prisma.user.findMany({
+      where: { role: "ADMINISTRATOR", banned: false },
+      select: { id: true },
+    })
+    if (admins.length > 0) {
+      await notifyMany(
+        admins.map((a) => ({
+          userId: a.id,
+          type: "MODERATOR_ANNOUNCEMENT" as const,
+          title: "YouTuber verification request",
+          content: `A member submitted a channel for verification.`,
+          link: "/admin/youtubers",
+        }))
+      )
+    }
 
     return NextResponse.json({ success: true })
   } catch (error) {

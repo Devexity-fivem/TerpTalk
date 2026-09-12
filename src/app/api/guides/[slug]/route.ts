@@ -52,7 +52,7 @@ export async function PATCH(
       return NextResponse.json({ error: "Slow down." }, { status: 429 })
     }
 
-    // Permission: author, moderator, or established+ community member
+    // Permission: guide author or moderator (fresh DB role check)
     const user = await prisma.user.findUnique({
       where: { id: session.user.id },
       select: { createdAt: true, banned: true, role: true, profile: { select: { reputation: true } } },

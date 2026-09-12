@@ -181,6 +181,7 @@ const getSearchResults = unstable_cache(
       (t === "all" || t === "setups") ? prisma.growSetup.findMany({
         where: {
           deleted: false,
+          author: activeUser,
           OR: [{ title: contains }, { strain: contains }, { description: contains }],
         },
         take: limit + 1,

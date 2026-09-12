@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma"
-import { publicUserSelect } from "@/lib/security"
+import { publicUserSelect, activeAuthor } from "@/lib/security"
 import { unstable_cache } from "next/cache"
 import { Settings, Plus, Users } from "lucide-react"
 import Link from "next/link"
@@ -16,7 +16,7 @@ export const metadata = {
 const getSetups = unstable_cache(
   async () => {
     const setups = await prisma.growSetup.findMany({
-      where: { deleted: false },
+      where: { deleted: false, author: activeAuthor() },
       take: 12,
       orderBy: { createdAt: "desc" },
       include: {

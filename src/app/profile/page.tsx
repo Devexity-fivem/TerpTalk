@@ -578,19 +578,7 @@ export default function ProfilePage() {
                         />
                         Notify me about reactions to my posts and diaries
                       </label>
-                      <div className="flex items-center gap-3">
-                        <label className="text-sm whitespace-nowrap">Email digest</label>
-                        <select
-                          value={editForm.emailDigestFrequency}
-                          onChange={(e) => setEditForm({ ...editForm, emailDigestFrequency: e.target.value })}
-                          className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                        >
-                          <option value="">—</option>
-                          <option value="DAILY">Daily</option>
-                          <option value="WEEKLY">Weekly</option>
-                          <option value="NEVER">Never</option>
-                        </select>
-                      </div>
+
                     </div>
                   </div>
                 </div>

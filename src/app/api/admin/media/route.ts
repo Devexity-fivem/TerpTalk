@@ -133,8 +133,11 @@ export async function POST(request: Request) {
         break
       }
       case "avatar": {
-        const row = await tx.profile.update({ where: { userId: id }, data: { avatarUrl: null }, select: { avatarUrl: true } })
-        url = row.avatarUrl
+        // Read the old URL first — update() returns the post-write (null) value.
+        const old = await tx.profile.findUnique({ where: { userId: id }, select: { avatarUrl: true } })
+        await tx.profile.update({ where: { userId: id }, data: { avatarUrl: null } })
+        await tx.user.update({ where: { id }, data: { image: null } })
+        url = old?.avatarUrl ?? null
         break
       }
       default:

@@ -56,7 +56,7 @@ export interface StrainGrowStats {
 
 const getStats = unstable_cache(
   async (strainName: string): Promise<StrainGrowStats> => {
-    const [rawDiaries, setupCount] = await Promise.all([
+    const [rawDiaries, rawSetups] = await Promise.all([
       prisma.growDiary.findMany({
         where: {
           deleted: false,
@@ -75,18 +75,21 @@ const getStats = unstable_cache(
         },
         take: 500,
       }),
-      prisma.growSetup.count({
+      prisma.growSetup.findMany({
         where: {
           deleted: false,
           author: activeAuthor(),
           strain: { contains: escapeLike(strainName), mode: "insensitive" },
         },
+        select: { strain: true },
+        take: 500,
       }),
     ])
 
     // `contains` is a recall-oriented pre-filter served by the trigram index;
     // post-filter for precision so short/common names can't pollute stats.
     const diaries = rawDiaries.filter((d) => strainFieldMatches(d.strain, strainName))
+    const setupCount = rawSetups.filter((s) => strainFieldMatches(s.strain, strainName)).length
     const diaryIds = diaries.map((d) => d.id)
 
     const [flowerOnsets, envAgg] = diaryIds.length

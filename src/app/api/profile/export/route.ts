@@ -25,7 +25,7 @@ export async function GET(request: Request) {
 
     const userId = session.user.id
 
-    const [user, profile, threads, posts, diaries, diaryUpdates, setups, chatMessages, sentMessages, receivedMessages, reactions, badges, reputationEvents] =
+    const [user, profile, threads, posts, diaries, diaryUpdates, setups, setupComments, chatMessages, sentMessages, receivedMessages, reactions, badges, reputationEvents, notifications, followsGiven, followsReceived, blocksMade, blocksReceived, bookmarks, savedSearches, contestEntries, contestVotes, diaryContestEntries, diaryContestVotes, strains, guideEdits, staffApplications, reportsFiled, categoryFollows, threadFollows, diaryFollows] =
       await Promise.all([
         prisma.user.findUnique({
           where: { id: userId },
@@ -47,13 +47,41 @@ export async function GET(request: Request) {
         prisma.growDiary.findMany({ where: { authorId: userId }, take: 10_000, orderBy: { createdAt: "desc" } }),
         prisma.diaryUpdate.findMany({ where: { authorId: userId }, take: 10_000, orderBy: { createdAt: "desc" } }),
         prisma.growSetup.findMany({ where: { authorId: userId }, take: 10_000, orderBy: { createdAt: "desc" } }),
+        prisma.setupComment.findMany({ where: { authorId: userId }, take: 10_000, orderBy: { createdAt: "desc" } }),
         prisma.chatMessage.findMany({ where: { authorId: userId }, take: 10_000, orderBy: { createdAt: "desc" } }),
         prisma.directMessage.findMany({ where: { senderId: userId }, take: 10_000, orderBy: { createdAt: "desc" } }),
         prisma.directMessage.findMany({ where: { receiverId: userId }, take: 10_000, orderBy: { createdAt: "desc" } }),
         prisma.reaction.findMany({ where: { userId }, take: 10_000, orderBy: { createdAt: "desc" } }),
         prisma.userBadge.findMany({ where: { userId }, include: { badge: true }, take: 1_000 }),
         prisma.reputationEvent.findMany({ where: { userId }, take: 10_000, orderBy: { createdAt: "desc" } }),
+        prisma.notification.findMany({ where: { userId }, take: 10_000, orderBy: { createdAt: "desc" } }),
+        prisma.follow.findMany({ where: { followerId: userId }, take: 10_000 }),
+        prisma.follow.findMany({ where: { followingId: userId }, take: 10_000 }),
+        prisma.block.findMany({ where: { blockerId: userId }, take: 10_000 }),
+        prisma.block.findMany({ where: { blockedId: userId }, take: 10_000 }),
+        prisma.bookmark.findMany({ where: { userId }, take: 10_000, orderBy: { createdAt: "desc" } }),
+        prisma.savedSearch.findMany({ where: { userId }, take: 1_000 }),
+        prisma.contestEntry.findMany({ where: { userId }, take: 1_000 }),
+        prisma.contestVote.findMany({ where: { userId }, take: 1_000 }),
+        prisma.diaryContestEntry.findMany({ where: { userId }, take: 1_000 }),
+        prisma.diaryContestVote.findMany({ where: { userId }, take: 1_000 }),
+        prisma.strain.findMany({ where: { createdById: userId }, take: 10_000 }),
+        prisma.guideEdit.findMany({ where: { editorId: userId }, take: 10_000 }),
+        prisma.staffApplication.findMany({ where: { userId }, take: 100 }),
+        prisma.report.findMany({ where: { reporterId: userId }, take: 10_000, orderBy: { createdAt: "desc" } }),
+        prisma.categoryFollow.findMany({ where: { userId }, take: 1_000 }),
+        prisma.threadFollow.findMany({ where: { userId }, take: 10_000 }),
+        prisma.diaryFollow.findMany({ where: { userId }, take: 10_000 }),
       ])
+
+    // Profile.referredById references Profile.id, not User.id
+    const referralsMade = profile
+      ? await prisma.profile.findMany({
+          where: { referredById: profile.id },
+          select: { username: true, joinDate: true },
+          take: 10_000,
+        })
+      : []
 
     if (!user) {
       return NextResponse.json({ error: "User not found" }, { status: 404 })
@@ -69,9 +97,33 @@ export async function GET(request: Request) {
         diaries,
         diaryUpdates,
         setups,
+        setupComments,
+        strains,
+        guideEdits,
         chatMessages,
         directMessages: { sent: sentMessages, received: receivedMessages },
         reactions,
+      },
+      social: {
+        followsGiven,
+        followsReceived,
+        blocksMade,
+        blocksReceived,
+        categoryFollows,
+        threadFollows,
+        diaryFollows,
+      },
+      activity: {
+        bookmarks,
+        savedSearches,
+        notifications,
+        contestEntries,
+        contestVotes,
+        diaryContestEntries,
+        diaryContestVotes,
+        reportsFiled,
+        staffApplications,
+        referralsMade,
       },
       badges,
       reputationEvents,

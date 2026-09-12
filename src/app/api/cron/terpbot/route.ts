@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { postToGeneral, GROW_TIPS } from "@/lib/terpbot"
 import { currentWeekKey, previousWeekKey, currentMonthKey, previousMonthKey } from "@/lib/week"
+import { resolveWeeklyWinner, resolveMonthlyDiaryWinner } from "@/lib/contest-awards"
 
 // Daily TerpBot job — digests, grow tips, and contest-winner announcements.
 // Invoked by the Vercel cron configured in vercel.json. Idempotent via
@@ -64,14 +65,8 @@ export async function GET(request: NextRequest) {
   const contestKey = `terpbot:contest:${prevWeek}`
   if (currentWeekKey() !== prevWeek && !(await wasDone(contestKey))) {
     await markDone(contestKey)
-    const winner = await prisma.contestEntry.findFirst({
-      where: { week: prevWeek },
-      orderBy: { votes: { _count: "desc" } },
-      include: {
-        user: { select: { name: true, profile: { select: { username: true } } } },
-        _count: { select: { votes: true } },
-      },
-    })
+    // resolveWeeklyWinner also awards the Weekly Winner badge + notifies.
+    const winner = await resolveWeeklyWinner(prevWeek)
     if (winner && winner._count.votes > 0) {
       const name = winner.user.profile?.username || winner.user.name || "a member"
       await postToGeneral(
@@ -86,15 +81,8 @@ export async function GET(request: NextRequest) {
   const diaryContestKey = `terpbot:diary-contest:${prevMonth}`
   if (currentMonthKey() !== prevMonth && !(await wasDone(diaryContestKey))) {
     await markDone(diaryContestKey)
-    const winner = await prisma.diaryContestEntry.findFirst({
-      where: { month: prevMonth, diary: { deleted: false }, user: { banned: false } },
-      orderBy: [{ votes: { _count: "desc" } }, { createdAt: "asc" }],
-      include: {
-        user: { select: { name: true, profile: { select: { username: true } } } },
-        diary: { select: { title: true } },
-        _count: { select: { votes: true } },
-      },
-    })
+    // resolveMonthlyDiaryWinner also awards the badge + notifies the winner.
+    const winner = await resolveMonthlyDiaryWinner(prevMonth)
     if (winner && winner._count.votes > 0) {
       const name = winner.user.profile?.username || winner.user.name || "a member"
       await postToGeneral(

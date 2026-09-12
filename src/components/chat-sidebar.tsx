@@ -577,7 +577,7 @@ export default function ChatSidebar() {
             ) : (
               messages.map((msg) => {
                 const isMenuOpen = activeMenu === msg.id
-                const canManage = isStaff && msg.author.id !== (session?.user as { id?: string } | undefined)?.id
+                const canManage = isModerator && msg.author.id !== (session?.user as { id?: string } | undefined)?.id
                 const isDeleted = msg.content === "[deleted]"
                 const isBot = msg.author.username === "terpbot"
                 const isAction = !isBot && !isDeleted && /^\*.+\*$/.test(msg.content)

@@ -81,7 +81,7 @@ export async function PATCH(
           userId: application.userId,
           title: `Staff application ${status.toLowerCase()}`,
           content: `Your application for ${application.role} was ${status.toLowerCase()}.`,
-          link: "/staff/apply",
+          link: status === "APPROVED" ? "/moderation" : "/staff/apply",
         },
       }).catch(() => null)
     })

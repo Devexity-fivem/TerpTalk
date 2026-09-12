@@ -278,6 +278,12 @@ export default async function ForumPage() {
                 >
                   Search Forum
                 </Link>
+                <Link
+                  href="/forum/tags"
+                  className="block w-full text-center border border-border px-4 py-2 rounded-lg hover:bg-secondary transition-colors"
+                >
+                  Browse Tags
+                </Link>
               </div>
             </div>
           </div>

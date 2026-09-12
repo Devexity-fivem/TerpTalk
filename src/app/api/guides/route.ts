@@ -4,12 +4,22 @@ import { prisma } from "@/lib/prisma"
 import { publicUserSelect, forbidden } from "@/lib/security"
 import { requireModerator } from "@/lib/require-staff"
 import { GUIDE_TOPICS } from "@/lib/guides"
+import { rateLimit } from "@/lib/rate-limit"
+import { checkMaintenance } from "@/lib/maintenance"
 
 // POST — staff creates a guide: { title, excerpt, content, topic }
 export async function POST(request: Request) {
   try {
+    const maintenance = await checkMaintenance()
+    if (maintenance) return maintenance
+
     const staff = await requireModerator()
     if (!staff) return forbidden("Staff only")
+
+    const rl = await rateLimit(`guide-create:${staff.id}`, 10, 60 * 60 * 1000)
+    if (!rl.allowed) {
+      return NextResponse.json({ error: "Slow down." }, { status: 429 })
+    }
 
     const { title, excerpt, content, topic } = await request.json().catch(() => ({}))
     if (!title || !excerpt || !content || !topic) {

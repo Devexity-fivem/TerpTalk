@@ -9,6 +9,7 @@ import PostActions from "@/components/post-actions"
 import RoleBadge from "@/components/role-badge"
 import ThreadModActions from "@/components/thread-mod-actions"
 import ShareButtons from "@/components/share-buttons"
+import ReportButton from "@/components/report-button"
 import BookmarkButton from "@/components/bookmark-button"
 import PostContent from "@/components/post-content"
 import ImageGallery from "@/components/image-gallery"
@@ -123,6 +124,15 @@ export default async function ThreadPage({
       }
     }
   }
+
+  // Scrub reactor identities — clients need counts + the viewer's own
+  // reaction, not a list of who reacted. Other users' ids are nulled.
+  const scrubReactions = <T extends { reactions?: { userId: string; type: string }[] }>(p: T): T =>
+    p.reactions
+      ? { ...p, reactions: p.reactions.map((r) => ({ userId: r.userId === currentUserId ? r.userId : "", type: r.type })) }
+      : p
+  thread.posts = thread.posts.map(scrubReactions)
+  if (thread.acceptedAnswer) thread.acceptedAnswer = scrubReactions(thread.acceptedAnswer)
 
   const totalPages = Math.max(1, Math.ceil(thread._count.posts / POSTS_PER_PAGE))
   const tagIds = thread.tags.map((tt) => tt.tagId)
@@ -326,6 +336,7 @@ export default async function ThreadPage({
             <BookmarkButton threadId={thread.id} initiallySaved={saved} />
             <ThreadFollowButton threadId={thread.id} initiallyFollowing={following} />
             <ShareButtons path={`/forum/thread/${thread.slug}`} title={thread.title} />
+            <ReportButton type="THREAD" targetId={thread.id} authorId={thread.authorId} />
           </div>
           {/* Photos attached when the thread was opened */}
           <ImageGallery images={thread.images} />

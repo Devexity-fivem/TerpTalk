@@ -246,11 +246,11 @@ export default async function CategoryPage({
             return (
               <div className="flex items-center justify-center gap-2 p-4 text-sm border-t border-border">
                 {page > 1 && (
-                  <Link href={`/forum/category/${category.slug}?page=${page - 1}`} className="px-3 py-1.5 rounded-md bg-secondary hover:bg-secondary/70">← Previous</Link>
+                  <Link href={`/forum/category/${category.slug}?page=${page - 1}${unanswered ? "&filter=unanswered" : ""}`} className="px-3 py-1.5 rounded-md bg-secondary hover:bg-secondary/70">← Previous</Link>
                 )}
                 <span className="text-muted-foreground">Page {page} of {totalPages}</span>
                 {page < totalPages && (
-                  <Link href={`/forum/category/${category.slug}?page=${page + 1}`} className="px-3 py-1.5 rounded-md bg-secondary hover:bg-secondary/70">Next →</Link>
+                  <Link href={`/forum/category/${category.slug}?page=${page + 1}${unanswered ? "&filter=unanswered" : ""}`} className="px-3 py-1.5 rounded-md bg-secondary hover:bg-secondary/70">Next →</Link>
                 )}
               </div>
             )

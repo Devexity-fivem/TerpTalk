@@ -180,10 +180,10 @@ function NewThreadForm() {
                 onChange={(e) => setFormData({ ...formData, title: e.target.value })}
                 className="w-full px-4 py-2 rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary"
                 placeholder="Enter a descriptive title for your thread"
-                maxLength={200}
+                maxLength={150}
               />
               <p className="text-xs text-muted-foreground mt-1">
-                {formData.title.length}/200 characters
+                {formData.title.length}/150 characters
               </p>
             </div>
 

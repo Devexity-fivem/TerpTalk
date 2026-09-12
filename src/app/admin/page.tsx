@@ -203,6 +203,9 @@ export default function AdminPage() {
           <Link href="/admin/youtubers" className="text-sm text-primary hover:underline flex items-center gap-1">
             <Video className="w-4 h-4" /> YouTuber applications
           </Link>
+          <Link href="/admin/staff/applications" className="text-sm text-primary hover:underline flex items-center gap-1">
+            <UsersIcon className="w-4 h-4" /> Staff applications
+          </Link>
         </div>
 
         {/* Tabs */}
@@ -301,6 +304,7 @@ export default function AdminPage() {
                   <div className="min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <Link href={`/u/${u.username}`} className="font-medium hover:text-primary">@{u.username}</Link>
+                      <Link href={`/admin/users/${u.id}`} className="text-[10px] px-1.5 py-0.5 bg-secondary text-muted-foreground rounded font-semibold hover:text-foreground">MANAGE</Link>
                       {u.role === "ADMINISTRATOR" && <span className="text-[10px] px-1.5 py-0.5 bg-amber-500/15 text-amber-500 rounded font-semibold">ADMIN</span>}
                       {u.role === "MODERATOR" && <span className="text-[10px] px-1.5 py-0.5 bg-blue-500/15 text-blue-500 rounded font-semibold">MOD</span>}
                       {u.role === "VERIFIED_MEMBER" && <span className="text-[10px] px-1.5 py-0.5 bg-primary/15 text-primary rounded font-semibold">VERIFIED</span>}

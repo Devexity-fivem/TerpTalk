@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma"
 import { unstable_cache } from "next/cache"
+import { escapeLike } from "@/lib/strain-stats"
 import { Leaf, Plus, Search } from "lucide-react"
 import Link from "next/link"
 import EmptyState from "@/components/ui/empty-state"
@@ -13,7 +14,7 @@ export const metadata = {
 
 const getStrains = unstable_cache(
   async (q?: string) => {
-    const contains = q && q.trim() ? { contains: q.trim(), mode: "insensitive" as const } : undefined
+    const contains = q && q.trim() ? { contains: escapeLike(q.trim()), mode: "insensitive" as const } : undefined
     const strains = await prisma.strain.findMany({
       where: contains ? { OR: [{ name: contains }, { genetics: contains }, { breeder: contains }] } : undefined,
       take: 48,

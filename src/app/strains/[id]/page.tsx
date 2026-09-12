@@ -8,7 +8,7 @@ import ShareButtons from "@/components/share-buttons"
 import { buildMetadata, snippet } from "@/lib/seo"
 import { Breadcrumbs } from "@/components/breadcrumbs"
 import { publicUserSelect, activeAuthor } from "@/lib/security"
-import { getStrainGrowStats, escapeLike } from "@/lib/strain-stats"
+import { getStrainGrowStats, escapeLike, strainFieldMatches } from "@/lib/strain-stats"
 import Link from "next/link"
 
 export const dynamic = "force-dynamic"
@@ -52,11 +52,11 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
 
   if (!strain) notFound()
 
-  const [relatedDiaries, relatedSetups, relatedThreads, growStats] = await Promise.all([
+  const [relatedDiariesRaw, relatedSetupsRaw, relatedThreads, growStats] = await Promise.all([
     prisma.growDiary.findMany({
       where: { deleted: false, author: activeAuthor(), strain: { contains: escapeLike(strain.name), mode: "insensitive" } },
       orderBy: { updatedAt: "desc" },
-      take: 6,
+      take: 12,
       include: {
         author: { select: publicUserSelect },
         updates: { take: 1, orderBy: { createdAt: "desc" }, include: { images: { take: 1, orderBy: { order: "asc" } } } },
@@ -65,7 +65,7 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
     prisma.growSetup.findMany({
       where: { deleted: false, author: activeAuthor(), strain: { contains: escapeLike(strain.name), mode: "insensitive" } },
       orderBy: { createdAt: "desc" },
-      take: 6,
+      take: 12,
       include: { author: { select: publicUserSelect }, images: { take: 1 } },
     }),
     // Threads tagged with the strain name are the precise signal; title
@@ -96,6 +96,11 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
     }),
     getStrainGrowStats(strain.name),
   ])
+
+  // `contains` is a recall pre-filter — apply the same precision post-filter
+  // as the stats block so short names can't pull in unrelated grows.
+  const relatedDiaries = relatedDiariesRaw.filter((d) => strainFieldMatches(d.strain, strain.name)).slice(0, 6)
+  const relatedSetups = relatedSetupsRaw.filter((s) => strainFieldMatches(s.strain, strain.name)).slice(0, 6)
 
   const plantPhotos = strain.photos.filter((p) => p.kind === "PLANT")
   const flowerPhotos = strain.photos.filter((p) => p.kind === "FLOWER")

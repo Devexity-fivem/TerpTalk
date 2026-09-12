@@ -165,10 +165,8 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: "Report not found" }, { status: 404 })
   }
 
-  // Only admins can escalate reports
-  if (status === "ESCALATED" && staff.role !== "ADMINISTRATOR") {
-    return forbidden("Only administrators can escalate reports")
-  }
+  // requireModerator already excludes SUPPORT; moderators escalate TO admins,
+  // so no additional role restriction applies here.
 
   await prisma.report.update({
     where: { id: reportId },

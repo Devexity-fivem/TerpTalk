@@ -90,14 +90,10 @@ export async function POST(request: Request) {
         where: { username: referralCode.trim() },
         select: { id: true, userId: true },
       })
-      if (!referrer) {
-        return NextResponse.json(
-          { error: "Referral username not found" },
-          { status: 400 }
-        )
-      }
-      referrerId = referrer.id
-      referrerUserId = referrer.userId
+      // A stale or mistyped referral link must not block signup — just
+      // drop the attribution rather than hard-failing the registration.
+      referrerId = referrer?.id ?? null
+      referrerUserId = referrer?.userId ?? null
     }
 
     // Age verification — must be an explicit true attestation

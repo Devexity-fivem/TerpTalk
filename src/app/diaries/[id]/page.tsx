@@ -15,6 +15,9 @@ import HarvestForm from "@/components/harvest-form"
 import StageTimeline from "@/components/stage-timeline"
 import ImageGallery from "@/components/image-gallery"
 import { groupUpdatesByWeek, buildHarvestReport, diaryCompleteness, diaryDay, diaryWeek } from "@/lib/diary-weeks"
+import ReportButton from "@/components/report-button"
+import DiaryReactions from "@/components/diary-reactions"
+import { escapeLike } from "@/lib/strain-stats"
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -73,7 +76,7 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
       : false,
     diary.strain
       ? prisma.strain.findFirst({
-          where: { name: { contains: diary.strain, mode: "insensitive" } },
+          where: { name: { contains: escapeLike(diary.strain), mode: "insensitive" } },
           select: { id: true, name: true },
         })
       : null,
@@ -113,6 +116,19 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
     const expected = days[0] - i * 86400000
     if (Math.abs(days[i] - expected) < 43200000) streak++
     else break
+  }
+
+  // Diary reactions — aggregate counts + the viewer's own reaction. Reactor
+  // identities are never shipped to the client.
+  const reactionRows = await prisma.reaction.findMany({
+    where: { diaryId: diary.id },
+    select: { userId: true, type: true },
+  })
+  const reactionCounts: Record<string, number> = {}
+  let myReaction: string | null = null
+  for (const r of reactionRows) {
+    reactionCounts[r.type] = (reactionCounts[r.type] || 0) + 1
+    if (r.userId === session?.user?.id) myReaction = r.type
   }
 
   const canEdit = session?.user?.id === diary.author.id || (session?.user as { role?: string } | undefined)?.role === "ADMINISTRATOR"
@@ -200,9 +216,11 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
 
             </div>
             <div className="flex flex-col items-end gap-1">
-              <div className="flex gap-2 items-start">
+              <div className="flex gap-2 items-center">
+                <DiaryReactions diaryId={diary.id} initialCounts={reactionCounts} initialMine={myReaction} />
                 <DiaryFollowButton diaryId={diary.id} initiallyFollowing={following} />
                 <ShareButtons path={`/diaries/${diary.id}`} title={`${diary.title} — grow diary on TerpTalk`} />
+                <ReportButton type="DIARY" targetId={diary.id} authorId={diary.author.id} />
               </div>
               {!following && (
                 <p className="text-xs text-muted-foreground">Follow this diary to get notified of new updates.</p>

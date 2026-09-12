@@ -15,11 +15,11 @@ export async function GET(
   const from = new URL(request.url).searchParams.get("from")?.slice(0, 200) || null
   const session = await getServerSession(authOptions).catch(() => null)
 
-  // Rate-limit click tracking so analytics can't be inflated
+  // Rate-limit click tracking so analytics can't be inflated. The redirect
+  // still happens — we just skip recording the click — so a user who
+  // legitimately clicks fast isn't bounced off the destination.
   const rl = await rateLimit(`affclick:${hashIp(getClientIp(request))}`, 30, 10 * 60 * 1000)
-  if (!rl.allowed) {
-    return NextResponse.redirect(new URL("/deals", request.url))
-  }
+  const trackClick = rl.allowed
 
   // Product slug first, then partner slug
   const product = await prisma.affiliateProduct.findUnique({
@@ -41,14 +41,16 @@ export async function GET(
     return NextResponse.redirect(new URL("/deals", request.url))
   }
 
-  await prisma.affiliateClick.create({
-    data: {
-      partnerId,
-      productId: product?.id ?? null,
-      page: from,
-      userId: session?.user?.id ?? null, // account id only — no PII
-    },
-  }).catch(() => {})
+  if (trackClick) {
+    await prisma.affiliateClick.create({
+      data: {
+        partnerId,
+        productId: product?.id ?? null,
+        page: from,
+        userId: session?.user?.id ?? null, // account id only — no PII
+      },
+    }).catch(() => {})
+  }
 
   return NextResponse.redirect(dest, 302)
 }

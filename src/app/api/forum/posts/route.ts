@@ -282,6 +282,7 @@ export async function PATCH(request: Request) {
         id: true,
         authorId: true,
         deleted: true,
+        threadId: true,
         thread: { select: { locked: true, deleted: true, category: { select: { hidden: true } } } },
       },
     })
@@ -308,6 +309,21 @@ export async function PATCH(request: Request) {
       data: { content, edited: true },
       include: { author: { select: publicUserSelect } },
     })
+
+    // Keep Thread.content (the search/listing copy of the OP body) in sync
+    // when the opening post is edited — otherwise edits are invisible to
+    // search and thread previews.
+    const op = await prisma.post.findFirst({
+      where: { threadId: post.threadId },
+      orderBy: { createdAt: "asc" },
+      select: { id: true },
+    })
+    if (op?.id === id) {
+      await prisma.thread.update({
+        where: { id: post.threadId },
+        data: { content },
+      })
+    }
 
     return NextResponse.json({ post: updated })
   } catch (error) {

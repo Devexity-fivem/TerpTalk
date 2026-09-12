@@ -115,6 +115,8 @@ export default async function LeaderboardPage() {
 
         <p className="text-center text-sm text-muted-foreground mt-6">
           Check the <Link href="/about" className="text-primary hover:underline">About page</Link> to see how reputation and badges work.
+          {" · "}
+          <Link href="/leaderboard/yields" className="text-primary hover:underline">Strain yield leaderboard</Link>
         </p>
       </div>
     </div>

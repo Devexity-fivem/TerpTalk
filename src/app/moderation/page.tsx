@@ -79,6 +79,8 @@ export default function ModerationPage() {
   const role = (session?.user as { role?: string })?.role
   const isMod = role === "SUPPORT" || role === "MODERATOR" || role === "ADMINISTRATOR"
   const isAdminUser = role === "ADMINISTRATOR"
+  // SUPPORT is view-only — every mutating endpoint requires MODERATOR+.
+  const canAct = role === "MODERATOR" || role === "ADMINISTRATOR"
 
   const load = () => {
     fetch("/api/moderation/reports")
@@ -225,12 +227,14 @@ export default function ModerationPage() {
           {([
             { id: "queue", label: "Report Queue", icon: ListChecks },
             { id: "lookup", label: "User Lookup", icon: Search },
-            { id: "log", label: "Mod Log", icon: ScrollText },
-            { id: "bulk", label: "Bulk Threads", icon: Layers },
+            ...(canAct ? [
+              { id: "log", label: "Mod Log", icon: ScrollText },
+              { id: "bulk", label: "Bulk Threads", icon: Layers },
+            ] : []),
           ] as const).map(({ id, label, icon: Icon }) => (
             <button
               key={id}
-              onClick={() => setTab(id)}
+              onClick={() => setTab(id as typeof tab)}
               className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
                 tab === id ? "bg-primary text-primary-foreground" : "bg-card border border-border hover:bg-secondary"
               }`}
@@ -243,7 +247,7 @@ export default function ModerationPage() {
         {error && <div className="bg-destructive/10 text-destructive px-4 py-2 rounded-lg text-sm mb-4">{error}</div>}
 
         {/* BULK THREAD ACTIONS */}
-        {tab === "bulk" && isMod && (
+        {tab === "bulk" && canAct && (
           <div className="space-y-4 mb-10">
             <div className="bg-card rounded-lg border border-border p-4 space-y-3">
               <div>
@@ -359,7 +363,7 @@ export default function ModerationPage() {
                       <div className="text-xs text-destructive mt-1">Ban reason: {lookupUser.bannedReason}</div>
                     )}
                   </div>
-                  {lookupUser.role !== "ADMINISTRATOR" && (
+                  {lookupUser.role !== "ADMINISTRATOR" && canAct && (
                     <div className="flex gap-2 flex-wrap">
                       <button onClick={() => actOnUser(lookupUser.id, "WARNING", "Warning reason:")} disabled={busy === lookupUser.id}
                         className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-amber-500/10 text-amber-500 rounded-lg hover:bg-amber-500/20 disabled:opacity-50">
@@ -458,14 +462,17 @@ export default function ModerationPage() {
                     <p className="text-xs text-muted-foreground mt-1">Target content unavailable (may be deleted).</p>
                   )}
                 </div>
+                {canAct && (
                 <div className="flex flex-col gap-2 shrink-0">
-                  <button
-                    onClick={() => deleteContent(r)}
-                    disabled={busy === r.id}
-                    className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-destructive/10 text-destructive rounded-lg hover:bg-destructive/20 disabled:opacity-50"
-                  >
-                    <Trash2 className="w-4 h-4" /> Remove content
-                  </button>
+                  {r.type !== "PROFILE" && (
+                    <button
+                      onClick={() => deleteContent(r)}
+                      disabled={busy === r.id}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-destructive/10 text-destructive rounded-lg hover:bg-destructive/20 disabled:opacity-50"
+                    >
+                      <Trash2 className="w-4 h-4" /> Remove content
+                    </button>
+                  )}
                   <button
                     onClick={() => actOnUser(r.reportedUserId, "WARNING", "Warning reason:")}
                     disabled={busy === r.id}
@@ -482,15 +489,13 @@ export default function ModerationPage() {
                       <Ban className="w-4 h-4" /> Ban user
                     </button>
                   )}
-                  {isAdminUser && (
-                    <button
-                      onClick={() => updateReport(r.id, "ESCALATED")}
-                      disabled={busy === r.id}
-                      className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-amber-500/10 text-amber-500 rounded-lg hover:bg-amber-500/20 disabled:opacity-50"
-                    >
-                      <AlertTriangle className="w-4 h-4" /> Escalate
-                    </button>
-                  )}
+                  <button
+                    onClick={() => updateReport(r.id, "ESCALATED")}
+                    disabled={busy === r.id}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-amber-500/10 text-amber-500 rounded-lg hover:bg-amber-500/20 disabled:opacity-50"
+                  >
+                    <AlertTriangle className="w-4 h-4" /> Escalate
+                  </button>
                   <button
                     onClick={() => updateReport(r.id, "RESOLVED")}
                     disabled={busy === r.id}
@@ -506,6 +511,7 @@ export default function ModerationPage() {
                     <XCircle className="w-4 h-4" /> Dismiss
                   </button>
                 </div>
+                )}
               </div>
             </div>
           ))}

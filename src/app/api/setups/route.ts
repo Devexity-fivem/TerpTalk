@@ -6,6 +6,7 @@ import { unauthorized, publicUserSelect, LIMITS, getClientIp, logSecurityEvent, 
 import { rateLimit } from "@/lib/rate-limit"
 import { storeImages, deleteImagesIfUnreferenced } from "@/lib/blob"
 import { checkMaintenance } from "@/lib/maintenance"
+import { revalidateTag } from "next/cache"
 
 export async function POST(request: Request) {
   let storedImages: string[] = []
@@ -124,6 +125,8 @@ export async function POST(request: Request) {
         author: { select: publicUserSelect },
       },
     })
+
+    revalidateTag("setups", { expire: 0 })
 
     return NextResponse.json({ setup }, { status: 201 })
   } catch (error) {

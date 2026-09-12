@@ -17,6 +17,10 @@ export default function Footer() {
           <Link href="/strains" className="hover:text-foreground transition-colors">Strains</Link>
           <Link href="/deals" className="hover:text-foreground transition-colors">Deals</Link>
           <Link href="/guides" className="hover:text-foreground transition-colors">Guides</Link>
+          <Link href="/youtubers" className="hover:text-foreground transition-colors">Creators</Link>
+          <Link href="/leaderboard" className="hover:text-foreground transition-colors">Leaderboard</Link>
+          <Link href="/calculator" className="hover:text-foreground transition-colors">Calculator</Link>
+          <Link href="/staff/apply" className="hover:text-foreground transition-colors">Join the team</Link>
           <Link href="/help" className="hover:text-foreground transition-colors">Plant Help</Link>
           <Link href="/terms" className="hover:text-foreground transition-colors">Terms</Link>
           <Link href="/privacy" className="hover:text-foreground transition-colors">Privacy</Link>

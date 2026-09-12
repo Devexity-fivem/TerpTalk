@@ -1,13 +1,10 @@
-import { prisma } from "@/lib/prisma"
-import { publicUserSelect } from "@/lib/security"
 import { unstable_cache } from "next/cache"
 import { previousWeekKey, previousMonthKey } from "@/lib/week"
 import { Trophy, BookOpen } from "lucide-react"
 import Link from "next/link"
 import ContestBoard from "@/components/contest-board"
 import DiaryContestBoard from "@/components/diary-contest-board"
-import { getBadgeByName } from "@/lib/badge-registry"
-import { notify } from "@/lib/notify"
+import { resolveWeeklyWinner, resolveMonthlyDiaryWinner } from "@/lib/contest-awards"
 
 import { buildMetadata } from "@/lib/seo"
 
@@ -18,89 +15,17 @@ export const metadata = buildMetadata({
   pathname: "/contest",
 })
 
-// Lazily award the previous week's winner badge (idempotent).
-// Cached per week so the badge is not re-awarded on every page view.
+// Winner resolution + badge award live in lib/contest-awards so the cron
+// can award badges even if nobody visits this page. Cached per period so
+// the badge is not re-awarded on every page view.
 const getLastWeekWinner = unstable_cache(
-  async (week: string) => {
-    const top = await prisma.contestEntry.findFirst({
-      where: { week },
-      orderBy: { votes: { _count: "desc" } },
-      include: { user: { select: publicUserSelect }, _count: { select: { votes: true } } },
-    })
-    if (!top || top._count.votes === 0) return null
-
-    const def = getBadgeByName("Weekly Winner")
-    const badge = await prisma.badge.upsert({
-      where: { name: "Weekly Winner" },
-      update: {},
-      create: {
-        name: "Weekly Winner",
-        description: def?.description ?? "Won Budshot of the Week",
-        icon: def?.icon ?? "Trophy",
-        color: def?.rarity ?? "legendary",
-        requirement: def?.requirement ?? "Win a weekly photo contest",
-      },
-    })
-    const has = await prisma.userBadge.findUnique({
-      where: { userId_badgeId: { userId: top.userId, badgeId: badge.id } },
-    })
-    if (!has) {
-      await prisma.userBadge.create({ data: { userId: top.userId, badgeId: badge.id } }).catch(() => {})
-      await notify({
-        userId: top.userId,
-        type: "BADGE",
-        title: "🏆 You won Budshot of the Week!",
-        content: "Your photo took the top spot. Check your new badge.",
-        link: "/contest",
-      })
-    }
-    return top
-  },
+  async (week: string) => resolveWeeklyWinner(week),
   ["contest-last-winner"],
   { revalidate: 3600, tags: ["contest"] }
 )
 
-// Lazily award last month's Diary of the Month badge (idempotent, cached).
 const getLastMonthDiaryWinner = unstable_cache(
-  async (month: string) => {
-    const top = await prisma.diaryContestEntry.findFirst({
-      where: { month, diary: { deleted: false }, user: { banned: false } },
-      orderBy: [{ votes: { _count: "desc" } }, { createdAt: "asc" }],
-      include: {
-        user: { select: publicUserSelect },
-        _count: { select: { votes: true } },
-        diary: { select: { id: true, title: true } },
-      },
-    })
-    if (!top || top._count.votes === 0) return null
-
-    const def = getBadgeByName("Diary of the Month")
-    const badge = await prisma.badge.upsert({
-      where: { name: "Diary of the Month" },
-      update: {},
-      create: {
-        name: "Diary of the Month",
-        description: def?.description ?? "Won Diary of the Month",
-        icon: def?.icon ?? "Trophy",
-        color: def?.rarity ?? "legendary",
-        requirement: def?.requirement ?? "Win the monthly grow diary contest",
-      },
-    })
-    const has = await prisma.userBadge.findUnique({
-      where: { userId_badgeId: { userId: top.userId, badgeId: badge.id } },
-    })
-    if (!has) {
-      await prisma.userBadge.create({ data: { userId: top.userId, badgeId: badge.id } }).catch(() => {})
-      await notify({
-        userId: top.userId,
-        type: "BADGE",
-        title: "🏆 You won Diary of the Month!",
-        content: `Your diary "${top.diary.title.slice(0, 50)}" took the top spot. Check your new badge.`,
-        link: "/contest",
-      })
-    }
-    return top
-  },
+  async (month: string) => resolveMonthlyDiaryWinner(month),
   ["diary-contest-last-winner"],
   { revalidate: 3600, tags: ["contest"] }
 )

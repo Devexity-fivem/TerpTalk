@@ -4,6 +4,7 @@ import { unauthorized, forbidden } from "@/lib/security"
 import { requireAdmin } from "@/lib/require-staff"
 import { isValidUrl, slugify, cleanText, DEFAULT_DISCLOSURE } from "@/lib/affiliate"
 import { rateLimit } from "@/lib/rate-limit"
+import { revalidateTag } from "next/cache"
 
 const MAX_PAGE_SIZE = 100
 
@@ -84,6 +85,7 @@ export async function POST(request: Request) {
       adminNotes: cleanText(body.adminNotes, 1000),
     },
   })
+  revalidateTag("deals", { expire: 0 })
   return NextResponse.json({ partner }, { status: 201 })
 }
 
@@ -119,6 +121,7 @@ export async function PATCH(request: Request) {
       ...(fields.adminNotes !== undefined && { adminNotes: cleanText(fields.adminNotes, 1000) }),
     },
   })
+  revalidateTag("deals", { expire: 0 })
   return NextResponse.json({ partner })
 }
 
@@ -130,5 +133,6 @@ export async function DELETE(request: Request) {
   const id = searchParams.get("id")
   if (!id) return NextResponse.json({ error: "id required" }, { status: 400 })
   await prisma.affiliatePartner.delete({ where: { id } })
+  revalidateTag("deals", { expire: 0 })
   return NextResponse.json({ ok: true })
 }

@@ -7,7 +7,7 @@ import { buildMetadata, snippet } from "@/lib/seo"
 import { Breadcrumbs } from "@/components/breadcrumbs"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
-import { isModerator, getTrustLevel } from "@/lib/security"
+import { isModerator } from "@/lib/security"
 
 export const dynamic = "force-dynamic"
 
@@ -35,16 +35,15 @@ export default async function GuidePage({ params }: { params: Promise<{ slug: st
   ])
   if (!guide || !guide.published) notFound()
 
+  // Edit permission is author-or-moderator — mirrors PATCH /api/guides/[slug].
+  // Check the DB role so a stale JWT can't show an Edit link that will 403.
   let canEdit = guide.authorId === session?.user?.id || isModerator(session?.user?.role)
   if (!canEdit && session?.user?.id) {
     const user = await prisma.user.findUnique({
       where: { id: session.user.id },
-      select: { createdAt: true, banned: true, role: true, profile: { select: { reputation: true } } },
+      select: { banned: true, role: true },
     })
-    if (user && !user.banned) {
-      const level = getTrustLevel(user.createdAt, user.profile?.reputation ?? 0)
-      canEdit = ["Established", "Veteran", "Expert"].includes(level) || isModerator(user.role)
-    }
+    canEdit = !!user && !user.banned && isModerator(user.role)
   }
 
   return (

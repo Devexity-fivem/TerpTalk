@@ -35,7 +35,7 @@ export const REP_TIERS: ReputationTier[] = [
   { threshold: 250, name: "Sprout", color: "text-amber-600", bg: "bg-amber-600/10", icon: "🌿", benefit: "Your links no longer need manual approval." },
   { threshold: 750, name: "Seedling", color: "text-green-500", bg: "bg-green-500/10", icon: "🌱", benefit: "Unlock the ability to vote in community polls." },
   { threshold: 1500, name: "Grower", color: "text-emerald-500", bg: "bg-emerald-500/10", icon: "🌲", benefit: "Appear on the public leaderboard and unlock weekly rewards." },
-  { threshold: 3500, name: "Cultivator", color: "text-cyan-500", bg: "bg-cyan-500/10", icon: "🌿", benefit: "Can edit community guides and strain entries." },
+  { threshold: 3500, name: "Cultivator", color: "text-cyan-500", bg: "bg-cyan-500/10", icon: "🌿", benefit: "Recognized community expert — votes and contributions carry extra weight." },
   { threshold: 7000, name: "Master Grower", color: "text-purple-500", bg: "bg-purple-500/10", icon: "🏆", benefit: "Double voting weight in contests and a legendary profile flair." },
   { threshold: 15000, name: "Legendary Grower", color: "text-amber-400", bg: "bg-amber-400/10", icon: "👑", benefit: "Immortalized as a community elder — exclusive leaf badge and title." },
   { threshold: 30000, name: "Head Grower", color: "text-rose-400", bg: "bg-rose-500/10", icon: "🌟", benefit: "Glow like a perfectly frosted cola — Head Grower title and aura." },

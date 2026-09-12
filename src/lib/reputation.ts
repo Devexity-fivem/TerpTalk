@@ -65,7 +65,8 @@ const BADGE_RULES: Record<string, (s: UserStats) => boolean> = {
   "Garden Veteran": (s) => s.diaries >= 10,
   "Master Gardener": (s) => s.diaries >= 25,
   "Diary Legend": (s) => s.diaries >= 50,
-  "Dedicated Grower": (s) => s.diaryUpdates >= 7,
+  // "Dedicated Grower" is a 7-consecutive-day update streak, awarded by the
+  // diary updates route — not a lifetime update count, so no rule here.
 
   // Strain milestones
   "Strain Hunter": (s) => s.strains >= 3,
@@ -246,7 +247,9 @@ export async function awardReputation(
           select: { role: true, createdAt: true, banned: true },
         })
         const multiplier = user?.role === "VERIFIED_MEMBER" ? VERIFIED_MULTIPLIER : 1
-        const adjusted = amount * multiplier
+        // Round — reputation columns are Int; a fractional award would fail
+        // Prisma validation and silently drop the whole event for verified members.
+        const adjusted = Math.round(amount * multiplier)
 
         const profile = await tx.profile.findUnique({
           where: { userId },

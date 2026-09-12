@@ -1,13 +1,15 @@
 import { buildMetadata, snippet } from "@/lib/seo"
 import { Breadcrumbs } from "@/components/breadcrumbs"
 import { prisma } from "@/lib/prisma"
-import { publicUserSelect } from "@/lib/security"
+import { publicUserSelect, activeAuthor } from "@/lib/security"
 import { notFound } from "next/navigation"
 import { Settings, Users, MessageSquare } from "lucide-react"
 import Link from "next/link"
 import RoleBadge from "@/components/role-badge"
 import SetupComments from "@/components/setup-comments"
 import ShareButtons from "@/components/share-buttons"
+import ReportButton from "@/components/report-button"
+import { escapeLike } from "@/lib/strain-stats"
 
 export const dynamic = "force-dynamic"
 
@@ -28,8 +30,8 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
 
 export default async function SetupPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  const setup = await prisma.growSetup.findUnique({
-    where: { id },
+  const setup = await prisma.growSetup.findFirst({
+    where: { id, author: activeAuthor() },
     include: {
       author: { select: publicUserSelect },
       images: { orderBy: { order: "asc" }, take: 50 },
@@ -50,7 +52,7 @@ export default async function SetupPage({ params }: { params: Promise<{ id: stri
   // same soft-linking the diary page uses.
   const linkedStrain = setup.strain
     ? await prisma.strain.findFirst({
-        where: { name: { contains: setup.strain, mode: "insensitive" } },
+        where: { name: { contains: escapeLike(setup.strain), mode: "insensitive" } },
         select: { id: true },
       })
     : null
@@ -64,6 +66,8 @@ export default async function SetupPage({ params }: { params: Promise<{ id: stri
     ["Containers", setup.containers],
     ["Medium", setup.medium],
     ["Nutrients", setup.nutrients],
+    ["Controllers", setup.controllers],
+    ["Other equipment", setup.equipment],
     ["Strain", setup.strain],
   ]
 
@@ -89,7 +93,10 @@ export default async function SetupPage({ params }: { params: Promise<{ id: stri
             </Link>
             <span>{new Date(setup.createdAt).toLocaleDateString()}</span>
           </div>
-          <ShareButtons path={`/setups/${setup.id}`} title={`${setup.title} — grow setup on TerpTalk`} />
+          <div className="flex items-center gap-2">
+            <ShareButtons path={`/setups/${setup.id}`} title={`${setup.title} — grow setup on TerpTalk`} />
+            <ReportButton type="SETUP" targetId={setup.id} authorId={setup.authorId} />
+          </div>
 
           {setup.images.length > 0 && (
             <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mt-5">

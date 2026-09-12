@@ -4,6 +4,7 @@ import { forbidden } from "@/lib/security"
 import { requireAdmin } from "@/lib/require-staff"
 import { getBadgeByName } from "@/lib/badge-registry"
 import { rateLimit } from "@/lib/rate-limit"
+import { notify } from "@/lib/notify"
 
 const BADGE_NAME = "Verified YouTuber"
 const MAX_PAGE_SIZE = 100
@@ -100,11 +101,26 @@ export async function POST(request: Request) {
 
     if (existing) {
       await prisma.userBadge.delete({ where: { id: existing.id } })
+      await notify({
+        userId,
+        type: "MODERATOR_ANNOUNCEMENT",
+        title: "YouTuber verification removed",
+        content: "Your Verified YouTuber badge was removed by staff.",
+        link: "/youtubers/apply",
+      })
       return NextResponse.json({ verified: false })
     }
 
     await prisma.userBadge.create({
       data: { userId, badgeId: badge.id },
+    })
+
+    await notify({
+      userId,
+      type: "BADGE",
+      title: "You're a Verified YouTuber",
+      content: "Your channel was verified — the Verified YouTuber badge is now on your profile.",
+      link: "/youtubers",
     })
 
     return NextResponse.json({ verified: true })

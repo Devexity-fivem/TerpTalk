@@ -14,7 +14,9 @@ export async function notifyMentions(
   excludeUserIds: string[] = []
 ) {
   try {
-    const handles = [...text.matchAll(/@([A-Za-z0-9_-]{2,32})\b/g)]
+    // Match the username charset exactly (3-20 chars, no hyphens) so the
+    // notifier and the markdown renderer recognize the same handles.
+    const handles = [...text.matchAll(/@([A-Za-z0-9_]{3,20})\b/g)]
       .map((m) => m[1])
     if (handles.length === 0) return
 

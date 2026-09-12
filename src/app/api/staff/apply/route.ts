@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma"
 import { unauthorized, isSessionValid, forbidden } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
 import { checkMaintenance } from "@/lib/maintenance"
+import { notifyMany } from "@/lib/notify"
 
 const VALID_ROLES = new Set(["SUPPORT", "MODERATOR"])
 
@@ -74,6 +75,22 @@ export async function POST(request: NextRequest) {
         about: about.trim(),
       },
     })
+
+    const admins = await prisma.user.findMany({
+      where: { role: { in: ["MODERATOR", "ADMINISTRATOR"] }, banned: false },
+      select: { id: true },
+    })
+    if (admins.length > 0) {
+      await notifyMany(
+        admins.map((a) => ({
+          userId: a.id,
+          type: "MODERATOR_ANNOUNCEMENT" as const,
+          title: "New staff application",
+          content: `A member applied for the ${role.toLowerCase()} role.`,
+          link: "/admin/staff/applications",
+        }))
+      )
+    }
 
     return NextResponse.json({ ok: true, application: { id: application.id, role: application.role } }, { status: 201 })
   } catch (error) {

@@ -68,6 +68,7 @@ export async function GET(request: NextRequest) {
             id: m.id,
             content: m.content,
             createdAt: m.createdAt,
+            senderId: m.senderId,
             sender: senderDto(m.sender),
           })),
           incremental: true,
@@ -100,6 +101,7 @@ export async function GET(request: NextRequest) {
           id: m.id,
           content: m.content,
           createdAt: m.createdAt,
+          senderId: m.senderId,
           sender: senderDto(m.sender),
         })),
       })
@@ -119,15 +121,19 @@ export async function GET(request: NextRequest) {
       },
     })
 
-    const convos = new Map<string, { partnerName: string | null; partnerUsername: string | null; partnerImage: string | null; lastMessage: string; lastAt: Date; unread: number }>()
+    const convos = new Map<string, { partner: { id: string; name: string | null; image: string | null; role: string | null; profile: { username: string | null } | null }; lastMessage: string; lastAt: Date; unread: number }>()
     for (const m of msgs) {
       const partner = m.senderId === userId ? m.receiver : m.sender
       const partnerId = partner.id
       if (!convos.has(partnerId)) {
         convos.set(partnerId, {
-          partnerName: partner.name ?? partner.profile?.username ?? "Unknown",
-          partnerUsername: partner.profile?.username ?? null,
-          partnerImage: partner.image ?? null,
+          partner: {
+            id: partner.id,
+            name: partner.name ?? partner.profile?.username ?? "Unknown",
+            image: partner.image ?? null,
+            role: partner.role ?? null,
+            profile: { username: partner.profile?.username ?? null },
+          },
           lastMessage: m.content.slice(0, 80),
           lastAt: m.createdAt,
           unread: 0,
@@ -212,6 +218,7 @@ export async function POST(request: NextRequest) {
         id: message.id,
         content: message.content,
         createdAt: message.createdAt,
+        senderId: message.senderId,
         sender: senderDto(message.sender),
       },
     }, { status: 201 })

@@ -7,6 +7,7 @@ import { rateLimit } from "@/lib/rate-limit"
 import { awardReputation, REP_POINTS } from "@/lib/reputation"
 import { storeImage, deleteImagesIfUnreferenced } from "@/lib/blob"
 import { checkMaintenance } from "@/lib/maintenance"
+import { revalidateTag } from "next/cache"
 
 const VALID_KINDS = new Set(["PLANT", "FLOWER"])
 
@@ -78,6 +79,8 @@ export async function POST(request: Request) {
       },
     })
 
+    revalidateTag("strains", { expire: 0 })
+
     await awardReputation(
       session.user.id,
       "STRAIN_PHOTO",
@@ -127,6 +130,7 @@ export async function DELETE(request: Request) {
     }
 
     await prisma.strainPhoto.delete({ where: { id } })
+    revalidateTag("strains", { expire: 0 })
     deleteImagesIfUnreferenced([photo.imageUrl]).catch(() => {})
     return NextResponse.json({ deleted: true })
   } catch (error) {

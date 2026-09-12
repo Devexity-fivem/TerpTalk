@@ -35,8 +35,19 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "No fields provided" }, { status: 400 })
     }
 
-    // Validate username if provided
+    // Validate username if provided. Usernames are set once during
+    // onboarding — after onboardingCompletedAt they are permanent (they
+    // anchor profile URLs, mentions, and referral links).
     if (username !== undefined) {
+      const me = await prisma.user.findUnique({
+        where: { id: session.user.id },
+        select: { onboardingCompletedAt: true, profile: { select: { username: true } } },
+      })
+      const current = me?.profile?.username
+      const requested = typeof username === "string" ? username.trim() : null
+      if (me?.onboardingCompletedAt && requested && current && requested.toLowerCase() !== current.toLowerCase()) {
+        return NextResponse.json({ error: "Username cannot be changed after onboarding" }, { status: 400 })
+      }
       if (
         typeof username !== "string" ||
         username.length < LIMITS.USERNAME_MIN ||

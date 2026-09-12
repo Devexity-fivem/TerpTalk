@@ -3,10 +3,12 @@ import { prisma } from "@/lib/prisma"
 import { notify, notifyMany, invalidateNotificationsForLink } from "@/lib/notify"
 import { notifyMentions } from "@/lib/mentions"
 
-const STAMP = Date.now()
-const ACTOR_USERNAME = `__test_n2_actor_${STAMP}`
-const RECIP_USERNAME = `__test_n2_recip_${STAMP}`
-const THIRD_USERNAME = `__test_n2_third_${STAMP}`
+// Keep usernames ≤20 chars — that is the real username limit, and the
+// mention notifier/renderer only match valid handles.
+const STAMP = Date.now().toString(36)
+const ACTOR_USERNAME = `__t_n2a_${STAMP}`
+const RECIP_USERNAME = `__t_n2r_${STAMP}`
+const THIRD_USERNAME = `__t_n2t_${STAMP}`
 
 async function mkUser(username: string, banned = false) {
   return prisma.user.create({

@@ -79,6 +79,16 @@ export default async function YieldLeaderboardPage() {
     .sort((a, b) => b.avgGrams - a.avgGrams)
     .slice(0, 50)
 
+  // Link rows to catalog strain pages when the free-text strain name
+  // matches a catalog entry exactly; otherwise fall back to strain search.
+  const catalog = rows.length
+    ? await prisma.strain.findMany({
+        where: { OR: rows.map((r) => ({ name: { equals: r.strain, mode: "insensitive" as const } })) },
+        select: { id: true, name: true },
+      })
+    : []
+  const strainIdByName = new Map(catalog.map((s) => [s.name.toLowerCase(), s.id]))
+
   const totalHarvests = diaries.length
   const totalGrams = diaries.reduce(
     (sum, d) => sum + toGrams(d.yieldAmount!, d.yieldUnit),
@@ -95,6 +105,7 @@ export default async function YieldLeaderboardPage() {
           </h1>
           <p className="text-muted-foreground mt-2 max-w-2xl">
             Real harvest outcomes reported by the TerpTalk community. Average yields are converted to ounces for comparison.
+            {" "}<Link href="/leaderboard" className="text-primary hover:underline">See the reputation leaderboard</Link>.
           </p>
         </div>
 
@@ -133,7 +144,13 @@ export default async function YieldLeaderboardPage() {
                   </div>
                   <div className="min-w-0">
                     <h3 className="font-semibold truncate">
-                      <Link href={`/strains?q=${encodeURIComponent(row.strain)}`} className="hover:text-primary transition-colors">
+                      <Link
+                        href={(() => {
+                          const sid = strainIdByName.get(row.strain.toLowerCase())
+                          return sid ? `/strains/${sid}` : `/strains?q=${encodeURIComponent(row.strain)}`
+                        })()}
+                        className="hover:text-primary transition-colors"
+                      >
                         {row.strain}
                       </Link>
                     </h3>

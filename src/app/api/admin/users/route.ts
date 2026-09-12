@@ -52,7 +52,7 @@ export async function GET(request: Request) {
           ],
         }),
         ...(filter === "banned" && { banned: true }),
-        ...(filter === "staff" && { role: { in: ["MODERATOR", "ADMINISTRATOR"] } }),
+        ...(filter === "staff" && { role: { in: ["SUPPORT", "MODERATOR", "ADMINISTRATOR"] } }),
       },
       orderBy: { createdAt: "desc" },
       take: limit,

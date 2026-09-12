@@ -131,10 +131,11 @@ export default function NewStrainPage() {
 
             <div>
               <label htmlFor="type" className="block text-sm font-medium mb-2">
-                Type
+                Type <span className="text-destructive">*</span>
               </label>
               <select
                 id="type"
+                required
                 value={formData.type}
                 onChange={(e) => setFormData({ ...formData, type: e.target.value })}
                 className="w-full px-4 py-2 rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary"
@@ -144,6 +145,9 @@ export default function NewStrainPage() {
                 <option value="Indica">Indica</option>
                 <option value="Hybrid">Hybrid</option>
                 <option value="Ruderalis">Ruderalis</option>
+                <option value="Auto_Flower">Auto-flower</option>
+                <option value="CBD">CBD</option>
+                <option value="Other">Other</option>
               </select>
             </div>
 

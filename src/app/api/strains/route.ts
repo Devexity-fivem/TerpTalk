@@ -5,9 +5,14 @@ import { prisma } from "@/lib/prisma"
 import { unauthorized, LIMITS, getClientIp, logSecurityEvent, isBanned, forbidden, enforceLinkTrust } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
 import { awardReputation, REP_POINTS } from "@/lib/reputation"
+import { checkMaintenance } from "@/lib/maintenance"
+import { revalidateTag } from "next/cache"
 
 export async function POST(request: Request) {
   try {
+    const maintenance = await checkMaintenance()
+    if (maintenance) return maintenance
+
     const session = await getServerSession(authOptions)
 
     if (!session?.user?.id) {
@@ -97,6 +102,8 @@ export async function POST(request: Request) {
         createdById: session.user.id,
       },
     })
+
+    revalidateTag("strains", { expire: 0 })
 
     await awardReputation(
       session.user.id,

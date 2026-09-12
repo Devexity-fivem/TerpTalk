@@ -438,7 +438,7 @@ export async function POST(request: NextRequest) {
       }
 
       case "slowmode": {
-        if (!staff) return forbidden()
+        if (!moderator) return forbidden()
         const seconds = args[0] !== undefined ? parseInt(args[0], 10) : NaN
         if (Number.isNaN(seconds) || seconds < 0 || seconds > MAX_SLOW) {
           return NextResponse.json({ error: "Slow mode must be 0-300 seconds" }, { status: 400 })
@@ -452,7 +452,7 @@ export async function POST(request: NextRequest) {
       }
 
       case "lock": {
-        if (!staff) return forbidden()
+        if (!moderator) return forbidden()
         const updated = await prisma.chatRoom.update({
           where: { id: roomId },
           data: { locked: true },
@@ -462,7 +462,7 @@ export async function POST(request: NextRequest) {
       }
 
       case "unlock": {
-        if (!staff) return forbidden()
+        if (!moderator) return forbidden()
         const updated = await prisma.chatRoom.update({
           where: { id: roomId },
           data: { locked: false },
@@ -485,7 +485,7 @@ export async function POST(request: NextRequest) {
       }
 
       case "announce": {
-        if (!staff) return forbidden()
+        if (!moderator) return forbidden()
         if (!rest) {
           return NextResponse.json({ error: "Usage: /announce <message>" }, { status: 400 })
         }

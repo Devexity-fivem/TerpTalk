@@ -4,6 +4,7 @@ import { unauthorized, forbidden } from "@/lib/security"
 import { requireAdmin } from "@/lib/require-staff"
 import { isValidUrl, slugify, cleanText } from "@/lib/affiliate"
 import { rateLimit } from "@/lib/rate-limit"
+import { revalidateTag } from "next/cache"
 
 const MAX_PAGE_SIZE = 100
 
@@ -77,6 +78,7 @@ export async function POST(request: Request) {
       featured: !!body.featured,
     },
   })
+  revalidateTag("deals", { expire: 0 })
   return NextResponse.json({ product }, { status: 201 })
 }
 
@@ -111,6 +113,7 @@ export async function PATCH(request: Request) {
       ...(fields.featured !== undefined && { featured: !!fields.featured }),
     },
   })
+  revalidateTag("deals", { expire: 0 })
   return NextResponse.json({ product })
 }
 
@@ -119,5 +122,6 @@ export async function DELETE(request: Request) {
   const id = new URL(request.url).searchParams.get("id")
   if (!id) return NextResponse.json({ error: "id required" }, { status: 400 })
   await prisma.affiliateProduct.delete({ where: { id } })
+  revalidateTag("deals", { expire: 0 })
   return NextResponse.json({ ok: true })
 }
