@@ -62,7 +62,10 @@ export async function GET(request: NextRequest) {
         members + threads + updates > 0
           ? `Yesterday: ${members} new member${members === 1 ? "" : "s"}, ${threads} new thread${threads === 1 ? "" : "s"}, ${updates} diary update${updates === 1 ? "" : "s"}.`
           : "Quiet day yesterday — start a thread or update your diary to get things going."
-      await postToGeneral(`📊 ${activity}\n💡 Grow tip: ${tip}`)
+      // Two separate posts — combining them into one message read like a
+      // merged double-post in the chat UI.
+      await postToGeneral(`📊 ${activity}`)
+      await postToGeneral(`💡 Grow tip: ${tip}`)
       posted.push("digest")
     } catch (e) {
       console.error("[terpbot] digest failed:", e)

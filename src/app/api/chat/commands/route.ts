@@ -466,7 +466,7 @@ export async function POST(request: NextRequest) {
           where: { id: roomId },
           data: { slowModeSeconds: seconds },
         })
-        const bot = await postBot(`Slow mode set to ${seconds} second(s) by @${displayName}`)
+        const bot = await postBot(`Slow mode set to ${seconds} second(s)`)
         return NextResponse.json({ ok: true, room: { slowModeSeconds: updated.slowModeSeconds }, message: bot })
       }
 
@@ -476,7 +476,7 @@ export async function POST(request: NextRequest) {
           where: { id: roomId },
           data: { locked: true },
         })
-        const bot = await postBot(`Chat locked by @${displayName}`)
+        const bot = await postBot(`🔒 Chat locked by the moderation team`)
         return NextResponse.json({ ok: true, room: { locked: updated.locked }, message: bot })
       }
 
@@ -486,7 +486,7 @@ export async function POST(request: NextRequest) {
           where: { id: roomId },
           data: { locked: false },
         })
-        const bot = await postBot(`Chat unlocked by @${displayName}`)
+        const bot = await postBot(`🔓 Chat unlocked by the moderation team`)
         return NextResponse.json({ ok: true, room: { locked: updated.locked }, message: bot })
       }
 
@@ -499,7 +499,7 @@ export async function POST(request: NextRequest) {
           where,
           data: { deleted: true },
         })
-        const bot = await postBot(`Cleared ${result.count} message(s) by @${displayName}`)
+        const bot = await postBot(`🧹 ${result.count} message(s) cleared by the moderation team`)
         return NextResponse.json({ ok: true, cleared: result.count, message: bot })
       }
 
