@@ -44,6 +44,7 @@ model User {
   sentMessages  DirectMessage[]      @relation("SentMessages")
   receivedMessages DirectMessage[]   @relation("ReceivedMessages")
   notifications Notification[]
+  triggeredNotifications Notification[] @relation("NotificationActor")
   reactions     Reaction[]
   followers     Follow[]             @relation("Following")
   following     Follow[]             @relation("Follower")
@@ -117,6 +118,8 @@ model Profile {
   notifyOnCategoryFollow Boolean @default(true)
   notifyOnMessage      Boolean  @default(true)
   notifyOnComment      Boolean  @default(true)
+  notifyOnFollow       Boolean  @default(true)
+  notifyOnReaction     Boolean  @default(true)
   emailDigestFrequency String?
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -524,8 +527,11 @@ model DirectMessage {
 // Notifications
 model Notification {
   id        String   @id @default(cuid())
-  type      String   // LIKE, COMMENT, REPLY, MENTION, FOLLOW, DIARY_UPDATE, DIRECT_MESSAGE, THREAD_ACTIVITY, MODERATOR_ANNOUNCEMENT
+  type      String   // REACTION, COMMENT, REPLY, MENTION, FOLLOW, DIARY_UPDATE, DIRECT_MESSAGE, THREAD_ACTIVITY, MODERATOR_ANNOUNCEMENT, BADGE, REPUTATION, REFERRAL, ACCEPTED_ANSWER
   userId    String
+  actorId   String?
+  groupKey  String?
+  metadata  Json?
   title     String
   content   String
   link      String?
@@ -533,11 +539,15 @@ model Notification {
   createdAt DateTime @default(now())
 
   user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  actor     User?            @relation("NotificationActor", fields: [actorId], references: [id], onDelete: SetNull)
 
   @@index([userId])
   @@index([read])
   @@index([createdAt])
   @@index([userId, read])
+  @@index([userId, createdAt])
+  @@index([actorId])
+  @@index([userId, groupKey])
 }
 
 // Strain Database

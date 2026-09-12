@@ -4,6 +4,7 @@ import { forbidden, getClientIp, logSecurityEvent } from "@/lib/security"
 import { requireAdmin } from "@/lib/require-staff"
 import { getBadgeByName } from "@/lib/badge-registry"
 import { rateLimit } from "@/lib/rate-limit"
+import { emitNotificationPush } from "@/lib/notify"
 
 const ASSIGNABLE_ROLES = new Set(["MEMBER", "VERIFIED_MEMBER", "SUPPORT", "MODERATOR", "ADMINISTRATOR"])
 
@@ -162,7 +163,7 @@ export async function PATCH(request: Request) {
         })
       })
 
-      await prisma.notification.create({
+      const roleNotification = await prisma.notification.create({
         data: {
           userId,
           type: "MODERATOR_ANNOUNCEMENT",
@@ -178,7 +179,8 @@ export async function PATCH(request: Request) {
                     ? "Your account has been verified by the team."
                     : "Your staff role has been removed.",
         },
-      }).catch(() => {})
+      }).catch(() => null)
+      if (roleNotification) emitNotificationPush(userId, roleNotification)
 
       await logSecurityEvent("SUSPICIOUS_ACTIVITY", {
         userId: admin.id,

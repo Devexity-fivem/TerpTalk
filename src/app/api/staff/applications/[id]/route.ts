@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma"
 import { unauthorized, isSessionValid, forbidden, isAdmin } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
 import { checkMaintenance } from "@/lib/maintenance"
+import { emitNotificationPush } from "@/lib/notify"
 
 export async function PATCH(
   request: NextRequest,
@@ -56,6 +57,7 @@ export async function PATCH(
       return NextResponse.json({ error: "Application already reviewed" }, { status: 400 })
     }
 
+    let createdNotification: Awaited<ReturnType<typeof prisma.notification.create>> | null = null
     await prisma.$transaction(async (tx) => {
       if (status === "APPROVED") {
         await tx.user.update({
@@ -73,7 +75,7 @@ export async function PATCH(
         },
       })
 
-      await tx.notification.create({
+      createdNotification = await tx.notification.create({
         data: {
           type: "MODERATOR_ANNOUNCEMENT",
           userId: application.userId,
@@ -81,8 +83,12 @@ export async function PATCH(
           content: `Your application for ${application.role} was ${status.toLowerCase()}.`,
           link: "/staff/apply",
         },
-      }).catch(() => {})
+      }).catch(() => null)
     })
+
+    if (createdNotification) {
+      emitNotificationPush(application.userId, createdNotification)
+    }
 
     return NextResponse.json({ ok: true })
   } catch (error) {

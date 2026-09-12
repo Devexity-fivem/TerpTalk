@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma"
 import { unauthorized, getClientIp, logSecurityEvent, isBanned, forbidden, blockExistsBetween } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
 import { checkMaintenance } from "@/lib/maintenance"
+import { notify } from "@/lib/notify"
 
 // POST — toggle follow on a user: { userId }  (or diary: { diaryId })
 export async function POST(request: Request) {
@@ -62,15 +63,21 @@ export async function POST(request: Request) {
       await prisma.follow.create({
         data: { followerId: session.user.id, followingId: userId },
       })
-      await prisma.notification.create({
-        data: {
-          userId,
-          type: "FOLLOW",
-          title: "New follower",
-          content: "Someone started following you",
-          link: `/u/${session.user.name}`,
-        },
-      }).catch(() => {})
+      const actorProfile = await prisma.profile.findUnique({
+        where: { userId: session.user.id },
+        select: { username: true },
+      })
+      const actorName = actorProfile?.username ?? session.user.name ?? "Someone"
+      await notify({
+        userId,
+        type: "FOLLOW",
+        title: "New follower",
+        content: `@${actorName} started following you`,
+        link: actorProfile?.username ? `/u/${actorProfile.username}` : null,
+        actorId: session.user.id,
+        groupKey: `FOLLOW:${session.user.id}:${userId}`,
+        dedupeMs: 24 * 60 * 60 * 1000,
+      })
       return NextResponse.json({ following: true })
     }
 

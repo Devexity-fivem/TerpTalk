@@ -8,6 +8,7 @@ import { rateLimit } from "@/lib/rate-limit"
 import { awardReputation, REP_POINTS, REP_TIERS } from "@/lib/reputation"
 import { storeImages, deleteImagesIfUnreferenced } from "@/lib/blob"
 import { notifyMentions } from "@/lib/mentions"
+import { notify } from "@/lib/notify"
 import { checkMaintenance } from "@/lib/maintenance"
 
 export async function POST(request: Request) {
@@ -139,32 +140,27 @@ export async function POST(request: Request) {
       `Replied in "${thread.title.slice(0, 60)}"`
     ).catch(() => {})
 
-    // Notify the thread author (if not self-reply and they haven't opted out)
+    // Notify the thread author (if not self-reply; pref/block/ban handled by notify)
     if (thread.authorId !== session.user.id) {
-      const authorPrefs = await prisma.profile.findUnique({
-        where: { userId: thread.authorId },
-        select: { notifyOnReply: true },
+      await notify({
+        userId: thread.authorId,
+        type: "REPLY",
+        title: "New reply to your thread",
+        content: `@${session.user.name || "Someone"} replied to "${thread.title.slice(0, 80)}"`,
+        link: `/forum/thread/${thread.slug}`,
+        actorId: session.user.id,
       })
-      if (authorPrefs?.notifyOnReply !== false) {
-        await prisma.notification.create({
-          data: {
-            type: "REPLY",
-            userId: thread.authorId,
-            title: "New reply to your thread",
-            content: `Someone replied to "${thread.title.slice(0, 80)}"`,
-            link: `/forum/thread/${thread.slug}`,
-          },
-        }).catch(() => {})
-      }
     }
 
-    // Notify @mentions in the reply
+    // Notify @mentions in the reply — excluding the thread author, who
+    // already got the REPLY notification above.
     await notifyMentions(
       content,
       session.user.id,
       session.user.name || "Someone",
       `/forum/thread/${thread.slug}`,
-      `a reply in "${thread.title.slice(0, 60)}"`
+      `a reply in "${thread.title.slice(0, 60)}"`,
+      [thread.authorId]
     )
 
     return NextResponse.json({ post }, { status: 201 })

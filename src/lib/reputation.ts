@@ -9,6 +9,7 @@ import {
 } from "@/lib/reputation-config"
 import { seedBadges } from "@/lib/badges"
 import { announceBadges, announceTierUp } from "@/lib/terpbot"
+import { notify } from "@/lib/notify"
 
 // Re-exported for existing server-side callers.
 export {
@@ -182,15 +183,13 @@ async function checkTierChange(userId: string, oldRep: number, newRep: number) {
   const newTier = getReputationTier(newRep)
   if (newTier.threshold <= oldTier.threshold) return
 
-  await prisma.notification.create({
-    data: {
-      userId,
-      type: "REPUTATION",
-      title: `Tier up: ${newTier.name}`,
-      content: `You reached ${newRep} reputation and became a ${newTier.name}. ${newTier.benefit}`,
-      link: "/profile",
-    },
-  }).catch(() => {})
+  await notify({
+    userId,
+    type: "REPUTATION",
+    title: `Tier up: ${newTier.name}`,
+    content: `You reached ${newRep} reputation and became a ${newTier.name}. ${newTier.benefit}`,
+    link: "/profile",
+  })
 
   const profile = await prisma.profile.findUnique({
     where: { userId },
@@ -221,15 +220,13 @@ async function autoVerify(
     data: { role: "VERIFIED_MEMBER", sessionVersion: { increment: 1 } },
   })
 
-  await prisma.notification.create({
-    data: {
-      userId,
-      type: "REPUTATION",
-      title: "Verified Member",
-      content: "You automatically earned the Verified Member tag for reaching 1,500 reputation and being active for 7 days. Enjoy 1.5x reputation gains.",
-      link: "/profile",
-    },
-  }).catch(() => {})
+  await notify({
+    userId,
+    type: "REPUTATION",
+    title: "Verified Member",
+    content: "You automatically earned the Verified Member tag for reaching 1,500 reputation and being active for 7 days. Enjoy 1.5x reputation gains.",
+    link: "/profile",
+  })
 }
 
 // Award reputation points and re-check badge eligibility.
@@ -302,15 +299,13 @@ export async function checkBadges(userId: string) {
       data: { userId, badgeId: badge.id },
     })
     newlyEarned.push(badge.name)
-    await prisma.notification.create({
-      data: {
-        userId,
-        type: "BADGE",
-        title: "Badge earned",
-        content: `You earned the "${badge.name}" badge — ${badge.description}`,
-        link: "/profile",
-      },
-    }).catch(() => {})
+    await notify({
+      userId,
+      type: "BADGE",
+      title: "Badge earned",
+      content: `You earned the "${badge.name}" badge — ${badge.description}`,
+      link: "/profile",
+    })
   }
 
   // Celebrate new badges in community chat (one message, not one per badge).

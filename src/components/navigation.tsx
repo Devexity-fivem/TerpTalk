@@ -53,6 +53,7 @@ export function Navigation() {
 
   useEffect(() => {
     if (!session) return
+    const userId = (session.user as { id?: string } | undefined)?.id
     const refresh = () => {
       fetch("/api/notifications")
         .then((res) => (res.ok ? res.json() : null))
@@ -64,7 +65,41 @@ export function Navigation() {
     window.addEventListener("tt-notifications-read", onRead)
     // Presence ping — updates lastSeenAt/online status (server throttled)
     fetch("/api/ping", { method: "POST" }).catch(() => {})
-    return () => window.removeEventListener("tt-notifications-read", onRead)
+
+    // Realtime notifications via a per-user private channel. The DB
+    // remains the source of truth; the poll below is the fallback.
+    let p: import("pusher-js").default | null = null
+    let poll: ReturnType<typeof setInterval> | null = null
+    const startPolling = () => {
+      if (!poll) poll = setInterval(refresh, 60_000)
+    }
+    const pusherKey = process.env.NEXT_PUBLIC_PUSHER_KEY
+    const pusherCluster = process.env.NEXT_PUBLIC_PUSHER_CLUSTER
+    const channel = `private-user-${userId}`
+    if (userId && pusherKey && pusherCluster) {
+      import("pusher-js")
+        .then(({ default: Pusher }) => {
+          p = new Pusher(pusherKey, { cluster: pusherCluster, authEndpoint: "/api/pusher/auth" })
+          const ch = p.subscribe(channel)
+          ch.bind("new-notification", (n: unknown) => {
+            refresh()
+            window.dispatchEvent(new CustomEvent("tt-new-notification", { detail: n }))
+          })
+          ch.bind("pusher:subscription_error", startPolling)
+        })
+        .catch(startPolling)
+    } else {
+      startPolling()
+    }
+
+    return () => {
+      window.removeEventListener("tt-notifications-read", onRead)
+      if (poll) clearInterval(poll)
+      if (p) {
+        p.unsubscribe(channel)
+        p.disconnect()
+      }
+    }
   }, [session])
 
   // Close the drawer on Escape and on browser back/forward. Link clicks close
@@ -177,8 +212,11 @@ export function Navigation() {
                   >
                     <Bell className="h-5 w-5" />
                     {unread > 0 && (
-                      <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-semibold text-destructive-foreground">
-                        {unread > 9 ? "9+" : unread}
+                      <span
+                        className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-semibold text-destructive-foreground"
+                        aria-live="polite"
+                      >
+                        {unread > 99 ? "99+" : unread}
                       </span>
                     )}
                   </Link>

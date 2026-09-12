@@ -15,6 +15,7 @@ import { awardReputation, REP_POINTS } from "@/lib/reputation"
 import { getBooleanSetting, SITE_SETTINGS } from "@/lib/settings"
 import { checkMaintenance } from "@/lib/maintenance"
 import { announceNewMember } from "@/lib/terpbot"
+import { notify } from "@/lib/notify"
 
 export async function POST(request: Request) {
   const ip = getClientIp(request)
@@ -202,15 +203,14 @@ export async function POST(request: Request) {
         REP_POINTS.REFERRAL,
         `Referred new member ${username}`
       ).catch(() => {})
-      await prisma.notification.create({
-        data: {
-          userId: referrerUserId,
-          type: "REFERRAL",
-          title: "New referral",
-          content: `${username} joined using your referral link`,
-          link: "/profile",
-        },
-      }).catch(() => {})
+      await notify({
+        userId: referrerUserId,
+        type: "REFERRAL",
+        title: "New referral",
+        content: `@${username} joined using your referral link`,
+        link: `/u/${username}`,
+        actorId: user.id,
+      })
     }
 
     return NextResponse.json(

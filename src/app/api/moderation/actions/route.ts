@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma"
 import { unauthorized, isAdmin, forbidden, getClientIp, logSecurityEvent } from "@/lib/security"
 import { requireModerator } from "@/lib/require-staff"
 import { rateLimit } from "@/lib/rate-limit"
+import { emitNotificationPush } from "@/lib/notify"
 
 const CONTENT_TYPES = new Set(["THREAD", "POST", "CHAT_MESSAGE", "DIARY", "SETUP"])
 const ACTION_TYPES = new Set([
@@ -57,6 +58,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Cannot take action on yourself" }, { status: 400 })
     }
 
+    let createdNotification: Awaited<ReturnType<typeof prisma.notification.create>> | null = null
     await prisma.$transaction(async (tx) => {
       const target = await tx.user.findUnique({
         where: { id: targetUserId },
@@ -82,10 +84,14 @@ export async function POST(request: Request) {
           throw new Error("INVALID_REQUEST")
         }
         let ok = false
+        let deletedLink: string | null = null
         switch (targetType) {
-          case "THREAD":
+          case "THREAD": {
+            const t = await tx.thread.findUnique({ where: { id: targetId }, select: { slug: true } })
             ok = !!(await tx.thread.updateMany({ where: { id: targetId, authorId: targetUserId }, data: { deleted: true } })).count
+            if (ok && t) deletedLink = `/forum/thread/${t.slug}`
             break
+          }
           case "POST":
             ok = !!(await tx.post.updateMany({ where: { id: targetId, authorId: targetUserId }, data: { deleted: true } })).count
             break
@@ -94,13 +100,19 @@ export async function POST(request: Request) {
             break
           case "DIARY":
             ok = !!(await tx.growDiary.updateMany({ where: { id: targetId, authorId: targetUserId }, data: { deleted: true } })).count
+            if (ok) deletedLink = `/diaries/${targetId}`
             break
           case "SETUP":
             ok = !!(await tx.growSetup.updateMany({ where: { id: targetId, authorId: targetUserId }, data: { deleted: true } })).count
+            if (ok) deletedLink = `/setups/${targetId}`
             break
         }
         if (!ok) {
           throw new Error("CONTENT_NOT_FOUND")
+        }
+        // Drop notifications that would now point at deleted content.
+        if (deletedLink) {
+          await tx.notification.deleteMany({ where: { link: deletedLink } })
         }
       }
 
@@ -159,15 +171,20 @@ export async function POST(request: Request) {
         },
       })
 
-      await tx.notification.create({
+      // Intentionally anonymous — moderation notifications never name staff.
+      createdNotification = await tx.notification.create({
         data: {
           type: "MODERATOR_ANNOUNCEMENT",
           userId: targetUserId,
           title: `Moderation action: ${actionType.replace(/_/g, " ").toLowerCase()}`,
           content: `A moderator took action on your account or content. Reason: ${reason.trim()}`,
         },
-      }).catch(() => {})
+      }).catch(() => null)
     })
+
+    if (createdNotification) {
+      emitNotificationPush(targetUserId, createdNotification)
+    }
 
     await logSecurityEvent("SUSPICIOUS_ACTIVITY", {
       userId: staff.id,

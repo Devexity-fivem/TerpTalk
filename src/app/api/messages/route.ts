@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma"
 import { unauthorized, publicUserSelect, getClientIp, logSecurityEvent, isSessionValid, forbidden, blockExistsBetween, hashIp } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
 import { checkMaintenance } from "@/lib/maintenance"
+import { notify } from "@/lib/notify"
 
 function senderDto(user: { id?: string; name?: string | null; image?: string | null; profile?: { username?: string | null } | null }) {
   return {
@@ -192,17 +193,16 @@ export async function POST(request: NextRequest) {
       include: { sender: { select: publicUserSelect } },
     })
 
-    if (target.profile?.notifyOnMessage !== false) {
-      await prisma.notification.create({
-        data: {
-          userId: to,
-          type: "DIRECT_MESSAGE",
-          title: "New message",
-          content: `${((token as { name?: string | null }).name) ?? "Someone"} sent you a message`,
-          link: `/messages?with=${userId}`,
-        },
-      }).catch(() => {})
-    }
+    await notify({
+      userId: to,
+      type: "DIRECT_MESSAGE",
+      title: "New message",
+      content: `@${((token as { name?: string | null }).name) ?? "Someone"} sent you a message`,
+      link: `/messages?with=${userId}`,
+      actorId: userId,
+      groupKey: `DM:${userId}:${to}`,
+      dedupeMs: 10 * 60 * 1000,
+    })
 
     return NextResponse.json({
       message: {

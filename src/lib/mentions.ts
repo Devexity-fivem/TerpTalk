@@ -1,14 +1,17 @@
 import { prisma } from "@/lib/prisma"
+import { notifyMany } from "@/lib/notify"
 
 // Parse @username mentions from text and notify each mentioned user.
 // Usernames may contain letters, numbers, underscore, hyphen.
 // Skips the actor and dedupes. Fire-and-forget safe — catches its own errors.
+// Recipient pref/block/ban filtering happens inside notifyMany.
 export async function notifyMentions(
   text: string,
   actorId: string,
   actorName: string,
   link: string,
-  context: string
+  context: string,
+  excludeUserIds: string[] = []
 ) {
   try {
     const handles = [...text.matchAll(/@([A-Za-z0-9_-]{2,32})\b/g)]
@@ -18,21 +21,23 @@ export async function notifyMentions(
     const unique = [...new Set(handles)].slice(0, 10)
     const users = await prisma.profile.findMany({
       where: { username: { in: unique, mode: "insensitive" } },
-      select: { userId: true, username: true, notifyOnMention: true },
+      select: { userId: true, username: true },
     })
 
-    const targets = users.filter((u) => u.userId !== actorId && u.notifyOnMention !== false)
+    const excluded = new Set([actorId, ...excludeUserIds])
+    const targets = users.filter((u) => !excluded.has(u.userId))
     if (targets.length === 0) return
 
-    await prisma.notification.createMany({
-      data: targets.map((u) => ({
+    await notifyMany(
+      targets.map((u) => ({
         userId: u.userId,
-        type: "MENTION",
+        type: "MENTION" as const,
         title: "You were mentioned",
-        content: `${actorName} mentioned you in ${context}`,
+        content: `@${actorName} mentioned you in ${context}`,
         link,
-      })),
-    })
+        actorId,
+      }))
+    )
   } catch (e) {
     console.error("notifyMentions error:", e)
   }

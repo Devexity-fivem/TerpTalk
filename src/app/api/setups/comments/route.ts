@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma"
 import { unauthorized, publicUserSelect, getClientIp, logSecurityEvent, isBanned, forbidden, blockExistsBetween } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
 import { notifyMentions } from "@/lib/mentions"
+import { notify } from "@/lib/notify"
 import { checkMaintenance } from "@/lib/maintenance"
 
 // POST — comment on a setup: { setupId, content }
@@ -55,20 +56,20 @@ export async function POST(request: Request) {
       include: { author: { select: publicUserSelect } },
     })
 
-    if (setup.authorId !== session.user.id && setup.author.profile?.notifyOnComment !== false) {
-      await prisma.notification.create({
-        data: {
-          userId: setup.authorId,
-          type: "COMMENT",
-          title: "New comment on your setup",
-          content: `Someone commented on "${setup.title.slice(0, 60)}"`,
-          link: `/setups/${setupId}`,
-        },
-      }).catch(() => {})
+    if (setup.authorId !== session.user.id) {
+      await notify({
+        userId: setup.authorId,
+        type: "COMMENT",
+        title: "New comment on your setup",
+        content: `@${session.user.name || "Someone"} commented on "${setup.title.slice(0, 60)}"`,
+        link: `/setups/${setupId}`,
+        actorId: session.user.id,
+      })
     }
     await notifyMentions(
       content, session.user.id, session.user.name || "Someone",
-      `/setups/${setupId}`, `a comment on "${setup.title.slice(0, 50)}"`
+      `/setups/${setupId}`, `a comment on "${setup.title.slice(0, 50)}"`,
+      [setup.authorId]
     )
 
     return NextResponse.json({ comment }, { status: 201 })

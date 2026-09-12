@@ -6,6 +6,7 @@ import { isBanned, isModerator, forbidden, unauthorized, getClientIp, logSecurit
 import { rateLimit } from "@/lib/rate-limit"
 import { awardReputation } from "@/lib/reputation"
 import { checkMaintenance } from "@/lib/maintenance"
+import { notify } from "@/lib/notify"
 
 export async function POST(request: Request) {
   try {
@@ -47,6 +48,7 @@ export async function POST(request: Request) {
       where: { id: threadId },
       select: {
         id: true,
+        slug: true,
         authorId: true,
         acceptedAnswerId: true,
         title: true,
@@ -98,15 +100,14 @@ export async function POST(request: Request) {
         `Accepted answer in "${thread.title.slice(0, 50)}"`,
       ).catch(() => {})
 
-      await prisma.notification.create({
-        data: {
-          userId: post.authorId,
-          type: "ACCEPTED_ANSWER",
-          title: "Your answer was accepted",
-          content: `Your reply in "${thread.title.slice(0, 60)}" was marked as the accepted answer.`,
-          link: `/forum/thread/${threadId}`,
-        },
-      }).catch(() => {})
+      await notify({
+        userId: post.authorId,
+        type: "ACCEPTED_ANSWER",
+        title: "Your answer was accepted",
+        content: `@${session.user.name || "Someone"} marked your reply in "${thread.title.slice(0, 60)}" as the accepted answer.`,
+        link: `/forum/thread/${thread.slug}`,
+        actorId: session.user.id,
+      })
     }
 
     return NextResponse.json({ success: true, post: { id: postId } })

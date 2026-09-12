@@ -6,8 +6,19 @@ import { unauthorized, forbidden, getClientIp, logSecurityEvent, isBanned } from
 import { rateLimit } from "@/lib/rate-limit"
 import { awardReputation, REP_POINTS } from "@/lib/reputation"
 import { checkMaintenance } from "@/lib/maintenance"
+import { notify } from "@/lib/notify"
 
 const VALID_REACTION_TYPES = new Set(["LIKE", "LOVE", "LAUGH", "THINKING", "FIRE", "THUMBS_UP", "THUMBS_DOWN"])
+
+const REACTION_EMOJI: Record<string, string> = {
+  LIKE: "❤️",
+  LOVE: "😍",
+  LAUGH: "😂",
+  THINKING: "🤔",
+  FIRE: "🔥",
+  THUMBS_UP: "👍",
+  THUMBS_DOWN: "👎",
+}
 
 export async function POST(request: Request) {
   try {
@@ -53,24 +64,33 @@ export async function POST(request: Request) {
 
     // Verify the target exists and is not deleted
     let targetAuthorId: string | null = null
+    let targetLink: string | null = null
+    let targetTitle: string | null = null
     if (hasPostId) {
       const post = await prisma.post.findUnique({
         where: { id: postId, deleted: false },
-        select: { authorId: true, thread: { select: { deleted: true, category: { select: { hidden: true } } } } },
+        select: {
+          authorId: true,
+          thread: { select: { slug: true, title: true, deleted: true, category: { select: { hidden: true } } } },
+        },
       })
       if (!post || post.thread?.deleted || post.thread?.category?.hidden) {
         return NextResponse.json({ error: "Post not found" }, { status: 404 })
       }
       targetAuthorId = post.authorId
+      targetLink = post.thread ? `/forum/thread/${post.thread.slug}` : null
+      targetTitle = post.thread?.title ?? null
     } else if (hasDiaryId) {
       const diary = await prisma.growDiary.findUnique({
         where: { id: diaryId, deleted: false },
-        select: { authorId: true },
+        select: { authorId: true, title: true },
       })
       if (!diary) {
         return NextResponse.json({ error: "Diary not found" }, { status: 404 })
       }
       targetAuthorId = diary.authorId
+      targetLink = `/diaries/${diaryId}`
+      targetTitle = diary.title
     }
 
     // Check if reaction already exists
@@ -114,6 +134,25 @@ export async function POST(request: Request) {
         REP_POINTS.LIKE_RECEIVED,
         "Someone liked your content"
       ).catch(() => {})
+    }
+
+    // Notify the content author — once per actor per target per day so
+    // reaction toggling can't flood the inbox. notify() also enforces
+    // the recipient's notifyOnReaction pref, bans, and blocks.
+    if (targetAuthorId && targetAuthorId !== session.user.id) {
+      const emoji = REACTION_EMOJI[type] ?? "👍"
+      const targetKind = hasPostId ? "post" : "grow diary"
+      const context = targetTitle ? ` on "${targetTitle.slice(0, 60)}"` : ""
+      await notify({
+        userId: targetAuthorId,
+        type: "REACTION",
+        title: "New reaction",
+        content: `${session.user.name ?? "Someone"} reacted ${emoji} to your ${targetKind}${context}`,
+        link: targetLink,
+        actorId: session.user.id,
+        groupKey: `REACTION:${hasPostId ? `post:${postId}` : `diary:${diaryId}`}`,
+        dedupeMs: 24 * 60 * 60 * 1000,
+      })
     }
 
     return NextResponse.json({ reaction, action: "added" }, { status: 201 })

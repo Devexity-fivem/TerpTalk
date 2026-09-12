@@ -19,6 +19,7 @@ import { rateLimit } from "@/lib/rate-limit"
 import { checkMaintenance } from "@/lib/maintenance"
 import { getPusher } from "@/lib/pusher"
 import { postBotMessage, randomGrowTip } from "@/lib/terpbot"
+import { emitNotificationPush } from "@/lib/notify"
 import { currentWeekKey } from "@/lib/week"
 
 type ChatMessageWithAuthor = {
@@ -129,6 +130,7 @@ export async function POST(request: NextRequest) {
       reason: string,
       durationDays?: number
     ) => {
+      let createdNotification: Awaited<ReturnType<typeof prisma.notification.create>> | null = null
       await prisma.$transaction(async (tx) => {
         const target = await tx.user.findUnique({
           where: { id: targetUserId },
@@ -165,15 +167,20 @@ export async function POST(request: NextRequest) {
           },
         })
 
-        await tx.notification.create({
+        // Intentionally anonymous — never name the acting moderator.
+        createdNotification = await tx.notification.create({
           data: {
             type: "MODERATOR_ANNOUNCEMENT",
             userId: targetUserId,
             title: `Moderation action: ${actionType.replace(/_/g, " ").toLowerCase()}`,
             content: `A moderator took action on your account or content. Reason: ${reason.trim().slice(0, 200)}`,
           },
-        }).catch(() => {})
+        }).catch(() => null)
       })
+
+      if (createdNotification) {
+        emitNotificationPush(targetUserId, createdNotification)
+      }
     }
 
     const text = content.trim().slice(1)

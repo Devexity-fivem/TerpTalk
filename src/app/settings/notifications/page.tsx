@@ -11,6 +11,8 @@ const TOGGLES = [
   { key: "notifyOnCategoryFollow", label: "Category activity", desc: "New threads in categories I follow." },
   { key: "notifyOnMessage", label: "Direct messages", desc: "When I receive a private message." },
   { key: "notifyOnComment", label: "Comments on my setups", desc: "When someone comments on my grow setup." },
+  { key: "notifyOnFollow", label: "New followers", desc: "When someone follows my profile." },
+  { key: "notifyOnReaction", label: "Reactions", desc: "When someone reacts to my posts or grow diaries." },
 ] as const
 
 type Prefs = Record<(typeof TOGGLES)[number]["key"], boolean> & { emailDigestFrequency: string | null }

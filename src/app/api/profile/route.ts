@@ -182,6 +182,8 @@ export async function PATCH(request: Request) {
       notifyOnCategoryFollow,
       notifyOnMessage,
       notifyOnComment,
+      notifyOnFollow,
+      notifyOnReaction,
       emailDigestFrequency,
     } = body as Record<string, unknown>
 
@@ -286,6 +288,8 @@ export async function PATCH(request: Request) {
     if (typeof notifyOnCategoryFollow === "boolean") updateData.notifyOnCategoryFollow = notifyOnCategoryFollow
     if (typeof notifyOnMessage === "boolean") updateData.notifyOnMessage = notifyOnMessage
     if (typeof notifyOnComment === "boolean") updateData.notifyOnComment = notifyOnComment
+    if (typeof notifyOnFollow === "boolean") updateData.notifyOnFollow = notifyOnFollow
+    if (typeof notifyOnReaction === "boolean") updateData.notifyOnReaction = notifyOnReaction
 
     setIfDefined("emailDigestFrequency", cleanDigest)
 
@@ -318,6 +322,8 @@ export async function PATCH(request: Request) {
           notifyOnCategoryFollow: true,
           notifyOnMessage: true,
           notifyOnComment: true,
+          notifyOnFollow: true,
+          notifyOnReaction: true,
           emailDigestFrequency: true,
         },
       }),

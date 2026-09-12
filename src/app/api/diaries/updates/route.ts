@@ -8,6 +8,7 @@ import { awardReputation, REP_POINTS } from "@/lib/reputation"
 import { storeImages, deleteImagesIfUnreferenced } from "@/lib/blob"
 import { checkMaintenance } from "@/lib/maintenance"
 import { getBadgeByName } from "@/lib/badge-registry"
+import { notify, notifyMany } from "@/lib/notify"
 
 export async function POST(request: Request) {
   let storedImages: string[] = []
@@ -198,43 +199,34 @@ export async function POST(request: Request) {
       })
       if (!has) {
         await prisma.userBadge.create({ data: { userId: session.user.id, badgeId: badge.id } })
-        await prisma.notification.create({
-          data: {
-            userId: session.user.id,
-            type: "BADGE",
-            title: "Badge earned: 🔥 Dedicated Grower",
-            content: "7 days of updates in a row — impressive consistency!",
-            link: "/profile",
-          },
-        }).catch(() => {})
+        await notify({
+          userId: session.user.id,
+          type: "BADGE",
+          title: "Badge earned: 🔥 Dedicated Grower",
+          content: "7 days of updates in a row — impressive consistency!",
+          link: "/profile",
+        })
       }
     }
 
-    // Notify diary followers (not the author)
+    // Notify diary followers (not the author) — notifyMany filters
+    // prefs, banned recipients, and blocks in bulk.
     const followers = await prisma.diaryFollow.findMany({
       where: { diaryId, userId: { not: session.user.id } },
       select: { userId: true },
     })
     if (followers.length > 0) {
-      const followerIds = followers.map((f) => f.userId)
-      const profiles = await prisma.profile.findMany({
-        where: { userId: { in: followerIds } },
-        select: { userId: true, notifyOnComment: true },
-      })
-      const allowSet = new Set(profiles.filter((p) => p.notifyOnComment !== false).map((p) => p.userId))
-      const allowed = followers.filter((f) => allowSet.has(f.userId))
-      if (allowed.length > 0) {
-        const authorName = session.user.name || "Someone"
-        await prisma.notification.createMany({
-          data: allowed.map((f) => ({
-            userId: f.userId,
-            type: "DIARY_UPDATE",
-            title: "Diary updated",
-            content: `${authorName} added "${update.title.slice(0, 60)}" to "${diary.title.slice(0, 50)}"`,
-            link: `/diaries/${diaryId}`,
-          })),
-        }).catch(() => {})
-      }
+      const authorName = session.user.name || "Someone"
+      await notifyMany(
+        followers.map((f) => ({
+          userId: f.userId,
+          type: "DIARY_UPDATE" as const,
+          title: "Diary updated",
+          content: `@${authorName} added "${update.title.slice(0, 60)}" to "${diary.title.slice(0, 50)}"`,
+          link: `/diaries/${diaryId}`,
+          actorId: session.user.id,
+        }))
+      )
     }
 
     return NextResponse.json({ update }, { status: 201 })

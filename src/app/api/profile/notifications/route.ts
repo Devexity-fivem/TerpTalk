@@ -26,6 +26,8 @@ export async function GET() {
       notifyOnCategoryFollow: true,
       notifyOnMessage: true,
       notifyOnComment: true,
+      notifyOnFollow: true,
+      notifyOnReaction: true,
       emailDigestFrequency: true,
     },
   })
@@ -51,6 +53,8 @@ export async function PATCH(request: Request) {
     notifyOnCategoryFollow?: boolean
     notifyOnMessage?: boolean
     notifyOnComment?: boolean
+    notifyOnFollow?: boolean
+    notifyOnReaction?: boolean
     emailDigestFrequency?: string | null
   } = {}
 
@@ -59,6 +63,8 @@ export async function PATCH(request: Request) {
   if ("notifyOnCategoryFollow" in body) data.notifyOnCategoryFollow = !!body.notifyOnCategoryFollow
   if ("notifyOnMessage" in body) data.notifyOnMessage = !!body.notifyOnMessage
   if ("notifyOnComment" in body) data.notifyOnComment = !!body.notifyOnComment
+  if ("notifyOnFollow" in body) data.notifyOnFollow = !!body.notifyOnFollow
+  if ("notifyOnReaction" in body) data.notifyOnReaction = !!body.notifyOnReaction
   if ("emailDigestFrequency" in body) {
     const raw = body.emailDigestFrequency
     if (raw === null || raw === undefined || raw === "") {

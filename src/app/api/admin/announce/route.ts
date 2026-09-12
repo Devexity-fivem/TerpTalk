@@ -3,6 +3,7 @@ import { requireAdmin } from "@/lib/require-staff"
 import { prisma } from "@/lib/prisma"
 import { forbidden, getClientIp, logSecurityEvent } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
+import { getPusher } from "@/lib/pusher"
 
 // POST — broadcast an announcement to all users (ADMINISTRATOR only)
 // { title, content, link? }
@@ -69,6 +70,24 @@ export async function POST(request: Request) {
         },
       })
     })
+
+    // Realtime fan-out — Pusher accepts up to 100 channels per call.
+    const pusher = getPusher()
+    if (pusher) {
+      const dto = {
+        type: "MODERATOR_ANNOUNCEMENT",
+        title: title.trim(),
+        content: content.trim(),
+        link: link?.trim() || null,
+        read: false,
+      }
+      const channels = users.map((u) => `private-user-${u.id}`)
+      const pushes: Promise<unknown>[] = []
+      for (let i = 0; i < channels.length; i += 100) {
+        pushes.push(pusher.trigger(channels.slice(i, i + 100), "new-notification", dto))
+      }
+      Promise.allSettled(pushes).catch(() => {})
+    }
 
     await logSecurityEvent("SUSPICIOUS_ACTIVITY", {
       userId: user.id,

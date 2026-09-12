@@ -5,8 +5,11 @@ import { sessionCookieName } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { unauthorized, forbidden, isSessionValid } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
+import { NOTIFICATION_ACTOR_SELECT } from "@/lib/notify"
 
-// GET — my notifications (most recent 50)
+const PAGE_SIZE = 50
+
+// GET — my notifications (most recent 50, ?cursor=<id> for older pages)
 export async function GET(request: NextRequest) {
   try {
     const token = await getToken({ req: request, secret: process.env.NEXTAUTH_SECRET, cookieName: sessionCookieName })
@@ -14,11 +17,14 @@ export async function GET(request: NextRequest) {
     if (!userId) return unauthorized()
     if (!(await isSessionValid(userId, token?.sessionVersion as number | undefined))) return forbidden()
 
+    const cursor = request.nextUrl.searchParams.get("cursor")
+
     const [notifications, unreadCount] = await Promise.all([
       prisma.notification.findMany({
         where: { userId },
-        orderBy: { createdAt: "desc" },
-        take: 50,
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+        take: PAGE_SIZE,
+        ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
         select: {
           id: true,
           type: true,
@@ -27,6 +33,7 @@ export async function GET(request: NextRequest) {
           link: true,
           read: true,
           createdAt: true,
+          actor: { select: NOTIFICATION_ACTOR_SELECT },
         },
       }),
       prisma.notification.count({
@@ -34,7 +41,25 @@ export async function GET(request: NextRequest) {
       }),
     ])
 
-    return NextResponse.json({ notifications, unreadCount })
+    const shaped = notifications.map((n) => ({
+      id: n.id,
+      type: n.type,
+      title: n.title,
+      content: n.content,
+      link: n.link,
+      read: n.read,
+      createdAt: n.createdAt,
+      actor: n.actor
+        ? {
+            name: n.actor.name ?? n.actor.profile?.username ?? "Someone",
+            username: n.actor.profile?.username ?? null,
+            image: n.actor.image ?? n.actor.profile?.avatarUrl ?? null,
+          }
+        : null,
+    }))
+    const nextCursor = notifications.length === PAGE_SIZE ? notifications[notifications.length - 1].id : null
+
+    return NextResponse.json({ notifications: shaped, unreadCount, nextCursor })
   } catch (error) {
     console.error("Notifications fetch error:", error)
     return NextResponse.json({ error: "Failed" }, { status: 500 })

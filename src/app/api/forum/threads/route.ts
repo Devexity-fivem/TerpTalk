@@ -8,6 +8,7 @@ import { requireModerator } from "@/lib/require-staff"
 import { rateLimit } from "@/lib/rate-limit"
 import { awardReputation, REP_POINTS, REP_TIERS } from "@/lib/reputation"
 import { notifyMentions } from "@/lib/mentions"
+import { notifyMany, invalidateNotificationsForLink } from "@/lib/notify"
 import { storeImages, deleteImagesIfUnreferenced } from "@/lib/blob"
 import { getBooleanSetting, SITE_SETTINGS } from "@/lib/settings"
 import { checkMaintenance } from "@/lib/maintenance"
@@ -247,28 +248,23 @@ export async function POST(request: Request) {
     )
 
     // Notify category followers (one notification per follower)
+    // notifyMany filters prefs, banned recipients, and blocks in bulk.
     const followers = await prisma.categoryFollow.findMany({
       where: { categoryId: category.id },
-      include: {
-        user: {
-          include: {
-            profile: { select: { notifyOnCategoryFollow: true } },
-          },
-        },
-      },
+      select: { userId: true },
     })
-    const followerNotifications = followers
-      .filter((f) => f.user.id !== session.user.id && f.user.profile?.notifyOnCategoryFollow !== false)
-      .map((f) => ({
-        userId: f.user.id,
-        type: "THREAD_ACTIVITY",
-        title: `New thread in ${category.name}`,
-        content: `A new discussion "${title.slice(0, 60)}" was posted in a category you follow.`,
-        link: `/forum/thread/${thread.slug}`,
-      }))
-    if (followerNotifications.length > 0) {
-      await prisma.notification.createMany({ data: followerNotifications }).catch(() => {})
-    }
+    await notifyMany(
+      followers
+        .filter((f) => f.userId !== session.user.id)
+        .map((f) => ({
+          userId: f.userId,
+          type: "THREAD_ACTIVITY" as const,
+          title: `New thread in ${category.name}`,
+          content: `@${session.user.name || "Someone"} started "${title.slice(0, 60)}" in a category you follow.`,
+          link: `/forum/thread/${thread.slug}`,
+          actorId: session.user.id,
+        }))
+    )
 
     revalidateTag("forum", { expire: 0 })
 
@@ -301,7 +297,7 @@ export async function DELETE(request: Request) {
 
     const thread = await prisma.thread.findUnique({
       where: { id },
-      select: { id: true, authorId: true, deleted: true, author: { select: { id: true, role: true } } },
+      select: { id: true, slug: true, authorId: true, deleted: true, author: { select: { id: true, role: true } } },
     })
     if (!thread || thread.deleted) {
       return NextResponse.json({ error: "Thread not found" }, { status: 404 })
@@ -316,6 +312,7 @@ export async function DELETE(request: Request) {
     }
 
     await prisma.thread.update({ where: { id }, data: { deleted: true } })
+    await invalidateNotificationsForLink(`/forum/thread/${thread.slug}`)
 
     revalidateTag("forum", { expire: 0 })
 

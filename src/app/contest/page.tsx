@@ -6,6 +6,7 @@ import { Trophy } from "lucide-react"
 import Link from "next/link"
 import ContestBoard from "@/components/contest-board"
 import { getBadgeByName } from "@/lib/badge-registry"
+import { notify } from "@/lib/notify"
 
 import { buildMetadata } from "@/lib/seo"
 
@@ -44,15 +45,13 @@ const getLastWeekWinner = unstable_cache(
     })
     if (!has) {
       await prisma.userBadge.create({ data: { userId: top.userId, badgeId: badge.id } }).catch(() => {})
-      await prisma.notification.create({
-        data: {
-          userId: top.userId,
-          type: "BADGE",
-          title: "🏆 You won Budshot of the Week!",
-          content: "Your photo took the top spot. Check your new badge.",
-          link: "/contest",
-        },
-      }).catch(() => {})
+      await notify({
+        userId: top.userId,
+        type: "BADGE",
+        title: "🏆 You won Budshot of the Week!",
+        content: "Your photo took the top spot. Check your new badge.",
+        link: "/contest",
+      })
     }
     return top
   },

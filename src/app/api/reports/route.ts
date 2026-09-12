@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { rateLimit } from "@/lib/rate-limit"
 import { unauthorized, forbidden, getClientIp, logSecurityEvent, isBanned } from "@/lib/security"
+import { notifyMany } from "@/lib/notify"
 
 const REPORT_TYPES = new Set([
   "THREAD",
@@ -139,15 +140,16 @@ export async function POST(request: Request) {
       select: { id: true },
     })
     if (moderators.length > 0) {
-      await prisma.notification.createMany({
-        data: moderators.map((m) => ({
-          type: "MODERATOR_ANNOUNCEMENT",
+      // Reporter intentionally unnamed — reports are confidential.
+      await notifyMany(
+        moderators.map((m) => ({
           userId: m.id,
+          type: "MODERATOR_ANNOUNCEMENT" as const,
           title: "New report submitted",
           content: `A ${type.toLowerCase()} was reported for ${reason.toLowerCase().replace(/_/g, " ")}.`,
           link: "/moderation",
-        })),
-      })
+        }))
+      )
     }
 
     return NextResponse.json(

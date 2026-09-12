@@ -29,6 +29,15 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Invalid request" }, { status: 400 })
     }
 
+    // Per-user private channels for realtime notifications — only the
+    // channel's own user may subscribe.
+    const userMatch = channel.match(/^private-user-([A-Za-z0-9_-]{1,64})$/)
+    if (userMatch) {
+      if (userMatch[1] !== session.user.id) return forbidden()
+      const auth = pusher.authorizeChannel(socketId, channel)
+      return NextResponse.json(auth)
+    }
+
     // Only allow our private chat channels
     const match = channel.match(/^private-chat-([A-Za-z0-9_-]{1,64})$/)
     if (!match) return forbidden()
