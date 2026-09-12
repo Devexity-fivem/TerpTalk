@@ -111,7 +111,9 @@ export default function RecoveryPhraseCard() {
               placeholder="Current password"
             />
             <p className="text-xs text-muted-foreground mt-1">
-              Generating a new phrase signs out your other sessions.
+              {hasPhrase
+                ? "Replacing your phrase signs out all sessions, including this one."
+                : "You can regenerate this phrase later from your profile."}
             </p>
           </div>
           <div className="flex items-center gap-3">

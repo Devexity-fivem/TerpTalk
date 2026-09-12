@@ -1,10 +1,10 @@
 "use client"
 
-import { useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
 import { User, Camera, Loader2, Check } from "lucide-react"
-import { safeCallbackUrl } from "@/lib/callback-url"
+import { safeCallbackUrl, signInHref } from "@/lib/callback-url"
 
 // Resize an image file to a 128x128 data URI for avatar upload
 function resizeImage(file: File, size = 128): Promise<string> {
@@ -28,19 +28,41 @@ function resizeImage(file: File, size = 128): Promise<string> {
 }
 
 export default function CompleteProfilePage() {
-  const { update } = useSession()
+  const { data: session, status, update } = useSession()
   const router = useRouter()
   const [loading, setLoading] = useState(false)
   const [success, setSuccess] = useState(false)
+  const [error, setError] = useState("")
   const [formData, setFormData] = useState({
     username: "",
     bio: "",
     location: "",
-    website: "",
   })
   const [avatar, setAvatar] = useState("")
   const [avatarError, setAvatarError] = useState("")
   const avatarInputRef = useRef<HTMLInputElement>(null)
+
+  // Auth guard — the API also enforces this, but render nothing meaningful
+  // without a session instead of showing a form that can only fail.
+  useEffect(() => {
+    if (status === "unauthenticated") {
+      router.push(signInHref("/profile/complete"))
+    }
+  }, [status, router])
+
+  // Prefill the username the account was registered with.
+  const [usernamePrefilled, setUsernamePrefilled] = useState(false)
+  if (!usernamePrefilled && session?.user?.username) {
+    setFormData((prev) => ({ ...prev, username: session.user.username! }))
+    setUsernamePrefilled(true)
+  }
+
+  // Users who already finished onboarding shouldn't be dropped back here.
+  useEffect(() => {
+    if (session?.user?.onboardingCompletedAt) {
+      router.push(safeCallbackUrl(new URLSearchParams(window.location.search).get("callbackUrl")) ?? "/")
+    }
+  }, [session?.user?.onboardingCompletedAt, router])
 
   const handleAvatar = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -64,6 +86,7 @@ export default function CompleteProfilePage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    setError("")
     setLoading(true)
 
     try {
@@ -74,7 +97,9 @@ export default function CompleteProfilePage() {
       })
 
       if (!response.ok) {
-        throw new Error("Failed to update profile")
+        const data = await response.json().catch(() => ({}))
+        setError(data.error || "Failed to update profile")
+        return
       }
 
       setSuccess(true)
@@ -85,11 +110,20 @@ export default function CompleteProfilePage() {
       setTimeout(() => {
         router.push(callback ?? "/")
       }, 1500)
-    } catch (error) {
-      console.error("Profile update error:", error)
+    } catch (err) {
+      console.error("Profile update error:", err)
+      setError("Something went wrong. Please try again.")
     } finally {
       setLoading(false)
     }
+  }
+
+  if (status === "loading" || status === "unauthenticated" || session?.user?.onboardingCompletedAt) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    )
   }
 
   if (success) {
@@ -198,19 +232,11 @@ export default function CompleteProfilePage() {
               />
             </div>
 
-            <div>
-              <label htmlFor="website" className="block text-sm font-medium mb-2">
-                Website
-              </label>
-              <input
-                id="website"
-                type="url"
-                value={formData.website}
-                onChange={(e) => setFormData({ ...formData, website: e.target.value })}
-                className="w-full px-4 py-2 rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary"
-                placeholder="https://yourwebsite.com"
-              />
-            </div>
+            {error && (
+              <div role="alert" className="bg-destructive/10 text-destructive px-4 py-2 rounded-lg text-sm">
+                {error}
+              </div>
+            )}
 
             <button
               type="submit"

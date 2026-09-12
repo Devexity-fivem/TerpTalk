@@ -4,7 +4,7 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { unauthorized, getClientIp, logSecurityEvent, isBanned, forbidden, LIMITS } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
-import { newRecoveryPhrase, hashPhrase } from "@/lib/recovery"
+import { newRecoveryPhrase, hashPhrase, recoveryPhraseUpdateData } from "@/lib/recovery"
 import bcrypt from "bcryptjs"
 
 // GET — does the current user have a recovery phrase set?
@@ -46,7 +46,7 @@ export async function POST(request: Request) {
 
     const user = await prisma.user.findUnique({
       where: { id: session.user.id },
-      select: { password: true },
+      select: { password: true, recoveryPhraseHash: true },
     })
     if (!user?.password || !(await bcrypt.compare(password, user.password))) {
       await logSecurityEvent("AUTHORIZATION_FAILURE", { userId: session.user.id, ip: getClientIp(request), metadata: { endpoint: "profile/recovery" } })
@@ -56,9 +56,12 @@ export async function POST(request: Request) {
     const phrase = newRecoveryPhrase()
     const hash = await hashPhrase(phrase)
 
+    // First-time generation keeps the current session alive — there is no old
+    // phrase to revoke. Replacing an existing phrase still bumps
+    // sessionVersion to invalidate all sessions.
     await prisma.user.update({
       where: { id: session.user.id },
-      data: { recoveryPhraseHash: hash, sessionVersion: { increment: 1 } },
+      data: recoveryPhraseUpdateData(hash, !!user.recoveryPhraseHash),
     })
 
     await logSecurityEvent("RECOVERY_PHRASE_GENERATED", {

@@ -6,6 +6,8 @@ import sharp from "sharp"
 import { isTrustedForLinks, containsExternalLink, enforceLinkTrust } from "@/lib/security"
 import { safeCallbackUrl, signInHref } from "@/lib/callback-url"
 import { ADMIN_ONLY_MOD_ACTIONS } from "@/lib/require-staff"
+import { recoveryPhraseUpdateData, newRecoveryPhrase, hashPhrase, verifyPhrase } from "@/lib/recovery"
+import { notifyMany } from "@/lib/notify"
 
 const TEST_USERNAME = `__test_security_${Date.now()}`
 const TEST_NAME = `__test_security_name_${Date.now()}`
@@ -155,6 +157,11 @@ async function run() {
     assert.equal(safeCallbackUrl("javascript:alert(1)"), null, "javascript: URL must be rejected")
     assert.equal(safeCallbackUrl("/\\evil.example"), null, "backslash trick must be rejected")
     assert.equal(safeCallbackUrl("/auth/signin"), null, "auth paths must be rejected")
+    assert.equal(safeCallbackUrl("/profile/complete"), null, "onboarding route must be rejected")
+    assert.equal(safeCallbackUrl("/profile/complete?x=1"), null, "onboarding route with query must be rejected")
+    assert.equal(safeCallbackUrl("/welcome"), null, "welcome route must be rejected")
+    assert.equal(safeCallbackUrl("/welcome/step2"), null, "welcome subpaths must be rejected")
+    assert.equal(safeCallbackUrl("/profile/alice"), "/profile/alice", "legit profile paths still allowed")
     assert.equal(safeCallbackUrl(null), null)
     assert.equal(safeCallbackUrl(""), null)
     assert.equal(safeCallbackUrl("not-a-path"), null, "bare strings without a leading slash must be rejected")
@@ -164,6 +171,52 @@ async function run() {
       "sign-in href should carry the callback"
     )
     assert.equal(signInHref("https://evil.example"), "/auth/signin", "unsafe callback falls back to plain sign-in")
+    assert.equal(signInHref("/profile/complete"), "/auth/signin", "onboarding callback falls back to plain sign-in")
+
+    // Onboarding state — new accounts default to null (pending); completing
+    // writes a timestamp; nothing else changes about the account.
+    const freshUser = await prisma.user.findUnique({ where: { id: userId }, select: { onboardingCompletedAt: true } })
+    assert.equal(freshUser?.onboardingCompletedAt, null, "new account should start with null onboardingCompletedAt")
+    await prisma.user.update({ where: { id: userId }, data: { onboardingCompletedAt: new Date() } })
+    const completed = await prisma.user.findUnique({ where: { id: userId }, select: { onboardingCompletedAt: true } })
+    assert.ok(completed?.onboardingCompletedAt instanceof Date, "completed onboarding should store a timestamp")
+    await prisma.user.update({ where: { id: userId }, data: { onboardingCompletedAt: null } })
+
+    // Recovery phrase — first-time generation must NOT invalidate the current
+    // session; replacing an existing phrase must keep the old behavior.
+    const phrase = newRecoveryPhrase()
+    const hash = await hashPhrase(phrase)
+    assert.equal(await verifyPhrase(phrase, hash), true, "phrase should verify against its hash")
+    const firstTime = recoveryPhraseUpdateData(hash, false)
+    assert.equal("sessionVersion" in firstTime, false, "first-time generation must not bump sessionVersion")
+    assert.equal(firstTime.recoveryPhraseHash, hash)
+    const replacing = recoveryPhraseUpdateData(hash, true)
+    assert.deepEqual(replacing.sessionVersion, { increment: 1 }, "regeneration must still bump sessionVersion")
+
+    // notifyMany — creates the right rows and honors filters; the Pusher
+    // batching change must not alter recipients or semantics.
+    const otherUser = await prisma.user.create({
+      data: { name: `__test_notify_${Date.now()}`, ageVerified: true, profile: { create: { username: `__tnotify${Date.now().toString(36)}` } } },
+    })
+    try {
+      const created = await notifyMany([
+        { userId, type: "FOLLOW", title: "t", content: "c", actorId: otherUser.id },
+        { userId: otherUser.id, type: "FOLLOW", title: "t", content: "c", actorId: userId },
+        { userId, type: "FOLLOW", title: "t", content: "c", actorId: userId }, // self-action — must be dropped
+      ])
+      assert.equal(created, 2, "notifyMany should create 2 notifications and drop the self-action")
+      const rows = await prisma.notification.findMany({ where: { userId: { in: [userId, otherUser.id] } } })
+      assert.equal(rows.length, 2, "exactly 2 notification rows should exist")
+
+      // Preference gate — disabling notifyOnFollow must still suppress.
+      await prisma.profile.update({ where: { userId: otherUser.id }, data: { notifyOnFollow: false } })
+      const suppressed = await notifyMany([
+        { userId: otherUser.id, type: "FOLLOW", title: "t", content: "c", actorId: userId },
+      ])
+      assert.equal(suppressed, 0, "notifyMany must still honor notification preferences")
+    } finally {
+      await prisma.user.delete({ where: { id: otherUser.id } }).catch(() => {})
+    }
 
     console.log("All security regression tests passed.")
   } finally {

@@ -144,12 +144,13 @@ export async function POST(request: Request) {
       throw e
     }
 
-    if (cleanAvatar !== undefined) {
-      await prisma.user.update({
-        where: { id: session.user.id },
-        data: { image: cleanAvatar },
-      })
-    }
+    await prisma.user.update({
+      where: { id: session.user.id },
+      data: {
+        onboardingCompletedAt: new Date(),
+        ...(cleanAvatar !== undefined && { image: cleanAvatar }),
+      },
+    })
 
     return NextResponse.json({ profile }, { status: 200 })
   } catch (error) {

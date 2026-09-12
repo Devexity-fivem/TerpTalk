@@ -8,8 +8,13 @@ export function safeCallbackUrl(url: string | null | undefined): string | null {
   if (!trimmed.startsWith("/") || trimmed.startsWith("//")) return null
   // No schemes, backslashes, or whitespace anywhere in the path.
   if (/[\s\\]/.test(trimmed) || trimmed.includes(":")) return null
-  // Never bounce back into the auth flow itself.
-  if (trimmed.startsWith("/auth/")) return null
+  // Never bounce back into the auth or onboarding flows themselves.
+  const path = trimmed.split("?")[0]
+  if (
+    path.startsWith("/auth/") ||
+    path === "/profile/complete" || path.startsWith("/profile/complete/") ||
+    path === "/welcome" || path.startsWith("/welcome/")
+  ) return null
   return trimmed
 }
 

@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import Link from "next/link"
-import { KeyRound, Loader2, Check } from "lucide-react"
+import { KeyRound, Loader2, Check, Copy, AlertTriangle } from "lucide-react"
 
 export default function RecoverPage() {
   const [username, setUsername] = useState("")
@@ -10,7 +10,9 @@ export default function RecoverPage() {
   const [newPassword, setNewPassword] = useState("")
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState("")
-  const [done, setDone] = useState(false)
+  const [newPhrase, setNewPhrase] = useState("")
+  const [copied, setCopied] = useState(false)
+  const [acknowledged, setAcknowledged] = useState(false)
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -24,25 +26,59 @@ export default function RecoverPage() {
       })
       const d = await res.json()
       if (res.ok) {
-        setDone(true)
+        // The API rotates the phrase and returns the new one exactly once.
+        setNewPhrase(d.phrase || "")
       } else {
         setError(d.error || "Recovery failed")
       }
     } finally { setBusy(false) }
   }
 
-  if (done) {
+  if (newPhrase) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center px-4">
-        <div className="bg-card border border-border rounded-xl p-8 max-w-md w-full text-center">
-          <Check className="w-12 h-12 text-primary mx-auto mb-4" />
-          <h1 className="text-xl font-bold mb-2">Password reset</h1>
-          <p className="text-sm text-muted-foreground mb-6">
-            Your password has been updated. You can sign in with it now.
-          </p>
-          <Link href="/auth/signin" className="inline-block bg-primary text-primary-foreground px-6 py-2.5 rounded-lg font-semibold hover:bg-primary/90">
-            Sign in
-          </Link>
+        <div className="bg-card border border-border rounded-xl p-8 max-w-md w-full">
+          <div className="text-center mb-5">
+            <Check className="w-12 h-12 text-primary mx-auto mb-4" />
+            <h1 className="text-xl font-bold mb-2">Password reset</h1>
+            <p className="text-sm text-muted-foreground">
+              Your password has been updated. Your old recovery phrase no longer works — here is your new one.
+            </p>
+          </div>
+
+          <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-4 mb-5">
+            <p className="text-xs text-amber-500 font-semibold mb-2 flex items-center gap-1">
+              <AlertTriangle className="w-3.5 h-3.5" /> Shown only once — write it down now
+            </p>
+            <div className="grid grid-cols-3 gap-2 font-mono text-sm">
+              {newPhrase.split(" ").map((w, i) => (
+                <div key={i} className="flex items-center gap-1.5">
+                  <span className="text-muted-foreground text-xs w-4">{i + 1}.</span>
+                  <span className="font-medium">{w}</span>
+                </div>
+              ))}
+            </div>
+            <button
+              onClick={() => { navigator.clipboard.writeText(newPhrase); setCopied(true); setTimeout(() => setCopied(false), 2000) }}
+              className="mt-3 flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+            >
+              {copied ? <Check className="w-3.5 h-3.5 text-primary" /> : <Copy className="w-3.5 h-3.5" />}
+              {copied ? "Copied!" : "Copy phrase"}
+            </button>
+          </div>
+
+          {acknowledged ? (
+            <Link href="/auth/signin" className="block text-center bg-primary text-primary-foreground px-6 py-2.5 rounded-lg font-semibold hover:bg-primary/90">
+              Sign in
+            </Link>
+          ) : (
+            <button
+              onClick={() => setAcknowledged(true)}
+              className="w-full bg-secondary px-6 py-2.5 rounded-lg font-semibold hover:bg-secondary/80"
+            >
+              I&apos;ve saved my new phrase
+            </button>
+          )}
         </div>
       </div>
     )

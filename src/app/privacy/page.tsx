@@ -17,7 +17,7 @@ export default function PrivacyPage() {
           </section>
           <section>
             <h2 className="text-lg font-semibold text-foreground mb-2">What we don&apos;t collect</h2>
-            <p>No email address is required. No tracking pixels, advertising trackers, or third-party analytics are embedded. We do not sell or share your data with advertisers.</p>
+            <p>No email address is required. No tracking pixels or advertising trackers are embedded, and we do not sell or share your data with advertisers. We use Vercel Analytics, a privacy-focused service that records anonymized page views and performance metrics only — it uses no cookies and collects no personal data.</p>
           </section>
           <section>
             <h2 className="text-lg font-semibold text-foreground mb-2">Cookies &amp; sessions</h2>

@@ -297,21 +297,33 @@ export async function notifyMany(inputs: NotifyInput[]): Promise<number> {
       })),
     })
 
-    // Realtime fan-out — best effort, DB is source of truth.
+    // Realtime fan-out — best effort, DB is source of truth. Pusher accepts
+    // up to 100 channels per call, so group identical payloads and batch the
+    // channels instead of issuing one trigger per recipient.
     const pusher = getPusher()
     if (pusher) {
-      const dtoBase = (i: NotifyInput) => ({
-        type: i.type,
-        title: i.title.slice(0, 200),
-        content: i.content.slice(0, 500),
-        link: i.link ?? null,
-        read: false,
-      })
-      await Promise.allSettled(
-        allowed
-          .filter((i) => i.push !== false)
-          .map((i) => pusher.trigger(`private-user-${i.userId}`, "new-notification", dtoBase(i)))
-      )
+      const byPayload = new Map<string, { dto: Record<string, unknown>; channels: string[] }>()
+      for (const i of allowed) {
+        if (i.push === false) continue
+        const dto = {
+          type: i.type,
+          title: i.title.slice(0, 200),
+          content: i.content.slice(0, 500),
+          link: i.link ?? null,
+          read: false,
+        }
+        const key = JSON.stringify(dto)
+        const group = byPayload.get(key) ?? { dto, channels: [] as string[] }
+        group.channels.push(`private-user-${i.userId}`)
+        byPayload.set(key, group)
+      }
+      const pushes: Promise<unknown>[] = []
+      for (const { dto, channels } of byPayload.values()) {
+        for (let j = 0; j < channels.length; j += 100) {
+          pushes.push(pusher.trigger(channels.slice(j, j + 100), "new-notification", dto))
+        }
+      }
+      await Promise.allSettled(pushes)
     }
 
     return result.count

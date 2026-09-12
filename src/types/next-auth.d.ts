@@ -6,6 +6,7 @@ declare module "next-auth" {
       id: string
       username?: string
       role?: string
+      onboardingCompletedAt?: string | null
     } & DefaultSession["user"]
   }
 
