@@ -285,7 +285,7 @@ export default function ProfilePage() {
                         <span className="flex items-center gap-1"><Sprout className="w-3.5 h-3.5" />{profileData.profile.growExperience}</span>
                       )}
                       {profileData.profile?.favoriteStrain && (
-                        <span className="flex items-center gap-1"><Dna className="w-3.5 h-3.5" />{profileData.profile.favoriteStrain}</span>
+                        <Link href={`/strains?q=${encodeURIComponent(profileData.profile.favoriteStrain)}`} className="flex items-center gap-1 hover:text-primary transition-colors"><Dna className="w-3.5 h-3.5" />{profileData.profile.favoriteStrain}</Link>
                       )}
                       {profileData.profile?.growSpace && (
                         <span className="flex items-center gap-1"><Leaf className="w-3.5 h-3.5" />{profileData.profile.growSpace}</span>

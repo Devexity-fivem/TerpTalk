@@ -40,6 +40,9 @@ export async function GET(request: Request) {
   const users = await prisma.user.findMany({
     where: {
       banned: false,
+      // Suspended accounts aren't discoverable while suspended (same rule
+      // as isBanned() — mention pickers shouldn't surface them either).
+      AND: [{ OR: [{ suspendedUntil: null }, { suspendedUntil: { lt: new Date() } }] }],
       OR: [
         { name: { contains: q, mode: "insensitive" } },
         { profile: { username: { contains: q, mode: "insensitive" } } },

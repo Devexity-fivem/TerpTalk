@@ -145,7 +145,11 @@ export default async function YieldLeaderboardPage() {
                     {i + 1}
                   </div>
                   <div className="min-w-0">
-                    <h3 className="font-semibold truncate">{row.strain}</h3>
+                    <h3 className="font-semibold truncate">
+                      <Link href={`/strains?q=${encodeURIComponent(row.strain)}`} className="hover:text-primary transition-colors">
+                        {row.strain}
+                      </Link>
+                    </h3>
                     <p className="text-sm text-muted-foreground">{row.grows} grow{row.grows === 1 ? "" : "s"} reported</p>
                   </div>
                 </div>

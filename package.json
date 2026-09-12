@@ -15,7 +15,8 @@
     "test:security": "tsx scripts/security-tests.mts",
     "test:notifications": "tsx scripts/notification-2-tests.mts",
     "test:onboarding": "node scripts/onboarding-verify.mjs",
-    "test:forum": "node scripts/forum-verify.mjs"
+    "test:forum": "node scripts/forum-verify.mjs",
+    "test:search": "node scripts/search-verify.mjs"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",

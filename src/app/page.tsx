@@ -36,7 +36,7 @@ const getLatestDiscussions = unstable_cache(
         select: { name: true, slug: true, description: true, _count: { select: { threads: { where: { deleted: false } } } } },
       }),
       prisma.thread.findMany({
-        where: { deleted: false },
+        where: { deleted: false, category: { hidden: false } },
         orderBy: { createdAt: "desc" },
         take: 6,
         include: {
@@ -76,7 +76,7 @@ const getTrendingDiscussions = unstable_cache(
   async () => {
     const oneWeekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
     const candidates = await prisma.thread.findMany({
-      where: { deleted: false, createdAt: { gte: oneWeekAgo } },
+      where: { deleted: false, category: { hidden: false }, createdAt: { gte: oneWeekAgo } },
       take: 100,
       include: {
         author: { select: publicUserSelect },

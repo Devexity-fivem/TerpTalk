@@ -100,14 +100,17 @@ export async function POST(request: Request) {
         `Accepted answer in "${thread.title.slice(0, 50)}"`,
       ).catch(() => {})
 
-      await notify({
-        userId: post.authorId,
-        type: "ACCEPTED_ANSWER",
-        title: "Your answer was accepted",
-        content: `@${session.user.name || "Someone"} marked your reply in "${thread.title.slice(0, 60)}" as the accepted answer.`,
-        link: postDeepLink(thread.slug, postId),
-        actorId: session.user.id,
-      })
+      // Hidden categories never notify — title/link would leak staff-only content.
+      if (!thread.category?.hidden) {
+        await notify({
+          userId: post.authorId,
+          type: "ACCEPTED_ANSWER",
+          title: "Your answer was accepted",
+          content: `@${session.user.name || "Someone"} marked your reply in "${thread.title.slice(0, 60)}" as the accepted answer.`,
+          link: postDeepLink(thread.slug, postId),
+          actorId: session.user.id,
+        })
+      }
     }
 
     return NextResponse.json({ success: true, post: { id: postId } })

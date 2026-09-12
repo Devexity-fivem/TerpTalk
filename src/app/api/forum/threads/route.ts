@@ -239,15 +239,18 @@ export async function POST(request: Request) {
     ).catch(() => {})
 
     // Notify @mentions in the opening post — deep link lands on the OP.
+    // Hidden categories never notify — title/link would leak staff-only content.
     const opPostId = thread.posts[0]?.id
     const opLink = opPostId ? postDeepLink(thread.slug, opPostId) : `/forum/thread/${thread.slug}`
-    await notifyMentions(
-      content,
-      session.user.id,
-      session.user.name || "Someone",
-      opLink,
-      `the thread "${title.slice(0, 60)}"`
-    )
+    if (!category.hidden) {
+      await notifyMentions(
+        content,
+        session.user.id,
+        session.user.name || "Someone",
+        opLink,
+        `the thread "${title.slice(0, 60)}"`
+      )
+    }
 
     // The author auto-follows their own thread — powers unread indicators
     // and (via the reply fan-out) activity notifications.

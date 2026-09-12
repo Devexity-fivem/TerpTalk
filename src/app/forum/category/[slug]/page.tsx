@@ -2,7 +2,8 @@ import { prisma } from "@/lib/prisma"
 import { publicUserSelect, isModerator } from "@/lib/security"
 import { unstable_cache } from "next/cache"
 import { notFound } from "next/navigation"
-import { MessageSquare, Users, Clock, Pin, Lock } from "lucide-react"
+import { MessageSquare, Users, Clock, Pin, Lock, CheckCircle2, BookOpen } from "lucide-react"
+import { CATEGORY_TO_TOPICS } from "@/lib/guides"
 import Link from "next/link"
 import { buildMetadata } from "@/lib/seo"
 import { Breadcrumbs } from "@/components/breadcrumbs"
@@ -39,6 +40,9 @@ const getCategoryData = unstable_cache(
           where,
           include: {
             author: { select: publicUserSelect },
+            // acceptedAnswer can point at a soft-deleted post on legacy rows —
+            // only badge threads whose answer still exists.
+            acceptedAnswer: { select: { id: true, deleted: true } },
             _count: {
               select: { posts: { where: { deleted: false } } },
             },
@@ -58,7 +62,19 @@ const getCategoryData = unstable_cache(
       notFound()
     }
 
-    return category
+    // Related guides via the static topic → category map — rides the same
+    // 60s cache, zero extra queries per view.
+    const topics = CATEGORY_TO_TOPICS[slug] ?? []
+    const guides = topics.length
+      ? await prisma.guide.findMany({
+          where: { published: true, topic: { in: topics } },
+          orderBy: { title: "asc" },
+          take: 4,
+          select: { slug: true, title: true, excerpt: true },
+        })
+      : []
+
+    return { ...category, guides }
   },
   ["forum-category"],
   { revalidate: 60, tags: ["forum"] }
@@ -115,6 +131,28 @@ export default async function CategoryPage({
             <CategoryFollowButton categoryId={category.id} initiallyFollowing={isFollowing} />
           </div>
         </div>
+
+        {/* Related guides for this category's topics */}
+        {category.guides.length > 0 && (
+          <div className="bg-card rounded-lg border border-border p-4 mb-6">
+            <div className="flex items-center gap-2 mb-3">
+              <BookOpen className="w-4 h-4 text-primary" />
+              <h2 className="font-semibold text-sm">Related Guides</h2>
+            </div>
+            <div className="grid sm:grid-cols-2 gap-2">
+              {category.guides.map((g) => (
+                <Link
+                  key={g.slug}
+                  href={`/guides/${g.slug}`}
+                  className="text-sm p-2 rounded-md hover:bg-secondary/50 transition-colors"
+                >
+                  <span className="font-medium text-primary line-clamp-1">{g.title}</span>
+                  {g.excerpt && <span className="block text-xs text-muted-foreground line-clamp-1 mt-0.5">{g.excerpt}</span>}
+                </Link>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Threads List */}
         <div className="bg-card rounded-lg border border-border">
@@ -173,6 +211,11 @@ export default async function CategoryPage({
                         )}
                         {thread.pinned && <Pin className="w-4 h-4 text-primary" />}
                         {thread.locked && <Lock className="w-4 h-4 text-muted-foreground" />}
+                        {thread.acceptedAnswer && !thread.acceptedAnswer.deleted && (
+                          <span className="inline-flex items-center gap-1 text-xs text-green-500 shrink-0">
+                            <CheckCircle2 className="w-3.5 h-3.5" /> Solved
+                          </span>
+                        )}
                         <h3 className="font-semibold">{thread.title}</h3>
                       </div>
                       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">

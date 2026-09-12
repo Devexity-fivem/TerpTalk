@@ -46,6 +46,15 @@ export default async function SetupPage({ params }: { params: Promise<{ id: stri
 
   if (!setup || setup.deleted) notFound()
 
+  // Link free-text strain names to the strain catalogue when they match —
+  // same soft-linking the diary page uses.
+  const linkedStrain = setup.strain
+    ? await prisma.strain.findFirst({
+        where: { name: { contains: setup.strain, mode: "insensitive" } },
+        select: { id: true },
+      })
+    : null
+
   const specs: [string, string | null][] = [
     ["Space", setup.space],
     ["Tent", setup.tent],
@@ -101,7 +110,13 @@ export default async function SetupPage({ params }: { params: Promise<{ id: stri
             {specs.filter(([, v]) => v).map(([label, value]) => (
               <div key={label}>
                 <span className="text-xs text-muted-foreground">{label}</span>
-                <p className="text-sm font-medium">{value}</p>
+                {label === "Strain" && linkedStrain ? (
+                  <p className="text-sm font-medium">
+                    <Link href={`/strains/${linkedStrain.id}`} className="text-primary hover:underline">{value}</Link>
+                  </p>
+                ) : (
+                  <p className="text-sm font-medium">{value}</p>
+                )}
               </div>
             ))}
             {specs.every(([, v]) => !v) && (

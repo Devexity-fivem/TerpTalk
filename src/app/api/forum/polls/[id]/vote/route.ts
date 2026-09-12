@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { unauthorized, forbidden, isBanned } from "@/lib/security"
+import { unauthorized, forbidden, isBanned, isModerator } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
 import { checkMaintenance } from "@/lib/maintenance"
 
@@ -36,12 +36,12 @@ export async function POST(
     const poll = await prisma.poll.findUnique({
       where: { id },
       include: {
-        thread: { select: { locked: true, deleted: true } },
+        thread: { select: { locked: true, deleted: true, category: { select: { hidden: true } } } },
         options: { where: { id: optionId }, select: { id: true } },
       },
     })
 
-    if (!poll || !poll.thread || poll.thread.deleted) {
+    if (!poll || !poll.thread || poll.thread.deleted || (poll.thread.category?.hidden && !isModerator(session.user.role))) {
       return NextResponse.json({ error: "Poll not found" }, { status: 404 })
     }
     if (poll.thread.locked) {

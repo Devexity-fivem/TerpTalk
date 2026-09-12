@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma"
 import { notFound } from "next/navigation"
-import { Leaf, Dna, Sprout, ImageIcon, BookOpen, Wrench } from "lucide-react"
+import { Leaf, Dna, Sprout, ImageIcon, BookOpen, Wrench, MessageSquare, CheckCircle2 } from "lucide-react"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import StrainPhotoUpload from "@/components/strain-photo-upload"
@@ -51,7 +51,7 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
 
   if (!strain) notFound()
 
-  const [relatedDiaries, relatedSetups] = await Promise.all([
+  const [relatedDiaries, relatedSetups, relatedThreads] = await Promise.all([
     prisma.growDiary.findMany({
       where: { deleted: false, strain: { contains: strain.name, mode: "insensitive" } },
       orderBy: { updatedAt: "desc" },
@@ -66,6 +66,32 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
       orderBy: { createdAt: "desc" },
       take: 6,
       include: { author: { select: publicUserSelect }, images: { take: 1 } },
+    }),
+    // Threads tagged with the strain name are the precise signal; title
+    // matching adds recall but is skipped for short names ("OG", "CBD")
+    // that would false-positive on unrelated words.
+    prisma.thread.findMany({
+      where: {
+        deleted: false,
+        category: { hidden: false },
+        OR: [
+          { tags: { some: { tag: { name: { equals: strain.name, mode: "insensitive" } } } } },
+          ...(strain.name.trim().length >= 4
+            ? [{ title: { contains: strain.name, mode: "insensitive" as const } }]
+            : []),
+        ],
+      },
+      orderBy: { lastActivityAt: "desc" },
+      take: 6,
+      select: {
+        slug: true,
+        title: true,
+        replyCount: true,
+        views: true,
+        // Relation select — acceptedAnswerId can point at a deleted post.
+        acceptedAnswer: { select: { id: true, deleted: true } },
+        category: { select: { name: true } },
+      },
     }),
   ])
 
@@ -201,6 +227,33 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
                     <p className="font-medium text-sm truncate">{s.title}</p>
                     <p className="text-xs text-muted-foreground truncate">by {s.author.profile?.username || s.author.name}</p>
                   </div>
+                </Link>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Discussions about this strain */}
+        {relatedThreads.length > 0 && (
+          <div className="bg-card rounded-xl border border-border p-5 mb-6">
+            <div className="flex items-center gap-2 mb-4">
+              <MessageSquare className="w-4 h-4 text-primary" />
+              <h2 className="font-semibold">Discussions</h2>
+            </div>
+            <div className="divide-y divide-border -mx-5 px-5">
+              {relatedThreads.map((t) => (
+                <Link
+                  key={t.slug}
+                  href={`/forum/thread/${t.slug}`}
+                  className="flex items-center justify-between gap-3 py-2.5 hover:bg-secondary/50 transition-colors -mx-2 px-2 rounded"
+                >
+                  <span className="min-w-0 text-sm font-medium truncate flex items-center gap-2">
+                    {t.title}
+                    {t.acceptedAnswer && !t.acceptedAnswer.deleted && <CheckCircle2 className="w-3.5 h-3.5 text-green-500 shrink-0" aria-label="Solved" />}
+                  </span>
+                  <span className="text-xs text-muted-foreground shrink-0">
+                    {t.category.name} · {t.replyCount} repl{t.replyCount === 1 ? "y" : "ies"}
+                  </span>
                 </Link>
               ))}
             </div>

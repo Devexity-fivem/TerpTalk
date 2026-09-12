@@ -146,7 +146,8 @@ export async function POST(request: Request) {
     // Notify the thread author (if not self-reply; pref/block/ban handled by notify).
     // groupKey+dedupeMs bound reply-bombs: the same replier can't stack more
     // than one REPLY notification per hour on the same thread.
-    if (thread.authorId !== session.user.id) {
+    // Hidden categories never notify — title/link would leak staff-only content.
+    if (thread.authorId !== session.user.id && !thread.category?.hidden) {
       await notify({
         userId: thread.authorId,
         type: "REPLY",
@@ -160,15 +161,17 @@ export async function POST(request: Request) {
     }
 
     // Notify @mentions in the reply — excluding the thread author, who
-    // already got the REPLY notification above.
-    await notifyMentions(
-      content,
-      session.user.id,
-      session.user.name || "Someone",
-      postDeepLink(thread.slug, post.id),
-      `a reply in "${thread.title.slice(0, 60)}"`,
-      [thread.authorId]
-    )
+    // already got the REPLY notification above. Same hidden-category gate.
+    if (!thread.category?.hidden) {
+      await notifyMentions(
+        content,
+        session.user.id,
+        session.user.name || "Someone",
+        postDeepLink(thread.slug, post.id),
+        `a reply in "${thread.title.slice(0, 60)}"`,
+        [thread.authorId]
+      )
+    }
 
     // Fan out to thread followers — throttled per follower via
     // ThreadFollow.lastNotifiedAt (≤1 notification per 6h per thread), and
@@ -360,6 +363,12 @@ export async function DELETE(request: Request) {
       await tx.thread.update({
         where: { id: post.threadId },
         data: { replyCount: Math.max(0, remaining - (op && !op.deleted ? 1 : 0)) },
+      })
+      // If this post was the accepted answer, clear the pointer — the thread
+      // is no longer solved (SetNull on the FK only fires on hard delete).
+      await tx.thread.updateMany({
+        where: { acceptedAnswerId: post.id },
+        data: { acceptedAnswerId: null },
       })
       // Deep links to this post would now dangle — drop the notifications.
       await tx.notification.deleteMany({ where: postLinkWhere(post.id) })

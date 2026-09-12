@@ -168,7 +168,7 @@ export default function ProfileClient() {
                       <span className="flex items-center gap-1"><Sprout className="w-3.5 h-3.5" />{profile.growExperience}</span>
                     )}
                     {profile.favoriteStrain && (
-                      <span className="flex items-center gap-1"><Dna className="w-3.5 h-3.5" />{profile.favoriteStrain}</span>
+                      <Link href={`/strains?q=${encodeURIComponent(profile.favoriteStrain)}`} className="flex items-center gap-1 hover:text-primary transition-colors"><Dna className="w-3.5 h-3.5" />{profile.favoriteStrain}</Link>
                     )}
                     {profile.growSpace && (
                       <span className="flex items-center gap-1"><Leaf className="w-3.5 h-3.5" />{profile.growSpace}</span>

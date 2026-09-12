@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { revalidateTag } from "next/cache"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
@@ -6,7 +7,7 @@ import { unauthorized, forbidden, getClientIp, logSecurityEvent, isModerator } f
 import { rateLimit } from "@/lib/rate-limit"
 import { checkMaintenance } from "@/lib/maintenance"
 
-const TOPICS = new Set(["BASICS", "NUTRIENTS", "HARVEST", "PESTS", "ENVIRONMENT", "GENETICS", "TRAINING", "LAW"])
+import { GUIDE_TOPICS } from "@/lib/guides"
 
 export async function PATCH(
   request: Request,
@@ -36,7 +37,7 @@ export async function PATCH(
       typeof title !== "string" || title.trim().length === 0 || title.length > 150 ||
       typeof excerpt !== "string" || excerpt.length > 500 ||
       typeof content !== "string" || content.length > 50_000 ||
-      (topic !== undefined && (typeof topic !== "string" || !TOPICS.has(topic)))
+      (topic !== undefined && (typeof topic !== "string" || !GUIDE_TOPICS.has(topic)))
     ) {
       return NextResponse.json({ error: "Invalid fields" }, { status: 400 })
     }
@@ -91,6 +92,9 @@ export async function PATCH(
       ip: getClientIp(request),
       metadata: { endpoint: "guides/[slug]", action: "EDIT", guideId: guide.id },
     })
+
+    revalidateTag("guides", { expire: 0 })
+    revalidateTag("forum", { expire: 0 })
 
     return NextResponse.json({ guide: updated })
   } catch (error) {

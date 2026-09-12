@@ -25,7 +25,7 @@ const STATIC = [
 ]
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const [categories, threads, diaries, strains, profiles] = await Promise.all([
+  const [categories, threads, diaries, strains, profiles, guides] = await Promise.all([
     prisma.category.findMany({ where: { hidden: false }, select: { slug: true, updatedAt: true } }),
     prisma.thread.findMany({
       where: { deleted: false, category: { hidden: false } },
@@ -49,6 +49,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       take: 50,
       orderBy: { reputation: "desc" },
       select: { username: true, joinDate: true },
+    }),
+    prisma.guide.findMany({
+      where: { published: true },
+      take: 100,
+      orderBy: { updatedAt: "desc" },
+      select: { slug: true, updatedAt: true },
     }),
   ])
 
@@ -89,6 +95,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       lastModified: p.joinDate,
       changeFrequency: "weekly" as const,
       priority: 0.5,
+    })),
+    ...guides.map((g) => ({
+      url: `${baseUrl}/guides/${g.slug}`,
+      lastModified: g.updatedAt,
+      changeFrequency: "weekly" as const,
+      priority: 0.7,
     }))
   )
 

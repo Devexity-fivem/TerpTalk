@@ -18,6 +18,7 @@ const getGuides = unstable_cache(
     return prisma.guide.findMany({
       where: { published: true },
       orderBy: { createdAt: "desc" },
+      take: 200,
       include: { author: { select: { name: true, profile: { select: { username: true } } } } },
     })
   },

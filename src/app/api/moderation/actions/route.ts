@@ -112,6 +112,11 @@ export async function POST(request: Request) {
                 where: { id: p.threadId },
                 data: { replyCount: Math.max(0, remaining - (op && !op.deleted ? 1 : 0)) },
               })
+              // Deleting the accepted answer un-solves the thread.
+              await tx.thread.updateMany({
+                where: { acceptedAnswerId: targetId },
+                data: { acceptedAnswerId: null },
+              })
             }
             break
           }

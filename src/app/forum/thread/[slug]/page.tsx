@@ -246,6 +246,20 @@ export default async function ThreadPage({
       url: baseUrl,
     },
     answerCount: thread.replyCount,
+    // QAPage-compatible accepted-answer markup — Google can surface
+    // "solved" discussions with the answer inline.
+    ...(thread.acceptedAnswer && {
+      acceptedAnswer: {
+        "@type": "Answer",
+        text: snippet(thread.acceptedAnswer.content, 500),
+        url: `${canonical}#post-${thread.acceptedAnswer.id}`,
+        datePublished: thread.acceptedAnswer.createdAt.toISOString(),
+        author: {
+          "@type": "Person",
+          name: thread.acceptedAnswer.author.profile?.username || thread.acceptedAnswer.author.name,
+        },
+      },
+    }),
   }
 
   const visiblePosts = thread.acceptedAnswer

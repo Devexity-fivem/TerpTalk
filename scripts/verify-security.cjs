@@ -109,6 +109,39 @@ const apiFiles = () => {
   check("schema: no email collection", !/\bemail\s+String/.test(schema));
   check("schema: IP stored hashed only", !/\bip\s+String\b/.test(schema) || /ipHash/.test(schema));
 
+  // ── 11. Discovery security invariants (Phase 5) ──
+  const search = read("app/api/search/route.ts");
+  check("search: hidden categories filtered", search.includes("hidden: false"));
+  check("search: suspended users excluded", search.includes("suspendedUntil"));
+  check("search: LIKE wildcards escaped", search.includes("escapeLike"));
+  check("search: query length bounded", /slice\(0,\s*100\)/.test(search));
+  check("search: results bounded (take)", search.includes("take:"));
+  check("search: unpublished guides excluded", search.includes("published: true"));
+  check("search: bogus category narrows to zero", search.includes("__none__"));
+  const sug = read("app/api/search/suggest/route.ts");
+  check("suggest: hidden categories filtered", sug.includes("hidden: false"));
+  check("suggest: suspended users excluded", sug.includes("suspendedUntil"));
+  check("suggest: unpublished guides excluded", sug.includes("published: true"));
+  const userSearch = read("app/api/users/search/route.ts");
+  check("users/search: suspended excluded", userSearch.includes("suspendedUntil"));
+  const vote = read("app/api/forum/polls/[id]/vote/route.ts");
+  check("poll vote: hidden-category check", vote.includes("hidden") && vote.includes("isModerator"));
+  const guideEdit = read("app/guides/[slug]/edit/page.tsx");
+  check("guide edit: unpublished not disclosed", guideEdit.includes("published"));
+  check("guide edit: author/mod only", guideEdit.includes("isModerator") && !guideEdit.includes("getTrustLevel"));
+  const home = read("app/page.tsx");
+  check("homepage: hidden categories filtered", (home.match(/category:\s*{\s*hidden:\s*false/g) || []).length >= 2);
+  const modActions = read("app/api/moderation/actions/route.ts");
+  check("moderation: post delete purges deep links", modActions.includes("postLinkWhere"));
+  check("moderation: post delete clears acceptedAnswer", modActions.includes("acceptedAnswerId: null"));
+  const postsRoute = read("app/api/forum/posts/route.ts");
+  check("posts: hidden category never notifies", postsRoute.includes("category?.hidden"));
+  check("posts: delete clears acceptedAnswer", postsRoute.includes("acceptedAnswerId: null"));
+  const acceptRoute = read("app/api/forum/threads/accept/route.ts");
+  check("accept: hidden category never notifies", acceptRoute.includes("category?.hidden"));
+  const sitemap = read("app/sitemap.ts");
+  check("sitemap: only published guides", sitemap.includes("published: true"));
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })().catch((e) => { console.error(e); process.exit(1); }).finally(() => p.$disconnect());
