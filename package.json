@@ -18,7 +18,8 @@
     "test:forum": "node scripts/forum-verify.mjs",
     "test:search": "node scripts/search-verify.mjs",
     "test:diary": "node scripts/diary-verify.mjs",
-    "test:bot": "node scripts/bot-verify.mjs"
+    "test:bot": "node scripts/bot-verify.mjs",
+    "test:terpbot": "tsx scripts/terpbot-tests.mts"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",

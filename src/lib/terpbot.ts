@@ -13,7 +13,7 @@
 // a bot message; never hand the bot moderation, role, or reputation writes.
 import { prisma } from "@/lib/prisma"
 import { getPusher } from "@/lib/pusher"
-import { publicUserSelect } from "@/lib/security"
+import { publicUserSelect, LIMITS } from "@/lib/security"
 
 export const TERPBOT_USERNAME = "terpbot"
 const BOT_ROLE = "MEMBER"
@@ -33,9 +33,15 @@ async function getOrCreateBot(): Promise<string> {
   if (cachedBotId) return cachedBotId
   const existing = await prisma.user.findFirst({
     where: { profile: { username: TERPBOT_USERNAME } },
-    select: { id: true, image: true, role: true, profile: { select: { id: true, bio: true, avatarUrl: true } } },
+    select: { id: true, image: true, role: true, password: true, profile: { select: { id: true, bio: true, avatarUrl: true } } },
   })
   if (existing) {
+    // Never adopt a credentialed account — if a human ever ends up holding
+    // the "terpbot" username with a password, they could log in and speak as
+    // the bot. Fail closed instead of claiming the identity.
+    if (existing.password !== null) {
+      throw new Error("[terpbot] refusing to adopt a credentialed account")
+    }
     cachedBotId = existing.id
     // Pin the role — the bot must never be privileged. If anything elevated
     // the account out-of-band, demote it back to MEMBER on the next post.
@@ -81,7 +87,8 @@ async function getOrCreateBot(): Promise<string> {
 // Returns the chat DTO used by the sidebar, or null if posting failed.
 // Bot activity never earns reputation — automated posts must not pollute
 // leaderboards or member rankings.
-export async function postBotMessage(roomId: string, text: string) {
+// replyToId threads the bot's answer under the message that asked for it.
+export async function postBotMessage(roomId: string, text: string, replyToId?: string) {
   try {
     // The bot speaks in public rooms only — never into private/staff rooms.
     const room = await prisma.chatRoom.findUnique({
@@ -89,10 +96,19 @@ export async function postBotMessage(roomId: string, text: string) {
       select: { isPrivate: true },
     })
     if (!room || room.isPrivate) return null
+    // Enforce the same content cap users get, and never let bot output
+    // contain its own trigger — an "@terpbot" in a reply could ping itself
+    // if a future path ever re-scanned bot output.
+    const content = text
+      .replace(/@terpbot\b/gi, "terpbot")
+      .slice(0, LIMITS.CHAT_MESSAGE_MAX)
     const authorId = await getOrCreateBot()
     const message = await prisma.chatMessage.create({
-      data: { roomId, authorId, content: text },
-      include: { author: { select: publicUserSelect } },
+      data: { roomId, authorId, content, ...(replyToId ? { replyToId } : {}) },
+      include: {
+        author: { select: publicUserSelect },
+        replyTo: { include: { author: { select: publicUserSelect } } },
+      },
     })
     const dto = {
       id: message.id,
@@ -105,7 +121,19 @@ export async function postBotMessage(roomId: string, text: string) {
         image: message.author.image ?? null,
         role: message.author.role ?? null,
       },
-      replyTo: null,
+      replyTo: message.replyTo
+        ? {
+            id: message.replyTo.id,
+            content: message.replyTo.deleted ? "[deleted]" : message.replyTo.content,
+            author: {
+              id: message.replyTo.author.id,
+              name: message.replyTo.author.name,
+              username: message.replyTo.author.profile?.username ?? null,
+              image: message.replyTo.author.image ?? null,
+              role: message.replyTo.author.role ?? null,
+            },
+          }
+        : null,
     }
     getPusher()?.trigger(`private-chat-${roomId}`, "new-message", dto).catch(() => {})
     return dto

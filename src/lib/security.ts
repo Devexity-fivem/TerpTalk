@@ -181,6 +181,32 @@ export const RESERVED_USERNAMES = new Set([
   "terpbot",
 ])
 
+// Lookalike-safe reserved check: normalize leetspeak and separators so
+// "terpb0t", "terpbot_", "adm1n" can't impersonate system identities.
+export function isReservedUsername(username: string): boolean {
+  const raw = username.toLowerCase()
+  if (RESERVED_USERNAMES.has(raw)) return true
+  // Separators stripped, digits kept — catches "terp_bot" and digit-suffix
+  // variants like "terpbot1"/"admin99" without blocking real names that
+  // merely start with a reserved word ("modern", "helper").
+  const compact = raw.replace(/[^a-z0-9]/g, "")
+  for (const reserved of RESERVED_USERNAMES) {
+    if (compact === reserved) return true
+    if (compact.length > reserved.length && compact.startsWith(reserved) && /^\d+$/.test(compact.slice(reserved.length))) {
+      return true
+    }
+  }
+  // Leetspeak normalization for exact lookalikes ("terpb0t", "adm1n").
+  const leet = compact
+    .replace(/0/g, "o")
+    .replace(/1/g, "i")
+    .replace(/3/g, "e")
+    .replace(/4/g, "a")
+    .replace(/[5$]/g, "s")
+    .replace(/7/g, "t")
+  return leet !== compact && RESERVED_USERNAMES.has(leet)
+}
+
 // ─── Client IP (privacy-conscious: hashed, never stored raw) ────────
 
 export function getClientIp(request: { headers: Headers | Record<string, string | undefined> }): string {

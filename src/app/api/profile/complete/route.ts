@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { unauthorized, LIMITS, USERNAME_REGEX, RESERVED_USERNAMES, getClientIp, logSecurityEvent, isBanned, forbidden, enforceLinkTrust } from "@/lib/security"
+import { unauthorized, LIMITS, USERNAME_REGEX, isReservedUsername, getClientIp, logSecurityEvent, isBanned, forbidden, enforceLinkTrust } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
 import { storeImage, deleteImagesIfUnreferenced } from "@/lib/blob"
 
@@ -60,7 +60,7 @@ export async function POST(request: Request) {
         )
       }
 
-      if (RESERVED_USERNAMES.has(username.toLowerCase())) {
+      if (isReservedUsername(username)) {
         return NextResponse.json(
           { error: "This username is reserved" },
           { status: 400 }

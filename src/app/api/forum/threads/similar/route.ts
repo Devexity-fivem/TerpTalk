@@ -2,13 +2,7 @@ import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { rateLimit } from "@/lib/rate-limit"
 import { getClientIp, hashIp } from "@/lib/security"
-
-const STOP_WORDS = new Set([
-  "a", "an", "the", "and", "or", "but", "for", "of", "to", "in", "on", "at", "with", "by", "from",
-  "my", "your", "is", "are", "was", "were", "be", "been", "being", "have", "has", "had", "do", "does", "did",
-  "will", "would", "could", "should", "may", "might", "can", "i", "you", "he", "she", "it", "we", "they",
-  "this", "that", "these", "those", "what", "how", "help", "please", "need", "question", "about",
-])
+import { tokenizeSearchText } from "@/lib/search-terms"
 
 const TITLE_MAX = 200
 
@@ -32,12 +26,7 @@ export async function GET(request: Request) {
     const categoryId = typeof rawCategoryId === "string" && rawCategoryId ? rawCategoryId : undefined
 
     const title = rawTitle.slice(0, TITLE_MAX)
-    const words = title
-      .toLowerCase()
-      .replace(/[^\w\s]/g, " ")
-      .split(/\s+/)
-      .filter((w) => w.length > 2 && !STOP_WORDS.has(w))
-      .slice(0, 8)
+    const words = tokenizeSearchText(title)
 
     if (words.length === 0) {
       return NextResponse.json({ threads: [] })

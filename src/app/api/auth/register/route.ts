@@ -6,7 +6,7 @@ import { rateLimit } from "@/lib/rate-limit"
 import {
   LIMITS,
   USERNAME_REGEX,
-  RESERVED_USERNAMES,
+  isReservedUsername,
   getClientIp,
   hashIp,
   logSecurityEvent,
@@ -119,7 +119,7 @@ export async function POST(request: Request) {
       )
     }
 
-    if (RESERVED_USERNAMES.has(username.toLowerCase())) {
+    if (isReservedUsername(username)) {
       return NextResponse.json(
         { error: "This username is reserved" },
         { status: 400 }

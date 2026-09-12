@@ -6,7 +6,9 @@ import {
   MessageCircle, Send, X, Loader2, Smile, RefreshCw, MoreVertical,
   Trash2, AlertTriangle, Clock, Shield, User as UserIcon, MessageSquare,
 } from "lucide-react"
+import Link from "next/link"
 import RoleBadge from "@/components/role-badge"
+import { listCommandsForRole } from "@/lib/chat-commands"
 import { useToast } from "@/components/ui/toast"
 import { cn } from "@/lib/utils"
 import dynamic from "next/dynamic"
@@ -239,51 +241,26 @@ export default function ChatSidebar() {
       ).slice(0, 5)
     : []
 
+  // Autocomplete derives from the shared command registry — the same source
+  // of truth as the API — so the list can never drift from what's allowed.
+  // (SUPPORT sees only public commands; moderator/admin commands appear per
+  // the registry's permission tier.)
   const commandList = useMemo(() => {
-    const list: { name: string; desc: string }[] = [
-      { name: "help", desc: "Show chat commands" },
-      { name: "me", desc: "Roleplay an action" },
-      { name: "tip", desc: "Grow tip" },
-      { name: "stats", desc: "Community stats" },
-      { name: "top", desc: "Top growers" },
-      { name: "strain", desc: "Look up a strain" },
-      { name: "guide", desc: "Find a grow guide" },
-      { name: "ask", desc: "Search strains + guides" },
-      { name: "contest", desc: "Contest status" },
-      { name: "rules", desc: "Community rules" },
-      { name: "flip", desc: "Flip a coin" },
-      { name: "roll", desc: "Roll a die" },
-    ]
-    if (isStaff) {
-      list.push(
-        { name: "slowmode", desc: "Set slow mode (0-300s)" },
-        { name: "lock", desc: "Lock the chat" },
-        { name: "unlock", desc: "Unlock the chat" },
-        { name: "announce", desc: "Post an announcement" }
-      )
-    }
-    if (isModerator) {
-      list.push(
-        { name: "clear", desc: "Clear all messages" },
-        { name: "warn", desc: "Warn a user" }
-      )
-    }
-    if (isAdmin) {
-      list.push(
-        { name: "mute", desc: "Temporarily suspend a user" },
-        { name: "ban", desc: "Permanently ban a user" },
-        { name: "unban", desc: "Lift a permanent ban" }
-      )
-    }
-    return list
-  }, [isStaff, isModerator, isAdmin])
+    return listCommandsForRole(myRole)
+      .filter((c) => c.surfaces.includes("slash"))
+      .map((c) => ({ name: c.name, desc: c.description }))
+  }, [myRole])
 
   const commandSuggestions = slashQuery
     ? commandList.filter(c => c.name.startsWith(slashQuery)).slice(0, 6)
     : commandList.slice(0, 6)
 
+  // Internal paths emitted by TerpBot (and users) render as real links.
+  // Allowlisted prefixes only — no arbitrary scheme or external URL is
+  // ever turned into an anchor here.
+  const INTERNAL_LINK_RE = /^\/(forum|guides|strains|diaries|u|search|leaderboard|contest|profile|setups)(\/[a-zA-Z0-9\-_/?=&%#.]*)?$/
   const renderContent = (text: string) => {
-    const parts = text.split(/(@[a-zA-Z0-9_-]+)/gi)
+    const parts = text.split(/(@[a-zA-Z0-9_-]+|\/[a-zA-Z][a-zA-Z0-9\-_/?=&%#.]*)/gi)
     return (
       <>
         {parts.map((part, i) => {
@@ -292,6 +269,13 @@ export default function ChatSidebar() {
               <span key={i} className="font-medium text-primary hover:underline cursor-pointer">
                 {part}
               </span>
+            )
+          }
+          if (INTERNAL_LINK_RE.test(part)) {
+            return (
+              <Link key={i} href={part} className="font-medium text-primary hover:underline">
+                {part}
+              </Link>
             )
           }
           const lines = part.split("\n")

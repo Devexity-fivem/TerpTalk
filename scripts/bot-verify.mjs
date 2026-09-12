@@ -74,6 +74,12 @@ async function main() {
     const memberCookie = await login(member.username, member.password)
     const modCookie = await login(mod.username, mod.password)
 
+    // Rate-limit counters are DB-backed and persist between runs — clear the
+    // chat keys so a previous run's commands don't consume this run's window.
+    await prisma.rateLimit.deleteMany({
+      where: { key: { startsWith: "chat" } },
+    })
+
     // ── Identity ────────────────────────────────────────────────────
     const botUser = await prisma.user.findUnique({
       where: { id: botId },
@@ -176,6 +182,9 @@ async function main() {
       create: { key: "chat_enabled", value: "true" },
       update: { value: "true" },
     })
+    // The /slowmode 10 staff check left the shared room in slow mode —
+    // reset it so subsequent member commands aren't rate-limited.
+    await prisma.chatRoom.update({ where: { id: publicRoom.id }, data: { slowModeSeconds: 0 } })
 
     // ── @terpbot ping still answers as a normal member ──────────────
     // Fresh room — the 60s/room bot floor would suppress the reply if a
@@ -200,6 +209,109 @@ async function main() {
       where: { userId: botId, type: "MENTION", createdAt: { gte: new Date(Date.now() - 60_000) } },
     })
     mentionRows === 0 ? pass("no MENTION notification delivered to bot") : fail("no MENTION notification delivered to bot", mentionRows)
+
+    // ── Phase 2: registry-dispatched informational commands ─────────
+    const cmd = (content, cookie = memberCookie) =>
+      api(`/api/chat/commands`, { method: "POST", body: { roomId: publicRoom.id, content }, cookie })
+
+    const helpCmd = await cmd("/help")
+    helpCmd.status === 200 && /\/rep/.test(helpCmd.data?.message?.content || "")
+      ? pass("/help lists new commands")
+      : fail("/help lists new commands", helpCmd.data)
+
+    for (const [content, pattern, label] of [
+      ["/rep", /\d+ rep|Seed/i, "/rep answers with reputation"],
+      ["/progress", /tier|progress/i, "/progress answers with tier progress"],
+      ["/rank", /#\d+|leaderboard/i, "/rank answers with leaderboard position"],
+      ["/streak", /streak|updates/i, "/streak answers"],
+      ["/badge", /badge/i, "/badge answers"],
+      ["/nextbadges", /badge/i, "/nextbadges answers"],
+      ["/diary", /diary|diaries/i, "/diary answers"],
+      ["/thread nutrient", /thread|forum|no threads/i, "/thread answers"],
+      ["/online", /online|active|quiet/i, "/online answers"],
+      ["/digest", /24 hours|digest|quiet/i, "/digest answers"],
+      ["/leaderboard", /top|growers/i, "alias /leaderboard → /top"],
+    ]) {
+      const res = await cmd(content)
+      const text = res.data?.message?.content || ""
+      res.status === 200 && pattern.test(text)
+        ? pass(label)
+        : fail(label, { status: res.status, data: res.data })
+    }
+
+    // Staff commands now 403 for members through the registry gate
+    // (previously "Unknown command"); behavior must not grant anything.
+    const memberBan = await cmd("/ban @someone spam")
+    memberBan.status === 403 ? pass("member /ban gets 403") : fail("member /ban gets 403", { status: memberBan.status })
+
+    const unknownCmd = await cmd("/definitelynotacommand")
+    unknownCmd.status === 400 ? pass("unknown command still 400") : fail("unknown command still 400", { status: unknownCmd.status })
+
+    // Link laundering — a low-trust user must not get a URL echoed by the bot.
+    const launder = await cmd("/ask https://malware.example/steal")
+    const launderText = launder.data?.message?.content || ""
+    launder.status === 200 && !launderText.includes("malware.example")
+      ? pass("bot refuses to echo links in command output")
+      : fail("bot refuses to echo links in command output", { status: launder.status, data: launder.data })
+
+    // ── Phase 2: @terpbot intent routing ────────────────────────────
+    // Each mention gets a fresh room — the 60s/room bot floor would
+    // otherwise suppress consecutive replies.
+    async function mention(content) {
+      const r = await prisma.chatRoom.create({
+        data: { name: `__bv_${TS}_${Math.random().toString(36).slice(2, 8)}`, slug: `__bv_${TS}_${Math.random().toString(36).slice(2, 8)}`, isPrivate: false },
+      })
+      rooms.push(r.id)
+      const posted = await api(`/api/chat/messages`, {
+        method: "POST", body: { roomId: r.id, content }, cookie: memberCookie,
+      })
+      // respond() is fire-and-forget — poll for up to 5s (first mention may
+      // cold-compile the intent/data modules in dev).
+      let reply = null
+      for (let i = 0; i < 10 && !reply; i++) {
+        await new Promise((res) => setTimeout(res, 500))
+        reply = await prisma.chatMessage.findFirst({
+          where: { roomId: r.id, authorId: botId, deleted: false },
+          orderBy: { createdAt: "desc" },
+        })
+      }
+      return { reply, posted }
+    }
+
+    const repM = await mention("@terpbot what's my reputation?")
+    repM.reply && /\d+ rep|Seed/i.test(repM.reply.content)
+      ? pass("intent: reputation")
+      : fail("intent: reputation", repM.reply?.content)
+
+    const streakM = await mention("@terpbot what's my grow streak?")
+    streakM.reply && /streak|updates/i.test(streakM.reply.content)
+      ? pass("intent: grow streak")
+      : fail("intent: grow streak", streakM.reply?.content)
+
+    const refuseM = await mention(`@terpbot ban @${member.username}`)
+    refuseM.reply && /moderation|staff/i.test(refuseM.reply.content)
+      ? pass("intent: moderation request refused")
+      : fail("intent: moderation request refused", refuseM.reply?.content)
+    const refuseActions = await prisma.moderationAction.count({
+      where: { targetUserId: member.id, createdAt: { gte: new Date(Date.now() - 60_000) } },
+    })
+    refuseActions === 0
+      ? pass("refused mention created no moderation action")
+      : fail("refused mention created no moderation action", refuseActions)
+
+    const fallbackM = await mention("@terpbot xyzzyqq")
+    fallbackM.reply && /not sure|didn't catch|try asking/i.test(fallbackM.reply.content)
+      ? pass("intent: unknown input falls back gracefully")
+      : fail("intent: unknown input falls back gracefully", fallbackM.reply?.content)
+
+    // Bot replies must never contain the trigger — no self-loop possible.
+    const allBotMsgs = await prisma.chatMessage.findMany({
+      where: { authorId: botId, createdAt: { gte: new Date(Date.now() - 120_000) } },
+      select: { content: true },
+    })
+    allBotMsgs.every((m) => !/@terpbot/i.test(m.content))
+      ? pass("no bot reply contains @terpbot (no self-loop)")
+      : fail("no bot reply contains @terpbot", allBotMsgs.filter((m) => /@terpbot/i.test(m.content)).slice(0, 2))
   } finally {
     for (const roomId of rooms) {
       await prisma.chatMessage.deleteMany({ where: { roomId } }).catch(() => {})

@@ -1,6 +1,6 @@
 import { strict as assert } from "node:assert"
 import { prisma } from "@/lib/prisma"
-import { isBanned, isSessionValid, isAdmin, isModerator, isStaff, isSupport, hashIp, getTrustLevel } from "@/lib/security"
+import { isBanned, isSessionValid, isAdmin, isModerator, isStaff, isSupport, hashIp, getTrustLevel, LIMITS } from "@/lib/security"
 import { isValidImageDataUri, storeImage } from "@/lib/blob"
 import sharp from "sharp"
 import { isTrustedForLinks, containsExternalLink, enforceLinkTrust } from "@/lib/security"
@@ -395,6 +395,17 @@ async function run() {
       const dto = await postBotMessage(publicRoom.id, "bot boundary test")
       assert.ok(dto, "postBotMessage should post in a public room")
       assert.equal(dto!.author.username, TERPBOT_USERNAME, "bot message authored by terpbot")
+
+      // Bot output must never contain its own trigger — a stored "@terpbot"
+      // could self-ping if any future path re-scans bot output.
+      const triggerDto = await postBotMessage(publicRoom.id, "ping @terpbot back")
+      assert.ok(triggerDto, "bot post with trigger text should still post")
+      assert.ok(!/@terpbot/i.test(triggerDto!.content), "bot output must strip @terpbot trigger")
+
+      // Bot output is capped at the same message limit as users.
+      const longDto = await postBotMessage(publicRoom.id, "x".repeat(LIMITS.CHAT_MESSAGE_MAX + 500))
+      assert.ok(longDto, "oversized bot post should still post")
+      assert.equal(longDto!.content.length, LIMITS.CHAT_MESSAGE_MAX, "bot output capped at CHAT_MESSAGE_MAX")
 
       const botUser = await prisma.user.findUnique({
         where: { id: dto!.author.id },

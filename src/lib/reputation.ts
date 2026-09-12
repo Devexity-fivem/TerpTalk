@@ -21,7 +21,7 @@ export {
   type ReputationTier,
 } from "@/lib/reputation-config"
 
-interface UserStats {
+export interface UserStats {
   posts: number
   threads: number
   diaries: number
@@ -36,8 +36,9 @@ interface UserStats {
 }
 
 // Badge rules — evaluated against live user stats. Badge names must match the
-// Badge rows seeded in the database.
-const BADGE_RULES: Record<string, (s: UserStats) => boolean> = {
+// Badge rows seeded in the database. Exported read-only for TerpBot's
+// /nextbadges command; awarding still goes through checkBadges().
+export const BADGE_RULES: Record<string, (s: UserStats) => boolean> = {
   // First steps
   "New Grower": (s) => s.posts + s.threads + s.diaries >= 1,
   "First Post": (s) => s.posts >= 1,
@@ -133,7 +134,7 @@ const BADGE_RULES: Record<string, (s: UserStats) => boolean> = {
 
 let badgeSeedComplete = false
 
-async function getUserStats(userId: string): Promise<UserStats> {
+export async function getUserStats(userId: string): Promise<UserStats> {
   const [posts, threads, diaries, diaryUpdates, chatMessages, strains, strainPhotos, likesReceived, acceptedAnswers, user] =
     await Promise.all([
       prisma.post.count({ where: { authorId: userId, deleted: false, thread: { deleted: false } } }),

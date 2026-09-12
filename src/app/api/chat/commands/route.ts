@@ -20,9 +20,10 @@ import { rateLimit } from "@/lib/rate-limit"
 import { checkMaintenance } from "@/lib/maintenance"
 import { getBooleanSetting, SITE_SETTINGS } from "@/lib/settings"
 import { getPusher } from "@/lib/pusher"
-import { postBotMessage, randomGrowTip, TERPBOT_USERNAME } from "@/lib/terpbot"
+import { postBotMessage, TERPBOT_USERNAME } from "@/lib/terpbot"
 import { emitNotificationPush } from "@/lib/notify"
-import { currentWeekKey } from "@/lib/week"
+import { getChatCommand, canUseCommand } from "@/lib/chat-commands"
+import { runBotCommand } from "@/lib/terpbot-data"
 
 type ChatMessageWithAuthor = {
   id: string
@@ -207,50 +208,29 @@ export async function POST(request: NextRequest) {
     const [command, ...args] = text.split(/\s+/)
     const rest = args.join(" ")
 
-    switch (command.toLowerCase()) {
-      case "help": {
-        const base = [
-          "/help - show this list",
-          "/me <action> - roleplay a third-person action",
-        ]
-        const staffCmds = staff
-          ? ["/slowmode <0-300> - set seconds between messages", "/lock - prevent non-staff from posting", "/unlock - re-enable posting"]
-          : []
-        const modCmds = moderator
-          ? [
-              "/clear - soft-delete all messages",
-              "/announce <message> - post a system-style message",
-              "/warn <@user> <reason> - warn a user",
-            ]
-          : []
-        const adminCmds = admin
-          ? [
-              "/mute <@user> <days> <reason> - temporarily suspend a user",
-              "/ban <@user> <reason> - permanently ban a user",
-              "/unban <@user> - lift a permanent ban",
-            ]
-          : []
-        const helpText = [
-          "Available commands:",
-          ...base,
-          "/tip - grow tip",
-          "/stats - community stats",
-          "/top - top growers by rep",
-          "/strain <name> - look up a strain",
-          "/guide <search> - find a grow guide",
-          "/ask <question> - search strains + guides",
-          "/contest - this week's contest status",
-          "/rules - community rules",
-          "/flip - flip a coin",
-          "/roll [sides] - roll a die",
-          ...staffCmds,
-          ...modCmds,
-          ...adminCmds,
-        ].join("\n")
-        const dto = await postBot(helpText)
+    // Registry dispatch — every command resolves through the shared registry
+    // (single source of truth for names, aliases, permissions, surfaces).
+    // handledBy:"bot" commands run read-only handlers in terpbot-data.ts;
+    // handledBy:"route" commands (/me, staff moderation) keep the bespoke
+    // switch below because they post as the user, perform privileged writes,
+    // or return custom response shapes.
+    const meta = getChatCommand(command)
+    if (meta) {
+      if (!canUseCommand(meta, user.role)) return forbidden()
+      if (meta.handledBy === "bot") {
+        const result = await runBotCommand(meta.name, { userId, role: user.role, displayName, args, rest })
+        if (!result.ok) {
+          return NextResponse.json({ error: result.error }, { status: result.status ?? 400 })
+        }
+        let dto = null
+        for (const message of result.messages) {
+          dto = await postBot(message)
+        }
         return NextResponse.json({ ok: true, message: dto })
       }
+    }
 
+    switch (command.toLowerCase()) {
       case "me": {
         if (!rest) {
           return NextResponse.json({ error: "Usage: /me <action>" }, { status: 400 })
@@ -280,180 +260,6 @@ export async function POST(request: NextRequest) {
         const dto = toChatDto(message)
         getPusher()?.trigger(`private-chat-${roomId}`, "new-message", dto).catch(() => {})
         return NextResponse.json({ ok: true, message: dto })
-      }
-
-      case "tip": {
-        const bot = await postBot(`💡 Grow tip: ${randomGrowTip()}`)
-        return NextResponse.json({ ok: true, message: bot })
-      }
-
-      case "stats": {
-        const [members, threads, posts, diaries, strains] = await Promise.all([
-          prisma.user.count({ where: { banned: false } }),
-          prisma.thread.count({ where: { deleted: false } }),
-          prisma.post.count({ where: { deleted: false, thread: { deleted: false } } }),
-          prisma.growDiary.count({ where: { deleted: false } }),
-          prisma.strain.count(),
-        ])
-        const bot = await postBot(
-          `📊 TerpTalk stats — ${members} members · ${threads} threads · ${posts} posts · ${diaries} grow diaries · ${strains} strains`
-        )
-        return NextResponse.json({ ok: true, message: bot })
-      }
-
-      case "top":
-      case "leaderboard": {
-        const top = await prisma.profile.findMany({
-          where: { user: { banned: false }, username: { not: TERPBOT_USERNAME } },
-          orderBy: { reputation: "desc" },
-          take: 5,
-          select: { username: true, reputation: true },
-        })
-        const lines = top.map((p, i) => `${i + 1}. @${p.username} — ${p.reputation} rep`)
-        const bot = await postBot(`🏆 Top growers:\n${lines.join("\n")}\nFull board: /leaderboard`)
-        return NextResponse.json({ ok: true, message: bot })
-      }
-
-      case "strain": {
-        if (!rest) {
-          return NextResponse.json({ error: "Usage: /strain <name>" }, { status: 400 })
-        }
-        const strain = await prisma.strain.findFirst({
-          where: { name: { contains: rest, mode: "insensitive" } },
-          orderBy: { name: "asc" },
-        })
-        const bot = strain
-          ? await postBot(
-              [
-                `🌿 ${strain.name}${strain.type ? ` (${strain.type})` : ""}`,
-                strain.genetics ? `Genetics: ${strain.genetics}` : null,
-                strain.breeder ? `Breeder: ${strain.breeder}` : null,
-                `Details: /strains/${strain.id}`,
-              ]
-                .filter(Boolean)
-                .join("\n")
-            )
-          : await postBot(`No strain matching "${rest}" in the library — browse /strains or add it yourself!`)
-        return NextResponse.json({ ok: true, message: bot })
-      }
-
-      case "guide": {
-        if (!rest) {
-          return NextResponse.json({ error: "Usage: /guide <search>" }, { status: 400 })
-        }
-        const guides = await prisma.guide.findMany({
-          where: {
-            published: true,
-            OR: [
-              { title: { contains: rest, mode: "insensitive" } },
-              { excerpt: { contains: rest, mode: "insensitive" } },
-              { topic: { contains: rest, mode: "insensitive" } },
-            ],
-          },
-          take: 3,
-          select: { title: true, slug: true },
-        })
-        const bot = guides.length
-          ? await postBot(
-              `📚 Guides matching "${rest}":\n${guides.map((g) => `- ${g.title} → /guides/${g.slug}`).join("\n")}`
-            )
-          : await postBot(`No guides matching "${rest}" — browse /guides`)
-        return NextResponse.json({ ok: true, message: bot })
-      }
-
-      case "ask": {
-        if (!rest) {
-          return NextResponse.json({ error: "Usage: /ask <question>" }, { status: 400 })
-        }
-        const [guides, strains] = await Promise.all([
-          prisma.guide.findMany({
-            where: {
-              published: true,
-              OR: [
-                { title: { contains: rest, mode: "insensitive" } },
-                { excerpt: { contains: rest, mode: "insensitive" } },
-                { content: { contains: rest, mode: "insensitive" } },
-              ],
-            },
-            take: 2,
-            select: { title: true, slug: true },
-          }),
-          prisma.strain.findMany({
-            where: {
-              OR: [
-                { name: { contains: rest, mode: "insensitive" } },
-                { description: { contains: rest, mode: "insensitive" } },
-                { growingInfo: { contains: rest, mode: "insensitive" } },
-              ],
-            },
-            take: 2,
-            select: { id: true, name: true },
-          }),
-        ])
-        const lines = [
-          ...guides.map((g) => `📚 ${g.title} → /guides/${g.slug}`),
-          ...strains.map((s) => `🌿 ${s.name} → /strains/${s.id}`),
-        ]
-        const bot = lines.length
-          ? await postBot(`Here's what I found for "${rest}":\n${lines.join("\n")}\nFor anything else, try /help`)
-          : await postBot(
-              `Couldn't find anything about "${rest}" — try different keywords, browse /guides and /strains, or ask the community in Discussions!`
-            )
-        return NextResponse.json({ ok: true, message: bot })
-      }
-
-      case "contest": {
-        const week = currentWeekKey()
-        const [entries, leader] = await Promise.all([
-          prisma.contestEntry.count({ where: { week } }),
-          prisma.contestEntry.findFirst({
-            where: { week },
-            orderBy: { votes: { _count: "desc" } },
-            include: {
-              user: { select: { name: true, profile: { select: { username: true } } } },
-              _count: { select: { votes: true } },
-            },
-          }),
-        ])
-        const leaderText =
-          leader && leader._count.votes > 0
-            ? `Current leader: @${leader.user.profile?.username || leader.user.name} with ${leader._count.votes} vote${leader._count.votes === 1 ? "" : "s"}.`
-            : "No leader yet — every entry needs votes!"
-        const bot = await postBot(
-          `🏆 Photo contest (week ${week}): ${entries} entr${entries === 1 ? "y" : "ies"}. ${leaderText} Enter or vote on the Contest page.`
-        )
-        return NextResponse.json({ ok: true, message: bot })
-      }
-
-      case "rules": {
-        const bot = await postBot(
-          [
-            "📜 Community rules:",
-            "1. 21+ only — no exceptions.",
-            "2. Be respectful — no harassment, hate speech, or personal attacks.",
-            "3. No buying, selling, or sourcing cannabis or anything else.",
-            "4. No spam or unsolicited advertising.",
-            "5. Don't dox anyone — pseudonyms stay pseudonymous.",
-            "6. Staff decisions are final; report issues with /help moderation tools or the Report button.",
-          ].join("\n")
-        )
-        return NextResponse.json({ ok: true, message: bot })
-      }
-
-      case "flip": {
-        const result = Math.random() < 0.5 ? "Heads" : "Tails"
-        const bot = await postBot(`🪙 @${displayName} flipped a coin — ${result}!`)
-        return NextResponse.json({ ok: true, message: bot })
-      }
-
-      case "roll": {
-        const sides = args[0] !== undefined ? parseInt(args[0], 10) : 6
-        if (Number.isNaN(sides) || sides < 2 || sides > 1000) {
-          return NextResponse.json({ error: "Usage: /roll [2-1000]" }, { status: 400 })
-        }
-        const rolled = 1 + Math.floor(Math.random() * sides)
-        const bot = await postBot(`🎲 @${displayName} rolled a d${sides} — ${rolled}!`)
-        return NextResponse.json({ ok: true, message: bot })
       }
 
       case "slowmode": {
