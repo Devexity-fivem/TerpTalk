@@ -99,6 +99,7 @@ export const PUBLIC_REP_TYPES = new Set<string>([
   "CONTEST_MONTHLY_WIN",
   "REVERSAL",
   "REINSTATE",
+  "LEGACY_MIGRATION",
 ])
 
 // Public-safe label per type — raw `reason` strings embed titles and
