@@ -44,7 +44,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "User not found" }, { status: 404 })
   }
 
-  const [openReports, recentActions] = await Promise.all([
+  const [openReports, recentActions, recentRep] = await Promise.all([
     prisma.report.count({
       where: { reportedId: profile.user.id, status: { in: ["PENDING", "REVIEWING"] } },
     }),
@@ -53,6 +53,12 @@ export async function GET(request: Request) {
       orderBy: { createdAt: "desc" },
       take: 10,
       include: { moderator: { select: { profile: { select: { username: true } } } } },
+    }),
+    prisma.reputationEvent.findMany({
+      where: { userId: profile.user.id },
+      orderBy: { createdAt: "desc" },
+      take: 10,
+      select: { id: true, type: true, amount: true, reason: true, reversedAt: true, createdAt: true },
     }),
   ])
 
@@ -76,5 +82,6 @@ export async function GET(request: Request) {
       moderator: a.moderator.profile?.username ?? "unknown",
       createdAt: a.createdAt,
     })),
+    reputation: recentRep,
   })
 }

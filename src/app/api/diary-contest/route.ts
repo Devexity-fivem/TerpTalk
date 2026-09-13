@@ -225,14 +225,12 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: "Can't vote for your own entry" }, { status: 400 })
       }
 
-      // One vote per month per user, atomically swapped.
-      const vote = await prisma.$transaction(async (tx) => {
-        await tx.diaryContestVote.deleteMany({
-          where: { userId: session.user.id, entry: { month } },
-        })
-        return tx.diaryContestVote.create({
-          data: { entryId, userId: session.user.id },
-        })
+      // One vote per month per user — (userId, month) unique key makes the
+      // swap a single atomic upsert instead of a delete+create race window.
+      const vote = await prisma.diaryContestVote.upsert({
+        where: { userId_month: { userId: session.user.id, month } },
+        create: { entryId, userId: session.user.id, month },
+        update: { entryId },
       })
       return NextResponse.json({ voted: true, voteId: vote.id })
     }

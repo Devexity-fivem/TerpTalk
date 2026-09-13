@@ -28,22 +28,15 @@ export const BADGE_REGISTRY: BadgeDefinition[] = [
   { name: "Conversation Starter", description: "Started 5 discussion threads.", requirement: "Create 5 forum threads.", rarity: r("rare"), icon: "MessageSquarePlus" },
   { name: "Active Grower", description: "Made 10 forum posts.", requirement: "Publish 10 replies or threads.", rarity: r("common"), icon: "Flame" },
   { name: "Forum Regular", description: "A reliable voice in the forums.", requirement: "Publish 100 replies or threads.", rarity: r("epic"), icon: "MessageSquare" },
-  { name: "10 Posts", description: "Made 10 forum posts.", requirement: "Publish 10 posts.", rarity: r("common"), icon: "MessageSquare" },
-  { name: "50 Posts", description: "Made 50 forum posts.", requirement: "Publish 50 posts.", rarity: r("rare"), icon: "MessageSquare" },
-  { name: "100 Posts", description: "Made 100 forum posts.", requirement: "Publish 100 posts.", rarity: r("epic"), icon: "MessageSquare" },
-  { name: "500 Posts", description: "Made 500 forum posts.", requirement: "Publish 500 posts.", rarity: r("epic"), icon: "MessageSquare" },
-  { name: "1,000 Posts", description: "A cornerstone of the community.", requirement: "Publish 1,000 posts.", rarity: r("legendary"), icon: "MessageSquare" },
 
   // Content / collection
   { name: "Diary Master", description: "Created 5 grow diaries.", requirement: "Create 5 grow diaries.", rarity: r("rare"), icon: "BookOpen" },
   { name: "Garden Veteran", description: "Created 10 grow diaries.", requirement: "Create 10 grow diaries.", rarity: r("epic"), icon: "TreePine" },
-  { name: "Grow Diary Keeper", description: "Keeps detailed grow logs.", requirement: "Maintain an active grow diary for 30 days.", rarity: r("rare"), icon: "Calendar" },
   { name: "Strain Hunter", description: "Added 3 strains to the database.", requirement: "Add 3 strains.", rarity: r("rare"), icon: "Search" },
   { name: "Strain Explorer", description: "Helps catalog genetics.", requirement: "Add 10 strains.", rarity: r("rare"), icon: "Binoculars" },
   { name: "Grow Photographer", description: "Shared 5 strain or grow photos.", requirement: "Upload 5 photos.", rarity: r("rare"), icon: "Camera" },
   { name: "Photo Pro", description: "Shared 25 photos.", requirement: "Upload 25 photos.", rarity: r("epic"), icon: "Aperture" },
   { name: "Setup Specialist", description: "A master of grow-space design.", requirement: "Create 5 setup showcases.", rarity: r("rare"), icon: "Monitor" },
-  { name: "Content Creator", description: "Contributes high-quality guides or media.", requirement: "Create 5 guides or 10 featured posts.", rarity: r("epic"), icon: "Film" },
 
   // Social
   { name: "Social Butterfly", description: "Sent 25 messages in community chat.", requirement: "Send 25 chat messages.", rarity: r("rare"), icon: "MessageCircle" },
@@ -66,18 +59,19 @@ export const BADGE_REGISTRY: BadgeDefinition[] = [
   { name: "Grower", description: "Reached 1,500 reputation.", requirement: "Earn 1,500 reputation.", rarity: r("common"), icon: "Leaf" },
   { name: "Cultivator", description: "Reached 3,500 reputation.", requirement: "Earn 3,500 reputation.", rarity: r("rare"), icon: "Scissors" },
   { name: "Master Grower", description: "Reached 7,000 reputation.", requirement: "Earn 7,000 reputation.", rarity: r("epic"), icon: "Crown" },
-  { name: "Legendary Grower", description: "Reached 15,000 reputation.", requirement: "Earn 15,000 reputation.", rarity: r("legendary"), icon: "Gem" },
+  { name: "Head Grower", description: "Reached 15,000 reputation.", requirement: "Earn 15,000 reputation.", rarity: r("legendary"), icon: "Star" },
+  { name: "Hash Maker", description: "Pressed to perfection — reached 40,000 reputation.", requirement: "Earn 40,000 reputation.", rarity: r("legendary"), icon: "Sparkles" },
+  { name: "Cannabis Deity", description: "A true deity of the grow room — reached 100,000 reputation.", requirement: "Earn 100,000 reputation.", rarity: r("legendary"), icon: "Crown" },
 
   // Honours
   { name: "Top Contributor", description: "Reached 10,000 reputation points.", requirement: "Earn 10,000 reputation.", rarity: r("epic"), icon: "TrendingUp" },
   { name: "Dedicated Grower", description: "Posted grow updates 7 days in a row.", requirement: "Update diaries for 7 consecutive days.", rarity: r("epic"), icon: "Flame" },
-  { name: "Early Supporter", description: "One of the first to help build TerpTalk.", requirement: "Join during the early-access period.", rarity: r("rare"), icon: "Star" },
+  { name: "Early Supporter", description: "One of the first to help build TerpTalk.", requirement: "Be among the first 250 registered members.", rarity: r("rare"), icon: "Star" },
   { name: "Beta Tester", description: "Joined TerpTalk during the beta and helped shape the community.", requirement: "Early beta member.", rarity: r("rare"), icon: "Rocket" },
   { name: "Verified YouTuber", description: "A featured cannabis grow content creator on YouTube.", requirement: "Verified by staff as a YouTuber.", rarity: r("epic"), icon: "Video" },
   { name: "Weekly Winner", description: "Won Budshot of the Week.", requirement: "Win a weekly photo contest.", rarity: r("legendary"), icon: "Trophy" },
   { name: "Diary of the Month", description: "Won the monthly grow diary contest.", requirement: "Win Diary of the Month.", rarity: r("legendary"), icon: "Trophy" },
   { name: "Contest Finalist", description: "Reached the final round of a community contest.", requirement: "Finish top 5 in a contest.", rarity: r("rare"), icon: "Medal" },
-  { name: "Contest Winner", description: "Won a community contest.", requirement: "Place first in a contest.", rarity: r("legendary"), icon: "Trophy" },
 
   // Staff / trust
   { name: "Trusted Member", description: "Recognized by staff as a trusted community member.", requirement: "Awarded by staff.", rarity: r("epic"), icon: "ShieldCheck" },
@@ -130,14 +124,6 @@ export const BADGE_REGISTRY: BadgeDefinition[] = [
   { name: "Sage Answer", description: "Had 50 replies marked as accepted answers.", requirement: "Have 50 replies accepted.", rarity: r("epic"), icon: "ScrollText" },
   { name: "Oracle", description: "Had 100 replies marked as accepted answers.", requirement: "Have 100 replies accepted.", rarity: r("legendary"), icon: "ScrollText" },
 
-  // High reputation tiers
-  { name: "Head Grower", description: "Glowing like a perfectly frosted cola — reached 30,000 reputation.", requirement: "Earn 30,000 reputation.", rarity: r("legendary"), icon: "Star" },
-  { name: "Hash Maker", description: "Pressed to perfection — reached 75,000 reputation.", requirement: "Earn 75,000 reputation.", rarity: r("legendary"), icon: "Sparkles" },
-  { name: "Mother Plant", description: "The community grows from you — reached 150,000 reputation.", requirement: "Earn 150,000 reputation.", rarity: r("legendary"), icon: "Leaf" },
-  { name: "Pheno Hunter", description: "You always find the keeper — reached 300,000 reputation.", requirement: "Earn 300,000 reputation.", rarity: r("legendary"), icon: "Zap" },
-  { name: "Terpene Tycoon", description: "Your terp profile has its own fanbase — reached 600,000 reputation.", requirement: "Earn 600,000 reputation.", rarity: r("legendary"), icon: "Gem" },
-  { name: "Cannabis Deity", description: "A true deity of the grow room — reached 1,000,000 reputation.", requirement: "Earn 1,000,000 reputation.", rarity: r("legendary"), icon: "Crown" },
-
   // Overall contribution
   { name: "Elite Harvest", description: "Trimmed a serious haul — reached 25,000 reputation.", requirement: "Earn 25,000 reputation.", rarity: r("epic"), icon: "TrendingUp" },
   { name: "Legendary Harvest", description: "Your harvests are the stuff of legends — reached 50,000 reputation.", requirement: "Earn 50,000 reputation.", rarity: r("legendary"), icon: "TrendingUp" },
@@ -158,6 +144,10 @@ export const BOT_BADGE_REGISTRY: BadgeDefinition[] = [
   { name: "Evergreen", description: "Served the community on 90 different days.", requirement: "Be active on 90 distinct days (bot only).", rarity: r("epic"), icon: "TreePine" },
   { name: "Mother Bot", description: "The whole garden leans on it — 500 members assisted.", requirement: "Assist 500 unique members (bot only).", rarity: r("legendary"), icon: "Bot" },
 ]
+
+// Badges granted only by an administrator's explicit action — never by
+// checkBadges(). Whitelist enforced by /api/admin/users PATCH.
+export const STAFF_AWARDED_BADGES = new Set(["Trusted Member"])
 
 const BOT_BADGE_NAMES = new Set(BOT_BADGE_REGISTRY.map((b) => b.name))
 

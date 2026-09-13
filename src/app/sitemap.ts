@@ -1,7 +1,6 @@
 import type { MetadataRoute } from "next"
 import { prisma } from "@/lib/prisma"
-import { activeAuthor } from "@/lib/security"
-import { TERPBOT_USERNAME } from "@/lib/terpbot-constants"
+import { activeAuthor, rankableProfile, REPUTATION_ORDER } from "@/lib/security"
 
 const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://terp-talk.vercel.app"
 
@@ -15,6 +14,7 @@ const STATIC = [
   { url: "/strains", priority: 0.8, changeFrequency: "weekly" as const },
   { url: "/contest", priority: 0.6, changeFrequency: "weekly" as const },
   { url: "/leaderboard", priority: 0.6, changeFrequency: "daily" as const },
+  { url: "/reputation", priority: 0.5, changeFrequency: "monthly" as const },
   { url: "/guides", priority: 0.7, changeFrequency: "weekly" as const },
   { url: "/help", priority: 0.7, changeFrequency: "weekly" as const },
   { url: "/deals", priority: 0.5, changeFrequency: "weekly" as const },
@@ -48,9 +48,9 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     }),
     prisma.profile.findMany({
       // TerpBot excluded — its profile is a bot page, not member content.
-      where: { user: { banned: false }, username: { not: TERPBOT_USERNAME } },
+      where: rankableProfile(),
       take: 50,
-      orderBy: { reputation: "desc" },
+      orderBy: REPUTATION_ORDER,
       select: { username: true, joinDate: true },
     }),
     prisma.guide.findMany({

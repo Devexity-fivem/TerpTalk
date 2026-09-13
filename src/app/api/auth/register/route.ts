@@ -11,7 +11,6 @@ import {
   hashIp,
   logSecurityEvent,
 } from "@/lib/security"
-import { awardReputation, REP_POINTS } from "@/lib/reputation"
 import { getBooleanSetting, SITE_SETTINGS } from "@/lib/settings"
 import { checkMaintenance } from "@/lib/maintenance"
 import { announceNewMember, TERPBOT_USERNAME } from "@/lib/terpbot"
@@ -193,14 +192,11 @@ export async function POST(request: Request) {
     // signup response isn't delayed by the post.
     after(() => announceNewMember(username).then(() => {}))
 
-    // Reward the referrer
+    // Referral reputation no longer pays at signup — it pays via
+    // maybePayReferral() only once the referred member passes the legitimacy
+    // threshold (REFERRAL_MIN_REP earned + REFERRAL_MIN_AGE_HOURS old). The
+    // "someone joined" notification still fires here.
     if (referrerUserId) {
-      await awardReputation(
-        referrerUserId,
-        "REFERRAL",
-        REP_POINTS.REFERRAL,
-        `Referred new member ${username}`
-      ).catch(() => {})
       await notify({
         userId: referrerUserId,
         type: "REFERRAL",

@@ -6,6 +6,7 @@ import { unauthorized, publicUserSelect, LIMITS, getClientIp, logSecurityEvent, 
 import { rateLimit } from "@/lib/rate-limit"
 import { storeImages, deleteImagesIfUnreferenced } from "@/lib/blob"
 import { checkMaintenance } from "@/lib/maintenance"
+import { awardReputation, REP_POINTS } from "@/lib/reputation"
 import { revalidateTag } from "next/cache"
 
 export async function POST(request: Request) {
@@ -125,6 +126,14 @@ export async function POST(request: Request) {
         author: { select: publicUserSelect },
       },
     })
+
+    await awardReputation(
+      session.user.id,
+      "SETUP_CREATED",
+      REP_POINTS.SETUP_CREATED,
+      `Shared grow setup "${setup.title.slice(0, 60)}"`,
+      { key: `setup:${setup.id}`, sourceType: "SETUP", sourceId: setup.id }
+    ).catch(() => {})
 
     revalidateTag("setups", { expire: 0 })
 

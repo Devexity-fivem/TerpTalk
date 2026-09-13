@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { unstable_cache } from "next/cache"
-import { getClientIp, hashIp } from "@/lib/security"
+import { getClientIp, hashIp, REPUTATION_ORDER } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
 
 function escapeLike(str: string): string {
@@ -32,7 +32,7 @@ const getSearchSuggestions = unstable_cache(
           user: { banned: false, OR: [{ suspendedUntil: null }, { suspendedUntil: { lt: new Date() } }] },
         },
         take: 3,
-        orderBy: { reputation: "desc" },
+        orderBy: REPUTATION_ORDER,
         select: { username: true },
       }),
       prisma.tag.findMany({

@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma"
 import { createHash } from "crypto"
 import { NextResponse } from "next/server"
 import { REP_TIERS } from "@/lib/reputation-config"
+import { TERPBOT_USERNAME } from "@/lib/terpbot-constants"
 
 // ─── Role & status helpers ──────────────────────────────────────────
 
@@ -109,6 +110,25 @@ export function activeAuthor() {
     OR: [{ suspendedUntil: null }, { suspendedUntil: { lt: new Date() } }],
   }
 }
+
+/**
+ * Prisma where fragment for Profile queries on rankable surfaces
+ * (leaderboard, grower-of-week, /top, /rank): not banned, not suspended,
+ * never TerpBot. Reuse this everywhere reputation is ranked.
+ */
+export function rankableProfile() {
+  return {
+    user: activeAuthor(),
+    username: { not: TERPBOT_USERNAME },
+  }
+}
+
+// Deterministic leaderboard ordering — reputation desc, then userId asc so
+// ties never reshuffle between page loads or cache misses.
+export const REPUTATION_ORDER = [
+  { reputation: "desc" as const },
+  { userId: "asc" as const },
+]
 
 export type TrustLevel = "New Grower" | "Member" | "Established" | "Veteran" | "Expert"
 

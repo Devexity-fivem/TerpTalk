@@ -19,7 +19,8 @@
     "test:search": "node scripts/search-verify.mjs",
     "test:diary": "node scripts/diary-verify.mjs",
     "test:bot": "node scripts/bot-verify.mjs",
-    "test:terpbot": "tsx scripts/terpbot-tests.mts"
+    "test:terpbot": "tsx scripts/terpbot-tests.mts",
+    "test:reputation": "tsx scripts/reputation-tests.mts"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",

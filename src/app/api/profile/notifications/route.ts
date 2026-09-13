@@ -28,6 +28,7 @@ export async function GET() {
       notifyOnComment: true,
       notifyOnFollow: true,
       notifyOnReaction: true,
+      notifyOnMilestone: true,
       emailDigestFrequency: true,
     },
   })
@@ -55,6 +56,7 @@ export async function PATCH(request: Request) {
     notifyOnComment?: boolean
     notifyOnFollow?: boolean
     notifyOnReaction?: boolean
+    notifyOnMilestone?: boolean
     emailDigestFrequency?: string | null
   } = {}
 
@@ -65,6 +67,7 @@ export async function PATCH(request: Request) {
   if ("notifyOnComment" in body) data.notifyOnComment = !!body.notifyOnComment
   if ("notifyOnFollow" in body) data.notifyOnFollow = !!body.notifyOnFollow
   if ("notifyOnReaction" in body) data.notifyOnReaction = !!body.notifyOnReaction
+  if ("notifyOnMilestone" in body) data.notifyOnMilestone = !!body.notifyOnMilestone
   if ("emailDigestFrequency" in body) {
     const raw = body.emailDigestFrequency
     if (raw === null || raw === undefined || raw === "") {

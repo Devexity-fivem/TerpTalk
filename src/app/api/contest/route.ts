@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { unauthorized, publicUserSelect, getClientIp, hashIp, logSecurityEvent, isBanned, forbidden, enforceLinkTrust } from "@/lib/security"
+import { unauthorized, publicUserSelect, getClientIp, hashIp, logSecurityEvent, isBanned, forbidden, enforceLinkTrust, activeAuthor } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
 import { storeImage, deleteImagesIfUnreferenced } from "@/lib/blob"
 import { currentWeekKey } from "@/lib/week"
@@ -31,8 +31,8 @@ export async function GET(request: Request) {
     const week = currentWeekKey()
 
     const entries = await prisma.contestEntry.findMany({
-      where: { week },
-      orderBy: { votes: { _count: "desc" } },
+      where: { week, user: activeAuthor() },
+      orderBy: [{ votes: { _count: "desc" } }, { createdAt: "asc" }],
       take: 50,
       include: {
         user: { select: publicUserSelect },
@@ -107,14 +107,19 @@ export async function POST(request: Request) {
       }
 
       imageUrl = await storeImage(image, "contest")
-      const entry = await prisma.contestEntry.create({
-        data: {
-          week: currentWeek,
-          imageUrl,
-          caption: typeof caption === "string" ? caption.slice(0, 200) : null,
-          userId: session.user.id,
-        },
-      })
+      const entry = await prisma.contestEntry
+        .create({
+          data: {
+            week: currentWeek,
+            imageUrl,
+            caption: typeof caption === "string" ? caption.slice(0, 200) : null,
+            userId: session.user.id,
+          },
+        })
+        .catch(() => null)
+      if (!entry) {
+        return NextResponse.json({ error: "You have already entered this week" }, { status: 409 })
+      }
       return NextResponse.json({ entry }, { status: 201 })
     }
 
@@ -122,6 +127,19 @@ export async function POST(request: Request) {
       const { entryId } = body
       if (typeof entryId !== "string" || !entryId) {
         return NextResponse.json({ error: "Invalid entry id" }, { status: 400 })
+      }
+
+      // Voter trust gate — same bar as the monthly diary contest so
+      // sockpuppet voting costs real account age + reputation.
+      const voter = await prisma.user.findUnique({
+        where: { id: session.user.id },
+        select: { createdAt: true, role: true, profile: { select: { reputation: true } } },
+      })
+      const voterAgeDays = voter ? (Date.now() - voter.createdAt.getTime()) / 86400000 : 0
+      const voterRep = voter?.profile?.reputation ?? 0
+      const voterStaff = voter?.role === "ADMINISTRATOR" || voter?.role === "MODERATOR"
+      if (!voterStaff && (voterAgeDays < 7 || voterRep < 10)) {
+        return forbidden("Voting requires an account at least 7 days old with 10+ reputation")
       }
 
       const rl = await rateLimit(`contest-vote:${session.user.id}`, 20, 60 * 1000)
@@ -143,15 +161,13 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: "Can't vote for your own entry" }, { status: 400 })
       }
 
-      // One vote per week per user, atomically swap
+      // One vote per week per user — the (userId, week) unique key makes the
+      // swap a single atomic upsert instead of a delete+create race window.
       const currentWeek = currentWeekKey()
-      const vote = await prisma.$transaction(async (tx) => {
-        await tx.contestVote.deleteMany({
-          where: { userId: session.user.id, entry: { week: currentWeek } },
-        })
-        return tx.contestVote.create({
-          data: { entryId, userId: session.user.id },
-        })
+      const vote = await prisma.contestVote.upsert({
+        where: { userId_week: { userId: session.user.id, week: currentWeek } },
+        create: { entryId, userId: session.user.id, week: currentWeek },
+        update: { entryId },
       })
       return NextResponse.json({ voted: true, voteId: vote.id })
     }

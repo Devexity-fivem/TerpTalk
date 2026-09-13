@@ -6,6 +6,7 @@ import { unauthorized, isAdmin, forbidden, getClientIp, logSecurityEvent } from 
 import { requireModerator, ADMIN_ONLY_MOD_ACTIONS } from "@/lib/require-staff"
 import { rateLimit } from "@/lib/rate-limit"
 import { emitNotificationPush, notificationLinkWhere, postLinkWhere } from "@/lib/notify"
+import { reverseReputationBySource, reverseReputationByActor } from "@/lib/reputation"
 
 const CONTENT_TYPES = new Set(["THREAD", "POST", "CHAT_MESSAGE", "DIARY", "SETUP"])
 const ACTION_TYPES = new Set([
@@ -222,6 +223,24 @@ export async function POST(request: Request) {
 
     if (createdNotification) {
       emitNotificationPush(targetUserId, createdNotification)
+    }
+
+    // Reputation reconciliation — idempotent counter-entries, never silent edits.
+    if (actionType === "CONTENT_DELETION" && typeof targetId === "string") {
+      if (targetType === "THREAD") {
+        const postIds = await prisma.post.findMany({ where: { threadId: targetId }, select: { id: true } })
+        await reverseReputationBySource("THREAD", targetId, "Content removed by staff", staff.id).catch(() => 0)
+        for (const p of postIds) {
+          await reverseReputationBySource("POST", p.id, "Content removed by staff", staff.id).catch(() => 0)
+        }
+      } else if (targetType === "POST" || targetType === "DIARY" || targetType === "SETUP") {
+        await reverseReputationBySource(targetType, targetId, "Content removed by staff", staff.id).catch(() => 0)
+      }
+    }
+    // A permanent ban voids reputation the banned account granted others
+    // (likes they cast, answers they accepted). Their own earned history stays.
+    if (actionType === "PERMANENT_BAN") {
+      await reverseReputationByActor(targetUserId, "Granting account permanently banned").catch(() => 0)
     }
 
     await logSecurityEvent("SUSPICIOUS_ACTIVITY", {

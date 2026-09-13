@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma"
-import { TERPBOT_USERNAME } from "@/lib/terpbot"
+import { rankableProfile, REPUTATION_ORDER } from "@/lib/security"
 import { unstable_cache } from "next/cache"
 import { Trophy, Medal, Award } from "lucide-react"
 import Link from "next/link"
@@ -18,8 +18,8 @@ export const metadata = {
 const getTopUsers = unstable_cache(
   async () => {
     return prisma.profile.findMany({
-      where: { user: { banned: false }, username: { not: TERPBOT_USERNAME } },
-      orderBy: { reputation: "desc" },
+      where: rankableProfile(),
+      orderBy: REPUTATION_ORDER,
       take: 25,
       select: {
         username: true,

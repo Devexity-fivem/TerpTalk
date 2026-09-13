@@ -3,7 +3,7 @@ import { OpenChatButton } from "@/components/open-chat-button"
 import Link from "next/link"
 import { prisma } from "@/lib/prisma"
 import { unstable_cache } from "next/cache"
-import { publicUserSelect } from "@/lib/security"
+import { publicUserSelect, activeAuthor, rankableProfile, REPUTATION_ORDER } from "@/lib/security"
 import CannabisLeaf from "@/components/cannabis-leaf"
 import LiveStats from "@/components/live-stats"
 import JoinButton from "@/components/join-button"
@@ -110,8 +110,8 @@ const getActiveMembers = unstable_cache(
 const getGrowerOfWeek = unstable_cache(
   async () => {
     return await prisma.profile.findFirst({
-      where: { username: { not: "terpbot" }, user: { banned: false, role: { not: "ADMINISTRATOR" } } },
-      orderBy: { reputation: "desc" },
+      where: { ...rankableProfile(), user: { ...activeAuthor(), role: { not: "ADMINISTRATOR" } } },
+      orderBy: REPUTATION_ORDER,
       include: { user: { select: { id: true, image: true, createdAt: true } } },
     })
   },

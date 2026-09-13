@@ -2,7 +2,8 @@ import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { forbidden, getClientIp, logSecurityEvent } from "@/lib/security"
 import { requireAdmin } from "@/lib/require-staff"
-import { getBadgeByName } from "@/lib/badge-registry"
+import { getBadgeByName, STAFF_AWARDED_BADGES } from "@/lib/badge-registry"
+import { grantBadge } from "@/lib/reputation"
 import { rateLimit } from "@/lib/rate-limit"
 import { emitNotificationPush } from "@/lib/notify"
 
@@ -125,7 +126,7 @@ export async function PATCH(request: Request) {
     }
 
     const body = await request.json().catch(() => ({}))
-    const { userId, role, beta } = body
+    const { userId, role, beta, badge, grant } = body
 
     if (typeof userId !== "string" || !userId) {
       return NextResponse.json({ error: "Invalid request" }, { status: 400 })
@@ -162,6 +163,27 @@ export async function PATCH(request: Request) {
           },
         })
       })
+
+      // Role badges track live roles — grant on promotion, revoke on demotion.
+      const staffRole = role === "MODERATOR" || role === "ADMINISTRATOR" || role === "SUPPORT"
+      if (staffRole) {
+        if (role === "MODERATOR" || role === "ADMINISTRATOR") {
+          await grantBadge(userId, "Moderator", { notifyUser: false })
+        }
+        if (role === "ADMINISTRATOR" || role === "SUPPORT") {
+          await grantBadge(userId, "Staff", { notifyUser: false })
+        }
+      } else {
+        const staffBadges = await prisma.badge.findMany({
+          where: { name: { in: ["Moderator", "Staff"] } },
+          select: { id: true },
+        })
+        if (staffBadges.length > 0) {
+          await prisma.userBadge.deleteMany({
+            where: { userId, badgeId: { in: staffBadges.map((b) => b.id) } },
+          })
+        }
+      }
 
       const roleNotification = await prisma.notification.create({
         data: {
@@ -223,6 +245,50 @@ export async function PATCH(request: Request) {
       })
 
       return NextResponse.json({ ok: true, isBeta: beta })
+    }
+
+    // Staff-awarded badge path — { badge: "Trusted Member", grant: boolean }.
+    // Whitelisted so admins can't hand out stat/contest badges by fiat.
+    if (typeof badge === "string" && typeof grant === "boolean") {
+      if (!STAFF_AWARDED_BADGES.has(badge)) {
+        return NextResponse.json({ error: "Badge is not staff-awardable" }, { status: 400 })
+      }
+      const def = getBadgeByName(badge)
+      const row = await prisma.badge.upsert({
+        where: { name: badge },
+        create: {
+          name: badge,
+          description: def?.description ?? badge,
+          icon: def?.icon ?? "Award",
+          color: def?.rarity ?? "rare",
+          requirement: def?.requirement ?? "Awarded by staff",
+        },
+        update: {},
+      })
+
+      if (grant) {
+        await grantBadge(userId, badge, {
+          content: `Staff awarded you the "${badge}" badge — ${def?.description ?? ""}`,
+        })
+      } else {
+        await prisma.userBadge.deleteMany({ where: { userId, badgeId: row.id } })
+      }
+
+      await prisma.moderationAction.create({
+        data: {
+          type: "BADGE_ADJUSTMENT",
+          reason: `${grant ? "Granted" : "Revoked"} badge "${badge}"`,
+          targetUserId: userId,
+          moderatorId: admin.id,
+        },
+      })
+      await logSecurityEvent("SUSPICIOUS_ACTIVITY", {
+        userId: admin.id,
+        ip: getClientIp(request),
+        metadata: { adminAction: "badge_adjustment", badge, grant, targetUserId: userId },
+      })
+
+      return NextResponse.json({ ok: true, badge, granted: grant })
     }
 
     return NextResponse.json({ error: "Invalid request" }, { status: 400 })

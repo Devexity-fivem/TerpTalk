@@ -3,12 +3,10 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { unauthorized, publicUserSelect, LIMITS, getClientIp, logSecurityEvent, isBanned, forbidden, enforceLinkTrust } from "@/lib/security"
-import { rateLimit } from "@/lib/rate-limit"
-import { awardReputation, REP_POINTS } from "@/lib/reputation"
+import { awardReputation, grantBadge, repRateLimit, REP_POINTS } from "@/lib/reputation"
 import { storeImages, deleteImagesIfUnreferenced } from "@/lib/blob"
 import { checkMaintenance } from "@/lib/maintenance"
-import { getBadgeByName } from "@/lib/badge-registry"
-import { notify, notifyMany } from "@/lib/notify"
+import { notifyMany } from "@/lib/notify"
 import { revalidateTag } from "next/cache"
 import { diaryDay, diaryWeek } from "@/lib/diary-weeks"
 
@@ -99,7 +97,7 @@ export async function POST(request: Request) {
       : []
 
     // Rate limit + ban check before any expensive work
-    const rl = await rateLimit(`diary-update:${session.user.id}`, 30, 60 * 60 * 1000)
+    const rl = await repRateLimit(session.user.id, `diary-update:${session.user.id}`, 30, 60 * 60 * 1000)
     if (!rl.allowed) {
       await logSecurityEvent("RATE_LIMIT_EXCEEDED", {
         userId: session.user.id,
@@ -179,11 +177,15 @@ export async function POST(request: Request) {
       },
     })
 
+    // One paying update per diary per UTC day — keyed so extra updates and
+    // retries don't farm.
+    const updateDay = new Date().toISOString().slice(0, 10)
     await awardReputation(
       session.user.id,
       "DIARY_UPDATE",
       REP_POINTS.DIARY_UPDATE,
-      `Updated diary "${diary.title.slice(0, 60)}"`
+      `Updated diary "${diary.title.slice(0, 60)}"`,
+      { key: `diaryupd:${diaryId}:${updateDay}`, sourceType: "DIARY", sourceId: diaryId }
     ).catch(() => {})
 
     // Update diary stage only on an explicit change. The form defaults to the
@@ -211,31 +213,9 @@ export async function POST(request: Request) {
       else break
     }
     if (streak >= 7) {
-      const def = getBadgeByName("Dedicated Grower")
-      const badge = await prisma.badge.upsert({
-        where: { name: "Dedicated Grower" },
-        update: {},
-        create: {
-          name: "Dedicated Grower",
-          description: def?.description ?? "Posted grow updates 7 days in a row",
-          icon: def?.icon ?? "Flame",
-          color: def?.rarity ?? "epic",
-          requirement: def?.requirement ?? "Update diaries on 7 consecutive days",
-        },
+      await grantBadge(session.user.id, "Dedicated Grower", {
+        content: "You earned the \"Dedicated Grower\" badge — 7 days of updates in a row, impressive consistency!",
       })
-      const has = await prisma.userBadge.findUnique({
-        where: { userId_badgeId: { userId: session.user.id, badgeId: badge.id } },
-      })
-      if (!has) {
-        await prisma.userBadge.create({ data: { userId: session.user.id, badgeId: badge.id } })
-        await notify({
-          userId: session.user.id,
-          type: "BADGE",
-          title: "Badge earned: 🔥 Dedicated Grower",
-          content: "7 days of updates in a row — impressive consistency!",
-          link: "/profile",
-        })
-      }
     }
 
     // Notify diary followers (not the author) — notifyMany filters

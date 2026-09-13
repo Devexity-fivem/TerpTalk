@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import { useSession } from "next-auth/react"
 import { useParams } from "next/navigation"
-import { User, MessageSquare, Loader2, MapPin, Globe, Sprout, Dna, Leaf, Store, Flame, ChevronDown, ChevronUp, Bot, Zap, Users, Link2, HandMetal, CalendarClock } from "lucide-react"
+import { User, MessageSquare, Loader2, MapPin, Globe, Sprout, Dna, Leaf, Store, Flame, ChevronDown, ChevronUp, Bot, Zap, Users, Link2, HandMetal, CalendarClock, TrendingUp } from "lucide-react"
 import Link from "next/link"
 import UserActions from "@/components/user-actions"
 import RoleBadge from "@/components/role-badge"
@@ -81,11 +81,19 @@ interface GrowDiary {
   _count: { updates: number; followers: number }
 }
 
+interface RepEvent {
+  id: string
+  label: string
+  amount: number
+  reversed: boolean
+  createdAt: string
+}
+
 export default function ProfileClient() {
   const params = useParams()
   const { data: session } = useSession()
   const username = decodeURIComponent(String(params.username))
-  const [data, setData] = useState<{ profile: PublicProfile; viewerBlocked: boolean; viewerFollowing: boolean; recentThreads: Thread[]; growDiaries: GrowDiary[] } | null>(null)
+  const [data, setData] = useState<{ profile: PublicProfile; viewerBlocked: boolean; viewerFollowing: boolean; recentThreads: Thread[]; growDiaries: GrowDiary[]; recentRep: RepEvent[] } | null>(null)
   const [loading, setLoading] = useState(true)
   const [notFound, setNotFound] = useState(false)
   const [showAllBadges, setShowAllBadges] = useState(false)
@@ -120,7 +128,7 @@ export default function ProfileClient() {
     )
   }
 
-  const { profile, viewerBlocked, viewerFollowing, recentThreads, growDiaries } = data
+  const { profile, viewerBlocked, viewerFollowing, recentThreads, growDiaries, recentRep } = data
   const joinDate = new Date(profile.joinDate).toLocaleDateString("en-US", { year: "numeric", month: "long" })
 
   return (
@@ -307,6 +315,29 @@ export default function ProfileClient() {
             </div>
           </div>
         </div>
+
+        {!profile.isBot && recentRep.length > 0 && (
+          <div className="bg-card rounded-lg border border-border p-4 mb-4">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <TrendingUp className="w-4 h-4 text-primary" />
+                <h2 className="text-lg font-semibold">Reputation</h2>
+              </div>
+              <Link href="/reputation" className="text-xs text-primary hover:underline">How it works</Link>
+            </div>
+            <div className="space-y-1">
+              {recentRep.map((e) => (
+                <div key={e.id} className={`flex items-center justify-between text-sm py-1 ${e.reversed ? "opacity-50" : ""}`}>
+                  <span className={`truncate ${e.reversed ? "line-through" : ""}`}>{e.label}{e.reversed ? " (reversed)" : ""}</span>
+                  <span className="flex items-center gap-3 shrink-0 ml-3">
+                    <span className="text-xs text-muted-foreground">{new Date(e.createdAt).toLocaleDateString()}</span>
+                    <span className={`font-medium w-10 text-right ${e.amount >= 0 ? "text-primary" : "text-destructive"}`}>{e.amount >= 0 ? "+" : ""}{e.amount}</span>
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {profile.isBot ? (
           <div className="bg-card rounded-lg border border-border p-4 mb-4">

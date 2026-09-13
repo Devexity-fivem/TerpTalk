@@ -2,8 +2,9 @@ import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { unauthorized, forbidden, isBanned, isModerator } from "@/lib/security"
+import { unauthorized, forbidden, isBanned, isModerator, isStaff } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
+import { getTierPerks } from "@/lib/reputation"
 import { checkMaintenance } from "@/lib/maintenance"
 
 export async function POST(
@@ -21,6 +22,15 @@ export async function POST(
 
     const maintenance = await checkMaintenance()
     if (maintenance) return maintenance
+
+    // Poll voting is a Seedling-tier perk (750+ rep) — keeps poll brigading
+    // expensive. Staff always can.
+    if (!isStaff(session.user.role)) {
+      const perks = await getTierPerks(session.user.id)
+      if (!perks.pollVoting) {
+        return forbidden("Poll voting unlocks at 750 reputation (Seedling)")
+      }
+    }
 
     const rl = await rateLimit(`poll-vote:${session.user.id}:${id}`, 10, 60 * 1000)
     if (!rl.allowed) {

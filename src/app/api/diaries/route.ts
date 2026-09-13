@@ -123,7 +123,8 @@ export async function POST(request: Request) {
       session.user.id,
       "DIARY_CREATED",
       REP_POINTS.DIARY_CREATED,
-      `Started grow diary "${diary.title.slice(0, 60)}"`
+      `Started grow diary "${diary.title.slice(0, 60)}"`,
+      { key: `diary:${diary.id}`, sourceType: "DIARY", sourceId: diary.id }
     ).catch(() => {})
 
     revalidateTag("diaries", { expire: 0 })

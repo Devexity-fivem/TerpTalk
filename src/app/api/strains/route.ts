@@ -109,7 +109,8 @@ export async function POST(request: Request) {
       session.user.id,
       "STRAIN_CREATED",
       REP_POINTS.STRAIN_CREATED,
-      `Added strain "${name.slice(0, 60)}"`
+      `Added strain "${name.slice(0, 60)}"`,
+      { key: `strain:${strain.id}`, sourceType: "STRAIN", sourceId: strain.id }
     ).catch(() => {})
 
     return NextResponse.json({ strain }, { status: 201 })

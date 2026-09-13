@@ -63,7 +63,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     return NextResponse.json({ error: "User not found" }, { status: 404 })
   }
 
-  const [moderationHistory, reportsAgainst, reportsBy] = await Promise.all([
+  const [moderationHistory, reportsAgainst, reportsBy, badges] = await Promise.all([
     prisma.moderationAction.findMany({
       where: { targetUserId: id },
       orderBy: { createdAt: "desc" },
@@ -73,6 +73,10 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     }),
     prisma.report.count({ where: { reportedId: id } }),
     prisma.report.count({ where: { reporterId: id } }),
+    prisma.userBadge.findMany({
+      where: { userId: id },
+      select: { badge: { select: { name: true } } },
+    }),
   ])
 
   return NextResponse.json({
@@ -88,6 +92,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       })),
       reportsAgainst,
       reportsBy,
+      badges: badges.map((b) => b.badge.name),
     },
   })
 }

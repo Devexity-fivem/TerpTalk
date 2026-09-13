@@ -4,7 +4,7 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { isBanned, isModerator, forbidden, unauthorized, getClientIp, logSecurityEvent } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
-import { awardReputation } from "@/lib/reputation"
+import { awardReputation, reverseReputationByKey, REP_POINTS } from "@/lib/reputation"
 import { checkMaintenance } from "@/lib/maintenance"
 import { notify, postDeepLink } from "@/lib/notify"
 
@@ -72,6 +72,9 @@ export async function POST(request: Request) {
         where: { id: threadId },
         data: { acceptedAnswerId: null },
       })
+      if (thread.acceptedAnswerId) {
+        await reverseReputationByKey(`accept:${thread.acceptedAnswerId}`, "Answer unaccepted", user.id).catch(() => null)
+      }
       return NextResponse.json({ success: true })
     }
 
@@ -81,9 +84,10 @@ export async function POST(request: Request) {
     })
     if (!post) return NextResponse.json({ error: "Post not found" }, { status: 404 })
 
-    // Don't accept the thread author’s own post as the answer
-    if (post.authorId === thread.authorId) {
-      return NextResponse.json({ error: "Thread author cannot mark their own post as the answer" }, { status: 400 })
+    // Nobody can mark their own post as the answer — this also blocks a
+    // moderator accepting their own reply in someone else's thread.
+    if (post.authorId === thread.authorId || post.authorId === user.id) {
+      return NextResponse.json({ error: "You cannot mark your own post as the answer" }, { status: 400 })
     }
 
     await prisma.thread.update({
@@ -91,13 +95,20 @@ export async function POST(request: Request) {
       data: { acceptedAnswerId: postId },
     })
 
-    // Award reputation for helpful answer (only once when newly set)
+    // If a different post held the answer, reverse its award before paying the new one.
+    if (thread.acceptedAnswerId && thread.acceptedAnswerId !== postId) {
+      await reverseReputationByKey(`accept:${thread.acceptedAnswerId}`, "Accepted answer changed", user.id).catch(() => null)
+    }
+
+    // Award reputation for helpful answer — keyed per post so
+    // unaccept/re-accept cycles can't farm it.
     if (thread.acceptedAnswerId !== postId) {
       await awardReputation(
         post.authorId,
         "HELPFUL_ANSWER",
-        25,
+        REP_POINTS.HELPFUL_ANSWER,
         `Accepted answer in "${thread.title.slice(0, 50)}"`,
+        { key: `accept:${postId}`, actorId: user.id, sourceType: "POST", sourceId: postId }
       ).catch(() => {})
 
       // Hidden categories never notify — title/link would leak staff-only content.

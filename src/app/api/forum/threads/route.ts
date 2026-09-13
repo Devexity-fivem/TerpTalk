@@ -5,8 +5,7 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { unauthorized, publicUserSelect, LIMITS, getClientIp, logSecurityEvent, forbidden, containsExternalLink, isTrustedForLinks, isModerator, isAdmin } from "@/lib/security"
 import { requireModerator } from "@/lib/require-staff"
-import { rateLimit } from "@/lib/rate-limit"
-import { awardReputation, REP_POINTS, REP_TIERS } from "@/lib/reputation"
+import { awardReputation, reverseReputationBySource, repRateLimit, getTierPerks, REP_POINTS, REP_TIERS } from "@/lib/reputation"
 import { notifyMentions } from "@/lib/mentions"
 import { notifyMany, invalidateNotificationsForLink, postDeepLink } from "@/lib/notify"
 import { storeImages, deleteImagesIfUnreferenced } from "@/lib/blob"
@@ -80,8 +79,10 @@ export async function POST(request: Request) {
       )
     }
 
-    if (tagInputs.length > MAX_TAGS) {
-      return NextResponse.json({ error: `Maximum ${MAX_TAGS} tags per thread` }, { status: 400 })
+    // Head Grower+ can attach up to 7 tags instead of 5.
+    const tagCap = (await getTierPerks(session.user.id)).maxThreadTags ?? MAX_TAGS
+    if (tagInputs.length > tagCap) {
+      return NextResponse.json({ error: `Maximum ${tagCap} tags per thread` }, { status: 400 })
     }
 
     let pollData: { question: string; options: { text: string; order: number }[] } | undefined
@@ -105,8 +106,8 @@ export async function POST(request: Request) {
       pollData = { question: pollInput.question.trim(), options: pollOptions }
     }
 
-    // Rate limit: 10 threads per hour per user
-    const rl = await rateLimit(`thread:${session.user.id}`, 10, 60 * 60 * 1000)
+    // Rate limit: 10 threads per hour per user (Cultivator+ scale it up)
+    const rl = await repRateLimit(session.user.id, `thread:${session.user.id}`, 10, 60 * 60 * 1000)
     if (!rl.allowed) {
       await logSecurityEvent("RATE_LIMIT_EXCEEDED", {
         userId: session.user.id,
@@ -235,7 +236,8 @@ export async function POST(request: Request) {
       session.user.id,
       "THREAD_CREATED",
       REP_POINTS.THREAD_CREATED,
-      `Created thread "${title.slice(0, 60)}"`
+      `Created thread "${title.slice(0, 60)}"`,
+      { key: `thread:${thread.id}`, sourceType: "THREAD", sourceId: thread.id }
     ).catch(() => {})
 
     // Notify @mentions in the opening post — deep link lands on the OP.
@@ -331,6 +333,17 @@ export async function DELETE(request: Request) {
 
     await prisma.thread.update({ where: { id }, data: { deleted: true } })
     await invalidateNotificationsForLink(`/forum/thread/${thread.slug}`)
+
+    // Reputation reconciliation: reverse the thread award plus every event
+    // on posts inside it (post creation, likes, accepted answers).
+    await reverseReputationBySource("THREAD", thread.id, "Thread removed", session.user.id).catch(() => 0)
+    const postIds = await prisma.post.findMany({
+      where: { threadId: thread.id },
+      select: { id: true },
+    })
+    for (const p of postIds) {
+      await reverseReputationBySource("POST", p.id, "Thread removed", session.user.id).catch(() => 0)
+    }
 
     revalidateTag("forum", { expire: 0 })
 

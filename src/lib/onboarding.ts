@@ -1,6 +1,7 @@
 import { unstable_cache } from "next/cache"
 import { prisma } from "@/lib/prisma"
 import { TERPBOT_USERNAME } from "@/lib/terpbot"
+import { REPUTATION_ORDER } from "@/lib/security"
 
 // ─── Suggested growers ─────────────────────────────────────────────
 // Deterministic, inexpensive suggestions for cold-start onboarding.
@@ -29,7 +30,7 @@ async function fetchCandidatePool() {
         },
         OR: [{ avatarUrl: { not: null } }, { bio: { not: null } }],
       },
-      orderBy: { reputation: "desc" },
+      orderBy: REPUTATION_ORDER,
       take: 100,
       select: {
         username: true,

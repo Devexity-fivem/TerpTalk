@@ -124,6 +124,7 @@ model Profile {
   notifyOnComment      Boolean  @default(true)
   notifyOnFollow       Boolean  @default(true)
   notifyOnReaction     Boolean  @default(true)
+  notifyOnMilestone    Boolean  @default(true)
   emailDigestFrequency String?
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -643,17 +644,32 @@ model UserBadge {
 }
 
 // Reputation System
+// Reputation 2.0 ledger — append-only. Profile.reputation is a cached
+// balance; the invariant is reputation == SUM(amount WHERE reversedAt IS NULL).
+// `key` is an idempotency token so retries/deferred writes can never
+// double-award (same convention as BotEvent.key). Reversals are signed
+// counter-entries linked by reversalOfId — history is never deleted.
 model ReputationEvent {
-  id        String   @id @default(cuid())
-  type      String   // POST_CREATED, COMMENT_CREATED, DIARY_CREATED, DIARY_UPDATE, HELPFUL_ANSWER, COMMUNITY_CONTRIBUTION
-  userId    String
-  amount    Int
-  reason    String
-  createdAt DateTime @default(now())
+  id           String    @id @default(cuid())
+  type         String    // REP_POINTS keys | REVERSAL | STAFF_ADJUSTMENT | LEGACY_MIGRATION
+  userId       String    // recipient
+  amount       Int       // signed: +award, -reversal/deduction
+  reason       String    // owner-facing display string; staff details stay out of public labels
+  key          String?   @unique // idempotency token, e.g. "post:<id>", "like:<reactor>:post:<id>"
+  sourceType   String?             // THREAD | POST | DIARY | SETUP | STRAIN | STRAIN_PHOTO | CONTEST
+  sourceId     String?             // id of the causing entity — enables bulk reversal on deletion
+  actorId      String?             // who triggered it (liker, acceptor, staff); null = system/self
+  reversedAt   DateTime?           // set when a counter-entry cancels this row
+  reversalOfId String?             // set on counter-entries, points at the original row
+  createdAt    DateTime  @default(now())
 
   user      User               @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@index([userId])
+  @@index([userId, createdAt])
+  @@index([sourceType, sourceId])
+  @@index([actorId])
+  @@index([reversalOfId])
+  @@index([type, createdAt])
   @@index([createdAt])
 }
 
@@ -746,12 +762,14 @@ model ContestVote {
   id        String   @id @default(cuid())
   entryId   String
   userId    String
+  week      String   @default("") // denormalized from entry.week — powers one-vote-per-week
   createdAt DateTime @default(now())
 
   entry     ContestEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
   user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([entryId, userId])
+  @@unique([userId, week])
   @@index([entryId])
 }
 
@@ -777,12 +795,14 @@ model DiaryContestVote {
   id        String   @id @default(cuid())
   entryId   String
   userId    String
+  month     String   @default("") // denormalized from entry.month — powers one-vote-per-month
   createdAt DateTime @default(now())
 
   entry     DiaryContestEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
   user      User              @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([entryId, userId])
+  @@unique([userId, month])
   @@index([entryId])
 }
 

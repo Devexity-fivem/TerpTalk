@@ -3,31 +3,8 @@
 // badges are awarded reliably even if nobody visits the contest page.
 import { prisma } from "@/lib/prisma"
 import { publicUserSelect, activeAuthor } from "@/lib/security"
-import { getBadgeByName } from "@/lib/badge-registry"
-import { notify } from "@/lib/notify"
+import { applyReputationAward, grantBadge, REP_POINTS } from "@/lib/reputation"
 import { revalidateTag } from "next/cache"
-
-async function awardBadge(userId: string, name: string, fallback: { description: string; icon: string; rarity: string; requirement: string }, content: string) {
-  const def = getBadgeByName(name)
-  const badge = await prisma.badge.upsert({
-    where: { name },
-    update: {},
-    create: {
-      name,
-      description: def?.description ?? fallback.description,
-      icon: def?.icon ?? fallback.icon,
-      color: def?.rarity ?? fallback.rarity,
-      requirement: def?.requirement ?? fallback.requirement,
-    },
-  })
-  const has = await prisma.userBadge.findUnique({
-    where: { userId_badgeId: { userId, badgeId: badge.id } },
-  })
-  if (has) return false
-  await prisma.userBadge.create({ data: { userId, badgeId: badge.id } }).catch(() => {})
-  await notify({ userId, type: "BADGE", title: `🏆 ${name}!`, content, link: "/contest" })
-  return true
-}
 
 // Banned/suspended winners are skipped; ties break to the earliest entry
 // so the winner is deterministic and matches the announcement.
@@ -38,12 +15,19 @@ export async function resolveWeeklyWinner(week: string) {
     include: { user: { select: publicUserSelect }, _count: { select: { votes: true } } },
   })
   if (!top || top._count.votes === 0) return null
-  await awardBadge(
+  await grantBadge(top.userId, "Weekly Winner", {
+    content: "Your photo took the top spot in Budshot of the Week. Check your new badge.",
+    link: "/contest",
+  })
+  await awardFinalists("weekly", week, top.userId)
+  // Winner reputation — keyed per period so re-resolution can never double-pay.
+  await applyReputationAward(
     top.userId,
-    "Weekly Winner",
-    { description: "Won Budshot of the Week", icon: "Trophy", rarity: "legendary", requirement: "Win a weekly photo contest" },
-    "Your photo took the top spot. Check your new badge."
-  )
+    "CONTEST_WEEKLY_WIN",
+    REP_POINTS.CONTEST_WEEKLY_WIN,
+    "Won Budshot of the Week",
+    { key: `contestwin:${week}:${top.userId}`, sourceType: "CONTEST", sourceId: week }
+  ).catch(() => null)
   return top
 }
 
@@ -58,12 +42,18 @@ export async function resolveMonthlyDiaryWinner(month: string) {
     },
   })
   if (!top || top._count.votes === 0) return null
-  await awardBadge(
+  await grantBadge(top.userId, "Diary of the Month", {
+    content: `Your diary "${top.diary.title.slice(0, 50)}" took the top spot. Check your new badge.`,
+    link: "/contest",
+  })
+  await awardFinalists("monthly", month, top.userId)
+  await applyReputationAward(
     top.userId,
-    "Diary of the Month",
-    { description: "Won Diary of the Month", icon: "Trophy", rarity: "legendary", requirement: "Win the monthly grow diary contest" },
-    `Your diary "${top.diary.title.slice(0, 50)}" took the top spot. Check your new badge.`
-  )
+    "CONTEST_MONTHLY_WIN",
+    REP_POINTS.CONTEST_MONTHLY_WIN,
+    "Won Diary of the Month",
+    { key: `dcontestwin:${month}:${top.userId}`, sourceType: "CONTEST", sourceId: month }
+  ).catch(() => null)
   // Winners get the diary featured — this is the only writer for
   // GrowDiary.featured, so the "Featured" surfaces always reflect a win.
   await prisma.growDiary.update({
@@ -72,4 +62,33 @@ export async function resolveMonthlyDiaryWinner(month: string) {
   }).catch(() => {})
   revalidateTag("diaries", { expire: 0 })
   return top
+}
+
+// "Contest Finalist" for the rest of the top 5 (non-winner, active entrants).
+async function awardFinalists(kind: "weekly" | "monthly", period: string, winnerId: string) {
+  const where =
+    kind === "weekly"
+      ? { week: period, user: activeAuthor() }
+      : { month: period, diary: { deleted: false }, user: activeAuthor() }
+  const top5 =
+    kind === "weekly"
+      ? await prisma.contestEntry.findMany({
+          where,
+          orderBy: [{ votes: { _count: "desc" } }, { createdAt: "asc" }],
+          take: 5,
+          select: { userId: true },
+        })
+      : await prisma.diaryContestEntry.findMany({
+          where,
+          orderBy: [{ votes: { _count: "desc" } }, { createdAt: "asc" }],
+          take: 5,
+          select: { userId: true },
+        })
+  for (const e of top5) {
+    if (e.userId === winnerId) continue
+    await grantBadge(e.userId, "Contest Finalist", {
+      content: "You finished top 5 in a community contest — a finalist badge is yours.",
+      link: "/contest",
+    })
+  }
 }

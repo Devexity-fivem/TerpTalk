@@ -37,15 +37,12 @@ export async function POST(request: NextRequest) {
         data: { lastSeenAt: new Date(), status: "ONLINE" },
       })
 
-      // Award a small daily check-in rep once per 24 hours.
-      const dayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000)
-      const recentLogin = await prisma.reputationEvent.findFirst({
-        where: { userId, type: "DAILY_LOGIN", createdAt: { gte: dayAgo } },
-        orderBy: { createdAt: "desc" },
-      })
-      if (!recentLogin) {
-        await awardReputation(userId, "DAILY_LOGIN", 1, "Daily check-in")
-      }
+      // Daily check-in rep — keyed per UTC day so concurrent pings and
+      // retries can never double-award (the find-then-award race is gone).
+      const dayKey = new Date().toISOString().slice(0, 10)
+      await awardReputation(userId, "DAILY_LOGIN", 1, "Daily check-in", {
+        key: `daily:${userId}:${dayKey}`,
+      }).catch(() => {})
     }
 
     // Prune old chat messages in the background, throttled to once per hour.

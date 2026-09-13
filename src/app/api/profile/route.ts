@@ -4,7 +4,7 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { unauthorized, forbidden, getClientIp, logSecurityEvent, LIMITS, isBanned, enforceLinkTrust } from "@/lib/security"
 import { storeImage, deleteImagesIfUnreferenced } from "@/lib/blob"
-import { getReputationTier, getTierProgress } from "@/lib/reputation"
+import { getReputationTier, getTierProgress, reverseReputationByActor } from "@/lib/reputation"
 import { rateLimit } from "@/lib/rate-limit"
 import { checkMaintenance } from "@/lib/maintenance"
 import bcrypt from "bcryptjs"
@@ -469,6 +469,10 @@ export async function DELETE(request: Request) {
       ...contestImages.map((i) => i.imageUrl),
       user.profile?.avatarUrl,
     ]
+
+    // Void reputation this account granted others (likes, accepted answers)
+    // before the cascade deletes their own ledger rows.
+    await reverseReputationByActor(user.id, "Granting account deleted").catch(() => 0)
 
     // Cascade delete handles: profile, posts, threads, diaries, setups,
     // chat messages, DMs, notifications, reactions, follows, badges,

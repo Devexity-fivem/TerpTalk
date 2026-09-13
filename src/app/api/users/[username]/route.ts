@@ -4,6 +4,7 @@ import { sessionCookieName } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { blockExistsBetween, getTrustLevel, getClientIp, hashIp, isSessionValid } from "@/lib/security"
 import { getReputationTier, getTierProgress } from "@/lib/reputation"
+import { PUBLIC_REP_TYPES, publicRepLabel } from "@/lib/reputation-config"
 import { getGrowStreak } from "@/lib/grow-streak"
 import { rateLimit } from "@/lib/rate-limit"
 import { TERPBOT_USERNAME } from "@/lib/terpbot-constants"
@@ -133,6 +134,16 @@ export async function GET(
     // after ~3 days so it can't power real stats.
     const botStats = isBot ? await getBotStats() : null
 
+    // Recent public reputation events — powers the profile's Reputation card.
+    const recentRep = isBot
+      ? []
+      : await prisma.reputationEvent.findMany({
+          where: { userId: profile.user.id, type: { in: [...PUBLIC_REP_TYPES] } },
+          orderBy: { createdAt: "desc" },
+          take: 6,
+          select: { id: true, type: true, amount: true, reversedAt: true, createdAt: true },
+        })
+
     // Use JWT token for the viewer instead of a full DB session lookup.
     const token = await getToken({ req: request, secret: process.env.NEXTAUTH_SECRET, cookieName: sessionCookieName })
     let viewerId = token?.id as string | undefined
@@ -215,6 +226,13 @@ export async function GET(
         botStats,
       },
       viewerBlocked,
+      recentRep: recentRep.map((e) => ({
+        id: e.id,
+        label: publicRepLabel(e.type),
+        amount: e.amount,
+        reversed: !!e.reversedAt,
+        createdAt: e.createdAt,
+      })),
       viewerFollowing,
       recentThreads,
       growDiaries,

@@ -4,9 +4,8 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { unauthorized, publicUserSelect, LIMITS, getClientIp, logSecurityEvent, isBanned, forbidden, enforceLinkTrust, isModerator, isAdmin } from "@/lib/security"
 import { requireModerator } from "@/lib/require-staff"
-import { rateLimit } from "@/lib/rate-limit"
-import { awardReputation, REP_POINTS } from "@/lib/reputation"
-import { storeImages, deleteImagesIfUnreferenced } from "@/lib/blob"
+import { awardReputation, reverseReputationBySource, repRateLimit, getTierPerks, REP_POINTS } from "@/lib/reputation"
+import { storeImages, deleteImagesIfUnreferenced, MAX_POST_IMAGES } from "@/lib/blob"
 import { notifyMentions } from "@/lib/mentions"
 import { notify, notifyMany, postDeepLink, postLinkWhere } from "@/lib/notify"
 import { checkMaintenance } from "@/lib/maintenance"
@@ -52,8 +51,8 @@ export async function POST(request: Request) {
       )
     }
 
-    // Rate limit: 30 posts per 10 minutes per user
-    const rl = await rateLimit(`post:${session.user.id}`, 30, 10 * 60 * 1000)
+    // Rate limit: 30 posts per 10 minutes per user (Cultivator+ scale it up)
+    const rl = await repRateLimit(session.user.id, `post:${session.user.id}`, 30, 10 * 60 * 1000)
     if (!rl.allowed) {
       await logSecurityEvent("RATE_LIMIT_EXCEEDED", {
         userId: session.user.id,
@@ -94,7 +93,9 @@ export async function POST(request: Request) {
     // Upload attachments first so a storage failure cannot leave a reply
     // with only some of its images.
     try {
-      imageUrls = await storeImages(images, "forum")
+      // Master Grower+ can attach more images per post.
+      const perks = await getTierPerks(session.user.id)
+      imageUrls = await storeImages(images, "forum", perks.imagesPerPost ?? MAX_POST_IMAGES)
     } catch (err) {
       console.error("Forum post image upload error:", err)
       return NextResponse.json(
@@ -140,7 +141,8 @@ export async function POST(request: Request) {
       session.user.id,
       "POST_CREATED",
       REP_POINTS.POST_CREATED,
-      `Replied in "${thread.title.slice(0, 60)}"`
+      `Replied in "${thread.title.slice(0, 60)}"`,
+      { key: `post:${post.id}`, sourceType: "POST", sourceId: post.id }
     ).catch(() => {})
 
     // Notify the thread author (if not self-reply; pref/block/ban handled by notify).
@@ -389,6 +391,11 @@ export async function DELETE(request: Request) {
       // Deep links to this post would now dangle — drop the notifications.
       await tx.notification.deleteMany({ where: postLinkWhere(post.id) })
     })
+
+    // Reputation reconciliation: reverse every active event tied to this post
+    // (creation award, likes on it, accepted-answer award). Counter-entries
+    // preserve the audit trail and are idempotent under retries.
+    await reverseReputationBySource("POST", post.id, "Post removed", session.user.id).catch(() => 0)
 
     return NextResponse.json({ deleted: true })
   } catch (error) {

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { unstable_cache } from "next/cache"
-import { getClientIp, hashIp } from "@/lib/security"
+import { getClientIp, hashIp, REPUTATION_ORDER } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
 import { snippet } from "@/lib/seo"
 
@@ -144,7 +144,7 @@ const getSearchResults = unstable_cache(
           reputation: true,
           bio: true,
         },
-        orderBy: { reputation: "desc" },
+        orderBy: REPUTATION_ORDER,
       }) : [],
       (t === "all" || t === "diaries") ? prisma.growDiary.findMany({
         where: {

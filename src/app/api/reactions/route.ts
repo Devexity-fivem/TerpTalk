@@ -3,8 +3,8 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { unauthorized, forbidden, getClientIp, logSecurityEvent, isBanned, blockExistsBetween } from "@/lib/security"
-import { rateLimit } from "@/lib/rate-limit"
-import { awardReputation, REP_POINTS } from "@/lib/reputation"
+import { awardReputation, reverseReputationByKey, repRateLimit, REP_POINTS } from "@/lib/reputation"
+import { LIKE_MIN_ACTOR_AGE_HOURS } from "@/lib/reputation-config"
 import { checkMaintenance } from "@/lib/maintenance"
 import { notify, postDeepLink } from "@/lib/notify"
 
@@ -48,8 +48,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Invalid request" }, { status: 400 })
     }
 
-    // Rate limit: 120 reactions per 10 minutes per user
-    const rl = await rateLimit(`reaction:${session.user.id}`, 120, 10 * 60 * 1000)
+    // Rate limit: 120 reactions per 10 minutes per user (tier-scaled)
+    const rl = await repRateLimit(session.user.id, `reaction:${session.user.id}`, 120, 10 * 60 * 1000)
     if (!rl.allowed) {
       await logSecurityEvent("RATE_LIMIT_EXCEEDED", {
         userId: session.user.id,
@@ -110,10 +110,44 @@ export async function POST(request: Request) {
       },
     })
 
+    // Idempotency key for the reputation this reaction grants — one award per
+    // liker per target for life. Removing or switching away from LIKE reverses
+    // it; re-liking reinstates the original event instead of double-paying.
+    const likeKey = `like:${session.user.id}:${hasPostId ? `post:${postId}` : `diary:${diaryId}`}`
+
+    // Award the content author for a LIKE (not for self-likes). Likes from
+    // accounts younger than LIKE_MIN_ACTOR_AGE_HOURS still display but don't
+    // pay reputation — blunts sockpuppet farms. Keyed: re-liking reinstates
+    // the original event instead of double-paying.
+    const payLike = async () => {
+      if (!targetAuthorId || targetAuthorId === session.user.id) return
+      const actor = await prisma.user.findUnique({
+        where: { id: session.user.id },
+        select: { createdAt: true },
+      })
+      const actorAgeHours = actor ? (Date.now() - actor.createdAt.getTime()) / (1000 * 60 * 60) : 0
+      if (actorAgeHours < LIKE_MIN_ACTOR_AGE_HOURS) return
+      await awardReputation(
+        targetAuthorId,
+        "LIKE_RECEIVED",
+        REP_POINTS.LIKE_RECEIVED,
+        "Someone liked your content",
+        {
+          key: likeKey,
+          actorId: session.user.id,
+          sourceType: hasPostId ? "POST" : "DIARY",
+          sourceId: hasPostId ? postId : diaryId,
+        }
+      )
+    }
+
     if (existingReaction) {
       if (existingReaction.type === type) {
         // Same type — toggle off
         await prisma.reaction.delete({ where: { id: existingReaction.id } })
+        if (existingReaction.type === "LIKE") {
+          await reverseReputationByKey(likeKey, "Like removed").catch(() => null)
+        }
         return NextResponse.json({ reaction: null, action: "removed" })
       }
       // Different type — switch reaction
@@ -121,6 +155,11 @@ export async function POST(request: Request) {
         where: { id: existingReaction.id },
         data: { type },
       })
+      if (existingReaction.type === "LIKE") {
+        await reverseReputationByKey(likeKey, "Like switched to another reaction").catch(() => null)
+      } else if (type === "LIKE") {
+        await payLike().catch(() => null)
+      }
       return NextResponse.json({ reaction: updated, action: "switched" })
     }
 
@@ -134,15 +173,7 @@ export async function POST(request: Request) {
       },
     })
 
-    // Award the content author for a LIKE (not for self-likes)
-    if (type === "LIKE" && targetAuthorId && targetAuthorId !== session.user.id) {
-      await awardReputation(
-        targetAuthorId,
-        "LIKE_RECEIVED",
-        REP_POINTS.LIKE_RECEIVED,
-        "Someone liked your content"
-      ).catch(() => {})
-    }
+    if (type === "LIKE") await payLike().catch(() => null)
 
     // Notify the content author — once per actor per target per day so
     // reaction toggling can't flood the inbox. notify() also enforces

@@ -64,6 +64,8 @@ export const TYPE_PREF = {
   DIARY_UPDATE: "notifyOnComment",
   FOLLOW: "notifyOnFollow",
   REACTION: "notifyOnReaction",
+  BADGE: "notifyOnMilestone",
+  REPUTATION: "notifyOnMilestone",
 } as const
 
 export type NotifyPrefKey = (typeof TYPE_PREF)[keyof typeof TYPE_PREF]
@@ -76,6 +78,7 @@ const PREF_SELECT = {
   notifyOnComment: true,
   notifyOnFollow: true,
   notifyOnReaction: true,
+  notifyOnMilestone: true,
 } as const
 
 // Actor fields exposed to the client — username + avatar only.

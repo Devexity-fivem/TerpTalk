@@ -7,7 +7,7 @@ import { useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
 import {
   ShieldCheck, Loader2, Users as UsersIcon,
-  Megaphone, ShieldAlert, Ban, UserCheck, Search, Percent, Award, Video,
+  Megaphone, ShieldAlert, Ban, UserCheck, Search, Percent, Award, Video, TrendingUp,
 } from "lucide-react"
 import Link from "next/link"
 import AdminAffiliates from "@/components/admin-affiliates"
@@ -41,8 +41,16 @@ const TABS = [
   { id: "users", label: "Users", icon: UsersIcon },
   { id: "announce", label: "Announce", icon: Megaphone },
   { id: "security", label: "Security", icon: ShieldAlert },
+  { id: "reputation", label: "Reputation", icon: TrendingUp },
   { id: "affiliates", label: "Affiliates", icon: Percent },
 ] as const
+
+interface RepFlags {
+  velocity: { username: string; userId: string; gained: number }[]
+  reciprocalPairs: { a: string; b: string; mutual: number }[]
+  newAccountLikes: { username: string; userId: string; freshLikes: number }[]
+  staffActions: { id: string; type: string; amount: number; reason: string; createdAt: string; user: string; staff: string | null }[]
+}
 
 export default function AdminPage() {
   const { data: session, status } = useSession()
@@ -90,6 +98,14 @@ export default function AdminPage() {
       .catch(() => {})
   }, [])
 
+  const [repFlags, setRepFlags] = useState<RepFlags | null>(null)
+  const loadRepFlags = useCallback(() => {
+    fetch("/api/admin/reputation/flags")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => setRepFlags(d))
+      .catch(() => {})
+  }, [])
+
   useEffect(() => {
     if (status === "unauthenticated") router.push(signInHref(window.location.pathname + window.location.search))
     else if (status === "authenticated") load()
@@ -98,7 +114,8 @@ export default function AdminPage() {
   useEffect(() => {
     if (tab === "users") loadUsers()
     if (tab === "security") loadSecurity()
-  }, [tab, loadUsers, loadSecurity])
+    if (tab === "reputation") loadRepFlags()
+  }, [tab, loadUsers, loadSecurity, loadRepFlags])
 
   const flash = (msg: string) => { setNotice(msg); setTimeout(() => setNotice(""), 3000) }
 
@@ -371,6 +388,82 @@ export default function AdminPage() {
                 </div>
               ))}
             </div>
+          </div>
+        )}
+
+        {/* REPUTATION */}
+        {tab === "reputation" && (
+          <div className="space-y-4">
+            {!repFlags ? (
+              <div className="flex justify-center py-10"><Loader2 className="w-6 h-6 animate-spin text-primary" /></div>
+            ) : (
+              <>
+                <div className="bg-card rounded-xl border border-border overflow-hidden">
+                  <div className="p-4 border-b border-border font-semibold flex items-center gap-2">
+                    <TrendingUp className="w-4 h-4 text-amber-500" /> Unusual rep velocity (24h)
+                  </div>
+                  <div className="divide-y divide-border">
+                    {repFlags.velocity.length === 0 && <p className="p-4 text-sm text-muted-foreground">No members gained over 150 rep in the last 24 hours.</p>}
+                    {repFlags.velocity.map((v) => (
+                      <div key={v.userId} className="p-3 text-sm flex items-center justify-between gap-3">
+                        <span><Link href={`/admin/users/${v.userId}`} className="font-medium hover:text-primary">@{v.username}</Link> gained <span className="font-semibold text-amber-500">+{v.gained}</span> in 24h</span>
+                        <Link href={`/moderation`} className="text-xs text-primary hover:underline shrink-0">Review</Link>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="bg-card rounded-xl border border-border overflow-hidden">
+                  <div className="p-4 border-b border-border font-semibold flex items-center gap-2">
+                    <UsersIcon className="w-4 h-4 text-amber-500" /> Reciprocal like pairs (7d)
+                  </div>
+                  <div className="divide-y divide-border">
+                    {repFlags.reciprocalPairs.length === 0 && <p className="p-4 text-sm text-muted-foreground">No heavy mutual-like pairs detected.</p>}
+                    {repFlags.reciprocalPairs.map((p, i) => (
+                      <div key={i} className="p-3 text-sm flex items-center justify-between gap-3">
+                        <span><Link href={`/u/${p.a}`} className="font-medium hover:text-primary">@{p.a}</Link> ↔ <Link href={`/u/${p.b}`} className="font-medium hover:text-primary">@{p.b}</Link></span>
+                        <span className="text-xs text-muted-foreground shrink-0">{p.mutual} mutual likes</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="bg-card rounded-xl border border-border overflow-hidden">
+                  <div className="p-4 border-b border-border font-semibold flex items-center gap-2">
+                    <UserCheck className="w-4 h-4 text-amber-500" /> Likes from brand-new accounts (7d)
+                  </div>
+                  <div className="divide-y divide-border">
+                    {repFlags.newAccountLikes.length === 0 && <p className="p-4 text-sm text-muted-foreground">No members received 5+ likes from accounts under 48h old.</p>}
+                    {repFlags.newAccountLikes.map((n) => (
+                      <div key={n.userId} className="p-3 text-sm flex items-center justify-between gap-3">
+                        <span><Link href={`/admin/users/${n.userId}`} className="font-medium hover:text-primary">@{n.username}</Link></span>
+                        <span className="text-xs text-muted-foreground shrink-0">{n.freshLikes} likes from new accounts</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="bg-card rounded-xl border border-border overflow-hidden">
+                  <div className="p-4 border-b border-border font-semibold flex items-center gap-2">
+                    <ShieldCheck className="w-4 h-4 text-primary" /> Staff reputation actions
+                  </div>
+                  <div className="divide-y divide-border">
+                    {repFlags.staffActions.length === 0 && <p className="p-4 text-sm text-muted-foreground">No staff adjustments or reversals recorded.</p>}
+                    {repFlags.staffActions.map((s) => (
+                      <div key={s.id} className="p-3 text-sm flex items-center justify-between gap-3">
+                        <span className="min-w-0">
+                          <span className={`font-medium ${s.amount >= 0 ? "text-primary" : "text-destructive"}`}>{s.amount >= 0 ? "+" : ""}{s.amount}</span>
+                          {" "}{s.type.replace(/_/g, " ")} → <Link href={`/u/${s.user}`} className="hover:text-primary">@{s.user}</Link>
+                          {s.staff && <span className="text-muted-foreground"> by @{s.staff}</span>}
+                          <span className="block text-xs text-muted-foreground truncate">{s.reason}</span>
+                        </span>
+                        <span className="text-xs text-muted-foreground shrink-0">{new Date(s.createdAt).toLocaleDateString()}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         )}
 

@@ -5,7 +5,7 @@
 // publicUserSelect — never DirectMessage, Report, SecurityEvent, Block,
 // credentials, or staff-only tables.
 import { prisma } from "@/lib/prisma"
-import { activeAuthor, blockExistsBetween, containsExternalLink, LIMITS, USERNAME_REGEX } from "@/lib/security"
+import { activeAuthor, blockExistsBetween, containsExternalLink, LIMITS, USERNAME_REGEX, rankableProfile, REPUTATION_ORDER } from "@/lib/security"
 import { extractThreadRef, type ThreadRef } from "@/lib/terpbot-context"
 import { postDeepLink } from "@/lib/notify"
 import { getReputationTier, getNextTier, getTierProgress } from "@/lib/reputation-config"
@@ -267,8 +267,8 @@ async function handle(name: string, ctx: BotCommandCtx): Promise<BotCommandResul
 
     case "top": {
       const top = await prisma.profile.findMany({
-        where: { user: activeAuthor(), username: { not: TERPBOT_USERNAME } },
-        orderBy: { reputation: "desc" },
+        where: rankableProfile(),
+        orderBy: REPUTATION_ORDER,
         take: 5,
         select: { username: true, reputation: true },
       })
@@ -304,9 +304,9 @@ async function handle(name: string, ctx: BotCommandCtx): Promise<BotCommandResul
       if (!t) return ok(`Couldn't find that member.`)
       const [above, total] = await Promise.all([
         prisma.profile.count({
-          where: { reputation: { gt: t.reputation }, user: activeAuthor(), username: { not: TERPBOT_USERNAME } },
+          where: { reputation: { gt: t.reputation }, ...rankableProfile() },
         }),
-        prisma.profile.count({ where: { user: activeAuthor(), username: { not: TERPBOT_USERNAME } } }),
+        prisma.profile.count({ where: rankableProfile() }),
       ])
       return ok(`🏆 @${t.username} is #${above + 1} of ${total} members by reputation. Board: /leaderboard`)
     }

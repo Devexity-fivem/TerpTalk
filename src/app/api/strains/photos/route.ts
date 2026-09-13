@@ -4,7 +4,7 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { unauthorized, getClientIp, logSecurityEvent, isBanned, forbidden, isModerator } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
-import { awardReputation, REP_POINTS } from "@/lib/reputation"
+import { awardReputation, reverseReputationBySource, REP_POINTS } from "@/lib/reputation"
 import { storeImage, deleteImagesIfUnreferenced } from "@/lib/blob"
 import { checkMaintenance } from "@/lib/maintenance"
 import { revalidateTag } from "next/cache"
@@ -81,11 +81,14 @@ export async function POST(request: Request) {
 
     revalidateTag("strains", { expire: 0 })
 
+    // One paying photo per member per strain — stops photo-spam farming on
+    // the same strain while still rewarding coverage across the library.
     await awardReputation(
       session.user.id,
       "STRAIN_PHOTO",
       REP_POINTS.STRAIN_PHOTO,
-      "Uploaded a strain photo"
+      "Uploaded a strain photo",
+      { key: `strainphoto:${session.user.id}:${strainId}`, sourceType: "STRAIN_PHOTO", sourceId: photo.id }
     ).catch(() => {})
 
     return NextResponse.json({ photo }, { status: 201 })
@@ -130,6 +133,7 @@ export async function DELETE(request: Request) {
     }
 
     await prisma.strainPhoto.delete({ where: { id } })
+    await reverseReputationBySource("STRAIN_PHOTO", photo.id, "Photo removed", session.user.id).catch(() => 0)
     revalidateTag("strains", { expire: 0 })
     deleteImagesIfUnreferenced([photo.imageUrl]).catch(() => {})
     return NextResponse.json({ deleted: true })

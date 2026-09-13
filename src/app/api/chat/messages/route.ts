@@ -4,6 +4,7 @@ import { sessionCookieName } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { unauthorized, publicUserSelect, LIMITS, getClientIp, logSecurityEvent, isSessionValid, forbidden, isModerator, isStaff, enforceLinkTrust } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
+import { repRateLimit, getTierPerks } from "@/lib/reputation"
 import { notifyMentions } from "@/lib/mentions"
 import { getPusher } from "@/lib/pusher"
 import { postBotMessage, TERPBOT_USERNAME } from "@/lib/terpbot"
@@ -179,8 +180,8 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Rate limit: 30 messages per minute per user
-    const rl = await rateLimit(`chat:${userId}`, 30, 60 * 1000)
+    // Rate limit: 30 messages per minute per user (Cultivator+ scale it up)
+    const rl = await repRateLimit(userId, `chat:${userId}`, 30, 60 * 1000)
     if (!rl.allowed) {
       await logSecurityEvent("RATE_LIMIT_EXCEEDED", {
         userId,
@@ -232,9 +233,11 @@ export async function POST(request: NextRequest) {
       return forbidden("Chat is locked")
     }
 
+    // Master Grower+ (and staff) are exempt from room slowmode.
+    const slowmodeExempt = staff || (await getTierPerks(userId)).slowmodeExempt === true
     if (
       room.slowModeSeconds > 0 &&
-      !staff &&
+      !slowmodeExempt &&
       lastMessage &&
       Date.now() - lastMessage.createdAt.getTime() < room.slowModeSeconds * 1000
     ) {
