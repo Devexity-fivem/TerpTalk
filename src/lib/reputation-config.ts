@@ -84,6 +84,9 @@ export const REP_EVENT_TYPES = {
   STAFF_ADJUSTMENT: "STAFF_ADJUSTMENT",
   LEGACY_MIGRATION: "LEGACY_MIGRATION",
   CHALLENGE_WEEKLY: "CHALLENGE_WEEKLY",
+  // Zero-amount marker rows recording that a rung celebration already
+  // fired — the P2002 claim makes once-ever dedupe durable. Never public.
+  MILESTONE: "MILESTONE",
 } as const
 
 // Which event types are shown on a member's public reputation history.
@@ -319,6 +322,35 @@ export function getRepStage(reputation: number): RepStage {
 
 export function getRepLevel(reputation: number): number {
   return getRepStage(reputation).level
+}
+
+// Rung crossings for a rep change oldRep -> newRep. Only upward crossings
+// count — a demotion back below a rung returns []. Each rung is classified
+// so callers can tell a major tier crossing from an in-tier stage tick.
+export interface RungCrossing {
+  rung: number
+  kind: "tier" | "stage"
+  level: number // Grow Level landed on (ladder index + 1)
+}
+
+const TIER_THRESHOLD_SET = new Set(REP_TIERS.map((t) => t.threshold))
+
+export function crossedRungs(oldRep: number, newRep: number): RungCrossing[] {
+  if (newRep <= oldRep) return []
+  return REP_LADDER.filter((r) => r > oldRep && r <= newRep).map((r) => ({
+    rung: r,
+    kind: TIER_THRESHOLD_SET.has(r) ? "tier" : "stage",
+    level: REP_LADDER.indexOf(r) + 1,
+  }))
+}
+
+// Every cosmetic/checkpoint unlock a rep range grants — used to name the
+// rewards inside a tier-up celebration. Pure list diff over the registries.
+export interface UnlockedReward {
+  kind: "frame" | "title" | "theme"
+  key: string
+  name: string
+  unlockedAt: number
 }
 
 // Progress within the current stage — the bar that actually moves weekly.

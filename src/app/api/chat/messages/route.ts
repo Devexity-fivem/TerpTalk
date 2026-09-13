@@ -2,7 +2,7 @@ import { NextRequest, NextResponse, after } from "next/server"
 import { getToken } from "next-auth/jwt"
 import { sessionCookieName } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { unauthorized, publicUserSelect, LIMITS, getClientIp, logSecurityEvent, isSessionValid, forbidden, isModerator, isStaff, enforceLinkTrust } from "@/lib/security"
+import { unauthorized, chatAuthorSelect, LIMITS, getClientIp, logSecurityEvent, isSessionValid, forbidden, isModerator, isStaff, enforceLinkTrust } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
 import { repRateLimit, getTierPerks } from "@/lib/reputation"
 import { notifyMentions } from "@/lib/mentions"
@@ -26,7 +26,7 @@ type ChatMessageWithAuthor = {
     name?: string | null
     image?: string | null
     role?: string | null
-    profile?: { username?: string | null } | null
+    profile?: { username?: string | null; avatarFrame?: string | null; profileTitle?: string | null } | null
   }
   replyTo: ChatMessageWithAuthor | null
 }
@@ -43,6 +43,8 @@ function messageDto(m: ChatMessageWithAuthor) {
           username: m.replyTo.author.profile?.username ?? null,
           image: m.replyTo.author.image ?? null,
           role: m.replyTo.author.role ?? null,
+          avatarFrame: m.replyTo.author.profile?.avatarFrame ?? null,
+          profileTitle: m.replyTo.author.profile?.profileTitle ?? null,
         },
       }
     : null
@@ -56,6 +58,8 @@ function messageDto(m: ChatMessageWithAuthor) {
       username: m.author.profile?.username ?? null,
       image: m.author.image ?? null,
       role: m.author.role ?? null,
+      avatarFrame: m.author.profile?.avatarFrame ?? null,
+      profileTitle: m.author.profile?.profileTitle ?? null,
     },
     replyTo,
   }
@@ -123,9 +127,9 @@ export async function GET(request: NextRequest) {
       take: afterDate ? 100 : 50,
       orderBy: { createdAt: afterDate ? "asc" : "desc" },
       include: {
-        author: { select: publicUserSelect },
+        author: { select: chatAuthorSelect },
         replyTo: {
-          include: { author: { select: publicUserSelect } },
+          include: { author: { select: chatAuthorSelect } },
         },
       },
     })
@@ -259,9 +263,9 @@ export async function POST(request: NextRequest) {
         ...(replyToId ? { replyToId } : {}),
       },
       include: {
-        author: { select: publicUserSelect },
+        author: { select: chatAuthorSelect },
         replyTo: {
-          include: { author: { select: publicUserSelect } },
+          include: { author: { select: chatAuthorSelect } },
         },
       },
     })

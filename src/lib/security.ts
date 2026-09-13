@@ -174,6 +174,24 @@ export const publicUserSelect = {
   },
 } as const
 
+// Chat author select — publicUserSelect plus the equipped cosmetic keys.
+// Dedicated (not a widening of publicUserSelect, which has ~85 consumers)
+// so chat identity surfaces get cosmetics without leaking them everywhere.
+// DTOs emit only the registry keys — never raw CSS.
+export const chatAuthorSelect = {
+  id: true,
+  name: true,
+  image: true,
+  role: true,
+  profile: {
+    select: {
+      username: true,
+      avatarFrame: true,
+      profileTitle: true,
+    },
+  },
+} as const
+
 // ─── Input limits (server-side enforcement) ─────────────────────────
 
 export const LIMITS = {

@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma"
 import { forbidden, getClientIp, logSecurityEvent } from "@/lib/security"
 import { requireAdmin } from "@/lib/require-staff"
 import { rateLimit } from "@/lib/rate-limit"
-import { applyReputationAward, demoteIfNeeded, REP_EVENT_TYPES } from "@/lib/reputation"
+import { applyReputationAward, postDemotionEffects, runPostAwardEffects, REP_EVENT_TYPES } from "@/lib/reputation"
 import { STAFF_ADJUST_MAX } from "@/lib/reputation-config"
 import { notify } from "@/lib/notify"
 
@@ -56,8 +56,13 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Adjustment not applied" }, { status: 409 })
     }
 
+    // Positive adjustments run the full milestone pipeline (tier/stage
+    // crossings, badges, referrals); negative ones run demotion + cosmetic
+    // pruning so stale unlocks never render.
     if (delta < 0) {
-      await demoteIfNeeded(profile.userId).catch(() => null)
+      await postDemotionEffects(profile.userId).catch(() => null)
+    } else if (res.oldRep !== undefined && res.newRep !== undefined) {
+      await runPostAwardEffects(profile.userId, res.oldRep, res.newRep).catch(() => null)
     }
 
     await prisma.moderationAction.create({

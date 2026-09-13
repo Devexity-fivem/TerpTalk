@@ -2,6 +2,7 @@ import { REP_POINTS, REP_CAPS, REP_TIERS, REP_LADDER, VERIFIED_MULTIPLIER, REFER
 import { AVATAR_FRAMES, PROFILE_TITLES, PROFILE_THEMES } from "@/lib/cosmetics"
 import { WEEKLY_CHALLENGES } from "@/lib/challenges"
 import { TrendingUp, ShieldCheck, RotateCcw, Sprout, Target } from "lucide-react"
+import ProgressionPanel from "@/components/progression-panel"
 import type { Metadata } from "next"
 
 export const metadata: Metadata = {
@@ -36,6 +37,8 @@ export default function ReputationPage() {
             document your grows — and your profile grows with you.
           </p>
         </div>
+
+        <ProgressionPanel />
 
         <div className="bg-card rounded-lg border border-border p-4 mb-4">
           <div className="flex items-center gap-2 mb-3">

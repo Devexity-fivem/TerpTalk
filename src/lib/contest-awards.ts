@@ -3,7 +3,7 @@
 // badges are awarded reliably even if nobody visits the contest page.
 import { prisma } from "@/lib/prisma"
 import { publicUserSelect, activeAuthor } from "@/lib/security"
-import { applyReputationAward, grantBadge, REP_POINTS } from "@/lib/reputation"
+import { awardReputation, grantBadge, REP_POINTS } from "@/lib/reputation"
 import { revalidateTag } from "next/cache"
 
 // Banned/suspended winners are skipped; ties break to the earliest entry
@@ -20,8 +20,10 @@ export async function resolveWeeklyWinner(week: string) {
     link: "/contest",
   })
   await awardFinalists("weekly", week, top.userId)
-  // Winner reputation — keyed per period so re-resolution can never double-pay.
-  await applyReputationAward(
+  // Winner reputation — keyed per period so re-resolution can never
+  // double-pay. awardReputation (not apply) so tier/stage/badge side
+  // effects fire for contest wins too.
+  await awardReputation(
     top.userId,
     "CONTEST_WEEKLY_WIN",
     REP_POINTS.CONTEST_WEEKLY_WIN,
@@ -47,7 +49,7 @@ export async function resolveMonthlyDiaryWinner(month: string) {
     link: "/contest",
   })
   await awardFinalists("monthly", month, top.userId)
-  await applyReputationAward(
+  await awardReputation(
     top.userId,
     "CONTEST_MONTHLY_WIN",
     REP_POINTS.CONTEST_MONTHLY_WIN,

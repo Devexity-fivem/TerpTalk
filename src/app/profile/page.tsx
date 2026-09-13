@@ -21,7 +21,7 @@ import RecoveryPhraseCard from "@/components/recovery-phrase-card"
 import WeeklyChallenges from "@/components/weekly-challenges"
 import CosmeticsPanel from "@/components/cosmetics-panel"
 import { Avatar } from "@/components/ui/avatar"
-import { getAvatarFrame } from "@/lib/cosmetics"
+import { getAvatarFrame, getProfileTheme, getProfileTitle } from "@/lib/cosmetics"
 import { cn } from "@/lib/utils"
 
 function ProfileBadges({
@@ -279,8 +279,12 @@ export default function ProfilePage() {
   return (
     <div className="min-h-screen bg-background">
       <div className="max-w-4xl mx-auto px-4 py-8">
-        {/* Profile Header */}
-        <div className="bg-card rounded-lg border border-border p-6 mb-6">
+        {/* Profile Header — equipped theme styles the card, title shows under the name */}
+        <div className={cn(
+          "bg-card rounded-lg border p-6 mb-6",
+          getProfileTheme(profileData.profile?.profileTheme)?.borderClass ?? "border-border",
+          getProfileTheme(profileData.profile?.profileTheme)?.className
+        )}>
           <div className="flex items-start gap-4 sm:gap-6">
             <div className={cn("rounded-full shrink-0", getAvatarFrame(profileData.profile?.avatarFrame)?.className)}>
               <Avatar
@@ -295,6 +299,11 @@ export default function ProfilePage() {
                 <div className="flex items-start justify-between gap-4 flex-wrap">
                   <div>
                     <h1 className="text-2xl font-bold mb-1 flex items-center gap-2">{profileData.profile?.username || profileData.user.name} <RoleBadge role={profileData.user.role} /></h1>
+                    {getProfileTitle(profileData.profile?.profileTitle) && (
+                      <p className="text-xs font-medium uppercase tracking-wider text-primary/80 mb-1">
+                        {getProfileTitle(profileData.profile?.profileTitle)?.name}
+                      </p>
+                    )}
                     <p className="text-muted-foreground text-sm mb-2">Member since {joinDate}</p>
                     {profileData.profile?.bio && (
                       <p className="text-sm mb-3 whitespace-pre-wrap break-words">{profileData.profile.bio}</p>
@@ -886,6 +895,7 @@ export default function ProfilePage() {
           {/* Reputation detail widgets — the two tallest cards, paired in the
               final row so neither forces a shorter card to stretch. */}
           <WeeklyChallenges />
+          <div id="rewards" className="scroll-mt-20" />
           <CosmeticsPanel
             reputation={profileData.stats.reputation}
             equipped={{

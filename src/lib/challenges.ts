@@ -168,6 +168,7 @@ export async function evaluateChallenges(userId: string): Promise<string[]> {
           ? `You finished "${paidTitles[0]}" — +${total} reputation.`
           : `You finished: ${paidTitles.join(", ")} — +${total} reputation.`,
       link: "/reputation",
+      metadata: { kind: "challenge", titles: paidTitles, reward: total },
     }).catch(() => null)
   }
 

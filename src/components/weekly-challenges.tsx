@@ -20,10 +20,20 @@ export default function WeeklyChallenges() {
   const [challenges, setChallenges] = useState<Challenge[] | null>(null)
 
   useEffect(() => {
-    fetch("/api/challenges", { cache: "no-store" })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => setChallenges(d?.challenges ?? []))
-      .catch(() => setChallenges([]))
+    const load = () =>
+      fetch("/api/challenges", { cache: "no-store" })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d) => setChallenges(d?.challenges ?? []))
+        .catch(() => setChallenges([]))
+    load()
+    // Refetch when a challenge/reputation notification lands so a just-paid
+    // challenge shows as complete without waiting for the next page load.
+    const onNotify = (e: Event) => {
+      const n = (e as CustomEvent).detail as { type?: string; metadata?: { kind?: string } | null } | undefined
+      if (n?.type === "REPUTATION" && n?.metadata?.kind === "challenge") load()
+    }
+    window.addEventListener("tt-new-notification", onNotify)
+    return () => window.removeEventListener("tt-new-notification", onNotify)
   }, [])
 
   if (challenges === null) {

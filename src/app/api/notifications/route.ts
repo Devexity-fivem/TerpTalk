@@ -32,6 +32,8 @@ export async function GET(request: NextRequest) {
           content: true,
           link: true,
           read: true,
+          metadata: true,
+          groupKey: true,
           createdAt: true,
           actor: { select: NOTIFICATION_ACTOR_SELECT },
         },
@@ -48,6 +50,8 @@ export async function GET(request: NextRequest) {
       content: n.content,
       link: n.link,
       read: n.read,
+      metadata: n.metadata,
+      groupKey: n.groupKey,
       createdAt: n.createdAt,
       actor: n.actor
         ? {

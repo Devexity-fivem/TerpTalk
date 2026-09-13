@@ -80,9 +80,14 @@ const MATCHERS: Matcher[] = [
     patterns: [
       /\bnext tier\b/,
       /\btier progress\b/,
-      /\bhow (far|close).*(next tier|tier up|level up)\b/,
+      /\bhow (far|close).*(next tier|tier up|level up|next level|next stage)\b/,
       /\bhow (far|close) (am i|till|until)\b/,
       /\bmy progress\b/,
+      /\b(my|what('s| is)) (grow )?level\b/,
+      /\b(what|which) (grow )?(level|stage) (am i|are you|is)\b/,
+      /\bwhat (do|will|can) i unlock\b/,
+      /\bwhat('s| is) next (for me|to unlock)\b/,
+      /\bnext (unlock|reward|level|stage)\b/,
     ],
   },
   {
@@ -113,6 +118,8 @@ const MATCHERS: Matcher[] = [
       /\bbadges? (to|i can|left to|to earn|to get)\b/,
       /\bwhat badges? (can|should|do) i\b/,
       /\bbadges? (i|i'm|im) (missing|need|don't have)\b/,
+      /\bachievements? (am i |i'm |i am )?close (to|on)\b/,
+      /\bwhat achievements? (am i|can i)\b/,
     ],
   },
   {

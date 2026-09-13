@@ -1,4 +1,4 @@
-# Reputation 2.1
+# Reputation 2.2
 
 TerpTalk's community trust and progression system. Every point has a reason,
 every award is traceable, and anything important is reversible.
@@ -85,6 +85,42 @@ Perks are enforced in code via `getTierPerks()` / `repRateLimit()` — never
 just advertised. `checkTierChange` notifies on tier-up; `demoteIfNeeded`
 strips Verified Member if rep falls back under the threshold.
 
+## Milestones & celebrations (2.2)
+
+Every award's deferred pipeline (`postAwardEffects`) walks the ladder with
+`crossedRungs(oldRep, newRep)` — a pure function returning each rung crossed,
+classified `"tier"` or `"stage"` with the Grow Level landed on.
+
+- **Tier-up** — `checkTierChange`: prominent notification carrying
+  `metadata.kind = "tier"` (tier chip data + the cosmetics that just
+  unlocked), plus the TerpBot lounge announcement.
+- **Stage-up / Grow Level-up** — `checkStageChange`: one light notification
+  per rung with `metadata.kind = "stage"` and the member's next locked
+  cosmetic as the hook.
+- **Once-ever** — each celebration is claimed by a keyed zero-amount
+  `MILESTONE` ledger row (`milestone:tier:<uid>:<threshold>`,
+  `milestone:stage:<uid>:<rung>`). The unique key makes dedupe durable and
+  race-safe; `amount: 0` keeps `balance == SUM(amount)`. Reversals demote
+  the level but re-earning a rung never re-fires its celebration.
+- **Delivery** — `metadata` rides the normal notification row and the
+  Pusher `new-notification` DTO. `navigation.tsx` already re-dispatches it
+  as `tt-new-notification`; the global `MilestoneCelebration` listener
+  (mounted in `providers.tsx`) renders a celebratory card — big for tier
+  unlock chips, compact for stages, chips for badge/challenge events.
+  Ordinary rep events carry no `metadata.kind` and stay silent. Everything
+  is CSS-animated, `role="status"`, Escape/dismiss accessible, and
+  client-deduped by notification id.
+- **Badge unlocks** — `checkBadges` attaches `metadata.kind = "badge"` with
+  each earned badge's name/rarity/icon.
+- **Challenge completion** — `evaluateChallenges` attaches
+  `metadata.kind = "challenge"` with titles + total reward.
+- Contest wins and staff adjustments now run the same milestone pipeline
+  (`awardReputation`/`runPostAwardEffects`), so a contest win that crosses
+  a rung celebrates properly.
+- **Demotion pruning** — `postDemotionEffects` (reversals + negative staff
+  adjustments) clears equipped cosmetics the member no longer qualifies for
+  and unpins showcase badges beyond the current tier's slot count.
+
 ### Grow Stages
 
 Tiers are sparse, so `TIER_STAGE_CHECKPOINTS` defines sub-stages inside each
@@ -101,7 +137,11 @@ preset profile titles, profile card themes — each unlocked at a tier
 threshold. `Profile.avatarFrame`/`profileTitle`/`profileTheme` store only the
 equipped key; `PATCH /api/profile` validates equips with `canEquip()`.
 `UserBadge.pinned` drives the badge showcase (slots scale with tier via the
-`showcaseSlots` perk).
+`showcaseSlots` perk). Flat helpers (`nextLockedCosmetic`,
+`cosmeticsUnlockedBetween`) power "next unlock" copy and tier-up reward
+chips. Equipped frames and titles render in chat message rows via
+`chatAuthorSelect` — a dedicated select so cosmetics never widen
+`publicUserSelect`. TerpBot never renders cosmetics (`!isBot` gate).
 
 ## Badges
 
@@ -172,15 +212,22 @@ UserBadge assignments carry over untouched. All idempotent.
 recomputed server-side from the ledger and contest-vote rows — deleted or
 reversed activity stops counting automatically, and no progress table exists.
 Payouts are keyed `challenge:<isoWeek>:<slug>:<userId>` (~65 rep/week max,
-under the velocity flag). `evaluateChallenges()` runs inside `/api/ping`'s
-~15-minute throttle; `GET /api/challenges` is owner-only.
+under the velocity flag). `evaluateChallenges()` runs in `/api/ping`'s
+deferred `after()` block on the ~15-minute staleness cadence — off the
+response path; `GET /api/challenges` is owner-only.
 
 ## User-facing surfaces
 
 - Profile header: tier chip, progress bar, tier benefit.
 - Profile card: recent public reputation history (`PUBLIC_REP_TYPES` only —
   staff adjustments and check-in cadence stay private).
-- `/reputation` — public explainer: sources, points, caps, tiers, fair play.
+- `/reputation` — explainer plus the session-gated **Your Garden** panel
+  (`ProgressionPanel`): current level/stage/tier, stage + tier progress
+  bars, next unlock, upcoming rungs, weekly challenge strip, recent badges.
+  Backed by owner-only `GET /api/progression`.
 - `/api/users/[username]/reputation` — paginated public history.
 - Milestone notifications (`notifyOnMilestone` preference) for tier-ups,
-  badges, referral payouts, and staff adjustments — never per-point noise.
+  stage-ups, badges, challenges, referral payouts, and staff adjustments —
+  never per-point noise.
+- Chat message rows render the equipped avatar frame and preset title
+  (humans only).

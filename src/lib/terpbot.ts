@@ -13,7 +13,7 @@
 // a bot message; never hand the bot moderation, role, or reputation writes.
 import { prisma } from "@/lib/prisma"
 import { getPusher } from "@/lib/pusher"
-import { publicUserSelect, LIMITS } from "@/lib/security"
+import { chatAuthorSelect, LIMITS } from "@/lib/security"
 import { TERPBOT_USERNAME } from "@/lib/terpbot-constants"
 import { recordBotEvent } from "@/lib/terpbot-events"
 
@@ -108,8 +108,8 @@ export async function postBotMessage(roomId: string, text: string, replyToId?: s
     const message = await prisma.chatMessage.create({
       data: { roomId, authorId, content, ...(replyToId ? { replyToId } : {}) },
       include: {
-        author: { select: publicUserSelect },
-        replyTo: { include: { author: { select: publicUserSelect } } },
+        author: { select: chatAuthorSelect },
+        replyTo: { include: { author: { select: chatAuthorSelect } } },
       },
     })
     const dto = {
@@ -122,6 +122,8 @@ export async function postBotMessage(roomId: string, text: string, replyToId?: s
         username: message.author.profile?.username ?? null,
         image: message.author.image ?? null,
         role: message.author.role ?? null,
+        avatarFrame: message.author.profile?.avatarFrame ?? null,
+        profileTitle: message.author.profile?.profileTitle ?? null,
       },
       replyTo: message.replyTo
         ? {
@@ -133,6 +135,8 @@ export async function postBotMessage(roomId: string, text: string, replyToId?: s
               username: message.replyTo.author.profile?.username ?? null,
               image: message.replyTo.author.image ?? null,
               role: message.replyTo.author.role ?? null,
+              avatarFrame: message.replyTo.author.profile?.avatarFrame ?? null,
+              profileTitle: message.replyTo.author.profile?.profileTitle ?? null,
             },
           }
         : null,

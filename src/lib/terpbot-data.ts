@@ -8,7 +8,8 @@ import { prisma } from "@/lib/prisma"
 import { activeAuthor, blockExistsBetween, containsExternalLink, LIMITS, USERNAME_REGEX, rankableProfile, REPUTATION_ORDER } from "@/lib/security"
 import { extractThreadRef, type ThreadRef } from "@/lib/terpbot-context"
 import { postDeepLink } from "@/lib/notify"
-import { getReputationTier, getNextTier, getTierProgress } from "@/lib/reputation-config"
+import { getNextTier, getTierProgress, getRepStage, getStageProgress } from "@/lib/reputation-config"
+import { nextLockedCosmetic } from "@/lib/cosmetics"
 import { getGrowStreak } from "@/lib/grow-streak"
 import { BADGE_RULES, getUserStats } from "@/lib/reputation"
 import { BADGE_REGISTRY, getBadgeByName } from "@/lib/badge-registry"
@@ -279,24 +280,34 @@ async function handle(name: string, ctx: BotCommandCtx): Promise<BotCommandResul
     case "rep": {
       const t = await memberFor(ctx, ctx.args[0])
       if (!t) return ok(`Couldn't find that member.`)
-      const tier = getReputationTier(t.reputation)
+      const stage = getRepStage(t.reputation)
       const next = getNextTier(t.reputation)
-      const nextText = next ? ` Next: ${next.name} at ${next.threshold} rep (${next.threshold - t.reputation} to go).` : " Top tier reached!"
-      return ok(`📈 @${t.username} — ${t.reputation} rep · ${tier.name} tier.${nextText} /u/${t.username}`)
+      const nextText = next ? ` Next: ${next.name} at ${next.threshold.toLocaleString()} rep (${(next.threshold - t.reputation).toLocaleString()} to go).` : " Top tier reached!"
+      return ok(`📈 @${t.username} — ${t.reputation.toLocaleString()} rep · Grow Level ${stage.level} (${stage.stageName}) · ${stage.tier.name} tier.${nextText} /u/${t.username}`)
     }
 
     case "progress": {
       const t = await memberFor(ctx, ctx.args[0])
       if (!t) return ok(`Couldn't find that member.`)
-      const tier = getReputationTier(t.reputation)
+      const stage = getRepStage(t.reputation)
+      const stageProg = getStageProgress(t.reputation)
+      const unlock = nextLockedCosmetic(t.reputation)
       const next = getNextTier(t.reputation)
-      if (!next) return ok(`📈 @${t.username} — ${t.reputation} rep · ${tier.name}. That's the top tier!`)
-      const prog = getTierProgress(t.reputation)
-      return ok(
-        `📈 @${t.username} — ${t.reputation} rep · ${tier.name} tier\n` +
-          `Progress: ${prog.percent}% toward ${next.name} (${next.threshold} rep — ${next.threshold - t.reputation} to go)\n` +
-          `${next.icon} ${next.name}: ${next.benefit}`
-      )
+      const lines = [
+        `📈 @${t.username} — ${t.reputation.toLocaleString()} rep · Grow Level ${stage.level} · ${stage.tier.name} tier`,
+        stageProg.remaining > 0
+          ? `Stage: ${stage.stageName} — ${stageProg.remaining.toLocaleString()} rep to level ${stage.level + 1} (${stageProg.percent}% through)`
+          : `Stage: ${stage.stageName} — highest level reached`,
+      ]
+      if (unlock) lines.push(`Next unlock: ${unlock.name} at ${unlock.unlockedAt.toLocaleString()} rep`)
+      if (next) {
+        const prog = getTierProgress(t.reputation)
+        lines.push(`Tier: ${prog.percent}% toward ${next.name} (${next.threshold.toLocaleString()} rep — ${(next.threshold - t.reputation).toLocaleString()} to go)`)
+        lines.push(`${next.icon} ${next.name}: ${next.benefit}`)
+      } else {
+        lines.push("That's the top tier!")
+      }
+      return ok(lines.join("\n"))
     }
 
     case "rank": {

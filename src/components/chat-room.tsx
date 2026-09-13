@@ -11,6 +11,7 @@ import {
 import Link from "next/link"
 import RoleBadge from "@/components/role-badge"
 import { Avatar } from "@/components/ui/avatar"
+import { getAvatarFrame, getProfileTitle } from "@/lib/cosmetics"
 import { listCommandsForRole } from "@/lib/chat-commands"
 import { useToast } from "@/components/ui/toast"
 import { cn } from "@/lib/utils"
@@ -36,6 +37,8 @@ interface Author {
   username?: string | null
   role?: string | null
   image?: string | null
+  avatarFrame?: string | null
+  profileTitle?: string | null
 }
 
 interface Message {
@@ -121,12 +124,15 @@ const MessageRow = memo(function MessageRow({
   const isBot = msg.author.username === BOT_USERNAME
   const isAction = !isBot && !isDeleted && /^\*.+\*$/.test(msg.content)
   const displayName = msg.author.username || msg.author.name
+  // Cosmetics render only for humans — the bot keeps its fixed identity.
+  const frame = !isBot ? getAvatarFrame(msg.author.avatarFrame) : null
+  const title = !isBot ? getProfileTitle(msg.author.profileTitle) : null
 
   return (
     <div className="group relative flex gap-2.5">
       <Link
         href={`/u/${encodeURIComponent(displayName)}`}
-        className="mt-0.5 shrink-0"
+        className={cn("mt-0.5 shrink-0 rounded-full", frame?.className)}
         aria-label={`${displayName}'s profile`}
         tabIndex={-1}
       >
@@ -146,6 +152,11 @@ const MessageRow = memo(function MessageRow({
           >
             {displayName}
           </Link>
+          {title && (
+            <span className="text-[9px] font-medium uppercase tracking-wider px-1 py-px rounded truncate bg-primary/10 text-primary/80">
+              {title.name}
+            </span>
+          )}
           {isBot && (
             <span className="inline-flex items-center gap-0.5 text-[9px] font-bold uppercase tracking-wider bg-primary/15 text-primary px-1 py-px rounded">
               <Bot className="w-2.5 h-2.5" /> Bot

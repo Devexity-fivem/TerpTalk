@@ -24,8 +24,11 @@ import {
   VERIFIED_MIN_AGE_DAYS,
   VERIFIED_MIN_REPUTATION,
   VERIFIED_MULTIPLIER,
+  crossedRungs,
+  getRepStage,
   getReputationTier,
 } from "@/lib/reputation-config"
+import { canEquip, cosmeticsUnlockedBetween, nextLockedCosmetic } from "@/lib/cosmetics"
 import { seedBadges } from "@/lib/badges"
 import { BADGE_REGISTRY } from "@/lib/badge-registry"
 import { announceBadges, announceTierUp } from "@/lib/terpbot"
@@ -307,7 +310,7 @@ export async function reverseReputationEvent(
   })
 
   if (outcome === null) return { reversed: false }
-  await demoteIfNeeded(outcome.userId).catch(() => null)
+  await postDemotionEffects(outcome.userId).catch(() => null)
   return { reversed: true, eventId, newRep: outcome.newRep }
 }
 
@@ -377,8 +380,47 @@ async function demoteIfNeeded(userId: string) {
   }).catch(() => null)
 }
 
-// Exported for staff tooling — applies demotion after negative adjustments.
-export { demoteIfNeeded }
+// After a reputation drop, strip anything the member no longer qualifies
+// for: equipped cosmetics above their rep and showcase pins beyond their
+// current tier's slot count. Defense-in-depth — equip writes are already
+// gated by canEquip(), this closes the read-after-demotion gap.
+async function enforceCosmeticUnlocks(userId: string) {
+  const profile = await prisma.profile.findUnique({
+    where: { userId },
+    select: { reputation: true, avatarFrame: true, profileTitle: true, profileTheme: true },
+  })
+  if (!profile) return
+  const rep = profile.reputation
+
+  const clear: Record<string, null> = {}
+  if (profile.avatarFrame && !canEquip(rep, "frames", profile.avatarFrame)) clear.avatarFrame = null
+  if (profile.profileTitle && !canEquip(rep, "titles", profile.profileTitle)) clear.profileTitle = null
+  if (profile.profileTheme && !canEquip(rep, "themes", profile.profileTheme)) clear.profileTheme = null
+  if (Object.keys(clear).length > 0) {
+    await prisma.profile.update({ where: { userId }, data: clear })
+  }
+
+  const slots = getReputationTier(rep).perks.showcaseSlots ?? 0
+  const pinned = await prisma.userBadge.findMany({
+    where: { userId, pinned: true },
+    orderBy: { earnedAt: "asc" },
+    select: { id: true },
+  })
+  const overflow = pinned.slice(slots)
+  if (overflow.length > 0) {
+    await prisma.userBadge.updateMany({
+      where: { id: { in: overflow.map((b) => b.id) } },
+      data: { pinned: false },
+    })
+  }
+}
+
+// Exported for staff tooling — applies demotion + cosmetic pruning after
+// negative adjustments and reversals.
+export async function postDemotionEffects(userId: string) {
+  await demoteIfNeeded(userId)
+  await enforceCosmeticUnlocks(userId)
+}
 
 // ─── Side effects (deferred; never part of the balance transaction) ───
 
@@ -389,9 +431,42 @@ async function postAwardEffects(
   newRep: number
 ) {
   await checkTierChange(userId, oldRep, newRep)
+  await checkStageChange(userId, oldRep, newRep)
   await autoVerify(userId, newRep, user)
   await checkBadges(userId)
   await maybePayReferral(userId, user, newRep)
+}
+
+// Exported for paths that write reputation directly (admin adjustments,
+// contest resolutions) — they must still run the full milestone pipeline.
+export async function runPostAwardEffects(userId: string, oldRep: number, newRep: number) {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { role: true, createdAt: true, banned: true, suspendedUntil: true },
+  })
+  if (!user) return
+  await postAwardEffects(userId, user, oldRep, newRep)
+}
+
+// Once-ever milestone claims: a keyed 0-amount MILESTONE ledger row. The
+// unique `key` makes "has this celebration already fired" durable and
+// race-safe — the P2002 loser skips. amount=0 keeps balance == SUM(amount).
+async function claimMilestone(userId: string, key: string): Promise<boolean> {
+  try {
+    await prisma.reputationEvent.create({
+      data: {
+        userId,
+        type: REP_EVENT_TYPES.MILESTONE,
+        amount: 0,
+        reason: "Milestone marker",
+        key,
+      },
+    })
+    return true
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") return false
+    throw error
+  }
 }
 
 // Referral rep pays only once the referred member proves legitimate:
@@ -574,17 +649,32 @@ export async function getUserStats(userId: string): Promise<UserStats> {
 }
 
 // Notify and record when a user crosses into a higher reputation tier.
+// Once-ever per tier per user: a keyed MILESTONE marker makes the
+// celebration durable and race-safe — reversals demote the level but
+// re-earning the tier never re-fires the announcement or toast.
 async function checkTierChange(userId: string, oldRep: number, newRep: number) {
   const oldTier = getReputationTier(oldRep)
   const newTier = getReputationTier(newRep)
   if (newTier.threshold <= oldTier.threshold) return
+  if (!(await claimMilestone(userId, `milestone:tier:${userId}:${newTier.threshold}`))) return
+
+  const stage = getRepStage(newRep)
+  const unlocks = cosmeticsUnlockedBetween(oldRep, newRep)
 
   await notify({
     userId,
     type: "REPUTATION",
     title: `Tier up: ${newTier.name}`,
-    content: `You reached ${newRep} reputation and became a ${newTier.name}. ${newTier.benefit}`,
-    link: "/profile",
+    content: `You reached ${newRep.toLocaleString()} reputation and became a ${newTier.name}. ${newTier.benefit}`,
+    link: "/reputation",
+    metadata: {
+      kind: "tier",
+      level: stage.level,
+      stageName: stage.stageName,
+      rep: newRep,
+      tier: { name: newTier.name, icon: newTier.icon, color: newTier.color, bg: newTier.bg },
+      unlocks: unlocks.map((u) => ({ kind: u.kind, key: u.key, name: u.name })),
+    },
   })
 
   const profile = await prisma.profile.findUnique({
@@ -593,6 +683,43 @@ async function checkTierChange(userId: string, oldRep: number, newRep: number) {
   })
   if (profile?.username) {
     await announceTierUp(profile.username, newTier.name, newRep).catch(() => null)
+  }
+}
+
+// In-tier stage crossings — every Grow Level advance is a stage rung on
+// REP_LADDER (tier rungs are handled above), so this is the per-level
+// feedback layer. Light-weight: a notification with celebration metadata,
+// once-ever per rung via MILESTONE markers.
+async function checkStageChange(userId: string, oldRep: number, newRep: number) {
+  const stages = crossedRungs(oldRep, newRep).filter((c) => c.kind === "stage")
+  for (const crossing of stages) {
+    if (!(await claimMilestone(userId, `milestone:stage:${userId}:${crossing.rung}`))) continue
+    const stage = getRepStage(newRep)
+    const nextUnlock = nextLockedCosmetic(newRep)
+    await notify({
+      userId,
+      type: "REPUTATION",
+      title: `Grow Level ${stage.level} — ${stage.stageName}`,
+      content: nextUnlock
+        ? `Your garden reached a new stage. Next unlock: ${nextUnlock.name} at ${nextUnlock.unlockedAt.toLocaleString()} rep.`
+        : "Your garden reached a new stage.",
+      link: "/reputation",
+      metadata: {
+        kind: "stage",
+        level: stage.level,
+        stageName: stage.stageName,
+        rep: newRep,
+        tier: {
+          name: stage.tier.name,
+          icon: stage.tier.icon,
+          color: stage.tier.color,
+          bg: stage.tier.bg,
+        },
+        nextUnlock: nextUnlock
+          ? { kind: nextUnlock.kind, key: nextUnlock.key, name: nextUnlock.name, unlockedAt: nextUnlock.unlockedAt }
+          : null,
+      },
+    }).catch(() => null)
   }
 }
 
@@ -688,7 +815,12 @@ export async function checkBadges(userId: string) {
   }
 
   if (newlyEarned.length > 0) {
-    // One grouped notification, not one per badge.
+    // One grouped notification, not one per badge. Celebration metadata
+    // carries the registry details so the client can render real badges.
+    const earnedMeta = newlyEarned.map((name) => {
+      const def = BADGE_REGISTRY.find((b) => b.name === name)
+      return { name, rarity: def?.rarity ?? "common", icon: def?.icon ?? "🏅" }
+    })
     await notify({
       userId,
       type: "BADGE",
@@ -697,7 +829,8 @@ export async function checkBadges(userId: string) {
         newlyEarned.length === 1
           ? `You earned the "${newlyEarned[0]}" badge.`
           : `You earned: ${newlyEarned.join(", ")}.`,
-      link: "/profile",
+      link: "/achievements",
+      metadata: { kind: "badge", badges: earnedMeta },
     }).catch(() => null)
 
     const profile = await prisma.profile.findUnique({

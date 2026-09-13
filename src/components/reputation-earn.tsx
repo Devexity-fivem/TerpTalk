@@ -2,7 +2,7 @@
 
 import { MessageSquare, MessageCircle, BookOpen, Camera, Dna, Heart, UserPlus, Repeat, Calendar } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { REP_POINTS, VERIFIED_MULTIPLIER } from "@/lib/reputation-config"
+import { REP_POINTS, VERIFIED_MULTIPLIER, VERIFIED_MIN_AGE_DAYS, VERIFIED_MIN_REPUTATION } from "@/lib/reputation-config"
 
 const ACTIONS = [
   { key: "DAILY_LOGIN", label: "Daily sesh", icon: Calendar, points: REP_POINTS.DAILY_LOGIN },
@@ -43,7 +43,7 @@ export default function ReputationEarn({ compact }: { compact?: boolean }) {
       <div className="mt-4 rounded-lg bg-amber-500/10 border border-amber-500/20 p-3">
         <p className="text-sm text-amber-200">
           <span className="font-semibold">Verified growers earn {VERIFIED_MULTIPLIER}x reputation.</span>{" "}
-          Reach 1,500 rep and stay active for 7 days to become verified automatically.
+          Reach {VERIFIED_MIN_REPUTATION.toLocaleString()} rep and stay active for {VERIFIED_MIN_AGE_DAYS} days to become verified automatically.
         </p>
       </div>
     </div>

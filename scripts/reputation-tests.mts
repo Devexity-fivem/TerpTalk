@@ -21,11 +21,13 @@ import {
   getRepLevel,
   getStageProgress,
   publicRepLabel,
+  crossedRungs,
 } from "@/lib/reputation-config"
-import { AVATAR_FRAMES, PROFILE_TITLES, PROFILE_THEMES, canEquip, unlockedCosmetics } from "@/lib/cosmetics"
+import { AVATAR_FRAMES, PROFILE_TITLES, PROFILE_THEMES, canEquip, unlockedCosmetics, nextLockedCosmetic, cosmeticsUnlockedBetween } from "@/lib/cosmetics"
 import { WEEKLY_CHALLENGES } from "@/lib/challenges"
 import {
   applyReputationAward,
+  awardReputation,
   reverseReputationEvent,
   reverseReputationByKey,
   reverseReputationBySource,
@@ -132,6 +134,40 @@ async function run() {
   assert.equal(getRepLevel(0), 1)
   assert.equal(getRepLevel(REP_LADDER[REP_LADDER.length - 1]), REP_LADDER.length)
 
+  // ── Pure: rung crossings (2.2 celebration detection) ─────────────
+  assert.deepEqual(crossedRungs(0, 0), [])
+  assert.deepEqual(crossedRungs(500, 500), [], "no gain = no crossing")
+  assert.deepEqual(crossedRungs(600, 400), [], "demotion never crosses upward")
+  // 249 -> 250 crosses exactly the Sprout tier rung.
+  assert.deepEqual(
+    crossedRungs(249, 250).map((c) => [c.rung, c.kind, c.level]),
+    [[250, "tier", 2]]
+  )
+  // A single award can cross several rungs; each is classified.
+  assert.deepEqual(
+    crossedRungs(240, 760).map((c) => [c.rung, c.kind]),
+    [[250, "tier"], [500, "stage"], [750, "tier"]]
+  )
+  // Crossing a stage rung lands on the matching Grow Level.
+  const lvl500 = crossedRungs(499, 500)[0]
+  assert.equal(lvl500.kind, "stage")
+  assert.equal(lvl500.level, getRepLevel(500))
+  // Rung 0 (the start) can never be "crossed" — rep is never negative.
+  assert.ok(crossedRungs(0, 1).every((c) => c.rung > 0))
+
+  // ── Pure: unlock diff helpers ────────────────────────────────────
+  assert.equal(nextLockedCosmetic(0)?.unlockedAt, 250)
+  assert.equal(nextLockedCosmetic(100000), null, "nothing locked past max rep")
+  assert.ok(
+    cosmeticsUnlockedBetween(249, 250).length > 0,
+    "crossing 250 unlocks the first cosmetics"
+  )
+  assert.deepEqual(cosmeticsUnlockedBetween(500, 600), [], "no cosmetics mid-gap")
+  for (const c of cosmeticsUnlockedBetween(0, 100000)) {
+    assert.ok(c.unlockedAt > 0 && c.unlockedAt <= 100000)
+    assert.ok(["frame", "title", "theme"].includes(c.kind))
+  }
+
   // ── Pure: economy config sanity ───────────────────────────────────
   for (const k of Object.keys(REP_CAPS)) {
     assert.ok(k in REP_POINTS, `cap ${k} maps to a known source`)
@@ -161,6 +197,9 @@ async function run() {
   assert.ok(PUBLIC_REP_TYPES.has(REP_EVENT_TYPES.LEGACY_MIGRATION))
   assert.ok(!PUBLIC_REP_TYPES.has(REP_EVENT_TYPES.STAFF_ADJUSTMENT))
   assert.ok(!PUBLIC_REP_TYPES.has("DAILY_LOGIN"))
+  // Milestone markers are internal bookkeeping — never public history.
+  assert.ok(REP_EVENT_TYPES.MILESTONE === "MILESTONE")
+  assert.ok(!PUBLIC_REP_TYPES.has(REP_EVENT_TYPES.MILESTONE), "MILESTONE stays off public history")
 
   // ── Pure: badge registry ↔ rules consistency ─────────────────────
   const registryNames = new Set(BADGE_REGISTRY.map((b) => b.name))
@@ -354,6 +393,68 @@ async function run() {
     } else {
       console.log("  (terpbot user not present in this database — bot-exclusion test skipped)")
     }
+
+    // ── DB: milestone markers (2.2 once-ever celebrations) ─────────
+    // awardReputation runs the full side-effect funnel (inline outside a
+    // request scope). Crossing 250 claims the tier milestone once.
+    const repBeforeMilestone = await repOf(uid)
+    const bump = 250 - repBeforeMilestone
+    await awardReputation(uid, REP_EVENT_TYPES.STAFF_ADJUSTMENT, bump, "test milestone bump", { force: true })
+    assert.equal(await repOf(uid), 250)
+    const tierMarker = await prisma.reputationEvent.findUnique({
+      where: { key: `milestone:tier:${uid}:250` },
+    })
+    assert.ok(tierMarker, "tier milestone marker exists")
+    assert.equal(tierMarker!.amount, 0, "marker is zero-amount")
+    assert.equal(tierMarker!.type, "MILESTONE")
+    const tierNotifs = await prisma.notification.findMany({
+      where: { userId: uid, type: "REPUTATION" },
+    })
+    assert.ok(
+      tierNotifs.some((n) => (n.metadata as { kind?: string } | null)?.kind === "tier"),
+      "tier notification carries celebration metadata"
+    )
+
+    // Crossing 500 claims the stage milestone + a stage notification.
+    await awardReputation(uid, REP_EVENT_TYPES.STAFF_ADJUSTMENT, 250, "test stage bump", { force: true })
+    assert.equal(await repOf(uid), 500)
+    const stageMarker = await prisma.reputationEvent.findUnique({
+      where: { key: `milestone:stage:${uid}:500` },
+    })
+    assert.ok(stageMarker, "stage milestone marker exists")
+    const stageNotifs = await prisma.notification.findMany({
+      where: { userId: uid, type: "REPUTATION" },
+    })
+    const stageCount = stageNotifs.filter(
+      (n) => (n.metadata as { kind?: string } | null)?.kind === "stage"
+    ).length
+    assert.equal(stageCount, 1, "exactly one stage celebration fired")
+
+    // Once-ever: reversing below the rung then re-earning it must NOT
+    // re-fire the celebration (marker is claimed; P2002 = already fired).
+    const bump2 = await prisma.reputationEvent.findFirst({
+      where: { userId: uid, amount: 250, type: REP_EVENT_TYPES.STAFF_ADJUSTMENT },
+      orderBy: { createdAt: "desc" },
+      select: { id: true, key: true },
+    })
+    await reverseReputationEvent(bump2!.id, "test reverse")
+    assert.equal(await repOf(uid), 250, "reversal drops below the stage rung")
+    await awardReputation(uid, REP_EVENT_TYPES.STAFF_ADJUSTMENT, 250, "re-earn", { force: true, key: "test:milestone:re-earn" })
+    assert.equal(await repOf(uid), 500)
+    const markers500 = await prisma.reputationEvent.count({
+      where: { key: `milestone:stage:${uid}:500` },
+    })
+    assert.equal(markers500, 1, "marker claimed exactly once")
+    const stageNotifs2 = await prisma.notification.findMany({
+      where: { userId: uid, type: "REPUTATION" },
+    })
+    assert.equal(
+      stageNotifs2.filter((n) => (n.metadata as { kind?: string } | null)?.kind === "stage").length,
+      1,
+      "no duplicate stage celebration after re-earning"
+    )
+    // Markers never move the balance.
+    assert.equal(await repOf(uid), await ledgerSum(uid), "markers keep balance == ledger")
 
     // Final invariant: after every op above, balance == ledger sum.
     assert.equal(await repOf(uid), await ledgerSum(uid), "final balance == ledger")

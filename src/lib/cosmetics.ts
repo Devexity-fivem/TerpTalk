@@ -29,7 +29,7 @@ export const AVATAR_FRAMES: AvatarFrameDef[] = [
   { key: "pistil-fire", name: "Pistil Fire", description: "Orange hairs in full flower.", unlockedAt: 7000, className: "ring-2 ring-orange-500/90 shadow-[0_0_12px_-2px_rgba(249,115,22,0.5)]" },
   { key: "amber-jar", name: "Amber Jar", description: "Deep cured amber, settled and rich.", unlockedAt: 15000, className: "ring-[3px] ring-amber-400/90 shadow-[0_0_14px_-2px_rgba(251,191,36,0.55)]" },
   { key: "rosin-ring", name: "Rosin Ring", description: "Pressed gold — a legendary finish.", unlockedAt: 40000, className: "ring-4 ring-yellow-300/90 shadow-[0_0_16px_-2px_rgba(253,224,71,0.6)]" },
-  { key: "northern-lights", name: "Northern Lights", description: "An aurora only the garden's oldest hands ever see.", unlockedAt: 100000, className: "ring-4 shadow-[0_0_18px_-2px_rgba(125,211,252,0.7)] ring-sky-300/80 [box-shadow:0_0_18px_-2px_rgba(125,211,252,0.7),0_0_10px_-4px_rgba(196,181,253,0.8)]" },
+  { key: "northern-lights", name: "Northern Lights", description: "An aurora only the garden's oldest hands ever see.", unlockedAt: 100000, className: "ring-4 ring-sky-300/80 [box-shadow:0_0_18px_-2px_rgba(125,211,252,0.7),0_0_10px_-4px_rgba(196,181,253,0.8)]" },
 ]
 
 // ─── Custom titles ───────────────────────────────────────────────────
@@ -109,4 +109,26 @@ export function canEquip(reputation: number, kind: keyof UnlockedCosmetics, key:
 // The tier name a cosmetic first unlocks at — for "unlocks at X tier" copy.
 export function unlockTierName(unlockedAt: number): string {
   return getReputationTier(unlockedAt).name
+}
+
+// Flat list helpers used by milestone metadata — a single ordered view
+// across all three cosmetic kinds.
+export interface FlatCosmetic extends CosmeticDef {
+  kind: "frame" | "title" | "theme"
+}
+
+const ALL_COSMETICS: FlatCosmetic[] = [
+  ...AVATAR_FRAMES.map((c) => ({ ...c, kind: "frame" as const })),
+  ...PROFILE_TITLES.map((c) => ({ ...c, kind: "title" as const })),
+  ...PROFILE_THEMES.map((c) => ({ ...c, kind: "theme" as const })),
+].sort((a, b) => a.unlockedAt - b.unlockedAt)
+
+// The first cosmetic still locked at this reputation — "your next reward".
+export function nextLockedCosmetic(reputation: number): FlatCosmetic | null {
+  return ALL_COSMETICS.find((c) => c.unlockedAt > reputation) ?? null
+}
+
+// Everything a rep gain of (oldRep, newRep] just unlocked.
+export function cosmeticsUnlockedBetween(oldRep: number, newRep: number): FlatCosmetic[] {
+  return ALL_COSMETICS.filter((c) => c.unlockedAt > oldRep && c.unlockedAt <= newRep)
 }

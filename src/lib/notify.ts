@@ -169,6 +169,8 @@ function toPushDto(n: NotificationWithActor) {
     link: n.link,
     read: n.read,
     createdAt: n.createdAt.toISOString(),
+    metadata: n.metadata ?? null,
+    groupKey: n.groupKey ?? null,
     actor: a
       ? {
           name: a.name ?? a.profile?.username ?? "Someone",
@@ -201,6 +203,8 @@ export function emitNotificationPush(
     link: n.link,
     read: n.read,
     createdAt: n.createdAt.toISOString(),
+    metadata: null,
+    groupKey: null,
     actor: null,
   })
 }

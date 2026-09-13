@@ -11,7 +11,7 @@ import {
   isAdmin,
   getClientIp,
   hashIp,
-  publicUserSelect,
+  chatAuthorSelect,
   LIMITS,
   USERNAME_REGEX,
   enforceLinkTrust,
@@ -35,7 +35,7 @@ type ChatMessageWithAuthor = {
     name: string | null
     image: string | null
     role: string | null
-    profile: { username: string | null } | null
+    profile: { username: string | null; avatarFrame?: string | null; profileTitle?: string | null } | null
   }
 }
 
@@ -112,7 +112,7 @@ export async function POST(request: NextRequest) {
         name: string | null
         image: string | null
         role: string | null
-        profile: { username: string | null } | null
+        profile: { username: string | null; avatarFrame?: string | null; profileTitle?: string | null } | null
       }
       return {
         id: message.id,
@@ -124,6 +124,8 @@ export async function POST(request: NextRequest) {
           username: author.profile?.username ?? null,
           image: author.image ?? null,
           role: author.role ?? null,
+          avatarFrame: author.profile?.avatarFrame ?? null,
+          profileTitle: author.profile?.profileTitle ?? null,
         },
         replyTo: null,
       }
@@ -271,7 +273,7 @@ export async function POST(request: NextRequest) {
             authorId: userId,
             content: `*${displayName} ${rest}*`,
           },
-          include: { author: { select: publicUserSelect } },
+          include: { author: { select: chatAuthorSelect } },
         })
         const dto = toChatDto(message)
         getPusher()?.trigger(`private-chat-${roomId}`, "new-message", dto).catch(() => {})

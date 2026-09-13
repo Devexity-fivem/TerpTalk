@@ -44,15 +44,14 @@ export async function POST(request: NextRequest) {
       await awardReputation(userId, "DAILY_LOGIN", 1, "Daily check-in", {
         key: `daily:${userId}:${dayKey}`,
       }).catch(() => {})
-
-      // Weekly challenge evaluation — piggybacks on the same ~15-min
-      // throttle so it runs at most a few times per hour per member.
-      await evaluateChallenges(userId).catch(() => [])
     }
 
-    // Prune old chat messages in the background, throttled to once per hour.
+    // Background work, throttled to once per hour (chat prune) and the same
+    // ~15-min staleness cadence as above (weekly challenge evaluation).
+    // Deferred via after() so multi-query evaluation never delays the ping.
     after(async () => {
       await pruneChatMessagesIfDue()
+      if (stale) await evaluateChallenges(userId).catch(() => [])
     })
 
     return NextResponse.json({ ok: true })
