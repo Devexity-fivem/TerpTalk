@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma"
 import { rateLimit } from "@/lib/rate-limit"
 import { unauthorized, forbidden, getClientIp, logSecurityEvent, isBanned } from "@/lib/security"
 import { notifyMany } from "@/lib/notify"
+import { reportPriority } from "@/lib/trust-signals"
 
 const REPORT_TYPES = new Set([
   "THREAD",
@@ -109,13 +110,13 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Cannot report your own content" }, { status: 400 })
     }
 
-    // Prevent duplicate pending reports for the same target from the same user
+    // Prevent duplicate open reports for the same target from the same user
     const duplicate = await prisma.report.findFirst({
       where: {
         reporterId: session.user.id,
         type,
         targetId,
-        status: { in: ["PENDING", "REVIEWING"] },
+        status: { in: ["PENDING", "REVIEWING", "ESCALATED"] },
       },
       select: { id: true },
     })
@@ -131,6 +132,7 @@ export async function POST(request: Request) {
         reporterId: session.user.id,
         reportedId: reportedUserId,
         targetId,
+        priority: reportPriority(reason),
       },
     })
 

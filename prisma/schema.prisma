@@ -675,23 +675,53 @@ model ReputationEvent {
 
 // Reports and Moderation
 model Report {
-  id          String   @id @default(cuid())
-  type        String   // POST, COMMENT, CHAT_MESSAGE, PROFILE, DIRECT_MESSAGE, DIARY, SETUP
-  reason      String
-  description String?
-  reporterId  String
-  reportedId  String
-  targetId    String?  // ID of the reported content (thread/post/message id)
-  status      String   @default("PENDING") // PENDING, REVIEWING, RESOLVED, DISMISSED
-  resolution  String?  // Moderator note on resolution
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id           String    @id @default(cuid())
+  type         String    // THREAD, POST, CHAT_MESSAGE, PROFILE, DIARY, SETUP
+  reason       String
+  description  String?
+  reporterId   String
+  reportedId   String
+  targetId     String?   // ID of the reported content (thread/post/message id)
+  status       String    @default("PENDING") // PENDING, REVIEWING, ESCALATED, RESOLVED, DISMISSED
+  priority     String    @default("NORMAL")  // LOW, NORMAL, HIGH, URGENT — derived from reason, staff-overridable
+  resolution   String?   // Moderator note on resolution
+  assignedToId String?   // bare string — survives staff account deletion
+  resolvedById String?   // bare string
+  resolvedAt   DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 
   reporter    User        @relation(fields: [reporterId], references: [id], onDelete: Cascade)
 
   @@index([reporterId])
   @@index([status])
   @@index([createdAt])
+  @@index([status, createdAt])
+  @@index([reportedId])
+  @@index([assignedToId, status])
+}
+
+// Automated trust & safety signals — persisted so staff can triage, assign,
+// and resolve them like reports. `key` makes detector re-scans idempotent.
+model AbuseFlag {
+  id             String   @id @default(cuid())
+  signal         String   // REP_VELOCITY | REP_RECIPROCAL_PAIR | REP_NEW_ACCOUNT_LIKES
+  userId         String   // subject — bare string, same convention as SecurityEvent.userId
+  counterpartyId String?  // second user for pair signals
+  key            String   @unique // dedupe token, e.g. "repvel:<userId>:<yyyy-mm-dd>"
+  evidence       Json?    // snapshot of detector output at flag time
+  status         String   @default("PENDING") // PENDING, REVIEWING, ESCALATED, RESOLVED, DISMISSED
+  priority       String   @default("NORMAL")  // LOW, NORMAL, HIGH, URGENT
+  resolution     String?
+  assignedToId   String?
+  resolvedById   String?
+  resolvedAt     DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([status, createdAt])
+  @@index([userId])
+  @@index([assignedToId, status])
 }
 
 model ModerationAction {
@@ -701,6 +731,8 @@ model ModerationAction {
   targetUserId String
   moderatorId String
   duration    Int?     // in days for temporary bans
+  reportId    String?  // links REPORT_* / assignment actions back to the case
+  flagId      String?  // links FLAG_* actions back to the abuse flag
   createdAt   DateTime @default(now())
 
   moderator   User                 @relation(fields: [moderatorId], references: [id], onDelete: Cascade)
@@ -708,6 +740,8 @@ model ModerationAction {
   @@index([targetUserId])
   @@index([moderatorId])
   @@index([createdAt])
+  @@index([reportId])
+  @@index([flagId])
 }
 
 // Security Infrastructure

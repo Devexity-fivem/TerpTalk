@@ -72,7 +72,7 @@ export async function POST(request: Request) {
       if (target.role === "ADMINISTRATOR") {
         throw new Error("FORBIDDEN")
       }
-      if (target.role === "MODERATOR" && !isAdmin(staff.role)) {
+      if ((target.role === "MODERATOR" || target.role === "SUPPORT") && !isAdmin(staff.role)) {
         throw new Error("FORBIDDEN")
       }
 

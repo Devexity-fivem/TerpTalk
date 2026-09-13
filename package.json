@@ -20,7 +20,8 @@
     "test:diary": "node scripts/diary-verify.mjs",
     "test:bot": "node scripts/bot-verify.mjs",
     "test:terpbot": "tsx scripts/terpbot-tests.mts",
-    "test:reputation": "tsx scripts/reputation-tests.mts"
+    "test:reputation": "tsx scripts/reputation-tests.mts",
+    "test:trust-safety": "node scripts/trust-safety-verify.mjs"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",

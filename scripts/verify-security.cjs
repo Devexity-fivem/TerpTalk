@@ -25,11 +25,20 @@ const apiFiles = () => {
   const staffProtected = [
     "admin/users", "admin/announce", "admin/security", "admin/stats",
     "admin/affiliates/partners", "admin/affiliates/products", "admin/affiliates/stats",
-    "moderation/actions", "moderation/reports", "moderation/user",
+    "admin/reputation", "admin/reputation/flags", "admin/audit", "admin/users/[id]",
+    "moderation/actions", "moderation/reports", "moderation/user", "moderation/reputation",
+    "moderation/bulk", "moderation/queue", "moderation/queue/[id]",
+    "moderation/queue/bulk", "moderation/queue/staff",
+    "staff/applications", "staff/applications/[id]",
   ];
   for (const r of staffProtected) {
     const c = read(`app/api/${r}/route.ts`);
-    check(`${r}: uses requireAdmin/requireModerator`, /requireAdmin|requireModerator/.test(c));
+    // Accept the require* helpers OR the older getToken + isSessionValid +
+    // fresh-DB-role pattern (staff/applications predates the helpers but still
+    // re-reads user.role from the database — equivalent strength).
+    const dbRoleCheck = /requireAdmin|requireModerator|requireStaff/.test(c)
+      || (/isSessionValid/.test(c) && /prisma\.user\.findUnique/.test(c) && /isAdmin\(user\.role\)/.test(c));
+    check(`${r}: uses DB-verified staff check`, dbRoleCheck);
     check(`${r}: no bare JWT role check`, !/isAdmin\(session\.user\.role\)|isModerator\(session\.user\.role\)/.test(c) || r === "moderation/actions");
   }
 
@@ -46,21 +55,43 @@ const apiFiles = () => {
     if (e.isDirectory()) walk2(full); else allSrc.push(full);
   });
   walk2("src");
-  const jsonLdFiles = new Set([path.join("src", "components", "json-ld.tsx"), path.join("src", "components", "breadcrumbs.tsx")]);
+  // dangerouslySetInnerHTML is allowed only where content is a static
+  // constant or fully entity-escaped: json-ld/breadcrumbs (serialized JSON),
+  // layout.tsx (static THEME_INIT_SCRIPT), markdown.tsx (escapeForClass
+  // entity-escapes & < > before insertion; hrefs go through sanitizeHref).
+  const innerHtmlAllowlist = new Set([
+    path.join("src", "components", "json-ld.tsx"),
+    path.join("src", "components", "breadcrumbs.tsx"),
+    path.join("src", "app", "layout.tsx"),
+    path.join("src", "lib", "markdown.tsx"),
+  ]);
   check("no unsafe dangerouslySetInnerHTML", !allSrc.some((f) => {
-    if (jsonLdFiles.has(f)) return false;
+    if (innerHtmlAllowlist.has(f)) return false;
     return fs.readFileSync(f, "utf8").includes("dangerouslySetInnerHTML");
   }));
-  check("no raw SQL", !allSrc.some((f) => /\$queryRaw|\$executeRaw/.test(fs.readFileSync(f, "utf8"))));
+  // Raw SQL is allowed only in audited, parameterized queries (trust-signal
+  // detectors and the ledger drift check) — no user input concatenation.
+  const rawSqlAllowlist = new Set([
+    path.join("src", "lib", "trust-signals.ts"),
+    path.join("src", "lib", "reputation.ts"),
+    path.join("src", "app", "api", "admin", "reputation", "flags", "route.ts"),
+  ]);
+  check("no raw SQL outside allowlist", !allSrc.some((f) => {
+    if (rawSqlAllowlist.has(f)) return false;
+    return /\$queryRaw|\$executeRaw/.test(fs.readFileSync(f, "utf8"));
+  }));
 
   // ── 4. Rate limiting coverage on mutation endpoints ──
   const needsRl = ["auth/register", "auth/recover", "messages", "forum/posts", "forum/threads",
     "reactions", "follows", "reports", "blocks", "bookmarks", "search", "profile",
     "profile/complete", "profile/export", "contest", "chat/messages",
     "onboarding/interests", "onboarding/follow", "onboarding/complete", "onboarding/suggestions",
-    "forum/threads/follow", "categories/follow"];
+    "forum/threads/follow", "categories/follow",
+    "moderation/reports", "moderation/queue", "moderation/queue/[id]",
+    "moderation/queue/bulk", "moderation/queue/staff", "moderation/reputation"];
   for (const r of needsRl) {
-    check(`${r}: rate limited`, fs.readFileSync(`src/app/api/${r}/route.ts`, "utf8").includes("rateLimit"));
+    // repRateLimit is the tier-scaled limiter; rateLimit is the plain one.
+    check(`${r}: rate limited`, /repRateLimit|rateLimit/.test(fs.readFileSync(`src/app/api/${r}/route.ts`, "utf8")));
   }
 
   // ── 5. Upload security ──
@@ -94,7 +125,17 @@ const apiFiles = () => {
   check("schema: cascade deletes on user-owned content", (schema.match(/onDelete: Cascade/g) || []).length > 10);
 
   // ── 10. Privacy invariants ──
-  check("no client-side storage (localStorage/sessionStorage)", !allSrc.some((f) => /localStorage|sessionStorage|indexedDB/i.test(fs.readFileSync(f, "utf8"))));
+  // localStorage is allowed only for non-sensitive UI prefs (theme, banner
+  // dismissal) — never auth, credentials, or user data.
+  const storageAllowlist = new Set([
+    path.join("src", "components", "theme-toggle.tsx"),
+    path.join("src", "components", "announcement-banner.tsx"),
+    path.join("src", "lib", "theme.ts"),
+  ]);
+  check("no client-side storage (localStorage/sessionStorage)", !allSrc.some((f) => {
+    if (storageAllowlist.has(f)) return false;
+    return /localStorage|sessionStorage|indexedDB/i.test(fs.readFileSync(f, "utf8"));
+  }));
   check("no raw IP storage (schema has ipHash, not ip)", /ipHash/.test(schema) && !/\bip\s+String\b/.test(schema));
   const sec = read("app/api/admin/security/route.ts");
   check("admin/security: ipHash/userAgent not in response", !sec.includes("e.ipHash") && !sec.includes("e.userAgent"));
@@ -144,7 +185,7 @@ const apiFiles = () => {
 
   // ── 12. Grow Data Engine invariants (Phase 6) ──
   const updatesRoute = read("app/api/diaries/updates/route.ts");
-  check("diary updates: rate limited", updatesRoute.includes("rateLimit"));
+  check("diary updates: rate limited", /repRateLimit|rateLimit/.test(updatesRoute));
   check("diary updates: env values bounded", updatesRoute.includes("RANGES"));
   check("diary updates: stage whitelist", updatesRoute.includes("VALID_STAGES"));
   check("diary updates: stage never regresses silently", updatesRoute.includes("stage !== diary.stage"));
@@ -161,7 +202,7 @@ const apiFiles = () => {
   check("diary contest: rate limited", diaryContest.includes("rateLimit"));
   check("diary contest: voter trust gate", diaryContest.includes("VOTER_MIN_AGE_DAYS") && diaryContest.includes("VOTER_MIN_REPUTATION"));
   check("diary contest: self-vote rejected", diaryContest.includes("Can't vote for your own entry"));
-  check("diary contest: one vote per month (swap tx)", diaryContest.includes("deleteMany"));
+  check("diary contest: one vote per month (atomic upsert)", diaryContest.includes("upsert"));
   check("diary contest: banned/deleted authors excluded", diaryContest.includes("activeAuthor()") && diaryContest.includes("deleted: false"));
   check("diary contest: eligibility gate", diaryContest.includes("MIN_MONTH_UPDATES"));
   check("diary contest: entries bounded", diaryContest.includes("take: 50"));

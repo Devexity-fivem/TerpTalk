@@ -5,7 +5,7 @@ import { signInHref } from "@/lib/callback-url"
 import { useEffect, useState } from "react"
 import { useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
-import { Shield, Flag, Loader2, CheckCircle, XCircle, Trash2, Ban, AlertTriangle, Search, UserCheck, ScrollText, ListChecks, Layers } from "lucide-react"
+import { Shield, Flag, Loader2, CheckCircle, XCircle, Ban, AlertTriangle, Search, UserCheck, ScrollText, ListChecks, Layers, TrendingUp, ChevronRight } from "lucide-react"
 import Link from "next/link"
 
 interface LookupUser {
@@ -27,27 +27,32 @@ interface LookupRep {
   id: string; type: string; amount: number; reason: string; reversedAt: string | null; createdAt: string
 }
 
-interface ReportTarget {
-  id?: string
-  title?: string
-  slug?: string
-  content?: string
-  username?: string
-  deleted?: boolean
-  thread?: { slug: string }
+interface QueueItem {
+  kind: "REPORT" | "FLAG"
+  id: string
+  status: string
+  priority: string
+  createdAt: string
+  assignedTo: string | null
+  // reports
+  type?: string
+  reason?: string
+  subject?: string
+  subjectId?: string
+  reporter?: string | null
+  targetLabel?: string | null
+  targetDeleted?: boolean
+  // abuse flags
+  signal?: string
+  signalLabel?: string
+  counterparty?: string | null
+  evidence?: Record<string, unknown> | null
 }
 
-interface Report {
+interface StaffOption {
   id: string
-  type: string
-  reason: string
-  description: string | null
-  status: string
-  createdAt: string
-  reporter: string
-  reportedUserId: string
-  targetId?: string | null
-  target: ReportTarget | null
+  username: string
+  role: string
 }
 
 interface ModAction {
@@ -62,7 +67,11 @@ interface ModAction {
 export default function ModerationPage() {
   const { data: session, status } = useSession()
   const router = useRouter()
-  const [reports, setReports] = useState<Report[]>([])
+  const [items, setItems] = useState<QueueItem[]>([])
+  const [closed, setClosed] = useState<QueueItem[]>([])
+  const [counts, setCounts] = useState({ open: 0, mine: 0, escalated: 0 })
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [staffList, setStaffList] = useState<StaffOption[]>([])
   const [actions, setActions] = useState<ModAction[]>([])
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState<string | null>(null)
@@ -78,8 +87,8 @@ export default function ModerationPage() {
   const [bulkReason, setBulkReason] = useState("")
   const [bulkLoading, setBulkLoading] = useState(false)
   const [bulkResult, setBulkResult] = useState<string | null>(null)
-  const [queueFilter, setQueueFilter] = useState<"ALL" | "PENDING" | "REVIEWING" | "ESCALATED">("ALL")
-  const [queueSort, setQueueSort] = useState<"newest" | "oldest">("oldest")
+  const [queueFilter, setQueueFilter] = useState<"OPEN" | "PENDING" | "REVIEWING" | "ESCALATED" | "MINE">("OPEN")
+  const [kindFilter, setKindFilter] = useState<"ALL" | "REPORT" | "FLAG">("ALL")
   const role = (session?.user as { role?: string })?.role
   const isMod = role === "SUPPORT" || role === "MODERATOR" || role === "ADMINISTRATOR"
   const isAdminUser = role === "ADMINISTRATOR"
@@ -87,14 +96,24 @@ export default function ModerationPage() {
   const canAct = role === "MODERATOR" || role === "ADMINISTRATOR"
 
   const load = () => {
-    fetch("/api/moderation/reports")
+    const params = new URLSearchParams()
+    if (queueFilter === "MINE") { params.set("status", "OPEN"); params.set("mine", "1") }
+    else params.set("status", queueFilter)
+    params.set("kind", kindFilter)
+    fetch(`/api/moderation/queue?${params}`)
       .then(async (res) => {
         if (!res.ok) { setError("Access denied"); setLoading(false); return }
         const d = await res.json()
-        setReports(d.reports || [])
+        setItems(d.items || [])
+        setCounts(d.counts || { open: 0, mine: 0, escalated: 0 })
         setLoading(false)
       })
-      .catch(() => { setError("Failed to load reports"); setLoading(false) })
+      .catch(() => { setError("Failed to load queue"); setLoading(false) })
+
+    fetch("/api/moderation/queue?status=RESOLVED&limit=10")
+      .then((res) => res.ok ? res.json() : { items: [] })
+      .then((d) => setClosed(d.items || []))
+      .catch(() => {})
 
     fetch("/api/moderation/actions")
       .then((res) => res.ok ? res.json() : { actions: [] })
@@ -105,7 +124,8 @@ export default function ModerationPage() {
   useEffect(() => {
     if (status === "unauthenticated") router.push(signInHref(window.location.pathname + window.location.search))
     else if (status === "authenticated") load()
-  }, [status, router])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status, router, queueFilter, kindFilter])
 
   if (status === "loading" || loading) {
     return <div className="min-h-screen flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>
@@ -123,55 +143,45 @@ export default function ModerationPage() {
     )
   }
 
-  const updateReport = async (reportId: string, status: string) => {
-    setBusy(reportId)
+  const queueAction = async (item: QueueItem, body: Record<string, unknown>) => {
+    setBusy(item.id)
+    setError("")
     try {
-      const res = await fetch("/api/moderation/reports", {
+      const res = await fetch("/api/moderation/queue", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ reportId, status }),
+        body: JSON.stringify({ kind: item.kind, id: item.id, ...body }),
       })
       if (res.ok) load()
-      else setError("Action failed")
-    } finally { setBusy(null) }
-  }
-
-  const deleteContent = async (report: Report) => {
-    if (!report.targetId && !report.target?.id) return
-    if (!confirm("Delete this content?")) return
-    setBusy(report.id)
-    try {
-      const res = await fetch("/api/moderation/actions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          actionType: "CONTENT_DELETION",
-          targetType: report.type,
-          targetId: report.targetId || report.target?.id,
-          targetUserId: report.reportedUserId,
-          reason: `Reported for ${report.reason.toLowerCase()}`,
-        }),
-      })
-      if (res.ok) { await updateReport(report.id, "RESOLVED") }
-      else setError("Failed to remove content")
-    } finally { setBusy(null) }
-  }
-
-  const banUser = async (report: Report, permanent: boolean) => {
-    if (!confirm(`${permanent ? "Permanently ban" : "Ban"} this user?`)) return
-    setBusy(report.id)
-    try {
-      const res = await fetch("/api/moderation/actions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          actionType: permanent ? "PERMANENT_BAN" : "TEMPORARY_BAN",
-          targetUserId: report.reportedUserId,
-          reason: `Reported for ${report.reason.toLowerCase()}`,
-        }),
-      })
-      if (res.ok) { await updateReport(report.id, "RESOLVED") }
       else { const d = await res.json(); setError(d.error || "Action failed") }
+    } finally { setBusy(null) }
+  }
+
+  const loadStaff = async () => {
+    if (staffList.length > 0) return
+    const res = await fetch("/api/moderation/queue/staff")
+    if (res.ok) setStaffList((await res.json()).staff || [])
+  }
+
+  const runBulkQueue = async (action: "resolve" | "dismiss" | "assign", assignTo?: string) => {
+    if (selected.size === 0) return
+    if (!confirm(`${action === "assign" ? "Assign" : action === "resolve" ? "Resolve" : "Dismiss"} ${selected.size} case(s)?`)) return
+    setBusy("bulk")
+    setError("")
+    try {
+      const res = await fetch("/api/moderation/queue/bulk", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          items: items.filter((i) => selected.has(i.id)).map((i) => ({ kind: i.kind, id: i.id })),
+          action,
+          assignTo,
+        }),
+      })
+      const d = await res.json()
+      if (res.ok) { setSelected(new Set()); load() }
+      else setError(d.error || "Bulk action failed")
+      if (d.failed?.length) setError(`${d.failed.length} item(s) failed`)
     } finally { setBusy(null) }
   }
 
@@ -222,15 +232,38 @@ export default function ModerationPage() {
     } finally { setBusy(null) }
   }
 
-  const pending = reports.filter((r) => r.status === "PENDING" || r.status === "REVIEWING" || r.status === "ESCALATED")
-  const resolved = reports.filter((r) => r.status === "RESOLVED" || r.status === "DISMISSED")
-  const queueReports = pending
-    .filter((r) => queueFilter === "ALL" || r.status === queueFilter)
-    .sort((a, b) => {
-      const ta = new Date(a.createdAt).getTime()
-      const tb = new Date(b.createdAt).getTime()
-      return queueSort === "oldest" ? ta - tb : tb - ta
+  const priorityChip = (p: string) => {
+    const styles: Record<string, string> = {
+      URGENT: "bg-destructive/15 text-destructive",
+      HIGH: "bg-amber-500/15 text-amber-500",
+      NORMAL: "bg-secondary text-muted-foreground",
+      LOW: "bg-secondary/60 text-muted-foreground/70",
+    }
+    return (
+      <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold ${styles[p] ?? styles.NORMAL}`}>{p}</span>
+    )
+  }
+
+  const statusChip = (s: string) => {
+    const styles: Record<string, string> = {
+      PENDING: "bg-secondary text-muted-foreground",
+      REVIEWING: "bg-blue-500/15 text-blue-500",
+      ESCALATED: "bg-amber-500/15 text-amber-500",
+      RESOLVED: "bg-primary/10 text-primary",
+      DISMISSED: "bg-secondary text-muted-foreground",
+    }
+    return (
+      <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold ${styles[s] ?? ""}`}>{s}</span>
+    )
+  }
+
+  const toggleSelect = (id: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id); else next.add(id)
+      return next
     })
+  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -239,14 +272,14 @@ export default function ModerationPage() {
           <Shield className="w-8 h-8 text-primary" />
           <div>
             <h1 className="text-2xl font-bold">Moderation</h1>
-            <p className="text-muted-foreground text-sm">{pending.length} open report{pending.length !== 1 ? "s" : ""}</p>
+            <p className="text-muted-foreground text-sm">{counts.open} open case{counts.open !== 1 ? "s" : ""}</p>
           </div>
         </div>
 
         {/* Tabs */}
         <div className="flex gap-2 mb-6">
           {([
-            { id: "queue", label: "Report Queue", icon: ListChecks },
+            { id: "queue", label: "Queue", icon: ListChecks },
             { id: "lookup", label: "User Lookup", icon: Search },
             ...(canAct ? [
               { id: "log", label: "Mod Log", icon: ScrollText },
@@ -447,132 +480,147 @@ export default function ModerationPage() {
           </div>
         )}
 
-        {/* QUEUE */}
+        {/* UNIFIED QUEUE */}
         {tab === "queue" && (<>
         <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
-          <div className="flex items-center gap-2">
-            {(["ALL", "PENDING", "REVIEWING", "ESCALATED"] as const).map((s) => (
+          <div className="flex items-center gap-2 flex-wrap">
+            {([
+              { id: "OPEN", label: "Open", count: counts.open },
+              { id: "MINE", label: "Mine", count: counts.mine },
+              { id: "ESCALATED", label: "Escalated", count: counts.escalated },
+              { id: "PENDING", label: "Pending", count: null },
+              { id: "REVIEWING", label: "Reviewing", count: null },
+            ] as const).map(({ id, label, count }) => (
               <button
-                key={s}
-                onClick={() => setQueueFilter(s)}
+                key={id}
+                onClick={() => { setQueueFilter(id); setSelected(new Set()) }}
                 className={`px-3 py-1.5 rounded-lg text-sm transition-colors ${
-                  queueFilter === s ? "bg-primary text-primary-foreground" : "bg-card border border-border hover:bg-secondary"
+                  queueFilter === id ? "bg-primary text-primary-foreground" : "bg-card border border-border hover:bg-secondary"
                 }`}
               >
-                {s === "ALL" ? "All open" : s.toLowerCase()}
-                <span className="ml-1.5 text-xs opacity-80">{s === "ALL" ? pending.length : pending.filter((p) => p.status === s).length}</span>
+                {label}
+                {count !== null && <span className="ml-1.5 text-xs opacity-80">{count}</span>}
               </button>
             ))}
           </div>
           <select
-            value={queueSort}
-            onChange={(e) => setQueueSort(e.target.value as "newest" | "oldest")}
+            value={kindFilter}
+            onChange={(e) => setKindFilter(e.target.value as typeof kindFilter)}
             className="px-3 py-1.5 rounded-lg border border-border bg-card text-sm"
           >
-            <option value="oldest">Oldest first</option>
-            <option value="newest">Newest first</option>
+            <option value="ALL">All types</option>
+            <option value="REPORT">Reports</option>
+            <option value="FLAG">Abuse signals</option>
           </select>
         </div>
-        <div className="space-y-4 mb-10">
-          {queueReports.length === 0 && (
-            <div className="bg-card rounded-lg border border-border p-8 text-center text-muted-foreground">
+
+        {/* Bulk bar — lifecycle actions only; enforcement is never bulkable */}
+        {canAct && selected.size > 0 && (
+          <div className="bg-card border border-border rounded-lg p-3 flex items-center gap-3 mb-4 flex-wrap">
+            <span className="text-sm font-medium">{selected.size} selected</span>
+            <button onClick={() => runBulkQueue("resolve")} disabled={busy === "bulk"}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-primary/10 text-primary rounded-lg hover:bg-primary/20 disabled:opacity-50">
+              <CheckCircle className="w-4 h-4" /> Resolve
+            </button>
+            <button onClick={() => runBulkQueue("dismiss")} disabled={busy === "bulk"}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-secondary rounded-lg hover:bg-secondary/80 disabled:opacity-50">
+              <XCircle className="w-4 h-4" /> Dismiss
+            </button>
+            <select
+              defaultValue=""
+              onChange={(e) => { if (e.target.value) { runBulkQueue("assign", e.target.value); e.target.value = "" } }}
+              onFocus={loadStaff}
+              className="px-3 py-1.5 rounded-lg border border-border bg-card text-sm"
+            >
+              <option value="" disabled>Assign to…</option>
+              {staffList.map((s) => (
+                <option key={s.id} value={s.id}>@{s.username} ({s.role.toLowerCase()})</option>
+              ))}
+            </select>
+            <button onClick={() => setSelected(new Set())} className="text-sm text-muted-foreground hover:underline ml-auto">
+              Clear
+            </button>
+          </div>
+        )}
+
+        <div className="bg-card rounded-xl border border-border divide-y divide-border mb-6">
+          {items.length === 0 && (
+            <div className="p-8 text-center text-muted-foreground">
               <CheckCircle className="w-10 h-10 mx-auto mb-2 text-primary" />
-              Queue is clear. No pending reports.
+              Queue is clear. No cases match these filters.
             </div>
           )}
-          {queueReports.map((r) => (
-            <div key={r.id} className="bg-card rounded-lg border border-border p-5">
-              <div className="flex items-start justify-between gap-4 flex-wrap">
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2 mb-2 flex-wrap">
-                    <Flag className="w-4 h-4 text-amber-500" />
-                    <span className="font-medium">{r.type.replace(/_/g, " ")}</span>
-                    <span className="text-xs px-2 py-0.5 bg-destructive/10 text-destructive rounded">{r.reason.replace(/_/g, " ")}</span>
-                    <span className="text-xs text-muted-foreground">{new Date(r.createdAt).toLocaleString()}</span>
-                  </div>
-                  <p className="text-sm text-muted-foreground mb-1">Reported by @{r.reporter}</p>
-                  {r.description && <p className="text-sm mb-2 break-words">&ldquo;{r.description}&rdquo;</p>}
-                  {r.target && (
-                    <div className="text-sm bg-secondary/50 rounded p-2 mt-2 break-words">
-                      {r.type === "THREAD" && <span>Thread: <Link className="text-primary hover:underline" href={`/forum/thread/${r.target.slug}`}>{r.target.title}</Link></span>}
-                      {r.type === "POST" && <span>Post: {r.target.content?.slice(0, 200)}</span>}
-                      {r.type === "CHAT_MESSAGE" && <span>Message: {r.target.content?.slice(0, 200)}</span>}
-                      {r.type === "PROFILE" && <span>Profile: @{r.target.username}</span>}
-                      {r.type === "DIARY" && <span>Diary: {r.target.title}</span>}
-                      {r.type === "SETUP" && <span>Setup: {r.target.title}</span>}
-                      {r.target.deleted && <span className="ml-2 text-xs text-destructive">(already removed)</span>}
-                    </div>
-                  )}
-                  {!r.target && r.type !== "PROFILE" && (
-                    <p className="text-xs text-muted-foreground mt-1">Target content unavailable (may be deleted).</p>
-                  )}
-                </div>
-                {canAct && (
-                <div className="flex flex-col gap-2 shrink-0">
-                  {r.type !== "PROFILE" && (
-                    <button
-                      onClick={() => deleteContent(r)}
-                      disabled={busy === r.id}
-                      className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-destructive/10 text-destructive rounded-lg hover:bg-destructive/20 disabled:opacity-50"
-                    >
-                      <Trash2 className="w-4 h-4" /> Remove content
+          {items.map((it) => {
+            const terminal = it.status === "RESOLVED" || it.status === "DISMISSED"
+            return (
+              <div key={`${it.kind}:${it.id}`} className="p-4 flex items-center gap-3 hover:bg-secondary/50 transition-colors">
+                {canAct && !terminal && (
+                  <input
+                    type="checkbox"
+                    checked={selected.has(it.id)}
+                    onChange={() => toggleSelect(it.id)}
+                    className="h-4 w-4 rounded border-border accent-primary shrink-0"
+                  />
+                )}
+                <Link href={`/moderation/cases/${it.id}?kind=${it.kind}`} className="flex items-center gap-3 min-w-0 flex-1">
+                  <span className="w-8 h-8 rounded-lg bg-secondary flex items-center justify-center shrink-0">
+                    {it.kind === "FLAG" ? <TrendingUp className="w-4 h-4 text-amber-500" /> : <Flag className="w-4 h-4 text-amber-500" />}
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="flex items-center gap-2 flex-wrap">
+                      <span className="font-medium text-sm">
+                        {it.kind === "FLAG" ? it.signalLabel : `${(it.type ?? "").replace(/_/g, " ")} report`}
+                      </span>
+                      {it.kind === "REPORT" && it.reason && (
+                        <span className="text-xs px-2 py-0.5 bg-destructive/10 text-destructive rounded">{it.reason.replace(/_/g, " ")}</span>
+                      )}
+                      {priorityChip(it.priority)}
+                      {statusChip(it.status)}
+                    </span>
+                    <span className="block text-xs text-muted-foreground truncate mt-0.5">
+                      {it.kind === "FLAG"
+                        ? `@${it.subject}${it.counterparty ? ` ↔ @${it.counterparty}` : ""}`
+                        : `@${it.subject}${it.reporter ? ` — reported by @${it.reporter}` : ""}${it.targetLabel ? ` — ${it.targetLabel}` : ""}`}
+                      {it.targetDeleted && " (content removed)"}
+                    </span>
+                  </span>
+                  <span className="text-xs text-muted-foreground shrink-0 hidden sm:block" title={new Date(it.createdAt).toLocaleString()}>
+                    {new Date(it.createdAt).toLocaleDateString()}
+                  </span>
+                  <span className="text-xs text-muted-foreground shrink-0 w-24 truncate text-right hidden md:block">
+                    {it.assignedTo ? `@${it.assignedTo}` : <span className="italic">unassigned</span>}
+                  </span>
+                  <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
+                </Link>
+                {canAct && !terminal && (
+                  <span className="flex gap-1.5 shrink-0" onClick={(e) => e.preventDefault()}>
+                    <button onClick={() => queueAction(it, { action: "status", status: "RESOLVED" })} disabled={busy === it.id}
+                      title="Resolve"
+                      className="p-1.5 bg-primary/10 text-primary rounded-lg hover:bg-primary/20 disabled:opacity-50">
+                      <CheckCircle className="w-4 h-4" />
                     </button>
-                  )}
-                  <button
-                    onClick={() => actOnUser(r.reportedUserId, "WARNING", "Warning reason:")}
-                    disabled={busy === r.id}
-                    className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-amber-500/10 text-amber-500 rounded-lg hover:bg-amber-500/20 disabled:opacity-50"
-                  >
-                    <AlertTriangle className="w-4 h-4" /> Warn user
-                  </button>
-                  {isAdminUser && (
-                    <button
-                      onClick={() => banUser(r, true)}
-                      disabled={busy === r.id}
-                      className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-destructive text-destructive-foreground rounded-lg hover:bg-destructive/90 disabled:opacity-50"
-                    >
-                      <Ban className="w-4 h-4" /> Ban user
+                    <button onClick={() => queueAction(it, { action: "status", status: "DISMISSED" })} disabled={busy === it.id}
+                      title="Dismiss"
+                      className="p-1.5 bg-secondary rounded-lg hover:bg-secondary/80 disabled:opacity-50">
+                      <XCircle className="w-4 h-4" />
                     </button>
-                  )}
-                  <button
-                    onClick={() => updateReport(r.id, "ESCALATED")}
-                    disabled={busy === r.id}
-                    className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-amber-500/10 text-amber-500 rounded-lg hover:bg-amber-500/20 disabled:opacity-50"
-                  >
-                    <AlertTriangle className="w-4 h-4" /> Escalate
-                  </button>
-                  <button
-                    onClick={() => updateReport(r.id, "RESOLVED")}
-                    disabled={busy === r.id}
-                    className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-primary/10 text-primary rounded-lg hover:bg-primary/20 disabled:opacity-50"
-                  >
-                    <CheckCircle className="w-4 h-4" /> Resolve
-                  </button>
-                  <button
-                    onClick={() => updateReport(r.id, "DISMISSED")}
-                    disabled={busy === r.id}
-                    className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-secondary rounded-lg hover:bg-secondary/80 disabled:opacity-50"
-                  >
-                    <XCircle className="w-4 h-4" /> Dismiss
-                  </button>
-                </div>
+                  </span>
                 )}
               </div>
-            </div>
-          ))}
+            )
+          })}
         </div>
 
-        {resolved.length > 0 && (
+        {closed.length > 0 && (
           <>
             <h2 className="text-lg font-semibold mb-4">Recently Resolved</h2>
-            <div className="space-y-2 mb-10">
-              {resolved.slice(0, 10).map((r) => (
-                <div key={r.id} className="bg-card/50 rounded-lg border border-border p-3 text-sm flex items-center justify-between">
-                  <span>{r.type} — {r.reason.replace(/_/g, " ")}</span>
-                  <span className={`text-xs px-2 py-0.5 rounded ${r.status === "RESOLVED" ? "bg-primary/10 text-primary" : "bg-secondary text-muted-foreground"}`}>
-                    {r.status}
-                  </span>
-                </div>
+            <div className="bg-card/50 rounded-xl border border-border divide-y divide-border mb-10">
+              {closed.map((r) => (
+                <Link key={`${r.kind}:${r.id}`} href={`/moderation/cases/${r.id}?kind=${r.kind}`}
+                  className="p-3 text-sm flex items-center justify-between hover:bg-secondary/40 transition-colors">
+                  <span>{r.kind === "FLAG" ? r.signalLabel : `${r.type} — ${r.reason?.replace(/_/g, " ")}`}</span>
+                  {statusChip(r.status)}
+                </Link>
               ))}
             </div>
           </>

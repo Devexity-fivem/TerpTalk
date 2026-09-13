@@ -4,6 +4,7 @@ import { postToGeneral, GROW_TIPS } from "@/lib/terpbot"
 import { recordBotEvent } from "@/lib/terpbot-events"
 import { currentWeekKey, previousWeekKey, currentMonthKey, previousMonthKey } from "@/lib/week"
 import { resolveWeeklyWinner, resolveMonthlyDiaryWinner } from "@/lib/contest-awards"
+import { materializeReputationFlags } from "@/lib/trust-signals"
 
 // Daily TerpBot job — digests, grow tips, and contest-winner announcements.
 // Invoked by the Vercel cron configured in vercel.json. Idempotent via
@@ -139,6 +140,21 @@ export async function GET(request: NextRequest) {
     } catch (e) {
       console.error("[terpbot] notification cleanup failed:", e)
       failed.push("notification-cleanup")
+    }
+  }
+
+  // ── Trust & safety signal scan (once per UTC day) ──────────────────
+  // A plain system task — not a TerpBot capability. Detectors only flag;
+  // humans decide. Flags persist as AbuseFlag rows for the staff workqueue.
+  const scanKey = `safety:signal-scan:${today}`
+  if (!(await wasDone(scanKey))) {
+    await markDone(scanKey)
+    try {
+      const { created } = await materializeReputationFlags(7)
+      posted.push(`signal-scan:${created}`)
+    } catch (e) {
+      console.error("[cron] signal scan failed:", e)
+      failed.push("signal-scan")
     }
   }
 

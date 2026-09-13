@@ -100,6 +100,11 @@ export async function POST(request: Request) {
       return session?.user?.id ? forbidden() : unauthorized()
     }
 
+    const rl = await rateLimit(`mod-rep-mutate:${staff.id}`, 30, 60 * 1000)
+    if (!rl.allowed) {
+      return NextResponse.json({ error: "Too many requests" }, { status: 429 })
+    }
+
     const body = await request.json().catch(() => ({}))
     const { eventId, reason } = body
     if (typeof eventId !== "string" || !eventId || typeof reason !== "string" || !reason.trim() || reason.length > 500) {

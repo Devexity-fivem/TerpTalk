@@ -31,6 +31,7 @@ export async function GET(request: Request) {
           role: true,
           banned: true,
           bannedReason: true,
+          suspendedUntil: true,
           createdAt: true,
           lastSeenAt: true,
           _count: {
@@ -46,7 +47,7 @@ export async function GET(request: Request) {
 
   const [openReports, recentActions, recentRep] = await Promise.all([
     prisma.report.count({
-      where: { reportedId: profile.user.id, status: { in: ["PENDING", "REVIEWING"] } },
+      where: { reportedId: profile.user.id, status: { in: ["PENDING", "REVIEWING", "ESCALATED"] } },
     }),
     prisma.moderationAction.findMany({
       where: { targetUserId: profile.user.id },
@@ -69,6 +70,7 @@ export async function GET(request: Request) {
       role: profile.user.role,
       banned: profile.user.banned,
       bannedReason: profile.user.bannedReason,
+      suspendedUntil: profile.user.suspendedUntil,
       joined: profile.user.createdAt,
       lastSeen: profile.user.lastSeenAt,
       reputation: profile.reputation,
@@ -79,6 +81,7 @@ export async function GET(request: Request) {
       id: a.id,
       type: a.type,
       reason: a.reason,
+      duration: a.duration,
       moderator: a.moderator.profile?.username ?? "unknown",
       createdAt: a.createdAt,
     })),

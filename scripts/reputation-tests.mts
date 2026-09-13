@@ -113,14 +113,19 @@ async function run() {
   assert.ok(VERIFIED_MIN_REPUTATION === REP_TIERS[3].threshold, "verified threshold == Grower tier")
   for (const t of PUBLIC_REP_TYPES) {
     assert.ok(
-      t in REP_POINTS || t === REP_EVENT_TYPES.REVERSAL || t === REP_EVENT_TYPES.REINSTATE,
+      t in REP_POINTS
+        || t === REP_EVENT_TYPES.REVERSAL
+        || t === REP_EVENT_TYPES.REINSTATE
+        || t === REP_EVENT_TYPES.LEGACY_MIGRATION,
       `public type ${t} is a known award or REVERSAL`
     )
     assert.notEqual(publicRepLabel(t), "Reputation change", `public type ${t} labelled`)
   }
-  // Sensitive types stay off public history.
+  // Sensitive types stay off public history. LEGACY_MIGRATION IS public: if a
+  // carried-forward row ever exists, hiding it would leave an unexplained gap
+  // between the balance and the visible history.
+  assert.ok(PUBLIC_REP_TYPES.has(REP_EVENT_TYPES.LEGACY_MIGRATION))
   assert.ok(!PUBLIC_REP_TYPES.has(REP_EVENT_TYPES.STAFF_ADJUSTMENT))
-  assert.ok(!PUBLIC_REP_TYPES.has(REP_EVENT_TYPES.LEGACY_MIGRATION))
   assert.ok(!PUBLIC_REP_TYPES.has("DAILY_LOGIN"))
 
   // ── Pure: badge registry ↔ rules consistency ─────────────────────

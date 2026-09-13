@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { forbidden, getClientIp, logSecurityEvent } from "@/lib/security"
+import { forbidden, getClientIp, isSupport, logSecurityEvent } from "@/lib/security"
 import { requireModerator, requireStaff } from "@/lib/require-staff"
 import { rateLimit } from "@/lib/rate-limit"
 
@@ -127,10 +127,13 @@ export async function GET(request: Request) {
         reason: r.reason,
         description: r.description,
         status: r.status,
+        priority: r.priority,
         resolution: r.resolution,
         createdAt: r.createdAt,
-        reporter: r.reporter.profile?.username ?? "unknown",
+        // Reporter identity is confidential from view-only SUPPORT staff.
+        reporter: isSupport(staff.role) ? null : r.reporter.profile?.username ?? "unknown",
         reportedUserId: r.reportedId,
+        assignedToId: r.assignedToId,
         targetId: r.targetId,
         target,
       }
@@ -144,6 +147,11 @@ export async function GET(request: Request) {
 export async function PATCH(request: Request) {
   const staff = await requireModerator()
   if (!staff) return forbidden()
+
+  const rl = await rateLimit(`mod-reports-mutate:${staff.id}`, 30, 60 * 1000)
+  if (!rl.allowed) {
+    return NextResponse.json({ error: "Too many requests" }, { status: 429 })
+  }
 
   const body = await request.json().catch(() => ({}))
   const { reportId, status, resolution } = body
@@ -166,11 +174,21 @@ export async function PATCH(request: Request) {
   }
 
   // requireModerator already excludes SUPPORT; moderators escalate TO admins,
-  // so no additional role restriction applies here.
+  // so no additional role restriction applies here. Staff can't adjudicate
+  // reports they filed themselves.
+  if (report.reporterId === staff.id) {
+    return NextResponse.json({ error: "You cannot act on your own report" }, { status: 403 })
+  }
 
+  const terminal = status === "RESOLVED" || status === "DISMISSED"
   await prisma.report.update({
     where: { id: reportId },
-    data: { status, resolution: resolution?.trim() || null },
+    data: {
+      status,
+      resolution: resolution?.trim() || null,
+      resolvedById: terminal ? staff.id : null,
+      resolvedAt: terminal ? new Date() : null,
+    },
   })
 
   await prisma.moderationAction.create({
@@ -179,6 +197,7 @@ export async function PATCH(request: Request) {
       reason: resolution?.trim() || `Report marked ${status.toLowerCase()}`,
       targetUserId: report.reportedId,
       moderatorId: staff.id,
+      reportId: report.id,
     },
   })
 
