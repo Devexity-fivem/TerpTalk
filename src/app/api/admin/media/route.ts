@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma"
 import { forbidden, getClientIp, logSecurityEvent } from "@/lib/security"
 import { deleteImagesIfUnreferenced } from "@/lib/blob"
 import { rateLimit } from "@/lib/rate-limit"
+import { reverseReputationBySource } from "@/lib/reputation"
 
 type MediaType = "post" | "diary" | "setup" | "strain" | "contest" | "avatar"
 
@@ -127,6 +128,8 @@ export async function POST(request: Request) {
         url = row.imageUrl
         break
       }
+      // Note: only strain photos carry rep (STRAIN_PHOTO awards keyed to the
+      // photo id) — post/diary/setup images and avatars never earned points.
       case "contest": {
         const row = await tx.contestEntry.delete({ where: { id }, select: { imageUrl: true } })
         url = row.imageUrl
@@ -144,6 +147,11 @@ export async function POST(request: Request) {
         throw new Error("INVALID_TYPE")
     }
   })
+
+  if (type === "strain") {
+    // Reverse the STRAIN_PHOTO award — same path as member-side deletes.
+    await reverseReputationBySource("STRAIN_PHOTO", id, "Photo removed by staff", admin.id).catch(() => 0)
+  }
 
   if (url) {
     try {

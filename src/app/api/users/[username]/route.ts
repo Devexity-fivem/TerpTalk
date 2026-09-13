@@ -3,8 +3,9 @@ import { getToken } from "next-auth/jwt"
 import { sessionCookieName } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { blockExistsBetween, getTrustLevel, getClientIp, hashIp, isSessionValid } from "@/lib/security"
-import { getReputationTier, getTierProgress } from "@/lib/reputation"
+import { getReputationTier, getTierProgress, getRepStage, getStageProgress } from "@/lib/reputation"
 import { PUBLIC_REP_TYPES, publicRepLabel } from "@/lib/reputation-config"
+import { getProfileTitle } from "@/lib/cosmetics"
 import { getGrowStreak } from "@/lib/grow-streak"
 import { rateLimit } from "@/lib/rate-limit"
 import { TERPBOT_USERNAME } from "@/lib/terpbot-constants"
@@ -40,6 +41,9 @@ async function getPublicProfileData(username: string) {
         businessUrl: true,
         joinDate: true,
         reputation: true,
+        avatarFrame: true,
+        profileTitle: true,
+        profileTheme: true,
         user: {
           select: {
             id: true,
@@ -47,7 +51,7 @@ async function getPublicProfileData(username: string) {
             createdAt: true,
             banned: true,
             role: true,
-            badges: { include: { badge: true } },
+            badges: { include: { badge: true }, orderBy: [{ pinned: "desc" as const }, { earnedAt: "asc" as const }] },
             _count: {
               select: {
                 threadCreator: true,
@@ -206,6 +210,12 @@ export async function GET(
         trustLevel: getTrustLevel(profile.user.createdAt, profile.reputation),
         reputationTier: getReputationTier(profile.reputation),
         tierProgress: getTierProgress(profile.reputation),
+        repStage: getRepStage(profile.reputation),
+        stageProgress: getStageProgress(profile.reputation),
+        avatarFrame: profile.avatarFrame,
+        profileTitle: profile.profileTitle,
+        customTitle: getProfileTitle(profile.profileTitle)?.name ?? null,
+        profileTheme: profile.profileTheme,
         growStreak: growStreak.streak,
         totalUpdates: growStreak.totalUpdates,
         harvestedDiaries: growStreak.harvestedDiaries,
@@ -213,6 +223,7 @@ export async function GET(
           name: b.badge.name,
           description: b.badge.description,
           icon: b.badge.icon,
+          pinned: b.pinned,
         })),
         // NOTE: the schema's Follow relation names are counterintuitive —
         // _count.following counts rows where this user is the *target*

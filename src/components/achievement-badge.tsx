@@ -56,7 +56,7 @@ function IconFor({ name, className }: { name: string; className?: string }) {
 
 export default function AchievementBadge({ name, earned = true, mode = "profile", className, onClick }: AchievementBadgeProps) {
   const badge = getBadgeByName(name)
-  const definition: BadgeDefinition = badge ?? { name, description: "", requirement: "", rarity: "common", icon: "Award" }
+  const definition: BadgeDefinition = badge ?? { name, description: "", requirement: "", rarity: "common", category: "honours", icon: "Award" }
   const style = RARITY_STYLES[definition.rarity]
   const locked = !earned
 

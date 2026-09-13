@@ -4,7 +4,9 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { unauthorized, forbidden, getClientIp, logSecurityEvent, LIMITS, isBanned, enforceLinkTrust } from "@/lib/security"
 import { storeImage, deleteImagesIfUnreferenced } from "@/lib/blob"
-import { getReputationTier, getTierProgress, reverseReputationByActor } from "@/lib/reputation"
+import { getReputationTier, getTierProgress, getRepStage, getStageProgress, reverseReputationByActor } from "@/lib/reputation"
+import { canEquip } from "@/lib/cosmetics"
+import { Prisma } from "@prisma/client"
 import { rateLimit } from "@/lib/rate-limit"
 import { checkMaintenance } from "@/lib/maintenance"
 import bcrypt from "bcryptjs"
@@ -23,20 +25,16 @@ export async function GET() {
       where: { id: session.user.id },
       include: {
         profile: true,
-        diaryCreator: {
-          select: { id: true },
-        },
-        posts: {
-          select: { id: true },
-        },
-        followers: {
-          select: { id: true },
-        },
-        following: {
-          select: { id: true },
-        },
         badges: {
           include: { badge: true },
+        },
+        _count: {
+          select: {
+            diaryCreator: { where: { deleted: false } },
+            posts: { where: { deleted: false, thread: { deleted: false } } },
+            followers: true,
+            following: true,
+          },
         },
       },
     })
@@ -89,25 +87,29 @@ export async function GET() {
       },
       profile: user.profile,
       stats: {
-        diaries: user.diaryCreator.length,
-        posts: user.posts.length,
+        diaries: user._count.diaryCreator,
+        posts: user._count.posts,
         // Follow relation names are inverted in the schema — see the note in
         // api/users/[username]. "following" counts followers, "followers"
         // counts who the user follows.
-        followers: user.following.length,
-        following: user.followers.length,
+        followers: user._count.following,
+        following: user._count.followers,
         badges: user.badges.length,
         reputation: user.profile?.reputation || 0,
         reputationTier: getReputationTier(user.profile?.reputation || 0),
         tierProgress: getTierProgress(user.profile?.reputation || 0),
+        repStage: getRepStage(user.profile?.reputation || 0),
+        stageProgress: getStageProgress(user.profile?.reputation || 0),
         referrals: referralCount,
       },
       recentThreads,
       recentDiaries,
       badges: user.badges.map((b) => ({
+        id: b.badgeId,
         name: b.badge.name,
         description: b.badge.description,
         icon: b.badge.icon,
+        pinned: b.pinned,
         earnedAt: b.earnedAt,
       })),
     }, { headers: NO_STORE })
@@ -140,7 +142,7 @@ export async function PATCH(request: Request) {
 
     const current = await prisma.profile.findUnique({
       where: { userId },
-      select: { avatarUrl: true },
+      select: { avatarUrl: true, reputation: true },
     })
 
     if (await isBanned(userId)) {
@@ -185,6 +187,10 @@ export async function PATCH(request: Request) {
       notifyOnFollow,
       notifyOnReaction,
       emailDigestFrequency,
+      avatarFrame,
+      profileTitle,
+      profileTheme,
+      pinnedBadges,
     } = body as Record<string, unknown>
 
     const clean = (v: unknown, max: number) => {
@@ -307,36 +313,123 @@ export async function PATCH(request: Request) {
       updateData.avatarUrl = avatarUrl ? String(avatarUrl).slice(0, 500) : null
     }
 
-    if (Object.keys(updateData).length === 0) {
+    // ─── Cosmetics ────────────────────────────────────────────────────
+    // Registry keys only — canEquip() enforces the reputation unlock so a
+    // member can never equip a cosmetic above their tier. null clears.
+    const reputation = current?.reputation ?? 0
+    const cosmeticFields: [string, unknown, "frames" | "titles" | "themes"][] = [
+      ["avatarFrame", avatarFrame, "frames"],
+      ["profileTitle", profileTitle, "titles"],
+      ["profileTheme", profileTheme, "themes"],
+    ]
+    for (const [field, value, kind] of cosmeticFields) {
+      if (value === undefined) continue
+      if (value !== null && (typeof value !== "string" || value.length > 60)) {
+        return NextResponse.json({ error: `Invalid ${field}` }, { status: 400 })
+      }
+      if (!canEquip(reputation, kind, value as string | null)) {
+        return NextResponse.json({ error: "That reward isn't unlocked yet" }, { status: 403 })
+      }
+      updateData[field] = value
+    }
+
+    // ─── Badge showcase ───────────────────────────────────────────────
+    // pinnedBadges: badge IDs the member wants pinned. Must all be earned
+    // by this member; count is capped by the tier's showcaseSlots perk.
+    let pinOps: { unpin: Prisma.PrismaPromise<unknown>; pin: Prisma.PrismaPromise<unknown> } | null = null
+    if (pinnedBadges !== undefined) {
+      if (!Array.isArray(pinnedBadges) || pinnedBadges.length > 20 ||
+          !pinnedBadges.every((b) => typeof b === "string" && b.length <= 40)) {
+        return NextResponse.json({ error: "Invalid pinned badges" }, { status: 400 })
+      }
+      const slots = getReputationTier(reputation).perks.showcaseSlots ?? 3
+      if (pinnedBadges.length > slots) {
+        return NextResponse.json(
+          { error: `Your tier lets you showcase up to ${slots} badges` },
+          { status: 400 }
+        )
+      }
+      const owned = await prisma.userBadge.findMany({
+        where: { userId, badgeId: { in: pinnedBadges } },
+        select: { badgeId: true },
+      })
+      if (owned.length !== pinnedBadges.length) {
+        return NextResponse.json({ error: "You can only showcase badges you've earned" }, { status: 400 })
+      }
+      pinOps = {
+        unpin: prisma.userBadge.updateMany({ where: { userId, pinned: true }, data: { pinned: false } }),
+        pin: pinnedBadges.length
+          ? prisma.userBadge.updateMany({ where: { userId, badgeId: { in: pinnedBadges } }, data: { pinned: true } })
+          : prisma.userBadge.updateMany({ where: { userId, badgeId: { in: [] } }, data: { pinned: true } }),
+      }
+    }
+
+    if (Object.keys(updateData).length === 0 && !pinOps) {
       return NextResponse.json({ error: "No valid fields to update" }, { status: 400 })
     }
 
     const [updated] = await prisma.$transaction([
-      prisma.profile.update({
-        where: { userId },
-        data: updateData,
-        select: {
-          username: true,
-          bio: true,
-          location: true,
-          website: true,
-          avatarUrl: true,
-          growExperience: true,
-          favoriteStrain: true,
-          growSpace: true,
-          businessName: true,
-          businessType: true,
-          businessUrl: true,
-          notifyOnReply: true,
-          notifyOnMention: true,
-          notifyOnCategoryFollow: true,
-          notifyOnMessage: true,
-          notifyOnComment: true,
-          notifyOnFollow: true,
-          notifyOnReaction: true,
-          emailDigestFrequency: true,
-        },
-      }),
+      ...(Object.keys(updateData).length > 0
+        ? [
+            prisma.profile.update({
+              where: { userId },
+              data: updateData,
+              select: {
+                username: true,
+                bio: true,
+                location: true,
+                website: true,
+                avatarUrl: true,
+                growExperience: true,
+                favoriteStrain: true,
+                growSpace: true,
+                businessName: true,
+                businessType: true,
+                businessUrl: true,
+                avatarFrame: true,
+                profileTitle: true,
+                profileTheme: true,
+                notifyOnReply: true,
+                notifyOnMention: true,
+                notifyOnCategoryFollow: true,
+                notifyOnMessage: true,
+                notifyOnComment: true,
+                notifyOnFollow: true,
+                notifyOnReaction: true,
+                emailDigestFrequency: true,
+              },
+            }),
+          ]
+        : [
+            prisma.profile.findUniqueOrThrow({
+              where: { userId },
+              select: {
+                username: true,
+                bio: true,
+                location: true,
+                website: true,
+                avatarUrl: true,
+                growExperience: true,
+                favoriteStrain: true,
+                growSpace: true,
+                businessName: true,
+                businessType: true,
+                businessUrl: true,
+                avatarFrame: true,
+                profileTitle: true,
+                profileTheme: true,
+                notifyOnReply: true,
+                notifyOnMention: true,
+                notifyOnCategoryFollow: true,
+                notifyOnMessage: true,
+                notifyOnComment: true,
+                notifyOnFollow: true,
+                notifyOnReaction: true,
+                emailDigestFrequency: true,
+              },
+            }),
+          ]),
+      ...(pinOps ? [pinOps.unpin, pinOps.pin] : []),
       ...(avatarUrl !== undefined
         ? [
             prisma.user.update({

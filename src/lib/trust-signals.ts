@@ -30,32 +30,42 @@ export function reportPriority(reason: string): string {
 export const SIGNAL_LABELS: Record<string, string> = {
   REP_VELOCITY: "Unusual reputation velocity",
   REP_RECIPROCAL_PAIR: "Reciprocal like pattern",
+  REP_RECIPROCAL_ANSWERS: "Reciprocal accepted answers",
   REP_NEW_ACCOUNT_LIKES: "Likes from new accounts",
 }
 
 const SIGNAL_PRIORITY: Record<string, string> = {
   REP_VELOCITY: "HIGH",
   REP_RECIPROCAL_PAIR: "NORMAL",
+  REP_RECIPROCAL_ANSWERS: "HIGH",
   REP_NEW_ACCOUNT_LIKES: "NORMAL",
 }
 
 export interface DetectedSignals {
   velocity: { userId: string; gained: number }[]
   reciprocal: { aId: string; bId: string; mutual: number }[]
+  reciprocalAnswers: { aId: string; bId: string; mutual: number }[]
   newAccounts: { userId: string; freshLikes: number }[]
 }
 
-// The three reputation-abuse detectors. Identical thresholds to the original
-// admin flags route — these produce raw hits; materializeReputationFlags()
-// turns them into reviewable records.
+// Reputation-abuse detectors. Hits are raw signals for human review;
+// materializeReputationFlags() turns them into reviewable records.
+// The velocity detector excludes one-off high-value awards (contest wins,
+// staff adjustments, referrals, challenge payouts) so a legitimate weekly
+// winner doesn't trip it — it measures grinding velocity only.
 export async function detectReputationSignals(days: number): Promise<DetectedSignals> {
   const window = Math.min(30, Math.max(1, days))
 
-  const [velocity, reciprocal, newAccounts] = await Promise.all([
+  const [velocity, reciprocal, reciprocalAnswers, newAccounts] = await Promise.all([
     prisma.$queryRaw<{ userId: string; gained: bigint }[]>`
       SELECT "userId", SUM("amount") AS gained
       FROM "ReputationEvent"
       WHERE "reversedAt" IS NULL AND "amount" > 0
+        AND "type" NOT IN (
+          'CONTEST_WEEKLY_WIN', 'CONTEST_MONTHLY_WIN',
+          'STAFF_ADJUSTMENT', 'REFERRAL', 'CHALLENGE_WEEKLY',
+          'LEGACY_MIGRATION', 'REINSTATE'
+        )
         AND "createdAt" > NOW() - INTERVAL '24 hours'
       GROUP BY "userId"
       HAVING SUM("amount") > 150
@@ -77,6 +87,23 @@ export async function detectReputationSignals(days: number): Promise<DetectedSig
       ORDER BY mutual DESC
       LIMIT 20`,
 
+    // Mutual accepted answers — the highest-value reciprocal farm (+30 each
+    // way). Two members repeatedly accepting each other's replies.
+    prisma.$queryRaw<{ actorId: string; userId: string; mutual: bigint }[]>`
+      SELECT a."actorId", a."userId", COUNT(*) AS mutual
+      FROM "ReputationEvent" a
+      JOIN "ReputationEvent" b
+        ON b."actorId" = a."userId" AND b."userId" = a."actorId"
+       AND b."type" = 'HELPFUL_ANSWER' AND b."reversedAt" IS NULL
+      WHERE a."type" = 'HELPFUL_ANSWER' AND a."reversedAt" IS NULL
+        AND a."actorId" IS NOT NULL
+        AND a."actorId" < a."userId"
+        AND a."createdAt" > NOW() - make_interval(days => ${window}::int)
+      GROUP BY a."actorId", a."userId"
+      HAVING COUNT(*) >= 2
+      ORDER BY mutual DESC
+      LIMIT 20`,
+
     prisma.$queryRaw<{ userId: string; freshLikes: bigint }[]>`
       SELECT e."userId", COUNT(*) AS "freshLikes"
       FROM "ReputationEvent" e
@@ -93,6 +120,7 @@ export async function detectReputationSignals(days: number): Promise<DetectedSig
   return {
     velocity: velocity.map((v) => ({ userId: v.userId, gained: Number(v.gained) })),
     reciprocal: reciprocal.map((r) => ({ aId: r.actorId, bId: r.userId, mutual: Number(r.mutual) })),
+    reciprocalAnswers: reciprocalAnswers.map((r) => ({ aId: r.actorId, bId: r.userId, mutual: Number(r.mutual) })),
     newAccounts: newAccounts.map((n) => ({ userId: n.userId, freshLikes: Number(n.freshLikes) })),
   }
 }
@@ -129,6 +157,16 @@ export async function materializeReputationFlags(days = 7): Promise<{ created: n
       counterpartyId: b,
       key: `reprec:${a}:${b}:${today}`,
       evidence: { mutual: r.mutual, windowDays: days, threshold: 5 },
+    })
+  }
+  for (const r of signals.reciprocalAnswers) {
+    const [a, b] = [r.aId, r.bId].sort()
+    candidates.push({
+      signal: "REP_RECIPROCAL_ANSWERS",
+      userId: a,
+      counterpartyId: b,
+      key: `repans:${a}:${b}:${today}`,
+      evidence: { mutual: r.mutual, windowDays: days, threshold: 2 },
     })
   }
   for (const n of signals.newAccounts) {

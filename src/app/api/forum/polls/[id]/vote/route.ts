@@ -23,12 +23,12 @@ export async function POST(
     const maintenance = await checkMaintenance()
     if (maintenance) return maintenance
 
-    // Poll voting is a Seedling-tier perk (750+ rep) — keeps poll brigading
+    // Poll voting is a Rooted-tier perk (750+ rep) — keeps poll brigading
     // expensive. Staff always can.
     if (!isStaff(session.user.role)) {
       const perks = await getTierPerks(session.user.id)
       if (!perks.pollVoting) {
-        return forbidden("Poll voting unlocks at 750 reputation (Seedling)")
+        return forbidden("Poll voting unlocks at 750 reputation (Rooted)")
       }
     }
 

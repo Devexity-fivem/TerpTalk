@@ -10,14 +10,20 @@ import {
   REP_TIERS,
   REP_EVENT_TYPES,
   PUBLIC_REP_TYPES,
+  REP_LADDER,
   EARLY_SUPPORTER_LIMIT,
   LIKE_MIN_ACTOR_AGE_HOURS,
   VERIFIED_MIN_REPUTATION,
   getReputationTier,
   getNextTier,
   getTierProgress,
+  getRepStage,
+  getRepLevel,
+  getStageProgress,
   publicRepLabel,
 } from "@/lib/reputation-config"
+import { AVATAR_FRAMES, PROFILE_TITLES, PROFILE_THEMES, canEquip, unlockedCosmetics } from "@/lib/cosmetics"
+import { WEEKLY_CHALLENGES } from "@/lib/challenges"
 import {
   applyReputationAward,
   reverseReputationEvent,
@@ -71,7 +77,7 @@ async function run() {
   assert.equal(getReputationTier(249).name, "Seed")
   assert.equal(getReputationTier(250).name, "Sprout")
   assert.equal(getReputationTier(749).name, "Sprout")
-  assert.equal(getReputationTier(750).name, "Seedling")
+  assert.equal(getReputationTier(750).name, "Rooted")
   assert.equal(getReputationTier(100000).name, "Cannabis Deity")
   assert.equal(getReputationTier(999999999).name, "Cannabis Deity")
 
@@ -94,10 +100,37 @@ async function run() {
 
   assert.equal(getNextTier(0)?.name, "Sprout")
   assert.equal(getNextTier(100000), null)
-  const prog = getTierProgress(375) // halfway Seedling (750) - Sprout (250)
+  const prog = getTierProgress(375) // halfway Rooted (750) - Sprout (250)
   assert.equal(prog.percent, 25)
   assert.equal(getTierProgress(0).percent, 0)
   assert.equal(getTierProgress(100000).percent, 100)
+
+  // ── Pure: grow-stage ladder ───────────────────────────────────────
+  // Ladder is sorted, starts at 0, and contains every tier threshold.
+  for (let i = 1; i < REP_LADDER.length; i++) {
+    assert.ok(REP_LADDER[i] > REP_LADDER[i - 1], `ladder rung ${i} increases`)
+  }
+  for (const t of REP_TIERS) {
+    assert.ok(REP_LADDER.includes(t.threshold), `ladder contains ${t.name} threshold`)
+  }
+  // Stage boundaries: rep just below a rung stays in the lower stage.
+  assert.equal(getRepStage(0).level, 1)
+  assert.equal(getRepStage(0).tier.name, "Seed")
+  assert.equal(getRepStage(249).level, 1)
+  assert.equal(getRepStage(250).level, 2) // Sprout threshold = rung 2
+  assert.equal(getRepStage(250).tier.name, "Sprout")
+  assert.equal(getRepStage(999).stageName, getRepStage(750).stageName, "no stage within 750-999")
+  assert.equal(getRepStage(1000).stageName, "Flower", "1000 = Rooted Flower stage")
+  // Top of the ladder: percent 100, no remaining.
+  assert.equal(getStageProgress(100000).percent, 100)
+  assert.equal(getStageProgress(100000).remaining, 0)
+  // Mid-stage progress.
+  const sp = getStageProgress(1000) // Rooted stage at 1000, next rung 1250
+  assert.equal(sp.next, 250)
+  assert.equal(sp.current, 0)
+  assert.equal(sp.percent, 0)
+  assert.equal(getRepLevel(0), 1)
+  assert.equal(getRepLevel(REP_LADDER[REP_LADDER.length - 1]), REP_LADDER.length)
 
   // ── Pure: economy config sanity ───────────────────────────────────
   for (const k of Object.keys(REP_CAPS)) {
@@ -116,7 +149,8 @@ async function run() {
       t in REP_POINTS
         || t === REP_EVENT_TYPES.REVERSAL
         || t === REP_EVENT_TYPES.REINSTATE
-        || t === REP_EVENT_TYPES.LEGACY_MIGRATION,
+        || t === REP_EVENT_TYPES.LEGACY_MIGRATION
+        || t === REP_EVENT_TYPES.CHALLENGE_WEEKLY,
       `public type ${t} is a known award or REVERSAL`
     )
     assert.notEqual(publicRepLabel(t), "Reputation change", `public type ${t} labelled`)
@@ -148,6 +182,35 @@ async function run() {
   for (const b of BOT_BADGE_REGISTRY) {
     assert.ok(!registryNames.has(b.name), `bot badge "${b.name}" not in human registry`)
     assert.ok(isBotBadge(b.name), `isBotBadge("${b.name}")`)
+  }
+
+  // ── Pure: cosmetics registry ──────────────────────────────────────
+  // Every cosmetic unlocks exactly at a tier threshold, and keys are unique.
+  const tierThresholds = new Set(REP_TIERS.map((t) => t.threshold))
+  const allCosmetics = [...AVATAR_FRAMES, ...PROFILE_TITLES, ...PROFILE_THEMES]
+  const keys = new Set(allCosmetics.map((c) => c.key))
+  assert.equal(keys.size, allCosmetics.length, "cosmetic keys unique")
+  for (const c of allCosmetics) {
+    assert.ok(tierThresholds.has(c.unlockedAt), `${c.key} unlocks at a tier threshold`)
+    assert.ok(c.name && c.description, `${c.key} fully described`)
+  }
+  // canEquip: locked above tier, equippable at/after, null always clears.
+  assert.equal(canEquip(0, "frames", "sprout-ring"), false)
+  assert.equal(canEquip(250, "frames", "sprout-ring"), true)
+  assert.equal(canEquip(0, "frames", null), true)
+  assert.equal(canEquip(100000, "frames", "northern-lights"), true)
+  assert.equal(canEquip(99999, "frames", "northern-lights"), false)
+  assert.ok(unlockedCosmetics(0).frames.length === 0)
+  assert.ok(unlockedCosmetics(100000).frames.length === AVATAR_FRAMES.length)
+
+  // ── Pure: weekly challenges ───────────────────────────────────────
+  // Fixed roster, unique slugs, sane rewards, small weekly ceiling.
+  const slugs = new Set(WEEKLY_CHALLENGES.map((c) => c.slug))
+  assert.equal(slugs.size, WEEKLY_CHALLENGES.length, "challenge slugs unique")
+  const weeklyMax = WEEKLY_CHALLENGES.reduce((s, c) => s + c.reward, 0)
+  assert.ok(weeklyMax <= 150, `weekly challenge payout (${weeklyMax}) stays under the velocity flag threshold`)
+  for (const c of WEEKLY_CHALLENGES) {
+    assert.ok(c.reward > 0 && c.target > 0 && c.title && c.description, `challenge ${c.slug} well-formed`)
   }
 
   // ── DB: ledger behaviour with a disposable user ──────────────────

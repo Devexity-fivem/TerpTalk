@@ -18,7 +18,11 @@ import { REP_POINTS } from "@/lib/reputation-config"
 import SavedThreads from "@/components/saved-threads"
 import SavedSearches from "@/components/saved-searches"
 import RecoveryPhraseCard from "@/components/recovery-phrase-card"
+import WeeklyChallenges from "@/components/weekly-challenges"
+import CosmeticsPanel from "@/components/cosmetics-panel"
 import { Avatar } from "@/components/ui/avatar"
+import { getAvatarFrame } from "@/lib/cosmetics"
+import { cn } from "@/lib/utils"
 
 function ProfileBadges({
   badges,
@@ -48,16 +52,20 @@ function ProfileBadges({
           <Award className="w-5 h-5 text-primary" />
           <h2 className="text-lg font-semibold">Badges</h2>
         </div>
-        <p className="text-sm text-muted-foreground">No badges earned yet — post, grow, and share to earn them</p>
+        <p className="text-sm text-muted-foreground mb-2">No badges earned yet — post, grow, and share to earn them</p>
+        <Link href="/achievements" className="text-xs text-primary hover:underline">View achievement progress →</Link>
       </div>
     )
   }
 
   return (
     <div className="bg-card rounded-lg border border-border p-6">
-      <div className="flex items-center gap-2 mb-4">
-        <Award className="w-5 h-5 text-primary" />
-        <h2 className="text-lg font-semibold">Badges</h2>
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <Award className="w-5 h-5 text-primary" />
+          <h2 className="text-lg font-semibold">Badges</h2>
+        </div>
+        <Link href="/achievements" className="text-xs text-primary hover:underline">Progress</Link>
       </div>
       <div className="flex flex-wrap gap-2">
         {visible.map((b) => (
@@ -111,6 +119,9 @@ interface ProfileData {
     emailDigestFrequency: string | null
     joinDate: string
     reputation: number
+    avatarFrame: string | null
+    profileTitle: string | null
+    profileTheme: string | null
   } | null
   stats: {
     diaries: number
@@ -130,6 +141,20 @@ interface ProfileData {
       current: number
       next: number
       percent: number
+    }
+    repStage: {
+      level: number
+      stageName: string
+      stageIndex: number
+      stageCount: number
+      stageStart: number
+      stageEnd: number
+    }
+    stageProgress: {
+      current: number
+      next: number
+      percent: number
+      remaining: number
     }
     referrals: number
   }
@@ -257,13 +282,15 @@ export default function ProfilePage() {
         {/* Profile Header */}
         <div className="bg-card rounded-lg border border-border p-6 mb-6">
           <div className="flex items-start gap-4 sm:gap-6">
-            <Avatar
-              src={profileData.profile?.avatarUrl}
-              alt={`${profileData.profile?.username || profileData.user.name} avatar`}
-              size="xl"
-              className="w-24 h-24 bg-primary/10 text-primary"
-              fallback={<User className="w-12 h-12 text-primary" />}
-            />
+            <div className={cn("rounded-full shrink-0", getAvatarFrame(profileData.profile?.avatarFrame)?.className)}>
+              <Avatar
+                src={profileData.profile?.avatarUrl}
+                alt={`${profileData.profile?.username || profileData.user.name} avatar`}
+                size="xl"
+                className="w-24 h-24 bg-primary/10 text-primary"
+                fallback={<User className="w-12 h-12 text-primary" />}
+              />
+            </div>
               <div className="flex-1">
                 <div className="flex items-start justify-between gap-4 flex-wrap">
                   <div>
@@ -695,23 +722,36 @@ export default function ProfilePage() {
           <div className="bg-card rounded-lg border border-border p-6">
             <div className="flex items-center gap-2 mb-4">
               <TrendingUp className="w-5 h-5 text-primary" />
-              <h2 className="text-lg font-semibold">Reputation Tier</h2>
+              <h2 className="text-lg font-semibold">Your Growth</h2>
             </div>
-            <div className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full ${profileData.stats.reputationTier.bg} ${profileData.stats.reputationTier.color} text-sm font-medium mb-3`}>
+            <div className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full ${profileData.stats.reputationTier.bg} ${profileData.stats.reputationTier.color} text-sm font-medium mb-1`}>
               <span>{profileData.stats.reputationTier.icon}</span>
               {profileData.stats.reputationTier.name}
             </div>
+            <p className="text-xs text-muted-foreground mb-3">
+              Grow Level {profileData.stats.repStage.level} · {profileData.stats.repStage.stageName} stage ({profileData.stats.repStage.stageIndex + 1}/{profileData.stats.repStage.stageCount})
+            </p>
             <p className="text-sm text-muted-foreground mb-4">{profileData.stats.reputationTier.benefit}</p>
             <div className="mb-2">
               <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
-                <span>{profileData.stats.reputation} / {profileData.stats.tierProgress.next} rep</span>
-                <span>{profileData.stats.tierProgress.percent}% to next tier</span>
+                <span>
+                  {profileData.stats.stageProgress.next > 0
+                    ? `${profileData.stats.stageProgress.current} / ${profileData.stats.stageProgress.next} rep to next stage`
+                    : "Top of the ladder"}
+                </span>
+                <span>{profileData.stats.stageProgress.percent}%</span>
               </div>
               <div className="h-2.5 w-full bg-secondary rounded-full overflow-hidden">
                 <div
                   className="h-full bg-primary transition-all"
-                  style={{ width: `${profileData.stats.tierProgress.percent}%` }}
+                  style={{ width: `${profileData.stats.stageProgress.percent}%` }}
                 />
+              </div>
+              <div className="flex items-center justify-between text-[10px] text-muted-foreground mt-1">
+                <span>{profileData.stats.reputation} rep total</span>
+                {profileData.stats.tierProgress.next > profileData.stats.reputation && (
+                  <span>{profileData.stats.tierProgress.next - profileData.stats.reputation} to {profileData.stats.reputationTier.name === "Cannabis Deity" ? "max" : "next tier"}</span>
+                )}
               </div>
             </div>
             <p className="text-xs text-muted-foreground">
@@ -845,6 +885,16 @@ export default function ProfilePage() {
 
           {/* Reputation detail widgets — the two tallest cards, paired in the
               final row so neither forces a shorter card to stretch. */}
+          <WeeklyChallenges />
+          <CosmeticsPanel
+            reputation={profileData.stats.reputation}
+            equipped={{
+              avatarFrame: profileData.profile?.avatarFrame ?? null,
+              profileTitle: profileData.profile?.profileTitle ?? null,
+              profileTheme: profileData.profile?.profileTheme ?? null,
+            }}
+            onSaved={(p) => setProfileData((prev) => prev ? { ...prev, profile: prev.profile ? { ...prev.profile, ...p } : prev.profile } : prev)}
+          />
           <ReputationRoadmap reputation={profileData.stats.reputation} />
           <ReputationEarn />
         </div>

@@ -89,11 +89,17 @@ export interface BotStats {
   announcements: number   // all announcements
   daysActive: number      // distinct UTC days with any event
   fallbacks: number       // mentions the parser couldn't route
+  refusals: number        // moderation-vocabulary refusals
+  helps: number           // bare-ping help hints
+  byCommand: Record<string, number>      // per-command answer counts
+  byAnnouncement: Record<string, number> // per-kind announcement counts
 }
 
 export async function getBotStats(): Promise<BotStats> {
-  const [commands, mentions, assisted, entities, welcomes, announcements, daysActive, fallbacks] =
-    await Promise.all([
+  const [
+    commands, mentions, assisted, entities, welcomes, announcements,
+    daysActive, fallbacks, refusals, helps, commandRows, announceRows,
+  ] = await Promise.all([
       prisma.botEvent.count({ where: { type: { in: COMMAND_TYPES } } }),
       prisma.botEvent.count({ where: { type: "COMMAND_MENTION" } }),
       prisma.botEvent.findMany({
@@ -109,6 +115,18 @@ export async function getBotStats(): Promise<BotStats> {
       prisma.botEvent.count({ where: { type: "ANNOUNCEMENT" } }),
       prisma.botEvent.count({ where: { type: "DAY_ACTIVE" } }),
       prisma.botEvent.count({ where: { type: "MENTION_FALLBACK" } }),
+      prisma.botEvent.count({ where: { type: "MENTION_REFUSAL" } }),
+      prisma.botEvent.count({ where: { type: "MENTION_HELP" } }),
+      prisma.botEvent.groupBy({
+        by: ["command"],
+        where: { type: { in: COMMAND_TYPES }, command: { not: null } },
+        _count: { _all: true },
+      }),
+      prisma.botEvent.groupBy({
+        by: ["command"],
+        where: { type: "ANNOUNCEMENT", command: { not: null } },
+        _count: { _all: true },
+      }),
     ])
   return {
     commands,
@@ -119,19 +137,23 @@ export async function getBotStats(): Promise<BotStats> {
     announcements,
     daysActive,
     fallbacks,
+    refusals,
+    helps,
+    byCommand: Object.fromEntries(commandRows.map((r) => [r.command as string, r._count._all])),
+    byAnnouncement: Object.fromEntries(announceRows.map((r) => [r.command as string, r._count._all])),
   }
 }
 
-// Achievement criteria — evaluated against real BotEvent aggregates only.
-const BOT_BADGE_RULES: Record<string, (s: BotStats) => boolean> = {
-  "First Light": (s) => s.commands >= 1,
-  "Garden Greeter": (s) => s.welcomes >= 50,
-  "Field Guide": (s) => s.entityLinks >= 250,
-  "Budtender": (s) => s.membersAssisted >= 50,
-  "Tireless Trimmer": (s) => s.commands >= 1000,
-  "Evergreen": (s) => s.daysActive >= 90,
-  "Mother Bot": (s) => s.membersAssisted >= 500,
-}
+// Achievement criteria — generated from BOT_BADGE_REGISTRY progress specs
+// (same pattern as BADGE_RULES in reputation.ts), evaluated against real
+// BotEvent aggregates only.
+const BOT_BADGE_RULES: Record<string, (s: BotStats) => boolean> = Object.fromEntries(
+  BOT_BADGE_REGISTRY.flatMap((d): [string, (s: BotStats) => boolean][] => {
+    const spec = d.progress
+    if (!spec) return []
+    return [[d.name, (s: BotStats) => spec.stats.reduce((n, k) => n + Number(s[k as keyof BotStats] ?? 0), 0) >= spec.target]]
+  })
+)
 
 // Grant one bot badge — direct UserBadge write, matching the manual-grant
 // pattern used by contest-awards.ts. No notify() (bot notifications are

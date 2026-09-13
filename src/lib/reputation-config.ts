@@ -34,16 +34,18 @@ export type RepSource = keyof typeof REP_POINTS
 // Beyond the cap the action still succeeds — it just stops paying rep.
 export const REP_CAPS: Partial<Record<RepSource, number>> = {
   THREAD_CREATED: 3, // first 3 threads/day pay
-  POST_CREATED: 15, // first 15 replies/day pay
+  POST_CREATED: 10, // first 10 replies/day pay
   DIARY_CREATED: 2,
+  DIARY_UPDATE: 5, // plus the per-diary-per-day key dedupe — bounds the
+  // only self-driven source that used to scale with diary count.
   STRAIN_CREATED: 5,
   STRAIN_PHOTO: 5,
   SETUP_CREATED: 2,
   LIKE_RECEIVED: 50,
   HELPFUL_ANSWER: 2,
-  // DIARY_UPDATE is deduped by key (diaryId + UTC day) instead of a count cap.
   // REFERRAL is deduped per referred user. DAILY_LOGIN is deduped per day.
-  // Contest wins are deduped per period.
+  // Contest wins are deduped per period. CHALLENGE_WEEKLY is deduped per
+  // challenge per ISO week (keyed award — no count cap needed).
 }
 
 // A liker's account must be this old before their LIKE generates rep —
@@ -69,6 +71,8 @@ export const EARLY_SUPPORTER_LIMIT = 250
 //   "REINSTATE"                      — counter-entry undoing a reversal
 //   "STAFF_ADJUSTMENT"               — manual staff grant/deduction
 //   "LEGACY_MIGRATION"               — pre-ledger balance carried forward
+//   "CHALLENGE_WEEKLY"               — weekly challenge completion bonus
+//     (amount varies per challenge; keyed challenge:<week>:<slug>:<userId>)
 //
 // Accounting model: EVERY row's amount counts toward the balance —
 // reversedAt/reversalOfId are audit status, not sum filters. Reversals and
@@ -79,6 +83,7 @@ export const REP_EVENT_TYPES = {
   REINSTATE: "REINSTATE",
   STAFF_ADJUSTMENT: "STAFF_ADJUSTMENT",
   LEGACY_MIGRATION: "LEGACY_MIGRATION",
+  CHALLENGE_WEEKLY: "CHALLENGE_WEEKLY",
 } as const
 
 // Which event types are shown on a member's public reputation history.
@@ -97,6 +102,7 @@ export const PUBLIC_REP_TYPES = new Set<string>([
   "REFERRAL",
   "CONTEST_WEEKLY_WIN",
   "CONTEST_MONTHLY_WIN",
+  "CHALLENGE_WEEKLY",
   "REVERSAL",
   "REINSTATE",
   "LEGACY_MIGRATION",
@@ -106,24 +112,50 @@ export const PUBLIC_REP_TYPES = new Set<string>([
 // usernames, so public surfaces always render these labels instead.
 export function publicRepLabel(type: string): string {
   switch (type) {
-    case "THREAD_CREATED": return "Started a thread"
-    case "POST_CREATED": return "Replied in the forums"
+    case "THREAD_CREATED": return "Started a grow talk"
+    case "POST_CREATED": return "Helped in a thread"
     case "DIARY_CREATED": return "Started a grow diary"
-    case "DIARY_UPDATE": return "Posted a diary update"
-    case "STRAIN_CREATED": return "Added a strain"
-    case "STRAIN_PHOTO": return "Shared a photo"
+    case "DIARY_UPDATE": return "Tended your garden"
+    case "STRAIN_CREATED": return "Added strain knowledge"
+    case "STRAIN_PHOTO": return "Shared a bud shot"
     case "SETUP_CREATED": return "Shared a grow setup"
-    case "LIKE_RECEIVED": return "Content was liked"
-    case "HELPFUL_ANSWER": return "Answer accepted"
+    case "LIKE_RECEIVED": return "A grower liked your post"
+    case "HELPFUL_ANSWER": return "Your answer was accepted"
     case "REFERRAL": return "Invited a new member"
     case "CONTEST_WEEKLY_WIN": return "Won Budshot of the Week"
     case "CONTEST_MONTHLY_WIN": return "Won Diary of the Month"
+    case "CHALLENGE_WEEKLY": return "Weekly challenge completed"
     case "DAILY_LOGIN": return "Daily check-in"
-    case "REVERSAL": return "Reversal of removed content"
-    case "REINSTATE": return "Award reinstated"
+    case "REVERSAL": return "Reputation adjustment"
+    case "REINSTATE": return "Reputation restored"
     case "STAFF_ADJUSTMENT": return "Staff adjustment"
     case "LEGACY_MIGRATION": return "Reputation carried over"
     default: return "Reputation change"
+  }
+}
+
+// Emoji accent per event type for the public history feed.
+export function publicRepIcon(type: string): string {
+  switch (type) {
+    case "THREAD_CREATED": return "🧵"
+    case "POST_CREATED": return "💬"
+    case "DIARY_CREATED": return "📓"
+    case "DIARY_UPDATE": return "🌱"
+    case "STRAIN_CREATED": return "🧬"
+    case "STRAIN_PHOTO": return "📸"
+    case "SETUP_CREATED": return "🛠️"
+    case "LIKE_RECEIVED": return "❤️"
+    case "HELPFUL_ANSWER": return "✅"
+    case "REFERRAL": return "🤝"
+    case "CONTEST_WEEKLY_WIN": return "🏆"
+    case "CONTEST_MONTHLY_WIN": return "🏆"
+    case "CHALLENGE_WEEKLY": return "🎯"
+    case "DAILY_LOGIN": return "☀️"
+    case "REVERSAL": return "↩️"
+    case "REINSTATE": return "↩️"
+    case "STAFF_ADJUSTMENT": return "🛡️"
+    case "LEGACY_MIGRATION": return "📦"
+    default: return "✨"
   }
 }
 
@@ -148,30 +180,33 @@ export interface TierPerks {
   slowmodeExempt?: boolean // immune to chat room slowmode
   imagesPerPost?: number // overrides MAX_POST_IMAGES
   maxThreadTags?: number // overrides MAX_TAGS
+  showcaseSlots?: number // max pinned badges on the member's profile
 }
 
 const PERKS = {
-  BASE: {} as TierPerks,
-  SPROUT: { trustedLinks: true } as TierPerks,
-  SEEDLING: { trustedLinks: true, pollVoting: true } as TierPerks,
-  GROWER: { trustedLinks: true, pollVoting: true, verifiedMember: true } as TierPerks,
-  CULTIVATOR: { trustedLinks: true, pollVoting: true, verifiedMember: true, rateLimitBoost: 1.5 } as TierPerks,
-  MASTER: { trustedLinks: true, pollVoting: true, verifiedMember: true, rateLimitBoost: 1.5, slowmodeExempt: true, imagesPerPost: 6 } as TierPerks,
-  HEAD: { trustedLinks: true, pollVoting: true, verifiedMember: true, rateLimitBoost: 2, slowmodeExempt: true, imagesPerPost: 8, maxThreadTags: 7 } as TierPerks,
-  HASH: { trustedLinks: true, pollVoting: true, verifiedMember: true, rateLimitBoost: 2, slowmodeExempt: true, imagesPerPost: 8, maxThreadTags: 7 } as TierPerks,
-  DEITY: { trustedLinks: true, pollVoting: true, verifiedMember: true, rateLimitBoost: 2, slowmodeExempt: true, imagesPerPost: 8, maxThreadTags: 7 } as TierPerks,
+  BASE: { showcaseSlots: 3 } as TierPerks,
+  SPROUT: { trustedLinks: true, showcaseSlots: 3 } as TierPerks,
+  ROOTED: { trustedLinks: true, pollVoting: true, showcaseSlots: 3 } as TierPerks,
+  GROWER: { trustedLinks: true, pollVoting: true, verifiedMember: true, showcaseSlots: 4 } as TierPerks,
+  CULTIVATOR: { trustedLinks: true, pollVoting: true, verifiedMember: true, rateLimitBoost: 1.5, showcaseSlots: 5 } as TierPerks,
+  MASTER: { trustedLinks: true, pollVoting: true, verifiedMember: true, rateLimitBoost: 1.5, slowmodeExempt: true, imagesPerPost: 6, showcaseSlots: 6 } as TierPerks,
+  HEAD: { trustedLinks: true, pollVoting: true, verifiedMember: true, rateLimitBoost: 2, slowmodeExempt: true, imagesPerPost: 8, maxThreadTags: 7, showcaseSlots: 8 } as TierPerks,
+  HASH: { trustedLinks: true, pollVoting: true, verifiedMember: true, rateLimitBoost: 2, slowmodeExempt: true, imagesPerPost: 8, maxThreadTags: 7, showcaseSlots: 10 } as TierPerks,
+  DEITY: { trustedLinks: true, pollVoting: true, verifiedMember: true, rateLimitBoost: 2, slowmodeExempt: true, imagesPerPost: 8, maxThreadTags: 7, showcaseSlots: 12 } as TierPerks,
 }
 
+// Cosmetic unlock keys in `benefit` text reference the registries in
+// lib/cosmetics.ts — every advertised reward must exist there.
 export const REP_TIERS: ReputationTier[] = [
-  { threshold: 0, name: "Seed", color: "text-stone-500", bg: "bg-stone-500/10", icon: "🌰", benefit: "Welcome to the community — start growing your rep.", perks: PERKS.BASE },
-  { threshold: 250, name: "Sprout", color: "text-amber-600", bg: "bg-amber-600/10", icon: "🌱", benefit: "Your links no longer need the new-member wait.", perks: PERKS.SPROUT },
-  { threshold: 750, name: "Seedling", color: "text-green-500", bg: "bg-green-500/10", icon: "�", benefit: "Vote in community polls.", perks: PERKS.SEEDLING },
-  { threshold: 1500, name: "Grower", color: "text-emerald-500", bg: "bg-emerald-500/10", icon: "🪴", benefit: "Earn the Verified Member tag and a 1.5× reputation bonus.", perks: PERKS.GROWER },
-  { threshold: 3500, name: "Cultivator", color: "text-cyan-500", bg: "bg-cyan-500/10", icon: "�", benefit: "Higher posting and chat rate limits.", perks: PERKS.CULTIVATOR },
-  { threshold: 7000, name: "Master Grower", color: "text-purple-500", bg: "bg-purple-500/10", icon: "🏆", benefit: "Exempt from chat slowmode and can attach 6 images per post.", perks: PERKS.MASTER },
-  { threshold: 15000, name: "Head Grower", color: "text-rose-400", bg: "bg-rose-500/10", icon: "🌟", benefit: "Double rate limits, 8 images per post, and up to 7 thread tags.", perks: PERKS.HEAD },
-  { threshold: 40000, name: "Hash Maker", color: "text-violet-300", bg: "bg-violet-500/10", icon: "🔮", benefit: "Pressed to perfection — all perks plus a legendary profile flair.", perks: PERKS.HASH },
-  { threshold: 100000, name: "Cannabis Deity", color: "text-sky-300", bg: "bg-sky-500/10", icon: "🌌", benefit: "The top of the ladder — a true cannabis deity.", perks: PERKS.DEITY },
+  { threshold: 0, name: "Seed", color: "text-stone-500", bg: "bg-stone-500/10", icon: "🌰", benefit: "Every grow starts somewhere — post, grow, and share to earn rep.", perks: PERKS.BASE },
+  { threshold: 250, name: "Sprout", color: "text-amber-600", bg: "bg-amber-600/10", icon: "🌱", benefit: "Unlocks the Sprout Ring avatar frame — and your links no longer need the new-member wait.", perks: PERKS.SPROUT },
+  { threshold: 750, name: "Rooted", color: "text-green-500", bg: "bg-green-500/10", icon: "🌿", benefit: "Unlocks the Rooted Band frame, custom profile titles, and community poll voting.", perks: PERKS.ROOTED },
+  { threshold: 1500, name: "Grower", color: "text-emerald-500", bg: "bg-emerald-500/10", icon: "🪴", benefit: "Unlocks the Greenhouse Glow frame, the Evergreen profile theme, Verified Member status, and a 1.5× rep bonus.", perks: PERKS.GROWER },
+  { threshold: 3500, name: "Cultivator", color: "text-cyan-500", bg: "bg-cyan-500/10", icon: "✂️", benefit: "Unlocks the LED Bloom frame, the Golden Hour theme, and more room to post.", perks: PERKS.CULTIVATOR },
+  { threshold: 7000, name: "Master Grower", color: "text-purple-500", bg: "bg-purple-500/10", icon: "🏆", benefit: "Unlocks the Pistil Fire frame, the Midnight Garden theme, slowmode immunity, and 6 images per post.", perks: PERKS.MASTER },
+  { threshold: 15000, name: "Head Grower", color: "text-rose-400", bg: "bg-rose-500/10", icon: "🌟", benefit: "Unlocks the Amber Jar frame, the Deep Water theme, double limits, and 7 thread tags.", perks: PERKS.HEAD },
+  { threshold: 40000, name: "Hash Maker", color: "text-violet-300", bg: "bg-violet-500/10", icon: "🔮", benefit: "Unlocks the Rosin Ring frame, the Amber Cure theme, and legendary titles — pressed to perfection.", perks: PERKS.HASH },
+  { threshold: 100000, name: "Cannabis Deity", color: "text-sky-300", bg: "bg-sky-500/10", icon: "🌌", benefit: "Unlocks the Northern Lights frame and the Deity Glow theme — the top of the ladder.", perks: PERKS.DEITY },
 ]
 
 export function getReputationTier(reputation: number): ReputationTier {
@@ -205,4 +240,99 @@ export function getTierProgress(reputation: number): { current: number; next: nu
 
 // Verified-member auto-promotion threshold (the Grower tier).
 export const VERIFIED_MIN_REPUTATION = REP_TIERS[3].threshold
-export const VERIFIED_MIN_AGE_DAYS = 7
+// 30 days — the age gate is the only real defense against a farmed account
+// instantly amplifying to the 1.5× multiplier.
+export const VERIFIED_MIN_AGE_DAYS = 30
+
+// ─── Grow Stages ─────────────────────────────────────────────────────
+// Tiers are sparse and perk-bearing; stages are the frequent feedback
+// layer INSIDE each tier gap. Stages are pure presentation — derived
+// from the reputation balance with zero schema cost, and reversals
+// automatically demote them. The combined ladder (tier thresholds +
+// stage checkpoints) gives a decorative Grow Level (1..N).
+
+// Checkpoints within each tier's gap (tier threshold excluded — it's
+// stage 1 of that tier). Round numbers, weighted toward the long deserts.
+const TIER_STAGE_CHECKPOINTS: Record<string, number[]> = {
+  Sprout: [500],
+  Rooted: [1000, 1250],
+  Grower: [2000, 2500, 3000],
+  Cultivator: [4000, 5000, 6000],
+  "Master Grower": [8000, 10000, 12000, 14000],
+  "Head Grower": [20000, 25000, 30000, 35000],
+  "Hash Maker": [50000, 60000, 70000, 80000, 90000],
+}
+
+// Grow-cycle names clipped to the number of stages in a tier gap.
+const STAGE_NAMES: Record<number, string[]> = {
+  1: ["Growing"],
+  2: ["Veg", "Flower"],
+  3: ["Veg", "Flower", "Harvest"],
+  4: ["Germ", "Veg", "Flower", "Harvest"],
+  5: ["Germ", "Veg", "Flower", "Flush", "Harvest"],
+  6: ["Germ", "Veg", "Flower", "Flush", "Harvest", "Cure"],
+}
+
+// Flat ladder of every rung: tier thresholds interleaved with stage
+// checkpoints, ascending. Level = index into this list + 1.
+export const REP_LADDER: number[] = (() => {
+  const rungs = new Set<number>(REP_TIERS.map((t) => t.threshold))
+  for (const t of REP_TIERS) {
+    for (const c of TIER_STAGE_CHECKPOINTS[t.name] ?? []) rungs.add(c)
+  }
+  return [...rungs].sort((a, b) => a - b)
+})()
+
+export interface RepStage {
+  level: number // 1-based position on the combined ladder
+  tier: ReputationTier
+  stageName: string // grow-cycle name within the tier
+  stageIndex: number // 0-based within the tier
+  stageCount: number // total stages in the tier
+  stageStart: number // rep where this stage begins
+  stageEnd: number // rep where the next rung begins (=== stageStart at top)
+}
+
+export function getRepStage(reputation: number): RepStage {
+  const tier = getReputationTier(reputation)
+  const checkpoints = TIER_STAGE_CHECKPOINTS[tier.name] ?? []
+  const rungs = [tier.threshold, ...checkpoints]
+  let stageIndex = 0
+  for (let i = 0; i < rungs.length; i++) {
+    if (reputation >= rungs[i]) stageIndex = i
+    else break
+  }
+  const stageStart = rungs[stageIndex]
+  const stageEnd = rungs[stageIndex + 1] ?? getNextTier(reputation)?.threshold ?? stageStart
+  const names = STAGE_NAMES[rungs.length] ?? STAGE_NAMES[1]
+  const level = REP_LADDER.findIndex((r) => r === stageStart) + 1
+  return {
+    level,
+    tier,
+    stageName: names[stageIndex] ?? `Stage ${stageIndex + 1}`,
+    stageIndex,
+    stageCount: rungs.length,
+    stageStart,
+    stageEnd,
+  }
+}
+
+export function getRepLevel(reputation: number): number {
+  return getRepStage(reputation).level
+}
+
+// Progress within the current stage — the bar that actually moves weekly.
+export function getStageProgress(reputation: number): { current: number; next: number; percent: number; remaining: number } {
+  const stage = getRepStage(reputation)
+  if (stage.stageEnd <= stage.stageStart) {
+    return { current: reputation, next: reputation, percent: 100, remaining: 0 }
+  }
+  const range = stage.stageEnd - stage.stageStart
+  const gained = reputation - stage.stageStart
+  return {
+    current: gained,
+    next: range,
+    percent: Math.min(100, Math.max(0, Math.round((gained / range) * 100))),
+    remaining: range - gained,
+  }
+}

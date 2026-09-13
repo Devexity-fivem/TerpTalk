@@ -70,10 +70,13 @@ const apiFiles = () => {
     return fs.readFileSync(f, "utf8").includes("dangerouslySetInnerHTML");
   }));
   // Raw SQL is allowed only in audited, parameterized queries (trust-signal
-  // detectors and the ledger drift check) — no user input concatenation.
+  // detectors, the ledger drift check, and the distinct-day streak query) —
+  // no user input concatenation.
   const rawSqlAllowlist = new Set([
     path.join("src", "lib", "trust-signals.ts"),
     path.join("src", "lib", "reputation.ts"),
+    path.join("src", "lib", "grow-streak.ts"),
+    path.join("src", "lib", "challenges.ts"),
     path.join("src", "app", "api", "admin", "reputation", "flags", "route.ts"),
   ]);
   check("no raw SQL outside allowlist", !allSrc.some((f) => {

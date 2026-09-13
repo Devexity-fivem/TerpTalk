@@ -175,24 +175,51 @@ export async function announceNewMember(username: string) {
   return dto
 }
 
+// Announcement helpers all record an ANNOUNCEMENT BotEvent keyed by the
+// logical post so /u/terpbot stats stay truthful (welcomes/digests were
+// already counted; these kinds previously were not).
 export async function announceBadges(username: string, badgeNames: string[]) {
   if (badgeNames.length === 0) return null
   const list = badgeNames.map((n) => `"${n}"`).join(", ")
-  return postToGeneral(
+  const dto = await postToGeneral(
     `🏅 @${username} earned ${badgeNames.length > 1 ? "new badges" : "a new badge"}: ${list}`
   )
+  if (dto) {
+    await recordBotEvent({
+      type: "ANNOUNCEMENT",
+      key: `announce:badges:${dto.id}`,
+      command: "badges",
+    }).catch(() => {})
+  }
+  return dto
 }
 
 export async function announceTierUp(username: string, tierName: string, reputation: number) {
-  return postToGeneral(
+  const dto = await postToGeneral(
     `⬆️ @${username} just reached the ${tierName} tier with ${reputation.toLocaleString()} rep. Keep growing!`
   )
+  if (dto) {
+    await recordBotEvent({
+      type: "ANNOUNCEMENT",
+      key: `announce:tierup:${dto.id}`,
+      command: "tierup",
+    }).catch(() => {})
+  }
+  return dto
 }
 
 export async function announceHarvest(username: string, diaryTitle: string, yieldText?: string) {
-  return postToGeneral(
+  const dto = await postToGeneral(
     `🌾 @${username} harvested "${diaryTitle}"${yieldText ? ` — pulled ${yieldText}` : ""}. Nice work!`
   )
+  if (dto) {
+    await recordBotEvent({
+      type: "ANNOUNCEMENT",
+      key: `announce:harvest:${dto.id}`,
+      command: "harvest",
+    }).catch(() => {})
+  }
+  return dto
 }
 
 // Rotating grow tips — shared by the daily digest and the /tip command.

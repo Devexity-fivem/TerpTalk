@@ -60,7 +60,7 @@ export async function POST(request: Request) {
       return forbidden("Your account is suspended")
     }
 
-    const strain = await prisma.strain.findUnique({ where: { id: strainId }, select: { id: true } })
+    const strain = await prisma.strain.findUnique({ where: { id: strainId }, select: { id: true, createdById: true } })
     if (!strain) {
       return NextResponse.json({ error: "Strain not found" }, { status: 404 })
     }
@@ -83,7 +83,9 @@ export async function POST(request: Request) {
 
     // One paying photo per member per strain — stops photo-spam farming on
     // the same strain while still rewarding coverage across the library.
-    await awardReputation(
+    // Photos on a strain you created yourself don't pay (self-farm vector:
+    // create strain + upload photo = free rep). The photo still posts.
+    if (strain.createdById !== session.user.id) await awardReputation(
       session.user.id,
       "STRAIN_PHOTO",
       REP_POINTS.STRAIN_PHOTO,

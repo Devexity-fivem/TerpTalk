@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
+import { getToken } from "next-auth/jwt"
+import { sessionCookieName } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { getClientIp, hashIp } from "@/lib/security"
+import { blockExistsBetween, getClientIp, hashIp, isSessionValid } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
 import { PUBLIC_REP_TYPES, publicRepLabel, getReputationTier, getTierProgress } from "@/lib/reputation-config"
 import { TERPBOT_USERNAME } from "@/lib/terpbot-constants"
@@ -30,6 +32,17 @@ export async function GET(
       select: { userId: true, reputation: true },
     })
     if (!profile || username.toLowerCase() === TERPBOT_USERNAME) {
+      return NextResponse.json({ error: "User not found" }, { status: 404 })
+    }
+
+    // Same block policy as the public profile endpoint — a member who
+    // blocked the viewer doesn't expose their rep history to them.
+    const token = await getToken({ req: request, secret: process.env.NEXTAUTH_SECRET, cookieName: sessionCookieName })
+    let viewerId = token?.id as string | undefined
+    if (viewerId && !(await isSessionValid(viewerId, token?.sessionVersion as number | undefined))) {
+      viewerId = undefined
+    }
+    if (viewerId && viewerId !== profile.userId && (await blockExistsBetween(profile.userId, viewerId))) {
       return NextResponse.json({ error: "User not found" }, { status: 404 })
     }
 

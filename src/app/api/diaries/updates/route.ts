@@ -178,15 +178,18 @@ export async function POST(request: Request) {
     })
 
     // One paying update per diary per UTC day — keyed so extra updates and
-    // retries don't farm.
-    const updateDay = new Date().toISOString().slice(0, 10)
-    await awardReputation(
-      session.user.id,
-      "DIARY_UPDATE",
-      REP_POINTS.DIARY_UPDATE,
-      `Updated diary "${diary.title.slice(0, 60)}"`,
-      { key: `diaryupd:${diaryId}:${updateDay}`, sourceType: "DIARY", sourceId: diaryId }
-    ).catch(() => {})
+    // retries don't farm. A 10-character floor keeps trivial "bump" updates
+    // from paying; the update itself is still posted either way.
+    if (content.trim().length >= 10) {
+      const updateDay = new Date().toISOString().slice(0, 10)
+      await awardReputation(
+        session.user.id,
+        "DIARY_UPDATE",
+        REP_POINTS.DIARY_UPDATE,
+        `Updated diary "${diary.title.slice(0, 60)}"`,
+        { key: `diaryupd:${diaryId}:${updateDay}`, sourceType: "DIARY", sourceId: diaryId }
+      ).catch(() => {})
+    }
 
     // Update diary stage only on an explicit change. The form defaults to the
     // diary's current stage, so an untouched select never regresses it.

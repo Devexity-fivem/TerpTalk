@@ -70,6 +70,7 @@ model User {
   @@index([role])
   @@index([status])
   @@index([lastSeenAt])
+  @@index([createdAt])
 }
 
 // Staff Applications
@@ -126,6 +127,11 @@ model Profile {
   notifyOnReaction     Boolean  @default(true)
   notifyOnMilestone    Boolean  @default(true)
   emailDigestFrequency String?
+  // Equipped cosmetics — keys into the registries in lib/cosmetics.ts.
+  // Unlock is derived from reputation; these store only the equipped choice.
+  avatarFrame  String?
+  profileTitle String?
+  profileTheme String?
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([username])
@@ -595,6 +601,7 @@ model Strain {
   updatedAt   DateTime @updatedAt
 
   @@index([name])
+  @@index([createdById])
 }
 
 // Community photos of a strain — plant shots and harvested flower
@@ -633,6 +640,7 @@ model UserBadge {
   id        String   @id @default(cuid())
   userId    String
   badgeId   String
+  pinned    Boolean  @default(false) // showcased on the profile card
   earnedAt  DateTime @default(now())
 
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -645,10 +653,11 @@ model UserBadge {
 
 // Reputation System
 // Reputation 2.0 ledger — append-only. Profile.reputation is a cached
-// balance; the invariant is reputation == SUM(amount WHERE reversedAt IS NULL).
+// balance; the invariant is reputation == SUM(amount) over ALL rows.
+// reversedAt/reversalOfId are audit status, not sum filters: reversals are
+// signed counter-entries linked by reversalOfId — history is never deleted.
 // `key` is an idempotency token so retries/deferred writes can never
-// double-award (same convention as BotEvent.key). Reversals are signed
-// counter-entries linked by reversalOfId — history is never deleted.
+// double-award (same convention as BotEvent.key).
 model ReputationEvent {
   id           String    @id @default(cuid())
   type         String    // REP_POINTS keys | REVERSAL | STAFF_ADJUSTMENT | LEGACY_MIGRATION
@@ -666,6 +675,7 @@ model ReputationEvent {
   user      User               @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, createdAt])
+  @@index([userId, type, createdAt])
   @@index([sourceType, sourceId])
   @@index([actorId])
   @@index([reversalOfId])

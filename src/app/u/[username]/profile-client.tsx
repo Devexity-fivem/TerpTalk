@@ -3,12 +3,14 @@
 import { useEffect, useState } from "react"
 import { useSession } from "next-auth/react"
 import { useParams } from "next/navigation"
-import { User, MessageSquare, Loader2, MapPin, Globe, Sprout, Dna, Leaf, Store, Flame, ChevronDown, ChevronUp, Bot, Zap, Users, Link2, HandMetal, CalendarClock, TrendingUp } from "lucide-react"
+import { User, MessageSquare, Loader2, MapPin, Globe, Sprout, Dna, Leaf, Store, Flame, ChevronDown, ChevronUp, Bot, Zap, Users, Link2, HandMetal, CalendarClock, TrendingUp, Search, BookOpen, Trophy, BarChart3, AlertTriangle, Megaphone } from "lucide-react"
 import Link from "next/link"
 import UserActions from "@/components/user-actions"
 import RoleBadge from "@/components/role-badge"
 import AchievementBadge from "@/components/achievement-badge"
 import { Avatar } from "@/components/ui/avatar"
+import { getAvatarFrame, getProfileTheme } from "@/lib/cosmetics"
+import { cn } from "@/lib/utils"
 
 interface PublicProfile {
   id: string
@@ -41,7 +43,25 @@ interface PublicProfile {
     next: number
     percent: number
   }
-  badges: Array<{ name: string; description: string; icon: string | null }>
+  repStage?: {
+    level: number
+    stageName: string
+    stageIndex: number
+    stageCount: number
+    stageStart: number
+    stageEnd: number
+  }
+  stageProgress?: {
+    current: number
+    next: number
+    percent: number
+    remaining: number
+  }
+  avatarFrame: string | null
+  profileTitle: string | null
+  customTitle: string | null
+  profileTheme: string | null
+  badges: Array<{ name: string; description: string; icon: string | null; pinned: boolean }>
   stats: {
     threadCreator: number
     posts: number
@@ -57,6 +77,11 @@ interface PublicProfile {
     welcomes: number
     announcements: number
     daysActive: number
+    fallbacks: number
+    refusals: number
+    helps: number
+    byCommand: Record<string, number>
+    byAnnouncement: Record<string, number>
   } | null
   growStreak: number
   totalUpdates: number
@@ -130,19 +155,25 @@ export default function ProfileClient() {
 
   const { profile, viewerBlocked, viewerFollowing, recentThreads, growDiaries, recentRep } = data
   const joinDate = new Date(profile.joinDate).toLocaleDateString("en-US", { year: "numeric", month: "long" })
+  const frame = getAvatarFrame(profile.avatarFrame)
+  const theme = getProfileTheme(profile.profileTheme)
+  const pinnedBadges = profile.badges.filter((b) => b.pinned)
+  const restBadges = profile.badges.filter((b) => !b.pinned)
 
   return (
     <div className="min-h-screen bg-background">
       <div className="max-w-4xl mx-auto px-4 py-8">
-        <div className="bg-card rounded-lg border border-border p-4 mb-5">
+        <div className={cn("bg-card rounded-lg border p-4 mb-5", theme ? theme.borderClass : "border-border", theme?.className)}>
           <div className="flex items-start gap-4 flex-wrap">
-            <Avatar
-              src={profile.avatarUrl}
-              alt={`${profile.username} avatar`}
-              size="xl"
-              className="w-20 h-20 bg-primary/10 text-primary"
-              fallback={<User className="w-10 h-10 text-primary" />}
-            />
+            <div className={cn("rounded-full shrink-0", frame?.className)}>
+              <Avatar
+                src={profile.avatarUrl}
+                alt={`${profile.username} avatar`}
+                size="xl"
+                className="w-20 h-20 bg-primary/10 text-primary"
+                fallback={<User className="w-10 h-10 text-primary" />}
+              />
+            </div>
             <div className="flex-1 min-w-0">
               <div className="flex items-start justify-between gap-4 flex-wrap">
                 <div>
@@ -152,6 +183,9 @@ export default function ProfileClient() {
                           <Bot className="w-3 h-3" /> Bot
                         </span>
                       )}</h1>
+                  {profile.customTitle && (
+                    <p className="text-xs font-semibold uppercase tracking-wider text-amber-500 mb-1">{profile.customTitle}</p>
+                  )}
                   <p className="text-muted-foreground text-sm mb-2 flex items-center gap-2 flex-wrap">
                     <span>{profile.isBot ? "Active since" : "Member since"} {joinDate}</span>
                     {profile.isBot ? (
@@ -171,17 +205,32 @@ export default function ProfileClient() {
                     </p>
                   ) : (
                     <div className="mb-3">
+                      {profile.repStage && (
+                        <p className="text-xs text-muted-foreground mb-1">
+                          Grow Level {profile.repStage.level}
+                          <span className="mx-1">·</span>
+                          {profile.repStage.stageName} stage
+                          <span className="mx-1">·</span>
+                          stage {profile.repStage.stageIndex + 1} of {profile.repStage.stageCount} as {profile.reputationTier.name}
+                        </p>
+                      )}
                       <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
-                        <span>{profile.reputation} / {profile.tierProgress.next} rep to next tier</span>
-                        <span>{profile.tierProgress.percent}%</span>
+                        <span>
+                          {profile.stageProgress && profile.stageProgress.next > 0
+                            ? <>{profile.stageProgress.current} / {profile.stageProgress.next} rep to next stage</>
+                            : <>{profile.reputation} rep — top of the ladder</>}
+                        </span>
+                        <span>{profile.stageProgress?.percent ?? profile.tierProgress.percent}%</span>
                       </div>
                       <div className="h-2 w-full bg-secondary rounded-full overflow-hidden">
                         <div
                           className="h-full bg-primary transition-all"
-                          style={{ width: `${profile.tierProgress.percent}%` }}
+                          style={{ width: `${profile.stageProgress?.percent ?? profile.tierProgress.percent}%` }}
                         />
                       </div>
-                      <p className="text-xs text-muted-foreground mt-1">{profile.reputationTier.benefit}</p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {profile.reputation} rep total · {profile.reputationTier.benefit}
+                      </p>
                     </div>
                   )}
                   {profile.bio && <p className="text-sm mb-3 break-words whitespace-pre-wrap">{profile.bio}</p>}
@@ -246,6 +295,10 @@ export default function ProfileClient() {
                     <div className="text-xs text-muted-foreground">Days active</div>
                   </div>
                   <div className="text-center">
+                    <div className="text-lg font-bold text-primary flex items-center justify-center gap-1"><Megaphone className="w-4 h-4" />{profile.botStats.announcements}</div>
+                    <div className="text-xs text-muted-foreground">Announcements</div>
+                  </div>
+                  <div className="text-center">
                     <div className="text-lg font-bold text-primary">{profile.stats.followers}</div>
                     <div className="text-xs text-muted-foreground">Followers</div>
                   </div>
@@ -291,14 +344,27 @@ export default function ProfileClient() {
                   <Flame className="w-3.5 h-3.5" /> {profile.growStreak}-day grow streak
                 </div>
               )}
-              {profile.badges?.length > 0 && (
+              {pinnedBadges.length > 0 && (
                 <div className="mt-4">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">Showcase</p>
                   <div className="flex flex-wrap gap-2">
-                    {(showAllBadges ? profile.badges : profile.badges.slice(0, 6)).map((b) => (
+                    {pinnedBadges.map((b) => (
                       <AchievementBadge key={b.name} name={b.name} mode="profile" />
                     ))}
                   </div>
-                  {profile.badges.length > 6 && (
+                </div>
+              )}
+              {restBadges.length > 0 && (
+                <div className="mt-4">
+                  {pinnedBadges.length > 0 && (
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">All badges</p>
+                  )}
+                  <div className="flex flex-wrap gap-2">
+                    {(showAllBadges ? restBadges : restBadges.slice(0, 6)).map((b) => (
+                      <AchievementBadge key={b.name} name={b.name} mode="profile" />
+                    ))}
+                  </div>
+                  {restBadges.length > 6 && (
                     <button
                       onClick={() => setShowAllBadges((v) => !v)}
                       className="mt-2 inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded px-1"
@@ -306,7 +372,7 @@ export default function ProfileClient() {
                       {showAllBadges ? (
                         <>Show less <ChevronUp className="w-3 h-3" /></>
                       ) : (
-                        <>View all {profile.badges.length} badges <ChevronDown className="w-3 h-3" /></>
+                        <>View all {restBadges.length} badges <ChevronDown className="w-3 h-3" /></>
                       )}
                     </button>
                   )}
@@ -340,21 +406,76 @@ export default function ProfileClient() {
         )}
 
         {profile.isBot ? (
-          <div className="bg-card rounded-lg border border-border p-4 mb-4">
-            <div className="flex items-center gap-2 mb-3">
-              <Bot className="w-4 h-4 text-primary" />
-              <h2 className="text-lg font-semibold">What I do</h2>
+          <>
+            <div className="bg-card rounded-lg border border-border p-4 mb-4">
+              <div className="flex items-center gap-2 mb-3">
+                <Bot className="w-4 h-4 text-primary" />
+                <h2 className="text-lg font-semibold">What I do</h2>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
+                {[
+                  { icon: MessageSquare, label: "Chat" },
+                  { icon: Search, label: "Search" },
+                  { icon: Zap, label: "Threads" },
+                  { icon: Sprout, label: "Diaries" },
+                  { icon: Dna, label: "Strains" },
+                  { icon: BookOpen, label: "Guides" },
+                  { icon: Trophy, label: "Community" },
+                  { icon: BarChart3, label: "Stats" },
+                ].map((c) => (
+                  <div key={c.label} className="flex items-center gap-2 rounded-lg border border-border bg-secondary/30 px-3 py-2 text-xs font-medium">
+                    <c.icon className="w-3.5 h-3.5 text-primary shrink-0" />
+                    {c.label}
+                  </div>
+                ))}
+              </div>
+              <ul className="space-y-2 text-sm text-muted-foreground">
+                <li className="flex gap-2"><HandMetal className="w-4 h-4 text-primary shrink-0 mt-0.5" /> Welcome new members and post the daily digest in <Link href="/chat" className="text-primary hover:underline">Chat</Link>.</li>
+                <li className="flex gap-2"><MessageSquare className="w-4 h-4 text-primary shrink-0 mt-0.5" /> Answer questions when you mention <span className="text-primary font-medium">@terpbot</span> — rep, streaks, diaries, strains, guides, and more.</li>
+                <li className="flex gap-2"><Zap className="w-4 h-4 text-primary shrink-0 mt-0.5" /> Summarize linked threads and check whether a question got answered — try <span className="text-primary font-medium">@terpbot summarize this</span>.</li>
+                <li className="flex gap-2"><Sprout className="w-4 h-4 text-primary shrink-0 mt-0.5" /> Keep the garden tidy alongside the moderation team.</li>
+              </ul>
+              {profile.botStats && Object.keys(profile.botStats.byCommand).length > 0 && (
+                <div className="mt-4 pt-4 border-t border-border">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">Most-used commands</p>
+                  <div className="flex flex-wrap gap-2">
+                    {Object.entries(profile.botStats.byCommand)
+                      .sort((a, b) => b[1] - a[1])
+                      .slice(0, 8)
+                      .map(([cmd, n]) => (
+                        <span key={cmd} className="inline-flex items-center gap-1.5 rounded-full bg-secondary/60 px-2.5 py-1 text-xs">
+                          <span className="font-mono text-primary">/{cmd}</span>
+                          <span className="text-muted-foreground">×{n}</span>
+                        </span>
+                      ))}
+                  </div>
+                </div>
+              )}
             </div>
-            <ul className="space-y-2 text-sm text-muted-foreground">
-              <li className="flex gap-2"><HandMetal className="w-4 h-4 text-primary shrink-0 mt-0.5" /> Welcome new members and post the daily digest in <Link href="/chat" className="text-primary hover:underline">Chat</Link>.</li>
-              <li className="flex gap-2"><MessageSquare className="w-4 h-4 text-primary shrink-0 mt-0.5" /> Answer questions when you mention <span className="text-primary font-medium">@terpbot</span> — rep, streaks, diaries, strains, guides, and more.</li>
-              <li className="flex gap-2"><Zap className="w-4 h-4 text-primary shrink-0 mt-0.5" /> Summarize linked threads and check whether a question got answered — try <span className="text-primary font-medium">@terpbot summarize this</span>.</li>
-              <li className="flex gap-2"><Sprout className="w-4 h-4 text-primary shrink-0 mt-0.5" /> Keep the garden tidy alongside the moderation team.</li>
-            </ul>
-            <p className="text-xs text-muted-foreground mt-3 pt-3 border-t border-border">
-              I&apos;m fully automated — everything I say comes from real TerpTalk data, never a script pretending to be a grower.
-            </p>
-          </div>
+            <div className="bg-card rounded-lg border border-border p-4 mb-4">
+              <div className="flex items-center gap-2 mb-3">
+                <MessageSquare className="w-4 h-4 text-primary" />
+                <h2 className="text-lg font-semibold">How to use me</h2>
+              </div>
+              <div className="space-y-1.5">
+                {[
+                  "@terpbot what's my reputation?",
+                  "@terpbot summarize this thread",
+                  "@terpbot find cloning guides",
+                  "@terpbot /nextbadges",
+                ].map((ex) => (
+                  <code key={ex} className="block text-xs bg-secondary/50 rounded px-2.5 py-1.5 text-foreground/90">{ex}</code>
+                ))}
+              </div>
+              <p className="text-xs text-muted-foreground mt-3 pt-3 border-t border-border flex items-start gap-1.5">
+                <AlertTriangle className="w-3 h-3 shrink-0 mt-0.5" />
+                I&apos;m fully automated — everything I say comes from real TerpTalk data, never a script pretending to be a grower.
+                {profile.botStats && profile.botStats.fallbacks > 0 && (
+                  <span className="block mt-1">If I miss your meaning, rephrase — I&apos;m still learning.</span>
+                )}
+              </p>
+            </div>
+          </>
         ) : (
           <div className="bg-card rounded-lg border border-border p-4 mb-4">
           <div className="flex items-center gap-2 mb-3">
