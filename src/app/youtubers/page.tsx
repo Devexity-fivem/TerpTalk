@@ -2,8 +2,15 @@ import { prisma } from "@/lib/prisma"
 import Link from "next/link"
 import { Video } from "lucide-react"
 import { Avatar } from "@/components/ui/avatar"
+import { buildMetadata } from "@/lib/seo"
 
 export const revalidate = 60
+
+export const metadata = buildMetadata({
+  title: "Featured YouTubers",
+  description: "Cannabis growing creators featured on TerpTalk.",
+  pathname: "/youtubers",
+})
 
 export default async function YoutubersPage() {
   const badge = await prisma.badge.findUnique({

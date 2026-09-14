@@ -1,4 +1,11 @@
 import Link from "next/link"
+import { buildMetadata } from "@/lib/seo"
+
+export const metadata = buildMetadata({
+  title: "Maintenance",
+  description: "TerpTalk is temporarily down for maintenance.",
+  robots: { index: false, follow: false },
+})
 
 export default function MaintenancePage() {
   return (

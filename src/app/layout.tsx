@@ -24,7 +24,6 @@ const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://terp-talk.vercel.ap
 
 export const metadata: Metadata = {
   ...buildMetadata({
-    title: "TerpTalk — Cannabis Growing Community, Forum & Strain Database",
     description:
       "TerpTalk is a 21+ community for cannabis growers — grow journals, strain database, setup showcases, forums, and live chat. Share your grow, learn from others.",
   }),

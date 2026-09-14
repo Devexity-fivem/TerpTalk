@@ -2,11 +2,11 @@ import type { Metadata } from "next"
 import { buildMetadata } from "@/lib/seo"
 
 export const metadata: Metadata = buildMetadata({
-  title: "Admin Panel",
-  description: "TerpTalk administration panel.",
+  title: "Media Moderation",
+  description: "TerpTalk media moderation queue.",
   robots: { index: false, follow: false },
 })
 
-export default function AdminLayout({ children }: { children: React.ReactNode }) {
+export default function MediaModerationLayout({ children }: { children: React.ReactNode }) {
   return children
 }

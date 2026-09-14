@@ -4,6 +4,13 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { isModerator } from "@/lib/security"
 import EditGuideForm from "./edit-guide-form"
+import { buildMetadata } from "@/lib/seo"
+
+export const metadata = buildMetadata({
+  title: "Edit Guide",
+  description: "Edit your TerpTalk grow guide.",
+  robots: { index: false, follow: false },
+})
 
 export default async function EditGuidePage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params

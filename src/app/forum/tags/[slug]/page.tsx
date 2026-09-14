@@ -1,9 +1,25 @@
 import { prisma } from "@/lib/prisma"
 import { publicUserSelect } from "@/lib/security"
+import { buildMetadata } from "@/lib/seo"
 import Link from "next/link"
 import { notFound } from "next/navigation"
 
 export const dynamic = "force-dynamic"
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ slug: string }>
+}) {
+  const { slug } = await params
+  const tag = await prisma.tag.findUnique({ where: { slug }, select: { name: true } })
+  if (!tag) return buildMetadata({ title: "Tag not found", robots: { index: false, follow: false } })
+  return buildMetadata({
+    title: `#${tag.name}`,
+    description: `Forum discussions tagged #${tag.name} on TerpTalk.`,
+    pathname: `/forum/tags/${slug}`,
+  })
+}
 
 export default async function TagThreadsPage({
   params,
