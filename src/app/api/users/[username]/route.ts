@@ -44,6 +44,7 @@ async function getPublicProfileData(username: string) {
         avatarFrame: true,
         profileTitle: true,
         profileTheme: true,
+        publicMilestoneOptOut: true,
         user: {
           select: {
             id: true,
@@ -153,15 +154,18 @@ export async function GET(
       hasFallbacks: fullStats.fallbacks > 0,
     }
 
-    // Recent public reputation events — powers the profile's Reputation card.
-    const recentRep = isBot
-      ? []
-      : await prisma.reputationEvent.findMany({
-          where: { userId: profile.user.id, type: { in: [...PUBLIC_REP_TYPES] } },
-          orderBy: { createdAt: "desc" },
-          take: 6,
-          select: { id: true, type: true, amount: true, reversedAt: true, createdAt: true },
-        })
+    // Recent public reputation events — powers the profile's Reputation
+    // card. Per-event timestamps disclose activity cadence, so members who
+    // opt out of public recognition don't expose them.
+    const recentRep =
+      isBot || profile.publicMilestoneOptOut
+        ? []
+        : await prisma.reputationEvent.findMany({
+            where: { userId: profile.user.id, type: { in: [...PUBLIC_REP_TYPES] } },
+            orderBy: { createdAt: "desc" },
+            take: 6,
+            select: { id: true, type: true, amount: true, reversedAt: true, createdAt: true },
+          })
 
     // Use JWT token for the viewer instead of a full DB session lookup.
     const token = await getToken({ req: request, secret: process.env.NEXTAUTH_SECRET, cookieName: sessionCookieName })
@@ -231,7 +235,9 @@ export async function GET(
         profileTitle: profile.profileTitle,
         customTitle: getProfileTitle(profile.profileTitle)?.name ?? null,
         profileTheme: profile.profileTheme,
-        growStreak: growStreak.streak,
+        // A live streak ending today/yesterday leaks same-day activity —
+        // members who opted out of public recognition don't expose it.
+        growStreak: profile.publicMilestoneOptOut ? 0 : growStreak.streak,
         totalUpdates: growStreak.totalUpdates,
         harvestedDiaries: growStreak.harvestedDiaries,
         badges: profile.user.badges.map((b) => ({

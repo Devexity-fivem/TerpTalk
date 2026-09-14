@@ -27,7 +27,7 @@ import { runBotCommand } from "@/lib/terpbot-data"
 import { recordBotEvent, countEntityLinks } from "@/lib/terpbot-events"
 import { applyAccountActionInTx, logModAction } from "@/lib/moderation"
 import { logSecurityEvent } from "@/lib/security"
-import { reverseReputationByActor } from "@/lib/reputation"
+import { reverseReputationByActor, recordChatMessage } from "@/lib/reputation"
 
 type ChatMessageWithAuthor = {
   id: string
@@ -263,9 +263,7 @@ export async function POST(request: NextRequest) {
           },
           include: { author: { select: chatAuthorSelect } },
         })
-        await prisma.profile
-          .updateMany({ where: { userId }, data: { chatMessageCount: { increment: 1 } } })
-          .catch(() => null)
+        await recordChatMessage(userId)
         const dto = toChatDto(message)
         getPusher()?.trigger(`private-chat-${roomId}`, "new-message", dto).catch((e) => console.error("[pusher] command message push failed:", roomId, e))
         return NextResponse.json({ ok: true, message: dto })

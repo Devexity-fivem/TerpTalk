@@ -4,7 +4,7 @@ import { sessionCookieName } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { unauthorized, chatAuthorSelect, LIMITS, getClientIp, logSecurityEvent, isSessionValid, forbidden, isModerator, isStaff, enforceLinkTrust } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
-import { repRateLimit, getTierPerks } from "@/lib/reputation"
+import { repRateLimit, getTierPerks, recordChatMessage } from "@/lib/reputation"
 import { notifyMentions } from "@/lib/mentions"
 import { getPusher } from "@/lib/pusher"
 import { postBotMessage } from "@/lib/terpbot"
@@ -270,11 +270,10 @@ export async function POST(request: NextRequest) {
       },
     })
 
-    // Lifetime counter for social badges — immune to room clears and the
-    // 3-day prune, which used to reset progress.
-    await prisma.profile
-      .updateMany({ where: { userId }, data: { chatMessageCount: { increment: 1 } } })
-      .catch(() => null)
+    // Lifetime counter for social badges — daily-capped so chat spam
+    // can't speed-run badges. Also runs a throttled badge check since
+    // chat progress never touches the rep-award pipeline.
+    await recordChatMessage(userId)
 
     const dto = messageDto(message as unknown as ChatMessageWithAuthor)
 

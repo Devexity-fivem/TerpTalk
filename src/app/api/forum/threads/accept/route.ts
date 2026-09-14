@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma"
 import { isBanned, isModerator, forbidden, unauthorized, getClientIp, logSecurityEvent } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
 import { awardReputation, reverseReputationByKey, REP_POINTS } from "@/lib/reputation"
+import { ACCEPT_MIN_ACTOR_AGE_HOURS, ACCEPT_MIN_ACTOR_REP } from "@/lib/reputation-config"
 import { checkMaintenance } from "@/lib/maintenance"
 import { notify, postDeepLink } from "@/lib/notify"
 import { after } from "next/server"
@@ -17,7 +18,7 @@ export async function POST(request: Request) {
 
     const user = await prisma.user.findUnique({
       where: { id: session.user.id },
-      select: { id: true, role: true, banned: true },
+      select: { id: true, role: true, banned: true, createdAt: true, profile: { select: { reputation: true } } },
     })
     if (!user) return unauthorized()
 
@@ -112,8 +113,13 @@ export async function POST(request: Request) {
     }
 
     // Award reputation for helpful answer — keyed per post so
-    // unaccept/re-accept cycles can't farm it.
-    if (thread.acceptedAnswerId !== postId) {
+    // unaccept/re-accept cycles can't farm it. The accept itself works for
+    // anyone, but the payout is trust-gated: a brand-new or zero-rep
+    // acceptor doesn't pay — a fresh sockpuppet can't farm +30s for a main.
+    const acceptorTrusted =
+      Date.now() - user.createdAt.getTime() >= ACCEPT_MIN_ACTOR_AGE_HOURS * 3600 * 1000 &&
+      (user.profile?.reputation ?? 0) >= ACCEPT_MIN_ACTOR_REP
+    if (thread.acceptedAnswerId !== postId && acceptorTrusted) {
       await awardReputation(
         post.authorId,
         "HELPFUL_ANSWER",
@@ -121,6 +127,27 @@ export async function POST(request: Request) {
         `Accepted answer in "${thread.title.slice(0, 50)}"`,
         { key: `accept:${postId}`, actorId: user.id, sourceType: "POST", sourceId: postId }
       ).catch(() => {})
+    }
+
+    // Small peer-gated bonus for the OP who curates their own thread —
+    // requires another member's answer to exist, so it can't be solo-farmed.
+    // Keyed per thread so unmark/remark cycles can't repeat it. Moderators
+    // marking answers don't trigger it — only the OP's own curation.
+    if (
+      thread.acceptedAnswerId !== postId &&
+      user.id === thread.authorId &&
+      post.authorId !== thread.authorId
+    ) {
+      await awardReputation(
+        thread.authorId,
+        "ACCEPT_MARKED",
+        REP_POINTS.ACCEPT_MARKED,
+        `Marked an accepted answer on "${thread.title.slice(0, 50)}"`,
+        { key: `accept-op:${threadId}`, actorId: post.authorId, sourceType: "THREAD", sourceId: threadId }
+      ).catch(() => {})
+    }
+
+    if (thread.acceptedAnswerId !== postId) {
 
       // Hidden categories never notify — title/link would leak staff-only content.
       if (!thread.category?.hidden) {

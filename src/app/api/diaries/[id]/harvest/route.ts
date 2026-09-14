@@ -6,6 +6,7 @@ import { unauthorized, forbidden, isBanned, isAdmin } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
 import { checkMaintenance } from "@/lib/maintenance"
 import { announceHarvest } from "@/lib/terpbot"
+import { awardReputation, grantBadge, REP_POINTS } from "@/lib/reputation"
 import { revalidateTag } from "next/cache"
 import { VALID_YIELD_UNITS } from "@/lib/yield"
 
@@ -103,6 +104,29 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   revalidateTag("diaries", { expire: 0 })
   revalidateTag("leaderboard", { expire: 0 })
   revalidateTag("strains", { expire: 0 })
+
+  // Harvest payout — once per diary (keyed), only for a documented cycle:
+  // at least 4 diary updates. Toggling harvested off/on can't re-pay; the
+  // payout is to the diary's AUTHOR even when an admin flips the flag.
+  if (harvested && !diary.harvested) {
+    const updateCount = await prisma.diaryUpdate.count({ where: { diaryId: id } })
+    if (updateCount >= 4) {
+      await awardReputation(
+        diary.authorId,
+        "HARVEST_LOGGED",
+        REP_POINTS.HARVEST_LOGGED,
+        `Logged harvest for "${updated.title.slice(0, 60)}"`,
+        { key: `harvest:${id}`, sourceType: "DIARY", sourceId: id }
+      ).catch(() => {})
+    }
+
+    // Photoperiod — a single diary spanning a whole season to harvest.
+    const spanDays =
+      (new Date(updated.harvestedAt ?? Date.now()).getTime() - new Date(updated.startDate).getTime()) / 86400000
+    if (spanDays >= 120) {
+      await grantBadge(diary.authorId, "Photoperiod", { announce: true }).catch(() => false)
+    }
+  }
 
   // TerpBot celebrates the harvest in community chat — only on the
   // false→true transition so toggling can't spam the room. The diary

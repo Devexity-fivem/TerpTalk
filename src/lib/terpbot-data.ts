@@ -8,10 +8,11 @@ import { prisma } from "@/lib/prisma"
 import { activeAuthor, blockExistsBetween, containsExternalLink, LIMITS, USERNAME_REGEX, rankableProfile, REPUTATION_ORDER } from "@/lib/security"
 import { extractThreadRef, type ThreadRef } from "@/lib/terpbot-context"
 import { postDeepLink } from "@/lib/notify"
-import { getNextTier, getTierProgress, getRepStage, getStageProgress } from "@/lib/reputation-config"
+import { getNextTier, getTierProgress, getRepStage, getStageProgress, getTrustStanding, getNextTrustStanding } from "@/lib/reputation-config"
+import { getQuestProgress } from "@/lib/quests"
 import { nextLockedCosmetic } from "@/lib/cosmetics"
 import { getGrowStreak } from "@/lib/grow-streak"
-import { BADGE_RULES, getUserStats } from "@/lib/reputation"
+import { BADGE_RULES, getUserStats, getTrustScore } from "@/lib/reputation"
 import { BADGE_REGISTRY, getBadgeByName } from "@/lib/badge-registry"
 import { currentWeekKey } from "@/lib/week"
 import { escapeLike, getStrainGrowStats } from "@/lib/strain-stats"
@@ -296,7 +297,25 @@ async function handle(name: string, ctx: BotCommandCtx): Promise<BotCommandResul
       const stage = getRepStage(t.reputation)
       const next = getNextTier(t.reputation)
       const nextText = next ? ` Next: ${next.name} at ${next.threshold.toLocaleString()} rep (${(next.threshold - t.reputation).toLocaleString()} to go).` : " Top tier reached!"
-      return ok(`📈 @${t.username} — ${t.reputation.toLocaleString()} rep · Grow Level ${stage.level} (${stage.stageName}) · ${stage.tier.name} tier.${nextText} /u/${t.username}`)
+      const trust = await getTrustScore(t.userId)
+      const standing = getTrustStanding(trust)
+      const nextStanding = getNextTrustStanding(trust)
+      const standingText = nextStanding
+        ? ` Standing: ${standing.icon} ${standing.name} (${nextStanding.name} at ${nextStanding.min.toLocaleString()} trust).`
+        : ` Standing: ${standing.icon} ${standing.name} — the highest.`
+      return ok(`📈 @${t.username} — ${t.reputation.toLocaleString()} rep · Grow Level ${stage.level} (${stage.stageName}) · ${stage.tier.name} tier.${nextText}${standingText} /u/${t.username}`)
+    }
+
+    case "quests": {
+      const quests = await getQuestProgress(ctx.userId)
+      if (!quests.length) return ok(`⚡ No quests today — check back tomorrow. /progress`)
+      const lines = quests.map((q) => {
+        const state = q.paid ? "✓ paid" : q.done ? "✓ done" : `${q.progress}/${q.target}`
+        return `${q.icon} ${q.title} — ${q.description} (${state}, +${q.reward} rep)`
+      })
+      const done = quests.filter((q) => q.done || q.paid).length
+      const perfect = done === quests.length ? "\nAll done today — perfect-day bonus earned!" : ""
+      return ok(`⚡ @${ctx.displayName}'s quests today (${done}/${quests.length}):\n${lines.join("\n")}${perfect}\n/progress`)
     }
 
     case "progress": {

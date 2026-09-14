@@ -10,7 +10,7 @@
 import { useEffect, useRef, useState } from "react"
 import { useSession } from "next-auth/react"
 import Link from "next/link"
-import { Sprout, Lock, Target, ChevronRight, Award } from "lucide-react"
+import { Sprout, Lock, Target, ChevronRight, Award, Zap } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { signInHref } from "@/lib/callback-url"
 
@@ -30,6 +30,15 @@ interface ProgressionData {
     week: string
     endsAt: string
     items: { slug: string; title: string; icon: string; reward: number; target: number; progress: number; done: boolean; paid: boolean }[]
+  }
+  quests?: {
+    day: string
+    items: { slug: string; title: string; icon: string; reward: number; target: number; progress: number; done: boolean; paid: boolean }[]
+  }
+  trust?: {
+    score: number
+    standing: { name: string; icon: string; color: string; bg: string }
+    next: { name: string; min: number } | null
   }
   recentBadges: { name: string; icon: string | null; earnedAt: string }[]
 }
@@ -88,6 +97,14 @@ export default function ProgressionPanel() {
         <span className={cn("ml-auto inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium", data.tier.bg, data.tier.color)}>
           <span aria-hidden="true">{data.tier.icon}</span> {data.tier.name}
         </span>
+        {data.trust && (
+          <span
+            title={`Community standing — earned through helpful, peer-validated contributions (${data.trust.score.toLocaleString()} trust)`}
+            className={cn("inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium", data.trust.standing.bg, data.trust.standing.color)}
+          >
+            <span aria-hidden="true">{data.trust.standing.icon}</span> {data.trust.standing.name}
+          </span>
+        )}
       </div>
 
       <div className="flex items-baseline gap-2 mb-1">
@@ -146,6 +163,36 @@ export default function ProgressionPanel() {
               Lv {u.level} <span className="text-foreground/70">@ {u.rung.toLocaleString()}</span>
             </span>
           ))}
+        </div>
+      )}
+
+      {/* Today's quests strip */}
+      {data.quests && data.quests.items.length > 0 && (
+        <div className="mt-3 pt-3 border-t border-border">
+          <div className="flex items-center gap-1.5 text-xs font-medium mb-2">
+            <Zap className="w-3.5 h-3.5 text-primary" aria-hidden="true" />
+            Today&apos;s quests — {data.quests.items.filter((q) => q.done || q.paid).length}/{data.quests.items.length} complete
+            <Link href="/progress" className="ml-auto text-primary hover:underline">My progress</Link>
+          </div>
+          <div className="space-y-1.5">
+            {data.quests.items.map((q) => (
+              <div key={q.slug} className="flex items-center gap-2 text-xs">
+                <span aria-hidden="true">{q.icon}</span>
+                <span className={cn("min-w-0 truncate", (q.done || q.paid) && "text-muted-foreground")}>{q.title}</span>
+                <div className="ml-auto flex items-center gap-2 shrink-0">
+                  <div className="w-16 h-1 rounded-full bg-secondary overflow-hidden">
+                    <div
+                      className={cn("h-full rounded-full", q.done || q.paid ? "bg-primary" : "bg-primary/50")}
+                      style={{ width: `${Math.min(100, (q.progress / q.target) * 100)}%` }}
+                    />
+                  </div>
+                  <span className={cn("font-medium w-10 text-right", q.done || q.paid ? "text-primary" : "text-muted-foreground")}>
+                    {q.paid ? `+${q.reward} ✓` : `+${q.reward}`}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 

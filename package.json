@@ -26,7 +26,8 @@
     "test:terpbot-pipeline": "tsx scripts/terpbot-pipeline-tests.mts",
     "test:privacy": "tsx scripts/privacy-controls-tests.mts",
     "test:info-pages": "tsx scripts/info-pages-tests.mts",
-    "test:self-service": "tsx scripts/self-service-tests.mts"
+    "test:self-service": "tsx scripts/self-service-tests.mts",
+    "test:progression": "tsx scripts/progression-tests.mts"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",

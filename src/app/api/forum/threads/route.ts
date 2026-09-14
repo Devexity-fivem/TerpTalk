@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma"
 import { unauthorized, publicUserSelect, LIMITS, getClientIp, logSecurityEvent, forbidden, containsExternalLink, isTrustedForLinks, isModerator, isAdmin, isBanned } from "@/lib/security"
 import { requireModerator } from "@/lib/require-staff"
 import { awardReputation, reverseReputationBySource, repRateLimit, getTierPerks, REP_POINTS, REP_TIERS } from "@/lib/reputation"
+import { THREAD_MIN_PAID_LENGTH } from "@/lib/reputation-config"
 import { notifyMentions } from "@/lib/mentions"
 import { notifyMany, invalidateNotificationsForLink, postDeepLink } from "@/lib/notify"
 import { logModAction } from "@/lib/moderation"
@@ -233,13 +234,17 @@ export async function POST(request: Request) {
       },
     })
 
-    await awardReputation(
-      session.user.id,
-      "THREAD_CREATED",
-      REP_POINTS.THREAD_CREATED,
-      `Created thread "${title.slice(0, 60)}"`,
-      { key: `thread:${thread.id}`, sourceType: "THREAD", sourceId: thread.id }
-    ).catch(() => {})
+    // Paying floor: threads under ~40 chars still post — they just don't
+    // earn rep. One-word thread spam can't farm the 3/day payout.
+    if (content.trim().length >= THREAD_MIN_PAID_LENGTH) {
+      await awardReputation(
+        session.user.id,
+        "THREAD_CREATED",
+        REP_POINTS.THREAD_CREATED,
+        `Created thread "${title.slice(0, 60)}"`,
+        { key: `thread:${thread.id}`, sourceType: "THREAD", sourceId: thread.id }
+      ).catch(() => {})
+    }
 
     // Notify @mentions in the opening post — deep link lands on the OP.
     // Hidden categories never notify — title/link would leak staff-only content.

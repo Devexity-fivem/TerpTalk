@@ -28,10 +28,21 @@ export async function GET(
     }
 
     const profile = await prisma.profile.findFirst({
-      where: { username: { equals: username, mode: "insensitive" }, user: { banned: false } },
-      select: { userId: true, reputation: true },
+      where: {
+        username: { equals: username, mode: "insensitive" },
+        // Same visibility rule as the public profile — a suspended member's
+        // activity timeline shouldn't stay public while their profile is
+        // hidden, and milestone opt-out covers this recognition surface too.
+        user: { banned: false, OR: [{ suspendedUntil: null }, { suspendedUntil: { lte: new Date() } }] },
+      },
+      select: { userId: true, reputation: true, publicMilestoneOptOut: true },
     })
     if (!profile || username.toLowerCase() === TERPBOT_USERNAME) {
+      return NextResponse.json({ error: "User not found" }, { status: 404 })
+    }
+    // The per-event history is a public activity-cadence record — members
+    // who opted out of public recognition don't expose it.
+    if (profile.publicMilestoneOptOut) {
       return NextResponse.json({ error: "User not found" }, { status: 404 })
     }
 

@@ -112,6 +112,16 @@ const MATCHERS: Matcher[] = [
     },
   },
   {
+    name: "quests",
+    patterns: [
+      /\b(daily )?quests?\b/,
+      /\bwhat (should|can) i do (today|now)\b/,
+      /\bwhat('s| is) (there|left) to do\b/,
+      /\btoday('s|s) (goals?|tasks?|quests?)\b/,
+      /^quests?$/,
+    ],
+  },
+  {
     name: "nextbadges",
     patterns: [
       /\bnext badge/,

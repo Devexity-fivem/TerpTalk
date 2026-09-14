@@ -6,7 +6,8 @@
 // progression metadata.
 //
 // Kinds: "tier" (major — large card, longest dwell), "stage" (level-up —
-// compact card), "badge" (achievement unlock), "challenge" (weekly reward).
+// compact card), "badge" (achievement unlock), "challenge" (weekly reward),
+// "quest" (daily reward — quietest dwell).
 // Plain reputation notifications carry no metadata and stay silent, so
 // ordinary +2 rep events never produce a popup.
 //
@@ -64,7 +65,7 @@ export default function MilestoneCelebration() {
         metadata?: MilestoneMeta | null
       }
       const kind = n?.metadata?.kind
-      if (!n?.id || !kind || !["tier", "stage", "badge", "challenge"].includes(kind)) return
+      if (!n?.id || !kind || !["tier", "stage", "badge", "challenge", "quest"].includes(kind)) return
       const id = n.id
       if (seen.current.has(id)) return
       seen.current.add(id)
@@ -78,7 +79,7 @@ export default function MilestoneCelebration() {
       }
       setItems((prev) => [...prev.slice(-(MAX_VISIBLE - 1)), item])
 
-      const dwell = kind === "tier" ? 12_000 : kind === "badge" ? 8_000 : 6_000
+      const dwell = kind === "tier" ? 12_000 : kind === "badge" ? 8_000 : kind === "quest" ? 5_000 : 6_000
       timers.current.set(id, setTimeout(() => dismiss(id), dwell))
     }
 
@@ -117,7 +118,8 @@ function CelebrationCard({ item, onDismiss }: { item: Item; onDismiss: () => voi
   const { meta } = item
   const isTier = meta.kind === "tier"
   const isBadge = meta.kind === "badge"
-  const Icon = isTier || isBadge ? Trophy : meta.kind === "challenge" ? Target : Sprout
+  const Icon =
+    isTier || isBadge ? Trophy : meta.kind === "challenge" || meta.kind === "quest" ? Target : Sprout
 
   return (
     <div
@@ -152,7 +154,9 @@ function CelebrationCard({ item, onDismiss }: { item: Item; onDismiss: () => voi
                   ? "Achievement unlocked"
                   : meta.kind === "challenge"
                     ? "Challenge complete"
-                    : "Your garden is growing"}
+                    : meta.kind === "quest"
+                      ? "Quest complete"
+                      : "Your garden is growing"}
             </p>
             <p className={cn("font-semibold leading-tight", isTier ? "text-base" : "text-sm")}>
               {item.title}

@@ -10,12 +10,13 @@ import { useToast } from "@/components/ui/toast"
 import { cn } from "@/lib/utils"
 
 interface Achievement {
-  name: string
+  name: string | null
   description: string
   requirement: string
   rarity: string
   category: string
-  icon: string
+  icon: string | null
+  hidden?: boolean
   earned: boolean
   earnedAt: string | null
   pinned: boolean
@@ -31,6 +32,7 @@ export default function AchievementsPage() {
   const { toast } = useToast()
   const [achievements, setAchievements] = useState<Achievement[] | null>(null)
   const [categories, setCategories] = useState<Record<string, string>>({})
+  const [showcase, setShowcase] = useState<{ pinned: number; slots: number } | null>(null)
   const [filter, setFilter] = useState<Filter>("all")
   const [pinBusy, setPinBusy] = useState<string | null>(null)
 
@@ -47,6 +49,7 @@ export default function AchievementsPage() {
       .then((d) => {
         setAchievements(d?.achievements ?? [])
         setCategories(d?.categories ?? {})
+        setShowcase(d?.showcase ?? null)
       })
       .catch(() => setAchievements([]))
   }, [status])
@@ -120,7 +123,10 @@ export default function AchievementsPage() {
             <h1 className="text-2xl font-bold">Achievements</h1>
           </div>
           <p className="text-sm text-muted-foreground">
-            {earnedCount} of {achievements.length} earned. Pin your favorites to showcase them on your profile.
+            {earnedCount} of {achievements.length} earned.
+            {showcase
+              ? ` Pin up to ${showcase.slots} favorites to showcase on your profile (${showcase.pinned} pinned).`
+              : " Pin your favorites to showcase them on your profile."}
           </p>
         </div>
 
@@ -151,16 +157,32 @@ export default function AchievementsPage() {
               {categories[cat] ?? cat}
             </h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              {list.map((a) => (
+              {list.map((a, i) => (
                 <div
-                  key={a.name}
+                  key={a.name ?? `hidden-${cat}-${i}`}
                   className={cn(
                     "flex items-start gap-3 rounded-lg border border-border bg-card p-3",
                     !a.earned && "opacity-80"
                   )}
                 >
+                  {a.hidden && !a.earned ? (
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-secondary text-muted-foreground text-sm font-bold" aria-hidden="true">
+                          ?
+                        </span>
+                        <div>
+                          <div className="text-sm font-semibold text-muted-foreground">???</div>
+                          <div className="text-[10px] uppercase tracking-wider text-muted-foreground">{a.rarity}</div>
+                        </div>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-1.5">
+                        Something is waiting to be discovered.
+                      </p>
+                    </div>
+                  ) : (
                   <div className="flex-1 min-w-0">
-                    <AchievementBadge name={a.name} earned={a.earned} mode="profile" />
+                    <AchievementBadge name={a.name ?? ""} earned={a.earned} mode="profile" />
                     <p className="text-xs text-muted-foreground mt-1.5">{a.requirement}</p>
                     {a.progress && !a.earned && a.progress.direction === "lte" ? (
                       <p className="text-[10px] text-muted-foreground mt-1.5">
@@ -187,6 +209,7 @@ export default function AchievementsPage() {
                       </p>
                     )}
                   </div>
+                  )}
                   {a.earned && (
                     <button
                       onClick={() => togglePin(a)}

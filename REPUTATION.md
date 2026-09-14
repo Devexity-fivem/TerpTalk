@@ -1,7 +1,13 @@
-# Reputation 2.2
+# Reputation 2.3 — Gamified Progression
 
 TerpTalk's community trust and progression system. Every point has a reason,
 every award is traceable, and anything important is reversible.
+
+The ledger balance is the progression axis (it drives levels, tiers, and
+unlocks). **Community standing** is a separate, stricter metric: a filtered
+sum over peer-validated event types only — likes received, accepted answers,
+referrals, contest wins, staff recognition. Self-driven activity advances
+progression but cannot manufacture standing.
 
 ## Core model
 
@@ -40,6 +46,10 @@ Defined in `src/lib/reputation-config.ts` (`REP_POINTS`, `REP_CAPS`).
 | Budshot of the Week | +50 | per week | contest win |
 | Diary of the Month | +150 | per month | contest win |
 | Weekly challenge | +10–20 | per challenge per week | fixed roster, keyed `challenge:<week>:<slug>:<userId>` |
+| Daily quest | +5–10 | per quest per day | 3/day from a deterministic rotation, keyed `quest:<day>:<slug>:<userId>` |
+| Perfect day | +5 | once/day | all 3 daily quests done, keyed `quest-day:<day>:<userId>` |
+| Harvest logged | +15 | once per diary | first false→true harvest transition only |
+| Onboarding complete | +10 | once ever | profile-completion award, keyed |
 
 Verified members get a 1.5× floor bonus (a +1 stays +1; +2 → +3) once the
 account is 30+ days old.
@@ -162,16 +172,33 @@ specs so the grant rule and the UI progress bar can never disagree.
 - `Trusted Member` — whitelisted admin grant (`STAFF_AWARDED_BADGES`).
 - `BOT_BADGE_REGISTRY` — TerpBot-only achievements from `BotEvent` rows;
   never awardable to humans.
+- **Hidden badges** — registry entries with `hidden: true` render as "???"
+  on `/api/achievements` until earned (no name, description, or progress
+  leaks). They're checked inside `checkBadges`/`postAwardEffects` like any
+  other badge.
+- **Badge rep bonuses** — rare+ badges pay a one-time rep bonus on grant
+  (`BADGE_BONUS` in config); revoking a badge reverses its bonus via the
+  keyed ledger (`badge-bonus:<badgeId>:<userId>`), and re-earning reinstates.
+- **Admin badge tools** — `POST /api/admin/users` `badge` action can grant
+  or revoke any registered badge (not just the staff whitelist); every call
+  writes a `BADGE_ADJUSTMENT` moderation action + `SUSPICIOUS_ACTIVITY`
+  security event.
 
 ## Anti-abuse
 
 - **Prevention**: self-awards blocked, TerpBot can never earn, banned/suspended
   recipients skipped, keyed dedupe, per-type daily caps, 24h liker-age floor,
-  contest voter gates, one-vote-per-period unique indexes.
+  contest voter gates, one-vote-per-period unique indexes, accepted-answer
+  acceptor maturity gate (the thread author must be 24h+ and 10+ rep to pay
+  out `HELPFUL_ANSWER`), thread/strain content quality floors, harvest
+  one-shot keying (re-toggling can't re-farm), chat badge counter capped per
+  UTC day, diary-update rep clawed back when the day's last update is
+  deleted, onboarding/quest keys are replay-proof.
 - **Detection**: `/api/admin/reputation/flags` surfaces velocity spikes
   (excluding contest wins, staff adjustments, referrals, and challenge
-  payouts), reciprocal like pairs, reciprocal accepted answers, and likes
-  from brand-new accounts. Detection only — nothing auto-punishes.
+  payouts), reciprocal like pairs, reciprocal accepted answers, directed
+  accept concentration, referral concentration, and likes from brand-new
+  accounts. Detection only — nothing auto-punishes.
 - **Review**: moderator ledger view (`/api/moderation/reputation` GET),
   reputation history in the moderation user lookup, staff-action audit feed.
 - **Reversal**: single-event reversal (mods; `STAFF_ADJUSTMENT` rows need an
@@ -214,7 +241,30 @@ reversed activity stops counting automatically, and no progress table exists.
 Payouts are keyed `challenge:<isoWeek>:<slug>:<userId>` (~65 rep/week max,
 under the velocity flag). `evaluateChallenges()` runs in `/api/ping`'s
 deferred `after()` block on the ~15-minute staleness cadence — off the
-response path; `GET /api/challenges` is owner-only.
+response path; `GET /api/challenges` is owner-only. Replies in your own
+threads don't count toward reply-based challenges.
+
+## Daily quests
+
+`lib/quests.ts` — three quests per member per UTC day, selected by hashing
+`(dayKey, userId, slug)` over a fixed pool. No table, no cron: selection is
+deterministic and progress is recomputed from live rows/ledger entries the
+same way challenges are. Every quest requires distinct threads/members/days
+or a peer action — there is no "post N replies" quest. Payouts are keyed
+`quest:<day>:<slug>:<userId>` plus `quest-day:<day>:<userId>` for the
+perfect-day bonus; `evaluateQuests()` runs beside `evaluateChallenges()` in
+the `/api/ping` deferred block. Missed quests simply expire — no streak
+pressure, no punishment. Quest state is owner-only (`/progress`,
+`/api/progression`, TerpBot `/quests`).
+
+## Community standing (trust)
+
+`TRUST_STANDINGS` in reputation-config.ts labels a filtered trust score —
+the ledger sum over peer-validated types (`LIKE_RECEIVED`, `HELPFUL_ANSWER`,
+`REFERRAL`, `CONTEST_*`, `STAFF_*`) only. `getTrustScore()` computes it;
+labels run Unrooted → Known → Trusted → Respected → Pillar → Legend. It's
+shown on `/progress`, the Your Garden panel, and TerpBot `/rep` — never as
+a public ranking.
 
 ## User-facing surfaces
 

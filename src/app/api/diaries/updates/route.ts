@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { unauthorized, publicUserSelect, LIMITS, getClientIp, logSecurityEvent, isBanned, forbidden, enforceLinkTrust } from "@/lib/security"
-import { awardReputation, grantBadge, repRateLimit, REP_POINTS } from "@/lib/reputation"
+import { awardReputation, checkBadges, repRateLimit, reverseReputationByKey, REP_POINTS } from "@/lib/reputation"
 import { storeImages, deleteImagesIfUnreferenced } from "@/lib/blob"
 import { checkMaintenance } from "@/lib/maintenance"
 import { notifyMany } from "@/lib/notify"
@@ -206,24 +206,10 @@ export async function POST(request: Request) {
 
     revalidateTag("diaries", { expire: 0 })
 
-    // Award 7-day streak badge if earned
-    const recentUpdates = await prisma.diaryUpdate.findMany({
-      where: { authorId: session.user.id },
-      orderBy: { createdAt: "desc" },
-      take: 30,
-      select: { createdAt: true },
-    })
-    const days = [...new Set(recentUpdates.map((u) => u.createdAt.toDateString()))].map((d) => new Date(d).getTime()).sort((a, b) => b - a)
-    let streak = 0
-    for (let i = 0; i < days.length; i++) {
-      if (Math.abs(days[i] - (days[0] - i * 86400000)) < 43200000) streak++
-      else break
-    }
-    if (streak >= 7) {
-      await grantBadge(session.user.id, "Dedicated Grower", {
-        content: "You earned the \"Dedicated Grower\" badge — 7 days of updates in a row, impressive consistency!",
-      })
-    }
+    // Streak and diary badges are rule-backed via the growStreak stat —
+    // run the standard check so updates under the 10-char rep floor (which
+    // skip the award pipeline) still advance badges.
+    await checkBadges(session.user.id).catch(() => {})
 
     // Notify diary followers (not the author) — notifyMany filters
     // prefs, banned recipients, and blocks in bulk.
@@ -264,8 +250,9 @@ export async function POST(request: Request) {
 // DiaryUpdate has no `deleted` flag; nothing references it except its own
 // images (cascade), so a hard delete is safe. Derived state (streaks,
 // stage runs, harvest report, counts) recomputes from remaining updates.
-// Note: per-day diary rep is keyed to the diary+day, not the update row —
-// deleting an update does not claw back that day's points.
+// Per-day diary rep is keyed to the diary+day — deleting the LAST update
+// of that diary+day claws the day's points back, so post-then-delete can't
+// launder filler updates into kept rep.
 export async function DELETE(request: Request) {
   try {
     const session = await getServerSession(authOptions)
@@ -281,7 +268,7 @@ export async function DELETE(request: Request) {
     const update = await prisma.diaryUpdate.findUnique({
       where: { id },
       select: {
-        id: true, authorId: true,
+        id: true, authorId: true, diaryId: true, createdAt: true,
         diary: { select: { authorId: true, deleted: true } },
         images: { select: { url: true } },
       },
@@ -294,6 +281,21 @@ export async function DELETE(request: Request) {
     }
 
     await prisma.diaryUpdate.delete({ where: { id } })
+
+    // Claw back the day's diary-update rep if this was the last remaining
+    // update for that diary on that UTC day — otherwise delete-the-evidence
+    // keeps the payout. Reverse-by-key is a no-op when no award exists.
+    const dayStart = new Date(Date.UTC(
+      update.createdAt.getUTCFullYear(), update.createdAt.getUTCMonth(), update.createdAt.getUTCDate()
+    ))
+    const dayEnd = new Date(dayStart.getTime() + 86400000)
+    const remaining = await prisma.diaryUpdate.count({
+      where: { diaryId: update.diaryId, createdAt: { gte: dayStart, lt: dayEnd } },
+    })
+    if (remaining === 0) {
+      const dayKey = update.createdAt.toISOString().slice(0, 10)
+      await reverseReputationByKey(`diaryupd:${update.diaryId}:${dayKey}`, "Diary update deleted").catch(() => null)
+    }
     deleteImagesIfUnreferenced(update.images.map((i) => i.url)).catch(() => {})
     revalidateTag("diaries", { expire: 0 })
 

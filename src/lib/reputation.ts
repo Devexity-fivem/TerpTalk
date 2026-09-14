@@ -16,11 +16,16 @@ import { after } from "next/server"
 import { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
 import {
+  BADGE_BONUS,
+  CHAT_DAILY_BADGE_CAP,
+  LIKE_MIN_ACTOR_AGE_HOURS,
   REP_CAPS,
   REP_EVENT_TYPES,
   REP_POINTS,
+  REFERRAL_MAX_PER_WEEK,
   REFERRAL_MIN_AGE_HOURS,
   REFERRAL_MIN_REP,
+  TRUST_EVENT_TYPES,
   VERIFIED_MIN_AGE_DAYS,
   VERIFIED_MIN_REPUTATION,
   VERIFIED_MULTIPLIER,
@@ -30,10 +35,11 @@ import {
 } from "@/lib/reputation-config"
 import { canEquip, cosmeticsUnlockedBetween, nextLockedCosmetic } from "@/lib/cosmetics"
 import { seedBadges } from "@/lib/badges"
-import { BADGE_REGISTRY } from "@/lib/badge-registry"
+import { BADGE_REGISTRY, BADGE_CATEGORIES, type BadgeCategory } from "@/lib/badge-registry"
 import { announceBadges, announceTierUp } from "@/lib/terpbot"
 import { notify } from "@/lib/notify"
 import { rateLimit } from "@/lib/rate-limit"
+import { getGrowStreak } from "@/lib/grow-streak"
 import { TERPBOT_USERNAME } from "@/lib/terpbot-constants"
 
 // Defense in depth: TerpBot can never earn human reputation or human
@@ -64,6 +70,10 @@ export {
   publicRepLabel,
   type ReputationTier,
   type RepStage,
+  getTrustStanding,
+  getNextTrustStanding,
+  TRUST_EVENT_TYPES,
+  type TrustStanding,
 } from "@/lib/reputation-config"
 
 export interface AwardOptions {
@@ -477,28 +487,65 @@ export async function postDemotionEffects(userId: string) {
 
 // ─── Side effects (deferred; never part of the balance transaction) ───
 
+// Event types that count as a real contribution for the hidden discovery
+// badges — check-ins, bookkeeping, and payouts deliberately don't count.
+const CONTRIBUTION_TYPES = new Set([
+  "THREAD_CREATED",
+  "POST_CREATED",
+  "DIARY_CREATED",
+  "DIARY_UPDATE",
+  "STRAIN_CREATED",
+  "STRAIN_PHOTO",
+  "SETUP_CREATED",
+])
+
 async function postAwardEffects(
   userId: string,
   user: AwardUser,
   oldRep: number,
-  newRep: number
+  newRep: number,
+  type?: string
 ) {
   const announcedTier = await checkTierChange(userId, oldRep, newRep)
   await checkStageChange(userId, oldRep, newRep)
   await autoVerify(userId, newRep, user)
   await checkBadges(userId, { announcedTierName: announcedTier })
   await maybePayReferral(userId, user, newRep)
+  if (type && CONTRIBUTION_TYPES.has(type)) {
+    await checkDiscoveryBadges(userId).catch(() => null)
+  }
 }
 
 // Exported for paths that write reputation directly (admin adjustments,
 // contest resolutions) — they must still run the full milestone pipeline.
-export async function runPostAwardEffects(userId: string, oldRep: number, newRep: number) {
+export async function runPostAwardEffects(userId: string, oldRep: number, newRep: number, type?: string) {
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: { role: true, createdAt: true, banned: true, suspendedUntil: true },
   })
   if (!user) return
-  await postAwardEffects(userId, user, oldRep, newRep)
+  await postAwardEffects(userId, user, oldRep, newRep, type)
+}
+
+// Hidden discovery badges tied to contribution events (not stats):
+//   Four Twenty — any contribution on April 20 UTC.
+//   Comeback    — first contribution after a 90+ day contribution gap.
+async function checkDiscoveryBadges(userId: string) {
+  const now = new Date()
+  if (now.getUTCMonth() === 3 && now.getUTCDate() === 20) {
+    await grantBadge(userId, "Four Twenty", { announce: true })
+  }
+
+  const prev = await prisma.reputationEvent.findMany({
+    where: { userId, type: { in: [...CONTRIBUTION_TYPES] }, reversalOfId: null },
+    orderBy: { createdAt: "desc" },
+    take: 2,
+    select: { createdAt: true },
+  })
+  // prev[0] is the contribution just made; prev[1] is the one before it.
+  if (prev.length === 2 && now.getTime() - prev[1].createdAt.getTime() > 90 * 86400000) {
+    await grantBadge(userId, "Comeback", { announce: true })
+  }
 }
 
 // Once-ever milestone claims: a keyed 0-amount MILESTONE ledger row. The
@@ -540,6 +587,20 @@ async function maybePayReferral(userId: string, user: AwardUser, newRep: number)
   })
   if (!referrer || referrer.userId === userId) return
 
+  // Weekly payout cap — a sock farm grinding 25 rep per fake signup can't
+  // earn unbounded referral rep. Organic referrals (a few a week at most)
+  // never notice the limit.
+  const weekAgo = new Date(Date.now() - 7 * 86400000)
+  const recentPayouts = await prisma.reputationEvent.count({
+    where: {
+      userId: referrer.userId,
+      type: "REFERRAL",
+      reversedAt: null,
+      createdAt: { gte: weekAgo },
+    },
+  })
+  if (recentPayouts >= REFERRAL_MAX_PER_WEEK) return
+
   const res = await applyReputationAward(
     referrer.userId,
     "REFERRAL",
@@ -563,7 +624,7 @@ async function maybePayReferral(userId: string, user: AwardUser, newRep: number)
     select: { role: true, createdAt: true, banned: true, suspendedUntil: true },
   })
   if (referrerUser && res.newRep !== undefined) {
-    await postAwardEffects(referrer.userId, referrerUser, res.oldRep ?? res.newRep, res.newRep)
+    await postAwardEffects(referrer.userId, referrerUser, res.oldRep ?? res.newRep, res.newRep, "REFERRAL")
   }
 }
 
@@ -589,7 +650,7 @@ export async function awardReputation(
 
   const effects = async () => {
     try {
-      await postAwardEffects(userId, subject, res.oldRep ?? 0, res.newRep ?? 0)
+      await postAwardEffects(userId, subject, res.oldRep ?? 0, res.newRep ?? 0, type)
     } catch (error) {
       console.error("[awardReputation] side-effect error:", error)
     }
@@ -619,6 +680,12 @@ export interface UserStats {
   referrals: number
   reputation: number
   memberNumber: number // 1-based registration order — powers "Early Supporter"
+  harvestedDiaries: number // diaries marked harvested — bounded by real grow time
+  growStreak: number // consecutive UTC days with a diary update
+  wellLikedPosts: number // posts liked by 3+ distinct members
+  distinctAskers: number // threads' distinct authors where user's reply is the accepted answer
+  likesGivenDistinct: number // distinct members the user has liked
+  acceptsMarked: number // own threads where the user marked an accepted answer
 }
 
 // Badge rules — GENERATED from BADGE_REGISTRY progress specs so the grant
@@ -646,7 +713,8 @@ let badgeSeedComplete = false
 
 export async function getUserStats(userId: string, needed?: Set<keyof UserStats>): Promise<UserStats> {
   const want = (k: keyof UserStats) => !needed || needed.has(k)
-  const [posts, threads, diaries, diaryUpdates, , strains, strainPhotos, setups, likesReceived, acceptedAnswers, paidReferrals, user] =
+  const likeMinAge = new Date(Date.now() - LIKE_MIN_ACTOR_AGE_HOURS * 3600 * 1000)
+  const [posts, threads, diaries, diaryUpdates, , strains, strainPhotos, setups, likesReceived, acceptedAnswers, paidReferrals, harvestedDiaries, wellLikedPosts, distinctAskers, likesGivenDistinct, acceptsMarked, user] =
     await Promise.all([
       want("posts") ? prisma.post.count({ where: { authorId: userId, deleted: false, thread: { deleted: false } } }) : 0,
       want("threads") ? prisma.thread.count({ where: { authorId: userId, deleted: false } }) : 0,
@@ -656,10 +724,14 @@ export async function getUserStats(userId: string, needed?: Set<keyof UserStats>
       want("strains") ? prisma.strain.count({ where: { createdById: userId } }) : 0,
       want("strainPhotos") ? prisma.strainPhoto.count({ where: { userId } }) : 0,
       want("setups") ? prisma.growSetup.count({ where: { authorId: userId, deleted: false } }) : 0,
+      // Only legitimate likers count toward badge stats — the same gate the
+      // rep payout uses. Without this, banned/brand-new socks could farm the
+      // likesReceived badge line with zero rep cost and no flag surface.
       want("likesReceived")
         ? prisma.reaction.count({
             where: {
               type: "LIKE",
+              user: { banned: false, createdAt: { lte: likeMinAge } },
               OR: [{ post: { authorId: userId, deleted: false, thread: { deleted: false } } }, { diary: { authorId: userId, deleted: false } }],
             },
           })
@@ -679,6 +751,42 @@ export async function getUserStats(userId: string, needed?: Set<keyof UserStats>
       want("referrals")
         ? prisma.reputationEvent.count({
             where: { userId, type: "REFERRAL", reversedAt: null },
+          })
+        : 0,
+      want("harvestedDiaries")
+        ? prisma.growDiary.count({ where: { authorId: userId, deleted: false, harvested: true } })
+        : 0,
+      want("wellLikedPosts")
+        ? prisma.$queryRaw<{ n: bigint }[]>`
+            SELECT COUNT(*) AS n FROM (
+              SELECT p."id" FROM "Post" p
+              JOIN "Reaction" r ON r."postId" = p."id" AND r."type" = 'LIKE'
+              JOIN "User" ru ON ru."id" = r."userId" AND ru."banned" = false
+              WHERE p."authorId" = ${userId} AND p."deleted" = false
+              GROUP BY p."id" HAVING COUNT(DISTINCT r."userId") >= 3
+            ) t`.then((r) => Number(r[0]?.n ?? 0))
+        : 0,
+      want("distinctAskers")
+        ? prisma.$queryRaw<{ n: bigint }[]>`
+            SELECT COUNT(DISTINCT t."authorId") AS n
+            FROM "Post" p
+            JOIN "Thread" t ON t."id" = p."threadId"
+            WHERE p."authorId" = ${userId} AND p."deleted" = false AND t."deleted" = false
+              AND t."acceptedAnswerId" = p."id" AND t."authorId" <> ${userId}`.then((r) => Number(r[0]?.n ?? 0))
+        : 0,
+      want("likesGivenDistinct")
+        ? prisma.$queryRaw<{ n: bigint }[]>`
+            SELECT COUNT(DISTINCT COALESCE(p."authorId", d."authorId")) AS n
+            FROM "Reaction" r
+            LEFT JOIN "Post" p ON p."id" = r."postId" AND p."deleted" = false
+            LEFT JOIN "GrowDiary" d ON d."id" = r."diaryId" AND d."deleted" = false
+            WHERE r."userId" = ${userId} AND r."type" = 'LIKE'
+              AND COALESCE(p."authorId", d."authorId") IS NOT NULL
+              AND COALESCE(p."authorId", d."authorId") <> ${userId}`.then((r) => Number(r[0]?.n ?? 0))
+        : 0,
+      want("acceptsMarked")
+        ? prisma.thread.count({
+            where: { authorId: userId, deleted: false, acceptedAnswerId: { not: null } },
           })
         : 0,
       want("memberNumber") || want("reputation") || want("chatMessages")
@@ -712,6 +820,12 @@ export async function getUserStats(userId: string, needed?: Set<keyof UserStats>
     referrals: paidReferrals,
     reputation: user?.profile?.reputation ?? 0,
     memberNumber,
+    harvestedDiaries,
+    growStreak: want("growStreak") ? (await getGrowStreak(userId)).streak : 0,
+    wellLikedPosts,
+    distinctAskers,
+    likesGivenDistinct,
+    acceptsMarked,
   }
 }
 
@@ -863,6 +977,17 @@ export async function grantBadge(
       await announceBadges(profile.username, [badge.name]).catch(() => null)
     }
   }
+
+  // One-time rep bonus by rarity — a finite pool that can't scale with
+  // spam. Keyed per badge so re-grants/reinstates can never double-pay.
+  // Bot-only badges aren't in BADGE_REGISTRY and get no bonus.
+  const def = BADGE_REGISTRY.find((b) => b.name === badge.name)
+  if (def) {
+    await awardReputation(userId, REP_EVENT_TYPES.BADGE_BONUS, BADGE_BONUS[def.rarity] ?? 15, `Badge earned: ${badge.name}`, {
+      key: `badgebonus:${badge.name}:${userId}`,
+    }).catch(() => null)
+  }
+
   return true
 }
 
@@ -881,7 +1006,7 @@ export async function checkBadges(userId: string, opts: { announcedTierName?: st
   const allBadges = await prisma.badge.findMany()
   const earned = await prisma.userBadge.findMany({
     where: { userId },
-    select: { badgeId: true },
+    select: { badgeId: true, badge: { select: { name: true } } },
   })
   const earnedIds = new Set(earned.map((b) => b.badgeId))
 
@@ -920,6 +1045,69 @@ export async function checkBadges(userId: string, opts: { announcedTierName?: st
       const granted = await grantBadge(userId, badge.name, { notifyUser: false })
       if (granted) newlyEarned.push(badge.name)
     }
+  }
+
+  const badgeIdByName = new Map(allBadges.map((b) => [b.name, b.id]))
+  const isUnearned = (name: string) => {
+    const id = badgeIdByName.get(name)
+    return id !== undefined && !earnedIds.has(id)
+  }
+
+  // Deep Roots — account at least a year old with a contribution in the
+  // last 90 days. Hidden; granted here because it's a composite stat check.
+  if (isUnearned("Deep Roots")) {
+    const u = await prisma.user.findUnique({ where: { id: userId }, select: { createdAt: true } })
+    if (u && Date.now() - u.createdAt.getTime() >= 365 * 86400000) {
+      const recent = await prisma.reputationEvent.findFirst({
+        where: {
+          userId,
+          type: { in: [...CONTRIBUTION_TYPES] },
+          reversedAt: null,
+          createdAt: { gte: new Date(Date.now() - 90 * 86400000) },
+        },
+        select: { id: true },
+      })
+      if (recent && (await grantBadge(userId, "Deep Roots", { notifyUser: false }))) {
+        newlyEarned.push("Deep Roots")
+      }
+    }
+  }
+
+  // Secret Stash — earned at least one badge in every non-staff category.
+  // Meta-badge: hidden so it can't be deliberately gamed toward.
+  if (isUnearned("Secret Stash")) {
+    const covered = new Set<BadgeCategory>()
+    for (const e of earned) {
+      const def = BADGE_REGISTRY.find((b) => b.name === e.badge.name)
+      if (def) covered.add(def.category)
+    }
+    for (const name of newlyEarned) {
+      const def = BADGE_REGISTRY.find((b) => b.name === name)
+      if (def) covered.add(def.category)
+    }
+    if (BADGE_CATEGORIES.every((c) => c === "staff" || covered.has(c))) {
+      if (await grantBadge(userId, "Secret Stash", { notifyUser: false })) newlyEarned.push("Secret Stash")
+    }
+  }
+
+  // Lazy backfill: badges granted before BADGE_BONUS existed still owe
+  // their one-time bonus. Self-healing — runs once per member, then the
+  // NOT EXISTS check returns empty forever after.
+  const missingBonus = await prisma.$queryRaw<{ name: string }[]>`
+    SELECT b."name" FROM "UserBadge" ub
+    JOIN "Badge" b ON b."id" = ub."badgeId"
+    WHERE ub."userId" = ${userId}
+      AND NOT EXISTS (
+        SELECT 1 FROM "ReputationEvent" e
+        WHERE e."userId" = ${userId}
+          AND e."key" = 'badgebonus:' || b."name" || ':' || ${userId}
+      )`
+  for (const row of missingBonus) {
+    const def = BADGE_REGISTRY.find((b) => b.name === row.name)
+    if (!def) continue // bot badges and stale rows get no bonus
+    await awardReputation(userId, REP_EVENT_TYPES.BADGE_BONUS, BADGE_BONUS[def.rarity] ?? 15, `Badge earned: ${row.name}`, {
+      key: `badgebonus:${row.name}:${userId}`,
+    }).catch(() => null)
   }
 
   if (newlyEarned.length > 0) {
@@ -972,6 +1160,42 @@ export async function repRateLimit(userId: string, key: string, baseLimit: numbe
   const perks = await getTierPerks(userId)
   const limit = Math.floor(baseLimit * (perks.rateLimitBoost ?? 1))
   return rateLimit(key, limit, windowMs)
+}
+
+// ─── Community standing (trust axis) ─────────────────────────────────
+// XP (the ledger balance) measures participation; standing measures peer
+// validation. Only event types another member or staff had to cause count
+// — volume alone can't raise it. Reversed originals are excluded (their
+// counter-entries are REVERSAL/REINSTATE type and never match the list).
+export async function getTrustScore(userId: string): Promise<number> {
+  const agg = await prisma.reputationEvent.aggregate({
+    where: { userId, type: { in: [...TRUST_EVENT_TYPES] }, reversedAt: null },
+    _sum: { amount: true },
+  })
+  return Math.max(0, agg._sum.amount ?? 0)
+}
+
+// Badge checks normally ride the rep-award pipeline, which means purely
+// social progress (chat messages, onboarding) stalls until the next rep
+// event. This throttled entry point lets non-rep paths trigger a check at
+// most once per hour per user — one atomic RateLimit upsert when idle.
+export async function checkBadgesOccasionally(userId: string): Promise<void> {
+  const rl = await rateLimit(`badgecheck:${userId}`, 1, 60 * 60 * 1000).catch(() => null)
+  if (!rl?.allowed) return
+  await checkBadges(userId)
+}
+
+// Chat contribution bookkeeping for the social badge line. The lifetime
+// chatMessageCount only increments for the first CHAT_DAILY_BADGE_CAP
+// messages per rolling day — chat spam can't speed-run "Chat Legend".
+// Also gives badge checks a throttled trigger independent of rep awards.
+export async function recordChatMessage(userId: string): Promise<void> {
+  const rl = await rateLimit(`chatbadge:${userId}`, CHAT_DAILY_BADGE_CAP, 24 * 60 * 60 * 1000).catch(() => null)
+  if (!rl?.allowed) return
+  await prisma.profile
+    .updateMany({ where: { userId }, data: { chatMessageCount: { increment: 1 } } })
+    .catch(() => null)
+  await checkBadgesOccasionally(userId)
 }
 
 // ─── Reconciliation ──────────────────────────────────────────────────

@@ -43,6 +43,7 @@ export const CHAT_COMMANDS: ChatCommandMeta[] = [
   { name: "streak", usage: "/streak [@user]", description: "Grow-update streak", permission: P, surfaces: BOTH, handledBy: "bot" },
   { name: "badge", usage: "/badge [name]", description: "Your badges, or badge info", permission: P, surfaces: BOTH, handledBy: "bot" },
   { name: "nextbadges", usage: "/nextbadges", description: "Badges you haven't earned yet", permission: P, surfaces: BOTH, handledBy: "bot" },
+  { name: "quests", usage: "/quests", description: "Today's daily quests", permission: P, surfaces: BOTH, handledBy: "bot" },
   { name: "diary", usage: "/diary [@user]", description: "Latest grow diary", permission: P, surfaces: BOTH, handledBy: "bot" },
   { name: "thread", aliases: ["threads"], usage: "/thread <search>", description: "Find forum threads", permission: P, surfaces: BOTH, handledBy: "bot" },
   { name: "strain", usage: "/strain <name>", description: "Look up a strain", permission: P, surfaces: BOTH, handledBy: "bot" },

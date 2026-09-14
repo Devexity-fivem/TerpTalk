@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { unauthorized } from "@/lib/security"
+import { rateLimit } from "@/lib/rate-limit"
 import { getChallengeProgress, currentWeekKey, weekStart } from "@/lib/challenges"
 
 // GET — the signed-in member's weekly challenge progress. Owner-only:
@@ -10,6 +11,9 @@ export async function GET() {
   try {
     const session = await getServerSession(authOptions)
     if (!session?.user?.id) return unauthorized()
+
+    const rl = await rateLimit(`challenges:${session.user.id}`, 30, 60 * 1000)
+    if (!rl.allowed) return NextResponse.json({ error: "Too many requests" }, { status: 429 })
 
     const challenges = await getChallengeProgress(session.user.id)
     const start = weekStart()

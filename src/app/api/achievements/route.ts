@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { unauthorized } from "@/lib/security"
 import { prisma } from "@/lib/prisma"
-import { getUserStats } from "@/lib/reputation"
+import { getUserStats, getReputationTier } from "@/lib/reputation"
 import { BADGE_REGISTRY, BADGE_CATEGORY_LABELS } from "@/lib/badge-registry"
 import { rateLimit } from "@/lib/rate-limit"
 
@@ -17,17 +17,39 @@ export async function GET() {
     const rl = await rateLimit(`achievements:${session.user.id}`, 30, 60 * 1000)
     if (!rl.allowed) return NextResponse.json({ error: "Too many requests" }, { status: 429 })
 
-    const [stats, earned] = await Promise.all([
+    const [stats, earned, profile] = await Promise.all([
       getUserStats(session.user.id),
       prisma.userBadge.findMany({
         where: { userId: session.user.id },
         select: { badgeId: true, badge: { select: { name: true } }, earnedAt: true, pinned: true },
+      }),
+      prisma.profile.findUnique({
+        where: { userId: session.user.id },
+        select: { reputation: true },
       }),
     ])
     const earnedMap = new Map(earned.map((e) => [e.badge.name, e]))
 
     const achievements = BADGE_REGISTRY.map((def) => {
       const e = earnedMap.get(def.name)
+      // Hidden badges stay secret until earned — the collection renders
+      // them as "???" with no name, description, or progress to game toward.
+      if (def.hidden && !e) {
+        return {
+          name: null,
+          description: "Something is waiting to be discovered.",
+          requirement: "???",
+          rarity: def.rarity,
+          category: def.category,
+          icon: null,
+          hidden: true,
+          earned: false,
+          earnedAt: null,
+          pinned: false,
+          badgeId: null,
+          progress: null,
+        }
+      }
       let progress: { current: number; target: number; direction: "gte" | "lte" } | null = null
       if (def.progress) {
         const raw = def.progress.stats.reduce(
@@ -48,6 +70,7 @@ export async function GET() {
         rarity: def.rarity,
         category: def.category,
         icon: def.icon,
+        hidden: !!def.hidden,
         earned: !!e,
         earnedAt: e?.earnedAt ?? null,
         pinned: e?.pinned ?? false,
@@ -56,8 +79,15 @@ export async function GET() {
       }
     })
 
+    // Showcase quota — pin slots come from the member's current tier.
+    const showcaseSlots = getReputationTier(profile?.reputation ?? 0).perks.showcaseSlots ?? 3
+
     return NextResponse.json(
-      { achievements, categories: BADGE_CATEGORY_LABELS },
+      {
+        achievements,
+        categories: BADGE_CATEGORY_LABELS,
+        showcase: { pinned: earned.filter((e) => e.pinned).length, slots: showcaseSlots },
+      },
       { headers: { "Cache-Control": "no-store, max-age=0, must-revalidate" } }
     )
   } catch (error) {

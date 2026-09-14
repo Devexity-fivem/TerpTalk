@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma"
 import { unauthorized, LIMITS, USERNAME_REGEX, isReservedUsername, getClientIp, logSecurityEvent, isBanned, forbidden, enforceLinkTrust } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
 import { storeImage, deleteImagesIfUnreferenced } from "@/lib/blob"
+import { awardReputation, grantBadge, REP_POINTS } from "@/lib/reputation"
 
 export async function POST(request: Request) {
   let newAvatarBlobUrl: string | undefined
@@ -158,13 +159,30 @@ export async function POST(request: Request) {
     // Mark onboarding done only when the standalone completion page asks —
     // the /welcome stepper saves profile fields mid-flow and must not flip
     // this flag early or the user can never resume the remaining steps.
-    await prisma.user.update({
-      where: { id: session.user.id },
-      data: {
-        ...(completeOnboarding === true && { onboardingCompletedAt: new Date() }),
-        ...(cleanAvatar !== undefined && { image: cleanAvatar }),
-      },
-    })
+    if (completeOnboarding === true) {
+      // First-transition only — the null guard makes the award once-ever
+      // even if onboarding/complete also ran.
+      const marked = await prisma.user.updateMany({
+        where: { id: session.user.id, onboardingCompletedAt: null },
+        data: { onboardingCompletedAt: new Date() },
+      })
+      if (marked.count === 1) {
+        await awardReputation(
+          session.user.id,
+          "ONBOARDING_COMPLETE",
+          REP_POINTS.ONBOARDING_COMPLETE,
+          "Finished setting up your account",
+          { key: `onboard:${session.user.id}` }
+        ).catch(() => {})
+        await grantBadge(session.user.id, "Settled In").catch(() => false)
+      }
+    }
+    if (cleanAvatar !== undefined) {
+      await prisma.user.update({
+        where: { id: session.user.id },
+        data: { image: cleanAvatar },
+      })
+    }
 
     return NextResponse.json({ profile }, { status: 200 })
   } catch (error) {

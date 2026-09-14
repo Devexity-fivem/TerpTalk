@@ -126,7 +126,13 @@ export async function GET(request: Request) {
         referralsMade,
       },
       badges,
-      reputationEvents,
+      // Strip other users' identifiers (actorId = who liked/accepted your
+      // content — their action, not yours) and internal idempotency keys.
+      reputationEvents: reputationEvents.map(
+        ({ type, amount, reason, sourceType, sourceId, reversedAt, reversalFinal, createdAt }) => ({
+          type, amount, reason, sourceType, sourceId, reversedAt, reversalFinal, createdAt,
+        })
+      ),
     }
 
     return new NextResponse(JSON.stringify(exportData, null, 2), {

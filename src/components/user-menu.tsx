@@ -11,6 +11,7 @@ import { cn } from "@/lib/utils"
 
 const LINKS = [
   { href: "/profile", label: "My Profile", icon: User, desc: "Account, badges, saved threads" },
+  { href: "/progress", label: "My Progress", icon: TrendingUp, desc: "Level, quests, and unlocks" },
   { href: "/diaries", label: "Grow Diaries", icon: Leaf, desc: "Track and share your grows" },
   { href: "/achievements", label: "Achievements", icon: Award, desc: "Badges and progress" },
   { href: "/reputation", label: "Reputation", icon: TrendingUp, desc: "Tiers and unlocks" },

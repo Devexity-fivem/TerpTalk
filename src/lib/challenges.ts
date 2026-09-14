@@ -9,7 +9,7 @@ import { notify } from "@/lib/notify"
 //
 // Design rules:
 //   - Rewards are keyed/idempotent: challenge:<week>:<slug>:<userId>.
-//   - Total payout ~65 rep/week — below the velocity-flag threshold.
+//   - Total payout ~90 rep/week — below the velocity-flag threshold.
 //   - Nothing here rewards raw volume that can be spammed: replies must be
 //     in different threads, diary updates on different days, and the biggest
 //     reward needs a peer-accepted answer.
@@ -64,6 +64,22 @@ export const WEEKLY_CHALLENGES: ChallengeDef[] = [
     reward: 20,
     target: 1,
   },
+  {
+    slug: "help-a-newcomer",
+    title: "Help a Newcomer",
+    description: "Reply in 2 threads started by members under 30 days old.",
+    icon: "👋",
+    reward: 15,
+    target: 2,
+  },
+  {
+    slug: "close-the-loop",
+    title: "Close the Loop",
+    description: "Mark an accepted answer on a thread you started.",
+    icon: "🔁",
+    reward: 10,
+    target: 1,
+  },
 ]
 
 // ISO week key (UTC) — e.g. "2026-W41". Challenges reset each week.
@@ -96,21 +112,25 @@ export async function getChallengeProgress(userId: string, now = new Date()): Pr
   const since = weekStart(now)
   const week = currentWeekKey(now)
 
-  const [loginDays, replyThreads, diaryDays, contestVotes, answerCount, paidEvents] = await Promise.all([
+  const [loginDays, replyThreads, diaryDays, contestVotes, answerCount, newcomerThreads, acceptsMarked, paidEvents] = await Promise.all([
     prisma.$queryRaw<{ n: bigint }[]>`
       SELECT COUNT(DISTINCT ("createdAt" AT TIME ZONE 'UTC')::date) AS n
       FROM "ReputationEvent"
       WHERE "userId" = ${userId} AND "type" = 'DAILY_LOGIN'
         AND "reversedAt" IS NULL AND "createdAt" >= ${since}`,
     // "Reply in N different threads" — sourceId is the post id, so count
-    // distinct threadIds via a join. Replies in one thread can't stack.
+    // distinct threadIds via a join. Replies in one thread can't stack,
+    // and replies in your OWN threads don't count — self-bumping isn't
+    // joining the talk.
     prisma.$queryRaw<{ n: bigint }[]>`
       SELECT COUNT(DISTINCT p."threadId") AS n
       FROM "ReputationEvent" e
       JOIN "Post" p ON p."id" = e."sourceId"
+      JOIN "Thread" t ON t."id" = p."threadId"
       WHERE e."userId" = ${userId} AND e."type" = 'POST_CREATED'
         AND e."reversedAt" IS NULL AND e."createdAt" >= ${since}
-        AND p."deleted" = false`,
+        AND p."deleted" = false AND t."deleted" = false
+        AND t."authorId" <> ${userId}`,
     prisma.$queryRaw<{ n: bigint }[]>`
       SELECT COUNT(DISTINCT ("createdAt" AT TIME ZONE 'UTC')::date) AS n
       FROM "ReputationEvent"
@@ -124,6 +144,25 @@ export async function getChallengeProgress(userId: string, now = new Date()): Pr
     prisma.reputationEvent.count({
       where: { userId, type: "HELPFUL_ANSWER", reversedAt: null, createdAt: { gte: since } },
     }),
+    // Replies in threads started by members under 30 days old.
+    prisma.$queryRaw<{ n: bigint }[]>`
+      SELECT COUNT(DISTINCT p."threadId") AS n
+      FROM "ReputationEvent" e
+      JOIN "Post" p ON p."id" = e."sourceId"
+      JOIN "Thread" t ON t."id" = p."threadId"
+      JOIN "User" tu ON tu."id" = t."authorId"
+      WHERE e."userId" = ${userId} AND e."type" = 'POST_CREATED'
+        AND e."reversedAt" IS NULL AND e."createdAt" >= ${since}
+        AND p."deleted" = false AND t."deleted" = false
+        AND t."authorId" <> ${userId}
+        AND tu."createdAt" >= ${new Date(Date.now() - 30 * 86400000)}`,
+    // Threads the member marked an accepted answer on this week — rewards
+    // closing the loop, which previously only paid the answerer.
+    prisma.$queryRaw<{ n: bigint }[]>`
+      SELECT COUNT(*) AS n
+      FROM "ReputationEvent" e
+      WHERE e."userId" = ${userId} AND e."type" = 'ACCEPT_MARKED'
+        AND e."reversedAt" IS NULL AND e."createdAt" >= ${since}`,
     // Only unreversed payouts count as paid — a staff reversal should make
     // the challenge unpaid again (re-award reinstates via the same key).
     prisma.reputationEvent.findMany({
@@ -139,6 +178,8 @@ export async function getChallengeProgress(userId: string, now = new Date()): Pr
     "tend-the-diary": Number(diaryDays[0]?.n ?? 0),
     "judge-the-buds": Number(contestVotes[0]?.n ?? 0),
     "share-the-answer": answerCount,
+    "help-a-newcomer": Number(newcomerThreads[0]?.n ?? 0),
+    "close-the-loop": Number(acceptsMarked[0]?.n ?? 0),
   }
 
   return WEEKLY_CHALLENGES.map((c) => {

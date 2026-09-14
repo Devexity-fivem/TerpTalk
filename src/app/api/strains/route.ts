@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma"
 import { unauthorized, LIMITS, getClientIp, logSecurityEvent, isBanned, forbidden, enforceLinkTrust } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
 import { awardReputation, REP_POINTS } from "@/lib/reputation"
+import { STRAIN_MIN_PAID_DESCRIPTION } from "@/lib/reputation-config"
 import { checkMaintenance } from "@/lib/maintenance"
 import { revalidateTag } from "next/cache"
 
@@ -107,13 +108,17 @@ export async function POST(request: Request) {
 
     revalidateTag("strains", { expire: 0 })
 
-    await awardReputation(
-      session.user.id,
-      "STRAIN_CREATED",
-      REP_POINTS.STRAIN_CREATED,
-      `Added strain "${name.slice(0, 60)}"`,
-      { key: `strain:${strain.id}`, sourceType: "STRAIN", sourceId: strain.id }
-    ).catch(() => {})
+    // Paying floor: a real description keeps bare-name strain stubs from
+    // farming the catalog payout. The strain is still created either way.
+    if ((strain.description?.length ?? 0) >= STRAIN_MIN_PAID_DESCRIPTION) {
+      await awardReputation(
+        session.user.id,
+        "STRAIN_CREATED",
+        REP_POINTS.STRAIN_CREATED,
+        `Added strain "${name.slice(0, 60)}"`,
+        { key: `strain:${strain.id}`, sourceType: "STRAIN", sourceId: strain.id }
+      ).catch(() => {})
+    }
 
     return NextResponse.json({ strain }, { status: 201 })
   } catch (error) {

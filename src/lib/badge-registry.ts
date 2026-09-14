@@ -51,6 +51,9 @@ export interface BadgeDefinition {
   // Name of the Lucide icon component to render.
   icon: string
   progress?: BadgeProgressSpec
+  // Hidden badges render as "???" on the collection page until earned —
+  // discovery without a progress bar to game toward.
+  hidden?: boolean
 }
 
 const r = (rarity: BadgeRarity) => rarity
@@ -60,6 +63,7 @@ const p = (stats: string | string[], target: number, direction: "gte" | "lte" = 
 export const BADGE_REGISTRY: BadgeDefinition[] = [
   // ─── First steps ───
   { name: "New Grower", description: "Made your first contribution to the community.", requirement: "Post a thread, reply, or grow diary.", rarity: r("common"), category: "first-steps", icon: "Sprout", progress: p(["posts", "threads", "diaries"], 1) },
+  { name: "Settled In", description: "Finished setting up your TerpTalk account.", requirement: "Complete onboarding.", rarity: r("common"), category: "first-steps", icon: "Home" },
   { name: "First Post", description: "Made your first post in the forums.", requirement: "Publish one forum reply.", rarity: r("common"), category: "first-steps", icon: "PenLine", progress: p("posts", 1) },
   { name: "First Thread", description: "Started your first discussion thread.", requirement: "Create one thread.", rarity: r("common"), category: "first-steps", icon: "SquarePen", progress: p("threads", 1) },
   { name: "First Grow Diary", description: "Started tracking a grow.", requirement: "Create one grow diary.", rarity: r("common"), category: "first-steps", icon: "BookOpen", progress: p("diaries", 1) },
@@ -87,13 +91,25 @@ export const BADGE_REGISTRY: BadgeDefinition[] = [
   { name: "Mentor", description: "A trusted source of knowledge.", requirement: "Have 25 replies accepted.", rarity: r("epic"), category: "community", icon: "GraduationCap", progress: p("acceptedAnswers", 25) },
   { name: "Sage Answer", description: "Had 50 replies marked as accepted answers.", requirement: "Have 50 replies accepted.", rarity: r("epic"), category: "community", icon: "ScrollText", progress: p("acceptedAnswers", 50) },
   { name: "Oracle", description: "Had 100 replies marked as accepted answers.", requirement: "Have 100 replies accepted.", rarity: r("legendary"), category: "community", icon: "ScrollText", progress: p("acceptedAnswers", 100) },
+  // Peer-validated quality — volume alone can't reach these.
+  { name: "Many Gardens", description: "Helped ten different growers solve their problems.", requirement: "Have replies accepted in threads by 10 different members.", rarity: r("epic"), category: "community", icon: "HeartHandshake", progress: p("distinctAskers", 10) },
+  { name: "Green Thumb", description: "Several of your posts earned love from multiple growers.", requirement: "Have 5 posts each liked by 3+ different members.", rarity: r("rare"), category: "community", icon: "ThumbsUp", progress: p("wellLikedPosts", 5) },
+  { name: "Close the Loop", description: "Marked an accepted answer on your own thread.", requirement: "Accept an answer on a thread you started.", rarity: r("common"), category: "community", icon: "CheckCircle2", progress: p("acceptsMarked", 1) },
 
   // ─── Grow diaries ───
   { name: "Diary Master", description: "Created 5 grow diaries.", requirement: "Create 5 grow diaries.", rarity: r("rare"), category: "grows", icon: "BookOpen", progress: p("diaries", 5) },
   { name: "Garden Veteran", description: "Created 10 grow diaries.", requirement: "Create 10 grow diaries.", rarity: r("epic"), category: "grows", icon: "TreePine", progress: p("diaries", 10) },
   { name: "Master Gardener", description: "Created 25 grow diaries.", requirement: "Create 25 grow diaries.", rarity: r("epic"), category: "grows", icon: "BookOpen", progress: p("diaries", 25) },
   { name: "Diary Legend", description: "Created 50 grow diaries.", requirement: "Create 50 grow diaries.", rarity: r("legendary"), category: "grows", icon: "BookMarked", progress: p("diaries", 50) },
-  { name: "Dedicated Grower", description: "Posted grow updates 7 days in a row.", requirement: "Update diaries for 7 consecutive days.", rarity: r("epic"), category: "grows", icon: "Flame" },
+  { name: "Dedicated Grower", description: "Posted grow updates 7 days in a row.", requirement: "Update diaries for 7 consecutive days.", rarity: r("epic"), category: "grows", icon: "Flame", progress: p("growStreak", 7) },
+  { name: "Two-Week Tend", description: "Kept a diary alive for two straight weeks.", requirement: "Update diaries for 14 consecutive days.", rarity: r("rare"), category: "grows", icon: "Flame", progress: p("growStreak", 14) },
+  { name: "Monthly Tend", description: "A full month of daily diary updates.", requirement: "Update diaries for 30 consecutive days.", rarity: r("epic"), category: "grows", icon: "CalendarCheck", progress: p("growStreak", 30) },
+  { name: "Season Tend", description: "Ninety days of daily diary updates — a full grow in real time.", requirement: "Update diaries for 90 consecutive days.", rarity: r("legendary"), category: "grows", icon: "CalendarCheck", progress: p("growStreak", 90) },
+  // Harvests — bounded by real grow time, the least farmable stat on the site.
+  { name: "First Harvest", description: "Logged your first harvest.", requirement: "Mark one diary as harvested.", rarity: r("common"), category: "grows", icon: "Scissors", progress: p("harvestedDiaries", 1) },
+  { name: "Caretaker", description: "Harvested 3 documented grows.", requirement: "Harvest 3 grow diaries.", rarity: r("rare"), category: "grows", icon: "Sprout", progress: p("harvestedDiaries", 3) },
+  { name: "Perennial", description: "Harvested 8 documented grows.", requirement: "Harvest 8 grow diaries.", rarity: r("epic"), category: "grows", icon: "TreePine", progress: p("harvestedDiaries", 8) },
+  { name: "Eternal Harvest", description: "Harvested 15 documented grows — a multi-year record.", requirement: "Harvest 15 grow diaries.", rarity: r("legendary"), category: "grows", icon: "TreeDeciduous", progress: p("harvestedDiaries", 15) },
 
   // ─── Knowledge (strains, photos, setups) ───
   { name: "Strain Hunter", description: "Added 3 strains to the database.", requirement: "Add 3 strains.", rarity: r("common"), category: "knowledge", icon: "Search", progress: p("strains", 3) },
@@ -120,6 +136,7 @@ export const BADGE_REGISTRY: BadgeDefinition[] = [
   { name: "Popular Grower", description: "Received 250 likes.", requirement: "Earn 250 likes.", rarity: r("epic"), category: "social", icon: "Heart", progress: p("likesReceived", 250) },
   { name: "Influencer", description: "Received 500 likes.", requirement: "Earn 500 likes.", rarity: r("epic"), category: "social", icon: "Heart", progress: p("likesReceived", 500) },
   { name: "Celebrity", description: "Received 1,000 likes.", requirement: "Earn 1,000 likes.", rarity: r("legendary"), category: "social", icon: "Heart", progress: p("likesReceived", 1000) },
+  { name: "Generous Soul", description: "Spread love across the whole garden.", requirement: "???", rarity: r("common"), category: "social", icon: "HeartHandshake", hidden: true, progress: p("likesGivenDistinct", 100) },
 
   // ─── Outreach ───
   { name: "Recruiter", description: "Referred 3 new members.", requirement: "Have 3 users sign up with your referral code.", rarity: r("rare"), category: "outreach", icon: "UserPlus", progress: p("referrals", 3) },
@@ -148,6 +165,14 @@ export const BADGE_REGISTRY: BadgeDefinition[] = [
   { name: "Weekly Winner", description: "Won Budshot of the Week.", requirement: "Win a weekly photo contest.", rarity: r("legendary"), category: "honours", icon: "Trophy" },
   { name: "Diary of the Month", description: "Won the monthly grow diary contest.", requirement: "Win Diary of the Month.", rarity: r("legendary"), category: "honours", icon: "Trophy" },
   { name: "Contest Finalist", description: "Reached the final round of a community contest.", requirement: "Finish top 5 in a contest.", rarity: r("rare"), category: "honours", icon: "Medal" },
+
+  // ─── Hidden discovery badges — "???" until earned, no progress bar ───
+  // Granted by dedicated checks in lib/reputation.ts, never shown early.
+  { name: "Comeback", description: "Came back and contributed after a long rest.", requirement: "???", rarity: r("common"), category: "milestones", icon: "Sunrise", hidden: true },
+  { name: "Deep Roots", description: "Still growing after a full year.", requirement: "???", rarity: r("epic"), category: "milestones", icon: "TreePine", hidden: true },
+  { name: "Photoperiod", description: "Documented a single grow across a whole season.", requirement: "???", rarity: r("epic"), category: "grows", icon: "Hourglass", hidden: true },
+  { name: "Four Twenty", description: "Contributed on the community's favourite day.", requirement: "???", rarity: r("rare"), category: "honours", icon: "Sparkles", hidden: true },
+  { name: "Secret Stash", description: "Collected something from every corner of the garden.", requirement: "???", rarity: r("legendary"), category: "milestones", icon: "Package", hidden: true },
 
   // ─── Staff ───
   { name: "Trusted Member", description: "Recognized by staff as a trusted community member.", requirement: "Awarded by staff.", rarity: r("epic"), category: "staff", icon: "ShieldCheck" },

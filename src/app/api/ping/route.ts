@@ -6,6 +6,7 @@ import { sessionCookieName } from "@/lib/auth"
 import { forbidden, unauthorized } from "@/lib/security"
 import { awardReputation } from "@/lib/reputation"
 import { evaluateChallenges } from "@/lib/challenges"
+import { evaluateQuests } from "@/lib/quests"
 import { pruneChatMessagesIfDue } from "@/lib/chat-cleanup"
 
 // POST — lightweight presence ping; updates lastSeenAt + ONLINE status.
@@ -52,11 +53,15 @@ export async function POST(request: NextRequest) {
     }
 
     // Background work, throttled to once per hour (chat prune) and the same
-    // ~15-min staleness cadence as above (weekly challenge evaluation).
-    // Deferred via after() so multi-query evaluation never delays the ping.
+    // ~15-min staleness cadence as above (weekly challenge + daily quest
+    // evaluation). Deferred via after() so multi-query evaluation never
+    // delays the ping.
     after(async () => {
       await pruneChatMessagesIfDue()
-      if (stale) await evaluateChallenges(userId).catch(() => [])
+      if (stale) {
+        await evaluateChallenges(userId).catch(() => [])
+        await evaluateQuests(userId).catch(() => [])
+      }
     })
 
     return NextResponse.json({ ok: true })

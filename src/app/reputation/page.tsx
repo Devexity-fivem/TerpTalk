@@ -20,6 +20,9 @@ const SOURCES: Array<{ key: keyof typeof REP_POINTS; label: string; note: string
   { key: "STRAIN_CREATED", label: "Add a strain", note: "Contribute to the strain knowledge base." },
   { key: "STRAIN_PHOTO", label: "Share a strain photo", note: "Real photos of real grows — on strains others added." },
   { key: "LIKE_RECEIVED", label: "Receive a like", note: "Each member can only reward a post once — ever." },
+  { key: "ACCEPT_MARKED", label: "Mark an accepted answer", note: "Curate your own thread — requires another member's answer." },
+  { key: "HARVEST_LOGGED", label: "Log a harvest", note: "Finish a documented grow — once per diary, needs real updates." },
+  { key: "ONBOARDING_COMPLETE", label: "Finish onboarding", note: "A one-time welcome to the community." },
   { key: "REFERRAL", label: "Refer a member", note: `Pays out once your invitee earns ${REFERRAL_MIN_REP} rep on their own.` },
   { key: "CONTEST_WEEKLY_WIN", label: "Win Budshot of the Week", note: "Weekly community photo contest." },
   { key: "CONTEST_MONTHLY_WIN", label: "Win Diary of the Month", note: "Monthly grow diary contest." },
@@ -70,10 +73,13 @@ export default function ReputationPage() {
         <div className="bg-card rounded-lg border border-border p-4 mb-4">
           <div className="flex items-center gap-2 mb-3">
             <Target className="w-4 h-4 text-primary" />
-            <h2 className="text-lg font-semibold">Weekly challenges</h2>
+            <h2 className="text-lg font-semibold">Quests &amp; challenges</h2>
           </div>
           <p className="text-xs text-muted-foreground mb-3">
-            Optional goals that reset every Monday. Ignore them freely — they reward things you&apos;d do anyway.
+            Every day you get 3 small quests — reply somewhere, tend a diary, spread some likes.
+            They reset at midnight UTC and missed ones just expire. Below are the weekly challenges:
+            optional goals that reset every Monday. Ignore all of it freely — they reward things
+            you&apos;d do anyway.
           </p>
           <div className="space-y-2">
             {WEEKLY_CHALLENGES.map((c) => (

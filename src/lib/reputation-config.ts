@@ -22,10 +22,17 @@ export const REP_POINTS = {
   SETUP_CREATED: 8,
   LIKE_RECEIVED: 2,
   HELPFUL_ANSWER: 30,
+  // Small peer-gated bonus for the OP who curates their own thread —
+  // requires another member's answer to exist, so it can't be solo-farmed.
+  ACCEPT_MARKED: 5,
   REFERRAL: 25,
   DAILY_LOGIN: 1,
   CONTEST_WEEKLY_WIN: 50,
   CONTEST_MONTHLY_WIN: 150,
+  // Once per diary — a documented full grow cycle (requires ≥4 updates).
+  HARVEST_LOGGED: 25,
+  // Once per account — finishing onboarding.
+  ONBOARDING_COMPLETE: 15,
 } as const
 
 export type RepSource = keyof typeof REP_POINTS
@@ -52,10 +59,38 @@ export const REP_CAPS: Partial<Record<RepSource, number>> = {
 // reactions still display; they just don't pay sockpuppets.
 export const LIKE_MIN_ACTOR_AGE_HOURS = 24
 
+// The same trust gate applies to accepted-answer payouts: the accept still
+// works for anyone, but a brand-new/low-rep acceptor doesn't pay out — a
+// fresh sockpuppet can't farm +30s for a main account.
+export const ACCEPT_MIN_ACTOR_AGE_HOURS = 24
+export const ACCEPT_MIN_ACTOR_REP = 10
+
+// Paying content floors — content still posts below these, it just doesn't
+// earn rep. Stops 1-char threads and bare-name strain entries from paying.
+export const THREAD_MIN_PAID_LENGTH = 40
+export const STRAIN_MIN_PAID_DESCRIPTION = 120
+
+// Only the first N chat messages per rolling day count toward the lifetime
+// chatMessageCount that feeds social badges — bounds badge farming while
+// staying invisible to normal conversation.
+export const CHAT_DAILY_BADGE_CAP = 50
+
 // Referral rep pays out only once the referred member proves legitimate:
-// at least this much earned rep and at least this old.
+// at least this much earned rep and at least this old. A per-week cap keeps
+// a sock farm from grinding 25 rep per fake signup for unbounded payouts.
 export const REFERRAL_MIN_REP = 25
 export const REFERRAL_MIN_AGE_HOURS = 24
+export const REFERRAL_MAX_PER_WEEK = 3
+
+// Reputation bonus granted once per badge, scaled by rarity — a fixed,
+// finite pool (~all badges ≈ a few thousand rep lifetime) that can't scale
+// with spam the way per-post payouts can.
+export const BADGE_BONUS: Record<string, number> = {
+  common: 15,
+  rare: 40,
+  epic: 100,
+  legendary: 250,
+}
 
 // Staff manual adjustments are bounded per action.
 export const STAFF_ADJUST_MAX = 500
@@ -73,7 +108,10 @@ export const EARLY_SUPPORTER_LIMIT = 250
 //   "LEGACY_MIGRATION"               — pre-ledger balance carried forward
 //   "CHALLENGE_WEEKLY"               — weekly challenge completion bonus
 //     (amount varies per challenge; keyed challenge:<week>:<slug>:<userId>)
-//
+//   "QUEST_DAILY"                    — daily quest completion bonus
+//     (keyed quest:<day>:<slug>:<userId>; perfect-day bonus quest-day:<day>:<uid>)
+//   "BADGE_BONUS"                    — one-time rep bonus on badge grant
+//     (keyed badgebonus:<badge name>:<userId>; amount = BADGE_BONUS[rarity])
 // Accounting model: EVERY row's amount counts toward the balance —
 // reversedAt/reversalOfId are audit status, not sum filters. Reversals and
 // reinstates record the actually-applied delta (clamped to the balance at
@@ -87,6 +125,8 @@ export const REP_EVENT_TYPES = {
   // Zero-amount marker rows recording that a rung celebration already
   // fired — the P2002 claim makes once-ever dedupe durable. Never public.
   MILESTONE: "MILESTONE",
+  QUEST_DAILY: "QUEST_DAILY",
+  BADGE_BONUS: "BADGE_BONUS",
 } as const
 
 // Which event types are shown on a member's public reputation history.
@@ -102,10 +142,14 @@ export const PUBLIC_REP_TYPES = new Set<string>([
   "SETUP_CREATED",
   "LIKE_RECEIVED",
   "HELPFUL_ANSWER",
+  "ACCEPT_MARKED",
   "REFERRAL",
   "CONTEST_WEEKLY_WIN",
   "CONTEST_MONTHLY_WIN",
+  "HARVEST_LOGGED",
   "CHALLENGE_WEEKLY",
+  "QUEST_DAILY",
+  "BADGE_BONUS",
   "REVERSAL",
   "REINSTATE",
   "LEGACY_MIGRATION",
@@ -124,10 +168,15 @@ export function publicRepLabel(type: string): string {
     case "SETUP_CREATED": return "Shared a grow setup"
     case "LIKE_RECEIVED": return "A grower liked your post"
     case "HELPFUL_ANSWER": return "Your answer was accepted"
+    case "ACCEPT_MARKED": return "Marked an accepted answer"
     case "REFERRAL": return "Invited a new member"
     case "CONTEST_WEEKLY_WIN": return "Won Budshot of the Week"
     case "CONTEST_MONTHLY_WIN": return "Won Diary of the Month"
+    case "HARVEST_LOGGED": return "Logged a harvest"
     case "CHALLENGE_WEEKLY": return "Weekly challenge completed"
+    case "QUEST_DAILY": return "Daily quest completed"
+    case "BADGE_BONUS": return "Badge bonus"
+    case "ONBOARDING_COMPLETE": return "Finished onboarding"
     case "DAILY_LOGIN": return "Daily check-in"
     case "REVERSAL": return "Reputation adjustment"
     case "REINSTATE": return "Reputation restored"
@@ -342,4 +391,54 @@ export function getStageProgress(reputation: number): { current: number; next: n
     percent: Math.min(100, Math.max(0, Math.round((gained / range) * 100))),
     remaining: range - gained,
   }
+}
+
+// ─── Community standing (the trust axis) ─────────────────────────────
+// Progression ("reputation"/XP on the ledger) measures participation;
+// STANDING measures peer validation — only event types that require
+// another member (or staff) to act count. A member can grind XP with
+// volume but cannot raise their standing without genuinely helping.
+// Reversed events stop counting automatically: the original's amount is
+// excluded once reversedAt is set, and the counter-entry's own type is
+// REVERSAL/REINSTATE — never in this list.
+export const TRUST_EVENT_TYPES = new Set<string>([
+  "LIKE_RECEIVED",
+  "HELPFUL_ANSWER",
+  "REFERRAL",
+  "CONTEST_WEEKLY_WIN",
+  "CONTEST_MONTHLY_WIN",
+  "STAFF_ADJUSTMENT",
+])
+
+export interface TrustStanding {
+  min: number // inclusive lower bound
+  name: string
+  color: string
+  bg: string
+  icon: string
+}
+
+export const TRUST_STANDINGS: TrustStanding[] = [
+  { min: 0, name: "Unrooted", color: "text-stone-500", bg: "bg-stone-500/10", icon: "🌰" },
+  { min: 25, name: "Known", color: "text-green-500", bg: "bg-green-500/10", icon: "🌱" },
+  { min: 100, name: "Trusted", color: "text-emerald-500", bg: "bg-emerald-500/10", icon: "🌿" },
+  { min: 300, name: "Respected", color: "text-cyan-500", bg: "bg-cyan-500/10", icon: "🪴" },
+  { min: 800, name: "Pillar", color: "text-purple-500", bg: "bg-purple-500/10", icon: "🏛️" },
+  { min: 2000, name: "Legend", color: "text-amber-500", bg: "bg-amber-500/10", icon: "🌟" },
+]
+
+export function getTrustStanding(score: number): TrustStanding {
+  let s = TRUST_STANDINGS[0]
+  for (const t of TRUST_STANDINGS) {
+    if (score >= t.min) s = t
+    else break
+  }
+  return s
+}
+
+export function getNextTrustStanding(score: number): TrustStanding | null {
+  for (const t of TRUST_STANDINGS) {
+    if (score < t.min) return t
+  }
+  return null
 }

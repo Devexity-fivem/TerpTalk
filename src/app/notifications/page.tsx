@@ -7,7 +7,7 @@ import { useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
 import {
   Bell, BellRing, Loader2, CheckCheck, Check, UserPlus, Heart, MessageSquare, AtSign,
-  MessageCircle, Leaf, Mail, CheckCircle2, Award, TrendingUp, Users, Shield, Settings, Bot, Trash2,
+  MessageCircle, Leaf, Mail, CheckCircle2, Award, TrendingUp, Users, Shield, Settings, Bot, Trash2, Target,
 } from "lucide-react"
 import Link from "next/link"
 import EmptyState from "@/components/ui/empty-state"
@@ -28,6 +28,7 @@ interface Notification {
   content: string
   link: string | null
   read: boolean
+  metadata?: { kind?: string } | null
   createdAt: string
   actor: NotificationActor | null
 }
@@ -49,7 +50,11 @@ const TYPE_ICONS: Record<string, typeof Bell> = {
   BOT_ASSIST: Bot,
 }
 
-function typeIcon(type: string) {
+function typeIcon(type: string, kind?: string) {
+  // Progression notifications share the REPUTATION type — the metadata
+  // kind distinguishes quest/challenge/milestone icons.
+  if (type === "REPUTATION" && kind === "quest") return Target
+  if (type === "REPUTATION" && kind === "challenge") return Target
   return TYPE_ICONS[type] ?? Bell
 }
 
@@ -254,7 +259,7 @@ export default function NotificationsPage() {
             </li>
           )}
           {notifications.map((n) => {
-            const Icon = typeIcon(n.type)
+            const Icon = typeIcon(n.type, n.metadata?.kind)
             const row = (
               <div className="flex items-start gap-3">
                 <div className="relative shrink-0 pt-0.5">

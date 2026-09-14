@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma"
 import { forbidden, getClientIp, logSecurityEvent } from "@/lib/security"
 import { requireAdmin } from "@/lib/require-staff"
 import { getBadgeByName, STAFF_AWARDED_BADGES } from "@/lib/badge-registry"
-import { grantBadge } from "@/lib/reputation"
+import { grantBadge, reverseReputationByKey } from "@/lib/reputation"
 import { rateLimit } from "@/lib/rate-limit"
 import { emitNotificationPush } from "@/lib/notify"
 import { staffDisplayName } from "@/lib/moderation"
@@ -251,10 +251,12 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ ok: true, isBeta: beta })
     }
 
-    // Staff-awarded badge path — { badge: "Trusted Member", grant: boolean }.
-    // Whitelisted so admins can't hand out stat/contest badges by fiat.
+    // Staff badge path — { badge: "Trusted Member", grant: boolean }.
+    // Grants are whitelisted so admins can't hand out stat/contest badges
+    // by fiat; REVOCATION is allowed for any badge so staff can strip a
+    // badge that was farmed by abuse.
     if (typeof badge === "string" && typeof grant === "boolean") {
-      if (!STAFF_AWARDED_BADGES.has(badge)) {
+      if (grant && !STAFF_AWARDED_BADGES.has(badge)) {
         return NextResponse.json({ error: "Badge is not staff-awardable" }, { status: 400 })
       }
       const def = getBadgeByName(badge)
@@ -276,6 +278,9 @@ export async function PATCH(request: Request) {
         })
       } else {
         await prisma.userBadge.deleteMany({ where: { userId, badgeId: row.id } })
+        // Claw back the badge's rep bonus — non-final so a legitimate
+        // re-grant (badge re-earned or re-awarded) reinstates it.
+        await reverseReputationByKey(`badgebonus:${badge}:${userId}`, `Badge "${badge}" revoked`, admin.id).catch(() => null)
       }
 
       await prisma.moderationAction.create({

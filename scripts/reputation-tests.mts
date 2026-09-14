@@ -40,14 +40,15 @@ import { TERPBOT_USERNAME } from "@/lib/terpbot-constants"
 const TEST_USERNAME = `__test_rep_${Date.now()}`
 
 // Badges granted outside checkBadges() — each must have a real code path:
-//   Dedicated Grower   — diary-updates streak award (grantBadge)
+//   Settled In         — onboarding-complete award
 //   Weekly Winner / Diary of the Month / Contest Finalist — contest-awards.ts
 //   Beta Tester        — admin beta toggle
 //   Verified YouTuber  — admin/youtubers approval
 //   Moderator / Staff  — role-change grants in /api/admin/users
 //   Trusted Member     — whitelisted admin grant (STAFF_AWARDED_BADGES)
+//   Hidden discovery badges — dedicated checks in reputation.ts / harvest route
 const NON_RULE_BADGES = new Set([
-  "Dedicated Grower",
+  "Settled In",
   "Weekly Winner",
   "Diary of the Month",
   "Contest Finalist",
@@ -55,6 +56,11 @@ const NON_RULE_BADGES = new Set([
   "Verified YouTuber",
   "Moderator",
   "Staff",
+  "Comeback",
+  "Deep Roots",
+  "Photoperiod",
+  "Four Twenty",
+  "Secret Stash",
   ...STAFF_AWARDED_BADGES,
 ])
 
@@ -186,7 +192,9 @@ async function run() {
         || t === REP_EVENT_TYPES.REVERSAL
         || t === REP_EVENT_TYPES.REINSTATE
         || t === REP_EVENT_TYPES.LEGACY_MIGRATION
-        || t === REP_EVENT_TYPES.CHALLENGE_WEEKLY,
+        || t === REP_EVENT_TYPES.CHALLENGE_WEEKLY
+        || t === REP_EVENT_TYPES.QUEST_DAILY
+        || t === REP_EVENT_TYPES.BADGE_BONUS,
       `public type ${t} is a known award or REVERSAL`
     )
     assert.notEqual(publicRepLabel(t), "Reputation change", `public type ${t} labelled`)
@@ -400,7 +408,10 @@ async function run() {
     const repBeforeMilestone = await repOf(uid)
     const bump = 250 - repBeforeMilestone
     await awardReputation(uid, REP_EVENT_TYPES.STAFF_ADJUSTMENT, bump, "test milestone bump", { force: true })
-    assert.equal(await repOf(uid), 250)
+    // Crossing 250 also fires milestone badges (Sprout etc.) whose rep
+    // bonuses land in the same balance — assert the floor, not the total.
+    const repAt250 = await repOf(uid)
+    assert.ok(repAt250 >= 250, `expected >=250 after bump, got ${repAt250}`)
     const tierMarker = await prisma.reputationEvent.findUnique({
       where: { key: `milestone:tier:${uid}:250` },
     })
@@ -416,8 +427,9 @@ async function run() {
     )
 
     // Crossing 500 claims the stage milestone + a stage notification.
-    await awardReputation(uid, REP_EVENT_TYPES.STAFF_ADJUSTMENT, 250, "test stage bump", { force: true })
-    assert.equal(await repOf(uid), 500)
+    await awardReputation(uid, REP_EVENT_TYPES.STAFF_ADJUSTMENT, 500 - repAt250, "test stage bump", { force: true })
+    const repAt500 = await repOf(uid)
+    assert.ok(repAt500 >= 500, `expected >=500 after bump, got ${repAt500}`)
     const stageMarker = await prisma.reputationEvent.findUnique({
       where: { key: `milestone:stage:${uid}:500` },
     })
@@ -433,14 +445,16 @@ async function run() {
     // Once-ever: reversing below the rung then re-earning it must NOT
     // re-fire the celebration (marker is claimed; P2002 = already fired).
     const bump2 = await prisma.reputationEvent.findFirst({
-      where: { userId: uid, amount: 250, type: REP_EVENT_TYPES.STAFF_ADJUSTMENT },
+      where: { userId: uid, type: REP_EVENT_TYPES.STAFF_ADJUSTMENT, reason: "test stage bump" },
       orderBy: { createdAt: "desc" },
-      select: { id: true, key: true },
+      select: { id: true, amount: true },
     })
     await reverseReputationEvent(bump2!.id, "test reverse")
-    assert.equal(await repOf(uid), 250, "reversal drops below the stage rung")
-    await awardReputation(uid, REP_EVENT_TYPES.STAFF_ADJUSTMENT, 250, "re-earn", { force: true, key: "test:milestone:re-earn" })
-    assert.equal(await repOf(uid), 500)
+    const repAfterReverse = await repOf(uid)
+    assert.ok(repAfterReverse < 500, `reversal should drop below 500, got ${repAfterReverse}`)
+    const reEarn = 500 - repAfterReverse
+    await awardReputation(uid, REP_EVENT_TYPES.STAFF_ADJUSTMENT, reEarn, "re-earn", { force: true, key: "test:milestone:re-earn" })
+    assert.ok((await repOf(uid)) >= 500, "re-earn lands back at/above the rung")
     const markers500 = await prisma.reputationEvent.count({
       where: { key: `milestone:stage:${uid}:500` },
     })
