@@ -1,6 +1,6 @@
 import { unstable_cache } from "next/cache"
 import { prisma } from "@/lib/prisma"
-import { TERPBOT_USERNAME } from "@/lib/terpbot"
+import { TERPBOT_USERNAME } from "@/lib/terpbot-constants"
 import { REPUTATION_ORDER } from "@/lib/security"
 
 // ─── Suggested growers ─────────────────────────────────────────────

@@ -21,6 +21,7 @@ export const NOTIFICATION_TYPES = [
   "REPUTATION",
   "REFERRAL",
   "MODERATOR_ANNOUNCEMENT",
+  "BOT_ASSIST",
 ] as const
 
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number]
@@ -51,6 +52,7 @@ export const TYPE_CATEGORY: Record<NotificationType, string> = {
   REPUTATION: "MILESTONE",
   REFERRAL: "SYSTEM",
   MODERATOR_ANNOUNCEMENT: "MODERATION",
+  BOT_ASSIST: "SYSTEM",
 }
 
 // Which Profile preference gates each type. Types absent here are
@@ -66,6 +68,8 @@ export const TYPE_PREF = {
   REACTION: "notifyOnReaction",
   BADGE: "notifyOnMilestone",
   REPUTATION: "notifyOnMilestone",
+  ACCEPTED_ANSWER: "notifyOnMilestone",
+  BOT_ASSIST: "notifyOnBotAssist",
 } as const
 
 export type NotifyPrefKey = (typeof TYPE_PREF)[keyof typeof TYPE_PREF]
@@ -79,6 +83,7 @@ const PREF_SELECT = {
   notifyOnFollow: true,
   notifyOnReaction: true,
   notifyOnMilestone: true,
+  notifyOnBotAssist: true,
 } as const
 
 // Actor fields exposed to the client — username + avatar only.

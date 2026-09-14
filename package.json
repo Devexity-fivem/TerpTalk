@@ -22,7 +22,8 @@
     "test:terpbot": "tsx scripts/terpbot-tests.mts",
     "test:reputation": "tsx scripts/reputation-tests.mts",
     "test:trust-safety": "node scripts/trust-safety-verify.mjs",
-    "test:stabilization": "tsx scripts/stabilization-tests.mts"
+    "test:stabilization": "tsx scripts/stabilization-tests.mts",
+    "test:terpbot-pipeline": "tsx scripts/terpbot-pipeline-tests.mts"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",

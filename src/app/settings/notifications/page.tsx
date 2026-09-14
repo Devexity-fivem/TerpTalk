@@ -16,6 +16,7 @@ const TOGGLES = [
   { key: "notifyOnFollow", label: "New followers", desc: "When someone follows my profile." },
   { key: "notifyOnReaction", label: "Reactions", desc: "When someone reacts to my posts or grow diaries." },
   { key: "notifyOnMilestone", label: "Milestones", desc: "Tier-ups, badges, and reputation milestones." },
+  { key: "notifyOnBotAssist", label: "TerpBot tips", desc: "Occasional pointers from TerpBot about my threads, diaries, and account." },
 ] as const
 
 type Prefs = Record<(typeof TOGGLES)[number]["key"], boolean> & { emailDigestFrequency: string | null }

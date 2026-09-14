@@ -14,6 +14,7 @@ import {
 import { getBooleanSetting, SITE_SETTINGS } from "@/lib/settings"
 import { checkMaintenance } from "@/lib/maintenance"
 import { announceNewMember, TERPBOT_USERNAME } from "@/lib/terpbot"
+import { assistWelcome } from "@/lib/terpbot-assist"
 import { notify } from "@/lib/notify"
 
 export async function POST(request: Request) {
@@ -190,7 +191,14 @@ export async function POST(request: Request) {
 
     // TerpBot welcomes the new member in community chat — deferred so the
     // signup response isn't delayed by the post.
-    after(() => announceNewMember(username).then(() => {}))
+    after(() =>
+      Promise.all([
+        announceNewMember(username),
+        // Durable inbox welcome — the chat post prunes after ~3 days.
+        // assistWelcome re-validates the account is still active.
+        assistWelcome(user.id),
+      ]).then(() => {})
+    )
 
     // Referral reputation no longer pays at signup — it pays via
     // maybePayReferral() only once the referred member passes the legitimacy

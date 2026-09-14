@@ -23,6 +23,7 @@ export type BotEventType =
   | "MENTION_FALLBACK"   // mention we couldn't parse
   | "MENTION_REFUSAL"    // moderation-vocabulary refusal
   | "ANNOUNCEMENT"       // welcome/digest/contest posts (command = kind)
+  | "ASSIST"             // event-driven user assist notifications (command = kind)
   | "DAY_ACTIVE"         // one row per UTC day the bot did anything
 
 const COMMAND_TYPES: BotEventType[] = ["COMMAND_SLASH", "COMMAND_MENTION"]
@@ -80,6 +81,55 @@ export async function recordBotEvent(e: {
   )
 }
 
+// ── Claim-first event primitive ──────────────────────────────────────────
+// The event-driven assist pipeline needs claim-then-act semantics: the
+// BotEvent row IS the dedupe claim. A concurrent duplicate loses the unique-
+// key race (P2002 → false) and must not act. Unlike recordBotEvent, which
+// posts first and records after, this gates the action itself.
+export async function claimBotEvent(e: {
+  type: BotEventType
+  key: string
+  userId?: string | null
+  command?: string
+  entities?: number
+}): Promise<boolean> {
+  try {
+    if (e.userId) {
+      const bot = await prisma.profile.findUnique({
+        where: { username: TERPBOT_USERNAME },
+        select: { userId: true },
+      })
+      if (bot?.userId === e.userId) e = { ...e, userId: null }
+    }
+    await prisma.botEvent.create({
+      data: {
+        type: e.type,
+        key: e.key,
+        userId: e.userId ?? null,
+        command: e.command ?? null,
+        entities: e.entities ?? 0,
+      },
+    })
+  } catch (err) {
+    if ((err as { code?: string })?.code === "P2002") return false
+    throw err
+  }
+  const day = new Date().toISOString().slice(0, 10)
+  await prisma.botEvent
+    .create({ data: { type: "DAY_ACTIVE", key: `day:${day}` } })
+    .catch(() => {})
+  await checkBotBadges().catch((err) =>
+    console.error("[terpbot] badge check failed:", err)
+  )
+  return true
+}
+
+// Release a claim so a retryable failure can run again later. Only use for
+// classes where at-least-once beats at-most-once; assists keep the claim.
+export async function releaseBotEvent(key: string): Promise<void> {
+  await prisma.botEvent.deleteMany({ where: { key } }).catch(() => {})
+}
+
 export interface BotStats {
   commands: number        // answered commands (slash + mention)
   mentions: number        // answered via @terpbot
@@ -91,14 +141,16 @@ export interface BotStats {
   fallbacks: number       // mentions the parser couldn't route
   refusals: number        // moderation-vocabulary refusals
   helps: number           // bare-ping help hints
+  assists: number         // event-driven assist notifications delivered/claimed
   byCommand: Record<string, number>      // per-command answer counts
   byAnnouncement: Record<string, number> // per-kind announcement counts
+  byAssist: Record<string, number>       // per-kind assist counts
 }
 
 export async function getBotStats(): Promise<BotStats> {
   const [
     commands, mentions, assisted, entities, welcomes, announcements,
-    daysActive, fallbacks, refusals, helps, commandRows, announceRows,
+    daysActive, fallbacks, refusals, helps, assists, commandRows, announceRows, assistRows,
   ] = await Promise.all([
       prisma.botEvent.count({ where: { type: { in: COMMAND_TYPES } } }),
       prisma.botEvent.count({ where: { type: "COMMAND_MENTION" } }),
@@ -117,6 +169,7 @@ export async function getBotStats(): Promise<BotStats> {
       prisma.botEvent.count({ where: { type: "MENTION_FALLBACK" } }),
       prisma.botEvent.count({ where: { type: "MENTION_REFUSAL" } }),
       prisma.botEvent.count({ where: { type: "MENTION_HELP" } }),
+      prisma.botEvent.count({ where: { type: "ASSIST" } }),
       prisma.botEvent.groupBy({
         by: ["command"],
         where: { type: { in: COMMAND_TYPES }, command: { not: null } },
@@ -125,6 +178,11 @@ export async function getBotStats(): Promise<BotStats> {
       prisma.botEvent.groupBy({
         by: ["command"],
         where: { type: "ANNOUNCEMENT", command: { not: null } },
+        _count: { _all: true },
+      }),
+      prisma.botEvent.groupBy({
+        by: ["command"],
+        where: { type: "ASSIST", command: { not: null } },
         _count: { _all: true },
       }),
     ])
@@ -139,8 +197,10 @@ export async function getBotStats(): Promise<BotStats> {
     fallbacks,
     refusals,
     helps,
+    assists,
     byCommand: Object.fromEntries(commandRows.map((r) => [r.command as string, r._count._all])),
     byAnnouncement: Object.fromEntries(announceRows.map((r) => [r.command as string, r._count._all])),
+    byAssist: Object.fromEntries(assistRows.map((r) => [r.command as string, r._count._all])),
   }
 }
 

@@ -7,6 +7,8 @@ import { rateLimit } from "@/lib/rate-limit"
 import { awardReputation, REP_POINTS } from "@/lib/reputation"
 import { checkMaintenance } from "@/lib/maintenance"
 import { revalidateTag } from "next/cache"
+import { after } from "next/server"
+import { assistFirstDiary } from "@/lib/terpbot-assist"
 
 export async function POST(request: Request) {
   try {
@@ -126,6 +128,10 @@ export async function POST(request: Request) {
       `Started grow diary "${diary.title.slice(0, 60)}"`,
       { key: `diary:${diary.id}`, sourceType: "DIARY", sourceId: diary.id }
     ).catch(() => {})
+
+    // First-diary assist: one private TerpBot tip, once ever per member.
+    // Deferred — the claim inside assistFirstDiary makes retries idempotent.
+    after(() => assistFirstDiary(session.user.id, diary.id).then(() => {}))
 
     revalidateTag("diaries", { expire: 0 })
 

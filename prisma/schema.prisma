@@ -128,6 +128,7 @@ model Profile {
   notifyOnFollow       Boolean  @default(true)
   notifyOnReaction     Boolean  @default(true)
   notifyOnMilestone    Boolean  @default(true)
+  notifyOnBotAssist    Boolean  @default(true)
   emailDigestFrequency String?
   // Equipped cosmetics — keys into the registries in lib/cosmetics.ts.
   // Unlock is derived from reputation; these store only the equipped choice.

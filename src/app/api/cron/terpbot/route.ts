@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { runCronTask } from "@/lib/cron-claim"
-import { postToGeneral, GROW_TIPS } from "@/lib/terpbot"
+import { postToGeneral, GROW_TIPS, sanitizeEcho } from "@/lib/terpbot"
+import { scanDormantThreads } from "@/lib/terpbot-assist"
 import { recordBotEvent } from "@/lib/terpbot-events"
 import { currentWeekKey, previousWeekKey, currentMonthKey, previousMonthKey } from "@/lib/week"
 import { resolveWeeklyWinner, resolveMonthlyDiaryWinner } from "@/lib/contest-awards"
@@ -109,7 +110,7 @@ export async function GET(request: NextRequest) {
       if (winner && winner._count.votes > 0) {
         const name = winner.user.profile?.username || winner.user.name || "a member"
         const diaryDto = await postToGeneral(
-          `🏆 Last month's Diary of the Month winner: @${name} with "${winner.diary.title.slice(0, 60)}" (${winner._count.votes} vote${winner._count.votes === 1 ? "" : "s"})! This month's contest is open — enter a well-documented diary on the Contest page.`
+          `🏆 Last month's Diary of the Month winner: @${name} with "${sanitizeEcho(winner.diary.title, 60)}" (${winner._count.votes} vote${winner._count.votes === 1 ? "" : "s"})! This month's contest is open — enter a well-documented diary on the Contest page.`
         )
         if (diaryDto) {
           await recordBotEvent({ type: "ANNOUNCEMENT", key: `announce:diary-contest:${prevMonth}`, command: "diary-contest" }).catch(() => {})
@@ -129,6 +130,15 @@ export async function GET(request: NextRequest) {
     })
     return "notification-cleanup"
   }, posted, failed, "notification-cleanup")
+
+  // ── Dormant-thread assists (once per UTC day) ──────────────────────
+  // Threads that went quiet send the OP one private TerpBot nudge —
+  // never a public callout, never a fabricated answer. Per-thread claims
+  // inside scanDormantThreads make re-runs idempotent.
+  await runCronTask(`terpbot:dormant:${today}`, async () => {
+    const { dormant, unresolved } = await scanDormantThreads()
+    return `dormant:${dormant},unresolved:${unresolved}`
+  }, posted, failed, "dormant-scan")
 
   // ── Trust & safety signal scan (once per UTC day) ──────────────────
   // A plain system task — not a TerpBot capability. Detectors only flag;

@@ -80,8 +80,10 @@ interface PublicProfile {
     fallbacks: number
     refusals: number
     helps: number
+    assists: number
     byCommand: Record<string, number>
     byAnnouncement: Record<string, number>
+    byAssist: Record<string, number>
   } | null
   growStreak: number
   totalUpdates: number
@@ -297,6 +299,10 @@ export default function ProfileClient() {
                   <div className="text-center">
                     <div className="text-lg font-bold text-primary flex items-center justify-center gap-1"><Megaphone className="w-4 h-4" />{profile.botStats.announcements}</div>
                     <div className="text-xs text-muted-foreground">Announcements</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-lg font-bold text-primary flex items-center justify-center gap-1"><Bot className="w-4 h-4" />{profile.botStats.assists}</div>
+                    <div className="text-xs text-muted-foreground">Assists sent</div>
                   </div>
                   <div className="text-center">
                     <div className="text-lg font-bold text-primary">{profile.stats.followers}</div>

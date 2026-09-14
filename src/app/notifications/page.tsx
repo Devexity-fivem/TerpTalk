@@ -7,7 +7,7 @@ import { useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
 import {
   Bell, BellRing, Loader2, CheckCheck, Check, UserPlus, Heart, MessageSquare, AtSign,
-  MessageCircle, Leaf, Mail, CheckCircle2, Award, TrendingUp, Users, Shield, Settings,
+  MessageCircle, Leaf, Mail, CheckCircle2, Award, TrendingUp, Users, Shield, Settings, Bot,
 } from "lucide-react"
 import Link from "next/link"
 import EmptyState from "@/components/ui/empty-state"
@@ -46,6 +46,7 @@ const TYPE_ICONS: Record<string, typeof Bell> = {
   REPUTATION: TrendingUp,
   REFERRAL: Users,
   MODERATOR_ANNOUNCEMENT: Shield,
+  BOT_ASSIST: Bot,
 }
 
 function typeIcon(type: string) {

@@ -7,6 +7,8 @@ import { rateLimit } from "@/lib/rate-limit"
 import { awardReputation, reverseReputationByKey, REP_POINTS } from "@/lib/reputation"
 import { checkMaintenance } from "@/lib/maintenance"
 import { notify, postDeepLink } from "@/lib/notify"
+import { after } from "next/server"
+import { notifyOpAcceptedAnswer } from "@/lib/terpbot-assist"
 
 export async function POST(request: Request) {
   try {
@@ -130,6 +132,21 @@ export async function POST(request: Request) {
           link: postDeepLink(thread.slug, postId),
           actorId: session.user.id,
         })
+
+        // The answerer is told above, but when a MODERATOR accepts (the OP
+        // didn't do it themselves) the OP would otherwise never learn their
+        // thread got a marked answer. TerpBot delivers that notice — claimed
+        // once-ever per post so accept/unaccept cycles can't re-ping.
+        if (thread.authorId !== user.id) {
+          after(() =>
+            notifyOpAcceptedAnswer({
+              opUserId: thread.authorId,
+              threadSlug: thread.slug,
+              threadTitle: thread.title,
+              postId,
+            }).then(() => {})
+          )
+        }
       }
     }
 

@@ -7,7 +7,7 @@ import { rateLimit } from "@/lib/rate-limit"
 import { repRateLimit, getTierPerks } from "@/lib/reputation"
 import { notifyMentions } from "@/lib/mentions"
 import { getPusher } from "@/lib/pusher"
-import { postBotMessage, TERPBOT_USERNAME } from "@/lib/terpbot"
+import { postBotMessage } from "@/lib/terpbot"
 import { parseTerpbotIntent, TERPBOT_REFUSAL_TEXT, terpbotFallbackText } from "@/lib/terpbot-intents"
 import { runBotCommand } from "@/lib/terpbot-data"
 import { recordBotEvent, countEntityLinks } from "@/lib/terpbot-events"
@@ -294,12 +294,10 @@ export async function POST(request: NextRequest) {
     // way — staff/moderation vocabulary short-circuits to a refusal before
     // any matcher runs. The reply threads under the pinging message.
     if (/@terpbot\b/i.test(content)) {
-      const lastBot = await prisma.chatMessage.findFirst({
-        where: { roomId, author: { profile: { username: TERPBOT_USERNAME } }, deleted: false },
-        orderBy: { createdAt: "desc" },
-        select: { createdAt: true },
-      })
-      if (!lastBot || Date.now() - lastBot.createdAt.getTime() > 60 * 1000) {
+      // Atomic per-room mention cooldown — the old "read last bot message,
+      // then decide" check raced under concurrent pings.
+      const mentionCap = await rateLimit(`chat-bot-mention:${roomId}`, 1, 60 * 1000)
+      if (mentionCap.allowed) {
         const intent = parseTerpbotIntent(content)
         const respond = async () => {
           if (intent.kind === "refusal") {
@@ -318,7 +316,10 @@ export async function POST(request: NextRequest) {
           } else {
             const result = await runBotCommand(intent.name, {
               userId,
-              role: user.role,
+              // Mention surface is always public — /help output must never
+              // list staff commands into a room, and public commands can't
+              // differ by role anyway (staff vocabulary refuses earlier).
+              role: "MEMBER",
               displayName: actorName,
               args: intent.args,
               rest: intent.args.join(" "),

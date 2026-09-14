@@ -483,10 +483,10 @@ async function postAwardEffects(
   oldRep: number,
   newRep: number
 ) {
-  await checkTierChange(userId, oldRep, newRep)
+  const announcedTier = await checkTierChange(userId, oldRep, newRep)
   await checkStageChange(userId, oldRep, newRep)
   await autoVerify(userId, newRep, user)
-  await checkBadges(userId)
+  await checkBadges(userId, { announcedTierName: announcedTier })
   await maybePayReferral(userId, user, newRep)
 }
 
@@ -714,11 +714,11 @@ export async function getUserStats(userId: string, needed?: Set<keyof UserStats>
 // Once-ever per tier per user: a keyed MILESTONE marker makes the
 // celebration durable and race-safe — reversals demote the level but
 // re-earning the tier never re-fires the announcement or toast.
-async function checkTierChange(userId: string, oldRep: number, newRep: number) {
+async function checkTierChange(userId: string, oldRep: number, newRep: number): Promise<string | null> {
   const oldTier = getReputationTier(oldRep)
   const newTier = getReputationTier(newRep)
-  if (newTier.threshold <= oldTier.threshold) return
-  if (!(await claimMilestone(userId, `milestone:tier:${userId}:${newTier.threshold}`))) return
+  if (newTier.threshold <= oldTier.threshold) return null
+  if (!(await claimMilestone(userId, `milestone:tier:${userId}:${newTier.threshold}`))) return null
 
   const stage = getRepStage(newRep)
   const unlocks = cosmeticsUnlockedBetween(oldRep, newRep)
@@ -744,8 +744,14 @@ async function checkTierChange(userId: string, oldRep: number, newRep: number) {
     select: { username: true },
   })
   if (profile?.username) {
-    await announceTierUp(profile.username, newTier.name, newRep).catch(() => null)
+    await announceTierUp(
+      profile.username,
+      newTier.name,
+      newRep,
+      unlocks.map((u) => u.name)
+    ).catch(() => null)
   }
+  return newTier.name
 }
 
 // In-tier stage crossings — every Grow Level advance is a stage rung on
@@ -851,7 +857,9 @@ export async function grantBadge(
 }
 
 // Evaluate all badge rules and grant any newly earned badges (+ notification).
-export async function checkBadges(userId: string) {
+// `announcedTierName` lets the caller suppress a duplicate chat announce when
+// the same award just fired announceTierUp for the same-named milestone badge.
+export async function checkBadges(userId: string, opts: { announcedTierName?: string | null } = {}) {
   if (await isBotUser(userId)) return
   if (!badgeSeedComplete) {
     await seedBadges()
@@ -913,8 +921,13 @@ export async function checkBadges(userId: string) {
       where: { userId },
       select: { username: true },
     })
-    if (profile?.username) {
-      await announceBadges(profile.username, newlyEarned).catch(() => null)
+    // A milestone badge sharing the just-announced tier's name would double-
+    // post in chat — the tier-up announce already covers it.
+    const toAnnounce = opts.announcedTierName
+      ? newlyEarned.filter((n) => n !== opts.announcedTierName)
+      : newlyEarned
+    if (profile?.username && toAnnounce.length) {
+      await announceBadges(profile.username, toAnnounce).catch(() => null)
     }
   }
 }

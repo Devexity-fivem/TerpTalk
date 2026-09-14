@@ -1,0 +1,258 @@
+// TerpBot event-driven assistance pipeline — server-only.
+//
+// REAL EVENT → eligibility → dedupe claim → notify → recorded BotEvent.
+//
+// Hard rules encoded here (see terpbot.ts for the full permission contract):
+// - Every assist is claim-first: the keyed BotEvent row must be inserted
+//   BEFORE the notification is sent, so retries, `after()` re-runs, and
+//   concurrent serverless invocations collapse to one delivery.
+// - Assists are private BOT_ASSIST notifications authored by the TerpBot
+//   account — never chat posts, never fabricated content, always a real
+//   triggering event.
+// - Sparse by design: per-user daily cap + a 7-day "recently assisted"
+//   cushion checked before claiming so a suppressed send doesn't burn the
+//   once-ever claim.
+// - Never assists: the bot itself, banned/suspended recipients (notify()
+//   drops them), or anyone who turned off "TerpBot tips" (notifyOnBotAssist).
+// - Nothing here observes DirectMessage, Report, ModerationAction,
+//   SecurityEvent, or any staff-only table — those events never produce
+//   bot output.
+import { prisma } from "@/lib/prisma"
+import { notify, postDeepLink } from "@/lib/notify"
+import { rateLimit } from "@/lib/rate-limit"
+import { claimBotEvent } from "@/lib/terpbot-events"
+import { getBotUserId, sanitizeEcho } from "@/lib/terpbot"
+import { activeAuthor } from "@/lib/security"
+
+// At most this many assist notifications per user per day, and never more
+// than one assist of ANY kind in a rolling 7-day cushion window.
+const ASSIST_USER_DAILY_CAP = 3
+const ASSIST_CUSHION_MS = 7 * 24 * 60 * 60 * 1000
+
+const ASSIST_GROUP_PREFIX = "bot-assist"
+
+/**
+ * The single pipeline every event-driven assist flows through.
+ *
+ * Returns "sent" when a notification was created, "claimed" when the event
+ * was claimed but delivery was dropped by notify() (pref-off, banned —
+ * the claim is kept: opted-out means opted out, not retry-forever), or
+ * "skipped" when eligibility/cooldown/dedupe refused before claiming.
+ */
+export async function botAssist(opts: {
+  /** Once-ever dedupe key, e.g. `assist:first-diary:<userId>` */
+  key: string
+  /** Assist kind recorded on BotEvent.command, e.g. "first-diary" */
+  kind: string
+  userId: string
+  title: string
+  content: string
+  link?: string
+  /** Skip the 7-day cross-kind cushion (default: cushion applies) */
+  noCushion?: boolean
+}): Promise<"sent" | "claimed" | "skipped"> {
+  try {
+    const botId = await getBotUserId()
+    if (opts.userId === botId) return "skipped"
+
+    // Recipient must exist and be active before we burn a claim.
+    const recipient = await prisma.user.findUnique({
+      where: { id: opts.userId },
+      select: { banned: true, suspendedUntil: true },
+    })
+    if (
+      !recipient ||
+      recipient.banned ||
+      (recipient.suspendedUntil && recipient.suspendedUntil > new Date())
+    ) {
+      return "skipped"
+    }
+
+    // Cross-kind cushion: if ANY assist landed recently, stay quiet. Checked
+    // before the claim AND before the daily counter so a cushioned event
+    // doesn't burn either budget.
+    if (!opts.noCushion) {
+      const recent = await prisma.notification.findFirst({
+        where: {
+          userId: opts.userId,
+          type: "BOT_ASSIST",
+          groupKey: { startsWith: ASSIST_GROUP_PREFIX },
+          createdAt: { gte: new Date(Date.now() - ASSIST_CUSHION_MS) },
+        },
+        select: { id: true },
+      })
+      if (recent) return "skipped"
+    }
+
+    const cap = await rateLimit(
+      `terpbot:assist:user:${opts.userId}`,
+      ASSIST_USER_DAILY_CAP,
+      24 * 60 * 60 * 1000
+    )
+    if (!cap.allowed) return "skipped"
+
+    const claimed = await claimBotEvent({
+      type: "ASSIST",
+      key: opts.key,
+      userId: opts.userId,
+      command: opts.kind,
+    })
+    if (!claimed) return "skipped" // already handled — once ever
+
+    const n = await notify({
+      userId: opts.userId,
+      type: "BOT_ASSIST",
+      title: opts.title,
+      content: opts.content,
+      link: opts.link ?? null,
+      actorId: botId,
+      groupKey: `${ASSIST_GROUP_PREFIX}:${opts.kind}:${opts.userId}`,
+    })
+    return n ? "sent" : "claimed"
+  } catch (e) {
+    console.error("[terpbot] assist failed:", opts.key, e)
+    return "skipped"
+  }
+}
+
+// ── Event handlers ────────────────────────────────────────────────────────
+// One function per triggering event. Copy is factual and points at real
+// product surfaces — TerpBot never fabricates an answer or opinion.
+
+/** Registration → durable welcome in the inbox (chat welcome prunes in 3d). */
+export async function assistWelcome(userId: string) {
+  return botAssist({
+    key: `assist:welcome:${userId}`,
+    kind: "welcome",
+    userId,
+    title: "Welcome to TerpTalk",
+    content:
+      "I'm TerpBot — the community assistant. Finish setup on /welcome, browse the grow guides at /guides, or say hi in /chat. Type /help in chat to see what I can do.",
+    link: "/welcome",
+    noCushion: true, // day-one welcome should not lose to a same-day assist
+  })
+}
+
+/** First grow diary created → what to do next. Once ever per user. */
+export async function assistFirstDiary(userId: string, diaryId: string) {
+  // Only fires when this is genuinely the member's first live diary.
+  const count = await prisma.growDiary.count({
+    where: { authorId: userId, deleted: false },
+  })
+  if (count !== 1) return "skipped"
+  return botAssist({
+    key: `assist:first-diary:${userId}`,
+    kind: "first-diary",
+    userId,
+    title: "Your first diary is live",
+    content:
+      "Weekly updates with photos and numbers (pH, EC, temp/RH) earn +3 rep each and make troubleshooting way easier. Grow guides: /guides",
+    link: `/diaries/${diaryId}`,
+  })
+}
+
+/**
+ * Moderator marked an accepted answer in someone else's thread → tell the OP.
+ * Uses the real ACCEPTED_ANSWER type (factual event, not a tip) and a
+ * once-ever claim so unaccept/re-accept cycles can't re-ping the OP.
+ */
+export async function notifyOpAcceptedAnswer(opts: {
+  opUserId: string
+  threadSlug: string
+  threadTitle: string
+  postId: string
+}) {
+  const botId = await getBotUserId()
+  if (opts.opUserId === botId) return
+  const claimed = await claimBotEvent({
+    type: "ASSIST",
+    key: `assist:accept-op:${opts.postId}`,
+    userId: opts.opUserId,
+    command: "accept-op",
+  })
+  if (!claimed) return
+  await notify({
+    userId: opts.opUserId,
+    type: "ACCEPTED_ANSWER",
+    title: "Accepted answer on your thread",
+    content: `A reply in "${sanitizeEcho(opts.threadTitle, 60)}" was marked as the accepted answer.`,
+    link: postDeepLink(opts.threadSlug, opts.postId),
+    actorId: botId,
+  })
+}
+
+/** Daily cron scan — dormant threads get one private nudge to the OP. */
+export async function scanDormantThreads(opts: {
+  /** Test seam: restrict the scan to these author ids. Omit in production. */
+  authorIds?: string[]
+} = {}): Promise<{ dormant: number; unresolved: number }> {
+  const now = Date.now()
+  const weekAgo = new Date(now - 7 * 24 * 60 * 60 * 1000)
+  const monthAgo = new Date(now - 30 * 24 * 60 * 60 * 1000)
+  const authorScope = opts.authorIds ? { authorId: { in: opts.authorIds } } : {}
+
+  // Never reply-bait in public: dormant assists are private notifications.
+  // Eligibility is re-validated at scan time — deleted/locked/hidden threads
+  // and inactive authors are silently excluded.
+  const unanswered = await prisma.thread.findMany({
+    where: {
+      deleted: false,
+      locked: false,
+      replyCount: 0,
+      createdAt: { gte: monthAgo, lt: weekAgo },
+      category: { hidden: false },
+      author: activeAuthor(),
+      ...authorScope,
+    },
+    orderBy: { createdAt: "asc" },
+    take: 50,
+    select: { id: true, slug: true, title: true, authorId: true },
+  })
+
+  // Replies exist but nothing was ever accepted and the thread went quiet —
+  // remind the OP that marking an answer exists. Same once-ever semantics.
+  const unresolved = await prisma.thread.findMany({
+    where: {
+      deleted: false,
+      locked: false,
+      replyCount: { gt: 0 },
+      acceptedAnswerId: null,
+      lastActivityAt: { lt: weekAgo },
+      createdAt: { lt: weekAgo },
+      category: { hidden: false },
+      author: activeAuthor(),
+      ...authorScope,
+    },
+    orderBy: { lastActivityAt: "asc" },
+    take: 50,
+    select: { id: true, slug: true, title: true, authorId: true, replyCount: true },
+  })
+
+  let dormantSent = 0
+  for (const t of unanswered) {
+    const r = await botAssist({
+      key: `assist:dormant:${t.id}`,
+      kind: "dormant",
+      userId: t.authorId,
+      title: "No replies yet on your thread",
+      content: `"${sanitizeEcho(t.title, 60)}" has been quiet for a week. Adding specifics — medium, lighting, pH/EC readings, photos — usually gets answers. The problem wizard can help you describe it: /help`,
+      link: `/forum/thread/${t.slug}`,
+    })
+    if (r === "sent") dormantSent++
+  }
+
+  let unresolvedSent = 0
+  for (const t of unresolved) {
+    const r = await botAssist({
+      key: `assist:unresolved:${t.id}`,
+      kind: "unresolved",
+      userId: t.authorId,
+      title: "Did any reply solve it?",
+      content: `"${sanitizeEcho(t.title, 60)}" has ${t.replyCount} ${t.replyCount === 1 ? "reply" : "replies"} but no accepted answer. Marking one pays the helper +30 rep and helps future growers.`,
+      link: `/forum/thread/${t.slug}`,
+    })
+    if (r === "sent") unresolvedSent++
+  }
+
+  return { dormant: dormantSent, unresolved: unresolvedSent }
+}

@@ -29,6 +29,7 @@ export async function GET() {
       notifyOnFollow: true,
       notifyOnReaction: true,
       notifyOnMilestone: true,
+      notifyOnBotAssist: true,
       emailDigestFrequency: true,
     },
   })
@@ -57,6 +58,7 @@ export async function PATCH(request: Request) {
     notifyOnFollow?: boolean
     notifyOnReaction?: boolean
     notifyOnMilestone?: boolean
+    notifyOnBotAssist?: boolean
     emailDigestFrequency?: string | null
   } = {}
 
@@ -68,6 +70,7 @@ export async function PATCH(request: Request) {
   if ("notifyOnFollow" in body) data.notifyOnFollow = !!body.notifyOnFollow
   if ("notifyOnReaction" in body) data.notifyOnReaction = !!body.notifyOnReaction
   if ("notifyOnMilestone" in body) data.notifyOnMilestone = !!body.notifyOnMilestone
+  if ("notifyOnBotAssist" in body) data.notifyOnBotAssist = !!body.notifyOnBotAssist
   if ("emailDigestFrequency" in body) {
     const raw = body.emailDigestFrequency
     if (raw === null || raw === undefined || raw === "") {

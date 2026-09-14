@@ -202,13 +202,13 @@ async function loadThreadContext(ref: ThreadRef): Promise<ThreadContext | null> 
 
   const [topReplies, recentReplies] = await Promise.all([
     prisma.post.findMany({
-      where: { threadId: t.id, deleted: false },
+      where: { threadId: t.id, deleted: false, author: activeAuthor() },
       orderBy: { reactions: { _count: "desc" } },
       take: 3,
       select: postSelect,
     }),
     prisma.post.findMany({
-      where: { threadId: t.id, deleted: false },
+      where: { threadId: t.id, deleted: false, author: activeAuthor() },
       orderBy: { createdAt: "desc" },
       take: 3,
       select: postSelect,
@@ -423,7 +423,7 @@ async function handle(name: string, ctx: BotCommandCtx): Promise<BotCommandResul
       const day = diaryDay(diary.startDate, new Date())
       const yieldText = diary.yieldAmount != null ? ` · harvested ${diary.yieldAmount}${diary.yieldUnit ?? "g"}` : ""
       return ok(
-        `📔 @${t.username}'s diary "${diary.title}"${diary.strain ? ` (${diary.strain})` : ""}\n` +
+        `📔 @${t.username}'s diary "${sanitizeField(diary.title)}"${diary.strain ? ` (${sanitizeField(diary.strain)})` : ""}\n` +
           `Stage: ${diary.stage} · Day ${day} · ${diary._count.updates} update${diary._count.updates === 1 ? "" : "s"}${yieldText}\n` +
           `/diaries/${diary.id}`
       )

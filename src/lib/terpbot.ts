@@ -14,6 +14,7 @@
 import { prisma } from "@/lib/prisma"
 import { getPusher } from "@/lib/pusher"
 import { chatAuthorSelect, LIMITS } from "@/lib/security"
+import { rateLimit } from "@/lib/rate-limit"
 import { TERPBOT_USERNAME } from "@/lib/terpbot-constants"
 import { recordBotEvent } from "@/lib/terpbot-events"
 
@@ -85,6 +86,13 @@ async function getOrCreateBot(): Promise<string> {
   return created.id
 }
 
+// The bot's user id — needed by the assist pipeline to send notifications
+// authored by TerpBot (clear bot identity in the inbox). Fails closed the
+// same way getOrCreateBot does.
+export async function getBotUserId(): Promise<string> {
+  return getOrCreateBot()
+}
+
 // Post a message to a room as TerpBot and push it over Pusher when configured.
 // Returns the chat DTO used by the sidebar, or null if posting failed.
 // Bot activity never earns reputation — automated posts must not pollute
@@ -98,6 +106,13 @@ export async function postBotMessage(roomId: string, text: string, replyToId?: s
       select: { isPrivate: true },
     })
     if (!room || room.isPrivate) return null
+    // Global + per-room output budgets live here, not at call sites — every
+    // path that makes the bot speak (commands, mentions, announcements,
+    // event assists) shares the same ceiling, so an event burst can't flood.
+    const globalCap = await rateLimit("terpbot:out:global", 60, 60 * 60 * 1000)
+    if (!globalCap.allowed) return null
+    const roomCap = await rateLimit(`terpbot:out:room:${roomId}`, 10, 60 * 1000)
+    if (!roomCap.allowed) return null
     // Enforce the same content cap users get, and never let bot output
     // contain its own trigger — an "@terpbot" in a reply could ping itself
     // if a future path ever re-scanned bot output.
@@ -171,6 +186,10 @@ export async function postToGeneral(text: string) {
 export function sanitizeEcho(text: string, max = 80): string {
   return text
     .replace(/[\r\n]+/g, " ")
+    // Bot output bypasses enforceLinkTrust, so echoed user text must not
+    // smuggle URLs — strip explicit links and bare domains alike.
+    .replace(/(?:https?:\/\/|www\.)\S*/gi, "")
+    .replace(/\b[a-z0-9-]+\.[a-z]{2,}\b/gi, "")
     .replace(/[[\]()*`<>@\\]/g, "")
     .replace(/\s+/g, " ")
     .trim()
@@ -196,7 +215,7 @@ export async function announceNewMember(username: string) {
 // already counted; these kinds previously were not).
 export async function announceBadges(username: string, badgeNames: string[]) {
   if (badgeNames.length === 0) return null
-  const list = badgeNames.map((n) => `"${n}"`).join(", ")
+  const list = badgeNames.map((n) => `"${sanitizeEcho(n, 40)}"`).join(", ")
   const dto = await postToGeneral(
     `🏅 @${username} earned ${badgeNames.length > 1 ? "new badges" : "a new badge"}: ${list}`
   )
@@ -210,9 +229,17 @@ export async function announceBadges(username: string, badgeNames: string[]) {
   return dto
 }
 
-export async function announceTierUp(username: string, tierName: string, reputation: number) {
+export async function announceTierUp(
+  username: string,
+  tierName: string,
+  reputation: number,
+  unlockNames: string[] = []
+) {
+  const unlockText = unlockNames.length
+    ? ` — unlocked ${unlockNames.map((n) => sanitizeEcho(n, 40)).join(", ")}`
+    : ""
   const dto = await postToGeneral(
-    `⬆️ @${username} just reached the ${tierName} tier with ${reputation.toLocaleString()} rep. Keep growing!`
+    `⬆️ @${username} just reached the ${sanitizeEcho(tierName, 40)} tier with ${reputation.toLocaleString()} rep${unlockText}. Keep growing!`
   )
   if (dto) {
     await recordBotEvent({
