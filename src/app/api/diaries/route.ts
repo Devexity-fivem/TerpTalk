@@ -46,6 +46,12 @@ export async function POST(request: Request) {
       )
     }
 
+    // description is NOT NULL in the schema but the form sends "" when the
+    // member leaves it blank — a missing key must not 500 the create.
+    if (description !== undefined && typeof description !== "string") {
+      return NextResponse.json({ error: "Invalid description" }, { status: 400 })
+    }
+
     if (title.length > LIMITS.DIARY_TITLE_MAX || (description && description.length > LIMITS.DESCRIPTION_MAX)) {
       return NextResponse.json(
         { error: "Content exceeds maximum length" },
@@ -105,7 +111,7 @@ export async function POST(request: Request) {
     const diary = await prisma.growDiary.create({
       data: {
         title,
-        description,
+        description: description ?? "",
         strain,
         genetics,
         growType,

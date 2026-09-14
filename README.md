@@ -1,6 +1,6 @@
 # TerpTalk
 
-Invite-only cannabis community platform: forums, grow diaries, grow setups, strain database, chat, reactions, blocking, reporting, and full moderation tooling.
+Public cannabis community platform (21+): forums, grow diaries, grow setups, strain database, chat, reactions, blocking, reporting, and full moderation tooling.
 
 ## Stack
 
@@ -32,6 +32,14 @@ npm run backup                       # pg_dump or file copy -> backups/
 ```
 
 Never run `migrate reset` or destructive commands against production. Use `npx prisma migrate dev` only against a local dev database.
+
+**Production migrations (Neon):** `migrate deploy` is not part of the Vercel build — run it manually against the **direct** Neon endpoint, not the `-pooler` URL (PgBouncer transaction pooling breaks the advisory locks Prisma uses). In the Neon dashboard the direct host is the same endpoint minus `-pooler` from the hostname:
+
+```bash
+DATABASE_URL="postgresql://USER:PASSWORD@ep-XXXX.us-east-1.aws.neon.tech/neondb?sslmode=require" npx prisma migrate deploy
+```
+
+Then push the deploy. App runtime keeps using the pooled `DATABASE_URL`.
 
 ## Testing
 

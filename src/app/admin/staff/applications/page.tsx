@@ -41,7 +41,6 @@ export default function StaffApplicationsAdminPage() {
 
   useEffect(() => {
     if (status !== "authenticated" || !isAdmin) {
-      if (status !== "loading") setLoading(false)
       return
     }
     let mounted = true
@@ -93,7 +92,9 @@ export default function StaffApplicationsAdminPage() {
     }
   }
 
-  if (status === "loading" || loading) {
+  // Spinner only while we actually intend to fetch: session resolving,
+  // or an authenticated admin waiting on the applications request.
+  if (status === "loading" || (loading && status === "authenticated" && isAdmin)) {
     return (
       <main className="min-h-screen flex items-center justify-center">
         <Loader2 className="w-8 h-8 animate-spin text-primary" />

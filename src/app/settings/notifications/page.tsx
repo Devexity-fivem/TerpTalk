@@ -133,7 +133,7 @@ export default function NotificationSettingsPage() {
           <div className="flex items-start justify-between gap-4 p-4">
             <div>
               <div className="font-medium">Direct messages</div>
-              <div className="text-sm text-muted-foreground">Who can start a private conversation with you. Existing conversations aren't affected.</div>
+              <div className="text-sm text-muted-foreground">Who can start a private conversation with you. Existing conversations aren&apos;t affected.</div>
             </div>
             <select
               value={prefs.dmPolicy}

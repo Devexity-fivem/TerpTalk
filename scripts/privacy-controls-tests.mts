@@ -89,7 +89,7 @@ async function run() {
     await prisma.profile.update({ where: { userId: a.id }, data: { dmPolicy: "FOLLOWING" } })
     // a follows b — but that does NOT let b message a under FOLLOWING.
     await prisma.follow.create({ data: { followerId: a.id, followingId: b.id } })
-    let allowed = await prisma.follow.findFirst({
+    const allowed = await prisma.follow.findFirst({
       where: { followerId: a.id, followingId: b.id },
       select: { id: true },
     })
