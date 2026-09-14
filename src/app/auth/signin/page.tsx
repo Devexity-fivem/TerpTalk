@@ -32,7 +32,9 @@ export default function SignInPage() {
         redirect: false,
       })
 
-      if (result?.error) {
+      if (result?.error === "AccountBanned" || result?.error === "AccountSuspended") {
+        setError("restricted")
+      } else if (result?.error) {
         setError("Invalid username or password")
       } else {
         router.push(callback ?? "/")
@@ -91,11 +93,22 @@ export default function SignInPage() {
 
           {error && (
             <div className="bg-destructive/10 text-destructive px-4 py-2 rounded-lg text-sm">
-              {error}
-              {" "}
-              <Link href="/restricted" className="underline">
-                Account suspended or banned? Check your status
-              </Link>
+              {error === "restricted" ? (
+                <>
+                  Your account is suspended or banned.{" "}
+                  <Link href="/restricted" className="underline">
+                    Check your status or request a review
+                  </Link>
+                </>
+              ) : (
+                <>
+                  {error}
+                  {" "}
+                  <Link href="/restricted" className="underline">
+                    Account suspended or banned? Check your status
+                  </Link>
+                </>
+              )}
             </div>
           )}
 

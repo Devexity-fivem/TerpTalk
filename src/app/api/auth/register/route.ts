@@ -12,6 +12,7 @@ import {
   logSecurityEvent,
 } from "@/lib/security"
 import { getBooleanSetting, SITE_SETTINGS } from "@/lib/settings"
+import { turnstileEnabled, verifyTurnstile } from "@/lib/turnstile"
 import { checkMaintenance } from "@/lib/maintenance"
 import { announceNewMember, TERPBOT_USERNAME } from "@/lib/terpbot"
 import { assistWelcome } from "@/lib/terpbot-assist"
@@ -45,42 +46,59 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json().catch(() => ({}))
-    const { username, password, ageVerified, referralCode, captchaId, captchaAnswer } = body
+    const { username, password, ageVerified, referralCode, captchaId, captchaAnswer, turnstileToken } = body
 
-    if (!username || !password || !captchaId || !captchaAnswer) {
-      return NextResponse.json(
-        { error: "Missing required fields" },
-        { status: 400 }
-      )
-    }
+    if (turnstileEnabled()) {
+      // Managed anti-bot challenge — the token is single-use and
+      // server-verified, so scripted clients can't solve it locally.
+      if (!username || !password || !turnstileToken) {
+        return NextResponse.json(
+          { error: "Missing required fields" },
+          { status: 400 }
+        )
+      }
+      if (!(await verifyTurnstile(turnstileToken, ip))) {
+        return NextResponse.json(
+          { error: "Security check failed. Please try again." },
+          { status: 400 }
+        )
+      }
+    } else {
+      if (!username || !password || !captchaId || !captchaAnswer) {
+        return NextResponse.json(
+          { error: "Missing required fields" },
+          { status: 400 }
+        )
+      }
 
-    // Verify math captcha
-    const captcha = await prisma.captcha.findUnique({
-      where: { id: captchaId },
-    })
+      // Verify math captcha
+      const captcha = await prisma.captcha.findUnique({
+        where: { id: captchaId },
+      })
 
-    if (!captcha || captcha.used || captcha.expiresAt < new Date()) {
-      return NextResponse.json(
-        { error: "Challenge expired. Please refresh and try again." },
-        { status: 400 }
-      )
-    }
+      if (!captcha || captcha.used || captcha.expiresAt < new Date()) {
+        return NextResponse.json(
+          { error: "Challenge expired. Please refresh and try again." },
+          { status: 400 }
+        )
+      }
 
-    if (captcha.answer !== String(captchaAnswer).trim()) {
+      if (captcha.answer !== String(captchaAnswer).trim()) {
+        await prisma.captcha.update({
+          where: { id: captchaId },
+          data: { used: true },
+        })
+        return NextResponse.json(
+          { error: "Security check failed. Please try again." },
+          { status: 400 }
+        )
+      }
+
       await prisma.captcha.update({
         where: { id: captchaId },
         data: { used: true },
       })
-      return NextResponse.json(
-        { error: "Security check failed. Please try again." },
-        { status: 400 }
-      )
     }
-
-    await prisma.captcha.update({
-      where: { id: captchaId },
-      data: { used: true },
-    })
 
     // Optional referral — a referrer's username; validate it exists if provided
     let referrerId: string | null = null

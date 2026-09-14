@@ -58,7 +58,7 @@ export const authOptions: NextAuthOptions = {
         // Rate limit credential attempts: 10 tries per 15 min per username
         // (mitigates credential stuffing without leaking account existence)
         const rl = await rateLimit(
-          `login:${credentials.username.toLowerCase()}`,
+          `login:${credentials.username.trim().toLowerCase()}`,
           10,
           15 * 60 * 1000
         )
@@ -112,9 +112,25 @@ export const authOptions: NextAuthOptions = {
           throw new Error("Invalid credentials")
         }
 
-        // Banned and suspended accounts can't sign in. The error stays
-        // generic client-side (enumeration resistance); the /restricted
-        // page re-verifies credentials and shows the actual status.
+        const isCorrectPassword = await bcrypt.compare(
+          credentials.password,
+          user.password
+        )
+
+        if (!isCorrectPassword) {
+          // Uniform error — wrong password never reveals account status
+          // or existence, even for banned/suspended accounts.
+          await logSecurityEvent("LOGIN_FAILURE", {
+            userId: user.id,
+            userAgent: (req?.headers as Record<string, string> | undefined)?.["user-agent"] ?? null,
+            metadata: { reason: "invalid_credentials" },
+          })
+          throw new Error("Invalid credentials")
+        }
+
+        // Password is correct, so the caller is the account owner — the
+        // distinct error lets a suspended/banned member self-diagnose via
+        // /restricted instead of chasing a phantom "wrong password".
         const isSuspended = !!user.suspendedUntil && user.suspendedUntil > new Date()
         if (user.banned || isSuspended) {
           await logSecurityEvent("LOGIN_FAILURE", {
@@ -122,21 +138,7 @@ export const authOptions: NextAuthOptions = {
             userAgent: (req?.headers as Record<string, string> | undefined)?.["user-agent"] ?? null,
             metadata: { reason: user.banned ? "banned" : "suspended" },
           })
-          throw new Error("Invalid credentials")
-        }
-
-        const isCorrectPassword = await bcrypt.compare(
-          credentials.password,
-          user.password
-        )
-
-        if (!isCorrectPassword) {
-          await logSecurityEvent("LOGIN_FAILURE", {
-            userId: user.id,
-            userAgent: (req?.headers as Record<string, string> | undefined)?.["user-agent"] ?? null,
-            metadata: { reason: "invalid_credentials" },
-          })
-          throw new Error("Invalid credentials")
+          throw new Error(user.banned ? "AccountBanned" : "AccountSuspended")
         }
 
         await logSecurityEvent("LOGIN_SUCCESS", {

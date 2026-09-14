@@ -18,7 +18,7 @@ const securityHeaders = [
     key: "Content-Security-Policy",
     value: [
       "default-src 'self'",
-      `script-src 'self' 'unsafe-inline'${process.env.NODE_ENV === "development" ? " 'unsafe-eval'" : ""}`,
+      `script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com${process.env.NODE_ENV === "development" ? " 'unsafe-eval'" : ""}`,
       "style-src 'self' 'unsafe-inline'",
       "img-src 'self' data: blob: https://*.vercel-storage.com https://*.public.blob.vercel-storage.com",
       "font-src 'self' data:",
@@ -26,7 +26,7 @@ const securityHeaders = [
         (process.env.NODE_ENV === "development" ? " ws: wss:" : ""),
       "frame-ancestors 'none'",
       // MediaEmbed renders youtube-nocookie / vimeo iframes.
-      "frame-src https://www.youtube-nocookie.com https://player.vimeo.com",
+      "frame-src https://www.youtube-nocookie.com https://player.vimeo.com https://challenges.cloudflare.com",
       "object-src 'none'",
       "base-uri 'self'",
       "form-action 'self'",

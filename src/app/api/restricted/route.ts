@@ -28,6 +28,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Invalid request" }, { status: 400 })
     }
 
+    // Per-username cap too — IP rotation alone must not give unlimited
+    // guesses against a single account.
+    const userRl = await rateLimit(`restricted-user:${username.trim().toLowerCase()}`, 10, 15 * 60 * 1000)
+    if (!userRl.allowed) {
+      return NextResponse.json({ error: "Too many attempts. Please try again later." }, { status: 429 })
+    }
+
     const user = await prisma.user.findFirst({
       where: { profile: { username: { equals: username.trim(), mode: "insensitive" } } },
       select: {

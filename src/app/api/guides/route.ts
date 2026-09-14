@@ -22,7 +22,12 @@ export async function POST(request: Request) {
     }
 
     const { title, excerpt, content, topic } = await request.json().catch(() => ({}))
-    if (!title || !excerpt || !content || !topic) {
+    if (
+      typeof title !== "string" || !title ||
+      typeof excerpt !== "string" || !excerpt ||
+      typeof content !== "string" || !content ||
+      typeof topic !== "string" || !topic
+    ) {
       return NextResponse.json({ error: "All fields required" }, { status: 400 })
     }
     if (String(content).length > 50_000) {

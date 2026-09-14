@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import { signIn } from "next-auth/react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
@@ -12,10 +12,24 @@ interface Captcha {
   question: string
 }
 
+const TURNSTILE_SITE_KEY = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || ""
+
+declare global {
+  interface Window {
+    turnstile?: {
+      render: (el: HTMLElement, opts: Record<string, unknown>) => string
+      reset: (id?: string) => void
+    }
+  }
+}
+
 export default function SignUpPage() {
   const router = useRouter()
   const [captcha, setCaptcha] = useState<Captcha | null>(null)
   const [captchaAnswer, setCaptchaAnswer] = useState("")
+  const [turnstileToken, setTurnstileToken] = useState("")
+  const turnstileRef = useRef<HTMLDivElement>(null)
+  const turnstileWidgetId = useRef<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
   const callback = typeof window !== "undefined"
@@ -52,8 +66,10 @@ export default function SignUpPage() {
 
   // Fetch the initial challenge. State is set from promise callbacks rather
   // than synchronously in the effect body, and the request is aborted on
-  // unmount so a late response cannot update a stale component.
+  // unmount so a late response cannot update a stale component. Skipped
+  // entirely when Turnstile is configured.
   useEffect(() => {
+    if (TURNSTILE_SITE_KEY) return
     const controller = new AbortController()
     fetch("/api/captcha", { signal: controller.signal })
       .then((res) => res.json().then((data) => ({ ok: res.ok, data })))
@@ -66,6 +82,30 @@ export default function SignUpPage() {
     return () => controller.abort()
   }, [])
 
+  // Render the Turnstile widget when configured. Explicit render keeps a
+  // stable widget id so failures can reset it for a fresh token.
+  useEffect(() => {
+    if (!TURNSTILE_SITE_KEY || !turnstileRef.current) return
+    const render = () => {
+      if (!turnstileRef.current || turnstileWidgetId.current || !window.turnstile) return
+      turnstileWidgetId.current = window.turnstile.render(turnstileRef.current, {
+        sitekey: TURNSTILE_SITE_KEY,
+        callback: (token: string) => setTurnstileToken(token),
+        "expired-callback": () => setTurnstileToken(""),
+        "error-callback": () => setTurnstileToken(""),
+      })
+    }
+    if (window.turnstile) {
+      render()
+      return
+    }
+    const script = document.createElement("script")
+    script.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit"
+    script.async = true
+    script.onload = render
+    document.head.appendChild(script)
+  }, [])
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError("")
@@ -75,14 +115,21 @@ export default function SignUpPage() {
       return
     }
 
-    if (!captcha) {
-      setError("Challenge not loaded. Please refresh the page.")
-      return
-    }
+    if (TURNSTILE_SITE_KEY) {
+      if (!turnstileToken) {
+        setError("Please complete the security check")
+        return
+      }
+    } else {
+      if (!captcha) {
+        setError("Challenge not loaded. Please refresh the page.")
+        return
+      }
 
-    if (!captchaAnswer.trim()) {
-      setError("Please answer the security question")
-      return
+      if (!captchaAnswer.trim()) {
+        setError("Please answer the security question")
+        return
+      }
     }
 
     if (formData.password !== formData.confirmPassword) {
@@ -106,8 +153,9 @@ export default function SignUpPage() {
           password: formData.password,
           ageVerified: formData.ageVerified,
           referralCode: formData.referralCode,
-          captchaId: captcha.id,
-          captchaAnswer,
+          ...(TURNSTILE_SITE_KEY
+            ? { turnstileToken }
+            : { captchaId: captcha!.id, captchaAnswer }),
         }),
       })
 
@@ -131,7 +179,12 @@ export default function SignUpPage() {
     } catch (error: unknown) {
       setError((error as Error).message)
       setCaptchaAnswer("")
-      loadCaptcha()
+      setTurnstileToken("")
+      if (TURNSTILE_SITE_KEY) {
+        window.turnstile?.reset(turnstileWidgetId.current ?? undefined)
+      } else {
+        loadCaptcha()
+      }
     } finally {
       setLoading(false)
     }
@@ -213,35 +266,42 @@ export default function SignUpPage() {
             />
           </div>
 
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <label htmlFor="captchaAnswer" className="block text-sm font-medium">
-                Security Question *
-              </label>
-              <button
-                type="button"
-                onClick={loadCaptcha}
-                disabled={!captcha}
-                className="text-xs text-primary hover:underline flex items-center gap-1 disabled:opacity-50"
-              >
-                <RefreshCw className="w-3 h-3" />
-                New question
-              </button>
+          {TURNSTILE_SITE_KEY ? (
+            <div>
+              <label className="block text-sm font-medium mb-2">Security Check *</label>
+              <div ref={turnstileRef} />
             </div>
-            <p className="text-sm text-muted-foreground mb-2">
-              {captcha ? captcha.question : "Loading..."}
-            </p>
-            <input
-              id="captchaAnswer"
-              type="text"
-              required
-              value={captchaAnswer}
-              onChange={(e) => setCaptchaAnswer(e.target.value)}
-              className="w-full px-4 py-2 rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary"
-              placeholder="Enter the answer"
-              autoComplete="off"
-            />
-          </div>
+          ) : (
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label htmlFor="captchaAnswer" className="block text-sm font-medium">
+                  Security Question *
+                </label>
+                <button
+                  type="button"
+                  onClick={loadCaptcha}
+                  disabled={!captcha}
+                  className="text-xs text-primary hover:underline flex items-center gap-1 disabled:opacity-50"
+                >
+                  <RefreshCw className="w-3 h-3" />
+                  New question
+                </button>
+              </div>
+              <p className="text-sm text-muted-foreground mb-2">
+                {captcha ? captcha.question : "Loading..."}
+              </p>
+              <input
+                id="captchaAnswer"
+                type="text"
+                required
+                value={captchaAnswer}
+                onChange={(e) => setCaptchaAnswer(e.target.value)}
+                className="w-full px-4 py-2 rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary"
+                placeholder="Enter the answer"
+                autoComplete="off"
+              />
+            </div>
+          )}
 
           <div className="flex items-center">
             <input

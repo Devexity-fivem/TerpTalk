@@ -64,7 +64,7 @@ function sanitizeField(s: string, max = 80): string {
 // (similar-threads pattern). Visibility gate is identical to /search:
 // deleted:false + category.hidden:false.
 async function searchThreadsForBot(q: string, take = 3) {
-  const base = { deleted: false, category: { hidden: false } }
+  const base = { deleted: false, category: { hidden: false }, author: activeAuthor() }
   const select = { title: true, slug: true, replyCount: true, category: { select: { name: true } } } as const
   let threads = await prisma.thread.findMany({
     where: { ...base, OR: [{ title: { contains: q, mode: "insensitive" } }, { tags: { some: { tag: { name: { contains: q, mode: "insensitive" } } } } }] },
@@ -107,9 +107,12 @@ async function resolveMember(
   if (username.toLowerCase() === TERPBOT_USERNAME) return null
   const target = await prisma.user.findFirst({
     where: { profile: { username: { equals: username, mode: "insensitive" } }, ...activeAuthor() },
-    select: { id: true, profile: { select: { username: true, reputation: true } } },
+    select: { id: true, profile: { select: { username: true, reputation: true, publicMilestoneOptOut: true } } },
   })
   if (!target?.profile?.username) return null
+  // Members who opted out of public recognition resolve the same as an
+  // unknown name — the bot must not re-publish suppressed signals.
+  if (target.profile.publicMilestoneOptOut && target.id !== requesterId) return null
   if (target.id !== requesterId && (await blockExistsBetween(requesterId, target.id))) return null
   return { userId: target.id, username: target.profile.username, reputation: target.profile.reputation }
 }
@@ -180,7 +183,7 @@ interface ThreadContext {
 // a nonexistent slug, so the bot is never an existence oracle.
 async function loadThreadContext(ref: ThreadRef): Promise<ThreadContext | null> {
   const t = await prisma.thread.findFirst({
-    where: { slug: { equals: ref.slug, mode: "insensitive" }, deleted: false, category: { hidden: false } },
+    where: { slug: { equals: ref.slug, mode: "insensitive" }, deleted: false, category: { hidden: false }, author: activeAuthor() },
     select: {
       id: true, slug: true, title: true, content: true, replyCount: true, locked: true,
       category: { select: { name: true } },
@@ -188,7 +191,7 @@ async function loadThreadContext(ref: ThreadRef): Promise<ThreadContext | null> 
       acceptedAnswer: {
         select: {
           id: true, content: true, deleted: true,
-          author: { select: { name: true, profile: { select: { username: true } } } },
+          author: { select: { name: true, banned: true, suspendedUntil: true, profile: { select: { username: true } } } },
         },
       },
     },
@@ -216,8 +219,12 @@ async function loadThreadContext(ref: ThreadRef): Promise<ThreadContext | null> 
     }),
   ])
 
+  const answerAuthorActive =
+    !!t.acceptedAnswer &&
+    !t.acceptedAnswer.author.banned &&
+    (!t.acceptedAnswer.author.suspendedUntil || t.acceptedAnswer.author.suspendedUntil < new Date())
   const answer =
-    t.acceptedAnswer && !t.acceptedAnswer.deleted
+    t.acceptedAnswer && !t.acceptedAnswer.deleted && answerAuthorActive
       ? {
           id: t.acceptedAnswer.id,
           content: t.acceptedAnswer.content,
@@ -390,10 +397,11 @@ async function handle(name: string, ctx: BotCommandCtx): Promise<BotCommandResul
       const def = getBadgeByName(ctx.rest)
       if (!badge && !def) return ok(`No badge called that — browse the list on your profile or /nextbadges.`)
       const name = badge?.name ?? def!.name
-      const [holders, mine] = await Promise.all([
-        prisma.userBadge.count({ where: { badge: { name } } }),
-        prisma.userBadge.findFirst({ where: { userId: ctx.userId, badge: { name } }, select: { earnedAt: true } }),
-      ])
+      const mine = await prisma.userBadge.findFirst({ where: { userId: ctx.userId, badge: { name } }, select: { earnedAt: true } })
+      // Hidden badges are undiscoverable — the bot answers as if they
+      // don't exist unless the requester has already earned one.
+      if (def?.hidden && !mine) return ok(`No badge called that — browse the list on your profile or /nextbadges.`)
+      const holders = await prisma.userBadge.count({ where: { badge: { name } } })
       const earned = mine ? ` Earned by you on ${mine.earnedAt.toISOString().slice(0, 10)}.` : ""
       return ok(
         `🏅 "${name}" (${badge?.color ?? def!.rarity}) — ${badge?.description ?? def!.description}\n` +
@@ -407,7 +415,7 @@ async function handle(name: string, ctx: BotCommandCtx): Promise<BotCommandResul
         prisma.userBadge.findMany({ where: { userId: ctx.userId }, select: { badge: { select: { name: true } } } }),
       ])
       const earned = new Set(earnedRows.map((r) => r.badge.name))
-      const unearned = BADGE_REGISTRY.filter((d) => !earned.has(d.name) && BADGE_RULES[d.name] && !BADGE_RULES[d.name](stats))
+      const unearned = BADGE_REGISTRY.filter((d) => !d.hidden && !earned.has(d.name) && BADGE_RULES[d.name] && !BADGE_RULES[d.name](stats))
       if (!unearned.length) return ok(`🏅 @${ctx.displayName} has earned every rule-based badge — impressive!`)
       unearned.sort((a, b) => RARITY_ORDER.indexOf(a.rarity) - RARITY_ORDER.indexOf(b.rarity))
       const lines = unearned.slice(0, 5).map((d) => `• ${d.name} (${d.rarity}) — ${d.requirement}`)

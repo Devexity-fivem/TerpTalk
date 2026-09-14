@@ -26,16 +26,18 @@ export async function rateLimit(
       update: { count: { increment: 1 } },
     })
 
-    // Window expired — reset
+    // Window expired — reset, but only the first concurrent request wins
+    // the reset; others keep their increment so a burst can't undercount.
+    let count = record.count
     if (record.expiresAt.getTime() < now) {
-      await prisma.rateLimit.update({
-        where: { key },
+      const reset = await prisma.rateLimit.updateMany({
+        where: { key, expiresAt: { lt: new Date(now) } },
         data: { count: 1, expiresAt },
       })
-      return { allowed: true, remaining: limit - 1, retryAfterSeconds: 0 }
+      count = reset.count === 1 ? 1 : record.count
     }
 
-    const allowed = record.count <= limit
+    const allowed = count <= limit
 
     // Opportunistically clean expired rows after the response so the table
     // does not grow forever. 0.5% chance per call keeps overhead negligible.
@@ -51,10 +53,10 @@ export async function rateLimit(
 
     return {
       allowed,
-      remaining: Math.max(0, limit - record.count),
+      remaining: Math.max(0, limit - count),
       retryAfterSeconds: allowed
         ? 0
-        : Math.ceil((record.expiresAt.getTime() - now) / 1000),
+        : Math.max(1, Math.ceil((record.expiresAt.getTime() - now) / 1000)),
     }
   } catch (error) {
     // Mutations should fail closed by default; reads can opt into fail-open
