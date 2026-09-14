@@ -109,16 +109,18 @@ function renderContent(text: string) {
 interface MessageRowProps {
   msg: Message
   isMenuOpen: boolean
+  isOwn: boolean
   canManage: boolean
   isAdmin: boolean
   onToggleMenu: (id: string) => void
   onReply: (msg: Message) => void
   onModerate: (actionType: string, targetUserId: string, opts?: { targetType?: string; targetId?: string; durationDays?: number }) => void
+  onDeleteOwn: (id: string) => void
 }
 
 // Memoized — a 100-message room re-renders only the row whose menu toggled.
 const MessageRow = memo(function MessageRow({
-  msg, isMenuOpen, canManage, isAdmin, onToggleMenu, onReply, onModerate,
+  msg, isMenuOpen, isOwn, canManage, isAdmin, onToggleMenu, onReply, onModerate, onDeleteOwn,
 }: MessageRowProps) {
   const isDeleted = msg.content === "[deleted]"
   const isBot = msg.author.username === BOT_USERNAME
@@ -220,6 +222,15 @@ const MessageRow = memo(function MessageRow({
             >
               <UserIcon className="w-3 h-3 text-primary" /> View profile
             </Link>
+            {isOwn && !isDeleted && (
+              <button
+                role="menuitem"
+                onClick={() => onDeleteOwn(msg.id)}
+                className="w-full flex items-center gap-1.5 px-2 py-1 rounded text-xs text-left hover:bg-secondary text-foreground"
+              >
+                <Trash2 className="w-3 h-3 text-destructive" /> Delete my message
+              </button>
+            )}
             {canManage && (
               <>
                 <div className="border-t border-border my-1" />
@@ -634,6 +645,26 @@ export default function ChatRoom() {
     }
   }
 
+  const deleteOwnMessage = async (msgId: string) => {
+    setActiveMenu(null)
+    if (!confirm("Delete this message? This cannot be undone.")) return
+    try {
+      const res = await fetch("/api/chat/messages", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: msgId }),
+      })
+      if (res.ok) {
+        setMessages((prev) => prev.map((m) => (m.id === msgId ? { ...m, content: "[deleted]" } : m)))
+      } else {
+        const body = await res.json().catch(() => ({}))
+        throw new Error(body.error || `HTTP ${res.status}`)
+      }
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "Delete failed", "error")
+    }
+  }
+
   const takeModerationAction = async (
     actionType: string,
     targetUserId: string,
@@ -811,11 +842,13 @@ export default function ChatRoom() {
                   key={msg.id}
                   msg={msg}
                   isMenuOpen={activeMenu === msg.id}
+                  isOwn={msg.author.id === myId}
                   canManage={isModerator && msg.author.id !== myId}
                   isAdmin={isAdmin}
                   onToggleMenu={toggleMenu}
                   onReply={startReply}
                   onModerate={takeModerationAction}
+                  onDeleteOwn={deleteOwnMessage}
                 />
               ))
             )}

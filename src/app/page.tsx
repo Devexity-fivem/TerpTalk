@@ -101,8 +101,11 @@ const getActiveMembers = unstable_cache(
       where: {
         banned: false,
         status: "ONLINE",
-        profile: { isNot: { username: "terpbot" } },
         OR: [{ suspendedUntil: null }, { suspendedUntil: { lt: new Date() } }],
+        AND: [
+          { profile: { isNot: { username: "terpbot" } } },
+          { OR: [{ profile: { hideOnlineStatus: false } }, { profile: null }] },
+        ],
       },
       take: 12,
       orderBy: { lastSeenAt: "desc" },

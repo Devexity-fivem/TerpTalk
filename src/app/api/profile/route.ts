@@ -506,7 +506,12 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ error: "Invalid password" }, { status: 403 })
     }
 
-    if (confirmUsername !== user.profile?.username) {
+    // Case-insensitive — login is insensitive too, so requiring an
+    // exact-case match here is just a footgun.
+    if (
+      confirmUsername.trim().toLowerCase() !== (user.profile?.username ?? "").toLowerCase() ||
+      !user.profile?.username
+    ) {
       return NextResponse.json(
         { error: "Username confirmation does not match" },
         { status: 400 }
@@ -532,6 +537,9 @@ export async function DELETE(request: Request) {
           OR: [
             { thread: { authorId: user.id } },
             { post: { authorId: user.id } },
+            // Images on other members' replies inside this user's threads —
+            // the cascade removes those posts too, so their blobs go as well.
+            { post: { thread: { authorId: user.id } } },
           ],
         },
         select: { url: true },
@@ -563,11 +571,30 @@ export async function DELETE(request: Request) {
       user.profile?.avatarUrl,
     ]
 
+    // Scrub the username out of other members' notifications before the
+    // actor link is dropped — otherwise "@name replied…" text and /u/name
+    // links outlive the account (and a re-registered name would inherit them).
+    await prisma.notification.updateMany({
+      where: { actorId: user.id },
+      data: { content: "A former member interacted with your content.", link: null },
+    }).catch(() => {})
+
+    // Welcome announcements are keyed by username — re-key to the user id so
+    // the retained once-ever marker doesn't store the deleted name.
+    if (user.profile?.username) {
+      await prisma.botEvent.updateMany({
+        where: { key: `announce:welcome:${user.profile.username.toLowerCase()}` },
+        data: { key: `announce:welcome:uid:${user.id}` },
+      }).catch(() => {})
+    }
+
     // Void reputation this account granted others (likes, accepted answers)
     // before the cascade deletes their own ledger rows.
     await reverseReputationByActor(user.id, "Granting account deleted").catch(() => 0)
 
     // Cascade delete handles: profile, posts, threads, diaries, setups,
+    // chat messages, DMs, notifications, reactions, follows, badges,
+    // reputation events, reports filed, moderation actions, blocks
     // chat messages, DMs, notifications, reactions, follows, badges,
     // reputation events, reports filed, moderation actions, blocks
     await prisma.user.delete({ where: { id: user.id } })

@@ -89,7 +89,12 @@ export async function GET(request: NextRequest) {
       // resolveWeeklyWinner also awards the Weekly Winner badge + notifies.
       const winner = await resolveWeeklyWinner(prevWeek)
       if (winner && winner._count.votes > 0) {
-        const name = winner.user.profile?.username || winner.user.name || "a member"
+        // publicMilestoneOptOut members still win — they're just not named.
+        const opt = await prisma.profile.findUnique({
+          where: { userId: winner.user.id },
+          select: { publicMilestoneOptOut: true },
+        })
+        const name = opt?.publicMilestoneOptOut ? "a member" : winner.user.profile?.username || winner.user.name || "a member"
         const contestDto = await postToGeneral(
           `🏆 Last week's photo contest winner: @${name} with ${winner._count.votes} vote${winner._count.votes === 1 ? "" : "s"}! This week's contest is open — submit your best budshot on the Contest page.`
         )
@@ -109,7 +114,11 @@ export async function GET(request: NextRequest) {
       // resolveMonthlyDiaryWinner also awards the badge + notifies the winner.
       const winner = await resolveMonthlyDiaryWinner(prevMonth)
       if (winner && winner._count.votes > 0) {
-        const name = winner.user.profile?.username || winner.user.name || "a member"
+        const opt = await prisma.profile.findUnique({
+          where: { userId: winner.user.id },
+          select: { publicMilestoneOptOut: true },
+        })
+        const name = opt?.publicMilestoneOptOut ? "a member" : winner.user.profile?.username || winner.user.name || "a member"
         const diaryDto = await postToGeneral(
           `🏆 Last month's Diary of the Month winner: @${name} with "${sanitizeEcho(winner.diary.title, 60)}" (${winner._count.votes} vote${winner._count.votes === 1 ? "" : "s"})! This month's contest is open — enter a well-documented diary on the Contest page.`
         )

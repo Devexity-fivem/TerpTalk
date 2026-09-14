@@ -365,3 +365,35 @@ export async function POST(request: NextRequest) {
     )
   }
 }
+
+// DELETE — delete own chat message: { id }
+// Sets the same `deleted` flag the staff path uses; the DTO renders it as
+// "[deleted]". chatMessageCount (lifetime badge stat) is never decremented.
+export async function DELETE(request: NextRequest) {
+  try {
+    const token = await getToken({ req: request, secret: process.env.NEXTAUTH_SECRET, cookieName: sessionCookieName })
+    const userId = token?.id as string | undefined
+    if (!userId) return unauthorized()
+    if (!(await isSessionValid(userId, token?.sessionVersion as number | undefined))) return forbidden()
+
+    const body = await request.json().catch(() => ({}))
+    const { id } = body
+    if (typeof id !== "string" || !id) {
+      return NextResponse.json({ error: "Missing message id" }, { status: 400 })
+    }
+
+    // Scoped update — a non-owned or already-deleted id just no-ops.
+    const res = await prisma.chatMessage.updateMany({
+      where: { id, authorId: userId, deleted: false },
+      data: { deleted: true },
+    })
+    if (!res.count) {
+      return NextResponse.json({ error: "Message not found" }, { status: 404 })
+    }
+
+    return NextResponse.json({ deleted: true })
+  } catch (error) {
+    console.error("Chat message delete error:", error)
+    return NextResponse.json({ error: "Failed to delete message" }, { status: 500 })
+  }
+}

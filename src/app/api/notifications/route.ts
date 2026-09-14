@@ -125,3 +125,31 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ error: "Failed" }, { status: 500 })
   }
 }
+
+// DELETE — remove my notifications: { ids?: string[], all?: boolean }
+export async function DELETE(request: NextRequest) {
+  try {
+    const token = await getToken({ req: request, secret: process.env.NEXTAUTH_SECRET, cookieName: sessionCookieName })
+    const userId = token?.id as string | undefined
+    if (!userId) return unauthorized()
+    if (!(await isSessionValid(userId, token?.sessionVersion as number | undefined))) return forbidden()
+
+    const body = await request.json().catch(() => ({}))
+    const { ids, all } = body
+
+    if (all === true) {
+      await prisma.notification.deleteMany({ where: { userId } })
+      return NextResponse.json({ deleted: true })
+    }
+    if (!Array.isArray(ids) || !ids.length || ids.length > 100 || !ids.every((i) => typeof i === "string")) {
+      return NextResponse.json({ error: "Missing notification ids" }, { status: 400 })
+    }
+
+    // userId in the where clause keeps this scoped to the caller's rows.
+    await prisma.notification.deleteMany({ where: { userId, id: { in: ids } } })
+    return NextResponse.json({ deleted: true })
+  } catch (error) {
+    console.error("Notification delete error:", error)
+    return NextResponse.json({ error: "Failed to delete notifications" }, { status: 500 })
+  }
+}

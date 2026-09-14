@@ -207,6 +207,10 @@ export default function ProfilePage() {
   const [editing, setEditing] = useState(false)
   const [saving, setSaving] = useState(false)
   const [showAllBadges, setShowAllBadges] = useState(false)
+  const [deleteOpen, setDeleteOpen] = useState(false)
+  const [deleteForm, setDeleteForm] = useState({ username: "", password: "" })
+  const [deleteBusy, setDeleteBusy] = useState(false)
+  const [deleteError, setDeleteError] = useState("")
   const bioRef = useRef<HTMLTextAreaElement>(null)
   const [editForm, setEditForm] = useState({
     bio: "",
@@ -822,50 +826,62 @@ export default function ProfilePage() {
                 <Download className="w-4 h-4" /> Download my data (JSON)
               </a>
               <button
-                onClick={async () => {
-                  const username = profileData.profile?.username || profileData.user.name
-
-                  if (!window.confirm(
-                    "This action is permanent. Deleting your account will remove all your content, data, and media. You cannot undo this. Continue?"
-                  )) {
-                    return
-                  }
-
-                  const confirm = window.prompt(
-                    `Type your username "${username}" to confirm account deletion:`
-                  )
-                  if (confirm === null) return
-                  if (confirm !== username) {
-                    alert("Username does not match.")
-                    return
-                  }
-
-                  const password = window.prompt(
-                    "Enter your current password to permanently delete your account:"
-                  )
-                  if (password === null) return
-                  if (typeof password !== "string" || password.length === 0) {
-                    alert("Password is required.")
-                    return
-                  }
-
-                  const res = await fetch("/api/profile", {
-                    method: "DELETE",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ confirmUsername: confirm, password }),
-                  })
-
-                  if (res.ok) {
-                    await signOut({ callbackUrl: "/" })
-                  } else {
-                    const d = await res.json().catch(() => ({}))
-                    alert(d.error || "Deletion failed")
-                  }
-                }}
+                onClick={() => setDeleteOpen((v) => !v)}
                 className="flex items-center gap-2 text-sm text-destructive hover:text-destructive/80 transition-colors"
               >
                 <Trash2 className="w-4 h-4" /> Delete my account
               </button>
+              {deleteOpen && (
+                <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-4 space-y-3">
+                  <p className="text-sm">
+                    This permanently removes your account and everything attached to it —
+                    threads, replies, diaries, setups, photos, chat messages, and direct messages.
+                    It cannot be undone.
+                  </p>
+                  <input
+                    type="text"
+                    value={deleteForm.username}
+                    onChange={(e) => setDeleteForm({ ...deleteForm, username: e.target.value })}
+                    placeholder={`Type your username "${profileData.profile?.username || profileData.user.name}" to confirm`}
+                    autoComplete="off"
+                    className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-destructive"
+                  />
+                  <input
+                    type="password"
+                    value={deleteForm.password}
+                    onChange={(e) => setDeleteForm({ ...deleteForm, password: e.target.value })}
+                    placeholder="Your current password"
+                    autoComplete="current-password"
+                    className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-destructive"
+                  />
+                  {deleteError && <p className="text-sm text-destructive">{deleteError}</p>}
+                  <button
+                    disabled={deleteBusy || !deleteForm.username || !deleteForm.password}
+                    onClick={async () => {
+                      setDeleteBusy(true)
+                      setDeleteError("")
+                      const res = await fetch("/api/profile", {
+                        method: "DELETE",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                          confirmUsername: deleteForm.username,
+                          password: deleteForm.password,
+                        }),
+                      })
+                      if (res.ok) {
+                        await signOut({ callbackUrl: "/" })
+                      } else {
+                        const d = await res.json().catch(() => ({}))
+                        setDeleteError(d.error || "Deletion failed")
+                        setDeleteBusy(false)
+                      }
+                    }}
+                    className="w-full px-4 py-2 bg-destructive text-white rounded-lg text-sm font-medium disabled:opacity-50"
+                  >
+                    {deleteBusy ? "Deleting…" : "Permanently delete my account"}
+                  </button>
+                </div>
+              )}
               <p className="text-xs text-muted-foreground">
                 Account deletion is permanent and removes all your content. This action cannot be undone.
               </p>

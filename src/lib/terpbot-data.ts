@@ -529,16 +529,24 @@ async function handle(name: string, ctx: BotCommandCtx): Promise<BotCommandResul
 
     case "online": {
       const since = new Date(Date.now() - 15 * 60 * 1000)
+      // hideOnlineStatus members are excluded — their lastSeenAt still
+      // updates (throttling) but they never appear in presence lists.
+      const presenceWhere = {
+        lastSeenAt: { gte: since },
+        banned: false,
+        AND: [
+          { profile: { isNot: { username: TERPBOT_USERNAME } } },
+          { OR: [{ profile: { hideOnlineStatus: false } }, { profile: null }] },
+        ],
+      }
       const users = await prisma.user.findMany({
-        where: { lastSeenAt: { gte: since }, banned: false, profile: { isNot: { username: TERPBOT_USERNAME } } },
+        where: presenceWhere,
         orderBy: { lastSeenAt: "desc" },
         take: 6,
         select: { profile: { select: { username: true } } },
       })
       const names = users.map((u) => u.profile?.username).filter(Boolean) as string[]
-      const count = await prisma.user.count({
-        where: { lastSeenAt: { gte: since }, banned: false, profile: { isNot: { username: TERPBOT_USERNAME } } },
-      })
+      const count = await prisma.user.count({ where: presenceWhere })
       if (!count) return ok(`👀 Nobody's been active in the last 15 minutes — quiet garden.`)
       const list = names.slice(0, 5).map((n) => `@${n}`).join(", ")
       return ok(`👀 ${count} member${count === 1 ? "" : "s"} active in the last 15 min: ${list}${count > names.length ? " …" : ""}`)

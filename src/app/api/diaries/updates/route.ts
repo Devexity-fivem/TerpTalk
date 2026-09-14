@@ -260,3 +260,46 @@ export async function POST(request: Request) {
     )
   }
 }
+// DELETE — delete own diary update: { id }
+// DiaryUpdate has no `deleted` flag; nothing references it except its own
+// images (cascade), so a hard delete is safe. Derived state (streaks,
+// stage runs, harvest report, counts) recomputes from remaining updates.
+// Note: per-day diary rep is keyed to the diary+day, not the update row —
+// deleting an update does not claw back that day's points.
+export async function DELETE(request: Request) {
+  try {
+    const session = await getServerSession(authOptions)
+    if (!session?.user?.id) return unauthorized()
+    if (await isBanned(session.user.id)) return forbidden("Your account is suspended")
+
+    const body = await request.json().catch(() => ({}))
+    const { id } = body
+    if (typeof id !== "string" || !id) {
+      return NextResponse.json({ error: "Missing update id" }, { status: 400 })
+    }
+
+    const update = await prisma.diaryUpdate.findUnique({
+      where: { id },
+      select: {
+        id: true, authorId: true,
+        diary: { select: { authorId: true, deleted: true } },
+        images: { select: { url: true } },
+      },
+    })
+    if (!update || update.diary.deleted) {
+      return NextResponse.json({ error: "Update not found" }, { status: 404 })
+    }
+    if (update.authorId !== session.user.id || update.diary.authorId !== session.user.id) {
+      return forbidden()
+    }
+
+    await prisma.diaryUpdate.delete({ where: { id } })
+    deleteImagesIfUnreferenced(update.images.map((i) => i.url)).catch(() => {})
+    revalidateTag("diaries", { expire: 0 })
+
+    return NextResponse.json({ deleted: true })
+  } catch (error) {
+    console.error("Diary update delete error:", error)
+    return NextResponse.json({ error: "Failed to delete update" }, { status: 500 })
+  }
+}

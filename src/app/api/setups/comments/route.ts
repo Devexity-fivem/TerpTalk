@@ -7,6 +7,7 @@ import { rateLimit } from "@/lib/rate-limit"
 import { notifyMentions } from "@/lib/mentions"
 import { notify } from "@/lib/notify"
 import { checkMaintenance } from "@/lib/maintenance"
+import { revalidateTag } from "next/cache"
 
 // POST — comment on a setup: { setupId, content }
 export async function POST(request: Request) {
@@ -79,5 +80,39 @@ export async function POST(request: Request) {
   } catch (error) {
     console.error("Setup comment error:", error)
     return NextResponse.json({ error: "Failed" }, { status: 500 })
+  }
+}
+
+// DELETE — delete own setup comment: { id }
+// SetupComment has no `deleted` flag and nothing references it, so a hard
+// delete is safe. Reputation has no comment award — nothing to reverse.
+export async function DELETE(request: Request) {
+  try {
+    const session = await getServerSession(authOptions)
+    if (!session?.user?.id) return unauthorized()
+    if (await isBanned(session.user.id)) return forbidden("Your account is suspended")
+
+    const body = await request.json().catch(() => ({}))
+    const { id } = body
+    if (typeof id !== "string" || !id) {
+      return NextResponse.json({ error: "Missing comment id" }, { status: 400 })
+    }
+
+    const comment = await prisma.setupComment.findUnique({
+      where: { id },
+      select: { id: true, authorId: true, setupId: true },
+    })
+    if (!comment) {
+      return NextResponse.json({ error: "Comment not found" }, { status: 404 })
+    }
+    if (comment.authorId !== session.user.id) return forbidden()
+
+    await prisma.setupComment.delete({ where: { id } })
+    revalidateTag("setups", { expire: 0 })
+
+    return NextResponse.json({ deleted: true })
+  } catch (error) {
+    console.error("Setup comment delete error:", error)
+    return NextResponse.json({ error: "Failed to delete comment" }, { status: 500 })
   }
 }

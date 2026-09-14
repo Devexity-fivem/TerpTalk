@@ -31,7 +31,7 @@ export default function PrivacyPage() {
           </section>
           <section>
             <h2 className="text-lg font-semibold text-foreground mb-2">TerpBot</h2>
-            <p>TerpBot is our automated community assistant — a bot, not a person. It reads public chat messages to answer <span className="text-foreground">@terpbot</span> mentions, and it can send you occasional private notifications (welcome tips, grow-diary pointers, a nudge when one of your threads goes quiet). You can turn these off anytime under <Link href="/settings/notifications" className="text-primary hover:underline">Settings → TerpBot tips</Link>. TerpBot may also celebrate your milestones publicly in chat — those posts can mention your username.</p>
+            <p>TerpBot is our automated community assistant — a bot, not a person. It reads public chat messages to answer <span className="text-foreground">@terpbot</span> mentions, and it can send you occasional private notifications (welcome tips, grow-diary pointers, a nudge when one of your threads goes quiet). You can turn these off anytime under <Link href="/settings/notifications" className="text-primary hover:underline">Settings → TerpBot tips</Link>. TerpBot may also celebrate your milestones publicly in chat — those posts can mention your username; you can opt out under Settings → Privacy.</p>
           </section>
           <section>
             <h2 className="text-lg font-semibold text-foreground mb-2">Cookies &amp; browser storage</h2>
@@ -50,10 +50,10 @@ export default function PrivacyPage() {
           <section>
             <h2 className="text-lg font-semibold text-foreground mb-2">Your controls</h2>
             <ul className="list-disc list-inside space-y-1.5">
-              <li>Edit your profile and most of your content anytime.</li>
+              <li>Edit your profile and delete your own threads, replies, diaries, setups, comments, chat messages, and notifications.</li>
               <li>Export a copy of your data from <Link href="/profile" className="text-primary hover:underline">your profile</Link>.</li>
-              <li>Choose which notifications you get in <Link href="/settings/notifications" className="text-primary hover:underline">notification settings</Link>.</li>
-              <li>Permanently delete your account from your profile — this removes your profile, posts, messages, and uploads.</li>
+              <li>Choose which notifications you get, hide your online status, opt out of public milestone shout-outs, and control who can message you in <Link href="/settings/notifications" className="text-primary hover:underline">settings</Link>.</li>
+              <li>Permanently delete your account from your profile — this removes your profile, posts, messages, and uploads. If your account is restricted, you can request deletion from the <Link href="/restricted" className="text-primary hover:underline">restricted account page</Link>.</li>
             </ul>
             <p className="mt-2">Two things worth knowing: deleting a post or message hides it, but a copy may be kept briefly for moderation and safety. And when you delete your account, a few records tied to moderation, security, or abuse prevention can remain so people can&apos;t wipe evidence of violations — they&apos;re stripped of what identifies you wherever the system allows.</p>
           </section>

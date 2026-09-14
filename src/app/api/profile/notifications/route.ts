@@ -7,6 +7,7 @@ import { rateLimit } from "@/lib/rate-limit"
 import { Prisma } from "@prisma/client"
 
 const DIGEST_OPTIONS = new Set(["DAILY", "WEEKLY", "NEVER"])
+const DM_POLICIES = new Set(["EVERYONE", "FOLLOWING", "NONE"])
 
 export async function GET() {
   const session = await getServerSession(authOptions)
@@ -31,6 +32,9 @@ export async function GET() {
       notifyOnMilestone: true,
       notifyOnBotAssist: true,
       emailDigestFrequency: true,
+      hideOnlineStatus: true,
+      publicMilestoneOptOut: true,
+      dmPolicy: true,
     },
   })
 
@@ -60,6 +64,9 @@ export async function PATCH(request: Request) {
     notifyOnMilestone?: boolean
     notifyOnBotAssist?: boolean
     emailDigestFrequency?: string | null
+    hideOnlineStatus?: boolean
+    publicMilestoneOptOut?: boolean
+    dmPolicy?: string
   } = {}
 
   if ("notifyOnReply" in body) data.notifyOnReply = !!body.notifyOnReply
@@ -71,6 +78,16 @@ export async function PATCH(request: Request) {
   if ("notifyOnReaction" in body) data.notifyOnReaction = !!body.notifyOnReaction
   if ("notifyOnMilestone" in body) data.notifyOnMilestone = !!body.notifyOnMilestone
   if ("notifyOnBotAssist" in body) data.notifyOnBotAssist = !!body.notifyOnBotAssist
+  if ("hideOnlineStatus" in body) data.hideOnlineStatus = !!body.hideOnlineStatus
+  if ("publicMilestoneOptOut" in body) data.publicMilestoneOptOut = !!body.publicMilestoneOptOut
+  if ("dmPolicy" in body) {
+    const raw = body.dmPolicy
+    if (typeof raw === "string" && DM_POLICIES.has(raw.toUpperCase())) {
+      data.dmPolicy = raw.toUpperCase()
+    } else {
+      return NextResponse.json({ error: "Invalid message privacy setting" }, { status: 400 })
+    }
+  }
   if ("emailDigestFrequency" in body) {
     const raw = body.emailDigestFrequency
     if (raw === null || raw === undefined || raw === "") {
@@ -86,6 +103,15 @@ export async function PATCH(request: Request) {
     where: { userId: session.user.id },
     data: data as unknown as Prisma.ProfileUpdateInput,
   })
+
+  // Hiding online status clears any stale ONLINE marker immediately —
+  // nothing else ever stamps a user back to OFFLINE.
+  if (data.hideOnlineStatus === true) {
+    await prisma.user.update({
+      where: { id: session.user.id },
+      data: { status: "OFFLINE" },
+    }).catch(() => {})
+  }
 
   return NextResponse.json({ ok: true })
 }

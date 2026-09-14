@@ -192,10 +192,25 @@ export async function POST(request: NextRequest) {
 
     const target = await prisma.user.findUnique({
       where: { id: to },
-      select: { id: true, banned: true, profile: { select: { notifyOnMessage: true, username: true } } },
+      select: { id: true, banned: true, profile: { select: { notifyOnMessage: true, username: true, dmPolicy: true } } },
     })
     if (!target || target.banned) {
       return NextResponse.json({ error: "User not found" }, { status: 404 })
+    }
+    // Recipient's DM policy — enforced server-side.
+    const dmPolicy = target.profile?.dmPolicy ?? "EVERYONE"
+    if (dmPolicy === "NONE") {
+      return NextResponse.json({ error: "This member isn't accepting direct messages" }, { status: 403 })
+    }
+    if (dmPolicy === "FOLLOWING") {
+      // "Members I follow" — a Follow row where the recipient follows the sender.
+      const followed = await prisma.follow.findFirst({
+        where: { followerId: to, followingId: userId },
+        select: { id: true },
+      })
+      if (!followed) {
+        return NextResponse.json({ error: "This member only accepts messages from members they follow" }, { status: 403 })
+      }
     }
     // TerpBot can't be DM'd — it never reads them, so a DM is a dead letter
     // where members might dump personal info expecting a reply.

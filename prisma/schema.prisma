@@ -132,6 +132,10 @@ model Profile {
   notifyOnMilestone    Boolean  @default(true)
   notifyOnBotAssist    Boolean  @default(true)
   emailDigestFrequency String?
+  // Privacy controls
+  hideOnlineStatus       Boolean @default(false)
+  publicMilestoneOptOut  Boolean @default(false)
+  dmPolicy               String  @default("EVERYONE") // EVERYONE | FOLLOWING | NONE
   // Equipped cosmetics — keys into the registries in lib/cosmetics.ts.
   // Unlock is derived from reputation; these store only the equipped choice.
   avatarFrame  String?

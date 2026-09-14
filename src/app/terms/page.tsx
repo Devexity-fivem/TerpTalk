@@ -46,7 +46,7 @@ export default function TermsPage() {
           </section>
           <section>
             <h2 className="text-lg font-semibold text-foreground mb-2">6. Moderation</h2>
-            <p>Moderators can remove content, issue warnings, or suspend accounts that break these terms. If you think a decision was a mistake, use the Report button or contact a staff member in <Link href="/chat" className="text-primary hover:underline">chat</Link> while your account is active. Some self-service actions — like account deletion — aren&apos;t available on suspended or banned accounts.</p>
+            <p>Moderators can remove content, issue warnings, or suspend accounts that break these terms. If you think a decision was a mistake, use the Report button or contact a staff member in <Link href="/chat" className="text-primary hover:underline">chat</Link> while your account is active. If your account is suspended or banned, the <Link href="/restricted" className="text-primary hover:underline">restricted account page</Link> lets you check your status and ask the moderation team to review the restriction or delete your account.</p>
           </section>
           <section>
             <h2 className="text-lg font-semibold text-foreground mb-2">7. TerpBot</h2>

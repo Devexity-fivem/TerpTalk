@@ -11,6 +11,7 @@ import ThreadModActions from "@/components/thread-mod-actions"
 import ShareButtons from "@/components/share-buttons"
 import ReportButton from "@/components/report-button"
 import BookmarkButton from "@/components/bookmark-button"
+import OwnerDeleteButton from "@/components/owner-delete-button"
 import PostContent from "@/components/post-content"
 import ImageGallery from "@/components/image-gallery"
 import Poll from "@/components/poll"
@@ -346,6 +347,14 @@ export default async function ThreadPage({
             <BookmarkButton threadId={thread.id} initiallySaved={saved} />
             <ThreadFollowButton threadId={thread.id} initiallyFollowing={following} />
             <ShareButtons path={`/forum/thread/${thread.slug}`} title={thread.title} />
+            <OwnerDeleteButton
+              endpoint="/api/forum/threads"
+              id={thread.id}
+              authorId={thread.authorId}
+              confirmText="Delete this thread? This permanently removes the thread and all of its replies."
+              redirectTo="/forum"
+              iconOnly
+            />
             <ReportButton type="THREAD" targetId={thread.id} authorId={thread.authorId} />
           </div>
           {/* Photos attached when the thread was opened */}

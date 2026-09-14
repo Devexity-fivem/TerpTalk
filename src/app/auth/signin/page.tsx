@@ -92,6 +92,10 @@ export default function SignInPage() {
           {error && (
             <div className="bg-destructive/10 text-destructive px-4 py-2 rounded-lg text-sm">
               {error}
+              {" "}
+              <Link href="/restricted" className="underline">
+                Account suspended or banned? Check your status
+              </Link>
             </div>
           )}
 

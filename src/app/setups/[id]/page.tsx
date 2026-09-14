@@ -9,6 +9,7 @@ import RoleBadge from "@/components/role-badge"
 import SetupComments from "@/components/setup-comments"
 import ShareButtons from "@/components/share-buttons"
 import ReportButton from "@/components/report-button"
+import OwnerDeleteButton from "@/components/owner-delete-button"
 import { escapeLike } from "@/lib/strain-stats"
 
 export const dynamic = "force-dynamic"
@@ -95,6 +96,14 @@ export default async function SetupPage({ params }: { params: Promise<{ id: stri
           </div>
           <div className="flex items-center gap-2">
             <ShareButtons path={`/setups/${setup.id}`} title={`${setup.title} — grow setup on TerpTalk`} />
+            <OwnerDeleteButton
+              endpoint="/api/setups"
+              id={setup.id}
+              authorId={setup.authorId}
+              confirmText="Delete this setup? This permanently removes the setup, its photos, and its comments."
+              redirectTo="/setups"
+              iconOnly
+            />
             <ReportButton type="SETUP" targetId={setup.id} authorId={setup.authorId} />
           </div>
 
@@ -150,6 +159,13 @@ export default async function SetupPage({ params }: { params: Promise<{ id: stri
                     </Link>
                     <RoleBadge role={c.author.role} />
                     <span className="text-xs text-muted-foreground">{new Date(c.createdAt).toLocaleDateString()}</span>
+                    <OwnerDeleteButton
+                      endpoint="/api/setups/comments"
+                      id={c.id}
+                      authorId={c.author.id}
+                      confirmText="Delete this comment? This cannot be undone."
+                      iconOnly
+                    />
                   </div>
                   <p className="text-sm text-muted-foreground whitespace-pre-wrap">{c.content}</p>
                 </div>

@@ -746,9 +746,9 @@ async function checkTierChange(userId: string, oldRep: number, newRep: number): 
 
   const profile = await prisma.profile.findUnique({
     where: { userId },
-    select: { username: true },
+    select: { username: true, publicMilestoneOptOut: true },
   })
-  if (profile?.username) {
+  if (profile?.username && !profile.publicMilestoneOptOut) {
     await announceTierUp(
       profile.username,
       newTier.name,
@@ -855,8 +855,13 @@ export async function grantBadge(
     }).catch(() => null)
   }
   if (opts.announce) {
-    const profile = await prisma.profile.findUnique({ where: { userId }, select: { username: true } })
-    if (profile?.username) await announceBadges(profile.username, [badge.name]).catch(() => null)
+    const profile = await prisma.profile.findUnique({
+      where: { userId },
+      select: { username: true, publicMilestoneOptOut: true },
+    })
+    if (profile?.username && !profile.publicMilestoneOptOut) {
+      await announceBadges(profile.username, [badge.name]).catch(() => null)
+    }
   }
   return true
 }
@@ -938,14 +943,14 @@ export async function checkBadges(userId: string, opts: { announcedTierName?: st
 
     const profile = await prisma.profile.findUnique({
       where: { userId },
-      select: { username: true },
+      select: { username: true, publicMilestoneOptOut: true },
     })
     // A milestone badge sharing the just-announced tier's name would double-
     // post in chat — the tier-up announce already covers it.
     const toAnnounce = opts.announcedTierName
       ? newlyEarned.filter((n) => n !== opts.announcedTierName)
       : newlyEarned
-    if (profile?.username && toAnnounce.length) {
+    if (profile?.username && !profile.publicMilestoneOptOut && toAnnounce.length) {
       await announceBadges(profile.username, toAnnounce).catch(() => null)
     }
   }

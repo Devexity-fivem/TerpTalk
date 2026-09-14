@@ -7,7 +7,7 @@ import { useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
 import {
   Bell, BellRing, Loader2, CheckCheck, Check, UserPlus, Heart, MessageSquare, AtSign,
-  MessageCircle, Leaf, Mail, CheckCircle2, Award, TrendingUp, Users, Shield, Settings, Bot,
+  MessageCircle, Leaf, Mail, CheckCircle2, Award, TrendingUp, Users, Shield, Settings, Bot, Trash2,
 } from "lucide-react"
 import Link from "next/link"
 import EmptyState from "@/components/ui/empty-state"
@@ -131,6 +131,27 @@ export default function NotificationsPage() {
     window.dispatchEvent(new CustomEvent("tt-notifications-read"))
   }
 
+  const deleteNotification = async (id: string) => {
+    setNotifications((prev) => prev.filter((n) => n.id !== id))
+    await fetch("/api/notifications", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ids: [id] }),
+    }).catch(() => {})
+    window.dispatchEvent(new CustomEvent("tt-notifications-read"))
+  }
+
+  const clearAll = async () => {
+    if (!confirm("Clear all notifications? This can't be undone.")) return
+    setNotifications([])
+    await fetch("/api/notifications", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ all: true }),
+    }).catch(() => {})
+    window.dispatchEvent(new CustomEvent("tt-notifications-read"))
+  }
+
   const loadMore = async () => {
     if (!nextCursor || loadingMore) return
     setLoadingMore(true)
@@ -209,6 +230,16 @@ export default function NotificationsPage() {
               Mark all read
             </button>
           )}
+          {notifications.length > 0 && (
+            <button
+              onClick={clearAll}
+              aria-label="Clear all notifications"
+              title="Clear all notifications"
+              className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-secondary hover:text-destructive"
+            >
+              <Trash2 className="h-4 w-4" />
+            </button>
+          )}
           </div>
         </div>
 
@@ -281,6 +312,14 @@ export default function NotificationsPage() {
                     <Check className="h-4 w-4" />
                   </button>
                 )}
+                <button
+                  onClick={() => deleteNotification(n.id)}
+                  className="mr-1 mt-3 flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-secondary hover:text-destructive focus-visible:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
+                  aria-label="Delete notification"
+                  title="Delete notification"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
               </li>
             )
           })}

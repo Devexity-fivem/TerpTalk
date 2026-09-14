@@ -383,8 +383,13 @@ export async function DELETE(request: Request) {
       const op = await tx.post.findFirst({
         where: { threadId: post.threadId },
         orderBy: { createdAt: "asc" },
-        select: { deleted: true },
+        select: { id: true, deleted: true },
       })
+      // The OP's body is denormalized onto Thread.content — without this a
+      // deleted OP keeps rendering in thread metadata/search.
+      if (op?.id === post.id) {
+        await tx.thread.update({ where: { id: post.threadId }, data: { content: "" } })
+      }
       await tx.thread.update({
         where: { id: post.threadId },
         data: { replyCount: Math.max(0, remaining - (op && !op.deleted ? 1 : 0)) },

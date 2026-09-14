@@ -19,7 +19,20 @@ const TOGGLES = [
   { key: "notifyOnBotAssist", label: "TerpBot tips", desc: "Occasional pointers from TerpBot (our automated helper) about my threads, diaries, and account. Doesn't affect reply or accepted-answer notices." },
 ] as const
 
-type Prefs = Record<(typeof TOGGLES)[number]["key"], boolean> & { emailDigestFrequency: string | null }
+const PRIVACY_TOGGLES = [
+  { key: "hideOnlineStatus", label: "Hide my online status", desc: "Don't show me in 'who's online' lists or mark me as active. Members may still see your public posts and comments." },
+  { key: "publicMilestoneOptOut", label: "Opt out of public recognition", desc: "Skip me in TerpBot's public shout-outs (tier-ups, badges, harvests, contest winners) and leaderboard-style spotlights. You still earn the badges, reputation, and private notifications." },
+] as const
+
+const DM_OPTIONS = [
+  { value: "EVERYONE", label: "Anyone can message me" },
+  { value: "FOLLOWING", label: "Only members I follow" },
+  { value: "NONE", label: "Nobody" },
+] as const
+
+type Prefs = Record<(typeof TOGGLES)[number]["key"], boolean> &
+  Record<(typeof PRIVACY_TOGGLES)[number]["key"], boolean> &
+  { emailDigestFrequency: string | null; dmPolicy: string }
 
 export default function NotificationSettingsPage() {
   const { status } = useSession()
@@ -73,10 +86,12 @@ export default function NotificationSettingsPage() {
       <div className="max-w-2xl mx-auto px-4 py-8">
         <div className="mb-6">
           <h1 className="text-2xl font-bold flex items-center gap-2">
-            <Bell className="w-6 h-6 text-primary" /> Notification Settings
+            <Bell className="w-6 h-6 text-primary" /> Settings
           </h1>
-          <p className="text-muted-foreground">Choose what you want to be notified about.</p>
+          <p className="text-muted-foreground">Choose what you want to be notified about, and how visible you are to others.</p>
         </div>
+
+        <h2 className="text-lg font-semibold mb-3">Notifications</h2>
 
         <div className="bg-card rounded-lg border border-border divide-y divide-border">
           {TOGGLES.map(({ key, label, desc }) => (
@@ -93,6 +108,39 @@ export default function NotificationSettingsPage() {
               />
             </label>
           ))}
+        </div>
+
+        <h2 className="text-lg font-semibold mt-8 mb-3">Privacy</h2>
+        <div className="bg-card rounded-lg border border-border divide-y divide-border">
+          {PRIVACY_TOGGLES.map(({ key, label, desc }) => (
+            <label key={key} className="flex items-start justify-between gap-4 p-4 cursor-pointer hover:bg-secondary/30 transition-colors">
+              <div>
+                <div className="font-medium">{label}</div>
+                <div className="text-sm text-muted-foreground">{desc}</div>
+              </div>
+              <input
+                type="checkbox"
+                checked={!!prefs[key]}
+                onChange={(e) => handleToggle(key, e.target.checked)}
+                className="w-5 h-5 mt-0.5 accent-primary"
+              />
+            </label>
+          ))}
+          <div className="flex items-start justify-between gap-4 p-4">
+            <div>
+              <div className="font-medium">Direct messages</div>
+              <div className="text-sm text-muted-foreground">Who can start a private conversation with you. Existing conversations aren't affected.</div>
+            </div>
+            <select
+              value={prefs.dmPolicy}
+              onChange={(e) => setPrefs({ ...prefs, dmPolicy: e.target.value })}
+              className="bg-input border border-border rounded-md px-2 py-1.5 text-sm"
+            >
+              {DM_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
+            </select>
+          </div>
         </div>
 
         {message && (

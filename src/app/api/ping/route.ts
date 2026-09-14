@@ -23,7 +23,10 @@ export async function POST(request: NextRequest) {
     // Fetch banned, sessionVersion, and lastSeenAt in one query; only write when stale (>15 min)
     const user = await prisma.user.findUnique({
       where: { id: userId },
-      select: { banned: true, sessionVersion: true, lastSeenAt: true },
+      select: {
+        banned: true, sessionVersion: true, lastSeenAt: true,
+        profile: { select: { hideOnlineStatus: true } },
+      },
     })
     if (!user || user.banned || (token?.sessionVersion as number | undefined ?? 0) !== (user.sessionVersion ?? 0)) {
       return forbidden()
@@ -35,7 +38,9 @@ export async function POST(request: NextRequest) {
     if (stale) {
       await prisma.user.update({
         where: { id: userId },
-        data: { lastSeenAt: new Date(), status: "ONLINE" },
+        // Members who hide their online status still get lastSeenAt (it
+        // drives throttling/onboarding) but never get stamped ONLINE.
+        data: { lastSeenAt: new Date(), status: user.profile?.hideOnlineStatus ? "OFFLINE" : "ONLINE" },
       })
 
       // Daily check-in rep — keyed per UTC day so concurrent pings and

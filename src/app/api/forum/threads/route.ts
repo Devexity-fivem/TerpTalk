@@ -3,7 +3,7 @@ import { revalidateTag } from "next/cache"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { unauthorized, publicUserSelect, LIMITS, getClientIp, logSecurityEvent, forbidden, containsExternalLink, isTrustedForLinks, isModerator, isAdmin } from "@/lib/security"
+import { unauthorized, publicUserSelect, LIMITS, getClientIp, logSecurityEvent, forbidden, containsExternalLink, isTrustedForLinks, isModerator, isAdmin, isBanned } from "@/lib/security"
 import { requireModerator } from "@/lib/require-staff"
 import { awardReputation, reverseReputationBySource, repRateLimit, getTierPerks, REP_POINTS, REP_TIERS } from "@/lib/reputation"
 import { notifyMentions } from "@/lib/mentions"
@@ -334,6 +334,9 @@ export async function DELETE(request: Request) {
     }
     if (!isOwn && mod && !isAdmin(mod.role) && !["MEMBER", "VERIFIED_MEMBER"].includes(thread.author.role)) {
       return forbidden()
+    }
+    if (isOwn && (await isBanned(session.user.id))) {
+      return forbidden("Your account is suspended")
     }
 
     await prisma.$transaction(async (tx) => {

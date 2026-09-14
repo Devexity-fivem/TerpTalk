@@ -17,6 +17,7 @@ import ImageGallery from "@/components/image-gallery"
 import { groupUpdatesByWeek, buildHarvestReport, diaryCompleteness, diaryDay, diaryWeek } from "@/lib/diary-weeks"
 import ReportButton from "@/components/report-button"
 import DiaryReactions from "@/components/diary-reactions"
+import OwnerDeleteButton from "@/components/owner-delete-button"
 import { escapeLike } from "@/lib/strain-stats"
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
@@ -224,6 +225,14 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
                 <DiaryReactions diaryId={diary.id} initialCounts={reactionCounts} initialMine={myReaction} />
                 <DiaryFollowButton diaryId={diary.id} initiallyFollowing={following} />
                 <ShareButtons path={`/diaries/${diary.id}`} title={`${diary.title} — grow diary on TerpTalk`} />
+                <OwnerDeleteButton
+                  endpoint="/api/diaries"
+                  id={diary.id}
+                  authorId={diary.author.id}
+                  confirmText="Delete this diary? This permanently removes the diary, its updates, and its photos."
+                  redirectTo="/diaries"
+                  iconOnly
+                />
                 <ReportButton type="DIARY" targetId={diary.id} authorId={diary.author.id} />
               </div>
               {!following && (
@@ -488,8 +497,15 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
                             </div>
                             <h4 className="font-semibold text-sm">{update.title}</h4>
                           </div>
-                          <span className="text-xs text-muted-foreground">
+                          <span className="text-xs text-muted-foreground flex items-center gap-2">
                             {new Date(update.createdAt).toLocaleDateString()}
+                            <OwnerDeleteButton
+                              endpoint="/api/diaries/updates"
+                              id={update.id}
+                              authorId={update.authorId}
+                              confirmText="Delete this update? This permanently removes the update and its photos."
+                              iconOnly
+                            />
                           </span>
                         </div>
 

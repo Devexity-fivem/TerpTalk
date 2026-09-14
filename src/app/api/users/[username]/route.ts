@@ -50,6 +50,7 @@ async function getPublicProfileData(username: string) {
             image: true,
             createdAt: true,
             banned: true,
+            suspendedUntil: true,
             role: true,
             badges: { include: { badge: true }, orderBy: [{ pinned: "desc" as const }, { earnedAt: "asc" as const }] },
             _count: {
@@ -66,7 +67,8 @@ async function getPublicProfileData(username: string) {
       },
     })
 
-    if (!profile || profile.user.banned) return null
+    const suspended = !!profile?.user.suspendedUntil && profile.user.suspendedUntil > new Date()
+    if (!profile || profile.user.banned || suspended) return null
 
     const recentThreads = await prisma.thread.findMany({
       where: {

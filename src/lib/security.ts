@@ -114,12 +114,14 @@ export function activeAuthor() {
 /**
  * Prisma where fragment for Profile queries on rankable surfaces
  * (leaderboard, grower-of-week, /top, /rank): not banned, not suspended,
- * never TerpBot. Reuse this everywhere reputation is ranked.
+ * never TerpBot, and not opted out of public recognition. Reuse this
+ * everywhere reputation is ranked.
  */
 export function rankableProfile() {
   return {
     user: activeAuthor(),
     username: { not: TERPBOT_USERNAME },
+    publicMilestoneOptOut: false,
   }
 }
 

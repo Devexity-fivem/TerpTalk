@@ -4,7 +4,9 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { unauthorized, publicUserSelect, LIMITS, getClientIp, logSecurityEvent, isBanned, forbidden, enforceLinkTrust } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
-import { awardReputation, REP_POINTS } from "@/lib/reputation"
+import { awardReputation, reverseReputationBySource, REP_POINTS } from "@/lib/reputation"
+import { notificationLinkWhere } from "@/lib/notify"
+import { deleteImagesIfUnreferenced } from "@/lib/blob"
 import { checkMaintenance } from "@/lib/maintenance"
 import { revalidateTag } from "next/cache"
 import { after } from "next/server"
@@ -142,5 +144,54 @@ export async function POST(request: Request) {
       { error: "Failed to create diary" },
       { status: 500 }
     )
+  }
+}
+// DELETE — delete own diary: { id }
+// Soft-delete keeps the row for moderation/audit but removes it from every
+// public surface (all reads filter `deleted`). Images are permanently
+// removed — restore paths re-attach nothing.
+export async function DELETE(request: Request) {
+  try {
+    const session = await getServerSession(authOptions)
+    if (!session?.user?.id) return unauthorized()
+    if (await isBanned(session.user.id)) return forbidden("Your account is suspended")
+
+    const body = await request.json().catch(() => ({}))
+    const { id } = body
+    if (typeof id !== "string" || !id) {
+      return NextResponse.json({ error: "Missing diary id" }, { status: 400 })
+    }
+
+    const diary = await prisma.growDiary.findUnique({
+      where: { id },
+      select: { id: true, authorId: true, deleted: true },
+    })
+    if (!diary || diary.deleted) {
+      return NextResponse.json({ error: "Diary not found" }, { status: 404 })
+    }
+    if (diary.authorId !== session.user.id) return forbidden()
+
+    const imageUrls = await prisma.$transaction(async (tx) => {
+      await tx.growDiary.update({ where: { id }, data: { deleted: true } })
+      const imgs = await tx.diaryImage.findMany({
+        where: { update: { diaryId: id } },
+        select: { url: true },
+      })
+      await tx.diaryImage.deleteMany({ where: { update: { diaryId: id } } })
+      // Links to this diary in members' notifications would dangle.
+      await tx.notification.deleteMany({ where: notificationLinkWhere(`/diaries/${id}`) })
+      return imgs.map((i) => i.url)
+    })
+
+    // Diary rep (DIARY_CREATED, per-day update awards, reactions) is all
+    // keyed sourceType=DIARY/sourceId=diaryId — one reversal unwinds it.
+    await reverseReputationBySource("DIARY", id, "Diary removed", session.user.id).catch(() => 0)
+    deleteImagesIfUnreferenced(imageUrls).catch(() => {})
+    revalidateTag("diaries", { expire: 0 })
+
+    return NextResponse.json({ deleted: true })
+  } catch (error) {
+    console.error("Diary delete error:", error)
+    return NextResponse.json({ error: "Failed to delete diary" }, { status: 500 })
   }
 }

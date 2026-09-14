@@ -96,7 +96,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     where: { id },
     data,
     include: {
-      author: { select: { id: true, name: true, profile: { select: { username: true } } } },
+      author: { select: { id: true, name: true, profile: { select: { username: true, publicMilestoneOptOut: true } } } },
     },
   })
 
@@ -108,7 +108,12 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   // false→true transition so toggling can't spam the room. The diary
   // title is sanitized inside announceHarvest.
   if (harvested && !diary.harvested) {
-    const username = updated.author.profile?.username || updated.author.name || "a member"
+    // Members who opt out of public recognition are celebrated as "a member".
+    const username =
+      !updated.author.profile?.publicMilestoneOptOut &&
+      (updated.author.profile?.username || updated.author.name)
+        ? updated.author.profile?.username || updated.author.name!
+        : "a member"
     const yieldText =
       updated.yieldAmount != null && updated.yieldUnit
         ? `${updated.yieldAmount}${updated.yieldUnit}`

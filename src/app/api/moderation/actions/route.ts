@@ -142,8 +142,13 @@ export async function POST(request: Request) {
               const op = await tx.post.findFirst({
                 where: { threadId: p.threadId },
                 orderBy: { createdAt: "asc" },
-                select: { deleted: true },
+                select: { id: true, deleted: true },
               })
+              // The OP's body is denormalized onto Thread.content — scrub it
+              // when the opening post is removed.
+              if (op?.id === targetId) {
+                await tx.thread.update({ where: { id: p.threadId }, data: { content: "" } })
+              }
               await tx.thread.update({
                 where: { id: p.threadId },
                 data: { replyCount: Math.max(0, remaining - (op && !op.deleted ? 1 : 0)) },

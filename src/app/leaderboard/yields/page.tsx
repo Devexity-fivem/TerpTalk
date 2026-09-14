@@ -22,7 +22,7 @@ const getYieldDiaries = unstable_cache(
       where: {
         harvested: true,
         deleted: false,
-        author: activeAuthor(),
+        author: { ...activeAuthor(), profile: { publicMilestoneOptOut: false } },
         yieldAmount: { not: null },
         strain: { not: null },
       },

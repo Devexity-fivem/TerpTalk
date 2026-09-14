@@ -98,6 +98,7 @@ export const authOptions: NextAuthOptions = {
             sessionVersion: true,
             password: true,
             banned: true,
+            suspendedUntil: true,
             profile: { select: { username: true, avatarUrl: true } },
           },
         })
@@ -111,11 +112,15 @@ export const authOptions: NextAuthOptions = {
           throw new Error("Invalid credentials")
         }
 
-        if (user.banned) {
+        // Banned and suspended accounts can't sign in. The error stays
+        // generic client-side (enumeration resistance); the /restricted
+        // page re-verifies credentials and shows the actual status.
+        const isSuspended = !!user.suspendedUntil && user.suspendedUntil > new Date()
+        if (user.banned || isSuspended) {
           await logSecurityEvent("LOGIN_FAILURE", {
             userId: user.id,
             userAgent: (req?.headers as Record<string, string> | undefined)?.["user-agent"] ?? null,
-            metadata: { reason: "banned" },
+            metadata: { reason: user.banned ? "banned" : "suspended" },
           })
           throw new Error("Invalid credentials")
         }

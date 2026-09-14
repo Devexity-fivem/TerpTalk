@@ -6,7 +6,8 @@ import { unauthorized, publicUserSelect, LIMITS, getClientIp, logSecurityEvent, 
 import { rateLimit } from "@/lib/rate-limit"
 import { storeImages, deleteImagesIfUnreferenced } from "@/lib/blob"
 import { checkMaintenance } from "@/lib/maintenance"
-import { awardReputation, REP_POINTS } from "@/lib/reputation"
+import { awardReputation, reverseReputationBySource, REP_POINTS } from "@/lib/reputation"
+import { notificationLinkWhere } from "@/lib/notify"
 import { revalidateTag } from "next/cache"
 
 export async function POST(request: Request) {
@@ -146,5 +147,47 @@ export async function POST(request: Request) {
       { error: "Failed to create setup" },
       { status: 500 }
     )
+  }
+}
+
+// DELETE — delete own setup: { id }
+// Soft-delete; image rows are detached and their blobs permanently removed.
+export async function DELETE(request: Request) {
+  try {
+    const session = await getServerSession(authOptions)
+    if (!session?.user?.id) return unauthorized()
+    if (await isBanned(session.user.id)) return forbidden("Your account is suspended")
+
+    const body = await request.json().catch(() => ({}))
+    const { id } = body
+    if (typeof id !== "string" || !id) {
+      return NextResponse.json({ error: "Missing setup id" }, { status: 400 })
+    }
+
+    const setup = await prisma.growSetup.findUnique({
+      where: { id },
+      select: { id: true, authorId: true, deleted: true },
+    })
+    if (!setup || setup.deleted) {
+      return NextResponse.json({ error: "Setup not found" }, { status: 404 })
+    }
+    if (setup.authorId !== session.user.id) return forbidden()
+
+    const imageUrls = await prisma.$transaction(async (tx) => {
+      await tx.growSetup.update({ where: { id }, data: { deleted: true } })
+      const imgs = await tx.setupImage.findMany({ where: { setupId: id }, select: { url: true } })
+      await tx.setupImage.deleteMany({ where: { setupId: id } })
+      await tx.notification.deleteMany({ where: notificationLinkWhere(`/setups/${id}`) })
+      return imgs.map((i) => i.url)
+    })
+
+    await reverseReputationBySource("SETUP", id, "Setup removed", session.user.id).catch(() => 0)
+    deleteImagesIfUnreferenced(imageUrls).catch(() => {})
+    revalidateTag("setups", { expire: 0 })
+
+    return NextResponse.json({ deleted: true })
+  } catch (error) {
+    console.error("Setup delete error:", error)
+    return NextResponse.json({ error: "Failed to delete setup" }, { status: 500 })
   }
 }

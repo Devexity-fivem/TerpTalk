@@ -56,6 +56,7 @@ export async function GET(request: NextRequest) {
       prisma.user.count({
         where: {
           lastSeenAt: { gte: new Date(Date.now() - 15 * 60 * 1000) },
+          OR: [{ profile: { hideOnlineStatus: false } }, { profile: null }],
         },
       }),
     ])
