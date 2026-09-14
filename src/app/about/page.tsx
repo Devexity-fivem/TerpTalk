@@ -99,7 +99,8 @@ export default function AboutPage() {
             <li>Keep everyone pseudonymous — no sharing private info.</li>
           </ul>
           <p className="text-sm text-muted-foreground mt-3">
-            Full details in the{" "}
+            Full rules on the{" "}
+            <Link href="/rules" className="text-primary hover:underline">Community Rules</Link> page; legal terms in the{" "}
             <Link href="/terms" className="text-primary hover:underline">Terms of Service</Link>.
           </p>
         </div>
@@ -127,7 +128,9 @@ export default function AboutPage() {
           {" · "}
           <Link href="/privacy" className="hover:text-foreground underline underline-offset-2">Privacy Policy</Link>
           {" · "}
-          <Link href="/help" className="hover:text-foreground underline underline-offset-2">Plant Help</Link>
+          <Link href="/rules" className="hover:text-foreground underline underline-offset-2">Community Rules</Link>
+          {" · "}
+          <Link href="/help" className="hover:text-foreground underline underline-offset-2">Help Center</Link>
         </p>
       </div>
     </div>

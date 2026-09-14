@@ -7,7 +7,7 @@ import { usePathname, useRouter } from "next/navigation"
 import {
   Leaf, MessageCircle, MessagesSquare, Home, Calendar,
   Settings, Dna, Bell, Menu, X, Mail, Search, Trophy, BookOpen, Stethoscope, Tag, TrendingUp, Info, Shield,
-  ScrollText, Image as ImageIcon, Video,
+  ScrollText, Image as ImageIcon, Video, Tent, HelpCircle, Medal,
 } from "lucide-react"
 import CannabisLeaf from "@/components/cannabis-leaf"
 import MobileNav from "@/components/mobile-nav"
@@ -23,11 +23,12 @@ const NAV_LINKS = [
   { href: "/feed", label: "Feed", icon: Calendar, section: "Explore" },
   { href: "/forum", label: "Discussions", icon: MessageCircle, section: "Community" },
   { href: "/diaries", label: "Grow Diaries", icon: Leaf, section: "Community" },
-  { href: "/setups", label: "Setups", icon: Settings, section: "Community" },
+  { href: "/setups", label: "Setups", icon: Tent, section: "Community" },
   { href: "/guides", label: "Guides", icon: BookOpen, section: "Community" },
-  { href: "/help", label: "Plant Help", icon: Stethoscope, section: "Community" },
+  { href: "/plant-doctor", label: "Plant Doctor", icon: Stethoscope, section: "Community" },
   { href: "/strains", label: "Strains", icon: Dna, section: "Library" },
   { href: "/contest", label: "Contest", icon: Trophy, section: "Library" },
+  { href: "/leaderboard", label: "Leaderboard", icon: Medal, section: "Library" },
   { href: "/deals", label: "Deals", icon: Tag, section: "Library" },
 ]
 
@@ -320,6 +321,14 @@ export function Navigation() {
                 <Link href="/about" className={linkClass("/about")} onClick={() => setMenuOpen(false)}>
                   <Info className="h-4 w-4" />
                   About
+                </Link>
+                <Link href="/help" className={linkClass("/help")} onClick={() => setMenuOpen(false)}>
+                  <HelpCircle className="h-4 w-4" />
+                  Help Center
+                </Link>
+                <Link href="/rules" className={linkClass("/rules")} onClick={() => setMenuOpen(false)}>
+                  <ScrollText className="h-4 w-4" />
+                  Community Rules
                 </Link>
                 <Link href="/terms" className={linkClass("/terms")} onClick={() => setMenuOpen(false)}>
                   <ScrollText className="h-4 w-4" />

@@ -69,7 +69,7 @@ async function getSharedPusher() {
 // Internal paths emitted by TerpBot (and users) render as real links.
 // Allowlisted prefixes only — no arbitrary scheme or external URL is
 // ever turned into an anchor here.
-const INTERNAL_LINK_RE = /^\/(forum|guides|strains|diaries|u|search|leaderboard|contest|profile|setups|chat)(\/[a-zA-Z0-9\-_/?=&%#.]*)?$/
+const INTERNAL_LINK_RE = /^\/(forum|guides|strains|diaries|u|search|leaderboard|contest|profile|setups|chat|rules|help|plant-doctor|about)(\/[a-zA-Z0-9\-_/?=&%#.]*)?$/
 
 function renderContent(text: string) {
   const parts = text.split(/(@[a-zA-Z0-9_-]+|\/[a-zA-Z][a-zA-Z0-9\-_/?=&%#.]*)/gi)

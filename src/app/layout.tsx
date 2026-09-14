@@ -13,6 +13,7 @@ import { THEME_INIT_SCRIPT } from "@/lib/theme";
 import { shouldGatePublic } from "@/lib/maintenance";
 import MaintenancePage from "./maintenance/page";
 import AnnouncementBanner from "@/components/announcement-banner";
+import RecoveryWarningBanner from "@/components/recovery-warning-banner";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -91,6 +92,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             </a>
             <Providers>
               <AnnouncementBanner />
+              <RecoveryWarningBanner />
               <Navigation />
               <main id="main-content" className="flex-1 min-w-0 pb-16 lg:pb-0">{children}</main>
               <Footer />

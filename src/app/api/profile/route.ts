@@ -186,7 +186,6 @@ export async function PATCH(request: Request) {
       notifyOnComment,
       notifyOnFollow,
       notifyOnReaction,
-      emailDigestFrequency,
       avatarFrame,
       profileTitle,
       profileTheme,
@@ -276,14 +275,6 @@ export async function PATCH(request: Request) {
         : null
     const cleanBusinessName = clean(businessName, 80)
 
-    const DIGEST_OPTIONS = new Set(["DAILY", "WEEKLY", "NEVER"])
-    const cleanDigest =
-      typeof emailDigestFrequency === "string" && DIGEST_OPTIONS.has(emailDigestFrequency.toUpperCase())
-        ? emailDigestFrequency.toUpperCase()
-        : emailDigestFrequency === undefined
-        ? undefined
-        : null
-
     const updateData: Record<string, unknown> = {}
     const setIfDefined = (key: string, value: unknown) => {
       if (value !== undefined) updateData[key] = value
@@ -306,8 +297,6 @@ export async function PATCH(request: Request) {
     if (typeof notifyOnComment === "boolean") updateData.notifyOnComment = notifyOnComment
     if (typeof notifyOnFollow === "boolean") updateData.notifyOnFollow = notifyOnFollow
     if (typeof notifyOnReaction === "boolean") updateData.notifyOnReaction = notifyOnReaction
-
-    setIfDefined("emailDigestFrequency", cleanDigest)
 
     if (avatarUrl !== undefined) {
       updateData.avatarUrl = avatarUrl ? String(avatarUrl).slice(0, 500) : null
@@ -396,7 +385,6 @@ export async function PATCH(request: Request) {
                 notifyOnComment: true,
                 notifyOnFollow: true,
                 notifyOnReaction: true,
-                emailDigestFrequency: true,
               },
             }),
           ]
@@ -425,7 +413,6 @@ export async function PATCH(request: Request) {
                 notifyOnComment: true,
                 notifyOnFollow: true,
                 notifyOnReaction: true,
-                emailDigestFrequency: true,
               },
             }),
           ]),

@@ -17,6 +17,8 @@ const STATIC = [
   { url: "/reputation", priority: 0.5, changeFrequency: "monthly" as const },
   { url: "/guides", priority: 0.7, changeFrequency: "weekly" as const },
   { url: "/help", priority: 0.7, changeFrequency: "weekly" as const },
+  { url: "/plant-doctor", priority: 0.6, changeFrequency: "monthly" as const },
+  { url: "/rules", priority: 0.5, changeFrequency: "monthly" as const },
   { url: "/deals", priority: 0.5, changeFrequency: "weekly" as const },
   { url: "/calculator", priority: 0.5, changeFrequency: "monthly" as const },
   { url: "/youtubers", priority: 0.6, changeFrequency: "weekly" as const },

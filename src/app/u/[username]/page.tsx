@@ -45,7 +45,7 @@ export async function generateMetadata({ params }: { params: Promise<{ username:
   const description = snippet(
     profile.bio ||
       (isBot
-        ? `TerpBot is TerpTalk's built-in community assistant — welcomes new members, answers questions in chat, and keeps the garden tidy.`
+        ? `TerpBot is TerpTalk's built-in automated assistant — welcomes new members, answers questions in chat, and relays staff announcements. It's a bot, not a moderator.`
         : `View ${profile.username}'s grow diaries, setup showcases, and forum activity on TerpTalk — the 21+ community for cannabis growers.`),
     160
   )

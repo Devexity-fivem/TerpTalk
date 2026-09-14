@@ -1,4 +1,4 @@
-import { MessageSquare, Award, Dna, Sprout, Calendar, Trophy, BookOpen, Tag, PenLine, ArrowRight, TrendingUp, Users, Leaf } from "lucide-react"
+import { MessageSquare, Award, Dna, Sprout, Calendar, Trophy, BookOpen, Tag, ArrowRight, TrendingUp, Users, Leaf } from "lucide-react"
 import { OpenChatButton } from "@/components/open-chat-button"
 import Link from "next/link"
 import { prisma } from "@/lib/prisma"
@@ -6,7 +6,7 @@ import { unstable_cache } from "next/cache"
 import { publicUserSelect, activeAuthor, rankableProfile, REPUTATION_ORDER } from "@/lib/security"
 import CannabisLeaf from "@/components/cannabis-leaf"
 import LiveStats from "@/components/live-stats"
-import JoinButton from "@/components/join-button"
+import HeroCta from "@/components/hero-cta"
 import { Avatar } from "@/components/ui/avatar"
 
 // Public landing page — prerendered and revalidated every 60s. User-specific UI
@@ -168,33 +168,8 @@ export default async function Home() {
           <p className="text-lg sm:text-xl text-muted-foreground max-w-2xl mx-auto mb-4">
             A 21+ community built around cannabis cultivation. Ask questions, share your grow, compare genetics, troubleshoot problems, and learn from other growers.
           </p>
-          {/* Primary and secondary actions */}
-          <div className="flex flex-col sm:flex-row gap-4 justify-center mb-6">
-            <Link
-              href="/forum/new"
-              className="inline-flex items-center justify-center gap-2 bg-primary text-primary-foreground px-8 py-3 rounded-xl font-semibold hover:bg-primary/90 transition-all shadow-lg shadow-primary/25 hover:shadow-primary/40"
-            >
-              <PenLine className="w-4 h-4" />
-              Start a discussion
-            </Link>
-            <Link
-              href="/forum"
-              className="inline-flex items-center justify-center gap-2 px-8 py-3 rounded-xl font-semibold border border-border bg-card hover:bg-secondary transition-colors"
-            >
-              Browse the forums
-              <ArrowRight className="w-4 h-4" />
-            </Link>
-          </div>
-          <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-3">
-            <Link
-              href="/diaries/new"
-              className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-lg bg-card border border-border hover:border-primary/40 hover:bg-secondary transition-colors"
-            >
-              <Sprout className="w-4 h-4" />
-              New diary
-            </Link>
-            <JoinButton />
-          </div>
+          {/* Primary and secondary actions (session-aware, client-side) */}
+          <HeroCta />
           <div className="mt-5 flex justify-center">
             <OpenChatButton />
           </div>

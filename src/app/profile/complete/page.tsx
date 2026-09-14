@@ -134,7 +134,7 @@ export default function CompleteProfilePage() {
             <Check className="w-12 h-12 text-primary" />
           </div>
           <h1 className="text-2xl font-bold mb-2">Profile Complete!</h1>
-          <p className="text-muted-foreground">Redirecting to your dashboard...</p>
+          <p className="text-muted-foreground">Taking you to the community...</p>
         </div>
       </div>
     )

@@ -463,14 +463,14 @@ export default function ProfileClient() {
                   "@terpbot what's my reputation?",
                   "@terpbot summarize this thread",
                   "@terpbot find cloning guides",
-                  "@terpbot /nextbadges",
+                  "@terpbot next badges",
                 ].map((ex) => (
                   <code key={ex} className="block text-xs bg-secondary/50 rounded px-2.5 py-1.5 text-foreground/90">{ex}</code>
                 ))}
               </div>
               <p className="text-xs text-muted-foreground mt-3 pt-3 border-t border-border flex items-start gap-1.5">
                 <AlertTriangle className="w-3 h-3 shrink-0 mt-0.5" />
-                I&apos;m fully automated — everything I say comes from real TerpTalk data, never a script pretending to be a grower. I&apos;m not a moderator and I don&apos;t give cultivation advice. Manage my notifications in{" "}
+                I&apos;m fully automated — everything I say comes from real TerpTalk data, never a script pretending to be a grower. I&apos;m not a moderator, and I don&apos;t give personalized cultivation, legal, or medical advice — just general info. Manage my notifications in{" "}
                 <Link href="/settings/notifications" className="text-primary hover:underline">settings</Link>.
                 {profile.botStats?.hasFallbacks && (
                   <span className="block mt-1">If I miss your meaning, rephrase — I&apos;m still learning.</span>

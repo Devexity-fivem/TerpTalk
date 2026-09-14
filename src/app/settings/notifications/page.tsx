@@ -32,7 +32,7 @@ const DM_OPTIONS = [
 
 type Prefs = Record<(typeof TOGGLES)[number]["key"], boolean> &
   Record<(typeof PRIVACY_TOGGLES)[number]["key"], boolean> &
-  { emailDigestFrequency: string | null; dmPolicy: string }
+  { dmPolicy: string }
 
 export default function NotificationSettingsPage() {
   const { status } = useSession()

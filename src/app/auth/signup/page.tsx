@@ -264,6 +264,11 @@ export default function SignUpPage() {
             <Link href="/privacy" className="text-primary hover:underline">Privacy Policy</Link>.
           </p>
 
+          <p className="text-xs text-muted-foreground bg-secondary/50 border border-border rounded-lg px-3 py-2">
+            We never ask for your email. After signup you&apos;ll get a recovery phrase —{" "}
+            <strong className="text-foreground">it&apos;s the only way back in</strong> if you forget your password. Write it down and keep it safe.
+          </p>
+
           {error && (
             <div className="bg-destructive/10 text-destructive px-4 py-2 rounded-lg text-sm">
               {error}

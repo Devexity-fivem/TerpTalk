@@ -7,6 +7,7 @@ import { unauthorized, getClientIp, logSecurityEvent, isBanned, forbidden, block
 import { rateLimit } from "@/lib/rate-limit"
 import { checkMaintenance } from "@/lib/maintenance"
 import { notify } from "@/lib/notify"
+import { TERPBOT_USERNAME } from "@/lib/terpbot-constants"
 
 // POST — toggle follow on a user: { userId }  (or diary: { diaryId })
 export async function POST(request: Request) {
@@ -46,9 +47,9 @@ export async function POST(request: Request) {
 
       const targetUser = await prisma.user.findUnique({
         where: { id: userId },
-        select: { banned: true },
+        select: { banned: true, profile: { select: { username: true } } },
       })
-      if (!targetUser || targetUser.banned) {
+      if (!targetUser || targetUser.banned || targetUser.profile?.username === TERPBOT_USERNAME) {
         return NextResponse.json({ error: "User not found" }, { status: 404 })
       }
 

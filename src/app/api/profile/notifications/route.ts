@@ -6,7 +6,6 @@ import { unauthorized, forbidden, isBanned } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
 import { Prisma } from "@prisma/client"
 
-const DIGEST_OPTIONS = new Set(["DAILY", "WEEKLY", "NEVER"])
 const DM_POLICIES = new Set(["EVERYONE", "FOLLOWING", "NONE"])
 
 export async function GET() {
@@ -31,7 +30,6 @@ export async function GET() {
       notifyOnReaction: true,
       notifyOnMilestone: true,
       notifyOnBotAssist: true,
-      emailDigestFrequency: true,
       hideOnlineStatus: true,
       publicMilestoneOptOut: true,
       dmPolicy: true,
@@ -63,7 +61,6 @@ export async function PATCH(request: Request) {
     notifyOnReaction?: boolean
     notifyOnMilestone?: boolean
     notifyOnBotAssist?: boolean
-    emailDigestFrequency?: string | null
     hideOnlineStatus?: boolean
     publicMilestoneOptOut?: boolean
     dmPolicy?: string
@@ -86,16 +83,6 @@ export async function PATCH(request: Request) {
       data.dmPolicy = raw.toUpperCase()
     } else {
       return NextResponse.json({ error: "Invalid message privacy setting" }, { status: 400 })
-    }
-  }
-  if ("emailDigestFrequency" in body) {
-    const raw = body.emailDigestFrequency
-    if (raw === null || raw === undefined || raw === "") {
-      data.emailDigestFrequency = null
-    } else if (typeof raw === "string" && DIGEST_OPTIONS.has(raw.toUpperCase())) {
-      data.emailDigestFrequency = raw.toUpperCase().slice(0, 10)
-    } else {
-      return NextResponse.json({ error: "Invalid email digest frequency" }, { status: 400 })
     }
   }
 

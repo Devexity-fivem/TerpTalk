@@ -24,7 +24,7 @@ const BOT_ROLE = "MEMBER"
 let cachedBotId: string | null = null
 
 const BOT_PROFILE = {
-  bio: "🤖 TerpTalk's resident bot. I welcome new members, celebrate your milestones, post the daily digest, and keep chat tidy. Type /help in chat to see my commands.",
+  bio: "🤖 TerpTalk's resident bot. I welcome new members, celebrate your milestones, post the daily digest and grow tips, and relay staff announcements. Type /help in chat to see my commands.",
   location: "The Garden",
   growSpace: "Server rack",
   growExperience: "Eternal — I watch every grow",

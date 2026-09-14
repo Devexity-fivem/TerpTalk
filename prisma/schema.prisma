@@ -131,7 +131,6 @@ model Profile {
   notifyOnReaction     Boolean  @default(true)
   notifyOnMilestone    Boolean  @default(true)
   notifyOnBotAssist    Boolean  @default(true)
-  emailDigestFrequency String?
   // Privacy controls
   hideOnlineStatus       Boolean @default(false)
   publicMilestoneOptOut  Boolean @default(false)

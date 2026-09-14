@@ -116,8 +116,6 @@ interface ProfileData {
     notifyOnComment: boolean
     notifyOnFollow: boolean
     notifyOnReaction: boolean
-    emailDigestFrequency: string | null
-    joinDate: string
     reputation: number
     avatarFrame: string | null
     profileTitle: string | null
@@ -230,7 +228,6 @@ export default function ProfilePage() {
     notifyOnComment: true,
     notifyOnFollow: true,
     notifyOnReaction: true,
-    emailDigestFrequency: "",
   })
 
   useEffect(() => {
@@ -353,7 +350,6 @@ export default function ProfilePage() {
                         notifyOnComment: p?.notifyOnComment ?? true,
                         notifyOnFollow: p?.notifyOnFollow ?? true,
                         notifyOnReaction: p?.notifyOnReaction ?? true,
-                        emailDigestFrequency: p?.emailDigestFrequency || "",
                       })
                       setEditing(true)
                     }}

@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react"
 import Link from "next/link"
 import { useSession, signOut } from "next-auth/react"
 import {
-  User, Award, TrendingUp, Leaf, Mail, Bell, Settings, Shield, LogOut, ChevronDown,
+  User, Award, TrendingUp, Leaf, Mail, Bell, Settings, Shield, LogOut, ChevronDown, HelpCircle,
 } from "lucide-react"
 import { Avatar } from "@/components/ui/avatar"
 import { cn } from "@/lib/utils"
@@ -17,6 +17,7 @@ const LINKS = [
   { href: "/messages", label: "Messages", icon: Mail, desc: "Private conversations" },
   { href: "/notifications", label: "Notifications", icon: Bell, desc: "Replies, mentions, milestones" },
   { href: "/settings/notifications", label: "Settings", icon: Settings, desc: "Notification preferences" },
+  { href: "/help", label: "Help Center", icon: HelpCircle, desc: "How TerpTalk works" },
 ] as const
 
 export default function UserMenu() {

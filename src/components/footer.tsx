@@ -22,7 +22,9 @@ export default function Footer() {
           <Link href="/reputation" className="hover:text-foreground transition-colors">Reputation</Link>
           <Link href="/calculator" className="hover:text-foreground transition-colors">Calculator</Link>
           <Link href="/staff/apply" className="hover:text-foreground transition-colors">Join the team</Link>
-          <Link href="/help" className="hover:text-foreground transition-colors">Plant Help</Link>
+          <Link href="/help" className="hover:text-foreground transition-colors">Help</Link>
+          <Link href="/plant-doctor" className="hover:text-foreground transition-colors">Plant Doctor</Link>
+          <Link href="/rules" className="hover:text-foreground transition-colors">Rules</Link>
           <Link href="/terms" className="hover:text-foreground transition-colors">Terms</Link>
           <Link href="/privacy" className="hover:text-foreground transition-colors">Privacy</Link>
         </div>

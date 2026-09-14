@@ -161,7 +161,7 @@ export async function blockExistsBetween(a: string, b: string): Promise<boolean>
 
 // ─── Safe serialization ─────────────────────────────────────────────
 // NEVER include the full User object in API responses — it contains
-// password hash, email, status, lastSeenAt, and role internals.
+// password hash, status, lastSeenAt, and role internals.
 // Always use this select for public-facing author/user references.
 
 export const publicUserSelect = {

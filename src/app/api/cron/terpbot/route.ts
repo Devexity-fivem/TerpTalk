@@ -70,8 +70,8 @@ export async function GET(request: NextRequest) {
     const tip = GROW_TIPS[dayOfYear % GROW_TIPS.length]
     const activity =
       members + threads + updates > 0
-        ? `Yesterday: ${members} new member${members === 1 ? "" : "s"}, ${threads} new thread${threads === 1 ? "" : "s"}, ${updates} diary update${updates === 1 ? "" : "s"}.`
-        : "Quiet day yesterday — start a thread or update your diary to get things going."
+        ? `Last 24 hours: ${members} new member${members === 1 ? "" : "s"}, ${threads} new thread${threads === 1 ? "" : "s"}, ${updates} diary update${updates === 1 ? "" : "s"}.`
+        : "Quiet last 24 hours — start a thread or update your diary to get things going."
     // Two separate posts — combining them into one message read like a
     // merged double-post in the chat UI.
     const digestDto = await postToGeneral(`📊 ${activity}`)
@@ -94,9 +94,10 @@ export async function GET(request: NextRequest) {
           where: { userId: winner.user.id },
           select: { publicMilestoneOptOut: true },
         })
-        const name = opt?.publicMilestoneOptOut ? "a member" : winner.user.profile?.username || winner.user.name || "a member"
+        const name = winner.user.profile?.username || winner.user.name
+        const who = opt?.publicMilestoneOptOut || !name ? "a member" : `@${name}`
         const contestDto = await postToGeneral(
-          `🏆 Last week's photo contest winner: @${name} with ${winner._count.votes} vote${winner._count.votes === 1 ? "" : "s"}! This week's contest is open — submit your best budshot on the Contest page.`
+          `🏆 Last week's photo contest winner: ${who} with ${winner._count.votes} vote${winner._count.votes === 1 ? "" : "s"}! This week's contest is open — submit your best budshot on the Contest page.`
         )
         if (contestDto) {
           await recordBotEvent({ type: "ANNOUNCEMENT", key: `announce:contest:${prevWeek}`, command: "contest" }).catch(() => {})
@@ -118,9 +119,10 @@ export async function GET(request: NextRequest) {
           where: { userId: winner.user.id },
           select: { publicMilestoneOptOut: true },
         })
-        const name = opt?.publicMilestoneOptOut ? "a member" : winner.user.profile?.username || winner.user.name || "a member"
+        const name = winner.user.profile?.username || winner.user.name
+        const who = opt?.publicMilestoneOptOut || !name ? "a member" : `@${name}`
         const diaryDto = await postToGeneral(
-          `🏆 Last month's Diary of the Month winner: @${name} with "${sanitizeEcho(winner.diary.title, 60)}" (${winner._count.votes} vote${winner._count.votes === 1 ? "" : "s"})! This month's contest is open — enter a well-documented diary on the Contest page.`
+          `🏆 Last month's Diary of the Month winner: ${who} with "${sanitizeEcho(winner.diary.title, 60)}" (${winner._count.votes} vote${winner._count.votes === 1 ? "" : "s"})! This month's contest is open — enter a well-documented diary on the Contest page.`
         )
         if (diaryDto) {
           await recordBotEvent({ type: "ANNOUNCEMENT", key: `announce:diary-contest:${prevMonth}`, command: "diary-contest" }).catch(() => {})

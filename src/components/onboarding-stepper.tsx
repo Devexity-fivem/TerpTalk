@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react"
 import { useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
+import Link from "next/link"
 import {
   Leaf, User, Camera, Loader2, Check, Copy, AlertTriangle, KeyRound, Users, Sparkles,
 } from "lucide-react"
@@ -674,9 +675,14 @@ export default function OnboardingStepper({
               <Check className="w-10 h-10 text-primary" />
             </div>
             <h1 ref={headingRef} tabIndex={-1} className="text-2xl font-bold mb-3 outline-none">You&apos;re all set 🌱</h1>
-            <p className="text-muted-foreground mb-8 max-w-md mx-auto">
+            <p className="text-muted-foreground mb-6 max-w-md mx-auto">
               Your TerpTalk feed is ready. Follow growers, join a discussion, or start your own grow diary whenever you&apos;re ready.
             </p>
+            <div className="flex justify-center gap-4 text-sm mb-6">
+              <Link href="/guides" className="text-primary hover:underline">Browse guides</Link>
+              <Link href="/rules" className="text-primary hover:underline">Community rules</Link>
+              <Link href="/help" className="text-primary hover:underline">Help Center</Link>
+            </div>
             <button onClick={() => complete(destination)} disabled={busy} className={btnPrimary + " w-full"}>
               {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
               Enter TerpTalk

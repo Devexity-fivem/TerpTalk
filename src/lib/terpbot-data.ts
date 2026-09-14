@@ -598,6 +598,7 @@ async function handle(name: string, ctx: BotCommandCtx): Promise<BotCommandResul
           "4. No spam or unsolicited advertising.",
           "5. Don't dox anyone — pseudonyms stay pseudonymous.",
           "6. Staff may remove content or restrict accounts that break the rules — use the Report button to flag issues.",
+          "Full rules: /rules",
         ].join("\n")
       )
 
