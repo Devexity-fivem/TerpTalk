@@ -136,7 +136,7 @@ export async function POST(request: Request) {
       Buffer.byteLength(password, "utf8") > 72
     ) {
       return NextResponse.json(
-        { error: `Password must be between ${LIMITS.PASSWORD_MIN} and ${LIMITS.PASSWORD_MAX} characters and must not exceed 72 bytes` },
+        { error: `Password must be between ${LIMITS.PASSWORD_MIN} and ${LIMITS.PASSWORD_MAX} characters` },
         { status: 400 }
       )
     }

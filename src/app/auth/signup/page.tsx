@@ -257,6 +257,13 @@ export default function SignUpPage() {
             </label>
           </div>
 
+          <p className="text-xs text-muted-foreground">
+            By creating an account you agree to the{" "}
+            <Link href="/terms" className="text-primary hover:underline">Terms of Service</Link>{" "}
+            and{" "}
+            <Link href="/privacy" className="text-primary hover:underline">Privacy Policy</Link>.
+          </p>
+
           {error && (
             <div className="bg-destructive/10 text-destructive px-4 py-2 rounded-lg text-sm">
               {error}

@@ -155,7 +155,7 @@ export default function ReputationPage() {
           <ul className="space-y-2 text-sm text-muted-foreground list-disc list-inside">
             <li>You can&apos;t earn reputation from your own content or from TerpBot.</li>
             <li>Reputation from deleted or removed content is reversed automatically.</li>
-            <li>Farming patterns (alt accounts, vote rings, rapid-fire likes) are flagged for moderator review.</li>
+            <li>Automated, coordinated, or inauthentic reputation farming is flagged for moderator review.</li>
             <li>Every point has a reason — your profile shows a public history of what you earned.</li>
           </ul>
           <p className="text-xs text-muted-foreground mt-3 pt-3 border-t border-border flex items-center gap-1.5">

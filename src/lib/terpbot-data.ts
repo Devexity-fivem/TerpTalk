@@ -589,7 +589,7 @@ async function handle(name: string, ctx: BotCommandCtx): Promise<BotCommandResul
           "3. No buying, selling, or sourcing cannabis or anything else.",
           "4. No spam or unsolicited advertising.",
           "5. Don't dox anyone — pseudonyms stay pseudonymous.",
-          "6. Staff decisions are final; report issues with /help moderation tools or the Report button.",
+          "6. Staff may remove content or restrict accounts that break the rules — use the Report button to flag issues.",
         ].join("\n")
       )
 

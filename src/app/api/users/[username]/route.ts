@@ -136,7 +136,20 @@ export async function GET(
     const isBot = profile.username === TERPBOT_USERNAME
     // Durable bot metrics come from BotEvent rows — ChatMessage hard-deletes
     // after ~3 days so it can't power real stats.
-    const botStats = isBot ? await getBotStats() : null
+    const fullStats = isBot ? await getBotStats() : null
+    // Only expose what the profile renders — internal counters (refusals,
+    // per-kind event breakdowns) would aid probing of bot filters.
+    const botStats = fullStats && {
+      commands: fullStats.commands,
+      membersAssisted: fullStats.membersAssisted,
+      entityLinks: fullStats.entityLinks,
+      welcomes: fullStats.welcomes,
+      announcements: fullStats.announcements,
+      daysActive: fullStats.daysActive,
+      assists: fullStats.assists,
+      byCommand: fullStats.byCommand,
+      hasFallbacks: fullStats.fallbacks > 0,
+    }
 
     // Recent public reputation events — powers the profile's Reputation card.
     const recentRep = isBot

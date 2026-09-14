@@ -71,19 +71,14 @@ interface PublicProfile {
   }
   botStats?: {
     commands: number
-    mentions: number
     membersAssisted: number
     entityLinks: number
     welcomes: number
     announcements: number
     daysActive: number
-    fallbacks: number
-    refusals: number
-    helps: number
     assists: number
     byCommand: Record<string, number>
-    byAnnouncement: Record<string, number>
-    byAssist: Record<string, number>
+    hasFallbacks: boolean
   } | null
   growStreak: number
   totalUpdates: number
@@ -439,7 +434,7 @@ export default function ProfileClient() {
                 <li className="flex gap-2"><HandMetal className="w-4 h-4 text-primary shrink-0 mt-0.5" /> Welcome new members and post the daily digest in <Link href="/chat" className="text-primary hover:underline">Chat</Link>.</li>
                 <li className="flex gap-2"><MessageSquare className="w-4 h-4 text-primary shrink-0 mt-0.5" /> Answer questions when you mention <span className="text-primary font-medium">@terpbot</span> — rep, streaks, diaries, strains, guides, and more.</li>
                 <li className="flex gap-2"><Zap className="w-4 h-4 text-primary shrink-0 mt-0.5" /> Summarize linked threads and check whether a question got answered — try <span className="text-primary font-medium">@terpbot summarize this</span>.</li>
-                <li className="flex gap-2"><Sprout className="w-4 h-4 text-primary shrink-0 mt-0.5" /> Keep the garden tidy alongside the moderation team.</li>
+                <li className="flex gap-2"><Sprout className="w-4 h-4 text-primary shrink-0 mt-0.5" /> Send you a private heads-up when it&apos;s useful — a welcome note, first-diary tips, or a nudge when one of your threads goes quiet.</li>
               </ul>
               {profile.botStats && Object.keys(profile.botStats.byCommand).length > 0 && (
                 <div className="mt-4 pt-4 border-t border-border">
@@ -475,8 +470,9 @@ export default function ProfileClient() {
               </div>
               <p className="text-xs text-muted-foreground mt-3 pt-3 border-t border-border flex items-start gap-1.5">
                 <AlertTriangle className="w-3 h-3 shrink-0 mt-0.5" />
-                I&apos;m fully automated — everything I say comes from real TerpTalk data, never a script pretending to be a grower.
-                {profile.botStats && profile.botStats.fallbacks > 0 && (
+                I&apos;m fully automated — everything I say comes from real TerpTalk data, never a script pretending to be a grower. I&apos;m not a moderator and I don&apos;t give cultivation advice. Manage my notifications in{" "}
+                <Link href="/settings/notifications" className="text-primary hover:underline">settings</Link>.
+                {profile.botStats?.hasFallbacks && (
                   <span className="block mt-1">If I miss your meaning, rephrase — I&apos;m still learning.</span>
                 )}
               </p>

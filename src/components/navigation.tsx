@@ -6,7 +6,7 @@ import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import {
   Leaf, MessageCircle, MessagesSquare, Home, Calendar,
-  Settings, Dna, Bell, Menu, X, Mail, Search, Trophy, BookOpen, Stethoscope, Tag, TrendingUp,
+  Settings, Dna, Bell, Menu, X, Mail, Search, Trophy, BookOpen, Stethoscope, Tag, TrendingUp, Info, Shield,
   ScrollText, Image as ImageIcon, Video,
 } from "lucide-react"
 import CannabisLeaf from "@/components/cannabis-leaf"
@@ -312,6 +312,24 @@ export function Navigation() {
                   ))}
                 </div>
               ))}
+
+              <div className="space-y-1">
+                <div className="px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  Info
+                </div>
+                <Link href="/about" className={linkClass("/about")} onClick={() => setMenuOpen(false)}>
+                  <Info className="h-4 w-4" />
+                  About
+                </Link>
+                <Link href="/terms" className={linkClass("/terms")} onClick={() => setMenuOpen(false)}>
+                  <ScrollText className="h-4 w-4" />
+                  Terms
+                </Link>
+                <Link href="/privacy" className={linkClass("/privacy")} onClick={() => setMenuOpen(false)}>
+                  <Shield className="h-4 w-4" />
+                  Privacy
+                </Link>
+              </div>
 
               {/* Signed-out users have no avatar menu or navbar chat icon —
                   give them a mobile-only chat entry. Signed-in users reach

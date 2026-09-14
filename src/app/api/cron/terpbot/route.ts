@@ -37,7 +37,8 @@ export async function GET(request: NextRequest) {
   } else {
     if (process.env.NODE_ENV === "production") {
       console.error("[cron] CRON_SECRET is not configured — refusing to run in production")
-      return NextResponse.json({ error: "Cron not configured" }, { status: 503 })
+      // Uniform 401 — don't reveal configuration state to unauthenticated callers.
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
     const ua = request.headers.get("user-agent") || ""
     if (!ua.startsWith("vercel-cron") && !ua.startsWith("Mozilla") && !ua.includes("curl")) {
