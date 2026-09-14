@@ -13,6 +13,7 @@ import CannabisLeaf from "@/components/cannabis-leaf"
 import MobileNav from "@/components/mobile-nav"
 import ThemeToggle from "@/components/theme-toggle"
 import CreateMenu from "@/components/create-menu"
+import UserMenu from "@/components/user-menu"
 import { cn } from "@/lib/utils"
 import { signInHref } from "@/lib/callback-url"
 
@@ -227,24 +228,7 @@ export function Navigation() {
                       </span>
                     )}
                   </Link>
-                  <Link
-                    href="/profile"
-                    className="hidden items-center gap-2 rounded-lg p-1 text-sm transition-colors hover:text-foreground lg:flex"
-                    aria-label="Your profile"
-                    title="Your profile"
-                  >
-                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10">
-                      <User className="h-4 w-4 text-primary" />
-                    </div>
-                    <span className="font-medium hidden xl:inline">{session.user?.name}</span>
-                  </Link>
-                  <button
-                    onClick={() => signOut()}
-                    className="hidden rounded-lg p-2 transition-colors hover:bg-secondary lg:block"
-                    aria-label="Sign out"
-                  >
-                    <LogOut className="h-4 w-4" />
-                  </button>
+                  <UserMenu />
                 </>
               ) : (
                 <>
