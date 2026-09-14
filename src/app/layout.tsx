@@ -30,6 +30,8 @@ export const metadata: Metadata = {
   }),
   // Tab/bookmark icon + iOS Add-to-Home-Screen icon (opaque, no alpha).
   icons: { icon: "/icon.png", shortcut: "/icon.png", apple: "/icons/apple-touch-icon.png" },
+  // iOS standalone mode — launched from home screen without Safari chrome.
+  appleWebApp: { capable: true, statusBarStyle: "black-translucent", title: "TerpTalk" },
 }
 
 export const viewport: Viewport = {
