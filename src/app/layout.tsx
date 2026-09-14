@@ -28,8 +28,8 @@ export const metadata: Metadata = {
     description:
       "TerpTalk is a 21+ community for cannabis growers — grow journals, strain database, setup showcases, forums, and live chat. Share your grow, learn from others.",
   }),
-  // iOS Add-to-Home-Screen icon (PNG, any size is accepted)
-  icons: { apple: "/logo.png" },
+  // Tab/bookmark icon + iOS Add-to-Home-Screen icon (opaque, no alpha).
+  icons: { icon: "/icon.png", shortcut: "/icon.png", apple: "/icons/apple-touch-icon.png" },
 }
 
 export const viewport: Viewport = {
