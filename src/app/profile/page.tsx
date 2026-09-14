@@ -809,10 +809,12 @@ export default function ProfilePage() {
           </div>
 
           {/* Account Recovery */}
-          <RecoveryPhraseCard />
+          <div id="recovery" className="scroll-mt-20">
+            <RecoveryPhraseCard />
+          </div>
 
           {/* Account Controls */}
-          <div className="bg-card rounded-lg border border-border p-6">
+          <div id="account" className="scroll-mt-20 bg-card rounded-lg border border-border p-6">
             <h2 className="text-lg font-semibold mb-4">Privacy & Account</h2>
             <div className="space-y-3">
               <a

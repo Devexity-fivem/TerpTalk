@@ -25,7 +25,7 @@ export async function GET() {
         blocked: {
           select: {
             id: true,
-            profile: { select: { username: true } },
+            profile: { select: { username: true, avatarUrl: true } },
           },
         },
       },
@@ -36,6 +36,7 @@ export async function GET() {
         id: b.id,
         userId: b.blocked.id,
         username: b.blocked.profile?.username ?? "unknown",
+        avatarUrl: b.blocked.profile?.avatarUrl ?? null,
         createdAt: b.createdAt,
       })),
     })

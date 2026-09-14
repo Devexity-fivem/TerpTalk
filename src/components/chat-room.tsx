@@ -6,7 +6,7 @@ import { useSearchParams } from "next/navigation"
 import {
   MessageCircle, Send, X, Loader2, Smile, RefreshCw, MoreVertical,
   Trash2, AlertTriangle, Clock, Shield, User as UserIcon, MessageSquare,
-  Lock, Timer, Hash, Bot,
+  Lock, Timer, Hash, Bot, Flag,
 } from "lucide-react"
 import Link from "next/link"
 import RoleBadge from "@/components/role-badge"
@@ -126,6 +126,33 @@ const MessageRow = memo(function MessageRow({
   const isBot = msg.author.username === BOT_USERNAME
   const isAction = !isBot && !isDeleted && /^\*.+\*$/.test(msg.content)
   const displayName = msg.author.username || msg.author.name
+  const [reporting, setReporting] = useState(false)
+  const [reportReason, setReportReason] = useState("SPAM")
+  const [reportDesc, setReportDesc] = useState("")
+  const [reportBusy, setReportBusy] = useState(false)
+  const [reported, setReported] = useState(false)
+  const [reportError, setReportError] = useState("")
+
+  const submitReport = async () => {
+    setReportBusy(true)
+    setReportError("")
+    try {
+      const res = await fetch("/api/reports", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "CHAT_MESSAGE", targetId: msg.id, reason: reportReason, description: reportDesc }),
+      })
+      const d = await res.json().catch(() => ({}))
+      if (res.ok) {
+        setReported(true)
+        setReporting(false)
+      } else {
+        setReportError(d.error || "Report failed")
+      }
+    } finally {
+      setReportBusy(false)
+    }
+  }
   // Cosmetics render only for humans — the bot keeps its fixed identity.
   const frame = !isBot ? getAvatarFrame(msg.author.avatarFrame) : null
   const title = !isBot ? getProfileTitle(msg.author.profileTitle) : null
@@ -206,6 +233,53 @@ const MessageRow = memo(function MessageRow({
         )}
 
         {isMenuOpen && (
+          reported ? (
+            <div className="mt-1 rounded-lg border border-border bg-card shadow-lg p-2.5 relative z-20">
+              <p role="status" className="text-xs text-muted-foreground">Report submitted — thank you. Our moderators will take a look.</p>
+            </div>
+          ) : reporting ? (
+            <div className="mt-1 rounded-lg border border-border bg-card shadow-lg p-2.5 space-y-2 relative z-20" role="group" aria-label="Report message">
+              <p className="text-xs font-medium">Report this message?</p>
+              <select
+                value={reportReason}
+                onChange={(e) => setReportReason(e.target.value)}
+                aria-label="Report reason"
+                className="w-full px-2 py-1.5 rounded-lg border border-border bg-background text-xs"
+              >
+                <option value="SPAM">Spam</option>
+                <option value="HARASSMENT">Harassment</option>
+                <option value="THREATS">Threats</option>
+                <option value="ILLEGAL_CONTENT">Illegal content</option>
+                <option value="SCAM">Scam / phishing</option>
+                <option value="MALICIOUS_LINKS">Malicious links</option>
+                <option value="OTHER">Other</option>
+              </select>
+              <textarea
+                value={reportDesc}
+                onChange={(e) => setReportDesc(e.target.value)}
+                placeholder="Optional details for moderators..."
+                aria-label="Report details"
+                className="w-full px-2 py-1.5 rounded-lg border border-border bg-background text-xs"
+                maxLength={1000}
+              />
+              {reportError && <p role="alert" className="text-xs text-destructive">{reportError}</p>}
+              <div className="flex gap-2">
+                <button
+                  onClick={submitReport}
+                  disabled={reportBusy}
+                  className="px-3 py-1.5 text-xs font-medium bg-destructive text-destructive-foreground rounded-lg disabled:opacity-50"
+                >
+                  {reportBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Submit report"}
+                </button>
+                <button
+                  onClick={() => { setReporting(false); setReportError("") }}
+                  className="px-3 py-1.5 text-xs rounded-lg bg-secondary"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ) : (
           <div role="menu" className="mt-1 rounded-lg border border-border bg-card shadow-lg p-1.5 space-y-1 relative z-20">
             <button
               role="menuitem"
@@ -222,6 +296,15 @@ const MessageRow = memo(function MessageRow({
             >
               <UserIcon className="w-3 h-3 text-primary" /> View profile
             </Link>
+            {!isOwn && !isDeleted && !isBot && (
+              <button
+                role="menuitem"
+                onClick={() => setReporting(true)}
+                className="w-full flex items-center gap-1.5 px-2 py-1 rounded text-xs text-left hover:bg-secondary text-foreground"
+              >
+                <Flag className="w-3 h-3 text-amber-500" /> Report message
+              </button>
+            )}
             {isOwn && !isDeleted && (
               <button
                 role="menuitem"
@@ -276,6 +359,7 @@ const MessageRow = memo(function MessageRow({
               </>
             )}
           </div>
+          )
         )}
       </div>
     </div>

@@ -10,7 +10,7 @@ import HeroCta from "@/components/hero-cta"
 import { Avatar } from "@/components/ui/avatar"
 
 // Public landing page — prerendered and revalidated every 60s. User-specific UI
-// (e.g. JoinButton) is rendered client-side, so the shell can be edge-cached.
+// (e.g. HeroCta) is rendered client-side, so the shell can be edge-cached.
 export const revalidate = 60
 
 const getStats = unstable_cache(

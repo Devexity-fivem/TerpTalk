@@ -4,8 +4,9 @@ import { signInHref } from "@/lib/callback-url"
 
 import { useEffect, useState } from "react"
 import { useSession } from "next-auth/react"
-import { Bell, Loader2, Save } from "lucide-react"
+import { ArrowLeft, Bell, Loader2, Save } from "lucide-react"
 import { useRouter } from "next/navigation"
+import Link from "next/link"
 
 const TOGGLES = [
   { key: "notifyOnReply", label: "Replies to my threads", desc: "When someone replies to a thread I started." },
@@ -84,14 +85,17 @@ export default function NotificationSettingsPage() {
   return (
     <div className="min-h-screen bg-background">
       <div className="max-w-2xl mx-auto px-4 py-8">
+        <Link href="/settings" className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground mb-4">
+          <ArrowLeft className="w-4 h-4" /> All settings
+        </Link>
         <div className="mb-6">
           <h1 className="text-2xl font-bold flex items-center gap-2">
-            <Bell className="w-6 h-6 text-primary" /> Settings
+            <Bell className="w-6 h-6 text-primary" /> Notifications & Privacy
           </h1>
           <p className="text-muted-foreground">Choose what you want to be notified about, and how visible you are to others.</p>
         </div>
 
-        <h2 className="text-lg font-semibold mb-3">Notifications</h2>
+        <h2 id="notifications" className="text-lg font-semibold mb-3 scroll-mt-20">Notifications</h2>
 
         <div className="bg-card rounded-lg border border-border divide-y divide-border">
           {TOGGLES.map(({ key, label, desc }) => (
@@ -110,7 +114,7 @@ export default function NotificationSettingsPage() {
           ))}
         </div>
 
-        <h2 className="text-lg font-semibold mt-8 mb-3">Privacy</h2>
+        <h2 id="privacy" className="text-lg font-semibold mt-8 mb-3 scroll-mt-20">Privacy</h2>
         <div className="bg-card rounded-lg border border-border divide-y divide-border">
           {PRIVACY_TOGGLES.map(({ key, label, desc }) => (
             <label key={key} className="flex items-start justify-between gap-4 p-4 cursor-pointer hover:bg-secondary/30 transition-colors">

@@ -519,7 +519,9 @@ const main = async () => {
       : fail("ban purge", { s: r.status, preBan, postBan })
 
     // ── 6. Anon page smoke ──
-    r = await callApi(`/forum/thread/${thread.slug}`)
+    // authorThread, not thread — replier was permanently banned above, and
+    // banned-author thread pages correctly 404 for everyone.
+    r = await callApi(`/forum/thread/${authorThread.slug}`)
     r.status === 200 ? pass("page: public thread 200 anon") : fail("anon thread page", r.status)
 
     console.log(`\n${results.filter(([s]) => s === "PASS").length} passed, ${results.filter(([s]) => s === "FAIL").length} failed`)

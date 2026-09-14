@@ -81,7 +81,12 @@ export async function POST(request: Request) {
         break
       }
       case "CHAT_MESSAGE": {
-        const m = await prisma.chatMessage.findUnique({ where: { id: targetId }, select: { authorId: true } })
+        // findFirst so we can exclude private/staff rooms — a member should
+        // only be able to report messages they can legitimately see.
+        const m = await prisma.chatMessage.findFirst({
+          where: { id: targetId, deleted: false, room: { isPrivate: false } },
+          select: { authorId: true },
+        })
         reportedUserId = m?.authorId ?? null
         break
       }

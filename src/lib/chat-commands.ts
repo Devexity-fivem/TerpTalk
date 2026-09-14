@@ -49,7 +49,7 @@ export const CHAT_COMMANDS: ChatCommandMeta[] = [
   { name: "guide", aliases: ["guides"], usage: "/guide <search>", description: "Find a grow guide", permission: P, surfaces: BOTH, handledBy: "bot" },
   { name: "ask", usage: "/ask <question>", description: "Search guides and strains", permission: P, surfaces: BOTH, handledBy: "bot" },
   { name: "online", usage: "/online", description: "Who's online right now", permission: P, surfaces: BOTH, handledBy: "bot" },
-  { name: "digest", usage: "/digest", description: "Yesterday's community digest", permission: P, surfaces: BOTH, handledBy: "bot" },
+  { name: "digest", usage: "/digest", description: "Last 24 hours of community activity", permission: P, surfaces: BOTH, handledBy: "bot" },
   { name: "contest", usage: "/contest", description: "This week's contest status", permission: P, surfaces: BOTH, handledBy: "bot" },
   { name: "stats", usage: "/stats", description: "Community stats", permission: P, surfaces: BOTH, handledBy: "bot" },
   { name: "top", aliases: ["leaderboard"], usage: "/top", description: "Top growers by rep", permission: P, surfaces: BOTH, handledBy: "bot" },
