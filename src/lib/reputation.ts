@@ -883,19 +883,33 @@ export async function checkBadges(userId: string, opts: { announcedTierName?: st
       for (const k of def.progress.stats) neededStats.add(k as keyof UserStats)
     }
   }
-  if (neededStats.size === 0) return
-
-  const stats = await getUserStats(userId, neededStats)
 
   const newlyEarned: string[] = []
-  for (const badge of allBadges) {
-    if (earnedIds.has(badge.id)) continue
-    const rule = BADGE_RULES[badge.name]
-    if (!rule || !rule(stats)) continue
-    // grantBadge is P2002-safe; only count badges this call actually granted
-    // so notifications/announcements never fire for a lost race.
-    const granted = await grantBadge(userId, badge.name, { notifyUser: false })
-    if (granted) newlyEarned.push(badge.name)
+
+  // Role-tracked badges self-heal here too, so staff promoted outside the
+  // admin role-change API (seeds, direct edits) still get their badges.
+  const userRole = (
+    await prisma.user.findUnique({ where: { id: userId }, select: { role: true } })
+  )?.role
+  const roleBadgeNames = [
+    ...(userRole === "MODERATOR" || userRole === "ADMINISTRATOR" ? ["Moderator"] : []),
+    ...(userRole === "ADMINISTRATOR" || userRole === "SUPPORT" ? ["Staff"] : []),
+  ]
+  for (const name of roleBadgeNames) {
+    if (await grantBadge(userId, name, { notifyUser: false })) newlyEarned.push(name)
+  }
+
+  if (neededStats.size > 0) {
+    const stats = await getUserStats(userId, neededStats)
+    for (const badge of allBadges) {
+      if (earnedIds.has(badge.id)) continue
+      const rule = BADGE_RULES[badge.name]
+      if (!rule || !rule(stats)) continue
+      // grantBadge is P2002-safe; only count badges this call actually granted
+      // so notifications/announcements never fire for a lost race.
+      const granted = await grantBadge(userId, badge.name, { notifyUser: false })
+      if (granted) newlyEarned.push(badge.name)
+    }
   }
 
   if (newlyEarned.length > 0) {
