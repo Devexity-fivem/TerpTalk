@@ -87,7 +87,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
         type: a.type,
         reason: a.reason,
         duration: a.duration,
-        moderator: a.moderator.profile?.username ?? a.moderatorId,
+        moderator: a.moderator?.profile?.username ?? a.moderatorName ?? a.moderatorId ?? "unknown",
         createdAt: a.createdAt,
       })),
       reportsAgainst,

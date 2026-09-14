@@ -125,7 +125,7 @@ classified `"tier"` or `"stage"` with the Grow Level landed on.
 
 Tiers are sparse, so `TIER_STAGE_CHECKPOINTS` defines sub-stages inside each
 tier gap (grow-cycle names: Germ → Veg → Flower → Flush → Harvest → Cure).
-`REP_LADDER` is the flat list of all rungs — 30 total — and `getRepStage()` /
+`REP_LADDER` is the flat list of all rungs — 31 total — and `getRepStage()` /
 `getStageProgress()` / `getRepLevel()` derive a member's current stage and a
 decorative Grow Level purely from the balance. Zero schema cost; reversals
 demote stages automatically.

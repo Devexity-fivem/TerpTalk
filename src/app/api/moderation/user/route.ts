@@ -1,12 +1,15 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { forbidden } from "@/lib/security"
-import { requireStaff } from "@/lib/require-staff"
+import { requireModerator } from "@/lib/require-staff"
 import { rateLimit } from "@/lib/rate-limit"
 
-// GET ?username= — staff lookup of a member's moderation-relevant profile
+// GET ?username= — moderator lookup of a member's moderation-relevant profile.
+// Moderator-only (not SUPPORT): this dossier includes ban reasons, suspension
+// dates, last-seen, staff usernames, and the raw reputation ledger — all of
+// which are deliberately masked from SUPPORT in the case-queue views.
 export async function GET(request: Request) {
-  const staff = await requireStaff()
+  const staff = await requireModerator()
   if (!staff) return forbidden()
 
   const rl = await rateLimit(`mod-user:${staff.id}`, 60, 60 * 1000)
@@ -82,7 +85,7 @@ export async function GET(request: Request) {
       type: a.type,
       reason: a.reason,
       duration: a.duration,
-      moderator: a.moderator.profile?.username ?? "unknown",
+      moderator: a.moderator?.profile?.username ?? a.moderatorName ?? "unknown",
       createdAt: a.createdAt,
     })),
     reputation: recentRep,

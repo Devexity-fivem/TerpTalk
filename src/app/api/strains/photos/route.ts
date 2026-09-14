@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { unauthorized, getClientIp, logSecurityEvent, isBanned, forbidden, isModerator } from "@/lib/security"
+import { unauthorized, getClientIp, logSecurityEvent, isBanned, forbidden, isModerator, isStaff, isAdmin } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
 import { awardReputation, reverseReputationBySource, REP_POINTS } from "@/lib/reputation"
 import { storeImage, deleteImagesIfUnreferenced } from "@/lib/blob"
@@ -118,7 +118,7 @@ export async function DELETE(request: Request) {
 
     const photo = await prisma.strainPhoto.findUnique({
       where: { id },
-      select: { id: true, userId: true, imageUrl: true },
+      select: { id: true, userId: true, imageUrl: true, user: { select: { role: true } } },
     })
     if (!photo) {
       return NextResponse.json({ error: "Photo not found" }, { status: 404 })
@@ -130,8 +130,11 @@ export async function DELETE(request: Request) {
     })
     if (!user || user.banned) return forbidden()
 
-    if (photo.userId !== session.user.id && !isModerator(user.role)) {
-      return forbidden()
+    if (photo.userId !== session.user.id) {
+      if (!isModerator(user.role)) return forbidden()
+      // Staff-owned photos need an admin — same protected-target rule as
+      // account sanctions, so a moderator can't strip a colleague's content.
+      if (isStaff(photo.user?.role) && !isAdmin(user.role)) return forbidden()
     }
 
     await prisma.strainPhoto.delete({ where: { id } })

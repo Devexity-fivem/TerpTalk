@@ -46,6 +46,18 @@ const err = (error: string, status = 400): BotCommandResult => ({ ok: false, err
 function sanitizeEcho(q: string): string {
   return q.replace(/@/g, "").slice(0, 60).trim()
 }
+
+// DB-sourced fields echoed inside a bot message (strain genetics/breeder,
+// thread/guide titles). User-authored values can smuggle markdown links or
+// line breaks into a trusted-bot message — strip the markup characters.
+function sanitizeField(s: string, max = 80): string {
+  return s
+    .replace(/[\r\n]+/g, " ")
+    .replace(/[[\]()*`<>\\]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, max)
+}
 // Two-pass public thread search shared by /thread and /about: exact
 // phrase on title/tags first (search tier-1), then tokenized title match
 // (similar-threads pattern). Visibility gate is identical to /search:
@@ -235,6 +247,7 @@ function sanitizeExcerpt(text: string, max = 160): string {
     .replace(/@/g, "")
     .replace(/(?:https?:\/\/|www\.)\S*/gi, "")
     .replace(/\b[a-z0-9-]+\.[a-z]{2,}\b/gi, "")
+    .replace(/[[\]()`\\]/g, "")
     .replace(/\s+/g, " ")
     .trim()
   return clean.length > max ? `${clean.slice(0, max).trimEnd()}…` : clean
@@ -424,7 +437,7 @@ async function handle(name: string, ctx: BotCommandCtx): Promise<BotCommandResul
       if (!threads.length) {
         return ok(`No threads matching that — try broader keywords or browse /forum`)
       }
-      const lines = threads.map((t) => `- ${t.title} → /forum/thread/${t.slug} (${t.replyCount} replies)`)
+      const lines = threads.map((t) => `- ${sanitizeField(t.title)} → /forum/thread/${t.slug} (${t.replyCount} replies)`)
       return ok(`🔎 Threads about "${sanitizeEcho(ctx.rest)}":\n${lines.join("\n")}\nMore: /search?q=${encodeURIComponent(ctx.rest.slice(0, 60))}&type=threads`)
     }
 
@@ -441,9 +454,9 @@ async function handle(name: string, ctx: BotCommandCtx): Promise<BotCommandResul
       const statsLine = stats.growCount > 0 ? `📊 ${stats.label}` : null
       return ok(
         [
-          `🌿 ${strain.name}${strain.type ? ` (${strain.type})` : ""}`,
-          strain.genetics ? `Genetics: ${strain.genetics}` : null,
-          strain.breeder ? `Breeder: ${strain.breeder}` : null,
+          `🌿 ${sanitizeField(strain.name)}${strain.type ? ` (${sanitizeField(strain.type, 20)})` : ""}`,
+          strain.genetics ? `Genetics: ${sanitizeField(strain.genetics)}` : null,
+          strain.breeder ? `Breeder: ${sanitizeField(strain.breeder)}` : null,
           statsLine,
           `Details: /strains/${strain.id}`,
         ]
@@ -470,7 +483,7 @@ async function handle(name: string, ctx: BotCommandCtx): Promise<BotCommandResul
         select: { title: true, slug: true },
       })
       if (!guides.length) return ok(`No guides matching that — browse /guides`)
-      return ok(`📚 Guides matching "${sanitizeEcho(ctx.rest)}":\n${guides.map((g) => `- ${g.title} → /guides/${g.slug}`).join("\n")}`)
+      return ok(`📚 Guides matching "${sanitizeEcho(ctx.rest)}":\n${guides.map((g) => `- ${sanitizeField(g.title)} → /guides/${g.slug}`).join("\n")}`)
     }
 
     case "ask": {
@@ -505,8 +518,8 @@ async function handle(name: string, ctx: BotCommandCtx): Promise<BotCommandResul
         }),
       ])
       const lines = [
-        ...guides.map((g) => `📚 ${g.title} → /guides/${g.slug}`),
-        ...strains.map((s) => `🌿 ${s.name} → /strains/${s.id}`),
+        ...guides.map((g) => `📚 ${sanitizeField(g.title)} → /guides/${g.slug}`),
+        ...strains.map((s) => `🌿 ${sanitizeField(s.name)} → /strains/${s.id}`),
       ]
       if (!lines.length) {
         return ok(`Couldn't find anything on that — try different keywords, browse /guides and /strains, or ask the community in Discussions!`)
@@ -605,7 +618,7 @@ async function handle(name: string, ctx: BotCommandCtx): Promise<BotCommandResul
         t.locked ? "locked" : null,
       ].filter(Boolean).join(" · ")
       const lines = [
-        `📋 "${t.title}" — ${t.category.name} (${status})`,
+        `📋 "${sanitizeField(t.title)}" — ${t.category.name} (${status})`,
         `${t.authorName} asked: ${sanitizeExcerpt(t.content, 140)}`,
       ]
       if (t.answer) {
@@ -631,17 +644,17 @@ async function handle(name: string, ctx: BotCommandCtx): Promise<BotCommandResul
       if (!t) return ok(THREAD_NOT_FOUND)
       if (t.answer) {
         return ok(
-          `✅ Yes — "${t.title}" has an accepted answer from ${t.answer.authorName}: "${sanitizeExcerpt(t.answer.content, 140)}" → ${postDeepLink(t.slug, t.answer.id)}`
+          `✅ Yes — "${sanitizeField(t.title)}" has an accepted answer from ${t.answer.authorName}: "${sanitizeExcerpt(t.answer.content, 140)}" → ${postDeepLink(t.slug, t.answer.id)}`
         )
       }
       const latest = t.recentReplies[0]
       if (latest) {
         const who = latest.author.profile?.username ?? latest.author.name ?? "member"
         return ok(
-          `Not yet — ${t.replyCount} repl${t.replyCount === 1 ? "y" : "ies"} on "${t.title}", none accepted. Latest from ${who}: "${sanitizeExcerpt(latest.content, 120)}" → /forum/thread/${t.slug}`
+          `Not yet — ${t.replyCount} repl${t.replyCount === 1 ? "y" : "ies"} on "${sanitizeField(t.title)}", none accepted. Latest from ${who}: "${sanitizeExcerpt(latest.content, 120)}" → /forum/thread/${t.slug}`
         )
       }
-      return ok(`No replies yet on "${t.title}" — /forum/thread/${t.slug}`)
+      return ok(`No replies yet on "${sanitizeField(t.title)}" — /forum/thread/${t.slug}`)
     }
     case "about": {
       const q = (ctx.rest || ctx.args.join(" ")).trim()
@@ -673,11 +686,11 @@ async function handle(name: string, ctx: BotCommandCtx): Promise<BotCommandResul
               return `— ${who}: "${sanitizeExcerpt(p.content, 120)}"`
             })
             return ok(
-              `In "${t.title}", here's what came up about "${q}":\n${lines.join("\n")}\n→ ${postDeepLink(t.slug, matches[0].id)}`
+              `In "${sanitizeField(t.title)}", here's what came up about "${sanitizeField(q)}":\n${lines.join("\n")}\n→ ${postDeepLink(t.slug, matches[0].id)}`
             )
           }
           return ok(
-            `Nobody's mentioned "${q}" in "${t.title}" yet — worth asking there: /forum/thread/${t.slug}. Or search wider: /search?q=${encodeURIComponent(q)}`
+            `Nobody's mentioned "${sanitizeField(q)}" in "${sanitizeField(t.title)}" yet — worth asking there: /forum/thread/${t.slug}. Or search wider: /search?q=${encodeURIComponent(q)}`
           )
         }
       }
@@ -691,12 +704,12 @@ async function handle(name: string, ctx: BotCommandCtx): Promise<BotCommandResul
         }),
       ])
       if (!threads.length && !guides.length) {
-        return ok(`Nothing obvious on "${q}" yet — try /thread ${q} or start a thread yourself.`)
+        return ok(`Nothing obvious on "${sanitizeField(q)}" yet — try /thread ${sanitizeField(q)} or start a thread yourself.`)
       }
       const parts = threads.map(
-        (x) => `💬 "${x.title}" (${x.replyCount} replies, ${x.category.name}) → /forum/thread/${x.slug}`
+        (x) => `💬 "${sanitizeField(x.title)}" (${x.replyCount} replies, ${x.category.name}) → /forum/thread/${x.slug}`
       )
-      guides.forEach((g) => parts.push(`📖 "${g.title}" → /guides/${g.slug}`))
+      guides.forEach((g) => parts.push(`📖 "${sanitizeField(g.title)}" → /guides/${g.slug}`))
       return ok(parts.join("\n"))
     }
 

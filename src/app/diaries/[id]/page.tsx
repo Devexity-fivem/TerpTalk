@@ -39,7 +39,7 @@ async function getDiaryData(id: string) {
   const diary = await prisma.growDiary.findUnique({
     where: { id },
     include: {
-      author: { select: publicUserSelect },
+      author: { select: { ...publicUserSelect, banned: true, suspendedUntil: true } },
       updates: {
         include: {
           author: { select: publicUserSelect },
@@ -54,7 +54,11 @@ async function getDiaryData(id: string) {
     },
   })
 
-  if (!diary || diary.deleted) {
+  const authorInactive =
+    !diary ||
+    diary.author.banned ||
+    (diary.author.suspendedUntil && diary.author.suspendedUntil.getTime() > Date.now())
+  if (!diary || diary.deleted || authorInactive) {
     notFound()
   }
 

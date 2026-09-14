@@ -28,9 +28,15 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   const { slug } = await params
   const thread = await prisma.thread.findUnique({
     where: { slug },
-    select: { title: true, content: true, deleted: true, category: { select: { name: true, slug: true, hidden: true } } },
+    select: {
+      title: true, content: true, deleted: true,
+      category: { select: { name: true, slug: true, hidden: true } },
+      author: { select: { banned: true, suspendedUntil: true } },
+    },
   })
-  if (!thread || thread.deleted || thread.category.hidden) return buildMetadata({ title: "Thread not found", robots: { index: false } })
+  const authorInactive =
+    thread && (thread.author.banned || (thread.author.suspendedUntil && thread.author.suspendedUntil.getTime() > Date.now()))
+  if (!thread || thread.deleted || thread.category.hidden || authorInactive) return buildMetadata({ title: "Thread not found", robots: { index: false } })
   return buildMetadata({
     title: thread.title,
     description: snippet(thread.content),
@@ -46,7 +52,7 @@ async function getThreadData(slug: string, page: number, canSeeHidden: boolean) 
   const thread = await prisma.thread.findUnique({
     where: { slug },
     include: {
-      author: { select: publicUserSelect },
+      author: { select: { ...publicUserSelect, banned: true, suspendedUntil: true } },
       category: true,
       tags: { include: { tag: true } },
       images: { orderBy: { order: "asc" } },
@@ -81,7 +87,11 @@ async function getThreadData(slug: string, page: number, canSeeHidden: boolean) 
 
   // Hidden-category threads are unlisted, not public — mirror the mutation
   // routes and 404 them for non-moderators.
-  if (!thread || thread.deleted || (thread.category?.hidden && !canSeeHidden)) {
+  const authorInactive =
+    thread &&
+    (thread.author.banned ||
+      (thread.author.suspendedUntil && thread.author.suspendedUntil.getTime() > Date.now()))
+  if (!thread || thread.deleted || (thread.category?.hidden && !canSeeHidden) || authorInactive) {
     notFound()
   }
 

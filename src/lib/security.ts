@@ -254,16 +254,28 @@ export function getClientIp(request: { headers: Headers | Record<string, string 
     const value = (headers as Record<string, string | undefined>)[name.toLowerCase()] ?? (headers as Record<string, string | undefined>)[name]
     return value ?? null
   }
-  // Trust platform-specific headers when available (Vercel, Cloudflare)
-  const platformIp = get("x-vercel-forwarded-for") || get("cf-connecting-ip")
-  if (platformIp) return platformIp.split(",")[0].trim()
-  // Otherwise use the rightmost entry of X-Forwarded-For, which is the closest trusted proxy
+  // x-vercel-forwarded-for is set by the Vercel platform — client-supplied
+  // copies are stripped at the edge — so it's always safe to trust.
+  const vercelIp = get("x-vercel-forwarded-for")
+  if (vercelIp) return vercelIp.split(",")[0].trim()
+  // cf-connecting-ip is only trustworthy when the deployment actually sits
+  // behind Cloudflare; off-platform clients can spoof it freely, so it's
+  // opt-in via env.
+  if (process.env.TRUST_CLOUDFLARE_HEADERS === "1") {
+    const cf = get("cf-connecting-ip")
+    if (cf) return cf.split(",")[0].trim()
+  }
+  // A single trusted proxy (e.g. nginx) sets x-real-ip and cannot be
+  // appended-to by the client — prefer it over the client-controllable XFF.
+  const realIp = get("x-real-ip")
+  if (realIp) return realIp.trim()
+  // Fallback: rightmost X-Forwarded-For entry is the closest proxy hop.
   const forwarded = get("x-forwarded-for")
   if (forwarded) {
     const parts = forwarded.split(",").map((s) => s.trim()).filter(Boolean)
     return parts[parts.length - 1] || forwarded.split(",")[0].trim()
   }
-  return get("x-real-ip") || "unknown"
+  return "unknown"
 }
 
 export function hashIp(ip: string): string {

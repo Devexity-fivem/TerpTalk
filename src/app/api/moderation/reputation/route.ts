@@ -6,6 +6,7 @@ import { unauthorized, forbidden, getClientIp, logSecurityEvent, isAdmin } from 
 import { requireModerator } from "@/lib/require-staff"
 import { rateLimit } from "@/lib/rate-limit"
 import { reverseReputationEvent, REP_EVENT_TYPES, publicRepLabel } from "@/lib/reputation"
+import { logModAction } from "@/lib/moderation"
 
 // GET ?username=&cursor= — staff view of a member's full reputation ledger.
 // Sees everything the public view hides (staff adjustments, raw reasons,
@@ -117,7 +118,7 @@ export async function POST(request: Request) {
     })
     if (!event) return NextResponse.json({ error: "Event not found" }, { status: 404 })
     if (event.reversedAt) return NextResponse.json({ error: "Already reversed" }, { status: 409 })
-    if (event.type === REP_EVENT_TYPES.REVERSAL || event.type === REP_EVENT_TYPES.REINSTATE || event.type === REP_EVENT_TYPES.LEGACY_MIGRATION) {
+    if (event.type === REP_EVENT_TYPES.REVERSAL || event.type === REP_EVENT_TYPES.REINSTATE || event.type === REP_EVENT_TYPES.LEGACY_MIGRATION || event.type === REP_EVENT_TYPES.MILESTONE) {
       return NextResponse.json({ error: "This event type cannot be reversed" }, { status: 400 })
     }
     if (event.type === REP_EVENT_TYPES.STAFF_ADJUSTMENT && !isAdmin(staff.role)) {
@@ -126,19 +127,23 @@ export async function POST(request: Request) {
     if (event.user.role === "ADMINISTRATOR" || event.userId === staff.id) {
       return forbidden()
     }
+    // Moderators can't strip reputation from fellow staff.
+    if ((event.user.role === "MODERATOR" || event.user.role === "SUPPORT") && !isAdmin(staff.role)) {
+      return forbidden()
+    }
 
-    const result = await reverseReputationEvent(eventId, `Staff reversal: ${reason.trim()}`, staff.id)
+    // final: staff reversals must not silently reinstate via keyed
+    // re-triggers (re-like, re-accept, challenge re-evaluation).
+    const result = await reverseReputationEvent(eventId, `Staff reversal: ${reason.trim()}`, staff.id, { final: true })
     if (!result.reversed) {
       return NextResponse.json({ error: "Already reversed" }, { status: 409 })
     }
 
-    await prisma.moderationAction.create({
-      data: {
-        type: "REPUTATION_REVERSAL",
-        reason: `${reason.trim()} (event ${eventId}, ${event.type})`,
-        targetUserId: event.userId,
-        moderatorId: staff.id,
-      },
+    await logModAction(prisma, {
+      type: "REPUTATION_REVERSAL",
+      reason: `${reason.trim()} (event ${eventId}, ${event.type})`,
+      targetUserId: event.userId,
+      moderatorId: staff.id,
     })
     await logSecurityEvent("SUSPICIOUS_ACTIVITY", {
       userId: staff.id,

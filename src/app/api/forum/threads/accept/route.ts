@@ -68,10 +68,14 @@ export async function POST(request: Request) {
     if (!canSet) return forbidden()
 
     if (postId === null) {
-      await prisma.thread.update({
-        where: { id: threadId },
+      // Compare-and-set: bail if a concurrent request changed the pointer.
+      const cleared = await prisma.thread.updateMany({
+        where: { id: threadId, acceptedAnswerId: thread.acceptedAnswerId },
         data: { acceptedAnswerId: null },
       })
+      if (cleared.count === 0) {
+        return NextResponse.json({ error: "Accepted answer changed concurrently — retry" }, { status: 409 })
+      }
       if (thread.acceptedAnswerId) {
         await reverseReputationByKey(`accept:${thread.acceptedAnswerId}`, "Answer unaccepted", user.id).catch(() => null)
       }
@@ -90,10 +94,15 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "You cannot mark your own post as the answer" }, { status: 400 })
     }
 
-    await prisma.thread.update({
-      where: { id: threadId },
+    // Compare-and-set on the current pointer — two parallel accepts must not
+    // both pay out. Loser gets a 409 and retries against fresh state.
+    const swapped = await prisma.thread.updateMany({
+      where: { id: threadId, acceptedAnswerId: thread.acceptedAnswerId },
       data: { acceptedAnswerId: postId },
     })
+    if (swapped.count === 0) {
+      return NextResponse.json({ error: "Accepted answer changed concurrently — retry" }, { status: 409 })
+    }
 
     // If a different post held the answer, reverse its award before paying the new one.
     if (thread.acceptedAnswerId && thread.acceptedAnswerId !== postId) {

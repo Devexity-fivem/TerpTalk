@@ -4,6 +4,9 @@ import { requireModerator } from "@/lib/require-staff"
 import { getClientIp, isAdmin, logSecurityEvent } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
 import { notificationLinkWhere } from "@/lib/notify"
+import { staffDisplayName } from "@/lib/moderation"
+import { reverseReputationBySource } from "@/lib/reputation"
+import { deleteImagesIfUnreferenced } from "@/lib/blob"
 
 const BULK_ACTIONS = new Set(["lock", "unlock", "pin", "unpin", "delete", "restore"])
 
@@ -54,6 +57,13 @@ export async function POST(request: Request) {
     if (!isAdmin(staff.role) && threads.some((t) => !["MEMBER", "VERIFIED_MEMBER"].includes(t.author.role))) {
       return NextResponse.json({ error: "Cannot moderate protected authors" }, { status: 403 })
     }
+    // Restoring deleted content can undo an administrator's deletion —
+    // restrict restore to admins.
+    if (action === "restore" && !isAdmin(staff.role)) {
+      return NextResponse.json({ error: "Only administrators can restore deleted content" }, { status: 403 })
+    }
+
+    const moderatorName = await staffDisplayName(staff.id)
 
     const data: Record<string, boolean> = {
       lock: { locked: true },
@@ -75,6 +85,7 @@ export async function POST(request: Request) {
           reason: reason || `Bulk ${action} by moderator`,
           targetUserId: t.authorId,
           moderatorId: staff.id,
+          moderatorName,
         })),
       }),
     ]
@@ -88,6 +99,27 @@ export async function POST(request: Request) {
       )
     }
     await prisma.$transaction(ops)
+
+    // Reputation reconciliation for bulk deletes — same counter-entry
+    // semantics as single deletions. Sequential per-thread to stay
+    // bounded; each reversal is internally idempotent.
+    if (action === "delete") {
+      const imgs = await prisma.postImage.findMany({
+        where: { OR: [{ threadId: { in: ids } }, { post: { threadId: { in: ids } } }] },
+        select: { url: true },
+      })
+      await prisma.postImage.deleteMany({
+        where: { OR: [{ threadId: { in: ids } }, { post: { threadId: { in: ids } } }] },
+      })
+      deleteImagesIfUnreferenced(imgs.map((i) => i.url)).catch(() => {})
+      for (const t of threads) {
+        const postIds = await prisma.post.findMany({ where: { threadId: t.id }, select: { id: true } })
+        await reverseReputationBySource("THREAD", t.id, "Content removed by staff", staff.id).catch(() => 0)
+        for (const p of postIds) {
+          await reverseReputationBySource("POST", p.id, "Content removed by staff", staff.id).catch(() => 0)
+        }
+      }
+    }
 
     await logSecurityEvent("SUSPICIOUS_ACTIVITY", {
       userId: staff.id,

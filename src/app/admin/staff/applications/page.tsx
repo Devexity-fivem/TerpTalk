@@ -40,7 +40,10 @@ export default function StaffApplicationsAdminPage() {
   const isAdmin = userRole === "ADMINISTRATOR"
 
   useEffect(() => {
-    if (status !== "authenticated" || !isAdmin) return
+    if (status !== "authenticated" || !isAdmin) {
+      if (status !== "loading") setLoading(false)
+      return
+    }
     let mounted = true
     const fetchApplications = async () => {
       try {

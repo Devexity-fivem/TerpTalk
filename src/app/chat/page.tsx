@@ -1,62 +1,28 @@
-"use client"
+import { MessageCircle } from "lucide-react"
+import { getBooleanSetting, SITE_SETTINGS } from "@/lib/settings"
+import ChatClient from "./chat-client"
 
-import { signInHref } from "@/lib/callback-url"
-import { Suspense } from "react"
-import { useSession } from "next-auth/react"
-import { Loader2, MessageCircle } from "lucide-react"
-import Link from "next/link"
-import ChatRoom from "@/components/chat-room"
+import { buildMetadata } from "@/lib/seo"
 
-export default function ChatPage() {
-  return (
-    <Suspense
-      fallback={
-        <div className="min-h-screen bg-background flex items-center justify-center">
-          <Loader2 className="w-8 h-8 animate-spin text-primary" />
-        </div>
-      }
-    >
-      <ChatInner />
-    </Suspense>
-  )
-}
+export const dynamic = "force-dynamic"
+export const metadata = buildMetadata({
+  title: "Community Chat",
+  description: "Live conversation with the TerpTalk community — and TerpBot, our community assistant.",
+  pathname: "/chat",
+})
 
-function ChatInner() {
-  const { data: session, status } = useSession()
-
-  if (status === "loading") {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
-      </div>
-    )
-  }
-
-  if (!session) {
+export default async function ChatPage() {
+  const enabled = await getBooleanSetting(SITE_SETTINGS.CHAT_ENABLED, true)
+  if (!enabled) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center px-4">
         <div className="text-center max-w-sm">
-          <MessageCircle className="w-10 h-10 text-primary mx-auto mb-3" />
-          <h1 className="text-xl font-bold mb-2">Community Chat</h1>
-          <p className="text-sm text-muted-foreground mb-4">
-            Sign in to join the live conversation — and meet TerpBot, our community assistant.
-          </p>
-          <Link
-            href={signInHref("/chat")}
-            className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
-          >
-            Sign in to chat
-          </Link>
+          <MessageCircle className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
+          <h1 className="text-xl font-bold mb-2">Chat is temporarily disabled</h1>
+          <p className="text-sm text-muted-foreground">The community chat is turned off right now. Check back later.</p>
         </div>
       </div>
     )
   }
-
-  return (
-    <div className="min-h-screen bg-background">
-      <div className="max-w-6xl mx-auto px-4 py-4 sm:py-6 h-[calc(100dvh-4rem-4rem)] lg:h-[calc(100dvh-4rem)] flex flex-col">
-        <ChatRoom />
-      </div>
-    </div>
-  )
+  return <ChatClient />
 }

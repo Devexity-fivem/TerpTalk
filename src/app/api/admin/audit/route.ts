@@ -86,7 +86,7 @@ export async function GET(request: Request) {
       type: a.type,
       reason: a.reason,
       actorId: a.moderatorId,
-      actor: a.moderator.profile?.username ?? a.moderatorId,
+      actor: a.moderator?.profile?.username ?? a.moderatorName ?? a.moderatorId ?? "unknown",
       targetId: a.targetUserId,
       duration: a.duration,
       metadata: null as string | null,

@@ -5,6 +5,17 @@
  * Requires test invite code + admin/mod credentials seeded via env.
  */
 const BASE = process.env.E2E_BASE || "http://localhost:3000"
+
+// This suite creates real content (chat messages, posts, blocks) in whatever
+// environment it points at. Refuse non-local targets unless explicitly
+// overridden — running it against staging/prod would inject test data into
+// live rooms and cannot be undone.
+const isLocal = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?/.test(BASE)
+if (!isLocal && process.env.E2E_ALLOW_REMOTE !== "1") {
+  console.error(`Refusing to run e2e tests against non-local base: ${BASE}`)
+  console.error("Set E2E_ALLOW_REMOTE=1 only if the target is a disposable environment.")
+  process.exit(1)
+}
 const results = []
 const pass = (name) => { results.push([name, "PASS"]); console.log(`  ✓ ${name}`) }
 const fail = (name, info) => { results.push([name, "FAIL", info]); console.log(`  ✗ ${name} — ${info}`) }

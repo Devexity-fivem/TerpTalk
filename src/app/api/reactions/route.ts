@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
+import { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
 import { unauthorized, forbidden, getClientIp, logSecurityEvent, isBanned, blockExistsBetween } from "@/lib/security"
 import { awardReputation, reverseReputationByKey, repRateLimit, REP_POINTS } from "@/lib/reputation"
@@ -163,15 +164,32 @@ export async function POST(request: Request) {
       return NextResponse.json({ reaction: updated, action: "switched" })
     }
 
-    // Create new reaction
-    const reaction = await prisma.reaction.create({
-      data: {
-        type,
-        userId: session.user.id,
-        ...(hasPostId ? { postId } : {}),
-        ...(hasDiaryId ? { diaryId } : {}),
-      },
-    })
+    // Create new reaction — a double-click race can hit the unique
+    // constraint; read the winner's row instead of 500ing.
+    let reaction
+    try {
+      reaction = await prisma.reaction.create({
+        data: {
+          type,
+          userId: session.user.id,
+          ...(hasPostId ? { postId } : {}),
+          ...(hasDiaryId ? { diaryId } : {}),
+        },
+      })
+    } catch (e) {
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
+        reaction = await prisma.reaction.findFirst({
+          where: {
+            userId: session.user.id,
+            ...(hasPostId ? { postId } : {}),
+            ...(hasDiaryId ? { diaryId } : {}),
+          },
+        })
+        if (!reaction) throw e
+      } else {
+        throw e
+      }
+    }
 
     if (type === "LIKE") await payLike().catch(() => null)
 

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
+import { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
 import { unauthorized, forbidden, isBanned } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
@@ -46,7 +47,12 @@ export async function POST(request: Request) {
       await prisma.bookmark.delete({ where: { id: existing.id } })
       return NextResponse.json({ bookmarked: false })
     }
-    await prisma.bookmark.create({ data: { userId, threadId } })
+    try {
+      await prisma.bookmark.create({ data: { userId, threadId } })
+    } catch (e) {
+      // Double-click race: the parallel request already created it.
+      if (!(e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002")) throw e
+    }
     return NextResponse.json({ bookmarked: true })
   } catch (error) {
     console.error("Bookmark error:", error)

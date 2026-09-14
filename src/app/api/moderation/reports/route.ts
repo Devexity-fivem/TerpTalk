@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { forbidden, getClientIp, isSupport, logSecurityEvent } from "@/lib/security"
+import { forbidden, getClientIp, isAdmin, isSupport, logSecurityEvent } from "@/lib/security"
 import { requireModerator, requireStaff } from "@/lib/require-staff"
+import { logModAction } from "@/lib/moderation"
 import { rateLimit } from "@/lib/rate-limit"
 
 const VALID_REPORT_STATUSES = ["PENDING", "REVIEWING", "ESCALATED", "RESOLVED", "DISMISSED"]
@@ -179,6 +180,10 @@ export async function PATCH(request: Request) {
   if (report.reporterId === staff.id) {
     return NextResponse.json({ error: "You cannot act on your own report" }, { status: 403 })
   }
+  // Staff may not adjudicate cases about themselves (non-admin only).
+  if (report.reportedId === staff.id && !isAdmin(staff.role)) {
+    return NextResponse.json({ error: "You cannot act on a case about yourself" }, { status: 403 })
+  }
 
   const terminal = status === "RESOLVED" || status === "DISMISSED"
   await prisma.report.update({
@@ -191,14 +196,12 @@ export async function PATCH(request: Request) {
     },
   })
 
-  await prisma.moderationAction.create({
-    data: {
-      type: `REPORT_${status}`,
-      reason: resolution?.trim() || `Report marked ${status.toLowerCase()}`,
-      targetUserId: report.reportedId,
-      moderatorId: staff.id,
-      reportId: report.id,
-    },
+  await logModAction(prisma, {
+    type: `REPORT_${status}`,
+    reason: resolution?.trim() || `Report marked ${status.toLowerCase()}`,
+    targetUserId: report.reportedId,
+    moderatorId: staff.id,
+    reportId: report.id,
   })
 
   await logSecurityEvent("SUSPICIOUS_ACTIVITY", {

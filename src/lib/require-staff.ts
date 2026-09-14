@@ -1,7 +1,7 @@
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { isAdmin, isModerator, isStaff, isSupport } from "@/lib/security"
+import { isAdmin, isModerator, isStaff } from "@/lib/security"
 
 // Moderation action types that only ADMINISTRATOR may perform — ban state
 // changes and suspension removal can silently unban users, so moderators
@@ -49,13 +49,3 @@ export async function requireStaff(): Promise<{ id: string; role: string } | nul
   return { id: session.user.id, role: user.role }
 }
 
-export async function requireSupport(): Promise<{ id: string; role: string } | null> {
-  const session = await getServerSession(authOptions)
-  if (!session?.user?.id) return null
-  const user = await prisma.user.findUnique({
-    where: { id: session.user.id },
-    select: { role: true, banned: true, suspendedUntil: true },
-  })
-  if (!user || user.banned || (!!user.suspendedUntil && user.suspendedUntil > new Date()) || !isSupport(user.role)) return null
-  return { id: session.user.id, role: user.role }
-}

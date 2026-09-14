@@ -144,37 +144,50 @@ export async function POST(request: Request) {
     const derivedDay = typeof dayNumber === "number" ? dayNumber : diaryDay(diary.startDate, new Date())
     const derivedWeek = typeof weekNumber === "number" ? weekNumber : diaryWeek(diary.startDate, new Date())
 
-    // Create update
-    const update = await prisma.diaryUpdate.create({
-      data: {
-        title,
-        content,
-        diaryId,
-        authorId: session.user.id,
-        dayNumber: derivedDay,
-        weekNumber: derivedWeek,
-        stage: stage || diary.stage,
-        temperature: typeof temperature === "number" ? temperature : null,
-        humidity: typeof humidity === "number" ? humidity : null,
-        vpd: typeof vpd === "number" ? vpd : null,
-        ph: typeof ph === "number" ? ph : null,
-        ec: typeof ec === "number" ? ec : null,
-        feeding: cleanStr(feeding, 300),
-        training: cleanStr(training, 300),
-        // Attach up to 4 client-resized photos
-        ...(storedImages.length > 0 && {
-          images: {
-            create: storedImages.map((url: string, i: number) => ({
-              url,
-              order: i,
-            })),
-          },
-        }),
-      },
-      include: {
-        author: { select: publicUserSelect },
-        images: true,
-      },
+    // Create update + optional diary stage change in one transaction — a
+    // stage-update failure can't leave an update that disagrees with the
+    // diary's stage.
+    const update = await prisma.$transaction(async (tx) => {
+      const created = await tx.diaryUpdate.create({
+        data: {
+          title,
+          content,
+          diaryId,
+          authorId: session.user.id,
+          dayNumber: derivedDay,
+          weekNumber: derivedWeek,
+          stage: stage || diary.stage,
+          temperature: typeof temperature === "number" ? temperature : null,
+          humidity: typeof humidity === "number" ? humidity : null,
+          vpd: typeof vpd === "number" ? vpd : null,
+          ph: typeof ph === "number" ? ph : null,
+          ec: typeof ec === "number" ? ec : null,
+          feeding: cleanStr(feeding, 300),
+          training: cleanStr(training, 300),
+          // Attach up to 4 client-resized photos
+          ...(storedImages.length > 0 && {
+            images: {
+              create: storedImages.map((url: string, i: number) => ({
+                url,
+                order: i,
+              })),
+            },
+          }),
+        },
+        include: {
+          author: { select: publicUserSelect },
+          images: true,
+        },
+      })
+      // Update diary stage only on an explicit change. The form defaults to the
+      // diary's current stage, so an untouched select never regresses it.
+      if (stage && stage !== diary.stage) {
+        await tx.growDiary.update({
+          where: { id: diaryId },
+          data: { stage },
+        })
+      }
+      return created
     })
 
     // One paying update per diary per UTC day — keyed so extra updates and
@@ -189,15 +202,6 @@ export async function POST(request: Request) {
         `Updated diary "${diary.title.slice(0, 60)}"`,
         { key: `diaryupd:${diaryId}:${updateDay}`, sourceType: "DIARY", sourceId: diaryId }
       ).catch(() => {})
-    }
-
-    // Update diary stage only on an explicit change. The form defaults to the
-    // diary's current stage, so an untouched select never regresses it.
-    if (stage && stage !== diary.stage) {
-      await prisma.growDiary.update({
-        where: { id: diaryId },
-        data: { stage },
-      })
     }
 
     revalidateTag("diaries", { expire: 0 })
@@ -237,6 +241,10 @@ export async function POST(request: Request) {
           content: `@${authorName} added "${update.title.slice(0, 60)}" to "${diary.title.slice(0, 50)}"`,
           link: `/diaries/${diaryId}`,
           actorId: session.user.id,
+          // Throttle fan-out like thread-follow notifications — rapid
+          // update bursts shouldn't spam followers.
+          groupKey: `diary-update:${diaryId}`,
+          dedupeMs: 6 * 60 * 60 * 1000,
         }))
       )
     }

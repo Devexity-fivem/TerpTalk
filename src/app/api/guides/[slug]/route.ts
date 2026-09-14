@@ -55,7 +55,7 @@ export async function PATCH(
     // Permission: guide author or moderator (fresh DB role check)
     const user = await prisma.user.findUnique({
       where: { id: session.user.id },
-      select: { createdAt: true, banned: true, role: true, profile: { select: { reputation: true } } },
+      select: { createdAt: true, banned: true, role: true, profile: { select: { reputation: true, username: true } } },
     })
     if (!user || user.banned) return forbidden()
 
@@ -73,7 +73,7 @@ export async function PATCH(
       if (!current) throw new Error("Guide missing")
 
       await tx.guideEdit.create({
-        data: { guideId: guide.id, editorId: session.user.id, content: current.content },
+        data: { guideId: guide.id, editorId: session.user.id, editorName: user.profile?.username ?? null, content: current.content },
       })
 
       return tx.guide.update({

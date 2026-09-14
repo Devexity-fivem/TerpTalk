@@ -102,11 +102,15 @@ export async function getChallengeProgress(userId: string, now = new Date()): Pr
       FROM "ReputationEvent"
       WHERE "userId" = ${userId} AND "type" = 'DAILY_LOGIN'
         AND "reversedAt" IS NULL AND "createdAt" >= ${since}`,
+    // "Reply in N different threads" — sourceId is the post id, so count
+    // distinct threadIds via a join. Replies in one thread can't stack.
     prisma.$queryRaw<{ n: bigint }[]>`
-      SELECT COUNT(DISTINCT "sourceId") AS n
-      FROM "ReputationEvent"
-      WHERE "userId" = ${userId} AND "type" = 'POST_CREATED'
-        AND "reversedAt" IS NULL AND "createdAt" >= ${since}`,
+      SELECT COUNT(DISTINCT p."threadId") AS n
+      FROM "ReputationEvent" e
+      JOIN "Post" p ON p."id" = e."sourceId"
+      WHERE e."userId" = ${userId} AND e."type" = 'POST_CREATED'
+        AND e."reversedAt" IS NULL AND e."createdAt" >= ${since}
+        AND p."deleted" = false`,
     prisma.$queryRaw<{ n: bigint }[]>`
       SELECT COUNT(DISTINCT ("createdAt" AT TIME ZONE 'UTC')::date) AS n
       FROM "ReputationEvent"
@@ -120,8 +124,10 @@ export async function getChallengeProgress(userId: string, now = new Date()): Pr
     prisma.reputationEvent.count({
       where: { userId, type: "HELPFUL_ANSWER", reversedAt: null, createdAt: { gte: since } },
     }),
+    // Only unreversed payouts count as paid — a staff reversal should make
+    // the challenge unpaid again (re-award reinstates via the same key).
     prisma.reputationEvent.findMany({
-      where: { userId, type: "CHALLENGE_WEEKLY", key: { startsWith: `challenge:${week}:` } },
+      where: { userId, type: "CHALLENGE_WEEKLY", key: { startsWith: `challenge:${week}:` }, reversedAt: null },
       select: { key: true },
     }),
   ])

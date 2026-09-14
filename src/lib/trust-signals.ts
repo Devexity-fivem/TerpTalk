@@ -189,6 +189,10 @@ export async function materializeReputationFlags(days = 7): Promise<{ created: n
   if (fresh.length === 0) return { created: 0 }
 
   await prisma.abuseFlag.createMany({
+    // The read-then-create above races with a concurrent scan — the unique
+    // key constraint is the real dedupe; skipDuplicates turns the loser's
+    // P2002 batch failure into a no-op.
+    skipDuplicates: true,
     data: fresh.map((c) => ({
       signal: c.signal,
       userId: c.userId,

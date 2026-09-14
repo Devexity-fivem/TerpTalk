@@ -137,31 +137,6 @@ export function publicRepLabel(type: string): string {
   }
 }
 
-// Emoji accent per event type for the public history feed.
-export function publicRepIcon(type: string): string {
-  switch (type) {
-    case "THREAD_CREATED": return "🧵"
-    case "POST_CREATED": return "💬"
-    case "DIARY_CREATED": return "📓"
-    case "DIARY_UPDATE": return "🌱"
-    case "STRAIN_CREATED": return "🧬"
-    case "STRAIN_PHOTO": return "📸"
-    case "SETUP_CREATED": return "🛠️"
-    case "LIKE_RECEIVED": return "❤️"
-    case "HELPFUL_ANSWER": return "✅"
-    case "REFERRAL": return "🤝"
-    case "CONTEST_WEEKLY_WIN": return "🏆"
-    case "CONTEST_MONTHLY_WIN": return "🏆"
-    case "CHALLENGE_WEEKLY": return "🎯"
-    case "DAILY_LOGIN": return "☀️"
-    case "REVERSAL": return "↩️"
-    case "REINSTATE": return "↩️"
-    case "STAFF_ADJUSTMENT": return "🛡️"
-    case "LEGACY_MIGRATION": return "📦"
-    default: return "✨"
-  }
-}
-
 // ─── Tiers ───────────────────────────────────────────────────────────
 export interface ReputationTier {
   threshold: number

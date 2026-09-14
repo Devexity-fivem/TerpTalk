@@ -1,6 +1,8 @@
-// ISO week key, e.g. "2026-W37" — used to bucket contest entries
+// ISO week key, e.g. "2026-W37" — used to bucket contest entries.
+// UTC getters — must match challenges.ts so contests and weekly
+// challenges agree on week boundaries regardless of server timezone.
 export function currentWeekKey(d = new Date()): string {
-  const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()))
+  const date = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()))
   const dayNum = date.getUTCDay() || 7
   date.setUTCDate(date.getUTCDate() + 4 - dayNum)
   const yearStart = new Date(Date.UTC(date.getUTCFullYear(), 0, 1))

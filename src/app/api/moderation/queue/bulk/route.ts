@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { forbidden, getClientIp, logSecurityEvent, STAFF_ROLES } from "@/lib/security"
+import { forbidden, getClientIp, isAdmin, logSecurityEvent, STAFF_ROLES } from "@/lib/security"
 import { requireModerator } from "@/lib/require-staff"
+import { logModAction } from "@/lib/moderation"
 import { rateLimit } from "@/lib/rate-limit"
 import { notifyMany } from "@/lib/notify"
 
@@ -66,6 +67,14 @@ export async function POST(request: Request) {
         failed.push({ id: it.id, error: "own report" })
         continue
       }
+      // Non-admin staff can't adjudicate cases where they're the subject.
+      const itemTarget = it.kind === "REPORT"
+        ? (item as { reportedId?: string }).reportedId
+        : (item as { userId?: string }).userId
+      if (itemTarget === staff.id && !isAdmin(staff.role)) {
+        failed.push({ id: it.id, error: "own case" })
+        continue
+      }
       if (action !== "assign" && (item.status === "RESOLVED" || item.status === "DISMISSED")) {
         failed.push({ id: it.id, error: "already closed" })
         continue
@@ -94,14 +103,12 @@ export async function POST(request: Request) {
         })
       }
 
-      await prisma.moderationAction.create({
-        data: {
-          type: action === "assign" ? `${prefix}_ASSIGNED` : `${prefix}_${action === "resolve" ? "RESOLVED" : "DISMISSED"}`,
-          reason: action === "assign" ? `Bulk assigned to @${assigneeName}` : `Bulk ${action}d`,
-          targetUserId,
-          moderatorId: staff.id,
-          ...linkField,
-        },
+      await logModAction(prisma, {
+        type: action === "assign" ? `${prefix}_ASSIGNED` : `${prefix}_${action === "resolve" ? "RESOLVED" : "DISMISSED"}`,
+        reason: action === "assign" ? `Bulk assigned to @${assigneeName}` : `Bulk ${action}d`,
+        targetUserId,
+        moderatorId: staff.id,
+        ...linkField,
       })
       succeeded.push(it.id)
     } catch {

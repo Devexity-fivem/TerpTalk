@@ -66,10 +66,12 @@ model User {
   pollVotes     PollVote[]
   blockedUsers  Block[]              @relation("Blocker")
   blockedBy     Block[]              @relation("Blocked")
+  bookmarks     Bookmark[]
+  diaryFollows  DiaryFollow[]
 
   @@index([role])
   @@index([status])
-  @@index([lastSeenAt])
+  @@index([lastSeenAt(sort: Desc)])
   @@index([createdAt])
 }
 
@@ -135,7 +137,7 @@ model Profile {
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([username])
-  @@index([reputation])
+  @@index([reputation(sort: Desc)])
   @@index([referredById])
 }
 
@@ -221,6 +223,8 @@ model Thread {
   @@index([slug])
   @@index([replyCount])
   @@index([createdAt])
+  @@index([views])
+  @@index([lastActivityAt])
 }
 
 // Followed threads — drives reply notifications (throttled via
@@ -308,6 +312,7 @@ model Bookmark {
   threadId  String
   createdAt DateTime @default(now())
 
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   thread    Thread   @relation(fields: [threadId], references: [id], onDelete: Cascade)
 
   @@unique([userId, threadId])
@@ -381,7 +386,7 @@ model GrowDiary {
   @@index([strain])
   @@index([featured])
   @@index([createdAt])
-  @@index([harvested, harvestedAt])
+  @@index([harvested, harvestedAt(sort: Desc)])
 }
 
 model DiaryUpdate {
@@ -432,6 +437,7 @@ model DiaryFollow {
   diaryId   String
   createdAt DateTime @default(now())
 
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   diary     GrowDiary @relation(fields: [diaryId], references: [id], onDelete: Cascade)
 
   @@unique([userId, diaryId])
@@ -670,6 +676,7 @@ model ReputationEvent {
   actorId      String?             // who triggered it (liker, acceptor, staff); null = system/self
   reversedAt   DateTime?           // set when a counter-entry cancels this row
   reversalOfId String?             // set on counter-entries, points at the original row
+  reversalFinal Boolean  @default(false) // staff reversal — organic re-triggers must not reinstate
   createdAt    DateTime  @default(now())
 
   user      User               @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -708,6 +715,7 @@ model Report {
   @@index([createdAt])
   @@index([status, createdAt])
   @@index([reportedId])
+  @@index([targetId])
   @@index([assignedToId, status])
 }
 
@@ -739,13 +747,14 @@ model ModerationAction {
   type        String   // WARNING, TEMPORARY_BAN, PERMANENT_BAN, CONTENT_DELETION, CONTENT_EDIT
   reason      String
   targetUserId String
-  moderatorId String
+  moderatorId String?  // SetNull on staff deletion — the audit row must survive
+  moderatorName String? // username snapshot; survives moderator account deletion
   duration    Int?     // in days for temporary bans
   reportId    String?  // links REPORT_* / assignment actions back to the case
   flagId      String?  // links FLAG_* actions back to the abuse flag
   createdAt   DateTime @default(now())
 
-  moderator   User                 @relation(fields: [moderatorId], references: [id], onDelete: Cascade)
+  moderator   User?                @relation(fields: [moderatorId], references: [id], onDelete: SetNull)
 
   @@index([targetUserId])
   @@index([moderatorId])
@@ -873,12 +882,13 @@ model Guide {
 model GuideEdit {
   id        String   @id @default(cuid())
   guideId   String
-  editorId  String
+  editorId  String?  // SetNull — edit history survives account deletion
+  editorName String? // username snapshot
   content   String
   createdAt DateTime @default(now())
 
   guide     Guide    @relation(fields: [guideId], references: [id], onDelete: Cascade)
-  editor    User     @relation(fields: [editorId], references: [id], onDelete: Cascade)
+  editor    User?    @relation(fields: [editorId], references: [id], onDelete: SetNull)
 
   @@index([guideId])
   @@index([editorId])

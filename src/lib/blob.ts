@@ -66,6 +66,16 @@ export async function storeImages(
 }
 
 export async function storeImage(dataUri: string, folder: string): Promise<string> {
+  // Validation runs before the storage branch — the dev fallback must not
+  // accept payloads that production would reject.
+  const m = dataUri.match(DATA_URI)
+  if (!m) throw new Error("Only PNG, WebP, and JPEG data URIs are accepted")
+  const ext = m[1] === "jpeg" ? "jpg" : m[1]
+  const buf = Buffer.from(m[2], "base64")
+
+  // Content must match the declared type — rejects spoofed payloads.
+  if (!MAGIC[ext]?.(buf)) throw new Error("Image content does not match declared type")
+
   if (process.env.BLOB_READ_WRITE_TOKEN) {
     const uploadsEnabled = await getBooleanSetting(SITE_SETTINGS.IMAGE_UPLOADS_ENABLED, true)
     if (!uploadsEnabled) {
@@ -76,14 +86,6 @@ export async function storeImage(dataUri: string, folder: string): Promise<strin
   } else {
     return dataUri
   }
-
-  const m = dataUri.match(DATA_URI)
-  if (!m) throw new Error("Only PNG, WebP, and JPEG data URIs are accepted")
-  const ext = m[1] === "jpeg" ? "jpg" : m[1]
-  const buf = Buffer.from(m[2], "base64")
-
-  // Content must match the declared type — rejects spoofed payloads.
-  if (!MAGIC[ext]?.(buf)) throw new Error("Image content does not match declared type")
 
   // Re-encode server-side to strip all EXIF/GPS/XMP metadata. The canvas-based
   // client uploader already strips most metadata, but this is the authoritative
@@ -143,13 +145,14 @@ export async function deleteImagesIfUnreferenced(urls: (string | null | undefine
   const candidates = urls.filter((u): u is string => typeof u === "string" && u.startsWith("https://"))
   if (!candidates.length || !process.env.BLOB_READ_WRITE_TOKEN) return
 
-  const [postImages, diaryImages, setupImages, strainPhotos, contestImages, profiles] = await Promise.all([
+  const [postImages, diaryImages, setupImages, strainPhotos, contestImages, profiles, userImages] = await Promise.all([
     prisma.postImage.findMany({ where: { url: { in: candidates } }, select: { url: true } }),
     prisma.diaryImage.findMany({ where: { url: { in: candidates } }, select: { url: true } }),
     prisma.setupImage.findMany({ where: { url: { in: candidates } }, select: { url: true } }),
     prisma.strainPhoto.findMany({ where: { imageUrl: { in: candidates } }, select: { imageUrl: true } }),
     prisma.contestEntry.findMany({ where: { imageUrl: { in: candidates } }, select: { imageUrl: true } }),
     prisma.profile.findMany({ where: { avatarUrl: { in: candidates } }, select: { avatarUrl: true } }),
+    prisma.user.findMany({ where: { image: { in: candidates } }, select: { image: true } }),
   ])
 
   const inUse = new Set<string>(
@@ -160,6 +163,7 @@ export async function deleteImagesIfUnreferenced(urls: (string | null | undefine
       ...strainPhotos.map((i) => i.imageUrl),
       ...contestImages.map((i) => i.imageUrl),
       ...profiles.map((p) => p.avatarUrl),
+      ...userImages.map((u) => u.image),
     ].filter((u): u is string => typeof u === "string")
   )
 

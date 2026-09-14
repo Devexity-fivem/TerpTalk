@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma"
 import { forbidden, getClientIp, logSecurityEvent } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
 import { getPusher } from "@/lib/pusher"
+import { staffDisplayName } from "@/lib/moderation"
 
 // POST — broadcast an announcement to all users (ADMINISTRATOR only)
 // { title, content, link? }
@@ -29,14 +30,22 @@ export async function POST(request: Request) {
         { status: 400 }
       )
     }
-    if (link !== undefined && link !== null && link !== "" && (typeof link !== "string" || !/^\/[a-zA-Z0-9\-_/?=&%.]*$/.test(link))) {
+    // Internal path only — reject protocol-relative (//evil.com) and
+    // backslash variants that browsers resolve as external URLs.
+    if (link !== undefined && link !== null && link !== "" && (typeof link !== "string" || !/^\/(?!\/)[a-zA-Z0-9\-_/?=&%.#]*$/.test(link) || link.includes("\\"))) {
       return NextResponse.json({ error: "Link must be a relative path like /forum" }, { status: 400 })
     }
 
     const MAX_RECIPIENTS = 5000
     const users = await prisma.user.findMany({
-      // TerpBot never reads notifications — exclude it from broadcasts.
-      where: { banned: false, id: { not: user.id }, profile: { isNot: { username: "terpbot" } } },
+      // TerpBot never reads notifications — exclude it, and don't broadcast
+      // to banned or currently-suspended accounts.
+      where: {
+        banned: false,
+        id: { not: user.id },
+        profile: { isNot: { username: "terpbot" } },
+        OR: [{ suspendedUntil: null }, { suspendedUntil: { lt: new Date() } }],
+      },
       select: { id: true },
       take: MAX_RECIPIENTS + 1,
     })
@@ -48,6 +57,7 @@ export async function POST(request: Request) {
       )
     }
 
+    const moderatorName = await staffDisplayName(user.id)
     const BATCH = 500
     await prisma.$transaction(async (tx) => {
       for (let i = 0; i < users.length; i += BATCH) {
@@ -68,6 +78,7 @@ export async function POST(request: Request) {
           reason: `Broadcast: ${title.trim()}`,
           targetUserId: user.id,
           moderatorId: user.id,
+          moderatorName,
         },
       })
     })

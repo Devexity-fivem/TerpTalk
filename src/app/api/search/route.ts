@@ -67,6 +67,7 @@ const getSearchResults = unstable_cache(
         where: {
           deleted: false,
           content: contains,
+          author: activeUser,
           thread: { deleted: false, category: threadCategory },
         },
         orderBy: { createdAt: "desc" },
@@ -101,7 +102,7 @@ const getSearchResults = unstable_cache(
 
     const [threadsRaw, strainsRaw, usersRaw, diariesRaw, guidesRaw, setupsRaw, tagsRaw] = await Promise.all([
       (t === "all" || t === "threads") ? (async () => {
-        const base = { deleted: false, category: threadCategory }
+        const base = { deleted: false, category: threadCategory, author: activeUser }
         // Tier 1: title or tag match. Tier 2: body or reply match.
         // Title/tag hits always outrank body/reply hits.
         const fetchN = skip + limit + 1
@@ -172,6 +173,7 @@ const getSearchResults = unstable_cache(
       (t === "all" || t === "guides") ? prisma.guide.findMany({
         where: {
           published: true,
+          author: activeUser,
           OR: [{ title: contains }, { excerpt: contains }, { content: contains }],
         },
         take: limit + 1,
@@ -204,7 +206,7 @@ const getSearchResults = unstable_cache(
           name: true,
           slug: true,
           _count: {
-            select: { threads: { where: { thread: { deleted: false, category: { hidden: false } } } } },
+            select: { threads: { where: { thread: { deleted: false, category: { hidden: false }, author: activeUser } } } },
           },
         },
       }) : [],

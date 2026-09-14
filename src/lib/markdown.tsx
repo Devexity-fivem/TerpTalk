@@ -22,8 +22,12 @@ function escapeForClass(text: string): string {
     .replace(/>/g, "&gt;")
 }
 
-function sanitizeHref(href: string): string | null {
-  if (href.startsWith("/") && !href.startsWith("//")) return href
+// Exported for regression tests — the backslash/protocol-relative cases are
+// security-relevant (browsers resolve /\evil.com as external navigation).
+export function sanitizeHref(href: string): string | null {
+  // Internal path only when it can't be resolved as protocol-relative —
+  // browsers treat /\evil.com and //evil.com as external navigation.
+  if (href.startsWith("/") && !/^[/\\]/.test(href[1] ?? "") && !href.includes("\\")) return href
   if (ALLOWED_LINK_PREFIX.test(href)) return href
   return null
 }

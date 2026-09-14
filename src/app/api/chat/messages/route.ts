@@ -281,12 +281,12 @@ export async function POST(request: NextRequest) {
       content,
       userId,
       actorName,
-      "/",
+      "/chat",
       "community chat"
     ).catch(() => {})
 
     // Realtime fan-out when Pusher is configured (clients fall back to polling)
-    getPusher()?.trigger(`private-chat-${roomId}`, "new-message", dto).catch(() => {})
+    getPusher()?.trigger(`private-chat-${roomId}`, "new-message", dto).catch((e) => console.error("[pusher] chat message push failed:", roomId, e))
 
     // TerpBot answers direct pings through the deterministic intent parser.
     // At most one bot reply per room per minute so it can't be spammed into

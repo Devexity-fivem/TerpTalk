@@ -6,6 +6,7 @@ import { rateLimit } from "@/lib/rate-limit"
 import { applyReputationAward, postDemotionEffects, runPostAwardEffects, REP_EVENT_TYPES } from "@/lib/reputation"
 import { STAFF_ADJUST_MAX } from "@/lib/reputation-config"
 import { notify } from "@/lib/notify"
+import { logModAction } from "@/lib/moderation"
 
 // POST { username, delta, reason } — admin-only manual reputation adjustment.
 // Bounded to ±500 per action, writes a STAFF_ADJUSTMENT ledger entry plus a
@@ -65,13 +66,11 @@ export async function POST(request: Request) {
       await runPostAwardEffects(profile.userId, res.oldRep, res.newRep).catch(() => null)
     }
 
-    await prisma.moderationAction.create({
-      data: {
-        type: "REPUTATION_ADJUSTMENT",
-        reason: `${delta > 0 ? "+" : ""}${delta} — ${reason.trim()}`,
-        targetUserId: profile.userId,
-        moderatorId: admin.id,
-      },
+    await logModAction(prisma, {
+      type: "REPUTATION_ADJUSTMENT",
+      reason: `${delta > 0 ? "+" : ""}${delta} — ${reason.trim()}`,
+      targetUserId: profile.userId,
+      moderatorId: admin.id,
     })
     await logSecurityEvent("SUSPICIOUS_ACTIVITY", {
       userId: admin.id,

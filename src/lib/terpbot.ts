@@ -141,7 +141,7 @@ export async function postBotMessage(roomId: string, text: string, replyToId?: s
           }
         : null,
     }
-    getPusher()?.trigger(`private-chat-${roomId}`, "new-message", dto).catch(() => {})
+    getPusher()?.trigger(`private-chat-${roomId}`, "new-message", dto).catch((e) => console.error("[pusher] terpbot message push failed:", roomId, e))
     return dto
   } catch (error) {
     console.error("[terpbot] post failed:", error)
@@ -164,6 +164,18 @@ export async function postToGeneral(text: string) {
 }
 
 // ── Community events ────────────────────────────────────────────────────
+
+// User-controlled text echoed inside bot announcements must not be able to
+// smuggle markdown links, fake mentions, or line breaks into a trusted-bot
+// message (e.g. a diary title of `[free stuff](https://evil.example)`).
+export function sanitizeEcho(text: string, max = 80): string {
+  return text
+    .replace(/[\r\n]+/g, " ")
+    .replace(/[[\]()*`<>@\\]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, max)
+}
 
 export async function announceNewMember(username: string) {
   const dto = await postToGeneral(
@@ -214,7 +226,7 @@ export async function announceTierUp(username: string, tierName: string, reputat
 
 export async function announceHarvest(username: string, diaryTitle: string, yieldText?: string) {
   const dto = await postToGeneral(
-    `🌾 @${username} harvested "${diaryTitle}"${yieldText ? ` — pulled ${yieldText}` : ""}. Nice work!`
+    `🌾 @${username} harvested "${sanitizeEcho(diaryTitle)}"${yieldText ? ` — pulled ${sanitizeEcho(yieldText, 20)}` : ""}. Nice work!`
   )
   if (dto) {
     await recordBotEvent({

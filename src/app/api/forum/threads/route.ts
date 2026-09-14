@@ -8,6 +8,7 @@ import { requireModerator } from "@/lib/require-staff"
 import { awardReputation, reverseReputationBySource, repRateLimit, getTierPerks, REP_POINTS, REP_TIERS } from "@/lib/reputation"
 import { notifyMentions } from "@/lib/mentions"
 import { notifyMany, invalidateNotificationsForLink, postDeepLink } from "@/lib/notify"
+import { logModAction } from "@/lib/moderation"
 import { storeImages, deleteImagesIfUnreferenced } from "@/lib/blob"
 import { getBooleanSetting, SITE_SETTINGS } from "@/lib/settings"
 import { checkMaintenance } from "@/lib/maintenance"
@@ -317,7 +318,11 @@ export async function DELETE(request: Request) {
 
     const thread = await prisma.thread.findUnique({
       where: { id },
-      select: { id: true, slug: true, authorId: true, deleted: true, author: { select: { id: true, role: true } } },
+      select: {
+        id: true, slug: true, authorId: true, deleted: true,
+        author: { select: { id: true, role: true } },
+        images: { select: { url: true } },
+      },
     })
     if (!thread || thread.deleted) {
       return NextResponse.json({ error: "Thread not found" }, { status: 404 })
@@ -331,19 +336,48 @@ export async function DELETE(request: Request) {
       return forbidden()
     }
 
-    await prisma.thread.update({ where: { id }, data: { deleted: true } })
+    await prisma.$transaction(async (tx) => {
+      await tx.thread.update({ where: { id }, data: { deleted: true } })
+      // Detach image rows on the thread and all its posts so the blob
+      // cleanup's reference check sees them as unlinked.
+      await tx.postImage.deleteMany({
+        where: { OR: [{ threadId: id }, { post: { threadId: id } }] },
+      })
+    })
     await invalidateNotificationsForLink(`/forum/thread/${thread.slug}`)
+
+    // Staff deletion of another user's content is a moderation action —
+    // audit it the same way the mod panel does.
+    if (!isOwn && mod) {
+      await logModAction(prisma, {
+        type: "CONTENT_DELETION",
+        reason: "Thread removed via forum UI",
+        targetUserId: thread.authorId,
+        moderatorId: mod.id,
+      }).catch(() => null)
+      await logSecurityEvent("SUSPICIOUS_ACTIVITY", {
+        userId: mod.id,
+        ip: getClientIp(request),
+        metadata: { moderationAction: "CONTENT_DELETION", targetType: "THREAD", targetId: id, surface: "thread-delete" },
+      }).catch(() => {})
+    }
 
     // Reputation reconciliation: reverse the thread award plus every event
     // on posts inside it (post creation, likes, accepted answers).
     await reverseReputationBySource("THREAD", thread.id, "Thread removed", session.user.id).catch(() => 0)
     const postIds = await prisma.post.findMany({
       where: { threadId: thread.id },
-      select: { id: true },
+      select: { id: true, images: { select: { url: true } } },
     })
     for (const p of postIds) {
       await reverseReputationBySource("POST", p.id, "Thread removed", session.user.id).catch(() => 0)
     }
+
+    // Soft-deleted content must not leave live public blobs behind.
+    deleteImagesIfUnreferenced([
+      ...thread.images.map((i) => i.url),
+      ...postIds.flatMap((p) => p.images.map((i) => i.url)),
+    ]).catch(() => {})
 
     revalidateTag("forum", { expire: 0 })
 

@@ -80,7 +80,7 @@ export interface AwardResult {
   amount?: number
   oldRep?: number
   newRep?: number
-  skippedReason?: "bot" | "no-user" | "suspended" | "self" | "duplicate" | "capped"
+  skippedReason?: "bot" | "no-user" | "suspended" | "self" | "duplicate" | "capped" | "locked"
 }
 
 type AwardUser = {
@@ -132,28 +132,22 @@ export async function applyReputationAward(
     return { awarded: false, skippedReason: "self" }
   }
 
-  // Existing keyed event: active -> no-op; reversed -> reinstate it.
+  // Existing keyed event: active -> no-op; reversed -> reinstate it —
+  // unless a staff reversal marked it final, in which case the organic
+  // re-trigger is refused and the moderation decision stands.
   if (opts.key) {
     const existing = await prisma.reputationEvent.findUnique({
       where: { key: opts.key },
-      select: { id: true, userId: true, amount: true, reversedAt: true },
+      select: { id: true, userId: true, amount: true, reversedAt: true, reversalFinal: true },
     })
     if (existing) {
       if (!existing.reversedAt) return { awarded: false, skippedReason: "duplicate" }
+      if (existing.reversalFinal) return { awarded: false, skippedReason: "locked" }
       return reinstateEvent(existing, subject)
     }
   }
 
   const cap = REP_CAPS[type as keyof typeof REP_CAPS]
-  if (cap !== undefined) {
-    const dayStart = new Date()
-    dayStart.setUTCHours(0, 0, 0, 0)
-    const today = await prisma.reputationEvent.count({
-      where: { userId, type, reversedAt: null, createdAt: { gte: dayStart } },
-    })
-    if (today >= cap) return { awarded: false, skippedReason: "capped" }
-  }
-
   const adjusted = type === REP_EVENT_TYPES.STAFF_ADJUSTMENT ? amount : adjustedAmount(amount, subject.role)
   const oldRep = subject.profile.reputation
   // Clamp negative events to the current balance: the ledger records the
@@ -162,32 +156,58 @@ export async function applyReputationAward(
   const applied = adjusted < 0 ? -Math.min(-adjusted, oldRep) : adjusted
 
   try {
-    const newRep = await prisma.$transaction(async (tx) => {
-      await tx.reputationEvent.create({
-        data: {
-          userId,
-          type,
-          amount: applied,
-          reason,
-          key: opts.key,
-          sourceType: opts.sourceType,
-          sourceId: opts.sourceId,
-          actorId: opts.actorId,
+    // Serializable for capped types: under read-committed, two parallel
+    // awards could both read the same count and both slip under the cap.
+    // Serialization failures (P2034) get one transparent retry.
+    const runTx = () =>
+      prisma.$transaction(
+        async (tx) => {
+          if (cap !== undefined) {
+            const dayStart = new Date()
+            dayStart.setUTCHours(0, 0, 0, 0)
+            const today = await tx.reputationEvent.count({
+              where: { userId, type, reversedAt: null, createdAt: { gte: dayStart } },
+            })
+            if (today >= cap) return "capped" as const
+          }
+          await tx.reputationEvent.create({
+            data: {
+              userId,
+              type,
+              amount: applied,
+              reason,
+              key: opts.key,
+              sourceType: opts.sourceType,
+              sourceId: opts.sourceId,
+              actorId: opts.actorId,
+            },
+          })
+          await tx.profile.update({
+            where: { userId },
+            data: { reputation: { increment: applied } },
+          })
+          if (applied < 0) {
+            await tx.profile.updateMany({
+              where: { userId, reputation: { lt: 0 } },
+              data: { reputation: 0 },
+            })
+          }
+          return oldRep + applied
         },
-      })
-      await tx.profile.update({
-        where: { userId },
-        data: { reputation: { increment: applied } },
-      })
-      if (applied < 0) {
-        await tx.profile.updateMany({
-          where: { userId, reputation: { lt: 0 } },
-          data: { reputation: 0 },
-        })
+        cap !== undefined ? { isolationLevel: "Serializable" } : undefined
+      )
+    let txResult: number | "capped"
+    try {
+      txResult = await runTx()
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2034") {
+        txResult = await runTx()
+      } else {
+        throw error
       }
-      return oldRep + applied
-    })
-    return { awarded: true, amount: applied, oldRep, newRep }
+    }
+    if (txResult === "capped") return { awarded: false, skippedReason: "capped" }
+    return { awarded: true, amount: applied, oldRep, newRep: txResult }
   } catch (error) {
     // Concurrent keyed award lost the race — the winner already incremented.
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
@@ -209,7 +229,7 @@ async function reinstateEvent(
   const newRep = await prisma.$transaction(async (tx) => {
     const { count } = await tx.reputationEvent.updateMany({
       where: { id: original.id, reversedAt: { not: null } },
-      data: { reversedAt: null },
+      data: { reversedAt: null, reversalFinal: false },
     })
     if (count === 0) return null // another request reinstated first
     const descendants = await tx.reputationEvent.findMany({
@@ -259,23 +279,28 @@ export interface ReversalResult {
   newRep?: number
 }
 
-/** Reverse one ledger row with a signed counter-entry. Idempotent. */
+/**
+ * Reverse one ledger row with a signed counter-entry. Idempotent.
+ * `final: true` marks the reversal as a staff decision — later organic
+ * re-triggers of the same key will NOT reinstate the award.
+ */
 export async function reverseReputationEvent(
   eventId: string,
   reason: string,
-  actorId?: string
+  actorId?: string,
+  opts: { final?: boolean } = {}
 ): Promise<ReversalResult> {
   const outcome = await prisma.$transaction(async (tx) => {
     const original = await tx.reputationEvent.findUnique({
       where: { id: eventId },
-      select: { id: true, userId: true, amount: true, reversedAt: true, type: true, sourceType: true, sourceId: true },
+      select: { id: true, userId: true, amount: true, reversedAt: true, reversalFinal: true, type: true, sourceType: true, sourceId: true },
     })
     if (!original || original.reversedAt) return null
     const subjectUserId = original.userId
 
     const { count } = await tx.reputationEvent.updateMany({
       where: { id: original.id, reversedAt: null },
-      data: { reversedAt: new Date() },
+      data: { reversedAt: new Date(), ...(opts.final ? { reversalFinal: true } : {}) },
     })
     if (count === 0) return null // concurrent reversal won
 
@@ -310,7 +335,9 @@ export async function reverseReputationEvent(
   })
 
   if (outcome === null) return { reversed: false }
-  await postDemotionEffects(outcome.userId).catch(() => null)
+  await postDemotionEffects(outcome.userId).catch((e) =>
+    console.error("[reputation] post-demotion effects failed:", outcome.userId, e)
+  )
   return { reversed: true, eventId, newRep: outcome.newRep }
 }
 
@@ -321,7 +348,14 @@ export async function reverseReputationByKey(key: string, reason: string, actorI
     select: { id: true },
   })
   if (!original) return { reversed: false }
-  return reverseReputationEvent(original.id, reason, actorId)
+  try {
+    return await reverseReputationEvent(original.id, reason, actorId)
+  } catch (err) {
+    // Most callers `.catch(() => null)` — without this log a failed
+    // un-like/un-accept reversal would silently keep the points.
+    console.error("[reputation] keyed reversal failed:", key, err)
+    throw err
+  }
 }
 
 /** Reverse every active event tied to a deleted source (post, thread, diary…). */
@@ -331,14 +365,23 @@ export async function reverseReputationBySource(
   reason: string,
   actorId?: string
 ): Promise<number> {
+  // reversalOfId: null selects only root award rows — REVERSAL and REINSTATE
+  // rows share the original's sourceType/sourceId, and reversing them would
+  // double-deduct (the counter-entries already net out in the balance).
   const events = await prisma.reputationEvent.findMany({
-    where: { sourceType, sourceId, reversedAt: null, type: { not: REP_EVENT_TYPES.REVERSAL } },
+    where: { sourceType, sourceId, reversedAt: null, reversalOfId: null, type: { not: REP_EVENT_TYPES.REVERSAL } },
     select: { id: true },
   })
   let reversed = 0
   for (const e of events) {
-    const r = await reverseReputationEvent(e.id, reason, actorId)
-    if (r.reversed) reversed++
+    try {
+      const r = await reverseReputationEvent(e.id, reason, actorId)
+      if (r.reversed) reversed++
+    } catch (err) {
+      // Callers swallow reversal failures — the log is the only trace that
+      // rep stayed attached to removed content.
+      console.error("[reputation] reversal failed:", sourceType, sourceId, e.id, err)
+    }
   }
   return reversed
 }
@@ -346,13 +389,23 @@ export async function reverseReputationBySource(
 /** Reverse every active event a user *caused* (e.g. likes they granted). */
 export async function reverseReputationByActor(actorId: string, reason: string): Promise<number> {
   const events = await prisma.reputationEvent.findMany({
-    where: { actorId, reversedAt: null, type: { not: REP_EVENT_TYPES.REVERSAL } },
+    where: { actorId, reversedAt: null, reversalOfId: null, type: { not: REP_EVENT_TYPES.REVERSAL } },
     select: { id: true },
   })
   let reversed = 0
-  for (const e of events) {
-    const r = await reverseReputationEvent(e.id, reason, actorId)
-    if (r.reversed) reversed++
+  // Bounded concurrency — a ban can reverse thousands of granted events;
+  // unbounded Promise.all would exhaust the Neon pool.
+  const BATCH = 25
+  for (let i = 0; i < events.length; i += BATCH) {
+    const results = await Promise.all(
+      events.slice(i, i + BATCH).map((e) =>
+        reverseReputationEvent(e.id, reason, actorId).catch((err) => {
+          console.error("[reputation] actor reversal failed:", actorId, e.id, err)
+          return { reversed: false } as ReversalResult
+        })
+      )
+    )
+    reversed += results.filter((r) => r.reversed).length
   }
   return reversed
 }
@@ -591,43 +644,52 @@ export const BADGE_RULES: Record<string, (s: UserStats) => boolean> = Object.fro
 
 let badgeSeedComplete = false
 
-export async function getUserStats(userId: string): Promise<UserStats> {
+export async function getUserStats(userId: string, needed?: Set<keyof UserStats>): Promise<UserStats> {
+  const want = (k: keyof UserStats) => !needed || needed.has(k)
   const [posts, threads, diaries, diaryUpdates, chatMessages, strains, strainPhotos, setups, likesReceived, acceptedAnswers, paidReferrals, user] =
     await Promise.all([
-      prisma.post.count({ where: { authorId: userId, deleted: false, thread: { deleted: false } } }),
-      prisma.thread.count({ where: { authorId: userId, deleted: false } }),
-      prisma.growDiary.count({ where: { authorId: userId, deleted: false } }),
-      prisma.diaryUpdate.count({ where: { authorId: userId, diary: { deleted: false } } }),
-      prisma.chatMessage.count({ where: { authorId: userId, deleted: false } }),
-      prisma.strain.count({ where: { createdById: userId } }),
-      prisma.strainPhoto.count({ where: { userId } }),
-      prisma.growSetup.count({ where: { authorId: userId, deleted: false } }),
-      prisma.reaction.count({
-        where: {
-          type: "LIKE",
-          OR: [{ post: { authorId: userId, deleted: false, thread: { deleted: false } } }, { diary: { authorId: userId, deleted: false } }],
-        },
-      }),
-      prisma.post.count({
-        where: {
-          authorId: userId,
-          deleted: false,
-          thread: { deleted: false },
-          acceptedAnswerFor: { isNot: null },
-        },
-      }),
+      want("posts") ? prisma.post.count({ where: { authorId: userId, deleted: false, thread: { deleted: false } } }) : 0,
+      want("threads") ? prisma.thread.count({ where: { authorId: userId, deleted: false } }) : 0,
+      want("diaries") ? prisma.growDiary.count({ where: { authorId: userId, deleted: false } }) : 0,
+      want("diaryUpdates") ? prisma.diaryUpdate.count({ where: { authorId: userId, diary: { deleted: false } } }) : 0,
+      want("chatMessages") ? prisma.chatMessage.count({ where: { authorId: userId, deleted: false } }) : 0,
+      want("strains") ? prisma.strain.count({ where: { createdById: userId } }) : 0,
+      want("strainPhotos") ? prisma.strainPhoto.count({ where: { userId } }) : 0,
+      want("setups") ? prisma.growSetup.count({ where: { authorId: userId, deleted: false } }) : 0,
+      want("likesReceived")
+        ? prisma.reaction.count({
+            where: {
+              type: "LIKE",
+              OR: [{ post: { authorId: userId, deleted: false, thread: { deleted: false } } }, { diary: { authorId: userId, deleted: false } }],
+            },
+          })
+        : 0,
+      want("acceptedAnswers")
+        ? prisma.post.count({
+            where: {
+              authorId: userId,
+              deleted: false,
+              thread: { deleted: false },
+              acceptedAnswerFor: { isNot: null },
+            },
+          })
+        : 0,
       // Referral badges count only referrals that actually paid out — a pile
       // of fake signups must not advance the Recruiter line.
-      prisma.reputationEvent.count({
-        where: { userId, type: "REFERRAL", reversedAt: null },
-      }),
-      prisma.user.findUnique({
-        where: { id: userId },
-        select: { createdAt: true, profile: { select: { reputation: true } } },
-      }),
+      want("referrals")
+        ? prisma.reputationEvent.count({
+            where: { userId, type: "REFERRAL", reversedAt: null },
+          })
+        : 0,
+      want("memberNumber") || want("reputation")
+        ? prisma.user.findUnique({
+            where: { id: userId },
+            select: { createdAt: true, profile: { select: { reputation: true } } },
+          })
+        : null,
     ])
 
-  const memberNumber = user
+  const memberNumber = user && want("memberNumber")
     ? (await prisma.user.count({ where: { createdAt: { lt: user.createdAt } } })) + 1
     : 0
 
@@ -795,13 +857,27 @@ export async function checkBadges(userId: string) {
     await seedBadges()
     badgeSeedComplete = true
   }
-  const stats = await getUserStats(userId)
+  // Fetch badge state first so we only compute the stats that unearned,
+  // rule-backed badges actually need — veterans with everything earned skip
+  // the ~11 stat queries entirely.
   const allBadges = await prisma.badge.findMany()
   const earned = await prisma.userBadge.findMany({
     where: { userId },
     select: { badgeId: true },
   })
   const earnedIds = new Set(earned.map((b) => b.badgeId))
+
+  const neededStats = new Set<keyof UserStats>()
+  for (const badge of allBadges) {
+    if (earnedIds.has(badge.id)) continue
+    const def = BADGE_REGISTRY.find((b) => b.name === badge.name)
+    if (def?.progress) {
+      for (const k of def.progress.stats) neededStats.add(k as keyof UserStats)
+    }
+  }
+  if (neededStats.size === 0) return
+
+  const stats = await getUserStats(userId, neededStats)
 
   const newlyEarned: string[] = []
   for (const badge of allBadges) {

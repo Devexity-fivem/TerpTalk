@@ -162,7 +162,7 @@ async function caseActivity(where: { reportId?: string; flagId?: string }) {
     id: a.id,
     type: a.type,
     reason: a.reason,
-    moderator: a.moderator.profile?.username ?? "unknown",
+    moderator: a.moderator?.profile?.username ?? a.moderatorName ?? "unknown",
     createdAt: a.createdAt,
   }))
 }
@@ -228,7 +228,7 @@ async function subjectContext(userId: string, supportOnly: boolean) {
     recentReputation: repEvents,
     recentActions: modHistory.map((a) => ({
       id: a.id, type: a.type, reason: a.reason,
-      moderator: a.moderator.profile?.username ?? "unknown",
+      moderator: a.moderator?.profile?.username ?? a.moderatorName ?? "unknown",
       createdAt: a.createdAt, duration: a.duration,
     })),
   }

@@ -97,7 +97,13 @@ const getActiveMembers = unstable_cache(
   async () => {
     return await prisma.user.findMany({
       // TerpBot is permanently ONLINE — exclude it so real members lead.
-      where: { banned: false, status: "ONLINE", profile: { isNot: { username: "terpbot" } } },
+      // Suspended members don't broadcast presence either.
+      where: {
+        banned: false,
+        status: "ONLINE",
+        profile: { isNot: { username: "terpbot" } },
+        OR: [{ suspendedUntil: null }, { suspendedUntil: { lt: new Date() } }],
+      },
       take: 12,
       orderBy: { lastSeenAt: "desc" },
       select: publicUserSelect,

@@ -70,8 +70,10 @@ export async function POST(request: Request) {
       return forbidden("Your account is suspended")
     }
 
+    // name/genetics/breeder are echoed by TerpBot's /strain replies — leaving
+    // them out would let untrusted users launder links through the bot.
     const linkBlock = await enforceLinkTrust(
-      [description, growingInfo].filter((f): f is string => typeof f === "string").join("\n"),
+      [name, genetics, breeder, description, growingInfo].filter((f): f is string => typeof f === "string").join("\n"),
       session.user.id,
       request,
       "strains"

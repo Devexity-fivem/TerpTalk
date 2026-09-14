@@ -21,7 +21,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const { id } = await params
   const diary = await prisma.growDiary.findUnique({
     where: { id },
-    select: { id: true, authorId: true, deleted: true, startDate: true },
+    select: { id: true, authorId: true, deleted: true, startDate: true, harvested: true },
   })
   if (!diary || diary.deleted) return NextResponse.json({ error: "Diary not found" }, { status: 404 })
 
@@ -104,8 +104,10 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   revalidateTag("leaderboard", { expire: 0 })
   revalidateTag("strains", { expire: 0 })
 
-  // TerpBot celebrates the harvest in community chat.
-  if (harvested) {
+  // TerpBot celebrates the harvest in community chat — only on the
+  // false→true transition so toggling can't spam the room. The diary
+  // title is sanitized inside announceHarvest.
+  if (harvested && !diary.harvested) {
     const username = updated.author.profile?.username || updated.author.name || "a member"
     const yieldText =
       updated.yieldAmount != null && updated.yieldUnit

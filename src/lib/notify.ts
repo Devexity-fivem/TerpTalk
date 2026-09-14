@@ -184,7 +184,7 @@ function toPushDto(n: NotificationWithActor) {
 function pushNotification(userId: string, dto: ReturnType<typeof toPushDto>) {
   getPusher()
     ?.trigger(`private-user-${userId}`, "new-notification", dto)
-    .catch(() => {})
+    .catch((e) => console.error("[pusher] notification push failed:", userId, dto.type, e))
 }
 
 /**
@@ -256,7 +256,8 @@ export async function notify(input: NotifyInput): Promise<NotificationWithActor 
 
     if (input.push !== false) pushNotification(input.userId, toPushDto(notification))
     return notification
-  } catch {
+  } catch (e) {
+    console.error("[notify] failed:", input.type, input.userId, e)
     return null
   }
 }
@@ -366,11 +367,16 @@ export async function notifyMany(
           pushes.push(pusher.trigger(channels.slice(j, j + 100), "new-notification", dto))
         }
       }
-      await Promise.allSettled(pushes)
+      const results = await Promise.allSettled(pushes)
+      const failed = results.filter((r) => r.status === "rejected").length
+      if (failed > 0) {
+        console.error("[notifyMany] pusher delivery failed for", failed, "of", pushes.length, "batches")
+      }
     }
 
     return { sent: result.count, deliveredUserIds: [...new Set(allowed.map((i) => i.userId))] }
-  } catch {
+  } catch (e) {
+    console.error("[notifyMany] failed:", inputs.length, "recipients", e)
     return { sent: 0, deliveredUserIds: [] }
   }
 }

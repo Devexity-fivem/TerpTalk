@@ -43,6 +43,10 @@ export async function notifyMentions(
         content: `@${actorName} mentioned you in ${context}`,
         link,
         actorId,
+        // Dedupe per actor+target link — re-saving/editing the same content
+        // (or spamming the same mention) can't flood the recipient.
+        groupKey: `mention:${actorId}:${link}`,
+        dedupeMs: 30 * 60 * 1000,
       }))
     )
   } catch (e) {

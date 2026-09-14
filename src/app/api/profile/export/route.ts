@@ -25,7 +25,9 @@ export async function GET(request: Request) {
 
     const userId = session.user.id
 
-    const [user, profile, threads, posts, diaries, diaryUpdates, setups, setupComments, chatMessages, sentMessages, receivedMessages, reactions, badges, reputationEvents, notifications, followsGiven, followsReceived, blocksMade, blocksReceived, bookmarks, savedSearches, contestEntries, contestVotes, diaryContestEntries, diaryContestVotes, strains, guideEdits, staffApplications, reportsFiled, categoryFollows, threadFollows, diaryFollows] =
+    // Note: `blocksReceived` is deliberately excluded — who blocked you is
+    // the other user's private moderation choice, not your data.
+    const [user, profile, threads, posts, diaries, diaryUpdates, setups, setupComments, chatMessages, sentMessages, receivedMessages, reactions, badges, reputationEvents, notifications, followsGiven, followsReceived, blocksMade, bookmarks, savedSearches, contestEntries, contestVotes, diaryContestEntries, diaryContestVotes, strains, guideEdits, staffApplications, reportsFiled, categoryFollows, threadFollows, diaryFollows] =
       await Promise.all([
         prisma.user.findUnique({
           where: { id: userId },
@@ -58,7 +60,6 @@ export async function GET(request: Request) {
         prisma.follow.findMany({ where: { followerId: userId }, take: 10_000 }),
         prisma.follow.findMany({ where: { followingId: userId }, take: 10_000 }),
         prisma.block.findMany({ where: { blockerId: userId }, take: 10_000 }),
-        prisma.block.findMany({ where: { blockedId: userId }, take: 10_000 }),
         prisma.bookmark.findMany({ where: { userId }, take: 10_000, orderBy: { createdAt: "desc" } }),
         prisma.savedSearch.findMany({ where: { userId }, take: 1_000 }),
         prisma.contestEntry.findMany({ where: { userId }, take: 1_000 }),
@@ -108,7 +109,6 @@ export async function GET(request: Request) {
         followsGiven,
         followsReceived,
         blocksMade,
-        blocksReceived,
         categoryFollows,
         threadFollows,
         diaryFollows,

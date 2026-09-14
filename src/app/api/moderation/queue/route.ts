@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { forbidden, getClientIp, isSupport, logSecurityEvent, STAFF_ROLES } from "@/lib/security"
+import { forbidden, getClientIp, isAdmin, isSupport, logSecurityEvent, STAFF_ROLES } from "@/lib/security"
 import { requireStaff } from "@/lib/require-staff"
+import { logModAction } from "@/lib/moderation"
 import { rateLimit } from "@/lib/rate-limit"
 import { notifyMany } from "@/lib/notify"
 import {
@@ -274,7 +275,8 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: "Case not found" }, { status: 404 })
   }
 
-  // Self-adjudication guard — staff can't act on reports they filed.
+  // Self-adjudication guards — staff can't act on reports they filed, and
+  // (non-admin) staff can't adjudicate cases where they're the subject.
   if (kind === "REPORT" && (item as { reporterId?: string }).reporterId === staff.id) {
     return NextResponse.json({ error: "You cannot act on your own report" }, { status: 403 })
   }
@@ -287,10 +289,12 @@ export async function PATCH(request: Request) {
     ? (item as { reportedId: string }).reportedId
     : (item as { userId: string }).userId
 
+  if (targetUserId === staff.id && !isAdmin(staff.role)) {
+    return NextResponse.json({ error: "You cannot act on a case about yourself" }, { status: 403 })
+  }
+
   const audit = async (type: string, reason: string) => {
-    await prisma.moderationAction.create({
-      data: { type, reason, targetUserId, moderatorId: staff.id, ...linkField },
-    })
+    await logModAction(prisma, { type, reason, targetUserId, moderatorId: staff.id, ...linkField })
     await logSecurityEvent("SUSPICIOUS_ACTIVITY", {
       userId: staff.id,
       ip: getClientIp(request),

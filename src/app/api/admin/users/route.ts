@@ -6,6 +6,7 @@ import { getBadgeByName, STAFF_AWARDED_BADGES } from "@/lib/badge-registry"
 import { grantBadge } from "@/lib/reputation"
 import { rateLimit } from "@/lib/rate-limit"
 import { emitNotificationPush } from "@/lib/notify"
+import { staffDisplayName } from "@/lib/moderation"
 
 const ASSIGNABLE_ROLES = new Set(["MEMBER", "VERIFIED_MEMBER", "SUPPORT", "MODERATOR", "ADMINISTRATOR"])
 
@@ -146,6 +147,8 @@ export async function PATCH(request: Request) {
       return forbidden("Cannot change an administrator's role")
     }
 
+    const moderatorName = await staffDisplayName(admin.id)
+
     // Role change path
     if (role !== undefined) {
       if (!ASSIGNABLE_ROLES.has(role)) {
@@ -160,6 +163,7 @@ export async function PATCH(request: Request) {
             reason: `Role changed: ${target.role} → ${role}`,
             targetUserId: userId,
             moderatorId: admin.id,
+            moderatorName,
           },
         })
       })
@@ -280,6 +284,7 @@ export async function PATCH(request: Request) {
           reason: `${grant ? "Granted" : "Revoked"} badge "${badge}"`,
           targetUserId: userId,
           moderatorId: admin.id,
+          moderatorName,
         },
       })
       await logSecurityEvent("SUSPICIOUS_ACTIVITY", {

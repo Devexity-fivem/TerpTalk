@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
+import { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
 import { unauthorized, getClientIp, logSecurityEvent, isBanned, forbidden, blockExistsBetween } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
@@ -60,9 +61,14 @@ export async function POST(request: Request) {
         await prisma.follow.delete({ where: { id: existing.id } })
         return NextResponse.json({ following: false })
       }
-      await prisma.follow.create({
-        data: { followerId: session.user.id, followingId: userId },
-      })
+      try {
+        await prisma.follow.create({
+          data: { followerId: session.user.id, followingId: userId },
+        })
+      } catch (e) {
+        // Double-click race: the parallel request already created it.
+        if (!(e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002")) throw e
+      }
       const actorProfile = await prisma.profile.findUnique({
         where: { userId: session.user.id },
         select: { username: true },
@@ -98,7 +104,11 @@ export async function POST(request: Request) {
       await prisma.diaryFollow.delete({ where: { id: existing.id } })
       return NextResponse.json({ following: false })
     }
-    await prisma.diaryFollow.create({ data: { userId: session.user.id, diaryId } })
+    try {
+      await prisma.diaryFollow.create({ data: { userId: session.user.id, diaryId } })
+    } catch (e) {
+      if (!(e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002")) throw e
+    }
     return NextResponse.json({ following: true })
   } catch (error) {
     console.error("Follow error:", error)

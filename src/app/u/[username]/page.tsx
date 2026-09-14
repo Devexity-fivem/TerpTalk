@@ -14,7 +14,7 @@ const getProfileForMetadata = unstable_cache(
         bio: true,
         avatarUrl: true,
         reputation: true,
-        user: { select: { image: true } },
+        user: { select: { image: true, banned: true, suspendedUntil: true } },
       },
     })
   },
@@ -22,13 +22,22 @@ const getProfileForMetadata = unstable_cache(
   { revalidate: 300, tags: ["profiles"] }
 )
 
+// Banned/suspended members' profiles are not public surfaces — treat them
+// like missing profiles (noindex + 404) so bios don't stay indexable.
+function isInactiveUser(u: { banned: boolean; suspendedUntil: Date | null } | null): boolean {
+  if (!u) return true
+  if (u.banned) return true
+  if (u.suspendedUntil && u.suspendedUntil.getTime() > Date.now()) return true
+  return false
+}
+
 export async function generateMetadata({ params }: { params: Promise<{ username: string }> }) {
   const { username } = await params
   const decoded = decodeURIComponent(username)
 
   const profile = await getProfileForMetadata(decoded)
 
-  if (!profile) {
+  if (!profile || isInactiveUser(profile.user)) {
     return buildMetadata({ title: "Profile not found", robots: { index: false } })
   }
 
@@ -57,7 +66,7 @@ const getProfileId = unstable_cache(
   async (username: string) => {
     return prisma.profile.findUnique({
       where: { username },
-      select: { id: true },
+      select: { id: true, user: { select: { banned: true, suspendedUntil: true } } },
     })
   },
   ["profile-id"],
@@ -74,7 +83,7 @@ export default async function PublicProfilePage({
 
   const profile = await getProfileId(decoded)
 
-  if (!profile) {
+  if (!profile || isInactiveUser(profile.user)) {
     notFound()
   }
 

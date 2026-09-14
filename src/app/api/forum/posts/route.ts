@@ -8,6 +8,7 @@ import { awardReputation, reverseReputationBySource, repRateLimit, getTierPerks,
 import { storeImages, deleteImagesIfUnreferenced, MAX_POST_IMAGES } from "@/lib/blob"
 import { notifyMentions } from "@/lib/mentions"
 import { notify, notifyMany, postDeepLink, postLinkWhere } from "@/lib/notify"
+import { logModAction } from "@/lib/moderation"
 import { checkMaintenance } from "@/lib/maintenance"
 
 export async function POST(request: Request) {
@@ -104,38 +105,36 @@ export async function POST(request: Request) {
       )
     }
 
-    // Create post
-    const post = await prisma.post.create({
-      data: {
-        content,
-        threadId,
-        authorId: session.user.id,
-        images: {
-          create: imageUrls.map((url, order) => ({ url, order })),
+    // Post + replyCount + auto-follow are one transaction — a failure partway
+    // can't leave a reply that isn't counted (or a count without a reply).
+    const post = await prisma.$transaction(async (tx) => {
+      const created = await tx.post.create({
+        data: {
+          content,
+          threadId,
+          authorId: session.user.id,
+          images: {
+            create: imageUrls.map((url, order) => ({ url, order })),
+          },
         },
-      },
-      include: {
-        author: { select: publicUserSelect },
-        images: { orderBy: { order: "asc" } },
-      },
-    })
-
-    await prisma.thread.update({
-      where: { id: threadId },
-      data: { replyCount: { increment: 1 }, lastActivityAt: new Date() },
-    })
-
-    // Repliers auto-follow the thread (XenForo-style): silent upsert — no
-    // notification, and lastSeenAt covers everything up to their own reply.
-    // Prisma upsert isn't atomic (select-then-write), so retry once on a
-    // concurrent-reply race before giving up.
-    const autoFollow = () =>
-      prisma.threadFollow.upsert({
+        include: {
+          author: { select: publicUserSelect },
+          images: { orderBy: { order: "asc" } },
+        },
+      })
+      await tx.thread.update({
+        where: { id: threadId },
+        data: { replyCount: { increment: 1 }, lastActivityAt: new Date() },
+      })
+      // Repliers auto-follow the thread (XenForo-style): silent upsert — no
+      // notification, and lastSeenAt covers everything up to their own reply.
+      await tx.threadFollow.upsert({
         where: { userId_threadId: { userId: session.user.id, threadId } },
         create: { userId: session.user.id, threadId, lastSeenAt: new Date() },
         update: { lastSeenAt: new Date() },
       })
-    await autoFollow().catch(() => autoFollow().catch(() => {}))
+      return created
+    })
 
     await awardReputation(
       session.user.id,
@@ -351,7 +350,11 @@ export async function DELETE(request: Request) {
 
     const post = await prisma.post.findUnique({
       where: { id },
-      select: { id: true, authorId: true, deleted: true, threadId: true, author: { select: { id: true, role: true } } },
+      select: {
+        id: true, authorId: true, deleted: true, threadId: true,
+        author: { select: { id: true, role: true } },
+        images: { select: { url: true } },
+      },
     })
     if (!post || post.deleted) {
       return NextResponse.json({ error: "Post not found" }, { status: 404 })
@@ -370,6 +373,10 @@ export async function DELETE(request: Request) {
 
     await prisma.$transaction(async (tx) => {
       await tx.post.update({ where: { id }, data: { deleted: true } })
+      // Detach image rows so the blob cleanup's reference check sees the
+      // post as truly unlinked. Restore paths re-attach nothing — deleted
+      // images stay deleted.
+      await tx.postImage.deleteMany({ where: { postId: post.id } })
       const remaining = await tx.post.count({ where: { threadId: post.threadId, deleted: false } })
       // replyCount = non-deleted posts minus the opening post — but only when
       // the OP still exists; deleting the OP must not double-subtract.
@@ -392,10 +399,29 @@ export async function DELETE(request: Request) {
       await tx.notification.deleteMany({ where: postLinkWhere(post.id) })
     })
 
+    // Staff deletion of another user's content is a moderation action —
+    // audit it the same way the mod panel does.
+    if (!isOwn && mod) {
+      await logModAction(prisma, {
+        type: "CONTENT_DELETION",
+        reason: "Post removed via forum UI",
+        targetUserId: post.authorId,
+        moderatorId: mod.id,
+      }).catch(() => null)
+      await logSecurityEvent("SUSPICIOUS_ACTIVITY", {
+        userId: mod.id,
+        ip: getClientIp(request),
+        metadata: { moderationAction: "CONTENT_DELETION", targetType: "POST", targetId: id, surface: "post-delete" },
+      }).catch(() => {})
+    }
+
     // Reputation reconciliation: reverse every active event tied to this post
     // (creation award, likes on it, accepted-answer award). Counter-entries
     // preserve the audit trail and are idempotent under retries.
     await reverseReputationBySource("POST", post.id, "Post removed", session.user.id).catch(() => 0)
+
+    // Soft-deleted content must not leave live public blobs behind.
+    deleteImagesIfUnreferenced(post.images.map((i) => i.url)).catch(() => {})
 
     return NextResponse.json({ deleted: true })
   } catch (error) {

@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma"
-import { publicUserSelect } from "@/lib/security"
+import { publicUserSelect, activeAuthor } from "@/lib/security"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { unstable_cache } from "next/cache"
@@ -25,18 +25,18 @@ const getForumData = unstable_cache(
       orderBy: { order: "asc" },
       include: {
         threads: {
-          where: { deleted: false },
+          where: { deleted: false, author: activeAuthor() },
           take: 1,
           orderBy: { createdAt: "desc" },
         },
         _count: {
-          select: { threads: { where: { deleted: false } } },
+          select: { threads: { where: { deleted: false, author: activeAuthor() } } },
         },
       },
     })
 
     const recentThreads = await prisma.thread.findMany({
-      where: { deleted: false, category: { hidden: false } },
+      where: { deleted: false, category: { hidden: false }, author: activeAuthor() },
       take: 5,
       orderBy: { createdAt: "desc" },
       include: {
@@ -49,11 +49,11 @@ const getForumData = unstable_cache(
     })
 
     const [threadCount, postCount, memberCount, trendingThreads] = await Promise.all([
-      prisma.thread.count({ where: { deleted: false, category: { hidden: false } } }),
-      prisma.post.count({ where: { deleted: false, thread: { category: { hidden: false } } } }),
+      prisma.thread.count({ where: { deleted: false, category: { hidden: false }, author: activeAuthor() } }),
+      prisma.post.count({ where: { deleted: false, thread: { category: { hidden: false } }, author: activeAuthor() } }),
       prisma.user.count({ where: { banned: false } }),
       prisma.thread.findMany({
-        where: { deleted: false, views: { gt: 0 }, category: { hidden: false } },
+        where: { deleted: false, views: { gt: 0 }, category: { hidden: false }, author: activeAuthor() },
         take: 5,
         orderBy: { views: "desc" },
         select: { slug: true, title: true, views: true },

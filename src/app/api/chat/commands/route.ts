@@ -25,6 +25,9 @@ import { emitNotificationPush } from "@/lib/notify"
 import { getChatCommand, canUseCommand } from "@/lib/chat-commands"
 import { runBotCommand } from "@/lib/terpbot-data"
 import { recordBotEvent, countEntityLinks } from "@/lib/terpbot-events"
+import { applyAccountActionInTx, logModAction } from "@/lib/moderation"
+import { logSecurityEvent } from "@/lib/security"
+import { reverseReputationByActor } from "@/lib/reputation"
 
 type ChatMessageWithAuthor = {
   id: string
@@ -148,63 +151,41 @@ export async function POST(request: NextRequest) {
       return target
     }
 
+    // Shared enforcement — identical semantics to /api/moderation/actions:
+    // same role guards (incl. SUPPORT + self-target), bannedReason, and
+    // notification purge on bans.
     const applyModeration = async (
       actionType: "WARNING" | "TEMPORARY_BAN" | "PERMANENT_BAN" | "UNBAN",
       targetUserId: string,
       reason: string,
       durationDays?: number
     ) => {
-      let createdNotification: Awaited<ReturnType<typeof prisma.notification.create>> | null = null
-      await prisma.$transaction(async (tx) => {
-        const target = await tx.user.findUnique({
-          where: { id: targetUserId },
-          select: { role: true },
+      const createdNotification = await prisma.$transaction((tx) =>
+        applyAccountActionInTx(tx, {
+          actionType,
+          targetUserId,
+          reason,
+          durationDays,
+          staffId: userId,
+          staffRole: user.role,
+          staffName: displayName,
         })
-        if (!target) throw new Error("USER_NOT_FOUND")
-        if (target.role === "ADMINISTRATOR") throw new Error("FORBIDDEN")
-        if (target.role === "MODERATOR" && !admin) throw new Error("FORBIDDEN")
-
-        if (actionType === "TEMPORARY_BAN" && typeof durationDays === "number" && durationDays > 0) {
-          await tx.user.update({
-            where: { id: targetUserId },
-            data: { suspendedUntil: new Date(Date.now() + durationDays * 24 * 60 * 60 * 1000), sessionVersion: { increment: 1 } },
-          })
-        } else if (actionType === "PERMANENT_BAN") {
-          await tx.user.update({
-            where: { id: targetUserId },
-            data: { banned: true, suspendedUntil: null, sessionVersion: { increment: 1 } },
-          })
-        } else if (actionType === "UNBAN") {
-          await tx.user.update({
-            where: { id: targetUserId },
-            data: { banned: false, suspendedUntil: null, bannedReason: null, sessionVersion: { increment: 1 } },
-          })
-        }
-
-        await tx.moderationAction.create({
-          data: {
-            type: actionType,
-            reason: reason.trim().slice(0, 500),
-            targetUserId,
-            moderatorId: userId,
-            duration: typeof durationDays === "number" ? durationDays : null,
-          },
-        })
-
-        // Intentionally anonymous — never name the acting moderator.
-        createdNotification = await tx.notification.create({
-          data: {
-            type: "MODERATOR_ANNOUNCEMENT",
-            userId: targetUserId,
-            title: `Moderation action: ${actionType.replace(/_/g, " ").toLowerCase()}`,
-            content: `A moderator took action on your account or content. Reason: ${reason.trim().slice(0, 200)}`,
-          },
-        }).catch(() => null)
-      })
+      )
 
       if (createdNotification) {
         emitNotificationPush(targetUserId, createdNotification)
       }
+
+      // A permanent ban voids reputation the banned account granted others.
+      if (actionType === "PERMANENT_BAN") {
+        await reverseReputationByActor(targetUserId, "Granting account permanently banned").catch(() => 0)
+      }
+
+      await logSecurityEvent("SUSPICIOUS_ACTIVITY", {
+        userId,
+        ip: getClientIp(request),
+        metadata: { moderationAction: actionType, targetUserId, surface: "chat-command" },
+      }).catch(() => {})
     }
 
     const text = content.trim().slice(1)
@@ -221,6 +202,13 @@ export async function POST(request: NextRequest) {
     if (meta) {
       if (!canUseCommand(meta, user.role)) return forbidden()
       if (meta.handledBy === "bot") {
+        // Per-room bot-output cap: even when each user's own rate limit is
+        // clean, N users running commands concurrently must not flood the
+        // room with bot replies.
+        const roomBotRl = await rateLimit(`chat-bot-out:${roomId}`, 10, 60 * 1000)
+        if (!roomBotRl.allowed) {
+          return NextResponse.json({ error: "TerpBot is busy in this room — try again shortly" }, { status: 429 })
+        }
         const result = await runBotCommand(meta.name, {
           userId, role: user.role, displayName, args, rest,
           roomId, rawContent: content,
@@ -276,7 +264,7 @@ export async function POST(request: NextRequest) {
           include: { author: { select: chatAuthorSelect } },
         })
         const dto = toChatDto(message)
-        getPusher()?.trigger(`private-chat-${roomId}`, "new-message", dto).catch(() => {})
+        getPusher()?.trigger(`private-chat-${roomId}`, "new-message", dto).catch((e) => console.error("[pusher] command message push failed:", roomId, e))
         return NextResponse.json({ ok: true, message: dto })
       }
 
@@ -290,6 +278,10 @@ export async function POST(request: NextRequest) {
           where: { id: roomId },
           data: { slowModeSeconds: seconds },
         })
+        await logSecurityEvent("SUSPICIOUS_ACTIVITY", {
+          userId, ip: getClientIp(request),
+          metadata: { chatCommand: "slowmode", roomId, seconds },
+        }).catch(() => {})
         const bot = await postBot(`Slow mode set to ${seconds} second(s)`)
         return NextResponse.json({ ok: true, room: { slowModeSeconds: updated.slowModeSeconds }, message: bot })
       }
@@ -300,6 +292,10 @@ export async function POST(request: NextRequest) {
           where: { id: roomId },
           data: { locked: true },
         })
+        await logSecurityEvent("SUSPICIOUS_ACTIVITY", {
+          userId, ip: getClientIp(request),
+          metadata: { chatCommand: "lock", roomId },
+        }).catch(() => {})
         const bot = await postBot(`🔒 Chat locked by the moderation team`)
         return NextResponse.json({ ok: true, room: { locked: updated.locked }, message: bot })
       }
@@ -310,6 +306,10 @@ export async function POST(request: NextRequest) {
           where: { id: roomId },
           data: { locked: false },
         })
+        await logSecurityEvent("SUSPICIOUS_ACTIVITY", {
+          userId, ip: getClientIp(request),
+          metadata: { chatCommand: "unlock", roomId },
+        }).catch(() => {})
         const bot = await postBot(`🔓 Chat unlocked by the moderation team`)
         return NextResponse.json({ ok: true, room: { locked: updated.locked }, message: bot })
       }
@@ -323,6 +323,10 @@ export async function POST(request: NextRequest) {
           where,
           data: { deleted: true },
         })
+        await logSecurityEvent("SUSPICIOUS_ACTIVITY", {
+          userId, ip: getClientIp(request),
+          metadata: { chatCommand: "clear", roomId, clearedCount: result.count },
+        }).catch(() => {})
         const bot = await postBot(`🧹 ${result.count} message(s) cleared by the moderation team`)
         return NextResponse.json({ ok: true, cleared: result.count, message: bot })
       }
@@ -332,7 +336,19 @@ export async function POST(request: NextRequest) {
         if (!rest) {
           return NextResponse.json({ error: "Usage: /announce <message>" }, { status: 400 })
         }
-        const dto = await postBot(`📢 ${rest}`)
+        // The bot speaks with a trusted voice — strip link/handle syntax so
+        // a compromised or careless staff account can't launder URLs.
+        const safe = rest
+          .replace(/https?:\/\/\S+/gi, "[link removed]")
+          .replace(/\b[a-z0-9-]+\.[a-z]{2,}\b/gi, "[link removed]")
+          .replace(/[@＠]/g, "")
+          .replace(/[[\]()`\\]/g, "")
+          .slice(0, 500)
+        const dto = await postBot(`📢 ${safe}`)
+        await logSecurityEvent("SUSPICIOUS_ACTIVITY", {
+          userId, ip: getClientIp(request),
+          metadata: { chatCommand: "announce", roomId },
+        }).catch(() => {})
         return NextResponse.json({ ok: true, message: dto })
       }
 
@@ -400,6 +416,12 @@ export async function POST(request: NextRequest) {
     }
   } catch (error) {
     console.error("Chat command error:", error)
+    if (error instanceof Error && error.message === "USER_NOT_FOUND") {
+      return NextResponse.json({ error: "User not found" }, { status: 404 })
+    }
+    if (error instanceof Error && ["FORBIDDEN", "INVALID_REQUEST"].includes(error.message)) {
+      return forbidden()
+    }
     return NextResponse.json({ error: "Command failed" }, { status: 500 })
   }
 }

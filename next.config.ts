@@ -18,14 +18,15 @@ const securityHeaders = [
     key: "Content-Security-Policy",
     value: [
       "default-src 'self'",
-      `script-src 'self' 'unsafe-inline' https://*.hcaptcha.com${process.env.NODE_ENV === "development" ? " 'unsafe-eval'" : ""}`,
+      `script-src 'self' 'unsafe-inline'${process.env.NODE_ENV === "development" ? " 'unsafe-eval'" : ""}`,
       "style-src 'self' 'unsafe-inline'",
       "img-src 'self' data: blob: https://*.vercel-storage.com https://*.public.blob.vercel-storage.com",
       "font-src 'self' data:",
-      "connect-src 'self' https://*.hcaptcha.com https://*.pusher.com wss://*.pusher.com" +
+      "connect-src 'self' https://*.pusher.com wss://*.pusher.com" +
         (process.env.NODE_ENV === "development" ? " ws: wss:" : ""),
       "frame-ancestors 'none'",
-      "frame-src https://*.hcaptcha.com",
+      // MediaEmbed renders youtube-nocookie / vimeo iframes.
+      "frame-src https://www.youtube-nocookie.com https://player.vimeo.com",
       "object-src 'none'",
       "base-uri 'self'",
       "form-action 'self'",
@@ -35,6 +36,7 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
   allowedDevOrigins: ["127.0.0.1"],
+  poweredByHeader: false,
   experimental: {
     serverSourceMaps: false,
   },
