@@ -1,12 +1,12 @@
 "use client"
 
-import { useSession, signOut } from "next-auth/react"
+import { useSession } from "next-auth/react"
 import { useEffect, useState } from "react"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import {
-  Leaf, User, LogOut, MessageCircle, MessagesSquare, Home, Calendar,
-  Settings, Dna, Bell, Shield, Menu, X, Mail, Search, Trophy, BookOpen, Stethoscope, Tag, TrendingUp,
+  Leaf, MessageCircle, MessagesSquare, Home, Calendar,
+  Settings, Dna, Bell, Menu, X, Mail, Search, Trophy, BookOpen, Stethoscope, Tag, TrendingUp,
   ScrollText, Image as ImageIcon, Video,
 } from "lucide-react"
 import CannabisLeaf from "@/components/cannabis-leaf"
@@ -49,10 +49,7 @@ export function Navigation() {
   const [unread, setUnread] = useState(0)
   const [menuOpen, setMenuOpen] = useState(false)
   const role = (session?.user as { role?: string } | undefined)?.role
-  const isMod = role === "MODERATOR" || role === "ADMINISTRATOR"
   const isAdmin = role === "ADMINISTRATOR"
-  const isSupport = role === "SUPPORT"
-  const isStaff = isMod || isSupport
 
   useEffect(() => {
     if (!session) return
@@ -316,16 +313,14 @@ export function Navigation() {
                 </div>
               ))}
 
-              <div className="space-y-1">
-                <div className="px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                  Connect
-                </div>
-                {session ? (
-                  <Link href="/chat" className={linkClass("/chat")} onClick={() => setMenuOpen(false)}>
-                    <MessagesSquare className="h-4 w-4" />
-                    Chat
-                  </Link>
-                ) : (
+              {/* Signed-out users have no avatar menu or navbar chat icon —
+                  give them a mobile-only chat entry. Signed-in users reach
+                  Chat/Messages/Profile via the navbar and avatar menu. */}
+              {!session && (
+                <div className="space-y-1 lg:hidden">
+                  <div className="px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    Connect
+                  </div>
                   <button
                     onClick={() => { openChat(); setMenuOpen(false) }}
                     className={cn(
@@ -336,66 +331,36 @@ export function Navigation() {
                     <MessagesSquare className="h-4 w-4" />
                     Chat
                   </button>
-                )}
-                {session && (
-                  <>
-                    <Link href="/messages" className={linkClass("/messages")} onClick={() => setMenuOpen(false)}>
-                      <Mail className="h-4 w-4" />
-                      Messages
-                    </Link>
-                    <Link href="/profile" className={linkClass("/profile")} onClick={() => setMenuOpen(false)}>
-                      <User className="h-4 w-4" />
-                      Profile
-                    </Link>
-                  </>
-                )}
-              </div>
-              {isStaff && (
+                </div>
+              )}
+              {/* Admin-only extras — Moderation and Admin Dashboard live in
+                  the avatar menu for every staff role. */}
+              {isAdmin && (
                 <div className="space-y-1 md:col-span-2 lg:col-span-3">
                   <div className="px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-amber-500/80">
-                    Staff Tools
+                    Admin
                   </div>
                   <div className="grid grid-cols-1 gap-1 md:grid-cols-2 lg:grid-cols-3">
-                    {isMod && (
-                      <Link href="/moderation" className={cn(linkClass("/moderation"), "!text-amber-500")} onClick={() => setMenuOpen(false)}>
-                        <Shield className="h-4 w-4" />
-                        Moderation
-                      </Link>
-                    )}
-                    {isSupport && (
-                      <Link href="/moderation" className={cn(linkClass("/moderation"), "!text-teal-500")} onClick={() => setMenuOpen(false)}>
-                        <Shield className="h-4 w-4" />
-                        Support Queue
-                      </Link>
-                    )}
-                    {isAdmin && (
-                      <>
-                        <Link href="/admin" className={cn(linkClass("/admin"), "!text-amber-500")} onClick={() => setMenuOpen(false)}>
-                          <Shield className="h-4 w-4" />
-                          Admin Dashboard
-                        </Link>
-                        <Link href="/admin/audit" className={cn(linkClass("/admin/audit"), "!text-amber-500")} onClick={() => setMenuOpen(false)}>
-                          <ScrollText className="h-4 w-4" />
-                          Audit Log
-                        </Link>
-                        <Link href="/admin/media" className={cn(linkClass("/admin/media"), "!text-amber-500")} onClick={() => setMenuOpen(false)}>
-                          <ImageIcon className="h-4 w-4" />
-                          Media Moderation
-                        </Link>
-                        <Link href="/admin/settings" className={cn(linkClass("/admin/settings"), "!text-amber-500")} onClick={() => setMenuOpen(false)}>
-                          <Settings className="h-4 w-4" />
-                          Site Settings
-                        </Link>
-                        <Link href="/admin/features" className={cn(linkClass("/admin/features"), "!text-amber-500")} onClick={() => setMenuOpen(false)}>
-                          <Trophy className="h-4 w-4" />
-                          Feature Flags
-                        </Link>
-                        <Link href="/admin/youtubers" className={cn(linkClass("/admin/youtubers"), "!text-amber-500")} onClick={() => setMenuOpen(false)}>
-                          <Video className="h-4 w-4" />
-                          YouTubers
-                        </Link>
-                      </>
-                    )}
+                    <Link href="/admin/audit" className={cn(linkClass("/admin/audit"), "!text-amber-500")} onClick={() => setMenuOpen(false)}>
+                      <ScrollText className="h-4 w-4" />
+                      Audit Log
+                    </Link>
+                    <Link href="/admin/media" className={cn(linkClass("/admin/media"), "!text-amber-500")} onClick={() => setMenuOpen(false)}>
+                      <ImageIcon className="h-4 w-4" />
+                      Media Moderation
+                    </Link>
+                    <Link href="/admin/settings" className={cn(linkClass("/admin/settings"), "!text-amber-500")} onClick={() => setMenuOpen(false)}>
+                      <Settings className="h-4 w-4" />
+                      Site Settings
+                    </Link>
+                    <Link href="/admin/features" className={cn(linkClass("/admin/features"), "!text-amber-500")} onClick={() => setMenuOpen(false)}>
+                      <Trophy className="h-4 w-4" />
+                      Feature Flags
+                    </Link>
+                    <Link href="/admin/youtubers" className={cn(linkClass("/admin/youtubers"), "!text-amber-500")} onClick={() => setMenuOpen(false)}>
+                      <Video className="h-4 w-4" />
+                      YouTubers
+                    </Link>
                   </div>
                 </div>
               )}
@@ -406,15 +371,7 @@ export function Navigation() {
                 <span className="text-sm text-muted-foreground">Theme</span>
                 <ThemeToggle />
               </div>
-              {session && (
-                <button
-                  onClick={() => signOut()}
-                  className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground lg:hidden"
-                >
-                  <LogOut className="h-4 w-4" />
-                  Sign out
-                </button>
-              )}
+
             </div>
           </div>
         )}

@@ -52,7 +52,7 @@ export default function UserMenu() {
       <button
         onClick={() => setOpen(!open)}
         className={cn(
-          "hidden items-center gap-2 rounded-lg p-1 pr-2 text-sm transition-colors lg:flex",
+          "flex items-center gap-2 rounded-lg p-1 pr-2 text-sm transition-colors",
           open ? "bg-secondary text-foreground" : "hover:bg-secondary"
         )}
         aria-label="Account menu"
