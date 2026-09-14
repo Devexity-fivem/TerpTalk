@@ -270,6 +270,12 @@ export async function POST(request: NextRequest) {
       },
     })
 
+    // Lifetime counter for social badges — immune to room clears and the
+    // 3-day prune, which used to reset progress.
+    await prisma.profile
+      .updateMany({ where: { userId }, data: { chatMessageCount: { increment: 1 } } })
+      .catch(() => null)
+
     const dto = messageDto(message as unknown as ChatMessageWithAuthor)
 
     // Notify @mentions in chat (fire-and-forget)

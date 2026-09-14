@@ -646,13 +646,13 @@ let badgeSeedComplete = false
 
 export async function getUserStats(userId: string, needed?: Set<keyof UserStats>): Promise<UserStats> {
   const want = (k: keyof UserStats) => !needed || needed.has(k)
-  const [posts, threads, diaries, diaryUpdates, chatMessages, strains, strainPhotos, setups, likesReceived, acceptedAnswers, paidReferrals, user] =
+  const [posts, threads, diaries, diaryUpdates, , strains, strainPhotos, setups, likesReceived, acceptedAnswers, paidReferrals, user] =
     await Promise.all([
       want("posts") ? prisma.post.count({ where: { authorId: userId, deleted: false, thread: { deleted: false } } }) : 0,
       want("threads") ? prisma.thread.count({ where: { authorId: userId, deleted: false } }) : 0,
       want("diaries") ? prisma.growDiary.count({ where: { authorId: userId, deleted: false } }) : 0,
       want("diaryUpdates") ? prisma.diaryUpdate.count({ where: { authorId: userId, diary: { deleted: false } } }) : 0,
-      want("chatMessages") ? prisma.chatMessage.count({ where: { authorId: userId, deleted: false } }) : 0,
+      0, // chatMessages comes from the profile counter below
       want("strains") ? prisma.strain.count({ where: { createdById: userId } }) : 0,
       want("strainPhotos") ? prisma.strainPhoto.count({ where: { userId } }) : 0,
       want("setups") ? prisma.growSetup.count({ where: { authorId: userId, deleted: false } }) : 0,
@@ -681,10 +681,13 @@ export async function getUserStats(userId: string, needed?: Set<keyof UserStats>
             where: { userId, type: "REFERRAL", reversedAt: null },
           })
         : 0,
-      want("memberNumber") || want("reputation")
+      want("memberNumber") || want("reputation") || want("chatMessages")
         ? prisma.user.findUnique({
             where: { id: userId },
-            select: { createdAt: true, profile: { select: { reputation: true } } },
+            select: {
+              createdAt: true,
+              profile: { select: { reputation: true, chatMessageCount: true } },
+            },
           })
         : null,
     ])
@@ -698,7 +701,9 @@ export async function getUserStats(userId: string, needed?: Set<keyof UserStats>
     threads,
     diaries,
     diaryUpdates,
-    chatMessages,
+    // Lifetime counter — survives room clears and the 3-day chat prune,
+    // which used to silently reset social-badge progress.
+    chatMessages: user?.profile?.chatMessageCount ?? 0,
     strains,
     strainPhotos,
     setups,

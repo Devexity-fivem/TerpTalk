@@ -112,6 +112,8 @@ model Profile {
   favoriteStrain String?
   joinDate     DateTime @default(now())
   reputation   Int      @default(0)
+  // Lifetime chat messages sent — survives room clears and the 3-day prune.
+  chatMessageCount Int   @default(0)
   growSpace    String?
   referredById String?
   referredBy   Profile?  @relation("ProfileReferrals", fields: [referredById], references: [id])

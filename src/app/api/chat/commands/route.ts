@@ -263,6 +263,9 @@ export async function POST(request: NextRequest) {
           },
           include: { author: { select: chatAuthorSelect } },
         })
+        await prisma.profile
+          .updateMany({ where: { userId }, data: { chatMessageCount: { increment: 1 } } })
+          .catch(() => null)
         const dto = toChatDto(message)
         getPusher()?.trigger(`private-chat-${roomId}`, "new-message", dto).catch((e) => console.error("[pusher] command message push failed:", roomId, e))
         return NextResponse.json({ ok: true, message: dto })
