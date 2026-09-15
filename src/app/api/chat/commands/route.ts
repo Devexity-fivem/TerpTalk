@@ -19,13 +19,14 @@ import {
 import { rateLimit } from "@/lib/rate-limit"
 import { checkMaintenance } from "@/lib/maintenance"
 import { getBooleanSetting, SITE_SETTINGS } from "@/lib/settings"
+import { canAccessRoom } from "@/lib/chat-access"
 import { getPusher } from "@/lib/pusher"
 import { postBotMessage, TERPBOT_USERNAME } from "@/lib/terpbot"
 import { emitNotificationPush } from "@/lib/notify"
 import { getChatCommand, canUseCommand } from "@/lib/chat-commands"
 import { runBotCommand } from "@/lib/terpbot-data"
 import { recordBotEvent, countEntityLinks } from "@/lib/terpbot-events"
-import { applyAccountActionInTx, logModAction } from "@/lib/moderation"
+import { applyAccountActionInTx } from "@/lib/moderation"
 import { logSecurityEvent } from "@/lib/security"
 import { reverseReputationByActor, recordChatMessage } from "@/lib/reputation"
 
@@ -72,7 +73,9 @@ export async function POST(request: NextRequest) {
     }
 
     const room = await prisma.chatRoom.findUnique({ where: { id: roomId } })
-    if (!room || room.isPrivate) {
+    // Commands post into the room — same gate as message POST (private
+    // rooms stay read-only for staff; rep-gated rooms need the rep).
+    if (!room || room.isPrivate || !(await canAccessRoom(userId, room))) {
       return NextResponse.json({ error: "Room not found" }, { status: 404 })
     }
 

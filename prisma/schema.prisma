@@ -517,6 +517,9 @@ model ChatRoom {
   slug            String        @unique
   order           Int           @default(0)
   isPrivate       Boolean       @default(false)
+  // Reputation gate — distinct from isPrivate (staff-only). Non-null means
+  // members need profile.reputation >= requiredRep; staff always pass.
+  requiredRep     Int?
   slowModeSeconds Int           @default(0)
   locked          Boolean       @default(false)
   createdAt       DateTime      @default(now())

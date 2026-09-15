@@ -2,7 +2,8 @@ import { NextRequest, NextResponse, after } from "next/server"
 import { getToken } from "next-auth/jwt"
 import { sessionCookieName } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { unauthorized, chatAuthorSelect, LIMITS, getClientIp, logSecurityEvent, isSessionValid, forbidden, isModerator, isStaff, enforceLinkTrust } from "@/lib/security"
+import { unauthorized, chatAuthorSelect, LIMITS, getClientIp, logSecurityEvent, isSessionValid, forbidden, isStaff, enforceLinkTrust } from "@/lib/security"
+import { roomAccessInfo } from "@/lib/chat-access"
 import { rateLimit } from "@/lib/rate-limit"
 import { repRateLimit, getTierPerks, recordChatMessage } from "@/lib/reputation"
 import { notifyMentions } from "@/lib/mentions"
@@ -26,7 +27,7 @@ type ChatMessageWithAuthor = {
     name?: string | null
     image?: string | null
     role?: string | null
-    profile?: { username?: string | null; avatarFrame?: string | null; profileTitle?: string | null } | null
+    profile?: { username?: string | null; reputation?: number | null; publicMilestoneOptOut?: boolean | null; avatarFrame?: string | null; profileTitle?: string | null } | null
   }
   replyTo: ChatMessageWithAuthor | null
 }
@@ -43,6 +44,8 @@ function messageDto(m: ChatMessageWithAuthor) {
           username: m.replyTo.author.profile?.username ?? null,
           image: m.replyTo.author.image ?? null,
           role: m.replyTo.author.role ?? null,
+          reputation: m.replyTo.author.profile?.reputation ?? 0,
+          publicMilestoneOptOut: m.replyTo.author.profile?.publicMilestoneOptOut ?? false,
           avatarFrame: m.replyTo.author.profile?.avatarFrame ?? null,
           profileTitle: m.replyTo.author.profile?.profileTitle ?? null,
         },
@@ -58,6 +61,8 @@ function messageDto(m: ChatMessageWithAuthor) {
       username: m.author.profile?.username ?? null,
       image: m.author.image ?? null,
       role: m.author.role ?? null,
+      reputation: m.author.profile?.reputation ?? 0,
+      publicMilestoneOptOut: m.author.profile?.publicMilestoneOptOut ?? false,
       avatarFrame: m.author.profile?.avatarFrame ?? null,
       profileTitle: m.author.profile?.profileTitle ?? null,
     },
@@ -97,12 +102,14 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Room not found" }, { status: 404 })
     }
 
-    // Public rooms are open; private rooms require moderator access until a membership model exists
-    if (room.isPrivate) {
-      const user = await prisma.user.findUnique({ where: { id: userId }, select: { role: true } })
-      if (!isModerator(user?.role)) {
-        return forbidden("Private room")
-      }
+    // Centralized gate — staff-only private rooms AND rep-gated rooms.
+    const access = await roomAccessInfo(userId, room)
+    if (!access.allowed) {
+      return forbidden(
+        access.reason === "rep" && room.requiredRep
+          ? `This room unlocks at ${room.requiredRep.toLocaleString()} reputation`
+          : "Private room"
+      )
     }
 
     // Get recent messages — or incrementally: ?after=<ISO date> returns only new ones
@@ -203,11 +210,20 @@ export async function POST(request: NextRequest) {
       where: { id: roomId },
     })
 
-    if (!room || room.isPrivate) {
+    if (!room) {
       return NextResponse.json(
         { error: "Room not found" },
         { status: 404 }
       )
+    }
+
+    // Centralized gate. isPrivate rooms stay read-only for staff (nobody
+    // posts — preserved); rep-gated rooms accept member posts past the gate.
+    const access = await roomAccessInfo(userId, room)
+    if (!access.allowed || room.isPrivate) {
+      return access.reason === "rep" && room.requiredRep
+        ? forbidden(`This room unlocks at ${room.requiredRep.toLocaleString()} reputation`)
+        : NextResponse.json({ error: "Room not found" }, { status: 404 })
     }
 
     const { replyToId } = body

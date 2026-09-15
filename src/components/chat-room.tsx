@@ -10,6 +10,8 @@ import {
 } from "lucide-react"
 import Link from "next/link"
 import RoleBadge from "@/components/role-badge"
+import TierChip from "@/components/tier-chip"
+import UserPopover from "@/components/user-popover"
 import { Avatar } from "@/components/ui/avatar"
 import { getAvatarFrame, getProfileTitle } from "@/lib/cosmetics"
 import { listCommandsForRole } from "@/lib/chat-commands"
@@ -26,6 +28,8 @@ interface Room {
   name: string
   slug: string
   description: string
+  requiredRep: number | null
+  accessible: boolean
   slowModeSeconds: number
   locked: boolean
   _count: { messages: number }
@@ -37,6 +41,8 @@ interface Author {
   username?: string | null
   role?: string | null
   image?: string | null
+  reputation?: number | null
+  publicMilestoneOptOut?: boolean | null
   avatarFrame?: string | null
   profileTitle?: string | null
 }
@@ -175,12 +181,14 @@ const MessageRow = memo(function MessageRow({
       </Link>
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1.5 mb-0.5">
-          <Link
-            href={`/u/${encodeURIComponent(displayName)}`}
-            className="font-semibold text-xs hover:underline truncate"
-          >
-            {displayName}
-          </Link>
+          <UserPopover username={msg.author.username ?? displayName}>
+            <Link
+              href={`/u/${encodeURIComponent(displayName)}`}
+              className="font-semibold text-xs hover:underline truncate"
+            >
+              {displayName}
+            </Link>
+          </UserPopover>
           {title && (
             <span className="text-[9px] font-medium uppercase tracking-wider px-1 py-px rounded truncate bg-primary/10 text-primary/80">
               {title.name}
@@ -192,6 +200,12 @@ const MessageRow = memo(function MessageRow({
             </span>
           )}
           <RoleBadge role={msg.author.role} />
+          {!isBot && (
+            <TierChip
+              reputation={msg.author.reputation ?? 0}
+              publicMilestoneOptOut={msg.author.publicMilestoneOptOut}
+            />
+          )}
           <time
             dateTime={msg.createdAt}
             className="text-[10px] text-muted-foreground opacity-70 group-hover:opacity-100 transition-opacity"
@@ -476,8 +490,10 @@ export default function ChatRoom() {
 
   // Load messages: realtime via Pusher when configured, otherwise poll.
   // Polls are incremental (?after=) so idle polls are near-empty.
+  // Gated rooms skip all fetching — the unlock panel needs no data and the
+  // API would 403 anyway.
   useEffect(() => {
-    if (!session || !room) return
+    if (!session || !room || room.accessible === false) return
 
     let cancelled = false
     let timer: ReturnType<typeof setTimeout> | null = null
@@ -821,9 +837,16 @@ export default function ChatRoom() {
                     : "text-muted-foreground hover:bg-secondary hover:text-foreground"
                 )}
               >
-                <Hash className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+                {r.accessible === false ? (
+                  <Lock className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+                ) : (
+                  <Hash className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+                )}
                 <span className="truncate">{r.name}</span>
                 {r.locked && <Lock className="w-3 h-3 ml-auto shrink-0" aria-label="Locked" />}
+                {r.accessible === false && (
+                  <span className="ml-auto shrink-0 text-[9px] text-muted-foreground">{r.requiredRep?.toLocaleString()} rep</span>
+                )}
               </button>
             </li>
           ))}
@@ -892,7 +915,7 @@ export default function ChatRoom() {
                   : "bg-secondary text-muted-foreground hover:text-foreground"
               )}
             >
-              {r.locked && <Lock className="w-3 h-3" aria-hidden="true" />}
+              {(r.locked || r.accessible === false) && <Lock className="w-3 h-3" aria-hidden="true" />}
               {r.name}
             </button>
           ))}
@@ -911,6 +934,15 @@ export default function ChatRoom() {
             {loading ? (
               <div className="flex justify-center py-8">
                 <Loader2 className="w-5 h-5 animate-spin text-primary" />
+              </div>
+            ) : room && room.accessible === false ? (
+              <div className="text-center py-10 px-4">
+                <Lock className="w-8 h-8 text-amber-500 mx-auto mb-2" />
+                <p className="font-medium text-sm">{room.name} is a members-only room</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Unlocks at <span className="text-amber-500 font-medium">{room.requiredRep?.toLocaleString()} reputation</span>
+                  {room.description ? ` — ${room.description}` : ""}
+                </p>
               </div>
             ) : messages.length === 0 ? (
               <div className="text-center py-10">
@@ -954,7 +986,8 @@ export default function ChatRoom() {
             </div>
           )}
 
-          {/* Composer */}
+          {/* Composer — hidden entirely in gated rooms (server enforces too) */}
+          {!(room && room.accessible === false) && (
           <form onSubmit={handleSendMessage} className="p-2.5 border-t border-border shrink-0 relative">
             {replyingTo && (
               <div className="mb-1.5 flex items-center gap-1.5 text-xs text-muted-foreground">
@@ -1113,6 +1146,7 @@ export default function ChatRoom() {
               </button>
             </div>
           </form>
+          )}
         </div>
       </div>
     </div>

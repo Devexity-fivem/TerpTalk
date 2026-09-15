@@ -3,7 +3,8 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { getPusher } from "@/lib/pusher"
-import { unauthorized, forbidden, isBanned, isModerator } from "@/lib/security"
+import { unauthorized, forbidden, isBanned } from "@/lib/security"
+import { canAccessRoom } from "@/lib/chat-access"
 import { rateLimit } from "@/lib/rate-limit"
 
 // Pusher channel authorization — private chat channels require a session and room access.
@@ -43,13 +44,12 @@ export async function POST(request: Request) {
     if (!match) return forbidden()
     const roomId = match[1]
 
-    const room = await prisma.chatRoom.findUnique({ where: { id: roomId }, select: { isPrivate: true } })
+    const room = await prisma.chatRoom.findUnique({ where: { id: roomId }, select: { isPrivate: true, requiredRep: true } })
     if (!room) return forbidden()
 
-    if (room.isPrivate) {
-      const user = await prisma.user.findUnique({ where: { id: session.user.id }, select: { role: true } })
-      if (!isModerator(user?.role)) return forbidden("Private room")
-    }
+    // Same central gate as message reads — realtime subscribers never
+    // receive a room they couldn't fetch over HTTP.
+    if (!(await canAccessRoom(session.user.id, room))) return forbidden("Private room")
 
     const auth = pusher.authorizeChannel(socketId, channel)
     return NextResponse.json(auth)
