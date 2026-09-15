@@ -16,7 +16,9 @@ npm run seed         # categories, chat rooms, optional admin/mod, invite codes
 npm run dev          # http://localhost:3000
 ```
 
-Requires a PostgreSQL `DATABASE_URL` (local Postgres or a free Neon dev branch). SQLite is no longer supported.
+Requires a PostgreSQL `DATABASE_URL`. SQLite is no longer supported.
+
+**Database environments (Neon):** local development and mutation-capable tests use the **`dev`** branch; Vercel Preview deployments also use **`dev`**; Vercel Production uses **`main`**. Never point local tooling at the `main` endpoint.
 
 ## Environment variables
 
@@ -31,7 +33,9 @@ npm run seed                         # re-seed categories, chat rooms, optional 
 npm run backup                       # pg_dump or file copy -> backups/
 ```
 
-Never run `migrate reset` or destructive commands against production. Use `npx prisma migrate dev` only against a local dev database.
+Never run `migrate reset` or destructive commands against production. Use `npx prisma migrate dev` only against the Neon `dev` branch.
+
+**Test safety:** every mutation-capable script under `scripts/` imports `db-guard.mjs`, which refuses to run when `DATABASE_URL` resolves to the production endpoint. `ALLOW_PRODUCTION_DB_TESTS=1` overrides it — never set it casually.
 
 **Production migrations (Neon):** `migrate deploy` is not part of the Vercel build — run it manually against the **direct** Neon endpoint, not the `-pooler` URL (PgBouncer transaction pooling breaks the advisory locks Prisma uses). In the Neon dashboard the direct host is the same endpoint minus `-pooler` from the hostname:
 

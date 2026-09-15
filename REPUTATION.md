@@ -82,14 +82,14 @@ Automatic reversal triggers:
 | Tier | Threshold | Benefit |
 |---|---|---|
 | Seed | 0 | — |
-| Sprout | 250 | Sprout Ring frame; links don't need the new-member wait |
-| Rooted | 750 | Rooted Band frame, custom titles, poll voting |
+| Sprout | 150 | Sprout Ring frame; links don't need the new-member wait |
+| Rooted | 500 | Rooted Band frame, custom titles, poll voting |
 | Grower | 1,500 | Greenhouse Glow frame, Evergreen theme, auto Verified Member (+1.5× rep) |
 | Cultivator | 3,500 | LED Bloom frame, Golden Hour theme, 1.5× rate limits |
 | Master Grower | 7,000 | Pistil Fire frame, Midnight Garden theme, slowmode exempt, 6 images/post |
 | Head Grower | 15,000 | Amber Jar frame, Deep Water theme, 2× rate limits, 8 images/post, 7 tags |
-| Hash Maker | 40,000 | Rosin Ring frame, Amber Cure theme, legendary titles |
-| Cannabis Deity | 100,000 | Northern Lights frame, Deity Glow theme — top of the ladder |
+| Hash Maker | 30,000 | Rosin Ring frame, Amber Cure theme, legendary titles |
+| Cannabis Deity | 50,000 | Northern Lights frame, Deity Glow theme — top of the ladder |
 
 Perks are enforced in code via `getTierPerks()` / `repRateLimit()` — never
 just advertised. `checkTierChange` notifies on tier-up; `demoteIfNeeded`
