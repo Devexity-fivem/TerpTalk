@@ -75,7 +75,7 @@ const SECTIONS: { title: string; items: QA[] }[] = [
       },
       {
         q: "Why can't I post links?",
-        a: <>New accounts can&apos;t post external links until the account is 24 hours old and has 250 reputation — it keeps spam out. Keep posting and it unlocks quickly.</>,
+        a: <>New accounts can&apos;t post external links until the account is 24 hours old and has 150 reputation — it keeps spam out. Keep posting and it unlocks quickly.</>,
       },
       {
         q: "What are accepted answers?",

@@ -81,9 +81,13 @@ export const BADGE_REGISTRY: BadgeDefinition[] = [
   { name: "Century Poster", description: "Made 100 forum posts.", requirement: "Publish 100 posts.", rarity: r("rare"), category: "community", icon: "MessageCircle", progress: p("posts", 100) },
   { name: "Veteran Poster", description: "Made 500 forum posts.", requirement: "Publish 500 posts.", rarity: r("epic"), category: "community", icon: "MessageSquare", progress: p("posts", 500) },
   { name: "Master Poster", description: "Made 1,000 forum posts.", requirement: "Publish 1,000 posts.", rarity: r("epic"), category: "community", icon: "MessageSquare", progress: p("posts", 1000) },
-  { name: "Grand Poster", description: "Made 2,500 forum posts.", requirement: "Publish 2,500 posts.", rarity: r("legendary"), category: "community", icon: "PenTool", progress: p("posts", 2500) },
-  { name: "Legendary Poster", description: "Made 5,000 forum posts.", requirement: "Publish 5,000 posts.", rarity: r("legendary"), category: "community", icon: "PenTool", progress: p("posts", 5000) },
-  { name: "Mythic Poster", description: "Made 10,000 forum posts.", requirement: "Publish 10,000 posts.", rarity: r("legendary"), category: "community", icon: "PenTool", progress: p("posts", 10000) },
+  // The old 2.5k/5k/10k raw-post-count rungs were reworked into
+  // quality-gated honours — the top of the community track now certifies
+  // peer-validated contribution, not volume. (Formerly Grand/Legendary/
+  // Mythic Poster; existing UserBadge rows keep their recognition.)
+  { name: "Community Cornerstone", description: "Twenty-five of your posts each earned love from 3+ different growers.", requirement: "Have 25 posts each liked by 3+ different members.", rarity: r("legendary"), category: "community", icon: "Landmark", progress: p("wellLikedPosts", 25) },
+  { name: "Library of Wisdom", description: "Your accepted answers have helped twenty-five different growers.", requirement: "Have replies accepted in threads by 25 different members.", rarity: r("legendary"), category: "community", icon: "LibraryBig", progress: p("distinctAskers", 25) },
+  { name: "Living Legend", description: "One hundred fifty accepted answers — a living knowledge base.", requirement: "Have 150 replies accepted.", rarity: r("legendary"), category: "community", icon: "Crown", progress: p("acceptedAnswers", 150) },
 
   // Accepted answers
   { name: "Helper", description: "Your reply was marked as an accepted answer.", requirement: "Have one reply accepted.", rarity: r("rare"), category: "community", icon: "CheckCircle", progress: p("acceptedAnswers", 1) },
@@ -145,14 +149,14 @@ export const BADGE_REGISTRY: BadgeDefinition[] = [
   { name: "Founder", description: "Brought 50 new members to the community.", requirement: "Have 50 successful referrals.", rarity: r("legendary"), category: "outreach", icon: "Users", progress: p("referrals", 50) },
 
   // ─── Milestones (reputation) ───
-  { name: "Sprout", description: "Reached 250 reputation.", requirement: "Earn 250 reputation.", rarity: r("common"), category: "milestones", icon: "Sprout", progress: p("reputation", 250) },
-  { name: "Rooted", description: "Reached 750 reputation.", requirement: "Earn 750 reputation.", rarity: r("common"), category: "milestones", icon: "Leaf", progress: p("reputation", 750) },
+  { name: "Sprout", description: "Reached 150 reputation.", requirement: "Earn 150 reputation.", rarity: r("common"), category: "milestones", icon: "Sprout", progress: p("reputation", 150) },
+  { name: "Rooted", description: "Reached 500 reputation.", requirement: "Earn 500 reputation.", rarity: r("common"), category: "milestones", icon: "Leaf", progress: p("reputation", 500) },
   { name: "Grower", description: "Reached 1,500 reputation.", requirement: "Earn 1,500 reputation.", rarity: r("common"), category: "milestones", icon: "Leaf", progress: p("reputation", 1500) },
   { name: "Cultivator", description: "Reached 3,500 reputation.", requirement: "Earn 3,500 reputation.", rarity: r("rare"), category: "milestones", icon: "Scissors", progress: p("reputation", 3500) },
   { name: "Master Grower", description: "Reached 7,000 reputation.", requirement: "Earn 7,000 reputation.", rarity: r("epic"), category: "milestones", icon: "Crown", progress: p("reputation", 7000) },
   { name: "Head Grower", description: "Reached 15,000 reputation.", requirement: "Earn 15,000 reputation.", rarity: r("legendary"), category: "milestones", icon: "Star", progress: p("reputation", 15000) },
-  { name: "Hash Maker", description: "Pressed to perfection — reached 40,000 reputation.", requirement: "Earn 40,000 reputation.", rarity: r("legendary"), category: "milestones", icon: "Sparkles", progress: p("reputation", 40000) },
-  { name: "Cannabis Deity", description: "A true deity of the grow room — reached 100,000 reputation.", requirement: "Earn 100,000 reputation.", rarity: r("legendary"), category: "milestones", icon: "Crown", progress: p("reputation", 100000) },
+  { name: "Hash Maker", description: "Pressed to perfection — reached 30,000 reputation.", requirement: "Earn 30,000 reputation.", rarity: r("legendary"), category: "milestones", icon: "Sparkles", progress: p("reputation", 30000) },
+  { name: "Cannabis Deity", description: "A true deity of the grow room — reached 50,000 reputation.", requirement: "Earn 50,000 reputation.", rarity: r("legendary"), category: "milestones", icon: "Crown", progress: p("reputation", 50000) },
   { name: "Top Contributor", description: "Reached 10,000 reputation points.", requirement: "Earn 10,000 reputation.", rarity: r("epic"), category: "milestones", icon: "TrendingUp", progress: p("reputation", 10000) },
   { name: "Elite Harvest", description: "Trimmed a serious haul — reached 25,000 reputation.", requirement: "Earn 25,000 reputation.", rarity: r("epic"), category: "milestones", icon: "TrendingUp", progress: p("reputation", 25000) },
   { name: "Legendary Harvest", description: "Your harvests are the stuff of legends — reached 50,000 reputation.", requirement: "Earn 50,000 reputation.", rarity: r("legendary"), category: "milestones", icon: "TrendingUp", progress: p("reputation", 50000) },
@@ -165,6 +169,11 @@ export const BADGE_REGISTRY: BadgeDefinition[] = [
   { name: "Weekly Winner", description: "Won Budshot of the Week.", requirement: "Win a weekly photo contest.", rarity: r("legendary"), category: "honours", icon: "Trophy" },
   { name: "Diary of the Month", description: "Won the monthly grow diary contest.", requirement: "Win Diary of the Month.", rarity: r("legendary"), category: "honours", icon: "Trophy" },
   { name: "Contest Finalist", description: "Reached the final round of a community contest.", requirement: "Finish top 5 in a contest.", rarity: r("rare"), category: "honours", icon: "Medal" },
+  // Granted once to every account that existed before Reputation &
+  // Rewards 3.0 — recognition for helping build the garden early.
+  // Awarded by the 3.0 migration sweep, not a stat rule.
+  { name: "Legacy Member", description: "Helped build TerpTalk before Reputation & Rewards 3.0.", requirement: "Be a member since before the 3.0 rewards update.", rarity: r("rare"), category: "honours", icon: "History" },
+  { name: "Grower of the Week", description: "Recognized as the week's most helpful grower.", requirement: "Win the weekly community recognition.", rarity: r("epic"), category: "honours", icon: "Trophy" },
 
   // ─── Hidden discovery badges — "???" until earned, no progress bar ───
   // Granted by dedicated checks in lib/reputation.ts, never shown early.

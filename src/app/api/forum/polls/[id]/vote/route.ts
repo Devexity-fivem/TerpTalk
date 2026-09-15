@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma"
 import { unauthorized, forbidden, isBanned, isModerator, isStaff } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
 import { getTierPerks } from "@/lib/reputation"
+import { REP_TIERS } from "@/lib/reputation-config"
 import { checkMaintenance } from "@/lib/maintenance"
 
 export async function POST(
@@ -23,12 +24,12 @@ export async function POST(
     const maintenance = await checkMaintenance()
     if (maintenance) return maintenance
 
-    // Poll voting is a Rooted-tier perk (750+ rep) — keeps poll brigading
+    // Poll voting is a Rooted-tier perk — keeps poll brigading
     // expensive. Staff always can.
     if (!isStaff(session.user.role)) {
       const perks = await getTierPerks(session.user.id)
       if (!perks.pollVoting) {
-        return forbidden("Poll voting unlocks at 750 reputation (Rooted)")
+        return forbidden(`Poll voting unlocks at ${REP_TIERS[2].threshold} reputation (Rooted)`)
       }
     }
 

@@ -112,6 +112,12 @@ export const EARLY_SUPPORTER_LIMIT = 250
 //     (keyed quest:<day>:<slug>:<userId>; perfect-day bonus quest-day:<day>:<uid>)
 //   "BADGE_BONUS"                    — one-time rep bonus on badge grant
 //     (keyed badgebonus:<badge name>:<userId>; amount = BADGE_BONUS[rarity])
+//   "GROW_MILESTONE"                 — derived grow-journey stage reached
+//     (keyed growstage:<diaryId>:<stage>:<userId>; amount per stage)
+//   "JOURNEY_COMPLETE"               — one-time guided-journey bundle
+//     (keyed journey:<slug>:<userId>)
+//   "WEEKLY_AWARD"                   — weekly recognition board winner
+//     (keyed weekly:<board>:<week>:<userId>)
 // Accounting model: EVERY row's amount counts toward the balance —
 // reversedAt/reversalOfId are audit status, not sum filters. Reversals and
 // reinstates record the actually-applied delta (clamped to the balance at
@@ -127,6 +133,9 @@ export const REP_EVENT_TYPES = {
   MILESTONE: "MILESTONE",
   QUEST_DAILY: "QUEST_DAILY",
   BADGE_BONUS: "BADGE_BONUS",
+  GROW_MILESTONE: "GROW_MILESTONE",
+  JOURNEY_COMPLETE: "JOURNEY_COMPLETE",
+  WEEKLY_AWARD: "WEEKLY_AWARD",
 } as const
 
 // Which event types are shown on a member's public reputation history.
@@ -150,6 +159,9 @@ export const PUBLIC_REP_TYPES = new Set<string>([
   "CHALLENGE_WEEKLY",
   "QUEST_DAILY",
   "BADGE_BONUS",
+  "GROW_MILESTONE",
+  "JOURNEY_COMPLETE",
+  "WEEKLY_AWARD",
   "REVERSAL",
   "REINSTATE",
   "LEGACY_MIGRATION",
@@ -176,6 +188,9 @@ export function publicRepLabel(type: string): string {
     case "CHALLENGE_WEEKLY": return "Weekly challenge completed"
     case "QUEST_DAILY": return "Daily quest completed"
     case "BADGE_BONUS": return "Badge bonus"
+    case "GROW_MILESTONE": return "Reached a grow milestone"
+    case "JOURNEY_COMPLETE": return "Completed the Getting Rooted journey"
+    case "WEEKLY_AWARD": return "Weekly recognition"
     case "ONBOARDING_COMPLETE": return "Finished onboarding"
     case "DAILY_LOGIN": return "Daily check-in"
     case "REVERSAL": return "Reputation adjustment"
@@ -226,14 +241,14 @@ const PERKS = {
 // lib/cosmetics.ts — every advertised reward must exist there.
 export const REP_TIERS: ReputationTier[] = [
   { threshold: 0, name: "Seed", color: "text-stone-500", bg: "bg-stone-500/10", icon: "🌰", benefit: "Every grow starts somewhere — post, grow, and share to earn rep.", perks: PERKS.BASE },
-  { threshold: 250, name: "Sprout", color: "text-amber-600", bg: "bg-amber-600/10", icon: "🌱", benefit: "Unlocks the Sprout Ring avatar frame — and your links no longer need the new-member wait.", perks: PERKS.SPROUT },
-  { threshold: 750, name: "Rooted", color: "text-green-500", bg: "bg-green-500/10", icon: "🌿", benefit: "Unlocks the Rooted Band frame, custom profile titles, and community poll voting.", perks: PERKS.ROOTED },
-  { threshold: 1500, name: "Grower", color: "text-emerald-500", bg: "bg-emerald-500/10", icon: "🪴", benefit: "Unlocks the Greenhouse Glow frame, the Evergreen profile theme, Verified Member status, and a 1.5× rep bonus.", perks: PERKS.GROWER },
-  { threshold: 3500, name: "Cultivator", color: "text-cyan-500", bg: "bg-cyan-500/10", icon: "✂️", benefit: "Unlocks the LED Bloom frame, the Golden Hour theme, and more room to post.", perks: PERKS.CULTIVATOR },
+  { threshold: 150, name: "Sprout", color: "text-amber-600", bg: "bg-amber-600/10", icon: "🌱", benefit: "Your links work instantly — no more new-member wait — and you unlock the Sprout Ring avatar frame.", perks: PERKS.SPROUT },
+  { threshold: 500, name: "Rooted", color: "text-green-500", bg: "bg-green-500/10", icon: "🌿", benefit: "Unlocks community poll voting, the Rooted Band frame, and custom profile titles.", perks: PERKS.ROOTED },
+  { threshold: 1500, name: "Grower", color: "text-emerald-500", bg: "bg-emerald-500/10", icon: "🪴", benefit: "Earns Verified Member status and a permanent 1.5× reputation bonus, plus the Greenhouse Glow frame and Evergreen theme.", perks: PERKS.GROWER },
+  { threshold: 3500, name: "Cultivator", color: "text-cyan-500", bg: "bg-cyan-500/10", icon: "✂️", benefit: "Unlocks The Grow Room — the members-only space for experienced growers — plus the LED Bloom frame and Golden Hour theme.", perks: PERKS.CULTIVATOR },
   { threshold: 7000, name: "Master Grower", color: "text-purple-500", bg: "bg-purple-500/10", icon: "🏆", benefit: "Unlocks the Pistil Fire frame, the Midnight Garden theme, slowmode immunity, and 6 images per post.", perks: PERKS.MASTER },
-  { threshold: 15000, name: "Head Grower", color: "text-rose-400", bg: "bg-rose-500/10", icon: "🌟", benefit: "Unlocks the Amber Jar frame, the Deep Water theme, double limits, and 7 thread tags.", perks: PERKS.HEAD },
-  { threshold: 40000, name: "Hash Maker", color: "text-violet-300", bg: "bg-violet-500/10", icon: "🔮", benefit: "Unlocks the Rosin Ring frame, the Amber Cure theme, and legendary titles — pressed to perfection.", perks: PERKS.HASH },
-  { threshold: 100000, name: "Cannabis Deity", color: "text-sky-300", bg: "bg-sky-500/10", icon: "🌌", benefit: "Unlocks the Northern Lights frame and the Deity Glow theme — the top of the ladder.", perks: PERKS.DEITY },
+  { threshold: 15000, name: "Head Grower", color: "text-rose-400", bg: "bg-rose-500/10", icon: "🌟", benefit: "Unlocks the Amber Jar frame, the Deep Water theme, double rate limits, and 7 thread tags — the garden's head table.", perks: PERKS.HEAD },
+  { threshold: 30000, name: "Hash Maker", color: "text-violet-300", bg: "bg-violet-500/10", icon: "🔮", benefit: "Unlocks the Rosin Ring frame, the Amber Cure theme, and legendary titles — pressed to perfection.", perks: PERKS.HASH },
+  { threshold: 50000, name: "Cannabis Deity", color: "text-sky-300", bg: "bg-sky-500/10", icon: "🌌", benefit: "Unlocks the Northern Lights frame and the Deity Glow theme — the top of the ladder.", perks: PERKS.DEITY },
 ]
 
 export function getReputationTier(reputation: number): ReputationTier {
@@ -281,13 +296,16 @@ export const VERIFIED_MIN_AGE_DAYS = 30
 // Checkpoints within each tier's gap (tier threshold excluded — it's
 // stage 1 of that tier). Round numbers, weighted toward the long deserts.
 const TIER_STAGE_CHECKPOINTS: Record<string, number[]> = {
-  Sprout: [500],
-  Rooted: [1000, 1250],
+  // Every checkpoint must sit strictly inside its tier's gap — above the
+  // tier's own threshold and below the NEXT tier's threshold — or
+  // getRepStage()/getStageProgress() produce invalid ranges.
+  Sprout: [300],
+  Rooted: [750, 1000, 1250],
   Grower: [2000, 2500, 3000],
   Cultivator: [4000, 5000, 6000],
   "Master Grower": [8000, 10000, 12000, 14000],
-  "Head Grower": [20000, 25000, 30000, 35000],
-  "Hash Maker": [50000, 60000, 70000, 80000, 90000],
+  "Head Grower": [20000, 25000],
+  "Hash Maker": [35000, 40000, 45000],
 }
 
 // Grow-cycle names clipped to the number of stages in a tier gap.

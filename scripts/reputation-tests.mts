@@ -47,6 +47,8 @@ const TEST_USERNAME = `__test_rep_${Date.now()}`
 //   Moderator / Staff  — role-change grants in /api/admin/users
 //   Trusted Member     — whitelisted admin grant (STAFF_AWARDED_BADGES)
 //   Hidden discovery badges — dedicated checks in reputation.ts / harvest route
+//   Legacy Member       — one-time 3.0 migration sweep script
+//   Grower of the Week  — weekly recognition resolver (lib/weekly-awards.ts)
 const NON_RULE_BADGES = new Set([
   "Settled In",
   "Weekly Winner",
@@ -56,6 +58,8 @@ const NON_RULE_BADGES = new Set([
   "Verified YouTuber",
   "Moderator",
   "Staff",
+  "Legacy Member",
+  "Grower of the Week",
   "Comeback",
   "Deep Roots",
   "Photoperiod",
@@ -80,14 +84,23 @@ async function ledgerSum(userId: string) {
 async function run() {
   console.log("Starting Reputation 2.0 tests...")
 
-  // ── Pure: tier math ───────────────────────────────────────────────
-  assert.equal(getReputationTier(0).name, "Seed")
-  assert.equal(getReputationTier(249).name, "Seed")
-  assert.equal(getReputationTier(250).name, "Sprout")
-  assert.equal(getReputationTier(749).name, "Sprout")
-  assert.equal(getReputationTier(750).name, "Rooted")
-  assert.equal(getReputationTier(100000).name, "Cannabis Deity")
-  assert.equal(getReputationTier(999999999).name, "Cannabis Deity")
+  // ── Pure: tier math (3.0 ladder) ─────────────────────────────────
+  // Full boundary sweep — every threshold edge lands in the right tier.
+  const boundaryExpectations: [number, string][] = [
+    [0, "Seed"], [149, "Seed"],
+    [150, "Sprout"], [499, "Sprout"],
+    [500, "Rooted"], [1499, "Rooted"],
+    [1500, "Grower"], [3499, "Grower"],
+    [3500, "Cultivator"], [6999, "Cultivator"],
+    [7000, "Master Grower"], [14999, "Master Grower"],
+    [15000, "Head Grower"], [29999, "Head Grower"],
+    [30000, "Hash Maker"], [49999, "Hash Maker"],
+    [50000, "Cannabis Deity"], [100000, "Cannabis Deity"],
+    [999999999, "Cannabis Deity"],
+  ]
+  for (const [rep, expected] of boundaryExpectations) {
+    assert.equal(getReputationTier(rep).name, expected, `rep ${rep} → ${expected}`)
+  }
 
   // Thresholds strictly increasing, every tier has a benefit + perks object.
   for (let i = 0; i < REP_TIERS.length; i++) {
@@ -107,11 +120,12 @@ async function run() {
   }
 
   assert.equal(getNextTier(0)?.name, "Sprout")
-  assert.equal(getNextTier(100000), null)
-  const prog = getTierProgress(375) // halfway Rooted (750) - Sprout (250)
-  assert.equal(prog.percent, 25)
+  assert.equal(getNextTier(50000), null)
+  const prog = getTierProgress(325) // halfway Sprout (150) → Rooted (500)
+  assert.equal(prog.percent, 50)
   assert.equal(getTierProgress(0).percent, 0)
-  assert.equal(getTierProgress(100000).percent, 100)
+  assert.equal(getTierProgress(50000).percent, 100)
+  assert.equal(getTierProgress(999999999).percent, 100)
 
   // ── Pure: grow-stage ladder ───────────────────────────────────────
   // Ladder is sorted, starts at 0, and contains every tier threshold.
@@ -124,14 +138,14 @@ async function run() {
   // Stage boundaries: rep just below a rung stays in the lower stage.
   assert.equal(getRepStage(0).level, 1)
   assert.equal(getRepStage(0).tier.name, "Seed")
-  assert.equal(getRepStage(249).level, 1)
-  assert.equal(getRepStage(250).level, 2) // Sprout threshold = rung 2
-  assert.equal(getRepStage(250).tier.name, "Sprout")
+  assert.equal(getRepStage(149).level, 1)
+  assert.equal(getRepStage(150).level, 2) // Sprout threshold = rung 2
+  assert.equal(getRepStage(150).tier.name, "Sprout")
   assert.equal(getRepStage(999).stageName, getRepStage(750).stageName, "no stage within 750-999")
   assert.equal(getRepStage(1000).stageName, "Flower", "1000 = Rooted Flower stage")
   // Top of the ladder: percent 100, no remaining.
-  assert.equal(getStageProgress(100000).percent, 100)
-  assert.equal(getStageProgress(100000).remaining, 0)
+  assert.equal(getStageProgress(50000).percent, 100)
+  assert.equal(getStageProgress(50000).remaining, 0)
   // Mid-stage progress.
   const sp = getStageProgress(1000) // Rooted stage at 1000, next rung 1250
   assert.equal(sp.next, 250)
@@ -140,37 +154,75 @@ async function run() {
   assert.equal(getRepLevel(0), 1)
   assert.equal(getRepLevel(REP_LADDER[REP_LADDER.length - 1]), REP_LADDER.length)
 
+  // Checkpoint integrity (3.0 re-map): every rung strictly inside a valid
+  // stage range — guards against checkpoints exceeding the next tier's
+  // threshold (the old Hash Maker map ran to 90k past the 50k summit).
+  const lastRung = REP_LADDER[REP_LADDER.length - 1]
+  for (const rung of REP_LADDER) {
+    const stage = getRepStage(rung)
+    assert.equal(stage.stageStart, rung, `rung ${rung} starts a stage`)
+    assert.ok(stage.stageEnd >= stage.stageStart, `rung ${rung} end >= start`)
+    const atRung = getStageProgress(rung)
+    if (rung === lastRung) {
+      assert.equal(atRung.percent, 100, "top rung complete")
+    } else {
+      assert.equal(atRung.percent, 0, `rung ${rung} starts at 0%`)
+      assert.ok(atRung.next > 0, `rung ${rung} has a positive range`)
+    }
+    const below = getStageProgress(rung - 1)
+    assert.ok(below.percent >= 0 && below.percent <= 100, `rep ${rung - 1} percent in [0,100]`)
+    assert.ok(below.remaining >= 0, `rep ${rung - 1} remaining >= 0`)
+  }
+  // Every rung's stageEnd is exactly the next rung (or itself at the
+  // summit) — a checkpoint above the next tier threshold would produce a
+  // stageEnd below stageStart's stage or skip the tier boundary.
+  for (let i = 0; i < REP_LADDER.length; i++) {
+    const stage = getRepStage(REP_LADDER[i])
+    const expectedEnd = REP_LADDER[i + 1] ?? REP_LADDER[i]
+    assert.equal(stage.stageEnd, expectedEnd, `rung ${REP_LADDER[i]} ends at ${expectedEnd}`)
+  }
+  // And no rep below a tier threshold may report that tier as current.
+  for (const t of REP_TIERS) {
+    if (t.threshold === 0) continue
+    assert.notEqual(getRepStage(t.threshold - 1).tier.name, t.name, `rep ${t.threshold - 1} not ${t.name}`)
+  }
+
   // ── Pure: rung crossings (2.2 celebration detection) ─────────────
   assert.deepEqual(crossedRungs(0, 0), [])
   assert.deepEqual(crossedRungs(500, 500), [], "no gain = no crossing")
   assert.deepEqual(crossedRungs(600, 400), [], "demotion never crosses upward")
-  // 249 -> 250 crosses exactly the Sprout tier rung.
+  // 149 -> 150 crosses exactly the Sprout tier rung.
   assert.deepEqual(
-    crossedRungs(249, 250).map((c) => [c.rung, c.kind, c.level]),
-    [[250, "tier", 2]]
+    crossedRungs(149, 150).map((c) => [c.rung, c.kind, c.level]),
+    [[150, "tier", 2]]
   )
   // A single award can cross several rungs; each is classified.
   assert.deepEqual(
-    crossedRungs(240, 760).map((c) => [c.rung, c.kind]),
-    [[250, "tier"], [500, "stage"], [750, "tier"]]
+    crossedRungs(140, 760).map((c) => [c.rung, c.kind]),
+    [[150, "tier"], [300, "stage"], [500, "tier"], [750, "stage"]]
   )
   // Crossing a stage rung lands on the matching Grow Level.
-  const lvl500 = crossedRungs(499, 500)[0]
-  assert.equal(lvl500.kind, "stage")
-  assert.equal(lvl500.level, getRepLevel(500))
+  const lvl300 = crossedRungs(299, 300)[0]
+  assert.equal(lvl300.kind, "stage")
+  assert.equal(lvl300.level, getRepLevel(300))
+  // 30k→50k progression: crossing the Deity threshold is a tier rung.
+  const lvlDeity = crossedRungs(49999, 50000)[0]
+  assert.equal(lvlDeity.kind, "tier")
+  assert.equal(getRepStage(40000).tier.name, "Hash Maker")
+  assert.equal(getRepStage(45000).tier.name, "Hash Maker")
   // Rung 0 (the start) can never be "crossed" — rep is never negative.
   assert.ok(crossedRungs(0, 1).every((c) => c.rung > 0))
 
   // ── Pure: unlock diff helpers ────────────────────────────────────
-  assert.equal(nextLockedCosmetic(0)?.unlockedAt, 250)
-  assert.equal(nextLockedCosmetic(100000), null, "nothing locked past max rep")
+  assert.equal(nextLockedCosmetic(0)?.unlockedAt, 150)
+  assert.equal(nextLockedCosmetic(50000), null, "nothing locked past max rep")
   assert.ok(
-    cosmeticsUnlockedBetween(249, 250).length > 0,
-    "crossing 250 unlocks the first cosmetics"
+    cosmeticsUnlockedBetween(149, 150).length > 0,
+    "crossing 150 unlocks the first cosmetics"
   )
   assert.deepEqual(cosmeticsUnlockedBetween(500, 600), [], "no cosmetics mid-gap")
-  for (const c of cosmeticsUnlockedBetween(0, 100000)) {
-    assert.ok(c.unlockedAt > 0 && c.unlockedAt <= 100000)
+  for (const c of cosmeticsUnlockedBetween(0, 50000)) {
+    assert.ok(c.unlockedAt > 0 && c.unlockedAt <= 50000)
     assert.ok(["frame", "title", "theme"].includes(c.kind))
   }
 
@@ -194,7 +246,10 @@ async function run() {
         || t === REP_EVENT_TYPES.LEGACY_MIGRATION
         || t === REP_EVENT_TYPES.CHALLENGE_WEEKLY
         || t === REP_EVENT_TYPES.QUEST_DAILY
-        || t === REP_EVENT_TYPES.BADGE_BONUS,
+        || t === REP_EVENT_TYPES.BADGE_BONUS
+        || t === REP_EVENT_TYPES.GROW_MILESTONE
+        || t === REP_EVENT_TYPES.JOURNEY_COMPLETE
+        || t === REP_EVENT_TYPES.WEEKLY_AWARD,
       `public type ${t} is a known award or REVERSAL`
     )
     assert.notEqual(publicRepLabel(t), "Reputation change", `public type ${t} labelled`)
@@ -243,10 +298,11 @@ async function run() {
   }
   // canEquip: locked above tier, equippable at/after, null always clears.
   assert.equal(canEquip(0, "frames", "sprout-ring"), false)
-  assert.equal(canEquip(250, "frames", "sprout-ring"), true)
+  assert.equal(canEquip(150, "frames", "sprout-ring"), true)
+  assert.equal(canEquip(149, "frames", "sprout-ring"), false)
   assert.equal(canEquip(0, "frames", null), true)
-  assert.equal(canEquip(100000, "frames", "northern-lights"), true)
-  assert.equal(canEquip(99999, "frames", "northern-lights"), false)
+  assert.equal(canEquip(50000, "frames", "northern-lights"), true)
+  assert.equal(canEquip(49999, "frames", "northern-lights"), false)
   assert.ok(unlockedCosmetics(0).frames.length === 0)
   assert.ok(unlockedCosmetics(100000).frames.length === AVATAR_FRAMES.length)
 
@@ -404,16 +460,16 @@ async function run() {
 
     // ── DB: milestone markers (2.2 once-ever celebrations) ─────────
     // awardReputation runs the full side-effect funnel (inline outside a
-    // request scope). Crossing 250 claims the tier milestone once.
+    // request scope). Crossing 150 claims the Sprout tier milestone once.
     const repBeforeMilestone = await repOf(uid)
-    const bump = 250 - repBeforeMilestone
+    const bump = 150 - repBeforeMilestone
     await awardReputation(uid, REP_EVENT_TYPES.STAFF_ADJUSTMENT, bump, "test milestone bump", { force: true })
-    // Crossing 250 also fires milestone badges (Sprout etc.) whose rep
+    // Crossing 150 also fires milestone badges (Sprout etc.) whose rep
     // bonuses land in the same balance — assert the floor, not the total.
-    const repAt250 = await repOf(uid)
-    assert.ok(repAt250 >= 250, `expected >=250 after bump, got ${repAt250}`)
+    const repAt150 = await repOf(uid)
+    assert.ok(repAt150 >= 150, `expected >=150 after bump, got ${repAt150}`)
     const tierMarker = await prisma.reputationEvent.findUnique({
-      where: { key: `milestone:tier:${uid}:250` },
+      where: { key: `milestone:tier:${uid}:150` },
     })
     assert.ok(tierMarker, "tier milestone marker exists")
     assert.equal(tierMarker!.amount, 0, "marker is zero-amount")
@@ -426,12 +482,12 @@ async function run() {
       "tier notification carries celebration metadata"
     )
 
-    // Crossing 500 claims the stage milestone + a stage notification.
-    await awardReputation(uid, REP_EVENT_TYPES.STAFF_ADJUSTMENT, 500 - repAt250, "test stage bump", { force: true })
-    const repAt500 = await repOf(uid)
-    assert.ok(repAt500 >= 500, `expected >=500 after bump, got ${repAt500}`)
+    // Crossing 300 claims the Sprout stage milestone + a stage notification.
+    await awardReputation(uid, REP_EVENT_TYPES.STAFF_ADJUSTMENT, 300 - repAt150, "test stage bump", { force: true })
+    const repAt300 = await repOf(uid)
+    assert.ok(repAt300 >= 300, `expected >=300 after bump, got ${repAt300}`)
     const stageMarker = await prisma.reputationEvent.findUnique({
-      where: { key: `milestone:stage:${uid}:500` },
+      where: { key: `milestone:stage:${uid}:300` },
     })
     assert.ok(stageMarker, "stage milestone marker exists")
     const stageNotifs = await prisma.notification.findMany({
@@ -451,14 +507,14 @@ async function run() {
     })
     await reverseReputationEvent(bump2!.id, "test reverse")
     const repAfterReverse = await repOf(uid)
-    assert.ok(repAfterReverse < 500, `reversal should drop below 500, got ${repAfterReverse}`)
-    const reEarn = 500 - repAfterReverse
+    assert.ok(repAfterReverse < 300, `reversal should drop below 300, got ${repAfterReverse}`)
+    const reEarn = 300 - repAfterReverse
     await awardReputation(uid, REP_EVENT_TYPES.STAFF_ADJUSTMENT, reEarn, "re-earn", { force: true, key: "test:milestone:re-earn" })
-    assert.ok((await repOf(uid)) >= 500, "re-earn lands back at/above the rung")
-    const markers500 = await prisma.reputationEvent.count({
-      where: { key: `milestone:stage:${uid}:500` },
+    assert.ok((await repOf(uid)) >= 300, "re-earn lands back at/above the rung")
+    const markers300 = await prisma.reputationEvent.count({
+      where: { key: `milestone:stage:${uid}:300` },
     })
-    assert.equal(markers500, 1, "marker claimed exactly once")
+    assert.equal(markers300, 1, "marker claimed exactly once")
     const stageNotifs2 = await prisma.notification.findMany({
       where: { userId: uid, type: "REPUTATION" },
     })
