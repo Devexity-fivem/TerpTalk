@@ -5,6 +5,7 @@ import Link from "next/link"
 import ShareButtons from "@/components/share-buttons"
 import { buildMetadata, snippet } from "@/lib/seo"
 import { Breadcrumbs } from "@/components/breadcrumbs"
+import TierChip from "@/components/tier-chip"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { isModerator } from "@/lib/security"
@@ -29,7 +30,7 @@ export default async function GuidePage({ params }: { params: Promise<{ slug: st
   const [guide, session] = await Promise.all([
     prisma.guide.findUnique({
       where: { slug },
-      include: { author: { select: { name: true, role: true, profile: { select: { username: true } } } } },
+      include: { author: { select: { name: true, role: true, profile: { select: { username: true, reputation: true, publicMilestoneOptOut: true } } } } },
     }),
     getServerSession(authOptions),
   ])
@@ -58,7 +59,7 @@ export default async function GuidePage({ params }: { params: Promise<{ slug: st
             <BookOpen className="w-4 h-4 text-primary" />
             <span className="uppercase tracking-wide">{guide.topic}</span>
             <span>·</span>
-            <span>by {guide.author.profile?.username || guide.author.name}</span>
+            <span className="inline-flex items-center gap-1">by {guide.author.profile?.username || guide.author.name} <TierChip reputation={guide.author.profile?.reputation ?? 0} publicMilestoneOptOut={guide.author.profile?.publicMilestoneOptOut} /></span>
             <span>·</span>
             <span>{new Date(guide.createdAt).toLocaleDateString()}</span>
             {canEdit && (

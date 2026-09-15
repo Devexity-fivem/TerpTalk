@@ -221,6 +221,16 @@ body {
   box-shadow: 0 0 0 1px var(--primary);
 }
 
+/* Cannabis Deity tier chip — a soft aurora shimmer. Pure CSS; the global
+   prefers-reduced-motion block below neutralises it for users who ask. */
+@keyframes tier-chip-deity-shimmer {
+  0%, 100% { box-shadow: 0 0 6px -1px rgba(125, 211, 252, 0.35); }
+  50% { box-shadow: 0 0 12px -1px rgba(196, 181, 253, 0.55); }
+}
+.tier-chip-deity {
+  animation: tier-chip-deity-shimmer 3s ease-in-out infinite;
+}
+
 /* Honour users who ask for less motion */
 @media (prefers-reduced-motion: reduce) {
   *,

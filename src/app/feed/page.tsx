@@ -5,6 +5,7 @@ import { authOptions } from "@/lib/auth"
 import { Leaf, MessageSquare, TrendingUp, Calendar, Users, UserPlus } from "lucide-react"
 import Link from "next/link"
 import RoleBadge from "@/components/role-badge"
+import TierChip from "@/components/tier-chip"
 
 export const dynamic = "force-dynamic"
 
@@ -353,6 +354,7 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
                             <span className="font-semibold text-sm">
                               {update.author.profile?.username || update.author.name}
                               <RoleBadge role={update.author.role} />
+                              <TierChip reputation={update.author.profile?.reputation ?? 0} publicMilestoneOptOut={update.author.profile?.publicMilestoneOptOut} />
                             </span>
                             <span className="text-xs text-muted-foreground">
                               updated their diary
@@ -401,6 +403,7 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
                             <span className="font-semibold text-sm">
                               {thread.author.profile?.username || thread.author.name}
                               <RoleBadge role={thread.author.role} />
+                              <TierChip reputation={thread.author.profile?.reputation ?? 0} publicMilestoneOptOut={thread.author.profile?.publicMilestoneOptOut} />
                             </span>
                             <span className="text-xs text-muted-foreground">
                               started a discussion
@@ -508,6 +511,7 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
                             <Users className="w-3 h-3" />
                             {diary.author.profile?.username || diary.author.name}
                               <RoleBadge role={diary.author.role} />
+                              <TierChip reputation={diary.author.profile?.reputation ?? 0} publicMilestoneOptOut={diary.author.profile?.publicMilestoneOptOut} />
                           </span>
                           <span>•</span>
                           <span>{diary._count.updates} updates</span>

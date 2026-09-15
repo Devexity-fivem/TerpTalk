@@ -9,12 +9,14 @@ import { currentWeekKey } from "@/lib/week"
 import { getBooleanSetting, SITE_SETTINGS } from "@/lib/settings"
 import { checkMaintenance } from "@/lib/maintenance"
 
-function userDto(u: { id?: string; name?: string | null; image?: string | null; profile?: { username?: string | null } | null; role?: string | null }) {
+function userDto(u: { id?: string; name?: string | null; image?: string | null; profile?: { username?: string | null; reputation?: number | null; publicMilestoneOptOut?: boolean | null } | null; role?: string | null }) {
   return {
     name: u.name,
     username: u.profile?.username ?? null,
     image: u.image ?? null,
     role: u.role ?? null,
+    reputation: u.profile?.reputation ?? 0,
+    publicMilestoneOptOut: u.profile?.publicMilestoneOptOut ?? false,
   }
 }
 

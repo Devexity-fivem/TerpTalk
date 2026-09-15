@@ -16,12 +16,14 @@ const MIN_MONTH_UPDATES = 4 // documentation-frequency gate for eligibility
 const VOTER_MIN_AGE_DAYS = 7
 const VOTER_MIN_REPUTATION = 10
 
-function userDto(u: { name?: string | null; image?: string | null; profile?: { username?: string | null } | null; role?: string | null }) {
+function userDto(u: { name?: string | null; image?: string | null; profile?: { username?: string | null; reputation?: number | null; publicMilestoneOptOut?: boolean | null } | null; role?: string | null }) {
   return {
     name: u.name,
     username: u.profile?.username ?? null,
     image: u.image ?? null,
     role: u.role ?? null,
+    reputation: u.profile?.reputation ?? 0,
+    publicMilestoneOptOut: u.profile?.publicMilestoneOptOut ?? false,
   }
 }
 

@@ -4,6 +4,7 @@ import { unstable_cache } from "next/cache"
 import { Settings, Plus, Users } from "lucide-react"
 import Link from "next/link"
 import RoleBadge from "@/components/role-badge"
+import TierChip from "@/components/tier-chip"
 import EmptyState from "@/components/ui/empty-state"
 
 export const revalidate = 300
@@ -90,6 +91,7 @@ export default async function SetupsPage() {
                       <Users className="w-3 h-3" />
                       {setup.author.profile?.username || setup.author.name}
                       <RoleBadge role={setup.author.role} />
+                        <TierChip reputation={setup.author.profile?.reputation ?? 0} publicMilestoneOptOut={setup.author.profile?.publicMilestoneOptOut} />
                     </span>
                     <span>{setup._count.comments} comments</span>
                   </div>

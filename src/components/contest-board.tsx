@@ -5,6 +5,7 @@ import { useSession } from "next-auth/react"
 import Link from "next/link"
 import { Trophy, Camera, Loader2, Heart } from "lucide-react"
 import RoleBadge from "@/components/role-badge"
+import TierChip from "@/components/tier-chip"
 import EmptyState from "@/components/ui/empty-state"
 
 interface Entry {
@@ -14,7 +15,7 @@ interface Entry {
   votes: number
   votedByMe: boolean
   mine: boolean
-  user: { name: string | null; role: string; profile: { username: string | null } | null }
+  user: { name: string | null; username: string | null; role: string; reputation: number; publicMilestoneOptOut: boolean }
 }
 
 export default function ContestBoard() {
@@ -75,7 +76,7 @@ export default function ContestBoard() {
     finally { setBusy(false); if (fileRef.current) fileRef.current.value = "" }
   }
 
-  const nameOf = (u: Entry["user"]) => u.profile?.username || u.name || "Member"
+  const nameOf = (u: Entry["user"]) => u.username || u.name || "Member"
   const alreadyEntered = session && entries.some((e) => e.mine)
 
   if (loading) return <div className="flex justify-center py-12"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>
@@ -139,7 +140,7 @@ export default function ContestBoard() {
                     href={`/u/${nameOf(e.user)}`}
                     className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1"
                   >
-                    {nameOf(e.user)} <RoleBadge role={e.user.role} />
+                    {nameOf(e.user)} <RoleBadge role={e.user.role} /> <TierChip reputation={e.user.reputation ?? 0} publicMilestoneOptOut={e.user.publicMilestoneOptOut} />
                   </Link>
                   <button
                     onClick={() => vote(e.id)}

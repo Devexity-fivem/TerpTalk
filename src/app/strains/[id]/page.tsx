@@ -8,6 +8,7 @@ import ShareButtons from "@/components/share-buttons"
 import { buildMetadata, snippet } from "@/lib/seo"
 import { Breadcrumbs } from "@/components/breadcrumbs"
 import { publicUserSelect, activeAuthor } from "@/lib/security"
+import TierChip from "@/components/tier-chip"
 import { getStrainGrowStats, escapeLike, strainFieldMatches } from "@/lib/strain-stats"
 import Link from "next/link"
 
@@ -37,12 +38,12 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
     prisma.strain.findUnique({
       where: { id },
       include: {
-        createdBy: { select: { profile: { select: { username: true } }, name: true } },
+        createdBy: { select: { profile: { select: { username: true, reputation: true, publicMilestoneOptOut: true } }, name: true } },
         photos: {
           orderBy: { createdAt: "desc" },
           take: 100,
           include: {
-            user: { select: { profile: { select: { username: true } }, name: true } },
+            user: { select: { profile: { select: { username: true, reputation: true, publicMilestoneOptOut: true } }, name: true } },
           },
         },
       },
@@ -131,9 +132,10 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
                 {strain.type && <span className="px-2 py-0.5 bg-primary/10 text-primary rounded">{strain.type}</span>}
                 {strain.breeder && <span>Breeder: {strain.breeder}</span>}
                 {strain.createdBy && (
-                  <span>
+                  <span className="inline-flex items-center gap-1.5">
                     Added by{" "}
                     {strain.createdBy.profile?.username || strain.createdBy.name}
+                    <TierChip reputation={strain.createdBy.profile?.reputation ?? 0} publicMilestoneOptOut={strain.createdBy.profile?.publicMilestoneOptOut} />
                   </span>
                 )}
               </div>
@@ -268,7 +270,7 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
                   </div>
                   <div className="min-w-0">
                     <p className="font-medium text-sm truncate">{d.title}</p>
-                    <p className="text-xs text-muted-foreground truncate">by {d.author.profile?.username || d.author.name}</p>
+                    <p className="text-xs text-muted-foreground truncate flex items-center gap-1">by {d.author.profile?.username || d.author.name} <TierChip reputation={d.author.profile?.reputation ?? 0} publicMilestoneOptOut={d.author.profile?.publicMilestoneOptOut} /></p>
                   </div>
                 </Link>
               ))}
@@ -302,7 +304,7 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
                   </div>
                   <div className="min-w-0">
                     <p className="font-medium text-sm truncate">{s.title}</p>
-                    <p className="text-xs text-muted-foreground truncate">by {s.author.profile?.username || s.author.name}</p>
+                    <p className="text-xs text-muted-foreground truncate flex items-center gap-1">by {s.author.profile?.username || s.author.name} <TierChip reputation={s.author.profile?.reputation ?? 0} publicMilestoneOptOut={s.author.profile?.publicMilestoneOptOut} /></p>
                   </div>
                 </Link>
               ))}

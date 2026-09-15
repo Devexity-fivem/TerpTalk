@@ -9,6 +9,7 @@ import { User, Calendar, Award, MessageSquare, Leaf, Loader2, Download, Trash2, 
 import { signOut } from "next-auth/react"
 import Link from "next/link"
 import RoleBadge from "@/components/role-badge"
+import TierChip from "@/components/tier-chip"
 import AchievementBadge from "@/components/achievement-badge"
 import ReputationRoadmap from "@/components/reputation-roadmap"
 import ReputationEarn from "@/components/reputation-earn"
@@ -299,7 +300,7 @@ export default function ProfilePage() {
               <div className="flex-1">
                 <div className="flex items-start justify-between gap-4 flex-wrap">
                   <div>
-                    <h1 className="text-2xl font-bold mb-1 flex items-center gap-2">{profileData.profile?.username || profileData.user.name} <RoleBadge role={profileData.user.role} /></h1>
+                    <h1 className="text-2xl font-bold mb-1 flex items-center gap-2">{profileData.profile?.username || profileData.user.name} <RoleBadge role={profileData.user.role} /> <TierChip reputation={profileData.profile?.reputation ?? 0} size="md" /></h1>
                     {getProfileTitle(profileData.profile?.profileTitle) && (
                       <p className="text-xs font-medium uppercase tracking-wider text-primary/80 mb-1">
                         {getProfileTitle(profileData.profile?.profileTitle)?.name}

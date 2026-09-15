@@ -5,6 +5,7 @@ import { authOptions } from "@/lib/auth"
 import Link from "next/link"
 import { MessageSquare, TrendingUp, Clock, Users, Flame, Eye } from "lucide-react"
 import RoleBadge from "@/components/role-badge"
+import TierChip from "@/components/tier-chip"
 import { Avatar } from "@/components/ui/avatar"
 import EmptyState from "@/components/empty-state"
 
@@ -132,6 +133,7 @@ export default async function DiscoverPage({
                       <div className="flex items-center gap-1.5 text-xs text-muted-foreground flex-wrap">
                         <span className="font-medium text-foreground">{thread.author.profile?.username || thread.author.name}</span>
                         <RoleBadge role={thread.author.role} />
+                        <TierChip reputation={thread.author.profile?.reputation ?? 0} publicMilestoneOptOut={thread.author.profile?.publicMilestoneOptOut} />
                         <span>•</span>
                         <span className="text-primary">{thread.category.name}</span>
                       </div>

@@ -76,7 +76,7 @@ export default function ReputationPage() {
             <h2 className="text-lg font-semibold">Quests &amp; challenges</h2>
           </div>
           <p className="text-xs text-muted-foreground mb-3">
-            Every day you get 3 small quests — reply somewhere, tend a diary, spread some likes.
+            Every day you get 2 small quests — reply somewhere, tend a diary, spread some likes.
             They reset at midnight UTC and missed ones just expire. Below are the weekly challenges:
             optional goals that reset every Monday. Ignore all of it freely — they reward things
             you&apos;d do anyway.

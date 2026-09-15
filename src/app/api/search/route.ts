@@ -143,6 +143,7 @@ const getSearchResults = unstable_cache(
           username: true,
           avatarUrl: true,
           reputation: true,
+          publicMilestoneOptOut: true,
           bio: true,
         },
         orderBy: REPUTATION_ORDER,
@@ -194,7 +195,7 @@ const getSearchResults = unstable_cache(
           id: true,
           title: true,
           strain: true,
-          author: { select: { profile: { select: { username: true } }, name: true } },
+          author: { select: { profile: { select: { username: true, reputation: true, publicMilestoneOptOut: true } }, name: true } },
         },
       }) : [],
       (t === "all" || t === "tags") ? prisma.tag.findMany({

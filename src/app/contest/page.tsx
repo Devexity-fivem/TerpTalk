@@ -3,6 +3,7 @@ import { previousWeekKey, previousMonthKey } from "@/lib/week"
 import { Trophy, BookOpen } from "lucide-react"
 import Link from "next/link"
 import ContestBoard from "@/components/contest-board"
+import TierChip from "@/components/tier-chip"
 import DiaryContestBoard from "@/components/diary-contest-board"
 import { resolveWeeklyWinner, resolveMonthlyDiaryWinner } from "@/lib/contest-awards"
 
@@ -56,9 +57,10 @@ export default async function ContestPage() {
               <p className="text-xs text-amber-500 font-semibold uppercase tracking-wide">Last week&apos;s winner</p>
               <Link
                 href={`/u/${lastWinner.user.profile?.username || lastWinner.user.name}`}
-                className="font-medium hover:text-primary"
+                className="font-medium hover:text-primary inline-flex items-center gap-1.5"
               >
                 {lastWinner.user.profile?.username || lastWinner.user.name}
+                <TierChip reputation={lastWinner.user.profile?.reputation ?? 0} publicMilestoneOptOut={lastWinner.user.profile?.publicMilestoneOptOut} />
               </Link>
               <p className="text-xs text-muted-foreground">{lastWinner._count.votes} votes</p>
             </div>
@@ -90,7 +92,7 @@ export default async function ContestPage() {
                 {lastDiaryWinner.diary.title}
               </Link>
               <p className="text-xs text-muted-foreground">
-                by {lastDiaryWinner.user.profile?.username || lastDiaryWinner.user.name} · {lastDiaryWinner._count.votes} votes
+                <span className="inline-flex items-center gap-1">by {lastDiaryWinner.user.profile?.username || lastDiaryWinner.user.name} <TierChip reputation={lastDiaryWinner.user.profile?.reputation ?? 0} publicMilestoneOptOut={lastDiaryWinner.user.profile?.publicMilestoneOptOut} /></span> · {lastDiaryWinner._count.votes} votes
               </p>
             </div>
             <Trophy className="w-6 h-6 text-amber-500 ml-auto" />

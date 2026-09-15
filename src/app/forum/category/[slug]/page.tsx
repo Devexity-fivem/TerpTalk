@@ -10,6 +10,7 @@ import { Breadcrumbs } from "@/components/breadcrumbs"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import CategoryFollowButton from "@/components/category-follow-button"
+import TierChip from "@/components/tier-chip"
 
 export const dynamic = "force-dynamic"
 
@@ -222,6 +223,7 @@ export default async function CategoryPage({
                         <span className="flex items-center gap-1">
                           <Users className="w-4 h-4" />
                           {thread.author.profile?.username || thread.author.name}
+                          <TierChip reputation={thread.author.profile?.reputation ?? 0} publicMilestoneOptOut={thread.author.profile?.publicMilestoneOptOut} />
                         </span>
                         <span className="flex items-center gap-1">
                           <MessageSquare className="w-4 h-4" />

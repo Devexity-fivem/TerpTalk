@@ -6,6 +6,7 @@ import { useSession } from "next-auth/react"
 import Link from "next/link"
 import { Search, MessageSquare, Leaf, Dna, User, Tag, Loader2, Bookmark, ArrowUpDown, BookOpen, Wrench, CheckCircle2, AlertCircle } from "lucide-react"
 import { Avatar } from "@/components/ui/avatar"
+import TierChip from "@/components/tier-chip"
 import EmptyState from "@/components/ui/empty-state"
 
 interface ThreadResult {
@@ -24,10 +25,10 @@ interface ThreadResult {
 interface Results {
   threads: ThreadResult[]
   strains: { id: string; name: string; type: string | null; genetics: string | null }[]
-  users: { username: string; avatarUrl: string | null; bio: string | null; reputation: number }[]
+  users: { username: string; avatarUrl: string | null; bio: string | null; reputation: number; publicMilestoneOptOut: boolean }[]
   diaries: { id: string; title: string; strain: string | null; stage: string; _count: { updates: number } }[]
   guides: { id: string; slug: string; title: string; excerpt: string; topic: string }[]
-  setups: { id: string; title: string; strain: string | null; author: { name: string | null; profile: { username: string } | null } }[]
+  setups: { id: string; title: string; strain: string | null; author: { name: string | null; profile: { username: string; reputation: number; publicMilestoneOptOut: boolean } | null } }[]
   tags: { name: string; slug: string; _count: { threads: number } }[]
   hasMore: Record<string, boolean>
 }
@@ -358,7 +359,10 @@ export default function SearchResults() {
                 {results.setups.map((s) => (
                   <Link key={s.id} href={`/setups/${s.id}`} className="block p-3 hover:bg-secondary/50 transition-colors">
                     <div className="font-medium text-sm">{s.title} {s.strain && <span className="text-xs text-muted-foreground">— {s.strain}</span>}</div>
-                    <div className="text-xs text-muted-foreground">by {s.author.profile?.username || s.author.name}</div>
+                    <div className="text-xs text-muted-foreground flex items-center gap-1.5">
+                      by {s.author.profile?.username || s.author.name}
+                      <TierChip reputation={s.author.profile?.reputation ?? 0} publicMilestoneOptOut={s.author.profile?.publicMilestoneOptOut} />
+                    </div>
                   </Link>
                 ))}
               </div>
@@ -399,7 +403,7 @@ export default function SearchResults() {
                       fallback={<span className="text-primary font-bold text-sm">{u.username[0].toUpperCase()}</span>}
                     />
                     <div className="min-w-0">
-                      <div className="font-medium text-sm">{u.username} <span className="text-xs text-amber-500">{u.reputation} rep</span></div>
+                      <div className="font-medium text-sm flex items-center gap-1.5">{u.username} <TierChip reputation={u.reputation} publicMilestoneOptOut={u.publicMilestoneOptOut} /> <span className="text-xs text-amber-500">{u.reputation} rep</span></div>
                       {u.bio && <div className="text-xs text-muted-foreground truncate">{u.bio}</div>}
                     </div>
                   </Link>

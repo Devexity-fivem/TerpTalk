@@ -164,6 +164,8 @@ export async function blockExistsBetween(a: string, b: string): Promise<boolean>
 // password hash, status, lastSeenAt, and role internals.
 // Always use this select for public-facing author/user references.
 
+// `reputation` + `publicMilestoneOptOut` feed the public TierChip — the
+// only two profile fields public identity surfaces need beyond username.
 export const publicUserSelect = {
   id: true,
   name: true,
@@ -172,6 +174,8 @@ export const publicUserSelect = {
   profile: {
     select: {
       username: true,
+      reputation: true,
+      publicMilestoneOptOut: true,
     },
   },
 } as const
@@ -188,6 +192,8 @@ export const chatAuthorSelect = {
   profile: {
     select: {
       username: true,
+      reputation: true,
+      publicMilestoneOptOut: true,
       avatarFrame: true,
       profileTitle: true,
     },

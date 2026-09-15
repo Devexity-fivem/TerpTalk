@@ -6,6 +6,7 @@ import { unstable_cache } from "next/cache"
 import { MessageSquare, Users, Clock, TrendingUp } from "lucide-react"
 import Link from "next/link"
 import RoleBadge from "@/components/role-badge"
+import TierChip from "@/components/tier-chip"
 import { ForumLiveRefresh } from "@/components/forum-live-refresh"
 import FollowedThreads from "@/components/followed-threads"
 
@@ -198,6 +199,7 @@ export default async function ForumPage() {
                             <Users className="w-4 h-4" />
                             {thread.author.profile?.username || thread.author.name}
                             <RoleBadge role={thread.author.role} />
+                        <TierChip reputation={thread.author.profile?.reputation ?? 0} publicMilestoneOptOut={thread.author.profile?.publicMilestoneOptOut} />
                           </span>
                           <span className="flex items-center gap-1">
                             <MessageSquare className="w-4 h-4" />

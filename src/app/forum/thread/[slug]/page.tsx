@@ -7,6 +7,8 @@ import Link from "next/link"
 import ReplyForm from "@/components/reply-form"
 import PostActions from "@/components/post-actions"
 import RoleBadge from "@/components/role-badge"
+import TierChip from "@/components/tier-chip"
+import UserPopover from "@/components/user-popover"
 import ThreadModActions from "@/components/thread-mod-actions"
 import ShareButtons from "@/components/share-buttons"
 import ReportButton from "@/components/report-button"
@@ -324,14 +326,17 @@ export default async function ThreadPage({
             </div>
           )}
           <div className="flex items-center gap-x-3 gap-y-1 text-xs text-muted-foreground flex-wrap">
-            <Link
-              href={`/u/${thread.author.profile?.username || thread.author.name}`}
-              className="flex items-center gap-1 hover:text-foreground"
-            >
-              <Users className="w-3.5 h-3.5" />
-              {thread.author.profile?.username || thread.author.name}
-            </Link>
+            <UserPopover username={thread.author.profile?.username}>
+              <Link
+                href={`/u/${thread.author.profile?.username || thread.author.name}`}
+                className="flex items-center gap-1 hover:text-foreground"
+              >
+                <Users className="w-3.5 h-3.5" />
+                {thread.author.profile?.username || thread.author.name}
+              </Link>
+            </UserPopover>
             <RoleBadge role={thread.author.role} />
+            <TierChip reputation={thread.author.profile?.reputation ?? 0} publicMilestoneOptOut={thread.author.profile?.publicMilestoneOptOut} />
             <span className="flex items-center gap-1">
               <Clock className="w-3.5 h-3.5" />
               {new Date(thread.createdAt).toLocaleDateString()}
@@ -401,6 +406,7 @@ export default async function ThreadPage({
                       {acceptedPost.author.profile?.username || acceptedPost.author.name}
                     </Link>
                     <RoleBadge role={acceptedPost.author.role} />
+                    <TierChip reputation={acceptedPost.author.profile?.reputation ?? 0} publicMilestoneOptOut={acceptedPost.author.profile?.publicMilestoneOptOut} />
                   </div>
                   <span className="text-xs text-muted-foreground shrink-0">
                     {new Date(acceptedPost.createdAt).toLocaleString()}
@@ -487,13 +493,16 @@ export default async function ThreadPage({
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between mb-2 gap-2">
                       <div className="min-w-0">
-                        <Link
-                          href={`/u/${post.author.profile?.username || post.author.name}`}
-                          className="font-semibold hover:text-primary truncate text-sm"
-                        >
-                          {post.author.profile?.username || post.author.name}
-                        </Link>
+                        <UserPopover username={post.author.profile?.username}>
+                          <Link
+                            href={`/u/${post.author.profile?.username || post.author.name}`}
+                            className="font-semibold hover:text-primary truncate text-sm"
+                          >
+                            {post.author.profile?.username || post.author.name}
+                          </Link>
+                        </UserPopover>
                         <RoleBadge role={post.author.role} />
+                        <TierChip reputation={post.author.profile?.reputation ?? 0} publicMilestoneOptOut={post.author.profile?.publicMilestoneOptOut} />
                         {isOp && (
                           <span className="ml-2 text-xs text-muted-foreground">(Original Poster)</span>
                         )}

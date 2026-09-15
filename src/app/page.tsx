@@ -8,6 +8,7 @@ import CannabisLeaf from "@/components/cannabis-leaf"
 import LiveStats from "@/components/live-stats"
 import HeroCta from "@/components/hero-cta"
 import { Avatar } from "@/components/ui/avatar"
+import TierChip from "@/components/tier-chip"
 
 // Public landing page — prerendered and revalidated every 60s. User-specific UI
 // (e.g. HeroCta) is rendered client-side, so the shell can be edge-cached.
@@ -247,7 +248,7 @@ export default async function Home() {
                       <div className="font-medium text-sm mb-0.5 line-clamp-1">{thread.title}</div>
                       <div className="text-xs text-muted-foreground flex items-center flex-wrap gap-x-2 gap-y-0.5">
                         <span className="text-primary">{thread.category.name}</span>
-                        <span>{thread.author.profile?.username || thread.author.name}</span>
+                        <span className="inline-flex items-center gap-1">{thread.author.profile?.username || thread.author.name}<TierChip reputation={thread.author.profile?.reputation ?? 0} publicMilestoneOptOut={thread.author.profile?.publicMilestoneOptOut} /></span>
                         <span>{thread.replyCount} repl{thread.replyCount === 1 ? "y" : "ies"}</span>
                       </div>
                     </div>
@@ -288,7 +289,7 @@ export default async function Home() {
                       <div className="font-medium text-sm mb-0.5 line-clamp-1">{update.title}</div>
                       <div className="text-xs text-muted-foreground flex items-center flex-wrap gap-x-2 gap-y-0.5">
                         <span className="text-emerald-500">{update.diary.title}</span>
-                        <span>{update.author.profile?.username || update.author.name}</span>
+                        <span className="inline-flex items-center gap-1">{update.author.profile?.username || update.author.name}<TierChip reputation={update.author.profile?.reputation ?? 0} publicMilestoneOptOut={update.author.profile?.publicMilestoneOptOut} /></span>
                       </div>
                     </div>
                   </Link>
