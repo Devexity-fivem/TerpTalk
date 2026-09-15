@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma"
 import { forbidden } from "@/lib/security"
 import { requireAdmin } from "@/lib/require-staff"
 import { rateLimit } from "@/lib/rate-limit"
-import { detectReputationSignals, materializeReputationFlags } from "@/lib/trust-signals"
+import { detectReputationSignals } from "@/lib/trust-signals"
 
 // GET — reputation-abuse signals for staff review. Detection only: nothing
 // here auto-punishes; every flag links to the member for manual inspection.
@@ -19,13 +19,8 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
   const days = Math.min(30, Math.max(1, Number(searchParams.get("days")) || 7))
 
-  // Upsert-on-read: persisting detector hits as AbuseFlag rows makes them
-  // reviewable queue items (status/assignment/resolution) without needing a
-  // separate scheduler pass — the daily cron also calls this.
-  await materializeReputationFlags(days).catch((e) =>
-    console.error("[flags] materialize failed:", e)
-  )
-
+  // Read-only: detection runs here for display, but persisting flags is the
+  // daily cron's job — viewing this page must not create moderation cases.
   const [signals, staffActions] = await Promise.all([
     detectReputationSignals(days),
 
@@ -62,11 +57,11 @@ export async function GET(request: Request) {
   const name = new Map(users.map((u) => [u.id, u.profile?.username ?? "?"]))
 
   return NextResponse.json({
-    velocity: velocity.map((v) => ({ username: name.get(v.userId), userId: v.userId, gained: v.gained })),
+    velocity: velocity.map((v) => ({ username: name.get(v.userId) ?? "Deleted user", userId: v.userId, gained: v.gained })),
     reciprocalPairs: reciprocal.map((r) => ({
-      a: name.get(r.aId), b: name.get(r.bId), mutual: r.mutual,
+      a: name.get(r.aId) ?? "Deleted user", b: name.get(r.bId) ?? "Deleted user", mutual: r.mutual,
     })),
-    newAccountLikes: newAccounts.map((n) => ({ username: name.get(n.userId), userId: n.userId, freshLikes: n.freshLikes })),
+    newAccountLikes: newAccounts.map((n) => ({ username: name.get(n.userId) ?? "Deleted user", userId: n.userId, freshLikes: n.freshLikes })),
     staffActions: staffActions.map((s) => ({
       id: s.id, type: s.type, amount: s.amount, reason: s.reason, createdAt: s.createdAt,
       user: name.get(s.userId), staff: s.actorId ? name.get(s.actorId) : null,

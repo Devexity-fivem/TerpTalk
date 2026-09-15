@@ -258,7 +258,7 @@ export default function CasePage() {
                 <div className="text-sm space-y-1">
                   <p><span className="text-muted-foreground">Reason:</span> <span className="font-medium">{item.reason?.replace(/_/g, " ")}</span></p>
                   <p><span className="text-muted-foreground">Reported user:</span>{" "}
-                    {subject?.username ? <Link href={`/u/${subject.username}`} className="text-primary hover:underline">@{subject.username}</Link> : "unknown"}
+                    {subject?.username ? <Link href={`/u/${subject.username}`} className="text-primary hover:underline">@{subject.username}</Link> : "Deleted user"}
                   </p>
                   <p>
                     <span className="text-muted-foreground">Reported by:</span>{" "}
@@ -289,7 +289,7 @@ export default function CasePage() {
               <div className="text-sm space-y-2">
                 <p><span className="text-muted-foreground">Signal:</span> <span className="font-medium">{item.signalLabel}</span></p>
                 <p><span className="text-muted-foreground">Subject:</span>{" "}
-                  {subject?.username ? <Link href={`/u/${subject.username}`} className="text-primary hover:underline">@{subject.username}</Link> : "unknown"}
+                  {subject?.username ? <Link href={`/u/${subject.username}`} className="text-primary hover:underline">@{subject.username}</Link> : "Deleted user"}
                 </p>
                 {counterparty?.username && (
                   <p><span className="text-muted-foreground">Counterparty:</span>{" "}

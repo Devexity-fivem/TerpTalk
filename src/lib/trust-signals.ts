@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
 import { notifyMany } from "@/lib/notify"
 
@@ -41,6 +42,34 @@ const SIGNAL_PRIORITY: Record<string, string> = {
   REP_NEW_ACCOUNT_LIKES: "NORMAL",
 }
 
+// Member-driven reputation event types — the only events the velocity
+// detector counts. These reflect what a member actually did: authored
+// content, peer reactions, peer-gated acceptances, harvest logs, daily
+// check-ins. Everything else (BADGE_BONUS, WEEKLY_AWARD, MILESTONE,
+// ONBOARDING_COMPLETE, QUEST_DAILY, GROW_MILESTONE, JOURNEY_COMPLETE,
+// contest wins, referrals, challenges, staff adjustments, migration and
+// reversal bookkeeping) is system-generated and must not read as grinding.
+// An allowlist — not a blocklist — so any future automated award type is
+// excluded by default.
+export const MEMBER_DRIVEN_REP_TYPES = [
+  "THREAD_CREATED",
+  "POST_CREATED",
+  "DIARY_CREATED",
+  "DIARY_UPDATE",
+  "STRAIN_CREATED",
+  "STRAIN_PHOTO",
+  "SETUP_CREATED",
+  "LIKE_RECEIVED",
+  "HELPFUL_ANSWER",
+  "ACCEPT_MARKED",
+  "HARVEST_LOGGED",
+  "DAILY_LOGIN",
+] as const
+
+export function isMemberDrivenReputationEvent(type: string): boolean {
+  return (MEMBER_DRIVEN_REP_TYPES as readonly string[]).includes(type)
+}
+
 export interface DetectedSignals {
   velocity: { userId: string; gained: number }[]
   reciprocal: { aId: string; bId: string; mutual: number }[]
@@ -50,9 +79,9 @@ export interface DetectedSignals {
 
 // Reputation-abuse detectors. Hits are raw signals for human review;
 // materializeReputationFlags() turns them into reviewable records.
-// The velocity detector excludes one-off high-value awards (contest wins,
-// staff adjustments, referrals, challenge payouts) so a legitimate weekly
-// winner doesn't trip it — it measures grinding velocity only.
+// The velocity detector counts member-driven events only, so badge
+// backfills, weekly awards and other system payouts can't trip it — it
+// measures grinding velocity only.
 export async function detectReputationSignals(days: number): Promise<DetectedSignals> {
   const window = Math.min(30, Math.max(1, days))
 
@@ -61,11 +90,7 @@ export async function detectReputationSignals(days: number): Promise<DetectedSig
       SELECT "userId", SUM("amount") AS gained
       FROM "ReputationEvent"
       WHERE "reversedAt" IS NULL AND "amount" > 0
-        AND "type" NOT IN (
-          'CONTEST_WEEKLY_WIN', 'CONTEST_MONTHLY_WIN',
-          'STAFF_ADJUSTMENT', 'REFERRAL', 'CHALLENGE_WEEKLY',
-          'LEGACY_MIGRATION', 'REINSTATE'
-        )
+        AND "type" IN (${Prisma.join(MEMBER_DRIVEN_REP_TYPES)})
         AND "createdAt" > NOW() - INTERVAL '24 hours'
       GROUP BY "userId"
       HAVING SUM("amount") > 150
