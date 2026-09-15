@@ -9,6 +9,7 @@ import { checkMaintenance } from "@/lib/maintenance"
 import { notifyMany } from "@/lib/notify"
 import { revalidateTag } from "next/cache"
 import { diaryDay, diaryWeek } from "@/lib/diary-weeks"
+import { evaluateGrowJourney } from "@/lib/grow-journey"
 
 export async function POST(request: Request) {
   let storedImages: string[] = []
@@ -206,6 +207,10 @@ export async function POST(request: Request) {
 
     revalidateTag("diaries", { expire: 0 })
 
+    // Grow-journey milestones recompute from live rows — a new meaningful
+    // update day or stage change may cross a gate. Keyed, idempotent.
+    await evaluateGrowJourney(diaryId).catch(() => {})
+
     // Streak and diary badges are rule-backed via the growStreak stat —
     // run the standard check so updates under the 10-char rep floor (which
     // skip the award pipeline) still advance badges.
@@ -296,6 +301,9 @@ export async function DELETE(request: Request) {
       const dayKey = update.createdAt.toISOString().slice(0, 10)
       await reverseReputationByKey(`diaryupd:${update.diaryId}:${dayKey}`, "Diary update deleted").catch(() => null)
     }
+    // Losing a meaningful update day can regress a grow-journey stage —
+    // reconciliation claws the milestone award back if it no longer holds.
+    await evaluateGrowJourney(update.diaryId).catch(() => {})
     deleteImagesIfUnreferenced(update.images.map((i) => i.url)).catch(() => {})
     revalidateTag("diaries", { expire: 0 })
 

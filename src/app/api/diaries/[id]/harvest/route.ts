@@ -7,6 +7,7 @@ import { rateLimit } from "@/lib/rate-limit"
 import { checkMaintenance } from "@/lib/maintenance"
 import { announceHarvest } from "@/lib/terpbot"
 import { awardReputation, grantBadge, REP_POINTS } from "@/lib/reputation"
+import { evaluateGrowJourney } from "@/lib/grow-journey"
 import { revalidateTag } from "next/cache"
 import { VALID_YIELD_UNITS } from "@/lib/yield"
 
@@ -131,6 +132,10 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   // TerpBot celebrates the harvest in community chat — only on the
   // false→true transition so toggling can't spam the room. The diary
   // title is sanitized inside announceHarvest.
+  // Reconcile journey milestones — harvest flips HARVESTED/COMPLETE on,
+  // un-harvest claws them back.
+  await evaluateGrowJourney(id).catch(() => {})
+
   if (harvested && !diary.harvested) {
     // Members who opt out of public recognition are celebrated as "a member".
     const username =

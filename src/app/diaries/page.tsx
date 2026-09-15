@@ -4,6 +4,7 @@ import { unstable_cache } from "next/cache"
 import { Leaf, Calendar, TrendingUp, Users } from "lucide-react"
 import Link from "next/link"
 import RoleBadge from "@/components/role-badge"
+import TierChip from "@/components/tier-chip"
 import EmptyState from "@/components/ui/empty-state"
 
 export const revalidate = 300
@@ -98,6 +99,7 @@ export default async function DiariesPage() {
                         <Users className="w-3 h-3" />
                         {diary.author.profile?.username || diary.author.name}
                         <RoleBadge role={diary.author.role} />
+                        <TierChip reputation={diary.author.profile?.reputation ?? 0} publicMilestoneOptOut={diary.author.profile?.publicMilestoneOptOut} />
                       </span>
                       <span className="flex items-center gap-1">
                         <Calendar className="w-3 h-3" />
@@ -175,6 +177,7 @@ export default async function DiariesPage() {
                         <Users className="w-3 h-3" />
                         {diary.author.profile?.username || diary.author.name}
                         <RoleBadge role={diary.author.role} />
+                        <TierChip reputation={diary.author.profile?.reputation ?? 0} publicMilestoneOptOut={diary.author.profile?.publicMilestoneOptOut} />
                       </span>
                       <span className="flex items-center gap-1">
                         <Calendar className="w-3 h-3" />

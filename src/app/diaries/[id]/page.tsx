@@ -13,6 +13,8 @@ import { Breadcrumbs } from "@/components/breadcrumbs"
 import EnvCharts from "@/components/env-chart"
 import HarvestForm from "@/components/harvest-form"
 import StageTimeline from "@/components/stage-timeline"
+import TierChip from "@/components/tier-chip"
+import { getGrowJourney, GROW_STAGES } from "@/lib/grow-journey"
 import ImageGallery from "@/components/image-gallery"
 import { groupUpdatesByWeek, buildHarvestReport, diaryCompleteness, diaryDay, diaryWeek } from "@/lib/diary-weeks"
 import ReportButton from "@/components/report-button"
@@ -72,7 +74,7 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
   // Fetch the most recent 100 updates and restore chronological order for the timeline.
   const updates = [...diary.updates].reverse()
   const session = await getServerSession(authOptions)
-  const [following, linkedStrain] = await Promise.all([
+  const [following, linkedStrain, journey] = await Promise.all([
     session?.user?.id
       ? !!(await prisma.diaryFollow.findUnique({
           where: { userId_diaryId: { userId: session.user.id, diaryId: diary.id } },
@@ -85,6 +87,7 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
           select: { id: true, name: true },
         })
       : null,
+    getGrowJourney(id),
   ])
 
   // eslint-disable-next-line react-hooks/purity
@@ -179,6 +182,7 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
                 <span className="flex items-center gap-1">
                   <Users className="w-3.5 h-3.5" />
                   {diary.author.profile?.username || diary.author.name}
+                  <TierChip reputation={diary.author.profile?.reputation ?? 0} publicMilestoneOptOut={diary.author.profile?.publicMilestoneOptOut} />
                 </span>
                 <span className="flex items-center gap-1">
                   <Calendar className="w-3.5 h-3.5" />
@@ -203,6 +207,31 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
                 )}
               </div>
               <StageTimeline current={diary.stage} runs={stageRuns} />
+
+              {/* Grow Journey — derived milestones with rep rewards */}
+              {journey && (
+                <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs">
+                  <div className="flex items-center gap-1.5">
+                    {GROW_STAGES.map((s, i) => (
+                      <span
+                        key={s.key}
+                        title={s.name}
+                        className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-sm ${
+                          i <= journey.stageIndex ? "bg-primary/15 ring-1 ring-primary/40" : "bg-secondary/60 opacity-50"
+                        }`}
+                      >
+                        {s.icon}
+                      </span>
+                    ))}
+                    <span className="ml-1 font-medium text-foreground">{journey.stage === "PLANTED" ? "Planted" : GROW_STAGES[journey.stageIndex].name}</span>
+                  </div>
+                  {journey.next && (
+                    <span className="text-muted-foreground">
+                      Next: {journey.next.icon} {journey.next.name} — {journey.next.summary}
+                    </span>
+                  )}
+                </div>
+              )}
 
               {/* Vitals row */}
               {(avgTemp || avgRh || harvestEta !== null) && (

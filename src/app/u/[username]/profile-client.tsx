@@ -103,6 +103,17 @@ interface GrowDiary {
   _count: { updates: number; followers: number }
 }
 
+interface HarvestEntry {
+  id: string
+  title: string
+  strain: string | null
+  startDate: string
+  harvestedAt: string | null
+  yieldAmount: number | null
+  yieldUnit: string | null
+  _count: { updates: number }
+}
+
 interface RepEvent {
   id: string
   label: string
@@ -115,7 +126,7 @@ export default function ProfileClient() {
   const params = useParams()
   const { data: session } = useSession()
   const username = decodeURIComponent(String(params.username))
-  const [data, setData] = useState<{ profile: PublicProfile; viewerBlocked: boolean; viewerFollowing: boolean; recentThreads: Thread[]; growDiaries: GrowDiary[]; recentRep: RepEvent[] } | null>(null)
+  const [data, setData] = useState<{ profile: PublicProfile; viewerBlocked: boolean; viewerFollowing: boolean; recentThreads: Thread[]; growDiaries: GrowDiary[]; harvestShelf: HarvestEntry[]; recentRep: RepEvent[] } | null>(null)
   const [loading, setLoading] = useState(true)
   const [notFound, setNotFound] = useState(false)
   const [showAllBadges, setShowAllBadges] = useState(false)
@@ -150,7 +161,7 @@ export default function ProfileClient() {
     )
   }
 
-  const { profile, viewerBlocked, viewerFollowing, recentThreads, growDiaries, recentRep } = data
+  const { profile, viewerBlocked, viewerFollowing, recentThreads, growDiaries, harvestShelf, recentRep } = data
   const joinDate = new Date(profile.joinDate).toLocaleDateString("en-US", { year: "numeric", month: "long" })
   const frame = getAvatarFrame(profile.avatarFrame)
   const theme = getProfileTheme(profile.profileTheme)
@@ -506,6 +517,45 @@ export default function ProfileClient() {
               ))}
             </div>
           )}
+        </div>
+        )}
+
+        {!profile.isBot && harvestShelf.length > 0 && (
+        <div className="bg-card rounded-lg border border-amber-500/30 p-4 mb-4">
+          <div className="flex items-center gap-2 mb-3">
+            <Trophy className="w-4 h-4 text-amber-500" />
+            <h2 className="text-lg font-semibold">Harvest Shelf</h2>
+            <span className="text-xs text-muted-foreground">{harvestShelf.length} completed grow{harvestShelf.length === 1 ? "" : "s"}</span>
+          </div>
+          <div className="grid gap-2 sm:grid-cols-2">
+            {harvestShelf.map((h) => {
+              const days = h.harvestedAt
+                ? Math.max(0, Math.round((new Date(h.harvestedAt).getTime() - new Date(h.startDate).getTime()) / 86400000))
+                : null
+              return (
+                <Link
+                  key={h.id}
+                  href={`/diaries/${h.id}`}
+                  className="block p-3 rounded-lg border border-border hover:border-amber-500/40 transition-colors"
+                >
+                  <h3 className="font-medium text-sm mb-1 break-words truncate">{h.title}</h3>
+                  <p className="text-xs text-muted-foreground">
+                    {h.strain ? `${h.strain} • ` : ""}
+                    {h.harvestedAt ? `harvested ${new Date(h.harvestedAt).toLocaleDateString()}` : "harvested"}
+                    {days != null && ` • ${days} days`}
+                  </p>
+                  <p className="text-xs mt-1">
+                    {h.yieldAmount != null && h.yieldUnit ? (
+                      <span className="text-amber-500 font-medium">{h.yieldAmount}{h.yieldUnit}</span>
+                    ) : (
+                      <span className="text-muted-foreground">yield not recorded</span>
+                    )}
+                    <span className="text-muted-foreground"> • {h._count.updates} updates</span>
+                  </p>
+                </Link>
+              )
+            })}
+          </div>
         </div>
         )}
 
