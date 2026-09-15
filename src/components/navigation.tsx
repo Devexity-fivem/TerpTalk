@@ -26,6 +26,7 @@ const NAV_LINKS = [
   { href: "/setups", label: "Setups", icon: Tent, section: "Community" },
   { href: "/guides", label: "Guides", icon: BookOpen, section: "Community" },
   { href: "/plant-doctor", label: "Plant Doctor", icon: Stethoscope, section: "Community" },
+  { href: "/chat", label: "Chat", icon: MessagesSquare, section: "Community" },
   { href: "/strains", label: "Strains", icon: Dna, section: "Library" },
   { href: "/contest", label: "Contest", icon: Trophy, section: "Library" },
   { href: "/leaderboard", label: "Leaderboard", icon: Medal, section: "Library" },
