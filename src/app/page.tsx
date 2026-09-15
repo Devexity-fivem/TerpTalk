@@ -119,6 +119,21 @@ const getActiveMembers = unstable_cache(
 
 const getGrowerOfWeek = unstable_cache(
   async () => {
+    // Show the actual weekly-recognition winner — recorded as a keyed
+    // WEEKLY_AWARD event — not merely the all-time rep leader. Falls back
+    // to the top grower until the first award has been resolved.
+    const award = await prisma.reputationEvent.findFirst({
+      where: { type: "WEEKLY_AWARD", key: { startsWith: "weekly:gotw:" }, reversedAt: null },
+      orderBy: { createdAt: "desc" },
+      select: { userId: true },
+    })
+    if (award) {
+      const winner = await prisma.profile.findFirst({
+        where: { userId: award.userId, ...rankableProfile() },
+        include: { user: { select: { id: true, image: true, createdAt: true } } },
+      })
+      if (winner) return winner
+    }
     return await prisma.profile.findFirst({
       where: { ...rankableProfile(), user: { ...activeAuthor(), role: { not: "ADMINISTRATOR" } } },
       orderBy: REPUTATION_ORDER,
