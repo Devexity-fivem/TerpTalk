@@ -66,9 +66,11 @@ export interface WeeklyRow {
   }
 }
 
-// Types that measure standing, not activity — excluded so a reversal
-// cleanup or a staff adjustment can't swing the board.
-const EXCLUDED_TYPES = ["REVERSAL", "REINSTATE", "STAFF_ADJUSTMENT", "MILESTONE", "LEGACY_MIGRATION"]
+// Standing adjustments, not earned activity — excluded so admin actions
+// can't swing the board. REVERSAL is deliberately INCLUDED: reversal rows
+// are signed negative counter-entries, so summing them is what makes the
+// weekly total *net* — clawed-back reputation stops counting.
+const EXCLUDED_TYPES = ["REINSTATE", "STAFF_ADJUSTMENT", "MILESTONE", "LEGACY_MIGRATION"]
 
 async function weeklyEarned(
   start: Date,

@@ -5,7 +5,7 @@
 import { strict as assert } from "node:assert"
 import { prisma } from "@/lib/prisma"
 import { computeGrowJourney, GROW_STAGES, evaluateGrowJourney } from "@/lib/grow-journey"
-import { weekRange, resolveWeeklyRecognition, GROWER_OF_THE_WEEK_REP } from "@/lib/weekly-recognition"
+import { weekRange, resolveWeeklyRecognition, weeklyBoard, GROWER_OF_THE_WEEK_REP } from "@/lib/weekly-recognition"
 import { canAccessRoom, roomAccessInfo, GROW_ROOM_REP, GROW_ROOM_SLUG } from "@/lib/chat-access"
 import { getJourneyState, evaluateJourneys } from "@/lib/journeys"
 import { DAILY_QUEST_COUNT } from "@/lib/quests"
@@ -220,6 +220,60 @@ async function main() {
     } else {
       await prisma.setting.delete({ where: { key: SITE_SETTINGS.GROW_ROOM_ENABLED } }).catch(() => {})
     }
+  }
+
+  // ─── DB: weekly board nets reversals ────────────────────────────────
+  // Reversal rows are signed negative counter-entries — they must subtract
+  // from the weekly sum. Uses a deep-past week no real member can contest.
+  const wkNet = "2020-W11"
+  const netRange = weekRange(wkNet)!
+  const netAt = (d: number) => new Date(netRange.start.getTime() + d * DAY)
+  const wUsers = {
+    full: await makeUser("wfull", 0),
+    partial: await makeUser("wpartial", 0),
+    multi: await makeUser("wmulti", 0),
+    excl: await makeUser("wexcl", 0),
+    gross: await makeUser("wgross", 0),
+    net: await makeUser("wnet", 0),
+  }
+  try {
+    const ev = (userId: string, type: string, amount: number, key: string, day = 1) =>
+      prisma.reputationEvent.create({
+        data: { userId, type, amount, reason: "test", key: `${T}:${key}`, createdAt: netAt(day) },
+      })
+    // +100 then -100 reversal → net 0 (dropped from board entirely)
+    await ev(wUsers.full.id, "POST_CREATED", 100, "f1")
+    await ev(wUsers.full.id, "REVERSAL", -100, "f2", 2)
+    // +100 then -40 reversal → net 60
+    await ev(wUsers.partial.id, "POST_CREATED", 100, "p1")
+    await ev(wUsers.partial.id, "REVERSAL", -40, "p2", 2)
+    // +100 +50 -25 → net 125
+    await ev(wUsers.multi.id, "POST_CREATED", 100, "m1")
+    await ev(wUsers.multi.id, "POST_CREATED", 50, "m2")
+    await ev(wUsers.multi.id, "REVERSAL", -25, "m3", 2)
+    // Excluded types must not count: +100 earned + 1000 staff adj + milestone
+    await ev(wUsers.excl.id, "POST_CREATED", 100, "e1")
+    await ev(wUsers.excl.id, "STAFF_ADJUSTMENT", 1000, "e2")
+    await ev(wUsers.excl.id, "MILESTONE", 0, "e3")
+    // Winner check: gross 1000 reversed down to 300 loses to a clean 500
+    await ev(wUsers.gross.id, "POST_CREATED", 1000, "g1")
+    await ev(wUsers.gross.id, "REVERSAL", -700, "g2", 2)
+    await ev(wUsers.net.id, "POST_CREATED", 500, "n1")
+
+    const board = await weeklyBoard(netRange.start, netRange.end)
+    const earned = (id: string) => board.find((r) => r.userId === id)?.earned
+    assert.equal(earned(wUsers.full.id), undefined, "fully reversed user drops off board")
+    assert.equal(earned(wUsers.partial.id), 60, "partial reversal nets")
+    assert.equal(earned(wUsers.multi.id), 125, "multiple events net")
+    assert.equal(earned(wUsers.excl.id), 100, "excluded types still excluded")
+    assert.equal(earned(wUsers.gross.id), 300, "gross-vs-net ordering uses net")
+    assert.equal(earned(wUsers.net.id), 500)
+
+    const winner = await resolveWeeklyRecognition(wkNet)
+    assert.equal(winner?.userId, wUsers.net.id, "winner is highest NET earner, not gross")
+    console.log("weekly reversal netting ok")
+  } finally {
+    for (const u of Object.values(wUsers)) await prisma.user.delete({ where: { id: u.id } }).catch(() => {})
   }
 
   // ─── DB: weekly award idempotency ───────────────────────────────────

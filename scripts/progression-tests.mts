@@ -162,7 +162,9 @@ async function run() {
     const progress = await getQuestProgress(uid)
     assert.equal(progress.length, DAILY_QUEST_COUNT)
     for (const q of progress) {
-      assert.equal(q.progress, 0)
+      // green-thumb legitimately ticks from the LIKE_RECEIVED awarded above —
+      // every other quest's inputs are still untouched.
+      assert.equal(q.progress, q.slug === "green-thumb" ? 1 : 0)
       assert.equal(q.done, false)
       // lend-a-hand may or may not be selected; paid only when selected+paid.
       if (q.slug === "lend-a-hand") assert.equal(q.paid, true)
