@@ -2,6 +2,7 @@
 // journey, weekly windows, chat gating and quest config, plus DB tests with
 // disposable __test_r3_ users (cascade-deleted at the end).
 // Run: npx tsx scripts/rewards3-tests.mts
+import "./db-guard.mjs"
 import { strict as assert } from "node:assert"
 import { prisma } from "@/lib/prisma"
 import { computeGrowJourney, GROW_STAGES, evaluateGrowJourney } from "@/lib/grow-journey"

@@ -2,6 +2,7 @@
 // protections end-to-end against a running dev server. Temp fixtures use
 // `__bv_<ts>` markers and are fully cleaned up.
 // Run: node scripts\bot-verify.mjs   (requires `npm run dev` on :3000)
+import "./db-guard.mjs"
 import { PrismaClient } from "@prisma/client"
 import bcrypt from "bcryptjs"
 

@@ -3,6 +3,7 @@
 // dormant-thread scan. Uses disposable __tbp_ users on the real database;
 // everything is cleaned up at the end.
 // Run: npm run test:terpbot-pipeline
+import "./db-guard.mjs"
 import { strict as assert } from "node:assert"
 import { prisma } from "@/lib/prisma"
 import { claimBotEvent, releaseBotEvent, getBotStats } from "@/lib/terpbot-events"

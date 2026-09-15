@@ -1,5 +1,6 @@
 // Phase 3 authenticated verification — thread follows, reply notifications,
 // unread state, first-action nudge. Temp users/threads fully cleaned up.
+import "./db-guard.mjs"
 import { PrismaClient } from "@prisma/client"
 import bcrypt from "bcryptjs"
 

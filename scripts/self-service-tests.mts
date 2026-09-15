@@ -8,6 +8,7 @@
 // the same Prisma shapes and lib functions the routes call, plus source-level
 // assertions for guards that only exist inside the handlers.
 // Run: npm run test:self-service
+import "./db-guard.mjs"
 import { strict as assert } from "node:assert"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"

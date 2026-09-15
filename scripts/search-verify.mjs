@@ -2,6 +2,7 @@
 // end-to-end: result buckets, tiering, solved/matched-post metadata,
 // pagination, malformed input, and hidden/deleted/suspended exclusion.
 // Temp fixtures use unique `__sv_<ts>` markers and are fully cleaned up.
+import "./db-guard.mjs"
 import { PrismaClient } from "@prisma/client"
 import bcrypt from "bcryptjs"
 

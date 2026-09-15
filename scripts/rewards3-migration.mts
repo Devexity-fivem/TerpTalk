@@ -45,6 +45,16 @@ function oldTier(rep: number) {
   return t
 }
 
+// Movement is a change of tier, not of threshold. Comparing thresholds
+// misreports a member whose rep sits between the old and new threshold of
+// the SAME tier as "demoted" — compare ladder position (name) instead.
+function oldTierRank(name: string) {
+  return OLD_TIERS.findIndex((t) => t.name === name)
+}
+function newTierRank(name: string) {
+  return REP_TIERS.findIndex((t) => t.name === name)
+}
+
 // Same keyed-marker convention as reputation.ts claimMilestone — amount=0,
 // unique key, P2002 = already celebrated. Replicated here because the live
 // helper is intentionally private to the award engine.
@@ -99,8 +109,8 @@ async function main() {
     const before = oldTier(rep)
     const after = getReputationTier(rep)
 
-    if (after.threshold > before.threshold) promoted++
-    else if (after.threshold < before.threshold) {
+    if (newTierRank(after.name) > oldTierRank(before.name)) promoted++
+    else if (newTierRank(after.name) < oldTierRank(before.name)) {
       demoted++
       demotions.push(`${user.profile?.username ?? user.id}: ${rep} rep ${before.name} -> ${after.name}`)
     } else unchanged++
@@ -114,7 +124,7 @@ async function main() {
     // Tier-up celebration for promotions — suspended/banned users keep the
     // promotion (it's their real rep) but get no notification or announce.
     const inactive = user.banned || (user.suspendedUntil != null && user.suspendedUntil.getTime() > now)
-    if (APPLY && after.threshold > before.threshold && !inactive) {
+    if (APPLY && newTierRank(after.name) > oldTierRank(before.name) && !inactive) {
       if (await claimTierMilestone(user.id, after.threshold)) {
         const stage = getRepStage(rep)
         const unlocks = cosmeticsUnlockedBetween(before.threshold, rep)

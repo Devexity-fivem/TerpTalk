@@ -5,6 +5,7 @@
 // account-deletion scrub helpers. Uses disposable __test_pv_ users on the
 // real database; everything is cleaned up at the end.
 // Run: npm run test:privacy
+import "./db-guard.mjs"
 import { strict as assert } from "node:assert"
 import { prisma } from "@/lib/prisma"
 import { rankableProfile, activeAuthor } from "@/lib/security"

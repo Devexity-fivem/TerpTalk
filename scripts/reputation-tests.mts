@@ -2,6 +2,7 @@
 // rules, plus ledger behaviour exercised against the real database with a
 // disposable __test_rep_ user (cascade-deleted at the end).
 // Run: npm run test:reputation
+import "./db-guard.mjs"
 import { strict as assert } from "node:assert"
 import { prisma } from "@/lib/prisma"
 import {

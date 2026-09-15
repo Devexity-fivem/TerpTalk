@@ -2,6 +2,7 @@
 // privacy, case state transitions, assignment, bulk bounds, IDOR, flags,
 // and admin reputation endpoints. Creates temp users/cases, cleans up fully.
 // Requires a dev server: VERIFY_URL (default http://localhost:3000).
+import "./db-guard.mjs"
 import { PrismaClient } from "@prisma/client"
 import bcrypt from "bcryptjs"
 

@@ -3,6 +3,7 @@
 // checks for keyed quest payouts + trust-score filtering against a
 // disposable __test_prog_ user (cascade-deleted at the end).
 // Run: npx tsx scripts/progression-tests.mts
+import "./db-guard.mjs"
 import { strict as assert } from "node:assert"
 import { prisma } from "@/lib/prisma"
 import {

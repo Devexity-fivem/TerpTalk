@@ -1,3 +1,4 @@
+import "./db-guard.mjs"
 import { strict as assert } from "node:assert"
 import { prisma } from "@/lib/prisma"
 import { notify, notifyMany, invalidateNotificationsForLink } from "@/lib/notify"

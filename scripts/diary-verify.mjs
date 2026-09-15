@@ -1,6 +1,7 @@
 // Phase 6 verification — grow diary API contracts, week grouping, harvest
 // report, strain stats honesty tiers, Diary of the Month contest, reactions
 // block check. Temp users/diaries/strains fully cleaned up.
+import "./db-guard.mjs"
 import { PrismaClient } from "@prisma/client"
 import bcrypt from "bcryptjs"
 

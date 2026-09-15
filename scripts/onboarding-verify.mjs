@@ -1,4 +1,5 @@
 // Phase 2 authenticated verification — temp users, localhost, full cleanup.
+import "./db-guard.mjs"
 import { PrismaClient } from "@prisma/client"
 import bcrypt from "bcryptjs"
 
