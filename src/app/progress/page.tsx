@@ -18,6 +18,17 @@ import { signInHref } from "@/lib/callback-url"
 
 interface ProgressionData {
   reputation: number
+  nextAction: { icon: string; text: string; href: string; cta: string } | null
+  journey: {
+    slug: string
+    name: string
+    description: string
+    doneCount: number
+    complete: boolean
+    reward: number
+    paid: boolean
+    steps: { key: string; title: string; description: string; icon: string; done: boolean; href: string; cta: string }[]
+  } | null
   level: number
   maxLevel: number
   stage: { name: string; index: number; count: number }
@@ -195,6 +206,62 @@ export default function ProgressPage() {
             </div>
           )}
         </section>
+
+        {/* Next Best Action */}
+        {data.nextAction && (
+          <section aria-label="Next best action" className="bg-primary/5 rounded-lg border border-primary/20 p-4 mb-4">
+            <div className="flex items-center gap-3">
+              <span className="text-xl" aria-hidden="true">{data.nextAction.icon}</span>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-semibold uppercase tracking-wide text-primary mb-0.5">Next best action</p>
+                <p className="text-sm">{data.nextAction.text}</p>
+              </div>
+              <Link
+                href={data.nextAction.href}
+                className="shrink-0 inline-flex items-center gap-1 text-xs font-medium bg-primary text-primary-foreground px-3 py-2 rounded-md hover:bg-primary/90"
+              >
+                {data.nextAction.cta} <ChevronRight className="w-3.5 h-3.5" />
+              </Link>
+            </div>
+          </section>
+        )}
+
+        {/* Getting Rooted journey */}
+        {data.journey && !data.journey.complete && (
+          <section aria-label="Getting Rooted journey" className="bg-card rounded-lg border border-border p-4 mb-4">
+            <div className="flex items-center gap-2 mb-1">
+              <Sprout className="w-4 h-4 text-primary" />
+              <h2 className="text-sm font-semibold">{data.journey.name}</h2>
+              <span className="ml-auto text-xs text-muted-foreground">
+                {data.journey.doneCount}/{data.journey.steps.length} · +{data.journey.reward} rep
+              </span>
+            </div>
+            <p className="text-xs text-muted-foreground mb-3">{data.journey.description}</p>
+            <ol className="space-y-2">
+              {data.journey.steps.map((s, i) => (
+                <li key={s.key} className="flex items-center gap-2.5">
+                  <span
+                    className={cn(
+                      "w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0",
+                      s.done ? "bg-primary text-primary-foreground" : "bg-secondary text-muted-foreground"
+                    )}
+                    aria-hidden="true"
+                  >
+                    {s.done ? "✓" : i + 1}
+                  </span>
+                  <span className={cn("flex-1 text-sm min-w-0", s.done && "text-muted-foreground line-through")}>
+                    <span aria-hidden="true">{s.icon}</span> {s.title}
+                  </span>
+                  {!s.done && (
+                    <Link href={s.href} className="shrink-0 text-xs text-primary hover:underline">
+                      {s.cta}
+                    </Link>
+                  )}
+                </li>
+              ))}
+            </ol>
+          </section>
+        )}
 
         {/* Trust standing */}
         {data.trust && (

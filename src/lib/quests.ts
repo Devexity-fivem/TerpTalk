@@ -107,7 +107,8 @@ export const DAILY_QUESTS: QuestDef[] = [
   },
 ]
 
-export const DAILY_QUEST_COUNT = 3
+// 2/day — quests are seasoning, not the main progression loop.
+export const DAILY_QUEST_COUNT = 2
 export const PERFECT_DAY_BONUS = 5
 
 // UTC day key — e.g. "2026-04-20". Quests reset each day.
