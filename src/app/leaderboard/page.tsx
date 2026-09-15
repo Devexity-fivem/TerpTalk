@@ -6,8 +6,10 @@ import Link from "next/link"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import RoleBadge from "@/components/role-badge"
+import TierChip from "@/components/tier-chip"
 import EmptyState from "@/components/ui/empty-state"
-import { getReputationTier } from "@/lib/reputation"
+import { weeklyBoard, weeklyNewGrowers, weekRange } from "@/lib/weekly-recognition"
+import { currentWeekKey } from "@/lib/week"
 import { Avatar } from "@/components/ui/avatar"
 import { cn } from "@/lib/utils"
 
@@ -18,9 +20,16 @@ export const metadata = {
   description: "Top contributors in the TerpTalk cannabis growing community.",
 }
 
-type Tab = "rep" | "helpful" | "diaries" | "badges"
+type Tab = "rep" | "week" | "helpful" | "diaries" | "badges"
 
 const TABS: { key: Tab; label: string; icon: typeof Trophy; blurb: string; metricLabel: string }[] = [
+  {
+    key: "week",
+    label: "This Week",
+    icon: Sprout,
+    blurb: "Reputation earned this week — resets Monday. Anyone can win it.",
+    metricLabel: "rep this week",
+  },
   {
     key: "rep",
     label: "Reputation",
@@ -55,6 +64,7 @@ const PROFILE_SELECT = {
   username: true,
   avatarUrl: true,
   reputation: true,
+  publicMilestoneOptOut: true,
   user: {
     select: {
       id: true,
@@ -74,6 +84,7 @@ type LeaderboardProfile = {
   username: string
   avatarUrl: string | null
   reputation: number
+  publicMilestoneOptOut: boolean
   user: {
     id: string
     name: string | null
@@ -152,6 +163,25 @@ const getTopByDiaries = unstable_cache(
   { revalidate: 300, tags: ["leaderboard"] }
 )
 
+// Weekly boards re-key their cache by ISO week so last week's results stay
+// cacheable while this week's move live.
+const getWeeklyBoard = unstable_cache(
+  async (week: string): Promise<{ rows: BoardRow[]; newRows: BoardRow[] }> => {
+    const range = weekRange(week)
+    if (!range) return { rows: [], newRows: [] }
+    const [board, fresh] = await Promise.all([
+      weeklyBoard(range.start, range.end),
+      weeklyNewGrowers(range.start, range.end),
+    ])
+    return {
+      rows: board.map((r) => ({ profile: r.profile as LeaderboardProfile, metric: r.earned })),
+      newRows: fresh.map((r) => ({ profile: r.profile as LeaderboardProfile, metric: r.earned })),
+    }
+  },
+  ["leaderboard-week"],
+  { revalidate: 300, tags: ["leaderboard"] }
+)
+
 const getTopByBadges = unstable_cache(
   async (): Promise<BoardRow[]> => {
     const groups = await prisma.userBadge.groupBy({
@@ -172,25 +202,29 @@ export default async function LeaderboardPage({
   searchParams: Promise<{ tab?: string }>
 }) {
   const { tab: rawTab } = await searchParams
-  const tab: Tab = (["rep", "helpful", "diaries", "badges"] as Tab[]).includes(rawTab as Tab)
+  const tab: Tab = (["rep", "week", "helpful", "diaries", "badges"] as Tab[]).includes(rawTab as Tab)
     ? (rawTab as Tab)
     : "rep"
 
   const session = await getServerSession(authOptions)
   const viewerId = session?.user?.id
+  const week = currentWeekKey()
 
-  const [rows, viewerProfile] = await Promise.all([
-    tab === "helpful"
+  const [weekly, viewerProfile] = await Promise.all([
+    tab === "week" ? getWeeklyBoard(week) : Promise.resolve(null),
+    viewerId
+      ? prisma.profile.findUnique({ where: { userId: viewerId }, select: PROFILE_SELECT })
+      : Promise.resolve(null),
+  ])
+  const rows: BoardRow[] =
+    weekly?.rows ??
+    (await (tab === "helpful"
       ? getTopByHelpful()
       : tab === "diaries"
         ? getTopByDiaries()
         : tab === "badges"
           ? getTopByBadges()
-          : getTopByRep(),
-    viewerId
-      ? prisma.profile.findUnique({ where: { userId: viewerId }, select: PROFILE_SELECT })
-      : Promise.resolve(null),
-  ])
+          : getTopByRep()))
 
   // Viewer's own metric for the active tab — one count per non-rep tab,
   // only computed when the member isn't already on the board.
@@ -198,7 +232,20 @@ export default async function LeaderboardPage({
   let viewerMetric = viewerProfile?.reputation ?? 0
   let viewerRank: number | null = null
   if (viewerProfile && !viewerOnBoard) {
-    if (tab === "rep") {
+    if (tab === "week") {
+      const range = weekRange(week)
+      if (range) {
+        const agg = await prisma.reputationEvent.aggregate({
+          where: {
+            userId: viewerProfile.user.id,
+            createdAt: { gte: range.start, lt: range.end },
+            type: { notIn: ["REVERSAL", "REINSTATE", "STAFF_ADJUSTMENT", "MILESTONE", "LEGACY_MIGRATION"] },
+          },
+          _sum: { amount: true },
+        })
+        viewerMetric = Math.max(0, agg._sum.amount ?? 0)
+      }
+    } else if (tab === "rep") {
       viewerRank =
         (await prisma.profile.count({
           where: { ...rankableProfile(), reputation: { gt: viewerProfile.reputation } },
@@ -292,9 +339,7 @@ export default async function LeaderboardPage({
                   <div className="font-semibold truncate flex items-center">
                     {p.username || p.user.name}
                     <RoleBadge role={p.user.role} />
-                    <span className={`ml-2 inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full ${getReputationTier(p.reputation).bg} ${getReputationTier(p.reputation).color}`}>
-                      {getReputationTier(p.reputation).icon} {getReputationTier(p.reputation).name}
-                    </span>
+                    <TierChip reputation={p.reputation} publicMilestoneOptOut={p.publicMilestoneOptOut} />
                   </div>
                   <div className="text-xs text-muted-foreground">
                     {p.user._count.threadCreator} threads · {p.user._count.posts} posts · {p.user._count.diaryCreator} diaries · {p.user._count.following} followers
@@ -346,6 +391,36 @@ export default async function LeaderboardPage({
             </div>
           )}
         </div>
+
+        {/* Best New Growers — same week, accounts under 30 days */}
+        {tab === "week" && weekly && weekly.newRows.length > 0 && (
+          <div className="mt-6 bg-card rounded-xl border border-border overflow-hidden">
+            <div className="px-4 py-3 border-b border-border">
+              <h2 className="text-sm font-semibold flex items-center gap-2">
+                <Sprout className="w-4 h-4 text-primary" /> Best New Growers
+              </h2>
+              <p className="text-xs text-muted-foreground">Members under 30 days old, ranked by rep earned this week.</p>
+            </div>
+            <div className="divide-y divide-border">
+              {weekly.newRows.map(({ profile: p, metric }, i) => (
+                <Link
+                  key={p.user.id}
+                  href={`/u/${p.username || p.user.name}`}
+                  className="flex items-center gap-3 p-3 hover:bg-secondary/50 transition-colors"
+                >
+                  <span className="w-5 text-center text-xs text-muted-foreground shrink-0">{i + 1}</span>
+                  <div className="flex-1 min-w-0">
+                    <span className="text-sm font-medium truncate flex items-center">
+                      {p.username || p.user.name}
+                      <TierChip reputation={p.reputation} publicMilestoneOptOut={p.publicMilestoneOptOut} />
+                    </span>
+                  </div>
+                  <span className="text-sm font-semibold text-primary shrink-0">{metric.toLocaleString()}</span>
+                </Link>
+              ))}
+            </div>
+          </div>
+        )}
 
         <p className="text-center text-sm text-muted-foreground mt-6">
           <Link href="/progress" className="text-primary hover:underline inline-flex items-center gap-1">

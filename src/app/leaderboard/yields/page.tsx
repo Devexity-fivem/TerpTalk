@@ -7,6 +7,7 @@ import { Trophy, Leaf } from "lucide-react"
 import { Avatar } from "@/components/ui/avatar"
 import { buildMetadata } from "@/lib/seo"
 import EmptyState from "@/components/empty-state"
+import TierChip from "@/components/tier-chip"
 
 export const revalidate = 300
 
@@ -173,7 +174,7 @@ export default async function YieldLeaderboardPage() {
                       alt={row.topEntry.author.profile?.username ?? row.topEntry.author.name ?? undefined}
                       size="sm"
                     />
-                    <span className="text-muted-foreground text-xs">
+                    <span className="text-muted-foreground text-xs inline-flex items-center gap-1">
                       Best by{" "}
                       <Link
                         href={`/u/${row.topEntry.author.profile?.username || row.topEntry.author.name}`}
@@ -181,6 +182,7 @@ export default async function YieldLeaderboardPage() {
                       >
                         {row.topEntry.author.profile?.username || row.topEntry.author.name}
                       </Link>
+                      <TierChip reputation={row.topEntry.author.profile?.reputation ?? 0} publicMilestoneOptOut={row.topEntry.author.profile?.publicMilestoneOptOut} />
                     </span>
                   </div>
                 </div>

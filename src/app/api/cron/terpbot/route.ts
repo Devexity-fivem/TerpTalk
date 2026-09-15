@@ -6,6 +6,7 @@ import { scanDormantThreads } from "@/lib/terpbot-assist"
 import { recordBotEvent } from "@/lib/terpbot-events"
 import { currentWeekKey, previousWeekKey, currentMonthKey, previousMonthKey } from "@/lib/week"
 import { resolveWeeklyWinner, resolveMonthlyDiaryWinner } from "@/lib/contest-awards"
+import { resolveWeeklyRecognition } from "@/lib/weekly-recognition"
 import { materializeReputationFlags } from "@/lib/trust-signals"
 
 // Daily TerpBot job — digests, grow tips, and contest-winner announcements.
@@ -106,6 +107,22 @@ export async function GET(request: NextRequest) {
       }
       return null
     }, posted, failed, "contest")
+
+    // ── Grower of the Week (once per ISO week) ────────────────────────
+    // resolveWeeklyRecognition awards the badge + keyed WEEKLY_AWARD and
+    // is idempotent — the cron key just makes the announcement once.
+    await runCronTask(`terpbot:gotw:${prevWeek}`, async () => {
+      const winner = await resolveWeeklyRecognition(prevWeek)
+      if (!winner) return null
+      const who = winner.username ? `@${winner.username}` : "a member"
+      const dto = await postToGeneral(
+        `🌿 Grower of the Week: ${who}! Most reputation earned last week. This week's board resets Monday — every member starts at zero on the This Week leaderboard.`
+      )
+      if (dto) {
+        await recordBotEvent({ type: "ANNOUNCEMENT", key: `announce:gotw:${prevWeek}`, command: "gotw" }).catch(() => {})
+      }
+      return "gotw"
+    }, posted, failed, "gotw")
   }
 
   // ── Monthly diary contest winner (once per calendar month) ─────────
