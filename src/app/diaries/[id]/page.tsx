@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma"
 import { publicUserSelect } from "@/lib/security"
 import { notFound } from "next/navigation"
-import { Leaf, Calendar, Users, ClipboardCheck, Camera } from "lucide-react"
+import { Leaf, Calendar, Users, ClipboardCheck, Camera, TrendingUp } from "lucide-react"
 import Link from "next/link"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
@@ -12,12 +12,13 @@ import { buildMetadata, snippet } from "@/lib/seo"
 import { Breadcrumbs } from "@/components/breadcrumbs"
 import { JsonLd } from "@/components/json-ld"
 import EnvCharts from "@/components/env-chart"
+import HeightChart from "@/components/height-chart"
 import HarvestForm from "@/components/harvest-form"
 import StageTimeline from "@/components/stage-timeline"
 import TierChip from "@/components/tier-chip"
 import { getGrowJourney, GROW_STAGES } from "@/lib/grow-journey"
 import ImageGallery from "@/components/image-gallery"
-import { groupUpdatesByWeek, buildHarvestReport, diaryCompleteness, diaryDay, diaryWeek } from "@/lib/diary-weeks"
+import { groupUpdatesByWeek, buildHarvestReport, diaryCompleteness, diaryDay, diaryWeek, growthSummary, stageDurations } from "@/lib/diary-weeks"
 import ReportButton from "@/components/report-button"
 import DiaryReactions from "@/components/diary-reactions"
 import OwnerDeleteButton from "@/components/owner-delete-button"
@@ -80,7 +81,7 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
   // Fetch the most recent 100 updates and restore chronological order for the timeline.
   const updates = [...diary.updates].reverse()
   const session = await getServerSession(authOptions)
-  const [following, linkedStrain, journey] = await Promise.all([
+  const [following, linkedStrain, journey, growthUpdates] = await Promise.all([
     session?.user?.id
       ? !!(await prisma.diaryFollow.findUnique({
           where: { userId_diaryId: { userId: session.user.id, diaryId: diary.id } },
@@ -94,6 +95,15 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
         })
       : null,
     getGrowJourney(id),
+    // Lean analytics series — the updates payload above is capped at 100,
+    // which would silently drop early history from long grows. This query
+    // carries only what the height chart and stage spans need.
+    prisma.diaryUpdate.findMany({
+      where: { diaryId: id },
+      select: { id: true, createdAt: true, stage: true, heightCm: true },
+      orderBy: { createdAt: "asc" },
+      take: 500,
+    }),
   ])
   // The explicit catalog link wins over the fuzzy text match.
   const strainLink = diary.strainRef ?? linkedStrain
@@ -101,16 +111,14 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
   // eslint-disable-next-line react-hooks/purity
   const dayCount = Math.max(0, Math.floor((Date.now() - new Date(diary.startDate).getTime()) / 86400000))
 
-  // Stage timeline — consecutive day-runs per stage from updates
-  const stageRuns: { stage: string; days: number }[] = []
-  let prevDay = -1
-  for (const u of updates) {
-    const d = Math.floor((new Date(u.createdAt).getTime() - new Date(diary.startDate).getTime()) / 86400000)
-    const last = stageRuns[stageRuns.length - 1]
-    if (last && last.stage === u.stage && d === prevDay + 1) last.days++
-    else if (!last || last.stage !== u.stage) stageRuns.push({ stage: u.stage, days: 1 })
-    prevDay = d
-  }
+  const now = new Date()
+
+  // Growth summary + stage spans — the lean series covers the full grow
+  // (the timeline payload is capped at 100 updates).
+  const growth = growthSummary(diary, growthUpdates, now)
+  // Stage timeline — elapsed-day runs from update stage snapshots; the
+  // current stage extends through now (or harvest day when harvested).
+  const stageRuns = stageDurations(diary, growthUpdates, now)
 
   // Harvest estimate — first FLOWER update + 9 weeks typical flower time
   const flip = updates.find((u) => u.stage === "FLOWER")
@@ -548,6 +556,36 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
               ))}
             </nav>
           )}
+
+          <section className="bg-card rounded-xl border border-border p-4 mb-4" aria-label="Grow progress">
+              <div className="flex items-center gap-2 mb-2">
+                <TrendingUp className="w-4 h-4 text-primary" />
+                <h2 className="font-semibold text-sm">Growth</h2>
+                <span className="text-xs text-muted-foreground ml-auto">
+                  day {growth.totalDays}{diary.harvested ? " (harvested)" : ""}
+                </span>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                {growth.measurements === 0
+                  ? "Height measurements will appear here as they are recorded."
+                  : growth.measurements === 1
+                    ? `Day ${growth.latestDay} · week ${growth.latestWeek} — height ${growth.currentHeight} cm`
+                    : `Day ${growth.latestDay} · week ${growth.latestWeek} — ${growth.currentHeight} cm (${growth.delta! >= 0 ? "+" : ""}${growth.delta} cm since previous reading${growth.deltaDays! > 0 ? `, ${growth.deltaDays}d earlier` : ", same day"})`}
+              </p>
+              <div className="mt-3">
+                <HeightChart
+                  points={growthUpdates
+                    .filter((u) => u.heightCm != null)
+                    .map((u) => ({
+                      createdAt: u.createdAt.toISOString(),
+                      day: diaryDay(diary.startDate, u.createdAt),
+                      week: diaryWeek(diary.startDate, u.createdAt),
+                      stage: u.stage,
+                      heightCm: u.heightCm!,
+                    }))}
+                />
+              </div>
+            </section>
 
           <EnvCharts
             updates={updates.map((u) => ({

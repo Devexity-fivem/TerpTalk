@@ -188,6 +188,101 @@ export function buildHarvestReport(
   }
 }
 
+// ─── Growth summary ─────────────────────────────────────────────────
+
+export interface GrowthSummary {
+  measurements: number
+  currentHeight: number | null
+  previousHeight: number | null
+  /** cm change since the previous measurement — null when <2 readings. */
+  delta: number | null
+  /** Calendar days between the latest two measurements — 0 for same-day. */
+  deltaDays: number | null
+  /** Days since grow start (harvest day when harvested). */
+  totalDays: number
+  latestAt: Date | null
+  latestDay: number | null
+  latestWeek: number | null
+}
+
+/**
+ * Factual height summary — deliberately no growth-rate metric; sparse
+ * readings make cm/day misleading. Ordering is by createdAt only; the
+ * user-entered dayNumber/weekNumber annotations are never trusted.
+ */
+export function growthSummary(
+  diary: DiaryLike,
+  updates: { createdAt: Date | string; heightCm?: number | null }[],
+  now: Date = new Date()
+): GrowthSummary {
+  const measured = updates
+    .filter((u) => u.heightCm != null)
+    .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+  const last = measured[measured.length - 1]
+  const prev = measured.length >= 2 ? measured[measured.length - 2] : undefined
+  const end = diary.harvested && diary.harvestedAt ? diary.harvestedAt : now
+  return {
+    measurements: measured.length,
+    currentHeight: last?.heightCm ?? null,
+    previousHeight: prev?.heightCm ?? null,
+    delta: last && prev ? Math.round((last.heightCm! - prev.heightCm!) * 10) / 10 : null,
+    deltaDays: last && prev
+      ? Math.round((new Date(last.createdAt).getTime() - new Date(prev.createdAt).getTime()) / DAY_MS)
+      : null,
+    totalDays: diaryDay(diary.startDate, end),
+    latestAt: last ? new Date(last.createdAt) : null,
+    latestDay: last ? diaryDay(diary.startDate, last.createdAt) : null,
+    latestWeek: last ? diaryWeek(diary.startDate, last.createdAt) : null,
+  }
+}
+
+// ─── Stage durations ────────────────────────────────────────────────
+
+export interface StageDuration {
+  stage: string
+  /** Elapsed days in this stage — sum across re-entries (e.g. re-veg). */
+  days: number
+}
+
+/**
+ * Chronological stage runs as elapsed-day spans — the generalized form of
+ * the diary page's inline "consecutive observed days" calc. A run starts
+ * the day a new stage is first observed and ends the day before the next
+ * stage appears; re-entering a stage (e.g. re-veg) produces a new segment.
+ * The final run extends through harvest day when harvested, else through
+ * `now` — the recorded stage persists until the grower logs otherwise.
+ * Stages only seen inside a same-day switch span no days and are omitted
+ * rather than invented. Output shape matches StageTimeline's `runs` prop.
+ */
+export function stageDurations(
+  diary: DiaryLike,
+  updates: Pick<DiaryUpdateLike, "createdAt" | "stage">[],
+  now: Date = new Date()
+): StageDuration[] {
+  const sorted = [...updates].sort(
+    (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+  )
+  if (sorted.length === 0) return []
+
+  const endDay = diary.harvested && diary.harvestedAt
+    ? diaryDay(diary.startDate, diary.harvestedAt)
+    : diaryDay(diary.startDate, now)
+
+  // Boundaries: the diary day each new stage is first observed.
+  const bounds: { stage: string; startDay: number }[] = []
+  for (const u of sorted) {
+    const day = diaryDay(diary.startDate, u.createdAt)
+    const last = bounds[bounds.length - 1]
+    if (!last || last.stage !== u.stage) bounds.push({ stage: u.stage, startDay: day })
+  }
+  return bounds
+    .map((b, i) => ({
+      stage: b.stage,
+      days: Math.max(0, (bounds[i + 1]?.startDay ?? endDay + 1) - b.startDay),
+    }))
+    .filter((r) => r.days > 0)
+}
+
 // ─── Diary completeness (owner-facing quality indicator) ────────────
 
 export interface CompletenessResult {
