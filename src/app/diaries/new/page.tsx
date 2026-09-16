@@ -2,11 +2,13 @@
 
 import { signInHref } from "@/lib/callback-url"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
 import { Leaf, Loader2 } from "lucide-react"
 import Link from "next/link"
+import StrainCombobox from "@/components/strain-combobox"
+import { MEDIUM_TYPES, MEDIUM_LABELS, LIGHT_TYPES, LIGHT_LABELS, TECHNIQUES, TECHNIQUE_LABELS } from "@/lib/grow-fields"
 
 export default function NewDiaryPage() {
   const { data: session, status } = useSession()
@@ -14,20 +16,33 @@ export default function NewDiaryPage() {
   
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
+  const [setups, setSetups] = useState<{ id: string; title: string }[]>([])
   const [formData, setFormData] = useState({
     title: "",
     description: "",
     strain: "",
+    strainId: null as string | null,
     genetics: "",
     growType: "INDOOR",
     startDate: "",
     medium: "",
+    mediumType: "",
     containerSize: "",
     lighting: "",
+    lightType: "",
     nutrients: "",
     equipment: "",
+    techniques: [] as string[],
     spaceDimensions: "",
+    setupId: "",
   })
+
+  useEffect(() => {
+    fetch("/api/setups")
+      .then((res) => res.json())
+      .then((data) => setSetups(data.setups || []))
+      .catch(() => setSetups([]))
+  }, [])
 
   if (status === "loading") {
     return (
@@ -57,7 +72,13 @@ export default function NewDiaryPage() {
       const response = await fetch("/api/diaries", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formData),
+        body: JSON.stringify({
+          ...formData,
+          strainId: formData.strainId || null,
+          mediumType: formData.mediumType || null,
+          lightType: formData.lightType || null,
+          setupId: formData.setupId || null,
+        }),
       })
 
       if (!response.ok) {
@@ -128,13 +149,10 @@ export default function NewDiaryPage() {
                   <label htmlFor="strain" className="block text-sm font-medium mb-2">
                     Strain
                   </label>
-                  <input
-                    id="strain"
-                    type="text"
+                  <StrainCombobox
                     value={formData.strain}
-                    onChange={(e) => setFormData({ ...formData, strain: e.target.value })}
-                    className="w-full px-4 py-2 rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary"
-                    placeholder="e.g., Blue Dream, OG Kush"
+                    strainId={formData.strainId}
+                    onChange={(text, strainId) => setFormData({ ...formData, strain: text, strainId })}
                   />
                 </div>
 
@@ -193,16 +211,27 @@ export default function NewDiaryPage() {
               
               <div className="grid md:grid-cols-2 gap-4">
                 <div>
-                  <label htmlFor="medium" className="block text-sm font-medium mb-2">
+                  <label htmlFor="mediumType" className="block text-sm font-medium mb-2">
                     Growing Medium
                   </label>
+                  <select
+                    id="mediumType"
+                    value={formData.mediumType}
+                    onChange={(e) => setFormData({ ...formData, mediumType: e.target.value })}
+                    className="w-full px-4 py-2 rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary"
+                  >
+                    <option value="">Select (optional)</option>
+                    {MEDIUM_TYPES.map((t) => (
+                      <option key={t} value={t}>{MEDIUM_LABELS[t]}</option>
+                    ))}
+                  </select>
                   <input
                     id="medium"
                     type="text"
                     value={formData.medium}
                     onChange={(e) => setFormData({ ...formData, medium: e.target.value })}
-                    className="w-full px-4 py-2 rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary"
-                    placeholder="e.g., Soil, Coco, Hydroponics"
+                    className="w-full px-4 py-2 mt-2 rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary"
+                    placeholder="Details, e.g., Fox Farm Ocean Forest"
                   />
                 </div>
 
@@ -223,16 +252,27 @@ export default function NewDiaryPage() {
 
               <div className="grid md:grid-cols-2 gap-4">
                 <div>
-                  <label htmlFor="lighting" className="block text-sm font-medium mb-2">
+                  <label htmlFor="lightType" className="block text-sm font-medium mb-2">
                     Lighting
                   </label>
+                  <select
+                    id="lightType"
+                    value={formData.lightType}
+                    onChange={(e) => setFormData({ ...formData, lightType: e.target.value })}
+                    className="w-full px-4 py-2 rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary"
+                  >
+                    <option value="">Select (optional)</option>
+                    {LIGHT_TYPES.map((t) => (
+                      <option key={t} value={t}>{LIGHT_LABELS[t]}</option>
+                    ))}
+                  </select>
                   <input
                     id="lighting"
                     type="text"
                     value={formData.lighting}
                     onChange={(e) => setFormData({ ...formData, lighting: e.target.value })}
-                    className="w-full px-4 py-2 rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary"
-                    placeholder="e.g., LED 600W, HPS 1000W"
+                    className="w-full px-4 py-2 mt-2 rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary"
+                    placeholder="Details, e.g., 240W quantum board"
                   />
                 </div>
 
@@ -278,6 +318,55 @@ export default function NewDiaryPage() {
                   rows={3}
                 />
               </div>
+
+              <div>
+                <span className="block text-sm font-medium mb-2">Training techniques (optional)</span>
+                <div className="flex flex-wrap gap-2">
+                  {TECHNIQUES.map((t) => {
+                    const active = formData.techniques.includes(t)
+                    return (
+                      <button
+                        key={t}
+                        type="button"
+                        onClick={() =>
+                          setFormData({
+                            ...formData,
+                            techniques: active
+                              ? formData.techniques.filter((x) => x !== t)
+                              : [...formData.techniques, t],
+                          })
+                        }
+                        className={`px-3 py-1 rounded-full text-sm border transition-colors ${
+                          active
+                            ? "bg-primary text-primary-foreground border-primary"
+                            : "border-border hover:bg-secondary"
+                        }`}
+                      >
+                        {TECHNIQUE_LABELS[t]}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {setups.length > 0 && (
+                <div>
+                  <label htmlFor="setupId" className="block text-sm font-medium mb-2">
+                    Link a grow setup (optional)
+                  </label>
+                  <select
+                    id="setupId"
+                    value={formData.setupId}
+                    onChange={(e) => setFormData({ ...formData, setupId: e.target.value })}
+                    className="w-full px-4 py-2 rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary"
+                  >
+                    <option value="">None</option>
+                    {setups.map((s) => (
+                      <option key={s.id} value={s.id}>{s.title}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
             </div>
 
             {error && (

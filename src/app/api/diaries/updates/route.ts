@@ -37,6 +37,7 @@ export async function POST(request: Request) {
       vpd,
       ph,
       ec,
+      heightCm,
       feeding,
       training,
       images,
@@ -65,7 +66,7 @@ export async function POST(request: Request) {
     if (stage !== undefined && stage !== null && !VALID_STAGES.has(stage)) {
       return NextResponse.json({ error: "Invalid stage" }, { status: 400 })
     }
-    for (const n of [dayNumber, weekNumber, temperature, humidity, vpd, ph, ec]) {
+    for (const n of [dayNumber, weekNumber, temperature, humidity, vpd, ph, ec, heightCm]) {
       if (n !== undefined && n !== null && typeof n !== "number") {
         return NextResponse.json({ error: "Numeric fields must be numbers" }, { status: 400 })
       }
@@ -78,6 +79,7 @@ export async function POST(request: Request) {
       [vpd, 0, 6, "vpd"],
       [ph, 0, 14, "ph"],
       [ec, 0, 15, "ec"],
+      [heightCm, 0.1, 500, "heightCm"],
       [dayNumber, 0, 1000, "dayNumber"],
       [weekNumber, 0, 150, "weekNumber"],
     ]
@@ -163,6 +165,7 @@ export async function POST(request: Request) {
           vpd: typeof vpd === "number" ? vpd : null,
           ph: typeof ph === "number" ? ph : null,
           ec: typeof ec === "number" ? ec : null,
+          heightCm: typeof heightCm === "number" ? heightCm : null,
           feeding: cleanStr(feeding, 300),
           training: cleanStr(training, 300),
           // Attach up to 4 client-resized photos

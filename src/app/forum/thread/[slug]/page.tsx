@@ -2,7 +2,7 @@ import { Fragment } from "react"
 import { prisma } from "@/lib/prisma"
 import { publicUserSelect, isModerator } from "@/lib/security"
 import { notFound, redirect } from "next/navigation"
-import { MessageSquare, Users, Clock, CheckCircle2, Eye } from "lucide-react"
+import { MessageSquare, Users, Clock, CheckCircle2, Eye, BookOpen } from "lucide-react"
 import Link from "next/link"
 import ReplyForm from "@/components/reply-form"
 import PostActions from "@/components/post-actions"
@@ -85,6 +85,18 @@ async function getThreadData(slug: string, page: number, canSeeHidden: boolean) 
         take: POSTS_PER_PAGE,
       },
       _count: { select: { posts: { where: { deleted: false } } } },
+      // Canonical diary this thread discusses (0-1) — surfaced as a context card.
+      diaryFor: {
+        select: {
+          id: true,
+          title: true,
+          strain: true,
+          stage: true,
+          harvested: true,
+          deleted: true,
+          author: { select: { ...publicUserSelect, banned: true, suspendedUntil: true } },
+        },
+      },
     },
   })
 
@@ -96,6 +108,15 @@ async function getThreadData(slug: string, page: number, canSeeHidden: boolean) 
       (thread.author.suspendedUntil && thread.author.suspendedUntil.getTime() > Date.now()))
   if (!thread || thread.deleted || (thread.category?.hidden && !canSeeHidden) || authorInactive) {
     notFound()
+  }
+
+  // Diary context card — hidden when the linked diary is gone or its
+  // author is suspended/banned (mirrors the diary page's own gate).
+  if (thread.diaryFor) {
+    const a = thread.diaryFor.author
+    if (thread.diaryFor.deleted || a.banned || (a.suspendedUntil && a.suspendedUntil.getTime() > Date.now())) {
+      thread.diaryFor = null
+    }
   }
 
   return thread
@@ -296,6 +317,7 @@ export default async function ThreadPage({
     : thread.posts
 
   const acceptedPost = thread.acceptedAnswer
+  const diaryCtx = thread.diaryFor
 
   return (
     <div className="min-h-screen bg-background">
@@ -368,6 +390,21 @@ export default async function ThreadPage({
             />
             <ReportButton type="THREAD" targetId={thread.id} authorId={thread.authorId} />
           </div>
+          {/* Grow diary context — this thread is a diary's canonical discussion */}
+          {diaryCtx && (
+            <div className="mt-3 mb-2">
+              <Link
+                href={`/diaries/${diaryCtx.id}`}
+                className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-primary/30 bg-primary/5 text-sm hover:bg-primary/10 transition-colors"
+              >
+                <BookOpen className="w-4 h-4 text-primary shrink-0" />
+                <span>Grow diary: {diaryCtx.title}</span>
+                <span className="text-xs text-muted-foreground">
+                  {diaryCtx.strain ? `${diaryCtx.strain} · ` : ""}{diaryCtx.harvested ? "harvested" : diaryCtx.stage.toLowerCase()}
+                </span>
+              </Link>
+            </div>
+          )}
           {/* Photos attached when the thread was opened */}
           <ImageGallery images={thread.images} />
           {thread.poll && (

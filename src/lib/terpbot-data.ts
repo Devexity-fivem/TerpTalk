@@ -477,7 +477,7 @@ async function handle(name: string, ctx: BotCommandCtx): Promise<BotCommandResul
         orderBy: { name: "asc" },
       })
       if (!strain) return ok(`No strain matching that in the library — browse /strains or add it yourself!`)
-      const stats = await getStrainGrowStats(strain.name)
+      const stats = await getStrainGrowStats(strain.name, strain.id)
       const statsLine = stats.growCount > 0 ? `📊 ${stats.label}` : null
       return ok(
         [

@@ -213,6 +213,9 @@ model Thread {
   // increments, so it can't drive unread indicators.
   lastActivityAt DateTime @default(now())
   acceptedAnswerId String? @unique
+  // Set when the thread was created from the Plant Doctor wizard — powers
+  // exact-match community answers and the symptom tag taxonomy.
+  wizardResultId String?
 
   category   Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
   author     User     @relation("ThreadAuthor", fields: [authorId], references: [id], onDelete: Cascade)
@@ -223,9 +226,11 @@ model Thread {
   poll       Poll?
   acceptedAnswer Post?  @relation("ThreadAcceptedAnswer", fields: [acceptedAnswerId], references: [id], onDelete: SetNull)
   followers  ThreadFollow[]
+  diaryFor   GrowDiary? @relation("DiaryDiscussion")
 
   @@index([categoryId])
   @@index([authorId])
+  @@index([wizardResultId])
   @@index([slug])
   @@index([replyCount])
   @@index([createdAt])
@@ -361,16 +366,22 @@ model GrowDiary {
   id            String   @id @default(cuid())
   title         String
   description   String
-  strain        String?
+  strain        String?  // legacy free text — kept for old diaries and "not listed" entries
+  strainId      String?  // structured link to the community strain catalog
   genetics      String?
   growType      String   // INDOOR, OUTDOOR, GREENHOUSE
   startDate     DateTime
   medium        String?
+  mediumType    String?  // SOIL, COCO, HYDRO, DWC, LIVING_SOIL, OTHER
   containerSize String?
   lighting      String?
+  lightType     String?  // LED, HPS, CMH, FLUORESCENT, SUN, OTHER
   nutrients     String?
   equipment     String?
+  techniques    String[] // LST, HST, TOPPING, FIM, SCROG, SOG, DEFOLIATION, MAINLINING
   spaceDimensions String?
+  setupId       String?  // optional link to the grower's GrowSetup showcase
+  threadId      String?  @unique // 0-1 canonical discussion thread, lazy-created
   authorId      String
   featured      Boolean  @default(false)
   deleted       Boolean  @default(false)
@@ -379,10 +390,16 @@ model GrowDiary {
   harvestedAt   DateTime?
   yieldAmount   Float?
   yieldUnit     String?
+  harvestRating     Int?    // optional 1-10 strain verdict from the harvest review
+  harvestDifficulty String? // EASY | NORMAL | HARD
+  harvestNotes      String? // "what I learned" — shown on the strain page
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
   author        User        @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  strainRef     Strain?     @relation("DiaryStrain", fields: [strainId], references: [id], onDelete: SetNull)
+  setup         GrowSetup?  @relation("SetupDiaries", fields: [setupId], references: [id], onDelete: SetNull)
+  discussion    Thread?     @relation("DiaryDiscussion", fields: [threadId], references: [id], onDelete: SetNull)
   updates       DiaryUpdate[]
   reactions     Reaction[]
   followers     DiaryFollow[]
@@ -390,6 +407,9 @@ model GrowDiary {
 
   @@index([authorId])
   @@index([strain])
+  @@index([strainId])
+  @@index([setupId])
+  @@index([mediumType])
   @@index([featured])
   @@index([createdAt])
   @@index([harvested, harvestedAt(sort: Desc)])
@@ -407,6 +427,7 @@ model DiaryUpdate {
   vpd          Float?
   ph           Float?
   ec           Float?
+  heightCm     Float?
   feeding      String?
   training     String?
   diaryId      String
@@ -475,6 +496,7 @@ model GrowSetup {
   author      User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
   images      SetupImage[]
   comments    SetupComment[]
+  diaries     GrowDiary[] @relation("SetupDiaries")
 
   @@index([authorId])
   @@index([createdAt])
@@ -612,6 +634,7 @@ model Strain {
   createdById String?
   createdBy   User?    @relation(fields: [createdById], references: [id])
   photos      StrainPhoto[]
+  diaries     GrowDiary[] @relation("DiaryStrain")
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 

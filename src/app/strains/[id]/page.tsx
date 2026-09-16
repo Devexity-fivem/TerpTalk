@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma"
 import { notFound } from "next/navigation"
-import { Leaf, Dna, Sprout, ImageIcon, BookOpen, Wrench, MessageSquare, CheckCircle2, BarChart3 } from "lucide-react"
+import { Leaf, Dna, Sprout, ImageIcon, BookOpen, Wrench, MessageSquare, CheckCircle2, BarChart3, Star } from "lucide-react"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import StrainPhotoUpload from "@/components/strain-photo-upload"
@@ -55,7 +55,14 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
 
   const [relatedDiariesRaw, relatedSetupsRaw, relatedThreads, growStats] = await Promise.all([
     prisma.growDiary.findMany({
-      where: { deleted: false, author: activeAuthor(), strain: { contains: escapeLike(strain.name), mode: "insensitive" } },
+      where: {
+        deleted: false,
+        author: activeAuthor(),
+        OR: [
+          { strainId: strain.id },
+          { strain: { contains: escapeLike(strain.name), mode: "insensitive" } },
+        ],
+      },
       orderBy: { updatedAt: "desc" },
       take: 12,
       include: {
@@ -95,12 +102,15 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
         category: { select: { name: true } },
       },
     }),
-    getStrainGrowStats(strain.name),
+    getStrainGrowStats(strain.name, strain.id),
   ])
 
   // `contains` is a recall pre-filter — apply the same precision post-filter
-  // as the stats block so short names can't pull in unrelated grows.
-  const relatedDiaries = relatedDiariesRaw.filter((d) => strainFieldMatches(d.strain, strain.name)).slice(0, 6)
+  // as the stats block so short names can't pull in unrelated grows. A
+  // structured strainId match always counts.
+  const relatedDiaries = relatedDiariesRaw
+    .filter((d) => d.strainId === strain.id || strainFieldMatches(d.strain, strain.name))
+    .slice(0, 6)
   const relatedSetups = relatedSetupsRaw.filter((s) => strainFieldMatches(s.strain, strain.name)).slice(0, 6)
 
   const plantPhotos = strain.photos.filter((p) => p.kind === "PLANT")
@@ -201,6 +211,12 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
                 <div className="text-2xl font-bold text-primary">{growStats.harvestedCount}</div>
                 <div className="text-xs text-muted-foreground">harvested</div>
               </div>
+              {growStats.avgRating != null && (
+                <div>
+                  <div className="text-2xl font-bold text-amber-500">{growStats.avgRating}/10</div>
+                  <div className="text-xs text-muted-foreground">member rating · {growStats.ratingSample} reviews</div>
+                </div>
+              )}
               {growStats.avgYieldOz != null && (
                 <div>
                   <div className="text-2xl font-bold text-emerald-500">{growStats.avgYieldOz} oz</div>
@@ -241,6 +257,42 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
                 {growStats.env.ec != null && <span>avg EC {growStats.env.ec} ({growStats.envSamples.ec})</span>}
               </div>
             )}
+            {(growStats.difficulty.total >= 3 || growStats.topMediums.length > 0 || growStats.topTechniques.length > 0) && (
+              <div className="mt-4 pt-4 border-t border-border flex flex-wrap gap-x-5 gap-y-2 text-xs text-muted-foreground">
+                {growStats.difficulty.total >= 3 && (
+                  <span>
+                    difficulty: {growStats.difficulty.easy} easy · {growStats.difficulty.normal} normal · {growStats.difficulty.hard} hard
+                  </span>
+                )}
+                {growStats.topMediums.length > 0 && <span>mediums: {growStats.topMediums.join(", ")}</span>}
+                {growStats.topLightTypes.length > 0 && <span>lights: {growStats.topLightTypes.join(", ")}</span>}
+                {growStats.topTechniques.length > 0 && <span>techniques: {growStats.topTechniques.join(", ")}</span>}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Member harvest reviews — real notes from growers who finished this strain */}
+        {growStats.reviews.length > 0 && (
+          <div className="bg-card rounded-xl border border-border p-5 mb-6">
+            <div className="flex items-center gap-2 mb-4">
+              <Star className="w-4 h-4 text-amber-500" />
+              <h2 className="font-semibold">Member reviews</h2>
+            </div>
+            <ul className="space-y-4">
+              {growStats.reviews.map((r) => (
+                <li key={r.diaryId} className="text-sm">
+                  <div className="flex flex-wrap items-center gap-2 mb-1">
+                    {r.rating != null && <span className="font-medium text-amber-500">{r.rating}/10</span>}
+                    {r.difficulty && <span className="text-xs text-muted-foreground">difficulty: {r.difficulty}</span>}
+                    <Link href={`/diaries/${r.diaryId}`} className="text-xs text-primary hover:underline ml-auto">
+                      {r.authorName}&apos;s grow →
+                    </Link>
+                  </div>
+                  <p className="text-muted-foreground">{r.notes}</p>
+                </li>
+              ))}
+            </ul>
           </div>
         )}
 

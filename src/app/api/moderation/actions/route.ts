@@ -113,6 +113,8 @@ export async function POST(request: Request) {
             ok = !!(await tx.thread.updateMany({ where: { id: targetId, authorId: targetUserId }, data: { deleted: true } })).count
             if (ok && t) {
               deletedLink = `/forum/thread/${t.slug}`
+              // A deleted discussion thread frees the diary's canonical link.
+              await tx.growDiary.updateMany({ where: { threadId: targetId }, data: { threadId: null } })
               // Detach image rows so deleted content can't keep blobs live.
               const imgs = await tx.postImage.findMany({
                 where: { OR: [{ threadId: targetId }, { post: { threadId: targetId } }] },
@@ -165,7 +167,7 @@ export async function POST(request: Request) {
             ok = !!(await tx.chatMessage.updateMany({ where: { id: targetId, authorId: targetUserId }, data: { deleted: true } })).count
             break
           case "DIARY":
-            ok = !!(await tx.growDiary.updateMany({ where: { id: targetId, authorId: targetUserId }, data: { deleted: true } })).count
+            ok = !!(await tx.growDiary.updateMany({ where: { id: targetId, authorId: targetUserId }, data: { deleted: true, threadId: null } })).count
             if (ok) {
               deletedLink = `/diaries/${targetId}`
               const imgs = await tx.diaryImage.findMany({

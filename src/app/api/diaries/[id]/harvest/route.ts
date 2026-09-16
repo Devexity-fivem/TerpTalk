@@ -2,7 +2,7 @@ import { NextResponse, after } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { unauthorized, forbidden, isBanned, isAdmin } from "@/lib/security"
+import { unauthorized, forbidden, isBanned, isAdmin, enforceLinkTrust } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
 import { checkMaintenance } from "@/lib/maintenance"
 import { announceHarvest } from "@/lib/terpbot"
@@ -10,6 +10,7 @@ import { awardReputation, grantBadge, REP_POINTS } from "@/lib/reputation"
 import { evaluateGrowJourney } from "@/lib/grow-journey"
 import { revalidateTag } from "next/cache"
 import { VALID_YIELD_UNITS } from "@/lib/yield"
+import { parseHarvestDifficulty } from "@/lib/grow-fields"
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await getServerSession(authOptions)
@@ -36,10 +37,50 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   }
 
   const body = await request.json().catch(() => ({}))
-  const { harvested, harvestedAt, yieldAmount, yieldUnit } = body
+  const { harvested, harvestedAt, yieldAmount, yieldUnit, harvestRating, harvestDifficulty, harvestNotes } = body
 
   if (typeof harvested !== "boolean") {
     return NextResponse.json({ error: "harvested must be a boolean" }, { status: 400 })
+  }
+
+  // Optional harvest review — feeds strain-page member knowledge. Worth no
+  // reputation: a paid review is a solicited review.
+  let reviewRating: number | null | undefined // undefined = leave unchanged
+  if ("harvestRating" in body) {
+    if (harvestRating === null || harvestRating === "") {
+      reviewRating = null
+    } else {
+      const r = Number(harvestRating)
+      if (!Number.isInteger(r) || r < 1 || r > 10) {
+        return NextResponse.json({ error: "Rating must be a whole number 1-10" }, { status: 400 })
+      }
+      reviewRating = r
+    }
+  }
+  let reviewDifficulty: string | null | undefined
+  if ("harvestDifficulty" in body) {
+    if (harvestDifficulty === null || harvestDifficulty === "") {
+      reviewDifficulty = null
+    } else {
+      reviewDifficulty = parseHarvestDifficulty(harvestDifficulty)
+      if (!reviewDifficulty) {
+        return NextResponse.json({ error: "Invalid difficulty" }, { status: 400 })
+      }
+    }
+  }
+  let reviewNotes: string | null | undefined
+  if ("harvestNotes" in body) {
+    if (harvestNotes === null || harvestNotes === "") {
+      reviewNotes = null
+    } else if (typeof harvestNotes !== "string" || harvestNotes.length > 1000) {
+      return NextResponse.json({ error: "Notes must be under 1000 characters" }, { status: 400 })
+    } else {
+      reviewNotes = harvestNotes.trim() || null
+    }
+    // Notes render publicly on strain pages — same link gate as other
+    // member-authored text.
+    const linkBlock = await enforceLinkTrust(reviewNotes ?? "", session.user.id, request, "diary-harvest")
+    if (linkBlock) return linkBlock
   }
 
   const data: {
@@ -47,6 +88,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     harvestedAt?: Date | null
     yieldAmount?: number | null
     yieldUnit?: string | null
+    harvestRating?: number | null
+    harvestDifficulty?: string | null
+    harvestNotes?: string | null
     stage: string
   } = {
     harvested,
@@ -88,10 +132,18 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     } else {
       data.yieldUnit = null
     }
+    if (reviewRating !== undefined) data.harvestRating = reviewRating
+    if (reviewDifficulty !== undefined) data.harvestDifficulty = reviewDifficulty
+    if (reviewNotes !== undefined) data.harvestNotes = reviewNotes
   } else {
     data.harvestedAt = null
     data.yieldAmount = null
     data.yieldUnit = null
+    // Unmarking harvest retires the review with it — a review for a grow
+    // that "wasn't actually harvested" shouldn't linger in strain stats.
+    data.harvestRating = null
+    data.harvestDifficulty = null
+    data.harvestNotes = null
   }
 
   const updated = await prisma.growDiary.update({

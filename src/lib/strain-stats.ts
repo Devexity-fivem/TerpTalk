@@ -1,7 +1,8 @@
 import { prisma } from "@/lib/prisma"
 import { unstable_cache } from "next/cache"
 import { toGrams, toOz } from "@/lib/yield"
-import { activeAuthor } from "@/lib/security"
+import { activeAuthor, publicUserSelect } from "@/lib/security"
+import { DIFFICULTY_LABELS, MEDIUM_LABELS, LIGHT_LABELS, TECHNIQUE_LABELS } from "@/lib/grow-fields"
 
 const DAY_MS = 86400000
 
@@ -47,6 +48,16 @@ export interface StrainGrowStats {
   flowerSample: number
   env: { temp: number | null; rh: number | null; vpd: number | null; ph: number | null; ec: number | null }
   envSamples: { temp: number; rh: number; vpd: number; ph: number; ec: number }
+  /** null = insufficient data (fewer than 3 reviews) */
+  avgRating: number | null
+  ratingSample: number
+  difficulty: { easy: number; normal: number; hard: number; total: number }
+  topMediums: string[]
+  topLightTypes: string[]
+  topTechniques: string[]
+  /** Member-authored harvest notes — attributed, not anonymized (they're
+   *  public diary content, same as the linked-grows list). */
+  reviews: { rating: number | null; difficulty: string | null; notes: string; authorName: string; diaryId: string }[]
   /** Honesty tier driven by sample size — the UI must show this. */
   tier: "none" | "minimal" | "early" | "established"
   label: string
@@ -55,13 +66,18 @@ export interface StrainGrowStats {
 
 
 const getStats = unstable_cache(
-  async (strainName: string): Promise<StrainGrowStats> => {
+  async (strainName: string, strainId: string): Promise<StrainGrowStats> => {
     const [rawDiaries, rawSetups] = await Promise.all([
       prisma.growDiary.findMany({
         where: {
           deleted: false,
           author: activeAuthor(),
-          strain: { contains: escapeLike(strainName), mode: "insensitive" },
+          // Union match: structured strainId OR the legacy fuzzy text path.
+          // One row per diary either way — no double counting is possible.
+          OR: [
+            { strainId },
+            { strain: { contains: escapeLike(strainName), mode: "insensitive" } },
+          ],
         },
         select: {
           id: true,
@@ -72,6 +88,15 @@ const getStats = unstable_cache(
           yieldAmount: true,
           yieldUnit: true,
           strain: true,
+          strainId: true,
+          title: true,
+          mediumType: true,
+          lightType: true,
+          techniques: true,
+          harvestRating: true,
+          harvestDifficulty: true,
+          harvestNotes: true,
+          author: { select: publicUserSelect },
         },
         take: 500,
       }),
@@ -88,7 +113,10 @@ const getStats = unstable_cache(
 
     // `contains` is a recall-oriented pre-filter served by the trigram index;
     // post-filter for precision so short/common names can't pollute stats.
-    const diaries = rawDiaries.filter((d) => strainFieldMatches(d.strain, strainName))
+    // A structured strainId match always counts — that's the explicit link.
+    const diaries = rawDiaries.filter(
+      (d) => d.strainId === strainId || strainFieldMatches(d.strain, strainName)
+    )
     const setupCount = rawSetups.filter((s) => strainFieldMatches(s.strain, strainName)).length
     const diaryIds = diaries.map((d) => d.id)
 
@@ -132,6 +160,43 @@ const getStats = unstable_cache(
     const avgN = (arr: number[]) => (arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : null)
     const round1 = (v: number | null) => (v == null ? null : Math.round(v * 10) / 10)
 
+    // Member-review + structured-field aggregates.
+    const ratings = diaries.map((d) => d.harvestRating).filter((r): r is number => r != null)
+    const difficulty = {
+      easy: diaries.filter((d) => d.harvestDifficulty === "EASY").length,
+      normal: diaries.filter((d) => d.harvestDifficulty === "NORMAL").length,
+      hard: diaries.filter((d) => d.harvestDifficulty === "HARD").length,
+      total: 0,
+    }
+    difficulty.total = difficulty.easy + difficulty.normal + difficulty.hard
+
+    const topOf = (pairs: [string, number][], labels: Record<string, string>) =>
+      pairs
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 3)
+        .map(([k]) => labels[k] ?? k)
+    const mediumCounts = new Map<string, number>()
+    const lightCounts = new Map<string, number>()
+    const techniqueCounts = new Map<string, number>()
+    for (const d of diaries) {
+      if (d.mediumType) mediumCounts.set(d.mediumType, (mediumCounts.get(d.mediumType) ?? 0) + 1)
+      if (d.lightType) lightCounts.set(d.lightType, (lightCounts.get(d.lightType) ?? 0) + 1)
+      for (const t of d.techniques) techniqueCounts.set(t, (techniqueCounts.get(t) ?? 0) + 1)
+    }
+
+    const reviews = diaries
+      .filter((d) => d.harvestNotes && d.harvestNotes.trim())
+      .slice(0, 6)
+      .map((d) => ({
+        rating: d.harvestRating,
+        difficulty: d.harvestDifficulty
+          ? DIFFICULTY_LABELS[d.harvestDifficulty as keyof typeof DIFFICULTY_LABELS] ?? d.harvestDifficulty
+          : null,
+        notes: d.harvestNotes!.trim(),
+        authorName: d.author.profile?.username || d.author.name || "Member",
+        diaryId: d.id,
+      }))
+
     return {
       growCount: n,
       growerCount: new Set(diaries.map((d) => d.authorId)).size,
@@ -163,6 +228,13 @@ const getStats = unstable_cache(
             ec: envAgg._count.ec,
           }
         : { temp: 0, rh: 0, vpd: 0, ph: 0, ec: 0 },
+      avgRating: ratings.length >= 3 ? round1(avgN(ratings)!) : null,
+      ratingSample: ratings.length,
+      difficulty,
+      topMediums: topOf([...mediumCounts.entries()], MEDIUM_LABELS as Record<string, string>),
+      topLightTypes: topOf([...lightCounts.entries()], LIGHT_LABELS as Record<string, string>),
+      topTechniques: topOf([...techniqueCounts.entries()], TECHNIQUE_LABELS as Record<string, string>),
+      reviews,
       tier: n === 0 ? "none" : n <= 2 ? "minimal" : n <= 4 ? "early" : "established",
       label:
         n === 0
@@ -178,6 +250,6 @@ const getStats = unstable_cache(
   { revalidate: 300, tags: ["strains"] }
 )
 
-export function getStrainGrowStats(strainName: string) {
-  return getStats(strainName)
+export function getStrainGrowStats(strainName: string, strainId: string) {
+  return getStats(strainName, strainId)
 }

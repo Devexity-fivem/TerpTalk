@@ -10,6 +10,26 @@ import { awardReputation, reverseReputationBySource, REP_POINTS } from "@/lib/re
 import { notificationLinkWhere } from "@/lib/notify"
 import { revalidateTag } from "next/cache"
 
+// The caller's own non-deleted setups — feeds the "link a grow setup"
+// picker on the diary form. Owner-scoped by construction.
+export async function GET() {
+  try {
+    const session = await getServerSession(authOptions)
+    if (!session?.user?.id) return unauthorized()
+
+    const setups = await prisma.growSetup.findMany({
+      where: { authorId: session.user.id, deleted: false },
+      orderBy: { createdAt: "desc" },
+      take: 50,
+      select: { id: true, title: true },
+    })
+    return NextResponse.json({ setups })
+  } catch (error) {
+    console.error("Own setups error:", error)
+    return NextResponse.json({ setups: [] })
+  }
+}
+
 export async function POST(request: Request) {
   let storedImages: string[] = []
 

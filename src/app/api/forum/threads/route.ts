@@ -13,6 +13,7 @@ import { logModAction } from "@/lib/moderation"
 import { storeImages, deleteImagesIfUnreferenced } from "@/lib/blob"
 import { getBooleanSetting, SITE_SETTINGS } from "@/lib/settings"
 import { checkMaintenance } from "@/lib/maintenance"
+import { isValidWizardResultId, wizardResultToTag } from "@/lib/symptom-tags"
 
 // Helper function to create a slug from a string
 function createSlug(text: string): string {
@@ -60,8 +61,16 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json().catch(() => ({}))
-    const { title, content, categoryId, images } = body
+    const { title, content, categoryId, images, wizardResultId } = body
     const tagInputs = Array.isArray(body.tags) ? body.tags.filter((t: unknown): t is string => typeof t === "string").map((t: string) => t.trim()).filter(Boolean) : []
+
+    // Plant Doctor handoff — persist which wizard result produced this
+    // Plant Problems thread and auto-apply its symptom tag.
+    const cleanWizardResultId = wizardResultId != null ? (isValidWizardResultId(wizardResultId) ? wizardResultId : null) : null
+    if (wizardResultId != null && !cleanWizardResultId) {
+      return NextResponse.json({ error: "Invalid wizard result" }, { status: 400 })
+    }
+    const symptomTag = wizardResultToTag(cleanWizardResultId)
 
     if (
       typeof title !== "string" || !title.trim() ||
@@ -85,6 +94,11 @@ export async function POST(request: Request) {
     const tagCap = (await getTierPerks(session.user.id)).maxThreadTags ?? MAX_TAGS
     if (tagInputs.length > tagCap) {
       return NextResponse.json({ error: `Maximum ${tagCap} tags per thread` }, { status: 400 })
+    }
+    // The wizard's symptom tag is system-applied — it doesn't count against
+    // the member's tag cap.
+    if (symptomTag && !tagInputs.some((t: string) => t.toLowerCase() === symptomTag.name)) {
+      tagInputs.unshift(symptomTag.name)
     }
 
     let pollData: { question: string; options: { text: string; order: number }[] } | undefined
@@ -201,6 +215,7 @@ export async function POST(request: Request) {
         content,
         categoryId,
         authorId: session.user.id,
+        wizardResultId: cleanWizardResultId,
         posts: {
           create: {
             content,
@@ -346,6 +361,8 @@ export async function DELETE(request: Request) {
 
     await prisma.$transaction(async (tx) => {
       await tx.thread.update({ where: { id }, data: { deleted: true } })
+      // A deleted discussion thread frees the diary's canonical link.
+      await tx.growDiary.updateMany({ where: { threadId: id }, data: { threadId: null } })
       // Detach image rows on the thread and all its posts so the blob
       // cleanup's reference check sees them as unlinked.
       await tx.postImage.deleteMany({

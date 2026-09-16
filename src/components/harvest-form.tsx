@@ -11,6 +11,9 @@ interface HarvestFormProps {
   initialAmount?: number | null
   initialUnit?: string | null
   initialAt?: Date | string | null
+  initialRating?: number | null
+  initialDifficulty?: string | null
+  initialNotes?: string | null
 }
 
 const UNITS = ["g", "oz", "lb", "kg"]
@@ -22,6 +25,9 @@ export default function HarvestForm({
   initialAmount,
   initialUnit,
   initialAt,
+  initialRating,
+  initialDifficulty,
+  initialNotes,
 }: HarvestFormProps) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
@@ -35,6 +41,10 @@ export default function HarvestForm({
   })
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState("")
+  // Optional strain review — folded into the harvest record, never required.
+  const [rating, setRating] = useState(initialRating?.toString() || "")
+  const [difficulty, setDifficulty] = useState(initialDifficulty || "")
+  const [notes, setNotes] = useState(initialNotes || "")
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -45,6 +55,9 @@ export default function HarvestForm({
     if (amount.trim()) body.yieldAmount = Number(amount)
     if (unit) body.yieldUnit = unit
     if (at) body.harvestedAt = at
+    if (rating.trim()) body.harvestRating = Number(rating)
+    if (difficulty) body.harvestDifficulty = difficulty
+    if (notes.trim()) body.harvestNotes = notes.trim()
     try {
       const res = await fetch(`/api/diaries/${diaryId}/harvest`, {
         method: "PATCH",
@@ -183,6 +196,57 @@ export default function HarvestForm({
                 className="mt-1 w-full px-3 py-2 rounded-lg border border-border bg-background text-sm"
               />
             </label>
+
+            {/* Optional strain review — feeds the strain page's member stats */}
+            <details className="border border-border rounded-lg p-3 group">
+              <summary className="text-sm font-medium cursor-pointer select-none list-none flex items-center justify-between">
+                <span>Rate this strain (optional)</span>
+                <span aria-hidden="true" className="group-open:rotate-180 transition-transform">▼</span>
+              </summary>
+              <div className="pt-3 space-y-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <label className="block">
+                    <span className="text-sm font-medium">Rating (1–10)</span>
+                    <input
+                      type="number"
+                      inputMode="numeric"
+                      min={1}
+                      max={10}
+                      step={1}
+                      value={rating}
+                      onChange={(e) => setRating(e.target.value)}
+                      placeholder="—"
+                      className="mt-1 w-full px-3 py-2 rounded-lg border border-border bg-background text-sm"
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="text-sm font-medium">Difficulty to grow</span>
+                    <select
+                      value={difficulty}
+                      onChange={(e) => setDifficulty(e.target.value)}
+                      className="mt-1 w-full px-3 py-2 rounded-lg border border-border bg-background text-sm"
+                    >
+                      <option value="">—</option>
+                      <option value="EASY">Easy</option>
+                      <option value="NORMAL">Normal</option>
+                      <option value="HARD">Hard</option>
+                    </select>
+                  </label>
+                </div>
+                <label className="block">
+                  <span className="text-sm font-medium">What did you learn?</span>
+                  <textarea
+                    value={notes}
+                    onChange={(e) => setNotes(e.target.value)}
+                    maxLength={1000}
+                    rows={3}
+                    placeholder="Tips for the next grower — feeding, training, what to watch for..."
+                    className="mt-1 w-full px-3 py-2 rounded-lg border border-border bg-background text-sm resize-none"
+                  />
+                  <span className="text-xs text-muted-foreground">{notes.length}/1000 — shown on the strain page</span>
+                </label>
+              </div>
+            </details>
             {error && <p className="text-sm text-destructive">{error}</p>}
             <div className="flex items-center gap-2">
               <button

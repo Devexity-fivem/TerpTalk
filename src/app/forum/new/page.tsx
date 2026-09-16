@@ -12,6 +12,7 @@ import TagInput from "@/components/tag-input"
 import PollComposer from "@/components/poll-composer"
 import Link from "next/link"
 import { WIZARD_RESULTS } from "@/lib/problem-wizard"
+import { SYMPTOM_TAGS, wizardResultToTag } from "@/lib/symptom-tags"
 
 interface Category {
   id: string
@@ -36,6 +37,7 @@ function NewThreadForm() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
   const [categories, setCategories] = useState<Category[]>([])
+  const wizardResultId = searchParams?.get("result") || null
   const [formData, setFormData] = useState(() => {
     const resultId = searchParams?.get("result")
     const result = resultId ? WIZARD_RESULTS[resultId] : null
@@ -59,7 +61,11 @@ function NewThreadForm() {
 
   const [similarThreads, setSimilarThreads] = useState<SimilarThread[]>([])
   const [images, setImages] = useState<string[]>([])
-  const [tags, setTags] = useState<string[]>([])
+  // Plant Doctor handoff pre-applies the matching symptom tag.
+  const [tags, setTags] = useState<string[]>(() => {
+    const t = wizardResultToTag(searchParams?.get("result"))
+    return t ? [t.name] : []
+  })
   const [poll, setPoll] = useState<{ question: string; options: string[] } | null>(null)
 
   useEffect(() => {
@@ -116,7 +122,7 @@ function NewThreadForm() {
       const response = await fetch("/api/forum/threads", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...formData, categoryId, images, tags, poll }),
+        body: JSON.stringify({ ...formData, categoryId, images, tags, poll, wizardResultId }),
       })
 
       if (!response.ok) {
@@ -233,6 +239,35 @@ function NewThreadForm() {
                   <ImageUploader value={images} onChange={setImages} disabled={loading} />
                 </div>
                 <TagInput value={tags} onChange={setTags} disabled={loading} />
+                {/* Symptom picker — only for Plant Problems threads; these
+                    are ordinary tags drawn from the Plant Doctor taxonomy. */}
+                {categories.find((c) => c.id === (formData.categoryId || prefillCategoryId))?.slug === "plant-problems" && (
+                  <div>
+                    <span className="block text-sm font-medium mb-2">Symptoms (optional)</span>
+                    <div className="flex flex-wrap gap-2">
+                      {SYMPTOM_TAGS.map((t) => {
+                        const active = tags.some((x) => x.toLowerCase() === t.name)
+                        return (
+                          <button
+                            key={t.slug}
+                            type="button"
+                            disabled={loading}
+                            onClick={() =>
+                              setTags(active ? tags.filter((x) => x.toLowerCase() !== t.name) : [...tags, t.name])
+                            }
+                            className={`px-3 py-1 rounded-full text-xs border transition-colors ${
+                              active
+                                ? "bg-primary text-primary-foreground border-primary"
+                                : "border-border hover:bg-secondary"
+                            }`}
+                          >
+                            {t.name}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
                 <PollComposer value={poll} onChange={setPoll} disabled={loading} />
               </div>
             </details>

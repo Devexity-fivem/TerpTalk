@@ -8,6 +8,7 @@ import { awardReputation, reverseReputationBySource, REP_POINTS } from "@/lib/re
 import { notificationLinkWhere } from "@/lib/notify"
 import { deleteImagesIfUnreferenced } from "@/lib/blob"
 import { checkMaintenance } from "@/lib/maintenance"
+import { parseMediumType, parseLightType, parseTechniques } from "@/lib/grow-fields"
 import { revalidateTag } from "next/cache"
 import { after } from "next/server"
 import { assistFirstDiary } from "@/lib/terpbot-assist"
@@ -28,15 +29,20 @@ export async function POST(request: Request) {
       title,
       description,
       strain,
+      strainId,
       genetics,
       growType,
       startDate,
       medium,
+      mediumType,
       containerSize,
       lighting,
+      lightType,
       nutrients,
       equipment,
+      techniques,
       spaceDimensions,
+      setupId,
     } = body
 
     if (typeof title !== "string" || !title.trim() || !startDate) {
@@ -67,6 +73,55 @@ export async function POST(request: Request) {
     const stringFields = [strain, genetics, medium, containerSize, lighting, nutrients, equipment, spaceDimensions]
     if (stringFields.some((f) => typeof f === "string" && f.length > 500)) {
       return NextResponse.json({ error: "A field exceeds maximum length" }, { status: 400 })
+    }
+
+    // Structured fields — all optional, additive to the legacy free text.
+    const cleanMediumType = parseMediumType(mediumType)
+    if (mediumType != null && !cleanMediumType) {
+      return NextResponse.json({ error: "Invalid medium type" }, { status: 400 })
+    }
+    const cleanLightType = parseLightType(lightType)
+    if (lightType != null && !cleanLightType) {
+      return NextResponse.json({ error: "Invalid light type" }, { status: 400 })
+    }
+    const cleanTechniques = parseTechniques(techniques)
+    // Strict: a non-array or any out-of-vocabulary value rejects the request.
+    if (techniques != null && (!cleanTechniques || cleanTechniques.length !== techniques.length)) {
+      return NextResponse.json({ error: "Invalid techniques" }, { status: 400 })
+    }
+
+    // Optional catalog strain link — must point at a real strain. The
+    // free-text `strain` stays populated so fuzzy matching still works.
+    const cleanStrainId = typeof strainId === "string" && strainId.trim() ? strainId : null
+    const cleanSetupId = typeof setupId === "string" && setupId.trim() ? setupId : null
+    if (strainId != null && typeof strainId !== "string") {
+      return NextResponse.json({ error: "Invalid strain" }, { status: 400 })
+    }
+    if (setupId != null && typeof setupId !== "string") {
+      return NextResponse.json({ error: "Invalid setup" }, { status: 400 })
+    }
+
+    let linkedStrainName: string | null = null
+    if (cleanStrainId) {
+      const strainRow = await prisma.strain.findUnique({
+        where: { id: cleanStrainId },
+        select: { id: true, name: true },
+      })
+      if (!strainRow) {
+        return NextResponse.json({ error: "Strain not found" }, { status: 400 })
+      }
+      linkedStrainName = strainRow.name
+    }
+
+    // Optional setup link — only the member's own setups can be attached.
+    if (cleanSetupId) {
+      const setup = await prisma.growSetup.findUnique({
+        where: { id: cleanSetupId },
+        select: { id: true, authorId: true, deleted: true },
+      })
+      if (!setup || setup.deleted || setup.authorId !== session.user.id) {
+        return NextResponse.json({ error: "Setup not found" }, { status: 400 })
+      }
     }
 
     const parsedStartDate = new Date(startDate)
@@ -112,16 +167,21 @@ export async function POST(request: Request) {
       data: {
         title,
         description: description ?? "",
-        strain,
+        strain: linkedStrainName ?? strain,
+        strainId: cleanStrainId,
         genetics,
         growType,
         startDate: parsedStartDate,
         medium,
+        mediumType: cleanMediumType,
         containerSize,
         lighting,
+        lightType: cleanLightType,
         nutrients,
         equipment,
+        techniques: cleanTechniques ?? [],
         spaceDimensions,
+        setupId: cleanSetupId,
         authorId: session.user.id,
       },
       include: {
@@ -142,6 +202,8 @@ export async function POST(request: Request) {
     after(() => assistFirstDiary(session.user.id, diary.id).then(() => {}))
 
     revalidateTag("diaries", { expire: 0 })
+    // A structured strain link feeds strain-page stats — same bust as harvest.
+    if (cleanStrainId) revalidateTag("strains", { expire: 0 })
 
     return NextResponse.json({ diary }, { status: 201 })
   } catch (error) {
@@ -178,7 +240,9 @@ export async function DELETE(request: Request) {
     if (diary.authorId !== session.user.id) return forbidden()
 
     const imageUrls = await prisma.$transaction(async (tx) => {
-      await tx.growDiary.update({ where: { id }, data: { deleted: true } })
+      // threadId goes null with the diary: the discussion thread survives as
+      // a normal thread, and no diary context can leak through it.
+      await tx.growDiary.update({ where: { id }, data: { deleted: true, threadId: null } })
       const imgs = await tx.diaryImage.findMany({
         where: { update: { diaryId: id } },
         select: { url: true },

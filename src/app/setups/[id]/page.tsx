@@ -50,6 +50,22 @@ export default async function SetupPage({ params }: { params: Promise<{ id: stri
 
   if (!setup || setup.deleted) notFound()
 
+  // Grows that linked this setup — only publicly viewable diaries.
+  const usedIn = await prisma.growDiary.findMany({
+    where: { setupId: setup.id, deleted: false, author: activeAuthor() },
+    orderBy: { updatedAt: "desc" },
+    take: 6,
+    select: {
+      id: true,
+      title: true,
+      strain: true,
+      stage: true,
+      harvested: true,
+      author: { select: publicUserSelect },
+      updates: { take: 1, orderBy: { createdAt: "desc" }, select: { images: { take: 1, orderBy: { order: "asc" }, select: { url: true } } } },
+    },
+  })
+
   // Link free-text strain names to the strain catalogue when they match —
   // same soft-linking the diary page uses.
   const linkedStrain = setup.strain
@@ -142,6 +158,37 @@ export default async function SetupPage({ params }: { params: Promise<{ id: stri
             )}
           </div>
         </div>
+
+        {/* Grows using this setup */}
+        {usedIn.length > 0 && (
+          <div className="bg-card rounded-xl border border-border p-6 mb-6">
+            <h2 className="font-semibold mb-4">Used in {usedIn.length} grow{usedIn.length === 1 ? "" : "s"}</h2>
+            <ul className="grid sm:grid-cols-2 gap-3">
+              {usedIn.map((d) => (
+                <li key={d.id}>
+                  <Link href={`/diaries/${d.id}`} className="flex items-center gap-3 p-3 rounded-lg border border-border hover:border-primary/50 hover:bg-secondary/50 transition-colors">
+                    {d.updates[0]?.images[0]?.url ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={d.updates[0].images[0].url} alt="" className="w-12 h-12 rounded-lg object-cover border border-border" />
+                    ) : (
+                      <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center text-primary font-bold">
+                        {(d.strain || d.title)[0].toUpperCase()}
+                      </div>
+                    )}
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium truncate">{d.title}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {d.author.profile?.username || d.author.name}
+                        {d.strain ? ` · ${d.strain}` : ""}
+                        {d.harvested ? " · harvested" : ` · ${d.stage.toLowerCase()}`}
+                      </p>
+                    </div>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
 
         {/* Comments */}
         <div className="bg-card rounded-xl border border-border p-6">

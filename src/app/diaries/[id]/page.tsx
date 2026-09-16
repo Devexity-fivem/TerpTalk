@@ -21,7 +21,9 @@ import { groupUpdatesByWeek, buildHarvestReport, diaryCompleteness, diaryDay, di
 import ReportButton from "@/components/report-button"
 import DiaryReactions from "@/components/diary-reactions"
 import OwnerDeleteButton from "@/components/owner-delete-button"
+import DiaryDiscussButton from "@/components/diary-discuss-button"
 import { escapeLike } from "@/lib/strain-stats"
+import { MEDIUM_LABELS, LIGHT_LABELS, TECHNIQUE_LABELS, DIFFICULTY_LABELS } from "@/lib/grow-fields"
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -44,6 +46,9 @@ async function getDiaryData(id: string) {
     where: { id },
     include: {
       author: { select: { ...publicUserSelect, banned: true, suspendedUntil: true } },
+      strainRef: { select: { id: true, name: true } },
+      setup: { select: { id: true, title: true, deleted: true } },
+      discussion: { select: { id: true, slug: true, deleted: true } },
       updates: {
         include: {
           author: { select: publicUserSelect },
@@ -90,6 +95,8 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
       : null,
     getGrowJourney(id),
   ])
+  // The explicit catalog link wins over the fuzzy text match.
+  const strainLink = diary.strainRef ?? linkedStrain
 
   // eslint-disable-next-line react-hooks/purity
   const dayCount = Math.max(0, Math.floor((Date.now() - new Date(diary.startDate).getTime()) / 86400000))
@@ -277,6 +284,10 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
               <div className="flex gap-2 items-center">
                 <DiaryReactions diaryId={diary.id} initialCounts={reactionCounts} initialMine={myReaction} />
                 <DiaryFollowButton diaryId={diary.id} initiallyFollowing={following} />
+                <DiaryDiscussButton
+                  diaryId={diary.id}
+                  existingSlug={diary.discussion && !diary.discussion.deleted ? diary.discussion.slug : null}
+                />
                 <ShareButtons path={`/diaries/${diary.id}`} title={`${diary.title} — grow diary on TerpTalk`} />
                 <OwnerDeleteButton
                   endpoint="/api/diaries"
@@ -303,6 +314,9 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
             initialAmount={diary.yieldAmount}
             initialUnit={diary.yieldUnit}
             initialAt={diary.harvestedAt}
+            initialRating={diary.harvestRating}
+            initialDifficulty={diary.harvestDifficulty}
+            initialNotes={diary.harvestNotes}
           />
         )}
 
@@ -372,6 +386,25 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
                 )}
               </div>
             )}
+            {(diary.harvestRating != null || diary.harvestDifficulty || diary.harvestNotes) && (
+              <div className="mt-4 pt-4 border-t border-border">
+                <div className="flex flex-wrap items-center gap-3 text-sm">
+                  {diary.harvestRating != null && (
+                    <span className="font-medium">
+                      Strain rating: <span className="text-primary">{diary.harvestRating}/10</span>
+                    </span>
+                  )}
+                  {diary.harvestDifficulty && (
+                    <span className="text-muted-foreground">
+                      Difficulty: {DIFFICULTY_LABELS[diary.harvestDifficulty as keyof typeof DIFFICULTY_LABELS] ?? diary.harvestDifficulty}
+                    </span>
+                  )}
+                </div>
+                {diary.harvestNotes && (
+                  <p className="text-sm text-muted-foreground mt-2 whitespace-pre-wrap">{diary.harvestNotes}</p>
+                )}
+              </div>
+            )}
             <p className="text-xs text-muted-foreground mt-3">
               Harvested {harvestReport.harvestedAt.toLocaleDateString()} · started {new Date(diary.startDate).toLocaleDateString()}
             </p>
@@ -405,13 +438,21 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
             {diary.strain && (
               <div>
                 <span className="text-sm text-muted-foreground">Strain:</span>
-                {linkedStrain ? (
-                  <Link href={`/strains/${linkedStrain.id}`} className="font-medium text-primary hover:underline block">
+                {strainLink ? (
+                  <Link href={`/strains/${strainLink.id}`} className="font-medium text-primary hover:underline block">
                     {diary.strain}
                   </Link>
                 ) : (
                   <p className="font-medium">{diary.strain}</p>
                 )}
+              </div>
+            )}
+            {diary.setup && !diary.setup.deleted && (
+              <div>
+                <span className="text-sm text-muted-foreground">Setup:</span>
+                <Link href={`/setups/${diary.setup.id}`} className="font-medium text-primary hover:underline block">
+                  {diary.setup.title}
+                </Link>
               </div>
             )}
             {diary.genetics && (
@@ -420,10 +461,14 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
                 <p className="font-medium">{diary.genetics}</p>
               </div>
             )}
-            {diary.medium && (
+            {(diary.mediumType || diary.medium) && (
               <div>
                 <span className="text-sm text-muted-foreground">Medium:</span>
-                <p className="font-medium">{diary.medium}</p>
+                <p className="font-medium">
+                  {diary.mediumType ? MEDIUM_LABELS[diary.mediumType as keyof typeof MEDIUM_LABELS] ?? diary.mediumType : ""}
+                  {diary.mediumType && diary.medium ? " — " : ""}
+                  {diary.medium}
+                </p>
               </div>
             )}
             {diary.containerSize && (
@@ -432,10 +477,14 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
                 <p className="font-medium">{diary.containerSize}</p>
               </div>
             )}
-            {diary.lighting && (
+            {(diary.lightType || diary.lighting) && (
               <div>
                 <span className="text-sm text-muted-foreground">Lighting:</span>
-                <p className="font-medium">{diary.lighting}</p>
+                <p className="font-medium">
+                  {diary.lightType ? LIGHT_LABELS[diary.lightType as keyof typeof LIGHT_LABELS] ?? diary.lightType : ""}
+                  {diary.lightType && diary.lighting ? " — " : ""}
+                  {diary.lighting}
+                </p>
               </div>
             )}
             {diary.nutrients && (
@@ -455,6 +504,18 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
             <div className="mt-4">
               <span className="text-sm text-muted-foreground">Equipment:</span>
               <p className="font-medium">{diary.equipment}</p>
+            </div>
+          )}
+          {diary.techniques.length > 0 && (
+            <div className="mt-4">
+              <span className="text-sm text-muted-foreground">Techniques:</span>
+              <div className="flex flex-wrap gap-1.5 mt-1">
+                {diary.techniques.map((t) => (
+                  <span key={t} className="text-xs px-2 py-1 bg-secondary rounded">
+                    {TECHNIQUE_LABELS[t as keyof typeof TECHNIQUE_LABELS] ?? t}
+                  </span>
+                ))}
+              </div>
             </div>
           )}
           </div>
@@ -571,8 +632,8 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
                         <p className="text-muted-foreground my-4 whitespace-pre-wrap break-words">{update.content}</p>
 
                         {/* Environmental Data */}
-                        {(update.temperature != null || update.humidity != null || update.vpd != null || update.ph != null || update.ec != null) && (
-                          <div className="grid grid-cols-3 sm:grid-cols-5 gap-3 sm:gap-4 mb-4 p-4 bg-secondary/50 rounded-lg">
+                        {(update.temperature != null || update.humidity != null || update.vpd != null || update.ph != null || update.ec != null || update.heightCm != null) && (
+                          <div className="grid grid-cols-3 sm:grid-cols-6 gap-3 sm:gap-4 mb-4 p-4 bg-secondary/50 rounded-lg">
                             {update.temperature != null && (
                               <div className="text-center">
                                 <div className="text-xs text-muted-foreground">Temp</div>
@@ -601,6 +662,12 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
                               <div className="text-center">
                                 <div className="text-xs text-muted-foreground">EC</div>
                                 <div className="font-semibold">{update.ec}</div>
+                              </div>
+                            )}
+                            {update.heightCm != null && (
+                              <div className="text-center">
+                                <div className="text-xs text-muted-foreground">Height</div>
+                                <div className="font-semibold">{update.heightCm}cm</div>
                               </div>
                             )}
                           </div>

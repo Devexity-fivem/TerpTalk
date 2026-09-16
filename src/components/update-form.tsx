@@ -58,6 +58,7 @@ export default function UpdateForm({ diaryId, currentStage, currentDay, currentW
     vpd: "",
     ph: "",
     ec: "",
+    heightCm: "",
     feeding: "",
     training: "",
   })
@@ -102,6 +103,7 @@ export default function UpdateForm({ diaryId, currentStage, currentDay, currentW
           vpd: formData.vpd ? parseFloat(formData.vpd) : null,
           ph: formData.ph ? parseFloat(formData.ph) : null,
           ec: formData.ec ? parseFloat(formData.ec) : null,
+          heightCm: formData.heightCm ? parseFloat(formData.heightCm) : null,
           images: photos,
         }),
       })
@@ -332,6 +334,19 @@ export default function UpdateForm({ diaryId, currentStage, currentDay, currentW
                     onChange={(e) => setFormData({ ...formData, ec: e.target.value })}
                     className={envInput}
                     placeholder="1.5"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium mb-1">Height (cm)</label>
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    step="0.5"
+                    min="0"
+                    value={formData.heightCm}
+                    onChange={(e) => setFormData({ ...formData, heightCm: e.target.value })}
+                    className={envInput}
+                    placeholder="45"
                   />
                 </div>
               </div>

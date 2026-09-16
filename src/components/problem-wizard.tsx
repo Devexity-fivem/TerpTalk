@@ -1,9 +1,18 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import Link from "next/link"
-import { Stethoscope, RotateCcw, AlertTriangle, ArrowRight } from "lucide-react"
+import { Stethoscope, RotateCcw, AlertTriangle, ArrowRight, CheckCircle2, MessageSquare } from "lucide-react"
 import { WIZARD_START, WIZARD_NODES, WIZARD_RESULTS } from "@/lib/problem-wizard"
+
+interface CommunityThread {
+  id: string
+  slug: string
+  title: string
+  replyCount: number
+  solved: boolean
+  authorName: string
+}
 
 const SEVERITY = {
   urgent: { label: "Act now", cls: "bg-destructive/15 text-destructive" },
@@ -19,7 +28,22 @@ export default function ProblemWizard() {
   const node = WIZARD_NODES[nodeId]
   const result = resultId ? WIZARD_RESULTS[resultId] : null
 
-  const reset = () => { setNodeId(WIZARD_START); setResultId(null); setHistory([]) }
+  // Community threads that hit the same wizard result (or similar symptoms).
+  // Kept with the resultId they were fetched for so a previous diagnosis
+  // can't flash while the next one loads.
+  const [community, setCommunity] = useState<{ forId: string; threads: CommunityThread[] } | null>(null)
+  useEffect(() => {
+    if (!resultId) return
+    let cancelled = false
+    fetch(`/api/forum/threads/symptom?result=${encodeURIComponent(resultId)}`)
+      .then((res) => res.json())
+      .then((data) => { if (!cancelled) setCommunity({ forId: resultId, threads: data.threads || [] }) })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [resultId])
+
+  const reset = () => { setNodeId(WIZARD_START); setResultId(null); setHistory([]); setCommunity(null) }
+  const communityThreads = community?.forId === resultId ? community.threads : []
 
   return (
     <div className="bg-card border border-border rounded-xl p-6">
@@ -48,6 +72,36 @@ export default function ProblemWizard() {
               Ask in Plant Problems <ArrowRight className="w-4 h-4" />
             </Link>
           </div>
+
+          {/* Community threads — real member answers, not a diagnosis */}
+          {communityThreads.length > 0 && (
+            <div className="mt-5 pt-4 border-t border-border">
+              <h3 className="text-sm font-semibold mb-1 flex items-center gap-1.5">
+                <MessageSquare className="w-4 h-4 text-primary" />
+                Community threads about similar problems
+              </h3>
+              <p className="text-xs text-muted-foreground mb-3">
+                Real member experiences — not medical or scientific certainty.
+              </p>
+              <ul className="space-y-2">
+                {communityThreads.map((t) => (
+                  <li key={t.id}>
+                    <Link
+                      href={`/forum/thread/${t.slug}`}
+                      className="text-sm text-primary hover:underline flex items-center gap-2 flex-wrap"
+                    >
+                      {t.solved && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />}
+                      <span>{t.title}</span>
+                      <span className="text-xs text-muted-foreground">
+                        · {t.authorName} · {t.replyCount} repl{t.replyCount === 1 ? "y" : "ies"}
+                        {t.solved ? " · solved" : ""}
+                      </span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
       ) : node ? (
         <div>

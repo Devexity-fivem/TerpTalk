@@ -2,12 +2,36 @@ import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { unauthorized, LIMITS, getClientIp, logSecurityEvent, isBanned, forbidden, enforceLinkTrust } from "@/lib/security"
+import { unauthorized, LIMITS, getClientIp, hashIp, logSecurityEvent, isBanned, forbidden, enforceLinkTrust } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
 import { awardReputation, REP_POINTS } from "@/lib/reputation"
 import { STRAIN_MIN_PAID_DESCRIPTION } from "@/lib/reputation-config"
 import { checkMaintenance } from "@/lib/maintenance"
 import { revalidateTag } from "next/cache"
+
+// Lightweight strain search for the diary-form combobox. Public list —
+// id + name only, enough to pick an existing community strain.
+export async function GET(request: Request) {
+  try {
+    const { searchParams } = new URL(request.url)
+    const q = (searchParams.get("q") ?? "").trim().slice(0, 80)
+
+    const ip = getClientIp(request)
+    const rl = await rateLimit(`strain-search:${hashIp(ip)}`, 30, 60 * 1000)
+    if (!rl.allowed) return NextResponse.json({ strains: [] })
+
+    const strains = await prisma.strain.findMany({
+      where: q ? { name: { contains: q, mode: "insensitive" } } : {},
+      orderBy: { name: "asc" },
+      take: 15,
+      select: { id: true, name: true, type: true },
+    })
+    return NextResponse.json({ strains })
+  } catch (error) {
+    console.error("Strain search error:", error)
+    return NextResponse.json({ strains: [] })
+  }
+}
 
 export async function POST(request: Request) {
   try {
