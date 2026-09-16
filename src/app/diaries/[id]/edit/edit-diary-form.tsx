@@ -7,11 +7,12 @@ interface Props {
   diaryId: string
   initial: DiaryFormData
   startDateDisplay: string
+  strainSuggestion?: { id: string; name: string } | null
 }
 
 // Thin submit wrapper around the shared DiaryForm — PATCHes the diary
 // and returns to it on success. Errors surface via the form's error box.
-export default function EditDiaryForm({ diaryId, initial, startDateDisplay }: Props) {
+export default function EditDiaryForm({ diaryId, initial, startDateDisplay, strainSuggestion }: Props) {
   const router = useRouter()
 
   const handleSubmit = async (formData: DiaryFormData) => {
@@ -45,6 +46,7 @@ export default function EditDiaryForm({ diaryId, initial, startDateDisplay }: Pr
       onSubmit={handleSubmit}
       cancelHref={`/diaries/${diaryId}`}
       startDateDisplay={startDateDisplay}
+      strainSuggestion={strainSuggestion}
     />
   )
 }

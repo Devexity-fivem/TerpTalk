@@ -256,3 +256,30 @@ const getStats = unstable_cache(
 export function getStrainGrowStats(strainName: string, strainId: string) {
   return getStats(strainName, strainId)
 }
+
+/**
+ * Suggest a canonical catalog strain for a legacy free-text value.
+ * Conservative by design: a suggestion is returned only when EXACTLY ONE
+ * catalog name produces a normalized-exact match — "blue dream" /
+ * "BLUE-DREAM" can suggest "Blue Dream", but "Blue Dream Auto" gets
+ * nothing (prefix-fuzzy ≠ exact), and "OG" matching multiple entries gets
+ * nothing. No suggestion is always preferred over a wrong association.
+ *
+ * The query is prefiltered on the input's first normalized token (which
+ * must be a substring of the raw catalog name for an exact-normalized
+ * match to be possible) so the catalog scan stays bounded.
+ */
+export async function suggestStrainLink(
+  strainText: string | null | undefined
+): Promise<{ id: string; name: string } | null> {
+  const normalized = normalizeStrain(strainText ?? "")
+  if (!normalized) return null
+  const firstToken = normalized.split(" ")[0]
+  const candidates = await prisma.strain.findMany({
+    where: { name: { contains: firstToken, mode: "insensitive" } },
+    select: { id: true, name: true },
+    take: 100,
+  })
+  const matches = candidates.filter((s) => normalizeStrain(s.name) === normalized)
+  return matches.length === 1 ? matches[0] : null
+}

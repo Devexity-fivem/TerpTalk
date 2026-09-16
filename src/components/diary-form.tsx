@@ -39,6 +39,9 @@ interface Props {
    * immutable after creation.
    */
   startDateDisplay?: string
+  /** Unique normalized-exact catalog match for the diary's free-text
+   *  strain — rendered as a suggestion the owner must explicitly select. */
+  strainSuggestion?: { id: string; name: string } | null
 }
 
 const inputCls =
@@ -47,7 +50,7 @@ const inputCls =
 // Shared diary metadata form — used by both create (/diaries/new) and
 // edit (/diaries/[id]/edit). Field markup and controls are identical;
 // only the submit wiring and start-date treatment differ.
-export default function DiaryForm({ initial, submitLabel, pendingLabel, onSubmit, cancelHref, startDateDisplay }: Props) {
+export default function DiaryForm({ initial, submitLabel, pendingLabel, onSubmit, cancelHref, startDateDisplay, strainSuggestion }: Props) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
   const [setups, setSetups] = useState<{ id: string; title: string }[]>([])
@@ -125,6 +128,18 @@ export default function DiaryForm({ initial, submitLabel, pendingLabel, onSubmit
               strainId={formData.strainId}
               onChange={(text, strainId) => setFormData({ ...formData, strain: text, strainId })}
             />
+            {strainSuggestion && !formData.strainId && (
+              <p className="mt-2 text-xs text-muted-foreground">
+                Possible catalog match:{" "}
+                <button
+                  type="button"
+                  onClick={() => setFormData({ ...formData, strain: strainSuggestion.name, strainId: strainSuggestion.id })}
+                  className="font-medium text-primary hover:underline"
+                >
+                  {strainSuggestion.name} — select this strain
+                </button>
+              </p>
+            )}
           </div>
 
           <div>

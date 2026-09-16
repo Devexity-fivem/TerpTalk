@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma"
 import { isAdmin } from "@/lib/security"
 import { signInHref } from "@/lib/callback-url"
 import { buildMetadata } from "@/lib/seo"
+import { suggestStrainLink } from "@/lib/strain-stats"
 import EditDiaryForm from "./edit-diary-form"
 import Link from "next/link"
 
@@ -44,6 +45,13 @@ export default async function EditDiaryPage({ params }: { params: Promise<{ id: 
     month: "short", day: "numeric", year: "numeric",
   })
 
+  // Legacy strain hint — only for unlinked diaries with usable free text.
+  // A suggestion appears solely on a unique normalized-exact match; the
+  // owner still has to select it and save. Server-side and owner-gated, so
+  // it can never surface another member's data.
+  const strainSuggestion =
+    !diary.strainId && diary.strain ? await suggestStrainLink(diary.strain) : null
+
   return (
     <div className="min-h-screen bg-background">
       <div className="max-w-4xl mx-auto px-4 py-8">
@@ -61,6 +69,7 @@ export default async function EditDiaryPage({ params }: { params: Promise<{ id: 
           <EditDiaryForm
             diaryId={diary.id}
             startDateDisplay={startDateDisplay}
+            strainSuggestion={strainSuggestion}
             initial={{
               title: diary.title,
               description: diary.description,

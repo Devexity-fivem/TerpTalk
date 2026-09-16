@@ -7,7 +7,7 @@ import "./db-guard.mjs"
 import { strict as assert } from "node:assert"
 import { prisma } from "@/lib/prisma"
 import { parseDiaryPatch, patchTouchesStrainStats, DIARY_EDITABLE_FIELDS } from "@/lib/diary-edit"
-import { escapeLike, strainFieldMatches } from "@/lib/strain-stats"
+import { escapeLike, strainFieldMatches, suggestStrainLink } from "@/lib/strain-stats"
 import { activeAuthor } from "@/lib/security"
 
 const tag = Date.now().toString(36)
@@ -304,6 +304,39 @@ await check("db: strain stats reflect edited membership", async () => {
   assert.equal(await memberCount(), 1, "counted after link")
   await applyPatch(dr.id, { strainId: null, strain: "unrelated" }, u.id)
   assert.equal(await memberCount(), 0, "uncounted after unlink")
+})
+
+// ─── suggestStrainLink ───────────────────────────────────────────────
+await check("suggestStrainLink: exact / case / punctuation variants", async () => {
+  const s = await prisma.strain.create({ data: { name: `Test Legacy ${tag}` } })
+  cleanup.strainIds.push(s.id)
+  for (const text of [`Test Legacy ${tag}`, `test legacy ${tag}`, `TEST-LEGACY_${tag}!`]) {
+    const r = await suggestStrainLink(text)
+    assert.equal(r?.id, s.id, `"${text}" should suggest the catalog strain`)
+  }
+})
+
+await check("suggestStrainLink: no match / empty / null → null", async () => {
+  assert.equal(await suggestStrainLink(`Completely Unknown ${tag}`), null)
+  assert.equal(await suggestStrainLink(""), null)
+  assert.equal(await suggestStrainLink("   "), null)
+  assert.equal(await suggestStrainLink(null), null)
+})
+
+await check("suggestStrainLink: fuzzy-prefix is not a suggestion", async () => {
+  // "Test Legacy X Auto" only prefix-matches "Test Legacy X" — that's
+  // exactly the ambiguity the feature must never auto-resolve.
+  const r = await suggestStrainLink(`Test Legacy ${tag} Auto`)
+  assert.equal(r, null, "prefix-fuzzy must not suggest")
+})
+
+await check("suggestStrainLink: multiple normalized matches → null", async () => {
+  // Two raw names that normalize identically — the DB unique index is
+  // case/punctuation-sensitive so both can exist.
+  const a = await prisma.strain.create({ data: { name: `Test Ambig ${tag}` } })
+  const b = await prisma.strain.create({ data: { name: `test-ambig-${tag}` } })
+  cleanup.strainIds.push(a.id, b.id)
+  assert.equal(await suggestStrainLink(`test ambig ${tag}`), null, "ambiguous must not suggest")
 })
 
 await check("db: editable-field allowlist matches schema", () => {
