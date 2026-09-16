@@ -9,7 +9,7 @@ import { STAGE_TIPS } from "@/lib/stage-tips"
 
 // The API silently drops data-URIs over 400K chars — step the quality down
 // until the encoded image fits instead of losing the photo.
-function resizeImage(file: File, max = 800): Promise<string> {
+export function resizeImage(file: File, max = 800): Promise<string> {
   return new Promise((resolve, reject) => {
     const img = new Image()
     img.onload = () => {

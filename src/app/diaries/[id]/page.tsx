@@ -17,7 +17,7 @@ import HarvestForm from "@/components/harvest-form"
 import StageTimeline from "@/components/stage-timeline"
 import TierChip from "@/components/tier-chip"
 import { getGrowJourney, GROW_STAGES } from "@/lib/grow-journey"
-import ImageGallery from "@/components/image-gallery"
+import UpdateEditSection from "@/components/update-edit-form"
 import { groupUpdatesByWeek, buildHarvestReport, diaryCompleteness, diaryDay, diaryWeek, growthSummary, stageDurations } from "@/lib/diary-weeks"
 import ReportButton from "@/components/report-button"
 import DiaryReactions from "@/components/diary-reactions"
@@ -645,99 +645,28 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
 
                   <div className="space-y-4 border-l-2 border-border pl-4 sm:pl-6">
                     {week.updates.map((update) => (
-                      <div key={update.id} className="bg-card rounded-lg border border-border p-4">
-                        <div className="flex flex-wrap items-start justify-between gap-2 mb-3">
-                          <div>
-                            <div className="flex items-center gap-2 mb-1.5 flex-wrap">
-                              <span className="text-xs text-muted-foreground px-2 py-1 bg-secondary rounded">
-                                {update.stage}
-                              </span>
-                              <span className="text-xs text-muted-foreground px-2 py-1 bg-secondary rounded">
-                                Day {diaryDay(diary.startDate, update.createdAt)}
-                              </span>
-                            </div>
-                            <h4 className="font-semibold text-sm">{update.title}</h4>
-                          </div>
-                          <span className="text-xs text-muted-foreground flex items-center gap-2">
-                            {new Date(update.createdAt).toLocaleDateString()}
-                            <OwnerDeleteButton
-                              endpoint="/api/diaries/updates"
-                              id={update.id}
-                              authorId={update.authorId}
-                              confirmText="Delete this update? This permanently removes the update and its photos."
-                              iconOnly
-                            />
-                          </span>
-                        </div>
-
-                        {update.images.length > 0 && (
-                          <ImageGallery
-                            images={update.images.map((img) => ({ id: img.id, url: img.url, caption: img.caption }))}
-                          />
-                        )}
-
-                        <p className="text-muted-foreground my-4 whitespace-pre-wrap break-words">{update.content}</p>
-
-                        {/* Environmental Data */}
-                        {(update.temperature != null || update.humidity != null || update.vpd != null || update.ph != null || update.ec != null || update.heightCm != null) && (
-                          <div className="grid grid-cols-3 sm:grid-cols-6 gap-3 sm:gap-4 mb-4 p-4 bg-secondary/50 rounded-lg">
-                            {update.temperature != null && (
-                              <div className="text-center">
-                                <div className="text-xs text-muted-foreground">Temp</div>
-                                <div className="font-semibold">{update.temperature}°F</div>
-                              </div>
-                            )}
-                            {update.humidity != null && (
-                              <div className="text-center">
-                                <div className="text-xs text-muted-foreground">Humidity</div>
-                                <div className="font-semibold">{update.humidity}%</div>
-                              </div>
-                            )}
-                            {update.vpd != null && (
-                              <div className="text-center">
-                                <div className="text-xs text-muted-foreground">VPD</div>
-                                <div className="font-semibold">{update.vpd}</div>
-                              </div>
-                            )}
-                            {update.ph != null && (
-                              <div className="text-center">
-                                <div className="text-xs text-muted-foreground">pH</div>
-                                <div className="font-semibold">{update.ph}</div>
-                              </div>
-                            )}
-                            {update.ec != null && (
-                              <div className="text-center">
-                                <div className="text-xs text-muted-foreground">EC</div>
-                                <div className="font-semibold">{update.ec}</div>
-                              </div>
-                            )}
-                            {update.heightCm != null && (
-                              <div className="text-center">
-                                <div className="text-xs text-muted-foreground">Height</div>
-                                <div className="font-semibold">{update.heightCm}cm</div>
-                              </div>
-                            )}
-                          </div>
-                        )}
-
-                        {/* Additional Info */}
-                        {(update.feeding || update.training) && (
-                          <div className="space-y-2 mb-4">
-                            {update.feeding && (
-                              <div>
-                                <span className="text-sm text-muted-foreground">Feeding:</span>
-                                <p className="text-sm">{update.feeding}</p>
-                              </div>
-                            )}
-                            {update.training && (
-                              <div>
-                                <span className="text-sm text-muted-foreground">Training:</span>
-                                <p className="text-sm">{update.training}</p>
-                              </div>
-                            )}
-                          </div>
-                        )}
-                      </div>
+                      <UpdateEditSection
+                        key={update.id}
+                        update={{
+                          id: update.id,
+                          authorId: update.authorId,
+                          title: update.title,
+                          content: update.content,
+                          stage: update.stage,
+                          temperature: update.temperature,
+                          humidity: update.humidity,
+                          vpd: update.vpd,
+                          ph: update.ph,
+                          ec: update.ec,
+                          heightCm: update.heightCm,
+                          feeding: update.feeding,
+                          training: update.training,
+                          images: update.images.map((img) => ({ id: img.id, url: img.url, caption: img.caption })),
+                        }}
+                        day={diaryDay(diary.startDate, update.createdAt)}
+                        dateLabel={new Date(update.createdAt).toLocaleDateString()}
+                        edited={update.updatedAt.getTime() - update.createdAt.getTime() > 60_000}
+                      />
                     ))}
                   </div>
                 </section>
