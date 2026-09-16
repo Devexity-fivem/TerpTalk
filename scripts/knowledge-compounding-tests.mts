@@ -279,6 +279,14 @@ await check("every wizard result maps to exactly one symptom tag", () => {
     assert.ok(t.slug && t.name, "tag has slug+name")
     assert.equal(new Set(t.resultIds).size, t.resultIds.length, `dup ids in ${t.slug}`)
   }
+  // Tag rows are keyed by createTagSlug(name) in the threads route — the
+  // canonical slugs must equal what that function generates, otherwise
+  // slug-based lookups silently miss.
+  const createTagSlug = (text: string) =>
+    text.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40)
+  for (const t of SYMPTOM_TAGS) {
+    assert.equal(createTagSlug(t.name), t.slug, `canonical slug mismatch for '${t.name}'`)
+  }
 })
 
 await check("wizardResultToTag + isValidWizardResultId", () => {
@@ -306,10 +314,11 @@ await check("symptom lookup: exact wizardResultId first, solved threads ranked, 
   })
   await prisma.thread.update({ where: { id: solved.id }, data: { acceptedAnswerId: answer.id } })
 
-  // Replica of the symptom route's exact-match query.
+  // Replica of the symptom route's exact-match query — ASC ordering puts
+  // non-null acceptedAnswerId first because Postgres sorts NULLS LAST.
   const exact = await prisma.thread.findMany({
     where: { ...baseWhere, wizardResultId: "root_rot" },
-    orderBy: [{ acceptedAnswerId: "desc" }, { createdAt: "desc" }],
+    orderBy: [{ acceptedAnswerId: "asc" }, { createdAt: "desc" }],
     take: 5,
     select: { id: true, acceptedAnswerId: true },
   })
@@ -317,31 +326,35 @@ await check("symptom lookup: exact wizardResultId first, solved threads ranked, 
   assert.ok(exact.some((t) => t.id === solved.id) && exact.some((t) => t.id === unsolved.id))
   assert.equal(exact[0].id, solved.id, "solved thread ranks first")
 
-  // Fallback: different result id → similar-title/tag search finds tagged thread.
+  // Fallback: different result id → tag/title search finds the thread.
+  // The tag row uses the slug createTagSlug actually generates — for
+  // multi-word names that differs from the old canonical slugs, so the
+  // route must match on tag name (which is unique) not slug.
   const tagRow = await prisma.tag.upsert({
-    where: { slug: "root-problems" },
-    create: { slug: "root-problems", name: "root problems" },
+    where: { slug: "overfeeding-nutrient-burn" },
+    create: { slug: "overfeeding-nutrient-burn", name: "overfeeding / nutrient burn" },
     update: {},
   })
   cleanup.tagIds.push(tagRow.id)
-  const tagged = await mkThread(u.id, cat!.id, { title: `__test_kc_root problems_${tag}` })
+  // Title deliberately shares no search tokens — only the tag-name branch
+  // can find this thread, proving name matching works where slug matching failed.
+  const tagged = await mkThread(u.id, cat!.id, { title: `__test_kc_zx_${tag}` })
   await prisma.threadTag.create({ data: { threadId: tagged.id, tagId: tagRow.id } })
-  const sympTag = wizardResultToTag("damping_off") // no exact threads — maps to a different tag
-  assert.equal(sympTag?.slug, "seedling-germination")
-  const fallbackTag = wizardResultToTag("root_bound") // shares 'root problems' tag
+  const fallbackTag = wizardResultToTag("nitrogen_tox") // maps to 'overfeeding / nutrient burn'
+  assert.equal(fallbackTag?.slug, "overfeeding-nutrient-burn")
   const words = tokenizeSearchText(fallbackTag!.name.replace(/-/g, " "))
   const similar = await prisma.thread.findMany({
     where: {
       ...baseWhere,
       OR: [
-        { tags: { some: { tag: { slug: fallbackTag!.slug } } } },
+        { tags: { some: { tag: { name: fallbackTag!.name } } } },
         ...words.map((w) => ({ title: { contains: w, mode: "insensitive" as const } })),
       ],
     },
     take: 5,
     select: { id: true },
   })
-  assert.ok(similar.some((t) => t.id === tagged.id), "fallback finds tag/title-matched thread")
+  assert.ok(similar.some((t) => t.id === tagged.id), "fallback finds tag-matched thread via tag name")
 })
 
 await check("suspended/banned authors excluded from symptom lookup", async () => {
@@ -405,6 +418,44 @@ await check("thread soft-delete clears diary.threadId; diary delete clears link"
   await prisma.growDiary.update({ where: { id: d.id }, data: { deleted: true, threadId: null } })
   const row2 = await prisma.growDiary.findUnique({ where: { id: d.id }, select: { threadId: true } })
   assert.equal(row2?.threadId, null)
+})
+
+await check("generated discussion carries an opening post so the body renders", async () => {
+  const u = await mkUser("discussop")
+  const d = await mkDiary(u.id, {})
+  const cat = await prisma.category.findUnique({ where: { slug: "general-cannabis-discussion" }, select: { id: true } })
+  assert.ok(cat, "general-cannabis-discussion exists")
+  // Mirror the discuss route's thread create — the thread page renders
+  // posts, not thread.content, so a missing OP post means an empty body.
+  const content = `Community discussion for the grow diary: [x](/diaries/${d.id})`
+  const t = await prisma.thread.create({
+    data: {
+      title: `__test_kc_discuss_${tag}`,
+      slug: `test-kc-discuss-${tag}`,
+      content,
+      categoryId: cat!.id,
+      authorId: u.id,
+      posts: { create: { content, authorId: u.id } },
+    },
+  })
+  cleanup.threadIds.push(t.id)
+  const postCount = await prisma.post.count({ where: { threadId: t.id, deleted: false } })
+  assert.equal(postCount, 1, "opening post must exist or the thread body renders empty")
+})
+
+await check("bulk moderation delete unlinks diary discussions", async () => {
+  const u = await mkUser("bulkmod")
+  const d = await mkDiary(u.id, {})
+  const cat = await prisma.category.findUnique({ where: { slug: "general-cannabis-discussion" }, select: { id: true } })
+  const t = await mkThread(u.id, cat!.id, {})
+  await prisma.growDiary.update({ where: { id: d.id }, data: { threadId: t.id } })
+  // Mirror the bulk route's delete-path unlink.
+  await prisma.$transaction([
+    prisma.thread.updateMany({ where: { id: { in: [t.id] } }, data: { deleted: true } }),
+    prisma.growDiary.updateMany({ where: { threadId: { in: [t.id] } }, data: { threadId: null } }),
+  ])
+  const row = await prisma.growDiary.findUnique({ where: { id: d.id }, select: { threadId: true } })
+  assert.equal(row?.threadId, null, "bulk delete must clear diary.threadId")
 })
 
 await check("generated discussion title never embeds the diary title", async () => {

@@ -91,6 +91,9 @@ export async function POST(
         content,
         categoryId: category.id,
         authorId: session.user.id,
+        // The thread page renders posts, not thread.content — the opening
+        // post is what makes the body (and the diary link) visible.
+        posts: { create: { content, authorId: session.user.id } },
       },
       select: { id: true, slug: true },
     })
@@ -101,6 +104,15 @@ export async function POST(
       where: { id: diary.id, OR: [{ threadId: null }, { discussion: { deleted: true } }] },
       data: { threadId: thread.id },
     })
+    // The creator follows the canonical thread so replies notify them —
+    // same convention as normal thread creation.
+    const followThread = (threadId: string) =>
+      prisma.threadFollow.upsert({
+        where: { userId_threadId: { userId: session.user.id, threadId } },
+        create: { userId: session.user.id, threadId, lastSeenAt: new Date() },
+        update: { lastSeenAt: new Date() },
+      }).catch(() => {})
+
     if (claimed.count === 0) {
       // Lost the race — retire our duplicate and return the winner.
       await prisma.thread.update({ where: { id: thread.id }, data: { deleted: true } })
@@ -109,11 +121,13 @@ export async function POST(
         select: { discussion: { select: { id: true, slug: true } } },
       })
       if (fresh?.discussion) {
+        await followThread(fresh.discussion.id)
         return NextResponse.json({ threadId: fresh.discussion.id, threadSlug: fresh.discussion.slug })
       }
       return NextResponse.json({ error: "Could not create discussion" }, { status: 500 })
     }
 
+    await followThread(thread.id)
     revalidateTag("diaries", { expire: 0 })
     revalidateTag("forum", { expire: 0 })
     return NextResponse.json({ threadId: thread.id, threadSlug: thread.slug }, { status: 201 })

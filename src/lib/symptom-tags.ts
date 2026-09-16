@@ -20,12 +20,12 @@ export const SYMPTOM_TAGS: SymptomTag[] = [
     resultIds: ["nitrogen_def", "magnesium_def", "iron_def", "potassium_def", "phosphorus_def", "sulfur_def", "zinc_boron", "cal_mag", "cold_phosphorus"],
   },
   {
-    slug: "overfeeding",
+    slug: "overfeeding-nutrient-burn",
     name: "overfeeding / nutrient burn",
     resultIds: ["nutrient_burn", "nitrogen_tox", "salt_buildup", "bud_nutrient", "seedling_chem", "seedling_burn"],
   },
   {
-    slug: "watering",
+    slug: "watering-problems",
     name: "watering problems",
     resultIds: ["overwater", "underwater", "overwater_burst"],
   },
@@ -50,12 +50,12 @@ export const SYMPTOM_TAGS: SymptomTag[] = [
     resultIds: ["heat_stress", "light_burn", "wind_or_dry", "insufficient_light", "seedling_light"],
   },
   {
-    slug: "environment",
+    slug: "environment-ph",
     name: "environment / pH",
     resultIds: ["humidity_high", "humidity_low", "ph_drift"],
   },
   {
-    slug: "plant-structure",
+    slug: "growth-structure",
     name: "growth & structure",
     resultIds: ["stretch", "weak_stem", "stem_rot", "stunt", "hermie"],
   },

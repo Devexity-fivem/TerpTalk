@@ -49,15 +49,17 @@ export async function GET(request: Request) {
     } as const
 
     // Exact matches on the wizard result — accepted-answer threads first.
+    // ASC puts non-null acceptedAnswerId values first because Postgres
+    // orders NULLS LAST on ascending sorts; DESC would push unsolved
+    // threads to the top of the take:5 window before the JS re-sort.
     const exact = await prisma.thread.findMany({
       where: { ...baseWhere, wizardResultId: resultId },
-      orderBy: [{ acceptedAnswerId: "desc" }, { createdAt: "desc" }],
+      orderBy: [{ acceptedAnswerId: "asc" }, { createdAt: "desc" }],
       take: 5,
       select: THREAD_SELECT,
     })
 
-    // Sort "solved" (has accepted answer) to the top, stable otherwise —
-    // Postgres can't order by nulls-desc on a nullable FK portably here.
+    // Sort "solved" (has accepted answer) to the top, stable otherwise.
     exact.sort((a, b) => (b.acceptedAnswerId ? 1 : 0) - (a.acceptedAnswerId ? 1 : 0))
 
     let threads = exact
@@ -74,7 +76,10 @@ export async function GET(request: Request) {
             ...baseWhere,
             id: { notIn: exactIds },
             OR: [
-              { tags: { some: { tag: { slug: tag?.slug ?? "__none__" } } } },
+              // Match on the tag name — Tag.name is unique and is what the
+              // auto-tagger writes; generated slugs differ from the
+              // canonical SYMPTOM_TAGS slugs for multi-word names.
+              { tags: { some: { tag: { name: tag?.name ?? "__none__" } } } },
               ...words.map((word) => ({ title: { contains: word, mode: "insensitive" as const } })),
             ],
           },

@@ -95,6 +95,12 @@ export async function POST(request: Request) {
       ops.push(
         prisma.notification.deleteMany({
           where: notificationLinkWhere(threads.map((t) => `/forum/thread/${t.slug}`)),
+        }),
+        // Unlink any diary discussions pointing at these threads — same
+        // cleanup as the single-delete paths.
+        prisma.growDiary.updateMany({
+          where: { threadId: { in: ids } },
+          data: { threadId: null },
         })
       )
     }
