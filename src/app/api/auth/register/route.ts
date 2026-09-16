@@ -105,8 +105,10 @@ export async function POST(request: Request) {
     let referrerUserId: string | null = null
     if (referralCode && typeof referralCode === "string" && referralCode.trim()
         && referralCode.trim().toLowerCase() !== TERPBOT_USERNAME) {
-      const referrer = await prisma.profile.findUnique({
-        where: { username: referralCode.trim() },
+      const referrer = await prisma.profile.findFirst({
+        // Referral links circulate in whatever case the sharer typed —
+        // usernames are unique case-insensitively so attribution matches.
+        where: { username: { equals: referralCode.trim(), mode: "insensitive" } },
         select: { id: true, userId: true },
       })
       // A stale or mistyped referral link must not block signup — just

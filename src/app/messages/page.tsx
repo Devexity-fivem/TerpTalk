@@ -43,7 +43,10 @@ function MessagesInner() {
   const [loading, setLoading] = useState(true)
   const [sending, setSending] = useState(false)
   const [error, setError] = useState("")
+  const [hasOlder, setHasOlder] = useState(false)
+  const [loadingOlder, setLoadingOlder] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
+  const topRef = useRef<HTMLDivElement>(null)
 
   const loadConvos = useCallback(() => {
     fetch("/api/messages")
@@ -54,29 +57,80 @@ function MessagesInner() {
 
   const messagesRef = useRef<Msg[]>([])
   useEffect(() => { messagesRef.current = messages }, [messages])
+  // Which conversation the current message state belongs to, and its tail
+  // cursor — both reset on every conversation switch so a stale poll can
+  // never bleed one thread into another or reuse the wrong incremental tail.
+  const activeWithRef = useRef<string | null>(null)
+  const cursorRef = useRef<{ ts: string; id: string } | null>(null)
+
+  const markRead = useCallback((uid: string) => {
+    setConvos((prev) => prev.map((c) => (c.partner.id === uid ? { ...c, unread: 0 } : c)))
+  }, [])
 
   const loadThread = useCallback((uid: string) => {
-    // Incremental poll — only fetch messages newer than the newest we hold
-    const latest = messagesRef.current[messagesRef.current.length - 1]
-    const qs = latest?.createdAt
-      ? `&after=${encodeURIComponent(latest.createdAt)}`
-      : ""
-    fetch(`/api/messages?with=${uid}${qs}`)
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => {
-        if (!d) return
-        if (d.incremental) {
-          if (d.messages?.length) {
-            setMessages((prev) => [...prev, ...d.messages])
-            setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }), 50)
-          }
-        } else {
-          setMessages(d.messages || [])
+    const applyPage = (d: { messages?: Msg[]; incremental?: boolean; hasMore?: boolean } | null) => {
+      if (!d || activeWithRef.current !== uid) return // stale response — conversation changed mid-flight
+      if (d.incremental) {
+        const fresh: Msg[] = d.messages || []
+        if (fresh.length) {
+          const last = fresh[fresh.length - 1]
+          cursorRef.current = { ts: last.createdAt, id: last.id }
+          setMessages((prev) => {
+            const seen = new Set(prev.map((m) => m.id))
+            return [...prev, ...fresh.filter((m) => !seen.has(m.id))]
+          })
           setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }), 50)
         }
+      } else {
+        const list: Msg[] = d.messages || []
+        const last = list[list.length - 1]
+        cursorRef.current = last ? { ts: last.createdAt, id: last.id } : null
+        setMessages(list)
+        setHasOlder(!!d.hasMore)
+        setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }), 50)
+      }
+      markRead(uid)
+    }
+    // One page fetch; when more fresh history than a page remains, the next
+    // page is chained so the tail is fully drained before the next poll.
+    const fetchPage = (): void => {
+      const cursor = activeWithRef.current === uid ? cursorRef.current : null
+      const qs = cursor
+        ? `&after=${encodeURIComponent(cursor.ts)}&afterId=${encodeURIComponent(cursor.id)}`
+        : ""
+      fetch(`/api/messages?with=${uid}${qs}`)
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d) => {
+          applyPage(d)
+          if (d?.incremental && d?.hasMore && activeWithRef.current === uid) fetchPage()
+        })
+        .catch(() => {})
+    }
+    fetchPage()
+  }, [markRead])
+
+  const loadOlder = useCallback(() => {
+    const uid = activeWithRef.current
+    const earliest = messagesRef.current[0]
+    if (!uid || !earliest || loadingOlder) return
+    setLoadingOlder(true)
+    fetch(`/api/messages?with=${uid}&before=${encodeURIComponent(earliest.createdAt)}&beforeId=${encodeURIComponent(earliest.id)}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!d || activeWithRef.current !== uid) return
+        const older: Msg[] = d.messages || []
+        if (older.length) {
+          setMessages((prev) => {
+            const seen = new Set(prev.map((m) => m.id))
+            return [...older.filter((m) => !seen.has(m.id)), ...prev]
+          })
+          setTimeout(() => topRef.current?.scrollIntoView({ behavior: "instant" }), 50)
+        }
+        setHasOlder(!!d.hasMore)
       })
       .catch(() => {})
-  }, [])
+      .finally(() => setLoadingOlder(false))
+  }, [loadingOlder])
 
   useEffect(() => {
     if (status === "unauthenticated") router.push(signInHref(window.location.pathname + window.location.search))
@@ -85,6 +139,15 @@ function MessagesInner() {
 
   useEffect(() => {
     if (!withId || !session) return
+    // Conversation switch (or first open): drop the previous thread's
+    // messages and cursor so nothing from conversation A leaks into B.
+    if (activeWithRef.current !== withId) {
+      activeWithRef.current = withId
+      cursorRef.current = null
+      setMessages([])
+      setHasOlder(false)
+      setError("")
+    }
     loadThread(withId)
     const poll = () => {
       if (document.hidden) return
@@ -178,6 +241,18 @@ function MessagesInner() {
                   {active ? nameOf(active) : "Conversation"}
                 </div>
                 <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                  {hasOlder && (
+                    <div className="flex justify-center">
+                      <button
+                        onClick={loadOlder}
+                        disabled={loadingOlder}
+                        className="text-xs text-muted-foreground hover:text-foreground px-3 py-1 rounded-full border border-border hover:bg-secondary/60 transition-colors disabled:opacity-50"
+                      >
+                        {loadingOlder ? "Loading..." : "Load earlier messages"}
+                      </button>
+                    </div>
+                  )}
+                  <div ref={topRef} />
                   {messages.map((m) => {
                     const mine = m.senderId === session?.user?.id
                     return (

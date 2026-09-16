@@ -203,6 +203,7 @@ export default function ProfilePage() {
   const { toast } = useToast()
   const [profileData, setProfileData] = useState<ProfileData | null>(null)
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState(false)
   const [editing, setEditing] = useState(false)
   const [saving, setSaving] = useState(false)
   const [showAllBadges, setShowAllBadges] = useState(false)
@@ -250,12 +251,19 @@ export default function ProfilePage() {
   useEffect(() => {
     if (status === "authenticated") {
       fetch("/api/profile", { cache: "no-store" })
-        .then(res => res.json())
+        .then(async res => (res.ok ? res.json() : null))
         .then(data => {
-          setProfileData(data)
+          // A failed request or an error body must not be stored as if it
+          // were profile data — the render dereferences data.user.createdAt.
+          if (data?.user?.createdAt) {
+            setProfileData(data)
+          } else {
+            setLoadError(true)
+          }
           setLoading(false)
         })
         .catch(() => {
+          setLoadError(true)
           setLoading(false)
         })
     }
@@ -269,8 +277,25 @@ export default function ProfilePage() {
     )
   }
 
-  if (!session || !profileData) {
+  if (!session) {
     return null
+  }
+
+  if (loadError || !profileData) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center px-4">
+        <div className="text-center">
+          <p className="text-lg font-semibold mb-2">Couldn&apos;t load your profile</p>
+          <p className="text-sm text-muted-foreground mb-4">Something went wrong on our end — try again in a moment.</p>
+          <button
+            onClick={() => { setLoadError(false); setLoading(true); window.location.reload() }}
+            className="px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm hover:bg-primary/90 transition-colors"
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    )
   }
 
   const joinDate = new Date(profileData.user.createdAt).toLocaleDateString('en-US', {

@@ -36,8 +36,8 @@ export async function GET(
       return NextResponse.json({ error: "Invalid username" }, { status: 400 })
     }
 
-    const profile = await prisma.profile.findUnique({
-      where: { username },
+    const profile = await prisma.profile.findFirst({
+      where: { username: { equals: username, mode: "insensitive" } },
       select: {
         username: true,
         bio: true,

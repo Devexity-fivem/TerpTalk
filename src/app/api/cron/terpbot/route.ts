@@ -51,6 +51,15 @@ export async function GET(request: NextRequest) {
   const posted: string[] = []
   const failed: string[] = []
 
+  // Post-marker check: an ANNOUNCEMENT BotEvent row means this exact post
+  // already landed. Retried tasks consult it so a bookkeeping failure can
+  // never re-post an announcement; a failed post (no marker) stays retryable.
+  const wasAnnounced = (key: string) =>
+    prisma.botEvent
+      .findUnique({ where: { key }, select: { id: true } })
+      .then(Boolean)
+      .catch(() => false)
+
   // ── Daily digest + grow tip (once per UTC day) ───────────────────────
   const today = new Date().toISOString().slice(0, 10)
   await runCronTask(`terpbot:digest:${today}`, async () => {
@@ -74,11 +83,20 @@ export async function GET(request: NextRequest) {
         ? `Last 24 hours: ${members} new member${members === 1 ? "" : "s"}, ${threads} new thread${threads === 1 ? "" : "s"}, ${updates} diary update${updates === 1 ? "" : "s"}.`
         : "Quiet last 24 hours — start a thread or update your diary to get things going."
     // Two separate posts — combining them into one message read like a
-    // merged double-post in the chat UI.
-    const digestDto = await postToGeneral(`📊 ${activity}`)
-    await postToGeneral(`💡 Grow tip: ${tip}`)
-    if (digestDto) {
-      await recordBotEvent({ type: "ANNOUNCEMENT", key: `announce:digest:${today}`, command: "digest" }).catch(() => {})
+    // merged double-post in the chat UI. Each is marker-checked so a
+    // retried run never duplicates the one that already landed; a dropped
+    // post throws, releasing the claim so the next invocation retries.
+    const digestKey = `announce:digest:${today}`
+    if (!(await wasAnnounced(digestKey))) {
+      const dto = await postToGeneral(`📊 ${activity}`)
+      if (!dto) throw new Error("digest post to #general failed")
+      await recordBotEvent({ type: "ANNOUNCEMENT", key: digestKey, command: "digest" }).catch(() => {})
+    }
+    const tipKey = `announce:tip:${today}`
+    if (!(await wasAnnounced(tipKey))) {
+      const dto = await postToGeneral(`💡 Grow tip: ${tip}`)
+      if (!dto) throw new Error("grow-tip post to #general failed")
+      await recordBotEvent({ type: "ANNOUNCEMENT", key: tipKey, command: "tip" }).catch(() => {})
     }
     return "digest"
   }, posted, failed, "digest")
@@ -97,11 +115,13 @@ export async function GET(request: NextRequest) {
         })
         const name = winner.user.profile?.username || winner.user.name
         const who = opt?.publicMilestoneOptOut || !name ? "a member" : `@${name}`
-        const contestDto = await postToGeneral(
-          `🏆 Last week's photo contest winner: ${who} with ${winner._count.votes} vote${winner._count.votes === 1 ? "" : "s"}! This week's contest is open — submit your best budshot on the Contest page.`
-        )
-        if (contestDto) {
-          await recordBotEvent({ type: "ANNOUNCEMENT", key: `announce:contest:${prevWeek}`, command: "contest" }).catch(() => {})
+        const contestKey = `announce:contest:${prevWeek}`
+        if (!(await wasAnnounced(contestKey))) {
+          const contestDto = await postToGeneral(
+            `🏆 Last week's photo contest winner: ${who} with ${winner._count.votes} vote${winner._count.votes === 1 ? "" : "s"}! This week's contest is open — submit your best budshot on the Contest page.`
+          )
+          if (!contestDto) throw new Error("contest-winner post to #general failed")
+          await recordBotEvent({ type: "ANNOUNCEMENT", key: contestKey, command: "contest" }).catch(() => {})
         }
         return "contest"
       }
@@ -115,11 +135,13 @@ export async function GET(request: NextRequest) {
       const winner = await resolveWeeklyRecognition(prevWeek)
       if (!winner) return null
       const who = winner.username ? `@${winner.username}` : "a member"
-      const dto = await postToGeneral(
-        `🌿 Grower of the Week: ${who}! Most reputation earned last week. This week's board resets Monday — every member starts at zero on the This Week leaderboard.`
-      )
-      if (dto) {
-        await recordBotEvent({ type: "ANNOUNCEMENT", key: `announce:gotw:${prevWeek}`, command: "gotw" }).catch(() => {})
+      const gotwKey = `announce:gotw:${prevWeek}`
+      if (!(await wasAnnounced(gotwKey))) {
+        const dto = await postToGeneral(
+          `🌿 Grower of the Week: ${who}! Most reputation earned last week. This week's board resets Monday — every member starts at zero on the This Week leaderboard.`
+        )
+        if (!dto) throw new Error("grower-of-the-week post to #general failed")
+        await recordBotEvent({ type: "ANNOUNCEMENT", key: gotwKey, command: "gotw" }).catch(() => {})
       }
       return "gotw"
     }, posted, failed, "gotw")
@@ -138,11 +160,13 @@ export async function GET(request: NextRequest) {
         })
         const name = winner.user.profile?.username || winner.user.name
         const who = opt?.publicMilestoneOptOut || !name ? "a member" : `@${name}`
-        const diaryDto = await postToGeneral(
-          `🏆 Last month's Diary of the Month winner: ${who} with "${sanitizeEcho(winner.diary.title, 60)}" (${winner._count.votes} vote${winner._count.votes === 1 ? "" : "s"})! This month's contest is open — enter a well-documented diary on the Contest page.`
-        )
-        if (diaryDto) {
-          await recordBotEvent({ type: "ANNOUNCEMENT", key: `announce:diary-contest:${prevMonth}`, command: "diary-contest" }).catch(() => {})
+        const diaryKey = `announce:diary-contest:${prevMonth}`
+        if (!(await wasAnnounced(diaryKey))) {
+          const diaryDto = await postToGeneral(
+            `🏆 Last month's Diary of the Month winner: ${who} with "${sanitizeEcho(winner.diary.title, 60)}" (${winner._count.votes} vote${winner._count.votes === 1 ? "" : "s"})! This month's contest is open — enter a well-documented diary on the Contest page.`
+          )
+          if (!diaryDto) throw new Error("diary-contest-winner post to #general failed")
+          await recordBotEvent({ type: "ANNOUNCEMENT", key: diaryKey, command: "diary-contest" }).catch(() => {})
         }
         return "diary-contest"
       }

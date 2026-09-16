@@ -45,6 +45,8 @@ export async function releaseClaim(key: string) {
 }
 
 // Run one period task under an atomic claim; done only after success.
+// Every failure mode is isolated to this task — a throwing claim layer or a
+// bookkeeping error must never abort the route's remaining tasks.
 export async function runCronTask(
   key: string,
   work: () => Promise<string | null>,
@@ -52,10 +54,35 @@ export async function runCronTask(
   failed: string[],
   label: string
 ) {
-  if (!(await claimTask(key))) return
+  let claimed: boolean
+  try {
+    claimed = await claimTask(key)
+  } catch (e) {
+    console.error(`[cron] ${label} claim failed:`, e)
+    failed.push(label)
+    return
+  }
+  if (!claimed) return
   try {
     const result = await work()
-    await markDone(key)
+    try {
+      await markDone(key)
+    } catch (e) {
+      // Work succeeded but bookkeeping failed. Retrying the mark once
+      // covers a transient write error; if it still fails we deliberately
+      // leave the claim in place — it goes stale after CLAIM_STALE_MS and a
+      // later run re-checks, rather than releasing it into a guaranteed
+      // immediate duplicate execution.
+      console.error(`[cron] ${label} markDone failed after successful work — retrying once:`, e)
+      try {
+        await markDone(key)
+        if (result) posted.push(result)
+      } catch (e2) {
+        console.error(`[cron] ${label} markDone retry failed — claim left in place:`, e2)
+        failed.push(`${label}:bookkeeping`)
+      }
+      return
+    }
     if (result) posted.push(result)
   } catch (e) {
     console.error(`[cron] ${label} failed:`, e)

@@ -35,10 +35,30 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const withId = searchParams.get("with")
     const after = searchParams.get("after") // ISO timestamp for incremental polling
+    const afterId = searchParams.get("afterId") // tie-break: (createdAt, id) cursor
+    const before = searchParams.get("before") // ISO timestamp for paging older messages
+    const beforeId = searchParams.get("beforeId")
 
     if (withId) {
-      // Incremental mode: only fetch messages newer than `after` — the
-      // poll then transfers near-empty payloads instead of the whole thread
+      const threadWhere = {
+        deleted: false,
+        OR: [
+          { senderId: userId, receiverId: withId },
+          { senderId: withId, receiverId: userId },
+        ],
+      }
+      const dto = (m: { id: string; content: string; createdAt: Date; senderId: string; sender: Parameters<typeof senderDto>[0] }) => ({
+        id: m.id,
+        content: m.content,
+        createdAt: m.createdAt,
+        senderId: m.senderId,
+        sender: senderDto(m.sender),
+      })
+
+      // Incremental mode: only fetch messages after the (createdAt, id)
+      // cursor — the poll then transfers near-empty payloads instead of the
+      // whole thread. The id tie-break keeps a deterministic total order so
+      // messages sharing a millisecond timestamp can never be skipped.
       if (after && ISO_RE.test(after)) {
         const afterDate = new Date(after)
         if (isNaN(afterDate.getTime())) {
@@ -46,17 +66,20 @@ export async function GET(request: NextRequest) {
         }
         const fresh = await prisma.directMessage.findMany({
           where: {
-            deleted: false,
-            createdAt: { gt: afterDate },
-            OR: [
-              { senderId: userId, receiverId: withId },
-              { senderId: withId, receiverId: userId },
-            ],
+            ...threadWhere,
+            AND: {
+              OR: [
+                { createdAt: { gt: afterDate } },
+                ...(afterId ? [{ createdAt: afterDate, id: { gt: afterId } }] : []),
+              ],
+            },
           },
-          orderBy: { createdAt: "asc" },
-          take: 50,
+          orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+          take: 51,
           include: { sender: { select: publicUserSelect } },
         })
+        const hasMore = fresh.length > 50
+        if (hasMore) fresh.pop()
         // Still mark incoming as read
         if (fresh.some((m) => m.senderId === withId && !m.read)) {
           await prisma.directMessage.updateMany({
@@ -65,32 +88,54 @@ export async function GET(request: NextRequest) {
           })
         }
         return NextResponse.json({
-          messages: fresh.map((m) => ({
-            id: m.id,
-            content: m.content,
-            createdAt: m.createdAt,
-            senderId: m.senderId,
-            sender: senderDto(m.sender),
-          })),
+          messages: fresh.map(dto),
           incremental: true,
+          hasMore,
         })
       }
 
-      const messages = await prisma.directMessage.findMany({
-        where: {
-          deleted: false,
-          OR: [
-            { senderId: userId, receiverId: withId },
-            { senderId: withId, receiverId: userId },
-          ],
-        },
-        orderBy: { createdAt: "asc" },
-        take: 100,
+      // Page of older history: messages strictly before the (createdAt, id)
+      // cursor, fetched newest-first then reversed for chronological display.
+      if (before && ISO_RE.test(before)) {
+        const beforeDate = new Date(before)
+        if (isNaN(beforeDate.getTime())) {
+          return NextResponse.json({ error: "Invalid before timestamp" }, { status: 400 })
+        }
+        const older = await prisma.directMessage.findMany({
+          where: {
+            ...threadWhere,
+            AND: {
+              OR: [
+                { createdAt: { lt: beforeDate } },
+                ...(beforeId ? [{ createdAt: beforeDate, id: { lt: beforeId } }] : []),
+              ],
+            },
+          },
+          orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+          take: 51,
+          include: { sender: { select: publicUserSelect } },
+        })
+        const hasMore = older.length > 50
+        if (hasMore) older.pop()
+        older.reverse()
+        return NextResponse.json({ messages: older.map(dto), hasMore })
+      }
+
+      // Initial load: the newest 100 messages, not the oldest — a long
+      // thread must open at the tail. Fetched desc, reversed for display;
+      // the extra row is the hasMore probe for "load older" paging.
+      const newest = await prisma.directMessage.findMany({
+        where: threadWhere,
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+        take: 101,
         include: { sender: { select: publicUserSelect } },
       })
+      const hasMore = newest.length > 100
+      if (hasMore) newest.pop()
+      newest.reverse()
 
       // Only write when there are actually unread messages from the other user.
-      if (messages.some((m) => m.senderId === withId && !m.read)) {
+      if (newest.some((m) => m.senderId === withId && !m.read)) {
         await prisma.directMessage.updateMany({
           where: { senderId: withId, receiverId: userId, read: false, deleted: false },
           data: { read: true },
@@ -98,54 +143,58 @@ export async function GET(request: NextRequest) {
       }
 
       return NextResponse.json({
-        messages: messages.map((m) => ({
-          id: m.id,
-          content: m.content,
-          createdAt: m.createdAt,
-          senderId: m.senderId,
-          sender: senderDto(m.sender),
-        })),
+        messages: newest.map(dto),
+        hasMore,
       })
     }
 
-    // Conversation list: latest message per partner + unread count
-    const msgs = await prisma.directMessage.findMany({
-      where: {
-        deleted: false,
-        OR: [{ senderId: userId }, { receiverId: userId }],
-      },
-      orderBy: { createdAt: "desc" },
-      take: 100,
-      include: {
-        sender: { select: publicUserSelect },
-        receiver: { select: publicUserSelect },
-      },
+    // Conversation list: latest message per partner + unread count.
+    // Aggregated in SQL rather than scanning a capped window in JS — the
+    // inbox must find every conversation regardless of total message count.
+    const latest = await prisma.$queryRaw<{ partnerId: string; content: string; createdAt: Date }[]>`
+      SELECT DISTINCT ON (partner) partner AS "partnerId", content, "createdAt"
+      FROM (
+        SELECT CASE WHEN "senderId" = ${userId} THEN "receiverId" ELSE "senderId" END AS partner,
+               content, "createdAt"
+        FROM "DirectMessage"
+        WHERE deleted = false AND ("senderId" = ${userId} OR "receiverId" = ${userId})
+      ) m
+      ORDER BY partner, "createdAt" DESC`
+
+    const unreadRows = await prisma.$queryRaw<{ partnerId: string; n: bigint }[]>`
+      SELECT "senderId" AS "partnerId", COUNT(*) AS n
+      FROM "DirectMessage"
+      WHERE "receiverId" = ${userId} AND read = false AND deleted = false
+      GROUP BY "senderId"`
+    const unreadBy = new Map(unreadRows.map((r) => [r.partnerId, Number(r.n)]))
+
+    const partners = await prisma.user.findMany({
+      where: { id: { in: latest.map((r) => r.partnerId) } },
+      select: publicUserSelect,
     })
+    const partnerBy = new Map(partners.map((p) => [p.id, p]))
 
-    const convos = new Map<string, { partner: { id: string; name: string | null; image: string | null; role: string | null; profile: { username: string | null } | null }; lastMessage: string; lastAt: Date; unread: number }>()
-    for (const m of msgs) {
-      const partner = m.senderId === userId ? m.receiver : m.sender
-      const partnerId = partner.id
-      if (!convos.has(partnerId)) {
-        convos.set(partnerId, {
+    const convos = latest
+      .map((row) => {
+        const p = partnerBy.get(row.partnerId)
+        if (!p) return null // partner account removed — its DMs cascade with it
+        return {
           partner: {
-            id: partner.id,
-            name: partner.name ?? partner.profile?.username ?? "Unknown",
-            image: partner.image ?? null,
-            role: partner.role ?? null,
-            profile: { username: partner.profile?.username ?? null },
+            id: p.id,
+            name: p.name ?? p.profile?.username ?? "Unknown",
+            image: p.image ?? null,
+            role: p.role ?? null,
+            profile: { username: p.profile?.username ?? null },
           },
-          lastMessage: m.content.slice(0, 80),
-          lastAt: m.createdAt,
-          unread: 0,
-        })
-      }
-      if (m.receiverId === userId && !m.read) {
-        convos.get(partnerId)!.unread++
-      }
-    }
+          lastMessage: row.content.slice(0, 80),
+          lastAt: row.createdAt,
+          unread: unreadBy.get(row.partnerId) ?? 0,
+        }
+      })
+      .filter((c): c is NonNullable<typeof c> => c !== null)
+      .sort((a, b) => b.lastAt.getTime() - a.lastAt.getTime())
 
-    return NextResponse.json({ conversations: [...convos.values()] })
+    return NextResponse.json({ conversations: convos })
   } catch (error) {
     console.error("Messages fetch error:", error)
     return NextResponse.json({ error: "Failed to fetch messages" }, { status: 500 })

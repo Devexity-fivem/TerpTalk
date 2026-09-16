@@ -1,6 +1,6 @@
 "use client"
 
-import { useSession } from "next-auth/react"
+import { useSession, signOut } from "next-auth/react"
 import { useEffect, useState } from "react"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
@@ -53,9 +53,19 @@ export function Navigation() {
   const role = (session?.user as { role?: string } | undefined)?.role
   const isAdmin = role === "ADMINISTRATOR"
 
+  // Server-side session invalidation (ban, suspension, sessionVersion bump)
+  // returns a session with an empty user object — without this guard the
+  // client would sit in a broken "authenticated" state until the JWT aged
+  // out. Detect it and sign out so the UI transitions cleanly.
   useEffect(() => {
-    if (!session) return
-    const userId = (session.user as { id?: string } | undefined)?.id
+    if (status === "authenticated" && session && !(session.user as { id?: string } | undefined)?.id) {
+      void signOut({ redirect: false })
+    }
+  }, [status, session])
+
+  useEffect(() => {
+    const userId = (session?.user as { id?: string } | undefined)?.id
+    if (!userId) return // signed out, or an invalidated ghost session
     const refresh = () => {
       fetch("/api/notifications")
         .then((res) => (res.ok ? res.json() : null))

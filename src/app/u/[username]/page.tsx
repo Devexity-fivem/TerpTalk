@@ -7,8 +7,10 @@ import ProfileClient from "./profile-client"
 
 const getProfileForMetadata = unstable_cache(
   async (username: string) => {
-    return prisma.profile.findUnique({
-      where: { username },
+    return prisma.profile.findFirst({
+      // Usernames are unique case-insensitively — /u/GrowKing and /u/growking
+      // must resolve to the same member.
+      where: { username: { equals: username, mode: "insensitive" } },
       select: {
         username: true,
         bio: true,
@@ -64,8 +66,8 @@ export async function generateMetadata({ params }: { params: Promise<{ username:
 
 const getProfileId = unstable_cache(
   async (username: string) => {
-    return prisma.profile.findUnique({
-      where: { username },
+    return prisma.profile.findFirst({
+      where: { username: { equals: username, mode: "insensitive" } },
       select: { id: true, user: { select: { banned: true, suspendedUntil: true } } },
     })
   },

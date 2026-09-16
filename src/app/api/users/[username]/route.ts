@@ -25,8 +25,8 @@ function safeUrl(url: string | null | undefined): string | null {
 }
 
 async function getPublicProfileData(username: string) {
-  const profile = await prisma.profile.findUnique({
-      where: { username },
+  const profile = await prisma.profile.findFirst({
+      where: { username: { equals: username, mode: "insensitive" } },
       select: {
         username: true,
         bio: true,

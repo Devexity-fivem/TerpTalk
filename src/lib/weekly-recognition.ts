@@ -12,6 +12,7 @@
  */
 import { prisma } from "@/lib/prisma"
 import { rankableProfile } from "@/lib/security"
+import { MEMBER_DRIVEN_REP_TYPES } from "@/lib/trust-signals"
 import { awardReputation, grantBadge } from "@/lib/reputation"
 import { getBooleanSetting, SITE_SETTINGS } from "@/lib/settings"
 
@@ -66,11 +67,21 @@ export interface WeeklyRow {
   }
 }
 
-// Standing adjustments, not earned activity — excluded so admin actions
-// can't swing the board. REVERSAL is deliberately INCLUDED: reversal rows
+// What counts on the weekly board — the authoritative definition of
+// member-earned weekly reputation. Uses the same member-driven allowlist
+// as the velocity detector so every system-generated payout (WEEKLY_AWARD,
+// BADGE_BONUS, quests, milestones, journey rewards, challenges, contest
+// wins, referrals, staff adjustments, migrations, onboarding) is excluded
+// by default — a winner's own automated payout can never compound into the
+// following week's ranking, and no future automated award type can leak
+// in without being explicitly classified member-driven.
+//
+// REVERSAL is deliberately INCLUDED alongside the allowlist: reversal rows
 // are signed negative counter-entries, so summing them is what makes the
-// weekly total *net* — clawed-back reputation stops counting.
-const EXCLUDED_TYPES = ["REINSTATE", "STAFF_ADJUSTMENT", "MILESTONE", "LEGACY_MIGRATION"]
+// weekly total *net* — clawed-back reputation stops counting. (A reversal
+// of an excluded system payout nets slightly conservatively — rare and
+// harmless versus counting reversed member activity.)
+export const WEEKLY_BOARD_TYPES: string[] = [...MEMBER_DRIVEN_REP_TYPES, "REVERSAL"]
 
 async function weeklyEarned(
   start: Date,
@@ -82,7 +93,7 @@ async function weeklyEarned(
     by: ["userId"],
     where: {
       createdAt: { gte: start, lt: end },
-      type: { notIn: EXCLUDED_TYPES },
+      type: { in: WEEKLY_BOARD_TYPES },
       user: extraUserWhere,
     },
     _sum: { amount: true },

@@ -8,7 +8,7 @@ import { authOptions } from "@/lib/auth"
 import RoleBadge from "@/components/role-badge"
 import TierChip from "@/components/tier-chip"
 import EmptyState from "@/components/ui/empty-state"
-import { weeklyBoard, weeklyNewGrowers, weekRange } from "@/lib/weekly-recognition"
+import { weeklyBoard, weeklyNewGrowers, weekRange, WEEKLY_BOARD_TYPES } from "@/lib/weekly-recognition"
 import { currentWeekKey } from "@/lib/week"
 import { Avatar } from "@/components/ui/avatar"
 import { cn } from "@/lib/utils"
@@ -239,7 +239,7 @@ export default async function LeaderboardPage({
           where: {
             userId: viewerProfile.user.id,
             createdAt: { gte: range.start, lt: range.end },
-            type: { notIn: ["REVERSAL", "REINSTATE", "STAFF_ADJUSTMENT", "MILESTONE", "LEGACY_MIGRATION"] },
+            type: { in: WEEKLY_BOARD_TYPES },
           },
           _sum: { amount: true },
         })
