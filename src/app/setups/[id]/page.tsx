@@ -3,7 +3,9 @@ import { Breadcrumbs } from "@/components/breadcrumbs"
 import { prisma } from "@/lib/prisma"
 import { publicUserSelect, activeAuthor } from "@/lib/security"
 import { notFound } from "next/navigation"
-import { Settings, Users, MessageSquare } from "lucide-react"
+import { getServerSession } from "next-auth"
+import { authOptions } from "@/lib/auth"
+import { Settings, Users, MessageSquare, Pencil } from "lucide-react"
 import Link from "next/link"
 import RoleBadge from "@/components/role-badge"
 import TierChip from "@/components/tier-chip"
@@ -49,6 +51,12 @@ export default async function SetupPage({ params }: { params: Promise<{ id: stri
   })
 
   if (!setup || setup.deleted) notFound()
+
+  const session = await getServerSession(authOptions)
+  const isOwner = session?.user?.id === setup.authorId
+  // Derived "edited" marker — same 60s grace as diary updates: a plain
+  // creation write must not count as an edit.
+  const edited = setup.updatedAt.getTime() - setup.createdAt.getTime() > 60_000
 
   // Grows that linked this setup — only publicly viewable diaries.
   const usedIn = await prisma.growDiary.findMany({
@@ -111,9 +119,20 @@ export default async function SetupPage({ params }: { params: Promise<{ id: stri
               <TierChip reputation={setup.author.profile?.reputation ?? 0} publicMilestoneOptOut={setup.author.profile?.publicMilestoneOptOut} />
             </Link>
             <span>{new Date(setup.createdAt).toLocaleDateString()}</span>
+            {edited && <span title="Edited">· edited</span>}
           </div>
           <div className="flex items-center gap-2">
             <ShareButtons path={`/setups/${setup.id}`} title={`${setup.title} — grow setup on TerpTalk`} />
+            {isOwner && (
+              <Link
+                href={`/setups/${setup.id}/edit`}
+                className="text-muted-foreground hover:text-foreground transition-colors"
+                aria-label="Edit setup"
+                title="Edit setup"
+              >
+                <Pencil className="w-4 h-4" />
+              </Link>
+            )}
             <OwnerDeleteButton
               endpoint="/api/setups"
               id={setup.id}
