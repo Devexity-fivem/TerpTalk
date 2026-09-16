@@ -82,7 +82,9 @@ export async function POST(
 
     let slug = createSlug(title)
     if (!slug) slug = `grow-discussion`
-    slug = `${slug}-${Date.now().toString(36)}`
+    // Readable prefix + enough entropy that two same-strain diaries
+    // opening a discussion in the same millisecond can't collide.
+    slug = `${slug}-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`
 
     const thread = await prisma.thread.create({
       data: {

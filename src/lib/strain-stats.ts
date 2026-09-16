@@ -98,6 +98,9 @@ const getStats = unstable_cache(
           harvestNotes: true,
           author: { select: publicUserSelect },
         },
+        // Deterministic set + review order: newest diaries first, so both
+        // the take:500 window and the attributed-note slice are stable.
+        orderBy: [{ createdAt: "desc" }, { id: "asc" }],
         take: 500,
       }),
       prisma.growSetup.findMany({

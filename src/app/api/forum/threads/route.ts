@@ -139,12 +139,21 @@ export async function POST(request: Request) {
     // Validate category exists and is visible to the user
     const category = await prisma.category.findUnique({
       where: { id: categoryId },
-      select: { id: true, hidden: true, name: true },
+      select: { id: true, hidden: true, name: true, slug: true },
     })
 
     if (!category) {
       return NextResponse.json(
         { error: "Invalid category" },
+        { status: 400 }
+      )
+    }
+
+    // Plant Doctor result ids only carry meaning on the Plant Problems
+    // board — reject them on unrelated categories at the boundary.
+    if (cleanWizardResultId && category.slug !== "plant-problems") {
+      return NextResponse.json(
+        { error: "Wizard result is only valid for Plant Problems" },
         { status: 400 }
       )
     }

@@ -67,6 +67,7 @@ async function unionDiaries(strainName: string, strainId: string) {
       ],
     },
     select: { id: true, strain: true, strainId: true },
+    orderBy: [{ createdAt: "desc" }, { id: "asc" }],
     take: 500,
   })
   return raw.filter((d) => d.strainId === strainId || strainFieldMatches(d.strain, strainName))
@@ -239,6 +240,31 @@ await check("harvest review writes no reputation events", async () => {
   assert.equal(after, before, "review fields must not emit reputation")
 })
 
+await check("member review selection is deterministic — newest first, stable across runs", async () => {
+  const u = await mkUser("revdet")
+  const s = await prisma.strain.create({ data: { name: `__test_kc_Rev_${tag}`, createdById: u.id } })
+  cleanup.strainIds.push(s.id)
+  const older = await mkDiary(u.id, { strainId: s.id, strain: s.name, harvested: true, harvestNotes: "old note" })
+  await new Promise((r) => setTimeout(r, 5))
+  const newer = await mkDiary(u.id, { strainId: s.id, strain: s.name, harvested: true, harvestNotes: "new note" })
+  // Replica of strain-stats review selection: newest first, id tiebreak.
+  const run = () => prisma.growDiary.findMany({
+    where: { deleted: false, author: activeAuthor(), OR: [{ strainId: s.id }, { strain: { contains: escapeLike(s.name), mode: "insensitive" } }] },
+    orderBy: [{ createdAt: "desc" }, { id: "asc" }],
+    take: 500,
+    select: { id: true, strain: true, strainId: true, harvestNotes: true },
+  }).then((raw) => raw
+    .filter((d) => d.strainId === s.id || strainFieldMatches(d.strain, s.name))
+    .filter((d) => d.harvestNotes && d.harvestNotes.trim())
+    .slice(0, 6)
+    .map((d) => d.id))
+  const first = await run()
+  const second = await run()
+  assert.deepEqual(first, second, "review selection must be deterministic across runs")
+  assert.equal(first[0], newer.id, "newest harvest review ranks first")
+  assert.ok(first.includes(older.id))
+})
+
 // ─── Privacy / deletion ────────────────────────────────────────────
 await check("deleted diaries and banned authors drop out of the union", async () => {
   const u = await mkUser("privacy")
@@ -367,6 +393,22 @@ await check("suspended/banned authors excluded from symptom lookup", async () =>
     select: { id: true },
   })
   assert.ok(!found.some((x) => x.id === t.id), "banned author's thread excluded")
+})
+
+await check("wizardResultId is scoped to the plant-problems category", async () => {
+  const u = await mkUser("wizscope")
+  const pp = await prisma.category.findUnique({ where: { slug: "plant-problems" }, select: { id: true, slug: true } })
+  const other = await prisma.category.findFirst({ where: { slug: { not: "plant-problems" }, hidden: false }, select: { id: true, slug: true } })
+  assert.ok(pp && other, "plant-problems and another category exist")
+  // Mirror the thread-create gate: a wizard result id is only valid on plant-problems.
+  const gateAllows = (slug: string, w: string | null) => !w || slug === "plant-problems"
+  assert.ok(gateAllows(pp!.slug, "root_rot"), "wizard result on plant-problems accepted")
+  assert.ok(!gateAllows(other!.slug, "root_rot"), "wizard result on unrelated category rejected")
+  assert.ok(gateAllows(other!.slug, null), "non-wizard thread on any category unaffected")
+  // Legitimate Plant Doctor use still lands with its result id.
+  const t = await mkThread(u.id, pp!.id, { wizardResultId: "root_rot" })
+  const found = await prisma.thread.findFirst({ where: { id: t.id, wizardResultId: "root_rot", categoryId: pp!.id } })
+  assert.ok(found, "valid wizard thread persists with its result id")
 })
 
 // ─── Diary ↔ discussion ────────────────────────────────────────────

@@ -45,6 +45,16 @@ DATABASE_URL="postgresql://USER:PASSWORD@ep-XXXX.us-east-1.aws.neon.tech/neondb?
 
 Then push the deploy. App runtime keeps using the pooled `DATABASE_URL`.
 
+**Deployment ordering for schema-dependent changes — migrate BEFORE deploying code.** When a commit both adds a migration and changes code that reads the new columns, this order is required:
+
+1. Create/test the migration locally against `dev`
+2. Apply it to production (`migrate deploy`, direct endpoint)
+3. Verify with `npx prisma migrate status` → "Database schema is up to date"
+4. Push/deploy the application code
+5. Smoke-test production
+
+Why it matters: `next build` prerenders pages (e.g. `/diaries`) **against the production database at build time**, and the generated Prisma client already selects the new columns. If code deploys before the migration, the build fails with `P2022: The column ... does not exist` — or worse, runtime 500s on any route touching the new fields. The reverse order is always safe: additive migrations (nullable columns, new indexes) don't break the currently-deployed old code.
+
 ## Testing
 
 ```bash

@@ -232,7 +232,7 @@ export async function DELETE(request: Request) {
 
     const diary = await prisma.growDiary.findUnique({
       where: { id },
-      select: { id: true, authorId: true, deleted: true },
+      select: { id: true, authorId: true, deleted: true, strainId: true, strain: true },
     })
     if (!diary || diary.deleted) {
       return NextResponse.json({ error: "Diary not found" }, { status: 404 })
@@ -258,6 +258,9 @@ export async function DELETE(request: Request) {
     await reverseReputationBySource("DIARY", id, "Diary removed", session.user.id).catch(() => 0)
     deleteImagesIfUnreferenced(imageUrls).catch(() => {})
     revalidateTag("diaries", { expire: 0 })
+    // Strain stats aggregate this diary — bust the cache so deleted grows
+    // stop contributing immediately instead of lingering to the TTL.
+    if (diary.strainId || diary.strain) revalidateTag("strains", { expire: 0 })
 
     return NextResponse.json({ deleted: true })
   } catch (error) {

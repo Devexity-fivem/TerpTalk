@@ -9,6 +9,7 @@ import { emitNotificationPush, notificationLinkWhere, postLinkWhere } from "@/li
 import { reverseReputationBySource, reverseReputationByActor } from "@/lib/reputation"
 import { applyAccountActionInTx, staffDisplayName } from "@/lib/moderation"
 import { deleteImagesIfUnreferenced } from "@/lib/blob"
+import { revalidateTag } from "next/cache"
 
 const CONTENT_TYPES = new Set(["THREAD", "POST", "CHAT_MESSAGE", "DIARY", "SETUP"])
 const ACTION_TYPES = new Set([
@@ -68,6 +69,7 @@ export async function POST(request: Request) {
 
     let createdNotification: Awaited<ReturnType<typeof prisma.notification.create>> | null = null
     const deletedBlobUrls: string[] = []
+    let diaryContentDeleted = false
     await prisma.$transaction(async (tx) => {
       if (isAccountAction) {
         // Shared enforcement — identical semantics to chat /warn /mute /ban.
@@ -170,6 +172,7 @@ export async function POST(request: Request) {
             ok = !!(await tx.growDiary.updateMany({ where: { id: targetId, authorId: targetUserId }, data: { deleted: true, threadId: null } })).count
             if (ok) {
               deletedLink = `/diaries/${targetId}`
+              diaryContentDeleted = true
               const imgs = await tx.diaryImage.findMany({
                 where: { update: { diaryId: targetId } },
                 select: { url: true },
@@ -264,6 +267,11 @@ export async function POST(request: Request) {
       } else if (targetType === "POST" || targetType === "DIARY" || targetType === "SETUP") {
         await reverseReputationBySource(targetType, targetId, "Content removed by staff", staff.id).catch(() => 0)
       }
+    }
+    // A moderated diary must stop contributing to strain stats — same
+    // invalidation as the owner-delete path.
+    if (diaryContentDeleted) {
+      revalidateTag("strains", { expire: 0 })
     }
     // A permanent ban voids reputation the banned account granted others
     // (likes they cast, answers they accepted). Their own earned history stays.
