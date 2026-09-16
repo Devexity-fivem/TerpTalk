@@ -9,6 +9,7 @@ import { canEquip } from "@/lib/cosmetics"
 import { Prisma } from "@prisma/client"
 import { rateLimit } from "@/lib/rate-limit"
 import { checkMaintenance } from "@/lib/maintenance"
+import { revalidateTag } from "next/cache"
 import bcrypt from "bcryptjs"
 
 const NO_STORE = { "Cache-Control": "no-store, max-age=0, must-revalidate" }
@@ -592,6 +593,10 @@ export async function DELETE(request: Request) {
     } catch {
       // Cleanup failure must not roll back the account deletion.
     }
+
+    // The cascade removed all of the member's diaries/threads — community
+    // aggregates must drop them immediately, not at TTL.
+    revalidateTag("analytics", { expire: 0 })
 
     return NextResponse.json({ deleted: true })
   } catch (error) {

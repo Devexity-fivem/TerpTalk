@@ -203,6 +203,8 @@ export async function POST(request: Request) {
     revalidateTag("diaries", { expire: 0 })
     // A structured strain link feeds strain-page stats — same bust as harvest.
     if (cleanStrainId) revalidateTag("strains", { expire: 0 })
+    // Community aggregates count every live diary.
+    revalidateTag("analytics", { expire: 0 })
 
     return NextResponse.json({ diary }, { status: 201 })
   } catch (error) {
@@ -260,6 +262,8 @@ export async function DELETE(request: Request) {
     // Strain stats aggregate this diary — bust the cache so deleted grows
     // stop contributing immediately instead of lingering to the TTL.
     if (diary.strainId || diary.strain) revalidateTag("strains", { expire: 0 })
+    // Same for community-level aggregates — deleted grows leave the stats.
+    revalidateTag("analytics", { expire: 0 })
 
     return NextResponse.json({ deleted: true })
   } catch (error) {

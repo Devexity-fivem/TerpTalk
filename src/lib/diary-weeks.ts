@@ -283,6 +283,74 @@ export function stageDurations(
     .filter((r) => r.days > 0)
 }
 
+// ─── Cross-diary stage-duration medians ─────────────────────────────
+
+/** Median of a set of numbers — proper midpoint average for even counts. */
+export function median(values: number[]): number | null {
+  if (values.length === 0) return null
+  const s = [...values].sort((a, b) => a - b)
+  const mid = Math.floor(s.length / 2)
+  return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2
+}
+
+export interface StageMedian {
+  stage: string
+  /** Median elapsed days in this stage — null when n < minSample. */
+  medianDays: number | null
+  /** Diaries contributing a completed run of this stage. */
+  n: number
+}
+
+/**
+ * Per-stage median durations across many diaries — the aggregate form of
+ * stageDurations(), used by strain/community analytics. Only CLOSED runs
+ * count: a diary's final run is open-ended (it stretches to harvest or
+ * `now`), so for a still-active diary the last run is dropped when it is
+ * the diary's current stage — otherwise in-progress grows would keep
+ * inflating the medians. Harvested diaries are fully closed: harvestedAt
+ * terminates the last run. Re-entries of a stage (re-veg) sum into one
+ * per-diary duration. Stages with fewer than minSample contributing
+ * diaries report medianDays: null — a suppressed state, never a fake zero.
+ */
+export function medianStageDurations(
+  entries: {
+    diary: DiaryLike & { stage: string }
+    updates: Pick<DiaryUpdateLike, "createdAt" | "stage">[]
+  }[],
+  now: Date = new Date(),
+  minSample = 5
+): StageMedian[] {
+  const daysByStage = new Map<string, number[]>()
+  for (const { diary, updates } of entries) {
+    let runs = stageDurations(diary, updates, now)
+    const last = runs[runs.length - 1]
+    // The last run is open-ended for a live diary — drop it when it's the
+    // diary's current stage (a same-day current stage is already filtered
+    // out by stageDurations, so `last` may legitimately be a closed run).
+    if (!diary.harvested && last && last.stage === diary.stage) {
+      runs = runs.slice(0, -1)
+    }
+    const perDiary = new Map<string, number>()
+    for (const r of runs) perDiary.set(r.stage, (perDiary.get(r.stage) ?? 0) + r.days)
+    for (const [stage, days] of perDiary) {
+      const arr = daysByStage.get(stage) ?? []
+      arr.push(days)
+      daysByStage.set(stage, arr)
+    }
+  }
+  return [...daysByStage.entries()]
+    .map(([stage, days]) => ({
+      stage,
+      medianDays: days.length >= minSample ? Math.round(median(days)!) : null,
+      n: days.length,
+    }))
+    .sort(
+      (a, b) =>
+        STAGE_ORDER.indexOf(a.stage as (typeof STAGE_ORDER)[number]) -
+        STAGE_ORDER.indexOf(b.stage as (typeof STAGE_ORDER)[number])
+    )
+}
+
 // ─── Diary completeness (owner-facing quality indicator) ────────────
 
 export interface CompletenessResult {

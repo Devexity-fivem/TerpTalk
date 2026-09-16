@@ -8,6 +8,7 @@ import { awardReputation, reverseReputationByKey, REP_POINTS } from "@/lib/reput
 import { ACCEPT_MIN_ACTOR_AGE_HOURS, ACCEPT_MIN_ACTOR_REP } from "@/lib/reputation-config"
 import { checkMaintenance } from "@/lib/maintenance"
 import { notify, postDeepLink } from "@/lib/notify"
+import { revalidateTag } from "next/cache"
 import { after } from "next/server"
 import { notifyOpAcceptedAnswer } from "@/lib/terpbot-assist"
 
@@ -57,6 +58,7 @@ export async function POST(request: Request) {
         title: true,
         locked: true,
         deleted: true,
+        wizardResultId: true,
         category: { select: { hidden: true } },
       },
     })
@@ -82,6 +84,8 @@ export async function POST(request: Request) {
       if (thread.acceptedAnswerId) {
         await reverseReputationByKey(`accept:${thread.acceptedAnswerId}`, "Answer unaccepted", user.id).catch(() => null)
       }
+      // Plant Doctor outcome stats track accepted answers.
+      if (thread.wizardResultId) revalidateTag("analytics", { expire: 0 })
       return NextResponse.json({ success: true })
     }
 
@@ -177,6 +181,7 @@ export async function POST(request: Request) {
       }
     }
 
+    if (thread.wizardResultId) revalidateTag("analytics", { expire: 0 })
     return NextResponse.json({ success: true, post: { id: postId } })
   } catch (error: unknown) {
     console.error("Accept answer error:", error)

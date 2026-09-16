@@ -7,6 +7,7 @@ import { notificationLinkWhere } from "@/lib/notify"
 import { staffDisplayName } from "@/lib/moderation"
 import { reverseReputationBySource } from "@/lib/reputation"
 import { deleteImagesIfUnreferenced } from "@/lib/blob"
+import { revalidateTag } from "next/cache"
 
 const BULK_ACTIONS = new Set(["lock", "unlock", "pin", "unpin", "delete", "restore"])
 
@@ -132,6 +133,12 @@ export async function POST(request: Request) {
       ip: getClientIp(request),
       metadata: { action, count: ids.length, reason },
     })
+
+    // Bulk-deleted/restored threads can carry wizardResultId + accepted
+    // answers — keep Plant Doctor outcome stats honest.
+    if (action === "delete" || action === "restore") {
+      revalidateTag("analytics", { expire: 0 })
+    }
 
     return NextResponse.json({ updated: threads.length })
   } catch (error) {

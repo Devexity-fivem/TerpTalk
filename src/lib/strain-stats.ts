@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma"
 import { unstable_cache } from "next/cache"
 import { toGrams, toOz } from "@/lib/yield"
 import { activeAuthor, publicUserSelect } from "@/lib/security"
+import { medianStageDurations, type StageMedian } from "@/lib/diary-weeks"
 import { DIFFICULTY_LABELS, MEDIUM_LABELS, LIGHT_LABELS, TECHNIQUE_LABELS } from "@/lib/grow-fields"
 
 const DAY_MS = 86400000
@@ -55,6 +56,9 @@ export interface StrainGrowStats {
   topMediums: string[]
   topLightTypes: string[]
   topTechniques: string[]
+  /** Median days per stage across member grows — medianDays null when the
+   *  stage has fewer than 5 contributing diaries (suppressed, not zero). */
+  stageDurations: StageMedian[]
   /** Member-authored harvest notes — attributed, not anonymized (they're
    *  public diary content, same as the linked-grows list). */
   reviews: { rating: number | null; difficulty: string | null; notes: string; authorName: string; diaryId: string }[]
@@ -90,6 +94,7 @@ const getStats = unstable_cache(
           strain: true,
           strainId: true,
           title: true,
+          stage: true,
           mediumType: true,
           lightType: true,
           techniques: true,
@@ -123,7 +128,7 @@ const getStats = unstable_cache(
     const setupCount = rawSetups.filter((s) => strainFieldMatches(s.strain, strainName)).length
     const diaryIds = diaries.map((d) => d.id)
 
-    const [flowerOnsets, envAgg] = diaryIds.length
+    const [flowerOnsets, envAgg, stageUpdates] = diaryIds.length
       ? await Promise.all([
           prisma.diaryUpdate.findMany({
             where: { stage: "FLOWER", diaryId: { in: diaryIds } },
@@ -136,10 +141,32 @@ const getStats = unstable_cache(
             _avg: { temperature: true, humidity: true, vpd: true, ph: true, ec: true },
             _count: { temperature: true, humidity: true, vpd: true, ph: true, ec: true },
           }),
+          // Bounded update history for stage-duration medians — the ≤500
+          // diary window plus this cap bound worst-case volume (~40 updates
+          // per diary). Deterministic truncation, same honesty pattern.
+          prisma.diaryUpdate.findMany({
+            where: { diaryId: { in: diaryIds } },
+            select: { diaryId: true, stage: true, createdAt: true },
+            orderBy: [{ diaryId: "asc" }, { createdAt: "asc" }],
+            take: 20000,
+          }),
         ])
-      : [[], null]
+      : [[], null, []]
 
     const onsetByDiary = new Map((flowerOnsets as { diaryId: string; createdAt: Date }[]).map((f) => [f.diaryId, f.createdAt]))
+
+    // Median stage durations — group the bounded update history per diary
+    // and reuse the shared derivation (open-ended final runs of active
+    // grows are excluded inside medianStageDurations).
+    const updatesByDiary = new Map<string, { stage: string; createdAt: Date }[]>()
+    for (const u of stageUpdates) {
+      const arr = updatesByDiary.get(u.diaryId) ?? []
+      arr.push(u)
+      updatesByDiary.set(u.diaryId, arr)
+    }
+    const stageMedians = medianStageDurations(
+      diaries.map((d) => ({ diary: d, updates: updatesByDiary.get(d.id) ?? [] }))
+    )
 
     const yieldsG: number[] = []
     const totalDays: number[] = []
@@ -237,6 +264,7 @@ const getStats = unstable_cache(
       topMediums: topOf([...mediumCounts.entries()], MEDIUM_LABELS as Record<string, string>),
       topLightTypes: topOf([...lightCounts.entries()], LIGHT_LABELS as Record<string, string>),
       topTechniques: topOf([...techniqueCounts.entries()], TECHNIQUE_LABELS as Record<string, string>),
+      stageDurations: stageMedians,
       reviews,
       tier: n === 0 ? "none" : n <= 2 ? "minimal" : n <= 4 ? "early" : "established",
       label:

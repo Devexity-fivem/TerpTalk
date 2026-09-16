@@ -112,6 +112,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     // Strain stats aggregate on strain/strainId/mediumType/lightType/
     // techniques — bust only when one of those actually changed.
     if (touchesStrainStats) revalidateTag("strains", { expire: 0 })
+    // Community methods aggregate those fields plus growType, which the
+    // strain-stats check doesn't cover.
+    if (touchesStrainStats || "growType" in data) revalidateTag("analytics", { expire: 0 })
 
     return NextResponse.json({ diary: result })
   } catch (error) {

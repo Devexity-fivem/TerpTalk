@@ -10,6 +10,7 @@ import { notifyMentions } from "@/lib/mentions"
 import { notify, notifyMany, postDeepLink, postLinkWhere } from "@/lib/notify"
 import { logModAction } from "@/lib/moderation"
 import { checkMaintenance } from "@/lib/maintenance"
+import { revalidateTag } from "next/cache"
 
 export async function POST(request: Request) {
   let imageUrls: string[] = []
@@ -354,6 +355,7 @@ export async function DELETE(request: Request) {
         id: true, authorId: true, deleted: true, threadId: true,
         author: { select: { id: true, role: true } },
         images: { select: { url: true } },
+        thread: { select: { wizardResultId: true } },
       },
     })
     if (!post || post.deleted) {
@@ -371,6 +373,7 @@ export async function DELETE(request: Request) {
       return forbidden("Your account is suspended")
     }
 
+    let acceptedCleared = 0
     await prisma.$transaction(async (tx) => {
       await tx.post.update({ where: { id }, data: { deleted: true } })
       // Detach image rows so the blob cleanup's reference check sees the
@@ -396,10 +399,12 @@ export async function DELETE(request: Request) {
       })
       // If this post was the accepted answer, clear the pointer — the thread
       // is no longer solved (SetNull on the FK only fires on hard delete).
-      await tx.thread.updateMany({
-        where: { acceptedAnswerId: post.id },
-        data: { acceptedAnswerId: null },
-      })
+      acceptedCleared = (
+        await tx.thread.updateMany({
+          where: { acceptedAnswerId: post.id },
+          data: { acceptedAnswerId: null },
+        })
+      ).count
       // Deep links to this post would now dangle — drop the notifications.
       await tx.notification.deleteMany({ where: postLinkWhere(post.id) })
     })
@@ -427,6 +432,12 @@ export async function DELETE(request: Request) {
 
     // Soft-deleted content must not leave live public blobs behind.
     deleteImagesIfUnreferenced(post.images.map((i) => i.url)).catch(() => {})
+
+    // Deleting the accepted answer un-solves the thread — bust the Plant
+    // Doctor outcome aggregates when the thread was wizard-linked.
+    if (acceptedCleared > 0 && post.thread.wizardResultId) {
+      revalidateTag("analytics", { expire: 0 })
+    }
 
     return NextResponse.json({ deleted: true })
   } catch (error) {

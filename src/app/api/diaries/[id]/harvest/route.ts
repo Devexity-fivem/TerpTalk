@@ -157,6 +157,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   revalidateTag("diaries", { expire: 0 })
   revalidateTag("leaderboard", { expire: 0 })
   revalidateTag("strains", { expire: 0 })
+  // Community harvest stats aggregate yield/rating/difficulty/duration.
+  revalidateTag("analytics", { expire: 0 })
 
   // Harvest payout — once per diary (keyed), only for a documented cycle:
   // at least 4 diary updates. Toggling harvested off/on can't re-pay; the

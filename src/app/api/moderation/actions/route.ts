@@ -273,6 +273,12 @@ export async function POST(request: Request) {
     if (diaryContentDeleted) {
       revalidateTag("strains", { expire: 0 })
     }
+    // Content deletion removes diaries/threads/accepted answers from the
+    // community aggregates; account actions change activeAuthor() so the
+    // member's content enters or leaves every public stat.
+    if (actionType === "CONTENT_DELETION" || isAccountAction) {
+      revalidateTag("analytics", { expire: 0 })
+    }
     // A permanent ban voids reputation the banned account granted others
     // (likes they cast, answers they accepted). Their own earned history stays.
     if (actionType === "PERMANENT_BAN") {

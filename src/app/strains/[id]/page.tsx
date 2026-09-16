@@ -269,6 +269,19 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
                 {growStats.topTechniques.length > 0 && <span>techniques: {growStats.topTechniques.join(", ")}</span>}
               </div>
             )}
+            {/* Median stage durations — only stages with ≥5 member grows show */}
+            {growStats.stageDurations.some((s) => s.medianDays != null) && (
+              <div className="mt-4 pt-4 border-t border-border flex flex-wrap gap-x-5 gap-y-1 text-xs text-muted-foreground">
+                <span>median time in stage:</span>
+                {growStats.stageDurations
+                  .filter((s) => s.medianDays != null)
+                  .map((s) => (
+                    <span key={s.stage}>
+                      {s.stage.toLowerCase().replace(/_/g, " ")} ~{s.medianDays}d ({s.n} grow{s.n === 1 ? "" : "s"})
+                    </span>
+                  ))}
+              </div>
+            )}
           </div>
         )}
 

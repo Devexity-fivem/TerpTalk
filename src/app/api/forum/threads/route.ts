@@ -317,6 +317,8 @@ export async function POST(request: Request) {
     }
 
     revalidateTag("forum", { expire: 0 })
+    // Plant Doctor outcome stats aggregate wizard-linked threads.
+    if (cleanWizardResultId) revalidateTag("analytics", { expire: 0 })
 
     return NextResponse.json({ thread }, { status: 201 })
   } catch (error) {
@@ -349,6 +351,7 @@ export async function DELETE(request: Request) {
       where: { id },
       select: {
         id: true, slug: true, authorId: true, deleted: true,
+        wizardResultId: true,
         author: { select: { id: true, role: true } },
         images: { select: { url: true } },
       },
@@ -414,6 +417,8 @@ export async function DELETE(request: Request) {
     ]).catch(() => {})
 
     revalidateTag("forum", { expire: 0 })
+    // A deleted Plant Doctor thread leaves the outcome aggregates.
+    if (thread.wizardResultId) revalidateTag("analytics", { expire: 0 })
 
     return NextResponse.json({ deleted: true })
   } catch (error) {

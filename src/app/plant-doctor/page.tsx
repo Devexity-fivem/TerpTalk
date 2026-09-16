@@ -1,13 +1,18 @@
 import ProblemWizard from "@/components/problem-wizard"
-import { Stethoscope } from "lucide-react"
+import { Stethoscope, MessageSquare } from "lucide-react"
 import Link from "next/link"
+import { getSymptomStats } from "@/lib/community-stats"
+
+export const dynamic = "force-dynamic"
 
 export const metadata = {
   title: "Plant Problem Solver",
   description: "Interactive diagnostic tool — answer a few questions about your plant's symptoms and get likely causes and fixes.",
 }
 
-export default function PlantDoctorPage() {
+export default async function PlantDoctorPage() {
+  const stats = await getSymptomStats()
+
   return (
     <div className="min-h-screen bg-background">
       <div className="max-w-2xl mx-auto px-4 py-8">
@@ -20,6 +25,40 @@ export default function PlantDoctorPage() {
           </p>
         </div>
         <ProblemWizard />
+
+        {/* Community outcomes — aggregate-only stats from Plant Doctor threads */}
+        <div className="mt-8 bg-card rounded-xl border border-border p-5">
+          <div className="flex items-center gap-2 mb-3">
+            <MessageSquare className="w-4 h-4 text-primary" />
+            <h2 className="font-semibold text-sm">Community outcomes</h2>
+          </div>
+          {stats.threadCount === 0 ? (
+            <p className="text-xs text-muted-foreground">
+              Not enough community data yet — outcomes appear once members post Plant Doctor threads.
+            </p>
+          ) : (
+            <div className="space-y-1.5 text-xs text-muted-foreground">
+              <p>
+                {stats.solvedCount} of {stats.threadCount} community threads have an accepted answer
+                {stats.solvedPct != null ? ` (${stats.solvedPct}%)` : ""}.
+              </p>
+              {stats.medianHoursToAnswer != null && (
+                <p>
+                  median time to an accepted answer: ~{stats.medianHoursToAnswer}h ({stats.answerN} threads)
+                </p>
+              )}
+              {stats.topTags.length > 0 && (
+                <p>
+                  common topics:{" "}
+                  {stats.topTags
+                    .slice(0, 4)
+                    .map((t) => `${t.name} (${t.threads})`)
+                    .join(" · ")}
+                </p>
+              )}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   )

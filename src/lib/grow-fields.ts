@@ -43,6 +43,14 @@ export const TECHNIQUE_LABELS: Record<Technique, string> = {
   MAINLINING: "Main-lining",
 }
 
+export const GROW_TYPE_LABELS: Record<string, string> = {
+  INDOOR: "Indoor",
+  OUTDOOR: "Outdoor",
+  GREENHOUSE: "Greenhouse",
+  HYDROPONIC: "Hydroponic",
+  OTHER: "Other",
+}
+
 export const DIFFICULTY_LABELS: Record<HarvestDifficulty, string> = {
   EASY: "Easy",
   NORMAL: "Normal",
