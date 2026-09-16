@@ -10,6 +10,7 @@ import DiaryFollowButton from "@/components/diary-follow-button"
 import ShareButtons from "@/components/share-buttons"
 import { buildMetadata, snippet } from "@/lib/seo"
 import { Breadcrumbs } from "@/components/breadcrumbs"
+import { JsonLd } from "@/components/json-ld"
 import EnvCharts from "@/components/env-chart"
 import HarvestForm from "@/components/harvest-form"
 import StageTimeline from "@/components/stage-timeline"
@@ -147,9 +148,32 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
   const completeness = canEdit ? diaryCompleteness(diary, updates) : null
   const truncated = diary._count.updates > updates.length
 
+  const diaryBase = process.env.NEXT_PUBLIC_SITE_URL || "https://terp-talk.vercel.app"
+  const diaryUrl = `${diaryBase}/diaries/${diary.id}`
+  const authorName = diary.author.profile?.username || diary.author.name || "Member"
+  const diarySchema = {
+    "@context": "https://schema.org",
+    "@type": "BlogPosting",
+    headline: diary.title,
+    description: snippet(diary.description || `Cannabis grow diary${diary.strain ? ` — ${diary.strain}` : ""} on TerpTalk.`),
+    author: { "@type": "Person", name: authorName, url: `${diaryBase}/u/${authorName}` },
+    datePublished: diary.createdAt.toISOString(),
+    dateModified: diary.updatedAt.toISOString(),
+    url: diaryUrl,
+    mainEntityOfPage: { "@type": "WebPage", "@id": diaryUrl },
+    publisher: { "@type": "Organization", name: "TerpTalk", url: diaryBase },
+    keywords: [diary.strain, "grow diary", "grow journal", "cannabis cultivation"].filter(Boolean).join(", "),
+    interactionStatistic: {
+      "@type": "InteractionCounter",
+      interactionType: "https://schema.org/CommentAction",
+      userInteractionCount: diary._count.updates,
+    },
+  }
+
   return (
     <div className="min-h-screen bg-background">
       <div className="max-w-7xl mx-auto px-4 py-8">
+        <JsonLd data={diarySchema} />
         <Breadcrumbs items={[
           { label: "Grow Diaries", href: "/diaries" },
           { label: diary.title },

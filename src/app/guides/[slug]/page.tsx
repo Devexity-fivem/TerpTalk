@@ -4,6 +4,7 @@ import { BookOpen, Pencil } from "lucide-react"
 import Link from "next/link"
 import ShareButtons from "@/components/share-buttons"
 import { buildMetadata, snippet } from "@/lib/seo"
+import { JsonLd } from "@/components/json-ld"
 import { Breadcrumbs } from "@/components/breadcrumbs"
 import TierChip from "@/components/tier-chip"
 import { getServerSession } from "next-auth"
@@ -47,9 +48,29 @@ export default async function GuidePage({ params }: { params: Promise<{ slug: st
     canEdit = !!user && !user.banned && isModerator(user.role)
   }
 
+  const guideBase = process.env.NEXT_PUBLIC_SITE_URL || "https://terp-talk.vercel.app"
+  const guideUrl = `${guideBase}/guides/${guide.slug}`
+  const guideSchema = {
+    "@context": "https://schema.org",
+    "@type": "Article",
+    headline: guide.title,
+    description: snippet(guide.excerpt || guide.content || guide.title),
+    articleSection: guide.topic,
+    author: {
+      "@type": "Person",
+      name: guide.author.profile?.username || guide.author.name || "TerpTalk",
+    },
+    datePublished: guide.createdAt.toISOString(),
+    dateModified: guide.updatedAt.toISOString(),
+    url: guideUrl,
+    mainEntityOfPage: { "@type": "WebPage", "@id": guideUrl },
+    publisher: { "@type": "Organization", name: "TerpTalk", url: guideBase },
+  }
+
   return (
     <div className="min-h-screen bg-background">
       <div className="max-w-3xl mx-auto px-4 py-8">
+        <JsonLd data={guideSchema} />
         <Breadcrumbs items={[
           { label: "Grow Guides", href: "/guides" },
           { label: guide.title },

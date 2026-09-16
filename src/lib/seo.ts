@@ -43,6 +43,9 @@ export function buildMetadata({
   const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://terp-talk.vercel.app"
   const fullTitle = title ? `${title} | ${SITE_NAME}` : DEFAULT_TITLE
   const fullDescription = description || DEFAULT_DESCRIPTION
+  // Every page should ship a shareable card image — an empty images list
+  // renders as a bare text link on most platforms, which kills CTR.
+  const shareImage = og?.image || twitter?.image || `${baseUrl}/icons/icon-512.png`
 
   return {
     title: title ? { absolute: fullTitle } : { default: DEFAULT_TITLE, template: DEFAULT_TITLE_TEMPLATE },
@@ -56,13 +59,13 @@ export function buildMetadata({
       title: og?.title || fullTitle,
       description: og?.description || fullDescription,
       url: pathname ? `${baseUrl}${pathname}` : baseUrl,
-      images: og?.image ? [{ url: og.image }] : undefined,
+      images: [{ url: shareImage }],
     },
     twitter: {
       card: "summary_large_image",
       title: twitter?.title || og?.title || fullTitle,
       description: twitter?.description || og?.description || fullDescription,
-      images: (twitter?.image || og?.image) ? [{ url: twitter?.image || og?.image || "" }] : undefined,
+      images: [{ url: twitter?.image || shareImage }],
     },
     robots: robots || { index: true, follow: true },
   }

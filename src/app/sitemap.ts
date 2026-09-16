@@ -29,35 +29,46 @@ const STATIC = [
 ]
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const [categories, threads, diaries, strains, profiles, guides] = await Promise.all([
+  const [categories, threads, diaries, strains, profiles, guides, setups, tags] = await Promise.all([
     prisma.category.findMany({ where: { hidden: false }, select: { slug: true, updatedAt: true } }),
     prisma.thread.findMany({
       where: { deleted: false, category: { hidden: false } },
-      take: 100,
+      take: 1000,
       orderBy: { updatedAt: "desc" },
       select: { slug: true, updatedAt: true },
     }),
     prisma.growDiary.findMany({
       where: { deleted: false, author: activeAuthor() },
-      take: 50,
+      take: 500,
       orderBy: { updatedAt: "desc" },
       select: { id: true, updatedAt: true },
     }),
     prisma.strain.findMany({
-      take: 50,
+      take: 500,
       orderBy: { createdAt: "desc" },
       select: { id: true, updatedAt: true },
     }),
     prisma.profile.findMany({
       // TerpBot excluded — its profile is a bot page, not member content.
       where: rankableProfile(),
-      take: 50,
+      take: 500,
       orderBy: REPUTATION_ORDER,
       select: { username: true, joinDate: true },
     }),
     prisma.guide.findMany({
       where: { published: true },
-      take: 100,
+      take: 200,
+      orderBy: { updatedAt: "desc" },
+      select: { slug: true, updatedAt: true },
+    }),
+    prisma.growSetup.findMany({
+      where: { deleted: false, author: activeAuthor() },
+      take: 500,
+      orderBy: { updatedAt: "desc" },
+      select: { id: true, updatedAt: true },
+    }),
+    prisma.tag.findMany({
+      take: 500,
       orderBy: { updatedAt: "desc" },
       select: { slug: true, updatedAt: true },
     }),
@@ -106,6 +117,18 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       lastModified: g.updatedAt,
       changeFrequency: "weekly" as const,
       priority: 0.7,
+    })),
+    ...setups.map((s) => ({
+      url: `${baseUrl}/setups/${s.id}`,
+      lastModified: s.updatedAt,
+      changeFrequency: "weekly" as const,
+      priority: 0.6,
+    })),
+    ...tags.map((t) => ({
+      url: `${baseUrl}/forum/tags/${t.slug}`,
+      lastModified: t.updatedAt,
+      changeFrequency: "weekly" as const,
+      priority: 0.5,
     }))
   )
 

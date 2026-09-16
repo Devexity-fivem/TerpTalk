@@ -58,6 +58,11 @@ const siteJsonLd = [
         url: `${baseUrl}/logo.png`,
       },
     },
+    potentialAction: {
+      "@type": "SearchAction",
+      target: { "@type": "EntryPoint", urlTemplate: `${baseUrl}/search?q={query}` },
+      "query-input": "required name=query",
+    },
   },
   {
     "@context": "https://schema.org",

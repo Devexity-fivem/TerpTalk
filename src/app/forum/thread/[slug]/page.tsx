@@ -258,7 +258,13 @@ export default async function ThreadPage({
       url: `${baseUrl}/u/${thread.author.profile?.username || thread.author.name}`,
     },
     datePublished: thread.createdAt.toISOString(),
+    dateModified: thread.lastActivityAt.toISOString(),
     url: canonical,
+    interactionStatistic: {
+      "@type": "InteractionCounter",
+      interactionType: "https://schema.org/CommentAction",
+      userInteractionCount: thread.replyCount,
+    },
     mainEntityOfPage: {
       "@type": "WebPage",
       "@id": canonical,
