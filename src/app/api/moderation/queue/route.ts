@@ -94,6 +94,15 @@ async function reportTargetLabels(reports: { type: string; targetId: string | nu
         })
         return fetch(type, rows.map((s) => ({ id: s.id, label: s.title, deleted: s.deleted, href: `/setups/${s.id}` })))
       }
+      case "STRAIN": {
+        // Strains are hard-deleted — a missing row means the catalog entry
+        // is gone (label falls back to null, same as any absent target).
+        const rows = await prisma.strain.findMany({
+          where: { id: { in: ids } },
+          select: { id: true, name: true, type: true },
+        })
+        return fetch(type, rows.map((s) => ({ id: s.id, label: s.type ? `${s.name} (${s.type})` : s.name, href: `/strains/${s.id}` })))
+      }
       case "PROFILE": {
         const rows = await prisma.profile.findMany({
           where: { userId: { in: ids } },

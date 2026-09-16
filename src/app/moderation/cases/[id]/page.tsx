@@ -169,7 +169,8 @@ export default function CasePage() {
   }
 
   const removeContent = async () => {
-    if (!item?.targetId || !item.type || !item.reportedUserId) return
+    // reportedUserId may be "" for a STRAIN whose creator's account is gone.
+    if (!item?.targetId || !item.type || (!item.reportedUserId && item.type !== "STRAIN")) return
     if (!confirm("Delete this content?")) return
     setBusy(true)
     try {

@@ -273,6 +273,18 @@ async function reportTargetDetail(type: string, targetId: string | null) {
         })
         return s && { title: s.title, content: (s.description ?? "").slice(0, 2000), deleted: s.deleted, href: `/setups/${s.id}` }
       }
+      case "STRAIN": {
+        const s = await prisma.strain.findUnique({
+          where: { id: targetId },
+          select: { id: true, name: true, type: true, genetics: true, breeder: true, description: true },
+        })
+        return s && {
+          title: s.type ? `${s.name} (${s.type})` : s.name,
+          content: [s.genetics, s.breeder, s.description].filter(Boolean).join("\n").slice(0, 2000),
+          deleted: false,
+          href: `/strains/${s.id}`,
+        }
+      }
       case "PROFILE": {
         const p = await prisma.profile.findUnique({
           where: { userId: targetId },

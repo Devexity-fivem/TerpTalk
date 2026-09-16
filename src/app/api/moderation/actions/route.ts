@@ -11,7 +11,7 @@ import { applyAccountActionInTx, staffDisplayName } from "@/lib/moderation"
 import { deleteImagesIfUnreferenced } from "@/lib/blob"
 import { revalidateTag } from "next/cache"
 
-const CONTENT_TYPES = new Set(["THREAD", "POST", "CHAT_MESSAGE", "DIARY", "SETUP"])
+const CONTENT_TYPES = new Set(["THREAD", "POST", "CHAT_MESSAGE", "DIARY", "SETUP", "STRAIN"])
 const ACTION_TYPES = new Set([
   "WARNING", "CONTENT_DELETION", "TEMPORARY_BAN", "PERMANENT_BAN", "UNBAN", "REMOVE_SUSPENSION",
   "PIN_THREAD", "LOCK_THREAD",
@@ -38,11 +38,15 @@ export async function POST(request: Request) {
     const body = await request.json().catch(() => ({}))
     const { actionType, targetType, targetId, targetUserId, reason, durationDays } = body
 
+    // STRAIN is the one content type whose creator may no longer exist —
+    // createdById is SetNull'd on account deletion, so "" is accepted only
+    // for STRAIN content deletions.
+    const emptyTargetUserAllowed = actionType === "CONTENT_DELETION" && targetType === "STRAIN"
     if (
       typeof actionType !== "string" ||
       !ACTION_TYPES.has(actionType) ||
       typeof targetUserId !== "string" ||
-      !targetUserId ||
+      (!targetUserId && !emptyTargetUserAllowed) ||
       typeof reason !== "string" ||
       !reason.trim() ||
       reason.length > 500
@@ -70,6 +74,8 @@ export async function POST(request: Request) {
     let createdNotification: Awaited<ReturnType<typeof prisma.notification.create>> | null = null
     const deletedBlobUrls: string[] = []
     let diaryContentDeleted = false
+    let strainDeleted = false
+    let strainPhotoIds: string[] = []
     await prisma.$transaction(async (tx) => {
       if (isAccountAction) {
         // Shared enforcement — identical semantics to chat /warn /mute /ban.
@@ -84,19 +90,24 @@ export async function POST(request: Request) {
         })
       } else {
         // Guards for content/thread actions — non-admin staff may not act
-        // on fellow staff or administrators' content.
-        const target = await tx.user.findUnique({
-          where: { id: targetUserId },
-          select: { id: true, role: true },
-        })
-        if (!target) {
+        // on fellow staff or administrators' content. Empty targetUserId is
+        // only reachable for STRAIN deletions with a deleted creator.
+        const target = targetUserId
+          ? await tx.user.findUnique({
+              where: { id: targetUserId },
+              select: { id: true, role: true },
+            })
+          : null
+        if (targetUserId && !target) {
           throw new Error("USER_NOT_FOUND")
         }
-        if (target.role === "ADMINISTRATOR") {
-          throw new Error("FORBIDDEN")
-        }
-        if ((target.role === "MODERATOR" || target.role === "SUPPORT") && !isAdmin(staff.role)) {
-          throw new Error("FORBIDDEN")
+        if (target) {
+          if (target.role === "ADMINISTRATOR") {
+            throw new Error("FORBIDDEN")
+          }
+          if ((target.role === "MODERATOR" || target.role === "SUPPORT") && !isAdmin(staff.role)) {
+            throw new Error("FORBIDDEN")
+          }
         }
         if (ADMIN_ONLY_MOD_ACTIONS.has(actionType) && !isAdmin(staff.role)) {
           throw new Error("FORBIDDEN")
@@ -190,6 +201,30 @@ export async function POST(request: Request) {
               deletedBlobUrls.push(...imgs.map((i) => i.url))
             }
             break
+          case "STRAIN": {
+            const strain = await tx.strain.findUnique({
+              where: { id: targetId },
+              select: {
+                id: true,
+                createdById: true,
+                photos: { select: { id: true, imageUrl: true } },
+              },
+            })
+            if (!strain) throw new Error("CONTENT_NOT_FOUND")
+            // targetUserId must name the strain's real creator — "" only
+            // when the creator's account is gone (createdById SetNull'd).
+            // Same mismatch rejection as the authorId-scoped updates above.
+            if ((strain.createdById ?? "") !== targetUserId) throw new Error("CONTENT_NOT_FOUND")
+            // Hard delete: GrowDiary.strainId SetNulls via FK (free-text
+            // diary.strain survives), StrainPhoto rows cascade-delete.
+            strainPhotoIds = strain.photos.map((p) => p.id)
+            deletedBlobUrls.push(...strain.photos.map((p) => p.imageUrl))
+            await tx.strain.delete({ where: { id: targetId } })
+            deletedLink = `/strains/${targetId}`
+            strainDeleted = true
+            ok = true
+            break
+          }
         }
         if (!ok) {
           throw new Error("CONTENT_NOT_FOUND")
@@ -236,18 +271,19 @@ export async function POST(request: Request) {
         })
 
         // Intentionally anonymous — moderation notifications never name staff.
-        createdNotification = await tx.notification.create({
+        // Skipped when there is no subject (creator-less STRAIN deletion).
+        createdNotification = effectiveTargetUserId ? await tx.notification.create({
           data: {
             type: "MODERATOR_ANNOUNCEMENT",
             userId: effectiveTargetUserId,
             title: `Moderation action: ${actionType.replace(/_/g, " ").toLowerCase()}`,
             content: `A moderator took action on your account or content. Reason: ${reason.trim()}`,
           },
-        }).catch(() => null)
+        }).catch(() => null) : null
       }
     })
 
-    if (createdNotification) {
+    if (createdNotification && effectiveTargetUserId) {
       emitNotificationPush(effectiveTargetUserId, createdNotification)
     }
 
@@ -266,17 +302,25 @@ export async function POST(request: Request) {
         }
       } else if (targetType === "POST" || targetType === "DIARY" || targetType === "SETUP") {
         await reverseReputationBySource(targetType, targetId, "Content removed by staff", staff.id).catch(() => 0)
+      } else if (targetType === "STRAIN") {
+        // STRAIN_CREATED on the catalog row + each photo's STRAIN_PHOTO —
+        // photo ids were collected before the cascade removed the rows.
+        await reverseReputationBySource("STRAIN", targetId, "Content removed by staff", staff.id).catch(() => 0)
+        for (const pid of strainPhotoIds) {
+          await reverseReputationBySource("STRAIN_PHOTO", pid, "Content removed by staff", staff.id).catch(() => 0)
+        }
       }
     }
-    // A moderated diary must stop contributing to strain stats — same
-    // invalidation as the owner-delete path.
-    if (diaryContentDeleted) {
+    // A moderated diary or strain must stop contributing to strain stats —
+    // same invalidation as the owner-delete paths.
+    if (diaryContentDeleted || strainDeleted) {
       revalidateTag("strains", { expire: 0 })
     }
     // Content deletion removes diaries/threads/accepted answers from the
     // community aggregates; account actions change activeAuthor() so the
-    // member's content enters or leaves every public stat.
-    if (actionType === "CONTENT_DELETION" || isAccountAction) {
+    // member's content enters or leaves every public stat. Strains don't
+    // feed those aggregates — a catalog deletion skips this bust.
+    if (isAccountAction || (actionType === "CONTENT_DELETION" && targetType !== "STRAIN")) {
       revalidateTag("analytics", { expire: 0 })
     }
     // A permanent ban voids reputation the banned account granted others

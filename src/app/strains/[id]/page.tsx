@@ -5,6 +5,8 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import StrainPhotoUpload from "@/components/strain-photo-upload"
 import ShareButtons from "@/components/share-buttons"
+import ReportButton from "@/components/report-button"
+import OwnerDeleteButton from "@/components/owner-delete-button"
 import { buildMetadata, snippet } from "@/lib/seo"
 import { Breadcrumbs } from "@/components/breadcrumbs"
 import { publicUserSelect, activeAuthor } from "@/lib/security"
@@ -43,7 +45,7 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
           orderBy: { createdAt: "desc" },
           take: 100,
           include: {
-            user: { select: { profile: { select: { username: true, reputation: true, publicMilestoneOptOut: true } }, name: true } },
+            user: { select: { id: true, profile: { select: { username: true, reputation: true, publicMilestoneOptOut: true } }, name: true } },
           },
         },
       },
@@ -149,8 +151,9 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
                   </span>
                 )}
               </div>
-              <div className="mt-3">
+              <div className="mt-3 flex items-center gap-2">
                 <ShareButtons path={`/strains/${strain.id}`} title={`${strain.name} strain — TerpTalk`} />
+                <ReportButton type="STRAIN" targetId={strain.id} authorId={strain.createdById ?? undefined} />
               </div>
             </div>
           </div>
@@ -435,6 +438,16 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
                       />
                       <div className="absolute bottom-0 inset-x-0 bg-black/60 text-[10px] text-white px-2 py-1 rounded-b-lg opacity-0 group-hover:opacity-100 transition-opacity">
                         by {photo.user.profile?.username || photo.user.name}
+                      </div>
+                      <div className="absolute top-1.5 right-1.5 opacity-0 group-hover:opacity-100 transition-opacity bg-black/60 rounded-lg px-1">
+                        <OwnerDeleteButton
+                          endpoint="/api/strains/photos"
+                          id={photo.id}
+                          authorId={photo.user.id}
+                          confirmText="Delete this photo? This cannot be undone."
+                          label="Delete photo"
+                          iconOnly
+                        />
                       </div>
                     </div>
                   ))}

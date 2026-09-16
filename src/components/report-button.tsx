@@ -12,7 +12,7 @@ export default function ReportButton({
   authorId,
   label,
 }: {
-  type: "THREAD" | "DIARY" | "SETUP"
+  type: "THREAD" | "DIARY" | "SETUP" | "STRAIN"
   targetId: string
   authorId?: string
   label?: string

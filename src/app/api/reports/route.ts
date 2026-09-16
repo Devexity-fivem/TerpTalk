@@ -14,6 +14,7 @@ const REPORT_TYPES = new Set([
   "PROFILE",
   "DIARY",
   "SETUP",
+  "STRAIN",
 ])
 
 const REPORT_REASONS = new Set([
@@ -105,9 +106,23 @@ export async function POST(request: Request) {
         reportedUserId = s?.authorId ?? null
         break
       }
+      case "STRAIN": {
+        // Strain.createdById is nullable — SetNull'd when the creator's
+        // account is deleted. A creator-less catalog entry is still
+        // reportable: "" marks "no subject" (the queue renders it as a
+        // deleted user) without blocking the report.
+        const s = await prisma.strain.findUnique({ where: { id: targetId }, select: { createdById: true } })
+        if (!s) {
+          return NextResponse.json({ error: "Reported content not found" }, { status: 404 })
+        }
+        reportedUserId = s.createdById ?? ""
+        break
+      }
     }
 
-    if (!reportedUserId) {
+    // null = target doesn't exist. STRAIN alone may produce "" (a real
+    // strain whose creator account is gone) — still reportable.
+    if (reportedUserId === null) {
       return NextResponse.json({ error: "Reported content not found" }, { status: 404 })
     }
 
