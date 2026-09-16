@@ -8,7 +8,7 @@ import { awardReputation, reverseReputationBySource, REP_POINTS } from "@/lib/re
 import { notificationLinkWhere } from "@/lib/notify"
 import { deleteImagesIfUnreferenced } from "@/lib/blob"
 import { checkMaintenance } from "@/lib/maintenance"
-import { parseMediumType, parseLightType, parseTechniques } from "@/lib/grow-fields"
+import { parseMediumType, parseLightType, parseTechniques, GROW_TYPES } from "@/lib/grow-fields"
 import { revalidateTag } from "next/cache"
 import { after } from "next/server"
 import { assistFirstDiary } from "@/lib/terpbot-assist"
@@ -65,8 +65,7 @@ export async function POST(request: Request) {
       )
     }
 
-    const VALID_GROW_TYPES = new Set(["INDOOR", "OUTDOOR", "GREENHOUSE", "HYDROPONIC", "OTHER"])
-    if (typeof growType !== "string" || !VALID_GROW_TYPES.has(growType)) {
+    if (typeof growType !== "string" || !(GROW_TYPES as readonly string[]).includes(growType)) {
       return NextResponse.json({ error: "Invalid grow type" }, { status: 400 })
     }
 

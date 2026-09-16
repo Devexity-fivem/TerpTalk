@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma"
 import { publicUserSelect } from "@/lib/security"
 import { notFound } from "next/navigation"
-import { Leaf, Calendar, Users, ClipboardCheck, Camera, TrendingUp } from "lucide-react"
+import { Leaf, Calendar, Users, ClipboardCheck, Camera, TrendingUp, Pencil } from "lucide-react"
 import Link from "next/link"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
@@ -297,6 +297,15 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
                   existingSlug={diary.discussion && !diary.discussion.deleted ? diary.discussion.slug : null}
                 />
                 <ShareButtons path={`/diaries/${diary.id}`} title={`${diary.title} — grow diary on TerpTalk`} />
+                {canEdit && (
+                  <Link
+                    href={`/diaries/${diary.id}/edit`}
+                    aria-label="Edit diary"
+                    className="inline-flex items-center justify-center p-2 rounded-lg hover:bg-secondary transition-colors"
+                  >
+                    <Pencil className="w-4 h-4" />
+                  </Link>
+                )}
                 <OwnerDeleteButton
                   endpoint="/api/diaries"
                   id={diary.id}

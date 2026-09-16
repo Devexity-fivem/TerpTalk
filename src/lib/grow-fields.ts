@@ -3,6 +3,7 @@
 // "grows like mine" discovery without building a GrowDiaries-style
 // equipment/nutrient catalog. The free-text fields stay as fallbacks.
 
+export const GROW_TYPES = ["INDOOR", "OUTDOOR", "GREENHOUSE", "HYDROPONIC", "OTHER"] as const
 export const MEDIUM_TYPES = ["SOIL", "COCO", "HYDRO", "DWC", "LIVING_SOIL", "OTHER"] as const
 export const LIGHT_TYPES = ["LED", "HPS", "CMH", "FLUORESCENT", "SUN", "OTHER"] as const
 export const TECHNIQUES = ["LST", "HST", "TOPPING", "FIM", "SCROG", "SOG", "DEFOLIATION", "MAINLINING"] as const
