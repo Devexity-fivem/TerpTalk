@@ -3,7 +3,7 @@
 import { useSession, signOut } from "next-auth/react"
 import { useEffect, useState } from "react"
 import Link from "next/link"
-import { usePathname, useRouter } from "next/navigation"
+import { usePathname } from "next/navigation"
 import {
   Leaf, MessageCircle, MessagesSquare, Home, Calendar,
   Settings, Dna, Bell, Menu, X, Mail, Search, Trophy, BookOpen, Stethoscope, Tag, TrendingUp, Info, Shield,
@@ -47,8 +47,9 @@ const DESKTOP_LINKS = [
 export function Navigation() {
   const { data: session, status } = useSession()
   const pathname = usePathname()
-  const router = useRouter()
   const [unread, setUnread] = useState(0)
+  const [dmUnread, setDmUnread] = useState(0)
+  const [chatOnline, setChatOnline] = useState(0)
   const [menuOpen, setMenuOpen] = useState(false)
   const role = (session?.user as { role?: string } | undefined)?.role
   const isAdmin = role === "ADMINISTRATOR"
@@ -71,12 +72,28 @@ export function Navigation() {
         .then((res) => (res.ok ? res.json() : null))
         .then((d) => setUnread(d?.unreadCount || 0))
         .catch(() => {})
+      // One indexed COUNT — never the whole inbox — for the mail badge.
+      fetch("/api/messages?unread=1")
+        .then((res) => (res.ok ? res.json() : null))
+        .then((d) => setDmUnread(d?.unread || 0))
+        .catch(() => {})
     }
     refresh()
     const onRead = () => refresh()
     window.addEventListener("tt-notifications-read", onRead)
     // Presence ping — updates lastSeenAt/online status (server throttled)
     fetch("/api/ping", { method: "POST" }).catch(() => {})
+
+    // Chat activity signal for the nav entry — one bounded fetch on mount
+    // plus a slow poll. The endpoint is auth-only, so guests get no signal.
+    const refreshChat = () => {
+      fetch("/api/chat/rooms?badge=1")
+        .then((res) => (res.ok ? res.json() : null))
+        .then((d) => setChatOnline(d?.onlineCount || 0))
+        .catch(() => {})
+    }
+    refreshChat()
+    const chatPoll = setInterval(refreshChat, 60_000)
 
     // Realtime notifications via a per-user private channel. The DB
     // remains the source of truth; the poll below is the fallback.
@@ -112,6 +129,7 @@ export function Navigation() {
       cancelled = true
       window.removeEventListener("tt-notifications-read", onRead)
       if (poll) clearInterval(poll)
+      clearInterval(chatPoll)
       if (p) {
         p.unsubscribe(channel)
         p.disconnect()
@@ -147,14 +165,6 @@ export function Navigation() {
   const isActive = (href: string) =>
     href === "/" ? pathname === "/" : pathname.startsWith(href)
 
-  const openChat = () => {
-    if (session) {
-      router.push("/chat")
-    } else {
-      router.push(signInHref(pathname))
-    }
-  }
-
   const linkClass = (href: string) =>
     cn(
       "flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
@@ -185,6 +195,12 @@ export function Navigation() {
                 <Link key={href} href={href} className={linkClass(href)}>
                   <Icon className="h-4 w-4" />
                   {label}
+                  {href === "/chat" && chatOnline > 0 && (
+                    <span className="flex items-center gap-1 text-[10px] font-normal text-muted-foreground" title={`${chatOnline} online`}>
+                      <span className="h-1.5 w-1.5 rounded-full bg-primary" aria-hidden="true" />
+                      {chatOnline}
+                    </span>
+                  )}
                 </Link>
               ))}
             </div>
@@ -217,10 +233,18 @@ export function Navigation() {
                   <CreateMenu />
                   <Link
                     href="/messages"
-                    className="hidden rounded-lg p-2 transition-colors hover:bg-secondary lg:block"
-                    aria-label="Messages"
+                    className="relative hidden rounded-lg p-2 transition-colors hover:bg-secondary lg:block"
+                    aria-label={dmUnread > 0 ? `Messages (${dmUnread} unread)` : "Messages"}
                   >
                     <Mail className="h-5 w-5" />
+                    {dmUnread > 0 && (
+                      <span
+                        className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-semibold text-destructive-foreground"
+                        aria-live="polite"
+                      >
+                        {dmUnread > 99 ? "99+" : dmUnread}
+                      </span>
+                    )}
                   </Link>
                   <Link
                     href="/notifications"
@@ -255,6 +279,16 @@ export function Navigation() {
                   </Link>
                 </>
               )}
+
+              {/* Mobile search entry — the search input is md+; below that
+                  this icon is the only direct search affordance. */}
+              <Link
+                href="/search"
+                className="rounded-lg p-2 transition-colors hover:bg-secondary md:hidden"
+                aria-label="Search"
+              >
+                <Search className="h-5 w-5" />
+              </Link>
 
               {/* Chat shortcut — visible on small screens where the
                   desktop link bar is hidden. */}
@@ -320,6 +354,11 @@ export function Navigation() {
                     <Link key={href} href={href} className={linkClass(href)} onClick={() => setMenuOpen(false)}>
                       <Icon className="h-4 w-4" />
                       {label}
+                      {href === "/chat" && chatOnline > 0 && (
+                        <span className="ml-auto text-[10px] font-normal text-muted-foreground">
+                          {chatOnline} online
+                        </span>
+                      )}
                     </Link>
                   ))}
                 </div>
@@ -351,24 +390,27 @@ export function Navigation() {
                 </Link>
               </div>
 
-              {/* Signed-out users have no avatar menu or navbar chat icon —
-                  give them a mobile-only chat entry. Signed-in users reach
-                  Chat/Messages/Profile via the navbar and avatar menu. */}
-              {!session && (
+
+              {/* Signed-in: the navbar Mail icon is desktop-only, so the
+                  drawer carries the mobile Messages entry + unread badge. */}
+              {session && (
                 <div className="space-y-1 lg:hidden">
                   <div className="px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
                     Connect
                   </div>
-                  <button
-                    onClick={() => { openChat(); setMenuOpen(false) }}
-                    className={cn(
-                      "flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-medium transition-colors",
-                      "text-muted-foreground hover:bg-secondary hover:text-foreground"
-                    )}
+                  <Link
+                    href="/messages"
+                    className={linkClass("/messages")}
+                    onClick={() => setMenuOpen(false)}
                   >
-                    <MessagesSquare className="h-4 w-4" />
-                    Chat
-                  </button>
+                    <Mail className="h-4 w-4" />
+                    Messages
+                    {dmUnread > 0 && (
+                      <span className="ml-auto flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-semibold text-destructive-foreground">
+                        {dmUnread > 99 ? "99+" : dmUnread}
+                      </span>
+                    )}
+                  </Link>
                 </div>
               )}
               {/* Admin-only extras — Moderation and Admin Dashboard live in

@@ -9,7 +9,9 @@ import { Breadcrumbs } from "@/components/breadcrumbs"
 import TierChip from "@/components/tier-chip"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
-import { isModerator } from "@/lib/security"
+import { isModerator, activeAuthor, publicUserSelect, isActiveAuthorRow } from "@/lib/security"
+import { TOPIC_TO_CATEGORY_SLUGS } from "@/lib/guides"
+import { MessageSquare } from "lucide-react"
 
 export const dynamic = "force-dynamic"
 
@@ -31,11 +33,40 @@ export default async function GuidePage({ params }: { params: Promise<{ slug: st
   const [guide, session] = await Promise.all([
     prisma.guide.findUnique({
       where: { slug },
-      include: { author: { select: { name: true, role: true, profile: { select: { username: true, reputation: true, publicMilestoneOptOut: true } } } } },
+      include: { author: { select: { name: true, role: true, banned: true, suspendedUntil: true, profile: { select: { username: true, reputation: true, publicMilestoneOptOut: true } } } } },
     }),
     getServerSession(authOptions),
   ])
   if (!guide || !guide.published) notFound()
+
+  // Onward paths — same-topic guides and discussions in the categories this
+  // topic maps to (TOPIC_TO_CATEGORY_SLUGS is the canonical mapping).
+  const [relatedGuides, relatedThreads] = await Promise.all([
+    prisma.guide.findMany({
+      where: { published: true, topic: guide.topic, slug: { not: guide.slug }, author: activeAuthor() },
+      orderBy: { title: "asc" },
+      take: 6,
+      select: { title: true, slug: true, excerpt: true },
+    }),
+    (TOPIC_TO_CATEGORY_SLUGS[guide.topic] ?? []).length > 0
+      ? prisma.thread.findMany({
+          where: {
+            deleted: false,
+            author: activeAuthor(),
+            category: { hidden: false, slug: { in: TOPIC_TO_CATEGORY_SLUGS[guide.topic] } },
+          },
+          orderBy: { lastActivityAt: "desc" },
+          take: 5,
+          select: {
+            slug: true,
+            title: true,
+            replyCount: true,
+            author: { select: publicUserSelect },
+            category: { select: { name: true } },
+          },
+        })
+      : Promise.resolve([]),
+  ])
 
   // Edit permission is author-or-moderator — mirrors PATCH /api/guides/[slug].
   // Check the DB role so a stale JWT can't show an Edit link that will 403.
@@ -80,7 +111,11 @@ export default async function GuidePage({ params }: { params: Promise<{ slug: st
             <BookOpen className="w-4 h-4 text-primary" />
             <span className="uppercase tracking-wide">{guide.topic}</span>
             <span>·</span>
-            <span className="inline-flex items-center gap-1">by {guide.author.profile?.username || guide.author.name} <TierChip reputation={guide.author.profile?.reputation ?? 0} publicMilestoneOptOut={guide.author.profile?.publicMilestoneOptOut} /></span>
+            {isActiveAuthorRow(guide.author) ? (
+              <span className="inline-flex items-center gap-1">by <Link href={`/u/${guide.author.profile?.username || guide.author.name}`} className="text-primary hover:underline">{guide.author.profile?.username || guide.author.name}</Link> <TierChip reputation={guide.author.profile?.reputation ?? 0} publicMilestoneOptOut={guide.author.profile?.publicMilestoneOptOut} /></span>
+            ) : (
+              <span>TerpTalk staff</span>
+            )}
             <span>·</span>
             <span>{new Date(guide.createdAt).toLocaleDateString()}</span>
             {canEdit && (
@@ -100,6 +135,49 @@ export default async function GuidePage({ params }: { params: Promise<{ slug: st
             <ShareButtons path={`/guides/${guide.slug}`} title={guide.title} />
           </div>
         </div>
+
+        {(relatedGuides.length > 0 || relatedThreads.length > 0) && (
+          <div className="mt-6 space-y-6">
+            {relatedGuides.length > 0 && (
+              <section className="bg-card rounded-xl border border-border p-5">
+                <h2 className="font-semibold mb-3 flex items-center gap-2">
+                  <BookOpen className="w-4 h-4 text-primary" />
+                  Related guides
+                </h2>
+                <ul className="space-y-2">
+                  {relatedGuides.map((g) => (
+                    <li key={g.slug}>
+                      <Link href={`/guides/${g.slug}`} className="text-sm font-medium text-primary hover:underline">
+                        {g.title}
+                      </Link>
+                      {g.excerpt && <p className="text-xs text-muted-foreground line-clamp-1 mt-0.5">{g.excerpt}</p>}
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
+            {relatedThreads.length > 0 && (
+              <section className="bg-card rounded-xl border border-border p-5">
+                <h2 className="font-semibold mb-3 flex items-center gap-2">
+                  <MessageSquare className="w-4 h-4 text-primary" />
+                  Related discussions
+                </h2>
+                <ul className="space-y-2">
+                  {relatedThreads.map((t) => (
+                    <li key={t.slug}>
+                      <Link href={`/forum/thread/${t.slug}`} className="text-sm font-medium text-primary hover:underline">
+                        {t.title}
+                      </Link>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {t.category.name} · {t.replyCount} repl{t.replyCount === 1 ? "y" : "ies"} · by {t.author.profile?.username || t.author.name}
+                      </p>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
+          </div>
+        )}
       </div>
     </div>
   )

@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma"
-import { publicUserSelect, isModerator } from "@/lib/security"
+import { publicUserSelect, isModerator, activeAuthor } from "@/lib/security"
 import { unstable_cache } from "next/cache"
 import { notFound } from "next/navigation"
 import { MessageSquare, Users, Clock, Pin, Lock, CheckCircle2, BookOpen } from "lucide-react"
@@ -33,7 +33,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
 
 const getCategoryData = unstable_cache(
   async (slug: string, page: number, unanswered = false) => {
-    const where = { deleted: false, ...(unanswered ? { replyCount: 0 } : {}) }
+    const where = { deleted: false, author: activeAuthor(), ...(unanswered ? { replyCount: 0 } : {}) }
     const category = await prisma.category.findUnique({
       where: { slug },
       include: {

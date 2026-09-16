@@ -19,8 +19,7 @@ export default function QuickPostButton() {
   if (!session) return null
 
   return (
-    /* Bottom-right, opposite the chat FAB on the left, lifted above the
-       mobile bottom navigation. */
+    /* Bottom-right, lifted above the mobile bottom navigation. */
     <div className="lg:hidden fixed bottom-[calc(4.5rem+env(safe-area-inset-bottom))] right-4 z-40">
       {open && (
         <div className="absolute bottom-14 right-0 bg-card border border-border rounded-2xl shadow-lg p-2 space-y-1 min-w-[10rem]">

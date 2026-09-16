@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { unstable_cache } from "next/cache"
-import { getClientIp, hashIp } from "@/lib/security"
+import { getClientIp, hashIp, activeAuthor } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
 
 export const dynamic = "force-dynamic"
@@ -10,10 +10,10 @@ export const revalidate = 60
 const getStats = unstable_cache(
   async () => {
     const [members, diaries, threads, posts] = await Promise.all([
-      prisma.user.count({ where: { banned: false } }),
-      prisma.growDiary.count({ where: { deleted: false } }),
-      prisma.thread.count({ where: { deleted: false } }),
-      prisma.post.count({ where: { deleted: false } }),
+      prisma.user.count({ where: activeAuthor() }),
+      prisma.growDiary.count({ where: { deleted: false, author: activeAuthor() } }),
+      prisma.thread.count({ where: { deleted: false, author: activeAuthor() } }),
+      prisma.post.count({ where: { deleted: false, author: activeAuthor() } }),
     ])
     return { members, diaries, discussions: threads + posts }
   },

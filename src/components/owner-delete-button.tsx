@@ -64,7 +64,7 @@ export default function OwnerDeleteButton({
       disabled={busy}
       className={
         iconOnly
-          ? "text-muted-foreground hover:text-destructive transition-colors disabled:opacity-50"
+          ? "p-1.5 -m-1 text-muted-foreground hover:text-destructive transition-colors disabled:opacity-50"
           : "inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-destructive border border-destructive/40 rounded-lg hover:bg-destructive/10 transition-colors disabled:opacity-50"
       }
       aria-label={label}

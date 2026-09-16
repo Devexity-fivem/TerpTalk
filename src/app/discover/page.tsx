@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma"
-import { publicUserSelect } from "@/lib/security"
+import { publicUserSelect, activeAuthor } from "@/lib/security"
+import { signInHref } from "@/lib/callback-url"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import Link from "next/link"
@@ -28,14 +29,17 @@ async function getDiscoverData(tab: string, userId?: string) {
     _count: { select: { posts: { where: { deleted: false } } } },
   } as const
 
-  if (tab === "following" && userId) {
+  if (tab === "following") {
+    // Guests have no follows — return empty so the page can render an honest
+    // sign-in state instead of global content labeled "Your Following".
+    if (!userId) return { threads: [] }
     const follows = await prisma.follow.findMany({
       where: { followerId: userId },
       select: { followingId: true },
     })
     const followingIds = follows.map((f) => f.followingId)
     const threads = await prisma.thread.findMany({
-      where: { deleted: false, category: { hidden: false }, authorId: { in: followingIds } },
+      where: { deleted: false, category: { hidden: false }, authorId: { in: followingIds }, author: activeAuthor() },
       take: 50,
       orderBy: { createdAt: "desc" },
       include,
@@ -46,7 +50,7 @@ async function getDiscoverData(tab: string, userId?: string) {
   if (tab === "trending") {
     const oneWeekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
     const candidates = await prisma.thread.findMany({
-      where: { deleted: false, category: { hidden: false }, createdAt: { gte: oneWeekAgo } },
+      where: { deleted: false, category: { hidden: false }, createdAt: { gte: oneWeekAgo }, author: activeAuthor() },
       take: 100,
       include,
     })
@@ -59,7 +63,7 @@ async function getDiscoverData(tab: string, userId?: string) {
 
   // default latest
   const threads = await prisma.thread.findMany({
-    where: { deleted: false, category: { hidden: false } },
+    where: { deleted: false, category: { hidden: false }, author: activeAuthor() },
     take: 50,
     orderBy: { createdAt: "desc" },
     include,
@@ -106,16 +110,26 @@ export default async function DiscoverPage({
           </div>
           {threads.length === 0 ? (
             <EmptyState
-              icon={MessageSquare}
-              title={activeTab === "following" ? "No follows yet" : "No discussions found"}
+              icon={activeTab === "following" && !session?.user?.id ? Users : MessageSquare}
+              title={
+                activeTab === "following"
+                  ? session?.user?.id
+                    ? "No follows yet"
+                    : "Sign in to see your following feed"
+                  : "No discussions found"
+              }
               description={
                 activeTab === "following"
-                  ? "Follow growers to see their threads here."
+                  ? session?.user?.id
+                    ? "Follow growers to see their threads here."
+                    : "Follow growers and their threads will show up here."
                   : "Be the first to start a conversation."
               }
               action={
                 activeTab === "following"
-                  ? { href: "/search?type=users", label: "Find growers to follow" }
+                  ? session?.user?.id
+                    ? { href: "/search?type=users", label: "Find growers to follow" }
+                    : { href: signInHref("/discover?tab=following"), label: "Sign in" }
                   : { href: "/forum/new", label: "Start a discussion" }
               }
             />

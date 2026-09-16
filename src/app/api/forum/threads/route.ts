@@ -295,11 +295,14 @@ export async function POST(request: Request) {
     // Notify category followers (one notification per follower)
     // notifyMany filters prefs, banned recipients, and blocks in bulk.
     // Hidden categories never fan out — the link would leak content.
+    let categoryFollowerIds: string[] = []
     if (!category.hidden) {
       const followers = await prisma.categoryFollow.findMany({
         where: { categoryId: category.id },
         select: { userId: true },
+        take: 5000,
       })
+      categoryFollowerIds = followers.map((f) => f.userId)
       await notifyMany(
         followers
           .filter((f) => f.userId !== session.user.id)
@@ -314,6 +317,34 @@ export async function POST(request: Request) {
             dedupeMs: 60 * 60 * 1000,
           }))
       )
+    }
+
+    // New thread from a followed member — the return loop for follow.
+    // Hidden categories never fan out (same leak rule as the category
+    // notification above); users who already got it are excluded too.
+    const authorFollowers = category.hidden ? [] : await prisma.follow.findMany({
+      where: {
+        followingId: session.user.id,
+        followerId: { notIn: categoryFollowerIds },
+      },
+      select: { followerId: true },
+      take: 5000,
+    })
+    if (authorFollowers.length > 0) {
+      await notifyMany(
+        authorFollowers
+          .filter((f) => f.followerId !== session.user.id)
+          .map((f) => ({
+            userId: f.followerId,
+            type: "FOLLOWED_CONTENT" as const,
+            title: "New thread from someone you follow",
+            content: `@${session.user.name || "Someone"} started "${title.slice(0, 60)}".`,
+            link: opLink,
+            actorId: session.user.id,
+            groupKey: `followed-content:thread:${thread.id}`,
+            dedupeMs: 24 * 60 * 60 * 1000,
+          }))
+      ).catch(() => {})
     }
 
     revalidateTag("forum", { expire: 0 })

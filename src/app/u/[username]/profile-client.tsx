@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import { useSession } from "next-auth/react"
 import { useParams } from "next/navigation"
-import { User, MessageSquare, Loader2, MapPin, Globe, Sprout, Dna, Leaf, Store, Flame, ChevronDown, ChevronUp, Bot, Zap, Users, Link2, HandMetal, CalendarClock, TrendingUp, Search, BookOpen, Trophy, BarChart3, AlertTriangle, Megaphone } from "lucide-react"
+import { User, MessageSquare, Loader2, MapPin, Globe, Sprout, Dna, Leaf, Store, Flame, ChevronDown, ChevronUp, Bot, Zap, Users, Link2, HandMetal, CalendarClock, TrendingUp, Search, BookOpen, Trophy, BarChart3, AlertTriangle, Megaphone, Wrench } from "lucide-react"
 import Link from "next/link"
 import UserActions from "@/components/user-actions"
 import RoleBadge from "@/components/role-badge"
@@ -103,6 +103,14 @@ interface GrowDiary {
   _count: { updates: number; followers: number }
 }
 
+interface GrowSetup {
+  id: string
+  title: string
+  strain: string | null
+  images: { url: string }[]
+  _count: { comments: number }
+}
+
 interface HarvestEntry {
   id: string
   title: string
@@ -126,7 +134,7 @@ export default function ProfileClient() {
   const params = useParams()
   const { data: session } = useSession()
   const username = decodeURIComponent(String(params.username))
-  const [data, setData] = useState<{ profile: PublicProfile; viewerBlocked: boolean; viewerFollowing: boolean; recentThreads: Thread[]; growDiaries: GrowDiary[]; harvestShelf: HarvestEntry[]; recentRep: RepEvent[] } | null>(null)
+  const [data, setData] = useState<{ profile: PublicProfile; viewerBlocked: boolean; viewerFollowing: boolean; recentThreads: Thread[]; growDiaries: GrowDiary[]; growSetups: GrowSetup[]; harvestShelf: HarvestEntry[]; recentRep: RepEvent[] } | null>(null)
   const [loading, setLoading] = useState(true)
   const [notFound, setNotFound] = useState(false)
   const [showAllBadges, setShowAllBadges] = useState(false)
@@ -161,7 +169,7 @@ export default function ProfileClient() {
     )
   }
 
-  const { profile, viewerBlocked, viewerFollowing, recentThreads, growDiaries, harvestShelf, recentRep } = data
+  const { profile, viewerBlocked, viewerFollowing, recentThreads, growDiaries, growSetups, harvestShelf, recentRep } = data
   const joinDate = new Date(profile.joinDate).toLocaleDateString("en-US", { year: "numeric", month: "long" })
   const frame = getAvatarFrame(profile.avatarFrame)
   const theme = getProfileTheme(profile.profileTheme)
@@ -555,6 +563,40 @@ export default function ProfileClient() {
                 </Link>
               )
             })}
+          </div>
+        </div>
+        )}
+
+        {!profile.isBot && growSetups.length > 0 && (
+        <div className="bg-card rounded-lg border border-border p-4 mb-4">
+          <div className="flex items-center gap-2 mb-3">
+            <Wrench className="w-4 h-4 text-primary" />
+            <h2 className="text-lg font-semibold">Grow Setups</h2>
+            <span className="text-xs text-muted-foreground">{growSetups.length} shared</span>
+          </div>
+          <div className="grid gap-2 sm:grid-cols-2">
+            {growSetups.map((s) => (
+              <Link
+                key={s.id}
+                href={`/setups/${s.id}`}
+                className="flex items-center gap-3 p-3 rounded-lg border border-border hover:border-primary/40 transition-colors"
+              >
+                {s.images[0]?.url ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={s.images[0].url} alt="" loading="lazy" decoding="async" className="w-12 h-12 rounded-md object-cover shrink-0" />
+                ) : (
+                  <div className="w-12 h-12 rounded-md bg-primary/10 flex items-center justify-center shrink-0">
+                    <Wrench className="w-5 h-5 text-primary" />
+                  </div>
+                )}
+                <div className="min-w-0">
+                  <h3 className="font-medium text-sm truncate">{s.title}</h3>
+                  <p className="text-xs text-muted-foreground truncate">
+                    {s.strain ? `${s.strain} • ` : ""}{s._count.comments} comment{s._count.comments === 1 ? "" : "s"}
+                  </p>
+                </div>
+              </Link>
+            ))}
           </div>
         </div>
         )}

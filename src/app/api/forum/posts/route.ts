@@ -2,7 +2,7 @@ import { NextResponse, after } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { unauthorized, publicUserSelect, LIMITS, getClientIp, logSecurityEvent, isBanned, forbidden, enforceLinkTrust, isModerator, isAdmin } from "@/lib/security"
+import { unauthorized, publicUserSelect, LIMITS, getClientIp, logSecurityEvent, isBanned, forbidden, enforceLinkTrust, isModerator, isAdmin, blockExistsBetween } from "@/lib/security"
 import { requireModerator } from "@/lib/require-staff"
 import { awardReputation, reverseReputationBySource, repRateLimit, getTierPerks, REP_POINTS } from "@/lib/reputation"
 import { storeImages, deleteImagesIfUnreferenced, MAX_POST_IMAGES } from "@/lib/blob"
@@ -87,6 +87,12 @@ export async function POST(request: Request) {
         { error: "Thread is locked" },
         { status: 403 }
       )
+    }
+
+    // A block in either direction means no replying in the other member's
+    // thread — same rule as setup comments, reactions, follows, and DMs.
+    if (await blockExistsBetween(session.user.id, thread.authorId)) {
+      return forbidden()
     }
 
     const linkBlock = await enforceLinkTrust(content, session.user.id, request, "forum/posts")

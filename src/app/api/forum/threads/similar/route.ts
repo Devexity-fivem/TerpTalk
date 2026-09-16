@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { rateLimit } from "@/lib/rate-limit"
-import { getClientIp, hashIp } from "@/lib/security"
+import { getClientIp, hashIp, activeAuthor } from "@/lib/security"
 import { tokenizeSearchText } from "@/lib/search-terms"
 
 const TITLE_MAX = 200
@@ -36,6 +36,7 @@ export async function GET(request: Request) {
       where: {
         deleted: false,
         category: { hidden: false },
+        author: activeAuthor(),
         ...(categoryId ? { categoryId } : {}),
         OR: words.map((word) => ({ title: { contains: word, mode: "insensitive" } })),
       },

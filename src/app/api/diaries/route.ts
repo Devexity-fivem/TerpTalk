@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma"
 import { unauthorized, publicUserSelect, LIMITS, getClientIp, logSecurityEvent, isBanned, forbidden, enforceLinkTrust } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
 import { awardReputation, reverseReputationBySource, REP_POINTS } from "@/lib/reputation"
-import { notificationLinkWhere } from "@/lib/notify"
+import { notificationLinkWhere, notifyMany } from "@/lib/notify"
 import { deleteImagesIfUnreferenced } from "@/lib/blob"
 import { checkMaintenance } from "@/lib/maintenance"
 import { parseMediumType, parseLightType, parseTechniques, GROW_TYPES } from "@/lib/grow-fields"
@@ -199,6 +199,32 @@ export async function POST(request: Request) {
     // First-diary assist: one private TerpBot tip, once ever per member.
     // Deferred — the claim inside assistFirstDiary makes retries idempotent.
     after(() => assistFirstDiary(session.user.id, diary.id).then(() => {}))
+
+    // New diary from a followed member — the return loop for follow.
+    // Deferred, bounded, and pref/block filtered inside notifyMany.
+    // groupKey dedupes on the diary id so retried creations don't re-notify.
+    after(async () => {
+      const followers = await prisma.follow.findMany({
+        where: { followingId: session.user.id },
+        select: { followerId: true },
+        take: 5000,
+      })
+      if (followers.length === 0) return
+      const authorName =
+        diary.author.profile?.username || diary.author.name || "Someone"
+      await notifyMany(
+        followers.map((f) => ({
+          userId: f.followerId,
+          type: "FOLLOWED_CONTENT" as const,
+          title: "New diary from someone you follow",
+          content: `@${authorName} started a new grow diary: "${diary.title.slice(0, 60)}"`,
+          link: `/diaries/${diary.id}`,
+          actorId: session.user.id,
+          groupKey: `followed-content:diary:${diary.id}`,
+          dedupeMs: 24 * 60 * 60 * 1000,
+        }))
+      ).catch(() => {})
+    })
 
     revalidateTag("diaries", { expire: 0 })
     // A structured strain link feeds strain-page stats — same bust as harvest.

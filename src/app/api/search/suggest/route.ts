@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { unstable_cache } from "next/cache"
-import { getClientIp, hashIp, REPUTATION_ORDER } from "@/lib/security"
+import { getClientIp, hashIp, REPUTATION_ORDER, activeAuthor } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
 
 function escapeLike(str: string): string {
@@ -15,7 +15,7 @@ const getSearchSuggestions = unstable_cache(
   async (query: string) => {
     const [threads, strains, users, tags, guides] = await Promise.all([
       prisma.thread.findMany({
-        where: { deleted: false, category: { hidden: false }, title: { contains: query, mode: "insensitive" } },
+        where: { deleted: false, category: { hidden: false }, author: activeAuthor(), title: { contains: query, mode: "insensitive" } },
         take: 4,
         orderBy: { views: "desc" },
         select: { title: true, slug: true },
@@ -42,7 +42,7 @@ const getSearchSuggestions = unstable_cache(
         select: { name: true, slug: true },
       }),
       prisma.guide.findMany({
-        where: { published: true, OR: [{ title: { contains: query, mode: "insensitive" } }, { excerpt: { contains: query, mode: "insensitive" } }] },
+        where: { published: true, author: activeAuthor(), OR: [{ title: { contains: query, mode: "insensitive" } }, { excerpt: { contains: query, mode: "insensitive" } }] },
         take: 3,
         orderBy: { title: "asc" },
         select: { title: true, slug: true },

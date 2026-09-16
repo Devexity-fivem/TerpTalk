@@ -105,6 +105,20 @@ async function getPublicProfileData(username: string) {
       },
     })
 
+    // Public grow setups — same visibility rule as the /setups index.
+    const growSetups = await prisma.growSetup.findMany({
+      where: { authorId: profile.user.id, deleted: false },
+      orderBy: { createdAt: "desc" },
+      take: 6,
+      select: {
+        id: true,
+        title: true,
+        strain: true,
+        images: { take: 1, orderBy: { order: "asc" }, select: { url: true } },
+        _count: { select: { comments: true } },
+      },
+    })
+
     // Harvest Shelf — completed documented grows, newest harvest first.
     // Derived from existing diary rows; no trophy model.
     const harvestShelf = await prisma.growDiary.findMany({
@@ -127,6 +141,7 @@ async function getPublicProfileData(username: string) {
       profile,
       recentThreads,
       growDiaries,
+      growSetups,
       harvestShelf,
       growStreak: { streak, totalUpdates, harvestedDiaries },
     }
@@ -154,7 +169,7 @@ export async function GET(
       return NextResponse.json({ error: "User not found" }, { status: 404 })
     }
 
-    const { profile, recentThreads, growDiaries, harvestShelf, growStreak } = data
+    const { profile, recentThreads, growDiaries, growSetups, harvestShelf, growStreak } = data
     const isBot = profile.username === TERPBOT_USERNAME
     // Durable bot metrics come from BotEvent rows — ChatMessage hard-deletes
     // after ~3 days so it can't power real stats.
@@ -287,6 +302,7 @@ export async function GET(
       viewerFollowing,
       recentThreads,
       growDiaries,
+      growSetups,
       harvestShelf,
     }, { headers: NO_STORE })
   } catch (error) {

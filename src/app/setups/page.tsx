@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma"
 import { publicUserSelect, activeAuthor } from "@/lib/security"
 import { unstable_cache } from "next/cache"
-import { Settings, Plus, Users } from "lucide-react"
+import { Settings, Plus, Users, ChevronLeft, ChevronRight } from "lucide-react"
 import Link from "next/link"
 import RoleBadge from "@/components/role-badge"
 import TierChip from "@/components/tier-chip"
@@ -14,29 +14,47 @@ export const metadata = {
   description: "Cannabis grow room and tent setups — lighting, tents, and equipment shared by TerpTalk growers.",
 }
 
-const getSetups = unstable_cache(
-  async () => {
-    const setups = await prisma.growSetup.findMany({
-      where: { deleted: false, author: activeAuthor() },
-      take: 12,
-      orderBy: { createdAt: "desc" },
-      include: {
-        author: { select: publicUserSelect },
-        images: { take: 1, orderBy: { order: "asc" } },
-        _count: {
-          select: { comments: true },
-        },
-      },
-    })
+const PAGE_SIZE = 24
+const MAX_PAGE = 50
 
-    return setups
+const getSetups = unstable_cache(
+  async (page: number) => {
+    const where = { deleted: false, author: activeAuthor() }
+    const [setups, total] = await Promise.all([
+      prisma.growSetup.findMany({
+        where,
+        skip: (page - 1) * PAGE_SIZE,
+        take: PAGE_SIZE,
+        orderBy: [{ createdAt: "desc" }, { id: "asc" }],
+        include: {
+          author: { select: publicUserSelect },
+          images: { take: 1, orderBy: { order: "asc" } },
+          _count: {
+            select: { comments: true },
+          },
+        },
+      }),
+      prisma.growSetup.count({ where }),
+    ])
+
+    return { setups, total }
   },
   ["setups-list"],
   { revalidate: 300, tags: ["setups"] }
 )
 
-export default async function SetupsPage() {
-  const setups = await getSetups()
+export default async function SetupsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ page?: string }>
+}) {
+  const sp = await searchParams
+  const rawPage = Number.parseInt(sp?.page ?? "1", 10)
+  const page = Number.isFinite(rawPage) && rawPage >= 1 ? Math.min(rawPage, MAX_PAGE) : 1
+
+  const { setups, total } = await getSetups(page)
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
+  const pageHref = (p: number) => (p <= 1 ? "/setups" : `/setups?page=${p}`)
 
   return (
     <div className="min-h-screen bg-background">
@@ -47,7 +65,7 @@ export default async function SetupsPage() {
           <p className="text-muted-foreground">Show off your grow room and equipment. Get feedback and inspiration from the community.</p>
         </div>
 
-        <div className="flex justify-between items-center mb-6">
+        <div className="flex justify-between items-center mb-6 gap-3 flex-wrap">
           <h2 className="text-xl font-semibold">All Setups</h2>
           <Link
             href="/setups/new"
@@ -62,43 +80,80 @@ export default async function SetupsPage() {
           <div className="bg-card rounded-xl border border-border">
             <EmptyState
               icon={Settings}
-              title="No setups shared yet"
-              description="Be the first to show off your grow setup."
-              action={{ label: "Share your setup", href: "/setups/new" }}
+              title={total === 0 ? "No setups shared yet" : "No setups on this page"}
+              description={total === 0 ? "Be the first to show off your grow setup." : "This page is past the end of the setups list."}
+              action={total === 0 ? { label: "Share your setup", href: "/setups/new" } : { label: "Back to page 1", href: "/setups" }}
             />
           </div>
         ) : (
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {setups.map((setup) => (
-              <Link
-                key={setup.id}
-                href={`/setups/${setup.id}`}
-                className="bg-card rounded-lg border border-border overflow-hidden hover:border-primary/50 transition-colors"
-              >
-                {setup.images.length > 0 ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={setup.images[0].url} alt={setup.title} loading="lazy" decoding="async" className="aspect-video w-full object-cover" />
-                ) : (
-                  <div className="aspect-video bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center">
-                    <Settings className="w-16 h-16 text-primary/30" />
-                  </div>
-                )}
-                <div className="p-4">
-                  <h3 className="font-semibold mb-1">{setup.title}</h3>
-                  <p className="text-sm text-muted-foreground mb-3 line-clamp-2">{setup.description}</p>
-                  <div className="flex items-center justify-between text-xs text-muted-foreground">
-                    <span className="flex items-center gap-1">
-                      <Users className="w-3 h-3" />
-                      {setup.author.profile?.username || setup.author.name}
-                      <RoleBadge role={setup.author.role} />
+          <>
+            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {setups.map((setup) => (
+                <div
+                  key={setup.id}
+                  className="bg-card rounded-lg border border-border overflow-hidden hover:border-primary/50 transition-colors"
+                >
+                  <Link href={`/setups/${setup.id}`} className="block">
+                    {setup.images.length > 0 ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={setup.images[0].url} alt={setup.title} loading="lazy" decoding="async" className="aspect-video w-full object-cover" />
+                    ) : (
+                      <div className="aspect-video bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center">
+                        <Settings className="w-16 h-16 text-primary/30" />
+                      </div>
+                    )}
+                  </Link>
+                  <div className="p-4">
+                    <Link href={`/setups/${setup.id}`} className="hover:text-primary transition-colors">
+                      <h3 className="font-semibold mb-1">{setup.title}</h3>
+                    </Link>
+                    <p className="text-sm text-muted-foreground mb-3 line-clamp-2">{setup.description}</p>
+                    <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground flex-wrap">
+                      <span className="flex items-center gap-1 min-w-0">
+                        <Users className="w-3 h-3 shrink-0" />
+                        <Link
+                          href={`/u/${setup.author.profile?.username || setup.author.name}`}
+                          className="truncate hover:text-foreground hover:underline"
+                        >
+                          {setup.author.profile?.username || setup.author.name}
+                        </Link>
+                        <RoleBadge role={setup.author.role} />
                         <TierChip reputation={setup.author.profile?.reputation ?? 0} publicMilestoneOptOut={setup.author.profile?.publicMilestoneOptOut} />
-                    </span>
-                    <span>{setup._count.comments} comments</span>
+                      </span>
+                      <span className="shrink-0">{setup._count.comments} comments</span>
+                    </div>
                   </div>
                 </div>
-              </Link>
-            ))}
-          </div>
+              ))}
+            </div>
+            {totalPages > 1 && (
+              <div className="flex items-center justify-between gap-3 mt-6">
+                {page > 1 ? (
+                  <Link
+                    href={pageHref(page - 1)}
+                    className="inline-flex items-center gap-1 px-4 py-2 rounded-lg bg-card border border-border text-sm font-medium hover:border-primary/40 transition-colors"
+                  >
+                    <ChevronLeft className="w-4 h-4" /> Previous
+                  </Link>
+                ) : (
+                  <span />
+                )}
+                <span className="text-sm text-muted-foreground">
+                  Page {page} of {totalPages}
+                </span>
+                {page < totalPages ? (
+                  <Link
+                    href={pageHref(page + 1)}
+                    className="inline-flex items-center gap-1 px-4 py-2 rounded-lg bg-card border border-border text-sm font-medium hover:border-primary/40 transition-colors"
+                  >
+                    Next <ChevronRight className="w-4 h-4" />
+                  </Link>
+                ) : (
+                  <span />
+                )}
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>

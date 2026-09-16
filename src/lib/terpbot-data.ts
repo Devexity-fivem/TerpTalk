@@ -560,7 +560,7 @@ async function handle(name: string, ctx: BotCommandCtx): Promise<BotCommandResul
       // updates (throttling) but they never appear in presence lists.
       const presenceWhere = {
         lastSeenAt: { gte: since },
-        banned: false,
+        ...activeAuthor(),
         AND: [
           { profile: { isNot: { username: TERPBOT_USERNAME } } },
           { OR: [{ profile: { hideOnlineStatus: false } }, { profile: null }] },

@@ -84,6 +84,12 @@ async function main() {
     await prisma.rateLimit.deleteMany({
       where: { key: { startsWith: "register:" } },
     }).catch(() => {})
+    // Bot output budgets (terpbot:out:global 60/hr, per-room 10/min) are
+    // DB-backed too — a previous run's replies would otherwise suppress this
+    // run's bot answers and cascade into false failures.
+    await prisma.rateLimit.deleteMany({
+      where: { key: { startsWith: "terpbot:out:" } },
+    })
 
     // ── Identity ────────────────────────────────────────────────────
     const botUser = await prisma.user.findUnique({
@@ -202,11 +208,15 @@ async function main() {
       method: "POST", body: { roomId: pingRoom.id, content: "@terpbot ping" }, cookie: memberCookie,
     })
     ping.status === 201 || ping.status === 200 ? pass("member can post @terpbot ping") : fail("member can post @terpbot ping", { status: ping.status, data: ping.data })
-    // Give the synchronous bot reply a moment to land.
-    await new Promise((r) => setTimeout(r, 500))
-    const botReply = await prisma.chatMessage.findFirst({
-      where: { roomId: pingRoom.id, authorId: botId, deleted: false, createdAt: { gte: new Date(Date.now() - 10_000) } },
-    })
+    // The reply is dispatched via after() — poll briefly like mention() does;
+    // a single fixed sleep races the async respond() in dev.
+    let botReply = null
+    for (let i = 0; i < 16 && !botReply; i++) {
+      await new Promise((r) => setTimeout(r, 500))
+      botReply = await prisma.chatMessage.findFirst({
+        where: { roomId: pingRoom.id, authorId: botId, deleted: false, createdAt: { gte: new Date(Date.now() - 15_000) } },
+      })
+    }
     botReply ? pass("bot answered the @terpbot ping as MEMBER") : fail("bot answered the @terpbot ping", "no bot reply row")
 
     // The ping must not create a MENTION notification to the bot.
@@ -216,8 +226,16 @@ async function main() {
     mentionRows === 0 ? pass("no MENTION notification delivered to bot") : fail("no MENTION notification delivered to bot", mentionRows)
 
     // ── Phase 2: registry-dispatched informational commands ─────────
-    const cmd = (content, cookie = memberCookie) =>
-      api(`/api/chat/commands`, { method: "POST", body: { roomId: publicRoom.id, content }, cookie })
+    // Per-room bot output cap is 10/min and these commands run back-to-back —
+    // clear the room's counter before each command so the budget doesn't
+    // suppress replies mid-phase (mention() uses a fresh room for the same
+    // reason).
+    const cmd = async (content, cookie = memberCookie) => {
+      await prisma.rateLimit.deleteMany({
+        where: { key: { in: [`terpbot:out:room:${publicRoom.id}`, `chat-bot-out:${publicRoom.id}`] } },
+      })
+      return api(`/api/chat/commands`, { method: "POST", body: { roomId: publicRoom.id, content }, cookie })
+    }
 
     const helpCmd = await cmd("/help")
     helpCmd.status === 200 && /\/rep/.test(helpCmd.data?.message?.content || "")

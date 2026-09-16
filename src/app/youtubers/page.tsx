@@ -3,6 +3,7 @@ import Link from "next/link"
 import { Video } from "lucide-react"
 import { Avatar } from "@/components/ui/avatar"
 import { buildMetadata } from "@/lib/seo"
+import { activeAuthor } from "@/lib/security"
 
 export const revalidate = 60
 
@@ -54,6 +55,7 @@ export default async function YoutubersPage() {
 
   const users = await prisma.user.findMany({
     where: {
+      ...activeAuthor(),
       badges: { some: { badgeId: badge.id } },
       profile: { youtubeChannelUrl: { not: null } },
     },

@@ -1,6 +1,6 @@
 import { Fragment } from "react"
 import { prisma } from "@/lib/prisma"
-import { publicUserSelect, isModerator } from "@/lib/security"
+import { publicUserSelect, isModerator, activeAuthor } from "@/lib/security"
 import { notFound, redirect } from "next/navigation"
 import { MessageSquare, Users, Clock, CheckCircle2, Eye, BookOpen } from "lucide-react"
 import Link from "next/link"
@@ -66,7 +66,7 @@ async function getThreadData(slug: string, page: number, canSeeHidden: boolean) 
         },
       },
       acceptedAnswer: {
-        where: { deleted: false },
+        where: { deleted: false, author: activeAuthor() },
         include: {
           author: { select: publicUserSelect },
           reactions: { select: { userId: true, type: true } },
@@ -74,7 +74,7 @@ async function getThreadData(slug: string, page: number, canSeeHidden: boolean) 
         },
       },
       posts: {
-        where: { deleted: false },
+        where: { deleted: false, author: activeAuthor() },
         include: {
           author: { select: publicUserSelect },
           reactions: { select: { userId: true, type: true } },
@@ -84,7 +84,7 @@ async function getThreadData(slug: string, page: number, canSeeHidden: boolean) 
         skip: (page - 1) * POSTS_PER_PAGE,
         take: POSTS_PER_PAGE,
       },
-      _count: { select: { posts: { where: { deleted: false } } } },
+      _count: { select: { posts: { where: { deleted: false, author: activeAuthor() } } } },
       // Canonical diary this thread discusses (0-1) — surfaced as a context card.
       diaryFor: {
         select: {
@@ -175,6 +175,7 @@ export default async function ThreadPage({
       deleted: false,
       id: { not: thread.id },
       category: { hidden: false },
+      author: activeAuthor(),
       OR: [
         { categoryId: thread.categoryId },
         ...(tagIds.length > 0 ? [{ tags: { some: { tagId: { in: tagIds } } } }] : []),
@@ -185,7 +186,7 @@ export default async function ThreadPage({
     include: {
       author: { select: publicUserSelect },
       category: { select: { name: true, slug: true } },
-      _count: { select: { posts: { where: { deleted: false } } } },
+      _count: { select: { posts: { where: { deleted: false, author: activeAuthor() } } } },
     },
   })
   const saved = currentUserId

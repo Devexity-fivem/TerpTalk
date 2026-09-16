@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma"
 import { publicUserSelect, activeAuthor } from "@/lib/security"
 import { unstable_cache } from "next/cache"
-import { Leaf, Calendar, TrendingUp, Users, BarChart3 } from "lucide-react"
+import { Leaf, Calendar, TrendingUp, Users, BarChart3, ChevronLeft, ChevronRight } from "lucide-react"
 import { getCommunityGrowStats, type Distribution } from "@/lib/community-stats"
 import Link from "next/link"
 import RoleBadge from "@/components/role-badge"
@@ -15,30 +15,61 @@ export const metadata = {
   description: "Follow real cannabis grow journals — seed to harvest updates, environment data, and results from TerpTalk growers.",
 }
 
-const getDiaries = unstable_cache(
-  async () => {
-    const diaries = await prisma.growDiary.findMany({
-      where: { deleted: false, author: activeAuthor() },
-      take: 12,
-      orderBy: [
-        { featured: "desc" },
-        { createdAt: "desc" },
-      ],
-      include: {
-        author: { select: publicUserSelect },
-        // Latest update's first photo becomes the card cover.
-        updates: {
-          take: 1,
-          orderBy: { createdAt: "desc" },
-          include: { images: { take: 1, orderBy: { order: "asc" } } },
-        },
-        _count: {
-          select: { updates: true, followers: true },
-        },
-      },
-    })
+const PAGE_SIZE = 24
+const MAX_PAGE = 50
 
-    return diaries
+const getDiaries = unstable_cache(
+  async (page: number) => {
+    const where = { deleted: false, author: activeAuthor() }
+    // The rail owns featured diaries — the grid excludes them so page 1
+    // never shows the same diary twice, and counts stay consistent.
+    const gridWhere = { ...where, featured: false }
+    const [diaries, total, featured] = await Promise.all([
+      prisma.growDiary.findMany({
+        where: gridWhere,
+        skip: (page - 1) * PAGE_SIZE,
+        take: PAGE_SIZE,
+        orderBy: [
+          { createdAt: "desc" },
+          { id: "asc" },
+        ],
+        include: {
+          author: { select: publicUserSelect },
+          // Latest update's first photo becomes the card cover.
+          updates: {
+            take: 1,
+            orderBy: { createdAt: "desc" },
+            include: { images: { take: 1, orderBy: { order: "asc" } } },
+          },
+          _count: {
+            select: { updates: true, followers: true },
+          },
+        },
+      }),
+      prisma.growDiary.count({ where: gridWhere }),
+      // Featured rail is page-1-only, fetched separately so pagination never
+      // hides or duplicates featured entries.
+      page === 1
+        ? prisma.growDiary.findMany({
+            where: { ...where, featured: true },
+            take: 6,
+            orderBy: { createdAt: "desc" },
+            include: {
+              author: { select: publicUserSelect },
+              updates: {
+                take: 1,
+                orderBy: { createdAt: "desc" },
+                include: { images: { take: 1, orderBy: { order: "asc" } } },
+              },
+              _count: {
+                select: { updates: true, followers: true },
+              },
+            },
+          })
+        : Promise.resolve([]),
+    ])
+
+    return { diaries, total, featured }
   },
   ["diaries-list"],
   { revalidate: 300, tags: ["diaries"] }
@@ -61,8 +92,77 @@ function DistLine({ label, dist }: { label: string; dist: Distribution }) {
   )
 }
 
-export default async function DiariesPage() {
-  const [diaries, stats] = await Promise.all([getDiaries(), getCommunityGrowStats()])
+type DiaryCardData = Awaited<ReturnType<typeof getDiaries>>["diaries"][number]
+
+function DiaryCard({ diary, showFeatured = false }: { diary: DiaryCardData; showFeatured?: boolean }) {
+  const authorName = diary.author.profile?.username || diary.author.name
+  return (
+    <div className="bg-card rounded-lg border border-border overflow-hidden hover:border-primary/50 transition-colors">
+      <Link href={`/diaries/${diary.id}`} className="block">
+        <div className="aspect-video bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center overflow-hidden">
+          {diary.updates[0]?.images[0]?.url ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={diary.updates[0].images[0].url}
+              alt=""
+              loading="lazy"
+              decoding="async"
+              className="w-full h-full object-cover"
+            />
+          ) : (
+            <Leaf className="w-10 h-10 text-primary/30" />
+          )}
+        </div>
+      </Link>
+      <div className="p-4">
+        <div className="flex items-center gap-2 mb-2 flex-wrap">
+          {(showFeatured || diary.featured) && (
+            <span className="text-xs text-primary px-2 py-1 bg-primary/10 rounded">
+              Featured
+            </span>
+          )}
+          <span className="text-xs text-primary px-2 py-1 bg-primary/10 rounded">
+            {diary.growType}
+          </span>
+          <span className="text-xs text-muted-foreground px-2 py-1 bg-secondary rounded">
+            {diary.stage}
+          </span>
+        </div>
+        <Link href={`/diaries/${diary.id}`} className="hover:text-primary transition-colors">
+          <h3 className="font-semibold mb-1">{diary.title}</h3>
+        </Link>
+        <p className="text-sm text-muted-foreground mb-3 line-clamp-2">{diary.description}</p>
+        <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground flex-wrap">
+          <span className="flex items-center gap-1 min-w-0">
+            <Users className="w-3 h-3 shrink-0" />
+            <Link href={`/u/${authorName}`} className="truncate hover:text-foreground hover:underline">
+              {authorName}
+            </Link>
+            <RoleBadge role={diary.author.role} />
+            <TierChip reputation={diary.author.profile?.reputation ?? 0} publicMilestoneOptOut={diary.author.profile?.publicMilestoneOptOut} />
+          </span>
+          <span className="flex items-center gap-1 shrink-0">
+            <Calendar className="w-3 h-3" />
+            {diary._count.updates} updates
+          </span>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+export default async function DiariesPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ page?: string }>
+}) {
+  const sp = await searchParams
+  const rawPage = Number.parseInt(sp?.page ?? "1", 10)
+  const page = Number.isFinite(rawPage) && rawPage >= 1 ? Math.min(rawPage, MAX_PAGE) : 1
+
+  const [{ diaries, total, featured }, stats] = await Promise.all([getDiaries(page), getCommunityGrowStats()])
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
+  const pageHref = (p: number) => (p <= 1 ? "/diaries" : `/diaries?page=${p}`)
 
   return (
     <div className="min-h-screen bg-background">
@@ -145,59 +245,16 @@ export default async function DiariesPage() {
           )}
         </div>
 
-        {/* Featured Diaries */}
-        {diaries.filter(d => d.featured).length > 0 && (
+        {/* Featured Diaries — page 1 only */}
+        {featured.length > 0 && (
           <div className="mb-6">
             <h2 className="text-lg font-semibold mb-3 flex items-center gap-2">
               <TrendingUp className="w-4 h-4 text-primary" />
               Featured Diaries
             </h2>
             <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {diaries.filter(d => d.featured).map((diary) => (
-                <Link
-                  key={diary.id}
-                  href={`/diaries/${diary.id}`}
-                  className="bg-card rounded-lg border border-border overflow-hidden hover:border-primary/50 transition-colors"
-                >
-                  <div className="aspect-video bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center overflow-hidden">
-                    {diary.updates[0]?.images[0]?.url ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={diary.updates[0].images[0].url}
-                        alt=""
-                        loading="lazy"
-                        decoding="async"
-                        className="w-full h-full object-cover"
-                      />
-                    ) : (
-                      <Leaf className="w-10 h-10 text-primary/30" />
-                    )}
-                  </div>
-                  <div className="p-4">
-                    <div className="flex items-center gap-2 mb-2">
-                      <span className="text-xs text-primary px-2 py-1 bg-primary/10 rounded">
-                        {diary.growType}
-                      </span>
-                      <span className="text-xs text-muted-foreground px-2 py-1 bg-secondary rounded">
-                        {diary.stage}
-                      </span>
-                    </div>
-                    <h3 className="font-semibold mb-1">{diary.title}</h3>
-                    <p className="text-sm text-muted-foreground mb-3 line-clamp-2">{diary.description}</p>
-                    <div className="flex items-center justify-between text-xs text-muted-foreground">
-                      <span className="flex items-center gap-1">
-                        <Users className="w-3 h-3" />
-                        {diary.author.profile?.username || diary.author.name}
-                        <RoleBadge role={diary.author.role} />
-                        <TierChip reputation={diary.author.profile?.reputation ?? 0} publicMilestoneOptOut={diary.author.profile?.publicMilestoneOptOut} />
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <Calendar className="w-3 h-3" />
-                        {diary._count.updates} updates
-                      </span>
-                    </div>
-                  </div>
-                </Link>
+              {featured.map((diary) => (
+                <DiaryCard key={diary.id} diary={diary} showFeatured />
               ))}
             </div>
           </div>
@@ -205,7 +262,7 @@ export default async function DiariesPage() {
 
         {/* All Diaries */}
         <div>
-          <div className="flex justify-between items-center mb-3">
+          <div className="flex justify-between items-center mb-3 gap-3 flex-wrap">
             <h2 className="text-lg font-semibold">All Diaries</h2>
             <Link
               href="/diaries/new"
@@ -219,65 +276,46 @@ export default async function DiariesPage() {
             <div className="bg-card rounded-xl border border-border">
               <EmptyState
                 icon={Leaf}
-                title="No grow diaries yet"
-                description="Be the first to document your grow journey."
-                action={{ label: "Start your first diary", href: "/diaries/new" }}
+                title={total === 0 ? "No grow diaries yet" : "No diaries on this page"}
+                description={total === 0 ? "Be the first to document your grow journey." : "This page is past the end of the diary list."}
+                action={total === 0 ? { label: "Start your first diary", href: "/diaries/new" } : { label: "Back to page 1", href: "/diaries" }}
               />
             </div>
           ) : (
-            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {diaries.map((diary) => (
-                <Link
-                  key={diary.id}
-                  href={`/diaries/${diary.id}`}
-                  className="bg-card rounded-lg border border-border overflow-hidden hover:border-primary/50 transition-colors"
-                >
-                  <div className="aspect-video bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center overflow-hidden">
-                    {diary.updates[0]?.images[0]?.url ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={diary.updates[0].images[0].url}
-                        alt=""
-                        loading="lazy"
-                        decoding="async"
-                        className="w-full h-full object-cover"
-                      />
-                    ) : (
-                      <Leaf className="w-10 h-10 text-primary/30" />
-                    )}
-                  </div>
-                  <div className="p-4">
-                    <div className="flex items-center gap-2 mb-2">
-                      {diary.featured && (
-                        <span className="text-xs text-primary px-2 py-1 bg-primary/10 rounded">
-                          Featured
-                        </span>
-                      )}
-                      <span className="text-xs text-muted-foreground px-2 py-1 bg-secondary rounded">
-                        {diary.growType}
-                      </span>
-                      <span className="text-xs text-muted-foreground px-2 py-1 bg-secondary rounded">
-                        {diary.stage}
-                      </span>
-                    </div>
-                    <h3 className="font-semibold mb-1">{diary.title}</h3>
-                    <p className="text-sm text-muted-foreground mb-3 line-clamp-2">{diary.description}</p>
-                    <div className="flex items-center justify-between text-xs text-muted-foreground">
-                      <span className="flex items-center gap-1">
-                        <Users className="w-3 h-3" />
-                        {diary.author.profile?.username || diary.author.name}
-                        <RoleBadge role={diary.author.role} />
-                        <TierChip reputation={diary.author.profile?.reputation ?? 0} publicMilestoneOptOut={diary.author.profile?.publicMilestoneOptOut} />
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <Calendar className="w-3 h-3" />
-                        {diary._count.updates} updates
-                      </span>
-                    </div>
-                  </div>
-                </Link>
-              ))}
-            </div>
+            <>
+              <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {diaries.map((diary) => (
+                  <DiaryCard key={diary.id} diary={diary} />
+                ))}
+              </div>
+              {totalPages > 1 && (
+                <div className="flex items-center justify-between gap-3 mt-6">
+                  {page > 1 ? (
+                    <Link
+                      href={pageHref(page - 1)}
+                      className="inline-flex items-center gap-1 px-4 py-2 rounded-lg bg-card border border-border text-sm font-medium hover:border-primary/40 transition-colors"
+                    >
+                      <ChevronLeft className="w-4 h-4" /> Previous
+                    </Link>
+                  ) : (
+                    <span />
+                  )}
+                  <span className="text-sm text-muted-foreground">
+                    Page {page} of {totalPages}
+                  </span>
+                  {page < totalPages ? (
+                    <Link
+                      href={pageHref(page + 1)}
+                      className="inline-flex items-center gap-1 px-4 py-2 rounded-lg bg-card border border-border text-sm font-medium hover:border-primary/40 transition-colors"
+                    >
+                      Next <ChevronRight className="w-4 h-4" />
+                    </Link>
+                  ) : (
+                    <span />
+                  )}
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>

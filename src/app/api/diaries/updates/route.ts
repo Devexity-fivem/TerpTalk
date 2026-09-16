@@ -221,6 +221,7 @@ export async function POST(request: Request) {
     const followers = await prisma.diaryFollow.findMany({
       where: { diaryId, userId: { not: session.user.id } },
       select: { userId: true },
+      take: 5000,
     })
     if (followers.length > 0) {
       const authorName = session.user.name || "Someone"
@@ -230,7 +231,10 @@ export async function POST(request: Request) {
           type: "DIARY_UPDATE" as const,
           title: "Diary updated",
           content: `@${authorName} added "${update.title.slice(0, 60)}" to "${diary.title.slice(0, 50)}"`,
-          link: `/diaries/${diaryId}`,
+          // Deep-link to the week section — derive the anchor the same way
+          // the page does (createdAt vs startDate); client-supplied
+          // weekNumber is never trusted for display grouping.
+          link: `/diaries/${diaryId}#week-${diaryWeek(diary.startDate, update.createdAt)}`,
           actorId: session.user.id,
           // Throttle fan-out like thread-follow notifications — rapid
           // update bursts shouldn't spam followers.

@@ -272,12 +272,15 @@ export async function POST(request: Request) {
 
         // Intentionally anonymous — moderation notifications never name staff.
         // Skipped when there is no subject (creator-less STRAIN deletion).
+        // Link lands on the community rules — the only useful public
+        // destination for a content action.
         createdNotification = effectiveTargetUserId ? await tx.notification.create({
           data: {
             type: "MODERATOR_ANNOUNCEMENT",
             userId: effectiveTargetUserId,
             title: `Moderation action: ${actionType.replace(/_/g, " ").toLowerCase()}`,
             content: `A moderator took action on your account or content. Reason: ${reason.trim()}`,
+            link: "/rules",
           },
         }).catch(() => null) : null
       }

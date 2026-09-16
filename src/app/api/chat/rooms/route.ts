@@ -26,6 +26,19 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Too many requests" }, { status: 429 })
     }
 
+    // Badge mode — the nav polls this once a minute per signed-in user, so
+    // it skips room seeding and the full room list for a single COUNT.
+    if (new URL(request.url).searchParams.get("badge") === "1") {
+      const onlineCount = await prisma.user.count({
+        where: {
+          lastSeenAt: { gte: new Date(Date.now() - 15 * 60 * 1000) },
+          OR: [{ profile: { hideOnlineStatus: false } }, { profile: null }],
+          banned: false,
+        },
+      })
+      return NextResponse.json({ onlineCount })
+    }
+
     // Ensure a default public room exists so users always have somewhere to chat
     await prisma.chatRoom.upsert({
       where: { slug: "general" },

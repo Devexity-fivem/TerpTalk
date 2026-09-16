@@ -52,7 +52,7 @@ const getForumData = unstable_cache(
     const [threadCount, postCount, memberCount, trendingThreads] = await Promise.all([
       prisma.thread.count({ where: { deleted: false, category: { hidden: false }, author: activeAuthor() } }),
       prisma.post.count({ where: { deleted: false, thread: { category: { hidden: false } }, author: activeAuthor() } }),
-      prisma.user.count({ where: { banned: false } }),
+      prisma.user.count({ where: activeAuthor() }),
       prisma.thread.findMany({
         where: { deleted: false, views: { gt: 0 }, category: { hidden: false }, author: activeAuthor() },
         take: 5,

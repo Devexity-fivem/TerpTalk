@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma"
-import { publicUserSelect } from "@/lib/security"
+import { publicUserSelect, activeAuthor } from "@/lib/security"
 import { buildMetadata } from "@/lib/seo"
 import TierChip from "@/components/tier-chip"
 import Link from "next/link"
@@ -32,7 +32,7 @@ export default async function TagThreadsPage({
     where: { slug },
     include: {
       threads: {
-        where: { thread: { deleted: false, category: { hidden: false } } },
+        where: { thread: { deleted: false, category: { hidden: false }, author: activeAuthor() } },
         orderBy: { thread: { createdAt: "desc" } },
         take: 50,
         include: {

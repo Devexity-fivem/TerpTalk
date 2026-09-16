@@ -302,8 +302,10 @@ export async function POST(request: NextRequest) {
       content,
       userId,
       actorName,
-      "/chat",
-      "community chat"
+      // Deep link into the room — /chat?room=<slug> is the existing
+      // room-selection contract the client already understands.
+      `/chat?room=${encodeURIComponent(room.slug)}`,
+      `the ${room.name} chat room`
     ).catch(() => {})
 
     // Realtime fan-out when Pusher is configured (clients fall back to polling)

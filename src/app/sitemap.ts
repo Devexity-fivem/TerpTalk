@@ -32,7 +32,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const [categories, threads, diaries, strains, profiles, guides, setups, tags] = await Promise.all([
     prisma.category.findMany({ where: { hidden: false }, select: { slug: true, updatedAt: true } }),
     prisma.thread.findMany({
-      where: { deleted: false, category: { hidden: false } },
+      where: { deleted: false, category: { hidden: false }, author: activeAuthor() },
       take: 1000,
       orderBy: { updatedAt: "desc" },
       select: { slug: true, updatedAt: true },

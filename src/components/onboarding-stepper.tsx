@@ -676,9 +676,10 @@ export default function OnboardingStepper({
             </div>
             <h1 ref={headingRef} tabIndex={-1} className="text-2xl font-bold mb-3 outline-none">You&apos;re all set 🌱</h1>
             <p className="text-muted-foreground mb-6 max-w-md mx-auto">
-              Your TerpTalk feed is ready. Follow growers, join a discussion, or start your own grow diary whenever you&apos;re ready.
+              Your TerpTalk feed is ready. Follow growers, join a discussion, hop into live chat, or start your own grow diary whenever you&apos;re ready.
             </p>
             <div className="flex justify-center gap-4 text-sm mb-6">
+              <Link href="/chat" className="text-primary hover:underline">Live chat</Link>
               <Link href="/guides" className="text-primary hover:underline">Browse guides</Link>
               <Link href="/rules" className="text-primary hover:underline">Community rules</Link>
               <Link href="/help" className="text-primary hover:underline">Help Center</Link>

@@ -34,6 +34,16 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = new URL(request.url)
     const withId = searchParams.get("with")
+
+    // Lightweight unread-count mode — one indexed COUNT for the navbar
+    // badge so chrome doesn't pull the whole conversation list per page.
+    if (searchParams.get("unread") === "1") {
+      const unread = await prisma.directMessage.count({
+        where: { receiverId: userId, read: false, deleted: false },
+      })
+      return NextResponse.json({ unread })
+    }
+
     const after = searchParams.get("after") // ISO timestamp for incremental polling
     const afterId = searchParams.get("afterId") // tie-break: (createdAt, id) cursor
     const before = searchParams.get("before") // ISO timestamp for paging older messages

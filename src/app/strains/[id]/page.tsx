@@ -9,9 +9,9 @@ import ReportButton from "@/components/report-button"
 import OwnerDeleteButton from "@/components/owner-delete-button"
 import { buildMetadata, snippet } from "@/lib/seo"
 import { Breadcrumbs } from "@/components/breadcrumbs"
-import { publicUserSelect, activeAuthor } from "@/lib/security"
+import { publicUserSelect, activeAuthor, isActiveAuthorRow } from "@/lib/security"
 import TierChip from "@/components/tier-chip"
-import { getStrainGrowStats, escapeLike, strainFieldMatches } from "@/lib/strain-stats"
+import { getStrainGrowStats, escapeLike, strainFieldMatches, strainTypeLabel } from "@/lib/strain-stats"
 import Link from "next/link"
 
 export const dynamic = "force-dynamic"
@@ -40,8 +40,9 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
     prisma.strain.findUnique({
       where: { id },
       include: {
-        createdBy: { select: { profile: { select: { username: true, reputation: true, publicMilestoneOptOut: true } }, name: true } },
+        createdBy: { select: { profile: { select: { username: true, reputation: true, publicMilestoneOptOut: true } }, name: true, banned: true, suspendedUntil: true } },
         photos: {
+          where: { user: activeAuthor() },
           orderBy: { createdAt: "desc" },
           take: 100,
           include: {
@@ -85,6 +86,7 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
       where: {
         deleted: false,
         category: { hidden: false },
+        author: activeAuthor(),
         OR: [
           { tags: { some: { tag: { name: { equals: strain.name, mode: "insensitive" } } } } },
           ...(strain.name.trim().length >= 4
@@ -118,6 +120,12 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
   const plantPhotos = strain.photos.filter((p) => p.kind === "PLANT")
   const flowerPhotos = strain.photos.filter((p) => p.kind === "FLOWER")
 
+  // Suppress creator attribution when the account is banned/suspended —
+  // same status gate used on detail pages elsewhere.
+  const creator = strain.createdBy
+  const creatorActive = creator && isActiveAuthorRow(creator) ? creator : null
+  const creatorName = creatorActive ? creatorActive.profile?.username || creatorActive.name : null
+
   const diaryThumb = (d: typeof relatedDiaries[0]) =>
     d.updates[0]?.images[0]?.url
 
@@ -139,19 +147,28 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
               <Leaf className="w-8 h-8 text-primary" />
             </div>
             <div>
-              <h1 className="text-3xl font-bold tracking-tight">{strain.name}</h1>
+              <h1 className="text-3xl font-bold tracking-tight break-words">{strain.name}</h1>
               <div className="flex gap-3 text-sm text-muted-foreground mt-1 flex-wrap">
-                {strain.type && <span className="px-2 py-0.5 bg-primary/10 text-primary rounded">{strain.type}</span>}
+                {strain.type && <span className="px-2 py-0.5 bg-primary/10 text-primary rounded">{strainTypeLabel(strain.type)}</span>}
                 {strain.breeder && <span>Breeder: {strain.breeder}</span>}
-                {strain.createdBy && (
+                {creator && creatorName && (
                   <span className="inline-flex items-center gap-1.5">
                     Added by{" "}
-                    {strain.createdBy.profile?.username || strain.createdBy.name}
-                    <TierChip reputation={strain.createdBy.profile?.reputation ?? 0} publicMilestoneOptOut={strain.createdBy.profile?.publicMilestoneOptOut} />
+                    <Link href={`/u/${creator.profile?.username || creator.name}`} className="text-primary hover:underline">
+                      {creatorName}
+                    </Link>
+                    <TierChip reputation={creator.profile?.reputation ?? 0} publicMilestoneOptOut={creator.profile?.publicMilestoneOptOut} />
                   </span>
                 )}
               </div>
-              <div className="mt-3 flex items-center gap-2">
+              <div className="mt-3 flex items-center gap-2 flex-wrap">
+                <Link
+                  href={`/diaries/new?strain=${strain.id}`}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
+                >
+                  <Sprout className="w-4 h-4" />
+                  Start a grow with this strain
+                </Link>
                 <ShareButtons path={`/strains/${strain.id}`} title={`${strain.name} strain — TerpTalk`} />
                 <ReportButton type="STRAIN" targetId={strain.id} authorId={strain.createdById ?? undefined} />
               </div>
@@ -436,10 +453,10 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
                         decoding="async"
                         className="w-full aspect-square object-cover rounded-lg border border-border"
                       />
-                      <div className="absolute bottom-0 inset-x-0 bg-black/60 text-[10px] text-white px-2 py-1 rounded-b-lg opacity-0 group-hover:opacity-100 transition-opacity">
+                      <div className="absolute bottom-0 inset-x-0 bg-black/60 text-[10px] text-white px-2 py-1 rounded-b-lg opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
                         by {photo.user.profile?.username || photo.user.name}
                       </div>
-                      <div className="absolute top-1.5 right-1.5 opacity-0 group-hover:opacity-100 transition-opacity bg-black/60 rounded-lg px-1">
+                      <div className="absolute top-1.5 right-1.5 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity bg-black/60 rounded-lg px-1">
                         <OwnerDeleteButton
                           endpoint="/api/strains/photos"
                           id={photo.id}

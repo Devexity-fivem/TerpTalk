@@ -13,6 +13,22 @@ export function escapeLike(s: string): string {
   return s.replace(/[\\%_]/g, (c) => `\\${c}`)
 }
 
+// Human-readable labels for the Strain.type enum strings stored in the DB.
+const STRAIN_TYPE_LABELS: Record<string, string> = {
+  SATIVA: "Sativa",
+  INDICA: "Indica",
+  HYBRID: "Hybrid",
+  RUDERALIS: "Ruderalis",
+  AUTO_FLOWER: "Auto Flower",
+  CBD: "CBD",
+  OTHER: "Other",
+}
+
+export function strainTypeLabel(type: string | null | undefined): string {
+  if (!type) return ""
+  return STRAIN_TYPE_LABELS[type] ?? type
+}
+
 // Normalize a strain name for comparison: lowercase, strip punctuation.
 export function normalizeStrain(s: string): string {
   return s.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()

@@ -1,4 +1,4 @@
-import { MessageSquare, Award, Dna, Sprout, Calendar, Trophy, BookOpen, Tag, ArrowRight, TrendingUp, Users, Leaf } from "lucide-react"
+import { MessageSquare, Award, Dna, Sprout, Calendar, Trophy, BookOpen, Tag, ArrowRight, TrendingUp, Users, Leaf, MessagesSquare } from "lucide-react"
 import { OpenChatButton } from "@/components/open-chat-button"
 import Link from "next/link"
 import { prisma } from "@/lib/prisma"
@@ -17,10 +17,10 @@ export const revalidate = 60
 const getStats = unstable_cache(
   async () => {
     const [members, diaries, threads, posts] = await Promise.all([
-      prisma.user.count({ where: { banned: false } }),
-      prisma.growDiary.count({ where: { deleted: false } }),
-      prisma.thread.count({ where: { deleted: false } }),
-      prisma.post.count({ where: { deleted: false } }),
+      prisma.user.count({ where: activeAuthor() }),
+      prisma.growDiary.count({ where: { deleted: false, author: activeAuthor() } }),
+      prisma.thread.count({ where: { deleted: false, author: activeAuthor() } }),
+      prisma.post.count({ where: { deleted: false, author: activeAuthor() } }),
     ])
     return { members, diaries, discussions: threads + posts }
   },
@@ -37,7 +37,7 @@ const getLatestDiscussions = unstable_cache(
         select: { name: true, slug: true, description: true, _count: { select: { threads: { where: { deleted: false } } } } },
       }),
       prisma.thread.findMany({
-        where: { deleted: false, category: { hidden: false } },
+        where: { deleted: false, category: { hidden: false }, author: activeAuthor() },
         orderBy: { createdAt: "desc" },
         take: 6,
         include: {
@@ -47,7 +47,7 @@ const getLatestDiscussions = unstable_cache(
         },
       }),
       prisma.diaryUpdate.findMany({
-        where: { diary: { deleted: false } },
+        where: { author: activeAuthor(), diary: { deleted: false, author: activeAuthor() } },
         orderBy: { createdAt: "desc" },
         take: 4,
         include: {
@@ -77,7 +77,7 @@ const getTrendingDiscussions = unstable_cache(
   async () => {
     const oneWeekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
     const candidates = await prisma.thread.findMany({
-      where: { deleted: false, category: { hidden: false }, createdAt: { gte: oneWeekAgo } },
+      where: { deleted: false, category: { hidden: false }, createdAt: { gte: oneWeekAgo }, author: activeAuthor() },
       take: 100,
       include: {
         author: { select: publicUserSelect },
@@ -150,6 +150,7 @@ const EXPLORE_CARDS = [
   { icon: Dna, title: "Strain Database", desc: "Compare genetics and grower photos.", href: "/strains" },
   { icon: Trophy, title: "Budshot of the Week", desc: "Photo contest and community votes.", href: "/contest" },
   { icon: BookOpen, title: "Grow Guides", desc: "Staff guides from germination to curing.", href: "/guides" },
+  { icon: MessagesSquare, title: "Live Chat", desc: "Talk with growers in real time — TerpBot helps too.", href: "/chat" },
   { icon: Tag, title: "Deals", desc: "Partner gear and discount codes.", href: "/deals" },
 ]
 

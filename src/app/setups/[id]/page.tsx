@@ -13,6 +13,7 @@ import SetupComments from "@/components/setup-comments"
 import ShareButtons from "@/components/share-buttons"
 import ReportButton from "@/components/report-button"
 import OwnerDeleteButton from "@/components/owner-delete-button"
+import ImageGallery from "@/components/image-gallery"
 import { escapeLike } from "@/lib/strain-stats"
 
 export const dynamic = "force-dynamic"
@@ -40,12 +41,13 @@ export default async function SetupPage({ params }: { params: Promise<{ id: stri
       author: { select: publicUserSelect },
       images: { orderBy: { order: "asc" }, take: 50 },
       comments: {
+        where: { author: activeAuthor() },
         orderBy: { createdAt: "asc" },
         take: 50,
         include: { author: { select: publicUserSelect } },
       },
       _count: {
-        select: { comments: true },
+        select: { comments: { where: { author: activeAuthor() } } },
       },
     },
   })
@@ -106,8 +108,8 @@ export default async function SetupPage({ params }: { params: Promise<{ id: stri
         ]} />
 
         <div className="bg-card rounded-xl border border-border p-6 mb-6">
-          <h1 className="text-3xl font-bold mb-2">{setup.title}</h1>
-          <p className="text-muted-foreground mb-4 whitespace-pre-wrap">{setup.description}</p>
+          <h1 className="text-3xl font-bold mb-2 break-words">{setup.title}</h1>
+          <p className="text-muted-foreground mb-4 whitespace-pre-wrap break-words">{setup.description}</p>
           <div className="flex items-center gap-4 text-sm text-muted-foreground mb-4">
             <Link
               href={`/u/${setup.author.profile?.username || setup.author.name}`}
@@ -121,7 +123,7 @@ export default async function SetupPage({ params }: { params: Promise<{ id: stri
             <span>{new Date(setup.createdAt).toLocaleDateString()}</span>
             {edited && <span title="Edited">· edited</span>}
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <ShareButtons path={`/setups/${setup.id}`} title={`${setup.title} — grow setup on TerpTalk`} />
             {isOwner && (
               <Link
@@ -145,11 +147,8 @@ export default async function SetupPage({ params }: { params: Promise<{ id: stri
           </div>
 
           {setup.images.length > 0 && (
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mt-5">
-              {setup.images.map((img) => (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img key={img.id} src={img.url} alt={img.caption || "Setup photo"} loading="lazy" decoding="async" className="aspect-video object-cover rounded-lg border border-border" />
-              ))}
+            <div className="mt-5">
+              <ImageGallery images={setup.images} />
             </div>
           )}
         </div>
@@ -216,12 +215,12 @@ export default async function SetupPage({ params }: { params: Promise<{ id: stri
           </h2>
           <div className="space-y-4 mb-6">
             {setup.comments.map((c) => (
-              <div key={c.id} className="flex gap-3">
+              <div key={c.id} id={`comment-${c.id}`} className="flex gap-3 scroll-mt-20">
                 <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0 text-primary text-xs font-bold">
                   {(c.author.profile?.username || c.author.name || "?")[0].toUpperCase()}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 text-sm">
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
                     <Link href={`/u/${c.author.profile?.username || c.author.name}`} className="font-medium hover:text-primary">
                       {c.author.profile?.username || c.author.name}
                     </Link>
@@ -236,7 +235,7 @@ export default async function SetupPage({ params }: { params: Promise<{ id: stri
                       iconOnly
                     />
                   </div>
-                  <p className="text-sm text-muted-foreground whitespace-pre-wrap">{c.content}</p>
+                  <p className="text-sm text-muted-foreground whitespace-pre-wrap break-words">{c.content}</p>
                 </div>
               </div>
             ))}

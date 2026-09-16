@@ -66,13 +66,13 @@ export async function POST(request: Request) {
         type: "COMMENT",
         title: "New comment on your setup",
         content: `@${session.user.name || "Someone"} commented on "${setup.title.slice(0, 60)}"`,
-        link: `/setups/${setupId}`,
+        link: `/setups/${setupId}#comment-${comment.id}`,
         actorId: session.user.id,
       })
     }
     await notifyMentions(
       content, session.user.id, session.user.name || "Someone",
-      `/setups/${setupId}`, `a comment on "${setup.title.slice(0, 50)}"`,
+      `/setups/${setupId}#comment-${comment.id}`, `a comment on "${setup.title.slice(0, 50)}"`,
       [setup.authorId]
     )
 

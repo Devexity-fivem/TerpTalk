@@ -22,6 +22,8 @@ export const NOTIFICATION_TYPES = [
   "REFERRAL",
   "MODERATOR_ANNOUNCEMENT",
   "BOT_ASSIST",
+  // New primary content (diary/thread) from a member the recipient follows.
+  "FOLLOWED_CONTENT",
 ] as const
 
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number]
@@ -53,6 +55,7 @@ export const TYPE_CATEGORY: Record<NotificationType, string> = {
   REFERRAL: "SYSTEM",
   MODERATOR_ANNOUNCEMENT: "MODERATION",
   BOT_ASSIST: "SYSTEM",
+  FOLLOWED_CONTENT: "CONTENT",
 }
 
 // Which Profile preference gates each type. Types absent here are
@@ -70,6 +73,7 @@ export const TYPE_PREF = {
   REPUTATION: "notifyOnMilestone",
   ACCEPTED_ANSWER: "notifyOnMilestone",
   BOT_ASSIST: "notifyOnBotAssist",
+  FOLLOWED_CONTENT: "notifyOnCategoryFollow",
 } as const
 
 export type NotifyPrefKey = (typeof TYPE_PREF)[keyof typeof TYPE_PREF]

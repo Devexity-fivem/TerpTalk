@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma"
-import { publicUserSelect } from "@/lib/security"
+import { publicUserSelect, activeAuthor } from "@/lib/security"
 import { notFound } from "next/navigation"
-import { Leaf, Calendar, Users, ClipboardCheck, Camera, TrendingUp, Pencil } from "lucide-react"
+import { Leaf, Calendar, Users, ClipboardCheck, Camera, TrendingUp, Pencil, Sprout } from "lucide-react"
 import Link from "next/link"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
@@ -23,7 +23,8 @@ import ReportButton from "@/components/report-button"
 import DiaryReactions from "@/components/diary-reactions"
 import OwnerDeleteButton from "@/components/owner-delete-button"
 import DiaryDiscussButton from "@/components/diary-discuss-button"
-import { escapeLike } from "@/lib/strain-stats"
+import { escapeLike, strainFieldMatches, suggestStrainLink } from "@/lib/strain-stats"
+import UserPopover from "@/components/user-popover"
 import { MEDIUM_LABELS, LIGHT_LABELS, TECHNIQUE_LABELS, DIFFICULTY_LABELS } from "@/lib/grow-fields"
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
@@ -81,19 +82,25 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
   // Fetch the most recent 100 updates and restore chronological order for the timeline.
   const updates = [...diary.updates].reverse()
   const session = await getServerSession(authOptions)
-  const [following, linkedStrain, journey, growthUpdates] = await Promise.all([
+  // Related-grows matching: a structured strainId or setupId link is exact;
+  // the free-text strain field is a recall pre-filter checked by
+  // strainFieldMatches below. growType is the fallback when the diary has
+  // no strain/setup linkage at all.
+  const similarOr = [
+    ...(diary.strainId ? [{ strainId: diary.strainId }] : []),
+    ...(diary.setupId ? [{ setupId: diary.setupId }] : []),
+    ...(diary.strain ? [{ strain: { contains: escapeLike(diary.strain), mode: "insensitive" as const } }] : []),
+  ]
+  if (similarOr.length === 0) similarOr.push({ growType: diary.growType } as never)
+
+  const [following, linkedStrain, journey, growthUpdates, moreFromAuthor, similarRaw] = await Promise.all([
     session?.user?.id
       ? !!(await prisma.diaryFollow.findUnique({
           where: { userId_diaryId: { userId: session.user.id, diaryId: diary.id } },
           select: { id: true },
         }))
       : false,
-    diary.strain
-      ? prisma.strain.findFirst({
-          where: { name: { contains: escapeLike(diary.strain), mode: "insensitive" } },
-          select: { id: true, name: true },
-        })
-      : null,
+    diary.strain ? suggestStrainLink(diary.strain) : null,
     getGrowJourney(id),
     // Lean analytics series — the updates payload above is capped at 100,
     // which would silently drop early history from long grows. This query
@@ -104,9 +111,52 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
       orderBy: { createdAt: "asc" },
       take: 500,
     }),
+    // More from this grower — bounded, active grows only.
+    prisma.growDiary.findMany({
+      where: { authorId: diary.author.id, deleted: false, id: { not: diary.id } },
+      orderBy: { updatedAt: "desc" },
+      take: 6,
+      include: {
+        updates: { take: 1, orderBy: { createdAt: "desc" }, select: { images: { take: 1, orderBy: { order: "asc" }, select: { url: true } } } },
+        _count: { select: { updates: true, followers: true } },
+      },
+    }),
+    // Similar grows — other growers only; this author's other diaries are
+    // covered by the section above.
+    prisma.growDiary.findMany({
+      where: {
+        deleted: false,
+        author: activeAuthor(),
+        id: { not: diary.id },
+        authorId: { not: diary.author.id },
+        OR: similarOr,
+      },
+      orderBy: { updatedAt: "desc" },
+      take: 12,
+      include: {
+        author: { select: publicUserSelect },
+        updates: { take: 1, orderBy: { createdAt: "desc" }, select: { images: { take: 1, orderBy: { order: "asc" }, select: { url: true } } } },
+        _count: { select: { updates: true, followers: true } },
+      },
+    }),
   ])
   // The explicit catalog link wins over the fuzzy text match.
   const strainLink = diary.strainRef ?? linkedStrain
+
+  // Precision post-filter for the strain-text recall path — structured
+  // strainId/setupId matches count only when the diary actually carries
+  // them (null === null would pass everything), and growType only counts
+  // when it was the OR fallback.
+  const growTypeWasFallback = similarOr.length === 1 && "growType" in similarOr[0]
+  const similarGrows = similarRaw
+    .filter(
+      (d) =>
+        (diary.strainId != null && d.strainId === diary.strainId) ||
+        (diary.setupId != null && d.setupId === diary.setupId) ||
+        (growTypeWasFallback && d.growType === diary.growType) ||
+        (diary.strain ? strainFieldMatches(d.strain, diary.strain) : false)
+    )
+    .slice(0, 6)
 
   // eslint-disable-next-line react-hooks/purity
   const dayCount = Math.max(0, Math.floor((Date.now() - new Date(diary.startDate).getTime()) / 86400000))
@@ -195,8 +245,8 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
         ]} />
         {/* Header */}
         <div className="mb-5">
-          <div className="flex items-start justify-between gap-4">
-            <div className="flex-1">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 mb-2 flex-wrap">
                 {diary.featured && (
                   <span className="text-xs text-primary px-2 py-1 bg-primary/10 rounded">
@@ -220,7 +270,14 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
               <div className="flex items-center flex-wrap gap-x-3 gap-y-1 text-sm text-muted-foreground">
                 <span className="flex items-center gap-1">
                   <Users className="w-3.5 h-3.5" />
-                  {diary.author.profile?.username || diary.author.name}
+                  <UserPopover username={diary.author.profile?.username}>
+                    <Link
+                      href={`/u/${diary.author.profile?.username || diary.author.name}`}
+                      className="hover:text-foreground hover:underline"
+                    >
+                      {diary.author.profile?.username || diary.author.name}
+                    </Link>
+                  </UserPopover>
                   <TierChip reputation={diary.author.profile?.reputation ?? 0} publicMilestoneOptOut={diary.author.profile?.publicMilestoneOptOut} />
                 </span>
                 <span className="flex items-center gap-1">
@@ -288,8 +345,8 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
 
 
             </div>
-            <div className="flex flex-col items-end gap-1">
-              <div className="flex gap-2 items-center">
+            <div className="flex flex-col sm:items-end gap-1">
+              <div className="flex flex-wrap gap-2 items-center sm:justify-end">
                 <DiaryReactions diaryId={diary.id} initialCounts={reactionCounts} initialMine={myReaction} />
                 <DiaryFollowButton diaryId={diary.id} initiallyFollowing={following} />
                 <DiaryDiscussButton
@@ -671,6 +728,80 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
                   </div>
                 </section>
               ))}
+            </div>
+          )}
+
+          {/* Cross-links: onward paths to this grower's other diaries and
+              similar grows — keeps a leaf page from being a dead end. */}
+          {(moreFromAuthor.length > 0 || similarGrows.length > 0) && (
+            <div className="grid md:grid-cols-2 gap-6 mt-8">
+              {moreFromAuthor.length > 0 && (
+                <section>
+                  <h2 className="text-lg font-semibold mb-3 flex items-center gap-2">
+                    <Users className="w-5 h-5 text-primary" />
+                    More from {authorName}
+                  </h2>
+                  <div className="space-y-2">
+                    {moreFromAuthor.map((d) => (
+                      <Link
+                        key={d.id}
+                        href={`/diaries/${d.id}`}
+                        className="flex items-start gap-3 p-3 bg-card rounded-lg border border-border hover:border-primary/40 transition-colors"
+                      >
+                        {d.updates[0]?.images[0]?.url ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={d.updates[0].images[0].url} alt="" loading="lazy" decoding="async" className="w-10 h-10 rounded-md object-cover shrink-0" />
+                        ) : (
+                          <div className="w-10 h-10 rounded-md bg-primary/10 flex items-center justify-center shrink-0">
+                            <Leaf className="w-4 h-4 text-primary" />
+                          </div>
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <div className="font-medium text-sm mb-0.5 line-clamp-1">{d.title}</div>
+                          <div className="text-xs text-muted-foreground flex items-center flex-wrap gap-x-2 gap-y-0.5">
+                            {d.strain && <span className="text-emerald-500">{d.strain}</span>}
+                            <span>{d._count.updates} update{d._count.updates === 1 ? "" : "s"}</span>
+                          </div>
+                        </div>
+                      </Link>
+                    ))}
+                  </div>
+                </section>
+              )}
+              {similarGrows.length > 0 && (
+                <section>
+                  <h2 className="text-lg font-semibold mb-3 flex items-center gap-2">
+                    <Sprout className="w-5 h-5 text-primary" />
+                    Similar grows
+                  </h2>
+                  <div className="space-y-2">
+                    {similarGrows.map((d) => (
+                      <Link
+                        key={d.id}
+                        href={`/diaries/${d.id}`}
+                        className="flex items-start gap-3 p-3 bg-card rounded-lg border border-border hover:border-primary/40 transition-colors"
+                      >
+                        {d.updates[0]?.images[0]?.url ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={d.updates[0].images[0].url} alt="" loading="lazy" decoding="async" className="w-10 h-10 rounded-md object-cover shrink-0" />
+                        ) : (
+                          <div className="w-10 h-10 rounded-md bg-primary/10 flex items-center justify-center shrink-0">
+                            <Leaf className="w-4 h-4 text-primary" />
+                          </div>
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <div className="font-medium text-sm mb-0.5 line-clamp-1">{d.title}</div>
+                          <div className="text-xs text-muted-foreground flex items-center flex-wrap gap-x-2 gap-y-0.5">
+                            {d.strain && <span className="text-emerald-500">{d.strain}</span>}
+                            <span>{d.author.profile?.username || d.author.name}</span>
+                            <span>{d._count.updates} update{d._count.updates === 1 ? "" : "s"}</span>
+                          </div>
+                        </div>
+                      </Link>
+                    ))}
+                  </div>
+                </section>
+              )}
             </div>
           )}
         </div>

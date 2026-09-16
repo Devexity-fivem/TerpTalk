@@ -11,7 +11,7 @@ import Link from "next/link"
 const TOGGLES = [
   { key: "notifyOnReply", label: "Replies to my threads", desc: "When someone replies to a thread I started." },
   { key: "notifyOnMention", label: "Mentions", desc: "When someone @mentions me in a post or thread." },
-  { key: "notifyOnCategoryFollow", label: "Followed content activity", desc: "New threads in categories I follow, and new replies in threads I follow." },
+  { key: "notifyOnCategoryFollow", label: "Followed content activity", desc: "New threads in categories I follow, new replies in threads I follow, and new diaries or threads from members I follow." },
   { key: "notifyOnMessage", label: "Direct messages", desc: "When I receive a private message." },
   { key: "notifyOnComment", label: "Comments on my setups", desc: "When someone comments on my grow setup." },
   { key: "notifyOnFollow", label: "New followers", desc: "When someone follows my profile." },

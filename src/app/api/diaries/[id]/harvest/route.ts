@@ -6,6 +6,7 @@ import { unauthorized, forbidden, isBanned, isAdmin, enforceLinkTrust } from "@/
 import { rateLimit } from "@/lib/rate-limit"
 import { checkMaintenance } from "@/lib/maintenance"
 import { announceHarvest } from "@/lib/terpbot"
+import { notifyMany } from "@/lib/notify"
 import { awardReputation, grantBadge, REP_POINTS } from "@/lib/reputation"
 import { evaluateGrowJourney } from "@/lib/grow-journey"
 import { revalidateTag } from "next/cache"
@@ -202,6 +203,31 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         ? `${updated.yieldAmount}${updated.yieldUnit}`
         : undefined
     after(() => announceHarvest(username, updated.title, yieldText).then(() => {}))
+
+    // Diary followers get a real notification for the harvest — the TerpBot
+    // chat post above expires after ~3 days. notifyMany handles pref, ban,
+    // and block filtering; the groupKey makes the false→true edge once-only.
+    after(async () => {
+      const followers = await prisma.diaryFollow.findMany({
+        where: { diaryId: id, userId: { not: diary.authorId } },
+        select: { userId: true },
+        take: 5000,
+      })
+      if (followers.length === 0) return
+      const authorName = updated.author.profile?.username || updated.author.name || "Someone"
+      await notifyMany(
+        followers.map((f) => ({
+          userId: f.userId,
+          type: "DIARY_UPDATE" as const,
+          title: "Diary harvested",
+          content: `@${authorName} harvested "${updated.title.slice(0, 50)}"${yieldText ? ` — reported yield ${yieldText}` : ""}`,
+          link: `/diaries/${id}`,
+          actorId: diary.authorId,
+          groupKey: `diary-harvest:${id}`,
+          dedupeMs: 24 * 60 * 60 * 1000,
+        }))
+      ).catch(() => {})
+    })
   }
 
   return NextResponse.json({ diary: updated })

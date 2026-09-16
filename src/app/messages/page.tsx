@@ -5,7 +5,7 @@ import { signInHref } from "@/lib/callback-url"
 import { useEffect, useRef, useState, useCallback, Suspense } from "react"
 import { useSession } from "next-auth/react"
 import { useSearchParams, useRouter } from "next/navigation"
-import { Mail, Send, Loader2, MessageCircle } from "lucide-react"
+import { Mail, Send, Loader2, MessageCircle, User } from "lucide-react"
 import Link from "next/link"
 import EmptyState from "@/components/ui/empty-state"
 
@@ -209,21 +209,38 @@ function MessagesInner() {
             ) : (
               <div className="divide-y divide-border">
                 {convos.map((c) => (
-                  <Link
+                  <div
                     key={c.partner.id}
-                    href={`/messages?with=${c.partner.id}`}
-                    className={`block p-3 hover:bg-secondary/60 transition-colors ${withId === c.partner.id ? "bg-secondary" : ""}`}
+                    className={`p-3 hover:bg-secondary/60 transition-colors ${withId === c.partner.id ? "bg-secondary" : ""}`}
                   >
                     <div className="flex items-center justify-between gap-2">
-                      <span className="font-medium text-sm truncate">{nameOf(c.partner)}</span>
-                      {c.unread > 0 && (
-                        <span className="bg-primary text-primary-foreground text-[10px] font-bold px-1.5 py-0.5 rounded-full shrink-0">
-                          {c.unread}
-                        </span>
-                      )}
+                      <div className="flex items-center gap-2 min-w-0">
+                        <Link
+                          href={`/messages?with=${c.partner.id}`}
+                          className="font-medium text-sm truncate hover:underline"
+                        >
+                          {nameOf(c.partner)}
+                        </Link>
+                        <Link
+                          href={`/u/${encodeURIComponent(nameOf(c.partner))}`}
+                          aria-label={`View ${nameOf(c.partner)}'s profile`}
+                          className="text-muted-foreground hover:text-primary shrink-0"
+                        >
+                          <User className="w-3.5 h-3.5" />
+                        </Link>
+                      </div>
+                      <Link href={`/messages?with=${c.partner.id}`} className="flex items-center gap-2 shrink-0">
+                        {c.unread > 0 && (
+                          <span className="bg-primary text-primary-foreground text-[10px] font-bold px-1.5 py-0.5 rounded-full">
+                            {c.unread}
+                          </span>
+                        )}
+                      </Link>
                     </div>
-                    <p className="text-xs text-muted-foreground truncate mt-0.5">{c.lastMessage}</p>
-                  </Link>
+                    <Link href={`/messages?with=${c.partner.id}`} className="block">
+                      <p className="text-xs text-muted-foreground truncate mt-0.5">{c.lastMessage}</p>
+                    </Link>
+                  </div>
                 ))}
               </div>
             )}
@@ -238,7 +255,13 @@ function MessagesInner() {
             ) : (
               <>
                 <div className="p-3 border-b border-border font-semibold text-sm">
-                  {active ? nameOf(active) : "Conversation"}
+                  {active ? (
+                    <Link href={`/u/${encodeURIComponent(nameOf(active))}`} className="hover:text-primary hover:underline">
+                      {nameOf(active)}
+                    </Link>
+                  ) : (
+                    "Conversation"
+                  )}
                 </div>
                 <div className="flex-1 overflow-y-auto p-4 space-y-3">
                   {hasOlder && (

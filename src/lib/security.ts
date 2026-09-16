@@ -112,6 +112,17 @@ export function activeAuthor() {
 }
 
 /**
+ * Row-level counterpart to activeAuthor() — for records that were fetched
+ * (rather than filtered) and need their public attribution gated, e.g. a
+ * strain's `createdBy` when the creator has since been banned/suspended.
+ */
+export function isActiveAuthorRow(
+  u: { banned: boolean; suspendedUntil: Date | null } | null | undefined
+): boolean {
+  return !!u && !u.banned && (!u.suspendedUntil || u.suspendedUntil.getTime() < Date.now())
+}
+
+/**
  * Prisma where fragment for Profile queries on rankable surfaces
  * (leaderboard, grower-of-week, /top, /rank): not banned, not suspended,
  * never TerpBot, and not opted out of public recognition. Reuse this

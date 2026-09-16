@@ -48,6 +48,7 @@ const TYPE_ICONS: Record<string, typeof Bell> = {
   REFERRAL: Users,
   MODERATOR_ANNOUNCEMENT: Shield,
   BOT_ASSIST: Bot,
+  FOLLOWED_CONTENT: UserPlus,
 }
 
 function typeIcon(type: string, kind?: string) {

@@ -7,6 +7,7 @@ import { rateLimit } from "@/lib/rate-limit"
 import { awardReputation, REP_POINTS } from "@/lib/reputation"
 import { STRAIN_MIN_PAID_DESCRIPTION } from "@/lib/reputation-config"
 import { checkMaintenance } from "@/lib/maintenance"
+import { escapeLike } from "@/lib/strain-stats"
 import { revalidateTag } from "next/cache"
 
 // Lightweight strain search for the diary-form combobox. Public list —
@@ -21,7 +22,7 @@ export async function GET(request: Request) {
     if (!rl.allowed) return NextResponse.json({ strains: [] })
 
     const strains = await prisma.strain.findMany({
-      where: q ? { name: { contains: q, mode: "insensitive" } } : {},
+      where: q ? { name: { contains: escapeLike(q), mode: "insensitive" } } : {},
       orderBy: { name: "asc" },
       take: 15,
       select: { id: true, name: true, type: true },
