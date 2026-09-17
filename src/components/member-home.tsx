@@ -1,4 +1,5 @@
 import Link from "next/link"
+import type { ReactNode } from "react"
 import {
   Zap, Sprout, Bell, ArrowRight, Leaf, Users, Radio, TrendingUp, CheckCircle2, Circle,
 } from "lucide-react"
@@ -52,10 +53,11 @@ function Card({
   )
 }
 
-function MiniEmpty({ text, cta }: { text: string; cta?: { href: string; label: string } }) {
+function MiniEmpty({ text, cta, children }: { text: string; cta?: { href: string; label: string }; children?: ReactNode }) {
   return (
     <div className="rounded-lg bg-secondary/40 px-4 py-5 text-center">
       <p className="text-sm text-muted-foreground">{text}</p>
+      {children}
       {cta && (
         <Link
           href={cta.href}
@@ -287,10 +289,9 @@ export default function MemberHome({ data }: { data: MemberHomeData }) {
                 </div>
               </div>
             ) : (
-              <MiniEmpty
-                text="The community is quiet right now — start a conversation."
-                cta={{ href: "/chat", label: "Open chat" }}
-              />
+              <MiniEmpty text="The community is quiet right now — start a conversation.">
+                <OpenChatButton className="mt-2 inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline" />
+              </MiniEmpty>
             )}
           </Card>
         </div>

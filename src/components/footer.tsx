@@ -1,5 +1,6 @@
 import Link from "next/link"
 import CannabisLeaf from "@/components/cannabis-leaf"
+import FooterChatLink from "@/components/footer-chat-link"
 
 export default function Footer() {
   return (
@@ -14,7 +15,7 @@ export default function Footer() {
           <Link href="/about" className="hover:text-foreground transition-colors">About</Link>
           <Link href="/forum" className="hover:text-foreground transition-colors">Discussions</Link>
           <Link href="/diaries" className="hover:text-foreground transition-colors">Diaries</Link>
-          <Link href="/chat" className="hover:text-foreground transition-colors">Chat</Link>
+          <FooterChatLink className="hover:text-foreground transition-colors" />
           <Link href="/strains" className="hover:text-foreground transition-colors">Strains</Link>
           <Link href="/deals" className="hover:text-foreground transition-colors">Deals</Link>
           <Link href="/guides" className="hover:text-foreground transition-colors">Guides</Link>
