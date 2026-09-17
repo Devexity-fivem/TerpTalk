@@ -349,6 +349,53 @@ async function run() {
     assertSource("components/image-gallery.tsx", ["openIndex"], "shared gallery exists")
     assertSource("components/mobile-nav.tsx", ['href: "/chat"'], "mobile bottom-nav chat")
 
+    // ─────────────────────────────────────────────────────────────
+    // Live DB — sitemap generation end to end. Runs the real
+    // src/app/sitemap.ts default export against fixtures so a gated
+    // route or an ineligible record can never re-enter the sitemap
+    // silently.
+    // ─────────────────────────────────────────────────────────────
+    const { default: buildSitemap } = await import("@/app/sitemap")
+    const urls = (await buildSitemap()).map((e) => e.url)
+    const pathOf = (u: string) => new URL(u).pathname
+
+    // Gated/personalized routes are never sitemap destinations.
+    const gatedPaths = urls.map(pathOf)
+    for (const gated of ["/feed", "/profile", "/settings", "/messages", "/notifications", "/admin", "/moderation"]) {
+      assert.ok(!gatedPaths.includes(gated), `sitemap must not include gated route ${gated}`)
+    }
+
+    // Real public content is present.
+    assert.ok(urls.some((u) => pathOf(u) === "/forum"), "sitemap includes /forum")
+    assert.ok(urls.some((u) => /\/forum\/thread\/.+/.test(pathOf(u))), "sitemap includes thread URLs")
+    assert.ok(urls.some((u) => /\/guides\/.+/.test(pathOf(u))), "sitemap includes guide URLs")
+
+    // Hidden categories stay out: create one, verify, clean up.
+    const hiddenSlug = `__hidden-cat-${Date.now().toString(36)}`
+    const hiddenCat = await prisma.category.create({
+      data: { name: "Hidden Fixture", slug: hiddenSlug, description: "fixture", hidden: true },
+      select: { id: true },
+    })
+    const bannedName = `__sitemap-banned-${Date.now().toString(36)}`
+    const bannedAuthor = await mkUser(bannedName, { banned: true })
+    ids.push(bannedAuthor.id)
+    const visibleCat = await prisma.category.findFirst({ where: { hidden: false }, select: { id: true, slug: true } })
+    const deletedThread = await prisma.thread.create({
+      data: { title: "Deleted sitemap fixture", slug: `__deleted-${Date.now().toString(36)}`, content: "x", authorId: bannedAuthor.id, categoryId: visibleCat!.id, deleted: true },
+      select: { id: true, slug: true },
+    })
+    try {
+      const urls2 = (await buildSitemap()).map((e) => new URL(e.url).pathname)
+      assert.ok(!urls2.includes(`/forum/category/${hiddenSlug}`), "sitemap excludes hidden categories")
+      assert.ok(!urls2.includes(`/forum/thread/${deletedThread.slug}`), "sitemap excludes deleted threads")
+      assert.ok(!urls2.includes(`/u/${bannedName}`), "sitemap excludes banned-author profiles")
+      assert.ok(!urls2.includes("/u/terpbot"), "sitemap excludes TerpBot profile")
+      if (visibleCat) assert.ok(urls2.includes(`/forum/category/${visibleCat.slug}`), "sitemap includes a visible category")
+    } finally {
+      await prisma.thread.delete({ where: { id: deletedThread.id } }).catch(() => {})
+      await prisma.category.delete({ where: { id: hiddenCat.id } }).catch(() => {})
+    }
+
     console.log("All Discovery P0 integration tests passed.")
   } finally {
     for (const id of diaryIds) {

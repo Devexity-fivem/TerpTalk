@@ -10,6 +10,8 @@ export const dynamic = "force-dynamic"
 export const metadata = {
   title: "Welcome to TerpTalk",
   description: "Set up your TerpTalk experience.",
+  // Onboarding flow — auth-gated redirect, never a search destination.
+  robots: { index: false, follow: false },
 }
 
 export default async function WelcomePage({

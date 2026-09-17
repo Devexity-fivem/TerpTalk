@@ -12,6 +12,8 @@ export const dynamic = "force-dynamic"
 export const metadata = {
   title: "Community Feed",
   description: "Latest grow diary updates, discussions and new diaries from the TerpTalk community.",
+  // Member-personalized surface (Following / For You) — not a search destination.
+  robots: { index: false, follow: false },
 }
 
 async function getFeedData(userId?: string, tab = "latest") {

@@ -57,6 +57,13 @@ async function run() {
 
   const sitemap = read("src/app/sitemap.ts")
   assert.ok(sitemap.includes("/rules") && sitemap.includes("/plant-doctor"), "sitemap covers new routes")
+  // Personalized/member surfaces must not be SEO destinations. /feed was
+  // removed after being listed — this keeps it (and friends) from returning.
+  const staticEntries = sitemap.match(/url: "[^"]+"/g)?.map((s) => s.slice(6, -1)) ?? []
+  for (const gated of ["/feed", "/profile", "/settings", "/messages", "/notifications", "/progress", "/chat", "/admin", "/moderation"]) {
+    assert.ok(!staticEntries.includes(gated), `sitemap must not include gated route ${gated}`)
+  }
+  assert.ok(staticEntries.includes("/forum") && staticEntries.includes("/discover") && staticEntries.includes("/strains"), "sitemap keeps public routes")
 
   const about = read("src/app/about/page.tsx")
   assert.ok(about.includes('"/rules"'), "about links /rules")

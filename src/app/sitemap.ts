@@ -8,7 +8,8 @@ const STATIC = [
   { url: "/", priority: 1, changeFrequency: "daily" as const },
   { url: "/forum", priority: 0.9, changeFrequency: "daily" as const },
   { url: "/discover", priority: 0.9, changeFrequency: "daily" as const },
-  { url: "/feed", priority: 0.7, changeFrequency: "daily" as const },
+  // /feed is intentionally absent — it's a member-personalized surface
+  // (Following / For You tabs), not a canonical SEO destination.
   { url: "/diaries", priority: 0.8, changeFrequency: "daily" as const },
   { url: "/setups", priority: 0.7, changeFrequency: "daily" as const },
   { url: "/strains", priority: 0.8, changeFrequency: "weekly" as const },
