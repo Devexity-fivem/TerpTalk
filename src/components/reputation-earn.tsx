@@ -33,7 +33,7 @@ export default function ReputationEarn({ compact }: { compact?: boolean }) {
               <div className="text-sm font-medium">{a.label}</div>
               <div className="text-[10px] text-muted-foreground">
                 +{a.points} rep
-                {a.key === "LIKE_RECEIVED" ? " per like" : a.key === "REFERRAL" ? " per signup" : ""}
+                {a.key === "LIKE_RECEIVED" ? " per like" : a.key === "REFERRAL" ? " when your invitee gets established" : ""}
               </div>
             </div>
             <span className="text-sm font-bold text-amber-500">+{a.points}</span>

@@ -15,7 +15,7 @@ import ReputationRoadmap from "@/components/reputation-roadmap"
 import ReputationEarn from "@/components/reputation-earn"
 import { useToast } from "@/components/ui/toast"
 import { getBadgeByName, BADGE_RARITIES } from "@/lib/badge-registry"
-import { REP_POINTS } from "@/lib/reputation-config"
+import { REP_POINTS, REFERRAL_MIN_REP } from "@/lib/reputation-config"
 import SavedThreads from "@/components/saved-threads"
 import SavedSearches from "@/components/saved-searches"
 import RecoveryPhraseCard from "@/components/recovery-phrase-card"
@@ -807,7 +807,7 @@ export default function ProfilePage() {
               <h2 className="text-lg font-semibold">Referrals</h2>
             </div>
             <p className="text-sm text-muted-foreground mb-3">
-              Invite growers — earn <span className="font-semibold text-amber-500">+{REP_POINTS.REFERRAL} reputation</span> per signup and unlock the <span className="font-semibold text-amber-500">🤝 Recruiter</span> badge at 3 referrals. You&apos;ve referred <span className="font-semibold text-foreground">{profileData.stats.referrals}</span> member{profileData.stats.referrals !== 1 ? "s" : ""}.
+              Invite growers — earn <span className="font-semibold text-amber-500">+{REP_POINTS.REFERRAL} reputation</span> once your invitee reaches {REFERRAL_MIN_REP} rep and has been a member for 24+ hours, and unlock the <span className="font-semibold text-amber-500">🤝 Recruiter</span> badge at 3 referrals. You&apos;ve referred <span className="font-semibold text-foreground">{profileData.stats.referrals}</span> member{profileData.stats.referrals !== 1 ? "s" : ""}.
             </p>
             <div className="flex gap-2">
               <input

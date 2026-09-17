@@ -1,4 +1,4 @@
-import { REP_POINTS, REP_CAPS, REP_TIERS, REP_LADDER, VERIFIED_MULTIPLIER, REFERRAL_MIN_REP } from "@/lib/reputation-config"
+import { REP_POINTS, REP_CAPS, REP_TIERS, REP_LADDER, VERIFIED_MULTIPLIER, REFERRAL_MIN_REP, REFERRAL_MIN_AGE_HOURS } from "@/lib/reputation-config"
 import { AVATAR_FRAMES, PROFILE_TITLES, PROFILE_THEMES } from "@/lib/cosmetics"
 import { WEEKLY_CHALLENGES } from "@/lib/challenges"
 import { TrendingUp, ShieldCheck, RotateCcw, Sprout, Target } from "lucide-react"
@@ -23,7 +23,7 @@ const SOURCES: Array<{ key: keyof typeof REP_POINTS; label: string; note: string
   { key: "ACCEPT_MARKED", label: "Mark an accepted answer", note: "Curate your own thread — requires another member's answer." },
   { key: "HARVEST_LOGGED", label: "Log a harvest", note: "Finish a documented grow — once per diary, needs real updates." },
   { key: "ONBOARDING_COMPLETE", label: "Finish onboarding", note: "A one-time welcome to the community." },
-  { key: "REFERRAL", label: "Refer a member", note: `Pays out once your invitee earns ${REFERRAL_MIN_REP} rep on their own.` },
+  { key: "REFERRAL", label: "Refer a member", note: `Pays out once your invitee earns ${REFERRAL_MIN_REP} rep and has been a member for ${REFERRAL_MIN_AGE_HOURS}+ hours.` },
   { key: "CONTEST_WEEKLY_WIN", label: "Win Budshot of the Week", note: "Weekly community photo contest." },
   { key: "CONTEST_MONTHLY_WIN", label: "Win Diary of the Month", note: "Monthly grow diary contest." },
 ]

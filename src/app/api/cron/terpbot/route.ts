@@ -8,6 +8,7 @@ import { currentWeekKey, previousWeekKey, currentMonthKey, previousMonthKey } fr
 import { resolveWeeklyWinner, resolveMonthlyDiaryWinner } from "@/lib/contest-awards"
 import { resolveWeeklyRecognition } from "@/lib/weekly-recognition"
 import { materializeReputationFlags } from "@/lib/trust-signals"
+import { reconcileReferralPayouts } from "@/lib/reputation"
 
 // Daily TerpBot job — digests, grow tips, and contest-winner announcements.
 // Invoked by the Vercel cron configured in vercel.json.
@@ -192,6 +193,18 @@ export async function GET(request: NextRequest) {
     const { dormant, unresolved } = await scanDormantThreads()
     return `dormant:${dormant},unresolved:${unresolved}`
   }, posted, failed, "dormant-scan")
+
+  // ── Referral payout reconciliation (once per UTC day) ─────────────
+  // Safety net for qualifying referrals whose deferred payout trigger was
+  // lost (dropped after() work, an earlier side-effect stage failing, or a
+  // referee who went dormant right after qualifying). Idempotent — the
+  // referral:<refereeId> key makes a concurrent normal-path payout a no-op.
+  // A partially-failed sweep throws inside work(), releasing the claim so a
+  // later invocation retries the remaining referees.
+  await runCronTask(`reputation:referral-sweep:${today}`, async () => {
+    const { candidates, attempted, failed: sweepFailed } = await reconcileReferralPayouts()
+    return `referral-sweep:${candidates}c/${attempted}a/${sweepFailed}f`
+  }, posted, failed, "referral-sweep")
 
   // ── Trust & safety signal scan (once per UTC day) ──────────────────
   // A plain system task — not a TerpBot capability. Detectors only flag;

@@ -123,49 +123,49 @@ export async function applyReputationAward(
   reason: string,
   opts: AwardOptions = {}
 ): Promise<AwardResult> {
-  const subject = await prisma.user.findUnique({
-    where: { id: userId },
-    select: {
-      role: true,
-      createdAt: true,
-      banned: true,
-      suspendedUntil: true,
-      profile: { select: { reputation: true, username: true } },
-    },
-  })
-  if (!subject?.profile) return { awarded: false, skippedReason: "no-user" }
-  if (subject.profile.username === TERPBOT_USERNAME) return { awarded: false, skippedReason: "bot" }
-  if (!opts.force && isInactive(subject)) return { awarded: false, skippedReason: "suspended" }
-  // Self-awards are meaningless — callsites already block them; this is the
-  // safety net for any path that forgets (staff adjustments exempt).
-  if (opts.actorId === userId && type !== REP_EVENT_TYPES.STAFF_ADJUSTMENT) {
-    return { awarded: false, skippedReason: "self" }
-  }
-
-  // Existing keyed event: active -> no-op; reversed -> reinstate it —
-  // unless a staff reversal marked it final, in which case the organic
-  // re-trigger is refused and the moderation decision stands.
-  if (opts.key) {
-    const existing = await prisma.reputationEvent.findUnique({
-      where: { key: opts.key },
-      select: { id: true, userId: true, amount: true, reversedAt: true, reversalFinal: true },
-    })
-    if (existing) {
-      if (!existing.reversedAt) return { awarded: false, skippedReason: "duplicate" }
-      if (existing.reversalFinal) return { awarded: false, skippedReason: "locked" }
-      return reinstateEvent(existing, subject)
-    }
-  }
-
-  const cap = REP_CAPS[type as keyof typeof REP_CAPS]
-  const adjusted = type === REP_EVENT_TYPES.STAFF_ADJUSTMENT ? amount : adjustedAmount(amount, subject.role)
-  const oldRep = subject.profile.reputation
-  // Clamp negative events to the current balance: the ledger records the
-  // actually-applied delta, so balance == SUM(active) always holds and the
-  // balance can never dip below zero.
-  const applied = adjusted < 0 ? -Math.min(-adjusted, oldRep) : adjusted
-
   try {
+    const subject = await prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        role: true,
+        createdAt: true,
+        banned: true,
+        suspendedUntil: true,
+        profile: { select: { reputation: true, username: true } },
+      },
+    })
+    if (!subject?.profile) return { awarded: false, skippedReason: "no-user" }
+    if (subject.profile.username === TERPBOT_USERNAME) return { awarded: false, skippedReason: "bot" }
+    if (!opts.force && isInactive(subject)) return { awarded: false, skippedReason: "suspended" }
+    // Self-awards are meaningless — callsites already block them; this is the
+    // safety net for any path that forgets (staff adjustments exempt).
+    if (opts.actorId === userId && type !== REP_EVENT_TYPES.STAFF_ADJUSTMENT) {
+      return { awarded: false, skippedReason: "self" }
+    }
+
+    // Existing keyed event: active -> no-op; reversed -> reinstate it —
+    // unless a staff reversal marked it final, in which case the organic
+    // re-trigger is refused and the moderation decision stands.
+    if (opts.key) {
+      const existing = await prisma.reputationEvent.findUnique({
+        where: { key: opts.key },
+        select: { id: true, userId: true, amount: true, reversedAt: true, reversalFinal: true },
+      })
+      if (existing) {
+        if (!existing.reversedAt) return { awarded: false, skippedReason: "duplicate" }
+        if (existing.reversalFinal) return { awarded: false, skippedReason: "locked" }
+        return await reinstateEvent(existing, subject)
+      }
+    }
+
+    const cap = REP_CAPS[type as keyof typeof REP_CAPS]
+    const adjusted = type === REP_EVENT_TYPES.STAFF_ADJUSTMENT ? amount : adjustedAmount(amount, subject.role)
+    const oldRep = subject.profile.reputation
+    // Clamp negative events to the current balance: the ledger records the
+    // actually-applied delta, so balance == SUM(active) always holds and the
+    // balance can never dip below zero.
+    const applied = adjusted < 0 ? -Math.min(-adjusted, oldRep) : adjusted
+
     // Serializable for capped types: under read-committed, two parallel
     // awards could both read the same count and both slip under the cap.
     // Serialization failures (P2034) get one transparent retry.
@@ -223,6 +223,12 @@ export async function applyReputationAward(
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
       return { awarded: false, skippedReason: "duplicate" }
     }
+    // Callers universally swallow award failures to keep the user action
+    // non-blocking — this log is the only observability that the award was
+    // lost. It covers every failure point in the function (subject lookup,
+    // key pre-check, transaction), and the key is NOT consumed, so the next
+    // trigger can still retry.
+    console.error("[reputation] award failed:", { userId, type, key: opts.key, sourceType: opts.sourceType, sourceId: opts.sourceId }, error)
     throw error
   }
 }
@@ -237,11 +243,22 @@ async function reinstateEvent(
   const oldRep = subject.profile?.reputation ?? 0
   let restored = 0
   const newRep = await prisma.$transaction(async (tx) => {
+    // CAS guard includes reversalFinal: a staff-final reversal committing
+    // between the caller's pre-check and this update must NOT be cleared —
+    // the moderation decision stands and the organic re-trigger loses.
     const { count } = await tx.reputationEvent.updateMany({
-      where: { id: original.id, reversedAt: { not: null } },
-      data: { reversedAt: null, reversalFinal: false },
+      where: { id: original.id, reversedAt: { not: null }, reversalFinal: false },
+      data: { reversedAt: null },
     })
-    if (count === 0) return null // another request reinstated first
+    if (count === 0) {
+      // Lost the CAS: either a concurrent reinstate won or a final reversal
+      // landed in between. Distinguish so the caller reports accurately.
+      const cur = await tx.reputationEvent.findUnique({
+        where: { id: original.id },
+        select: { reversalFinal: true, reversedAt: true },
+      })
+      return cur?.reversedAt && cur.reversalFinal ? "locked" : null
+    }
     const descendants = await tx.reputationEvent.findMany({
       where: { reversalOfId: original.id },
       select: { amount: true },
@@ -277,6 +294,7 @@ async function reinstateEvent(
     }
     return oldRep + restore
   })
+  if (newRep === "locked") return { awarded: false, skippedReason: "locked" }
   if (newRep === null) return { awarded: false, skippedReason: "duplicate" }
   return { awarded: true, reinstated: true, amount: restored, oldRep, newRep }
 }
@@ -378,10 +396,18 @@ export async function reverseReputationBySource(
   // reversalOfId: null selects only root award rows — REVERSAL and REINSTATE
   // rows share the original's sourceType/sourceId, and reversing them would
   // double-deduct (the counter-entries already net out in the balance).
-  const events = await prisma.reputationEvent.findMany({
-    where: { sourceType, sourceId, reversedAt: null, reversalOfId: null, type: { not: REP_EVENT_TYPES.REVERSAL } },
-    select: { id: true },
-  })
+  let events
+  try {
+    events = await prisma.reputationEvent.findMany({
+      where: { sourceType, sourceId, reversedAt: null, reversalOfId: null, type: { not: REP_EVENT_TYPES.REVERSAL } },
+      select: { id: true },
+    })
+  } catch (error) {
+    // Callers `.catch(() => 0)` — without this log a failed source sweep
+    // silently leaves every award attached to deleted content.
+    console.error("[reputation] source reversal lookup failed:", sourceType, sourceId, error)
+    throw error
+  }
   let reversed = 0
   for (const e of events) {
     try {
@@ -398,10 +424,16 @@ export async function reverseReputationBySource(
 
 /** Reverse every active event a user *caused* (e.g. likes they granted). */
 export async function reverseReputationByActor(actorId: string, reason: string): Promise<number> {
-  const events = await prisma.reputationEvent.findMany({
-    where: { actorId, reversedAt: null, reversalOfId: null, type: { not: REP_EVENT_TYPES.REVERSAL } },
-    select: { id: true },
-  })
+  let events
+  try {
+    events = await prisma.reputationEvent.findMany({
+      where: { actorId, reversedAt: null, reversalOfId: null, type: { not: REP_EVENT_TYPES.REVERSAL } },
+      select: { id: true },
+    })
+  } catch (error) {
+    console.error("[reputation] actor reversal lookup failed:", actorId, error)
+    throw error
+  }
   let reversed = 0
   // Bounded concurrency — a ban can reverse thousands of granted events;
   // unbounded Promise.all would exhaust the Neon pool.
@@ -479,10 +511,15 @@ async function enforceCosmeticUnlocks(userId: string) {
 }
 
 // Exported for staff tooling — applies demotion + cosmetic pruning after
-// negative adjustments and reversals.
+// negative adjustments and reversals. Best-effort: callers swallow errors,
+// so failures are logged here rather than at every callsite.
 export async function postDemotionEffects(userId: string) {
-  await demoteIfNeeded(userId)
-  await enforceCosmeticUnlocks(userId)
+  try {
+    await demoteIfNeeded(userId)
+    await enforceCosmeticUnlocks(userId)
+  } catch (error) {
+    console.error("[reputation] post-demotion effects failed:", userId, error)
+  }
 }
 
 // ─── Side effects (deferred; never part of the balance transaction) ───
@@ -499,6 +536,21 @@ const CONTRIBUTION_TYPES = new Set([
   "SETUP_CREATED",
 ])
 
+// Run one deferred side-effect stage in isolation — a throwing stage is
+// logged and must never starve later stages (e.g. a badge failure used to
+// skip the referral payout check entirely).
+export async function runEffectStage(
+  userId: string,
+  stage: string,
+  fn: () => Promise<unknown>
+): Promise<void> {
+  try {
+    await fn()
+  } catch (error) {
+    console.error(`[reputation] side-effect "${stage}" failed for user ${userId}:`, error)
+  }
+}
+
 async function postAwardEffects(
   userId: string,
   user: AwardUser,
@@ -506,13 +558,18 @@ async function postAwardEffects(
   newRep: number,
   type?: string
 ) {
-  const announcedTier = await checkTierChange(userId, oldRep, newRep)
-  await checkStageChange(userId, oldRep, newRep)
-  await autoVerify(userId, newRep, user)
-  await checkBadges(userId, { announcedTierName: announcedTier })
-  await maybePayReferral(userId, user, newRep)
+  // The tier name feeds the badge announcement copy — capture it across the
+  // stage boundary so a badge failure still can't take the tier check down.
+  let announcedTier: string | null = null
+  await runEffectStage(userId, "tier", async () => {
+    announcedTier = await checkTierChange(userId, oldRep, newRep)
+  })
+  await runEffectStage(userId, "stage", () => checkStageChange(userId, oldRep, newRep))
+  await runEffectStage(userId, "verify", () => autoVerify(userId, newRep, user))
+  await runEffectStage(userId, "badges", () => checkBadges(userId, { announcedTierName: announcedTier }))
+  await runEffectStage(userId, "referral", () => maybePayReferral(userId, user, newRep))
   if (type && CONTRIBUTION_TYPES.has(type)) {
-    await checkDiscoveryBadges(userId).catch(() => null)
+    await runEffectStage(userId, "discovery-badges", () => checkDiscoveryBadges(userId))
   }
 }
 
@@ -571,13 +628,17 @@ async function claimMilestone(userId: string, key: string): Promise<boolean> {
 
 // Referral rep pays only once the referred member proves legitimate:
 // REFERRAL_MIN_REP earned + REFERRAL_MIN_AGE_HOURS old. Keyed per referee.
-async function maybePayReferral(userId: string, user: AwardUser, newRep: number) {
-  if (newRep < REFERRAL_MIN_REP) return
-  const ageHours = (Date.now() - user.createdAt.getTime()) / (1000 * 60 * 60)
+//
+// This is the single canonical eligibility/payout path — both the deferred
+// post-award trigger and the daily reconciliation sweep call it, so the
+// business rules can never diverge between entry points.
+async function payReferralBonus(refereeUserId: string, refereeCreatedAt: Date, refereeRep: number) {
+  if (refereeRep < REFERRAL_MIN_REP) return
+  const ageHours = (Date.now() - refereeCreatedAt.getTime()) / (1000 * 60 * 60)
   if (ageHours < REFERRAL_MIN_AGE_HOURS) return
 
   const profile = await prisma.profile.findUnique({
-    where: { userId },
+    where: { userId: refereeUserId },
     select: { referredById: true },
   })
   if (!profile?.referredById) return
@@ -585,7 +646,7 @@ async function maybePayReferral(userId: string, user: AwardUser, newRep: number)
     where: { id: profile.referredById },
     select: { userId: true },
   })
-  if (!referrer || referrer.userId === userId) return
+  if (!referrer || referrer.userId === refereeUserId) return
 
   // Weekly payout cap — a sock farm grinding 25 rep per fake signup can't
   // earn unbounded referral rep. Organic referrals (a few a week at most)
@@ -606,17 +667,21 @@ async function maybePayReferral(userId: string, user: AwardUser, newRep: number)
     "REFERRAL",
     REP_POINTS.REFERRAL,
     "A member you invited became an established grower",
-    { key: `referral:${userId}`, actorId: userId }
+    { key: `referral:${refereeUserId}`, actorId: refereeUserId }
   )
   if (!res.awarded) return
 
+  // The award is already committed — notification delivery stays
+  // non-blocking, but a failure must be observable (never re-award).
   await notify({
     userId: referrer.userId,
     type: "REPUTATION",
     title: "Referral bonus",
     content: `A member you invited became an established grower — +${res.amount ?? REP_POINTS.REFERRAL} reputation.`,
     link: "/profile",
-  }).catch(() => null)
+  }).catch((error) => {
+    console.error(`[reputation] referral payout notification failed for referrer ${referrer.userId} (referee ${refereeUserId}):`, error)
+  })
 
   // Referrer's own side effects (tier/badge checks) for the new points.
   const referrerUser = await prisma.user.findUnique({
@@ -626,6 +691,77 @@ async function maybePayReferral(userId: string, user: AwardUser, newRep: number)
   if (referrerUser && res.newRep !== undefined) {
     await postAwardEffects(referrer.userId, referrerUser, res.oldRep ?? res.newRep, res.newRep, "REFERRAL")
   }
+}
+
+// Deferred trigger inside the award pipeline — delegates to the canonical
+// payout so award-time and sweep-time eligibility can never diverge.
+async function maybePayReferral(userId: string, user: AwardUser, newRep: number) {
+  await payReferralBonus(userId, user.createdAt, newRep)
+}
+
+/**
+ * Referral reconciliation sweep — the safety net for qualifying referrals
+ * whose payout trigger was lost (deferred side effect dropped, earlier stage
+ * failed, referrer was suspended at the moment of qualification, or the
+ * referee simply went dormant after crossing the threshold).
+ *
+ * Bounded: reads at most `limit` candidate profiles (referredById set,
+ * rep >= threshold, account old enough), skips referees whose
+ * `referral:<userId>` key already has an active event, and hands each
+ * remaining candidate to the canonical payReferralBonus — the unique key
+ * makes a concurrent normal-path payout safe (P2002 -> duplicate no-op).
+ * Reversed-but-not-final keys flow through the canonical path and reinstate
+ * exactly as an organic re-trigger would.
+ *
+ * Throws after processing all candidates if any payout attempt errored, so
+ * callers (cron claims) can release the task and retry on the next run.
+ */
+export async function reconcileReferralPayouts(
+  limit = 200
+): Promise<{ candidates: number; attempted: number; failed: number }> {
+  const cutoff = new Date(Date.now() - REFERRAL_MIN_AGE_HOURS * 60 * 60 * 1000)
+  const candidates = await prisma.profile.findMany({
+    where: {
+      referredById: { not: null },
+      reputation: { gte: REFERRAL_MIN_REP },
+      user: { createdAt: { lte: cutoff } },
+    },
+    select: {
+      userId: true,
+      reputation: true,
+      user: { select: { createdAt: true } },
+    },
+    orderBy: { userId: "asc" },
+    take: limit,
+  })
+  if (candidates.length === 0) return { candidates: 0, attempted: 0, failed: 0 }
+
+  // One indexed read filters out referees whose payout is already live —
+  // reversed/final keys deliberately stay eligible so the canonical path
+  // applies its own reinstate/locked semantics.
+  const keys = candidates.map((c) => `referral:${c.userId}`)
+  const active = await prisma.reputationEvent.findMany({
+    where: { key: { in: keys }, reversedAt: null },
+    select: { key: true },
+  })
+  const alreadyPaid = new Set(active.map((e) => e.key))
+
+  let attempted = 0
+  let failed = 0
+  for (const c of candidates) {
+    if (alreadyPaid.has(`referral:${c.userId}`)) continue
+    attempted++
+    try {
+      await payReferralBonus(c.userId, c.user.createdAt, c.reputation)
+    } catch (error) {
+      failed++
+      console.error("[reputation] referral reconciliation failed for referee", c.userId, error)
+    }
+  }
+  if (failed > 0) {
+    throw new Error(`referral reconciliation: ${failed}/${attempted} payouts failed`)
+  }
+  return { candidates: candidates.length, attempted, failed }
 }
 
 /**
@@ -642,10 +778,16 @@ export async function awardReputation(
   const res = await applyReputationAward(userId, type, amount, reason, opts)
   if (!res.awarded) return res
 
-  const subject = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { role: true, createdAt: true, banned: true, suspendedUntil: true },
-  })
+  let subject: AwardUser | null
+  try {
+    subject = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { role: true, createdAt: true, banned: true, suspendedUntil: true },
+    })
+  } catch (error) {
+    console.error("[reputation] post-award subject lookup failed:", { userId, type, key: opts.key }, error)
+    throw error
+  }
   if (!subject) return res
 
   const effects = async () => {
