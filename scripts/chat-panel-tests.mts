@@ -90,6 +90,24 @@ check("panel carries expand-to-/chat and close controls", () => {
   assert.ok(panel.includes("headerActions"), "actions slot wired to ChatRoom")
 })
 
+check("panel top tracks the real nav bottom (banner-safe)", () => {
+  // When an announcement/recovery banner sits above the sticky nav, the
+  // nav's rect is lower than 64px — the panel must measure, not assume.
+  assert.ok(panel.includes("getBoundingClientRect().bottom"), "nav bottom is measured")
+  assert.ok(panel.includes("tt-top-nav"), "nav measured by id")
+  assert.ok(panel.includes("panelTop"), "measured offset applied")
+  assert.ok(nav.includes('id="tt-top-nav"'), "nav carries the measurement id")
+})
+
+check("Escape closes the open panel (keyboard path)", () => {
+  assert.ok(/e\.key === "Escape"[\s\S]*closePanel/.test(panel), "Escape → closePanel")
+})
+
+check("panel trigger declares the dialog it opens", () => {
+  assert.ok(panel.includes('aria-haspopup="dialog"'), "FAB aria-haspopup")
+  assert.ok(panel.includes('role="dialog"'), "panel dialog role")
+})
+
 // ── ChatRoom embedded mode ─────────────────────────────────────────────
 
 check("embedded mode never rewrites the page URL on room switch", () => {

@@ -108,8 +108,9 @@ export function ChatPanelProvider({ children }: { children: ReactNode }) {
         openPanel,
         closePanel,
         togglePanel,
-        chatUnread: chatUnreadRooms > 0,
-        chatUnreadRooms,
+        // Derived rather than reset on sign-out: guests never see a stale unread dot
+        chatUnread: !!session && chatUnreadRooms > 0,
+        chatUnreadRooms: session ? chatUnreadRooms : 0,
       }}
     >
       {children}
@@ -145,6 +146,43 @@ export function ChatDock() {
   const { open, openPanel, closePanel, chatUnread, chatUnreadRooms } = useChatPanel()
   const { data: session } = useSession()
   const pathname = usePathname()
+  // The panel's top edge tracks the sticky nav's REAL bottom, not a fixed
+  // offset — when an announcement/recovery banner sits above the nav, the
+  // nav's rect is lower until it sticks, and the panel must not cover it.
+  const [panelTop, setPanelTop] = useState(64)
+
+  useEffect(() => {
+    if (!open) return
+    const update = () => {
+      const bottom = document
+        .getElementById("tt-top-nav")
+        ?.getBoundingClientRect().bottom
+      setPanelTop(Math.max(0, Math.round(bottom ?? 64)))
+    }
+    update()
+    window.addEventListener("scroll", update, { passive: true })
+    window.addEventListener("resize", update)
+    // A banner mounting late (e.g. the recovery banner resolving with the
+    // session) changes layout without a scroll — re-measure on body resize.
+    const ro =
+      typeof ResizeObserver !== "undefined" ? new ResizeObserver(update) : null
+    ro?.observe(document.body)
+    return () => {
+      window.removeEventListener("scroll", update)
+      window.removeEventListener("resize", update)
+      ro?.disconnect()
+    }
+  }, [open])
+
+  // Escape closes the panel — keyboard path for the dialog surface.
+  useEffect(() => {
+    if (!open) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") closePanel()
+    }
+    document.addEventListener("keydown", onKey)
+    return () => document.removeEventListener("keydown", onKey)
+  }, [open, closePanel])
 
   // The dedicated /chat page is the expanded surface — never stack the
   // panel on top of it (also guarantees only one ChatRoom ever mounts).
@@ -182,6 +220,7 @@ export function ChatDock() {
           onClick={openPanel}
           className="fixed right-0 top-1/2 z-30 hidden -translate-y-1/2 flex-col items-center gap-1 rounded-l-xl border border-r-0 border-border bg-card px-2.5 py-3 shadow-md transition-colors hover:bg-secondary lg:flex"
           aria-label={chatUnread ? `Open chat (${chatUnreadRooms} rooms with new activity)` : "Open chat"}
+          aria-haspopup="dialog"
           title="Open chat"
         >
           <span className="relative">
@@ -206,6 +245,7 @@ export function ChatDock() {
         <aside
           role="dialog"
           aria-label="Chat panel"
+          style={{ top: panelTop }}
           className={cn(
             "fixed inset-x-0 top-16 z-40 flex flex-col border-t border-border bg-card",
             "bottom-[calc(3.5rem+env(safe-area-inset-bottom))]",
