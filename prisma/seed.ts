@@ -4,29 +4,32 @@ import bcrypt from 'bcryptjs'
 const prisma = new PrismaClient()
 
 async function main() {
-  // Create forum categories
+  // Create forum categories — 8 visible launch categories + archived
+  // (hidden) specializations kept in the schema so they can be unhidden when
+  // the community grows into them. Hidden categories are excluded from the
+  // forum index, new-thread picker, search, feed, sitemap, and onboarding.
   const categories = [
-    { name: "New Grower Questions", description: "Beginner help — no question is too basic", slug: "new-grower-questions", order: 1 },
-    { name: "Indoor Growing", description: "Indoor cultivation techniques, setups, and equipment", slug: "indoor-growing", order: 2 },
-    { name: "Outdoor Growing", description: "Outdoor cultivation tips and seasonal growing", slug: "outdoor-growing", order: 3 },
-    { name: "Greenhouse Growing", description: "Greenhouse cultivation and climate control", slug: "greenhouse-growing", order: 4 },
-    { name: "Soil & Living Soil", description: "Organic soil building and living soil techniques", slug: "soil-living-soil", order: 5 },
-    { name: "Hydroponics", description: "Hydroponic systems and nutrient solutions", slug: "hydroponics", order: 6 },
-    { name: "Lighting", description: "Lighting systems, spectrums, and schedules", slug: "lighting", order: 7 },
-    { name: "Ventilation", description: "Air flow, filtration, and climate control", slug: "ventilation", order: 8 },
-    { name: "Genetics & Breeding", description: "Strain genetics, breeding, and phenotypes", slug: "genetics-breeding", order: 9 },
-    { name: "Seeds & Starting Plants", description: "Seed selection, germination, and cloning", slug: "seeds-starting-plants", order: 10 },
-    { name: "Plant Problems", description: "Diagnose and treat plant issues and pests", slug: "plant-problems", order: 11 },
-    { name: "Nutrients", description: "Nutrient regimes, deficiencies, and feeding schedules", slug: "nutrients", order: 12 },
-    { name: "Training & Trellising", description: "Plant training techniques for better yields", slug: "training-trellising", order: 13 },
-    { name: "Flowering", description: "Flowering phase care and management", slug: "flowering", order: 14 },
-    { name: "Harvest & Curing", description: "Harvest timing, drying, and curing techniques", slug: "harvest-curing", order: 15 },
-    { name: "Advanced Growing", description: "Advanced techniques and experimental methods", slug: "advanced-growing", order: 16 },
-    { name: "DIY & Equipment", description: "DIY projects and equipment modifications", slug: "diy-equipment", order: 17 },
-    { name: "Smoke Reports & Strain Reviews", description: "Post-harvest reviews — flavor, effects, and how the grow went", slug: "smoke-reports", order: 18 },
-    { name: "General Cannabis Discussion", description: "General cannabis discussions and news", slug: "general-cannabis-discussion", order: 19 },
-    { name: "Cannabis Memes", description: "Funny cannabis-related content", slug: "cannabis-memes", order: 20 },
-    { name: "Off Topic", description: "Non-cannabis related discussions", slug: "off-topic", order: 21 },
+    { name: "General Cannabis Discussion", description: "General cannabis discussions and news", slug: "general-cannabis-discussion", order: 1 },
+    { name: "New Grower Questions", description: "Beginner help — no question is too basic", slug: "new-grower-questions", order: 2 },
+    { name: "Plant Problems", description: "Diagnose and treat plant issues and pests", slug: "plant-problems", order: 3 },
+    { name: "Indoor Growing", description: "Indoor cultivation techniques, setups, and equipment", slug: "indoor-growing", order: 4 },
+    { name: "Outdoor Growing", description: "Outdoor cultivation tips and seasonal growing", slug: "outdoor-growing", order: 5 },
+    { name: "DIY & Equipment", description: "DIY projects and equipment modifications", slug: "diy-equipment", order: 6 },
+    { name: "Smoke Reports & Strain Reviews", description: "Post-harvest reviews — flavor, effects, and how the grow went", slug: "smoke-reports", order: 7 },
+    { name: "Off Topic", description: "Non-cannabis related discussions", slug: "off-topic", order: 8 },
+    { name: "Greenhouse Growing", description: "Greenhouse cultivation and climate control", slug: "greenhouse-growing", order: 9, hidden: true },
+    { name: "Soil & Living Soil", description: "Organic soil building and living soil techniques", slug: "soil-living-soil", order: 10, hidden: true },
+    { name: "Hydroponics", description: "Hydroponic systems and nutrient solutions", slug: "hydroponics", order: 11, hidden: true },
+    { name: "Lighting", description: "Lighting systems, spectrums, and schedules", slug: "lighting", order: 12, hidden: true },
+    { name: "Ventilation", description: "Air flow, filtration, and climate control", slug: "ventilation", order: 13, hidden: true },
+    { name: "Genetics & Breeding", description: "Strain genetics, breeding, and phenotypes", slug: "genetics-breeding", order: 14, hidden: true },
+    { name: "Seeds & Starting Plants", description: "Seed selection, germination, and cloning", slug: "seeds-starting-plants", order: 15, hidden: true },
+    { name: "Nutrients", description: "Nutrient regimes, deficiencies, and feeding schedules", slug: "nutrients", order: 16, hidden: true },
+    { name: "Training & Trellising", description: "Plant training techniques for better yields", slug: "training-trellising", order: 17, hidden: true },
+    { name: "Flowering", description: "Flowering phase care and management", slug: "flowering", order: 18, hidden: true },
+    { name: "Harvest & Curing", description: "Harvest timing, drying, and curing techniques", slug: "harvest-curing", order: 19, hidden: true },
+    { name: "Advanced Growing", description: "Advanced techniques and experimental methods", slug: "advanced-growing", order: 20, hidden: true },
+    { name: "Cannabis Memes", description: "Funny cannabis-related content", slug: "cannabis-memes", order: 21, hidden: true },
   ]
 
   for (const category of categories) {
@@ -69,15 +72,13 @@ async function main() {
   }
 
   // Create chat rooms
+  // Launch chat structure: three public rooms. More rooms get added back
+  // (or created) when the member count can sustain them — an empty room
+  // reads as a dead room, not a promise.
   const chatRooms = [
     { name: "General", description: "General discussion for all growers", slug: "general", order: 1 },
     { name: "Grow Talk", description: "Discuss growing techniques and tips", slug: "grow-talk", order: 2 },
-    { name: "Indoor Growing", description: "Indoor cultivation discussions", slug: "indoor", order: 3 },
-    { name: "Outdoor Growing", description: "Outdoor cultivation discussions", slug: "outdoor", order: 4 },
-    { name: "Genetics", description: "Strain genetics and breeding", slug: "genetics", order: 5 },
-    { name: "Flower Room", description: "Flowering phase discussions", slug: "flower-room", order: 6 },
-    { name: "Equipment", description: "Equipment and setup discussions", slug: "equipment", order: 7 },
-    { name: "Off Topic", description: "Non-growing related discussions", slug: "off-topic", order: 8 },
+    { name: "Off Topic", description: "Non-growing related discussions", slug: "off-topic", order: 3 },
   ]
 
   for (const room of chatRooms) {
