@@ -15,6 +15,7 @@ import { shouldGatePublic } from "@/lib/maintenance";
 import MaintenancePage from "./maintenance/page";
 import AnnouncementBanner from "@/components/announcement-banner";
 import RecoveryWarningBanner from "@/components/recovery-warning-banner";
+import { ChatPanelProvider, ChatPanelInset, ChatDock } from "@/components/chat-panel";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -100,10 +101,17 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             <Providers>
               <AnnouncementBanner />
               <RecoveryWarningBanner />
-              <Navigation />
-              <main id="main-content" className="flex-1 min-w-0 pb-16 lg:pb-0">{children}</main>
-              <Footer />
-              <QuickPostButton />
+              <ChatPanelProvider>
+                <Navigation />
+                {/* The open Chat panel consumes real width on lg+ instead of
+                    floating over content — the inset shrinks page + footer. */}
+                <ChatPanelInset>
+                  <main id="main-content" className="flex-1 min-w-0 pb-16 lg:pb-0">{children}</main>
+                  <Footer />
+                </ChatPanelInset>
+                <QuickPostButton />
+                <ChatDock />
+              </ChatPanelProvider>
               <ServiceWorkerRegister />
             </Providers>
             <Analytics />

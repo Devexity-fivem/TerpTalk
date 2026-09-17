@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef, useMemo, memo, useCallback, Fragment } from "react"
+import { useState, useEffect, useRef, useMemo, memo, useCallback, Fragment, type ReactNode } from "react"
 import { useSession } from "next-auth/react"
 import { useSearchParams } from "next/navigation"
 import {
@@ -433,7 +433,15 @@ const MessageRow = memo(function MessageRow({
   )
 })
 
-export default function ChatRoom() {
+interface ChatRoomProps {
+  // Panel mode (global ChatDock): skip the ?room= deep link — the panel
+  // restores the last room instead — and don't rewrite the page URL.
+  embedded?: boolean
+  // Extra controls rendered in the header's right cluster (expand/close).
+  headerActions?: ReactNode
+}
+
+export default function ChatRoom({ embedded = false, headerActions }: ChatRoomProps = {}) {
   const { data: session } = useSession()
   const searchParams = useSearchParams()
   const { toast } = useToast()
@@ -561,7 +569,9 @@ export default function ChatRoom() {
         if (cancelled) return
         const all: Room[] = data.rooms || []
         setRooms(all)
-        const wanted = searchParams.get("room")
+        // The dedicated page honors ?room= deep links; the embedded panel
+        // restores the last room instead (there is no chat URL to link).
+        const wanted = embedded ? null : searchParams.get("room")
         const lastRoom = store ? getLastRoom(store) : null
         const chosen =
           all.find((r) => r.slug === wanted) ||
@@ -604,7 +614,9 @@ export default function ChatRoom() {
       // load below then advances the marker to the newest message.
       if (next.latestAt) markSeenNow(next.id, next.latestAt)
     }
-    window.history.replaceState(null, "", `/chat?room=${slug}`)
+    // Only the dedicated page owns the URL — the embedded panel must not
+    // rewrite whatever page the user is actually browsing.
+    if (!embedded) window.history.replaceState(null, "", `/chat?room=${slug}`)
   }
 
   // Load messages: realtime via Pusher when configured, otherwise poll.
@@ -968,7 +980,11 @@ export default function ChatRoom() {
     <div className="flex h-full min-h-0">
       {/* Main chat card — conversation-first: a compact header carries the
           room picker + presence; everything else is message viewport. */}
-      <div className="flex-1 min-w-0 flex flex-col rounded-xl border border-border bg-card overflow-hidden">
+      <div className={cn(
+        "flex-1 min-w-0 flex flex-col bg-card overflow-hidden",
+        // The panel provides its own frame — no double card chrome inside.
+        !embedded && "rounded-xl border border-border"
+      )}>
         <div className="flex items-center gap-2 px-2 py-1.5 border-b border-border shrink-0">
           <div className="relative min-w-0" ref={pickerRef}>
             <button
@@ -1055,6 +1071,7 @@ export default function ChatRoom() {
               <span className="flex h-1.5 w-1.5 rounded-full bg-green-400" aria-hidden="true" />
               {onlineCount} online
             </span>
+            {headerActions}
             {(!room || fetchError) && (
               <button
                 onClick={() => setRetryCount((c) => c + 1)}

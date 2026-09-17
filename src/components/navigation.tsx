@@ -17,7 +17,7 @@ import UserMenu from "@/components/user-menu"
 import { cn } from "@/lib/utils"
 import { signInHref } from "@/lib/callback-url"
 import { getSharedPusher, peekSharedPusher } from "@/lib/pusher-client"
-import { syncUnread, CHAT_SEEN_EVENT } from "@/lib/chat-client"
+import { useChatPanel } from "@/components/chat-panel"
 
 const NAV_LINKS = [
   { href: "/", label: "Home", icon: Home, section: "Explore" },
@@ -51,7 +51,9 @@ export function Navigation() {
   const pathname = usePathname()
   const [unread, setUnread] = useState(0)
   const [dmUnread, setDmUnread] = useState(0)
-  const [chatUnread, setChatUnread] = useState(false)
+  // Chat activity signal lives in the panel provider so the nav, the
+  // bottom bar, and the closed-panel FAB all share one poll.
+  const { chatUnread, openPanel } = useChatPanel()
   const [menuOpen, setMenuOpen] = useState(false)
   const role = (session?.user as { role?: string } | undefined)?.role
   const isAdmin = role === "ADMINISTRATOR"
@@ -86,32 +88,6 @@ export function Navigation() {
     // Presence ping — updates lastSeenAt/online status (server throttled)
     fetch("/api/ping", { method: "POST" }).catch(() => {})
 
-    // Chat unread signal — per-room latest activity vs localStorage
-    // last-seen. One bounded fetch on mount plus a slow poll; the endpoint
-    // is auth-only so guests get no signal, and only accessible public
-    // rooms are ever included in the payload.
-    const refreshChat = () => {
-      fetch("/api/chat/rooms?badge=1")
-        .then((res) => (res.ok ? res.json() : null))
-        .then((d) => {
-          if (!d) return
-          const unread = syncUnread(
-            (d.rooms || []).map((r: { id: string; latestAt: string | null }) => ({
-              id: r.id,
-              latestAt: r.latestAt,
-            })),
-            window.localStorage
-          )
-          setChatUnread(unread.size > 0)
-        })
-        .catch(() => {})
-    }
-    refreshChat()
-    const chatPoll = setInterval(refreshChat, 60_000)
-    // The chat page dispatches this after marking a room seen — clears the
-    // dot immediately instead of waiting for the next poll.
-    window.addEventListener(CHAT_SEEN_EVENT, refreshChat)
-
     // Realtime notifications via a per-user private channel on the SHARED
     // Pusher socket — the chat page subscribes its room channels on the
     // same connection, so a signed-in user never holds two sockets.
@@ -144,9 +120,7 @@ export function Navigation() {
     return () => {
       cancelled = true
       window.removeEventListener("tt-notifications-read", onRead)
-      window.removeEventListener(CHAT_SEEN_EVENT, refreshChat)
       if (poll) clearInterval(poll)
-      clearInterval(chatPoll)
       // The socket is shared — drop only this channel, never disconnect.
       peekSharedPusher()?.unsubscribe(channel)
     }
@@ -207,7 +181,23 @@ export function Navigation() {
             {/* Desktop primary links */}
             <div className="hidden items-center gap-1 lg:flex">
               {DESKTOP_LINKS.map(({ href, label, icon: Icon }) => (
-                <Link key={href} href={href} className={linkClass(href)}>
+                <Link
+                  key={href}
+                  href={href}
+                  className={linkClass(href)}
+                  // Chat opens the persistent panel in place — the page
+                  // underneath stays put. The href remains so the link is
+                  // still a real, deep-linkable navigation element.
+                  // Guests get normal navigation to /chat's sign-in wall.
+                  onClick={
+                    href === "/chat" && session
+                      ? (e) => {
+                          e.preventDefault()
+                          openPanel()
+                        }
+                      : undefined
+                  }
+                >
                   <Icon className="h-4 w-4" />
                   {label}
                   {href === "/chat" && chatUnread && (
@@ -355,7 +345,20 @@ export function Navigation() {
                     {section}
                   </div>
                   {NAV_LINKS.filter((l) => l.section === section).map(({ href, label, icon: Icon }) => (
-                    <Link key={href} href={href} className={linkClass(href)} onClick={() => setMenuOpen(false)}>
+                    <Link
+                      key={href}
+                      href={href}
+                      className={linkClass(href)}
+                      onClick={
+                        href === "/chat" && session
+                          ? (e) => {
+                              e.preventDefault()
+                              setMenuOpen(false)
+                              openPanel()
+                            }
+                          : () => setMenuOpen(false)
+                      }
+                    >
                       <Icon className="h-4 w-4" />
                       {label}
                       {href === "/chat" && chatUnread && (

@@ -6,6 +6,7 @@ import { useSession } from "next-auth/react"
 import { Home, MessageCircle, Leaf, Bell, User, MessagesSquare } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { signInHref } from "@/lib/callback-url"
+import { useChatPanel } from "@/components/chat-panel"
 
 interface MobileNavProps {
   unread: number
@@ -27,6 +28,9 @@ const ITEMS = [
 export default function MobileNav({ unread, chatUnread }: MobileNavProps) {
   const pathname = usePathname()
   const { data: session } = useSession()
+  // Chat opens the persistent sheet in place — tapping the bottom-nav item
+  // never navigates away. href stays so it remains a real link.
+  const { togglePanel, open: chatOpen } = useChatPanel()
 
   const isActive = (href: string, exact?: boolean) =>
     exact ? pathname === href : pathname === href || pathname.startsWith(`${href}/`)
@@ -41,12 +45,22 @@ export default function MobileNav({ unread, chatUnread }: MobileNavProps) {
       >
       <ul className="flex items-stretch">
         {ITEMS.map(({ href, label, icon: Icon, exact }) => {
-          const active = isActive(href, exact)
+          const active = isActive(href, exact) || (href === "/chat" && chatOpen)
           return (
             <li key={href} className="flex-1">
               <Link
                 href={href}
-                aria-current={active ? "page" : undefined}
+                aria-current={isActive(href, exact) ? "page" : undefined}
+                onClick={
+                  // Guests have no panel — let the link reach /chat's
+                  // sign-in wall as before.
+                  href === "/chat" && session
+                    ? (e) => {
+                        e.preventDefault()
+                        togglePanel()
+                      }
+                    : undefined
+                }
                 className={cn(
                   "flex h-14 flex-col items-center justify-center gap-0.5 text-[11px] font-medium transition-colors",
                   active ? "text-primary" : "text-muted-foreground"
