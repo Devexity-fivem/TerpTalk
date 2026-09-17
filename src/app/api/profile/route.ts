@@ -4,7 +4,7 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { unauthorized, forbidden, getClientIp, logSecurityEvent, LIMITS, isBanned, enforceLinkTrust } from "@/lib/security"
 import { storeImage, deleteImagesIfUnreferenced } from "@/lib/blob"
-import { getReputationTier, getTierProgress, getRepStage, getStageProgress, reverseReputationByActor } from "@/lib/reputation"
+import { getReputationTier, getTierProgress, getRepStage, getStageProgress, reverseReputationByActor, reverseReputationBySource } from "@/lib/reputation"
 import { canEquip } from "@/lib/cosmetics"
 import { Prisma } from "@prisma/client"
 import { rateLimit } from "@/lib/rate-limit"
@@ -579,6 +579,21 @@ export async function DELETE(request: Request) {
     // Void reputation this account granted others (likes, accepted answers)
     // before the cascade deletes their own ledger rows.
     await reverseReputationByActor(user.id, "Granting account deleted").catch(() => 0)
+
+    // The thread cascade also removes every reply other members posted in
+    // this user's threads — claw back the rep they earned from those posts
+    // (creation, likes, accepted answers), matching the owner/staff
+    // thread-removal policy. Idempotent keyed/source reversals.
+    const [ownedThreads, threadPosts] = await Promise.all([
+      prisma.thread.findMany({ where: { authorId: user.id }, select: { id: true } }),
+      prisma.post.findMany({ where: { thread: { authorId: user.id } }, select: { id: true } }),
+    ])
+    for (const t of ownedThreads) {
+      await reverseReputationBySource("THREAD", t.id, "Thread removed", user.id).catch(() => 0)
+    }
+    for (const p of threadPosts) {
+      await reverseReputationBySource("POST", p.id, "Thread removed", user.id).catch(() => 0)
+    }
 
     // Cascade delete handles: profile, posts, threads, diaries, setups,
     // chat messages, DMs, notifications, reactions, follows, badges,

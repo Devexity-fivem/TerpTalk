@@ -11,6 +11,7 @@ import {
   awardReputation,
   reconcileReferralPayouts,
   reverseReputationByActor,
+  reverseReputationBySource,
   reverseReputationEvent,
   runEffectStage,
 } from "@/lib/reputation"
@@ -412,6 +413,103 @@ async function run() {
   ok(evLike5After?.reversalFinal === true && evLike5After.reversedAt !== null, "final reversal survives a byActor sweep")
   ok((await repOf(liked5.id)) === liked5Rep, "final-reversed event is not re-deducted")
 
+  // ── Account deletion: third-party rep on cascade-deleted content ──
+  // prisma.user.delete cascades the member's threads — and every other
+  // member's posts inside them (Post.threadId Cascade). The DELETE route
+  // must run the same bySource sweep as owner/staff thread removal before
+  // the cascade, or third parties keep rep for content that no longer
+  // exists. This simulates the route's exact sequence against real rows.
+  const profileRouteSrc = readFileSync("src/app/api/profile/route.ts", "utf8")
+  ok(
+    profileRouteSrc.includes('reverseReputationBySource("POST", p.id') &&
+    profileRouteSrc.includes("thread: { authorId: user.id }"),
+    "account deletion sweeps rep on third-party posts inside owned threads"
+  )
+
+  const delUser = await makeUser("del")
+  const replier = await makeUser("replier")
+  const likerUser = await makeUser("liker")
+  const delReferrer = await makeUser("delref")
+  const cat = await prisma.category.create({ data: { name: `${P} cat`, slug: `${P}-cat`, description: "test" } })
+  const thread = await prisma.thread.create({
+    data: { title: `${P} thread`, slug: `${P}-thread`, content: "x", categoryId: cat.id, authorId: delUser.id },
+  })
+  const reply = await prisma.post.create({
+    data: { content: "third-party reply", threadId: thread.id, authorId: replier.id },
+  })
+
+  // Replier's rep on the doomed post + one unrelated event that must survive.
+  await applyReputationAward(replier.id, "POST_CREATED", 2, "t", {
+    key: `${P}:del:post1`, sourceType: "POST", sourceId: reply.id,
+  })
+  await applyReputationAward(replier.id, "LIKE_RECEIVED", 2, "t", {
+    key: `${P}:del:like1`, actorId: likerUser.id, sourceType: "POST", sourceId: reply.id,
+  })
+  await applyReputationAward(replier.id, "SETUP_CREATED", REP_POINTS.SETUP_CREATED, "t", {
+    key: `${P}:del:setup`, sourceType: "SETUP", sourceId: "unrelated",
+  })
+  // A staff-final reversal on the same post — must not be re-deducted.
+  await applyReputationAward(replier.id, "LIKE_RECEIVED", 2, "t", {
+    key: `${P}:del:like2`, actorId: likerUser.id, sourceType: "POST", sourceId: reply.id,
+  })
+  const evLike2 = await prisma.reputationEvent.findUnique({ where: { key: `${P}:del:like2` } })
+  await reverseReputationEvent(evLike2!.id, "staff final", "staff", { final: true })
+
+  // The deleter's own earned rep (own ledger — cascades with the account).
+  await applyReputationAward(delUser.id, "THREAD_CREATED", 10, "t", {
+    key: `${P}:del:thread`, sourceType: "THREAD", sourceId: thread.id,
+  })
+  // The deleter previously qualified → paid a referral to another member.
+  await applyReputationAward(delReferrer.id, "REFERRAL", REP_POINTS.REFERRAL, "t", {
+    key: `referral:${delUser.id}`, actorId: delUser.id,
+  })
+
+  const replierBefore = await repOf(replier.id) // 2+2+8+2-2 = 12
+  const delRefBefore = await repOf(delReferrer.id) // 25
+
+  // The route's exact sequence: byActor → bySource(THREAD) per owned
+  // thread → bySource(POST) per post inside them → user.delete.
+  await reverseReputationByActor(delUser.id, "Granting account deleted")
+  const ownedThreads = await prisma.thread.findMany({ where: { authorId: delUser.id }, select: { id: true } })
+  const threadPosts = await prisma.post.findMany({ where: { thread: { authorId: delUser.id } }, select: { id: true } })
+  for (const t of ownedThreads) {
+    await reverseReputationBySource("THREAD", t.id, "Thread removed", delUser.id)
+  }
+  for (const p of threadPosts) {
+    await reverseReputationBySource("POST", p.id, "Thread removed", delUser.id)
+  }
+  await prisma.user.delete({ where: { id: delUser.id } })
+
+  ok((await prisma.post.findUnique({ where: { id: reply.id } })) === null, "thread cascade removes the third-party reply")
+  ok((await prisma.user.findUnique({ where: { id: replier.id } })) !== null, "third-party member survives the deletion")
+  ok((await repOf(replier.id)) === replierBefore - 4, "replier loses only the rep tied to the deleted post", await repOf(replier.id))
+  ok((await repOf(delReferrer.id)) === delRefBefore - REP_POINTS.REFERRAL, "referrer loses the payout the deleted referee caused")
+  const evPost1 = await prisma.reputationEvent.findUnique({ where: { key: `${P}:del:post1` } })
+  const evLike1 = await prisma.reputationEvent.findUnique({ where: { key: `${P}:del:like1` } })
+  const evSetup = await prisma.reputationEvent.findUnique({ where: { key: `${P}:del:setup` } })
+  const evLike2After = await prisma.reputationEvent.findUnique({
+    where: { key: `${P}:del:like2` },
+    select: { reversedAt: true, reversalFinal: true },
+  })
+  ok(evPost1?.reversedAt !== null && evPost1 !== null, "POST_CREATED on deleted post is reversed")
+  ok(evLike1?.reversedAt !== null, "LIKE_RECEIVED on deleted post is reversed")
+  ok(evSetup?.reversedAt === null, "unrelated rep on the same member survives")
+  ok(evLike2After?.reversalFinal === true, "final reversal stays final through the deletion sweep")
+  ok((await prisma.reputationEvent.count({ where: { userId: delUser.id } })) === 0, "deleted member's own ledger is cascade-removed")
+  // Reversal counter-entries live on the replier's ledger, keyed and linked.
+  const revRows = await prisma.reputationEvent.count({
+    where: { userId: replier.id, type: "REVERSAL", reversalOfId: { in: [evPost1!.id, evLike1!.id] } },
+  })
+  ok(revRows === 2, "reversal counter-entries recorded on the third-party ledger", revRows)
+
+  // Re-running the sequence post-delete is a no-op (posts already gone).
+  const replierMid = await repOf(replier.id)
+  const threadPosts2 = await prisma.post.findMany({ where: { thread: { authorId: delUser.id } }, select: { id: true } })
+  for (const p of threadPosts2) {
+    await reverseReputationBySource("POST", p.id, "Thread removed", delUser.id)
+  }
+  ok((await repOf(replier.id)) === replierMid, "re-running the deletion sweep is a no-op")
+
   // ── Reconciliation bound + field minimality ──────────────────────
   const bounded = await reconcileReferralPayouts(1)
   ok(bounded.candidates <= 1, "sweep respects the limit bound", bounded.candidates)
@@ -430,7 +528,9 @@ run()
   })
   .finally(async () => {
     // Cascade-clean every disposable fixture user (profiles, events,
-    // notifications ride the user delete cascade).
+    // notifications ride the user delete cascade). The test category has
+    // no user FK — delete it directly (its threads cascade).
     await prisma.user.deleteMany({ where: { name: { startsWith: P } } }).catch(() => {})
+    await prisma.category.deleteMany({ where: { slug: { startsWith: P } } }).catch(() => {})
     await prisma.$disconnect()
   })
