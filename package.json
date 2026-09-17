@@ -30,7 +30,8 @@
     "test:self-service": "tsx scripts/self-service-tests.mts",
     "test:progression": "tsx scripts/progression-tests.mts",
     "test:chat": "tsx scripts/chat-ux-tests.mts",
-    "test:chat-panel": "tsx scripts/chat-panel-tests.mts"
+    "test:chat-panel": "tsx scripts/chat-panel-tests.mts",
+    "test:master": "tsx scripts/master-tests.mts"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",

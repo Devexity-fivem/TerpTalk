@@ -403,12 +403,19 @@ async function main() {
       ev ? pass("COMMAND_MENTION BotEvent recorded") : fail("COMMAND_MENTION BotEvent recorded", "missing")
 
       // Slash command records COMMAND_SLASH with entity links counted.
-      const evSlash = await prisma.botEvent.findFirst({
-        where: { type: "COMMAND_SLASH", command: "summarize", userId: member.id },
-      })
-      evSlash && evSlash.entities >= 1
+      // Two summarize events exist (accessible + hidden thread — the hidden
+      // one legitimately has entities 0), so filter for the counted one and
+      // poll for the async BotEvent write.
+      let evSlash = null
+      for (let i = 0; i < 10 && !evSlash; i++) {
+        await new Promise((r) => setTimeout(r, 500))
+        evSlash = await prisma.botEvent.findFirst({
+          where: { type: "COMMAND_SLASH", command: "summarize", userId: member.id, entities: { gte: 1 } },
+        })
+      }
+      evSlash
         ? pass("COMMAND_SLASH BotEvent counts the thread link")
-        : fail("COMMAND_SLASH BotEvent counts the thread link", evSlash)
+        : fail("COMMAND_SLASH BotEvent counts the thread link", "no summarize event with entities >= 1")
     } finally {
       await prisma.post.deleteMany({ where: { threadId: { in: [ctxThread.id, ctxHidden.id] } } }).catch(() => {})
       await prisma.thread.deleteMany({ where: { id: { in: [ctxThread.id, ctxHidden.id] } } }).catch(() => {})
