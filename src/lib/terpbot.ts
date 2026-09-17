@@ -129,6 +129,7 @@ export async function postBotMessage(roomId: string, text: string, replyToId?: s
     })
     const dto = {
       id: message.id,
+      roomId: message.roomId,
       content: message.content,
       createdAt: message.createdAt,
       author: {

@@ -5,6 +5,7 @@ import { sessionCookieName } from "@/lib/auth"
 import { unauthorized, forbidden, isSessionValid, getClientIp, hashIp, isStaff } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
 import { GROW_ROOM_REP, GROW_ROOM_SLUG } from "@/lib/chat-access"
+import { getChatActivity, countOnline, withLatestActivity } from "@/lib/chat-activity"
 import { getBooleanSetting, SITE_SETTINGS } from "@/lib/settings"
 
 // Get chat rooms
@@ -27,16 +28,12 @@ export async function GET(request: NextRequest) {
     }
 
     // Badge mode — the nav polls this once a minute per signed-in user, so
-    // it skips room seeding and the full room list for a single COUNT.
+    // it skips room seeding and the full room list. Returns the minimum
+    // activity metadata (latest timestamp per accessible room + site-wide
+    // online count) the client needs for the unread dot — no content.
     if (new URL(request.url).searchParams.get("badge") === "1") {
-      const onlineCount = await prisma.user.count({
-        where: {
-          lastSeenAt: { gte: new Date(Date.now() - 15 * 60 * 1000) },
-          OR: [{ profile: { hideOnlineStatus: false } }, { profile: null }],
-          banned: false,
-        },
-      })
-      return NextResponse.json({ onlineCount })
+      const activity = await getChatActivity(userId)
+      return NextResponse.json(activity)
     }
 
     // Ensure a default public room exists so users always have somewhere to chat
@@ -87,12 +84,7 @@ export async function GET(request: NextRequest) {
           },
         },
       }),
-      prisma.user.count({
-        where: {
-          lastSeenAt: { gte: new Date(Date.now() - 15 * 60 * 1000) },
-          OR: [{ profile: { hideOnlineStatus: false } }, { profile: null }],
-        },
-      }),
+      countOnline(),
       prisma.user.findUnique({
         where: { id: userId },
         select: { role: true, profile: { select: { reputation: true } } },
@@ -103,12 +95,14 @@ export async function GET(request: NextRequest) {
     // only while the flag is on — and messages never flow to non-members.
     const staff = isStaff(user?.role)
     const rep = user?.profile?.reputation ?? 0
-    const rooms = allRooms
-      .filter((r) => r.requiredRep == null || growRoomEnabled)
-      .map((r) => ({
-        ...r,
-        accessible: r.requiredRep == null || staff || rep >= r.requiredRep,
-      }))
+    const rooms = await withLatestActivity(
+      allRooms
+        .filter((r) => r.requiredRep == null || growRoomEnabled)
+        .map((r) => ({
+          ...r,
+          accessible: r.requiredRep == null || staff || rep >= r.requiredRep,
+        }))
+    )
 
     return NextResponse.json({ rooms, onlineCount })
   } catch (error) {

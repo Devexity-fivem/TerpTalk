@@ -1,10 +1,11 @@
 import { MessageSquare, Award, Dna, Sprout, Calendar, Trophy, BookOpen, Tag, ArrowRight, TrendingUp, Users, Leaf, MessagesSquare } from "lucide-react"
-import { OpenChatButton } from "@/components/open-chat-button"
+import ChatTeaser from "@/components/chat-teaser"
 import Link from "next/link"
 import { prisma } from "@/lib/prisma"
 import { unstable_cache } from "next/cache"
 import { publicUserSelect, activeAuthor, rankableProfile, REPUTATION_ORDER } from "@/lib/security"
 import CannabisLeaf from "@/components/cannabis-leaf"
+import { getChatTeaser } from "@/lib/chat-activity"
 import LiveStats from "@/components/live-stats"
 import HeroCta from "@/components/hero-cta"
 import { Avatar } from "@/components/ui/avatar"
@@ -144,6 +145,14 @@ const getGrowerOfWeek = unstable_cache(
   { revalidate: 300 }
 )
 
+// Live-chat teaser for the hero — public-room metadata only, so it is safe
+// to render for guests (no content, no gated/private room data).
+const getChatTeaserData = unstable_cache(
+  () => getChatTeaser(),
+  ["home-chat-teaser"],
+  { revalidate: 60 }
+)
+
 const EXPLORE_CARDS = [
   { icon: Sprout, title: "Grow Diaries", desc: "Document your grow from seed to harvest.", href: "/diaries" },
   { icon: MessageSquare, title: "Discussions", desc: "Ask questions and trade techniques.", href: "/forum" },
@@ -155,12 +164,13 @@ const EXPLORE_CARDS = [
 ]
 
 export default async function Home() {
-  const [stats, { categories, latest, diaryUpdates }, trending, active, growerOfWeek] = await Promise.all([
+  const [stats, { categories, latest, diaryUpdates }, trending, active, growerOfWeek, chatTeaser] = await Promise.all([
     getStats(),
     getLatestDiscussions(),
     getTrendingDiscussions(),
     getActiveMembers(),
     getGrowerOfWeek(),
+    getChatTeaserData(),
   ])
   return (
     <div className="flex flex-col min-h-screen bg-background">
@@ -187,9 +197,11 @@ export default async function Home() {
           </p>
           {/* Primary and secondary actions (session-aware, client-side) */}
           <HeroCta />
-          <div className="mt-5 flex justify-center">
-            <OpenChatButton />
-          </div>
+          {chatTeaser && (
+            <div className="mt-5 flex justify-center">
+              <ChatTeaser {...chatTeaser} />
+            </div>
+          )}
         </div>
       </section>
 

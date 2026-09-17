@@ -9,6 +9,7 @@ import { signInHref } from "@/lib/callback-url"
 
 interface MobileNavProps {
   unread: number
+  chatUnread?: boolean
 }
 
 const ITEMS = [
@@ -23,7 +24,7 @@ const ITEMS = [
  * where the header nav takes over. Targets are 56px tall for comfortable taps.
  * Search lives in the header drawer on mobile, keeping the bar at 6 items.
  */
-export default function MobileNav({ unread }: MobileNavProps) {
+export default function MobileNav({ unread, chatUnread }: MobileNavProps) {
   const pathname = usePathname()
   const { data: session } = useSession()
 
@@ -51,7 +52,16 @@ export default function MobileNav({ unread }: MobileNavProps) {
                   active ? "text-primary" : "text-muted-foreground"
                 )}
               >
-                <Icon className="h-5 w-5" aria-hidden="true" />
+                <span className="relative">
+                  <Icon className="h-5 w-5" aria-hidden="true" />
+                  {href === "/chat" && chatUnread && (
+                    <span
+                      className="absolute -right-1.5 -top-1 h-2 w-2 rounded-full bg-primary"
+                      role="status"
+                      aria-label="New chat activity"
+                    />
+                  )}
+                </span>
                 {label}
               </Link>
             </li>

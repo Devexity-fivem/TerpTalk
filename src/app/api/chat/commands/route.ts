@@ -32,6 +32,7 @@ import { reverseReputationByActor, recordChatMessage } from "@/lib/reputation"
 
 type ChatMessageWithAuthor = {
   id: string
+  roomId: string
   content: string
   createdAt: Date
   author: {
@@ -122,6 +123,7 @@ export async function POST(request: NextRequest) {
       }
       return {
         id: message.id,
+        roomId: message.roomId,
         content: message.content,
         createdAt: message.createdAt,
         author: {
@@ -282,6 +284,9 @@ export async function POST(request: NextRequest) {
           where: { id: roomId },
           data: { slowModeSeconds: seconds },
         })
+        // Fan the room state out on the existing channel so every
+        // subscriber updates its UI — not just the staff member's client.
+        getPusher()?.trigger(`private-chat-${roomId}`, "room-state", { slowModeSeconds: seconds }).catch((e) => console.error("[pusher] room-state push failed:", roomId, e))
         await logSecurityEvent("SUSPICIOUS_ACTIVITY", {
           userId, ip: getClientIp(request),
           metadata: { chatCommand: "slowmode", roomId, seconds },
@@ -296,6 +301,7 @@ export async function POST(request: NextRequest) {
           where: { id: roomId },
           data: { locked: true },
         })
+        getPusher()?.trigger(`private-chat-${roomId}`, "room-state", { locked: true }).catch((e) => console.error("[pusher] room-state push failed:", roomId, e))
         await logSecurityEvent("SUSPICIOUS_ACTIVITY", {
           userId, ip: getClientIp(request),
           metadata: { chatCommand: "lock", roomId },
@@ -310,6 +316,7 @@ export async function POST(request: NextRequest) {
           where: { id: roomId },
           data: { locked: false },
         })
+        getPusher()?.trigger(`private-chat-${roomId}`, "room-state", { locked: false }).catch((e) => console.error("[pusher] room-state push failed:", roomId, e))
         await logSecurityEvent("SUSPICIOUS_ACTIVITY", {
           userId, ip: getClientIp(request),
           metadata: { chatCommand: "unlock", roomId },
@@ -327,6 +334,9 @@ export async function POST(request: NextRequest) {
           where,
           data: { deleted: true },
         })
+        // Other subscribers must drop the wiped messages too — the command
+        // response only reaches the moderator who ran /clear.
+        getPusher()?.trigger(`private-chat-${roomId}`, "room-state", { cleared: true }).catch((e) => console.error("[pusher] room-state push failed:", roomId, e))
         await logSecurityEvent("SUSPICIOUS_ACTIVITY", {
           userId, ip: getClientIp(request),
           metadata: { chatCommand: "clear", roomId, clearedCount: result.count },

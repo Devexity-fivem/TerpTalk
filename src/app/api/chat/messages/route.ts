@@ -19,6 +19,7 @@ const ISO_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,3})?Z$/
 
 type ChatMessageWithAuthor = {
   id: string
+  roomId: string
   content: string
   createdAt: Date
   deleted: boolean
@@ -53,6 +54,7 @@ function messageDto(m: ChatMessageWithAuthor) {
     : null
   return {
     id: m.id,
+    roomId: m.roomId,
     content,
     createdAt: m.createdAt,
     author: {

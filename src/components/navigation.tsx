@@ -16,6 +16,8 @@ import CreateMenu from "@/components/create-menu"
 import UserMenu from "@/components/user-menu"
 import { cn } from "@/lib/utils"
 import { signInHref } from "@/lib/callback-url"
+import { getSharedPusher, peekSharedPusher } from "@/lib/pusher-client"
+import { syncUnread, CHAT_SEEN_EVENT } from "@/lib/chat-client"
 
 const NAV_LINKS = [
   { href: "/", label: "Home", icon: Home, section: "Explore" },
@@ -49,7 +51,7 @@ export function Navigation() {
   const pathname = usePathname()
   const [unread, setUnread] = useState(0)
   const [dmUnread, setDmUnread] = useState(0)
-  const [chatOnline, setChatOnline] = useState(0)
+  const [chatUnread, setChatUnread] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
   const role = (session?.user as { role?: string } | undefined)?.role
   const isAdmin = role === "ADMINISTRATOR"
@@ -84,20 +86,35 @@ export function Navigation() {
     // Presence ping — updates lastSeenAt/online status (server throttled)
     fetch("/api/ping", { method: "POST" }).catch(() => {})
 
-    // Chat activity signal for the nav entry — one bounded fetch on mount
-    // plus a slow poll. The endpoint is auth-only, so guests get no signal.
+    // Chat unread signal — per-room latest activity vs localStorage
+    // last-seen. One bounded fetch on mount plus a slow poll; the endpoint
+    // is auth-only so guests get no signal, and only accessible public
+    // rooms are ever included in the payload.
     const refreshChat = () => {
       fetch("/api/chat/rooms?badge=1")
         .then((res) => (res.ok ? res.json() : null))
-        .then((d) => setChatOnline(d?.onlineCount || 0))
+        .then((d) => {
+          if (!d) return
+          const unread = syncUnread(
+            (d.rooms || []).map((r: { id: string; latestAt: string | null }) => ({
+              id: r.id,
+              latestAt: r.latestAt,
+            })),
+            window.localStorage
+          )
+          setChatUnread(unread.size > 0)
+        })
         .catch(() => {})
     }
     refreshChat()
     const chatPoll = setInterval(refreshChat, 60_000)
+    // The chat page dispatches this after marking a room seen — clears the
+    // dot immediately instead of waiting for the next poll.
+    window.addEventListener(CHAT_SEEN_EVENT, refreshChat)
 
-    // Realtime notifications via a per-user private channel. The DB
-    // remains the source of truth; the poll below is the fallback.
-    let p: import("pusher-js").default | null = null
+    // Realtime notifications via a per-user private channel on the SHARED
+    // Pusher socket — the chat page subscribes its room channels on the
+    // same connection, so a signed-in user never holds two sockets.
     let poll: ReturnType<typeof setInterval> | null = null
     let cancelled = false
     const startPolling = () => {
@@ -107,12 +124,11 @@ export function Navigation() {
     const pusherCluster = process.env.NEXT_PUBLIC_PUSHER_CLUSTER
     const channel = `private-user-${userId}`
     if (userId && pusherKey && pusherCluster) {
-      import("pusher-js")
-        .then(({ default: Pusher }) => {
+      getSharedPusher()
+        .then((p) => {
           // Effect may have cleaned up before the import resolved —
-          // don't leave an orphaned connection behind.
-          if (cancelled) return
-          p = new Pusher(pusherKey, { cluster: pusherCluster, authEndpoint: "/api/pusher/auth" })
+          // don't leave an orphaned subscription behind.
+          if (cancelled || !p) return
           const ch = p.subscribe(channel)
           ch.bind("new-notification", (n: unknown) => {
             refresh()
@@ -128,12 +144,11 @@ export function Navigation() {
     return () => {
       cancelled = true
       window.removeEventListener("tt-notifications-read", onRead)
+      window.removeEventListener(CHAT_SEEN_EVENT, refreshChat)
       if (poll) clearInterval(poll)
       clearInterval(chatPoll)
-      if (p) {
-        p.unsubscribe(channel)
-        p.disconnect()
-      }
+      // The socket is shared — drop only this channel, never disconnect.
+      peekSharedPusher()?.unsubscribe(channel)
     }
   }, [session])
 
@@ -195,11 +210,13 @@ export function Navigation() {
                 <Link key={href} href={href} className={linkClass(href)}>
                   <Icon className="h-4 w-4" />
                   {label}
-                  {href === "/chat" && chatOnline > 0 && (
-                    <span className="flex items-center gap-1 text-[10px] font-normal text-muted-foreground" title={`${chatOnline} online`}>
-                      <span className="h-1.5 w-1.5 rounded-full bg-primary" aria-hidden="true" />
-                      {chatOnline}
-                    </span>
+                  {href === "/chat" && chatUnread && (
+                    <span
+                      className="h-2 w-2 rounded-full bg-primary"
+                      role="status"
+                      aria-label="New chat activity"
+                      title="New chat activity"
+                    />
                   )}
                 </Link>
               ))}
@@ -290,19 +307,6 @@ export function Navigation() {
                 <Search className="h-5 w-5" />
               </Link>
 
-              {/* Chat shortcut — visible on small screens where the
-                  desktop link bar is hidden. */}
-              {session && (
-                <Link
-                  href="/chat"
-                  className="rounded-lg p-2 transition-colors hover:bg-secondary lg:hidden"
-                  aria-label="Open live chat"
-                  title="Live Chat"
-                >
-                  <MessagesSquare className="h-5 w-5" />
-                </Link>
-              )}
-
               {/* Drawer trigger */}
               <button
                 onClick={() => setMenuOpen(!menuOpen)}
@@ -354,9 +358,10 @@ export function Navigation() {
                     <Link key={href} href={href} className={linkClass(href)} onClick={() => setMenuOpen(false)}>
                       <Icon className="h-4 w-4" />
                       {label}
-                      {href === "/chat" && chatOnline > 0 && (
-                        <span className="ml-auto text-[10px] font-normal text-muted-foreground">
-                          {chatOnline} online
+                      {href === "/chat" && chatUnread && (
+                        <span className="ml-auto flex items-center gap-1.5 text-[10px] font-medium text-muted-foreground">
+                          <span className="h-2 w-2 rounded-full bg-primary" role="status" aria-label="New chat activity" />
+                          New
                         </span>
                       )}
                     </Link>
@@ -457,7 +462,7 @@ export function Navigation() {
         )}
       </nav>
 
-      <MobileNav unread={unread} />
+      <MobileNav unread={unread} chatUnread={chatUnread} />
     </>
   )
 }

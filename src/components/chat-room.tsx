@@ -1,12 +1,12 @@
 "use client"
 
-import { useState, useEffect, useRef, useMemo, memo, useCallback } from "react"
+import { useState, useEffect, useRef, useMemo, memo, useCallback, Fragment } from "react"
 import { useSession } from "next-auth/react"
 import { useSearchParams } from "next/navigation"
 import {
   MessageCircle, Send, X, Loader2, Smile, RefreshCw, MoreVertical,
   Trash2, AlertTriangle, Clock, Shield, User as UserIcon, MessageSquare,
-  Lock, Timer, Hash, Bot, Flag,
+  Lock, Timer, Hash, Bot, Flag, ChevronDown,
 } from "lucide-react"
 import Link from "next/link"
 import RoleBadge from "@/components/role-badge"
@@ -15,6 +15,21 @@ import UserPopover from "@/components/user-popover"
 import { Avatar } from "@/components/ui/avatar"
 import { getAvatarFrame, getProfileTitle } from "@/lib/cosmetics"
 import { listCommandsForRole } from "@/lib/chat-commands"
+import { getSharedPusher, peekSharedPusher } from "@/lib/pusher-client"
+import {
+  mergeMessages,
+  isStaleBatch,
+  applyRoomState,
+  getLastSeen,
+  markRoomSeen,
+  getLastRoom,
+  setLastRoom,
+  syncUnread,
+  firstUnreadId,
+  CHAT_SEEN_EVENT,
+  CHAT_ROOM_STATE_EVENT,
+  type RoomStateEvent,
+} from "@/lib/chat-client"
 import { useToast } from "@/components/ui/toast"
 import { cn } from "@/lib/utils"
 import dynamic from "next/dynamic"
@@ -32,6 +47,7 @@ interface Room {
   accessible: boolean
   slowModeSeconds: number
   locked: boolean
+  latestAt?: string | null
   _count: { messages: number }
 }
 
@@ -49,6 +65,7 @@ interface Author {
 
 interface Message {
   id: string
+  roomId: string
   content: string
   createdAt: string
   author: Author
@@ -56,21 +73,13 @@ interface Message {
 }
 
 const BOT_USERNAME = "terpbot"
-const BOT_AVATAR = "/terpbot.svg"
 
-// One shared Pusher connection across room switches — subscribing to a new
-// channel reuses the socket instead of re-handshaking.
-let sharedPusher: import("pusher-js").default | null = null
-async function getSharedPusher() {
-  const key = process.env.NEXT_PUBLIC_PUSHER_KEY
-  const cluster = process.env.NEXT_PUBLIC_PUSHER_CLUSTER
-  if (!key || !cluster) return null
-  if (!sharedPusher) {
-    const { default: Pusher } = await import("pusher-js")
-    sharedPusher = new Pusher(key, { cluster, authEndpoint: "/api/pusher/auth" })
-  }
-  return sharedPusher
-}
+// Group consecutive same-author messages sent within this window — the
+// first keeps the full identity header, followers render compact.
+const GROUP_WINDOW_MS = 5 * 60 * 1000
+
+// Storage is only available in the browser — this component still SSRs.
+const store = typeof window === "undefined" ? null : window.localStorage
 
 // Internal paths emitted by TerpBot (and users) render as real links.
 // Allowlisted prefixes only — no arbitrary scheme or external URL is
@@ -118,6 +127,8 @@ interface MessageRowProps {
   isOwn: boolean
   canManage: boolean
   isAdmin: boolean
+  // Compact rows are consecutive same-author followers — no avatar/header.
+  compact: boolean
   onToggleMenu: (id: string) => void
   onReply: (msg: Message) => void
   onModerate: (actionType: string, targetUserId: string, opts?: { targetType?: string; targetId?: string; durationDays?: number }) => void
@@ -126,7 +137,7 @@ interface MessageRowProps {
 
 // Memoized — a 100-message room re-renders only the row whose menu toggled.
 const MessageRow = memo(function MessageRow({
-  msg, isMenuOpen, isOwn, canManage, isAdmin, onToggleMenu, onReply, onModerate, onDeleteOwn,
+  msg, isMenuOpen, isOwn, canManage, isAdmin, compact, onToggleMenu, onReply, onModerate, onDeleteOwn,
 }: MessageRowProps) {
   const isDeleted = msg.content === "[deleted]"
   const isBot = msg.author.username === BOT_USERNAME
@@ -163,90 +174,44 @@ const MessageRow = memo(function MessageRow({
   const frame = !isBot ? getAvatarFrame(msg.author.avatarFrame) : null
   const title = !isBot ? getProfileTitle(msg.author.profileTitle) : null
 
-  return (
-    <div className="group relative flex gap-2.5">
-      <Link
-        href={`/u/${encodeURIComponent(displayName)}`}
-        className={cn("mt-0.5 shrink-0 rounded-full", frame?.className)}
-        aria-label={`${displayName}'s profile`}
-        tabIndex={-1}
-      >
-        <Avatar
-          src={isBot ? BOT_AVATAR : msg.author.image}
-          alt={`${displayName} avatar`}
-          size="sm"
-          className={isBot ? "bg-primary/15" : undefined}
-          fallback={isBot ? <Bot className="w-4 h-4 text-primary" /> : undefined}
-        />
-      </Link>
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-1.5 mb-0.5">
-          <UserPopover username={msg.author.username ?? displayName}>
-            <Link
-              href={`/u/${encodeURIComponent(displayName)}`}
-              className="font-semibold text-xs hover:underline truncate"
-            >
-              {displayName}
-            </Link>
-          </UserPopover>
-          {title && (
-            <span className="text-[9px] font-medium uppercase tracking-wider px-1 py-px rounded truncate bg-primary/10 text-primary/80">
-              {title.name}
-            </span>
-          )}
-          {isBot && (
-            <span className="inline-flex items-center gap-0.5 text-[9px] font-bold uppercase tracking-wider bg-primary/15 text-primary px-1 py-px rounded">
-              <Bot className="w-2.5 h-2.5" /> Bot
-            </span>
-          )}
-          <RoleBadge role={msg.author.role} />
-          {!isBot && (
-            <TierChip
-              reputation={msg.author.reputation ?? 0}
-              publicMilestoneOptOut={msg.author.publicMilestoneOptOut}
-            />
-          )}
-          <time
-            dateTime={msg.createdAt}
-            className="text-[10px] text-muted-foreground opacity-70 group-hover:opacity-100 transition-opacity"
-          >
-            {new Date(msg.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-          </time>
-          <button
-            onClick={() => onToggleMenu(msg.id)}
-            className="ml-auto p-1 rounded hover:bg-secondary text-muted-foreground"
-            aria-label="Message options"
-            aria-expanded={isMenuOpen}
-            aria-haspopup="menu"
-            title="Message options"
-          >
-            <MoreVertical className="w-3 h-3" />
-          </button>
-        </div>
+  const menuButton = (
+    <button
+      onClick={() => onToggleMenu(msg.id)}
+      className="p-1 rounded hover:bg-secondary text-muted-foreground"
+      aria-label="Message options"
+      aria-expanded={isMenuOpen}
+      aria-haspopup="menu"
+      title="Message options"
+    >
+      <MoreVertical className="w-3 h-3" />
+    </button>
+  )
+  const timeEl = (
+    <time
+      dateTime={msg.createdAt}
+      className="text-[10px] text-muted-foreground opacity-70 group-hover:opacity-100 transition-opacity"
+    >
+      {new Date(msg.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+    </time>
+  )
+  const replyEl = msg.replyTo && (
+    <div className="mb-1 pl-2 border-l-2 border-primary/30 text-xs text-muted-foreground line-clamp-1">
+      <MessageSquare className="w-3 h-3 inline mr-1" aria-hidden="true" />
+      <span className="font-medium">{msg.replyTo.author.username || msg.replyTo.author.name}:</span>{" "}
+      {msg.replyTo.content}
+    </div>
+  )
+  const bodyEl = isAction ? (
+    <p className="text-sm pl-0.5 italic text-muted-foreground">
+      {renderContent(msg.content.slice(1, -1))}
+    </p>
+  ) : (
+    <p className="text-sm pl-0.5 break-words">
+      {isDeleted ? <span className="italic text-muted-foreground">{msg.content}</span> : renderContent(msg.content)}
+    </p>
+  )
 
-        {msg.replyTo && (
-          <div className="mb-1 pl-2 border-l-2 border-primary/30 text-xs text-muted-foreground line-clamp-1">
-            <MessageSquare className="w-3 h-3 inline mr-1" aria-hidden="true" />
-            <span className="font-medium">{msg.replyTo.author.username || msg.replyTo.author.name}:</span>{" "}
-            {msg.replyTo.content}
-          </div>
-        )}
-
-        {isBot ? (
-          <div className="rounded-lg border border-primary/20 bg-primary/5 px-2.5 py-2 text-xs leading-relaxed">
-            {renderContent(msg.content)}
-          </div>
-        ) : isAction ? (
-          <p className="text-sm pl-0.5 italic text-muted-foreground">
-            {renderContent(msg.content.slice(1, -1))}
-          </p>
-        ) : (
-          <p className="text-sm pl-0.5 break-words">
-            {isDeleted ? <span className="italic text-muted-foreground">{msg.content}</span> : renderContent(msg.content)}
-          </p>
-        )}
-
-        {isMenuOpen && (
+  const menu = isMenuOpen && (
           reported ? (
             <div className="mt-1 rounded-lg border border-border bg-card shadow-lg p-2.5 relative z-20">
               <p role="status" className="text-xs text-muted-foreground">Report submitted — thank you. Our moderators will take a look.</p>
@@ -374,7 +339,95 @@ const MessageRow = memo(function MessageRow({
             )}
           </div>
           )
-        )}
+        )
+
+  // TerpBot/system posts render as a compact tinted strip — clearly not a
+  // member message, but no longer a full identity header + boxed card.
+  if (isBot) {
+    return (
+      <div className="group relative" data-mid={msg.id}>
+        <div className="flex items-start gap-2 rounded-lg border border-primary/15 bg-primary/[0.05] px-2.5 py-1.5">
+          <Bot className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" />
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-1.5">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-primary/80">TerpBot</span>
+              {timeEl}
+              <span className="ml-auto">{menuButton}</span>
+            </div>
+            {replyEl}
+            <div className="text-xs leading-relaxed">
+              {isDeleted ? <span className="italic text-muted-foreground">{msg.content}</span> : renderContent(msg.content)}
+            </div>
+          </div>
+        </div>
+        {menu}
+      </div>
+    )
+  }
+
+  // Consecutive same-author follower — identity lives on the group's first
+  // row; the timestamp appears in the avatar gutter on hover.
+  if (compact) {
+    return (
+      <div className="group relative flex gap-2.5" data-mid={msg.id}>
+        <span className="w-8 shrink-0 select-none text-right" aria-hidden="true">
+          <time
+            dateTime={msg.createdAt}
+            className="invisible text-[10px] leading-5 text-muted-foreground group-hover:visible"
+          >
+            {new Date(msg.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+          </time>
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-start gap-1.5">
+            <div className="min-w-0 flex-1">
+              <span className="sr-only">{displayName}: </span>
+              {bodyEl}
+            </div>
+            {menuButton}
+          </div>
+          {menu}
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="group relative flex gap-2.5" data-mid={msg.id}>
+      <Link
+        href={`/u/${encodeURIComponent(displayName)}`}
+        className={cn("mt-0.5 shrink-0 rounded-full", frame?.className)}
+        aria-label={`${displayName}'s profile`}
+        tabIndex={-1}
+      >
+        <Avatar src={msg.author.image} alt={`${displayName} avatar`} size="sm" />
+      </Link>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-1.5 mb-0.5">
+          <UserPopover username={msg.author.username ?? displayName}>
+            <Link
+              href={`/u/${encodeURIComponent(displayName)}`}
+              className="font-semibold text-xs hover:underline truncate"
+            >
+              {displayName}
+            </Link>
+          </UserPopover>
+          {title && (
+            <span className="text-[9px] font-medium uppercase tracking-wider px-1 py-px rounded truncate bg-primary/10 text-primary/80">
+              {title.name}
+            </span>
+          )}
+          <RoleBadge role={msg.author.role} />
+          <TierChip
+            reputation={msg.author.reputation ?? 0}
+            publicMilestoneOptOut={msg.author.publicMilestoneOptOut}
+          />
+          {timeEl}
+          <span className="ml-auto">{menuButton}</span>
+        </div>
+        {replyEl}
+        {bodyEl}
+        {menu}
       </div>
     </div>
   )
@@ -408,11 +461,55 @@ export default function ChatRoom() {
   const [showCommands, setShowCommands] = useState(false)
   const [showEmoji, setShowEmoji] = useState(false)
   const [suggestIndex, setSuggestIndex] = useState(0)
+  const [pickerOpen, setPickerOpen] = useState(false)
+  // "New" divider anchor for the active room — set on entry, this visit only.
+  const [unreadBoundaryId, setUnreadBoundaryId] = useState<string | null>(null)
+  // Bumped whenever a room is marked seen — recomputes picker unread dots.
+  const [seenTick, setSeenTick] = useState(0)
 
   const messagesContainerRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+  const pickerRef = useRef<HTMLDivElement>(null)
   const lastTsRef = useRef<string | null>(null)
   const nearBottomRef = useRef(true)
+  const scrolledToUnreadRef = useRef(false)
+
+  // Record "seen up to ts" for a room and tell the nav badge to recompute.
+  const markSeenNow = useCallback((roomId: string, ts: string) => {
+    if (!store) return
+    markRoomSeen(store, roomId, ts)
+    setSeenTick((t) => t + 1)
+    window.dispatchEvent(new Event(CHAT_SEEN_EVENT))
+  }, [])
+
+  // Per-room unread dots in the picker — same localStorage contract the nav
+  // badge uses. syncUnread baselines a first-ever observation so the dot
+  // means "new since you've been around", never "things you never saw".
+  const unreadIds = useMemo(() => {
+    if (!store) return new Set<string>()
+    return syncUnread(
+      rooms.map((r) => ({ id: r.id, latestAt: r.latestAt ?? null })),
+      store
+    )
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- seenTick re-runs the comparison after marking seen
+  }, [rooms, seenTick])
+
+  // Close the room picker on outside click / Escape.
+  useEffect(() => {
+    if (!pickerOpen) return
+    const onDown = (e: MouseEvent) => {
+      if (pickerRef.current && !pickerRef.current.contains(e.target as Node)) setPickerOpen(false)
+    }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setPickerOpen(false)
+    }
+    document.addEventListener("mousedown", onDown)
+    document.addEventListener("keydown", onKey)
+    return () => {
+      document.removeEventListener("mousedown", onDown)
+      document.removeEventListener("keydown", onKey)
+    }
+  }, [pickerOpen])
 
   // Theme-aware emoji picker: data-theme wins, else follow the OS.
   const emojiTheme: Theme = useMemo(() => {
@@ -432,10 +529,21 @@ export default function ChatRoom() {
 
   useEffect(() => {
     const el = messagesContainerRef.current
-    if (el && nearBottomRef.current) {
+    if (!el) return
+    // On room entry with unread history, land on the "New" divider once
+    // instead of the bottom.
+    if (unreadBoundaryId && !scrolledToUnreadRef.current) {
+      const target = el.querySelector(`[data-mid="${unreadBoundaryId}"]`)
+      if (target) {
+        scrolledToUnreadRef.current = true
+        target.scrollIntoView({ block: "start" })
+        return
+      }
+    }
+    if (nearBottomRef.current) {
       el.scrollTo({ top: el.scrollHeight, behavior: "instant" as ScrollBehavior })
     }
-  }, [messages])
+  }, [messages, unreadBoundaryId])
 
   // Load the room list once — all public rooms, ordered server-side.
   useEffect(() => {
@@ -454,12 +562,15 @@ export default function ChatRoom() {
         const all: Room[] = data.rooms || []
         setRooms(all)
         const wanted = searchParams.get("room")
-        setRoom(
+        const lastRoom = store ? getLastRoom(store) : null
+        const chosen =
           all.find((r) => r.slug === wanted) ||
-            all.find((r) => r.slug === "general") ||
-            all[0] ||
-            null
-        )
+          all.find((r) => r.slug === lastRoom) ||
+          all.find((r) => r.slug === "general") ||
+          all[0] ||
+          null
+        setRoom(chosen)
+        if (chosen && store) setLastRoom(store, chosen.slug)
         setOnlineCount(data.onlineCount || 0)
         setFetchError(null)
       })
@@ -484,7 +595,15 @@ export default function ChatRoom() {
     setMessages([])
     setActiveMenu(null)
     setReplyingTo(null)
+    setUnreadBoundaryId(null)
     nearBottomRef.current = true
+    scrolledToUnreadRef.current = false
+    if (store) {
+      setLastRoom(store, slug)
+      // Entering a room clears its unread dot immediately — the message
+      // load below then advances the marker to the newest message.
+      if (next.latestAt) markSeenNow(next.id, next.latestAt)
+    }
     window.history.replaceState(null, "", `/chat?room=${slug}`)
   }
 
@@ -498,31 +617,49 @@ export default function ChatRoom() {
     let cancelled = false
     let timer: ReturnType<typeof setTimeout> | null = null
     let subscribedChannel: string | null = null
+    const roomId = room.id
 
+    // Single idempotent merge path for GET batches, Pusher pushes, and
+    // own-send/command responses — a message id renders at most once, and
+    // anything tagged with a different roomId is dropped (room-switch guard).
     const mergeFresh = (fresh: Message[]) => {
-      if (fresh.length === 0) return false
-      lastTsRef.current = fresh[fresh.length - 1].createdAt
-      let changed = false
-      setMessages((prev) => {
-        const seen = new Set(prev.map((m) => m.id))
-        const added = fresh.filter((m) => !seen.has(m.id))
-        if (!added.length) return prev
-        changed = true
-        return [...prev, ...added].slice(-100)
-      })
-      return changed
+      if (cancelled) return
+      const inRoom = fresh.filter((m) => m.roomId === roomId)
+      if (inRoom.length === 0) return
+      const newest = inRoom[inRoom.length - 1].createdAt
+      if (!lastTsRef.current || newest > lastTsRef.current) lastTsRef.current = newest
+      setMessages((prev) => mergeMessages(prev, inRoom))
+      if (!document.hidden) markSeenNow(roomId, newest)
     }
 
     const load = async () => {
       if (cancelled || document.hidden) return
       try {
+        const isInitial = !lastTsRef.current
         const url = lastTsRef.current
-          ? `/api/chat/messages?roomId=${room.id}&after=${encodeURIComponent(lastTsRef.current)}`
-          : `/api/chat/messages?roomId=${room.id}`
+          ? `/api/chat/messages?roomId=${roomId}&after=${encodeURIComponent(lastTsRef.current)}`
+          : `/api/chat/messages?roomId=${roomId}`
         const res = await fetch(url)
         if (!res.ok) return
         const data = await res.json()
-        mergeFresh(data.messages || [])
+        // The effect's cleanup sets cancelled on room switch — a stale
+        // response from the previous room can never land in the new list.
+        if (cancelled) return
+        const batch: Message[] = (data.messages || []).filter(
+          (m: Message) => m.roomId === roomId
+        )
+        if (isInitial && batch.length > 0 && store) {
+          // Anchor the "New" divider at the first post-seen message, then
+          // mergeFresh advances the marker past it. A room with no stored
+          // last-seen is baselined to its latest — nothing shows as unread
+          // on a first visit.
+          const seen = getLastSeen(store, roomId)
+          if (seen !== null) {
+            const fid = firstUnreadId(batch, seen)
+            if (fid) setUnreadBoundaryId(fid)
+          }
+        }
+        mergeFresh(batch)
       } catch { /* ignore transient errors */ }
     }
 
@@ -544,11 +681,24 @@ export default function ChatRoom() {
         const p = await getSharedPusher()
         // Effect may have cleaned up before the import resolved.
         if (cancelled || !p) return
-        const channelName = `private-chat-${room.id}`
+        const channelName = `private-chat-${roomId}`
         const channel = p.subscribe(channelName)
         subscribedChannel = channelName
         channel.bind("new-message", (m: Message) => {
-          if (!cancelled) mergeFresh([m])
+          if (isStaleBatch(m.roomId, roomId, cancelled)) return
+          mergeFresh([m])
+        })
+        // Staff room controls (lock/slowmode/clear) fan out on the same
+        // channel so every subscriber's UI updates without a remount.
+        channel.bind(CHAT_ROOM_STATE_EVENT, (s: RoomStateEvent) => {
+          if (cancelled) return
+          if (s.cleared) {
+            setMessages([])
+            setUnreadBoundaryId(null)
+          }
+          const patch = (r: Room) => (r.id === roomId ? applyRoomState(r, s) : r)
+          setRoom((prev) => (prev ? patch(prev) : prev))
+          setRooms((prev) => prev.map(patch))
         })
       } catch { /* stay on polling */ }
     }
@@ -563,17 +713,12 @@ export default function ChatRoom() {
     return () => {
       cancelled = true
       if (timer) clearTimeout(timer)
-      if (subscribedChannel && sharedPusher) {
-        sharedPusher.unsubscribe(subscribedChannel)
+      if (subscribedChannel) {
+        peekSharedPusher()?.unsubscribe(subscribedChannel)
       }
       document.removeEventListener("visibilitychange", onVisible)
     }
   }, [session, room?.id]) // eslint-disable-line react-hooks/exhaustive-deps -- room identity, not the object
-
-  // Focus the composer when the room is ready — chat is the point of this page.
-  useEffect(() => {
-    if (room && !room.locked) inputRef.current?.focus()
-  }, [room?.id, room?.locked]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const mentionUsers = useMemo(() => {
     const seen = new Map<string, Author>()
@@ -704,7 +849,7 @@ export default function ChatRoom() {
             toast(`Cleared ${data.cleared} messages`, "success")
           }
           if (data.message && data.message.author) {
-            setMessages((prev) => [...prev, data.message])
+            setMessages((prev) => mergeMessages(prev, [data.message]))
             nearBottomRef.current = true
           }
         }
@@ -721,7 +866,9 @@ export default function ChatRoom() {
 
         if (response.ok) {
           const data = await response.json()
-          setMessages((prev) => [...prev, data.message])
+          // Same idempotent merge as push/poll — if Pusher already
+          // delivered this message, the id dedupes the response copy.
+          setMessages((prev) => mergeMessages(prev, [data.message]))
           nearBottomRef.current = true
         } else {
           let message = "Message failed to send"
@@ -818,107 +965,108 @@ export default function ChatRoom() {
   }
 
   return (
-    <div className="flex h-full min-h-0 gap-4">
-      {/* Room rail — desktop */}
-      <nav aria-label="Chat rooms" className="hidden lg:flex w-52 shrink-0 flex-col rounded-xl border border-border bg-card overflow-hidden">
-        <div className="px-3 py-2.5 border-b border-border text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-          Rooms
-        </div>
-        <ul className="flex-1 overflow-y-auto p-1.5 space-y-0.5">
-          {rooms.map((r) => (
-            <li key={r.id}>
-              <button
-                onClick={() => switchRoom(r.slug)}
-                aria-current={room?.id === r.id ? "true" : undefined}
-                className={cn(
-                  "w-full flex items-center gap-2 rounded-lg px-2.5 py-2 text-left text-sm transition-colors",
-                  room?.id === r.id
-                    ? "bg-primary/10 text-primary font-medium"
-                    : "text-muted-foreground hover:bg-secondary hover:text-foreground"
-                )}
-              >
-                {r.accessible === false ? (
-                  <Lock className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
-                ) : (
-                  <Hash className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
-                )}
-                <span className="truncate">{r.name}</span>
-                {r.locked && <Lock className="w-3 h-3 ml-auto shrink-0" aria-label="Locked" />}
-                {r.accessible === false && (
-                  <span className="ml-auto shrink-0 text-[9px] text-muted-foreground">{r.requiredRep?.toLocaleString()} rep</span>
-                )}
-              </button>
-            </li>
-          ))}
-        </ul>
-      </nav>
-
-      {/* Main chat card */}
+    <div className="flex h-full min-h-0">
+      {/* Main chat card — conversation-first: a compact header carries the
+          room picker + presence; everything else is message viewport. */}
       <div className="flex-1 min-w-0 flex flex-col rounded-xl border border-border bg-card overflow-hidden">
-        {/* Header */}
-        <div className="p-3 border-b border-border flex items-center justify-between gap-3 shrink-0">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 shrink-0">
-              <MessageCircle className="w-5 h-5 text-primary" />
-            </div>
-            <div className="min-w-0">
-              <h1 className="font-semibold text-sm leading-tight truncate flex items-center gap-1.5">
-                {room?.name ?? "Community Chat"}
-                {room?.locked && (
-                  <span className="inline-flex items-center gap-1 text-[10px] font-medium text-amber-500">
-                    <Lock className="w-3 h-3" /> Locked
-                  </span>
-                )}
-                {room && room.slowModeSeconds > 0 && (
-                  <span className="inline-flex items-center gap-1 text-[10px] font-medium text-muted-foreground">
-                    <Timer className="w-3 h-3" /> {room.slowModeSeconds}s slow mode
-                  </span>
-                )}
-              </h1>
-              <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                <span className="flex h-1.5 w-1.5 rounded-full bg-green-400" aria-hidden="true" />
-                <span className="truncate">
-                  {room ? `${onlineCount} growers online${room.description ? ` · ${room.description}` : ""}` : "Community live chat"}
-                </span>
-              </div>
-            </div>
-          </div>
-          {(!room || fetchError) && (
+        <div className="flex items-center gap-2 px-2 py-1.5 border-b border-border shrink-0">
+          <div className="relative min-w-0" ref={pickerRef}>
             <button
-              onClick={() => setRetryCount((c) => c + 1)}
-              disabled={loading}
-              className="p-1.5 hover:bg-secondary rounded-lg transition-colors disabled:opacity-50"
-              aria-label="Retry loading chat"
-              title="Retry loading chat"
+              onClick={() => setPickerOpen((o) => !o)}
+              className="flex max-w-full items-center gap-1.5 rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-secondary"
+              aria-haspopup="listbox"
+              aria-expanded={pickerOpen}
+              aria-label="Choose chat room"
             >
-              <RefreshCw className={cn("w-4 h-4", loading && "animate-spin")} />
-            </button>
-          )}
-        </div>
-
-        {/* Room chips — mobile/tablet */}
-        <div
-          role="tablist"
-          aria-label="Chat rooms"
-          className="lg:hidden flex gap-1.5 overflow-x-auto px-3 py-2 border-b border-border shrink-0"
-        >
-          {rooms.map((r) => (
-            <button
-              key={r.id}
-              role="tab"
-              aria-selected={room?.id === r.id}
-              onClick={() => switchRoom(r.slug)}
-              className={cn(
-                "shrink-0 inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium transition-colors",
-                room?.id === r.id
-                  ? "bg-primary text-primary-foreground"
-                  : "bg-secondary text-muted-foreground hover:text-foreground"
+              {room?.accessible === false ? (
+                <Lock className="w-4 h-4 shrink-0 text-amber-500" aria-hidden="true" />
+              ) : (
+                <Hash className="w-4 h-4 shrink-0 text-primary" aria-hidden="true" />
               )}
-            >
-              {(r.locked || r.accessible === false) && <Lock className="w-3 h-3" aria-hidden="true" />}
-              {r.name}
+              <span className="min-w-0 truncate font-semibold text-sm">
+                {room?.name ?? "Community Chat"}
+              </span>
+              {room?.locked && (
+                <span className="inline-flex shrink-0 items-center gap-1 text-[10px] font-medium text-amber-500">
+                  <Lock className="w-3 h-3" /> Locked
+                </span>
+              )}
+              {room && room.slowModeSeconds > 0 && (
+                <span className="inline-flex shrink-0 items-center gap-1 text-[10px] font-medium text-muted-foreground">
+                  <Timer className="w-3 h-3" /> {room.slowModeSeconds}s
+                </span>
+              )}
+              <ChevronDown
+                className={cn("w-3.5 h-3.5 shrink-0 text-muted-foreground transition-transform", pickerOpen && "rotate-180")}
+                aria-hidden="true"
+              />
             </button>
-          ))}
+            {pickerOpen && (
+              <div
+                role="listbox"
+                aria-label="Chat rooms"
+                className="absolute left-0 top-full z-30 mt-1 w-64 max-w-[calc(100vw-2rem)] rounded-xl border border-border bg-card p-1.5 shadow-lg"
+              >
+                {rooms.map((r) => (
+                  <button
+                    key={r.id}
+                    role="option"
+                    aria-selected={room?.id === r.id}
+                    onClick={() => {
+                      switchRoom(r.slug)
+                      setPickerOpen(false)
+                    }}
+                    className={cn(
+                      "w-full flex items-center gap-2 rounded-lg px-2.5 py-2 text-left text-sm transition-colors",
+                      room?.id === r.id
+                        ? "bg-primary/10 text-primary font-medium"
+                        : "text-muted-foreground hover:bg-secondary hover:text-foreground"
+                    )}
+                  >
+                    {r.accessible === false ? (
+                      <Lock className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+                    ) : (
+                      <Hash className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+                    )}
+                    <span className="truncate flex-1">{r.name}</span>
+                    {unreadIds.has(r.id) && (
+                      <span
+                        className="h-2 w-2 shrink-0 rounded-full bg-primary"
+                        role="status"
+                        aria-label="New activity"
+                      />
+                    )}
+                    {r.locked && <Lock className="w-3 h-3 shrink-0" aria-label="Locked" />}
+                    {r.accessible === false && (
+                      <span className="shrink-0 text-[9px] text-muted-foreground">
+                        {r.requiredRep?.toLocaleString()} rep
+                      </span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          <div className="ml-auto flex shrink-0 items-center gap-1.5">
+            <span
+              className="flex items-center gap-1.5 text-xs text-muted-foreground"
+              title="Members active on TerpTalk in the last 15 minutes"
+            >
+              <span className="flex h-1.5 w-1.5 rounded-full bg-green-400" aria-hidden="true" />
+              {onlineCount} online
+            </span>
+            {(!room || fetchError) && (
+              <button
+                onClick={() => setRetryCount((c) => c + 1)}
+                disabled={loading}
+                className="p-1.5 hover:bg-secondary rounded-lg transition-colors disabled:opacity-50"
+                aria-label="Retry loading chat"
+                title="Retry loading chat"
+              >
+                <RefreshCw className={cn("w-4 h-4", loading && "animate-spin")} />
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Messages */}
@@ -953,20 +1101,41 @@ export default function ChatRoom() {
                 </p>
               </div>
             ) : (
-              messages.map((msg) => (
-                <MessageRow
-                  key={msg.id}
-                  msg={msg}
-                  isMenuOpen={activeMenu === msg.id}
-                  isOwn={msg.author.id === myId}
-                  canManage={isModerator && msg.author.id !== myId}
-                  isAdmin={isAdmin}
-                  onToggleMenu={toggleMenu}
-                  onReply={startReply}
-                  onModerate={takeModerationAction}
-                  onDeleteOwn={deleteOwnMessage}
-                />
-              ))
+              messages.map((msg, i) => {
+                // Group consecutive same-author messages — the first row of
+                // each run keeps the full identity header.
+                const prev = messages[i - 1]
+                const grouped =
+                  !!prev &&
+                  prev.author.id === msg.author.id &&
+                  prev.author.username !== BOT_USERNAME &&
+                  msg.author.username !== BOT_USERNAME &&
+                  !msg.replyTo &&
+                  new Date(msg.createdAt).getTime() - new Date(prev.createdAt).getTime() < GROUP_WINDOW_MS
+                return (
+                  <Fragment key={msg.id}>
+                    {msg.id === unreadBoundaryId && (
+                      <div className="flex items-center gap-2 py-0.5" role="separator" aria-label="New messages">
+                        <span className="h-px flex-1 bg-primary/30" />
+                        <span className="text-[10px] font-semibold uppercase tracking-wider text-primary">New</span>
+                        <span className="h-px flex-1 bg-primary/30" />
+                      </div>
+                    )}
+                    <MessageRow
+                      msg={msg}
+                      compact={grouped}
+                      isMenuOpen={activeMenu === msg.id}
+                      isOwn={msg.author.id === myId}
+                      canManage={isModerator && msg.author.id !== myId}
+                      isAdmin={isAdmin}
+                      onToggleMenu={toggleMenu}
+                      onReply={startReply}
+                      onModerate={takeModerationAction}
+                      onDeleteOwn={deleteOwnMessage}
+                    />
+                  </Fragment>
+                )
+              })
             )}
           </div>
 
