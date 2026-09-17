@@ -422,12 +422,25 @@ export async function reverseReputationBySource(
   return reversed
 }
 
-/** Reverse every active event a user *caused* (e.g. likes they granted). */
+// Event types whose actorId is the member who *granted* the reputation —
+// the only attribution an account-takedown sweep may claw back. Other types
+// use actorId differently: STAFF_ADJUSTMENT records the issuing staff member
+// (audit attribution, not a grant) and ACCEPT_MARKED records the answerer
+// whose post was accepted (the OP granted themselves the bonus). Reversing
+// either on ban/delete would undo staff actions and dock third parties who
+// earned the rep. Fail-closed: any type not listed here is never swept.
+const ACTOR_GRANTED_TYPES = new Set([
+  "LIKE_RECEIVED",   // liker granted the +2
+  "HELPFUL_ANSWER",  // acceptor granted the +30
+  "REFERRAL",        // referee's qualification granted the referrer +25
+])
+
+/** Reverse every active event a user *granted* (e.g. likes they cast). */
 export async function reverseReputationByActor(actorId: string, reason: string): Promise<number> {
   let events
   try {
     events = await prisma.reputationEvent.findMany({
-      where: { actorId, reversedAt: null, reversalOfId: null, type: { not: REP_EVENT_TYPES.REVERSAL } },
+      where: { actorId, reversedAt: null, reversalOfId: null, type: { in: [...ACTOR_GRANTED_TYPES] } },
       select: { id: true },
     })
   } catch (error) {

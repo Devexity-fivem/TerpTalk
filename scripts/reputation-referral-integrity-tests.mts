@@ -10,6 +10,7 @@ import {
   applyReputationAward,
   awardReputation,
   reconcileReferralPayouts,
+  reverseReputationByActor,
   reverseReputationEvent,
   runEffectStage,
 } from "@/lib/reputation"
@@ -299,6 +300,117 @@ async function run() {
     console.error = origErr2
   }
   ok(logged2.length === 0, "successful award produces no error log")
+
+  // ── reverseReputationByActor scope ────────────────────────────────
+  // Canonical invariant (callsite comments): an account takedown voids
+  // reputation the account *granted others* — likes cast, answers
+  // accepted, referral payouts their qualification triggered. Events
+  // where actorId is audit or incidental attribution (STAFF_ADJUSTMENT's
+  // issuing staff member, ACCEPT_MARKED's answerer) are out of scope.
+  ok(repSrc.includes("ACTOR_GRANTED_TYPES"), "byActor scope is an explicit granted-type allowlist")
+
+  const granter = await makeUser("granter")   // the account being taken down
+  const bystander = await makeUser("bystand") // unrelated third party
+
+  // Positive: events the account granted are reversed.
+  const likeTarget = await makeUser("liked")
+  await applyReputationAward(likeTarget.id, "LIKE_RECEIVED", 2, "t", {
+    key: `${P}:scope:like1`, actorId: granter.id, sourceType: "POST", sourceId: "sp1",
+  })
+  const answerer = await makeUser("answerer")
+  await applyReputationAward(answerer.id, "HELPFUL_ANSWER", REP_POINTS.HELPFUL_ANSWER, "t", {
+    key: `${P}:scope:accept`, actorId: granter.id, sourceType: "POST", sourceId: "sp2",
+  })
+  const scopeReferrer = await makeUser("scoperef")
+  const scopeReferee = granter // granter's qualification paid the referrer
+  await applyReputationAward(scopeReferrer.id, "REFERRAL", REP_POINTS.REFERRAL, "t", {
+    key: `${P}:scope:ref`, actorId: scopeReferee.id,
+  })
+  const likeTarget2 = await makeUser("liked2")
+  await applyReputationAward(likeTarget2.id, "LIKE_RECEIVED", 2, "t", {
+    key: `${P}:scope:like2`, actorId: granter.id, sourceType: "POST", sourceId: "sp3",
+  })
+
+  const likeRepBefore = await repOf(likeTarget.id)
+  const swept = await reverseReputationByActor(granter.id, "Granting account permanently banned")
+  ok(swept === 4, "byActor reverses all granted events (like, accept, referral, like)", swept)
+  ok((await repOf(likeTarget.id)) === likeRepBefore - 2, "like recipient loses exactly the granted rep")
+  ok((await repOf(answerer.id)) === 0, "accepted-answer rep clawed back from answerer")
+  ok((await repOf(scopeReferrer.id)) === 0, "referral payout clawed back from referrer")
+
+  // Negative: non-grant actorId attributions are NOT swept.
+  const staffUser = await makeUser("staffish") // acts as the issuing staff account
+  const adjTarget = await makeUser("adjtarget")
+  await applyReputationAward(adjTarget.id, "STAFF_ADJUSTMENT", 50, "staff note", {
+    key: `${P}:scope:adj`, actorId: staffUser.id,
+  })
+  const opUser = await makeUser("op")
+  // ACCEPT_MARKED: recipient is the OP, actorId is the answerer involved.
+  await applyReputationAward(opUser.id, "ACCEPT_MARKED", REP_POINTS.ACCEPT_MARKED, "t", {
+    key: `${P}:scope:acceptop`, actorId: staffUser.id, sourceType: "THREAD", sourceId: "st1",
+  })
+  // The account's own earned rep (no actorId) and rep granted TO it by
+  // others must also be untouched.
+  await pushRep(staffUser.id, 30, "staffish-earned")
+  await applyReputationAward(staffUser.id, "LIKE_RECEIVED", 2, "t", {
+    key: `${P}:scope:like-in`, actorId: bystander.id, sourceType: "POST", sourceId: "sp9",
+  })
+  // A bystander event whose sourceId coincidentally equals the account id —
+  // sourceId is never actor attribution.
+  await applyReputationAward(bystander.id, "POST_CREATED", 2, "t", {
+    key: `${P}:scope:coincide`, sourceType: "POST", sourceId: staffUser.id,
+  })
+
+  const staffSwept = await reverseReputationByActor(staffUser.id, "Granting account permanently banned")
+  ok(staffSwept === 0, "byActor does not touch staff-issued adjustments or incidental attribution", staffSwept)
+  ok((await repOf(adjTarget.id)) === 50, "staff adjustment on a third party survives the issuer's ban")
+  ok((await repOf(opUser.id)) === REP_POINTS.ACCEPT_MARKED, "OP keeps ACCEPT_MARKED when the answerer is banned")
+  ok((await repOf(staffUser.id)) === 32, "account's own earned + received rep untouched")
+  ok((await repOf(bystander.id)) === 2, "coincidental sourceId match is not actor attribution")
+
+  // Idempotent: a second sweep has nothing left to do.
+  ok((await reverseReputationByActor(granter.id, "again")) === 0, "byActor is idempotent — no double reversal")
+
+  // Descendants are never selected: pre-reverse one granted event, then the
+  // sweep must not count the REVERSAL row or deduct twice.
+  const granter2 = await makeUser("granter2")
+  const liked3 = await makeUser("liked3")
+  await applyReputationAward(liked3.id, "LIKE_RECEIVED", 2, "t", {
+    key: `${P}:scope:like3`, actorId: granter2.id, sourceType: "POST", sourceId: "sp4",
+  })
+  await applyReputationAward(liked3.id, "LIKE_RECEIVED", 2, "t", {
+    key: `${P}:scope:like4`, actorId: granter2.id, sourceType: "POST", sourceId: "sp5",
+  })
+  const evLike3 = await prisma.reputationEvent.findUnique({ where: { key: `${P}:scope:like3` } })
+  await reverseReputationEvent(evLike3!.id, "pre-reversed", granter2.id) // descendant carries actorId too
+  const liked3RepBefore = await repOf(liked3.id)
+  const swept2 = await reverseReputationByActor(granter2.id, "Granting account permanently banned")
+  ok(swept2 === 1, "already-reversed event and its REVERSAL descendant are skipped", swept2)
+  ok((await repOf(liked3.id)) === liked3RepBefore - 2, "no double deduction through the descendant path")
+
+  // Non-final byActor reversal can still be organically reinstated —
+  // unchanged semantics (a reinstated member's re-like re-awards).
+  const reinstateRes = await applyReputationAward(liked3.id, "LIKE_RECEIVED", 2, "t", {
+    key: `${P}:scope:like4`, actorId: granter2.id, sourceType: "POST", sourceId: "sp5",
+  })
+  ok(reinstateRes.awarded === true && reinstateRes.reinstated === true, "non-final byActor reversal reinstates on re-grant", reinstateRes)
+
+  // Final reversal stays locked even when the granting account is later swept.
+  const granter3 = await makeUser("granter3")
+  const liked5 = await makeUser("liked5")
+  await applyReputationAward(liked5.id, "LIKE_RECEIVED", 2, "t", {
+    key: `${P}:scope:like5`, actorId: granter3.id, sourceType: "POST", sourceId: "sp6",
+  })
+  const evLike5 = await prisma.reputationEvent.findUnique({ where: { key: `${P}:scope:like5` } })
+  await reverseReputationEvent(evLike5!.id, "staff final", "staff", { final: true })
+  const liked5Rep = await repOf(liked5.id)
+  await reverseReputationByActor(granter3.id, "Granting account permanently banned")
+  const evLike5After = await prisma.reputationEvent.findUnique({
+    where: { key: `${P}:scope:like5` },
+    select: { reversedAt: true, reversalFinal: true },
+  })
+  ok(evLike5After?.reversalFinal === true && evLike5After.reversedAt !== null, "final reversal survives a byActor sweep")
+  ok((await repOf(liked5.id)) === liked5Rep, "final-reversed event is not re-deducted")
 
   // ── Reconciliation bound + field minimality ──────────────────────
   const bounded = await reconcileReferralPayouts(1)
