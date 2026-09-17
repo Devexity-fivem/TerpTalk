@@ -305,7 +305,10 @@ async function run() {
       "/api/chat/rooms?badge=1",
       "chatUnread",
     ], "chat badge poll owned by panel provider")
-    assertSource("components/footer.tsx", ['href="/chat"'], "footer chat link")
+    // Footer chat lives in a session-aware client component: members open
+    // the persistent panel in place; guests keep the real /chat link.
+    assertSource("components/footer.tsx", ["FooterChatLink"], "footer delegates chat link")
+    assertSource("components/footer-chat-link.tsx", ['href="/chat"', "openPanel"], "footer chat link + panel open")
     assertSource("components/user-menu.tsx", ['href: "/chat"'], "user menu chat link")
     assertSource("components/onboarding-stepper.tsx", ['href="/chat"', "live chat"], "onboarding chat mention")
     assertSource("app/page.tsx", ['href: "/chat"'], "homepage chat explore card")

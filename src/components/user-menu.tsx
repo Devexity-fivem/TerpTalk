@@ -7,6 +7,7 @@ import {
   User, Award, TrendingUp, Leaf, Mail, Bell, Settings, Shield, LogOut, ChevronDown, HelpCircle, MessagesSquare,
 } from "lucide-react"
 import { Avatar } from "@/components/ui/avatar"
+import { useChatPanel } from "@/components/chat-panel"
 import { cn } from "@/lib/utils"
 
 const LINKS = [
@@ -24,6 +25,7 @@ const LINKS = [
 
 export default function UserMenu() {
   const { data: session } = useSession()
+  const { openPanel } = useChatPanel()
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
 
@@ -91,7 +93,18 @@ export default function UserMenu() {
             <Link
               key={href}
               href={href}
-              onClick={() => setOpen(false)}
+              // Chat opens the persistent panel in place instead of
+              // navigating to /chat — matches the primary nav and footer.
+              // This menu only renders for signed-in users.
+              onClick={
+                href === "/chat"
+                  ? (e) => {
+                      e.preventDefault()
+                      setOpen(false)
+                      openPanel()
+                    }
+                  : () => setOpen(false)
+              }
               className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm hover:bg-secondary transition-colors"
               role="menuitem"
             >
