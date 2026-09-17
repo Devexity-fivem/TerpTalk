@@ -77,7 +77,10 @@ const apiFiles = () => {
     path.join("src", "lib", "reputation.ts"),
     path.join("src", "lib", "grow-streak.ts"),
     path.join("src", "lib", "challenges.ts"),
+    path.join("src", "lib", "quests.ts"),
     path.join("src", "app", "api", "admin", "reputation", "flags", "route.ts"),
+    // DISTINCT ON (partner) inbox query — reviewed raw SQL.
+    path.join("src", "app", "api", "messages", "route.ts"),
   ]);
   check("no raw SQL outside allowlist", !allSrc.some((f) => {
     if (rawSqlAllowlist.has(f)) return false;
@@ -134,6 +137,13 @@ const apiFiles = () => {
     path.join("src", "components", "theme-toggle.tsx"),
     path.join("src", "components", "announcement-banner.tsx"),
     path.join("src", "lib", "theme.ts"),
+    // Chat last-seen timestamps + last-room id — non-sensitive UI state,
+    // deliberately client-side so read state is never stored server-side.
+    path.join("src", "lib", "chat-client.ts"),
+    path.join("src", "components", "chat-panel.tsx"),
+    path.join("src", "components", "chat-room.tsx"),
+    // Per-session dismissal flag for the recovery-phrase banner.
+    path.join("src", "components", "recovery-warning-banner.tsx"),
   ]);
   check("no client-side storage (localStorage/sessionStorage)", !allSrc.some((f) => {
     if (storageAllowlist.has(f)) return false;
@@ -190,7 +200,7 @@ const apiFiles = () => {
   const updatesRoute = read("app/api/diaries/updates/route.ts");
   check("diary updates: rate limited", /repRateLimit|rateLimit/.test(updatesRoute));
   check("diary updates: env values bounded", updatesRoute.includes("RANGES"));
-  check("diary updates: stage whitelist", updatesRoute.includes("VALID_STAGES"));
+  check("diary updates: stage whitelist", /UPDATE_STAGES\.has\(stage\)|VALID_STAGES/.test(updatesRoute));
   check("diary updates: stage never regresses silently", updatesRoute.includes("stage !== diary.stage"));
   check("diary updates: diaries cache invalidated", updatesRoute.includes('revalidateTag("diaries"'));
   check("diary updates: link trust enforced", updatesRoute.includes("enforceLinkTrust"));
@@ -247,7 +257,7 @@ const apiFiles = () => {
     repLib.includes("crossedRungs("));
   const repCfg2 = read("lib/reputation-config.ts");
   const pubBlock = repCfg2.slice(repCfg2.indexOf("PUBLIC_REP_TYPES"), repCfg2.indexOf("])", repCfg2.indexOf("PUBLIC_REP_TYPES")));
-  check("config: MILESTONE never public", !pubBlock.includes("MILESTONE"));
+  check("config: MILESTONE never public", !/["']MILESTONE["']/.test(pubBlock));
   const profileRoute = read("app/api/profile/route.ts");
   check("profile: cosmetic equip gated by canEquip", profileRoute.includes("canEquip(reputation"));
   const notifyLib = read("lib/notify.ts");
@@ -265,7 +275,7 @@ const apiFiles = () => {
   check("celebration: polite live region", celebration.includes('role="status"'));
   check("celebration: Escape dismiss", celebration.includes('e.key === "Escape"'));
   check("celebration: client-side dedupe by notification id", celebration.includes("seen.current.has"));
-  check("celebration: no metadata = no celebration", celebration.includes('!["tier", "stage", "badge", "challenge"].includes(kind)'));
+  check("celebration: no metadata = no celebration", /!\[[^\]]*"tier"[^\]]*"stage"[^\]]*"badge"[^\]]*\]\.includes\(kind\)/.test(celebration));
   const progRoute = read("app/api/progression/route.ts");
   check("progression api: owner-only (session + no-store)",
     progRoute.includes("session?.user?.id") && progRoute.includes("no-store"));

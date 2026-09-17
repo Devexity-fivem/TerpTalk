@@ -295,12 +295,16 @@ async function run() {
     // ─────────────────────────────────────────────────────────────
     assertSource("components/navigation.tsx", [
       'href: "/chat"',
-      "/api/chat/rooms?badge=1",
-      "chatOnline",
       "/api/messages?unread=1",
       'href="/search"',
       'href="/messages"',
-    ], "nav chat routing + activity + DM badge + mobile search/messages")
+    ], "nav chat routing + DM badge + mobile search/messages")
+    // The chat activity badge poll lives in the panel provider (single
+    // owner) — the nav consumes chatOnline/chatUnread via context.
+    assertSource("components/chat-panel.tsx", [
+      "/api/chat/rooms?badge=1",
+      "chatUnread",
+    ], "chat badge poll owned by panel provider")
     assertSource("components/footer.tsx", ['href="/chat"'], "footer chat link")
     assertSource("components/user-menu.tsx", ['href: "/chat"'], "user menu chat link")
     assertSource("components/onboarding-stepper.tsx", ['href="/chat"', "live chat"], "onboarding chat mention")

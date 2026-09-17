@@ -203,5 +203,14 @@ check("panel opens without subscribing (subscribe lives inside ChatRoom)", () =>
   assert.ok(!panel.includes(".subscribe("), "dock itself holds no subscription")
 })
 
+check("ChatRoom unsubscribes on unmount/room switch (socket cleanup)", () => {
+  // A commented-out or removed unsubscribe leaks a channel per open/switch.
+  // Assert the call is live code inside an effect cleanup, not a comment.
+  assert.ok(
+    /return \(\) => \{[\s\S]*?^\s*peekSharedPusher\(\)\?\.unsubscribe\(/m.test(room),
+    "unsubscribe must run in the subscription effect's cleanup"
+  )
+})
+
 console.log(`\n${passed} passed, ${failed} failed`)
 if (failed > 0) process.exit(1)

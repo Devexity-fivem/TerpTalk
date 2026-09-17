@@ -542,3 +542,5 @@ const main = async () => {
 }
 
 main()
+  .then(() => process.exit(results.some(([s]) => s === "FAIL") ? 1 : 0))
+  .catch((e) => { console.error(e); process.exit(1) })
