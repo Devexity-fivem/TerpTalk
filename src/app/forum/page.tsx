@@ -135,7 +135,7 @@ export default async function ForumPage() {
 
         <div className="grid lg:grid-cols-3 gap-6">
           {/* Main Forum Categories */}
-          <div className="lg:col-span-2 space-y-6">
+          <div className="min-w-0 lg:col-span-2 space-y-6">
             {/* Categories */}
             <div className="bg-card rounded-lg border border-border">
               <div className="p-4 border-b border-border">
@@ -149,12 +149,12 @@ export default async function ForumPage() {
                     className="block p-4 hover:bg-secondary/50 transition-colors"
                   >
                     <div className="flex items-start gap-4">
-                      <div className="bg-primary/10 p-3 rounded-lg">
+                      <div className="bg-primary/10 p-3 rounded-lg shrink-0">
                         <MessageSquare className="w-6 h-6 text-primary" />
                       </div>
-                      <div className="flex-1">
-                        <h3 className="font-semibold mb-1">{category.name}</h3>
-                        <p className="text-sm text-muted-foreground mb-2">{category.description}</p>
+                      <div className="flex-1 min-w-0">
+                        <h3 className="font-semibold mb-1 break-words">{category.name}</h3>
+                        <p className="text-sm text-muted-foreground mb-2 break-words">{category.description}</p>
                         <div className="flex items-center gap-4 text-sm text-muted-foreground">
                           <span className="flex items-center gap-1">
                             <MessageSquare className="w-4 h-4" />
@@ -187,17 +187,17 @@ export default async function ForumPage() {
                     className="block p-4 hover:bg-secondary/50 transition-colors"
                   >
                     <div className="flex items-start gap-4">
-                      <div className="flex-1">
+                      <div className="flex-1 min-w-0">
                         <h3 className="font-semibold mb-1 flex items-center gap-2">
                           {unreadThreadIds.has(thread.id) && (
                             <span className="h-2 w-2 rounded-full bg-primary shrink-0" role="img" aria-label="Unread" title="New activity" />
                           )}
-                          {thread.title}
+                          <span className="min-w-0 break-words">{thread.title}</span>
                         </h3>
                         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
-                          <span className="flex items-center gap-1">
-                            <Users className="w-4 h-4" />
-                            {thread.author.profile?.username || thread.author.name}
+                          <span className="flex min-w-0 items-center gap-1">
+                            <Users className="w-4 h-4 shrink-0" />
+                            <span className="truncate">{thread.author.profile?.username || thread.author.name}</span>
                             <RoleBadge role={thread.author.role} />
                         <TierChip reputation={thread.author.profile?.reputation ?? 0} publicMilestoneOptOut={thread.author.profile?.publicMilestoneOptOut} />
                           </span>
@@ -222,7 +222,7 @@ export default async function ForumPage() {
           </div>
 
           {/* Sidebar */}
-          <div className="space-y-6">
+          <div className="min-w-0 space-y-6">
             {/* Followed discussions — personalized, so it outranks stats */}
             <FollowedThreads items={followedItems} />
 

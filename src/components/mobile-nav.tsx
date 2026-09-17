@@ -47,7 +47,7 @@ export default function MobileNav({ unread, chatUnread }: MobileNavProps) {
         {ITEMS.map(({ href, label, icon: Icon, exact }) => {
           const active = isActive(href, exact) || (href === "/chat" && chatOpen)
           return (
-            <li key={href} className="flex-1">
+            <li key={href} className="min-w-0 flex-1">
               <Link
                 href={href}
                 aria-current={isActive(href, exact) ? "page" : undefined}
@@ -62,7 +62,7 @@ export default function MobileNav({ unread, chatUnread }: MobileNavProps) {
                     : undefined
                 }
                 className={cn(
-                  "flex h-14 flex-col items-center justify-center gap-0.5 text-[11px] font-medium transition-colors",
+                  "flex h-14 min-w-0 flex-col items-center justify-center gap-0.5 px-0.5 text-[11px] font-medium transition-colors",
                   active ? "text-primary" : "text-muted-foreground"
                 )}
               >
@@ -76,18 +76,18 @@ export default function MobileNav({ unread, chatUnread }: MobileNavProps) {
                     />
                   )}
                 </span>
-                {label}
+                <span className="max-w-full truncate">{label}</span>
               </Link>
             </li>
           )
         })}
         {session && (
-          <li className="flex-1">
+          <li className="min-w-0 flex-1">
             <Link
               href="/notifications"
               aria-current={isActive("/notifications") ? "page" : undefined}
               className={cn(
-                "relative flex h-14 flex-col items-center justify-center gap-0.5 text-[11px] font-medium transition-colors",
+                "relative flex h-14 min-w-0 flex-col items-center justify-center gap-0.5 px-0.5 text-[11px] font-medium transition-colors",
                 isActive("/notifications") ? "text-primary" : "text-muted-foreground"
               )}
             >
@@ -103,21 +103,21 @@ export default function MobileNav({ unread, chatUnread }: MobileNavProps) {
                   </span>
                 )}
               </span>
-              Alerts
+              <span className="max-w-full truncate">Alerts</span>
             </Link>
           </li>
         )}
-        <li className="flex-1">
+        <li className="min-w-0 flex-1">
           <Link
             href={accountHref}
             aria-current={isActive("/profile") ? "page" : undefined}
             className={cn(
-              "flex h-14 flex-col items-center justify-center gap-0.5 text-[11px] font-medium transition-colors",
+              "flex h-14 min-w-0 flex-col items-center justify-center gap-0.5 px-0.5 text-[11px] font-medium transition-colors",
               isActive("/profile") ? "text-primary" : "text-muted-foreground"
             )}
           >
             <User className="h-5 w-5" aria-hidden="true" />
-            {accountLabel}
+            <span className="max-w-full truncate">{accountLabel}</span>
           </Link>
         </li>
       </ul>

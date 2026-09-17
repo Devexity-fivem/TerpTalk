@@ -165,21 +165,24 @@ export function Navigation() {
   return (
     <>
       <nav id="tt-top-nav" className="sticky top-0 z-50 border-b border-border bg-card/95 backdrop-blur">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+        <div className="mx-auto max-w-7xl px-3 sm:px-6 lg:px-8">
           <div className="flex h-16 items-center justify-between gap-2">
-            {/* Logo */}
-            <Link href="/" className="flex shrink-0 items-center gap-2" aria-label="TerpTalk home" title="Go to homepage">
-              <div className="rounded-xl bg-primary/15 p-2 ring-1 ring-primary/30">
-                <CannabisLeaf className="h-6 w-6 text-primary" />
+            {/* Logo — compact below sm so the header fits 320px devices;
+                the Beta chip only appears once there's room for it. */}
+            <Link href="/" className="flex shrink-0 items-center gap-1.5 sm:gap-2" aria-label="TerpTalk home" title="Go to homepage">
+              <div className="rounded-xl bg-primary/15 p-1.5 ring-1 ring-primary/30 sm:p-2">
+                <CannabisLeaf className="h-5 w-5 text-primary sm:h-6 sm:w-6" />
               </div>
-              <span className="text-lg font-bold tracking-tight">TerpTalk</span>
-              <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-500">
+              <span className="text-base font-bold tracking-tight sm:text-lg">TerpTalk</span>
+              <span className="hidden rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-500 sm:inline">
                 Beta
               </span>
             </Link>
 
-            {/* Desktop primary links */}
-            <div className="hidden items-center gap-1 lg:flex">
+            {/* Desktop primary links — xl and up only; below that the
+                drawer carries the full nav so lg has room for the
+                authenticated control cluster. */}
+            <div className="hidden items-center gap-1 xl:flex">
               {DESKTOP_LINKS.map(({ href, label, icon: Icon }) => (
                 <Link
                   key={href}
@@ -213,7 +216,7 @@ export function Navigation() {
             </div>
 
             {/* Right side */}
-            <div className="flex items-center gap-1.5">
+            <div className="flex min-w-0 items-center gap-1 sm:gap-1.5">
               <form
                 action="/search"
                 className="hidden md:block"
@@ -228,7 +231,7 @@ export function Navigation() {
                   <input
                     name="q"
                     placeholder="Search..."
-                    className="w-40 rounded-lg border border-border bg-background py-1.5 pl-8 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring lg:w-52"
+                    className="w-40 rounded-lg border border-border bg-background py-1.5 pl-8 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring lg:w-52 xl:w-40 2xl:w-52"
                   />
                 </label>
               </form>
@@ -287,11 +290,12 @@ export function Navigation() {
                 </>
               )}
 
-              {/* Mobile search entry — the search input is md+; below that
-                  this icon is the only direct search affordance. */}
+              {/* Mobile search entry — the search input is md+; below sm the
+                  drawer's search field is the search path so the header fits
+                  320px devices. */}
               <Link
                 href="/search"
-                className="rounded-lg p-2 transition-colors hover:bg-secondary md:hidden"
+                className="hidden rounded-lg p-2 transition-colors hover:bg-secondary sm:block md:hidden"
                 aria-label="Search"
               >
                 <Search className="h-5 w-5" />
@@ -301,7 +305,7 @@ export function Navigation() {
               <button
                 onClick={() => setMenuOpen(!menuOpen)}
                 className={cn(
-                  "flex items-center gap-2 rounded-lg border border-border px-3 py-2 transition-colors",
+                  "flex items-center gap-2 rounded-lg border border-border px-2.5 py-2 transition-colors sm:px-3",
                   menuOpen ? "bg-secondary text-foreground" : "bg-card hover:bg-secondary"
                 )}
                 aria-label={menuOpen ? "Close navigation menu" : "Open navigation menu"}

@@ -63,8 +63,8 @@ export default function UserMenu() {
         aria-haspopup="menu"
       >
         <Avatar src={image} alt={name} size="sm" className="ring-1 ring-primary/30" />
-        <span className="font-medium hidden xl:inline max-w-28 truncate">{name}</span>
-        <ChevronDown className={cn("h-3.5 w-3.5 text-muted-foreground transition-transform", open && "rotate-180")} />
+        <span className="font-medium hidden 2xl:inline max-w-28 truncate">{name}</span>
+        <ChevronDown className={cn("hidden h-3.5 w-3.5 text-muted-foreground transition-transform sm:block", open && "rotate-180")} />
       </button>
 
       {open && (
