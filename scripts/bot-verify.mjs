@@ -396,10 +396,15 @@ async function main() {
         ? pass("mention: answered resolves thread via replied-to message")
         : fail("mention: answered resolves thread via replied-to message", replyBot?.content)
 
-      // A successful mention records a COMMAND_MENTION BotEvent.
-      const ev = await prisma.botEvent.findFirst({
-        where: { type: "COMMAND_MENTION", command: "answered", userId: member.id },
-      })
+      // A successful mention records a COMMAND_MENTION BotEvent. The event
+      // write is async — poll briefly like the COMMAND_SLASH check below.
+      let ev = null
+      for (let i = 0; i < 10 && !ev; i++) {
+        await new Promise((r) => setTimeout(r, 500))
+        ev = await prisma.botEvent.findFirst({
+          where: { type: "COMMAND_MENTION", command: "answered", userId: member.id },
+        })
+      }
       ev ? pass("COMMAND_MENTION BotEvent recorded") : fail("COMMAND_MENTION BotEvent recorded", "missing")
 
       // Slash command records COMMAND_SLASH with entity links counted.

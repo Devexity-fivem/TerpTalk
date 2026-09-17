@@ -6,14 +6,20 @@ import { unstable_cache } from "next/cache"
 import { publicUserSelect, activeAuthor, rankableProfile, REPUTATION_ORDER } from "@/lib/security"
 import CannabisLeaf from "@/components/cannabis-leaf"
 import { getChatTeaser } from "@/lib/chat-activity"
+import { getServerSession } from "next-auth"
+import { authOptions } from "@/lib/auth"
+import { getMemberHomeData } from "@/lib/member-home"
+import MemberHome from "@/components/member-home"
 import LiveStats from "@/components/live-stats"
 import HeroCta from "@/components/hero-cta"
 import { Avatar } from "@/components/ui/avatar"
 import TierChip from "@/components/tier-chip"
 
-// Public landing page — prerendered and revalidated every 60s. User-specific UI
-// (e.g. HeroCta) is rendered client-side, so the shell can be edge-cached.
-export const revalidate = 60
+// Public landing page for guests; signed-in members get the "Today"
+// dashboard instead (see components/member-home). getServerSession makes
+// the route dynamic; the landing's data still comes from unstable_cache,
+// so guest renders stay cheap.
+export const dynamic = "force-dynamic"
 
 const getStats = unstable_cache(
   async () => {
@@ -164,6 +170,16 @@ const EXPLORE_CARDS = [
 ]
 
 export default async function Home() {
+  // Signed-in members get the personalized dashboard; guests get the
+  // landing below. The session check runs first so member requests never
+  // pay for the landing queries.
+  const session = await getServerSession(authOptions)
+  if (session?.user?.id) {
+    const memberData = await getMemberHomeData(session.user.id)
+    if (memberData) return <MemberHome data={memberData} />
+    // Missing user row (deleted mid-session) — fall through to landing.
+  }
+
   const [stats, { categories, latest, diaryUpdates }, trending, active, growerOfWeek, chatTeaser] = await Promise.all([
     getStats(),
     getLatestDiscussions(),
