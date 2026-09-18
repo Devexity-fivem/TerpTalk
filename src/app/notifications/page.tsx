@@ -11,6 +11,7 @@ import {
 } from "lucide-react"
 import Link from "next/link"
 import EmptyState from "@/components/ui/empty-state"
+import Tooltip from "@/components/ui/tooltip"
 import { Avatar } from "@/components/ui/avatar"
 import { formatRelativeTime } from "@/lib/time"
 import { cn } from "@/lib/utils"
@@ -57,6 +58,32 @@ function typeIcon(type: string, kind?: string) {
   if (type === "REPUTATION" && kind === "quest") return Target
   if (type === "REPUTATION" && kind === "challenge") return Target
   return TYPE_ICONS[type] ?? Bell
+}
+
+// Human labels for the avatar type badge — same keys as TYPE_ICONS, with
+// the same quest/challenge split for REPUTATION.
+const TYPE_LABELS: Record<string, string> = {
+  FOLLOW: "Follow",
+  REACTION: "Reaction",
+  REPLY: "Reply",
+  THREAD_ACTIVITY: "Thread activity",
+  MENTION: "Mention",
+  COMMENT: "Comment",
+  DIARY_UPDATE: "Diary update",
+  DIRECT_MESSAGE: "Message",
+  ACCEPTED_ANSWER: "Accepted answer",
+  BADGE: "Badge",
+  REPUTATION: "Reputation",
+  REFERRAL: "Referral",
+  MODERATOR_ANNOUNCEMENT: "Announcement",
+  BOT_ASSIST: "Bot assist",
+  FOLLOWED_CONTENT: "Follow",
+}
+
+function typeLabel(type: string, kind?: string) {
+  if (type === "REPUTATION" && kind === "quest") return "Quest"
+  if (type === "REPUTATION" && kind === "challenge") return "Challenge"
+  return TYPE_LABELS[type] ?? "Notification"
 }
 
 export default function NotificationsPage() {
@@ -218,14 +245,15 @@ export default function NotificationsPage() {
             )}
           </div>
           <div className="flex items-center gap-1">
-          <Link
-            href="/settings/notifications"
-            aria-label="Notification settings"
-            title="Notification settings"
-            className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
-          >
-            <Settings className="h-4 w-4" />
-          </Link>
+          <Tooltip content="Notification settings">
+            <Link
+              href="/settings/notifications"
+              aria-label="Notification settings"
+              className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+            >
+              <Settings className="h-4 w-4" />
+            </Link>
+          </Tooltip>
           {unread > 0 && (
             <button
               onClick={markAllRead}
@@ -237,14 +265,15 @@ export default function NotificationsPage() {
             </button>
           )}
           {notifications.length > 0 && (
-            <button
-              onClick={clearAll}
-              aria-label="Clear all notifications"
-              title="Clear all notifications"
-              className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-secondary hover:text-destructive"
-            >
-              <Trash2 className="h-4 w-4" />
-            </button>
+            <Tooltip content="Clear all notifications">
+              <button
+                onClick={clearAll}
+                aria-label="Clear all notifications"
+                className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-secondary hover:text-destructive"
+              >
+                <Trash2 className="h-4 w-4" />
+              </button>
+            </Tooltip>
           )}
           </div>
         </div>
@@ -265,22 +294,25 @@ export default function NotificationsPage() {
               <div className="flex items-start gap-3">
                 <div className="relative shrink-0 pt-0.5">
                   <Avatar src={n.actor?.image} alt={n.actor?.name ?? "TerpTalk"} size="md" />
-                  <span className="absolute -bottom-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full border-2 border-card bg-secondary text-muted-foreground">
-                    <Icon className="h-3 w-3" aria-hidden="true" />
-                  </span>
+                  <Tooltip content={typeLabel(n.type, n.metadata?.kind)} className="absolute -bottom-1 -right-1">
+                    <span className="flex h-5 w-5 items-center justify-center rounded-full border-2 border-card bg-secondary text-muted-foreground">
+                      <Icon className="h-3 w-3" aria-hidden="true" />
+                    </span>
+                  </Tooltip>
                 </div>
                 <div className="min-w-0 flex-1">
                   <p className={cn("text-sm break-words", !n.read ? "font-semibold" : "text-muted-foreground")}>
                     {n.title}
                   </p>
                   <p className="text-sm text-muted-foreground break-words line-clamp-2">{n.content}</p>
-                  <time
-                    className="mt-1 block text-xs text-muted-foreground"
-                    dateTime={n.createdAt}
-                    title={new Date(n.createdAt).toLocaleString()}
-                  >
-                    {formatRelativeTime(n.createdAt)}
-                  </time>
+                  <Tooltip content={new Date(n.createdAt).toLocaleString()} align="start">
+                    <time
+                      className="mt-1 block text-xs text-muted-foreground"
+                      dateTime={n.createdAt}
+                    >
+                      {formatRelativeTime(n.createdAt)}
+                    </time>
+                  </Tooltip>
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
                   {!n.read && (
@@ -309,23 +341,25 @@ export default function NotificationsPage() {
                   <div className="min-w-0 flex-1 p-4">{row}</div>
                 )}
                 {!n.read && (
-                  <button
-                    onClick={() => markRead([n.id])}
-                    className="mr-1 mt-3 flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground focus-visible:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
-                    aria-label="Mark as read"
-                    title="Mark as read"
-                  >
-                    <Check className="h-4 w-4" />
-                  </button>
+                  <Tooltip content="Mark as read" className="sm:opacity-0 sm:group-hover:opacity-100 focus-within:opacity-100">
+                    <button
+                      onClick={() => markRead([n.id])}
+                      className="mr-1 mt-3 flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+                      aria-label="Mark as read"
+                    >
+                      <Check className="h-4 w-4" />
+                    </button>
+                  </Tooltip>
                 )}
-                <button
-                  onClick={() => deleteNotification(n.id)}
-                  className="mr-1 mt-3 flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-secondary hover:text-destructive focus-visible:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
-                  aria-label="Delete notification"
-                  title="Delete notification"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </button>
+                <Tooltip content="Delete notification" className="sm:opacity-0 sm:group-hover:opacity-100 focus-within:opacity-100">
+                  <button
+                    onClick={() => deleteNotification(n.id)}
+                    className="mr-1 mt-3 flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-secondary hover:text-destructive"
+                    aria-label="Delete notification"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </Tooltip>
               </li>
             )
           })}

@@ -5,6 +5,7 @@ import Link from "next/link"
 import { BellRing, BellOff, Loader2 } from "lucide-react"
 import { useToast } from "@/components/ui/toast"
 import { formatRelativeTime } from "@/lib/time"
+import Tooltip from "@/components/ui/tooltip"
 
 export interface FollowedThreadItem {
   threadId: string
@@ -59,26 +60,31 @@ export default function FollowedThreads({ items }: { items: FollowedThreadItem[]
             >
               <span className="flex items-center gap-2">
                 {t.unread && (
-                  <span className="h-2 w-2 rounded-full bg-primary shrink-0" role="img" aria-label="Unread" title="New activity" />
+                  <Tooltip content="New activity">
+                    <span className="h-2 w-2 rounded-full bg-primary shrink-0" role="img" aria-label="Unread" />
+                  </Tooltip>
                 )}
                 <span className="truncate">{t.title}</span>
               </span>
               <span className="block text-xs text-muted-foreground">
                 {t.category} ·{" "}
-                <time dateTime={t.lastActivityAt} title={new Date(t.lastActivityAt).toLocaleString()}>
-                  {formatRelativeTime(t.lastActivityAt)}
-                </time>
+                <Tooltip content={new Date(t.lastActivityAt).toLocaleString()}>
+                  <time dateTime={t.lastActivityAt}>
+                    {formatRelativeTime(t.lastActivityAt)}
+                  </time>
+                </Tooltip>
               </span>
             </Link>
-            <button
-              onClick={() => unfollow(t)}
-              disabled={busyId === t.threadId}
-              aria-label={`Unfollow "${t.title}"`}
-              title="Unfollow"
-              className="p-2 text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50 shrink-0"
-            >
-              {busyId === t.threadId ? <Loader2 className="w-4 h-4 animate-spin" /> : <BellOff className="w-4 h-4" />}
-            </button>
+            <Tooltip content="Unfollow this discussion">
+              <button
+                onClick={() => unfollow(t)}
+                disabled={busyId === t.threadId}
+                aria-label={`Unfollow "${t.title}"`}
+                className="p-2 text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50 shrink-0"
+              >
+                {busyId === t.threadId ? <Loader2 className="w-4 h-4 animate-spin" /> : <BellOff className="w-4 h-4" />}
+              </button>
+            </Tooltip>
           </div>
         ))}
       </div>

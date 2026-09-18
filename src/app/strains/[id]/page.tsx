@@ -11,6 +11,7 @@ import { buildMetadata, snippet } from "@/lib/seo"
 import { Breadcrumbs } from "@/components/breadcrumbs"
 import { publicUserSelect, activeAuthor, isActiveAuthorRow } from "@/lib/security"
 import TierChip from "@/components/tier-chip"
+import Tooltip from "@/components/ui/tooltip"
 import { getStrainGrowStats, escapeLike, strainFieldMatches, strainTypeLabel } from "@/lib/strain-stats"
 import Link from "next/link"
 
@@ -271,10 +272,10 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
             {(growStats.env.temp != null || growStats.env.rh != null || growStats.env.vpd != null) && (
               <div className="mt-4 pt-4 border-t border-border flex flex-wrap gap-x-5 gap-y-1 text-xs text-muted-foreground">
                 {growStats.env.temp != null && <span>avg temp {growStats.env.temp}°F ({growStats.envSamples.temp} readings)</span>}
-                {growStats.env.rh != null && <span>avg RH {growStats.env.rh}% ({growStats.envSamples.rh})</span>}
-                {growStats.env.vpd != null && <span>avg VPD {growStats.env.vpd} kPa ({growStats.envSamples.vpd})</span>}
+                {growStats.env.rh != null && <Tooltip content="Average relative humidity across reported grows"><span>avg RH {growStats.env.rh}% ({growStats.envSamples.rh})</span></Tooltip>}
+                {growStats.env.vpd != null && <Tooltip content="Average vapor pressure deficit"><span>avg VPD {growStats.env.vpd} kPa ({growStats.envSamples.vpd})</span></Tooltip>}
                 {growStats.env.ph != null && <span>avg pH {growStats.env.ph} ({growStats.envSamples.ph})</span>}
-                {growStats.env.ec != null && <span>avg EC {growStats.env.ec} ({growStats.envSamples.ec})</span>}
+                {growStats.env.ec != null && <Tooltip content="Average electrical conductivity — nutrient strength"><span>avg EC {growStats.env.ec} ({growStats.envSamples.ec})</span></Tooltip>}
               </div>
             )}
             {(growStats.difficulty.total >= 3 || growStats.topMediums.length > 0 || growStats.topTechniques.length > 0) && (

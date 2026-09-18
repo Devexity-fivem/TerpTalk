@@ -3,6 +3,7 @@
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { CheckCircle2, XCircle, Loader2 } from "lucide-react"
+import Tooltip from "@/components/ui/tooltip"
 
 export function AcceptAnswerButton({
   postId,
@@ -40,30 +41,31 @@ export function AcceptAnswerButton({
   }
 
   return (
-    <button
-      onClick={onClick}
-      disabled={loading}
-      className={`flex items-center gap-1 text-xs px-2 py-1 rounded-lg transition-colors ${
-        isAnswer
-          ? "bg-green-500/15 text-green-400 hover:bg-green-500/25"
-          : "bg-secondary text-muted-foreground hover:text-foreground hover:bg-secondary/80"
-      }`}
-      title={isAnswer ? "Unmark as accepted answer" : "Mark as accepted answer"}
-    >
-      {loading ? (
-        <Loader2 className="w-3 h-3 animate-spin" />
-      ) : isAnswer ? (
-        <>
-          <CheckCircle2 className="w-3 h-3" />
-          <span>Accepted</span>
-          <XCircle className="w-3 h-3 ml-0.5 opacity-70" />
-        </>
-      ) : (
-        <>
-          <CheckCircle2 className="w-3 h-3" />
-          <span>Accept</span>
-        </>
-      )}
-    </button>
+    <Tooltip content={isAnswer ? "Remove accepted-answer status" : "Mark this reply as the solution to your thread"}>
+      <button
+        onClick={onClick}
+        disabled={loading}
+        className={`flex items-center gap-1 text-xs px-2 py-1 rounded-lg transition-colors ${
+          isAnswer
+            ? "bg-green-500/15 text-green-400 hover:bg-green-500/25"
+            : "bg-secondary text-muted-foreground hover:text-foreground hover:bg-secondary/80"
+        }`}
+      >
+        {loading ? (
+          <Loader2 className="w-3 h-3 animate-spin" />
+        ) : isAnswer ? (
+          <>
+            <CheckCircle2 className="w-3 h-3" />
+            <span>Accepted</span>
+            <XCircle className="w-3 h-3 ml-0.5 opacity-70" />
+          </>
+        ) : (
+          <>
+            <CheckCircle2 className="w-3 h-3" />
+            <span>Accept</span>
+          </>
+        )}
+      </button>
+    </Tooltip>
   )
 }

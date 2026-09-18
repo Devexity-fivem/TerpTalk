@@ -31,6 +31,7 @@ import {
   type RoomStateEvent,
 } from "@/lib/chat-client"
 import { useToast } from "@/components/ui/toast"
+import Tooltip from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
 import dynamic from "next/dynamic"
 import type { Theme, EmojiStyle } from "emoji-picker-react"
@@ -175,16 +176,17 @@ const MessageRow = memo(function MessageRow({
   const title = !isBot ? getProfileTitle(msg.author.profileTitle) : null
 
   const menuButton = (
-    <button
-      onClick={() => onToggleMenu(msg.id)}
-      className="p-1 rounded hover:bg-secondary text-muted-foreground"
-      aria-label="Message options"
-      aria-expanded={isMenuOpen}
-      aria-haspopup="menu"
-      title="Message options"
-    >
-      <MoreVertical className="w-3 h-3" />
-    </button>
+    <Tooltip content="Message options">
+      <button
+        onClick={() => onToggleMenu(msg.id)}
+        className="p-1 rounded hover:bg-secondary text-muted-foreground"
+        aria-label="Message options"
+        aria-expanded={isMenuOpen}
+        aria-haspopup="menu"
+      >
+        <MoreVertical className="w-3 h-3" />
+      </button>
+    </Tooltip>
   )
   const timeEl = (
     <time
@@ -413,9 +415,11 @@ const MessageRow = memo(function MessageRow({
             </Link>
           </UserPopover>
           {title && (
-            <span className="text-[9px] font-medium uppercase tracking-wider px-1 py-px rounded truncate bg-primary/10 text-primary/80">
-              {title.name}
-            </span>
+            <Tooltip content="Profile title — cosmetic earned through progression">
+              <span className="text-[9px] font-medium uppercase tracking-wider px-1 py-px rounded truncate bg-primary/10 text-primary/80">
+                {title.name}
+              </span>
+            </Tooltip>
           )}
           <RoleBadge role={msg.author.role} />
           <TierChip
@@ -1003,14 +1007,18 @@ export default function ChatRoom({ embedded = false, headerActions }: ChatRoomPr
                 {room?.name ?? "Community Chat"}
               </span>
               {room?.locked && (
-                <span className="inline-flex shrink-0 items-center gap-1 text-[10px] font-medium text-amber-500">
-                  <Lock className="w-3 h-3" /> Locked
-                </span>
+                <Tooltip content="Room locked — only moderators can post right now">
+                  <span className="inline-flex shrink-0 items-center gap-1 text-[10px] font-medium text-amber-500">
+                    <Lock className="w-3 h-3" /> Locked
+                  </span>
+                </Tooltip>
               )}
               {room && room.slowModeSeconds > 0 && (
-                <span className="inline-flex shrink-0 items-center gap-1 text-[10px] font-medium text-muted-foreground">
-                  <Timer className="w-3 h-3" /> {room.slowModeSeconds}s
-                </span>
+                <Tooltip content={`Slow mode — one message every ${room.slowModeSeconds} seconds`}>
+                  <span className="inline-flex shrink-0 items-center gap-1 text-[10px] font-medium text-muted-foreground">
+                    <Timer className="w-3 h-3" /> {room.slowModeSeconds}s
+                  </span>
+                </Tooltip>
               )}
               <ChevronDown
                 className={cn("w-3.5 h-3.5 shrink-0 text-muted-foreground transition-transform", pickerOpen && "rotate-180")}
@@ -1054,9 +1062,11 @@ export default function ChatRoom({ embedded = false, headerActions }: ChatRoomPr
                     )}
                     {r.locked && <Lock className="w-3 h-3 shrink-0" aria-label="Locked" />}
                     {r.accessible === false && (
-                      <span className="shrink-0 text-[9px] text-muted-foreground">
-                        {r.requiredRep?.toLocaleString()} rep
-                      </span>
+                      <Tooltip content={`Requires ${r.requiredRep?.toLocaleString()} reputation to join`}>
+                        <span className="shrink-0 text-[9px] text-muted-foreground">
+                          {r.requiredRep?.toLocaleString()} rep
+                        </span>
+                      </Tooltip>
                     )}
                   </button>
                 ))}
@@ -1064,24 +1074,24 @@ export default function ChatRoom({ embedded = false, headerActions }: ChatRoomPr
             )}
           </div>
           <div className="ml-auto flex shrink-0 items-center gap-1.5">
-            <span
-              className="flex items-center gap-1.5 text-xs text-muted-foreground"
-              title="Members active on TerpTalk in the last 15 minutes"
-            >
-              <span className="flex h-1.5 w-1.5 rounded-full bg-green-400" aria-hidden="true" />
-              {onlineCount} online
-            </span>
+            <Tooltip content="Members active on TerpTalk in the last 15 minutes" side="bottom">
+              <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <span className="flex h-1.5 w-1.5 rounded-full bg-green-400" aria-hidden="true" />
+                {onlineCount} online
+              </span>
+            </Tooltip>
             {headerActions}
             {(!room || fetchError) && (
-              <button
-                onClick={() => setRetryCount((c) => c + 1)}
-                disabled={loading}
-                className="p-1.5 hover:bg-secondary rounded-lg transition-colors disabled:opacity-50"
-                aria-label="Retry loading chat"
-                title="Retry loading chat"
-              >
-                <RefreshCw className={cn("w-4 h-4", loading && "animate-spin")} />
-              </button>
+              <Tooltip content="Retry loading chat">
+                <button
+                  onClick={() => setRetryCount((c) => c + 1)}
+                  disabled={loading}
+                  className="p-1.5 hover:bg-secondary rounded-lg transition-colors disabled:opacity-50"
+                  aria-label="Retry loading chat"
+                >
+                  <RefreshCw className={cn("w-4 h-4", loading && "animate-spin")} />
+                </button>
+              </Tooltip>
             )}
           </div>
         </div>
@@ -1251,20 +1261,22 @@ export default function ChatRoom({ embedded = false, headerActions }: ChatRoomPr
             )}
 
             <div className="flex gap-1.5 items-center">
-              <button
-                type="button"
-                onClick={() => setShowEmoji(!showEmoji)}
-                className={`p-2 rounded-lg transition-colors ${showEmoji ? "bg-primary/10 text-primary" : "hover:bg-secondary text-muted-foreground"}`}
-                aria-label="Open emoji picker"
-                aria-expanded={showEmoji}
-              >
-                <Smile className="w-5 h-5" />
-              </button>
+              <Tooltip content="Insert emoji">
+                <button
+                  type="button"
+                  onClick={() => setShowEmoji(!showEmoji)}
+                  className={`p-2 rounded-lg transition-colors ${showEmoji ? "bg-primary/10 text-primary" : "hover:bg-secondary text-muted-foreground"}`}
+                  aria-label="Open emoji picker"
+                  aria-expanded={showEmoji}
+                >
+                  <Smile className="w-5 h-5" />
+                </button>
+              </Tooltip>
+            <Tooltip content="Maximum 1000 characters" className="flex-1 min-w-0">
               <input
                 ref={inputRef}
                 type="text"
                 maxLength={1000}
-                title="Maximum 1000 characters"
                 role="combobox"
                 aria-expanded={(showMentions || showCommands) && suggestionCount > 0}
                 aria-controls={listboxId}
@@ -1318,18 +1330,21 @@ export default function ChatRoom({ embedded = false, headerActions }: ChatRoomPr
                   }
                 }}
               />
-              <button
-                type="submit"
-                disabled={!room || sending || (room?.locked && !isStaff)}
-                aria-label="Send message"
-                className="bg-primary text-primary-foreground p-2 rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {sending ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  <Send className="w-4 h-4" />
-                )}
-              </button>
+            </Tooltip>
+              <Tooltip content="Send message">
+                <button
+                  type="submit"
+                  disabled={!room || sending || (room?.locked && !isStaff)}
+                  aria-label="Send message"
+                  className="bg-primary text-primary-foreground p-2 rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {sending ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Send className="w-4 h-4" />
+                  )}
+                </button>
+              </Tooltip>
             </div>
           </form>
           )}

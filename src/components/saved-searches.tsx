@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react"
 import Link from "next/link"
 import { Bookmark, Trash2 } from "lucide-react"
+import Tooltip from "@/components/ui/tooltip"
 
 interface SavedSearch {
   id: string
@@ -60,13 +61,15 @@ export default function SavedSearches() {
             >
               {s.name}
             </Link>
-            <button
-              onClick={() => remove(s.id)}
-              title="Remove"
-              className="text-muted-foreground hover:text-destructive"
-            >
-              <Trash2 className="w-4 h-4" />
-            </button>
+            <Tooltip content="Delete this saved search">
+              <button
+                onClick={() => remove(s.id)}
+                aria-label="Delete this saved search"
+                className="text-muted-foreground hover:text-destructive"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+            </Tooltip>
           </li>
         ))}
       </ul>

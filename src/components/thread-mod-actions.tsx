@@ -4,6 +4,7 @@ import { useState } from "react"
 import { useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
 import { Pin, Lock } from "lucide-react"
+import Tooltip from "@/components/ui/tooltip"
 
 // Staff-only thread controls — pin/unpin and lock/unlock
 export default function ThreadModActions({
@@ -44,20 +45,24 @@ export default function ThreadModActions({
 
   return (
     <div className="flex gap-2">
-      <button
-        onClick={() => act("PIN_THREAD")}
-        disabled={busy}
-        className="flex items-center gap-1.5 px-2.5 py-1 text-xs bg-primary/10 text-primary rounded-lg hover:bg-primary/20 disabled:opacity-50"
-      >
-        <Pin className="w-3 h-3" /> {pinned ? "Unpin" : "Pin"}
-      </button>
-      <button
-        onClick={() => act("LOCK_THREAD")}
-        disabled={busy}
-        className="flex items-center gap-1.5 px-2.5 py-1 text-xs bg-amber-500/10 text-amber-500 rounded-lg hover:bg-amber-500/20 disabled:opacity-50"
-      >
-        <Lock className="w-3 h-3" /> {locked ? "Unlock" : "Lock"}
-      </button>
+      <Tooltip content={pinned ? "Unpin: remove this thread from the top of the category" : "Pin: keep this thread at the top of the category"}>
+        <button
+          onClick={() => act("PIN_THREAD")}
+          disabled={busy}
+          className="flex items-center gap-1.5 px-2.5 py-1 text-xs bg-primary/10 text-primary rounded-lg hover:bg-primary/20 disabled:opacity-50"
+        >
+          <Pin className="w-3 h-3" /> {pinned ? "Unpin" : "Pin"}
+        </button>
+      </Tooltip>
+      <Tooltip content={locked ? "Unlock: allow new replies again" : "Lock: prevent new replies"}>
+        <button
+          onClick={() => act("LOCK_THREAD")}
+          disabled={busy}
+          className="flex items-center gap-1.5 px-2.5 py-1 text-xs bg-amber-500/10 text-amber-500 rounded-lg hover:bg-amber-500/20 disabled:opacity-50"
+        >
+          <Lock className="w-3 h-3" /> {locked ? "Unlock" : "Lock"}
+        </button>
+      </Tooltip>
     </div>
   )
 }

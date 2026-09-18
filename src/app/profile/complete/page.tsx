@@ -5,6 +5,7 @@ import { useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
 import { User, Camera, Loader2, Check } from "lucide-react"
 import { safeCallbackUrl, signInHref } from "@/lib/callback-url"
+import Tooltip from "@/components/ui/tooltip"
 
 // Resize an image file to a 128x128 data URI for avatar upload
 function resizeImage(file: File, size = 128): Promise<string> {
@@ -206,16 +207,17 @@ export default function CompleteProfilePage() {
               <label htmlFor="bio" className="block text-sm font-medium mb-2">
                 Bio
               </label>
+              <Tooltip content="Maximum 150 characters" className="block">
               <textarea
                 id="bio"
                 rows={4}
                 value={formData.bio}
                 onChange={(e) => setFormData({ ...formData, bio: e.target.value })}
                 maxLength={150}
-                title="Maximum 150 characters"
                 className="w-full px-4 py-2 rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary resize-none"
                 placeholder="Tell us about your growing experience, interests, and what you hope to share with the community..."
               />
+            </Tooltip>
             </div>
 
             <div>

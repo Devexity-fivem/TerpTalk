@@ -1,4 +1,5 @@
 import { getReputationTier } from "@/lib/reputation-config"
+import Tooltip from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
 
 // Public tier identity — renders the member's reputation tier as a compact
@@ -26,21 +27,22 @@ export default function TierChip({ reputation, publicMilestoneOptOut, size = "sm
   if (publicMilestoneOptOut) return null
   const tier = getReputationTier(reputation)
   return (
-    <span
-      role="img"
-      aria-label={`${tier.name} tier`}
-      title={`${tier.name} tier`}
-      className={cn(
-        "inline-flex shrink-0 items-center gap-1 rounded-full font-medium align-middle whitespace-nowrap",
-        tier.bg,
-        tier.color,
-        size === "sm" ? "px-1.5 py-0.5 text-[10px]" : "px-2 py-1 text-xs",
-        tier.name === "Cannabis Deity" && "tier-chip-deity",
-        className
-      )}
-    >
-      <span aria-hidden="true">{tier.icon}</span>
-      {tier.name}
-    </span>
+    <Tooltip content={`${tier.name} reputation tier — earned through community contributions`}>
+      <span
+        role="img"
+        aria-label={`${tier.name} tier`}
+        className={cn(
+          "inline-flex shrink-0 items-center gap-1 rounded-full font-medium align-middle whitespace-nowrap",
+          tier.bg,
+          tier.color,
+          size === "sm" ? "px-1.5 py-0.5 text-[10px]" : "px-2 py-1 text-xs",
+          tier.name === "Cannabis Deity" && "tier-chip-deity",
+          className
+        )}
+      >
+        <span aria-hidden="true">{tier.icon}</span>
+        {tier.name}
+      </span>
+    </Tooltip>
   )
 }

@@ -26,6 +26,7 @@ import DiaryDiscussButton from "@/components/diary-discuss-button"
 import { escapeLike, strainFieldMatches, suggestStrainLink } from "@/lib/strain-stats"
 import UserPopover from "@/components/user-popover"
 import { MEDIUM_LABELS, LIGHT_LABELS, TECHNIQUE_LABELS, DIFFICULTY_LABELS } from "@/lib/grow-fields"
+import Tooltip from "@/components/ui/tooltip"
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -292,14 +293,18 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
                   <Users className="w-3.5 h-3.5" />
                   {diary._count.followers} followers
                 </span>
-                <span className="flex items-center gap-1 font-medium text-primary">
-                  <Calendar className="w-3.5 h-3.5" />
-                  Day {dayCount}
-                </span>
-                {streak >= 2 && (
-                  <span className="flex items-center gap-1 text-amber-500 font-medium">
-                    🔥 {streak}-day streak
+                <Tooltip content="Days since this grow started">
+                  <span className="flex items-center gap-1 font-medium text-primary">
+                    <Calendar className="w-3.5 h-3.5" />
+                    Day {dayCount}
                   </span>
+                </Tooltip>
+                {streak >= 2 && (
+                  <Tooltip content="Consecutive days with a diary update">
+                    <span className="flex items-center gap-1 text-amber-500 font-medium">
+                      🔥 {streak}-day streak
+                    </span>
+                  </Tooltip>
                 )}
               </div>
               <StageTimeline current={diary.stage} runs={stageRuns} />
@@ -309,15 +314,22 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
                 <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs">
                   <div className="flex items-center gap-1.5">
                     {GROW_STAGES.map((s, i) => (
-                      <span
+                      <Tooltip
                         key={s.key}
-                        title={s.name}
-                        className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-sm ${
-                          i <= journey.stageIndex ? "bg-primary/15 ring-1 ring-primary/40" : "bg-secondary/60 opacity-50"
-                        }`}
+                        content={
+                          i <= journey.stageIndex
+                            ? `${s.name} — reached${s.rep > 0 ? ` · +${s.rep} rep` : ""}`
+                            : `${s.name} — not reached yet`
+                        }
                       >
-                        {s.icon}
-                      </span>
+                        <span
+                          className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-sm ${
+                            i <= journey.stageIndex ? "bg-primary/15 ring-1 ring-primary/40" : "bg-secondary/60 opacity-50"
+                          }`}
+                        >
+                          {s.icon}
+                        </span>
+                      </Tooltip>
                     ))}
                     <span className="ml-1 font-medium text-foreground">{journey.stage === "PLANTED" ? "Planted" : GROW_STAGES[journey.stageIndex].name}</span>
                   </div>
@@ -335,7 +347,9 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
                   {avgTemp && <span className="text-muted-foreground">avg temp <span className="text-foreground font-medium">{avgTemp}°</span></span>}
                   {avgRh && <span className="text-muted-foreground">avg RH <span className="text-foreground font-medium">{avgRh}%</span></span>}
                   {harvestEta !== null && harvestEta > 0 && (
-                    <span className="text-muted-foreground">est. harvest in <span className="text-primary font-medium">{harvestEta}d</span></span>
+                    <Tooltip content="Estimated from the first flower-stage update">
+                      <span className="text-muted-foreground">est. harvest in <span className="text-primary font-medium">{harvestEta}d</span></span>
+                    </Tooltip>
                   )}
                   {harvestEta !== null && harvestEta <= 0 && (
                     <span className="text-primary font-medium">🌾 Past estimated harvest window</span>
@@ -355,13 +369,15 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
                 />
                 <ShareButtons path={`/diaries/${diary.id}`} title={`${diary.title} — grow diary on TerpTalk`} />
                 {canEdit && (
-                  <Link
-                    href={`/diaries/${diary.id}/edit`}
-                    aria-label="Edit diary"
-                    className="inline-flex items-center justify-center p-2 rounded-lg hover:bg-secondary transition-colors"
-                  >
-                    <Pencil className="w-4 h-4" />
-                  </Link>
+                  <Tooltip content="Edit diary">
+                    <Link
+                      href={`/diaries/${diary.id}/edit`}
+                      aria-label="Edit diary"
+                      className="inline-flex items-center justify-center p-2 rounded-lg hover:bg-secondary transition-colors"
+                    >
+                      <Pencil className="w-4 h-4" />
+                    </Link>
+                  </Tooltip>
                 )}
                 <OwnerDeleteButton
                   endpoint="/api/diaries"
@@ -446,7 +462,9 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
               {harvestReport.avgVpd != null && (
                 <div>
                   <div className="text-2xl font-bold">{harvestReport.avgVpd}</div>
-                  <div className="text-xs text-muted-foreground">avg VPD</div>
+                  <div className="text-xs text-muted-foreground">
+                    <Tooltip content="Vapor pressure deficit — a combined measure of temperature and humidity stress">avg VPD</Tooltip>
+                  </div>
                 </div>
               )}
             </div>

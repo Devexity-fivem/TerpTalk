@@ -5,6 +5,7 @@ import { useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
 import { Trash2, Loader2 } from "lucide-react"
 import { useToast } from "@/components/ui/toast"
+import Tooltip from "@/components/ui/tooltip"
 
 interface OwnerDeleteButtonProps {
   /** API route that accepts DELETE { id } */
@@ -59,19 +60,20 @@ export default function OwnerDeleteButton({
   }
 
   return (
-    <button
-      onClick={handleDelete}
-      disabled={busy}
-      className={
-        iconOnly
-          ? "p-1.5 -m-1 text-muted-foreground hover:text-destructive transition-colors disabled:opacity-50"
-          : "inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-destructive border border-destructive/40 rounded-lg hover:bg-destructive/10 transition-colors disabled:opacity-50"
-      }
-      aria-label={label}
-      title={label}
-    >
-      {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
-      {!iconOnly && label}
-    </button>
+    <Tooltip content={label}>
+      <button
+        onClick={handleDelete}
+        disabled={busy}
+        className={
+          iconOnly
+            ? "p-1.5 -m-1 text-muted-foreground hover:text-destructive transition-colors disabled:opacity-50"
+            : "inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-destructive border border-destructive/40 rounded-lg hover:bg-destructive/10 transition-colors disabled:opacity-50"
+        }
+        aria-label={label}
+      >
+        {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+        {!iconOnly && label}
+      </button>
+    </Tooltip>
   )
 }

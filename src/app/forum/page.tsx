@@ -9,6 +9,7 @@ import RoleBadge from "@/components/role-badge"
 import TierChip from "@/components/tier-chip"
 import { ForumLiveRefresh } from "@/components/forum-live-refresh"
 import FollowedThreads from "@/components/followed-threads"
+import Tooltip from "@/components/ui/tooltip"
 
 // Dynamic: the client polls for new threads and calls router.refresh(),
 // so this page must not serve stale ISR when refreshed.
@@ -190,7 +191,9 @@ export default async function ForumPage() {
                       <div className="flex-1 min-w-0">
                         <h3 className="font-semibold mb-1 flex items-center gap-2">
                           {unreadThreadIds.has(thread.id) && (
-                            <span className="h-2 w-2 rounded-full bg-primary shrink-0" role="img" aria-label="Unread" title="New activity" />
+                            <Tooltip content="New activity" className="shrink-0">
+                              <span className="h-2 w-2 rounded-full bg-primary" role="img" aria-label="Unread" />
+                            </Tooltip>
                           )}
                           <span className="min-w-0 break-words">{thread.title}</span>
                         </h3>

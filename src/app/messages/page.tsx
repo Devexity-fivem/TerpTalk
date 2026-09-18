@@ -8,6 +8,7 @@ import { useSearchParams, useRouter } from "next/navigation"
 import { Mail, Send, Loader2, MessageCircle, User } from "lucide-react"
 import Link from "next/link"
 import EmptyState from "@/components/ui/empty-state"
+import Tooltip from "@/components/ui/tooltip"
 
 interface Convo {
   partner: { id: string; name: string | null; role: string; profile: { username: string | null } | null }
@@ -221,13 +222,15 @@ function MessagesInner() {
                         >
                           {nameOf(c.partner)}
                         </Link>
-                        <Link
-                          href={`/u/${encodeURIComponent(nameOf(c.partner))}`}
-                          aria-label={`View ${nameOf(c.partner)}'s profile`}
-                          className="text-muted-foreground hover:text-primary shrink-0"
-                        >
-                          <User className="w-3.5 h-3.5" />
-                        </Link>
+                        <Tooltip content="View profile">
+                          <Link
+                            href={`/u/${encodeURIComponent(nameOf(c.partner))}`}
+                            aria-label={`View ${nameOf(c.partner)}'s profile`}
+                            className="text-muted-foreground hover:text-primary shrink-0"
+                          >
+                            <User className="w-3.5 h-3.5" />
+                          </Link>
+                        </Tooltip>
                       </div>
                       <Link href={`/messages?with=${c.partner.id}`} className="flex items-center gap-2 shrink-0">
                         {c.unread > 0 && (
@@ -304,13 +307,16 @@ function MessagesInner() {
                       maxLength={2000}
                       className="flex-1 px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                     />
-                    <button
-                      onClick={send}
-                      disabled={sending || !draft.trim()}
-                      className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-50 transition-colors"
-                    >
-                      {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-                    </button>
+                    <Tooltip content="Send message">
+                      <button
+                        onClick={send}
+                        disabled={sending || !draft.trim()}
+                        aria-label="Send message"
+                        className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-50 transition-colors"
+                      >
+                        {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                      </button>
+                    </Tooltip>
                   </div>
                 </div>
               </>

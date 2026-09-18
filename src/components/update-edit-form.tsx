@@ -14,6 +14,7 @@ import { STAGE_TIPS } from "@/lib/stage-tips"
 import { resizeImage } from "@/components/update-form"
 import ImageGallery from "@/components/image-gallery"
 import OwnerDeleteButton from "@/components/owner-delete-button"
+import Tooltip from "@/components/ui/tooltip"
 
 export interface EditableUpdate {
   id: string
@@ -138,16 +139,21 @@ export default function UpdateEditSection({ update, day, dateLabel, edited }: Up
         </div>
         <span className="text-xs text-muted-foreground flex items-center gap-2">
           {dateLabel}
-          {edited && <span title="Edited">· edited</span>}
+          {edited && (
+            <Tooltip content="Edited after posting">
+              <span>· edited</span>
+            </Tooltip>
+          )}
           {isOwner && !editing && (
-            <button
-              onClick={() => setEditing(true)}
-              className="text-muted-foreground hover:text-foreground transition-colors"
-              aria-label="Edit update"
-              title="Edit update"
-            >
-              <Pencil className="w-4 h-4" />
-            </button>
+            <Tooltip content="Edit update">
+              <button
+                onClick={() => setEditing(true)}
+                className="text-muted-foreground hover:text-foreground transition-colors"
+                aria-label="Edit update"
+              >
+                <Pencil className="w-4 h-4" />
+              </button>
+            </Tooltip>
           )}
           <OwnerDeleteButton
             endpoint="/api/diaries/updates"

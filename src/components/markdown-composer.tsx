@@ -5,6 +5,7 @@ import { Bold, Italic, Heading, Quote, Link as LinkIcon, List, ListOrdered, Code
 import { MarkdownRenderer } from "@/lib/markdown"
 import { useSession } from "next-auth/react"
 import { Avatar } from "@/components/ui/avatar"
+import Tooltip from "@/components/ui/tooltip"
 
 interface User {
   id: string
@@ -35,16 +36,17 @@ interface ToolbarButtonProps {
 
 function ToolbarButton({ onClick, title, disabled, children }: ToolbarButtonProps) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      title={title}
-      aria-label={title}
-      disabled={disabled}
-      className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-    >
-      {children}
-    </button>
+    <Tooltip content={title} side="bottom">
+      <button
+        type="button"
+        onClick={onClick}
+        aria-label={title}
+        disabled={disabled}
+        className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+      >
+        {children}
+      </button>
+    </Tooltip>
   )
 }
 

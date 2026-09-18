@@ -22,6 +22,7 @@ import RecoveryPhraseCard from "@/components/recovery-phrase-card"
 import WeeklyChallenges from "@/components/weekly-challenges"
 import CosmeticsPanel from "@/components/cosmetics-panel"
 import { Avatar } from "@/components/ui/avatar"
+import { InfoTip } from "@/components/ui/tooltip"
 import { getAvatarFrame, getProfileTheme, getProfileTitle } from "@/lib/cosmetics"
 import { cn } from "@/lib/utils"
 
@@ -418,7 +419,9 @@ export default function ProfilePage() {
                 <div className="flex flex-wrap gap-4 sm:gap-6 mt-4">
                   <div className="text-center">
                     <div className="text-2xl font-bold text-primary">{profileData.stats.reputation}</div>
-                    <div className="text-sm text-muted-foreground">Reputation</div>
+                    <div className="text-sm text-muted-foreground">
+                      Reputation <InfoTip content="Points earned from posting, journaling, and helping other growers — raises your grow level and unlocks tiers and rewards." />
+                    </div>
                   </div>
                   <div className="text-center">
                     <div className="text-2xl font-bold text-primary">{profileData.stats.followers}</div>
@@ -797,12 +800,22 @@ export default function ProfilePage() {
           )}
           </>)}
 
-          {tab === "progress" && (<>
+          {tab === "progress" && (
+          <div className="md:col-span-2 space-y-4 md:space-y-6">
+          <div className="flex items-center gap-2">
+            <p className="text-sm text-muted-foreground">
+              Everything here compounds — reputation raises your grow level, unlocks tiers, and earns rewards.
+            </p>
+            <InfoTip content="Post, journal, and help other growers to earn reputation. Levels and tiers unlock rewards automatically — challenges and quests are optional bonuses." />
+          </div>
+          <div className="grid gap-4 md:gap-6 md:grid-cols-2 items-start">
+          <div className="space-y-4 md:space-y-6">
           {/* Reputation Tier */}
           <div className="bg-card rounded-lg border border-border p-6">
             <div className="flex items-center gap-2 mb-4">
               <TrendingUp className="w-5 h-5 text-primary" />
               <h2 className="text-lg font-semibold">Your Growth</h2>
+              <InfoTip content="Your grow level rises with reputation. Levels are grouped into stages — finish a stage to level up. Reputation tiers are the long arc and unlock community perks." />
             </div>
             <div className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full ${profileData.stats.reputationTier.bg} ${profileData.stats.reputationTier.color} text-sm font-medium mb-1`}>
               <span>{profileData.stats.reputationTier.icon}</span>
@@ -838,7 +851,39 @@ export default function ProfilePage() {
               Earn rep by posting, journaling, adding strains, and getting likes. Verified members earn 1.5x rep.
             </p>
           </div>
-          </>)}
+
+          <WeeklyChallenges />
+          <div id="rewards" className="scroll-mt-20">
+            <CosmeticsPanel
+              reputation={profileData.stats.reputation}
+              equipped={{
+                avatarFrame: profileData.profile?.avatarFrame ?? null,
+                profileTitle: profileData.profile?.profileTitle ?? null,
+                profileTheme: profileData.profile?.profileTheme ?? null,
+              }}
+              onSaved={(p) => setProfileData((prev) => prev ? { ...prev, profile: prev.profile ? { ...prev.profile, ...p } : prev.profile } : prev)}
+            />
+          </div>
+          </div>
+
+          <div className="space-y-4 md:space-y-6">
+          {/* Hub link — /progress holds quests, trust, and unlock detail. */}
+          <Link
+            href="/progress"
+            className="bg-card rounded-lg border border-border p-6 flex items-center justify-between gap-3 hover:border-primary/40 transition-colors"
+          >
+            <div>
+              <h2 className="text-lg font-semibold">Your Progress</h2>
+              <p className="text-sm text-muted-foreground mt-1">Daily quests, trust standing, and what unlocks next.</p>
+            </div>
+            <ArrowRight className="w-5 h-5 text-primary shrink-0" />
+          </Link>
+          <ReputationRoadmap reputation={profileData.stats.reputation} />
+          <ReputationEarn />
+          </div>
+          </div>
+          </div>
+          )}
 
           {tab === "saved" && (<>
           {/* Saved Threads */}
@@ -962,36 +1007,6 @@ export default function ProfilePage() {
             </div>
           </div>
 
-          </>)}
-
-          {tab === "progress" && (<>
-          {/* Reputation detail widgets — the two tallest cards, paired in the
-              final row so neither forces a shorter card to stretch. */}
-          <WeeklyChallenges />
-          <div id="rewards" className="scroll-mt-20" />
-          <CosmeticsPanel
-            reputation={profileData.stats.reputation}
-            equipped={{
-              avatarFrame: profileData.profile?.avatarFrame ?? null,
-              profileTitle: profileData.profile?.profileTitle ?? null,
-              profileTheme: profileData.profile?.profileTheme ?? null,
-            }}
-            onSaved={(p) => setProfileData((prev) => prev ? { ...prev, profile: prev.profile ? { ...prev.profile, ...p } : prev.profile } : prev)}
-          />
-          <ReputationRoadmap reputation={profileData.stats.reputation} />
-          <ReputationEarn />
-
-          {/* Hub link — /progress holds quests, trust, and unlock detail. */}
-          <Link
-            href="/progress"
-            className="bg-card rounded-lg border border-border p-6 flex items-center justify-between gap-3 hover:border-primary/40 transition-colors"
-          >
-            <div>
-              <h2 className="text-lg font-semibold">Your Progress</h2>
-              <p className="text-sm text-muted-foreground mt-1">Daily quests, trust standing, and what unlocks next.</p>
-            </div>
-            <ArrowRight className="w-5 h-5 text-primary shrink-0" />
-          </Link>
           </>)}
         </div>
       </div>

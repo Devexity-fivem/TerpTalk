@@ -5,6 +5,7 @@ import { useSession } from "next-auth/react"
 import { usePathname } from "next/navigation"
 import { Users, UserCheck, Loader2 } from "lucide-react"
 import { signInHref } from "@/lib/callback-url"
+import Tooltip from "@/components/ui/tooltip"
 
 export default function DiaryFollowButton({ diaryId, initiallyFollowing }: { diaryId: string; initiallyFollowing: boolean }) {
   const { data: session } = useSession()
@@ -14,38 +15,42 @@ export default function DiaryFollowButton({ diaryId, initiallyFollowing }: { dia
 
   if (!session) {
     return (
-      <a href={signInHref(pathname)} className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors">
-        <Users className="w-4 h-4" /> Follow
-      </a>
+      <Tooltip content="Sign in to follow this diary">
+        <a href={signInHref(pathname)} className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors">
+          <Users className="w-4 h-4" /> Follow
+        </a>
+      </Tooltip>
     )
   }
 
   return (
-    <button
-      onClick={async () => {
-        if (busy) return
-        setBusy(true)
-        try {
-          const res = await fetch("/api/follows", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ diaryId }),
-          })
-          if (res.ok) {
-            const d = await res.json()
-            setFollowing(d.following)
-          }
-        } finally { setBusy(false) }
-      }}
-      disabled={busy}
-      className={`flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg font-medium transition-colors disabled:opacity-50 ${
-        following
-          ? "bg-primary/10 text-primary border border-primary/30"
-          : "bg-primary text-primary-foreground hover:bg-primary/90"
-      }`}
-    >
-      {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : following ? <UserCheck className="w-4 h-4" /> : <Users className="w-4 h-4" />}
-      {following ? "Following" : "Follow"}
-    </button>
+    <Tooltip content={following ? "Unfollow this diary" : "Follow this diary — get notified of new updates"}>
+      <button
+        onClick={async () => {
+          if (busy) return
+          setBusy(true)
+          try {
+            const res = await fetch("/api/follows", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ diaryId }),
+            })
+            if (res.ok) {
+              const d = await res.json()
+              setFollowing(d.following)
+            }
+          } finally { setBusy(false) }
+        }}
+        disabled={busy}
+        className={`flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg font-medium transition-colors disabled:opacity-50 ${
+          following
+            ? "bg-primary/10 text-primary border border-primary/30"
+            : "bg-primary text-primary-foreground hover:bg-primary/90"
+        }`}
+      >
+        {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : following ? <UserCheck className="w-4 h-4" /> : <Users className="w-4 h-4" />}
+        {following ? "Following" : "Follow"}
+      </button>
+    </Tooltip>
   )
 }

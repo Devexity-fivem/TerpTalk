@@ -4,6 +4,7 @@ import { useState } from "react"
 import { useSession } from "next-auth/react"
 import { Heart, Flag, Pencil, Trash2, Loader2 } from "lucide-react"
 import { useRouter } from "next/navigation"
+import Tooltip from "@/components/ui/tooltip"
 
 interface PostActionsProps {
   postId: string
@@ -166,53 +167,63 @@ export default function PostActions({
 
       <div className="flex flex-wrap items-center gap-1.5">
         <div className="relative">
-          <button
-            onClick={() => (reactionType ? handleReact(reactionType) : setShowPicker(!showPicker))}
-            disabled={!session || busy}
-            className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-lg transition-colors disabled:opacity-50 ${
-              reactionType
-                ? "bg-primary/10 text-primary border border-primary/20"
-                : "text-muted-foreground hover:text-foreground hover:bg-secondary"
-            }`}
-          >
-            {activeEmoji ? <span className="text-sm">{activeEmoji}</span> : <Heart className="w-3.5 h-3.5" />}
-            <span>React</span>
-          </button>
+          <Tooltip content={reactionType ? "Remove your reaction" : "Add a reaction"}>
+            <button
+              onClick={() => (reactionType ? handleReact(reactionType) : setShowPicker(!showPicker))}
+              disabled={!session || busy}
+              className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-lg transition-colors disabled:opacity-50 ${
+                reactionType
+                  ? "bg-primary/10 text-primary border border-primary/20"
+                  : "text-muted-foreground hover:text-foreground hover:bg-secondary"
+              }`}
+            >
+              {activeEmoji ? <span className="text-sm">{activeEmoji}</span> : <Heart className="w-3.5 h-3.5" />}
+              <span>React</span>
+            </button>
+          </Tooltip>
           {showPicker && (
             <div className="absolute bottom-full left-0 mb-2 flex gap-1 bg-card border border-border rounded-lg px-1.5 py-1 shadow-lg z-10">
               {ORDER.map((type) => (
-                <button
-                  key={type}
-                  onClick={() => handleReact(type)}
-                  className="w-7 h-7 flex items-center justify-center text-base hover:bg-secondary rounded-md transition-colors"
-                  title={type.toLowerCase()}
-                  aria-label={`React with ${type.toLowerCase()}`}
-                >
-                  {EMOJIS[type]}
-                </button>
+                <Tooltip key={type} content={type.toLowerCase()}>
+                  <button
+                    onClick={() => handleReact(type)}
+                    className="w-7 h-7 flex items-center justify-center text-base hover:bg-secondary rounded-md transition-colors"
+                    aria-label={`React with ${type.toLowerCase()}`}
+                  >
+                    {EMOJIS[type]}
+                  </button>
+                </Tooltip>
               ))}
             </div>
           )}
         </div>
         {isOwner && !editing && (
           <>
-            <button onClick={() => setEditing(true)} aria-label="Edit post" className="p-1.5 text-muted-foreground hover:text-foreground transition-colors rounded-lg hover:bg-secondary" title="Edit">
-              <Pencil className="w-3.5 h-3.5" />
-            </button>
-            <button onClick={handleDelete} aria-label="Delete post" className="p-1.5 text-muted-foreground hover:text-destructive transition-colors rounded-lg hover:bg-secondary" title="Delete">
-              <Trash2 className="w-3.5 h-3.5" />
-            </button>
+            <Tooltip content="Edit">
+              <button onClick={() => setEditing(true)} aria-label="Edit post" className="p-1.5 text-muted-foreground hover:text-foreground transition-colors rounded-lg hover:bg-secondary">
+                <Pencil className="w-3.5 h-3.5" />
+              </button>
+            </Tooltip>
+            <Tooltip content="Delete">
+              <button onClick={handleDelete} aria-label="Delete post" className="p-1.5 text-muted-foreground hover:text-destructive transition-colors rounded-lg hover:bg-secondary">
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            </Tooltip>
           </>
         )}
         {session && !isOwner && (
-          <button onClick={() => setShowReport(!showReport)} aria-label="Report post" className="p-1.5 text-muted-foreground hover:text-foreground transition-colors rounded-lg hover:bg-secondary" title="Report">
-            <Flag className="w-3.5 h-3.5" />
-          </button>
+          <Tooltip content="Report">
+            <button onClick={() => setShowReport(!showReport)} aria-label="Report post" className="p-1.5 text-muted-foreground hover:text-foreground transition-colors rounded-lg hover:bg-secondary">
+              <Flag className="w-3.5 h-3.5" />
+            </button>
+          </Tooltip>
         )}
         {canModerate && !isOwner && (
-          <button onClick={handleDelete} aria-label="Remove post" className="p-1.5 text-amber-500 hover:text-amber-600 transition-colors rounded-lg hover:bg-amber-500/10" title="Remove (mod)">
-            <Trash2 className="w-3.5 h-3.5" />
-          </button>
+          <Tooltip content="Remove this post (moderator action)">
+            <button onClick={handleDelete} aria-label="Remove post" className="p-1.5 text-amber-500 hover:text-amber-600 transition-colors rounded-lg hover:bg-amber-500/10">
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
+          </Tooltip>
         )}
       </div>
 
@@ -223,19 +234,20 @@ export default function PostActions({
             .map((type) => {
               const isActive = reactionType === type
               return (
-                <button
-                  key={type}
-                  onClick={() => session && handleReact(type)}
-                  disabled={!session || busy}
-                  className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-xs border transition-colors disabled:opacity-50 ${
-                    isActive
-                      ? "bg-primary/10 border-primary text-primary"
-                      : "bg-secondary border-border/50 text-muted-foreground hover:bg-secondary/80"
-                  }`}
-                >
-                  <span>{EMOJIS[type]}</span>
-                  <span className="font-medium">{counts[type]}</span>
-                </button>
+                <Tooltip key={type} content="Click to add or remove this reaction">
+                  <button
+                    onClick={() => session && handleReact(type)}
+                    disabled={!session || busy}
+                    className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-xs border transition-colors disabled:opacity-50 ${
+                      isActive
+                        ? "bg-primary/10 border-primary text-primary"
+                        : "bg-secondary border-border/50 text-muted-foreground hover:bg-secondary/80"
+                    }`}
+                  >
+                    <span>{EMOJIS[type]}</span>
+                    <span className="font-medium">{counts[type]}</span>
+                  </button>
+                </Tooltip>
               )
             })}
         </div>

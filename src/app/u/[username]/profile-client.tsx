@@ -9,6 +9,7 @@ import UserActions from "@/components/user-actions"
 import RoleBadge from "@/components/role-badge"
 import AchievementBadge from "@/components/achievement-badge"
 import { Avatar } from "@/components/ui/avatar"
+import Tooltip from "@/components/ui/tooltip"
 import { getAvatarFrame, getProfileTheme } from "@/lib/cosmetics"
 import { cn } from "@/lib/utils"
 
@@ -195,9 +196,11 @@ export default function ProfileClient() {
                 <div>
                   <h1 className="text-xl font-bold mb-1 break-words flex items-center gap-2">@{profile.username} <RoleBadge role={profile.role} />
                       {profile.isBot && (
-                        <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider bg-primary/15 text-primary px-1.5 py-0.5 rounded">
-                          <Bot className="w-3 h-3" /> Bot
-                        </span>
+                        <Tooltip content="Automated community assistant — not a person">
+                          <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider bg-primary/15 text-primary px-1.5 py-0.5 rounded">
+                            <Bot className="w-3 h-3" /> Bot
+                          </span>
+                        </Tooltip>
                       )}</h1>
                   {profile.customTitle && (
                     <p className="text-xs font-semibold uppercase tracking-wider text-amber-500 mb-1">{profile.customTitle}</p>
@@ -209,10 +212,12 @@ export default function ProfileClient() {
                         <Zap className="w-3 h-3" /> Automated community helper
                       </span>
                     ) : (
-                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full ${profile.reputationTier.bg} ${profile.reputationTier.color} text-xs font-medium`}>
-                        <span className="text-sm">{profile.reputationTier.icon}</span>
-                        {profile.reputationTier.name}
-                      </span>
+                      <Tooltip content={`${profile.reputationTier.name} reputation tier — earned from community contributions`}>
+                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full ${profile.reputationTier.bg} ${profile.reputationTier.color} text-xs font-medium`}>
+                          <span className="text-sm">{profile.reputationTier.icon}</span>
+                          {profile.reputationTier.name}
+                        </span>
+                      </Tooltip>
                     )}
                   </p>
                   {profile.isBot ? (
@@ -360,9 +365,11 @@ export default function ProfileClient() {
                 </div>
               )}
               {profile.growStreak >= 2 && (
-                <div className="mt-4 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-500/10 text-amber-500 text-xs font-semibold">
-                  <Flame className="w-3.5 h-3.5" /> {profile.growStreak}-day grow streak
-                </div>
+                <Tooltip content="Consecutive days with a grow-diary update">
+                  <div className="mt-4 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-500/10 text-amber-500 text-xs font-semibold">
+                    <Flame className="w-3.5 h-3.5" /> {profile.growStreak}-day grow streak
+                  </div>
+                </Tooltip>
               )}
               {pinnedBadges.length > 0 && (
                 <div className="mt-4">

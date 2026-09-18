@@ -3,6 +3,7 @@
 import { Check } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { REP_TIERS, getReputationTier, getNextTier } from "@/lib/reputation-config"
+import { InfoTip } from "@/components/ui/tooltip"
 
 interface ReputationRoadmapProps {
   reputation: number
@@ -15,7 +16,10 @@ export default function ReputationRoadmap({ reputation, compact }: ReputationRoa
 
   return (
     <div className={cn("bg-card rounded-lg border border-border p-6", compact && "p-4")}>
-      <h3 className={cn("font-semibold mb-4", compact ? "text-base" : "text-lg")}>Reputation Roadmap</h3>
+      <h3 className={cn("font-semibold mb-4 flex items-center gap-1.5", compact ? "text-base" : "text-lg")}>
+        Reputation Roadmap
+        <InfoTip content="Tiers unlock automatically at each reputation threshold. Filled markers are earned, the amber marker is next, and each tier lists the perk it grants." />
+      </h3>
       <div className="relative space-y-4 before:absolute before:left-3.5 before:top-2 before:bottom-2 before:w-px before:bg-border">
         {REP_TIERS.map((tier, i) => {
           const earned = reputation >= tier.threshold

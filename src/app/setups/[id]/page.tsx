@@ -15,6 +15,7 @@ import ReportButton from "@/components/report-button"
 import OwnerDeleteButton from "@/components/owner-delete-button"
 import ImageGallery from "@/components/image-gallery"
 import { escapeLike } from "@/lib/strain-stats"
+import Tooltip from "@/components/ui/tooltip"
 
 export const dynamic = "force-dynamic"
 
@@ -121,19 +122,24 @@ export default async function SetupPage({ params }: { params: Promise<{ id: stri
               <TierChip reputation={setup.author.profile?.reputation ?? 0} publicMilestoneOptOut={setup.author.profile?.publicMilestoneOptOut} />
             </Link>
             <span>{new Date(setup.createdAt).toLocaleDateString()}</span>
-            {edited && <span title="Edited">· edited</span>}
+            {edited && (
+              <Tooltip content="Edited after posting">
+                <span>· edited</span>
+              </Tooltip>
+            )}
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <ShareButtons path={`/setups/${setup.id}`} title={`${setup.title} — grow setup on TerpTalk`} />
             {isOwner && (
-              <Link
-                href={`/setups/${setup.id}/edit`}
-                className="text-muted-foreground hover:text-foreground transition-colors"
-                aria-label="Edit setup"
-                title="Edit setup"
-              >
-                <Pencil className="w-4 h-4" />
-              </Link>
+              <Tooltip content="Edit setup">
+                <Link
+                  href={`/setups/${setup.id}/edit`}
+                  className="text-muted-foreground hover:text-foreground transition-colors"
+                  aria-label="Edit setup"
+                >
+                  <Pencil className="w-4 h-4" />
+                </Link>
+              </Tooltip>
             )}
             <OwnerDeleteButton
               endpoint="/api/setups"

@@ -33,6 +33,7 @@ import { usePathname } from "next/navigation"
 import { useSession } from "next-auth/react"
 import { Loader2, Maximize2, MessagesSquare, X } from "lucide-react"
 import ChatRoom from "@/components/chat-room"
+import Tooltip from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
 import { syncUnread, CHAT_SEEN_EVENT } from "@/lib/chat-client"
 
@@ -191,23 +192,25 @@ export function ChatDock() {
 
   const actions = (
     <>
-      <Link
-        href="/chat"
-        onClick={closePanel}
-        className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
-        aria-label="Open full chat"
-        title="Open full chat"
-      >
-        <Maximize2 className="h-4 w-4" />
-      </Link>
-      <button
-        onClick={closePanel}
-        className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
-        aria-label="Close chat panel"
-        title="Close chat panel"
-      >
-        <X className="h-4 w-4" />
-      </button>
+      <Tooltip content="Open full chat">
+        <Link
+          href="/chat"
+          onClick={closePanel}
+          className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+          aria-label="Open full chat"
+        >
+          <Maximize2 className="h-4 w-4" />
+        </Link>
+      </Tooltip>
+      <Tooltip content="Close chat panel">
+        <button
+          onClick={closePanel}
+          className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+          aria-label="Close chat panel"
+        >
+          <X className="h-4 w-4" />
+        </button>
+      </Tooltip>
     </>
   )
 
@@ -216,25 +219,28 @@ export function ChatDock() {
       {/* Closed state — desktop edge tab. On mobile the bottom-nav Chat
           item is the trigger, so no floating button is needed there. */}
       {!open && (
-        <button
-          onClick={openPanel}
-          className="fixed right-0 top-1/2 z-30 hidden -translate-y-1/2 flex-col items-center gap-1 rounded-l-xl border border-r-0 border-border bg-card px-2.5 py-3 shadow-md transition-colors hover:bg-secondary lg:flex"
-          aria-label={chatUnread ? `Open chat (${chatUnreadRooms} rooms with new activity)` : "Open chat"}
-          aria-haspopup="dialog"
-          title="Open chat"
-        >
-          <span className="relative">
-            <MessagesSquare className="h-5 w-5 text-primary" aria-hidden="true" />
-            {chatUnread && (
-              <span
-                className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full bg-primary ring-2 ring-card"
-                role="status"
-                aria-label="New chat activity"
-              />
-            )}
-          </span>
-          <span className="text-[10px] font-medium text-muted-foreground">Chat</span>
-        </button>
+        <Tooltip content="Open chat" align="end" className="hidden lg:inline-flex">
+          <button
+            onClick={openPanel}
+            className="fixed right-0 top-1/2 z-30 flex -translate-y-1/2 flex-col items-center gap-1 rounded-l-xl border border-r-0 border-border bg-card px-2.5 py-3 shadow-md transition-colors hover:bg-secondary"
+            aria-label={chatUnread ? `Open chat (${chatUnreadRooms} rooms with new activity)` : "Open chat"}
+            aria-haspopup="dialog"
+          >
+            <span className="relative">
+              <MessagesSquare className="h-5 w-5 text-primary" aria-hidden="true" />
+              {chatUnread && (
+                <Tooltip content="New chat activity" align="end" className="absolute -right-1 -top-1">
+                  <span
+                    className="h-2.5 w-2.5 rounded-full bg-primary ring-2 ring-card"
+                    role="status"
+                    aria-label="New chat activity"
+                  />
+                </Tooltip>
+              )}
+            </span>
+            <span className="text-[10px] font-medium text-muted-foreground">Chat</span>
+          </button>
+        </Tooltip>
       )}
 
       {/* ONE element for both form factors — two hidden-via-CSS surfaces

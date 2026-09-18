@@ -2,6 +2,7 @@
 
 import { useCallback, useLayoutEffect, useState } from "react"
 import { Monitor, Moon, Sun } from "lucide-react"
+import Tooltip from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
 import { THEME_STORAGE_KEY, type Theme } from "@/lib/theme"
 
@@ -59,22 +60,22 @@ export default function ThemeToggle({ className }: { className?: string }) {
       className={cn("inline-flex items-center gap-0.5 rounded-lg border border-border bg-background p-0.5", className)}
     >
       {OPTIONS.map(({ value, label, icon: Icon }) => (
-        <button
-          key={value}
-          role="radio"
-          aria-checked={theme === value}
-          aria-label={label}
-          title={label}
-          onClick={() => select(value)}
-          className={cn(
-            "rounded-md p-1.5 transition-colors",
-            theme === value
-              ? "bg-primary/15 text-primary"
-              : "text-muted-foreground hover:bg-secondary hover:text-foreground"
-          )}
-        >
-          <Icon className="h-4 w-4" />
-        </button>
+        <Tooltip key={value} content={label}>
+          <button
+            role="radio"
+            aria-checked={theme === value}
+            aria-label={label}
+            onClick={() => select(value)}
+            className={cn(
+              "rounded-md p-1.5 transition-colors",
+              theme === value
+                ? "bg-primary/15 text-primary"
+                : "text-muted-foreground hover:bg-secondary hover:text-foreground"
+            )}
+          >
+            <Icon className="h-4 w-4" />
+          </button>
+        </Tooltip>
       ))}
     </div>
   )

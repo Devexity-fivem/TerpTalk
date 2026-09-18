@@ -7,6 +7,7 @@ import { signInHref } from "@/lib/callback-url"
 import { Award, Loader2, Pin, PinOff } from "lucide-react"
 import AchievementBadge from "@/components/achievement-badge"
 import { useToast } from "@/components/ui/toast"
+import Tooltip from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
 
 interface Achievement {
@@ -166,20 +167,22 @@ export default function AchievementsPage() {
                   )}
                 >
                   {a.hidden && !a.earned ? (
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-secondary text-muted-foreground text-sm font-bold" aria-hidden="true">
-                          ?
-                        </span>
-                        <div>
-                          <div className="text-sm font-semibold text-muted-foreground">???</div>
-                          <div className="text-[10px] uppercase tracking-wider text-muted-foreground">{a.rarity}</div>
+                    <Tooltip content="Hidden achievement — keep participating to reveal it" className="flex-1 min-w-0">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-secondary text-muted-foreground text-sm font-bold" aria-hidden="true">
+                            ?
+                          </span>
+                          <div>
+                            <div className="text-sm font-semibold text-muted-foreground">???</div>
+                            <div className="text-[10px] uppercase tracking-wider text-muted-foreground">{a.rarity}</div>
+                          </div>
                         </div>
+                        <p className="text-xs text-muted-foreground mt-1.5">
+                          Something is waiting to be discovered.
+                        </p>
                       </div>
-                      <p className="text-xs text-muted-foreground mt-1.5">
-                        Something is waiting to be discovered.
-                      </p>
-                    </div>
+                    </Tooltip>
                   ) : (
                   <div className="flex-1 min-w-0">
                     <AchievementBadge name={a.name ?? ""} earned={a.earned} mode="profile" />
@@ -211,17 +214,19 @@ export default function AchievementsPage() {
                   </div>
                   )}
                   {a.earned && (
-                    <button
-                      onClick={() => togglePin(a)}
-                      disabled={pinBusy === a.name}
-                      title={a.pinned ? "Remove from profile showcase" : "Pin to profile showcase"}
-                      className={cn(
-                        "shrink-0 p-1.5 rounded-lg transition-colors",
-                        a.pinned ? "text-primary bg-primary/10" : "text-muted-foreground hover:text-foreground hover:bg-secondary"
-                      )}
-                    >
-                      {a.pinned ? <PinOff className="w-4 h-4" /> : <Pin className="w-4 h-4" />}
-                    </button>
+                    <Tooltip content={a.pinned ? "Remove from profile showcase" : "Pin to profile showcase"}>
+                      <button
+                        onClick={() => togglePin(a)}
+                        disabled={pinBusy === a.name}
+                        aria-label={a.pinned ? "Remove from profile showcase" : "Pin to profile showcase"}
+                        className={cn(
+                          "shrink-0 p-1.5 rounded-lg transition-colors",
+                          a.pinned ? "text-primary bg-primary/10" : "text-muted-foreground hover:text-foreground hover:bg-secondary"
+                        )}
+                      >
+                        {a.pinned ? <PinOff className="w-4 h-4" /> : <Pin className="w-4 h-4" />}
+                      </button>
+                    </Tooltip>
                   )}
                 </div>
               ))}

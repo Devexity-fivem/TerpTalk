@@ -13,6 +13,7 @@ import Link from "next/link"
 import { Sprout, Lock, Target, ChevronRight, Award, Zap } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { signInHref } from "@/lib/callback-url"
+import Tooltip from "@/components/ui/tooltip"
 
 interface ProgressionData {
   reputation: number
@@ -94,16 +95,19 @@ export default function ProgressionPanel() {
       <div className="flex items-center gap-2 mb-3">
         <Sprout className="w-4 h-4 text-primary" />
         <h2 className="text-lg font-semibold">Your garden</h2>
-        <span className={cn("ml-auto inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium", data.tier.bg, data.tier.color)}>
-          <span aria-hidden="true">{data.tier.icon}</span> {data.tier.name}
-        </span>
-        {data.trust && (
-          <span
-            title={`Community standing — earned through helpful, peer-validated contributions (${data.trust.score.toLocaleString()} trust)`}
-            className={cn("inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium", data.trust.standing.bg, data.trust.standing.color)}
-          >
-            <span aria-hidden="true">{data.trust.standing.icon}</span> {data.trust.standing.name}
+        <Tooltip content={data.tier.benefit ? `${data.tier.name} tier — ${data.tier.benefit}` : `${data.tier.name} reputation tier`} align="end" className="ml-auto">
+          <span className={cn("inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium", data.tier.bg, data.tier.color)}>
+            <span aria-hidden="true">{data.tier.icon}</span> {data.tier.name}
           </span>
+        </Tooltip>
+        {data.trust && (
+          <Tooltip content={`Community standing — earned through helpful, peer-validated contributions (${data.trust.score.toLocaleString()} trust)`} align="end">
+            <span
+              className={cn("inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium", data.trust.standing.bg, data.trust.standing.color)}
+            >
+              <span aria-hidden="true">{data.trust.standing.icon}</span> {data.trust.standing.name}
+            </span>
+          </Tooltip>
         )}
       </div>
 
@@ -159,9 +163,11 @@ export default function ProgressionPanel() {
       {data.upcoming.length > 0 && (
         <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
           {data.upcoming.map((u) => (
-            <span key={u.rung}>
-              Lv {u.level} <span className="text-foreground/70">@ {u.rung.toLocaleString()}</span>
-            </span>
+            <Tooltip key={u.rung} content={`Grow Level ${u.level} unlocks at ${u.rung.toLocaleString()} reputation`}>
+              <span>
+                Lv {u.level} <span className="text-foreground/70">@ {u.rung.toLocaleString()}</span>
+              </span>
+            </Tooltip>
           ))}
         </div>
       )}
@@ -186,9 +192,11 @@ export default function ProgressionPanel() {
                       style={{ width: `${Math.min(100, (q.progress / q.target) * 100)}%` }}
                     />
                   </div>
-                  <span className={cn("font-medium w-10 text-right", q.done || q.paid ? "text-primary" : "text-muted-foreground")}>
-                    {q.paid ? `+${q.reward} ✓` : `+${q.reward}`}
-                  </span>
+                  <Tooltip content={q.paid ? "Reputation paid" : `Pays +${q.reward} rep when complete`} align="end">
+                    <span className={cn("font-medium w-10 text-right", q.done || q.paid ? "text-primary" : "text-muted-foreground")}>
+                      {q.paid ? `+${q.reward} ✓` : `+${q.reward}`}
+                    </span>
+                  </Tooltip>
                 </div>
               </div>
             ))}
@@ -215,9 +223,11 @@ export default function ProgressionPanel() {
                     style={{ width: `${Math.min(100, (c.progress / c.target) * 100)}%` }}
                   />
                 </div>
-                <span className={cn("font-medium w-10 text-right", c.done ? "text-primary" : "text-muted-foreground")}>
-                  {c.done ? `+${c.reward} ✓` : `+${c.reward}`}
-                </span>
+                <Tooltip content={c.done ? "Reputation paid" : `Pays +${c.reward} rep when complete`} align="end">
+                  <span className={cn("font-medium w-10 text-right", c.done ? "text-primary" : "text-muted-foreground")}>
+                    {c.done ? `+${c.reward} ✓` : `+${c.reward}`}
+                  </span>
+                </Tooltip>
               </div>
             </div>
           ))}

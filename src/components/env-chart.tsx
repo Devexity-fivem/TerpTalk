@@ -4,6 +4,7 @@ import {
   LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer,
   Legend, ReferenceArea, ReferenceLine, ComposedChart,
 } from "recharts"
+import { InfoTip } from "@/components/ui/tooltip"
 
 interface Reading {
   createdAt: string
@@ -47,7 +48,10 @@ export default function EnvCharts({ updates }: { updates: Reading[] }) {
     <div className="space-y-4 mb-6">
       {envData.length >= 2 && (
         <section className="bg-card rounded-xl border border-border p-4" aria-label="Environment chart — temperature, humidity and VPD over time">
-          <h2 className="font-semibold text-sm mb-3">Environment — Temp / RH / VPD</h2>
+          <h2 className="font-semibold text-sm mb-3 flex items-center gap-1.5">
+            Environment — Temp / RH / VPD
+            <InfoTip content="RH = relative humidity. VPD = vapor pressure deficit (kPa) — how hard the air pulls moisture from leaves" />
+          </h2>
           <div role="img" aria-label="Line chart of temperature, relative humidity and VPD across diary updates">
             <ResponsiveContainer width="100%" height={220}>
               <ComposedChart data={envData}>
@@ -81,7 +85,10 @@ export default function EnvCharts({ updates }: { updates: Reading[] }) {
 
       {chemData.length >= 2 && (
         <section className="bg-card rounded-xl border border-border p-4" aria-label="Nutrient chart — pH and EC over time">
-          <h2 className="font-semibold text-sm mb-3">Nutrients — pH / EC</h2>
+          <h2 className="font-semibold text-sm mb-3 flex items-center gap-1.5">
+            Nutrients — pH / EC
+            <InfoTip content="EC = electrical conductivity — a proxy for nutrient concentration" />
+          </h2>
           <div role="img" aria-label="Line chart of pH and EC across diary updates">
             <ResponsiveContainer width="100%" height={200}>
               <LineChart data={chemData}>

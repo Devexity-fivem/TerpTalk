@@ -6,6 +6,7 @@ import { Leaf, MessageSquare, TrendingUp, Calendar, Users, UserPlus } from "luci
 import Link from "next/link"
 import RoleBadge from "@/components/role-badge"
 import TierChip from "@/components/tier-chip"
+import Tooltip from "@/components/ui/tooltip"
 
 export const dynamic = "force-dynamic"
 
@@ -288,7 +289,9 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
                             <div className="flex-1 min-w-0">
                               <div className="font-semibold text-sm mb-1 flex items-center gap-2">
                                 {unreadThreadIds.has(t.id) && (
-                                  <span className="h-2 w-2 rounded-full bg-primary shrink-0" role="img" aria-label="Unread" title="New activity" />
+                                  <Tooltip content="New activity" className="shrink-0">
+                                    <span className="h-2 w-2 rounded-full bg-primary" role="img" aria-label="Unread" />
+                                  </Tooltip>
                                 )}
                                 {t.title}
                               </div>
@@ -413,7 +416,9 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
                           </div>
                           <h3 className="font-medium mb-1 flex items-center gap-2">
                             {unreadThreadIds.has(thread.id) && (
-                              <span className="h-2 w-2 rounded-full bg-primary shrink-0" role="img" aria-label="Unread" title="New activity" />
+                              <Tooltip content="New activity" className="shrink-0">
+                                <span className="h-2 w-2 rounded-full bg-primary" role="img" aria-label="Unread" />
+                              </Tooltip>
                             )}
                             {thread.title}
                           </h3>

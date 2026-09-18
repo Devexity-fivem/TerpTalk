@@ -6,6 +6,8 @@ import { Loader2, Sprout } from "lucide-react"
 import { Avatar } from "@/components/ui/avatar"
 import RoleBadge from "@/components/role-badge"
 import TierChip from "@/components/tier-chip"
+import Tooltip from "@/components/ui/tooltip"
+import { getBadgeByName } from "@/lib/badge-registry"
 
 interface UserCard {
   username: string
@@ -148,16 +150,22 @@ export default function UserPopover({ username, children }: { username: string |
               {!card.statusHidden && (
                 <span className="mb-2 block text-xs text-muted-foreground">
                   {card.reputation} rep
-                  {card.trustStanding && <> · {card.trustStanding.icon} {card.trustStanding.name}</>}
+                  {card.trustStanding && (
+                    <Tooltip content="Community trust standing — grows with positive contributions">
+                      <> · {card.trustStanding.icon} {card.trustStanding.name}</>
+                    </Tooltip>
+                  )}
                   {card.totalGrows > 0 && <> · {card.harvestedGrows}/{card.totalGrows} grows harvested</>}
                 </span>
               )}
               {card.badges.length > 0 && (
                 <span className="mb-2 flex flex-wrap gap-1">
                   {card.badges.map((b) => (
-                    <span key={b.name} title={b.name} className="rounded bg-secondary px-1.5 py-0.5 text-[10px] text-secondary-foreground">
-                      {b.icon} {b.name}
-                    </span>
+                    <Tooltip key={b.name} content={getBadgeByName(b.name)?.description ?? b.name}>
+                      <span className="rounded bg-secondary px-1.5 py-0.5 text-[10px] text-secondary-foreground">
+                        {b.icon} {b.name}
+                      </span>
+                    </Tooltip>
                   ))}
                 </span>
               )}

@@ -14,6 +14,7 @@ import MobileNav from "@/components/mobile-nav"
 import ThemeToggle from "@/components/theme-toggle"
 import CreateMenu from "@/components/create-menu"
 import UserMenu from "@/components/user-menu"
+import Tooltip from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
 import { signInHref } from "@/lib/callback-url"
 import { getSharedPusher, peekSharedPusher } from "@/lib/pusher-client"
@@ -169,15 +170,19 @@ export function Navigation() {
           <div className="flex h-16 items-center justify-between gap-2">
             {/* Logo — compact below sm so the header fits 320px devices;
                 the Beta chip only appears once there's room for it. */}
-            <Link href="/" className="flex shrink-0 items-center gap-1.5 sm:gap-2" aria-label="TerpTalk home" title="Go to homepage">
-              <div className="rounded-xl bg-primary/15 p-1.5 ring-1 ring-primary/30 sm:p-2">
-                <CannabisLeaf className="h-5 w-5 text-primary sm:h-6 sm:w-6" />
-              </div>
-              <span className="text-base font-bold tracking-tight sm:text-lg">TerpTalk</span>
-              <span className="hidden rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-500 sm:inline">
-                Beta
-              </span>
-            </Link>
+            <Tooltip content="Go to homepage" side="bottom">
+              <Link href="/" className="flex shrink-0 items-center gap-1.5 sm:gap-2" aria-label="TerpTalk home">
+                <div className="rounded-xl bg-primary/15 p-1.5 ring-1 ring-primary/30 sm:p-2">
+                  <CannabisLeaf className="h-5 w-5 text-primary sm:h-6 sm:w-6" />
+                </div>
+                <span className="text-base font-bold tracking-tight sm:text-lg">TerpTalk</span>
+                <Tooltip content="TerpTalk is in public beta — features are still rolling out" side="bottom" className="hidden sm:inline-flex">
+                  <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-500">
+                    Beta
+                  </span>
+                </Tooltip>
+              </Link>
+            </Tooltip>
 
             {/* Desktop primary links — xl and up only; below that the
                 drawer carries the full nav so lg has room for the
@@ -204,12 +209,13 @@ export function Navigation() {
                   <Icon className="h-4 w-4" />
                   {label}
                   {href === "/chat" && chatUnread && (
-                    <span
-                      className="h-2 w-2 rounded-full bg-primary"
-                      role="status"
-                      aria-label="New chat activity"
-                      title="New chat activity"
-                    />
+                    <Tooltip content="New chat activity" side="bottom">
+                      <span
+                        className="h-2 w-2 rounded-full bg-primary"
+                        role="status"
+                        aria-label="New chat activity"
+                      />
+                    </Tooltip>
                   )}
                 </Link>
               ))}
@@ -241,36 +247,40 @@ export function Navigation() {
               ) : session ? (
                 <>
                   <CreateMenu />
-                  <Link
-                    href="/messages"
-                    className="relative hidden rounded-lg p-2 transition-colors hover:bg-secondary lg:block"
-                    aria-label={dmUnread > 0 ? `Messages (${dmUnread} unread)` : "Messages"}
-                  >
-                    <Mail className="h-5 w-5" />
-                    {dmUnread > 0 && (
-                      <span
-                        className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-semibold text-destructive-foreground"
-                        aria-live="polite"
-                      >
-                        {dmUnread > 99 ? "99+" : dmUnread}
-                      </span>
-                    )}
-                  </Link>
-                  <Link
-                    href="/notifications"
-                    className="relative hidden rounded-lg p-2 transition-colors hover:bg-secondary lg:block"
-                    aria-label={unread > 0 ? `Notifications (${unread} unread)` : "Notifications"}
-                  >
-                    <Bell className="h-5 w-5" />
-                    {unread > 0 && (
-                      <span
-                        className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-semibold text-destructive-foreground"
-                        aria-live="polite"
-                      >
-                        {unread > 99 ? "99+" : unread}
-                      </span>
-                    )}
-                  </Link>
+                  <Tooltip content="Messages" side="bottom" className="hidden lg:inline-flex">
+                    <Link
+                      href="/messages"
+                      className="relative rounded-lg p-2 transition-colors hover:bg-secondary"
+                      aria-label={dmUnread > 0 ? `Messages (${dmUnread} unread)` : "Messages"}
+                    >
+                      <Mail className="h-5 w-5" />
+                      {dmUnread > 0 && (
+                        <span
+                          className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-semibold text-destructive-foreground"
+                          aria-live="polite"
+                        >
+                          {dmUnread > 99 ? "99+" : dmUnread}
+                        </span>
+                      )}
+                    </Link>
+                  </Tooltip>
+                  <Tooltip content="Notifications" side="bottom" className="hidden lg:inline-flex">
+                    <Link
+                      href="/notifications"
+                      className="relative rounded-lg p-2 transition-colors hover:bg-secondary"
+                      aria-label={unread > 0 ? `Notifications (${unread} unread)` : "Notifications"}
+                    >
+                      <Bell className="h-5 w-5" />
+                      {unread > 0 && (
+                        <span
+                          className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-semibold text-destructive-foreground"
+                          aria-live="polite"
+                        >
+                          {unread > 99 ? "99+" : unread}
+                        </span>
+                      )}
+                    </Link>
+                  </Tooltip>
                   <UserMenu />
                 </>
               ) : (
@@ -293,13 +303,15 @@ export function Navigation() {
               {/* Mobile search entry — the search input is md+; below sm the
                   drawer's search field is the search path so the header fits
                   320px devices. */}
-              <Link
-                href="/search"
-                className="hidden rounded-lg p-2 transition-colors hover:bg-secondary sm:block md:hidden"
-                aria-label="Search"
-              >
-                <Search className="h-5 w-5" />
-              </Link>
+              <Tooltip content="Search TerpTalk" side="bottom" className="hidden sm:inline-flex md:hidden">
+                <Link
+                  href="/search"
+                  className="rounded-lg p-2 transition-colors hover:bg-secondary"
+                  aria-label="Search"
+                >
+                  <Search className="h-5 w-5" />
+                </Link>
+              </Tooltip>
 
               {/* Drawer trigger */}
               <button

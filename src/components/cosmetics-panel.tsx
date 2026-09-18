@@ -5,6 +5,7 @@ import { Palette, Lock, Check } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { AVATAR_FRAMES, PROFILE_TITLES, PROFILE_THEMES, unlockTierName } from "@/lib/cosmetics"
 import { useToast } from "@/components/ui/toast"
+import Tooltip, { InfoTip } from "@/components/ui/tooltip"
 
 type Field = "avatarFrame" | "profileTitle" | "profileTheme"
 
@@ -40,12 +41,10 @@ function Row({ items, field, reputation, equipped, saving, onEquip, render }: Ro
       {items.map((item) => {
         const locked = reputation < item.unlockedAt
         const active = equipped === item.key
-        return (
+        const button = (
           <button
-            key={item.key}
             disabled={locked || saving}
             onClick={() => onEquip(field, item.key)}
-            title={locked ? `Unlocks at ${item.unlockedAt.toLocaleString()} rep (${unlockTierName(item.unlockedAt)})` : item.name}
             className={cn(
               "inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs transition-colors",
               active
@@ -58,6 +57,16 @@ function Row({ items, field, reputation, equipped, saving, onEquip, render }: Ro
             {locked ? <Lock className="w-3 h-3" /> : active ? <Check className="w-3 h-3" /> : null}
             {render ? render(item) : item.name}
           </button>
+        )
+        // Locked rewards need the explanation — hover/focus/tap reveals the
+        // requirement. The disabled button can't fire hover itself, so the
+        // tooltip wraps it (spans still receive pointer events).
+        return locked ? (
+          <Tooltip key={item.key} content={`Unlocks at ${item.unlockedAt.toLocaleString()} rep (${unlockTierName(item.unlockedAt)})`}>
+            {button}
+          </Tooltip>
+        ) : (
+          <span key={item.key}>{button}</span>
         )
       })}
     </div>
@@ -92,11 +101,15 @@ export default function CosmeticsPanel({ reputation, equipped, onSaved }: Cosmet
       <div className="flex items-center gap-2 mb-1">
         <Palette className="w-5 h-5 text-primary" />
         <h2 className="text-lg font-semibold">Your Rewards</h2>
+        <InfoTip content="Cosmetic rewards unlock automatically as your reputation grows — no claiming needed. Equip them here and they show up on your profile and posts." />
       </div>
       <p className="text-xs text-muted-foreground mb-4">Unlocked by reputation. Higher tiers unlock rarer looks.</p>
       <div className="space-y-4">
         <div>
-          <h3 className="text-sm font-medium mb-2">Avatar frame</h3>
+          <h3 className="flex items-center gap-1.5 text-sm font-medium mb-2">
+            Avatar frame
+            <InfoTip content="A colored ring shown around your avatar across the site." />
+          </h3>
           <Row
             items={AVATAR_FRAMES}
             field="avatarFrame"
@@ -113,7 +126,10 @@ export default function CosmeticsPanel({ reputation, equipped, onSaved }: Cosmet
           />
         </div>
         <div>
-          <h3 className="text-sm font-medium mb-2">Profile title</h3>
+          <h3 className="flex items-center gap-1.5 text-sm font-medium mb-2">
+            Profile title
+            <InfoTip content="A tagline shown next to your name on your profile and posts." />
+          </h3>
           <Row
             items={PROFILE_TITLES}
             field="profileTitle"
@@ -124,7 +140,10 @@ export default function CosmeticsPanel({ reputation, equipped, onSaved }: Cosmet
           />
         </div>
         <div>
-          <h3 className="text-sm font-medium mb-2">Profile theme</h3>
+          <h3 className="flex items-center gap-1.5 text-sm font-medium mb-2">
+            Profile theme
+            <InfoTip content="A color accent applied to your profile page." />
+          </h3>
           <Row
             items={PROFILE_THEMES}
             field="profileTheme"

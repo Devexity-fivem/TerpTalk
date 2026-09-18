@@ -1,6 +1,7 @@
 "use client"
 
 import { cn } from "@/lib/utils"
+import Tooltip from "@/components/ui/tooltip"
 
 const STAGES = ["GERMINATION", "SEEDLING", "VEGETATIVE", "FLOWER", "HARVEST", "DRYING", "CURING", "COMPLETED"]
 
@@ -55,18 +56,29 @@ export default function StageTimeline({ current, runs }: { current: string; runs
         {STAGES.map((stage, i) => {
           const completed = i <= currentIdx
           const isCurrent = stage === current
+          const label = stage.replace(/_/g, " ")
           return (
             <div key={stage} className="flex flex-col items-center gap-1.5 text-center">
-              <div
-                className={cn(
-                  "w-6 h-6 sm:w-8 sm:h-8 rounded-full flex items-center justify-center text-[10px] sm:text-xs font-bold transition-colors",
-                  completed ? `${STAGE_COLORS[stage]} text-white` : "bg-secondary text-muted-foreground",
-                  isCurrent && `ring-2 ring-offset-2 ring-offset-background ${STAGE_RING[stage]}`
-                )}
-                aria-current={isCurrent ? "step" : undefined}
+              <Tooltip
+                content={
+                  isCurrent
+                    ? `${label} — current stage`
+                    : completed
+                      ? `${label} — completed`
+                      : `${label} — not reached yet`
+                }
               >
-                {i + 1}
-              </div>
+                <div
+                  className={cn(
+                    "w-6 h-6 sm:w-8 sm:h-8 rounded-full flex items-center justify-center text-[10px] sm:text-xs font-bold transition-colors",
+                    completed ? `${STAGE_COLORS[stage]} text-white` : "bg-secondary text-muted-foreground",
+                    isCurrent && `ring-2 ring-offset-2 ring-offset-background ${STAGE_RING[stage]}`
+                  )}
+                  aria-current={isCurrent ? "step" : undefined}
+                >
+                  {i + 1}
+                </div>
+              </Tooltip>
               <span
                 className={cn(
                   "text-[10px] sm:text-xs leading-tight",
@@ -82,14 +94,24 @@ export default function StageTimeline({ current, runs }: { current: string; runs
 
       {runs.length > 0 && (
         <div>
-          <div className="flex h-2 rounded-full overflow-hidden">
+          <div className="flex h-2">
             {runs.map((r, i) => (
               <div
                 key={i}
-                className={`${STAGE_COLORS[r.stage] || "bg-secondary"} h-full`}
+                className="h-full"
                 style={{ width: `${(r.days / Math.max(1, runs.reduce((a, b) => a + b.days, 0))) * 100}%` }}
-                title={`${r.stage} — ${r.days}d`}
-              />
+              >
+                <Tooltip content={`${r.stage} — ${r.days}d`} className="block h-full">
+                  <span
+                    className={cn(
+                      "block h-full",
+                      STAGE_COLORS[r.stage] || "bg-secondary",
+                      i === 0 && "rounded-l-full",
+                      i === runs.length - 1 && "rounded-r-full"
+                    )}
+                  />
+                </Tooltip>
+              </div>
             ))}
           </div>
           <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1.5">

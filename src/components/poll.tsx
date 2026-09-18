@@ -3,6 +3,7 @@
 import { useState } from "react"
 import { useSession } from "next-auth/react"
 import { BarChart3, Loader2 } from "lucide-react"
+import Tooltip from "@/components/ui/tooltip"
 
 interface PollProps {
   poll: {
@@ -78,14 +79,16 @@ export default function Poll({ poll, initialCounts, initialTotal, userVoteOption
                   </div>
                 </div>
               ) : (
-                <button
-                  onClick={() => handleVote(opt.id)}
-                  disabled={loading !== null}
-                  className="w-full text-left px-4 py-2 rounded-lg border border-border bg-background hover:border-primary hover:bg-primary/5 transition-colors disabled:opacity-50 flex items-center justify-between"
-                >
-                  <span>{opt.text}</span>
-                  {loading === opt.id && <Loader2 className="w-4 h-4 animate-spin" />}
-                </button>
+                <Tooltip content="Cast your vote — can't be changed" className="w-full">
+                  <button
+                    onClick={() => handleVote(opt.id)}
+                    disabled={loading !== null}
+                    className="w-full text-left px-4 py-2 rounded-lg border border-border bg-background hover:border-primary hover:bg-primary/5 transition-colors disabled:opacity-50 flex items-center justify-between"
+                  >
+                    <span>{opt.text}</span>
+                    {loading === opt.id && <Loader2 className="w-4 h-4 animate-spin" />}
+                  </button>
+                </Tooltip>
               )}
             </div>
           )

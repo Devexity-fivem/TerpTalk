@@ -3,6 +3,7 @@
 import { useState } from "react"
 import { useSession } from "next-auth/react"
 import { Flag, Loader2 } from "lucide-react"
+import Tooltip from "@/components/ui/tooltip"
 
 // Generic report control for content types without a dedicated action bar
 // (threads, diaries, setups). Posts and profiles have their own flows.
@@ -53,13 +54,14 @@ export default function ReportButton({
 
   return (
     <div className="relative">
-      <button
-        onClick={() => setOpen(!open)}
-        className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground px-2 py-1 rounded-lg hover:bg-secondary transition-colors"
-        title="Report"
-      >
-        <Flag className="w-3.5 h-3.5" /> {label ?? "Report"}
-      </button>
+      <Tooltip content="Report this to moderators" align="end">
+        <button
+          onClick={() => setOpen(!open)}
+          className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground px-2 py-1 rounded-lg hover:bg-secondary transition-colors"
+        >
+          <Flag className="w-3.5 h-3.5" /> {label ?? "Report"}
+        </button>
+      </Tooltip>
       {open && (
         <div className="absolute right-0 mt-1 w-72 p-3 bg-card border border-border rounded-lg shadow-lg z-20 space-y-2">
           <p className="text-xs text-muted-foreground">Why are you reporting this?</p>

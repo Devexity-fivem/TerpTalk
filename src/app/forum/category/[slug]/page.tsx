@@ -11,6 +11,7 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import CategoryFollowButton from "@/components/category-follow-button"
 import TierChip from "@/components/tier-chip"
+import Tooltip from "@/components/ui/tooltip"
 
 export const dynamic = "force-dynamic"
 
@@ -208,14 +209,26 @@ export default async function CategoryPage({
                     <div className="flex-1">
                       <div className="flex items-center gap-2 mb-1">
                         {unreadThreadIds.has(thread.id) && (
-                          <span className="h-2 w-2 rounded-full bg-primary shrink-0" role="img" aria-label="Unread" title="New activity" />
+                          <Tooltip content="New activity" className="shrink-0">
+                            <span className="h-2 w-2 rounded-full bg-primary" role="img" aria-label="Unread" />
+                          </Tooltip>
                         )}
-                        {thread.pinned && <Pin className="w-4 h-4 text-primary" />}
-                        {thread.locked && <Lock className="w-4 h-4 text-muted-foreground" />}
+                        {thread.pinned && (
+                          <Tooltip content="Pinned by moderators">
+                            <Pin className="w-4 h-4 text-primary" />
+                          </Tooltip>
+                        )}
+                        {thread.locked && (
+                          <Tooltip content="Locked — no new replies">
+                            <Lock className="w-4 h-4 text-muted-foreground" />
+                          </Tooltip>
+                        )}
                         {thread.acceptedAnswer && !thread.acceptedAnswer.deleted && (
-                          <span className="inline-flex items-center gap-1 text-xs text-green-500 shrink-0">
-                            <CheckCircle2 className="w-3.5 h-3.5" /> Solved
-                          </span>
+                          <Tooltip content="The author accepted a reply as the answer" className="shrink-0">
+                            <span className="inline-flex items-center gap-1 text-xs text-green-500">
+                              <CheckCircle2 className="w-3.5 h-3.5" /> Solved
+                            </span>
+                          </Tooltip>
                         )}
                         <h3 className="font-semibold">{thread.title}</h3>
                       </div>

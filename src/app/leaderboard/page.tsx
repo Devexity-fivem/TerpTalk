@@ -12,6 +12,7 @@ import { weeklyBoard, weeklyNewGrowers, weekRange, WEEKLY_BOARD_TYPES } from "@/
 import { currentWeekKey } from "@/lib/week"
 import { Avatar } from "@/components/ui/avatar"
 import { cn } from "@/lib/utils"
+import Tooltip from "@/components/ui/tooltip"
 
 export const revalidate = 300 // public content, edge-cached
 
@@ -22,13 +23,14 @@ export const metadata = {
 
 type Tab = "rep" | "week" | "helpful" | "diaries" | "badges"
 
-const TABS: { key: Tab; label: string; icon: typeof Trophy; blurb: string; metricLabel: string }[] = [
+const TABS: { key: Tab; label: string; icon: typeof Trophy; blurb: string; metricLabel: string; tip?: string }[] = [
   {
     key: "week",
     label: "This Week",
     icon: Sprout,
     blurb: "Reputation earned this week — resets Monday. Anyone can win it.",
     metricLabel: "rep this week",
+    tip: "Rep earned this week — resets Monday",
   },
   {
     key: "rep",
@@ -43,6 +45,7 @@ const TABS: { key: Tab; label: string; icon: typeof Trophy; blurb: string; metri
     icon: CheckCircle2,
     blurb: "Accepted answers — members whose replies solved a real problem.",
     metricLabel: "solutions",
+    tip: "Ranked by accepted answers",
   },
   {
     key: "diaries",
@@ -284,24 +287,34 @@ export default async function LeaderboardPage({
         </div>
 
         {/* Category tabs */}
-        <div className="flex gap-2 mb-2 overflow-x-auto pb-1" role="tablist" aria-label="Leaderboard categories">
-          {TABS.map((t) => (
-            <Link
-              key={t.key}
-              href={t.key === "rep" ? "/leaderboard" : `/leaderboard?tab=${t.key}`}
-              role="tab"
-              aria-selected={tab === t.key}
-              className={cn(
-                "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border whitespace-nowrap transition-colors",
-                tab === t.key
-                  ? "border-primary bg-primary/10 text-primary"
-                  : "border-border text-muted-foreground hover:text-foreground"
-              )}
-            >
-              <t.icon className="w-3.5 h-3.5" aria-hidden="true" />
-              {t.label}
-            </Link>
-          ))}
+        {/* sm:overflow-x-visible keeps pill tooltips from clipping; small screens still scroll */}
+        <div className="flex gap-2 mb-2 overflow-x-auto sm:overflow-x-visible pb-1" role="tablist" aria-label="Leaderboard categories">
+          {TABS.map((t) => {
+            const pill = (
+              <Link
+                key={t.key}
+                href={t.key === "rep" ? "/leaderboard" : `/leaderboard?tab=${t.key}`}
+                role="tab"
+                aria-selected={tab === t.key}
+                className={cn(
+                  "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border whitespace-nowrap transition-colors",
+                  tab === t.key
+                    ? "border-primary bg-primary/10 text-primary"
+                    : "border-border text-muted-foreground hover:text-foreground"
+                )}
+              >
+                <t.icon className="w-3.5 h-3.5" aria-hidden="true" />
+                {t.label}
+              </Link>
+            )
+            return t.tip ? (
+              <Tooltip key={t.key} content={t.tip} side="bottom">
+                {pill}
+              </Tooltip>
+            ) : (
+              pill
+            )
+          })}
         </div>
         <p className="text-xs text-muted-foreground mb-4 px-1">{activeTab.blurb}</p>
 

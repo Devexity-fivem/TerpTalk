@@ -7,6 +7,7 @@ import { useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
 import { Shield, Flag, Loader2, CheckCircle, XCircle, Ban, AlertTriangle, Search, UserCheck, ScrollText, ListChecks, Layers, TrendingUp, ChevronRight } from "lucide-react"
 import Link from "next/link"
+import Tooltip from "@/components/ui/tooltip"
 
 interface LookupUser {
   id: string
@@ -594,16 +595,20 @@ export default function ModerationPage() {
                 </Link>
                 {canAct && !terminal && (
                   <span className="flex gap-1.5 shrink-0" onClick={(e) => e.preventDefault()}>
-                    <button onClick={() => queueAction(it, { action: "status", status: "RESOLVED" })} disabled={busy === it.id}
-                      title="Resolve"
-                      className="p-1.5 bg-primary/10 text-primary rounded-lg hover:bg-primary/20 disabled:opacity-50">
-                      <CheckCircle className="w-4 h-4" />
-                    </button>
-                    <button onClick={() => queueAction(it, { action: "status", status: "DISMISSED" })} disabled={busy === it.id}
-                      title="Dismiss"
-                      className="p-1.5 bg-secondary rounded-lg hover:bg-secondary/80 disabled:opacity-50">
-                      <XCircle className="w-4 h-4" />
-                    </button>
+                    <Tooltip content="Resolve — mark this handled">
+                      <button onClick={() => queueAction(it, { action: "status", status: "RESOLVED" })} disabled={busy === it.id}
+                        aria-label="Resolve"
+                        className="p-1.5 bg-primary/10 text-primary rounded-lg hover:bg-primary/20 disabled:opacity-50">
+                        <CheckCircle className="w-4 h-4" />
+                      </button>
+                    </Tooltip>
+                    <Tooltip content="Dismiss — no action needed">
+                      <button onClick={() => queueAction(it, { action: "status", status: "DISMISSED" })} disabled={busy === it.id}
+                        aria-label="Dismiss"
+                        className="p-1.5 bg-secondary rounded-lg hover:bg-secondary/80 disabled:opacity-50">
+                        <XCircle className="w-4 h-4" />
+                      </button>
+                    </Tooltip>
                   </span>
                 )}
               </div>

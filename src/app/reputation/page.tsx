@@ -2,6 +2,7 @@ import { REP_POINTS, REP_CAPS, REP_TIERS, REP_LADDER, VERIFIED_MULTIPLIER, REFER
 import { AVATAR_FRAMES, PROFILE_TITLES, PROFILE_THEMES } from "@/lib/cosmetics"
 import { WEEKLY_CHALLENGES } from "@/lib/challenges"
 import { TrendingUp, ShieldCheck, RotateCcw, Sprout, Target } from "lucide-react"
+import Tooltip from "@/components/ui/tooltip"
 import ProgressionPanel from "@/components/progression-panel"
 import type { Metadata } from "next"
 
@@ -122,11 +123,13 @@ export default function ReputationPage() {
               <h3 className="text-sm font-semibold mb-2">Avatar frames</h3>
               <div className="flex flex-wrap gap-2">
                 {AVATAR_FRAMES.map((f) => (
-                  <span key={f.key} title={`${f.description} — unlocks at ${f.unlockedAt.toLocaleString()} rep`} className="inline-flex items-center gap-1.5 text-xs bg-secondary/50 rounded-full px-2.5 py-1">
-                    <span className={`inline-block w-3.5 h-3.5 rounded-full ${f.className.split(" ").filter((c) => c.startsWith("ring")).join(" ")}`} />
-                    {f.name}
-                    <span className="text-muted-foreground">{f.unlockedAt.toLocaleString()}</span>
-                  </span>
+                  <Tooltip key={f.key} content={`${f.description} — unlocks at ${f.unlockedAt.toLocaleString()} rep`}>
+                    <span className="inline-flex items-center gap-1.5 text-xs bg-secondary/50 rounded-full px-2.5 py-1">
+                      <span className={`inline-block w-3.5 h-3.5 rounded-full ${f.className.split(" ").filter((c) => c.startsWith("ring")).join(" ")}`} />
+                      {f.name}
+                      <span className="text-muted-foreground">{f.unlockedAt.toLocaleString()}</span>
+                    </span>
+                  </Tooltip>
                 ))}
               </div>
             </div>
@@ -134,9 +137,11 @@ export default function ReputationPage() {
               <h3 className="text-sm font-semibold mb-2">Profile titles</h3>
               <div className="flex flex-wrap gap-2">
                 {PROFILE_TITLES.map((t) => (
-                  <span key={t.key} title={`${t.description} — unlocks at ${t.unlockedAt.toLocaleString()} rep`} className="text-xs bg-secondary/50 rounded-full px-2.5 py-1">
-                    {t.name} <span className="text-muted-foreground">{t.unlockedAt.toLocaleString()}</span>
-                  </span>
+                  <Tooltip key={t.key} content={`${t.description} — unlocks at ${t.unlockedAt.toLocaleString()} rep`}>
+                    <span className="text-xs bg-secondary/50 rounded-full px-2.5 py-1">
+                      {t.name} <span className="text-muted-foreground">{t.unlockedAt.toLocaleString()}</span>
+                    </span>
+                  </Tooltip>
                 ))}
               </div>
             </div>
@@ -144,9 +149,11 @@ export default function ReputationPage() {
               <h3 className="text-sm font-semibold mb-2">Profile themes</h3>
               <div className="flex flex-wrap gap-2">
                 {PROFILE_THEMES.map((t) => (
-                  <span key={t.key} title={`${t.description} — unlocks at ${t.unlockedAt.toLocaleString()} rep`} className="text-xs bg-secondary/50 rounded-full px-2.5 py-1">
-                    {t.name} <span className="text-muted-foreground">{t.unlockedAt.toLocaleString()}</span>
-                  </span>
+                  <Tooltip key={t.key} content={`${t.description} — unlocks at ${t.unlockedAt.toLocaleString()} rep`}>
+                    <span className="text-xs bg-secondary/50 rounded-full px-2.5 py-1">
+                      {t.name} <span className="text-muted-foreground">{t.unlockedAt.toLocaleString()}</span>
+                    </span>
+                  </Tooltip>
                 ))}
               </div>
             </div>

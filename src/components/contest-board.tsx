@@ -7,6 +7,7 @@ import { Trophy, Camera, Loader2, Heart } from "lucide-react"
 import RoleBadge from "@/components/role-badge"
 import TierChip from "@/components/tier-chip"
 import EmptyState from "@/components/ui/empty-state"
+import Tooltip from "@/components/ui/tooltip"
 
 interface Entry {
   id: string
@@ -128,9 +129,11 @@ export default function ContestBoard() {
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={e.imageUrl} alt={e.caption || "Budshot entry"} loading="lazy" decoding="async" className="w-full aspect-square object-cover" />
                 {i === 0 && e.votes > 0 && (
-                  <span className="absolute top-2 left-2 bg-amber-500 text-black text-xs font-bold px-2 py-1 rounded-full flex items-center gap-1">
-                    <Trophy className="w-3 h-3" /> Leading
-                  </span>
+                  <Tooltip content="Currently in first place this week" side="bottom" className="absolute top-2 left-2">
+                    <span className="bg-amber-500 text-black text-xs font-bold px-2 py-1 rounded-full flex items-center gap-1">
+                      <Trophy className="w-3 h-3" /> Leading
+                    </span>
+                  </Tooltip>
                 )}
               </div>
               <div className="p-3">
@@ -142,18 +145,21 @@ export default function ContestBoard() {
                   >
                     {nameOf(e.user)} <RoleBadge role={e.user.role} /> <TierChip reputation={e.user.reputation ?? 0} publicMilestoneOptOut={e.user.publicMilestoneOptOut} />
                   </Link>
-                  <button
-                    onClick={() => vote(e.id)}
-                    disabled={!session || e.mine}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors disabled:opacity-60 ${
-                      e.votedByMe
-                        ? "bg-red-500/15 text-red-500"
-                        : "bg-secondary hover:bg-secondary/80"
-                    }`}
-                  >
-                    <Heart className={`w-4 h-4 ${e.votedByMe ? "fill-current" : ""}`} />
-                    {e.votes}
-                  </button>
+                  <Tooltip content={e.mine ? "You can't vote on your own entry" : "Vote for this budshot — most votes wins the week"}>
+                    <button
+                      onClick={() => vote(e.id)}
+                      disabled={!session || e.mine}
+                      aria-label={e.mine ? "You can't vote on your own entry" : "Vote for this budshot"}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors disabled:opacity-60 ${
+                        e.votedByMe
+                          ? "bg-red-500/15 text-red-500"
+                          : "bg-secondary hover:bg-secondary/80"
+                      }`}
+                    >
+                      <Heart className={`w-4 h-4 ${e.votedByMe ? "fill-current" : ""}`} />
+                      {e.votes}
+                    </button>
+                  </Tooltip>
                 </div>
               </div>
             </div>

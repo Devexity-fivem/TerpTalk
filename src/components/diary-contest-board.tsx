@@ -5,6 +5,7 @@ import { BookOpen, Heart, Loader2, Trophy, Leaf } from "lucide-react"
 import TierChip from "@/components/tier-chip"
 import Link from "next/link"
 import { useSession } from "next-auth/react"
+import Tooltip from "@/components/ui/tooltip"
 
 interface ContestUser {
   name: string | null
@@ -157,16 +158,20 @@ export default function DiaryContestBoard() {
                 <div className="flex items-center justify-between mt-2">
                   <span className="text-xs text-muted-foreground">{e.votes} vote{e.votes === 1 ? "" : "s"}</span>
                   {e.mine ? (
-                    <span className="text-xs text-primary flex items-center gap-1"><Trophy className="w-3 h-3" /> Your entry</span>
+                    <Tooltip content="This is your contest entry this month">
+                      <span className="text-xs text-primary flex items-center gap-1"><Trophy className="w-3 h-3" /> Your entry</span>
+                    </Tooltip>
                   ) : (
-                    <button
-                      onClick={() => vote(e.id)}
-                      disabled={busy}
-                      className={`text-xs px-3 py-1.5 rounded-lg font-medium transition-colors min-h-9 ${e.votedByMe ? "bg-primary/10 text-primary" : "bg-secondary hover:bg-secondary/80"}`}
-                    >
-                      <Heart className={`w-3 h-3 inline mr-1 ${e.votedByMe ? "fill-current" : ""}`} />
-                      {e.votedByMe ? "Voted" : "Vote"}
-                    </button>
+                    <Tooltip content="Vote for this diary — requires a 7-day-old account with 10+ rep">
+                      <button
+                        onClick={() => vote(e.id)}
+                        disabled={busy}
+                        className={`text-xs px-3 py-1.5 rounded-lg font-medium transition-colors min-h-9 ${e.votedByMe ? "bg-primary/10 text-primary" : "bg-secondary hover:bg-secondary/80"}`}
+                      >
+                        <Heart className={`w-3 h-3 inline mr-1 ${e.votedByMe ? "fill-current" : ""}`} />
+                        {e.votedByMe ? "Voted" : "Vote"}
+                      </button>
+                    </Tooltip>
                   )}
                 </div>
               </div>

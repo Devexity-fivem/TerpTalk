@@ -5,6 +5,7 @@ import {
 } from "lucide-react"
 import MemberGreeting from "@/components/member-greeting"
 import OpenChatButton from "@/components/open-chat-button"
+import Tooltip from "@/components/ui/tooltip"
 import type { MemberHomeData } from "@/lib/member-home"
 import { cn } from "@/lib/utils"
 
@@ -86,19 +87,20 @@ export default function MemberHome({ data }: { data: MemberHomeData }) {
               Here&apos;s your TerpTalk day.
             </p>
           </div>
-          <Link
-            href="/progress"
-            className={cn(
-              "inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold",
-              data.tier.bg,
-              data.tier.color
-            )}
-            title="View your progress"
-          >
-            <span aria-hidden="true">{data.tier.icon}</span>
-            Level {data.level} · {data.tier.name}
-            <span className="font-normal opacity-80">· {data.rep} rep</span>
-          </Link>
+          <Tooltip content="View your progress" side="bottom">
+            <Link
+              href="/progress"
+              className={cn(
+                "inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold",
+                data.tier.bg,
+                data.tier.color
+              )}
+            >
+              <span aria-hidden="true">{data.tier.icon}</span>
+              Level {data.level} · {data.tier.name}
+              <span className="font-normal opacity-80">· {data.rep} rep</span>
+            </Link>
+          </Tooltip>
         </div>
 
         {/* Next action — the single most useful thing to do */}
@@ -152,7 +154,9 @@ export default function MemberHome({ data }: { data: MemberHomeData }) {
                       {q.done ? (
                         <CheckCircle2 className="h-4 w-4 text-primary" aria-label="Done" />
                       ) : (
-                        `${q.progress}/${q.target} · +${q.reward}`
+                        <Tooltip content={`+${q.reward} reputation on completion`}>
+                          {`${q.progress}/${q.target} · +${q.reward}`}
+                        </Tooltip>
                       )}
                     </span>
                   </li>
