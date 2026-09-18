@@ -8,6 +8,7 @@ import {
   isMentionCommand,
   listCommandsForRole,
   buildHelpText,
+  suggestCommand,
 } from "@/lib/chat-commands"
 import { parseTerpbotIntent, extractTerpbotQuery } from "@/lib/terpbot-intents"
 import { extractThreadRef } from "@/lib/terpbot-context"
@@ -62,13 +63,58 @@ function run() {
   const adminCmds = listCommandsForRole("ADMINISTRATOR").map((c) => c.name)
   assert.ok(adminCmds.includes("ban") && adminCmds.includes("unban"), "admin sees admin commands")
 
-  // Help text
+  // New-command registry entries (Sprint: grow intelligence + community)
+  for (const n of ["grow", "grows", "checkin", "growhelp", "milestones", "related", "hot", "new", "unanswered", "active", "weekly", "mydigest"]) {
+    assert.ok(getChatCommand(n), `${n} registered`)
+    assert.equal(getChatCommand(n)!.permission, "public", `${n} is public`)
+    assert.equal(getChatCommand(n)!.handledBy, "bot", `${n} is bot-handled`)
+    assert.ok(getChatCommand(n)!.surfaces.includes("mention"), `${n} mention-eligible`)
+  }
+  assert.equal(getChatCommand("diaries")?.name, "grows", "alias diaries → grows")
+
+  // Every command carries a category; staff commands are "staff".
+  const CATEGORIES = new Set(["grow", "community", "knowledge", "profile", "utility", "staff"])
+  for (const c of CHAT_COMMANDS) {
+    assert.ok(CATEGORIES.has(c.category), `${c.name} has a valid category`)
+    if (c.permission !== "public") assert.equal(c.category, "staff", `${c.name} categorized staff`)
+  }
+
+  // Did-you-mean (deterministic edit distance over the registry)
+  assert.equal(suggestCommand("diari")?.name, "diary", "diari → diary")
+  assert.equal(suggestCommand("repp")?.name, "rep", "repp → rep")
+  assert.equal(suggestCommand("growse")?.name, "grows", "growse → grows")
+  assert.equal(suggestCommand("streal")?.name, "streak", "streal → streak")
+  assert.equal(suggestCommand("asdkfjqwer"), null, "gibberish → no suggestion")
+  assert.equal(suggestCommand("warnn", "MEMBER"), null, "staff command not suggested to member")
+  assert.equal(suggestCommand("warnn", "MODERATOR")?.name, "warn", "staff command suggested to moderator")
+  assert.equal(suggestCommand("threads")?.name, "thread", "exact alias resolves")
+
+  // Help text — compact categorized index, role-filtered, under the
+  // CHAT_MESSAGE_MAX cap (bot posts truncate at 1000 chars).
   const memberHelp = buildHelpText("MEMBER")
+  assert.ok(memberHelp.length < 1000, `member help fits message cap (${memberHelp.length})`)
   assert.ok(memberHelp.includes("/rep"), "help lists /rep")
   assert.ok(memberHelp.includes("/nextbadges"), "help lists /nextbadges")
   assert.ok(!memberHelp.includes("/ban"), "member help hides /ban")
+  for (const cat of ["Grow:", "Community:", "Knowledge:", "Profile:", "Utility:"]) {
+    assert.ok(memberHelp.includes(cat), `member help has ${cat} category`)
+  }
+  for (const n of ["/grow", "/grows", "/checkin", "/milestones", "/related", "/hot", "/unanswered", "/mydigest"]) {
+    assert.ok(memberHelp.includes(n), `member help lists ${n}`)
+  }
+  assert.ok(!memberHelp.includes("Staff:"), "member help has no staff section")
   const adminHelp = buildHelpText("ADMINISTRATOR")
   assert.ok(adminHelp.includes("/ban") && adminHelp.includes("Staff:"), "admin help lists staff section")
+
+  // /help <topic> — command detail card, category one-liners, role gate.
+  const growHelp = buildHelpText("MEMBER", "grow")
+  assert.ok(growHelp.includes("/grow") && growHelp.includes("-"), "/help grow → command detail")
+  const commHelp = buildHelpText("MEMBER", "community")
+  assert.ok(commHelp.includes("/stats") && commHelp.includes("-"), "/help community → category one-liners")
+  const memberBanHelp = buildHelpText("MEMBER", "ban")
+  assert.ok(!memberBanHelp.includes("/ban <@user>"), "member /help ban reveals nothing")
+  const adminBanHelp = buildHelpText("ADMINISTRATOR", "ban")
+  assert.ok(adminBanHelp.includes("/ban <@user> <reason>"), "admin /help ban → staff detail")
 
   // ── Intent parser: positive routes ────────────────────────────────────
   const cases: [string, string, string[]?][] = [
@@ -132,6 +178,40 @@ function run() {
     ["@terpbot what about nutrient burn?", "about", ["nutrient burn"]],
     ["@terpbot how about flushing", "about", ["flushing"]],
     ["@terpbot any thoughts on dwc buckets", "about", ["dwc buckets"]],
+
+    // ── Grow intelligence intents ────────────────────────────────────
+    ["@terpbot my grow", "grow"],
+    ["@terpbot how's my grow", "grow"],
+    ["@terpbot grow status", "grow"],
+    ["@terpbot my diaries", "grows"],
+    ["@terpbot my grows", "grows"],
+    ["@terpbot show my diaries", "grows"],
+    ["@terpbot diaries", "grows"],
+    ["@terpbot check in", "checkin"],
+    ["@terpbot what should I update", "checkin"],
+    ["@terpbot is my diary up to date", "checkin"],
+    ["@terpbot help with my grow", "growhelp"],
+    ["@terpbot my grow needs help", "growhelp"],
+    ["@terpbot milestones", "milestones"],
+    ["@terpbot what am I close to", "milestones"],
+    ["@terpbot what's my next milestone", "milestones"],
+    ["@terpbot what should I do next", "milestones"],
+    ["@terpbot my digest", "mydigest"],
+    ["@terpbot what did I miss", "mydigest"],
+    ["@terpbot catch me up", "mydigest"],
+
+    // ── Community intelligence intents ───────────────────────────────
+    ["@terpbot hot threads", "hot"],
+    ["@terpbot what's trending", "hot"],
+    ["@terpbot latest discussions", "new"],
+    ["@terpbot newest threads", "new"],
+    ["@terpbot unanswered threads", "unanswered"],
+    ["@terpbot who needs help", "unanswered"],
+    ["@terpbot what's going on", "active"],
+    ["@terpbot weekly recap", "weekly"],
+    ["@terpbot this week's activity", "weekly"],
+    ["@terpbot related to fungus gnats", "related", ["fungus gnats"]],
+    ["@terpbot more about dwc", "related", ["dwc"]],
   ]
   for (const [input, expected, args] of cases) {
     const intent = parseTerpbotIntent(input)

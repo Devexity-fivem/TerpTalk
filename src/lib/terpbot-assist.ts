@@ -256,3 +256,61 @@ export async function scanDormantThreads(opts: {
 
   return { dormant: dormantSent, unresolved: unresolvedSent }
 }
+
+/**
+ * Daily cron scan — active diaries with no update in 5+ days get one
+ * private nudge per calendar month (claim key carries YYYY-MM so a diary
+ * can only ever receive one stale reminder per month, and the 7-day
+ * cross-kind cushion still applies on top).
+ *
+ * Bounded: 100 candidate diaries (oldest-touched first), one grouped query
+ * for latest-update dates, at most 20 sends per run.
+ */
+export async function scanStaleDiaries(opts: {
+  /** Test seam: restrict the scan to these author ids. Omit in production. */
+  authorIds?: string[]
+} = {}): Promise<{ scanned: number; sent: number }> {
+  const staleBefore = new Date(Date.now() - 5 * 86400000)
+  const diaries = await prisma.growDiary.findMany({
+    where: {
+      deleted: false,
+      harvested: false,
+      updatedAt: { lt: staleBefore },
+      author: activeAuthor(),
+      ...(opts.authorIds ? { authorId: { in: opts.authorIds } } : {}),
+    },
+    orderBy: { updatedAt: "asc" },
+    take: 100,
+    select: { id: true, title: true, authorId: true, startDate: true, createdAt: true },
+  })
+  if (!diaries.length) return { scanned: 0, sent: 0 }
+
+  // Latest update per candidate diary — one grouped query, not N+1.
+  const latestRows = await prisma.diaryUpdate.groupBy({
+    by: ["diaryId"],
+    where: { diaryId: { in: diaries.map((d) => d.id) } },
+    _max: { createdAt: true },
+  })
+  const latestMap = new Map(latestRows.map((r) => [r.diaryId, r._max.createdAt]))
+
+  const monthKey = new Date().toISOString().slice(0, 7)
+  let sent = 0
+  for (const d of diaries) {
+    if (sent >= 20) break
+    const last = latestMap.get(d.id) ?? d.createdAt
+    // A diary whose latest update is fresh stays quiet even if the diary
+    // row itself hasn't been edited in 5 days.
+    if (!last || last >= staleBefore) continue
+    const days = Math.floor((Date.now() - last.getTime()) / 86400000)
+    const r = await botAssist({
+      key: `assist:diary-stale:${d.id}:${monthKey}`,
+      kind: "diary-stale",
+      userId: d.authorId,
+      title: "Your grow is waiting for an update",
+      content: `"${sanitizeEcho(d.title, 60)}" hasn't been updated in ${days} days. A weekly update keeps your streak alive and gets better advice — photos + pH/EC readings help most.`,
+      link: `/diaries/${d.id}`,
+    })
+    if (r === "sent") sent++
+  }
+  return { scanned: diaries.length, sent }
+}

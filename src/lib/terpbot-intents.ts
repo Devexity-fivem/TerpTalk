@@ -27,6 +27,12 @@ interface Matcher {
 }
 
 const MATCHERS: Matcher[] = [
+  // ── Week-scoped recaps route to /weekly, not thread summarize —
+  // "weekly recap" contains "recap" but means the community summary.
+  {
+    name: "weekly",
+    patterns: [/\bweekly\b/, /\bthis week('s)? (summary|recap|activity|stats)\b/, /\bweek in review\b/, /\bhow('?s| was) (the )?week\b/],
+  },
   // ── Thread-context intents first — "summarize this" etc. resolve
   // the thread from the message's link/reply context at dispatch time.
   {
@@ -148,14 +154,70 @@ const MATCHERS: Matcher[] = [
     },
   },
   {
+    name: "growhelp",
+    patterns: [
+      /\b(help|advice) (for|with|about|on) my (grow|diary|plant|girls?)\b/,
+      /\bmy (grow|plant|diary) (needs? )?(help|advice)\b/,
+      /\bgrow help\b/,
+      /\bhelp (me )?(with|fix) my (grow|plant)\b/,
+    ],
+  },
+  {
+    name: "grow",
+    patterns: [
+      /\bmy grow\b/,
+      /\bhow('?s| is) my (grow|plant)\b/,
+      /\bgrow (status|summary|report)\b/,
+      /\b(what|which) stage is my\b/,
+      /^grow$/,
+    ],
+  },
+  {
+    name: "grows",
+    patterns: [
+      /\bmy (grows|diaries)\b/,
+      /\b(all|list|show)( me)?( my)? (grows|diaries|plants)\b/,
+      /\bhow many (grows|diaries|plants)\b/,
+      /^(grows|diaries|plants)$/,
+    ],
+  },
+  {
+    name: "checkin",
+    patterns: [
+      /\bcheck ?in\b/,
+      /\bwhat (should|do) i (need to )?update\b/,
+      /\bis my (diary|grow) (up to date|current|stale|overdue)\b/,
+      /\bdiary (check|freshness|status)\b/,
+      /\boverdue (update|diary)\b/,
+    ],
+  },
+  {
+    name: "milestones",
+    patterns: [
+      /\bmilestones?\b/,
+      /\bwhat am i close to\b/,
+      /\bwhat('s| is) (my )?next (milestone|goal|unlock)\b/,
+      /\bclose to (unlocking|earning|leveling)\b/,
+      /\bwhat should i (work on|do) next\b/,
+    ],
+  },
+  {
+    name: "mydigest",
+    patterns: [
+      /\bmy digest\b/,
+      /\bpersonal(ized)? (digest|summary|recap|briefing)\b/,
+      /\bwhat did i miss\b/,
+      /\bcatch me up\b/,
+    ],
+  },
+  {
     name: "diary",
     patterns: [
-      /\bmy (diary|diaries|grow|journal|grow log)\b/,
+      /\bmy (diary|journal|grow log)\b/,
       /\bshow (me )?my (diary|grow)\b/,
-      /\bhow('?s| is) my (grow|diary|plant)\b/,
       /\bdiary of @\w+|@\w+('s)?\s+(diary|diaries|grow)\b/,
       /\b(diaries|diary) (about|on|for)\s+.+/,
-      /^(diary|diaries|journal|grow log)$/,
+      /^(diary|journal|grow log)$/,
     ],
     args: (t) => {
       const m = t.match(/@([A-Za-z0-9_]{3,20})\b/)
@@ -212,6 +274,49 @@ const MATCHERS: Matcher[] = [
   {
     name: "digest",
     patterns: [/\bdigest\b/, /\bwhat happened (yesterday|today|last 24)/, /\bdaily (recap|summary|digest)\b/, /\byesterday'?s (activity|recap|summary)\b/],
+  },
+  {
+    name: "hot",
+    patterns: [
+      /\b(hot|trending|popular|busiest)\b/,
+      /\bwhat('s| is) (hot|trending|popular)\b/,
+      /\bmost (discussed|replied|talked about)\b/,
+    ],
+  },
+  {
+    name: "new",
+    patterns: [
+      /\b(new|newest|latest|recent|fresh) (threads?|discussions?|posts?)\b/,
+      /\bwhat('s| is) new (in|on) (the )?(forum|discussions?|community)\b/,
+      /\blatest discussions?\b/,
+    ],
+  },
+  {
+    name: "unanswered",
+    patterns: [
+      /\bunanswered\b/,
+      /\b(threads?|posts?|discussions?) (that |with )?(need|needs|without|no) (answers?|replies|help)\b/,
+      /\bwho needs help\b/,
+      /\bno replies\b/,
+    ],
+  },
+  {
+    name: "active",
+    patterns: [
+      /\bwhat('s| is) (going on|happening|up)\b/,
+      /\bcommunity activity\b/,
+      /\bany activity\b/,
+      /\bhow (busy|active) (is|was)\b/,
+    ],
+  },
+  {
+    name: "related",
+    patterns: [
+      /\b(related|similar) (to |about |on )?(.+)/,
+      /\bmore (on|about) (.+)/,
+      /\banything else (on|about) (.+)/,
+    ],
+    args: (t, m) => [m[m.length - 1]],
   },
   {
     name: "contest",
@@ -313,9 +418,9 @@ export const TERPBOT_REFUSAL_TEXT =
   "🤖 I can't help with moderation — that's for the staff team. If someone's breaking the rules, use the Report button."
 
 export const TERPBOT_FALLBACKS = [
-  "🤖 Not sure what you're after — try \"my rep\", \"find threads about …\", \"who's online\", or /help for the full list.",
-  "🤖 I didn't catch that. I can look up threads, guides, strains, your rep/streak/diary, or list commands with /help.",
-  "🤖 Hmm, try asking differently — e.g. \"what's my streak\", \"guides about cloning\", or \"contest status\". /help lists everything.",
+  "🤖 Not sure what you're after. I can help with: your grow, rep, progress, diaries, strains, guides, threads, and community stats.\nTry: @terpbot my grow · @terpbot find threads about … · /help",
+  "🤖 I didn't catch that. I know your grows, milestones, rep, streaks, threads, guides, strains and community activity.\nTry: @terpbot what am I close to? · @terpbot summarize this · /help",
+  "🤖 Hmm, try asking differently — \"what's my streak\", \"guides about cloning\", \"check in on my grow\", or /help for the full list.",
 ]
 
 export function terpbotFallbackText(seed: string): string {

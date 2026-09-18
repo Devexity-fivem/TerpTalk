@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { runCronTask } from "@/lib/cron-claim"
 import { postToGeneral, GROW_TIPS, sanitizeEcho } from "@/lib/terpbot"
-import { scanDormantThreads } from "@/lib/terpbot-assist"
+import { scanDormantThreads, scanStaleDiaries } from "@/lib/terpbot-assist"
 import { recordBotEvent } from "@/lib/terpbot-events"
 import { currentWeekKey, previousWeekKey, currentMonthKey, previousMonthKey } from "@/lib/week"
 import { resolveWeeklyWinner, resolveMonthlyDiaryWinner } from "@/lib/contest-awards"
@@ -193,6 +193,15 @@ export async function GET(request: NextRequest) {
     const { dormant, unresolved } = await scanDormantThreads()
     return `dormant:${dormant},unresolved:${unresolved}`
   }, posted, failed, "dormant-scan")
+
+  // ── Stale-diary reminders (once per UTC day) ─────────────────────
+  // Active grows that haven't been updated in 5+ days get one private
+  // nudge per month — same claim/cushion/opt-out pipeline as every
+  // assist, capped at 20 sends per run.
+  await runCronTask(`terpbot:diary-stale:${today}`, async () => {
+    const { scanned, sent } = await scanStaleDiaries()
+    return `diary-stale:${scanned}scanned/${sent}sent`
+  }, posted, failed, "diary-stale")
 
   // ── Referral payout reconciliation (once per UTC day) ─────────────
   // Safety net for qualifying referrals whose deferred payout trigger was

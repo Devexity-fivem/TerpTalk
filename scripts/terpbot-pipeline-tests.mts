@@ -13,8 +13,10 @@ import {
   assistFirstDiary,
   notifyOpAcceptedAnswer,
   scanDormantThreads,
+  scanStaleDiaries,
 } from "@/lib/terpbot-assist"
 import { getBotUserId, sanitizeEcho } from "@/lib/terpbot"
+import { runBotCommand } from "@/lib/terpbot-data"
 
 const SUFFIX = String(Date.now()).slice(-8)
 const M1 = `__tbp_a_${SUFFIX}`
@@ -318,14 +320,129 @@ async function run() {
       console.log("✓ scanDormantThreads eligibility + idempotency")
     }
 
-    // ── 10. sanitizeEcho strips domains/URLs/markup ───────────────────
+    // ── 10. scanStaleDiaries: eligibility + monthly idempotency ───────
+    {
+      // m8 is fresh — no prior assists to cushion against.
+      const m8 = await mk(`__tbp_h_${SUFFIX}`)
+      const sixDaysAgo = new Date(Date.now() - 6 * 24 * 60 * 60 * 1000)
+      const mkDiary = async (authorId: string, title: string, opts: { stale?: boolean; harvested?: boolean } = {}) => {
+        const d = await prisma.growDiary.create({
+          data: { title, description: "t", growType: "INDOOR", startDate: sixDaysAgo, authorId, harvested: !!opts.harvested, ...(opts.stale ? { createdAt: sixDaysAgo } : {}) },
+        })
+        diaryIds.push(d.id)
+        if (opts.stale) {
+          await prisma.growDiary.update({ where: { id: d.id }, data: { updatedAt: sixDaysAgo } })
+        }
+        return d
+      }
+
+      // Stale, no updates at all → eligible
+      const staleOk = await mkDiary(m8.id, `__tbp stale ${SUFFIX}`, { stale: true })
+      // Stale diary row, but a fresh update exists → quiet
+      const freshUpdate = await mkDiary(m8.id, `__tbp fresh ${SUFFIX}`, { stale: true })
+      await prisma.diaryUpdate.create({
+        data: { title: "u", content: "u", stage: "VEGETATIVE", diaryId: freshUpdate.id, authorId: m8.id },
+      })
+      // Harvested → out of scope
+      await mkDiary(m8.id, `__tbp harv ${SUFFIX}`, { stale: true, harvested: true })
+      // Fresh row → out of scope
+      await mkDiary(m8.id, `__tbp ok ${SUFFIX}`)
+      // Banned author → excluded
+      const bannedDiaryAuthor = await mk(`__tbp_sban_${SUFFIX}`)
+      await prisma.user.update({ where: { id: bannedDiaryAuthor.id }, data: { banned: true } })
+      await mkDiary(bannedDiaryAuthor.id, `__tbp sban ${SUFFIX}`, { stale: true })
+
+      const monthKey = new Date().toISOString().slice(0, 7)
+      botEventKeys.push(`assist:diary-stale:${staleOk.id}:${monthKey}`)
+      rateLimitKeys.push(`terpbot:assist:user:${m8.id}`)
+
+      const res = await scanStaleDiaries({ authorIds: [m8.id, bannedDiaryAuthor.id] })
+      assert.equal(res.scanned, 2, "only stale non-harvested diaries scanned")
+      assert.equal(res.sent, 1, "only the genuinely stale diary nudged")
+
+      const n = await prisma.notification.findFirst({
+        where: { userId: m8.id, type: "BOT_ASSIST", link: `/diaries/${staleOk.id}` },
+      })
+      assert.ok(n, "stale-diary nudge delivered")
+      assert.match(n!.title, /waiting for an update/)
+      notificationIds.push(n!.id)
+      assert.equal(
+        await prisma.notification.count({ where: { userId: bannedDiaryAuthor.id } }),
+        0, "banned author never nudged"
+      )
+
+      const res2 = await scanStaleDiaries({ authorIds: [m8.id, bannedDiaryAuthor.id] })
+      assert.equal(res2.sent, 0, "monthly claim key suppresses re-send")
+      console.log("✓ scanStaleDiaries eligibility + monthly idempotency")
+    }
+
+    // ── 11. Command dispatch: grow/knowledge/community handlers ──────
+    {
+      const cmd = await mk(`__tbp_cmd_${SUFFIX}`)
+      const ctx = (rest = "", args: string[] = []) =>
+        ({ userId: cmd.id, role: "MEMBER", displayName: `__tbp_cmd_${SUFFIX}`, args, rest })
+
+      // No-diary member gets the onboarding text, not an error
+      const noGrow = await runBotCommand("grow", { userId: m7.id, role: "MEMBER", displayName: M7, args: [], rest: "" })
+      assert.ok(noGrow.ok && noGrow.messages[0].includes("don't have a grow diary"), "grow → no-diary guidance")
+
+      const growDiary = await prisma.growDiary.create({
+        data: { title: `__tbp grow ${SUFFIX}`, description: "t", growType: "INDOOR", startDate: new Date(), authorId: cmd.id, stage: "FLOWER" },
+      })
+      diaryIds.push(growDiary.id)
+      await prisma.diaryUpdate.create({
+        data: { title: "w5", content: "u", stage: "FLOWER", temperature: 77, humidity: 54, ph: 6.1, diaryId: growDiary.id, authorId: cmd.id },
+      })
+      // A searchable public thread for /related + /ask
+      const cat2 = await prisma.category.findFirst({ where: { hidden: false } })
+      const gnat = await prisma.thread.create({
+        data: { title: `__tbp fungus gnats ${SUFFIX}`, slug: `__tbp-gnat-${SUFFIX}`, content: "x", authorId: cmd.id, categoryId: cat2!.id },
+      })
+      threadIds.push(gnat.id)
+
+      const r = async (name: string, rest = "", args: string[] = []) => {
+        const res = await runBotCommand(name, ctx(rest, args))
+        assert.ok(res.ok, `${name} dispatched ok`)
+        return res.ok ? res.messages[0] : ""
+      }
+      assert.match(await r("grow"), /Stage: Flower/, "grow → stage card")
+      assert.match(await r("grow"), /Week \d+ · Day \d+/, "grow → week/day")
+      assert.match(await r("grows"), new RegExp(`__tbp grow ${SUFFIX}`), "grows → lists diary")
+      assert.match(await r("checkin"), /Grow check-in/, "checkin → rule engine")
+      assert.match(await r("checkin"), /Updated/, "checkin → recency rule")
+      assert.match(await r("growhelp"), /FLOWER|Flower/, "growhelp → stage context")
+      assert.match(await r("growhelp"), /fungus gnats|No related discussions/, "growhelp → deterministic routing")
+      assert.match(await r("milestones"), /What's next/, "milestones → unified next-step view")
+      assert.match(await r("progress"), /rep · Grow Level/, "progress → unified view")
+      assert.match(await r("related", "fungus gnats", ["fungus", "gnats"]), /fungus gnats/, "related → finds thread")
+      assert.match(await r("ask", "fungus gnats", ["fungus", "gnats"]), /fungus gnats|couldn't find|Try:/i, "ask → result or honest miss")
+      assert.match(await r("hot"), /🔥|No /, "hot → bounded engagement list")
+      assert.match(await r("new"), /🆕|No /, "new → recent threads")
+      assert.match(await r("unanswered"), /❓|No /, "unanswered → public only")
+      assert.match(await r("active"), /online|members/i, "active → community snapshot")
+      assert.match(await r("weekly"), /week/i, "weekly → real-count summary")
+
+      // mydigest delivers privately via BOT_ASSIST notification
+      const md = await r("mydigest")
+      assert.match(md, /digest|notifications|enable/i, "mydigest → private delivery or pref guidance")
+      const dn = await prisma.notification.findFirst({
+        where: { userId: cmd.id, type: "BOT_ASSIST", title: "Your TerpTalk digest" },
+      })
+      if (dn) {
+        assert.equal(dn.actorId, botId, "digest authored by TerpBot")
+        notificationIds.push(dn.id)
+      }
+      console.log("✓ command dispatch: grow/knowledge/community handlers")
+    }
+
+    // ── 12. sanitizeEcho strips domains/URLs/markup ───────────────────
     {
       const out = sanitizeEcho(`Check [x](https://evil.example) visit evil.example\n@admin`)
       assert.ok(!/https?:|evil\.example|@/.test(out), `sanitizeEcho cleaned: "${out}"`)
       console.log("✓ sanitizeEcho domain stripping")
     }
 
-    // ── 11. getBotStats counts assists ────────────────────────────────
+    // ── 13. getBotStats counts assists ────────────────────────────────
     {
       const stats = await getBotStats()
       assert.ok(stats.assists >= 5, `assists counted in bot stats (got ${stats.assists})`)

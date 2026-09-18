@@ -267,8 +267,20 @@ async function main() {
     const memberBan = await cmd("/ban @someone spam")
     memberBan.status === 403 ? pass("member /ban gets 403") : fail("member /ban gets 403", { status: memberBan.status })
 
+    // Unknown commands are answered by the bot with a friendly pointer
+    // (200 + bot message), not a bare API error.
     const unknownCmd = await cmd("/definitelynotacommand")
-    unknownCmd.status === 400 ? pass("unknown command still 400") : fail("unknown command still 400", { status: unknownCmd.status })
+    const unknownText = unknownCmd.data?.message?.content || ""
+    unknownCmd.status === 200 && /Unknown command/.test(unknownText) && /\/help/.test(unknownText)
+      ? pass("unknown command gets bot help pointer")
+      : fail("unknown command gets bot help pointer", { status: unknownCmd.status, data: unknownCmd.data })
+
+    // Did-you-mean: a near-miss resolves to the closest registered command.
+    const typo = await cmd("/diari")
+    const typoText = typo.data?.message?.content || ""
+    typo.status === 200 && /did you mean \/diary/.test(typoText)
+      ? pass("did-you-mean suggests /diary for /diari")
+      : fail("did-you-mean suggests /diary for /diari", { status: typo.status, data: typo.data })
 
     // Link laundering — a low-trust user must not get a URL echoed by the bot.
     const launder = await cmd("/ask https://malware.example/steal")

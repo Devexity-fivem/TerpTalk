@@ -17,7 +17,10 @@ import { BADGE_REGISTRY, getBadgeByName } from "@/lib/badge-registry"
 import { currentWeekKey } from "@/lib/week"
 import { escapeLike, getStrainGrowStats } from "@/lib/strain-stats"
 import { tokenizeSearchText } from "@/lib/search-terms"
-import { diaryDay } from "@/lib/diary-weeks"
+import { diaryDay, diaryWeek } from "@/lib/diary-weeks"
+import { getGrowJourney } from "@/lib/grow-journey"
+import { notify } from "@/lib/notify"
+import { getBotUserId } from "@/lib/terpbot"
 import { buildHelpText } from "@/lib/chat-commands"
 import { TERPBOT_USERNAME, randomGrowTip } from "@/lib/terpbot"
 
@@ -65,7 +68,7 @@ function sanitizeField(s: string, max = 80): string {
 // deleted:false + category.hidden:false.
 async function searchThreadsForBot(q: string, take = 3) {
   const base = { deleted: false, category: { hidden: false }, author: activeAuthor() }
-  const select = { title: true, slug: true, replyCount: true, category: { select: { name: true } } } as const
+  const select = { title: true, slug: true, replyCount: true, acceptedAnswerId: true, category: { select: { name: true } } } as const
   let threads = await prisma.thread.findMany({
     where: { ...base, OR: [{ title: { contains: q, mode: "insensitive" } }, { tags: { some: { tag: { name: { contains: q, mode: "insensitive" } } } } }] },
     take,
@@ -85,7 +88,7 @@ async function searchThreadsForBot(q: string, take = 3) {
       threads = [...threads, ...more.filter((t) => !seen.has(t.slug))].slice(0, take)
     }
   }
-  return threads
+  return threads.map((t) => ({ ...t, hasAcceptedAnswer: !!t.acceptedAnswerId }))
 }
 
 function hasLink(q: string): boolean {
@@ -268,10 +271,106 @@ const THREAD_NOT_FOUND = "I couldn't pull up that thread — the link may be old
 
 const RARITY_ORDER = ["common", "rare", "epic", "legendary"]
 
+// GrowDiary.stage values → display labels.
+const STAGE_LABELS: Record<string, string> = {
+  GERMINATION: "Germination",
+  SEEDLING: "Seedling",
+  VEGETATIVE: "Vegetative",
+  FLOWER: "Flower",
+  HARVEST: "Harvest",
+  DRYING: "Drying",
+  CURING: "Curing",
+  COMPLETED: "Completed",
+}
+const stageLabel = (s: string) => STAGE_LABELS[s] ?? s.charAt(0) + s.slice(1).toLowerCase()
+
+// The grow commands all need the requester's most relevant diary: the
+// recently-touched active one first, otherwise the latest harvest. The
+// select carries the newest update so "last update / readings" is free.
+const GROW_DIARY_SELECT = {
+  id: true, title: true, stage: true, growType: true, strain: true, strainId: true,
+  startDate: true, harvested: true, harvestedAt: true, yieldAmount: true, yieldUnit: true,
+  updatedAt: true,
+  strainRef: { select: { name: true } },
+  setup: { select: { title: true } },
+  _count: { select: { updates: true } },
+  updates: {
+    orderBy: { createdAt: "desc" as const },
+    take: 1,
+    select: {
+      title: true, stage: true, createdAt: true,
+      temperature: true, humidity: true, vpd: true, ph: true, ec: true,
+      _count: { select: { images: true } },
+    },
+  },
+} as const
+
+type GrowDiaryRow = {
+  id: string
+  title: string
+  stage: string
+  growType: string
+  strain: string | null
+  strainRef: { name: string } | null
+  startDate: Date
+  harvested: boolean
+  harvestedAt: Date | null
+  yieldAmount: number | null
+  yieldUnit: string | null
+  updatedAt: Date
+  setup: { title: string } | null
+  _count: { updates: number }
+  updates: {
+    title: string
+    stage: string
+    createdAt: Date
+    temperature: number | null
+    humidity: number | null
+    vpd: number | null
+    ph: number | null
+    ec: number | null
+    _count: { images: number }
+  }[]
+}
+
+async function primaryGrow(userId: string): Promise<GrowDiaryRow | null> {
+  return (
+    (await prisma.growDiary.findFirst({
+      where: { authorId: userId, deleted: false, harvested: false },
+      orderBy: { updatedAt: "desc" },
+      select: GROW_DIARY_SELECT,
+    })) ??
+    (await prisma.growDiary.findFirst({
+      where: { authorId: userId, deleted: false },
+      orderBy: { harvestedAt: "desc" },
+      select: GROW_DIARY_SELECT,
+    }))
+  )
+}
+
+// "2 days ago" style relative age — bounded grammar, deterministic.
+function relAge(d: Date): string {
+  const days = Math.floor((Date.now() - d.getTime()) / 86400000)
+  if (days <= 0) return "today"
+  if (days === 1) return "yesterday"
+  if (days < 30) return `${days} days ago`
+  return d.toISOString().slice(0, 10)
+}
+
+function envReadingsLine(u: GrowDiaryRow["updates"][number]): string | null {
+  const parts: string[] = []
+  if (u.temperature != null) parts.push(`${u.temperature}°`)
+  if (u.humidity != null) parts.push(`${u.humidity}% RH`)
+  if (u.vpd != null) parts.push(`VPD ${u.vpd}`)
+  if (u.ph != null) parts.push(`pH ${u.ph}`)
+  if (u.ec != null) parts.push(`EC ${u.ec}`)
+  return parts.length ? parts.join(" · ") : null
+}
+
 async function handle(name: string, ctx: BotCommandCtx): Promise<BotCommandResult> {
   switch (name) {
     case "help":
-      return ok(buildHelpText(ctx.role))
+      return ok(buildHelpText(ctx.role, ctx.args[0]))
 
     case "tip":
       return ok(`💡 Grow tip: ${randomGrowTip()}`)
@@ -332,20 +431,36 @@ async function handle(name: string, ctx: BotCommandCtx): Promise<BotCommandResul
       const stageProg = getStageProgress(t.reputation)
       const unlock = nextLockedCosmetic(t.reputation)
       const next = getNextTier(t.reputation)
+      // One unified progression view — rep, tier, trust, streak and today's
+      // quests composed from the same libs the /progress page uses.
+      const [trust, quests, streak] = await Promise.all([
+        getTrustScore(t.userId),
+        t.userId === ctx.userId ? getQuestProgress(ctx.userId) : Promise.resolve([]),
+        getGrowStreak(t.userId),
+      ])
+      const standing = getTrustStanding(trust)
       const lines = [
-        `📈 @${t.username} — ${t.reputation.toLocaleString()} rep · Grow Level ${stage.level} · ${stage.tier.name} tier`,
+        `📈 @${t.username} — ${t.reputation.toLocaleString()} rep · Grow Level ${stage.level} (${stage.stageName}) · ${stage.tier.name} tier`,
+        `Trust: ${standing.icon} ${standing.name}${streak.streak > 0 ? ` · Streak: 🔥 ${streak.streak} days` : ""}`,
         stageProg.remaining > 0
-          ? `Stage: ${stage.stageName} — ${stageProg.remaining.toLocaleString()} rep to level ${stage.level + 1} (${stageProg.percent}% through)`
+          ? `Stage: ${stageProg.remaining.toLocaleString()} rep to level ${stage.level + 1} (${stageProg.percent}% through)`
           : `Stage: ${stage.stageName} — highest level reached`,
       ]
-      if (unlock) lines.push(`Next unlock: ${unlock.name} at ${unlock.unlockedAt.toLocaleString()} rep`)
+      if (quests.length) {
+        const questLines = quests.map((q) => {
+          const state = q.paid || q.done ? "✓" : `${q.progress}/${q.target}`
+          return `${state === "✓" ? "✓" : state} ${q.title}`
+        })
+        lines.push(`Today's quests: ${questLines.join(" · ")}`)
+      }
+      const nexts: string[] = []
       if (next) {
         const prog = getTierProgress(t.reputation)
-        lines.push(`Tier: ${prog.percent}% toward ${next.name} (${next.threshold.toLocaleString()} rep — ${(next.threshold - t.reputation).toLocaleString()} to go)`)
-        lines.push(`${next.icon} ${next.name}: ${next.benefit}`)
-      } else {
-        lines.push("That's the top tier!")
+        nexts.push(`+${(next.threshold - t.reputation).toLocaleString()} rep → ${next.name} (${prog.percent}%)`)
       }
+      if (unlock) nexts.push(`${unlock.name} at ${unlock.unlockedAt.toLocaleString()} rep`)
+      if (nexts.length) lines.push(`Next: ${nexts.join(" · ")}`)
+      lines.push(`/progress`)
       return ok(lines.join("\n"))
     }
 
@@ -456,6 +571,200 @@ async function handle(name: string, ctx: BotCommandCtx): Promise<BotCommandResul
       )
     }
 
+    case "grow": {
+      const diary = await primaryGrow(ctx.userId)
+      if (!diary) {
+        return ok(`🌱 You don't have a grow diary yet — start one at /diaries/new and I'll track your grow here.`)
+      }
+      const day = diaryDay(diary.startDate, new Date())
+      const week = diaryWeek(diary.startDate, new Date())
+      const strainName = diary.strainRef?.name ?? diary.strain
+      const latest = diary.updates[0]
+      const [journey, streak] = await Promise.all([
+        getGrowJourney(diary.id),
+        getGrowStreak(ctx.userId),
+      ])
+      const lines = [`🌱 ${sanitizeField(diary.title)}${strainName ? ` — ${sanitizeField(strainName)}` : ""}`]
+      if (diary.harvested) {
+        const yieldText = diary.yieldAmount != null ? ` · ${diary.yieldAmount}${diary.yieldUnit ?? "g"}` : ""
+        lines.push(`Status: harvested${diary.harvestedAt ? ` ${diary.harvestedAt.toISOString().slice(0, 10)}` : ""}${yieldText}`)
+        lines.push(`No active grow right now — start a new diary at /diaries/new`)
+        lines.push(`/diaries/${diary.id}`)
+        return ok(lines.join("\n"))
+      }
+      const head = [
+        `Stage: ${stageLabel(diary.stage)}`,
+        `Week ${week} · Day ${day}`,
+        `${diary.growType.charAt(0)}${diary.growType.slice(1).toLowerCase()} grow`,
+      ]
+      lines.push(head.join(" · "))
+      lines.push(`Started ${diary.startDate.toISOString().slice(0, 10)} · ${diary._count.updates} update${diary._count.updates === 1 ? "" : "s"}`)
+      if (latest) {
+        const env = envReadingsLine(latest)
+        lines.push(`Last update: "${sanitizeField(latest.title, 50)}" — ${relAge(latest.createdAt)}${env ? `\nLast readings: ${env}` : ""}`)
+      } else {
+        lines.push(`No updates logged yet`)
+      }
+      if (streak.streak > 0) lines.push(`Update streak: 🔥 ${streak.streak} days`)
+      if (diary.setup) lines.push(`Setup: ${sanitizeField(diary.setup.title, 40)}`)
+      if (journey?.next) lines.push(`Next milestone: ${journey.next.icon} ${journey.next.name} — ${journey.next.summary}`)
+      lines.push(`Open diary → /diaries/${diary.id}`)
+      return ok(lines.join("\n"))
+    }
+
+    case "grows": {
+      const diaries = await prisma.growDiary.findMany({
+        where: { authorId: ctx.userId, deleted: false, harvested: false },
+        orderBy: { updatedAt: "desc" },
+        take: 5,
+        select: { id: true, title: true, stage: true, strain: true, strainRef: { select: { name: true } }, startDate: true },
+      })
+      if (!diaries.length) {
+        const harvested = await prisma.growDiary.count({ where: { authorId: ctx.userId, deleted: false, harvested: true } })
+        return ok(
+          harvested > 0
+            ? `🌱 No active grows — you've harvested ${harvested} diar${harvested === 1 ? "y" : "ies"}. Start a new run at /diaries/new`
+            : `🌱 No grow diaries yet — start your first at /diaries/new`
+        )
+      }
+      const lines = diaries.map((d, i) => {
+        const strainName = d.strainRef?.name ?? d.strain
+        return `${i + 1}. ${sanitizeField(d.title, 40)}${strainName ? ` (${sanitizeField(strainName, 30)})` : ""} — ${stageLabel(d.stage)} W${diaryWeek(d.startDate, new Date())}`
+      })
+      return ok(`🌱 @${ctx.displayName}'s grows:\n${lines.join("\n")}\n/diaries`)
+    }
+
+    case "checkin": {
+      const diaries = await prisma.growDiary.findMany({
+        where: { authorId: ctx.userId, deleted: false, harvested: false },
+        orderBy: { updatedAt: "desc" },
+        take: 3,
+        select: { id: true, title: true, stage: true, updatedAt: true },
+      })
+      if (!diaries.length) {
+        return ok(`🌱 No active grows to check in on — start a diary at /diaries/new`)
+      }
+      // Rule engine over real diary fields — recency, photos, env coverage.
+      // Never diagnoses the plant; it only evaluates diary freshness.
+      const weekAgo = new Date(Date.now() - 7 * 86400000)
+      const blocks: string[] = []
+      for (const d of diaries) {
+        const [latest, envThisWeek, meaningfulThisWeek] = await Promise.all([
+          prisma.diaryUpdate.findFirst({
+            where: { diaryId: d.id },
+            orderBy: { createdAt: "desc" },
+            select: {
+              createdAt: true,
+              temperature: true, humidity: true, vpd: true, ph: true, ec: true,
+              _count: { select: { images: true } },
+            },
+          }),
+          prisma.diaryUpdate.count({
+            where: {
+              diaryId: d.id,
+              createdAt: { gte: weekAgo },
+              OR: [
+                { temperature: { not: null } },
+                { humidity: { not: null } },
+                { vpd: { not: null } },
+                { ph: { not: null } },
+                { ec: { not: null } },
+              ],
+            },
+          }),
+          prisma.diaryUpdate.count({ where: { diaryId: d.id, createdAt: { gte: weekAgo } } }),
+        ])
+        const checks: string[] = []
+        if (!latest) {
+          checks.push(`⚠ No updates logged yet`)
+        } else {
+          const age = Math.floor((Date.now() - latest.createdAt.getTime()) / 86400000)
+          checks.push(age <= 3 ? `✓ Updated ${relAge(latest.createdAt)}` : `⚠ Last update ${relAge(latest.createdAt)}`)
+          if (latest._count.images > 0) checks.push(`✓ Photo in latest update`)
+          else checks.push(`⚠ No photo in latest update`)
+          if (envThisWeek > 0) checks.push(`✓ Environment logged this week`)
+          else checks.push(`⚠ No pH/EC/temp/RH recorded this week`)
+        }
+        const next =
+          !latest || meaningfulThisWeek === 0
+            ? `Next useful action: add this week's update → /diaries/${d.id}`
+            : latest._count.images === 0 || envThisWeek === 0
+              ? `Next useful action: add photos or env readings to your next update → /diaries/${d.id}`
+              : `On track — keep the weekly cadence → /diaries/${d.id}`
+        blocks.push(`${sanitizeField(d.title, 40)} (${stageLabel(d.stage)}):\n${checks.join("\n")}\n${next}`)
+      }
+      return ok(`🌱 Grow check-in\n\n${blocks.join("\n\n")}`)
+    }
+
+    case "growhelp": {
+      const diary = await primaryGrow(ctx.userId)
+      if (!diary || diary.harvested) {
+        return ok(`🌱 No active grow to match discussions to — start a diary at /diaries/new`)
+      }
+      const strainName = diary.strainRef?.name ?? diary.strain
+      const latest = diary.updates[0]
+      const env = latest ? envReadingsLine(latest) : null
+      const lines = [
+        `🌱 Your ${sanitizeField(diary.title, 40)} is in ${stageLabel(diary.stage)} W${diaryWeek(diary.startDate, new Date())}${strainName ? ` (${sanitizeField(strainName, 30)})` : ""}.`,
+      ]
+      if (env) lines.push(`You recently logged: ${env}`)
+      // Deterministic topic: stage + strain tokens searched against real
+      // public thread titles. No plant diagnosis — just knowledge routing.
+      const terms = [stageLabel(diary.stage).toLowerCase(), strainName?.toLowerCase()].filter(Boolean) as string[]
+      const seen = new Set<string>()
+      const threads: Awaited<ReturnType<typeof searchThreadsForBot>> = []
+      for (const t of terms) {
+        for (const hit of await searchThreadsForBot(escapeLike(t), 3)) {
+          if (seen.has(hit.slug) || threads.length >= 3) continue
+          seen.add(hit.slug)
+          threads.push(hit)
+        }
+      }
+      if (threads.length) {
+        lines.push(`Related TerpTalk discussions:`)
+        for (const t of threads) {
+          lines.push(`• ${sanitizeField(t.title)} → /forum/thread/${t.slug} (${t.replyCount} replies)`)
+        }
+      } else {
+        lines.push(`No related discussions yet — asking in /forum with your stage + readings usually gets answers.`)
+      }
+      lines.push(`Open diary → /diaries/${diary.id}`)
+      return ok(lines.join("\n"))
+    }
+
+    case "milestones": {
+      const [profile, quests, streak, earnedRows, stats, diary] = await Promise.all([
+        prisma.profile.findUnique({ where: { userId: ctx.userId }, select: { reputation: true } }),
+        getQuestProgress(ctx.userId),
+        getGrowStreak(ctx.userId),
+        prisma.userBadge.findMany({ where: { userId: ctx.userId }, select: { badge: { select: { name: true } } } }),
+        getUserStats(ctx.userId),
+        primaryGrow(ctx.userId),
+      ])
+      const rep = profile?.reputation ?? 0
+      const stage = getRepStage(rep)
+      const nextTier = getNextTier(rep)
+      const unlock = nextLockedCosmetic(rep)
+      const earned = new Set(earnedRows.map((r) => r.badge.name))
+      const nextBadge = BADGE_REGISTRY
+        .filter((d) => !d.hidden && !earned.has(d.name) && BADGE_RULES[d.name] && !BADGE_RULES[d.name](stats))
+        .sort((a, b) => RARITY_ORDER.indexOf(a.rarity) - RARITY_ORDER.indexOf(b.rarity))[0]
+      const journey = diary && !diary.harvested ? await getGrowJourney(diary.id) : null
+      const questLeft = quests.filter((q) => !q.done && !q.paid)
+
+      const lines = [`🎯 What's next for @${ctx.displayName}:`]
+      if (nextTier) lines.push(`${nextTier.icon} ${nextTier.name} tier — ${(nextTier.threshold - rep).toLocaleString()} rep to go`)
+      else lines.push(`${stage.tier.icon} ${stage.tier.name} — top tier reached`)
+      if (journey?.next) lines.push(`${journey.next.icon} ${journey.next.name} (grow) — ${journey.next.summary}`)
+      if (nextBadge) lines.push(`🏅 "${nextBadge.name}" badge — ${nextBadge.requirement}`)
+      if (unlock) lines.push(`🎨 ${unlock.name} — unlocks at ${unlock.unlockedAt.toLocaleString()} rep`)
+      if (questLeft.length) lines.push(`⚡ ${questLeft.length} quest${questLeft.length === 1 ? "" : "s"} left today (+${questLeft.reduce((n, q) => n + q.reward, 0)} rep)`)
+      if (streak.streak > 0) lines.push(`🔥 ${streak.streak}-day update streak — keep it alive`)
+      if (lines.length === 1) lines.push(`Post a reply or update your diary to start earning.`)
+      lines.push(`/progress`)
+      return ok(lines.join("\n"))
+    }
+
     case "thread": {
       if (!ctx.rest) return err("Usage: /thread <search>")
       if (hasLink(ctx.rest)) return ok(`I can't look that up — keywords only, no links.`)
@@ -517,7 +826,9 @@ async function handle(name: string, ctx: BotCommandCtx): Promise<BotCommandResul
       if (!ctx.rest) return err("Usage: /ask <question>")
       if (hasLink(ctx.rest)) return ok(`I can't look that up — keywords only, no links.`)
       const q = escapeLike(sanitizeEcho(ctx.rest))
-      const [guides, strains] = await Promise.all([
+      // Deterministic front door: exact-ish guide match → strain → threads
+      // (answered threads first — accepted answers are the best knowledge).
+      const [guides, strains, threads] = await Promise.all([
         prisma.guide.findMany({
           where: {
             published: true,
@@ -543,15 +854,64 @@ async function handle(name: string, ctx: BotCommandCtx): Promise<BotCommandResul
           orderBy: { name: "asc" },
           select: { id: true, name: true },
         }),
+        searchThreadsForBot(q, 3),
       ])
+      const answeredFirst = [...threads].sort(
+        (a, b) => Number(b.hasAcceptedAnswer) - Number(a.hasAcceptedAnswer)
+      ).slice(0, 2)
       const lines = [
         ...guides.map((g) => `📚 ${sanitizeField(g.title)} → /guides/${g.slug}`),
         ...strains.map((s) => `🌿 ${sanitizeField(s.name)} → /strains/${s.id}`),
+        ...answeredFirst.map(
+          (t) => `💬 ${sanitizeField(t.title)}${t.hasAcceptedAnswer ? " ✅" : ""} → /forum/thread/${t.slug}`
+        ),
       ]
       if (!lines.length) {
-        return ok(`Couldn't find anything on that — try different keywords, browse /guides and /strains, or ask the community in Discussions!`)
+        return ok(
+          `🤖 I couldn't find a strong match in TerpTalk.\n` +
+            `Try:\n- /thread ${sanitizeField(ctx.rest, 40)}\n- /guide ${sanitizeField(ctx.rest, 40)}\n- /strain <name>`
+        )
       }
       return ok(`Here's what I found:\n${lines.join("\n")}\nFor anything else, try /help`)
+    }
+
+    case "related": {
+      if (!ctx.rest) return err("Usage: /related <topic>")
+      if (hasLink(ctx.rest)) return ok(`I can't look that up — keywords only, no links.`)
+      const q = escapeLike(sanitizeEcho(ctx.rest))
+      const [threads, guides, strain] = await Promise.all([
+        searchThreadsForBot(q, 3),
+        prisma.guide.findMany({
+          where: {
+            published: true,
+            OR: [
+              { title: { contains: q, mode: "insensitive" } },
+              { excerpt: { contains: q, mode: "insensitive" } },
+              { topic: { contains: q, mode: "insensitive" } },
+            ],
+          },
+          take: 2,
+          orderBy: { title: "asc" },
+          select: { title: true, slug: true },
+        }),
+        prisma.strain.findFirst({
+          where: { name: { contains: q, mode: "insensitive" } },
+          orderBy: { name: "asc" },
+          select: { id: true, name: true },
+        }),
+      ])
+      if (!threads.length && !guides.length && !strain) {
+        return ok(`🤖 I couldn't find a strong match in TerpTalk for "${sanitizeField(ctx.rest, 40)}" — try broader keywords or /search`)
+      }
+      const lines = [`🔎 Related to "${sanitizeField(ctx.rest, 40)}":`]
+      for (const t of threads) {
+        lines.push(`💬 ${sanitizeField(t.title)}${t.hasAcceptedAnswer ? " ✅" : ""} → /forum/thread/${t.slug}`)
+      }
+      for (const g of guides) {
+        lines.push(`📚 ${sanitizeField(g.title)} → /guides/${g.slug}`)
+      }
+      if (strain) lines.push(`🌿 ${sanitizeField(strain.name)} → /strains/${strain.id}`)
+      return ok(lines.join("\n"))
     }
 
     case "online": {
@@ -613,6 +973,134 @@ async function handle(name: string, ctx: BotCommandCtx): Promise<BotCommandResul
       return ok(
         `🏆 Photo contest (week ${week}): ${entries} entr${entries === 1 ? "y" : "ies"}. ${leaderText} Enter or vote at /contest`
       )
+    }
+
+    case "hot": {
+      const since = new Date(Date.now() - 7 * 86400000)
+      const threads = await prisma.thread.findMany({
+        where: { deleted: false, createdAt: { gte: since }, category: { hidden: false }, author: activeAuthor() },
+        orderBy: [{ replyCount: "desc" }, { views: "desc" }],
+        take: 5,
+        select: { title: true, slug: true, replyCount: true, views: true },
+      })
+      if (!threads.length) return ok(`🔥 Quiet week so far — start a discussion at /forum`)
+      const lines = threads.map(
+        (t) => `• ${sanitizeField(t.title)} → /forum/thread/${t.slug} (${t.replyCount} replies · ${t.views} views)`
+      )
+      return ok(`🔥 Trending this week:\n${lines.join("\n")}`)
+    }
+
+    case "new": {
+      const threads = await prisma.thread.findMany({
+        where: { deleted: false, category: { hidden: false }, author: activeAuthor() },
+        orderBy: { createdAt: "desc" },
+        take: 5,
+        select: { title: true, slug: true, createdAt: true, category: { select: { name: true } } },
+      })
+      if (!threads.length) return ok(`No public discussions yet — start one at /forum/new`)
+      const lines = threads.map(
+        (t) => `• ${sanitizeField(t.title)} (${t.category.name}) → /forum/thread/${t.slug}`
+      )
+      return ok(`🆕 Newest discussions:\n${lines.join("\n")}`)
+    }
+
+    case "unanswered": {
+      // Threads still waiting for their first reply — bounded to the last
+      // 30 days so this doesn't resurrect ancient abandoned posts.
+      const threads = await prisma.thread.findMany({
+        where: {
+          deleted: false, locked: false, replyCount: 0,
+          createdAt: { gte: new Date(Date.now() - 30 * 86400000) },
+          category: { hidden: false },
+          author: activeAuthor(),
+        },
+        orderBy: { createdAt: "desc" },
+        take: 5,
+        select: { title: true, slug: true, createdAt: true, category: { select: { name: true } } },
+      })
+      if (!threads.length) return ok(`✅ Every recent thread has replies — the community's on top of it.`)
+      const lines = threads.map(
+        (t) => `• ${sanitizeField(t.title)} (${t.category.name}, ${relAge(t.createdAt)}) → /forum/thread/${t.slug}`
+      )
+      return ok(`🙋 Still looking for a first reply:\n${lines.join("\n")}\nAnswering one earns rep — and a possible +30 accepted-answer bonus.`)
+    }
+
+    case "active": {
+      const hourAgo = new Date(Date.now() - 60 * 60 * 1000)
+      const [posts, updates, members, msgs] = await Promise.all([
+        prisma.post.count({ where: { createdAt: { gte: hourAgo }, deleted: false, thread: { deleted: false, category: { hidden: false } } } }),
+        prisma.diaryUpdate.count({ where: { createdAt: { gte: hourAgo }, diary: { deleted: false } } }),
+        prisma.user.count({ where: { lastSeenAt: { gte: new Date(Date.now() - 15 * 60 * 1000) }, ...activeAuthor() } }),
+        prisma.chatMessage.count({ where: { createdAt: { gte: hourAgo }, deleted: false, room: { isPrivate: false } } }),
+      ])
+      if (!posts && !updates && !msgs) {
+        return ok(`👀 Quiet hour — ${members} member${members === 1 ? "" : "s"} around. Start a thread or update your diary to get things going.`)
+      }
+      return ok(
+        `📈 Last hour: ${posts} forum repl${posts === 1 ? "y" : "ies"} · ${updates} diary update${updates === 1 ? "" : "s"} · ${msgs} chat message${msgs === 1 ? "" : "s"} · ${members} online now`
+      )
+    }
+
+    case "weekly": {
+      const since = new Date(Date.now() - 7 * 86400000)
+      const [members, threads, posts, updates, diaries, entries] = await Promise.all([
+        prisma.user.count({ where: { createdAt: { gte: since }, banned: false } }),
+        prisma.thread.count({ where: { createdAt: { gte: since }, deleted: false, category: { hidden: false } } }),
+        prisma.post.count({ where: { createdAt: { gte: since }, deleted: false, thread: { deleted: false, category: { hidden: false } } } }),
+        prisma.diaryUpdate.count({ where: { createdAt: { gte: since }, diary: { deleted: false } } }),
+        prisma.growDiary.count({ where: { createdAt: { gte: since }, deleted: false } }),
+        prisma.contestEntry.count({ where: { week: currentWeekKey(), user: activeAuthor() } }),
+      ])
+      const total = members + threads + posts + updates + diaries
+      const summary = total > 0
+        ? `This week: ${members} new member${members === 1 ? "" : "s"} · ${threads} thread${threads === 1 ? "" : "s"} · ${posts} repl${posts === 1 ? "y" : "ies"} · ${diaries} new diar${diaries === 1 ? "y" : "ies"} · ${updates} diary update${updates === 1 ? "" : "s"}`
+        : `Quiet week so far — start a thread or update your diary to get things going.`
+      return ok(`📅 ${summary}\nContest entries this week: ${entries} — /contest`)
+    }
+
+    case "mydigest": {
+      // Personal digest — private by contract. Delivered as a BOT_ASSIST
+      // notification (respects notifyOnBotAssist), never posted to the room.
+      const [unreadNotifs, quests, streak, diary, followedUnread] = await Promise.all([
+        prisma.notification.count({ where: { userId: ctx.userId, read: false } }),
+        getQuestProgress(ctx.userId),
+        getGrowStreak(ctx.userId),
+        primaryGrow(ctx.userId),
+        prisma.threadFollow.count({
+          where: {
+            userId: ctx.userId,
+            thread: { deleted: false, category: { hidden: false } },
+          },
+        }),
+      ])
+      const parts: string[] = []
+      const questLeft = quests.filter((q) => !q.done && !q.paid)
+      if (unreadNotifs) parts.push(`${unreadNotifs} unread notification${unreadNotifs === 1 ? "" : "s"}`)
+      if (questLeft.length) parts.push(`${questLeft.length} quest${questLeft.length === 1 ? "" : "s"} left today (+${questLeft.reduce((n, q) => n + q.reward, 0)} rep)`)
+      if (streak.streak > 0) parts.push(`🔥 ${streak.streak}-day update streak`)
+      if (diary && !diary.harvested) {
+        const age = Math.floor((Date.now() - diary.updatedAt.getTime()) / 86400000)
+        if (age >= 3) parts.push(`⚠ "${sanitizeField(diary.title, 40)}" hasn't been updated in ${age} days`)
+        else parts.push(`"${sanitizeField(diary.title, 40)}" is current (${stageLabel(diary.stage)})`)
+      }
+      if (followedUnread) parts.push(`${followedUnread} followed thread${followedUnread === 1 ? "" : "s"}`)
+      const content = parts.length
+        ? parts.join("\n")
+        : `All quiet — post a reply or update your diary to start earning rep.`
+      const botId = await getBotUserId()
+      const n = await notify({
+        userId: ctx.userId,
+        type: "BOT_ASSIST",
+        title: "Your TerpTalk digest",
+        content,
+        link: "/",
+        actorId: botId,
+        groupKey: `bot-assist:mydigest:${ctx.userId}`,
+      })
+      if (!n) {
+        return ok(`🤖 I put your digest together but couldn't deliver it — enable "TerpBot tips" in /settings/notifications, or check /progress for the same info.`)
+      }
+      return ok(`📬 Sent your personal digest to your notifications — it stays private to you.`)
     }
 
     case "rules":

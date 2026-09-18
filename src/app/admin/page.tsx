@@ -7,11 +7,12 @@ import { useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
 import {
   ShieldCheck, Loader2, Users as UsersIcon,
-  Megaphone, ShieldAlert, Ban, UserCheck, Search, Percent, Award, Video, TrendingUp, MessageSquarePlus,
+  Megaphone, ShieldAlert, Ban, UserCheck, Search, Percent, Award, Video, TrendingUp, MessageSquarePlus, Bot,
 } from "lucide-react"
 import Link from "next/link"
 import AdminAffiliates from "@/components/admin-affiliates"
 import AdminFeedback from "@/components/admin-feedback"
+import AdminTerpBot from "@/components/admin-terpbot"
 
 interface Stats {
   users: number; newUsers: number; activeUsers: number; bannedUsers: number
@@ -45,6 +46,7 @@ const TABS = [
   { id: "reputation", label: "Reputation", icon: TrendingUp },
   { id: "affiliates", label: "Affiliates", icon: Percent },
   { id: "feedback", label: "Feedback", icon: MessageSquarePlus },
+  { id: "terpbot", label: "TerpBot", icon: Bot },
 ] as const
 
 interface RepFlags {
@@ -535,6 +537,7 @@ export default function AdminPage() {
         )}
         {tab === "affiliates" && <AdminAffiliates />}
         {tab === "feedback" && <AdminFeedback />}
+        {tab === "terpbot" && <AdminTerpBot />}
       </div>
     </div>
   )

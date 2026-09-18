@@ -24,7 +24,7 @@ const BOT_ROLE = "MEMBER"
 let cachedBotId: string | null = null
 
 const BOT_PROFILE = {
-  bio: "🤖 TerpTalk's resident bot. I welcome new members, celebrate your milestones, post the daily digest and grow tips, and relay staff announcements. Type /help in chat to see my commands.",
+  bio: "🤖 TerpBot — TerpTalk's deterministic community engine (no AI, just your real data). I track your grow, rep, streaks and milestones; find threads/guides/strains; summarize discussions; and welcome new members. I can only see public community data — never DMs, reports, or private settings. Type /help in chat for commands.",
   location: "The Garden",
   growSpace: "Server rack",
   growExperience: "Eternal — I watch every grow",
@@ -55,8 +55,9 @@ async function getOrCreateBot(): Promise<string> {
         data: { role: BOT_ROLE },
       }).catch(() => {})
     }
-    // Self-heal: fill in the bot's profile the first time it posts.
-    if (existing.profile && (!existing.profile.bio || !existing.profile.avatarUrl)) {
+    // Self-heal: fill in the bot's profile the first time it posts, and
+    // re-sync when the canonical bio changes (one write, then stable).
+    if (existing.profile && (!existing.profile.bio || !existing.profile.avatarUrl || existing.profile.bio !== BOT_PROFILE.bio)) {
       await prisma.profile.update({
         where: { id: existing.profile.id },
         data: BOT_PROFILE,

@@ -23,7 +23,7 @@ import { canAccessRoom } from "@/lib/chat-access"
 import { getPusher } from "@/lib/pusher"
 import { postBotMessage, TERPBOT_USERNAME } from "@/lib/terpbot"
 import { emitNotificationPush } from "@/lib/notify"
-import { getChatCommand, canUseCommand } from "@/lib/chat-commands"
+import { getChatCommand, canUseCommand, suggestCommand } from "@/lib/chat-commands"
 import { runBotCommand } from "@/lib/terpbot-data"
 import { recordBotEvent, countEntityLinks } from "@/lib/terpbot-events"
 import { applyAccountActionInTx } from "@/lib/moderation"
@@ -425,8 +425,28 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ ok: true })
       }
 
-      default:
-        return NextResponse.json({ error: "Unknown command" }, { status: 400 })
+      default: {
+        // Did-you-mean: deterministic edit-distance suggestion over the
+        // registry (role-filtered so members never learn staff command names).
+        // Answered by the bot in-room rather than as a bare API error — the
+        // suggestion reads as help, not a failure.
+        const suggestion = suggestCommand(command, user.role)
+        const attempted = command.toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 24) || "?"
+        const dto = await postBot(
+          suggestion
+            ? `🤖 Unknown command /${attempted} — did you mean ${suggestion.usage}? /help lists everything.`
+            : `🤖 Unknown command /${attempted} — /help lists what I can do.`
+        )
+        if (dto) {
+          after(() => recordBotEvent({
+            type: "COMMAND_UNKNOWN",
+            key: `unknown:${dto.id}`,
+            userId,
+            command: attempted,
+          }))
+        }
+        return NextResponse.json({ ok: true, message: dto })
+      }
     }
   } catch (error) {
     console.error("Chat command error:", error)

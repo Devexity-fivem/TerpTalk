@@ -19,6 +19,7 @@ import { BOT_BADGE_REGISTRY } from "@/lib/badge-registry"
 export type BotEventType =
   | "COMMAND_SLASH"      // /command answered successfully
   | "COMMAND_MENTION"    // @terpbot intent answered successfully
+  | "COMMAND_UNKNOWN"    // /command that didn't resolve — command = attempted name
   | "MENTION_HELP"       // bare @terpbot ping → help hint
   | "MENTION_FALLBACK"   // mention we couldn't parse
   | "MENTION_REFUSAL"    // moderation-vocabulary refusal
@@ -138,6 +139,7 @@ export interface BotStats {
   welcomes: number        // new-member welcome announcements
   announcements: number   // all announcements
   daysActive: number      // distinct UTC days with any event
+  unknownCommands: number // slash commands that didn't resolve
   fallbacks: number       // mentions the parser couldn't route
   refusals: number        // moderation-vocabulary refusals
   helps: number           // bare-ping help hints
@@ -150,7 +152,7 @@ export interface BotStats {
 export async function getBotStats(): Promise<BotStats> {
   const [
     commands, mentions, assisted, entities, welcomes, announcements,
-    daysActive, fallbacks, refusals, helps, assists, commandRows, announceRows, assistRows,
+    daysActive, unknownCommands, fallbacks, refusals, helps, assists, commandRows, announceRows, assistRows,
   ] = await Promise.all([
       prisma.botEvent.count({ where: { type: { in: COMMAND_TYPES } } }),
       prisma.botEvent.count({ where: { type: "COMMAND_MENTION" } }),
@@ -166,6 +168,7 @@ export async function getBotStats(): Promise<BotStats> {
       prisma.botEvent.count({ where: { type: "ANNOUNCEMENT", command: "welcome" } }),
       prisma.botEvent.count({ where: { type: "ANNOUNCEMENT" } }),
       prisma.botEvent.count({ where: { type: "DAY_ACTIVE" } }),
+      prisma.botEvent.count({ where: { type: "COMMAND_UNKNOWN" } }),
       prisma.botEvent.count({ where: { type: "MENTION_FALLBACK" } }),
       prisma.botEvent.count({ where: { type: "MENTION_REFUSAL" } }),
       prisma.botEvent.count({ where: { type: "MENTION_HELP" } }),
@@ -194,6 +197,7 @@ export async function getBotStats(): Promise<BotStats> {
     welcomes,
     announcements,
     daysActive,
+    unknownCommands,
     fallbacks,
     refusals,
     helps,
