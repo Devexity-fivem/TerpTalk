@@ -13,7 +13,9 @@ import {
   reverseReputationBySource,
 } from "@/lib/reputation"
 import { claimTask, markDone, releaseClaim } from "@/lib/cron-claim"
-import { sanitizeHref } from "@/lib/markdown"
+import React from "react"
+import { renderToString } from "react-dom/server"
+import { MarkdownRenderer, sanitizeHref } from "@/lib/markdown"
 import { applyAccountActionInTx } from "@/lib/moderation"
 import { notifyMentions } from "@/lib/mentions"
 
@@ -133,6 +135,23 @@ async function run() {
     assert.equal(sanitizeHref("\\evil.com"), null)
     assert.equal(sanitizeHref("javascript:alert(1)"), null)
     assert.equal(sanitizeHref("/a\\b"), null, "embedded backslash must be rejected")
+
+    // ── 4b. Markdown tokenizer — unmatched delimiters must not hang ──
+    // Regression: a delimiter char failing every inline pattern used to
+    // consume 0 characters and loop forever — any post containing "@",
+    // "!", or a lone *_`~[ wedged the entire request (and spun the
+    // server). renderToString is synchronous, so if the loop regresses
+    // this suite stalls rather than silently passing.
+    const md = (c: string) => renderToString(React.createElement(MarkdownRenderer, { content: c }))
+    const text = (c: string) => md(c).replace(/<[^>]*>/g, "")
+    assert.ok(md("Tag me (@terpbot) for help").includes("/u/terpbot"), "mention renders as a profile link")
+    assert.equal(text("wow!"), "wow!", "lone ! renders literally")
+    assert.equal(text("5 * 3 = 15"), "5 * 3 = 15", "lone * renders literally")
+    assert.equal(text("a_b"), "a_b", "lone _ renders literally")
+    assert.equal(text("back`tick"), "back`tick", "lone ` renders literally")
+    assert.equal(text("x~y"), "x~y", "lone ~ renders literally")
+    assert.equal(text("see [this"), "see [this", "unclosed [ renders literally")
+    assert.ok(!md("email a@b.com").includes("/u/"), "email addresses are not mentions")
 
     // ── 5. Shared moderation guards ──────────────────────────────────
     const attempt = (p: Parameters<typeof applyAccountActionInTx>[1]) =>

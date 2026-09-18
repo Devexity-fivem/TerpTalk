@@ -119,7 +119,13 @@ async function getThreadData(slug: string, page: number, canSeeHidden: boolean) 
     }
   }
 
-  return thread
+  // Threads created outside the posting API (launch seeds) can carry their
+  // body on thread.content without an OP Post row. The unfiltered count is
+  // what matters: it must include deleted/banned-author posts so a removed
+  // OP never resurfaces through the fallback render below.
+  const totalPostRows = await prisma.post.count({ where: { threadId: thread.id } })
+
+  return { thread, totalPostRows }
 }
 
 export default async function ThreadPage({
@@ -134,7 +140,7 @@ export default async function ThreadPage({
   const page = Math.max(1, Math.min(10_000, parseInt(pageParam || "1") || 1))
   const session = await getServerSession(authOptions)
   const currentUserId = session?.user?.id
-  const thread = await getThreadData(slug, page, isModerator(session?.user?.role))
+  const { thread, totalPostRows } = await getThreadData(slug, page, isModerator(session?.user?.role))
 
   // Deep-link resolution: `?post=` finds the page holding the target post
   // and redirects there so the #post-{id} anchor exists in the rendered
@@ -391,6 +397,16 @@ export default async function ThreadPage({
             />
             <ReportButton type="THREAD" targetId={thread.id} authorId={thread.authorId} />
           </div>
+          {/* OP body fallback — threads seeded without an OP Post row carry
+              their body only on thread.content. totalPostRows counts every
+              post ever created (including deleted/banned), so this renders
+              only when the thread genuinely never had a post; a removed OP
+              stays removed. */}
+          {totalPostRows === 0 && thread.content.trim() !== "" && (
+            <div className="mt-4 max-w-none">
+              <PostContent content={thread.content} authorRole={thread.author.role} pagePath={`/forum/thread/${thread.slug}`} />
+            </div>
+          )}
           {/* Grow diary context — this thread is a diary's canonical discussion */}
           {diaryCtx && (
             <div className="mt-3 mb-2">

@@ -289,7 +289,7 @@ export default function ProfileClient() {
                 )}
               </div>
               {profile.isBot && profile.botStats ? (
-                <div className="flex gap-4 mt-4 flex-wrap">
+                <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-8 gap-x-3 gap-y-4 mt-4">
                   <div className="text-center">
                     <div className="text-lg font-bold text-primary flex items-center justify-center gap-1"><Zap className="w-4 h-4" />{profile.botStats.commands}</div>
                     <div className="text-xs text-muted-foreground">Commands answered</div>
@@ -324,7 +324,7 @@ export default function ProfileClient() {
                   </div>
                 </div>
               ) : (
-                <div className="flex gap-4 mt-4 flex-wrap">
+                <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-8 gap-x-3 gap-y-4 mt-4">
                   <div className="text-center">
                     <div className="text-lg font-bold text-primary">{profile.reputation}</div>
                     <div className="text-xs text-muted-foreground">Reputation</div>

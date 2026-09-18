@@ -355,6 +355,13 @@ async function main() {
       } else {
         console.log(`  skip thread (exists): ${t.title}`)
       }
+      // Repair: threads seeded before the OP-post duplication have their body
+      // only on thread.content and render empty. Backfill the missing row.
+      const postRows = await prisma.post.count({ where: { threadId: existing.id } })
+      if (postRows === 0) {
+        await prisma.post.create({ data: { content: t.content, authorId: bot.id, threadId: existing.id } })
+        console.log(`  ~ thread OP post backfilled: ${existing.slug}`)
+      }
       continue
     }
     let slug = desired
@@ -369,6 +376,14 @@ async function main() {
         categoryId: cat.id,
         authorId: bot.id,
         pinned: t.pinned,
+        // Match the forum POST route: the OP body lives on the thread AND on
+        // a first Post row, which is what the thread page actually renders.
+        posts: {
+          create: {
+            content: t.content,
+            authorId: bot.id,
+          },
+        },
       },
     })
     createdThreads++

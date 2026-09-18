@@ -41,14 +41,20 @@ export async function rateLimit(
 
     // Opportunistically clean expired rows after the response so the table
     // does not grow forever. 0.5% chance per call keeps overhead negligible.
+    // `after` throws when invoked outside a request scope (e.g. scripts or
+    // tests calling this lib directly) — the cleanup is optional, so skip it.
     if (Math.random() < 0.005) {
-      after(async () => {
-        try {
-          await cleanupRateLimits()
-        } catch {
-          // non-fatal
-        }
-      })
+      try {
+        after(async () => {
+          try {
+            await cleanupRateLimits()
+          } catch {
+            // non-fatal
+          }
+        })
+      } catch {
+        // non-request context — no response to defer work after
+      }
     }
 
     return {

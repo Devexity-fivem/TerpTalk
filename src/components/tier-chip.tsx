@@ -31,7 +31,7 @@ export default function TierChip({ reputation, publicMilestoneOptOut, size = "sm
       aria-label={`${tier.name} tier`}
       title={`${tier.name} tier`}
       className={cn(
-        "inline-flex items-center gap-1 rounded-full font-medium align-middle whitespace-nowrap",
+        "inline-flex shrink-0 items-center gap-1 rounded-full font-medium align-middle whitespace-nowrap",
         tier.bg,
         tier.color,
         size === "sm" ? "px-1.5 py-0.5 text-[10px]" : "px-2 py-1 text-xs",

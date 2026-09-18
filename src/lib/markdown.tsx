@@ -63,9 +63,14 @@ function tokenizeInline(text: string): MarkdownToken[] {
       }
     }
     if (!matched) {
-      // Collect non-special text until next possible delimiter
-      const next = text.slice(i).search(/[*_`~[\!@]/)
-      const take = next === -1 ? text.length - i : next
+      // Collect non-special text until next possible delimiter. `@` is NOT a
+      // delimiter — mentions are handled by the raw-text scan below, so it
+      // must stay inside `raw`. Delimiters that fail every pattern (lone *,
+      // _, `, ~, [, !) still have to be consumed: next === 0 would otherwise
+      // take 0 chars and loop forever, hanging the request and spinning the
+      // server. Math.max(next, 1) guarantees forward progress.
+      const next = text.slice(i).search(/[*_`~[!]/)
+      const take = next === -1 ? text.length - i : Math.max(next, 1)
       const raw = text.slice(i, i + take)
       // scan raw for mentions and auto-urls
       const mentionParts = splitByPattern(raw, MENTION_RE, "mention")

@@ -336,10 +336,10 @@ export default async function LeaderboardPage({
                   }
                 />
                 <div className="flex-1 min-w-0">
-                  <div className="font-semibold truncate flex items-center">
-                    {p.username || p.user.name}
+                  <div className="font-semibold flex items-center gap-1.5">
+                    <span className="truncate">{p.username || p.user.name}</span>
                     <RoleBadge role={p.user.role} />
-                    <TierChip reputation={p.reputation} publicMilestoneOptOut={p.publicMilestoneOptOut} />
+                    <TierChip reputation={p.reputation} publicMilestoneOptOut={p.publicMilestoneOptOut} className="hidden sm:inline-flex" />
                   </div>
                   <div className="text-xs text-muted-foreground">
                     {p.user._count.threadCreator} threads · {p.user._count.posts} posts · {p.user._count.diaryCreator} diaries · {p.user._count.following} followers
@@ -377,9 +377,9 @@ export default async function LeaderboardPage({
                   }
                 />
                 <div className="flex-1 min-w-0">
-                  <div className="font-semibold truncate flex items-center">
-                    {viewerProfile.username || viewerProfile.user.name}
-                    <span className="ml-2 text-[10px] uppercase tracking-wider text-primary font-medium">You</span>
+                  <div className="font-semibold flex items-center gap-1.5">
+                    <span className="truncate">{viewerProfile.username || viewerProfile.user.name}</span>
+                    <span className="shrink-0 text-[10px] uppercase tracking-wider text-primary font-medium">You</span>
                   </div>
                   <div className="text-xs text-muted-foreground">Your current position</div>
                 </div>
@@ -410,9 +410,9 @@ export default async function LeaderboardPage({
                 >
                   <span className="w-5 text-center text-xs text-muted-foreground shrink-0">{i + 1}</span>
                   <div className="flex-1 min-w-0">
-                    <span className="text-sm font-medium truncate flex items-center">
-                      {p.username || p.user.name}
-                      <TierChip reputation={p.reputation} publicMilestoneOptOut={p.publicMilestoneOptOut} />
+                    <span className="text-sm font-medium flex items-center gap-1.5">
+                      <span className="truncate">{p.username || p.user.name}</span>
+                      <TierChip reputation={p.reputation} publicMilestoneOptOut={p.publicMilestoneOptOut} className="hidden sm:inline-flex" />
                     </span>
                   </div>
                   <span className="text-sm font-semibold text-primary shrink-0">{metric.toLocaleString()}</span>
