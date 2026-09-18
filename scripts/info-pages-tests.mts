@@ -4,6 +4,7 @@
 // recovery-phrase warning banner. Mostly source-level assertions since these
 // are static pages; DB check confirms the dropped column is really gone.
 // Run: npm run test:info-pages
+import "./db-guard.mjs"
 import { strict as assert } from "node:assert"
 import { readFileSync, existsSync, readdirSync } from "node:fs"
 import { join } from "node:path"
