@@ -21,6 +21,7 @@ export interface MemberHomeData {
   quests: {
     slug: string
     title: string
+    description: string
     icon: string
     reward: number
     target: number
@@ -161,6 +162,7 @@ export async function getMemberHomeData(userId: string): Promise<MemberHomeData 
     quests: quests.slice(0, 3).map((q) => ({
       slug: q.slug,
       title: q.title,
+      description: q.description,
       icon: q.icon,
       reward: q.reward,
       target: q.target,

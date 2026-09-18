@@ -223,9 +223,12 @@ export function Navigation() {
 
             {/* Right side */}
             <div className="flex min-w-0 items-center gap-1 sm:gap-1.5">
+              {/* Search — full input only while the inline links are hidden;
+                  at xl (when every control competes for the 1280px container)
+                  it collapses to an icon so the bar doesn't crowd. */}
               <form
                 action="/search"
-                className="hidden md:block"
+                className="hidden md:block xl:hidden"
                 onSubmit={(e) => {
                   const input = e.currentTarget.elements.namedItem("q") as HTMLInputElement
                   if (!input.value.trim()) e.preventDefault()
@@ -304,6 +307,18 @@ export function Navigation() {
                   drawer's search field is the search path so the header fits
                   320px devices. */}
               <Tooltip content="Search TerpTalk" side="bottom" className="hidden sm:inline-flex md:hidden">
+                <Link
+                  href="/search"
+                  className="rounded-lg p-2 transition-colors hover:bg-secondary"
+                  aria-label="Search"
+                >
+                  <Search className="h-5 w-5" />
+                </Link>
+              </Tooltip>
+
+              {/* Search icon for xl+ — replaces the input while the inline
+                  desktop links are shown so the bar stays uncrowded. */}
+              <Tooltip content="Search TerpTalk" side="bottom" className="hidden xl:inline-flex">
                 <Link
                   href="/search"
                   className="rounded-lg p-2 transition-colors hover:bg-secondary"

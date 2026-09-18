@@ -5,7 +5,7 @@ import {
 } from "lucide-react"
 import MemberGreeting from "@/components/member-greeting"
 import OpenChatButton from "@/components/open-chat-button"
-import Tooltip from "@/components/ui/tooltip"
+import Tooltip, { InfoTip } from "@/components/ui/tooltip"
 import type { MemberHomeData } from "@/lib/member-home"
 import { cn } from "@/lib/utils"
 
@@ -25,11 +25,13 @@ function timeAgo(iso: string): string {
 function Card({
   icon,
   title,
+  tip,
   action,
   children,
 }: {
   icon: React.ReactNode
   title: string
+  tip?: string
   action?: { href: string; label: string }
   children: React.ReactNode
 }) {
@@ -39,6 +41,7 @@ function Card({
         <h2 className="flex items-center gap-2 text-sm font-semibold">
           {icon}
           {title}
+          {tip && <InfoTip content={tip} />}
         </h2>
         {action && (
           <Link
@@ -110,9 +113,11 @@ export default function MemberHome({ data }: { data: MemberHomeData }) {
         >
           <span className="text-2xl" aria-hidden="true">{data.nextAction.icon}</span>
           <div className="min-w-0 flex-1">
-            <p className="text-[11px] font-semibold uppercase tracking-wider text-primary">
-              Next up
-            </p>
+            <Tooltip content="Suggested next step — picked from your progress and activity">
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-primary">
+                Next up
+              </p>
+            </Tooltip>
             <p className="truncate text-sm font-medium sm:text-base">{data.nextAction.text}</p>
           </div>
           <span className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground transition-colors group-hover:bg-primary/90">
@@ -125,6 +130,7 @@ export default function MemberHome({ data }: { data: MemberHomeData }) {
           <Card
             icon={<Zap className="h-4 w-4 text-amber-500" />}
             title="Today's quests"
+            tip="Small optional tasks that refresh daily — each pays the listed reputation. Hover a quest to see how to complete it."
             action={{ href: "/progress", label: "All progress" }}
           >
             {data.quests.length === 0 ? (
@@ -139,9 +145,11 @@ export default function MemberHome({ data }: { data: MemberHomeData }) {
                     <span className="text-lg" aria-hidden="true">{q.icon}</span>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
-                        <p className={cn("truncate text-sm font-medium", q.done && "text-muted-foreground line-through")}>
-                          {q.title}
-                        </p>
+                        <Tooltip content={q.description} align="start" className="min-w-0">
+                          <p className={cn("truncate text-sm font-medium", q.done && "text-muted-foreground line-through")}>
+                            {q.title}
+                          </p>
+                        </Tooltip>
                       </div>
                       <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-secondary">
                         <div
@@ -169,6 +177,7 @@ export default function MemberHome({ data }: { data: MemberHomeData }) {
           <Card
             icon={<Sprout className="h-4 w-4 text-primary" />}
             title="Your grows"
+            tip="Your active grow diaries — each shows its current stage and the next journey milestone."
             action={data.grows.length > 0 ? { href: "/diaries", label: "All diaries" } : undefined}
           >
             {data.grows.length === 0 ? (
@@ -186,7 +195,9 @@ export default function MemberHome({ data }: { data: MemberHomeData }) {
                     >
                       <div className="flex items-center justify-between gap-2">
                         <p className="min-w-0 truncate text-sm font-medium">{g.title}</p>
-                        <span className="shrink-0 text-xs">{g.stageLabel}</span>
+                        <Tooltip content="Current grow stage — advances as you log diary updates" align="end">
+                          <span className="shrink-0 text-xs">{g.stageLabel}</span>
+                        </Tooltip>
                       </div>
                       <p className="mt-1 truncate text-xs text-muted-foreground">
                         {g.journey?.next
@@ -205,6 +216,7 @@ export default function MemberHome({ data }: { data: MemberHomeData }) {
           <Card
             icon={<Bell className="h-4 w-4 text-primary" />}
             title="Since your last visit"
+            tip="New activity on threads and grow diaries you follow, plus unread notifications."
             action={{ href: "/notifications", label: "Notifications" }}
           >
             {!hasActivity ? (
@@ -231,7 +243,9 @@ export default function MemberHome({ data }: { data: MemberHomeData }) {
                       href={`/forum/thread/${t.slug}`}
                       className="group flex items-center gap-2 rounded-lg px-3 py-2 hover:bg-secondary/60"
                     >
-                      <Circle className="h-2 w-2 shrink-0 fill-primary text-primary" aria-label="New activity" />
+                      <Tooltip content="New activity since your last visit">
+                        <Circle className="h-2 w-2 shrink-0 fill-primary text-primary" aria-label="New activity" />
+                      </Tooltip>
                       <span className="min-w-0 flex-1 truncate group-hover:text-primary">{t.title}</span>
                       <span className="shrink-0 text-xs text-muted-foreground">{t.category}</span>
                     </Link>
@@ -266,15 +280,21 @@ export default function MemberHome({ data }: { data: MemberHomeData }) {
           </Card>
 
           {/* Live now */}
-          <Card icon={<Radio className="h-4 w-4 text-emerald-500" />} title="Live now">
+          <Card
+            icon={<Radio className="h-4 w-4 text-emerald-500" />}
+            title="Live now"
+            tip="Real-time community activity — who's online and the latest chat message."
+          >
             {data.live ? (
               <div className="space-y-3">
                 <div className="flex items-center gap-2 text-sm">
                   <Users className="h-4 w-4 shrink-0 text-muted-foreground" />
-                  <span>
-                    <span className="font-medium">{data.live.onlineCount}</span>{" "}
-                    grower{data.live.onlineCount === 1 ? "" : "s"} online
-                  </span>
+                  <Tooltip content="Members active on TerpTalk in the last 15 minutes">
+                    <span>
+                      <span className="font-medium">{data.live.onlineCount}</span>{" "}
+                      grower{data.live.onlineCount === 1 ? "" : "s"} online
+                    </span>
+                  </Tooltip>
                 </div>
                 <p className="text-sm text-muted-foreground">
                   {data.live.latestAt
