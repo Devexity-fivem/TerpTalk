@@ -172,6 +172,30 @@ async function run() {
   const dormEvents = await prisma.reputationEvent.count({ where: { key: referralKey(refereeDormant.id), reversedAt: null } })
   ok(dormEvents === 1, "second sweep does not duplicate the payout", { sweep2, dormEvents })
 
+  // ── Legacy unkeyed payout blocks double-pay ──────────────────────
+  // Pre-ledger signups paid the instant bonus as an unkeyed REFERRAL event
+  // stamped inside the registration request (key:null, createdAt ≈ referee
+  // signup). The keyed idempotency cannot see those rows — without the
+  // legacy check the sweep re-pays every referral that predates the ledger.
+  const referrerLegacy = await makeUser("refleg")
+  const refereeLegacy = await makeUser("leg", { referredById: referrerLegacy.profile!.id, ageHours: 48 })
+  await pushRep(refereeLegacy.id, REFERRAL_MIN_REP, "leg")
+  await prisma.reputationEvent.create({
+    data: {
+      userId: referrerLegacy.id,
+      type: "REFERRAL",
+      amount: 15,
+      reason: `Referred new member ${refereeLegacy.name}`,
+      createdAt: refereeLegacy.createdAt,
+    },
+  })
+  await reconcileReferralPayouts()
+  ok((await referralEvent(refereeLegacy.id)) === null, "legacy unkeyed payout blocks sweep double-pay")
+  const legCount = await prisma.reputationEvent.count({
+    where: { userId: referrerLegacy.id, type: "REFERRAL", reversedAt: null },
+  })
+  ok(legCount === 1, "legacy referrer keeps exactly one referral event", legCount)
+
   // ── Normal award + reconciliation concurrency → one payout ──────
   const referrerRace = await makeUser("refrace")
   const refereeRace = await makeUser("race", { referredById: referrerRace.profile!.id, ageHours: 48 })

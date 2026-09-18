@@ -661,6 +661,28 @@ async function payReferralBonus(refereeUserId: string, refereeCreatedAt: Date, r
   })
   if (!referrer || referrer.userId === refereeUserId) return
 
+  // Pre-ledger signups (before the deferred-payout system shipped) paid the
+  // instant referral bonus as an UNKEYED event inside the registration
+  // request — stamped at the same time as the referee's account. The keyed
+  // idempotency can't see those rows, so without this check the sweep and
+  // deferred trigger re-pay every referral that predates the ledger. The
+  // window is tight and the only historical producer of unkeyed REFERRAL
+  // events was that signup path, so a match is unambiguous.
+  const legacyPayout = await prisma.reputationEvent.findFirst({
+    where: {
+      userId: referrer.userId,
+      type: "REFERRAL",
+      key: null,
+      reversedAt: null,
+      createdAt: {
+        gte: new Date(refereeCreatedAt.getTime() - 60_000),
+        lte: new Date(refereeCreatedAt.getTime() + 10 * 60_000),
+      },
+    },
+    select: { id: true },
+  })
+  if (legacyPayout) return
+
   // Weekly payout cap — a sock farm grinding 25 rep per fake signup can't
   // earn unbounded referral rep. Organic referrals (a few a week at most)
   // never notice the limit.
