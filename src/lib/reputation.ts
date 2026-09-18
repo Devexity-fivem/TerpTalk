@@ -652,7 +652,7 @@ async function payReferralBonus(refereeUserId: string, refereeCreatedAt: Date, r
 
   const profile = await prisma.profile.findUnique({
     where: { userId: refereeUserId },
-    select: { referredById: true },
+    select: { referredById: true, username: true },
   })
   if (!profile?.referredById) return
   const referrer = await prisma.profile.findUnique({
@@ -708,11 +708,15 @@ async function payReferralBonus(refereeUserId: string, refereeCreatedAt: Date, r
 
   // The award is already committed — notification delivery stays
   // non-blocking, but a failure must be observable (never re-award).
+  // Name the invitee — an unnamed "a member you invited" payout is
+  // indistinguishable from a brand-new signup in the inbox (and bursts of
+  // deferred payouts read as a wave of new registrations).
+  const refereeName = profile.username ?? "a member you invited"
   await notify({
     userId: referrer.userId,
     type: "REPUTATION",
     title: "Referral bonus",
-    content: `A member you invited became an established grower — +${res.amount ?? REP_POINTS.REFERRAL} reputation.`,
+    content: `@${refereeName} became an established grower — +${res.amount ?? REP_POINTS.REFERRAL} reputation for the invite.`,
     link: "/profile",
   }).catch((error) => {
     console.error(`[reputation] referral payout notification failed for referrer ${referrer.userId} (referee ${refereeUserId}):`, error)
