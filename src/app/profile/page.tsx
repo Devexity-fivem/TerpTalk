@@ -5,7 +5,7 @@ import { signInHref } from "@/lib/callback-url"
 import { useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
 import { useEffect, useMemo, useRef, useState } from "react"
-import { User, Calendar, Award, MessageSquare, Leaf, Loader2, Download, Trash2, Pencil, MapPin, Globe, Sprout, Dna, Store, TrendingUp, ChevronDown, ChevronUp } from "lucide-react"
+import { User, Award, MessageSquare, Leaf, Loader2, Download, Trash2, Pencil, MapPin, Globe, Sprout, Dna, Store, TrendingUp, ChevronDown, ChevronUp, Bookmark, Settings, ArrowRight } from "lucide-react"
 import { signOut } from "next-auth/react"
 import Link from "next/link"
 import RoleBadge from "@/components/role-badge"
@@ -176,6 +176,22 @@ interface ProfileData {
 
 const EXPERIENCE_LEVELS = ["Just starting out", "First grow", "A few grows in", "Experienced", "Veteran grower", "Commercial"]
 
+const PROFILE_TABS = [
+  { id: "profile", label: "Profile", icon: User },
+  { id: "progress", label: "Progress", icon: TrendingUp },
+  { id: "saved", label: "Saved", icon: Bookmark },
+  { id: "account", label: "Account", icon: Settings },
+] as const
+type ProfileTab = (typeof PROFILE_TABS)[number]["id"]
+
+// Existing deep links: /profile#rewards → Progress, /profile#recovery and
+// /profile#account → Account.
+const HASH_TAB: Record<string, ProfileTab> = {
+  rewards: "progress",
+  recovery: "account",
+  account: "account",
+}
+
 // Resize an image file to a 128x128 data URI for avatar upload
 function resizeImage(file: File, size = 128): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -207,6 +223,11 @@ export default function ProfilePage() {
   const [editing, setEditing] = useState(false)
   const [saving, setSaving] = useState(false)
   const [showAllBadges, setShowAllBadges] = useState(false)
+  // Honor deep links (/profile#rewards, /profile#recovery, /profile#account)
+  // by landing on the tab that holds that section.
+  const [tab, setTab] = useState<ProfileTab>(() =>
+    typeof window === "undefined" ? "profile" : HASH_TAB[window.location.hash.slice(1)] ?? "profile"
+  )
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [deleteForm, setDeleteForm] = useState({ username: "", password: "" })
   const [deleteBusy, setDeleteBusy] = useState(false)
@@ -247,6 +268,16 @@ export default function ProfilePage() {
     window.addEventListener("keydown", onKeyDown)
     return () => window.removeEventListener("keydown", onKeyDown)
   }, [editing])
+
+  // Same-page hash navigation doesn't remount — keep deep links working.
+  useEffect(() => {
+    const onHash = () => {
+      const target = HASH_TAB[window.location.hash.slice(1)]
+      if (target) setTab(target)
+    }
+    window.addEventListener("hashchange", onHash)
+    return () => window.removeEventListener("hashchange", onHash)
+  }, [])
 
   useEffect(() => {
     if (status === "authenticated") {
@@ -400,10 +431,6 @@ export default function ProfilePage() {
                   <div className="text-center">
                     <div className="text-2xl font-bold text-primary">{profileData.stats.diaries}</div>
                     <div className="text-sm text-muted-foreground">Diaries</div>
-                  </div>
-                  <div className="text-center">
-                    <div className="text-2xl font-bold text-primary">{profileData.stats.referrals}</div>
-                    <div className="text-sm text-muted-foreground">Referrals</div>
                   </div>
                 </div>
               </div>
@@ -681,9 +708,25 @@ export default function ProfilePage() {
           </div>
         )}
 
-        {/* Profile Sections — default stretch gives every row equal card
-            heights; cards are ordered so row-mates carry similar content. */}
+        {/* Section tabs — the page used to stack every card at once, which was
+            overwhelming. Grouping keeps the default view focused. */}
+        <div className="flex gap-2 mb-4 md:mb-6 overflow-x-auto pb-1">
+          {PROFILE_TABS.map(({ id, label, icon: Icon }) => (
+            <button
+              key={id}
+              onClick={() => setTab(id)}
+              className={cn(
+                "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-colors",
+                tab === id ? "bg-primary text-primary-foreground" : "bg-card border border-border hover:bg-secondary"
+              )}
+            >
+              <Icon className="w-4 h-4" /> {label}
+            </button>
+          ))}
+        </div>
+
         <div className="grid md:grid-cols-2 gap-4 md:gap-6">
+          {tab === "profile" && (<>
           {/* Grow Diaries */}
           <div className="bg-card rounded-lg border border-border p-6">
             <div className="flex items-center gap-2 mb-4">
@@ -752,7 +795,9 @@ export default function ProfilePage() {
               setShowAll={setShowAllBadges}
             />
           )}
+          </>)}
 
+          {tab === "progress" && (<>
           {/* Reputation Tier */}
           <div className="bg-card rounded-lg border border-border p-6">
             <div className="flex items-center gap-2 mb-4">
@@ -793,7 +838,9 @@ export default function ProfilePage() {
               Earn rep by posting, journaling, adding strains, and getting likes. Verified members earn 1.5x rep.
             </p>
           </div>
+          </>)}
 
+          {tab === "saved" && (<>
           {/* Saved Threads */}
           <SavedThreads />
 
@@ -834,6 +881,9 @@ export default function ProfilePage() {
             </div>
           </div>
 
+          </>)}
+
+          {tab === "account" && (<>
           {/* Account Recovery */}
           <div id="recovery" className="scroll-mt-20">
             <RecoveryPhraseCard />
@@ -912,26 +962,9 @@ export default function ProfilePage() {
             </div>
           </div>
 
-          {/* Activity */}
-          <div className="bg-card rounded-lg border border-border p-6">
-            <div className="flex items-center gap-2 mb-4">
-              <Calendar className="w-5 h-5 text-primary" />
-              <h2 className="text-lg font-semibold">Recent Activity</h2>
-            </div>
-            {profileData.recentThreads.length === 0 && profileData.recentDiaries.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No recent activity</p>
-            ) : (
-              <div className="space-y-2 text-sm text-muted-foreground">
-                {profileData.recentThreads.length > 0 && (
-                  <div>Started {profileData.recentThreads.length} discussion{profileData.recentThreads.length !== 1 ? 's' : ''}</div>
-                )}
-                {profileData.recentDiaries.length > 0 && (
-                  <div>Created {profileData.recentDiaries.length} grow diar{profileData.recentDiaries.length !== 1 ? 'ies' : 'y'}</div>
-                )}
-              </div>
-            )}
-          </div>
+          </>)}
 
+          {tab === "progress" && (<>
           {/* Reputation detail widgets — the two tallest cards, paired in the
               final row so neither forces a shorter card to stretch. */}
           <WeeklyChallenges />
@@ -947,6 +980,19 @@ export default function ProfilePage() {
           />
           <ReputationRoadmap reputation={profileData.stats.reputation} />
           <ReputationEarn />
+
+          {/* Hub link — /progress holds quests, trust, and unlock detail. */}
+          <Link
+            href="/progress"
+            className="bg-card rounded-lg border border-border p-6 flex items-center justify-between gap-3 hover:border-primary/40 transition-colors"
+          >
+            <div>
+              <h2 className="text-lg font-semibold">Your Progress</h2>
+              <p className="text-sm text-muted-foreground mt-1">Daily quests, trust standing, and what unlocks next.</p>
+            </div>
+            <ArrowRight className="w-5 h-5 text-primary shrink-0" />
+          </Link>
+          </>)}
         </div>
       </div>
     </div>
