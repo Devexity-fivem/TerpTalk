@@ -170,19 +170,21 @@ export function Navigation() {
           <div className="flex h-16 items-center justify-between gap-2">
             {/* Logo — compact below sm so the header fits 320px devices;
                 the Beta chip only appears once there's room for it. */}
-            <Tooltip content="Go to homepage" side="bottom">
-              <Link href="/" className="flex shrink-0 items-center gap-1.5 sm:gap-2" aria-label="TerpTalk home">
-                <div className="rounded-xl bg-primary/15 p-1.5 ring-1 ring-primary/30 sm:p-2">
-                  <CannabisLeaf className="h-5 w-5 text-primary sm:h-6 sm:w-6" />
-                </div>
-                <span className="text-base font-bold tracking-tight sm:text-lg">TerpTalk</span>
-                <Tooltip content="TerpTalk is in public beta — features are still rolling out" side="bottom" className="hidden sm:inline-flex">
-                  <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-500">
-                    Beta
-                  </span>
-                </Tooltip>
-              </Link>
-            </Tooltip>
+            <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
+              <Tooltip content="Go to homepage" side="bottom">
+                <Link href="/" className="flex items-center gap-1.5 sm:gap-2" aria-label="TerpTalk home">
+                  <div className="rounded-xl bg-primary/15 p-1.5 ring-1 ring-primary/30 sm:p-2">
+                    <CannabisLeaf className="h-5 w-5 text-primary sm:h-6 sm:w-6" />
+                  </div>
+                  <span className="text-base font-bold tracking-tight sm:text-lg">TerpTalk</span>
+                </Link>
+              </Tooltip>
+              <Tooltip content="TerpTalk is in public beta — features are still rolling out" side="bottom" className="hidden sm:inline-flex">
+                <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-500">
+                  Beta
+                </span>
+              </Tooltip>
+            </div>
 
             {/* Desktop primary links — xl and up only; below that the
                 drawer carries the full nav so lg has room for the
