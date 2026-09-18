@@ -1,6 +1,7 @@
 import Link from "next/link"
 import CannabisLeaf from "@/components/cannabis-leaf"
 import FooterChatLink from "@/components/footer-chat-link"
+import FooterFeedbackLink from "@/components/footer-feedback-link"
 
 export default function Footer() {
   return (
@@ -24,6 +25,7 @@ export default function Footer() {
           <Link href="/reputation" className="hover:text-foreground transition-colors">Reputation</Link>
           <Link href="/calculator" className="hover:text-foreground transition-colors">Calculator</Link>
           <Link href="/staff/apply" className="hover:text-foreground transition-colors">Join the team</Link>
+          <FooterFeedbackLink className="hover:text-foreground transition-colors" />
           <Link href="/help" className="hover:text-foreground transition-colors">Help</Link>
           <Link href="/plant-doctor" className="hover:text-foreground transition-colors">Plant Doctor</Link>
           <Link href="/rules" className="hover:text-foreground transition-colors">Rules</Link>

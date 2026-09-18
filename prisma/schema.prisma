@@ -68,6 +68,7 @@ model User {
   blockedBy     Block[]              @relation("Blocked")
   bookmarks     Bookmark[]
   diaryFollows  DiaryFollow[]
+  feedback      Feedback[]
 
   @@index([role])
   @@index([status])
@@ -749,6 +750,34 @@ model Report {
   @@index([reportedId])
   @@index([targetId])
   @@index([assignedToId, status])
+}
+
+// Beta feedback — product-development signal, intentionally separate from the
+// moderation Report system. Members submit BUG/UX/FEATURE/CONTENT/OTHER items;
+// admins triage them and can also record their own ADMIN_OBSERVATIONs in the
+// same queue. `adminNotes` is staff-only and must never be exposed to members.
+model Feedback {
+  id          String    @id @default(cuid())
+  authorId    String?   // SetNull on account deletion — the signal outlives the account
+  type        String    @default("OTHER")   // BUG, UX, FEATURE, CONTENT, OTHER
+  status      String    @default("NEW")     // NEW, REVIEWING, PLANNED, IN_PROGRESS, RESOLVED, DECLINED
+  priority    String    @default("NORMAL")  // LOW, NORMAL, HIGH
+  source      String    @default("USER")    // USER, ADMIN_OBSERVATION
+  title       String
+  message     String
+  pagePath    String?   // route the member was on — captured automatically, never typed by hand
+  adminNotes  String?   // internal only — reproduction notes, fix commits, etc.
+  resolvedAt  DateTime?
+  resolvedById String?  // bare string — survives staff account deletion
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  author      User?     @relation(fields: [authorId], references: [id], onDelete: SetNull)
+
+  @@index([authorId])
+  @@index([status, createdAt])
+  @@index([type])
+  @@index([source])
 }
 
 // Automated trust & safety signals — persisted so staff can triage, assign,

@@ -60,6 +60,7 @@ const HTTP_PHASE: Suite[] = [
   { id: "diary", file: "scripts/diary-verify.mjs", runner: "node", cls: "A", label: "Grow diary HTTP behavior" },
   { id: "bot", file: "scripts/bot-verify.mjs", runner: "node", cls: "A", label: "TerpBot HTTP end-to-end", timeoutMs: 12 * 60_000 },
   { id: "trust-safety", file: "scripts/trust-safety-verify.mjs", runner: "node", cls: "A", label: "Trust & safety HTTP behavior" },
+  { id: "feedback", file: "scripts/feedback-tests.mjs", runner: "node", cls: "A", label: "Beta feedback auth/privacy/rate-limit" },
 ]
 
 // STRICTLY SERIAL — all create DB fixtures; several mutate shared global

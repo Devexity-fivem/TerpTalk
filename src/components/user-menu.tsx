@@ -4,10 +4,11 @@ import { useEffect, useRef, useState } from "react"
 import Link from "next/link"
 import { useSession, signOut } from "next-auth/react"
 import {
-  User, Award, TrendingUp, Leaf, Mail, Bell, Settings, Shield, LogOut, ChevronDown, HelpCircle, MessagesSquare,
+  User, Award, TrendingUp, Leaf, Mail, Bell, Settings, Shield, LogOut, ChevronDown, HelpCircle, MessagesSquare, MessageSquarePlus,
 } from "lucide-react"
 import { Avatar } from "@/components/ui/avatar"
 import { useChatPanel } from "@/components/chat-panel"
+import { FeedbackModal } from "@/components/feedback-modal"
 import { cn } from "@/lib/utils"
 
 const LINKS = [
@@ -27,6 +28,9 @@ export default function UserMenu() {
   const { data: session } = useSession()
   const { openPanel } = useChatPanel()
   const [open, setOpen] = useState(false)
+  // The feedback modal lives outside the dropdown — closing the menu must not
+  // unmount the dialog it just opened.
+  const [feedbackOpen, setFeedbackOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -116,6 +120,19 @@ export default function UserMenu() {
             </Link>
           ))}
 
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => { setOpen(false); setFeedbackOpen(true) }}
+            className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm hover:bg-secondary transition-colors"
+          >
+            <MessageSquarePlus className="h-4 w-4 text-primary shrink-0" />
+            <div className="text-left">
+              <div className="font-medium">Beta Feedback</div>
+              <div className="text-[11px] text-muted-foreground">Report bugs and share ideas</div>
+            </div>
+          </button>
+
           {isStaff && (
             <>
               <div className="my-1 border-t border-border" />
@@ -159,6 +176,8 @@ export default function UserMenu() {
           </button>
         </div>
       )}
+
+      {feedbackOpen && <FeedbackModal onClose={() => setFeedbackOpen(false)} />}
     </div>
   )
 }
