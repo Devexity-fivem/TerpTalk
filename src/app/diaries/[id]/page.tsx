@@ -166,6 +166,11 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
   // Growth summary + stage spans — the lean series covers the full grow
   // (the timeline payload is capped at 100 updates).
   const growth = growthSummary(diary, growthUpdates, now)
+  // Mirrors EnvCharts' own render guard so the chart bundle is only
+  // requested when there is something to plot.
+  const hasEnvChartData =
+    updates.filter((u) => u.temperature != null || u.humidity != null || u.vpd != null).length >= 2 ||
+    updates.filter((u) => u.ph != null || u.ec != null).length >= 2
   // Stage timeline — elapsed-day runs from update stage snapshots; the
   // current stage extends through now (or harvest day when harvested).
   const stageRuns = stageDurations(diary, growthUpdates, now)
@@ -655,33 +660,37 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
                     ? `Day ${growth.latestDay} · week ${growth.latestWeek} — height ${growth.currentHeight} cm`
                     : `Day ${growth.latestDay} · week ${growth.latestWeek} — ${growth.currentHeight} cm (${growth.delta! >= 0 ? "+" : ""}${growth.delta} cm since previous reading${growth.deltaDays! > 0 ? `, ${growth.deltaDays}d earlier` : ", same day"})`}
               </p>
-              <div className="mt-3">
-                <HeightChart
-                  points={growthUpdates
-                    .filter((u) => u.heightCm != null)
-                    .map((u) => ({
-                      createdAt: u.createdAt.toISOString(),
-                      day: diaryDay(diary.startDate, u.createdAt),
-                      week: diaryWeek(diary.startDate, u.createdAt),
-                      stage: u.stage,
-                      heightCm: u.heightCm!,
-                    }))}
-                />
-              </div>
+              {growth.measurements >= 2 && (
+                <div className="mt-3">
+                  <HeightChart
+                    points={growthUpdates
+                      .filter((u) => u.heightCm != null)
+                      .map((u) => ({
+                        createdAt: u.createdAt.toISOString(),
+                        day: diaryDay(diary.startDate, u.createdAt),
+                        week: diaryWeek(diary.startDate, u.createdAt),
+                        stage: u.stage,
+                        heightCm: u.heightCm!,
+                      }))}
+                  />
+                </div>
+              )}
             </section>
 
-          <EnvCharts
-            updates={updates.map((u) => ({
-              createdAt: u.createdAt.toISOString(),
-              day: diaryDay(diary.startDate, u.createdAt),
-              week: diaryWeek(diary.startDate, u.createdAt),
-              temperature: u.temperature,
-              humidity: u.humidity,
-              vpd: u.vpd,
-              ph: u.ph,
-              ec: u.ec,
-            }))}
-          />
+          {hasEnvChartData && (
+            <EnvCharts
+              updates={updates.map((u) => ({
+                createdAt: u.createdAt.toISOString(),
+                day: diaryDay(diary.startDate, u.createdAt),
+                week: diaryWeek(diary.startDate, u.createdAt),
+                temperature: u.temperature,
+                humidity: u.humidity,
+                vpd: u.vpd,
+                ph: u.ph,
+                ec: u.ec,
+              }))}
+            />
+          )}
 
           {truncated && (
             <p className="text-xs text-muted-foreground">
