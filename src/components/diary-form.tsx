@@ -5,6 +5,7 @@ import { Loader2 } from "lucide-react"
 import Link from "next/link"
 import StrainCombobox from "@/components/strain-combobox"
 import { MEDIUM_TYPES, MEDIUM_LABELS, LIGHT_TYPES, LIGHT_LABELS, TECHNIQUES, TECHNIQUE_LABELS } from "@/lib/grow-fields"
+import { localDateInputValue } from "@/lib/diary-weeks"
 
 export interface DiaryFormData {
   title: string
@@ -55,6 +56,20 @@ export default function DiaryForm({ initial, submitLabel, pendingLabel, onSubmit
   const [error, setError] = useState("")
   const [setups, setSetups] = useState<{ id: string; title: string }[]>([])
   const [formData, setFormData] = useState<DiaryFormData>(initial)
+
+  // Default the start date to today (local) on mount — client-only so the
+  // server-rendered "" never fights hydration, and an explicit user or
+  // prefill value is never overwritten. Edit mode passes startDateDisplay
+  // and locks the field entirely.
+  useEffect(() => {
+    if (startDateDisplay) return
+    // Deferred so the server-rendered "" and first client render match and
+    // the fill never becomes a synchronous cascading render.
+    const t = setTimeout(() => {
+      setFormData((prev) => (prev.startDate ? prev : { ...prev, startDate: localDateInputValue() }))
+    }, 0)
+    return () => clearTimeout(t)
+  }, [startDateDisplay])
 
   // The member's own setups — the API is owner-scoped by construction.
   useEffect(() => {

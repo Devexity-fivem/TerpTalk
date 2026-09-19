@@ -278,7 +278,7 @@ async function run() {
     // ─────────────────────────────────────────────────────────────
     // Source assertions — P0-B privacy/status/block
     // ─────────────────────────────────────────────────────────────
-    assertSource("app/page.tsx", ["author: activeAuthor()", "activeAuthor()"], "homepage filters")
+    assertSource("app/(home)/page.tsx", ["author: activeAuthor()", "activeAuthor()"], "homepage filters")
     assertSource("app/forum/category/[slug]/page.tsx", ["activeAuthor()"], "category page filter")
     assertSource("app/forum/tags/[slug]/page.tsx", ["activeAuthor()"], "tag page filter")
     assertSource("app/forum/thread/[slug]/page.tsx", ["activeAuthor()"], "thread page filter")
@@ -311,7 +311,7 @@ async function run() {
     assertSource("components/footer-chat-link.tsx", ['href="/chat"', "openPanel"], "footer chat link + panel open")
     assertSource("components/user-menu.tsx", ['href: "/chat"'], "user menu chat link")
     assertSource("components/onboarding-stepper.tsx", ['href="/chat"', "live chat"], "onboarding chat mention")
-    assertSource("app/page.tsx", ['href: "/chat"'], "homepage chat explore card")
+    assertSource("app/(home)/page.tsx", ['href: "/chat"'], "homepage chat explore card")
     assertSource("app/api/chat/messages/route.ts", ["/chat?room="], "chat mention deep link")
     assertSource("app/chat/chat-client.tsx", ['signInHref("/chat")'], "chat guest sign-in targets /chat")
 
@@ -333,10 +333,10 @@ async function run() {
     // ─────────────────────────────────────────────────────────────
     // Source assertions — P0-E pagination
     // ─────────────────────────────────────────────────────────────
-    for (const p of ["app/diaries/page.tsx", "app/setups/page.tsx", "app/strains/page.tsx"]) {
+    for (const p of ["app/diaries/(index)/page.tsx", "app/setups/page.tsx", "app/strains/(index)/page.tsx"]) {
       assertSource(p, ["PAGE_SIZE", "MAX_PAGE", "skip:", "Number.parseInt", "pageHref"], `pagination in ${p}`)
     }
-    assertSource("app/strains/page.tsx", ["escapeLike", "strainTypeLabel", "No strains match"], "strain search + labels")
+    assertSource("app/strains/(index)/page.tsx", ["escapeLike", "strainTypeLabel", "No strains match"], "strain search + labels")
     assertSource("lib/strain-stats.ts", ["strainTypeLabel"], "strain label helper")
 
     // ─────────────────────────────────────────────────────────────

@@ -171,7 +171,7 @@ export default function PostActions({
             <button
               onClick={() => (reactionType ? handleReact(reactionType) : setShowPicker(!showPicker))}
               disabled={!session || busy}
-              className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-lg transition-colors disabled:opacity-50 ${
+              className={`tap-target inline-flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-lg transition-colors disabled:opacity-50 ${
                 reactionType
                   ? "bg-primary/10 text-primary border border-primary/20"
                   : "text-muted-foreground hover:text-foreground hover:bg-secondary"
@@ -187,7 +187,7 @@ export default function PostActions({
                 <Tooltip key={type} content={type.toLowerCase()}>
                   <button
                     onClick={() => handleReact(type)}
-                    className="w-7 h-7 flex items-center justify-center text-base hover:bg-secondary rounded-md transition-colors"
+                    className="tap-target w-7 h-7 flex items-center justify-center text-base hover:bg-secondary rounded-md transition-colors"
                     aria-label={`React with ${type.toLowerCase()}`}
                   >
                     {EMOJIS[type]}
@@ -200,12 +200,12 @@ export default function PostActions({
         {isOwner && !editing && (
           <>
             <Tooltip content="Edit">
-              <button onClick={() => setEditing(true)} aria-label="Edit post" className="p-1.5 text-muted-foreground hover:text-foreground transition-colors rounded-lg hover:bg-secondary">
+              <button onClick={() => setEditing(true)} aria-label="Edit post" className="tap-target p-1.5 text-muted-foreground hover:text-foreground transition-colors rounded-lg hover:bg-secondary">
                 <Pencil className="w-3.5 h-3.5" />
               </button>
             </Tooltip>
             <Tooltip content="Delete">
-              <button onClick={handleDelete} aria-label="Delete post" className="p-1.5 text-muted-foreground hover:text-destructive transition-colors rounded-lg hover:bg-secondary">
+              <button onClick={handleDelete} aria-label="Delete post" className="tap-target p-1.5 text-muted-foreground hover:text-destructive transition-colors rounded-lg hover:bg-secondary">
                 <Trash2 className="w-3.5 h-3.5" />
               </button>
             </Tooltip>
@@ -213,14 +213,14 @@ export default function PostActions({
         )}
         {session && !isOwner && (
           <Tooltip content="Report">
-            <button onClick={() => setShowReport(!showReport)} aria-label="Report post" className="p-1.5 text-muted-foreground hover:text-foreground transition-colors rounded-lg hover:bg-secondary">
+            <button onClick={() => setShowReport(!showReport)} aria-label="Report post" className="tap-target p-1.5 text-muted-foreground hover:text-foreground transition-colors rounded-lg hover:bg-secondary">
               <Flag className="w-3.5 h-3.5" />
             </button>
           </Tooltip>
         )}
         {canModerate && !isOwner && (
           <Tooltip content="Remove this post (moderator action)">
-            <button onClick={handleDelete} aria-label="Remove post" className="p-1.5 text-amber-500 hover:text-amber-600 transition-colors rounded-lg hover:bg-amber-500/10">
+            <button onClick={handleDelete} aria-label="Remove post" className="tap-target p-1.5 text-amber-500 hover:text-amber-600 transition-colors rounded-lg hover:bg-amber-500/10">
               <Trash2 className="w-3.5 h-3.5" />
             </button>
           </Tooltip>
@@ -238,7 +238,7 @@ export default function PostActions({
                   <button
                     onClick={() => session && handleReact(type)}
                     disabled={!session || busy}
-                    className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-xs border transition-colors disabled:opacity-50 ${
+                    className={`tap-target inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-xs border transition-colors disabled:opacity-50 ${
                       isActive
                         ? "bg-primary/10 border-primary text-primary"
                         : "bg-secondary border-border/50 text-muted-foreground hover:bg-secondary/80"

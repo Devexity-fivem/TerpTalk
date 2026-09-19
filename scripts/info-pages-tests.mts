@@ -117,7 +117,9 @@ async function run() {
   assert.ok(/recovery phrase/i.test(signup), "signup warns about recovery phrase")
 
   // ── 7. Deleted components stay deleted ──────────────────────────────
-  for (const f of ["src/components/badge-icon.tsx", "src/components/ui/badge.tsx", "src/components/ui/button.tsx", "src/components/ui/card.tsx", "src/components/ui/input.tsx", "src/components/ui/skeleton.tsx"]) {
+  // Note: src/components/ui/skeleton.tsx was intentionally re-added in Sprint A
+  // as the shared loading-state primitive — it is no longer a dead file.
+  for (const f of ["src/components/badge-icon.tsx", "src/components/ui/badge.tsx", "src/components/ui/button.tsx", "src/components/ui/card.tsx", "src/components/ui/input.tsx"]) {
     assert.ok(!existsSync(join(root, f)), `${f} removed`)
   }
 

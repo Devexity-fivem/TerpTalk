@@ -11,6 +11,8 @@ import { prisma } from "@/lib/prisma"
 import { rankableProfile, activeAuthor } from "@/lib/security"
 import { notificationLinkWhere, postLinkWhere } from "@/lib/notify"
 import { TERPBOT_USERNAME } from "@/lib/terpbot"
+import { NextRequest } from "next/server"
+import { GET as getPublicProfile } from "@/app/api/users/[username]/route"
 
 const SUFFIX = String(Date.now()).slice(-8)
 const A = `__pv_a_${SUFFIX}`
@@ -221,6 +223,42 @@ async function run() {
       "suspended member excluded from rankable surfaces"
     )
     await prisma.user.update({ where: { id: b.id }, data: { suspendedUntil: null } })
+
+    // ── 11. Public reputation privacy via GET /api/users/[username] ────
+    // a still has publicMilestoneOptOut=true (section 2); b is default but
+    // has hideOnlineStatus=true (section 3) — both flags get exercised.
+    const profileApi = async (username: string) => {
+      const res = await getPublicProfile(
+        new NextRequest(`http://localhost/api/users/${username}`),
+        { params: Promise.resolve({ username }) }
+      )
+      assert.equal(res.status, 200, `GET /api/users/${username} → 200`)
+      return res.json()
+    }
+
+    // Opted-out member: no recent rep rows and a zeroed grow streak.
+    const optOut = await profileApi(A)
+    assert.ok(Array.isArray(optOut.recentRep), "recentRep is an array")
+    assert.equal(optOut.recentRep.length, 0, "opted-out member exposes no recentRep")
+    assert.equal(optOut.profile.growStreak, 0, "opted-out member growStreak zeroed")
+
+    // Default member with one public rep event: rows carry the public
+    // label/amount/createdAt shape and never leak the raw type.
+    await prisma.reputationEvent.create({
+      data: { userId: b.id, type: "THREAD_CREATED", amount: 5, reason: "pv test" },
+    })
+    const visible = await profileApi(B)
+    assert.ok(visible.recentRep.length >= 1, "default member exposes recentRep")
+    for (const e of visible.recentRep) {
+      assert.ok(typeof e.label === "string" && e.label.length > 0, "event has label")
+      assert.ok(typeof e.amount === "number", "event has amount")
+      assert.ok(e.createdAt, "event has createdAt")
+      assert.ok(!("type" in e), "event must not expose raw type")
+    }
+
+    // hideOnlineStatus alone must not empty recentRep — the two privacy
+    // flags stay independent (b has hideOnlineStatus=true from section 3).
+    assert.ok(visible.recentRep.length >= 1, "hideOnlineStatus does not hide recentRep")
 
     console.log("All privacy-controls tests passed.")
   } finally {

@@ -183,7 +183,7 @@ const apiFiles = () => {
   const guideEdit = read("app/guides/[slug]/edit/page.tsx");
   check("guide edit: unpublished not disclosed", guideEdit.includes("published"));
   check("guide edit: author/mod only", guideEdit.includes("isModerator") && !guideEdit.includes("getTrustLevel"));
-  const home = read("app/page.tsx");
+  const home = read("app/(home)/page.tsx");
   check("homepage: hidden categories filtered", (home.match(/category:\s*{\s*hidden:\s*false/g) || []).length >= 2);
   const modActions = read("app/api/moderation/actions/route.ts");
   check("moderation: post delete purges deep links", modActions.includes("postLinkWhere"));
@@ -232,7 +232,7 @@ const apiFiles = () => {
   check("feed: banned diary authors filtered", feed.includes("activeAuthor"));
   const yieldsLb = read("app/leaderboard/yields/page.tsx");
   check("yield leaderboard: banned authors filtered", yieldsLb.includes("activeAuthor"));
-  const diariesList = read("app/diaries/page.tsx");
+  const diariesList = read("app/diaries/(index)/page.tsx");
   check("diaries list: banned authors filtered", diariesList.includes("activeAuthor"));
   const terpbotCron = read("app/api/cron/terpbot/route.ts");
   check("terpbot cron: DotM winner excludes banned/deleted", terpbotCron.includes("previousMonthKey"));

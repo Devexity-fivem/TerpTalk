@@ -1,12 +1,18 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Share2, Link2, Check } from "lucide-react"
 
 // Share a page — copy link + post to X/Reddit
 export default function ShareButtons({ path, title }: { path: string; title: string }) {
   const [copied, setCopied] = useState(false)
-  const url = typeof window !== "undefined" ? `${window.location.origin}${path}` : path
+  // Origin resolves after mount so SSR HTML and first client render match.
+  const [origin, setOrigin] = useState("")
+  useEffect(() => {
+    const t = setTimeout(() => setOrigin(window.location.origin), 0)
+    return () => clearTimeout(t)
+  }, [])
+  const url = `${origin}${path}`
 
   const copy = async () => {
     await navigator.clipboard.writeText(url)
@@ -21,7 +27,7 @@ export default function ShareButtons({ path, title }: { path: string; title: str
     <div className="flex items-center gap-2">
       <button
         onClick={copy}
-        className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-secondary rounded-lg hover:bg-secondary/80 transition-colors"
+        className="tap-target flex items-center gap-1.5 px-3 py-1.5 text-xs bg-secondary rounded-lg hover:bg-secondary/80 transition-colors"
       >
         {copied ? <Check className="w-3.5 h-3.5 text-primary" /> : <Link2 className="w-3.5 h-3.5" />}
         {copied ? "Copied!" : "Copy link"}
@@ -30,7 +36,7 @@ export default function ShareButtons({ path, title }: { path: string; title: str
         href={xShare}
         target="_blank"
         rel="noopener noreferrer"
-        className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-secondary rounded-lg hover:bg-secondary/80 transition-colors"
+        className="tap-target flex items-center gap-1.5 px-3 py-1.5 text-xs bg-secondary rounded-lg hover:bg-secondary/80 transition-colors"
       >
         <Share2 className="w-3.5 h-3.5" /> X
       </a>
@@ -38,7 +44,7 @@ export default function ShareButtons({ path, title }: { path: string; title: str
         href={redditShare}
         target="_blank"
         rel="noopener noreferrer"
-        className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-secondary rounded-lg hover:bg-secondary/80 transition-colors"
+        className="tap-target flex items-center gap-1.5 px-3 py-1.5 text-xs bg-secondary rounded-lg hover:bg-secondary/80 transition-colors"
       >
         <Share2 className="w-3.5 h-3.5" /> Reddit
       </a>

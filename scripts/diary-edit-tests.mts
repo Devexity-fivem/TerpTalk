@@ -9,6 +9,7 @@ import { prisma } from "@/lib/prisma"
 import { parseDiaryPatch, patchTouchesStrainStats, DIARY_EDITABLE_FIELDS } from "@/lib/diary-edit"
 import { escapeLike, strainFieldMatches, suggestStrainLink } from "@/lib/strain-stats"
 import { activeAuthor } from "@/lib/security"
+import { localDateInputValue } from "@/lib/diary-weeks"
 
 const tag = Date.now().toString(36)
 const results: [string, string][] = []
@@ -344,6 +345,13 @@ await check("db: editable-field allowlist matches schema", () => {
   const fields = (prisma as unknown as { _runtimeDataModel: { models: { GrowDiary: { fields: { name: string }[] } } } })
     ._runtimeDataModel.models.GrowDiary.fields.map((f) => f.name)
   for (const k of DIARY_EDITABLE_FIELDS) assert.ok(fields.includes(k), `${k} not a GrowDiary field`)
+})
+
+await check("lib: localDateInputValue formats local YYYY-MM-DD with padding", () => {
+  assert.equal(localDateInputValue(new Date(2026, 0, 5, 0, 30)), "2026-01-05")
+  assert.equal(localDateInputValue(new Date(2026, 11, 31, 23, 59)), "2026-12-31")
+  assert.equal(localDateInputValue(new Date(2026, 5, 7)), "2026-06-07")
+  assert.match(localDateInputValue(), /^\d{4}-\d{2}-\d{2}$/)
 })
 
 // ─── Cleanup + summary ───────────────────────────────────────────────

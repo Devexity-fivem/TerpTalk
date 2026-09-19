@@ -108,7 +108,7 @@ export default function NotificationSettingsPage() {
                 type="checkbox"
                 checked={!!prefs[key as keyof Prefs]}
                 onChange={(e) => handleToggle(key as keyof Prefs, e.target.checked)}
-                className="w-5 h-5 mt-0.5 accent-primary"
+                className="w-6 h-6 mt-0.5 accent-primary rounded focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background"
               />
             </label>
           ))}
@@ -126,7 +126,7 @@ export default function NotificationSettingsPage() {
                 type="checkbox"
                 checked={!!prefs[key]}
                 onChange={(e) => handleToggle(key, e.target.checked)}
-                className="w-5 h-5 mt-0.5 accent-primary"
+                className="w-6 h-6 mt-0.5 accent-primary rounded focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background"
               />
             </label>
           ))}

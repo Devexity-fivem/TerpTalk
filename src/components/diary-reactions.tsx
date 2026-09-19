@@ -74,7 +74,7 @@ export default function DiaryReactions({
           <button
             onClick={() => (mine ? react(mine) : setShowPicker(!showPicker))}
             disabled={!session || busy}
-            className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-lg transition-colors disabled:opacity-50 ${
+            className={`tap-target inline-flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-lg transition-colors disabled:opacity-50 ${
               mine
                 ? "bg-primary/10 text-primary border border-primary/20"
                 : "text-muted-foreground hover:text-foreground hover:bg-secondary"
@@ -90,7 +90,7 @@ export default function DiaryReactions({
               <Tooltip key={type} content={type.toLowerCase()}>
                 <button
                   onClick={() => react(type)}
-                  className="w-7 h-7 flex items-center justify-center text-base hover:bg-secondary rounded-md transition-colors"
+                  className="tap-target w-7 h-7 flex items-center justify-center text-base hover:bg-secondary rounded-md transition-colors"
                   aria-label={`React with ${type.toLowerCase()}`}
                 >
                   {EMOJIS[type]}

@@ -14,6 +14,13 @@ export const STAGE_ORDER = [
   "COMPLETED",
 ] as const
 
+/** YYYY-MM-DD in LOCAL time for <input type="date"> defaults — never
+ * toISOString (UTC shifts the day near midnight). */
+export function localDateInputValue(d: Date = new Date()): string {
+  const p = (n: number) => String(n).padStart(2, "0")
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
+}
+
 export interface DiaryUpdateLike {
   id: string
   stage: string

@@ -42,7 +42,7 @@ export default function RecoveryWarningBanner() {
           <span className="text-amber-700">
             You haven&apos;t saved a recovery phrase — lose your password and there&apos;s no way back in.
           </span>
-          <Link href="/profile" className="ml-2 underline font-medium hover:text-amber-700">
+          <Link href="/profile" className="tap-target ml-2 underline font-medium hover:text-amber-700">
             Set one up
           </Link>
         </div>
@@ -51,7 +51,7 @@ export default function RecoveryWarningBanner() {
             sessionStorage.setItem(DISMISS_KEY, "1")
             setDismissed(true)
           }}
-          className="shrink-0 p-1 hover:bg-amber-500/20 rounded"
+          className="tap-target shrink-0 p-1 hover:bg-amber-500/20 rounded"
           aria-label="Dismiss recovery warning"
         >
           <X className="w-4 h-4" />

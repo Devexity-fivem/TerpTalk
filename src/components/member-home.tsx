@@ -11,7 +11,7 @@ import { cn } from "@/lib/utils"
 
 // The signed-in "Today" homepage — a compact dashboard composing the
 // member's progression, grows, followed activity, and live chat state.
-// Guests never see this; src/app/page.tsx renders the marketing landing.
+// Guests never see this; src/app/(home)/page.tsx renders the marketing landing.
 
 function timeAgo(iso: string): string {
   const mins = Math.floor((Date.now() - new Date(iso).getTime()) / 60000)
@@ -46,7 +46,7 @@ function Card({
         {action && (
           <Link
             href={action.href}
-            className="shrink-0 text-xs font-medium text-primary inline-flex items-center gap-0.5 hover:underline"
+            className="tap-target shrink-0 text-xs font-medium text-primary inline-flex items-center gap-0.5 hover:underline"
           >
             {action.label} <ArrowRight className="h-3 w-3" />
           </Link>
@@ -94,7 +94,7 @@ export default function MemberHome({ data }: { data: MemberHomeData }) {
             <Link
               href="/progress"
               className={cn(
-                "inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold",
+                "tap-target inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold",
                 data.tier.bg,
                 data.tier.color
               )}
@@ -255,7 +255,7 @@ export default function MemberHome({ data }: { data: MemberHomeData }) {
                   <li>
                     <Link
                       href="/forum"
-                      className="block px-3 py-1.5 text-xs text-muted-foreground hover:text-primary"
+                      className="tap-target block px-3 py-1.5 text-xs text-muted-foreground hover:text-primary"
                     >
                       +{s.unreadThreadCount - s.unreadThreads.length} more thread
                       {s.unreadThreadCount - s.unreadThreads.length === 1 ? "" : "s"} with new activity

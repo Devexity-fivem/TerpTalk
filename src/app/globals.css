@@ -189,6 +189,19 @@ body {
   outline-offset: 2px;
 }
 
+/* Extends the hit area of small controls to ≥40px without changing their
+   visual size. Percent insets resolve against the element's own box: when
+   the control is under 40px the calc is negative and expands the pseudo
+   element outward; at ≥40px min() clamps it to 0. */
+.tap-target {
+  position: relative;
+}
+.tap-target::after {
+  content: "";
+  position: absolute;
+  inset: min(0px, calc((100% - 2.5rem) / 2));
+}
+
 /* Prevent iOS auto-zoom on focus — inputs under 16px trigger it */
 @media (max-width: 640px) {
   input, textarea, select {
