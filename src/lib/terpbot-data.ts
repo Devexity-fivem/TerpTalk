@@ -336,15 +336,20 @@ type GrowDiaryRow = {
   }[]
 }
 
-async function primaryGrow(userId: string): Promise<GrowDiaryRow | null> {
+// publicOnly: room-posted command output only ever reflects PUBLIC diaries —
+// a caller asking the bot about their own UNLISTED/PRIVATE grow in a public
+// room must not get its title/stage/readings echoed to everyone. Private
+// channels (e.g. /mydigest's notification) pass publicOnly: false.
+async function primaryGrow(userId: string, { publicOnly = false } = {}): Promise<GrowDiaryRow | null> {
+  const scope = publicOnly ? publicDiaryWhere : {}
   return (
     (await prisma.growDiary.findFirst({
-      where: { authorId: userId, deleted: false, harvested: false },
+      where: { authorId: userId, deleted: false, harvested: false, ...scope },
       orderBy: { updatedAt: "desc" },
       select: GROW_DIARY_SELECT,
     })) ??
     (await prisma.growDiary.findFirst({
-      where: { authorId: userId, deleted: false },
+      where: { authorId: userId, deleted: false, ...scope },
       orderBy: { harvestedAt: "desc" },
       select: GROW_DIARY_SELECT,
     }))
@@ -439,7 +444,7 @@ async function handle(name: string, ctx: BotCommandCtx): Promise<BotCommandResul
       const [trust, quests, streak] = await Promise.all([
         getTrustScore(t.userId),
         t.userId === ctx.userId ? getQuestProgress(ctx.userId) : Promise.resolve([]),
-        getGrowStreak(t.userId, { publicOnly: t.userId !== ctx.userId }),
+        getGrowStreak(t.userId, { publicOnly: true }),
       ])
       const standing = getTrustStanding(trust)
       const lines = [
@@ -482,7 +487,9 @@ async function handle(name: string, ctx: BotCommandCtx): Promise<BotCommandResul
     case "streak": {
       const t = await memberFor(ctx, ctx.args[0])
       if (!t) return ok(`Couldn't find that member.`)
-      const s = await getGrowStreak(t.userId, { publicOnly: t.userId !== ctx.userId })
+      // Room output is public either way — the streak always reflects
+      // public diaries only, even when the caller asks about themselves.
+      const s = await getGrowStreak(t.userId, { publicOnly: true })
       if (s.streak === 0) {
         return ok(`🔥 @${t.username} has no diary-update streak — post an update to start one. /diaries`)
       }
@@ -547,9 +554,9 @@ async function handle(name: string, ctx: BotCommandCtx): Promise<BotCommandResul
         id: true, slug: true, title: true, stage: true, strain: true, startDate: true,
         harvested: true, yieldAmount: true, yieldUnit: true, _count: { select: { updates: true } },
       } as const
-      // Another member's diary: only PUBLIC grows are fair game — UNLISTED
-      // and PRIVATE diaries are not discoverable through the bot.
-      const diaryScope = t.userId === ctx.userId ? {} : publicDiaryWhere
+      // Only PUBLIC grows are fair game — the reply posts into a public
+      // room, so even the owner's own UNLISTED/PRIVATE diaries stay out.
+      const diaryScope = publicDiaryWhere
       const diary =
         (await prisma.growDiary.findFirst({
           where: { authorId: t.userId, deleted: false, harvested: false, ...diaryScope },
@@ -564,7 +571,7 @@ async function handle(name: string, ctx: BotCommandCtx): Promise<BotCommandResul
       if (!diary) {
         return ok(
           t.userId === ctx.userId
-            ? `You don't have a grow diary yet — start one at /diaries/new`
+            ? `You don't have a public grow diary — unlisted/private grows stay out of the room. Start a public one at /diaries/new`
             : `@${t.username} doesn't have a public grow diary.`
         )
       }
@@ -578,7 +585,7 @@ async function handle(name: string, ctx: BotCommandCtx): Promise<BotCommandResul
     }
 
     case "grow": {
-      const diary = await primaryGrow(ctx.userId)
+      const diary = await primaryGrow(ctx.userId, { publicOnly: true })
       if (!diary) {
         return ok(`🌱 You don't have a grow diary yet — start one at /diaries/new and I'll track your grow here.`)
       }
@@ -588,7 +595,7 @@ async function handle(name: string, ctx: BotCommandCtx): Promise<BotCommandResul
       const latest = diary.updates[0]
       const [journey, streak] = await Promise.all([
         getGrowJourney(diary.id),
-        getGrowStreak(ctx.userId),
+        getGrowStreak(ctx.userId, { publicOnly: true }),
       ])
       const lines = [`🌱 ${sanitizeField(diary.title)}${strainName ? ` — ${sanitizeField(strainName)}` : ""}`]
       if (diary.harvested) {
@@ -620,13 +627,13 @@ async function handle(name: string, ctx: BotCommandCtx): Promise<BotCommandResul
 
     case "grows": {
       const diaries = await prisma.growDiary.findMany({
-        where: { authorId: ctx.userId, deleted: false, harvested: false },
+        where: { authorId: ctx.userId, deleted: false, harvested: false, ...publicDiaryWhere },
         orderBy: { updatedAt: "desc" },
         take: 5,
         select: { id: true, title: true, stage: true, strain: true, strainRef: { select: { name: true } }, startDate: true },
       })
       if (!diaries.length) {
-        const harvested = await prisma.growDiary.count({ where: { authorId: ctx.userId, deleted: false, harvested: true } })
+        const harvested = await prisma.growDiary.count({ where: { authorId: ctx.userId, deleted: false, harvested: true, ...publicDiaryWhere } })
         return ok(
           harvested > 0
             ? `🌱 No active grows — you've harvested ${harvested} diar${harvested === 1 ? "y" : "ies"}. Start a new run at /diaries/new`
@@ -642,7 +649,7 @@ async function handle(name: string, ctx: BotCommandCtx): Promise<BotCommandResul
 
     case "checkin": {
       const diaries = await prisma.growDiary.findMany({
-        where: { authorId: ctx.userId, deleted: false, harvested: false },
+        where: { authorId: ctx.userId, deleted: false, harvested: false, ...publicDiaryWhere },
         orderBy: { updatedAt: "desc" },
         take: 3,
         select: { id: true, slug: true, title: true, stage: true, updatedAt: true },
@@ -703,7 +710,7 @@ async function handle(name: string, ctx: BotCommandCtx): Promise<BotCommandResul
     }
 
     case "growhelp": {
-      const diary = await primaryGrow(ctx.userId)
+      const diary = await primaryGrow(ctx.userId, { publicOnly: true })
       if (!diary || diary.harvested) {
         return ok(`🌱 No active grow to match discussions to — start a diary at /diaries/new`)
       }
@@ -742,10 +749,10 @@ async function handle(name: string, ctx: BotCommandCtx): Promise<BotCommandResul
       const [profile, quests, streak, earnedRows, stats, diary] = await Promise.all([
         prisma.profile.findUnique({ where: { userId: ctx.userId }, select: { reputation: true } }),
         getQuestProgress(ctx.userId),
-        getGrowStreak(ctx.userId),
+        getGrowStreak(ctx.userId, { publicOnly: true }),
         prisma.userBadge.findMany({ where: { userId: ctx.userId }, select: { badge: { select: { name: true } } } }),
         getUserStats(ctx.userId),
-        primaryGrow(ctx.userId),
+        primaryGrow(ctx.userId, { publicOnly: true }),
       ])
       const rep = profile?.reputation ?? 0
       const stage = getRepStage(rep)
