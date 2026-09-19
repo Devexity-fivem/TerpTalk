@@ -11,6 +11,7 @@ import { prisma } from "@/lib/prisma"
 import { rankableProfile, activeAuthor } from "@/lib/security"
 import { isDiaryVisibility, viewableDiaryWhere, canViewDiary, publicDiaryWhere } from "@/lib/diary-visibility"
 import { parseDiaryPatch } from "@/lib/diary-edit"
+import { resolveMonthlyDiaryWinner } from "@/lib/contest-awards"
 import { notificationLinkWhere, postLinkWhere } from "@/lib/notify"
 import { TERPBOT_USERNAME } from "@/lib/terpbot"
 import { NextRequest } from "next/server"
@@ -302,6 +303,40 @@ async function run() {
     // Non-editable fields still rejected alongside a valid visibility.
     const mixed = parseDiaryPatch({ visibility: "PUBLIC", authorId: "x" })
     assert.equal(mixed.ok, false, "non-editable field still rejected")
+
+    // ── 13. Hidden diary cannot win Diary of the Month ─────────────
+    // A diary flipped UNLISTED/PRIVATE after entering must not be publicly
+    // named winner — even when it leads on votes.
+    const c = await mk(`__pv_c_${SUFFIX}`)
+    const d = await mk(`__pv_d_${SUFFIX}`)
+    const v = await mk(`__pv_v_${SUFFIX}`)
+    const month = `pv${SUFFIX}`
+    const hiddenDiary = await prisma.growDiary.create({
+      data: { title: `${A}-hidden`, description: "t", growType: "INDOOR", startDate: new Date(), authorId: c.id, visibility: "PRIVATE" },
+    })
+    const openDiary = await prisma.growDiary.create({
+      data: { title: `${A}-open`, description: "t", growType: "INDOOR", startDate: new Date(), authorId: d.id, visibility: "PUBLIC" },
+    })
+    const hiddenEntry = await prisma.diaryContestEntry.create({ data: { month, diaryId: hiddenDiary.id, userId: c.id } })
+    const openEntry = await prisma.diaryContestEntry.create({ data: { month, diaryId: openDiary.id, userId: d.id } })
+    try {
+      await prisma.diaryContestVote.createMany({
+        data: [
+          { entryId: hiddenEntry.id, userId: a.id, month },
+          { entryId: hiddenEntry.id, userId: b.id, month },
+          { entryId: openEntry.id, userId: v.id, month },
+        ],
+      })
+      const winner = await resolveMonthlyDiaryWinner(month)
+      assert.equal(winner?.diaryId, openDiary.id, "hidden diary skipped despite leading on votes")
+    } finally {
+      await prisma.diaryContestVote.deleteMany({ where: { entryId: { in: [hiddenEntry.id, openEntry.id] } } })
+      await prisma.diaryContestEntry.deleteMany({ where: { id: { in: [hiddenEntry.id, openEntry.id] } } })
+      await prisma.userBadge.deleteMany({ where: { userId: { in: ids } } }).catch(() => {})
+      await prisma.badge.deleteMany({ where: { name: { in: ["Diary of the Month", "Contest Finalist"] } } }).catch(() => {})
+      await prisma.reputationEvent.deleteMany({ where: { userId: { in: ids }, key: { startsWith: "dcontestwin:" } } }).catch(() => {})
+      await prisma.growDiary.deleteMany({ where: { id: { in: [hiddenDiary.id, openDiary.id] } } })
+    }
 
     console.log("All privacy-controls tests passed.")
   } finally {

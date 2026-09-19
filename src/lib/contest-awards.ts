@@ -3,6 +3,7 @@
 // badges are awarded reliably even if nobody visits the contest page.
 import { prisma } from "@/lib/prisma"
 import { publicUserSelect, activeAuthor } from "@/lib/security"
+import { publicDiaryWhere } from "@/lib/diary-visibility"
 import { awardReputation, grantBadge, REP_POINTS } from "@/lib/reputation"
 import { revalidateTag } from "next/cache"
 
@@ -35,7 +36,9 @@ export async function resolveWeeklyWinner(week: string) {
 
 export async function resolveMonthlyDiaryWinner(month: string) {
   const top = await prisma.diaryContestEntry.findFirst({
-    where: { month, diary: { deleted: false }, user: activeAuthor() },
+    // publicDiaryWhere: a diary flipped UNLISTED/PRIVATE after entering
+    // must not be publicly named winner — same rule as the entry board.
+    where: { month, diary: { deleted: false, ...publicDiaryWhere }, user: activeAuthor() },
     orderBy: [{ votes: { _count: "desc" } }, { createdAt: "asc" }],
     include: {
       user: { select: publicUserSelect },
@@ -62,7 +65,9 @@ export async function resolveMonthlyDiaryWinner(month: string) {
     where: { id: top.diaryId },
     data: { featured: true },
   }).catch(() => {})
-  revalidateTag("diaries", { expire: 0 })
+  // try/catch: revalidateTag throws outside a Next request context
+  // (test scripts / tooling) — the award itself must still complete.
+  try { revalidateTag("diaries", { expire: 0 }) } catch {}
   return top
 }
 
@@ -71,7 +76,7 @@ async function awardFinalists(kind: "weekly" | "monthly", period: string, winner
   const where =
     kind === "weekly"
       ? { week: period, user: activeAuthor() }
-      : { month: period, diary: { deleted: false }, user: activeAuthor() }
+      : { month: period, diary: { deleted: false, ...publicDiaryWhere }, user: activeAuthor() }
   const top5 =
     kind === "weekly"
       ? await prisma.contestEntry.findMany({

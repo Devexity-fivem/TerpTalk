@@ -67,7 +67,7 @@ async function getThreadData(slug: string, page: number, canSeeHidden: boolean, 
         },
       },
       acceptedAnswer: {
-        where: { deleted: false, author: activeAuthor() },
+        where: { deleted: false, author: activeAuthor(), ...notBlockedAuthor(blockedIds) },
         include: {
           author: { select: publicUserSelect },
           reactions: { select: { userId: true, type: true } },
@@ -121,7 +121,8 @@ async function getThreadData(slug: string, page: number, canSeeHidden: boolean, 
   if (thread.diaryFor) {
     const a = thread.diaryFor.author
     const notPublic = thread.diaryFor.visibility !== "PUBLIC" && thread.diaryFor.authorId !== viewerId
-    if (thread.diaryFor.deleted || a.banned || (a.suspendedUntil && a.suspendedUntil.getTime() > Date.now()) || notPublic) {
+    const blocked = blockedIds.includes(thread.diaryFor.authorId)
+    if (thread.diaryFor.deleted || a.banned || (a.suspendedUntil && a.suspendedUntil.getTime() > Date.now()) || notPublic || blocked) {
       thread.diaryFor = null
     }
   }
