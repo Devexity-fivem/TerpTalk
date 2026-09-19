@@ -7,6 +7,7 @@ import { rateLimit } from "@/lib/rate-limit"
 import { checkMaintenance } from "@/lib/maintenance"
 import { revalidateTag } from "next/cache"
 import { publicDiaryWhere } from "@/lib/diary-visibility"
+import { diaryPath } from "@/lib/slugs"
 
 function createSlug(text: string): string {
   return text
@@ -48,6 +49,7 @@ export async function POST(
       where: { id, deleted: false, author: activeAuthor(), ...publicDiaryWhere },
       select: {
         id: true,
+        slug: true,
         title: true,
         strain: true,
         strainRef: { select: { name: true } },
@@ -81,7 +83,7 @@ export async function POST(
     // Markdown-hostile characters can't break the generated diary link.
     const safeName = strainName.replace(/[[\]()`\\]/g, "")
     const title = `${strainName} grow — discussion`
-    const content = `Community discussion for the grow diary: [${safeName}](/diaries/${diary.id})\n\nQuestions, suggestions, and comparisons welcome.`
+    const content = `Community discussion for the grow diary: [${safeName}](${diaryPath(diary)})\n\nQuestions, suggestions, and comparisons welcome.`
 
     let slug = createSlug(title)
     if (!slug) slug = `grow-discussion`

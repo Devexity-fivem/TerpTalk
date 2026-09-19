@@ -9,11 +9,12 @@ import SetupForm, {
 
 interface EditSetupFormProps {
   setupId: string
+  setupHref: string
   initial: SetupFormValues
   images: SetupFormImage[]
 }
 
-export default function EditSetupForm({ setupId, initial, images }: EditSetupFormProps) {
+export default function EditSetupForm({ setupId, setupHref, initial, images }: EditSetupFormProps) {
   const router = useRouter()
 
   const handleSubmit = async ({ fields, keepImageIds, newImages }: SetupFormSubmit) => {
@@ -33,7 +34,7 @@ export default function EditSetupForm({ setupId, initial, images }: EditSetupFor
       throw new Error(data.error || "Failed to save changes")
     }
 
-    router.push(`/setups/${setupId}`)
+    router.push(setupHref)
     router.refresh()
   }
 
@@ -44,7 +45,7 @@ export default function EditSetupForm({ setupId, initial, images }: EditSetupFor
       onSubmit={handleSubmit}
       submitLabel="Save Changes"
       submitBusyLabel="Saving..."
-      cancelHref={`/setups/${setupId}`}
+      cancelHref={setupHref}
     />
   )
 }

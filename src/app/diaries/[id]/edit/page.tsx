@@ -7,6 +7,7 @@ import { signInHref } from "@/lib/callback-url"
 import { buildMetadata } from "@/lib/seo"
 import { suggestStrainLink } from "@/lib/strain-stats"
 import EditDiaryForm from "./edit-diary-form"
+import { diaryPath } from "@/lib/slugs"
 import Link from "next/link"
 
 export const dynamic = "force-dynamic"
@@ -27,7 +28,7 @@ export default async function EditDiaryPage({ params }: { params: Promise<{ id: 
   const diary = await prisma.growDiary.findUnique({
     where: { id },
     select: {
-      id: true, authorId: true, deleted: true, startDate: true,
+      id: true, slug: true, authorId: true, deleted: true, startDate: true,
       title: true, description: true, strain: true, strainId: true, genetics: true,
       growType: true, medium: true, mediumType: true, containerSize: true,
       lighting: true, lightType: true, nutrients: true, equipment: true,
@@ -56,7 +57,7 @@ export default async function EditDiaryPage({ params }: { params: Promise<{ id: 
     <div className="min-h-screen bg-background">
       <div className="max-w-4xl mx-auto px-4 py-8">
         <div className="mb-8">
-          <Link href={`/diaries/${diary.id}`} className="text-sm text-muted-foreground hover:text-foreground mb-2 block">
+          <Link href={diaryPath(diary)} className="text-sm text-muted-foreground hover:text-foreground mb-2 block">
             ← Back to Diary
           </Link>
           <h1 className="text-3xl font-bold mb-2">Edit Diary</h1>
@@ -68,6 +69,7 @@ export default async function EditDiaryPage({ params }: { params: Promise<{ id: 
         <div className="bg-card rounded-lg border border-border p-6">
           <EditDiaryForm
             diaryId={diary.id}
+            diaryHref={diaryPath(diary)}
             startDateDisplay={startDateDisplay}
             strainSuggestion={strainSuggestion}
             initial={{

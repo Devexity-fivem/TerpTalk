@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma"
-import { notFound } from "next/navigation"
+import { notFound, permanentRedirect } from "next/navigation"
 import { Leaf, Dna, Sprout, ImageIcon, BookOpen, Wrench, MessageSquare, CheckCircle2, BarChart3, Star } from "lucide-react"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
@@ -16,14 +16,15 @@ import { getStrainGrowStats, escapeLike, strainFieldMatches, strainTypeLabel } f
 import Link from "next/link"
 import { publicDiaryWhere } from "@/lib/diary-visibility"
 import { blockedUserIds, notBlockedAuthor } from "@/lib/security"
+import { diaryPath, strainPath, setupPath } from "@/lib/slugs"
 
 export const dynamic = "force-dynamic"
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  const strain = await prisma.strain.findUnique({
-    where: { id },
-    select: { name: true, description: true, genetics: true, type: true },
+  const strain = await prisma.strain.findFirst({
+    where: { OR: [{ slug: id }, { id }] },
+    select: { id: true, slug: true, name: true, description: true, genetics: true, type: true },
   })
   if (!strain) return buildMetadata({ title: "Strain not found", robots: { index: false } })
   const desc = strain.description
@@ -33,15 +34,15 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
     title: `${strain.name} Cannabis Strain — Reviews & Grower Photos`,
     description: desc,
     keywords: [strain.name, "cannabis strain", "strain review", "cannabis genetics"],
-    pathname: `/strains/${id}`,
+    pathname: strainPath(strain),
   })
 }
 
 export default async function StrainPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const [strain, session] = await Promise.all([
-    prisma.strain.findUnique({
-      where: { id },
+    prisma.strain.findFirst({
+      where: { OR: [{ slug: id }, { id }] },
       include: {
         createdBy: { select: { profile: { select: { username: true, reputation: true, publicMilestoneOptOut: true } }, name: true, banned: true, suspendedUntil: true } },
         photos: {
@@ -58,6 +59,9 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
   ])
 
   if (!strain) notFound()
+
+  // Legacy id URL → canonical slug URL.
+  if (id === strain.id && strain.slug) permanentRedirect(strainPath(strain))
 
   const blockedIds = await blockedUserIds(session?.user?.id)
   // Photos embed in the strain lookup — post-filter by uploader id.
@@ -181,7 +185,7 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
                   <Sprout className="w-4 h-4" />
                   Start a grow with this strain
                 </Link>
-                <ShareButtons path={`/strains/${strain.id}`} title={`${strain.name} strain — TerpTalk`} />
+                <ShareButtons path={strainPath(strain)} title={`${strain.name} strain — TerpTalk`} />
                 <ReportButton type="STRAIN" targetId={strain.id} authorId={strain.createdById ?? undefined} />
               </div>
             </div>
@@ -330,7 +334,7 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
                   <div className="flex flex-wrap items-center gap-2 mb-1">
                     {r.rating != null && <span className="font-medium text-amber-500">{r.rating}/10</span>}
                     {r.difficulty && <span className="text-xs text-muted-foreground">difficulty: {r.difficulty}</span>}
-                    <Link href={`/diaries/${r.diaryId}`} className="text-xs text-primary hover:underline ml-auto">
+                    <Link href={`/diaries/${r.diarySlug ?? r.diaryId}`} className="text-xs text-primary hover:underline ml-auto">
                       {r.authorName}&apos;s grow →
                     </Link>
                   </div>
@@ -352,7 +356,7 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
               {relatedDiaries.map((d) => (
                 <Link
                   key={d.id}
-                  href={`/diaries/${d.id}`}
+                  href={diaryPath(d)}
                   className="flex items-center gap-3 p-3 rounded-lg border border-border hover:bg-secondary/50 transition-colors"
                 >
                   <div className="w-16 h-16 bg-secondary rounded-lg overflow-hidden shrink-0">
@@ -386,7 +390,7 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
               {relatedSetups.map((s) => (
                 <Link
                   key={s.id}
-                  href={`/setups/${s.id}`}
+                  href={setupPath(s)}
                   className="flex items-center gap-3 p-3 rounded-lg border border-border hover:bg-secondary/50 transition-colors"
                 >
                   <div className="w-16 h-16 bg-secondary rounded-lg overflow-hidden shrink-0">

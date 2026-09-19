@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma"
 import { signInHref } from "@/lib/callback-url"
 import { buildMetadata } from "@/lib/seo"
 import EditSetupForm from "./edit-setup-form"
+import { setupPath } from "@/lib/slugs"
 import Link from "next/link"
 
 export const dynamic = "force-dynamic"
@@ -25,7 +26,7 @@ export default async function EditSetupPage({ params }: { params: Promise<{ id: 
   const setup = await prisma.growSetup.findUnique({
     where: { id },
     select: {
-      id: true, authorId: true, deleted: true,
+      id: true, slug: true, authorId: true, deleted: true,
       title: true, description: true, space: true, tent: true,
       lighting: true, ventilation: true, fans: true, containers: true,
       medium: true, nutrients: true, controllers: true, equipment: true,
@@ -40,7 +41,7 @@ export default async function EditSetupPage({ params }: { params: Promise<{ id: 
     <div className="min-h-screen bg-background">
       <div className="max-w-4xl mx-auto px-4 py-8">
         <div className="mb-8">
-          <Link href={`/setups/${setup.id}`} className="text-sm text-muted-foreground hover:text-foreground mb-2 block">
+          <Link href={setupPath(setup)} className="text-sm text-muted-foreground hover:text-foreground mb-2 block">
             ← Back to Setup
           </Link>
           <h1 className="text-3xl font-bold mb-2">Edit Setup</h1>
@@ -52,6 +53,7 @@ export default async function EditSetupPage({ params }: { params: Promise<{ id: 
         <div className="bg-card rounded-lg border border-border p-6">
           <EditSetupForm
             setupId={setup.id}
+            setupHref={setupPath(setup)}
             initial={{
               title: setup.title,
               description: setup.description,

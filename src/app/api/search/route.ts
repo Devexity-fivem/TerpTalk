@@ -133,7 +133,7 @@ const getSearchResults = unstable_cache(
         take: limit + 1,
         skip,
         orderBy: { name: "asc" },
-        select: { id: true, name: true, type: true, genetics: true },
+        select: { id: true, slug: true, name: true, type: true, genetics: true },
       }) : [],
       (t === "all" || t === "users") ? prisma.profile.findMany({
         where: {
@@ -171,6 +171,7 @@ const getSearchResults = unstable_cache(
         orderBy: { createdAt: "desc" },
         select: {
           id: true,
+          slug: true,
           authorId: true,
           title: true,
           strain: true,
@@ -200,6 +201,7 @@ const getSearchResults = unstable_cache(
         orderBy: { createdAt: "desc" },
         select: {
           id: true,
+          slug: true,
           authorId: true,
           title: true,
           strain: true,

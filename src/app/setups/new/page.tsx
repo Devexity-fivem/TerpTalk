@@ -6,6 +6,7 @@ import { useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import SetupForm, { type SetupFormSubmit } from "@/components/setup-form"
+import { setupPath } from "@/lib/slugs"
 
 export default function NewSetupPage() {
   const { data: session, status } = useSession()
@@ -37,7 +38,7 @@ export default function NewSetupPage() {
     }
 
     const data = await response.json()
-    router.push(`/setups/${data.setup.id}`)
+    router.push(setupPath(data.setup))
   }
 
   return (

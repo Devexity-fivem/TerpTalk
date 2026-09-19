@@ -70,6 +70,7 @@ export async function GET(request: Request) {
         diary: {
           select: {
             id: true,
+            slug: true,
             title: true,
             strain: true,
             stage: true,
@@ -117,6 +118,7 @@ export async function GET(request: Request) {
         mine: e.userId === session?.user?.id,
         diary: {
           id: e.diary.id,
+          slug: e.diary.slug,
           title: e.diary.title,
           strain: e.diary.strain,
           stage: e.diary.stage,

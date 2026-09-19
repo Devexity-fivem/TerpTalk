@@ -2,6 +2,7 @@ import type { MetadataRoute } from "next"
 import { prisma } from "@/lib/prisma"
 import { activeAuthor, rankableProfile, REPUTATION_ORDER } from "@/lib/security"
 import { publicDiaryWhere } from "@/lib/diary-visibility"
+import { diaryPath, strainPath, setupPath } from "@/lib/slugs"
 
 const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://terp-talk.vercel.app"
 
@@ -47,12 +48,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       where: { deleted: false, author: activeAuthor(), ...publicDiaryWhere },
       take: 500,
       orderBy: { updatedAt: "desc" },
-      select: { id: true, updatedAt: true },
+      select: { id: true, slug: true, updatedAt: true },
     }),
     prisma.strain.findMany({
       take: 500,
       orderBy: { createdAt: "desc" },
-      select: { id: true, updatedAt: true },
+      select: { id: true, slug: true, updatedAt: true },
     }),
     prisma.profile.findMany({
       // TerpBot excluded — its profile is a bot page, not member content.
@@ -71,7 +72,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       where: { deleted: false, author: activeAuthor() },
       take: 500,
       orderBy: { updatedAt: "desc" },
-      select: { id: true, updatedAt: true },
+      select: { id: true, slug: true, updatedAt: true },
     }),
     prisma.tag.findMany({
       take: 500,
@@ -101,13 +102,13 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       priority: 0.7,
     })),
     ...diaries.map((d) => ({
-      url: `${baseUrl}/diaries/${d.id}`,
+      url: `${baseUrl}${diaryPath(d)}`,
       lastModified: d.updatedAt,
       changeFrequency: "weekly" as const,
       priority: 0.6,
     })),
     ...strains.map((s) => ({
-      url: `${baseUrl}/strains/${s.id}`,
+      url: `${baseUrl}${strainPath(s)}`,
       lastModified: s.updatedAt,
       changeFrequency: "weekly" as const,
       priority: 0.6,
@@ -125,7 +126,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       priority: 0.7,
     })),
     ...setups.map((s) => ({
-      url: `${baseUrl}/setups/${s.id}`,
+      url: `${baseUrl}${setupPath(s)}`,
       lastModified: s.updatedAt,
       changeFrequency: "weekly" as const,
       priority: 0.6,

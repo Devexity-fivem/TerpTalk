@@ -12,6 +12,7 @@ import { evaluateGrowJourney } from "@/lib/grow-journey"
 import { revalidateTag } from "next/cache"
 import { VALID_YIELD_UNITS } from "@/lib/yield"
 import { parseHarvestDifficulty } from "@/lib/grow-fields"
+import { diaryPath } from "@/lib/slugs"
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await getServerSession(authOptions)
@@ -227,7 +228,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
           type: "DIARY_UPDATE" as const,
           title: "Diary harvested",
           content: `@${authorName} harvested "${updated.title.slice(0, 50)}"${yieldText ? ` — reported yield ${yieldText}` : ""}`,
-          link: `/diaries/${id}`,
+          link: diaryPath(updated),
           actorId: diary.authorId,
           groupKey: `diary-harvest:${id}`,
           dedupeMs: 24 * 60 * 60 * 1000,

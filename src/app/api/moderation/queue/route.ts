@@ -5,6 +5,7 @@ import { requireStaff } from "@/lib/require-staff"
 import { logModAction } from "@/lib/moderation"
 import { rateLimit } from "@/lib/rate-limit"
 import { notifyMany } from "@/lib/notify"
+import { diaryPath, setupPath, strainPath } from "@/lib/slugs"
 import {
   CASE_PRIORITIES,
   CASE_STATUSES,
@@ -83,25 +84,25 @@ async function reportTargetLabels(reports: { type: string; targetId: string | nu
       case "DIARY": {
         const rows = await prisma.growDiary.findMany({
           where: { id: { in: ids } },
-          select: { id: true, title: true, deleted: true },
+          select: { id: true, slug: true, title: true, deleted: true },
         })
-        return fetch(type, rows.map((d) => ({ id: d.id, label: d.title, deleted: d.deleted, href: `/diaries/${d.id}` })))
+        return fetch(type, rows.map((d) => ({ id: d.id, label: d.title, deleted: d.deleted, href: diaryPath(d) })))
       }
       case "SETUP": {
         const rows = await prisma.growSetup.findMany({
           where: { id: { in: ids } },
-          select: { id: true, title: true, deleted: true },
+          select: { id: true, slug: true, title: true, deleted: true },
         })
-        return fetch(type, rows.map((s) => ({ id: s.id, label: s.title, deleted: s.deleted, href: `/setups/${s.id}` })))
+        return fetch(type, rows.map((s) => ({ id: s.id, label: s.title, deleted: s.deleted, href: setupPath(s) })))
       }
       case "STRAIN": {
         // Strains are hard-deleted — a missing row means the catalog entry
         // is gone (label falls back to null, same as any absent target).
         const rows = await prisma.strain.findMany({
           where: { id: { in: ids } },
-          select: { id: true, name: true, type: true },
+          select: { id: true, slug: true, name: true, type: true },
         })
-        return fetch(type, rows.map((s) => ({ id: s.id, label: s.type ? `${s.name} (${s.type})` : s.name, href: `/strains/${s.id}` })))
+        return fetch(type, rows.map((s) => ({ id: s.id, label: s.type ? `${s.name} (${s.type})` : s.name, href: strainPath(s) })))
       }
       case "PROFILE": {
         const rows = await prisma.profile.findMany({

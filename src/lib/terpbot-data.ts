@@ -19,6 +19,7 @@ import { escapeLike, getStrainGrowStats } from "@/lib/strain-stats"
 import { tokenizeSearchText } from "@/lib/search-terms"
 import { diaryDay, diaryWeek } from "@/lib/diary-weeks"
 import { publicDiaryWhere } from "@/lib/diary-visibility"
+import { diaryPath, strainPath } from "@/lib/slugs"
 import { getGrowJourney } from "@/lib/grow-journey"
 import { notify } from "@/lib/notify"
 import { getBotUserId } from "@/lib/terpbot"
@@ -289,7 +290,7 @@ const stageLabel = (s: string) => STAGE_LABELS[s] ?? s.charAt(0) + s.slice(1).to
 // recently-touched active one first, otherwise the latest harvest. The
 // select carries the newest update so "last update / readings" is free.
 const GROW_DIARY_SELECT = {
-  id: true, title: true, stage: true, growType: true, strain: true, strainId: true,
+  id: true, slug: true, title: true, stage: true, growType: true, strain: true, strainId: true,
   startDate: true, harvested: true, harvestedAt: true, yieldAmount: true, yieldUnit: true,
   updatedAt: true,
   strainRef: { select: { name: true } },
@@ -308,6 +309,7 @@ const GROW_DIARY_SELECT = {
 
 type GrowDiaryRow = {
   id: string
+  slug: string | null
   title: string
   stage: string
   growType: string
@@ -542,7 +544,7 @@ async function handle(name: string, ctx: BotCommandCtx): Promise<BotCommandResul
       const t = await memberFor(ctx, ctx.args[0])
       if (!t) return ok(`Couldn't find that member.`)
       const diarySelect = {
-        id: true, title: true, stage: true, strain: true, startDate: true,
+        id: true, slug: true, title: true, stage: true, strain: true, startDate: true,
         harvested: true, yieldAmount: true, yieldUnit: true, _count: { select: { updates: true } },
       } as const
       // Another member's diary: only PUBLIC grows are fair game — UNLISTED
@@ -571,7 +573,7 @@ async function handle(name: string, ctx: BotCommandCtx): Promise<BotCommandResul
       return ok(
         `📔 @${t.username}'s diary "${sanitizeField(diary.title)}"${diary.strain ? ` (${sanitizeField(diary.strain)})` : ""}\n` +
           `Stage: ${diary.stage} · Day ${day} · ${diary._count.updates} update${diary._count.updates === 1 ? "" : "s"}${yieldText}\n` +
-          `/diaries/${diary.id}`
+          diaryPath(diary)
       )
     }
 
@@ -593,7 +595,7 @@ async function handle(name: string, ctx: BotCommandCtx): Promise<BotCommandResul
         const yieldText = diary.yieldAmount != null ? ` · ${diary.yieldAmount}${diary.yieldUnit ?? "g"}` : ""
         lines.push(`Status: harvested${diary.harvestedAt ? ` ${diary.harvestedAt.toISOString().slice(0, 10)}` : ""}${yieldText}`)
         lines.push(`No active grow right now — start a new diary at /diaries/new`)
-        lines.push(`/diaries/${diary.id}`)
+        lines.push(diaryPath(diary))
         return ok(lines.join("\n"))
       }
       const head = [
@@ -612,7 +614,7 @@ async function handle(name: string, ctx: BotCommandCtx): Promise<BotCommandResul
       if (streak.streak > 0) lines.push(`Update streak: 🔥 ${streak.streak} days`)
       if (diary.setup) lines.push(`Setup: ${sanitizeField(diary.setup.title, 40)}`)
       if (journey?.next) lines.push(`Next milestone: ${journey.next.icon} ${journey.next.name} — ${journey.next.summary}`)
-      lines.push(`Open diary → /diaries/${diary.id}`)
+      lines.push(`Open diary → ${diaryPath(diary)}`)
       return ok(lines.join("\n"))
     }
 
@@ -643,7 +645,7 @@ async function handle(name: string, ctx: BotCommandCtx): Promise<BotCommandResul
         where: { authorId: ctx.userId, deleted: false, harvested: false },
         orderBy: { updatedAt: "desc" },
         take: 3,
-        select: { id: true, title: true, stage: true, updatedAt: true },
+        select: { id: true, slug: true, title: true, stage: true, updatedAt: true },
       })
       if (!diaries.length) {
         return ok(`🌱 No active grows to check in on — start a diary at /diaries/new`)
@@ -691,10 +693,10 @@ async function handle(name: string, ctx: BotCommandCtx): Promise<BotCommandResul
         }
         const next =
           !latest || meaningfulThisWeek === 0
-            ? `Next useful action: add this week's update → /diaries/${d.id}`
+            ? `Next useful action: add this week's update → ${diaryPath(d)}`
             : latest._count.images === 0 || envThisWeek === 0
-              ? `Next useful action: add photos or env readings to your next update → /diaries/${d.id}`
-              : `On track — keep the weekly cadence → /diaries/${d.id}`
+              ? `Next useful action: add photos or env readings to your next update → ${diaryPath(d)}`
+              : `On track — keep the weekly cadence → ${diaryPath(d)}`
         blocks.push(`${sanitizeField(d.title, 40)} (${stageLabel(d.stage)}):\n${checks.join("\n")}\n${next}`)
       }
       return ok(`🌱 Grow check-in\n\n${blocks.join("\n\n")}`)
@@ -732,7 +734,7 @@ async function handle(name: string, ctx: BotCommandCtx): Promise<BotCommandResul
       } else {
         lines.push(`No related discussions yet — asking in /forum with your stage + readings usually gets answers.`)
       }
-      lines.push(`Open diary → /diaries/${diary.id}`)
+      lines.push(`Open diary → ${diaryPath(diary)}`)
       return ok(lines.join("\n"))
     }
 
@@ -798,7 +800,7 @@ async function handle(name: string, ctx: BotCommandCtx): Promise<BotCommandResul
           strain.genetics ? `Genetics: ${sanitizeField(strain.genetics)}` : null,
           strain.breeder ? `Breeder: ${sanitizeField(strain.breeder)}` : null,
           statsLine,
-          `Details: /strains/${strain.id}`,
+          `Details: ${strainPath(strain)}`,
         ]
           .filter(Boolean)
           .join("\n")
@@ -856,7 +858,7 @@ async function handle(name: string, ctx: BotCommandCtx): Promise<BotCommandResul
           },
           take: 2,
           orderBy: { name: "asc" },
-          select: { id: true, name: true },
+          select: { id: true, slug: true, name: true },
         }),
         searchThreadsForBot(q, 3),
       ])
@@ -865,7 +867,7 @@ async function handle(name: string, ctx: BotCommandCtx): Promise<BotCommandResul
       ).slice(0, 2)
       const lines = [
         ...guides.map((g) => `📚 ${sanitizeField(g.title)} → /guides/${g.slug}`),
-        ...strains.map((s) => `🌿 ${sanitizeField(s.name)} → /strains/${s.id}`),
+        ...strains.map((s) => `🌿 ${sanitizeField(s.name)} → ${strainPath(s)}`),
         ...answeredFirst.map(
           (t) => `💬 ${sanitizeField(t.title)}${t.hasAcceptedAnswer ? " ✅" : ""} → /forum/thread/${t.slug}`
         ),
@@ -901,7 +903,7 @@ async function handle(name: string, ctx: BotCommandCtx): Promise<BotCommandResul
         prisma.strain.findFirst({
           where: { name: { contains: q, mode: "insensitive" } },
           orderBy: { name: "asc" },
-          select: { id: true, name: true },
+          select: { id: true, slug: true, name: true },
         }),
       ])
       if (!threads.length && !guides.length && !strain) {
@@ -914,7 +916,7 @@ async function handle(name: string, ctx: BotCommandCtx): Promise<BotCommandResul
       for (const g of guides) {
         lines.push(`📚 ${sanitizeField(g.title)} → /guides/${g.slug}`)
       }
-      if (strain) lines.push(`🌿 ${sanitizeField(strain.name)} → /strains/${strain.id}`)
+      if (strain) lines.push(`🌿 ${sanitizeField(strain.name)} → ${strainPath(strain)}`)
       return ok(lines.join("\n"))
     }
 

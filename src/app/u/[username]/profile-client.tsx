@@ -11,6 +11,7 @@ import AchievementBadge from "@/components/achievement-badge"
 import { Avatar } from "@/components/ui/avatar"
 import Tooltip from "@/components/ui/tooltip"
 import { getAvatarFrame, getProfileTheme } from "@/lib/cosmetics"
+import { diaryPath, setupPath } from "@/lib/slugs"
 import { cn } from "@/lib/utils"
 
 interface PublicProfile {
@@ -97,6 +98,7 @@ interface Thread {
 
 interface GrowDiary {
   id: string
+  slug: string | null
   title: string
   strain: string | null
   stage: string
@@ -106,6 +108,7 @@ interface GrowDiary {
 
 interface GrowSetup {
   id: string
+  slug: string | null
   title: string
   strain: string | null
   images: { url: string }[]
@@ -114,6 +117,7 @@ interface GrowSetup {
 
 interface HarvestEntry {
   id: string
+  slug: string | null
   title: string
   strain: string | null
   startDate: string
@@ -550,7 +554,7 @@ export default function ProfileClient() {
               return (
                 <Link
                   key={h.id}
-                  href={`/diaries/${h.id}`}
+                  href={diaryPath(h)}
                   className="block p-3 rounded-lg border border-border hover:border-amber-500/40 transition-colors"
                 >
                   <h3 className="font-medium text-sm mb-1 break-words truncate">{h.title}</h3>
@@ -585,7 +589,7 @@ export default function ProfileClient() {
             {growSetups.map((s) => (
               <Link
                 key={s.id}
-                href={`/setups/${s.id}`}
+                href={setupPath(s)}
                 className="flex items-center gap-3 p-3 rounded-lg border border-border hover:border-primary/40 transition-colors"
               >
                 {s.images[0]?.url ? (
@@ -621,7 +625,7 @@ export default function ProfileClient() {
               {growDiaries.map((d) => (
                 <Link
                   key={d.id}
-                  href={`/diaries/${d.id}`}
+                  href={diaryPath(d)}
                   className="block p-3 rounded-lg hover:bg-secondary/50 transition-colors"
                 >
                   <h3 className="font-medium mb-1 break-words">{d.title}</h3>

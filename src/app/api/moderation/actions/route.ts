@@ -119,13 +119,13 @@ export async function POST(request: Request) {
           throw new Error("INVALID_REQUEST")
         }
         let ok = false
-        let deletedLink: string | null = null
+        let deletedLink: string[] | null = null
         switch (targetType) {
           case "THREAD": {
             const t = await tx.thread.findUnique({ where: { id: targetId }, select: { slug: true } })
             ok = !!(await tx.thread.updateMany({ where: { id: targetId, authorId: targetUserId }, data: { deleted: true } })).count
             if (ok && t) {
-              deletedLink = `/forum/thread/${t.slug}`
+              deletedLink = [`/forum/thread/${t.slug}`]
               // A deleted discussion thread frees the diary's canonical link.
               await tx.growDiary.updateMany({ where: { threadId: targetId }, data: { threadId: null } })
               // Detach image rows so deleted content can't keep blobs live.
@@ -179,10 +179,13 @@ export async function POST(request: Request) {
           case "CHAT_MESSAGE":
             ok = !!(await tx.chatMessage.updateMany({ where: { id: targetId, authorId: targetUserId }, data: { deleted: true } })).count
             break
-          case "DIARY":
+          case "DIARY": {
+            const d = await tx.growDiary.findUnique({ where: { id: targetId }, select: { slug: true } })
             ok = !!(await tx.growDiary.updateMany({ where: { id: targetId, authorId: targetUserId }, data: { deleted: true, threadId: null } })).count
             if (ok) {
-              deletedLink = `/diaries/${targetId}`
+              // Notifications may store either the old id link or the slug
+              // link — invalidate both forms.
+              deletedLink = d?.slug ? [`/diaries/${targetId}`, `/diaries/${d.slug}`] : [`/diaries/${targetId}`]
               diaryContentDeleted = true
               const imgs = await tx.diaryImage.findMany({
                 where: { update: { diaryId: targetId } },
@@ -192,20 +195,24 @@ export async function POST(request: Request) {
               deletedBlobUrls.push(...imgs.map((i) => i.url))
             }
             break
-          case "SETUP":
+          }
+          case "SETUP": {
+            const s = await tx.growSetup.findUnique({ where: { id: targetId }, select: { slug: true } })
             ok = !!(await tx.growSetup.updateMany({ where: { id: targetId, authorId: targetUserId }, data: { deleted: true } })).count
             if (ok) {
-              deletedLink = `/setups/${targetId}`
+              deletedLink = s?.slug ? [`/setups/${targetId}`, `/setups/${s.slug}`] : [`/setups/${targetId}`]
               const imgs = await tx.setupImage.findMany({ where: { setupId: targetId }, select: { url: true } })
               await tx.setupImage.deleteMany({ where: { setupId: targetId } })
               deletedBlobUrls.push(...imgs.map((i) => i.url))
             }
             break
+          }
           case "STRAIN": {
             const strain = await tx.strain.findUnique({
               where: { id: targetId },
               select: {
                 id: true,
+                slug: true,
                 createdById: true,
                 photos: { select: { id: true, imageUrl: true } },
               },
@@ -220,7 +227,7 @@ export async function POST(request: Request) {
             strainPhotoIds = strain.photos.map((p) => p.id)
             deletedBlobUrls.push(...strain.photos.map((p) => p.imageUrl))
             await tx.strain.delete({ where: { id: targetId } })
-            deletedLink = `/strains/${targetId}`
+            deletedLink = strain.slug ? [`/strains/${targetId}`, `/strains/${strain.slug}`] : [`/strains/${targetId}`]
             strainDeleted = true
             ok = true
             break

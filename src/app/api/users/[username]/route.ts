@@ -105,6 +105,7 @@ async function getPublicProfileData(username: string, viewerId?: string) {
       take: 6,
       select: {
         id: true,
+        slug: true,
         title: true,
         strain: true,
         stage: true,
@@ -120,6 +121,7 @@ async function getPublicProfileData(username: string, viewerId?: string) {
       take: 6,
       select: {
         id: true,
+        slug: true,
         title: true,
         strain: true,
         images: { take: 1, orderBy: { order: "asc" }, select: { url: true } },
@@ -135,6 +137,7 @@ async function getPublicProfileData(username: string, viewerId?: string) {
       take: 6,
       select: {
         id: true,
+        slug: true,
         title: true,
         strain: true,
         startDate: true,

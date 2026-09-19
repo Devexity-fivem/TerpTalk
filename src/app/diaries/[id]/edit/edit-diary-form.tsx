@@ -5,6 +5,7 @@ import DiaryForm, { DiaryFormData } from "@/components/diary-form"
 
 interface Props {
   diaryId: string
+  diaryHref: string
   initial: DiaryFormData
   startDateDisplay: string
   strainSuggestion?: { id: string; name: string } | null
@@ -12,7 +13,7 @@ interface Props {
 
 // Thin submit wrapper around the shared DiaryForm — PATCHes the diary
 // and returns to it on success. Errors surface via the form's error box.
-export default function EditDiaryForm({ diaryId, initial, startDateDisplay, strainSuggestion }: Props) {
+export default function EditDiaryForm({ diaryId, diaryHref, initial, startDateDisplay, strainSuggestion }: Props) {
   const router = useRouter()
 
   const handleSubmit = async (formData: DiaryFormData) => {
@@ -34,7 +35,7 @@ export default function EditDiaryForm({ diaryId, initial, startDateDisplay, stra
       throw new Error(data.error || "Failed to save changes")
     }
 
-    router.push(`/diaries/${diaryId}`)
+    router.push(diaryHref)
     router.refresh()
   }
 
@@ -44,7 +45,7 @@ export default function EditDiaryForm({ diaryId, initial, startDateDisplay, stra
       submitLabel="Save Changes"
       pendingLabel="Saving..."
       onSubmit={handleSubmit}
-      cancelHref={`/diaries/${diaryId}`}
+      cancelHref={diaryHref}
       startDateDisplay={startDateDisplay}
       strainSuggestion={strainSuggestion}
     />

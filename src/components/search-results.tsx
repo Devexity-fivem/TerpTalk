@@ -8,6 +8,7 @@ import { Search, MessageSquare, Leaf, Dna, User, Tag, Loader2, Bookmark, ArrowUp
 import { Avatar } from "@/components/ui/avatar"
 import TierChip from "@/components/tier-chip"
 import EmptyState from "@/components/ui/empty-state"
+import { diaryPath, strainPath, setupPath } from "@/lib/slugs"
 
 interface ThreadResult {
   id: string
@@ -24,11 +25,11 @@ interface ThreadResult {
 
 interface Results {
   threads: ThreadResult[]
-  strains: { id: string; name: string; type: string | null; genetics: string | null }[]
+  strains: { id: string; slug: string | null; name: string; type: string | null; genetics: string | null }[]
   users: { username: string; avatarUrl: string | null; bio: string | null; reputation: number; publicMilestoneOptOut: boolean }[]
-  diaries: { id: string; title: string; strain: string | null; stage: string; _count: { updates: number } }[]
+  diaries: { id: string; slug: string | null; title: string; strain: string | null; stage: string; _count: { updates: number } }[]
   guides: { id: string; slug: string; title: string; excerpt: string; topic: string }[]
-  setups: { id: string; title: string; strain: string | null; author: { name: string | null; profile: { username: string; reputation: number; publicMilestoneOptOut: boolean } | null } }[]
+  setups: { id: string; slug: string | null; title: string; strain: string | null; author: { name: string | null; profile: { username: string; reputation: number; publicMilestoneOptOut: boolean } | null } }[]
   tags: { name: string; slug: string; _count: { threads: number } }[]
   hasMore: Record<string, boolean>
 }
@@ -323,7 +324,7 @@ export default function SearchResults() {
               </h2>
               <div className="divide-y divide-border">
                 {results.strains.map((s) => (
-                  <Link key={s.id} href={`/strains/${s.id}`} className="block p-3 hover:bg-secondary/50 transition-colors">
+                  <Link key={s.id} href={strainPath(s)} className="block p-3 hover:bg-secondary/50 transition-colors">
                     <div className="font-medium text-sm">{s.name} {s.type && <span className="text-xs text-muted-foreground">({s.type})</span>}</div>
                     {s.genetics && <div className="text-xs text-muted-foreground">{s.genetics}</div>}
                   </Link>
@@ -340,7 +341,7 @@ export default function SearchResults() {
               </h2>
               <div className="divide-y divide-border">
                 {results.diaries.map((d) => (
-                  <Link key={d.id} href={`/diaries/${d.id}`} className="block p-3 hover:bg-secondary/50 transition-colors">
+                  <Link key={d.id} href={diaryPath(d)} className="block p-3 hover:bg-secondary/50 transition-colors">
                     <div className="font-medium text-sm">{d.title} {d.strain && <span className="text-xs text-muted-foreground">— {d.strain}</span>}</div>
                     <div className="text-xs text-muted-foreground">{d.stage} · {d._count.updates} updates</div>
                   </Link>
@@ -357,7 +358,7 @@ export default function SearchResults() {
               </h2>
               <div className="divide-y divide-border">
                 {results.setups.map((s) => (
-                  <Link key={s.id} href={`/setups/${s.id}`} className="block p-3 hover:bg-secondary/50 transition-colors">
+                  <Link key={s.id} href={setupPath(s)} className="block p-3 hover:bg-secondary/50 transition-colors">
                     <div className="font-medium text-sm">{s.title} {s.strain && <span className="text-xs text-muted-foreground">— {s.strain}</span>}</div>
                     <div className="text-xs text-muted-foreground flex items-center gap-1.5">
                       by {s.author.profile?.username || s.author.name}

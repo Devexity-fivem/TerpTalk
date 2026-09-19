@@ -2,7 +2,7 @@ import { buildMetadata, snippet } from "@/lib/seo"
 import { Breadcrumbs } from "@/components/breadcrumbs"
 import { prisma } from "@/lib/prisma"
 import { publicUserSelect, activeAuthor } from "@/lib/security"
-import { notFound } from "next/navigation"
+import { notFound, permanentRedirect } from "next/navigation"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { Settings, Users, MessageSquare, Pencil } from "lucide-react"
@@ -17,28 +17,29 @@ import ImageGallery from "@/components/image-gallery"
 import { escapeLike } from "@/lib/strain-stats"
 import Tooltip from "@/components/ui/tooltip"
 import { publicDiaryWhere } from "@/lib/diary-visibility"
+import { diaryPath, strainPath, setupPath } from "@/lib/slugs"
 
 export const dynamic = "force-dynamic"
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  const setup = await prisma.growSetup.findUnique({
-    where: { id },
-    select: { title: true, description: true, deleted: true, strain: true },
+  const setup = await prisma.growSetup.findFirst({
+    where: { OR: [{ slug: id }, { id }] },
+    select: { id: true, slug: true, title: true, description: true, deleted: true, strain: true },
   })
   if (!setup || setup.deleted) return buildMetadata({ title: "Setup not found", robots: { index: false } })
   return buildMetadata({
     title: `${setup.title} ${setup.strain ? `(${setup.strain})` : ""} — Cannabis Grow Setup`,
     description: snippet(setup.description),
     keywords: ["grow setup", "grow tent", "grow lights", "cannabis setup", setup.strain || ""].filter(Boolean),
-    pathname: `/setups/${id}`,
+    pathname: setupPath(setup),
   })
 }
 
 export default async function SetupPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const setup = await prisma.growSetup.findFirst({
-    where: { id, author: activeAuthor() },
+    where: { OR: [{ slug: id }, { id }], author: activeAuthor() },
     include: {
       author: { select: publicUserSelect },
       images: { orderBy: { order: "asc" }, take: 50 },
@@ -56,6 +57,9 @@ export default async function SetupPage({ params }: { params: Promise<{ id: stri
 
   if (!setup || setup.deleted) notFound()
 
+  // Legacy id URL → canonical slug URL.
+  if (id === setup.id && setup.slug) permanentRedirect(setupPath(setup))
+
   const session = await getServerSession(authOptions)
   const isOwner = session?.user?.id === setup.authorId
   // Derived "edited" marker — same 60s grace as diary updates: a plain
@@ -69,6 +73,7 @@ export default async function SetupPage({ params }: { params: Promise<{ id: stri
     take: 6,
     select: {
       id: true,
+      slug: true,
       title: true,
       strain: true,
       stage: true,
@@ -83,7 +88,7 @@ export default async function SetupPage({ params }: { params: Promise<{ id: stri
   const linkedStrain = setup.strain
     ? await prisma.strain.findFirst({
         where: { name: { contains: escapeLike(setup.strain), mode: "insensitive" } },
-        select: { id: true },
+        select: { id: true, slug: true },
       })
     : null
 
@@ -130,7 +135,7 @@ export default async function SetupPage({ params }: { params: Promise<{ id: stri
             )}
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <ShareButtons path={`/setups/${setup.id}`} title={`${setup.title} — grow setup on TerpTalk`} />
+            <ShareButtons path={setupPath(setup)} title={`${setup.title} — grow setup on TerpTalk`} />
             {isOwner && (
               <Tooltip content="Edit setup">
                 <Link
@@ -171,7 +176,7 @@ export default async function SetupPage({ params }: { params: Promise<{ id: stri
                 <span className="text-xs text-muted-foreground">{label}</span>
                 {label === "Strain" && linkedStrain ? (
                   <p className="text-sm font-medium">
-                    <Link href={`/strains/${linkedStrain.id}`} className="text-primary hover:underline">{value}</Link>
+                    <Link href={strainPath(linkedStrain)} className="text-primary hover:underline">{value}</Link>
                   </p>
                 ) : (
                   <p className="text-sm font-medium">{value}</p>
@@ -191,7 +196,7 @@ export default async function SetupPage({ params }: { params: Promise<{ id: stri
             <ul className="grid sm:grid-cols-2 gap-3">
               {usedIn.map((d) => (
                 <li key={d.id}>
-                  <Link href={`/diaries/${d.id}`} className="flex items-center gap-3 p-3 rounded-lg border border-border hover:border-primary/50 hover:bg-secondary/50 transition-colors">
+                  <Link href={diaryPath(d)} className="flex items-center gap-3 p-3 rounded-lg border border-border hover:border-primary/50 hover:bg-secondary/50 transition-colors">
                     {d.updates[0]?.images[0]?.url ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img src={d.updates[0].images[0].url} alt="" className="w-12 h-12 rounded-lg object-cover border border-border" />

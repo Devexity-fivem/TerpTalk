@@ -1,6 +1,7 @@
 import { Fragment } from "react"
 import { prisma } from "@/lib/prisma"
 import { publicUserSelect, isModerator, activeAuthor, blockedUserIds, notBlockedAuthor } from "@/lib/security"
+import { diaryPath } from "@/lib/slugs"
 import { notFound, redirect } from "next/navigation"
 import { MessageSquare, Users, Clock, CheckCircle2, Eye, BookOpen } from "lucide-react"
 import Link from "next/link"
@@ -89,6 +90,7 @@ async function getThreadData(slug: string, page: number, canSeeHidden: boolean, 
       diaryFor: {
         select: {
           id: true,
+          slug: true,
           title: true,
           strain: true,
           stage: true,
@@ -423,7 +425,7 @@ export default async function ThreadPage({
           {diaryCtx && (
             <div className="mt-3 mb-2">
               <Link
-                href={`/diaries/${diaryCtx.id}`}
+                href={diaryPath(diaryCtx)}
                 className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-primary/30 bg-primary/5 text-sm hover:bg-primary/10 transition-colors"
               >
                 <BookOpen className="w-4 h-4 text-primary shrink-0" />

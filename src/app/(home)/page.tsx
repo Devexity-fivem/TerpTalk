@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma"
 import { unstable_cache } from "next/cache"
 import { publicUserSelect, activeAuthor, rankableProfile, REPUTATION_ORDER } from "@/lib/security"
 import { publicDiaryWhere } from "@/lib/diary-visibility"
+import { diaryPath } from "@/lib/slugs"
 import CannabisLeaf from "@/components/cannabis-leaf"
 import { getChatTeaser } from "@/lib/chat-activity"
 import { getServerSession } from "next-auth"
@@ -315,7 +316,7 @@ export default async function Home() {
                 {diaryUpdates.slice(0, 3).map((update) => (
                   <Link
                     key={update.id}
-                    href={`/diaries/${update.diary.id}`}
+                    href={diaryPath(update.diary)}
                     className="flex items-start gap-3 p-3 bg-card rounded-lg border border-border hover:border-primary/40 transition-colors"
                   >
                     {update.images[0]?.url ? (

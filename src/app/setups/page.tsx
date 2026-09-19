@@ -8,6 +8,7 @@ import Link from "next/link"
 import RoleBadge from "@/components/role-badge"
 import TierChip from "@/components/tier-chip"
 import EmptyState from "@/components/ui/empty-state"
+import { setupPath } from "@/lib/slugs"
 
 export const revalidate = 300
 
@@ -100,7 +101,7 @@ export default async function SetupsPage({
                   key={setup.id}
                   className="bg-card rounded-lg border border-border overflow-hidden hover:border-primary/50 transition-colors"
                 >
-                  <Link href={`/setups/${setup.id}`} className="block">
+                  <Link href={setupPath(setup)} className="block">
                     {setup.images.length > 0 ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img src={setup.images[0].url} alt={setup.title} loading="lazy" decoding="async" className="aspect-video w-full object-cover" />
@@ -111,7 +112,7 @@ export default async function SetupsPage({
                     )}
                   </Link>
                   <div className="p-4">
-                    <Link href={`/setups/${setup.id}`} className="hover:text-primary transition-colors">
+                    <Link href={setupPath(setup)} className="hover:text-primary transition-colors">
                       <h3 className="font-semibold mb-1">{setup.title}</h3>
                     </Link>
                     <p className="text-sm text-muted-foreground mb-3 line-clamp-2">{setup.description}</p>

@@ -59,7 +59,7 @@ export async function GET() {
           updatedAt: { lt: new Date(Date.now() - 3 * 86400000) },
         },
         orderBy: { updatedAt: "asc" },
-        select: { id: true, title: true },
+        select: { id: true, slug: true, title: true },
       }),
     ])
     if (!profile) return unauthorized()

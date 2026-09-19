@@ -4,6 +4,7 @@ import { forbidden, isSupport } from "@/lib/security"
 import { requireStaff } from "@/lib/require-staff"
 import { rateLimit } from "@/lib/rate-limit"
 import { SIGNAL_LABELS } from "@/lib/trust-signals"
+import { diaryPath, setupPath, strainPath } from "@/lib/slugs"
 
 // GET /api/moderation/queue/[id]?kind=REPORT|FLAG — case detail: the item,
 // its evidence, related open cases, the subject's staff-only context, and the
@@ -262,27 +263,27 @@ async function reportTargetDetail(type: string, targetId: string | null) {
       case "DIARY": {
         const d = await prisma.growDiary.findUnique({
           where: { id: targetId },
-          select: { id: true, title: true, deleted: true, description: true },
+          select: { id: true, slug: true, title: true, deleted: true, description: true },
         })
-        return d && { title: d.title, content: (d.description ?? "").slice(0, 2000), deleted: d.deleted, href: `/diaries/${d.id}` }
+        return d && { title: d.title, content: (d.description ?? "").slice(0, 2000), deleted: d.deleted, href: diaryPath(d) }
       }
       case "SETUP": {
         const s = await prisma.growSetup.findUnique({
           where: { id: targetId },
-          select: { id: true, title: true, deleted: true, description: true },
+          select: { id: true, slug: true, title: true, deleted: true, description: true },
         })
-        return s && { title: s.title, content: (s.description ?? "").slice(0, 2000), deleted: s.deleted, href: `/setups/${s.id}` }
+        return s && { title: s.title, content: (s.description ?? "").slice(0, 2000), deleted: s.deleted, href: setupPath(s) }
       }
       case "STRAIN": {
         const s = await prisma.strain.findUnique({
           where: { id: targetId },
-          select: { id: true, name: true, type: true, genetics: true, breeder: true, description: true },
+          select: { id: true, slug: true, name: true, type: true, genetics: true, breeder: true, description: true },
         })
         return s && {
           title: s.type ? `${s.name} (${s.type})` : s.name,
           content: [s.genetics, s.breeder, s.description].filter(Boolean).join("\n").slice(0, 2000),
           deleted: false,
-          href: `/strains/${s.id}`,
+          href: strainPath(s),
         }
       }
       case "PROFILE": {

@@ -10,9 +10,11 @@ import { signInHref } from "@/lib/callback-url"
 // thread on first click, then always links to it.
 export default function DiaryDiscussButton({
   diaryId,
+  diaryHref,
   existingSlug,
 }: {
   diaryId: string
+  diaryHref: string
   existingSlug: string | null
 }) {
   const router = useRouter()
@@ -37,7 +39,7 @@ export default function DiaryDiscussButton({
         try {
           const res = await fetch(`/api/diaries/${diaryId}/discuss`, { method: "POST" })
           if (res.status === 401) {
-            router.push(signInHref(`/diaries/${diaryId}`))
+            router.push(signInHref(diaryHref))
             return
           }
           const data = await res.json().catch(() => ({}))

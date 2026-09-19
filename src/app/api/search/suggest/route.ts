@@ -24,7 +24,7 @@ const getSearchSuggestions = unstable_cache(
         where: { name: { contains: query, mode: "insensitive" } },
         take: 3,
         orderBy: { name: "asc" },
-        select: { id: true, name: true },
+        select: { id: true, slug: true, name: true },
       }),
       prisma.profile.findMany({
         where: {
@@ -51,7 +51,7 @@ const getSearchSuggestions = unstable_cache(
 
     const suggestions = [
       ...threads.map((t) => ({ type: "thread" as const, title: t.title, slug: t.slug })),
-      ...strains.map((s) => ({ type: "strain" as const, title: s.name, slug: s.id })),
+      ...strains.map((s) => ({ type: "strain" as const, title: s.name, slug: s.slug ?? s.id })),
       ...users.map((u) => ({ type: "user" as const, title: u.username, slug: u.username })),
       ...tags.map((t) => ({ type: "tag" as const, title: t.name, slug: t.slug })),
       ...guides.map((g) => ({ type: "guide" as const, title: g.title, slug: g.slug })),

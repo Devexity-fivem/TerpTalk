@@ -24,6 +24,7 @@ import CosmeticsPanel from "@/components/cosmetics-panel"
 import { Avatar } from "@/components/ui/avatar"
 import { InfoTip } from "@/components/ui/tooltip"
 import { getAvatarFrame, getProfileTheme, getProfileTitle } from "@/lib/cosmetics"
+import { diaryPath } from "@/lib/slugs"
 import { cn } from "@/lib/utils"
 
 function ProfileBadges({
@@ -169,6 +170,7 @@ interface ProfileData {
   }>
   recentDiaries: Array<{
     id: string
+    slug: string | null
     title: string
     createdAt: string
     _count: { updates: number; followers: number }
@@ -743,7 +745,7 @@ export default function ProfilePage() {
                 {profileData.recentDiaries.map((diary) => (
                   <Link
                     key={diary.id}
-                    href={`/diaries/${diary.id}`}
+                    href={diaryPath(diary)}
                     className="block p-3 rounded-lg hover:bg-secondary/50 transition-colors"
                   >
                     <h3 className="font-medium mb-1">{diary.title}</h3>

@@ -7,6 +7,7 @@ import MemberGreeting from "@/components/member-greeting"
 import OpenChatButton from "@/components/open-chat-button"
 import Tooltip, { InfoTip } from "@/components/ui/tooltip"
 import type { MemberHomeData } from "@/lib/member-home"
+import { diaryPath } from "@/lib/slugs"
 import { cn } from "@/lib/utils"
 
 // The signed-in "Today" homepage — a compact dashboard composing the
@@ -190,7 +191,7 @@ export default function MemberHome({ data }: { data: MemberHomeData }) {
                 {data.grows.map((g) => (
                   <li key={g.id}>
                     <Link
-                      href={`/diaries/${g.id}`}
+                      href={diaryPath(g)}
                       className="block rounded-lg border border-border bg-secondary/30 p-3 transition-colors hover:border-primary/40"
                     >
                       <div className="flex items-center justify-between gap-2">
@@ -265,7 +266,7 @@ export default function MemberHome({ data }: { data: MemberHomeData }) {
                 {s.diaryUpdates.map((u, i) => (
                   <li key={`${u.diaryId}-${i}`}>
                     <Link
-                      href={`/diaries/${u.diaryId}`}
+                      href={diaryPath({ id: u.diaryId, slug: u.diarySlug })}
                       className="group flex items-center gap-2 rounded-lg px-3 py-2 hover:bg-secondary/60"
                     >
                       <Leaf className="h-3.5 w-3.5 shrink-0 text-emerald-500" />

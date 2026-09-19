@@ -11,6 +11,7 @@ import Link from "next/link"
 import RoleBadge from "@/components/role-badge"
 import TierChip from "@/components/tier-chip"
 import EmptyState from "@/components/ui/empty-state"
+import { diaryPath } from "@/lib/slugs"
 
 export const revalidate = 300
 
@@ -102,7 +103,7 @@ function DiaryCard({ diary, showFeatured = false }: { diary: DiaryCardData; show
   const authorName = diary.author.profile?.username || diary.author.name
   return (
     <div className="bg-card rounded-lg border border-border overflow-hidden hover:border-primary/50 transition-colors">
-      <Link href={`/diaries/${diary.id}`} className="block">
+      <Link href={diaryPath(diary)} className="block">
         <div className="aspect-video bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center overflow-hidden">
           {diary.updates[0]?.images[0]?.url ? (
             // eslint-disable-next-line @next/next/no-img-element
@@ -132,7 +133,7 @@ function DiaryCard({ diary, showFeatured = false }: { diary: DiaryCardData; show
             {diary.stage}
           </span>
         </div>
-        <Link href={`/diaries/${diary.id}`} className="hover:text-primary transition-colors">
+        <Link href={diaryPath(diary)} className="hover:text-primary transition-colors">
           <h3 className="font-semibold mb-1">{diary.title}</h3>
         </Link>
         <p className="text-sm text-muted-foreground mb-3 line-clamp-2">{diary.description}</p>

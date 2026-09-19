@@ -13,6 +13,7 @@ import { revalidateTag } from "next/cache"
 import { after } from "next/server"
 import { assistFirstDiary } from "@/lib/terpbot-assist"
 import { isDiaryVisibility } from "@/lib/diary-visibility"
+import { entitySlug, diaryPath } from "@/lib/slugs"
 
 export async function POST(request: Request) {
   try {
@@ -195,6 +196,11 @@ export async function POST(request: Request) {
       },
     })
 
+    // Canonical slug — built from the stored (post-censorship) title and the
+    // generated id suffix. Written once; renames never regenerate it.
+    diary.slug = entitySlug(diary.title, diary.id, "diary")
+    await prisma.growDiary.update({ where: { id: diary.id }, data: { slug: diary.slug } })
+
     await awardReputation(
       session.user.id,
       "DIARY_CREATED",
@@ -226,7 +232,7 @@ export async function POST(request: Request) {
           type: "FOLLOWED_CONTENT" as const,
           title: "New diary from someone you follow",
           content: `@${authorName} started a new grow diary: "${diary.title.slice(0, 60)}"`,
-          link: `/diaries/${diary.id}`,
+          link: diaryPath(diary),
           actorId: session.user.id,
           groupKey: `followed-content:diary:${diary.id}`,
           dedupeMs: 24 * 60 * 60 * 1000,
@@ -267,7 +273,7 @@ export async function DELETE(request: Request) {
 
     const diary = await prisma.growDiary.findUnique({
       where: { id },
-      select: { id: true, authorId: true, deleted: true, strainId: true, strain: true },
+      select: { id: true, slug: true, authorId: true, deleted: true, strainId: true, strain: true },
     })
     if (!diary || diary.deleted) {
       return NextResponse.json({ error: "Diary not found" }, { status: 404 })
@@ -283,8 +289,13 @@ export async function DELETE(request: Request) {
         select: { url: true },
       })
       await tx.diaryImage.deleteMany({ where: { update: { diaryId: id } } })
-      // Links to this diary in members' notifications would dangle.
-      await tx.notification.deleteMany({ where: notificationLinkWhere(`/diaries/${id}`) })
+      // Links to this diary in members' notifications would dangle. Match
+      // both URL forms — older rows store the id URL, newer ones the slug.
+      await tx.notification.deleteMany({
+        where: notificationLinkWhere(
+          diary.slug ? [`/diaries/${id}`, `/diaries/${diary.slug}`] : `/diaries/${id}`
+        ),
+      })
       return imgs.map((i) => i.url)
     })
 

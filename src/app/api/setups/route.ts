@@ -10,6 +10,7 @@ import { awardReputation, reverseReputationBySource, REP_POINTS } from "@/lib/re
 import { notificationLinkWhere } from "@/lib/notify"
 import { revalidateTag } from "next/cache"
 import { parseSetupPatch, setupPatchTouchesStrainStats, SETUP_MAX_IMAGES } from "@/lib/setup-edit"
+import { entitySlug } from "@/lib/slugs"
 import { diffUpdateImages } from "@/lib/diary-update-edit"
 
 // The caller's own non-deleted setups — feeds the "link a grow setup"
@@ -150,6 +151,11 @@ export async function POST(request: Request) {
       },
     })
 
+    // Canonical slug — built from the stored (post-censorship) title and
+    // the generated id suffix. Written once; renames never regenerate it.
+    setup.slug = entitySlug(setup.title, setup.id, "setup")
+    await prisma.growSetup.update({ where: { id: setup.id }, data: { slug: setup.slug } })
+
     await awardReputation(
       session.user.id,
       "SETUP_CREATED",
@@ -188,7 +194,7 @@ export async function DELETE(request: Request) {
 
     const setup = await prisma.growSetup.findUnique({
       where: { id },
-      select: { id: true, authorId: true, deleted: true },
+      select: { id: true, slug: true, authorId: true, deleted: true },
     })
     if (!setup || setup.deleted) {
       return NextResponse.json({ error: "Setup not found" }, { status: 404 })
@@ -199,7 +205,12 @@ export async function DELETE(request: Request) {
       await tx.growSetup.update({ where: { id }, data: { deleted: true } })
       const imgs = await tx.setupImage.findMany({ where: { setupId: id }, select: { url: true } })
       await tx.setupImage.deleteMany({ where: { setupId: id } })
-      await tx.notification.deleteMany({ where: notificationLinkWhere(`/setups/${id}`) })
+      // Match both URL forms — older rows store the id URL, newer the slug.
+      await tx.notification.deleteMany({
+        where: notificationLinkWhere(
+          setup.slug ? [`/setups/${id}`, `/setups/${setup.slug}`] : `/setups/${id}`
+        ),
+      })
       return imgs.map((i) => i.url)
     })
 

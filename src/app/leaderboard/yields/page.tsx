@@ -9,6 +9,7 @@ import { buildMetadata } from "@/lib/seo"
 import EmptyState from "@/components/empty-state"
 import TierChip from "@/components/tier-chip"
 import { publicDiaryWhere } from "@/lib/diary-visibility"
+import { strainPath } from "@/lib/slugs"
 
 export const revalidate = 300
 
@@ -87,10 +88,10 @@ export default async function YieldLeaderboardPage() {
   const catalog = rows.length
     ? await prisma.strain.findMany({
         where: { OR: rows.map((r) => ({ name: { equals: r.strain, mode: "insensitive" as const } })) },
-        select: { id: true, name: true },
+        select: { id: true, slug: true, name: true },
       })
     : []
-  const strainIdByName = new Map(catalog.map((s) => [s.name.toLowerCase(), s.id]))
+  const strainPathByName = new Map(catalog.map((s) => [s.name.toLowerCase(), strainPath(s)]))
 
   const totalHarvests = diaries.length
   const totalGrams = diaries.reduce(
@@ -149,8 +150,7 @@ export default async function YieldLeaderboardPage() {
                     <h3 className="font-semibold truncate">
                       <Link
                         href={(() => {
-                          const sid = strainIdByName.get(row.strain.toLowerCase())
-                          return sid ? `/strains/${sid}` : `/strains?q=${encodeURIComponent(row.strain)}`
+                          return strainPathByName.get(row.strain.toLowerCase()) ?? `/strains?q=${encodeURIComponent(row.strain)}`
                         })()}
                         className="hover:text-primary transition-colors"
                       >

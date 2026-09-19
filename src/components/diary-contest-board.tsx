@@ -6,6 +6,7 @@ import TierChip from "@/components/tier-chip"
 import Link from "next/link"
 import { useSession } from "next-auth/react"
 import Tooltip from "@/components/ui/tooltip"
+import { diaryPath } from "@/lib/slugs"
 
 interface ContestUser {
   name: string | null
@@ -24,6 +25,7 @@ interface Entry {
   mine: boolean
   diary: {
     id: string
+    slug: string | null
     title: string
     strain: string | null
     stage: string
@@ -134,7 +136,7 @@ export default function DiaryContestBoard() {
         <div className="grid sm:grid-cols-2 gap-3">
           {data.entries.map((e) => (
             <div key={e.id} className="rounded-lg border border-border overflow-hidden">
-              <Link href={`/diaries/${e.diary.id}`} className="block">
+              <Link href={diaryPath(e.diary)} className="block">
                 <div className="aspect-video bg-secondary flex items-center justify-center overflow-hidden">
                   {e.diary.thumb ? (
                     // eslint-disable-next-line @next/next/no-img-element
@@ -145,7 +147,7 @@ export default function DiaryContestBoard() {
                 </div>
               </Link>
               <div className="p-3">
-                <Link href={`/diaries/${e.diary.id}`} className="font-medium text-sm hover:text-primary transition-colors line-clamp-1">
+                <Link href={diaryPath(e.diary)} className="font-medium text-sm hover:text-primary transition-colors line-clamp-1">
                   {e.diary.title}
                 </Link>
                 <div className="text-xs text-muted-foreground mt-0.5 flex items-center gap-2 flex-wrap">

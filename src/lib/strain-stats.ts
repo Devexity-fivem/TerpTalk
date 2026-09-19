@@ -78,7 +78,7 @@ export interface StrainGrowStats {
   stageDurations: StageMedian[]
   /** Member-authored harvest notes — attributed, not anonymized (they're
    *  public diary content, same as the linked-grows list). */
-  reviews: { rating: number | null; difficulty: string | null; notes: string; authorName: string; diaryId: string }[]
+  reviews: { rating: number | null; difficulty: string | null; notes: string; authorName: string; diaryId: string; diarySlug: string | null }[]
   /** Honesty tier driven by sample size — the UI must show this. */
   tier: "none" | "minimal" | "early" | "established"
   label: string
@@ -103,6 +103,7 @@ const getStats = unstable_cache(
         },
         select: {
           id: true,
+          slug: true,
           authorId: true,
           startDate: true,
           harvested: true,
@@ -243,6 +244,7 @@ const getStats = unstable_cache(
         notes: d.harvestNotes!.trim(),
         authorName: d.author.profile?.username || d.author.name || "Member",
         diaryId: d.id,
+        diarySlug: d.slug,
       }))
 
     return {
@@ -317,13 +319,13 @@ export function getStrainGrowStats(strainName: string, strainId: string) {
  */
 export async function suggestStrainLink(
   strainText: string | null | undefined
-): Promise<{ id: string; name: string } | null> {
+): Promise<{ id: string; slug: string | null; name: string } | null> {
   const normalized = normalizeStrain(strainText ?? "")
   if (!normalized) return null
   const firstToken = normalized.split(" ")[0]
   const candidates = await prisma.strain.findMany({
     where: { name: { contains: firstToken, mode: "insensitive" } },
-    select: { id: true, name: true },
+    select: { id: true, slug: true, name: true },
     take: 100,
   })
   const matches = candidates.filter((s) => normalizeStrain(s.name) === normalized)

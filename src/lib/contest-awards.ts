@@ -40,7 +40,7 @@ export async function resolveMonthlyDiaryWinner(month: string) {
     include: {
       user: { select: publicUserSelect },
       _count: { select: { votes: true } },
-      diary: { select: { id: true, title: true } },
+      diary: { select: { id: true, slug: true, title: true } },
     },
   })
   if (!top || top._count.votes === 0) return null

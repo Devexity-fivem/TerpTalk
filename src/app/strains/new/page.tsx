@@ -7,6 +7,7 @@ import { useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
 import { Leaf, Loader2 } from "lucide-react"
 import Link from "next/link"
+import { strainPath } from "@/lib/slugs"
 
 export default function NewStrainPage() {
   const { data: session, status } = useSession()
@@ -60,7 +61,7 @@ export default function NewStrainPage() {
       }
 
       const data = await response.json()
-      router.push(`/strains/${data.strain.id}`)
+      router.push(strainPath(data.strain))
     } catch (error: unknown) {
       setError((error as Error).message)
     } finally {

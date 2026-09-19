@@ -8,6 +8,7 @@ import { awardReputation, REP_POINTS } from "@/lib/reputation"
 import { STRAIN_MIN_PAID_DESCRIPTION } from "@/lib/reputation-config"
 import { checkMaintenance } from "@/lib/maintenance"
 import { escapeLike } from "@/lib/strain-stats"
+import { entitySlug } from "@/lib/slugs"
 import { revalidateTag } from "next/cache"
 
 // Lightweight strain search for the diary-form combobox. Public list —
@@ -130,6 +131,10 @@ export async function POST(request: Request) {
         createdById: session.user.id,
       },
     })
+
+    // Canonical slug — written once from the stored name + id suffix.
+    strain.slug = entitySlug(strain.name, strain.id, "strain")
+    await prisma.strain.update({ where: { id: strain.id }, data: { slug: strain.slug } })
 
     revalidateTag("strains", { expire: 0 })
 

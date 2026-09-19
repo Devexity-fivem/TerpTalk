@@ -6,6 +6,7 @@ import ContestBoard from "@/components/contest-board"
 import TierChip from "@/components/tier-chip"
 import DiaryContestBoard from "@/components/diary-contest-board"
 import { resolveWeeklyWinner, resolveMonthlyDiaryWinner } from "@/lib/contest-awards"
+import { diaryPath } from "@/lib/slugs"
 
 import { buildMetadata } from "@/lib/seo"
 
@@ -86,7 +87,7 @@ export default async function ContestPage() {
             <div>
               <p className="text-xs text-amber-500 font-semibold uppercase tracking-wide">Last month&apos;s winner</p>
               <Link
-                href={`/diaries/${lastDiaryWinner.diary.id}`}
+                href={diaryPath(lastDiaryWinner.diary)}
                 className="font-medium hover:text-primary"
               >
                 {lastDiaryWinner.diary.title}

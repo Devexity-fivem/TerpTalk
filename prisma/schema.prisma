@@ -365,6 +365,7 @@ model Block {
 // Grow Diaries
 model GrowDiary {
   id            String   @id @default(cuid())
+  slug          String?  @unique // canonical URL segment — generated once, never regenerated on rename
   title         String
   description   String
   strain        String?  // legacy free text — kept for old diaries and "not listed" entries
@@ -478,6 +479,7 @@ model DiaryFollow {
 // Grow Setups
 model GrowSetup {
   id          String   @id @default(cuid())
+  slug        String?  @unique // canonical URL segment — generated once, never regenerated on rename
   title       String
   description String
   space       String?
@@ -628,6 +630,7 @@ model Notification {
 // Strain Database
 model Strain {
   id          String   @id @default(cuid())
+  slug        String?  @unique // canonical URL segment — generated once, never regenerated on rename
   name        String   @unique
   genetics    String?
   breeder     String?

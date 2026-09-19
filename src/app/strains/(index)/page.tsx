@@ -5,6 +5,7 @@ import { escapeLike, strainTypeLabel } from "@/lib/strain-stats"
 import { Leaf, Plus, Search, ChevronLeft, ChevronRight } from "lucide-react"
 import Link from "next/link"
 import EmptyState from "@/components/ui/empty-state"
+import { strainPath } from "@/lib/slugs"
 
 export const revalidate = 60 // public content, edge-cached
 
@@ -109,7 +110,7 @@ export default async function StrainsPage({ searchParams }: { searchParams: Prom
               {strains.map((strain) => (
                 <Link
                   key={strain.id}
-                  href={`/strains/${strain.id}`}
+                  href={strainPath(strain)}
                   className="bg-card rounded-lg border border-border p-4 hover:border-primary/50 transition-colors"
                 >
                   <div className="flex items-center gap-3 mb-3">

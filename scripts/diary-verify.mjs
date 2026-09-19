@@ -64,7 +64,7 @@ async function callApi(path, { method = "GET", body, cookie } = {}) {
 
 async function getHtml(path, cookie) {
   const res = await fetch(`${BASE}${path}`, { headers: cookie ? { cookie } : {}, redirect: "manual" })
-  return { status: res.status, html: await res.text() }
+  return { status: res.status, html: await res.text(), location: res.headers.get("location") }
 }
 
 const main = async () => {
@@ -79,6 +79,8 @@ const main = async () => {
   await prisma.profile.update({ where: { userId: voter.id }, data: { reputation: 50 } })
   const users = [owner, viewer, banned, voter]
   const diaryIds = []
+  const strainIds = []
+  const setupIds = []
   let strainId = null
   let contestEntryId = null
 
@@ -108,6 +110,9 @@ const main = async () => {
     })
     r.status === 201 && r.data?.diary?.id ? pass("diary created via API") : fail("diary create", { s: r.status, d: r.data })
     const diaryId = r.data?.diary?.id
+    // Page loads go through the canonical slug URL — the id URL is now a
+    // permanent redirect (verified separately in the slug section below).
+    const diaryHref = `/diaries/${r.data?.diary?.slug ?? diaryId}`
     if (diaryId) diaryIds.push(diaryId)
     if (!diaryId) throw new Error("cannot continue without a diary")
 
@@ -155,7 +160,7 @@ const main = async () => {
     diaryRow?.stage === "FLOWER" ? pass("explicit stage propagates to diary") : fail("stage propagation", diaryRow?.stage)
 
     // ── Diary page HTML — weekly grouping + gating ──────────────────
-    let page = await getHtml(`/diaries/${diaryId}`, ownerCookie)
+    let page = await getHtml(diaryHref, ownerCookie)
     page.status === 200 && page.html.includes("Week") && page.html.includes("Day ")
       ? pass("diary page renders week/day grouping")
       : fail("week grouping", page.status)
@@ -163,7 +168,7 @@ const main = async () => {
     page.html.includes("Add Update") ? pass("owner sees update form") : fail("owner update form", "missing")
     page.html.includes("Grow setup") ? pass("setup details render") : fail("setup details", "missing")
 
-    page = await getHtml(`/diaries/${diaryId}`, viewerCookie)
+    page = await getHtml(diaryHref, viewerCookie)
     page.status === 200 && !page.html.includes("Add Update") && !page.html.includes("Log harvest")
       ? pass("viewer does not see owner controls")
       : fail("viewer gating", page.html.includes("Add Update"))
@@ -181,7 +186,7 @@ const main = async () => {
     r = await callApi(`/api/diaries/${diaryId}/harvest`, { method: "PATCH", body: { harvested: true, yieldAmount: 100, yieldUnit: "oz" }, cookie: ownerCookie })
     r.status === 200 ? pass("harvest logged") : fail("harvest 200", { s: r.status, d: r.data })
 
-    page = await getHtml(`/diaries/${diaryId}`)
+    page = await getHtml(diaryHref)
     page.status === 200 && page.html.includes("Harvest Report") && page.html.includes("100") && page.html.includes("oz")
       ? pass("harvest report card renders")
       : fail("harvest report", page.status)
@@ -422,6 +427,173 @@ const main = async () => {
       ? pass("blocked author's diary searchable by guest")
       : fail("guest search", sr.data?.diaries)
 
+    // ── Canonical slugs (id → 308 → slug, privacy-ordered) ─────────
+    const slugifyLocal = (s) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 60).replace(/^-+|-+$/g, "")
+    const expSlug = (title, id, fallback) => `${slugifyLocal(title) || fallback}-${id.slice(-6).toLowerCase()}`
+
+    r = await callApi("/api/diaries", {
+      method: "POST",
+      body: { title: `Blue Dream Indoor Grow ${TS}`, description: "slug fixture", growType: "INDOOR", startDate: new Date().toISOString() },
+      cookie: ownerCookie,
+    })
+    const sDiary = r.data?.diary
+    if (sDiary?.id) diaryIds.push(sDiary.id)
+    r.status === 201 && sDiary?.slug === expSlug(`Blue Dream Indoor Grow ${TS}`, sDiary?.id ?? "", "diary")
+      ? pass("diary created with canonical slug")
+      : fail("diary slug", { s: r.status, slug: sDiary?.slug })
+
+    if (sDiary?.slug) {
+      page = await getHtml(`/diaries/${sDiary.slug}`)
+      page.status === 200 ? pass("slug URL serves the diary") : fail("slug 200", page.status)
+
+      const red = await getHtml(`/diaries/${sDiary.id}`)
+      red.status === 308 && red.location === `/diaries/${sDiary.slug}`
+        ? pass("old id URL 308s to slug URL")
+        : fail("id redirect", { st: red.status, loc: red.location })
+
+      ;(page.html.match(/<link rel="canonical" href="([^"]+)"/)?.[1] || "").endsWith(`/diaries/${sDiary.slug}`)
+        ? pass("canonical metadata uses slug URL")
+        : fail("canonical slug", page.html.match(/<link rel="canonical"[^>]*>/)?.[0])
+
+      // Rename keeps the slug — URLs are stable once issued.
+      r = await callApi(`/api/diaries/${sDiary.id}`, { method: "PATCH", body: { title: `Renamed Grow ${TS}` }, cookie: ownerCookie })
+      const renamed = await prisma.growDiary.findUnique({ where: { id: sDiary.id }, select: { slug: true } })
+      r.status === 200 && renamed?.slug === sDiary.slug
+        ? pass("rename preserves slug")
+        : fail("rename slug", { s: r.status, slug: renamed?.slug })
+
+      // Discovery surfaces emit the slug URL.
+      const sRes = await callApi(`/api/search?q=${encodeURIComponent(`Renamed Grow ${TS}`)}&type=diaries`)
+      const sHit = (sRes.data?.diaries || []).find((d) => d.id === sDiary.id)
+      sHit?.slug === sDiary.slug
+        ? pass("search result carries canonical slug")
+        : fail("search slug", sHit)
+      const dIdx = await getHtml("/diaries")
+      dIdx.html.includes(`/diaries/${sDiary.slug}`)
+        ? pass("/diaries card links slug URL")
+        : fail("/diaries slug link", "missing")
+      const smap = await getHtml("/sitemap.xml")
+      smap.html.includes(`/diaries/${sDiary.slug}`) && !smap.html.includes(`/diaries/${sDiary.id}<`)
+        ? pass("sitemap emits slug URL only")
+        : fail("sitemap", { has: smap.html.includes(`/diaries/${sDiary.slug}`), id: smap.html.includes(`/diaries/${sDiary.id}<`) })
+
+      // Notification invalidation catches both URL forms: seed an
+      // old-style id link and a new-style slug link (with a deep anchor,
+      // the form update notifications actually store).
+      await prisma.notification.createMany({
+        data: [
+          { userId: owner.id, type: "DIARY_UPDATE", title: "legacy", content: "legacy id link", link: `/diaries/${sDiary.id}` },
+          { userId: owner.id, type: "DIARY_UPDATE", title: "slugform", content: "slug link", link: `/diaries/${sDiary.slug}#week-3` },
+        ],
+      })
+      const linkedBefore = await prisma.notification.count({
+        where: { userId: owner.id, OR: [{ link: { contains: sDiary.id } }, { link: { contains: sDiary.slug } }] },
+      })
+      r = await callApi(`/api/diaries`, { method: "DELETE", body: { id: sDiary.id }, cookie: ownerCookie })
+      const linkedAfter = await prisma.notification.count({
+        where: { userId: owner.id, OR: [{ link: { contains: sDiary.id } }, { link: { contains: sDiary.slug } }] },
+      })
+      linkedBefore > 0 && linkedAfter === 0
+        ? pass("diary delete invalidates id + slug notification links")
+        : fail("notification invalidation", { linkedBefore, linkedAfter })
+    }
+
+    // PRIVATE diary: slug works for the owner, id URL 308s for the owner,
+    // and neither URL reveals existence to anyone else.
+    r = await callApi("/api/diaries", {
+      method: "POST",
+      body: { title: `Secret Grow ${TS}`, description: "slug fixture", growType: "INDOOR", startDate: new Date().toISOString(), visibility: "PRIVATE" },
+      cookie: ownerCookie,
+    })
+    const pDiary = r.data?.diary
+    if (pDiary?.id) diaryIds.push(pDiary.id)
+    if (pDiary?.slug) {
+      const oSlug = await getHtml(`/diaries/${pDiary.slug}`, ownerCookie)
+      const oId = await getHtml(`/diaries/${pDiary.id}`, ownerCookie)
+      oSlug.status === 200 ? pass("owner opens PRIVATE diary by slug") : fail("owner slug", oSlug.status)
+      oId.status === 308 && oId.location === `/diaries/${pDiary.slug}`
+        ? pass("owner id URL 308s to slug")
+        : fail("owner id redirect", { st: oId.status, loc: oId.location })
+      const gId = await getHtml(`/diaries/${pDiary.id}`)
+      const gSlug = await getHtml(`/diaries/${pDiary.slug}`)
+      const mSlug = await getHtml(`/diaries/${pDiary.slug}`, voterCookie)
+      gId.status === 404 && gSlug.status === 404 && mSlug.status === 404 && !gId.location && !gSlug.location
+        ? pass("PRIVATE diary leaks nothing via id or slug URL")
+        : fail("private slug leak", { gId: gId.status, gSlug: gSlug.status, mSlug: mSlug.status, loc: gId.location })
+    }
+
+    // UNLISTED diary: reachable by slug, id URL still redirects, noindex kept.
+    r = await callApi("/api/diaries", {
+      method: "POST",
+      body: { title: `Quiet Grow ${TS}`, description: "slug fixture", growType: "INDOOR", startDate: new Date().toISOString(), visibility: "UNLISTED" },
+      cookie: ownerCookie,
+    })
+    const uDiary = r.data?.diary
+    if (uDiary?.id) diaryIds.push(uDiary.id)
+    if (uDiary?.slug) {
+      const gSlug = await getHtml(`/diaries/${uDiary.slug}`)
+      const gId = await getHtml(`/diaries/${uDiary.id}`)
+      gSlug.status === 200 && /<meta name="robots"[^>]*noindex/.test(gSlug.html)
+        ? pass("UNLISTED slug URL serves page with noindex")
+        : fail("unlisted slug", { st: gSlug.status, noindex: /<meta name="robots"[^>]*noindex/.test(gSlug.html) })
+      gId.status === 308 && gId.location === `/diaries/${uDiary.slug}`
+        ? pass("UNLISTED id URL 308s to slug")
+        : fail("unlisted redirect", { st: gId.status, loc: gId.location })
+    }
+
+    page = await getHtml(`/diaries/not-a-real-slug-${TS}`)
+    page.status === 404 ? pass("missing slug 404s") : fail("missing slug", page.status)
+
+    // Strain + setup get the same treatment: slug at creation, id → 308.
+    const slugStrainName = `Slug Strain ${TS}`
+    r = await callApi("/api/strains", { method: "POST", body: { name: slugStrainName, type: "HYBRID" }, cookie: ownerCookie })
+    const sStrain = r.data?.strain
+    if (sStrain?.id) strainIds.push(sStrain.id)
+    sStrain?.slug === expSlug(slugStrainName, sStrain?.id ?? "", "strain")
+      ? pass("strain created with canonical slug")
+      : fail("strain slug", { s: r.status, slug: sStrain?.slug })
+    if (sStrain?.slug) {
+      const red = await getHtml(`/strains/${sStrain.id}`)
+      red.status === 308 && red.location === `/strains/${sStrain.slug}`
+        ? pass("strain id URL 308s to slug")
+        : fail("strain redirect", { st: red.status, loc: red.location })
+      page = await getHtml(`/strains/${sStrain.slug}`)
+      page.status === 200 ? pass("strain slug URL serves page") : fail("strain slug 200", page.status)
+      const smap = await getHtml("/sitemap.xml")
+      smap.html.includes(`/strains/${sStrain.slug}`) && !smap.html.includes(`/strains/${sStrain.id}<`)
+        ? pass("sitemap emits strain slug URL only")
+        : fail("strain sitemap", sStrain.slug)
+    }
+    page = await getHtml(`/strains/not-a-real-slug-${TS}`)
+    page.status === 404 ? pass("missing strain slug 404s") : fail("missing strain", page.status)
+
+    const slugSetupTitle = `Slug Setup ${TS}`
+    r = await callApi("/api/setups", { method: "POST", body: { title: slugSetupTitle, description: "slug fixture" }, cookie: ownerCookie })
+    const sSetup = r.data?.setup
+    if (sSetup?.id) setupIds.push(sSetup.id)
+    sSetup?.slug === expSlug(slugSetupTitle, sSetup?.id ?? "", "setup")
+      ? pass("setup created with canonical slug")
+      : fail("setup slug", { s: r.status, slug: sSetup?.slug })
+    if (sSetup?.slug) {
+      const red = await getHtml(`/setups/${sSetup.id}`)
+      red.status === 308 && red.location === `/setups/${sSetup.slug}`
+        ? pass("setup id URL 308s to slug")
+        : fail("setup redirect", { st: red.status, loc: red.location })
+      page = await getHtml(`/setups/${sSetup.slug}`)
+      page.status === 200 ? pass("setup slug URL serves page") : fail("setup slug 200", page.status)
+      r = await callApi("/api/setups", { method: "PATCH", body: { id: sSetup.id, title: `Renamed Setup ${TS}` }, cookie: ownerCookie })
+      const renamedSetup = await prisma.growSetup.findUnique({ where: { id: sSetup.id }, select: { slug: true } })
+      r.status === 200 && renamedSetup?.slug === sSetup.slug
+        ? pass("setup rename preserves slug")
+        : fail("setup rename", { s: r.status, slug: renamedSetup?.slug })
+      const smap = await getHtml("/sitemap.xml")
+      smap.html.includes(`/setups/${sSetup.slug}`) && !smap.html.includes(`/setups/${sSetup.id}<`)
+        ? pass("sitemap emits setup slug URL only")
+        : fail("setup sitemap", sSetup.slug)
+    }
+    page = await getHtml(`/setups/not-a-real-slug-${TS}`)
+    page.status === 404 ? pass("missing setup slug 404s") : fail("missing setup", page.status)
+
     // ── Deleted diary 404s ──────────────────────────────────────────
     await prisma.growDiary.update({ where: { id: sd2.id }, data: { deleted: true } })
     page = await getHtml(`/diaries/${sd2.id}`)
@@ -430,6 +602,8 @@ const main = async () => {
     fail("suite error", String(e))
   } finally {
     if (strainId) await prisma.strain.delete({ where: { id: strainId } }).catch(() => {})
+    for (const id of strainIds) await prisma.strain.delete({ where: { id } }).catch(() => {})
+    for (const id of setupIds) await prisma.growSetup.delete({ where: { id } }).catch(() => {})
     for (const id of diaryIds) await prisma.growDiary.delete({ where: { id } }).catch(() => {})
     for (const u of users) await prisma.user.delete({ where: { id: u.id } }).catch(() => {})
     await prisma.rateLimit.deleteMany({ where: { key: { startsWith: "login" } } }).catch(() => {})

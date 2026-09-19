@@ -23,6 +23,7 @@ import { rateLimit } from "@/lib/rate-limit"
 import { claimBotEvent } from "@/lib/terpbot-events"
 import { getBotUserId, sanitizeEcho } from "@/lib/terpbot"
 import { activeAuthor } from "@/lib/security"
+import { diaryPath } from "@/lib/slugs"
 
 // At most this many assist notifications per user per day, and never more
 // than one assist of ANY kind in a rolling 7-day cushion window.
@@ -140,6 +141,10 @@ export async function assistFirstDiary(userId: string, diaryId: string) {
     where: { authorId: userId, deleted: false },
   })
   if (count !== 1) return "skipped"
+  const diary = await prisma.growDiary.findUnique({
+    where: { id: diaryId },
+    select: { id: true, slug: true },
+  })
   return botAssist({
     key: `assist:first-diary:${userId}`,
     kind: "first-diary",
@@ -147,7 +152,7 @@ export async function assistFirstDiary(userId: string, diaryId: string) {
     title: "Your first diary is live",
     content:
       "Weekly updates with photos and numbers (pH, EC, temp/RH) earn +3 rep each and make troubleshooting way easier. Grow guides: /guides",
-    link: `/diaries/${diaryId}`,
+    link: diary ? diaryPath(diary) : "/diaries",
   })
 }
 
@@ -281,7 +286,7 @@ export async function scanStaleDiaries(opts: {
     },
     orderBy: { updatedAt: "asc" },
     take: 100,
-    select: { id: true, title: true, authorId: true, startDate: true, createdAt: true },
+    select: { id: true, slug: true, title: true, authorId: true, startDate: true, createdAt: true },
   })
   if (!diaries.length) return { scanned: 0, sent: 0 }
 
@@ -308,7 +313,7 @@ export async function scanStaleDiaries(opts: {
       userId: d.authorId,
       title: "Your grow is waiting for an update",
       content: `"${sanitizeEcho(d.title, 60)}" hasn't been updated in ${days} days. A weekly update keeps your streak alive and gets better advice — photos + pH/EC readings help most.`,
-      link: `/diaries/${d.id}`,
+      link: diaryPath(d),
     })
     if (r === "sent") sent++
   }

@@ -7,6 +7,7 @@ import { rateLimit } from "@/lib/rate-limit"
 import { notifyMentions } from "@/lib/mentions"
 import { notify } from "@/lib/notify"
 import { checkMaintenance } from "@/lib/maintenance"
+import { setupPath } from "@/lib/slugs"
 import { revalidateTag } from "next/cache"
 
 // POST — comment on a setup: { setupId, content }
@@ -41,6 +42,7 @@ export async function POST(request: Request) {
       where: { id: setupId },
       select: {
         id: true,
+        slug: true,
         title: true,
         authorId: true,
         deleted: true,
@@ -66,13 +68,13 @@ export async function POST(request: Request) {
         type: "COMMENT",
         title: "New comment on your setup",
         content: `@${session.user.name || "Someone"} commented on "${setup.title.slice(0, 60)}"`,
-        link: `/setups/${setupId}#comment-${comment.id}`,
+        link: `${setupPath(setup)}#comment-${comment.id}`,
         actorId: session.user.id,
       })
     }
     await notifyMentions(
       content, session.user.id, session.user.name || "Someone",
-      `/setups/${setupId}#comment-${comment.id}`, `a comment on "${setup.title.slice(0, 50)}"`,
+      `${setupPath(setup)}#comment-${comment.id}`, `a comment on "${setup.title.slice(0, 50)}"`,
       [setup.authorId]
     )
 

@@ -8,6 +8,7 @@ import Link from "next/link"
 import RoleBadge from "@/components/role-badge"
 import TierChip from "@/components/tier-chip"
 import Tooltip from "@/components/ui/tooltip"
+import { diaryPath } from "@/lib/slugs"
 
 export const dynamic = "force-dynamic"
 
@@ -334,7 +335,7 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
                       return (
                         <Link
                           key={`u-${u.id}`}
-                          href={`/diaries/${u.diary.id}`}
+                          href={diaryPath(u.diary)}
                           className="block p-4 hover:bg-secondary/50 transition-colors"
                         >
                           <div className="flex items-start gap-3">
@@ -370,7 +371,7 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
                   {recentDiaryUpdates.map((update) => (
                     <Link
                       key={update.id}
-                      href={`/diaries/${update.diary.id}`}
+                      href={diaryPath(update.diary)}
                       className="block p-4 hover:bg-secondary/50 transition-colors"
                     >
                       <div className="flex items-start gap-3">
@@ -527,7 +528,7 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
                 {trendingDiaries.map((diary) => (
                   <Link
                     key={diary.id}
-                    href={`/diaries/${diary.id}`}
+                    href={diaryPath(diary)}
                     className="block p-4 hover:bg-secondary/50 transition-colors"
                   >
                     <div className="flex items-start gap-3">

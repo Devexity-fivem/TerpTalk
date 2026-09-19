@@ -1,4 +1,5 @@
 import type { JourneyState } from "@/lib/journeys"
+import { diaryPath } from "@/lib/slugs"
 
 export interface NextAction {
   icon: string
@@ -15,7 +16,7 @@ export function pickNextAction(input: {
   journey: JourneyState | null
   rep: number
   nextTier: { name: string; threshold: number } | null
-  staleDiary: { id: string; title: string } | null
+  staleDiary: { id: string; slug: string | null; title: string } | null
   quests: { title: string; done: boolean; paid: boolean }[]
 }): NextAction {
   const { journey, rep, nextTier, staleDiary, quests } = input
@@ -35,7 +36,7 @@ export function pickNextAction(input: {
     return {
       icon: "📓",
       text: `"${staleDiary.title.slice(0, 40)}" hasn't been updated in a few days — log what changed`,
-      href: `/diaries/${staleDiary.id}`,
+      href: diaryPath(staleDiary),
       cta: "Add an update",
     }
   }

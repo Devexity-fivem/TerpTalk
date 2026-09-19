@@ -6,6 +6,7 @@ import { useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import DiaryForm, { DiaryFormData } from "@/components/diary-form"
+import { diaryPath } from "@/lib/slugs"
 
 const EMPTY_FORM: DiaryFormData = {
   title: "",
@@ -68,7 +69,7 @@ export default function NewDiaryClient({
     }
 
     const data = await response.json()
-    router.push(`/diaries/${data.diary.id}`)
+    router.push(diaryPath(data.diary))
   }
 
   return (

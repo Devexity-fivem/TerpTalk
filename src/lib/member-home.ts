@@ -31,6 +31,7 @@ export interface MemberHomeData {
   }[]
   grows: {
     id: string
+    slug: string | null
     title: string
     stageLabel: string
     journey: GrowJourneyState | null
@@ -41,7 +42,7 @@ export interface MemberHomeData {
   sinceLastVisit: {
     unreadThreads: { title: string; slug: string; category: string }[]
     unreadThreadCount: number
-    diaryUpdates: { title: string; diaryTitle: string; diaryId: string; author: string }[]
+    diaryUpdates: { title: string; diaryTitle: string; diaryId: string; diarySlug: string | null; author: string }[]
     unreadNotifications: number
   }
   live: ChatTeaser | null
@@ -73,7 +74,7 @@ export async function getMemberHomeData(userId: string): Promise<MemberHomeData 
           updatedAt: { lt: new Date(Date.now() - 3 * 86400000) },
         },
         orderBy: { updatedAt: "asc" },
-        select: { id: true, title: true },
+        select: { id: true, slug: true, title: true },
       }),
       prisma.growDiary.findMany({
         where: { authorId: userId, deleted: false, harvested: false },
@@ -81,6 +82,7 @@ export async function getMemberHomeData(userId: string): Promise<MemberHomeData 
         take: 3,
         select: {
           id: true,
+          slug: true,
           title: true,
           stage: true,
           updatedAt: true,
@@ -133,7 +135,7 @@ export async function getMemberHomeData(userId: string): Promise<MemberHomeData 
         take: 4,
         select: {
           title: true,
-          diary: { select: { id: true, title: true } },
+          diary: { select: { id: true, slug: true, title: true } },
           author: { select: { name: true, profile: { select: { username: true } } } },
         },
       })
@@ -174,6 +176,7 @@ export async function getMemberHomeData(userId: string): Promise<MemberHomeData 
     })),
     grows: diaries.map((d, i) => ({
       id: d.id,
+      slug: d.slug,
       title: d.title,
       stageLabel:
         journeyStates[i] != null
@@ -195,6 +198,7 @@ export async function getMemberHomeData(userId: string): Promise<MemberHomeData 
         title: u.title,
         diaryTitle: u.diary.title,
         diaryId: u.diary.id,
+        diarySlug: u.diary.slug,
         author: u.author.profile?.username || u.author.name || "a grower",
       })),
       unreadNotifications,

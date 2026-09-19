@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma"
 import { publicUserSelect, activeAuthor } from "@/lib/security"
-import { notFound } from "next/navigation"
+import { notFound, permanentRedirect } from "next/navigation"
 import { Leaf, Calendar, Users, ClipboardCheck, Camera, TrendingUp, Pencil, Sprout, Link2, Lock } from "lucide-react"
 import Link from "next/link"
 import { getServerSession } from "next-auth"
@@ -26,15 +26,18 @@ import { escapeLike, strainFieldMatches, suggestStrainLink } from "@/lib/strain-
 import UserPopover from "@/components/user-popover"
 import { MEDIUM_LABELS, LIGHT_LABELS, TECHNIQUE_LABELS, DIFFICULTY_LABELS } from "@/lib/grow-fields"
 import { canViewDiary, publicDiaryWhere } from "@/lib/diary-visibility"
+import { diaryPath, strainPath, setupPath } from "@/lib/slugs"
 import Tooltip from "@/components/ui/tooltip"
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const [diary, session] = await Promise.all([
-    prisma.growDiary.findUnique({
-      where: { id },
+    prisma.growDiary.findFirst({
+      where: { OR: [{ slug: id }, { id }] },
       select: {
+        id: true,
         title: true,
+        slug: true,
         description: true,
         strain: true,
         deleted: true,
@@ -64,18 +67,18 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
     title: `${diary.title} — Cannabis Grow Diary${diary.strain ? ` (${diary.strain})` : ""}`,
     description: snippet(diary.description || `Cannabis grow diary${diary.strain ? ` — ${diary.strain}` : ""} on TerpTalk.`),
     keywords: [diary.strain || "cannabis", "grow diary", "grow journal"],
-    pathname: `/diaries/${id}`,
+    pathname: diaryPath(diary),
     og: { type: "article" },
   })
 }
 
 async function getDiaryData(id: string, viewerId?: string | null) {
-  const diary = await prisma.growDiary.findUnique({
-    where: { id },
+  const diary = await prisma.growDiary.findFirst({
+    where: { OR: [{ slug: id }, { id }] },
     include: {
       author: { select: { ...publicUserSelect, banned: true, suspendedUntil: true } },
-      strainRef: { select: { id: true, name: true } },
-      setup: { select: { id: true, title: true, deleted: true } },
+      strainRef: { select: { id: true, slug: true, name: true } },
+      setup: { select: { id: true, slug: true, title: true, deleted: true } },
       discussion: { select: { id: true, slug: true, deleted: true } },
       updates: {
         include: {
@@ -97,6 +100,14 @@ async function getDiaryData(id: string, viewerId?: string | null) {
     (diary.author.suspendedUntil && diary.author.suspendedUntil.getTime() > Date.now())
   if (!diary || diary.deleted || authorInactive || !canViewDiary(diary, viewerId)) {
     notFound()
+  }
+
+  // Legacy id URL → canonical slug URL. This runs AFTER the existence,
+  // deletion, and visibility gates above, so a 308 can never leak whether
+  // a PRIVATE diary exists. Rows without a slug (created mid-deploy) keep
+  // serving at their id URL.
+  if (id === diary.id && diary.slug) {
+    permanentRedirect(diaryPath(diary))
   }
 
   return diary
@@ -127,12 +138,12 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
         }))
       : false,
     diary.strain ? suggestStrainLink(diary.strain) : null,
-    getGrowJourney(id),
+    getGrowJourney(diary.id),
     // Lean analytics series — the updates payload above is capped at 100,
     // which would silently drop early history from long grows. This query
     // carries only what the height chart and stage spans need.
     prisma.diaryUpdate.findMany({
-      where: { diaryId: id },
+      where: { diaryId: diary.id },
       select: { id: true, createdAt: true, stage: true, heightCm: true },
       orderBy: { createdAt: "asc" },
       take: 500,
@@ -253,7 +264,7 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
   const truncated = diary._count.updates > updates.length
 
   const diaryBase = process.env.NEXT_PUBLIC_SITE_URL || "https://terp-talk.vercel.app"
-  const diaryUrl = `${diaryBase}/diaries/${diary.id}`
+  const diaryUrl = `${diaryBase}${diaryPath(diary)}`
   const authorName = diary.author.profile?.username || diary.author.name || "Member"
   const diarySchema = {
     "@context": "https://schema.org",
@@ -416,10 +427,11 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
                 {diary.visibility === "PUBLIC" && (
                   <DiaryDiscussButton
                     diaryId={diary.id}
+                    diaryHref={diaryPath(diary)}
                     existingSlug={diary.discussion && !diary.discussion.deleted ? diary.discussion.slug : null}
                   />
                 )}
-                <ShareButtons path={`/diaries/${diary.id}`} title={`${diary.title} — grow diary on TerpTalk`} />
+                <ShareButtons path={diaryPath(diary)} title={`${diary.title} — grow diary on TerpTalk`} />
                 {canEdit && (
                   <Tooltip content="Edit diary">
                     <Link
@@ -583,7 +595,7 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
               <div>
                 <span className="text-sm text-muted-foreground">Strain:</span>
                 {strainLink ? (
-                  <Link href={`/strains/${strainLink.id}`} className="font-medium text-primary hover:underline block">
+                  <Link href={strainPath(strainLink)} className="font-medium text-primary hover:underline block">
                     {diary.strain}
                   </Link>
                 ) : (
@@ -594,7 +606,7 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
             {diary.setup && !diary.setup.deleted && (
               <div>
                 <span className="text-sm text-muted-foreground">Setup:</span>
-                <Link href={`/setups/${diary.setup.id}`} className="font-medium text-primary hover:underline block">
+                <Link href={setupPath(diary.setup)} className="font-medium text-primary hover:underline block">
                   {diary.setup.title}
                 </Link>
               </div>
@@ -819,7 +831,7 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
                     {moreFromAuthor.map((d) => (
                       <Link
                         key={d.id}
-                        href={`/diaries/${d.id}`}
+                        href={diaryPath(d)}
                         className="flex items-start gap-3 p-3 bg-card rounded-lg border border-border hover:border-primary/40 transition-colors"
                       >
                         {d.updates[0]?.images[0]?.url ? (
@@ -852,7 +864,7 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
                     {similarGrows.map((d) => (
                       <Link
                         key={d.id}
-                        href={`/diaries/${d.id}`}
+                        href={diaryPath(d)}
                         className="flex items-start gap-3 p-3 bg-card rounded-lg border border-border hover:border-primary/40 transition-colors"
                       >
                         {d.updates[0]?.images[0]?.url ? (

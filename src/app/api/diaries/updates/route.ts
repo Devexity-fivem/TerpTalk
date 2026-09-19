@@ -9,6 +9,7 @@ import { checkMaintenance } from "@/lib/maintenance"
 import { notifyMany } from "@/lib/notify"
 import { revalidateTag } from "next/cache"
 import { diaryDay, diaryWeek } from "@/lib/diary-weeks"
+import { diaryPath } from "@/lib/slugs"
 import { evaluateGrowJourney } from "@/lib/grow-journey"
 import { rateLimit } from "@/lib/rate-limit"
 import {
@@ -235,7 +236,7 @@ export async function POST(request: Request) {
           // Deep-link to the week section — derive the anchor the same way
           // the page does (createdAt vs startDate); client-supplied
           // weekNumber is never trusted for display grouping.
-          link: `/diaries/${diaryId}#week-${diaryWeek(diary.startDate, update.createdAt)}`,
+          link: `${diaryPath(diary)}#week-${diaryWeek(diary.startDate, update.createdAt)}`,
           actorId: session.user.id,
           // Throttle fan-out like thread-follow notifications — rapid
           // update bursts shouldn't spam followers.

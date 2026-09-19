@@ -9,6 +9,7 @@ import { LIKE_MIN_ACTOR_AGE_HOURS } from "@/lib/reputation-config"
 import { checkMaintenance } from "@/lib/maintenance"
 import { notify, postDeepLink } from "@/lib/notify"
 import { canViewDiary } from "@/lib/diary-visibility"
+import { diaryPath } from "@/lib/slugs"
 
 const VALID_REACTION_TYPES = new Set(["LIKE", "LOVE", "LAUGH", "THINKING", "FIRE", "THUMBS_UP", "THUMBS_DOWN"])
 
@@ -85,13 +86,13 @@ export async function POST(request: Request) {
     } else if (hasDiaryId) {
       const diary = await prisma.growDiary.findUnique({
         where: { id: diaryId, deleted: false },
-        select: { authorId: true, title: true, visibility: true },
+        select: { id: true, slug: true, authorId: true, title: true, visibility: true },
       })
       if (!diary || !canViewDiary(diary, session.user.id)) {
         return NextResponse.json({ error: "Diary not found" }, { status: 404 })
       }
       targetAuthorId = diary.authorId
-      targetLink = `/diaries/${diaryId}`
+      targetLink = diaryPath(diary)
       targetTitle = diary.title
     }
 
