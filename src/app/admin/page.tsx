@@ -26,6 +26,11 @@ interface Stats {
   resolvedReports: number; dismissedReports: number
   moderationActions: number; newModerationActions: number
   securityEvents24h: number; newSecurityEvents: number
+  referrals: {
+    referredProfiles: number; paidKeyed: number; legacyUnkeyed: number
+    reversed: number; eligibleUnpaid: { username: string; reputation: number }[]
+  }
+  cron: { date: string; tasksDone: number; tasksPending: string[]; lastRunDate: string | null }
 }
 interface AdminUser {
   id: string; username: string; role: string; banned: boolean
@@ -289,6 +294,30 @@ export default function AdminPage() {
                   <div className="text-xs text-muted-foreground">{s.label}</div>
                 </div>
               ))}
+            </div>
+
+            {/* Launch health: referral pipeline + cron status */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+              <div className="bg-card rounded-xl border border-border p-4">
+                <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">Referral Pipeline</div>
+                <div className="text-sm space-y-1">
+                  <div>{stats.referrals.referredProfiles} referred · {stats.referrals.paidKeyed} paid · {stats.referrals.legacyUnkeyed} legacy · {stats.referrals.reversed} reversed</div>
+                  {stats.referrals.eligibleUnpaid.length > 0 ? (
+                    <div className="text-amber-500">
+                      Eligible, unpaid: {stats.referrals.eligibleUnpaid.map((e) => `${e.username} (${e.reputation})`).join(", ")}
+                    </div>
+                  ) : (
+                    <div className="text-muted-foreground">No eligible unpaid referrals</div>
+                  )}
+                </div>
+              </div>
+              <div className="bg-card rounded-xl border border-border p-4">
+                <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">Cron Health</div>
+                <div className="text-sm space-y-1">
+                  <div>Last run date: {stats.cron.lastRunDate ?? "never"}</div>
+                  <div>Today ({stats.cron.date}): {stats.cron.tasksDone} tasks done{stats.cron.tasksPending.length > 0 ? `, pending: ${stats.cron.tasksPending.join(", ")}` : ""}</div>
+                </div>
+              </div>
             </div>
           </div>
         )}

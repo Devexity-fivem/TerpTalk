@@ -34,6 +34,11 @@ export default function SignInPage() {
 
       if (result?.error === "AccountBanned" || result?.error === "AccountSuspended") {
         setError("restricted")
+      } else if (result?.error && /too many/i.test(result.error)) {
+        // The login rate limit trips on the attempted username regardless of
+        // whether the account exists, so distinguishing it leaks nothing —
+        // and a throttled member needs "wait" guidance, not "wrong password".
+        setError("Too many attempts. Please try again later.")
       } else if (result?.error) {
         setError("Invalid username or password")
       } else {

@@ -104,10 +104,13 @@ export const authOptions: NextAuthOptions = {
         })
 
         if (!user || !user.password) {
-          // Uniform error — do not reveal whether the account exists
+          // Uniform error — do not reveal whether the account exists.
+          // userFound is internal-only metadata (SecurityEvent is never
+          // user-visible) so transient lookup misses stay diagnosable
+          // without changing what the client is told.
           await logSecurityEvent("LOGIN_FAILURE", {
             userAgent: (req?.headers as Record<string, string> | undefined)?.["user-agent"] ?? null,
-            metadata: { reason: "invalid_credentials" },
+            metadata: { reason: "invalid_credentials", userFound: !!user },
           })
           throw new Error("Invalid credentials")
         }

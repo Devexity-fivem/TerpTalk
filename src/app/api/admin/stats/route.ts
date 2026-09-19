@@ -3,6 +3,7 @@ import { requireAdmin } from "@/lib/require-staff"
 import { prisma } from "@/lib/prisma"
 import { forbidden } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
+import { REFERRAL_MIN_AGE_HOURS, REFERRAL_MIN_REP } from "@/lib/reputation-config"
 
 const ALLOWED_RANGES = new Set(["today", "7", "30", "all"])
 
@@ -97,6 +98,62 @@ export async function GET(request: Request) {
     prisma.securityEvent.count({ where: { createdAt: { gt: since } } }),
   ])
 
+  // ── Referral diagnostic ─────────────────────────────────────────
+  // Mirrors reconcileReferralPayouts eligibility exactly so the dashboard
+  // can distinguish: new referral vs paid (keyed) vs legacy (unkeyed) vs
+  // reversed vs eligible-but-unpaid. Same constants, same active-event test.
+  const referralCutoff = new Date(now.getTime() - REFERRAL_MIN_AGE_HOURS * 60 * 60 * 1000)
+  const [referredProfiles, referralEvents, eligibleCandidates] = await Promise.all([
+    prisma.profile.count({ where: { referredById: { not: null } } }),
+    prisma.reputationEvent.findMany({
+      where: { type: "REFERRAL" },
+      select: { key: true, userId: true, amount: true, reversedAt: true, createdAt: true },
+    }),
+    prisma.profile.findMany({
+      where: {
+        referredById: { not: null },
+        reputation: { gte: REFERRAL_MIN_REP },
+        user: { createdAt: { lte: referralCutoff } },
+      },
+      select: {
+        userId: true, username: true, reputation: true, referredById: true,
+        user: { select: { createdAt: true } },
+      },
+      take: 50,
+    }),
+  ])
+  // Same gates as payReferralBonus: keyed payout, legacy unkeyed payout
+  // (unkeyed REFERRAL on the referrer stamped at referee signup time), and
+  // self-referrals all count as settled.
+  const referrerIds = [...new Set(eligibleCandidates.map((c) => c.referredById).filter((x): x is string => !!x))]
+  const referrers = referrerIds.length
+    ? await prisma.profile.findMany({ where: { id: { in: referrerIds } }, select: { id: true, userId: true } })
+    : []
+  const refUserByProfileId = new Map(referrers.map((r) => [r.id, r.userId]))
+  const paidKeys = new Set(
+    referralEvents.filter((e) => e.key && !e.reversedAt).map((e) => e.key)
+  )
+  const legacyEvents = referralEvents.filter((e) => !e.key && !e.reversedAt)
+  const eligibleUnpaid = eligibleCandidates.filter((c) => {
+    if (paidKeys.has(`referral:${c.userId}`)) return false
+    const referrerUserId = c.referredById ? refUserByProfileId.get(c.referredById) : undefined
+    if (!referrerUserId || referrerUserId === c.userId) return false
+    const t = c.user.createdAt.getTime()
+    return !legacyEvents.some(
+      (e) => e.userId === referrerUserId && e.createdAt.getTime() >= t - 60_000 && e.createdAt.getTime() <= t + 600_000
+    )
+  })
+
+  // ── Cron health ─────────────────────────────────────────────────
+  // runCronTask claims land as Setting rows keyed "<task>:<UTC-date>".
+  // Check today + yesterday: done = value "1", pending = stale/failed claims.
+  const dayKeys = [0, 1].map((d) => new Date(now.getTime() - d * 86400000).toISOString().slice(0, 10))
+  const cronRows = await prisma.setting.findMany({
+    where: { OR: dayKeys.map((d) => ({ key: { endsWith: `:${d}` } })) },
+    select: { key: true, value: true },
+  })
+  const cronToday = cronRows.filter((r) => r.key.endsWith(`:${dayKeys[0]}`))
+
   return NextResponse.json({
     range,
     stats: {
@@ -122,6 +179,19 @@ export async function GET(request: Request) {
       newModerationActions,
       securityEvents24h,
       newSecurityEvents,
+      referrals: {
+        referredProfiles,
+        paidKeyed: referralEvents.filter((e) => e.key && !e.reversedAt).length,
+        legacyUnkeyed: referralEvents.filter((e) => !e.key && !e.reversedAt).length,
+        reversed: referralEvents.filter((e) => e.reversedAt).length,
+        eligibleUnpaid: eligibleUnpaid.map((c) => ({ username: c.username, reputation: c.reputation })),
+      },
+      cron: {
+        date: dayKeys[0],
+        tasksDone: cronToday.filter((r) => r.value === "1").length,
+        tasksPending: cronToday.filter((r) => r.value !== "1").map((r) => r.key),
+        lastRunDate: cronRows.length ? cronRows.map((r) => r.key.split(":").pop()!).sort().pop()! : null,
+      },
     },
   })
 }

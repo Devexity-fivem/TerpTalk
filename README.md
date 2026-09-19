@@ -37,23 +37,20 @@ Never run `migrate reset` or destructive commands against production. Use `npx p
 
 **Test safety:** every mutation-capable script under `scripts/` imports `db-guard.mjs`, which refuses to run when `DATABASE_URL` resolves to the production endpoint. `ALLOW_PRODUCTION_DB_TESTS=1` overrides it — never set it casually.
 
-**Production migrations (Neon):** `migrate deploy` is not part of the Vercel build — run it manually against the **direct** Neon endpoint, not the `-pooler` URL (PgBouncer transaction pooling breaks the advisory locks Prisma uses). In the Neon dashboard the direct host is the same endpoint minus `-pooler` from the hostname:
+**Production migrations run inside the Vercel build.** `vercel-build` = `node scripts/prebuild-migrate.mjs && prisma generate && next build`. The gate (`scripts/prebuild-migrate.mjs`):
+
+- Runs **only when `VERCEL_ENV=production`** (or `MIGRATE_ON_BUILD=1`); preview/local builds skip it — a preview can never migrate prod.
+- Prefers the **unpooled** connection (`DATABASE_URL_UNPOOLED` → `POSTGRES_URL_NON_POOLING` → `DIRECT_URL` → `DATABASE_URL`) — PgBouncer transaction pooling breaks Prisma's advisory locks.
+- Sweeps stale *idle* sessions holding the migrate lock (>60s) before running — leaked sessions once deadlocked deploys.
+- Runs `prisma migrate deploy`, retries once, and **exits nonzero on failure** — `next build` never runs, the deployment never promotes, and the previous deployment keeps serving. No code/schema mismatch is possible.
+
+Order is therefore automatic: migrate → verify schema → build → promote. You never run prod migrations manually.
+
+If you ever need a manual migration (disaster recovery), use the **direct** Neon endpoint (same host minus `-pooler`):
 
 ```bash
 DATABASE_URL="postgresql://USER:PASSWORD@ep-XXXX.us-east-1.aws.neon.tech/neondb?sslmode=require" npx prisma migrate deploy
 ```
-
-Then push the deploy. App runtime keeps using the pooled `DATABASE_URL`.
-
-**Deployment ordering for schema-dependent changes — migrate BEFORE deploying code.** When a commit both adds a migration and changes code that reads the new columns, this order is required:
-
-1. Create/test the migration locally against `dev`
-2. Apply it to production (`migrate deploy`, direct endpoint)
-3. Verify with `npx prisma migrate status` → "Database schema is up to date"
-4. Push/deploy the application code
-5. Smoke-test production
-
-Why it matters: `next build` prerenders pages (e.g. `/diaries`) **against the production database at build time**, and the generated Prisma client already selects the new columns. If code deploys before the migration, the build fails with `P2022: The column ... does not exist` — or worse, runtime 500s on any route touching the new fields. The reverse order is always safe: additive migrations (nullable columns, new indexes) don't break the currently-deployed old code.
 
 ## Testing
 
@@ -84,6 +81,35 @@ This project uses Vercel with two environments:
 ```
 
 Avoid pushing directly to `master` repeatedly. Each `master` build uses Vercel Functions Storage, and failed/skipped builds should be cleaned up from the Vercel dashboard regularly.
+
+## Launch checklist
+
+Per deployment — short enough to actually run:
+
+```bash
+git status && git rev-parse HEAD          # clean tree, HEAD == origin/master
+npm run test:master                       # authoritative suite
+npx tsc --noEmit && npm run lint          # types + lint
+npm audit --audit-level=high              # 0 expected
+git push origin master                    # triggers Vercel
+```
+
+Then verify the deploy:
+
+1. `npx vercel ls terp-talk --prod` → newest deployment READY, and the build log shows `[prebuild-migrate]` running before `next build` (or skipping with a reason on non-prod).
+2. `curl -s -o /dev/null -w "%{http_code}" https://terp-talk.vercel.app` → 200.
+3. Migrations: `npx prisma migrate status` against the prod endpoint → up to date.
+4. Smoke: `/auth/signin`, `/forum`, `/chat`, `/notifications` render; TerpBot `/help` answers in chat.
+5. Referral sanity: admin → Overview → "Referral Pipeline" — `eligible unpaid` should only list genuinely qualifying referrals.
+6. Cron: admin → Overview → "Cron Health" — today's tasks done, `lastRunDate` fresh. If cron dies, the daily digest/tip/sweep silently stop — this card is the tripwire.
+7. Rollback: promote the previous READY deployment in the Vercel dashboard (`vercel promote` or Aliases). DB migrations are additive — a code rollback is safe; never `migrate reset` prod.
+
+## Operations notes
+
+- **Cron:** one daily job — `GET /api/cron/terpbot` at 14:00 UTC (`vercel.json`, secured by `CRON_SECRET`). Per-task claims land as `Setting` rows (`<task>:<UTC-date>`); a failed task releases its claim and retries next run. Tasks: digest, grow tip, notification cleanup, dormant-member scan, stale-diary nudges, referral sweep, safety signal scan.
+- **Referrals:** signup writes `referredById` + a "joined using your referral link" notification (no instant award). The bonus pays later — once the referee reaches 25 rep and is 24h old — via `payReferralBonus` (keyed `referral:<refereeId>`, weekly cap, legacy unkeyed-payout detection). Both the post-award trigger and the daily `reputation:referral-sweep` cron call the same canonical path.
+- **Where to look when prod hurts:** `SecurityEvent` (auth failures, rate limits, registrations, deletions — `metadata.reason` distinguishes causes, `userFound` separates lookup misses from bad passwords), `BotEvent` (TerpBot command/announcement telemetry), `RateLimit` (live throttle keys), `Setting` rows (cron claims), Vercel function logs (everything else — short retention).
+- **Key env vars (prod):** `DATABASE_URL` + `DATABASE_URL_UNPOOLED` (Neon main), `NEXTAUTH_SECRET`, `NEXTAUTH_URL`, `IP_HASH_SALT`, Pusher set (`PUSHER_*` + `NEXT_PUBLIC_PUSHER_*`), `CRON_SECRET`, `TURNSTILE_SECRET_KEY` + `NEXT_PUBLIC_TURNSTILE_SITE_KEY` (signup protection), `BLOB_READ_WRITE_TOKEN` (uploads).
 
 ## Project structure
 
