@@ -155,7 +155,7 @@ async function run() {
     select: { content: true },
   })
   ok(!!qualNotif, "payout notification is delivered")
-  ok(qualNotif?.content.includes(`@${P}_qual`), "payout notification names the actual invitee", qualNotif?.content)
+  ok(!!qualNotif?.content?.includes(`@${P}_qual`), "payout notification names the actual invitee", qualNotif?.content)
   const mainPayouts = await prisma.reputationEvent.count({
     where: { userId: referrerMain.id, type: "REFERRAL", reversedAt: null },
   })
