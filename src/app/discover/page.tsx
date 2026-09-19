@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma"
-import { publicUserSelect, activeAuthor } from "@/lib/security"
+import { publicUserSelect, activeAuthor, blockedUserIds, notBlockedAuthor } from "@/lib/security"
 import { signInHref } from "@/lib/callback-url"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
@@ -23,6 +23,8 @@ function threadScore(t: { views: number; replyCount: number; createdAt: Date }) 
 }
 
 async function getDiscoverData(tab: string, userId?: string) {
+  const blockedIds = await blockedUserIds(userId)
+  const noBlocked = notBlockedAuthor(blockedIds)
   const include = {
     author: { select: publicUserSelect },
     category: { select: { name: true, slug: true } },
@@ -39,7 +41,7 @@ async function getDiscoverData(tab: string, userId?: string) {
     })
     const followingIds = follows.map((f) => f.followingId)
     const threads = await prisma.thread.findMany({
-      where: { deleted: false, category: { hidden: false }, authorId: { in: followingIds }, author: activeAuthor() },
+      where: { deleted: false, category: { hidden: false }, authorId: { in: followingIds, ...(blockedIds.length ? { notIn: blockedIds } : {}) }, author: activeAuthor() },
       take: 50,
       orderBy: { createdAt: "desc" },
       include,
@@ -50,7 +52,7 @@ async function getDiscoverData(tab: string, userId?: string) {
   if (tab === "trending") {
     const oneWeekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
     const candidates = await prisma.thread.findMany({
-      where: { deleted: false, category: { hidden: false }, createdAt: { gte: oneWeekAgo }, author: activeAuthor() },
+      where: { deleted: false, category: { hidden: false }, createdAt: { gte: oneWeekAgo }, author: activeAuthor(), ...noBlocked },
       take: 100,
       include,
     })
@@ -63,7 +65,7 @@ async function getDiscoverData(tab: string, userId?: string) {
 
   // default latest
   const threads = await prisma.thread.findMany({
-    where: { deleted: false, category: { hidden: false }, author: activeAuthor() },
+    where: { deleted: false, category: { hidden: false }, author: activeAuthor(), ...noBlocked },
     take: 50,
     orderBy: { createdAt: "desc" },
     include,

@@ -1,6 +1,6 @@
 import { Fragment } from "react"
 import { prisma } from "@/lib/prisma"
-import { publicUserSelect, isModerator, activeAuthor } from "@/lib/security"
+import { publicUserSelect, isModerator, activeAuthor, blockedUserIds, notBlockedAuthor } from "@/lib/security"
 import { notFound, redirect } from "next/navigation"
 import { MessageSquare, Users, Clock, CheckCircle2, Eye, BookOpen } from "lucide-react"
 import Link from "next/link"
@@ -51,7 +51,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
 
 const POSTS_PER_PAGE = 50
 
-async function getThreadData(slug: string, page: number, canSeeHidden: boolean) {
+async function getThreadData(slug: string, page: number, canSeeHidden: boolean, viewerId?: string, blockedIds: string[] = []) {
   const thread = await prisma.thread.findUnique({
     where: { slug },
     include: {
@@ -74,7 +74,7 @@ async function getThreadData(slug: string, page: number, canSeeHidden: boolean) 
         },
       },
       posts: {
-        where: { deleted: false, author: activeAuthor() },
+        where: { deleted: false, author: activeAuthor(), ...notBlockedAuthor(blockedIds) },
         include: {
           author: { select: publicUserSelect },
           reactions: { select: { userId: true, type: true } },
@@ -84,7 +84,7 @@ async function getThreadData(slug: string, page: number, canSeeHidden: boolean) 
         skip: (page - 1) * POSTS_PER_PAGE,
         take: POSTS_PER_PAGE,
       },
-      _count: { select: { posts: { where: { deleted: false, author: activeAuthor() } } } },
+      _count: { select: { posts: { where: { deleted: false, author: activeAuthor(), ...notBlockedAuthor(blockedIds) } } } },
       // Canonical diary this thread discusses (0-1) — surfaced as a context card.
       diaryFor: {
         select: {
@@ -94,6 +94,8 @@ async function getThreadData(slug: string, page: number, canSeeHidden: boolean) 
           stage: true,
           harvested: true,
           deleted: true,
+          visibility: true,
+          authorId: true,
           author: { select: { ...publicUserSelect, banned: true, suspendedUntil: true } },
         },
       },
@@ -110,11 +112,14 @@ async function getThreadData(slug: string, page: number, canSeeHidden: boolean) 
     notFound()
   }
 
-  // Diary context card — hidden when the linked diary is gone or its
-  // author is suspended/banned (mirrors the diary page's own gate).
+  // Diary context card — hidden when the linked diary is gone, its author
+  // is suspended/banned, or the diary isn't PUBLIC (the card would leak
+  // the title/link of an UNLISTED or PRIVATE grow). The diary's own author
+  // still sees it.
   if (thread.diaryFor) {
     const a = thread.diaryFor.author
-    if (thread.diaryFor.deleted || a.banned || (a.suspendedUntil && a.suspendedUntil.getTime() > Date.now())) {
+    const notPublic = thread.diaryFor.visibility !== "PUBLIC" && thread.diaryFor.authorId !== viewerId
+    if (thread.diaryFor.deleted || a.banned || (a.suspendedUntil && a.suspendedUntil.getTime() > Date.now()) || notPublic) {
       thread.diaryFor = null
     }
   }
@@ -140,7 +145,8 @@ export default async function ThreadPage({
   const page = Math.max(1, Math.min(10_000, parseInt(pageParam || "1") || 1))
   const session = await getServerSession(authOptions)
   const currentUserId = session?.user?.id
-  const { thread, totalPostRows } = await getThreadData(slug, page, isModerator(session?.user?.role))
+  const blockedIds = await blockedUserIds(currentUserId)
+  const { thread, totalPostRows } = await getThreadData(slug, page, isModerator(session?.user?.role), currentUserId, blockedIds)
 
   // Deep-link resolution: `?post=` finds the page holding the target post
   // and redirects there so the #post-{id} anchor exists in the rendered
@@ -172,6 +178,11 @@ export default async function ThreadPage({
       ? { ...p, reactions: p.reactions.map((r) => ({ userId: r.userId === currentUserId ? r.userId : "", type: r.type })) }
       : p
   thread.posts = thread.posts.map(scrubReactions)
+  // The accepted-answer pointer stays intact — a blocked author's answer
+  // just isn't rendered.
+  if (thread.acceptedAnswer && blockedIds.includes(thread.acceptedAnswer.authorId)) {
+    thread.acceptedAnswer = null
+  }
   if (thread.acceptedAnswer) thread.acceptedAnswer = scrubReactions(thread.acceptedAnswer)
 
   const totalPages = Math.max(1, Math.ceil(thread._count.posts / POSTS_PER_PAGE))
@@ -182,6 +193,7 @@ export default async function ThreadPage({
       id: { not: thread.id },
       category: { hidden: false },
       author: activeAuthor(),
+      ...notBlockedAuthor(blockedIds),
       OR: [
         { categoryId: thread.categoryId },
         ...(tagIds.length > 0 ? [{ tags: { some: { tagId: { in: tagIds } } } }] : []),

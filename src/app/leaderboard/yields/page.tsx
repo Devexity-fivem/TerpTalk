@@ -8,6 +8,7 @@ import { Avatar } from "@/components/ui/avatar"
 import { buildMetadata } from "@/lib/seo"
 import EmptyState from "@/components/empty-state"
 import TierChip from "@/components/tier-chip"
+import { publicDiaryWhere } from "@/lib/diary-visibility"
 
 export const revalidate = 300
 
@@ -23,6 +24,7 @@ const getYieldDiaries = unstable_cache(
       where: {
         harvested: true,
         deleted: false,
+        ...publicDiaryWhere,
         author: { ...activeAuthor(), profile: { publicMilestoneOptOut: false } },
         yieldAmount: { not: null },
         strain: { not: null },

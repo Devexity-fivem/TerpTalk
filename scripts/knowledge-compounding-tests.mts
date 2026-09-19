@@ -8,6 +8,7 @@ import { strict as assert } from "node:assert"
 import { prisma } from "@/lib/prisma"
 import { activeAuthor } from "@/lib/security"
 import { escapeLike, strainFieldMatches } from "@/lib/strain-stats"
+import { publicDiaryWhere } from "@/lib/diary-visibility"
 import { parseMediumType, parseLightType, parseTechniques, parseHarvestDifficulty, TECHNIQUES } from "@/lib/grow-fields"
 import { SYMPTOM_TAGS, wizardResultToTag, isValidWizardResultId } from "@/lib/symptom-tags"
 import { WIZARD_RESULTS } from "@/lib/problem-wizard"
@@ -61,6 +62,7 @@ async function unionDiaries(strainName: string, strainId: string) {
     where: {
       deleted: false,
       author: activeAuthor(),
+      ...publicDiaryWhere,
       OR: [
         { strainId },
         { strain: { contains: escapeLike(strainName), mode: "insensitive" } },
@@ -249,7 +251,7 @@ await check("member review selection is deterministic — newest first, stable a
   const newer = await mkDiary(u.id, { strainId: s.id, strain: s.name, harvested: true, harvestNotes: "new note" })
   // Replica of strain-stats review selection: newest first, id tiebreak.
   const run = () => prisma.growDiary.findMany({
-    where: { deleted: false, author: activeAuthor(), OR: [{ strainId: s.id }, { strain: { contains: escapeLike(s.name), mode: "insensitive" } }] },
+    where: { deleted: false, author: activeAuthor(), ...publicDiaryWhere, OR: [{ strainId: s.id }, { strain: { contains: escapeLike(s.name), mode: "insensitive" } }] },
     orderBy: [{ createdAt: "desc" }, { id: "asc" }],
     take: 500,
     select: { id: true, strain: true, strainId: true, harvestNotes: true },
@@ -280,6 +282,20 @@ await check("deleted diaries and banned authors drop out of the union", async ()
   assert.ok(ids.includes(live.id))
   assert.ok(!ids.includes(dead.id), "deleted diary excluded")
   assert.ok(!ids.includes(bannedDiary.id), "banned author's diary excluded")
+})
+
+await check("non-public diaries drop out of strain aggregates", async () => {
+  const u = await mkUser("visagg")
+  const s = await prisma.strain.create({ data: { name: `__test_kc_VisAgg_${tag}`, createdById: u.id } })
+  cleanup.strainIds.push(s.id)
+  const pub = await mkDiary(u.id, { strainId: s.id, strain: s.name, harvested: true, harvestedAt: new Date(), yieldAmount: 100, yieldUnit: "g" })
+  const unl = await mkDiary(u.id, { strainId: s.id, strain: s.name, harvested: true, harvestedAt: new Date(), yieldAmount: 100, yieldUnit: "g", visibility: "UNLISTED" })
+  const prv = await mkDiary(u.id, { strainId: s.id, strain: s.name, harvested: true, harvestedAt: new Date(), yieldAmount: 100, yieldUnit: "g", visibility: "PRIVATE" })
+  const matched = await unionDiaries(s.name, s.id)
+  const ids = matched.map((x) => x.id)
+  assert.ok(ids.includes(pub.id), "public harvested diary contributes")
+  assert.ok(!ids.includes(unl.id), "unlisted diary excluded from aggregates")
+  assert.ok(!ids.includes(prv.id), "private diary excluded from aggregates")
 })
 
 await check("strain hard-delete SetNulls diary.strainId without touching the diary", async () => {

@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma"
-import { publicUserSelect, isModerator, activeAuthor } from "@/lib/security"
+import { publicUserSelect, isModerator, activeAuthor, blockedUserIds } from "@/lib/security"
 import { unstable_cache } from "next/cache"
 import { notFound } from "next/navigation"
 import { MessageSquare, Users, Clock, Pin, Lock, CheckCircle2, BookOpen } from "lucide-react"
@@ -97,6 +97,13 @@ export default async function CategoryPage({
   const session = await getServerSession(authOptions)
   // Hidden categories are unlisted, not public — 404 for non-moderators.
   if (category.hidden && !isModerator(session?.user?.role)) notFound()
+  // The cached payload is global — drop threads by authors the viewer
+  // has blocked or been blocked by (post-filter; counts/pagination stay
+  // cache-based).
+  const blockedIds = await blockedUserIds(session?.user?.id)
+  if (blockedIds.length) {
+    category.threads = category.threads.filter((t) => !blockedIds.includes(t.authorId))
+  }
   const isFollowing = session?.user?.id
     ? !!(await prisma.categoryFollow.findUnique({
         where: { userId_categoryId: { userId: session.user.id, categoryId: category.id } },

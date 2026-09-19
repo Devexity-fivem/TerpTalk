@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma"
-import { publicUserSelect, activeAuthor } from "@/lib/security"
+import { publicUserSelect, activeAuthor, blockedUserIds, notBlockedAuthor } from "@/lib/security"
+import { publicDiaryWhere } from "@/lib/diary-visibility"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { Leaf, MessageSquare, TrendingUp, Calendar, Users, UserPlus } from "lucide-react"
@@ -36,6 +37,10 @@ async function getFeedData(userId?: string, tab = "latest") {
     followedCategoryIds = categoryFollows.map((f) => f.categoryId)
   }
 
+  // Authors the viewer has blocked or been blocked by never appear.
+  const blockedIds = await blockedUserIds(userId)
+  const noBlocked = notBlockedAuthor(blockedIds)
+
   // Cold start: a signed-in user on a personal tab with zero follows falls
   // back to global content instead of an empty feed — decided before
   // querying, so no extra queries run.
@@ -43,17 +48,35 @@ async function getFeedData(userId?: string, tab = "latest") {
     personal && !!userId &&
     followingIds.length === 0 && followedDiaryIds.length === 0 && followedCategoryIds.length === 0
 
+  // Visibility: global tabs are PUBLIC-only. On the Following tab a member
+  // sees PUBLIC rows from followed authors, plus PUBLIC|UNLISTED rows for
+  // diaries they explicitly followed (they already hold the link).
   const updateWhere = personal && !coldStart
-    ? { diary: { deleted: false, author: activeAuthor() }, OR: [{ authorId: { in: followingIds } }, { diaryId: { in: followedDiaryIds } }] }
-    : { diary: { deleted: false, author: activeAuthor() } }
+    ? {
+        diary: { deleted: false, author: activeAuthor() },
+        ...noBlocked,
+        OR: [
+          { authorId: { in: followingIds }, diary: { visibility: "PUBLIC" } },
+          { diaryId: { in: followedDiaryIds }, diary: { visibility: { in: ["PUBLIC", "UNLISTED"] } } },
+        ],
+      }
+    : { diary: { deleted: false, author: activeAuthor(), ...publicDiaryWhere }, ...noBlocked }
   const threadWhere = personal && !coldStart
     ? tab === "following"
-      ? { deleted: false, category: { hidden: false }, author: activeAuthor(), authorId: { in: followingIds } }
-      : { deleted: false, category: { hidden: false }, author: activeAuthor(), OR: [{ authorId: { in: followingIds } }, { categoryId: { in: followedCategoryIds } }] }
-    : { deleted: false, category: { hidden: false }, author: activeAuthor() }
+      ? { deleted: false, category: { hidden: false }, author: activeAuthor(), authorId: { in: followingIds, ...(blockedIds.length ? { notIn: blockedIds } : {}) } }
+      : { deleted: false, category: { hidden: false }, author: activeAuthor(), OR: [{ authorId: { in: followingIds } }, { categoryId: { in: followedCategoryIds } }], ...noBlocked }
+    : { deleted: false, category: { hidden: false }, author: activeAuthor(), ...noBlocked }
   const diaryWhere = personal && !coldStart
-    ? { deleted: false, author: activeAuthor(), OR: [{ authorId: { in: followingIds } }, { followers: { some: { userId } } }] }
-    : { deleted: false, author: activeAuthor() }
+    ? {
+        deleted: false,
+        author: activeAuthor(),
+        ...noBlocked,
+        OR: [
+          { ...publicDiaryWhere, authorId: { in: followingIds } },
+          { followers: { some: { userId } }, visibility: { in: ["PUBLIC", "UNLISTED"] } },
+        ],
+      }
+    : { deleted: false, author: activeAuthor(), ...publicDiaryWhere, ...noBlocked }
 
   // Get recent activity from various sources
   const recentDiaryUpdates = await prisma.diaryUpdate.findMany({
@@ -127,7 +150,7 @@ async function getFeedData(userId?: string, tab = "latest") {
   const [memberCount, threadCount, diaryCount, popularCategories] = await Promise.all([
     prisma.user.count({ where: activeAuthor() }),
     prisma.thread.count({ where: { deleted: false, category: { hidden: false }, author: activeAuthor() } }),
-    prisma.growDiary.count({ where: { deleted: false, author: activeAuthor() } }),
+    prisma.growDiary.count({ where: { deleted: false, author: activeAuthor(), ...publicDiaryWhere } }),
     prisma.category.findMany({
       where: { hidden: false },
       take: 4,

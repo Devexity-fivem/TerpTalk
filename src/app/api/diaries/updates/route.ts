@@ -217,8 +217,9 @@ export async function POST(request: Request) {
     await checkBadges(session.user.id).catch(() => {})
 
     // Notify diary followers (not the author) — notifyMany filters
-    // prefs, banned recipients, and blocks in bulk.
-    const followers = await prisma.diaryFollow.findMany({
+    // prefs, banned recipients, and blocks in bulk. PRIVATE diaries never
+    // fan out; UNLISTED followers already hold the link.
+    const followers = diary.visibility === "PRIVATE" ? [] : await prisma.diaryFollow.findMany({
       where: { diaryId, userId: { not: session.user.id } },
       select: { userId: true },
       take: 5000,

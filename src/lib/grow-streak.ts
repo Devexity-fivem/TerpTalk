@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
 
 // Streak = consecutive UTC days with at least one update, ending today or
@@ -5,20 +6,26 @@ import { prisma } from "@/lib/prisma"
 // is bounded by streak length in days — 400 days of updates returns 400
 // rows max instead of up to 1000 update rows. totalUpdates is a cheap
 // indexed count.
-export async function getGrowStreak(userId: string): Promise<{ streak: number; totalUpdates: number; harvestedDiaries: number }> {
+// publicOnly scopes every count to PUBLIC diaries — use it anywhere the
+// result is shown to someone other than the author.
+export async function getGrowStreak(
+  userId: string,
+  { publicOnly = false }: { publicOnly?: boolean } = {},
+): Promise<{ streak: number; totalUpdates: number; harvestedDiaries: number }> {
   const [days, totalUpdates, harvestedDiaries] = await Promise.all([
     prisma.$queryRaw<{ d: Date }[]>`
       SELECT DISTINCT (du."createdAt" AT TIME ZONE 'UTC')::date AS d
       FROM "DiaryUpdate" du
       JOIN "GrowDiary" g ON g.id = du."diaryId"
       WHERE du."authorId" = ${userId} AND g."deleted" = false
+      ${publicOnly ? Prisma.sql`AND g."visibility" = 'PUBLIC'` : Prisma.empty}
       ORDER BY d DESC
       LIMIT 400`,
     prisma.diaryUpdate.count({
-      where: { authorId: userId, diary: { deleted: false } },
+      where: { authorId: userId, diary: { deleted: false, ...(publicOnly ? { visibility: "PUBLIC" } : {}) } },
     }),
     prisma.growDiary.count({
-      where: { authorId: userId, deleted: false, harvested: true },
+      where: { authorId: userId, deleted: false, harvested: true, ...(publicOnly ? { visibility: "PUBLIC" } : {}) },
     }),
   ])
 

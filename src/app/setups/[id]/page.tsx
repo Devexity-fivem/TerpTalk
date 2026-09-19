@@ -16,6 +16,7 @@ import OwnerDeleteButton from "@/components/owner-delete-button"
 import ImageGallery from "@/components/image-gallery"
 import { escapeLike } from "@/lib/strain-stats"
 import Tooltip from "@/components/ui/tooltip"
+import { publicDiaryWhere } from "@/lib/diary-visibility"
 
 export const dynamic = "force-dynamic"
 
@@ -63,7 +64,7 @@ export default async function SetupPage({ params }: { params: Promise<{ id: stri
 
   // Grows that linked this setup — only publicly viewable diaries.
   const usedIn = await prisma.growDiary.findMany({
-    where: { setupId: setup.id, deleted: false, author: activeAuthor() },
+    where: { setupId: setup.id, deleted: false, author: activeAuthor(), ...publicDiaryWhere },
     orderBy: { updatedAt: "desc" },
     take: 6,
     select: {

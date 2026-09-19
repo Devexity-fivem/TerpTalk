@@ -386,6 +386,7 @@ model GrowDiary {
   authorId      String
   featured      Boolean  @default(false)
   deleted       Boolean  @default(false)
+  visibility    String   @default("PUBLIC") // PUBLIC | UNLISTED | PRIVATE
   stage         String   @default("GERMINATION") // GERMINATION, SEEDLING, VEGETATIVE, FLOWER, HARVEST, DRYING, CURING, COMPLETED
   harvested     Boolean  @default(false)
   harvestedAt   DateTime?
@@ -412,6 +413,7 @@ model GrowDiary {
   @@index([setupId])
   @@index([mediumType])
   @@index([featured])
+  @@index([visibility])
   @@index([createdAt])
   @@index([harvested, harvestedAt(sort: Desc)])
 }

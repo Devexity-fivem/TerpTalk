@@ -16,6 +16,7 @@ import {
   parseLightType,
   parseTechniques,
 } from "@/lib/grow-fields"
+import { isDiaryVisibility } from "@/lib/diary-visibility"
 
 /** Keys a diary owner may PATCH — everything else is rejected. */
 export const DIARY_EDITABLE_FIELDS = new Set([
@@ -35,6 +36,7 @@ export const DIARY_EDITABLE_FIELDS = new Set([
   "techniques",
   "spaceDimensions",
   "setupId",
+  "visibility",
 ])
 
 const METADATA_MAX = 500 // matches the creation route's string-field cap
@@ -122,6 +124,10 @@ export function parseDiaryPatch(body: unknown): DiaryPatchResult {
   if ("setupId" in b) {
     if (b.setupId !== null && typeof b.setupId !== "string") return bad("Invalid setup")
     data.setupId = typeof b.setupId === "string" && b.setupId.trim() ? b.setupId : null
+  }
+  if ("visibility" in b) {
+    if (!isDiaryVisibility(b.visibility)) return bad("Invalid visibility")
+    data.visibility = b.visibility
   }
 
   return { ok: true, data }

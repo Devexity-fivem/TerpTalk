@@ -4,6 +4,7 @@
 // notifications (unread count), and the shared chat teaser (presence +
 // room activity). No new models, no new realtime, no polling.
 import { prisma } from "@/lib/prisma"
+import { activeAuthor } from "@/lib/security"
 import { REP_LADDER, getRepStage, getNextTier } from "@/lib/reputation-config"
 import { getQuestProgress } from "@/lib/quests"
 import { getJourneyState } from "@/lib/journeys"
@@ -110,7 +111,9 @@ export async function getMemberHomeData(userId: string): Promise<MemberHomeData 
       // Latest updates on diaries the member follows (DiaryFollow has no
       // read cursor — this is honest "recent activity", not unread math).
       prisma.diaryFollow.findMany({
-        where: { userId, diary: { deleted: false, author: { banned: false } } },
+        // Explicitly followed diaries stay visible at PUBLIC|UNLISTED — the
+        // member already holds the link. PRIVATE rows drop out.
+        where: { userId, diary: { deleted: false, visibility: { in: ["PUBLIC", "UNLISTED"] }, author: activeAuthor() } },
         select: { diaryId: true },
       }),
       prisma.notification.count({ where: { userId, read: false } }),

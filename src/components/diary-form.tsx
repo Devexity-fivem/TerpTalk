@@ -6,6 +6,7 @@ import Link from "next/link"
 import StrainCombobox from "@/components/strain-combobox"
 import { MEDIUM_TYPES, MEDIUM_LABELS, LIGHT_TYPES, LIGHT_LABELS, TECHNIQUES, TECHNIQUE_LABELS } from "@/lib/grow-fields"
 import { localDateInputValue } from "@/lib/diary-weeks"
+import { DIARY_VISIBILITY_OPTIONS } from "@/lib/diary-visibility"
 
 export interface DiaryFormData {
   title: string
@@ -25,6 +26,7 @@ export interface DiaryFormData {
   techniques: string[]
   spaceDimensions: string
   setupId: string
+  visibility: string
 }
 
 interface Props {
@@ -209,6 +211,25 @@ export default function DiaryForm({ initial, submitLabel, pendingLabel, onSubmit
               />
             )}
           </div>
+        </div>
+
+        <div>
+          <label htmlFor="visibility" className="block text-sm font-medium mb-2">
+            Visibility
+          </label>
+          <select
+            id="visibility"
+            value={formData.visibility}
+            onChange={(e) => setFormData({ ...formData, visibility: e.target.value })}
+            className={inputCls}
+          >
+            {DIARY_VISIBILITY_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>{o.label}</option>
+            ))}
+          </select>
+          <p className="mt-1.5 text-xs text-muted-foreground">
+            {DIARY_VISIBILITY_OPTIONS.find((o) => o.value === formData.visibility)?.help}
+          </p>
         </div>
       </div>
 

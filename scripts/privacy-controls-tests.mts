@@ -9,6 +9,8 @@ import "./db-guard.mjs"
 import { strict as assert } from "node:assert"
 import { prisma } from "@/lib/prisma"
 import { rankableProfile, activeAuthor } from "@/lib/security"
+import { isDiaryVisibility, viewableDiaryWhere, canViewDiary, publicDiaryWhere } from "@/lib/diary-visibility"
+import { parseDiaryPatch } from "@/lib/diary-edit"
 import { notificationLinkWhere, postLinkWhere } from "@/lib/notify"
 import { TERPBOT_USERNAME } from "@/lib/terpbot"
 import { NextRequest } from "next/server"
@@ -259,6 +261,47 @@ async function run() {
     // hideOnlineStatus alone must not empty recentRep — the two privacy
     // flags stay independent (b has hideOnlineStatus=true from section 3).
     assert.ok(visible.recentRep.length >= 1, "hideOnlineStatus does not hide recentRep")
+
+    // ── 12. Diary visibility helpers + PATCH validation ─────────────
+    assert.equal(isDiaryVisibility("PUBLIC"), true)
+    assert.equal(isDiaryVisibility("UNLISTED"), true)
+    assert.equal(isDiaryVisibility("PRIVATE"), true)
+    assert.equal(isDiaryVisibility("BOGUS"), false, "unknown visibility rejected")
+    assert.equal(isDiaryVisibility("public"), false, "visibility is case-sensitive")
+    assert.equal(isDiaryVisibility(42), false, "non-string rejected")
+
+    // viewableDiaryWhere — guests get open rows only; members get open + own.
+    const guestWhere = viewableDiaryWhere()
+    assert.deepEqual(guestWhere, { visibility: { in: ["PUBLIC", "UNLISTED"] } }, "guest sees open rows")
+    const memberWhere = viewableDiaryWhere("u1")
+    assert.deepEqual(
+      memberWhere,
+      { OR: [{ visibility: { in: ["PUBLIC", "UNLISTED"] } }, { authorId: "u1" }] },
+      "member sees open rows plus own"
+    )
+
+    // canViewDiary — only PRIVATE restricts, and only to non-owners.
+    const priv = { visibility: "PRIVATE", authorId: "u1" }
+    const unl = { visibility: "UNLISTED", authorId: "u1" }
+    const pub = { visibility: "PUBLIC", authorId: "u1" }
+    assert.equal(canViewDiary(priv, "u1"), true, "owner views own private diary")
+    assert.equal(canViewDiary(priv, "u2"), false, "non-owner blocked from private diary")
+    assert.equal(canViewDiary(priv, null), false, "guest blocked from private diary")
+    assert.equal(canViewDiary(unl, null), true, "guest views unlisted by link")
+    assert.equal(canViewDiary(pub, "u2"), true, "public open to anyone")
+    assert.deepEqual(publicDiaryWhere, { visibility: "PUBLIC" }, "public fragment shape")
+
+    // parseDiaryPatch — visibility accepted/validated like other fields.
+    const okPatch = parseDiaryPatch({ visibility: "UNLISTED" })
+    assert.ok(okPatch.ok, "valid visibility parses")
+    assert.equal(okPatch.ok && okPatch.data.visibility, "UNLISTED")
+    const badPatch = parseDiaryPatch({ visibility: "BOGUS" })
+    assert.equal(badPatch.ok, false, "invalid visibility → 400 error result")
+    const wrongType = parseDiaryPatch({ visibility: 5 })
+    assert.equal(wrongType.ok, false, "non-string visibility → 400 error result")
+    // Non-editable fields still rejected alongside a valid visibility.
+    const mixed = parseDiaryPatch({ visibility: "PUBLIC", authorId: "x" })
+    assert.equal(mixed.ok, false, "non-editable field still rejected")
 
     console.log("All privacy-controls tests passed.")
   } finally {

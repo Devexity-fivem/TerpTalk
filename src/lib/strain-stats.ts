@@ -4,6 +4,7 @@ import { toGrams, toOz } from "@/lib/yield"
 import { activeAuthor, publicUserSelect } from "@/lib/security"
 import { medianStageDurations, type StageMedian } from "@/lib/diary-weeks"
 import { DIFFICULTY_LABELS, MEDIUM_LABELS, LIGHT_LABELS, TECHNIQUE_LABELS } from "@/lib/grow-fields"
+import { publicDiaryWhere } from "@/lib/diary-visibility"
 
 const DAY_MS = 86400000
 
@@ -92,6 +93,7 @@ const getStats = unstable_cache(
         where: {
           deleted: false,
           author: activeAuthor(),
+          ...publicDiaryWhere,
           // Union match: structured strainId OR the legacy fuzzy text path.
           // One row per diary either way — no double counting is possible.
           OR: [

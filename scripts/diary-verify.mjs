@@ -267,6 +267,161 @@ const main = async () => {
     const dl = await getHtml("/diaries")
     !dl.html.includes(M("banned")) ? pass("banned author hidden from diary list") : fail("banned diary listed", bd.id)
 
+    // ── Visibility matrix ───────────────────────────────────────────
+    // owner / viewer (blocked by owner — mutual semantics) / voter
+    // (unrelated member) / guest × PUBLIC / UNLISTED / PRIVATE.
+    const tok = M("vis")
+    const mkVis = (visibility) => prisma.growDiary.create({
+      data: {
+        title: `${tok} ${visibility}`, description: "visibility fixture",
+        growType: "INDOOR", startDate: new Date(), authorId: owner.id, visibility,
+      },
+    })
+    const pubD = await mkVis("PUBLIC")
+    const unlD = await mkVis("UNLISTED")
+    const prvD = await mkVis("PRIVATE")
+    diaryIds.push(pubD.id, unlD.id, prvD.id)
+    // Give the PRIVATE diary an update + harvest so profile growStreak
+    // counts differ between owner and non-owner viewers.
+    await prisma.diaryUpdate.create({
+      data: { diaryId: prvD.id, authorId: owner.id, title: M("pu"), content: "private update", stage: "VEGETATIVE", dayNumber: 1, weekNumber: 1 },
+    })
+    await prisma.growDiary.update({
+      where: { id: prvD.id },
+      data: { harvested: true, harvestedAt: new Date(), yieldAmount: 50, yieldUnit: "g" },
+    })
+
+    const actors = [
+      ["owner", ownerCookie],
+      ["other", voterCookie],
+      ["blocked", viewerCookie],
+      ["guest", undefined],
+    ]
+    const expect = {
+      PUBLIC:   { owner: 200, other: 200, blocked: 200, guest: 200 },
+      UNLISTED: { owner: 200, other: 200, blocked: 200, guest: 200 },
+      PRIVATE:  { owner: 200, other: 404, blocked: 404, guest: 404 },
+    }
+    const pages = {}
+    for (const [vis, d] of [["PUBLIC", pubD], ["UNLISTED", unlD], ["PRIVATE", prvD]]) {
+      for (const [who, ck] of actors) {
+        const p = await getHtml(`/diaries/${d.id}`, ck)
+        p.status === expect[vis][who]
+          ? pass(`${vis} diary → ${who} gets ${expect[vis][who]}`)
+          : fail(`${vis} diary ${who}`, p.status)
+        if (who === "guest") pages[vis] = p.html
+        if (who === "owner") pages[`${vis}_owner`] = p.html
+      }
+    }
+
+    ;/<meta name="robots"[^>]*noindex/.test(pages.UNLISTED || "")
+      ? pass("unlisted page carries noindex")
+      : fail("unlisted noindex", (pages.UNLISTED || "").match(/<meta name="robots"[^>]*>/)?.[0])
+    ;(pages.PUBLIC || "").includes("BlogPosting")
+      ? pass("public page emits BlogPosting JSON-LD")
+      : fail("public JSON-LD", "missing")
+    !(pages.UNLISTED || "").includes("BlogPosting") && !(pages.PRIVATE_owner || "").includes("BlogPosting")
+      ? pass("non-public pages emit no BlogPosting JSON-LD")
+      : fail("non-public JSON-LD", "leaked")
+
+    let sr = await callApi(`/api/search?q=${tok}&type=diaries`)
+    const srTitles = (sr.data?.diaries || []).map((d) => d.title)
+    srTitles.includes(`${tok} PUBLIC`) && !srTitles.some((t) => t.includes("UNLISTED") || t.includes("PRIVATE"))
+      ? pass("search returns only PUBLIC diary")
+      : fail("search visibility", srTitles)
+
+    const profOther = await callApi(`/api/users/${owner.username}`, { cookie: voterCookie })
+    const profOwner = await callApi(`/api/users/${owner.username}`, { cookie: ownerCookie })
+    const oTitles = (profOther.data?.diaries || profOther.data?.growDiaries || []).map((d) => d.title)
+    const sTitles = (profOwner.data?.diaries || profOwner.data?.growDiaries || []).map((d) => d.title)
+    oTitles.includes(`${tok} PUBLIC`) && !oTitles.some((t) => t.includes("UNLISTED") || t.includes("PRIVATE"))
+      ? pass("profile API shows other member only PUBLIC diaries")
+      : fail("profile other visibility", oTitles.filter((t) => t.includes(tok)))
+    [`${tok} PUBLIC`, `${tok} UNLISTED`, `${tok} PRIVATE`].every((t) => sTitles.includes(t))
+      ? pass("profile API shows owner all own diaries")
+      : fail("profile owner visibility", sTitles.filter((t) => t.includes(tok)))
+
+    // growStreak must not leak PRIVATE-diary activity to other viewers.
+    const gsOther = profOther.data?.profile
+    const gsOwner = profOwner.data?.profile
+    const expOtherUpdates = await prisma.diaryUpdate.count({
+      where: { authorId: owner.id, diary: { deleted: false, visibility: "PUBLIC" } },
+    })
+    const expOwnerUpdates = await prisma.diaryUpdate.count({
+      where: { authorId: owner.id, diary: { deleted: false } },
+    })
+    const expOtherHarvested = await prisma.growDiary.count({
+      where: { authorId: owner.id, deleted: false, harvested: true, visibility: "PUBLIC" },
+    })
+    const expOwnerHarvested = await prisma.growDiary.count({
+      where: { authorId: owner.id, deleted: false, harvested: true },
+    })
+    gsOther?.totalUpdates === expOtherUpdates && gsOther?.harvestedDiaries === expOtherHarvested
+      ? pass("profile growStreak scoped to PUBLIC for other member")
+      : fail("growStreak other", { gsOther, expOtherUpdates, expOtherHarvested })
+    gsOwner?.totalUpdates === expOwnerUpdates && gsOwner?.harvestedDiaries === expOwnerHarvested
+      ? pass("profile growStreak full-scope for owner")
+      : fail("growStreak owner", { gsOwner, expOwnerUpdates, expOwnerHarvested })
+
+    // Interactions on non-public diaries
+    r = await callApi("/api/follows", { method: "POST", body: { diaryId: prvD.id }, cookie: voterCookie })
+    r.status === 404 ? pass("follow on PRIVATE diary 404s") : fail("follow private", r.status)
+    r = await callApi("/api/reactions", { method: "POST", body: { type: "LIKE", diaryId: prvD.id }, cookie: voterCookie })
+    r.status === 404 ? pass("reaction on PRIVATE diary 404s") : fail("react private", r.status)
+    r = await callApi(`/api/diaries/${unlD.id}/discuss`, { method: "POST", cookie: voterCookie })
+    r.status === 404 ? pass("discuss on UNLISTED diary 404s") : fail("discuss unlisted", r.status)
+
+    // Visibility mutations
+    r = await callApi(`/api/diaries/${pubD.id}`, { method: "PATCH", body: { visibility: "PRIVATE" }, cookie: voterCookie })
+    r.status === 403 ? pass("non-owner visibility PATCH rejected") : fail("non-owner patch", r.status)
+    r = await callApi(`/api/diaries/${pubD.id}`, { method: "PATCH", body: { visibility: "BOGUS" }, cookie: ownerCookie })
+    r.status === 400 ? pass("invalid visibility rejected") : fail("bogus visibility", r.status)
+    r = await callApi(`/api/diaries/${pubD.id}`, { method: "PATCH", body: { visibility: "UNLISTED" }, cookie: ownerCookie })
+    r.status === 200 ? pass("owner visibility PATCH succeeds") : fail("owner patch", { s: r.status, d: r.data })
+    r = await callApi(`/api/diaries/${pubD.id}`, { method: "PATCH", body: { visibility: "PUBLIC" }, cookie: ownerCookie })
+
+    // /diaries is cached (300s) — the visibility PATCH above busts the
+    // "diaries" tag, so this fetch sees the fresh public-only set.
+    const dlVis = await getHtml("/diaries")
+    dlVis.html.includes(`${tok} PUBLIC`) && !dlVis.html.includes(`${tok} UNLISTED`) && !dlVis.html.includes(`${tok} PRIVATE`)
+      ? pass("/diaries lists only PUBLIC visibility")
+      : fail("/diaries visibility", { pub: dlVis.html.includes(`${tok} PUBLIC`), unl: dlVis.html.includes(`${tok} UNLISTED`), prv: dlVis.html.includes(`${tok} PRIVATE`) })
+
+    r = await callApi("/api/diaries", {
+      method: "POST",
+      body: { title: M("unlcreate"), growType: "INDOOR", startDate: new Date().toISOString(), visibility: "UNLISTED" },
+      cookie: ownerCookie,
+    })
+    const unlCreated = r.data?.diary?.id
+    if (unlCreated) diaryIds.push(unlCreated)
+    const unlRow = unlCreated && await prisma.growDiary.findUnique({ where: { id: unlCreated }, select: { visibility: true } })
+    r.status === 201 && unlRow?.visibility === "UNLISTED"
+      ? pass("create with UNLISTED persists")
+      : fail("create unlisted", { s: r.status, v: unlRow?.visibility })
+
+    // Blocked author's PUBLIC diary hides from the blocker's lists but
+    // stays visible to guests/unrelated members; blocker's own stays.
+    const blockedPub = await prisma.growDiary.create({
+      data: { title: `${tok} blocked-public`, description: "s", growType: "INDOOR", startDate: new Date(), authorId: viewer.id },
+    })
+    diaryIds.push(blockedPub.id)
+    const dlBlocker = await getHtml("/diaries", ownerCookie)
+    const dlGuest = await getHtml("/diaries")
+    const dlUnrel = await getHtml("/diaries", voterCookie)
+    !dlBlocker.html.includes("blocked-public") ? pass("blocked author's diary hidden from blocker list") : fail("blocker /diaries", "visible")
+    dlGuest.html.includes("blocked-public") && dlUnrel.html.includes("blocked-public")
+      ? pass("blocked author's diary visible to guest/unrelated")
+      : fail("guest/unrelated /diaries", { g: dlGuest.html.includes("blocked-public"), u: dlUnrel.html.includes("blocked-public") })
+    dlBlocker.html.includes(`${tok} PUBLIC`) ? pass("blocker's own diary still listed") : fail("blocker own diary", "missing")
+    sr = await callApi(`/api/search?q=${encodeURIComponent("blocked-public")}&type=diaries`, { cookie: ownerCookie })
+    !(sr.data?.diaries || []).some((d) => d.title.includes("blocked-public"))
+      ? pass("blocked author's diary hidden from blocker search")
+      : fail("blocker search", sr.data?.diaries)
+    sr = await callApi(`/api/search?q=${encodeURIComponent("blocked-public")}&type=diaries`)
+    ;(sr.data?.diaries || []).some((d) => d.title.includes("blocked-public"))
+      ? pass("blocked author's diary searchable by guest")
+      : fail("guest search", sr.data?.diaries)
+
     // ── Deleted diary 404s ──────────────────────────────────────────
     await prisma.growDiary.update({ where: { id: sd2.id }, data: { deleted: true } })
     page = await getHtml(`/diaries/${sd2.id}`)

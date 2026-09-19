@@ -8,6 +8,7 @@ import { rateLimit } from "@/lib/rate-limit"
 import { checkMaintenance } from "@/lib/maintenance"
 import { notify } from "@/lib/notify"
 import { TERPBOT_USERNAME } from "@/lib/terpbot-constants"
+import { canViewDiary } from "@/lib/diary-visibility"
 
 // POST — toggle follow on a user: { userId }  (or diary: { diaryId })
 export async function POST(request: Request) {
@@ -91,9 +92,9 @@ export async function POST(request: Request) {
     // ---- Diary follow ----
     const diary = await prisma.growDiary.findUnique({
       where: { id: diaryId, deleted: false },
-      select: { authorId: true },
+      select: { authorId: true, visibility: true },
     })
-    if (!diary) {
+    if (!diary || !canViewDiary(diary, session.user.id)) {
       return NextResponse.json({ error: "Diary not found" }, { status: 404 })
     }
     if (await blockExistsBetween(session.user.id, diary.authorId)) return forbidden()

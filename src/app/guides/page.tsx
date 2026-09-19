@@ -5,6 +5,7 @@ import Link from "next/link"
 import EmptyState from "@/components/ui/empty-state"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
+import { blockedUserIds } from "@/lib/security"
 
 export const dynamic = "force-dynamic"
 
@@ -30,7 +31,8 @@ export default async function GuidesPage() {
   const session = await getServerSession(authOptions)
   const isStaff = ["MODERATOR", "ADMINISTRATOR"].includes((session?.user as { role?: string })?.role || "")
 
-  const guides = await getGuides()
+  const [allGuides, blockedIds] = await Promise.all([getGuides(), blockedUserIds(session?.user?.id)])
+  const guides = blockedIds.length ? allGuides.filter((g) => !blockedIds.includes(g.authorId)) : allGuides
 
   const topics = [...new Set(guides.map((g) => g.topic))]
 

@@ -18,6 +18,7 @@ import { currentWeekKey } from "@/lib/week"
 import { escapeLike, getStrainGrowStats } from "@/lib/strain-stats"
 import { tokenizeSearchText } from "@/lib/search-terms"
 import { diaryDay, diaryWeek } from "@/lib/diary-weeks"
+import { publicDiaryWhere } from "@/lib/diary-visibility"
 import { getGrowJourney } from "@/lib/grow-journey"
 import { notify } from "@/lib/notify"
 import { getBotUserId } from "@/lib/terpbot"
@@ -436,7 +437,7 @@ async function handle(name: string, ctx: BotCommandCtx): Promise<BotCommandResul
       const [trust, quests, streak] = await Promise.all([
         getTrustScore(t.userId),
         t.userId === ctx.userId ? getQuestProgress(ctx.userId) : Promise.resolve([]),
-        getGrowStreak(t.userId),
+        getGrowStreak(t.userId, { publicOnly: t.userId !== ctx.userId }),
       ])
       const standing = getTrustStanding(trust)
       const lines = [
@@ -479,7 +480,7 @@ async function handle(name: string, ctx: BotCommandCtx): Promise<BotCommandResul
     case "streak": {
       const t = await memberFor(ctx, ctx.args[0])
       if (!t) return ok(`Couldn't find that member.`)
-      const s = await getGrowStreak(t.userId)
+      const s = await getGrowStreak(t.userId, { publicOnly: t.userId !== ctx.userId })
       if (s.streak === 0) {
         return ok(`🔥 @${t.username} has no diary-update streak — post an update to start one. /diaries`)
       }
@@ -544,14 +545,17 @@ async function handle(name: string, ctx: BotCommandCtx): Promise<BotCommandResul
         id: true, title: true, stage: true, strain: true, startDate: true,
         harvested: true, yieldAmount: true, yieldUnit: true, _count: { select: { updates: true } },
       } as const
+      // Another member's diary: only PUBLIC grows are fair game — UNLISTED
+      // and PRIVATE diaries are not discoverable through the bot.
+      const diaryScope = t.userId === ctx.userId ? {} : publicDiaryWhere
       const diary =
         (await prisma.growDiary.findFirst({
-          where: { authorId: t.userId, deleted: false, harvested: false },
+          where: { authorId: t.userId, deleted: false, harvested: false, ...diaryScope },
           orderBy: { updatedAt: "desc" },
           select: diarySelect,
         })) ??
         (await prisma.growDiary.findFirst({
-          where: { authorId: t.userId, deleted: false },
+          where: { authorId: t.userId, deleted: false, ...diaryScope },
           orderBy: { harvestedAt: "desc" },
           select: diarySelect,
         }))

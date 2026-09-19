@@ -4,6 +4,7 @@ import Link from "next/link"
 import { prisma } from "@/lib/prisma"
 import { unstable_cache } from "next/cache"
 import { publicUserSelect, activeAuthor, rankableProfile, REPUTATION_ORDER } from "@/lib/security"
+import { publicDiaryWhere } from "@/lib/diary-visibility"
 import CannabisLeaf from "@/components/cannabis-leaf"
 import { getChatTeaser } from "@/lib/chat-activity"
 import { getServerSession } from "next-auth"
@@ -25,14 +26,14 @@ const getStats = unstable_cache(
   async () => {
     const [members, diaries, threads, posts] = await Promise.all([
       prisma.user.count({ where: activeAuthor() }),
-      prisma.growDiary.count({ where: { deleted: false, author: activeAuthor() } }),
+      prisma.growDiary.count({ where: { deleted: false, author: activeAuthor(), ...publicDiaryWhere } }),
       prisma.thread.count({ where: { deleted: false, author: activeAuthor() } }),
       prisma.post.count({ where: { deleted: false, author: activeAuthor() } }),
     ])
     return { members, diaries, discussions: threads + posts }
   },
   ["home-stats"],
-  { revalidate: 60 }
+  { revalidate: 60, tags: ["diaries", "forum"] }
 )
 
 const getLatestDiscussions = unstable_cache(
@@ -54,7 +55,7 @@ const getLatestDiscussions = unstable_cache(
         },
       }),
       prisma.diaryUpdate.findMany({
-        where: { author: activeAuthor(), diary: { deleted: false, author: activeAuthor() } },
+        where: { author: activeAuthor(), diary: { deleted: false, author: activeAuthor(), ...publicDiaryWhere } },
         orderBy: { createdAt: "desc" },
         take: 4,
         include: {
@@ -72,7 +73,7 @@ const getLatestDiscussions = unstable_cache(
     return { categories, latest, diaryUpdates }
   },
   ["home-latest"],
-  { revalidate: 60 }
+  { revalidate: 60, tags: ["diaries", "forum"] }
 )
 
 function threadScore(t: { views: number; replyCount: number; createdAt: Date }) {

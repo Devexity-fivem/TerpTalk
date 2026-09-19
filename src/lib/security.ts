@@ -170,6 +170,26 @@ export async function blockExistsBetween(a: string, b: string): Promise<boolean>
   return !!row
 }
 
+/** Ids blocked by or blocking `viewerId` — mutual, same semantics as blockExistsBetween. [] for guests. */
+export async function blockedUserIds(viewerId?: string | null): Promise<string[]> {
+  if (!viewerId) return []
+  const rows = await prisma.block.findMany({
+    where: { OR: [{ blockerId: viewerId }, { blockedId: viewerId }] },
+    select: { blockerId: true, blockedId: true },
+  })
+  const ids = new Set<string>()
+  for (const r of rows) {
+    if (r.blockerId !== viewerId) ids.add(r.blockerId)
+    if (r.blockedId !== viewerId) ids.add(r.blockedId)
+  }
+  return [...ids]
+}
+
+/** Prisma where fragment excluding content by blocked authors; {} when nothing to exclude. */
+export function notBlockedAuthor(ids: string[], field = "authorId"): Record<string, unknown> {
+  return ids.length ? { [field]: { notIn: ids } } : {}
+}
+
 // ─── Safe serialization ─────────────────────────────────────────────
 // NEVER include the full User object in API responses — it contains
 // password hash, status, lastSeenAt, and role internals.

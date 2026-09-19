@@ -1,5 +1,7 @@
 import { prisma } from "@/lib/prisma"
-import { publicUserSelect, activeAuthor } from "@/lib/security"
+import { publicUserSelect, activeAuthor, blockedUserIds } from "@/lib/security"
+import { getServerSession } from "next-auth"
+import { authOptions } from "@/lib/auth"
 import { unstable_cache } from "next/cache"
 import { Settings, Plus, Users, ChevronLeft, ChevronRight } from "lucide-react"
 import Link from "next/link"
@@ -52,7 +54,12 @@ export default async function SetupsPage({
   const rawPage = Number.parseInt(sp?.page ?? "1", 10)
   const page = Number.isFinite(rawPage) && rawPage >= 1 ? Math.min(rawPage, MAX_PAGE) : 1
 
-  const { setups, total } = await getSetups(page)
+  const [cached, session] = await Promise.all([getSetups(page), getServerSession(authOptions)])
+  const { total } = cached
+  // The cached list is global — hide setups by authors the viewer has
+  // blocked or been blocked by (counts/pagination stay cache-based).
+  const blockedIds = await blockedUserIds(session?.user?.id)
+  const setups = blockedIds.length ? cached.setups.filter((s) => !blockedIds.includes(s.authorId)) : cached.setups
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
   const pageHref = (p: number) => (p <= 1 ? "/setups" : `/setups?page=${p}`)
 

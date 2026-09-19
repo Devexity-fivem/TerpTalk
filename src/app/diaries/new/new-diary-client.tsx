@@ -25,6 +25,7 @@ const EMPTY_FORM: DiaryFormData = {
   techniques: [],
   spaceDimensions: "",
   setupId: "",
+  visibility: "PUBLIC",
 }
 
 export default function NewDiaryClient({

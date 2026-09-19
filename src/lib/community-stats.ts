@@ -24,6 +24,7 @@ import {
   GROW_TYPE_LABELS,
 } from "@/lib/grow-fields"
 import { wizardResultToTag } from "@/lib/symptom-tags"
+import { publicDiaryWhere } from "@/lib/diary-visibility"
 
 export const NUMERIC_MIN = 5
 export const LABEL_MIN = 3
@@ -271,7 +272,7 @@ export function summarizeCommunityDiaries(
 
 const getGrowStats = unstable_cache(
   async (): Promise<CommunityGrowStats> => {
-    const where = { deleted: false, author: activeAuthor() }
+    const where = { deleted: false, author: activeAuthor(), ...publicDiaryWhere }
     // Bounded window (same pattern as strain-stats) + an honest total count
     // so "N community grows" stays accurate even once diaries exceed it.
     const [diaries, growCount] = await Promise.all([

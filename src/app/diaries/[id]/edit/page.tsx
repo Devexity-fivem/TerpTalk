@@ -31,7 +31,7 @@ export default async function EditDiaryPage({ params }: { params: Promise<{ id: 
       title: true, description: true, strain: true, strainId: true, genetics: true,
       growType: true, medium: true, mediumType: true, containerSize: true,
       lighting: true, lightType: true, nutrients: true, equipment: true,
-      techniques: true, spaceDimensions: true, setupId: true,
+      techniques: true, spaceDimensions: true, setupId: true, visibility: true,
     },
   })
   if (!diary || diary.deleted) notFound()
@@ -88,6 +88,7 @@ export default async function EditDiaryPage({ params }: { params: Promise<{ id: 
               techniques: diary.techniques,
               spaceDimensions: diary.spaceDimensions ?? "",
               setupId: diary.setupId ?? "",
+              visibility: diary.visibility,
             }}
           />
         </div>

@@ -8,6 +8,7 @@ import { getTrustScore } from "@/lib/reputation"
 import { getProfileTitle } from "@/lib/cosmetics"
 import { rateLimit } from "@/lib/rate-limit"
 import { TERPBOT_USERNAME } from "@/lib/terpbot-constants"
+import { publicDiaryWhere } from "@/lib/diary-visibility"
 
 const NO_STORE = { "Cache-Control": "no-store, max-age=0, must-revalidate" }
 
@@ -87,11 +88,17 @@ export async function GET(
       }
     }
 
-    // Completed grows = harvested, non-deleted diaries.
+    // Completed grows = harvested, non-deleted diaries. Non-owners only see
+    // the PUBLIC count — same rule as the full profile API.
     const harvestedGrows = isBot
       ? 0
       : await prisma.growDiary.count({
-          where: { authorId: profile.user.id, deleted: false, harvested: true },
+          where: {
+            authorId: profile.user.id,
+            deleted: false,
+            harvested: true,
+            ...(viewerId === profile.user.id ? {} : publicDiaryWhere),
+          },
         })
 
     // Trust standing is a peer-validation signal — like tier it hides when

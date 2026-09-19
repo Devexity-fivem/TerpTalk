@@ -1,8 +1,12 @@
 import { prisma } from "@/lib/prisma"
 import { publicUserSelect, activeAuthor } from "@/lib/security"
+import { publicDiaryWhere } from "@/lib/diary-visibility"
 import { unstable_cache } from "next/cache"
 import { Leaf, Calendar, TrendingUp, Users, BarChart3, ChevronLeft, ChevronRight } from "lucide-react"
 import { getCommunityGrowStats, type Distribution } from "@/lib/community-stats"
+import { getServerSession } from "next-auth"
+import { authOptions } from "@/lib/auth"
+import { blockedUserIds } from "@/lib/security"
 import Link from "next/link"
 import RoleBadge from "@/components/role-badge"
 import TierChip from "@/components/tier-chip"
@@ -20,7 +24,7 @@ const MAX_PAGE = 50
 
 const getDiaries = unstable_cache(
   async (page: number) => {
-    const where = { deleted: false, author: activeAuthor() }
+    const where = { deleted: false, author: activeAuthor(), ...publicDiaryWhere }
     // The rail owns featured diaries — the grid excludes them so page 1
     // never shows the same diary twice, and counts stay consistent.
     const gridWhere = { ...where, featured: false }
@@ -160,7 +164,18 @@ export default async function DiariesPage({
   const rawPage = Number.parseInt(sp?.page ?? "1", 10)
   const page = Number.isFinite(rawPage) && rawPage >= 1 ? Math.min(rawPage, MAX_PAGE) : 1
 
-  const [{ diaries, total, featured }, stats] = await Promise.all([getDiaries(page), getCommunityGrowStats()])
+  const [cached, stats, session] = await Promise.all([
+    getDiaries(page),
+    getCommunityGrowStats(),
+    getServerSession(authOptions),
+  ])
+  const { total } = cached
+  // The cached list is global — hide diaries by authors the viewer has
+  // blocked or been blocked by (counts/pagination stay cache-based).
+  const blockedIds = await blockedUserIds(session?.user?.id)
+  const notBlocked = (authorId: string) => !blockedIds.includes(authorId)
+  const diaries = cached.diaries.filter((d) => notBlocked(d.authorId))
+  const featured = cached.featured.filter((d) => notBlocked(d.authorId))
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
   const pageHref = (p: number) => (p <= 1 ? "/diaries" : `/diaries?page=${p}`)
 

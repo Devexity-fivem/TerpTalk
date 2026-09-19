@@ -13,6 +13,7 @@ import { currentWeekKey } from "@/lib/week"
 import { Avatar } from "@/components/ui/avatar"
 import { cn } from "@/lib/utils"
 import Tooltip from "@/components/ui/tooltip"
+import { publicDiaryWhere } from "@/lib/diary-visibility"
 
 export const revalidate = 300 // public content, edge-cached
 
@@ -155,7 +156,7 @@ const getTopByDiaries = unstable_cache(
   async (): Promise<BoardRow[]> => {
     const groups = await prisma.growDiary.groupBy({
       by: ["authorId"],
-      where: { deleted: false },
+      where: { deleted: false, ...publicDiaryWhere },
       _count: true,
       orderBy: { _count: { authorId: "desc" } },
       take: 25,

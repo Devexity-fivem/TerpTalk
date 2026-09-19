@@ -202,11 +202,17 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       updated.yieldAmount != null && updated.yieldUnit
         ? `${updated.yieldAmount}${updated.yieldUnit}`
         : undefined
-    after(() => announceHarvest(username, updated.title, yieldText).then(() => {}))
+    // PUBLIC diaries only — a chat post would broadcast a hidden grow.
+    if (updated.visibility === "PUBLIC") {
+      after(() => announceHarvest(username, updated.title, yieldText).then(() => {}))
+    }
 
     // Diary followers get a real notification for the harvest — the TerpBot
     // chat post above expires after ~3 days. notifyMany handles pref, ban,
     // and block filtering; the groupKey makes the false→true edge once-only.
+    // PRIVATE diaries never notify — followers must not learn of them.
+    if (updated.visibility === "PRIVATE") return NextResponse.json({ diary: updated })
+
     after(async () => {
       const followers = await prisma.diaryFollow.findMany({
         where: { diaryId: id, userId: { not: diary.authorId } },

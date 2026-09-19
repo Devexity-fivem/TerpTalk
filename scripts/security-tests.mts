@@ -1,7 +1,7 @@
 import "./db-guard.mjs"
 import { strict as assert } from "node:assert"
 import { prisma } from "@/lib/prisma"
-import { isBanned, isSessionValid, isAdmin, isModerator, isStaff, isSupport, hashIp, getTrustLevel, LIMITS } from "@/lib/security"
+import { isBanned, isSessionValid, isAdmin, isModerator, isStaff, isSupport, hashIp, getTrustLevel, LIMITS, blockedUserIds, notBlockedAuthor } from "@/lib/security"
 import { isValidImageDataUri, storeImage } from "@/lib/blob"
 import sharp from "sharp"
 import { isTrustedForLinks, containsExternalLink, enforceLinkTrust } from "@/lib/security"
@@ -581,6 +581,41 @@ async function run() {
     } finally {
       await prisma.chatMessage.deleteMany({ where: { roomId: { in: [privateRoom.id, publicRoom.id] } } }).catch(() => {})
       await prisma.chatRoom.deleteMany({ where: { id: { in: [privateRoom.id, publicRoom.id] } } }).catch(() => {})
+    }
+
+    // ── blockedUserIds / notBlockedAuthor ─────────────────────────
+    // Mutual block semantics — same as blockExistsBetween: a block in
+    // either direction hides the other party's content from the viewer.
+    const blkTag = Date.now().toString(36)
+    const mkBlkUser = (t: string) =>
+      prisma.user.create({
+        data: { name: `__blk_${t}_${blkTag}`, ageVerified: true, profile: { create: { username: `__blk${t}${blkTag}` } } },
+      })
+    const blkA = await mkBlkUser("a") // viewer blocks this one
+    const blkB = await mkBlkUser("b") // this one blocks the viewer
+    const blkC = await mkBlkUser("c") // unrelated — stays visible
+    try {
+      await prisma.block.create({ data: { blockerId: userId, blockedId: blkA.id } })
+      await prisma.block.create({ data: { blockerId: blkB.id, blockedId: userId } })
+      // A second row naming blkA must not duplicate it in the result.
+      await prisma.block.create({ data: { blockerId: blkA.id, blockedId: userId } })
+
+      const ids = await blockedUserIds(userId)
+      assert.ok(ids.includes(blkA.id), "viewer-blocked id returned")
+      assert.ok(ids.includes(blkB.id), "blocker id returned (reverse direction)")
+      assert.ok(!ids.includes(blkC.id), "unrelated user not returned")
+      assert.ok(!ids.includes(userId), "viewer id never returned")
+      assert.equal(ids.filter((i) => i === blkA.id).length, 1, "duplicates collapsed")
+
+      assert.deepEqual(await blockedUserIds(null), [], "guest (null) → empty list")
+      assert.deepEqual(await blockedUserIds(undefined), [], "guest (undefined) → empty list")
+
+      assert.deepEqual(notBlockedAuthor([blkA.id]), { authorId: { notIn: [blkA.id] } }, "notBlockedAuthor shape")
+      assert.deepEqual(notBlockedAuthor([blkA.id], "userId"), { userId: { notIn: [blkA.id] } }, "custom field respected")
+      assert.deepEqual(notBlockedAuthor([]), {}, "empty list → no-op fragment")
+    } finally {
+      await prisma.block.deleteMany({ where: { OR: [{ blockerId: { in: [userId, blkA.id, blkB.id] } }, { blockedId: { in: [userId, blkA.id, blkB.id] } }] } }).catch(() => {})
+      for (const u of [blkA, blkB, blkC]) await prisma.user.delete({ where: { id: u.id } }).catch(() => {})
     }
 
     console.log("All security regression tests passed.")

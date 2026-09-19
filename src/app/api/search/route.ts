@@ -1,9 +1,12 @@
-import { NextResponse } from "next/server"
+import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { unstable_cache } from "next/cache"
-import { getClientIp, hashIp, REPUTATION_ORDER } from "@/lib/security"
+import { getClientIp, hashIp, REPUTATION_ORDER, blockedUserIds } from "@/lib/security"
+import { getToken } from "next-auth/jwt"
+import { sessionCookieName } from "@/lib/auth"
 import { rateLimit } from "@/lib/rate-limit"
 import { snippet } from "@/lib/seo"
+import { publicDiaryWhere } from "@/lib/diary-visibility"
 
 // Escape PostgreSQL LIKE wildcards so a query cannot enumerate the whole table.
 function escapeLike(str: string): string {
@@ -84,6 +87,7 @@ const getSearchResults = unstable_cache(
 
     const threadSelect = {
       id: true,
+      authorId: true,
       title: true,
       slug: true,
       createdAt: true,
@@ -141,6 +145,7 @@ const getSearchResults = unstable_cache(
         skip,
         select: {
           username: true,
+          userId: true,
           avatarUrl: true,
           reputation: true,
           publicMilestoneOptOut: true,
@@ -152,6 +157,7 @@ const getSearchResults = unstable_cache(
         where: {
           deleted: false,
           author: activeUser,
+          ...publicDiaryWhere,
           OR: [
             { title: contains },
             { strain: contains },
@@ -165,6 +171,7 @@ const getSearchResults = unstable_cache(
         orderBy: { createdAt: "desc" },
         select: {
           id: true,
+          authorId: true,
           title: true,
           strain: true,
           stage: true,
@@ -180,7 +187,7 @@ const getSearchResults = unstable_cache(
         take: limit + 1,
         skip,
         orderBy: { title: "asc" },
-        select: { id: true, slug: true, title: true, excerpt: true, topic: true },
+        select: { id: true, authorId: true, slug: true, title: true, excerpt: true, topic: true },
       }) : [],
       (t === "all" || t === "setups") ? prisma.growSetup.findMany({
         where: {
@@ -193,6 +200,7 @@ const getSearchResults = unstable_cache(
         orderBy: { createdAt: "desc" },
         select: {
           id: true,
+          authorId: true,
           title: true,
           strain: true,
           author: { select: { profile: { select: { username: true, reputation: true, publicMilestoneOptOut: true } }, name: true } },
@@ -222,6 +230,7 @@ const getSearchResults = unstable_cache(
       const matchedPost = matchedPostByThread.get(t.id) ?? null
       return {
         id: t.id,
+        authorId: t.authorId,
         title: t.title,
         slug: t.slug,
         createdAt: t.createdAt,
@@ -290,8 +299,31 @@ export async function GET(request: Request) {
 
     const results = await getSearchResults(q, type, sort, categorySlug, page)
 
-    return NextResponse.json(results, {
-      headers: { "Cache-Control": "public, max-age=60, s-maxage=60" },
+    // The cached result set is global — hide content from authors the
+    // viewer has blocked or been blocked by. Guests skip the extra query.
+    const token = await getToken({ req: request as NextRequest, secret: process.env.NEXTAUTH_SECRET, cookieName: sessionCookieName })
+    const blockedIds = await blockedUserIds(token?.id as string | undefined)
+    const blocked = new Set(blockedIds)
+    const strip = <T extends { authorId?: string; userId?: string }>(arr: T[]) =>
+      arr
+        .filter((r) => !blocked.has(r.authorId ?? r.userId ?? ""))
+        .map(({ authorId: _a, userId: _u, ...rest }) => rest)
+
+    // Signed-in viewers get a block-filtered payload — it must never be
+    // served from a shared CDN cache to another viewer.
+    const cacheControl = token?.id
+      ? "private, no-store, max-age=0"
+      : "public, max-age=60, s-maxage=60"
+
+    return NextResponse.json({
+      ...results,
+      threads: strip(results.threads),
+      diaries: strip(results.diaries),
+      guides: strip(results.guides),
+      setups: strip(results.setups),
+      users: strip(results.users),
+    }, {
+      headers: { "Cache-Control": cacheControl, "Vary": "Cookie" },
     })
   } catch (error) {
     console.error("Search error:", error)

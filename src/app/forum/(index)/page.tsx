@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma"
-import { publicUserSelect, activeAuthor } from "@/lib/security"
+import { publicUserSelect, activeAuthor, blockedUserIds } from "@/lib/security"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { unstable_cache } from "next/cache"
@@ -58,7 +58,7 @@ const getForumData = unstable_cache(
         where: { deleted: false, views: { gt: 0 }, category: { hidden: false }, author: activeAuthor() },
         take: 5,
         orderBy: { views: "desc" },
-        select: { slug: true, title: true, views: true },
+        select: { slug: true, title: true, views: true, authorId: true },
       }),
     ])
 
@@ -69,8 +69,18 @@ const getForumData = unstable_cache(
 )
 
 export default async function ForumPage() {
-  const [{ categories, recentThreads, threadCount, postCount, memberCount, trendingThreads }, session] =
+  const [cached, session] =
     await Promise.all([getForumData(), getServerSession(authOptions)])
+  const { threadCount, postCount, memberCount } = cached
+  // The cached payload is global — hide content from authors the viewer
+  // has blocked (or been blocked by) after the cache read.
+  const blockedIds = await blockedUserIds(session?.user?.id)
+  const notBlocked = (authorId: string) => !blockedIds.includes(authorId)
+  const recentThreads = cached.recentThreads.filter((t) => notBlocked(t.authorId))
+  const trendingThreads = cached.trendingThreads.filter((t) => notBlocked(t.authorId))
+  const categories = blockedIds.length
+    ? cached.categories.map((c) => ({ ...c, threads: c.threads.filter((t) => notBlocked(t.authorId)) }))
+    : cached.categories
 
   // Per-viewer unread state lives outside the cached forum query.
   const unreadThreadIds = new Set<string>()
@@ -106,12 +116,14 @@ export default async function ForumPage() {
                 slug: true,
                 title: true,
                 lastActivityAt: true,
+                authorId: true,
                 category: { select: { name: true } },
               },
             },
           },
         })
       )
+        .filter((f) => notBlocked(f.thread.authorId))
         .map((f) => ({
           threadId: f.threadId,
           slug: f.thread.slug,

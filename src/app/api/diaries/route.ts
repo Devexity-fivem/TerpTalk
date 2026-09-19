@@ -12,6 +12,7 @@ import { parseMediumType, parseLightType, parseTechniques, GROW_TYPES } from "@/
 import { revalidateTag } from "next/cache"
 import { after } from "next/server"
 import { assistFirstDiary } from "@/lib/terpbot-assist"
+import { isDiaryVisibility } from "@/lib/diary-visibility"
 
 export async function POST(request: Request) {
   try {
@@ -43,6 +44,7 @@ export async function POST(request: Request) {
       techniques,
       spaceDimensions,
       setupId,
+      visibility,
     } = body
 
     if (typeof title !== "string" || !title.trim() || !startDate) {
@@ -67,6 +69,10 @@ export async function POST(request: Request) {
 
     if (typeof growType !== "string" || !(GROW_TYPES as readonly string[]).includes(growType)) {
       return NextResponse.json({ error: "Invalid grow type" }, { status: 400 })
+    }
+
+    if (visibility != null && !isDiaryVisibility(visibility)) {
+      return NextResponse.json({ error: "Invalid visibility" }, { status: 400 })
     }
 
     const stringFields = [strain, genetics, medium, containerSize, lighting, nutrients, equipment, spaceDimensions]
@@ -181,6 +187,7 @@ export async function POST(request: Request) {
         techniques: cleanTechniques ?? [],
         spaceDimensions,
         setupId: cleanSetupId,
+        visibility: visibility ?? "PUBLIC",
         authorId: session.user.id,
       },
       include: {
@@ -203,7 +210,8 @@ export async function POST(request: Request) {
     // New diary from a followed member — the return loop for follow.
     // Deferred, bounded, and pref/block filtered inside notifyMany.
     // groupKey dedupes on the diary id so retried creations don't re-notify.
-    after(async () => {
+    // Non-PUBLIC diaries never fan out — followers must not learn of them.
+    if (diary.visibility === "PUBLIC") after(async () => {
       const followers = await prisma.follow.findMany({
         where: { followingId: session.user.id },
         select: { followerId: true },

@@ -1,8 +1,13 @@
 import type { MetadataRoute } from "next"
 import { prisma } from "@/lib/prisma"
 import { activeAuthor, rankableProfile, REPUTATION_ORDER } from "@/lib/security"
+import { publicDiaryWhere } from "@/lib/diary-visibility"
 
 const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://terp-talk.vercel.app"
+
+// Regenerate at most hourly so a diary visibility flip leaves the sitemap
+// quickly; entries only get dropped, never leak private rows.
+export const revalidate = 3600
 
 const STATIC = [
   { url: "/", priority: 1, changeFrequency: "daily" as const },
@@ -39,7 +44,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       select: { slug: true, updatedAt: true },
     }),
     prisma.growDiary.findMany({
-      where: { deleted: false, author: activeAuthor() },
+      where: { deleted: false, author: activeAuthor(), ...publicDiaryWhere },
       take: 500,
       orderBy: { updatedAt: "desc" },
       select: { id: true, updatedAt: true },

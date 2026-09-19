@@ -115,6 +115,14 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     // Community methods aggregate those fields plus growType, which the
     // strain-stats check doesn't cover.
     if (touchesStrainStats || "growType" in data) revalidateTag("analytics", { expire: 0 })
+    // A visibility flip moves the diary between public and hidden sets —
+    // every cached surface that reads diaries must refresh.
+    if ("visibility" in data) {
+      revalidateTag("strains", { expire: 0 })
+      revalidateTag("analytics", { expire: 0 })
+      revalidateTag("leaderboard", { expire: 0 })
+      revalidateTag("search", { expire: 0 })
+    }
 
     return NextResponse.json({ diary: result })
   } catch (error) {

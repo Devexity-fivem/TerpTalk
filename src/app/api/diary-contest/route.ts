@@ -7,6 +7,7 @@ import { rateLimit } from "@/lib/rate-limit"
 import { currentMonthKey, monthRange } from "@/lib/week"
 import { getBooleanSetting, SITE_SETTINGS } from "@/lib/settings"
 import { checkMaintenance } from "@/lib/maintenance"
+import { publicDiaryWhere } from "@/lib/diary-visibility"
 
 // Diary of the Month — parallel to the weekly Budshot contest. Entries are
 // diaries (not photos), so the models live alongside ContestEntry/ContestVote
@@ -31,8 +32,9 @@ async function eligibleDiaryIds(userId: string): Promise<Set<string>> {
   const { start, end } = monthRange(currentMonthKey())
   // Eligibility: ≥ MIN_MONTH_UPDATES updates created this month AND at least
   // one photo update on the diary ever — rewards documented, photographed grows.
+  // Only PUBLIC diaries are eligible — entries surface the diary publicly.
   const candidates = await prisma.growDiary.findMany({
-    where: { authorId: userId, deleted: false },
+    where: { authorId: userId, deleted: false, ...publicDiaryWhere },
     select: {
       id: true,
       _count: { select: { updates: { where: { createdAt: { gte: start, lt: end } } } } },
@@ -59,7 +61,7 @@ export async function GET(request: Request) {
     const month = currentMonthKey()
 
     const entries = await prisma.diaryContestEntry.findMany({
-      where: { month, diary: { deleted: false, author: activeAuthor() } },
+      where: { month, diary: { deleted: false, author: activeAuthor(), ...publicDiaryWhere } },
       orderBy: [{ votes: { _count: "desc" } }, { createdAt: "asc" }],
       take: 50,
       include: {

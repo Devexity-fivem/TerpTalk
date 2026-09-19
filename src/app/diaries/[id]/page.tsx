@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma"
 import { publicUserSelect, activeAuthor } from "@/lib/security"
 import { notFound } from "next/navigation"
-import { Leaf, Calendar, Users, ClipboardCheck, Camera, TrendingUp, Pencil, Sprout } from "lucide-react"
+import { Leaf, Calendar, Users, ClipboardCheck, Camera, TrendingUp, Pencil, Sprout, Link2, Lock } from "lucide-react"
 import Link from "next/link"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
@@ -25,15 +25,41 @@ import DiaryDiscussButton from "@/components/diary-discuss-button"
 import { escapeLike, strainFieldMatches, suggestStrainLink } from "@/lib/strain-stats"
 import UserPopover from "@/components/user-popover"
 import { MEDIUM_LABELS, LIGHT_LABELS, TECHNIQUE_LABELS, DIFFICULTY_LABELS } from "@/lib/grow-fields"
+import { canViewDiary, publicDiaryWhere } from "@/lib/diary-visibility"
 import Tooltip from "@/components/ui/tooltip"
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  const diary = await prisma.growDiary.findUnique({
-    where: { id },
-    select: { title: true, description: true, strain: true, deleted: true },
-  })
-  if (!diary || diary.deleted) return buildMetadata({ title: "Diary not found", robots: { index: false } })
+  const [diary, session] = await Promise.all([
+    prisma.growDiary.findUnique({
+      where: { id },
+      select: {
+        title: true,
+        description: true,
+        strain: true,
+        deleted: true,
+        visibility: true,
+        authorId: true,
+        author: { select: { banned: true, suspendedUntil: true } },
+      },
+    }),
+    getServerSession(authOptions),
+  ])
+  const authorInactive =
+    !!diary &&
+    (diary.author.banned ||
+      (diary.author.suspendedUntil && diary.author.suspendedUntil.getTime() > Date.now()))
+  if (!diary || diary.deleted || authorInactive || !canViewDiary(diary, session?.user?.id)) {
+    return buildMetadata({ title: "Diary not found", robots: { index: false } })
+  }
+  if (diary.visibility === "UNLISTED") {
+    // Unlisted grows are reachable by link but must not be indexed.
+    return buildMetadata({
+      title: `${diary.title} — Cannabis Grow Diary${diary.strain ? ` (${diary.strain})` : ""}`,
+      description: snippet(diary.description || `Cannabis grow diary${diary.strain ? ` — ${diary.strain}` : ""} on TerpTalk.`),
+      robots: { index: false, follow: false },
+    })
+  }
   return buildMetadata({
     title: `${diary.title} — Cannabis Grow Diary${diary.strain ? ` (${diary.strain})` : ""}`,
     description: snippet(diary.description || `Cannabis grow diary${diary.strain ? ` — ${diary.strain}` : ""} on TerpTalk.`),
@@ -43,7 +69,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   })
 }
 
-async function getDiaryData(id: string) {
+async function getDiaryData(id: string, viewerId?: string | null) {
   const diary = await prisma.growDiary.findUnique({
     where: { id },
     include: {
@@ -69,7 +95,7 @@ async function getDiaryData(id: string) {
     !diary ||
     diary.author.banned ||
     (diary.author.suspendedUntil && diary.author.suspendedUntil.getTime() > Date.now())
-  if (!diary || diary.deleted || authorInactive) {
+  if (!diary || diary.deleted || authorInactive || !canViewDiary(diary, viewerId)) {
     notFound()
   }
 
@@ -78,10 +104,10 @@ async function getDiaryData(id: string) {
 
 export default async function DiaryPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  const diary = await getDiaryData(id)
+  const session = await getServerSession(authOptions)
+  const diary = await getDiaryData(id, session?.user?.id)
   // Fetch the most recent 100 updates and restore chronological order for the timeline.
   const updates = [...diary.updates].reverse()
-  const session = await getServerSession(authOptions)
   // Related-grows matching: a structured strainId or setupId link is exact;
   // the free-text strain field is a recall pre-filter checked by
   // strainFieldMatches below. growType is the fallback when the diary has
@@ -111,9 +137,16 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
       orderBy: { createdAt: "asc" },
       take: 500,
     }),
-    // More from this grower — bounded, active grows only.
+    // More from this grower — bounded, active grows only. The owner sees
+    // all their own diaries; everyone else only sees PUBLIC ones.
     prisma.growDiary.findMany({
-      where: { authorId: diary.author.id, deleted: false, id: { not: diary.id } },
+      where: {
+        authorId: diary.author.id,
+        deleted: false,
+        id: { not: diary.id },
+        author: activeAuthor(),
+        ...(session?.user?.id === diary.author.id ? {} : publicDiaryWhere),
+      },
       orderBy: { updatedAt: "desc" },
       take: 6,
       include: {
@@ -127,6 +160,7 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
       where: {
         deleted: false,
         author: activeAuthor(),
+        ...publicDiaryWhere,
         id: { not: diary.id },
         authorId: { not: diary.author.id },
         OR: similarOr,
@@ -243,7 +277,7 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
   return (
     <div className="min-h-screen bg-background">
       <div className="max-w-7xl mx-auto px-4 py-8">
-        <JsonLd data={diarySchema} />
+        {diary.visibility === "PUBLIC" && <JsonLd data={diarySchema} />}
         <Breadcrumbs items={[
           { label: "Grow Diaries", href: "/diaries" },
           { label: diary.title },
@@ -267,6 +301,16 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
                 {diary.harvested && (
                   <span className="text-xs text-emerald-500 px-2 py-1 bg-emerald-500/10 rounded">
                     Harvested
+                  </span>
+                )}
+                {canEdit && diary.visibility === "UNLISTED" && (
+                  <span className="text-xs text-muted-foreground px-2 py-1 bg-secondary rounded inline-flex items-center gap-1">
+                    <Link2 className="w-3 h-3" /> Unlisted
+                  </span>
+                )}
+                {canEdit && diary.visibility === "PRIVATE" && (
+                  <span className="text-xs text-muted-foreground px-2 py-1 bg-secondary rounded inline-flex items-center gap-1">
+                    <Lock className="w-3 h-3" /> Private
                   </span>
                 )}
               </div>
@@ -366,11 +410,15 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
             <div className="flex flex-col sm:items-end gap-1">
               <div className="flex flex-wrap gap-2 items-center sm:justify-end">
                 <DiaryReactions diaryId={diary.id} initialCounts={reactionCounts} initialMine={myReaction} />
-                <DiaryFollowButton diaryId={diary.id} initiallyFollowing={following} />
-                <DiaryDiscussButton
-                  diaryId={diary.id}
-                  existingSlug={diary.discussion && !diary.discussion.deleted ? diary.discussion.slug : null}
-                />
+                {diary.visibility !== "PRIVATE" && (
+                  <DiaryFollowButton diaryId={diary.id} initiallyFollowing={following} />
+                )}
+                {diary.visibility === "PUBLIC" && (
+                  <DiaryDiscussButton
+                    diaryId={diary.id}
+                    existingSlug={diary.discussion && !diary.discussion.deleted ? diary.discussion.slug : null}
+                  />
+                )}
                 <ShareButtons path={`/diaries/${diary.id}`} title={`${diary.title} — grow diary on TerpTalk`} />
                 {canEdit && (
                   <Tooltip content="Edit diary">

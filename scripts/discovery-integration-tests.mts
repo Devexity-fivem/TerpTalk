@@ -391,6 +391,29 @@ async function run() {
       assert.ok(!urls2.includes(`/u/${bannedName}`), "sitemap excludes banned-author profiles")
       assert.ok(!urls2.includes("/u/terpbot"), "sitemap excludes TerpBot profile")
       if (visibleCat) assert.ok(urls2.includes(`/forum/category/${visibleCat.slug}`), "sitemap includes a visible category")
+
+      // Diary visibility: only PUBLIC diaries are sitemap destinations.
+      const visToken = `__smap-vis-${Date.now().toString(36)}`
+      const visDiaries = await Promise.all(
+        (["PUBLIC", "UNLISTED", "PRIVATE"] as const).map((visibility) =>
+          prisma.growDiary.create({
+            data: {
+              title: `${visToken}-${visibility}`,
+              description: "",
+              growType: "INDOOR",
+              startDate: new Date(),
+              authorId: active.id,
+              visibility,
+            },
+            select: { id: true },
+          }),
+        ),
+      )
+      diaryIds.push(...visDiaries.map((d) => d.id))
+      const urls3 = (await buildSitemap()).map((e) => new URL(e.url).pathname)
+      assert.ok(urls3.includes(`/diaries/${visDiaries[0].id}`), "sitemap includes PUBLIC diary")
+      assert.ok(!urls3.includes(`/diaries/${visDiaries[1].id}`), "sitemap excludes UNLISTED diary")
+      assert.ok(!urls3.includes(`/diaries/${visDiaries[2].id}`), "sitemap excludes PRIVATE diary")
     } finally {
       await prisma.thread.delete({ where: { id: deletedThread.id } }).catch(() => {})
       await prisma.category.delete({ where: { id: hiddenCat.id } }).catch(() => {})

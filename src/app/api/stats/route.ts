@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma"
 import { unstable_cache } from "next/cache"
 import { getClientIp, hashIp, activeAuthor } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
+import { publicDiaryWhere } from "@/lib/diary-visibility"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 60
@@ -11,7 +12,7 @@ const getStats = unstable_cache(
   async () => {
     const [members, diaries, threads, posts] = await Promise.all([
       prisma.user.count({ where: activeAuthor() }),
-      prisma.growDiary.count({ where: { deleted: false, author: activeAuthor() } }),
+      prisma.growDiary.count({ where: { deleted: false, author: activeAuthor(), ...publicDiaryWhere } }),
       prisma.thread.count({ where: { deleted: false, author: activeAuthor() } }),
       prisma.post.count({ where: { deleted: false, author: activeAuthor() } }),
     ])

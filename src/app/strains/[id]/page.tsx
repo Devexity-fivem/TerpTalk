@@ -14,6 +14,8 @@ import TierChip from "@/components/tier-chip"
 import Tooltip from "@/components/ui/tooltip"
 import { getStrainGrowStats, escapeLike, strainFieldMatches, strainTypeLabel } from "@/lib/strain-stats"
 import Link from "next/link"
+import { publicDiaryWhere } from "@/lib/diary-visibility"
+import { blockedUserIds, notBlockedAuthor } from "@/lib/security"
 
 export const dynamic = "force-dynamic"
 
@@ -57,11 +59,19 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
 
   if (!strain) notFound()
 
+  const blockedIds = await blockedUserIds(session?.user?.id)
+  // Photos embed in the strain lookup — post-filter by uploader id.
+  if (blockedIds.length) {
+    strain.photos = strain.photos.filter((p) => !blockedIds.includes(p.user.id))
+  }
+
   const [relatedDiariesRaw, relatedSetupsRaw, relatedThreads, growStats] = await Promise.all([
     prisma.growDiary.findMany({
       where: {
         deleted: false,
         author: activeAuthor(),
+        ...publicDiaryWhere,
+        ...notBlockedAuthor(blockedIds),
         OR: [
           { strainId: strain.id },
           { strain: { contains: escapeLike(strain.name), mode: "insensitive" } },
@@ -75,7 +85,7 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
       },
     }),
     prisma.growSetup.findMany({
-      where: { deleted: false, author: activeAuthor(), strain: { contains: escapeLike(strain.name), mode: "insensitive" } },
+      where: { deleted: false, author: activeAuthor(), strain: { contains: escapeLike(strain.name), mode: "insensitive" }, ...notBlockedAuthor(blockedIds) },
       orderBy: { createdAt: "desc" },
       take: 12,
       include: { author: { select: publicUserSelect }, images: { take: 1 } },
@@ -88,6 +98,7 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
         deleted: false,
         category: { hidden: false },
         author: activeAuthor(),
+        ...notBlockedAuthor(blockedIds),
         OR: [
           { tags: { some: { tag: { name: { equals: strain.name, mode: "insensitive" } } } } },
           ...(strain.name.trim().length >= 4

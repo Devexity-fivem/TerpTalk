@@ -10,6 +10,7 @@ import { getGrowStreak } from "@/lib/grow-streak"
 import { rateLimit } from "@/lib/rate-limit"
 import { TERPBOT_USERNAME } from "@/lib/terpbot-constants"
 import { getBotStats } from "@/lib/terpbot-events"
+import { publicDiaryWhere } from "@/lib/diary-visibility"
 
 const NO_STORE = { "Cache-Control": "no-store, max-age=0, must-revalidate" }
 
@@ -24,7 +25,7 @@ function safeUrl(url: string | null | undefined): string | null {
   }
 }
 
-async function getPublicProfileData(username: string) {
+async function getPublicProfileData(username: string, viewerId?: string) {
   const profile = await prisma.profile.findFirst({
       where: { username: { equals: username, mode: "insensitive" } },
       select: {
@@ -89,10 +90,17 @@ async function getPublicProfileData(username: string) {
       },
     })
 
-    const { streak, totalUpdates, harvestedDiaries } = await getGrowStreak(profile.user.id)
+    const { streak, totalUpdates, harvestedDiaries } = await getGrowStreak(
+      profile.user.id,
+      { publicOnly: viewerId !== profile.user.id },
+    )
+
+    // Diary visibility: the owner sees all their rows; anyone else only
+    // sees PUBLIC ones (UNLISTED is reachable by link, not by listing).
+    const diaryScope = viewerId === profile.user.id ? {} : publicDiaryWhere
 
     const growDiaries = await prisma.growDiary.findMany({
-      where: { authorId: profile.user.id, deleted: false },
+      where: { authorId: profile.user.id, deleted: false, ...diaryScope },
       orderBy: { createdAt: "desc" },
       take: 6,
       select: {
@@ -122,7 +130,7 @@ async function getPublicProfileData(username: string) {
     // Harvest Shelf — completed documented grows, newest harvest first.
     // Derived from existing diary rows; no trophy model.
     const harvestShelf = await prisma.growDiary.findMany({
-      where: { authorId: profile.user.id, deleted: false, harvested: true },
+      where: { authorId: profile.user.id, deleted: false, harvested: true, ...diaryScope },
       orderBy: { harvestedAt: "desc" },
       take: 6,
       select: {
@@ -137,6 +145,13 @@ async function getPublicProfileData(username: string) {
       },
     })
 
+    // Non-owner viewers get the PUBLIC-scoped count, matching the lists.
+    const publicDiaryCount =
+      viewerId === profile.user.id
+        ? null
+        : await prisma.growDiary.count({
+            where: { authorId: profile.user.id, deleted: false, ...publicDiaryWhere },
+          })
     return {
       profile,
       recentThreads,
@@ -144,6 +159,7 @@ async function getPublicProfileData(username: string) {
       growSetups,
       harvestShelf,
       growStreak: { streak, totalUpdates, harvestedDiaries },
+      publicDiaryCount,
     }
   }
 
@@ -164,7 +180,15 @@ export async function GET(
       return NextResponse.json({ error: "Invalid username" }, { status: 400 })
     }
 
-    const data = await getPublicProfileData(username)
+    // Use JWT token for the viewer instead of a full DB session lookup —
+    // resolved up front so diary lists/counts can be visibility-scoped.
+    const token = await getToken({ req: request, secret: process.env.NEXTAUTH_SECRET, cookieName: sessionCookieName })
+    let viewerId = token?.id as string | undefined
+    if (viewerId && !(await isSessionValid(viewerId, token?.sessionVersion as number | undefined))) {
+      viewerId = undefined
+    }
+
+    const data = await getPublicProfileData(username, viewerId)
     if (!data) {
       return NextResponse.json({ error: "User not found" }, { status: 404 })
     }
@@ -200,13 +224,6 @@ export async function GET(
             take: 6,
             select: { id: true, type: true, amount: true, reversedAt: true, createdAt: true },
           })
-
-    // Use JWT token for the viewer instead of a full DB session lookup.
-    const token = await getToken({ req: request, secret: process.env.NEXTAUTH_SECRET, cookieName: sessionCookieName })
-    let viewerId = token?.id as string | undefined
-    if (viewerId && !(await isSessionValid(viewerId, token?.sessionVersion as number | undefined))) {
-      viewerId = undefined
-    }
 
     let viewerBlocked = false
     let blockedMe = false
@@ -286,6 +303,9 @@ export async function GET(
         // the follower (who they follow). Mapped back to the real meaning here.
         stats: {
           ...profile.user._count,
+          // _count.diaryCreator includes non-public rows — non-owners get
+          // the PUBLIC-scoped count instead.
+          ...(data.publicDiaryCount != null ? { diaryCreator: data.publicDiaryCount } : {}),
           followers: profile.user._count.following,
           following: profile.user._count.followers,
         },

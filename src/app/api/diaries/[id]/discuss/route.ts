@@ -6,6 +6,7 @@ import { unauthorized, forbidden, getClientIp, logSecurityEvent, isBanned, activ
 import { rateLimit } from "@/lib/rate-limit"
 import { checkMaintenance } from "@/lib/maintenance"
 import { revalidateTag } from "next/cache"
+import { publicDiaryWhere } from "@/lib/diary-visibility"
 
 function createSlug(text: string): string {
   return text
@@ -41,8 +42,10 @@ export async function POST(
     }
 
     const { id } = await params
+    // Discussion threads are public forum content — only PUBLIC diaries
+    // can have one, or the thread would leak the grow's existence.
     const diary = await prisma.growDiary.findFirst({
-      where: { id, deleted: false, author: activeAuthor() },
+      where: { id, deleted: false, author: activeAuthor(), ...publicDiaryWhere },
       select: {
         id: true,
         title: true,
