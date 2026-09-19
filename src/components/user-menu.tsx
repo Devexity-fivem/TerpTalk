@@ -128,7 +128,7 @@ export default function UserMenu() {
           >
             <MessageSquarePlus className="h-4 w-4 text-primary shrink-0" />
             <div className="text-left">
-              <div className="font-medium">Beta Feedback</div>
+              <div className="font-medium">Feedback</div>
               <div className="text-[11px] text-muted-foreground">Report bugs and share ideas</div>
             </div>
           </button>

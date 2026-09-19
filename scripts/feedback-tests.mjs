@@ -1,4 +1,4 @@
-// Beta feedback verification — auth boundary, source/field forcing, admin
+// Feedback verification — auth boundary, source/field forcing, admin
 // list + detail + PATCH, internal-notes privacy, rate limiting, pagination.
 // Temp users/feedback fully cleaned up.
 import "./db-guard.mjs"

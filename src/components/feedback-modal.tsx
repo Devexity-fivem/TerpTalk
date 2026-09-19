@@ -15,7 +15,7 @@ const TYPE_OPTIONS = [
   { value: "OTHER", label: "Other" },
 ] as const
 
-// Shared beta-feedback trigger + modal. Renders `children` as the clickable
+// Shared feedback trigger + modal. Renders `children` as the clickable
 // entry point; the modal captures the current route when opened.
 export default function FeedbackTrigger({
   children,
@@ -97,14 +97,14 @@ export function FeedbackModal({ onClose }: { onClose: () => void }) {
       <div
         role="dialog"
         aria-modal="true"
-        aria-labelledby="beta-feedback-title"
+        aria-labelledby="feedback-title"
         className="bg-card border border-border rounded-xl w-full max-w-lg max-h-[85vh] overflow-y-auto p-6"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-start justify-between gap-3 mb-4">
           <div>
-            <h2 id="beta-feedback-title" className="text-lg font-semibold flex items-center gap-2">
-              <MessageSquarePlus className="w-5 h-5 text-primary" /> Beta Feedback
+            <h2 id="feedback-title" className="text-lg font-semibold flex items-center gap-2">
+              <MessageSquarePlus className="w-5 h-5 text-primary" /> Feedback
             </h2>
             <p className="text-xs text-muted-foreground mt-1">
               Help shape TerpTalk — bugs, confusing bits, ideas, anything.
@@ -122,7 +122,7 @@ export function FeedbackModal({ onClose }: { onClose: () => void }) {
 
         {done ? (
           <div className="py-8 text-center">
-            <p className="font-medium text-primary">Thanks — your beta feedback was saved.</p>
+            <p className="font-medium text-primary">Thanks — your feedback was saved.</p>
           </div>
         ) : (
           <form onSubmit={submit} className="space-y-4">

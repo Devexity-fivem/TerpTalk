@@ -168,8 +168,7 @@ export function Navigation() {
       <nav id="tt-top-nav" className="sticky top-0 z-50 border-b border-border bg-card/95 backdrop-blur">
         <div className="mx-auto max-w-7xl px-3 sm:px-6 lg:px-8">
           <div className="flex h-16 items-center justify-between gap-2">
-            {/* Logo — compact below sm so the header fits 320px devices;
-                the Beta chip only appears once there's room for it. */}
+            {/* Logo — compact below sm so the header fits 320px devices. */}
             <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
               <Tooltip content="Go to homepage" side="bottom">
                 <Link href="/" className="flex items-center gap-1.5 sm:gap-2" aria-label="TerpTalk home">
@@ -178,11 +177,6 @@ export function Navigation() {
                   </div>
                   <span className="text-base font-bold tracking-tight sm:text-lg">TerpTalk</span>
                 </Link>
-              </Tooltip>
-              <Tooltip content="TerpTalk is in public beta — features are still rolling out" side="bottom" className="hidden sm:inline-flex">
-                <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-500">
-                  Beta
-                </span>
               </Tooltip>
             </div>
 

@@ -18,11 +18,11 @@ npm run dev          # http://localhost:3000
 
 Requires a PostgreSQL `DATABASE_URL`. SQLite is no longer supported.
 
-**Database environments (Neon):** local development and mutation-capable tests use the **`dev`** branch; Vercel Preview deployments also use **`dev`**; Vercel Production uses **`main`**. Never point local tooling at the `main` endpoint.
+**Database environments (Neon):** local development and mutation-capable tests use the **`dev`** branch; Vercel Production uses **`main`**. Never point local tooling at the `main` endpoint.
 
 ## Environment variables
 
-See `.env.example`. Required: `DATABASE_URL`, `NEXTAUTH_SECRET`, `IP_HASH_SALT`, `NEXTAUTH_URL`. Optional seed: `ADMIN_USERNAME`/`ADMIN_PASSWORD`, `MOD_USERNAME`/`MOD_PASSWORD`. Never commit `.env`.
+See `.env.example`. Required: `DATABASE_URL`, `NEXTAUTH_SECRET`, `IP_HASH_SALT`, `NEXTAUTH_URL`. Optional seed: `ADMIN_USERNAME`/`ADMIN_PASSWORD`, `MOD_USERNAME`/`MOD_PASSWORD`. Production additionally needs `DATABASE_URL_UNPOOLED` for the migration gate. Never commit `.env`.
 
 ## Prisma workflow
 
@@ -35,7 +35,7 @@ npm run backup                       # pg_dump or file copy -> backups/
 
 Never run `migrate reset` or destructive commands against production. Use `npx prisma migrate dev` only against the Neon `dev` branch.
 
-**Test safety:** every mutation-capable script under `scripts/` imports `db-guard.mjs`, which refuses to run when `DATABASE_URL` resolves to the production endpoint. `ALLOW_PRODUCTION_DB_TESTS=1` overrides it — never set it casually.
+**Test safety:** every mutation-capable test/verification script under `scripts/` imports `db-guard.mjs`, which refuses to run when `DATABASE_URL` resolves to the production endpoint. `ALLOW_PRODUCTION_DB_TESTS=1` overrides it — never set it casually.
 
 **Production migrations run inside the Vercel build.** `vercel-build` = `node scripts/prebuild-migrate.mjs && prisma generate && next build`. The gate (`scripts/prebuild-migrate.mjs`):
 
@@ -55,32 +55,20 @@ DATABASE_URL="postgresql://USER:PASSWORD@ep-XXXX.us-east-1.aws.neon.tech/neondb?
 ## Testing
 
 ```bash
-npm run lint && npm run build
-npm run dev &                        # terminal 1
-# open http://localhost:3000 and test key user flows
+npm run test:master          # authoritative suite — boots a dev server, runs every scripts/*-tests / *-verify against the Neon dev branch
+npm run test:<name>          # any single suite (see package.json)
+npx tsc --noEmit && npm run lint
 ```
+
+All mutation-capable test scripts import `scripts/db-guard.mjs`. Content seeds (`prisma/seed.ts`, `scripts/seed-strains.cjs`, `scripts/seed-mars-hydro-products.cjs`) are idempotent upserts and are the only unguarded writers — run them deliberately.
 
 ## Deployment workflow
 
-This project uses Vercel with two environments:
+This project uses a single Vercel environment:
 
 - `master` → Production (`https://terp-talk.vercel.app`)
-- `pre-prod` → Preview/Pre-production environment for testing before release
 
-```bash
-# Start a change
- git checkout -b feature/my-change pre-prod
-# ... work, commit, push to pre-prod ...
- git push origin pre-prod
-# Vercel builds a preview. Once verified, merge to master:
- git checkout pre-prod
- git pull origin pre-prod
- git checkout master
- git merge pre-prod
- git push origin master
-```
-
-Avoid pushing directly to `master` repeatedly. Each `master` build uses Vercel Functions Storage, and failed/skipped builds should be cleaned up from the Vercel dashboard regularly.
+Every push to `master` runs `vercel-build` (migration gate → build → promote). Feature work happens on local branches and lands on `master` via fast-forward/merge once `npm run test:master` passes. Failed/skipped builds can be pruned from the Vercel dashboard.
 
 ## Launch checklist
 

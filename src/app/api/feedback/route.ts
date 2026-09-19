@@ -11,7 +11,7 @@ const TITLE_MAX = 150
 const MESSAGE_MAX = 5000
 const PAGE_PATH_MAX = 300
 
-// POST — submit beta feedback: { type, title, message, pagePath? }
+// POST — submit feedback: { type, title, message, pagePath? }
 // Members only. source is always USER here — admins use the admin endpoint.
 export async function POST(request: Request) {
   try {
