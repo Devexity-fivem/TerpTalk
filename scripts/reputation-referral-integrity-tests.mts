@@ -149,6 +149,13 @@ async function run() {
   ok(qualEvent?.amount === REP_POINTS.REFERRAL, `payout amount is +${REP_POINTS.REFERRAL}`, qualEvent?.amount)
   ok(qualEvent?.userId === referrerMain.id, "payout credited to the referrer")
   ok(qualEvent?.actorId === refereeQual.id, "payout actorId is the referee")
+  const qualNotif = await prisma.notification.findFirst({
+    where: { userId: referrerMain.id, type: "REPUTATION", title: "Referral bonus" },
+    orderBy: { createdAt: "desc" },
+    select: { content: true },
+  })
+  ok(!!qualNotif, "payout notification is delivered")
+  ok(qualNotif?.content.includes(`@${P}_qual`), "payout notification names the actual invitee", qualNotif?.content)
   const mainPayouts = await prisma.reputationEvent.count({
     where: { userId: referrerMain.id, type: "REFERRAL", reversedAt: null },
   })
@@ -195,6 +202,23 @@ async function run() {
     where: { userId: referrerLegacy.id, type: "REFERRAL", reversedAt: null },
   })
   ok(legCount === 1, "legacy referrer keeps exactly one referral event", legCount)
+
+  // Negative: an unrelated unkeyed event in the same window must NOT satisfy
+  // legacy detection — only type REFERRAL counts.
+  const referrerNoise = await makeUser("refnoise")
+  const refereeNoise = await makeUser("noise", { referredById: referrerNoise.profile!.id, ageHours: 48 })
+  await pushRep(refereeNoise.id, REFERRAL_MIN_REP, "noise")
+  await prisma.reputationEvent.create({
+    data: {
+      userId: referrerNoise.id,
+      type: "STAFF_ADJUSTMENT",
+      amount: 25,
+      reason: "unrelated unkeyed adjustment",
+      createdAt: refereeNoise.createdAt,
+    },
+  })
+  await reconcileReferralPayouts()
+  ok((await referralEvent(refereeNoise.id)) !== null, "unrelated unkeyed event does not block payout")
 
   // ── Normal award + reconciliation concurrency → one payout ──────
   const referrerRace = await makeUser("refrace")
