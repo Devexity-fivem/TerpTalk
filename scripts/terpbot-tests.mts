@@ -72,6 +72,18 @@ function run() {
   }
   assert.equal(getChatCommand("diaries")?.name, "grows", "alias diaries → grows")
 
+  // /setup — public entity lookup, mention-eligible like the other lookups.
+  {
+    const setup = getChatCommand("setup")
+    assert.ok(setup, "setup registered")
+    assert.equal(setup!.permission, "public", "setup is public")
+    assert.equal(setup!.handledBy, "bot", "setup is bot-handled")
+    assert.ok(setup!.surfaces.includes("mention"), "setup mention-eligible")
+    assert.equal(setup!.category, "knowledge", "setup categorized knowledge")
+    assert.equal(getChatCommand("setups")?.name, "setup", "alias setups → setup")
+    assert.equal(isMentionCommand("setup"), true, "setup mention command")
+  }
+
   // Every command carries a category; staff commands are "staff".
   const CATEGORIES = new Set(["grow", "community", "knowledge", "profile", "utility", "staff"])
   for (const c of CHAT_COMMANDS) {
@@ -212,6 +224,23 @@ function run() {
     ["@terpbot this week's activity", "weekly"],
     ["@terpbot related to fungus gnats", "related", ["fungus gnats"]],
     ["@terpbot more about dwc", "related", ["dwc"]],
+
+    // ── Setup intents (Sprint 1) ────────────────────────────────────
+    ["@terpbot what lights does @pablo run", "setup", ["@pablo"]],
+    ["@terpbot what setup does @pablo use", "setup", ["@pablo"]],
+    ["@terpbot show me @pablo's setup", "setup", ["@pablo"]],
+    ["@terpbot @pablo's setup", "setup", ["@pablo"]],
+    ["@terpbot what tent is @pablo using", "setup", ["@pablo"]],
+    ["@terpbot what light does @pablo have", "setup", ["@pablo"]],
+    ["@terpbot what nutrients does @pablo run", "setup", ["@pablo"]],
+    ["@terpbot my setup", "setup", ["me"]],
+    ["@terpbot my grow setup", "setup", ["me"]],
+    ["@terpbot setup", "setup"],
+    ["@terpbot grow setup", "setup"],
+    ["@terpbot setups for a 4x4 tent", "setup", ["4x4 tent"]],
+    ["@terpbot find setups using led", "setup", ["led"]],
+    ["@terpbot show grow setups", "setup"],
+    ["@terpbot setups running coco", "setup", ["coco"]],
   ]
   for (const [input, expected, args] of cases) {
     const intent = parseTerpbotIntent(input)
@@ -244,6 +273,34 @@ function run() {
   for (const input of refusals) {
     const intent = parseTerpbotIntent(input)
     assert.equal(intent.kind, "refusal", `"${input}" should be refused (got ${JSON.stringify(intent)})`)
+  }
+
+  // ── Setup intents must not capture unrelated phrasing ────────────────
+  {
+    // "set up" (two words) is never a setup lookup — stays on guide/ask paths.
+    const guideIntent = parseTerpbotIntent("@terpbot how do i set up a tent")
+    assert.equal(guideIntent.kind, "command", "set up a tent → a command")
+    if (guideIntent.kind === "command") {
+      assert.equal(guideIntent.name, "guide", "set up a tent → guide, not setup")
+      assert.deepEqual(guideIntent.args, ["set up a tent"], "guide keeps the full query")
+    }
+    // Diary lookups keep their routing — setup matcher must not steal them.
+    const diaryIntent = parseTerpbotIntent("@terpbot show me @pablo's diary")
+    assert.equal(diaryIntent.kind, "command")
+    if (diaryIntent.kind === "command") {
+      assert.equal(diaryIntent.name, "diary", "@user's diary still → diary")
+      assert.deepEqual(diaryIntent.args, ["@pablo"])
+    }
+    const growIntent = parseTerpbotIntent("@terpbot show me @pablo's grow")
+    if (growIntent.kind === "command") {
+      assert.equal(growIntent.name, "diary", "@user's grow still → diary")
+    }
+    // A light question with no @user is a question, not a setup lookup.
+    assert.equal(parseTerpbotIntent("@terpbot what light should i use").kind, "fallback", "unowned light question → fallback")
+    assert.equal(parseTerpbotIntent("@terpbot what's the best tent for seedlings").kind, "fallback", "recommendation question → fallback")
+    // Staff vocabulary inside setup phrasing still hard-blocks.
+    assert.equal(parseTerpbotIntent("@terpbot ban @pablo's setup").kind, "refusal", "setup phrasing can't launder staff words")
+    assert.equal(parseTerpbotIntent("@terpbot delete @pablo's setup").kind, "refusal", "delete + setup → refusal")
   }
 
   // ── Intent parser: help / fallback / edge cases ───────────────────────

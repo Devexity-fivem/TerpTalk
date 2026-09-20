@@ -11,6 +11,7 @@ import { checkMaintenance } from "@/lib/maintenance"
 import { revalidateTag } from "next/cache"
 import { parseDiaryPatch, patchTouchesStrainStats } from "@/lib/diary-edit"
 import { notificationLinkWhere } from "@/lib/notify"
+import { purgeDiaryAnnouncements } from "@/lib/terpbot"
 
 // PATCH /api/diaries/[id] — owner/admin metadata editing.
 // Scope: mutable descriptive fields only. startDate anchors every derived
@@ -123,15 +124,17 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       revalidateTag("analytics", { expire: 0 })
       revalidateTag("leaderboard", { expire: 0 })
       revalidateTag("search", { expire: 0 })
-      // Leaving PUBLIC: purge previously-fanned-out notifications that still
-      // carry the diary title + link — same cleanup the DELETE path runs.
-      // Both URL forms: historical id links and canonical slug links.
+      // Leaving PUBLIC: purge previously-fanned-out notifications AND bot
+      // announcements that still carry the diary title + link — same
+      // cleanup the DELETE path runs. Both URL forms: historical id links
+      // and canonical slug links.
       if (data.visibility !== "PUBLIC" && result) {
         const links = [`/diaries/${result.id}`]
         if (result.slug) links.push(`/diaries/${result.slug}`)
         await prisma.notification
           .deleteMany({ where: notificationLinkWhere(links) })
           .catch(() => {})
+        await purgeDiaryAnnouncements(result).catch(() => {})
       }
     }
 

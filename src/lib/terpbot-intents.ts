@@ -153,6 +153,36 @@ const MATCHERS: Matcher[] = [
       return m && m[1].trim() ? [m[1].trim()] : []
     },
   },
+  // ── Setups — before grow/diary so "my grow setup" isn't captured by
+  // "my grow". Requires setup vocabulary or an @user, so unrelated grow
+  // questions keep falling through to guide/ask. "set up a tent" (two
+  // words) never matches `setups?` — "how do i set up a tent" still → guide.
+  {
+    name: "setup",
+    patterns: [
+      // "what lights does @user run" / "what tent is @user using"
+      /\b(what|which)\s+(lights?|lighting|tents?|setups?|gear|equipment|nutes?|nutrients?|medium)\s+(does|do|did|is)\s+@\w+\b/,
+      /\b(what|which)\s+(lights?|lighting|tents?|setups?|gear|equipment)\b.{0,20}\b(does|do|did)\s+@\w+\s+(use|uses|using|run|runs|running|have|has|got|grow|grows|growing)\b/,
+      // "@user's setup" / "show me @user's setup" / "@user's tent"
+      /@\w+('s|s)?\s+(grow\s+)?(setups?|tents?|lights?|lighting|gear|equipment)\b/,
+      /\bmy (grow )?setups?\b/,
+      // "setups for/with/using/running X" / "find grow setups"
+      /\bsetups?\s+(for|with|using|running)\s+(.+)/,
+      /\b(find|show|list|search|browse)\s+(me\s+)?(a\s+|an\s+|any\s+|some\s+|all\s+)?(grow\s+)?setups?\b/,
+      /^(grow )?(setup|setups)$/,
+    ],
+    args: (t) => {
+      const u = t.match(/@([A-Za-z0-9_]{3,20})\b/)
+      if (u) return [`@${u[1]}`]
+      if (/\bmy\b/.test(t)) return ["me"]
+      const q = t.match(/\bsetups?\s+(?:for|with|using|running)\s+(.+)/)
+      if (q) {
+        const cleaned = q[1].replace(/^(a|an|the|some|any)\s+/, "").trim()
+        return cleaned ? [cleaned] : []
+      }
+      return []
+    },
+  },
   {
     name: "growhelp",
     patterns: [

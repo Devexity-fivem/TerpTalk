@@ -12,6 +12,7 @@ import { parseMediumType, parseLightType, parseTechniques, GROW_TYPES } from "@/
 import { revalidateTag } from "next/cache"
 import { after } from "next/server"
 import { assistFirstDiary } from "@/lib/terpbot-assist"
+import { purgeDiaryAnnouncements } from "@/lib/terpbot"
 import { isDiaryVisibility } from "@/lib/diary-visibility"
 import { entitySlug, diaryPath } from "@/lib/slugs"
 
@@ -298,6 +299,10 @@ export async function DELETE(request: Request) {
       })
       return imgs.map((i) => i.url)
     })
+
+    // Bot announcements in public rooms carry the diary title + link — they
+    // must not outlive the diary. Post-commit, best-effort.
+    await purgeDiaryAnnouncements(diary).catch(() => {})
 
     // Diary rep (DIARY_CREATED, per-day update awards, reactions) is all
     // keyed sourceType=DIARY/sourceId=diaryId — one reversal unwinds it.

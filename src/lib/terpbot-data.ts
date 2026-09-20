@@ -5,7 +5,7 @@
 // publicUserSelect — never DirectMessage, Report, SecurityEvent, Block,
 // credentials, or staff-only tables.
 import { prisma } from "@/lib/prisma"
-import { activeAuthor, blockExistsBetween, containsExternalLink, LIMITS, USERNAME_REGEX, rankableProfile, REPUTATION_ORDER } from "@/lib/security"
+import { activeAuthor, blockExistsBetween, blockedUserIds, containsExternalLink, LIMITS, USERNAME_REGEX, rankableProfile, REPUTATION_ORDER } from "@/lib/security"
 import { extractThreadRef, type ThreadRef } from "@/lib/terpbot-context"
 import { postDeepLink } from "@/lib/notify"
 import { getNextTier, getTierProgress, getRepStage, getStageProgress, getTrustStanding, getNextTrustStanding } from "@/lib/reputation-config"
@@ -19,12 +19,12 @@ import { escapeLike, getStrainGrowStats } from "@/lib/strain-stats"
 import { tokenizeSearchText } from "@/lib/search-terms"
 import { diaryDay, diaryWeek } from "@/lib/diary-weeks"
 import { publicDiaryWhere } from "@/lib/diary-visibility"
-import { diaryPath, strainPath } from "@/lib/slugs"
+import { diaryPath, strainPath, setupPath } from "@/lib/slugs"
 import { getGrowJourney } from "@/lib/grow-journey"
 import { notify } from "@/lib/notify"
 import { getBotUserId } from "@/lib/terpbot"
 import { buildHelpText } from "@/lib/chat-commands"
-import { TERPBOT_USERNAME, randomGrowTip } from "@/lib/terpbot"
+import { TERPBOT_USERNAME, randomGrowTip, sanitizeEcho as sanitizeEchoStrict } from "@/lib/terpbot"
 
 export interface BotCommandCtx {
   userId: string
@@ -925,6 +925,125 @@ async function handle(name: string, ctx: BotCommandCtx): Promise<BotCommandResul
       }
       if (strain) lines.push(`🌿 ${sanitizeField(strain.name)} → ${strainPath(strain)}`)
       return ok(lines.join("\n"))
+    }
+
+    case "setup": {
+      const raw = ctx.rest.trim()
+      if (hasLink(raw)) return ok(`I can't look that up — setup names and equipment only, no links.`)
+
+      // Public setup surface mirrors /setups: deleted excluded, active
+      // authors only, and the viewer's blocked users filtered out.
+      const SETUP_SELECT = {
+        id: true,
+        slug: true,
+        title: true,
+        authorId: true,
+        space: true,
+        tent: true,
+        lighting: true,
+        medium: true,
+        equipment: true,
+        strain: true,
+        author: { select: { name: true, profile: { select: { username: true } } } },
+      } as const
+
+      const renderSetup = (s: {
+        slug: string | null
+        id: string
+        title: string
+        space: string | null
+        tent: string | null
+        lighting: string | null
+        medium: string | null
+        equipment: string | null
+        strain: string | null
+        author: { name: string | null; profile: { username: string | null } | null }
+      }) => {
+        // strict echo on stored user fields — strips URLs/domains/@ as well
+        // as markup, so a spec field can't smuggle a link into bot output.
+        const specs = [s.tent || s.space, s.lighting, s.medium, s.equipment]
+          .filter((v): v is string => !!v)
+          .map((v) => sanitizeEchoStrict(v, 30))
+          .filter(Boolean)
+          .slice(0, 3)
+        const owner = s.author.profile?.username || s.author.name || "member"
+        return `- ${sanitizeEchoStrict(s.title, 50)}${specs.length ? ` (${specs.join(" · ")})` : ""} by @${sanitizeEchoStrict(owner, 30)} → ${setupPath(s)}`
+      }
+
+      // "/setup @user" (and "my setup" → args ["me"]) — a member's setups.
+      // resolveMember applies the banned/opted-out/mutual-block gates, so a
+      // gated member resolves the same as an unknown name.
+      const selfLookup = raw === "me"
+      const ownerMatch = selfLookup ? null : raw.match(/^@([A-Za-z0-9_]{3,20})\b/)
+      if (selfLookup || ownerMatch) {
+        let targetId = ctx.userId
+        let username: string | null = null
+        if (ownerMatch) {
+          const t = await resolveMember(`@${ownerMatch[1]}`, ctx.userId)
+          if (!t) return ok(`Couldn't find that member — or they've opted out of bot lookups.`)
+          if (t !== "self") {
+            targetId = t.userId
+            username = t.username
+          }
+        }
+        const setups = await prisma.growSetup.findMany({
+          where: { deleted: false, authorId: targetId },
+          orderBy: { createdAt: "desc" },
+          take: 3,
+          select: SETUP_SELECT,
+        })
+        if (!setups.length) {
+          return ok(
+            username
+              ? `@${username} hasn't shared a setup yet — browse /setups`
+              : `You haven't shared a setup yet — post one at /setups/new`
+          )
+        }
+        return ok(`🛠 ${username ? `@${username}'s` : "Your"} setup${setups.length > 1 ? "s" : ""}:\n${setups.map(renderSetup).join("\n")}`)
+      }
+
+      const blocked = new Set(await blockedUserIds(ctx.userId))
+      const base = { deleted: false, author: activeAuthor() }
+
+      if (!raw) {
+        const setups = (await prisma.growSetup.findMany({
+          where: base,
+          orderBy: { createdAt: "desc" },
+          take: 6, // fetch extra — blocked authors drop out below
+          select: SETUP_SELECT,
+        })).filter((s) => !blocked.has(s.authorId)).slice(0, 3)
+        if (!setups.length) return ok(`No setups shared yet — be the first at /setups/new`)
+        return ok(`🛠 Newest grow setups:\n${setups.map(renderSetup).join("\n")}\nBrowse all: /setups`)
+      }
+
+      const q = escapeLike(sanitizeEcho(raw))
+      const needle = { contains: q, mode: "insensitive" as const }
+      const setups = (await prisma.growSetup.findMany({
+        where: {
+          ...base,
+          OR: [
+            { title: needle },
+            { space: needle },
+            { tent: needle },
+            { lighting: needle },
+            { ventilation: needle },
+            { fans: needle },
+            { containers: needle },
+            { medium: needle },
+            { nutrients: needle },
+            { controllers: needle },
+            { equipment: needle },
+            { strain: needle },
+          ],
+        },
+        orderBy: { createdAt: "desc" },
+        take: 6,
+        select: SETUP_SELECT,
+      })).filter((s) => !blocked.has(s.authorId)).slice(0, 3)
+      if (!setups.length) {
+        return ok(`No setups matching "${sanitizeEcho(raw)}" — browse /setups`)
+      }
+      return ok(`🛠 Setups matching "${sanitizeEcho(raw)}":\n${setups.map(renderSetup).join("\n")}\nBrowse all: /setups`)
     }
 
     case "online": {

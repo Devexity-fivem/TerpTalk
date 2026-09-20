@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server"
+import { after, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
@@ -11,6 +11,7 @@ import { revalidateTag } from "next/cache"
 import { diaryDay, diaryWeek } from "@/lib/diary-weeks"
 import { diaryPath } from "@/lib/slugs"
 import { evaluateGrowJourney } from "@/lib/grow-journey"
+import { announceStageTransition } from "@/lib/terpbot"
 import { rateLimit } from "@/lib/rate-limit"
 import {
   UPDATE_STAGES,
@@ -216,6 +217,16 @@ export async function POST(request: Request) {
     // run the standard check so updates under the 10-char rep floor (which
     // skip the award pipeline) still advance badges.
     await checkBadges(session.user.id).catch(() => {})
+
+    // TerpBot announces genuine stage transitions publicly — once per
+    // diary + resulting stage. The helper re-checks PUBLIC visibility,
+    // deletion, opt-out and the CURRENT stage at post time, so a diary
+    // flipped private mid-flight or superseded by a later flip can't emit
+    // a stale post. `stage` is the requested value, `diary.stage` the
+    // pre-transaction value — same guard the transaction used.
+    if (stage && stage !== diary.stage) {
+      after(() => announceStageTransition(diaryId, diary.stage, stage).then(() => {}))
+    }
 
     // Notify diary followers (not the author) — notifyMany filters
     // prefs, banned recipients, and blocks in bulk. PRIVATE diaries never

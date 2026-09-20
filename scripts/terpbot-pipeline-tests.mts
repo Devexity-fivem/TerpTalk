@@ -15,7 +15,7 @@ import {
   scanDormantThreads,
   scanStaleDiaries,
 } from "@/lib/terpbot-assist"
-import { getBotUserId, sanitizeEcho } from "@/lib/terpbot"
+import { getBotUserId, sanitizeEcho, announceStageTransition, purgeDiaryAnnouncements } from "@/lib/terpbot"
 import { runBotCommand } from "@/lib/terpbot-data"
 
 const SUFFIX = String(Date.now()).slice(-8)
@@ -32,6 +32,8 @@ const notificationIds: string[] = []
 const threadIds: string[] = []
 const postIds: string[] = []
 const diaryIds: string[] = []
+const setupIds: string[] = []
+const chatMessageIds: string[] = []
 const rateLimitKeys: string[] = []
 
 async function run() {
@@ -435,14 +437,220 @@ async function run() {
       console.log("✓ command dispatch: grow/knowledge/community handlers")
     }
 
-    // ── 12. sanitizeEcho strips domains/URLs/markup ───────────────────
+    // ── 12. /setup command: owner lookup, search, privacy gates ────────
+    {
+      const owner = await mk(`__tbp_own_${SUFFIX}`)
+      const viewer = await mk(`__tbp_view_${SUFFIX}`)
+      const blocker = await mk(`__tbp_blk_${SUFFIX}`)
+      const optedOwner = await mk(`__tbp_opt_${SUFFIX}`)
+      await prisma.profile.update({ where: { userId: optedOwner.id }, data: { publicMilestoneOptOut: true } })
+      const bannedOwner = await mk(`__tbp_sown_${SUFFIX}`)
+      await prisma.user.update({ where: { id: bannedOwner.id }, data: { banned: true } })
+
+      const mkSetup = async (authorId: string, data: Record<string, unknown>) => {
+        const s = await prisma.growSetup.create({
+          data: { title: `__tbp setup ${SUFFIX}`, description: "t", authorId, ...data },
+        })
+        setupIds.push(s.id)
+        return s
+      }
+      const s1 = await mkSetup(owner.id, {
+        title: `__tbp tent ${SUFFIX}`, slug: `__tbp-tent-${SUFFIX}`,
+        tent: "4x4 AC Infinity", lighting: "Mars Hydro TS1000", medium: "coco",
+      })
+      await mkSetup(owner.id, { title: `__tbp deleted ${SUFFIX}`, tent: "zzdeletedtent", deleted: true })
+      await mkSetup(bannedOwner.id, { title: `__tbp banned ${SUFFIX}`, lighting: "zzbannedlight" })
+      await mkSetup(owner.id, {
+        title: `[x](https://evil.example) __tbp evil ${SUFFIX}`, lighting: "evil.example 1000w",
+      })
+      await mkSetup(blocker.id, { title: `__tbp blocked ${SUFFIX}`, tent: "zzblockedtent" })
+      await mkSetup(optedOwner.id, { title: `__tbp opted ${SUFFIX}` })
+      const sNoSlug = await mkSetup(owner.id, { title: `__tbp noslug ${SUFFIX}`, lighting: "zznosluglight" })
+      await prisma.block.create({ data: { blockerId: viewer.id, blockedId: blocker.id } })
+
+      const ctx = (userId: string) => (rest = "", args: string[] = []): Parameters<typeof runBotCommand>[1] =>
+        ({ userId, role: "MEMBER", displayName: "t", args, rest })
+      const res = async (userId: string, rest: string) => {
+        const r = await runBotCommand("setup", ctx(userId)(rest, rest ? [rest] : []))
+        assert.ok(r.ok, `setup "${rest}" dispatched ok`)
+        return r.ok ? r.messages[0] : ""
+      }
+
+      // Owner lookup — real member resolves, canonical slug link emitted.
+      const own = await res(viewer.id, `@__tbp_own_${SUFFIX}`)
+      assert.match(own, new RegExp(`__tbp tent ${SUFFIX}`), "owner lookup returns the setup")
+      assert.ok(own.includes(`/setups/__tbp-tent-${SUFFIX}`), "canonical slug link")
+      assert.match(own, /@__tbp_own_/, "owner attributed")
+
+      // Self lookup via "me" (from "@terpbot my setup").
+      const self = await res(owner.id, "me")
+      assert.match(self, new RegExp(`__tbp tent ${SUFFIX}`), "self lookup works")
+
+      // Equipment + tent search hit the stored fields.
+      const led = await res(viewer.id, "mars hydro")
+      assert.match(led, new RegExp(`__tbp tent ${SUFFIX}`), "lighting search hits")
+      const tent = await res(viewer.id, "4x4")
+      assert.match(tent, new RegExp(`__tbp tent ${SUFFIX}`), "tent search hits")
+
+      // Deleted setups never surface.
+      const del = await res(viewer.id, "zzdeletedtent")
+      assert.match(del, /No setups matching/, "deleted setup excluded")
+      // Banned author's setups never surface.
+      const ban = await res(viewer.id, "zzbannedlight")
+      assert.match(ban, /No setups matching/, "banned author excluded")
+      // Blocked author's setups filtered for the blocking viewer only.
+      const blk = await res(viewer.id, "zzblockedtent")
+      assert.match(blk, /No setups matching/, "blocked author filtered for viewer")
+      const blkVisible = await res(owner.id, "zzblockedtent")
+      assert.match(blkVisible, new RegExp(`__tbp blocked ${SUFFIX}`), "unblocked viewer still sees it")
+      // Blocked member via owner lookup resolves like an unknown name.
+      const blkLookup = await res(viewer.id, `@__tbp_blk_${SUFFIX}`)
+      assert.match(blkLookup, /Couldn't find that member/, "blocked member → couldn't find")
+      // Opted-out member via owner lookup also resolves like unknown.
+      const optLookup = await res(viewer.id, `@__tbp_opt_${SUFFIX}`)
+      assert.match(optLookup, /Couldn't find that member/, "opted-out member → couldn't find")
+
+      // Slug-less setup falls back to the id route.
+      const noslug = await res(viewer.id, "zznosluglight")
+      assert.ok(noslug.includes(`/setups/${sNoSlug.id}`), "id fallback link when no slug")
+
+      // Sanitization — stored markdown/links can't survive the echo.
+      const evil = await res(viewer.id, `__tbp evil ${SUFFIX}`)
+      assert.ok(!/evil\.example|\[|\]\(|https?:/.test(evil), `stored markup stripped: ${evil}`)
+
+      // No-result and no-arg paths.
+      const none = await res(viewer.id, "zzz-none-zzz")
+      assert.match(none, /No setups matching/, "no-result response")
+      assert.ok(none.includes("/setups"), "no-result points to /setups")
+      const list = await res(viewer.id, "")
+      assert.match(list, /Newest grow setups/, "no-arg → newest list")
+      assert.ok(!list.includes(`__tbp blocked ${SUFFIX}`), "newest list filters blocked authors")
+      assert.ok(!list.includes(`__tbp deleted ${SUFFIX}`), "newest list filters deleted")
+      assert.ok(!list.includes(`__tbp banned ${SUFFIX}`), "newest list filters banned authors")
+      console.log("✓ /setup command: lookup, search, privacy gates, sanitization")
+    }
+
+    // ── 13. announceStageTransition: visibility gates + idempotency ────
+    {
+      const grower = await mk(`__tbp_stg_${SUFFIX}`)
+      const optedGrower = await mk(`__tbp_stgo_${SUFFIX}`)
+      await prisma.profile.update({ where: { userId: optedGrower.id }, data: { publicMilestoneOptOut: true } })
+      const bannedGrower = await mk(`__tbp_stgb_${SUFFIX}`)
+      await prisma.user.update({ where: { id: bannedGrower.id }, data: { banned: true } })
+
+      const general = await prisma.chatRoom.findFirst({
+        where: { isPrivate: false },
+        orderBy: { createdAt: "asc" },
+      })
+      assert.ok(general, "a public room exists for announcements")
+      rateLimitKeys.push("terpbot:out:global", `terpbot:out:room:${general!.id}`)
+      // Earlier suites may have consumed the bot's output budget — reset so
+      // a cap hit can't masquerade as a privacy gate.
+      await prisma.rateLimit.deleteMany({ where: { key: { in: rateLimitKeys } } }).catch(() => {})
+      const since = new Date()
+      const msgsFor = async (needle: string) =>
+        prisma.chatMessage.findMany({
+          where: { roomId: general!.id, authorId: botId, createdAt: { gte: since }, content: { contains: needle } },
+          select: { id: true, content: true },
+        })
+
+      const mkDiary = async (authorId: string, stage: string, opts: { visibility?: string; deleted?: boolean; slug?: string; title?: string } = {}) => {
+        const d = await prisma.growDiary.create({
+          data: {
+            title: opts.title ?? `__tbp stage ${SUFFIX}`,
+            description: "t", growType: "INDOOR", startDate: new Date(),
+            authorId, stage, visibility: opts.visibility ?? "PUBLIC",
+            deleted: !!opts.deleted, slug: opts.slug,
+          },
+        })
+        diaryIds.push(d.id)
+        return d
+      }
+
+      // Genuine transition on a PUBLIC diary → one post, claim recorded.
+      const d1 = await mkDiary(grower.id, "VEGETATIVE", { slug: `__tbp-stg-${SUFFIX}` })
+      const dto = await announceStageTransition(d1.id, "SEEDLING", "VEGETATIVE")
+      assert.ok(dto, "PUBLIC transition announces")
+      assert.match(dto!.content, new RegExp(`@__tbp_stg_${SUFFIX}`), "grower named")
+      assert.ok(dto!.content.includes("Seedling → Vegetative"), "real old→new labels")
+      assert.ok(dto!.content.includes(`/diaries/__tbp-stg-${SUFFIX}`), "canonical slug link")
+      assert.ok(!dto!.content.includes("@terpbot"), "no self-trigger in output")
+      chatMessageIds.push(dto!.id)
+      assert.ok(
+        await prisma.botEvent.findUnique({ where: { key: `announce:stage:${d1.id}:VEGETATIVE` } }),
+        "claim recorded"
+      )
+      botEventKeys.push(`announce:stage:${d1.id}:VEGETATIVE`)
+
+      // Retry → claim exists, no second post.
+      const dup = await announceStageTransition(d1.id, "SEEDLING", "VEGETATIVE")
+      assert.equal(dup, null, "same transition cannot announce twice")
+      assert.equal((await msgsFor(`__tbp-stg-${SUFFIX}`)).length, 1, "still exactly one post")
+
+      // New stage → new key → announces once more.
+      await prisma.growDiary.update({ where: { id: d1.id }, data: { stage: "FLOWER" } })
+      const dto2 = await announceStageTransition(d1.id, "VEGETATIVE", "FLOWER")
+      assert.ok(dto2, "subsequent transition announces")
+      assert.ok(dto2!.content.includes("Vegetative → Flower"), "second transition labels")
+      chatMessageIds.push(dto2!.id)
+      botEventKeys.push(`announce:stage:${d1.id}:FLOWER`)
+
+      // Stale async state: claimed stage isn't current → silent.
+      const stale = await announceStageTransition(d1.id, "FLOWER", "HARVEST")
+      assert.equal(stale, null, "stale stage never announces")
+      assert.equal(
+        await prisma.botEvent.count({ where: { key: `announce:stage:${d1.id}:HARVEST` } }),
+        0, "stale attempt leaves no claim"
+      )
+      assert.equal((await msgsFor(`__tbp-stg-${SUFFIX}`)).length, 2, "no stale post added")
+
+      // Visibility gates — PRIVATE / UNLISTED / deleted / banned / opted-out.
+      const dPriv = await mkDiary(grower.id, "FLOWER", { visibility: "PRIVATE", slug: `__tbp-priv-${SUFFIX}` })
+      assert.equal(await announceStageTransition(dPriv.id, "VEGETATIVE", "FLOWER"), null, "PRIVATE never announces")
+      const dUnl = await mkDiary(grower.id, "FLOWER", { visibility: "UNLISTED", slug: `__tbp-unl-${SUFFIX}` })
+      assert.equal(await announceStageTransition(dUnl.id, "VEGETATIVE", "FLOWER"), null, "UNLISTED never announces")
+      const dDel = await mkDiary(grower.id, "FLOWER", { deleted: true, slug: `__tbp-del-${SUFFIX}` })
+      assert.equal(await announceStageTransition(dDel.id, "VEGETATIVE", "FLOWER"), null, "deleted never announces")
+      const dBan = await mkDiary(bannedGrower.id, "FLOWER", { slug: `__tbp-ban-${SUFFIX}` })
+      assert.equal(await announceStageTransition(dBan.id, "VEGETATIVE", "FLOWER"), null, "banned author never announces")
+      const dOpt = await mkDiary(optedGrower.id, "FLOWER", { slug: `__tbp-opt-${SUFFIX}` })
+      assert.equal(await announceStageTransition(dOpt.id, "VEGETATIVE", "FLOWER"), null, "opted-out member never announces")
+      for (const [d, s] of [[dPriv, "priv"], [dUnl, "unl"], [dDel, "del"], [dBan, "ban"], [dOpt, "opt"]] as const) {
+        assert.equal(
+          await prisma.botEvent.count({ where: { key: `announce:stage:${d.id}:FLOWER` } }),
+          0, `suppressed transition leaves no claim (${s})`
+        )
+        assert.equal((await msgsFor(`__tbp-${s}-${SUFFIX}`)).length, 0, `no post (${s})`)
+      }
+
+      // Sanitization — attacker-controlled title can't inject markup/links.
+      const dEvil = await mkDiary(grower.id, "VEGETATIVE", {
+        slug: `__tbp-evilstg-${SUFFIX}`,
+        title: `[x](https://evil.example) __tbp evilstg ${SUFFIX}`,
+      })
+      const dtoE = await announceStageTransition(dEvil.id, "SEEDLING", "VEGETATIVE")
+      assert.ok(dtoE, "evil-title diary still announces")
+      assert.ok(!/evil\.example|\[|\]\(|https?:/.test(dtoE!.content), `title sanitized: ${dtoE!.content}`)
+      chatMessageIds.push(dtoE!.id)
+      botEventKeys.push(`announce:stage:${dEvil.id}:VEGETATIVE`)
+
+      // Residue purge — a diary leaving PUBLIC deletes the bot's posts
+      // carrying its link (same rule as the notification purge).
+      assert.equal((await msgsFor(`__tbp-stg-${SUFFIX}`)).length, 2, "two posts before purge")
+      await purgeDiaryAnnouncements(d1)
+      assert.equal((await msgsFor(`__tbp-stg-${SUFFIX}`)).length, 0, "purge removes both announce posts")
+      assert.equal((await msgsFor(`__tbp-evilstg-${SUFFIX}`)).length, 1, "other diaries' posts untouched")
+      console.log("✓ announceStageTransition: visibility gates, idempotency, sanitization, purge")
+    }
+
+    // ── 14. sanitizeEcho strips domains/URLs/markup ───────────────────
     {
       const out = sanitizeEcho(`Check [x](https://evil.example) visit evil.example\n@admin`)
       assert.ok(!/https?:|evil\.example|@/.test(out), `sanitizeEcho cleaned: "${out}"`)
       console.log("✓ sanitizeEcho domain stripping")
     }
 
-    // ── 13. getBotStats counts assists ────────────────────────────────
+    // ── 15. getBotStats counts assists ────────────────────────────────
     {
       const stats = await getBotStats()
       assert.ok(stats.assists >= 5, `assists counted in bot stats (got ${stats.assists})`)
@@ -457,6 +665,8 @@ async function run() {
     await prisma.post.deleteMany({ where: { id: { in: postIds } } }).catch(() => {})
     await prisma.thread.deleteMany({ where: { id: { in: threadIds } } }).catch(() => {})
     await prisma.growDiary.deleteMany({ where: { id: { in: diaryIds } } }).catch(() => {})
+    await prisma.growSetup.deleteMany({ where: { id: { in: setupIds } } }).catch(() => {})
+    await prisma.chatMessage.deleteMany({ where: { id: { in: chatMessageIds } } }).catch(() => {})
     await prisma.botEvent.deleteMany({ where: { key: { in: botEventKeys } } }).catch(() => {})
     await prisma.botEvent.deleteMany({ where: { key: { startsWith: "assist:" }, userId: { in: ids } } }).catch(() => {})
     await prisma.rateLimit.deleteMany({ where: { key: { in: rateLimitKeys } } }).catch(() => {})

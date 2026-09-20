@@ -13,10 +13,11 @@
 // a bot message; never hand the bot moderation, role, or reputation writes.
 import { prisma } from "@/lib/prisma"
 import { getPusher } from "@/lib/pusher"
-import { chatAuthorSelect, LIMITS } from "@/lib/security"
+import { activeAuthor, chatAuthorSelect, LIMITS } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
-import { TERPBOT_USERNAME } from "@/lib/terpbot-constants"
-import { recordBotEvent } from "@/lib/terpbot-events"
+import { TERPBOT_USERNAME, stageLabel } from "@/lib/terpbot-constants"
+import { claimBotEvent, recordBotEvent, releaseBotEvent } from "@/lib/terpbot-events"
+import { diaryPath } from "@/lib/slugs"
 
 export { TERPBOT_USERNAME }
 const BOT_ROLE = "MEMBER"
@@ -265,6 +266,80 @@ export async function announceHarvest(username: string, diaryTitle: string, yiel
     }).catch(() => {})
   }
   return dto
+}
+
+// ── Stage transitions ──────────────────────────────────────────────────
+
+// One public announcement per diary + resulting stage, at most. Detection
+// lives in the diary-update route; this helper re-validates live state at
+// post time (visibility, deletion, stage can all change between the update
+// commit and this async run) and claims the event BEFORE posting so retries
+// and concurrent transitions collapse to a single post.
+export async function announceStageTransition(
+  diaryId: string,
+  fromStage: string,
+  toStage: string
+) {
+  try {
+    const diary = await prisma.growDiary.findFirst({
+      where: {
+        id: diaryId,
+        deleted: false,
+        visibility: "PUBLIC",
+        stage: toStage, // stale announcements die here — a later flip wins
+        author: activeAuthor(),
+      },
+      select: {
+        id: true,
+        slug: true,
+        title: true,
+        author: {
+          select: {
+            name: true,
+            profile: { select: { username: true, publicMilestoneOptOut: true } },
+          },
+        },
+      },
+    })
+    if (!diary) return null
+    // Members who opt out of public milestones get no stage announcement at
+    // all — a public post still exposes their diary's title, stage and link.
+    if (diary.author.profile?.publicMilestoneOptOut) return null
+
+    const key = `announce:stage:${diaryId}:${toStage}`
+    const claimed = await claimBotEvent({ type: "ANNOUNCEMENT", key, command: "stage" })
+    if (!claimed) return null
+
+    const name = diary.author.profile?.username ?? diary.author.name
+    const who = name ? `@${name}` : "a member"
+    const dto = await postToGeneral(
+      `🌱 ${who} moved "${sanitizeEcho(diary.title)}" from ${stageLabel(fromStage)} → ${stageLabel(toStage)} — ${diaryPath(diary)}`
+    )
+    // A failed post releases the claim so the transition stays announceable;
+    // the unique key still prevents doubles once a post lands.
+    if (!dto) await releaseBotEvent(key)
+    return dto
+  } catch (error) {
+    console.error("[terpbot] stage announce failed:", error)
+    return null
+  }
+}
+
+// Remove the bot's public room messages carrying a diary link once the
+// diary leaves PUBLIC or is deleted — same residue rule as the notification
+// purge: a public post with the diary's title + link must not outlive the
+// diary's privacy. Matches both URL forms (id links and canonical slugs).
+export async function purgeDiaryAnnouncements(diary: { id: string; slug?: string | null }) {
+  try {
+    const botId = await getBotUserId()
+    const links = [`/diaries/${diary.id}`]
+    if (diary.slug) links.push(`/diaries/${diary.slug}`)
+    await prisma.chatMessage.deleteMany({
+      where: { authorId: botId, OR: links.map((l) => ({ content: { contains: l } })) },
+    })
+  } catch (error) {
+    console.error("[terpbot] diary announce purge failed:", error)
+  }
 }
 
 // Rotating grow tips — shared by the daily digest and the /tip command.

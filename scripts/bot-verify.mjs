@@ -71,6 +71,9 @@ async function main() {
   const member = await createUser("m")
   const mod = await createUser("mod", { role: "MODERATOR" })
   const rooms = []
+  const setupIds = []
+  const diaryIds = []
+  const extraUsers = []
   try {
     const memberCookie = await login(member.username, member.password)
     const modCookie = await login(mod.username, mod.password)
@@ -479,6 +482,193 @@ async function main() {
       fail("referral-guard registration returns 201", { status: reg.status, data: reg.data })
     }
 
+    // ── Phase 4: /setup command + setup mention intents ────────────
+    {
+      const ownSetup = await prisma.growSetup.create({
+        data: {
+          title: `__bv tent ${TS}`, slug: `__bv-tent-${TS}`, description: "t",
+          tent: "4x4 AC Infinity", lighting: "Mars Hydro TS1000", medium: "coco",
+          authorId: member.id,
+        },
+      })
+      const delSetup = await prisma.growSetup.create({
+        data: {
+          title: `__bv del ${TS}`, description: "t", tent: "zzbvdeleted",
+          authorId: member.id, deleted: true,
+        },
+      })
+      setupIds.push(ownSetup.id, delSetup.id)
+
+      const setupRes = await cmd(`/setup @${member.username}`)
+      const setupText = setupRes.data?.message?.content || ""
+      setupRes.status === 200 && setupText.includes(`__bv tent ${TS}`) && setupText.includes(`/setups/__bv-tent-${TS}`)
+        ? pass("/setup @user returns setup with canonical slug link")
+        : fail("/setup @user returns setup with canonical slug link", { status: setupRes.status, data: setupRes.data })
+
+      const setupSearch = await cmd("/setup mars hydro")
+      const searchText = setupSearch.data?.message?.content || ""
+      setupSearch.status === 200 && searchText.includes(`__bv tent ${TS}`) && /Mars Hydro/i.test(searchText)
+        ? pass("/setup equipment search hits")
+        : fail("/setup equipment search hits", { status: setupSearch.status, data: setupSearch.data })
+
+      const setupDel = await cmd("/setup zzbvdeleted")
+      const delText = setupDel.data?.message?.content || ""
+      setupDel.status === 200 && /No setups matching/.test(delText) && delText.includes("/setups")
+        ? pass("/setup excludes deleted setups")
+        : fail("/setup excludes deleted setups", { status: setupDel.status, data: setupDel.data })
+
+      const setupNone = await cmd("/setup zzz-no-match-zzz")
+      const noneText = setupNone.data?.message?.content || ""
+      setupNone.status === 200 && /No setups matching/.test(noneText)
+        ? pass("/setup no-result response")
+        : fail("/setup no-result response", { status: setupNone.status, data: setupNone.data })
+
+      const setupList = await cmd("/setup")
+      const listText = setupList.data?.message?.content || ""
+      setupList.status === 200 && /setup/i.test(listText)
+        ? pass("/setup no-arg lists setups")
+        : fail("/setup no-arg lists setups", { status: setupList.status, data: setupList.data })
+
+      // Mention intents hit the same data path.
+      const lightsM = await mention(`@terpbot what lights does @${member.username} run`)
+      lightsM.reply && lightsM.reply.content.includes(`__bv tent ${TS}`) && /Mars Hydro/i.test(lightsM.reply.content)
+        ? pass("intent: what lights does @user run")
+        : fail("intent: what lights does @user run", lightsM.reply?.content)
+
+      const tentM = await mention(`@terpbot what tent is @${member.username} using`)
+      tentM.reply && tentM.reply.content.includes(`__bv tent ${TS}`)
+        ? pass("intent: what tent is @user using")
+        : fail("intent: what tent is @user using", tentM.reply?.content)
+
+      const showM = await mention(`@terpbot show me @${member.username}'s setup`)
+      showM.reply && showM.reply.content.includes(`/setups/__bv-tent-${TS}`)
+        ? pass("intent: show me @user's setup")
+        : fail("intent: show me @user's setup", showM.reply?.content)
+    }
+
+    // ── Phase 4b: stage-flip announcements via the real update path ──
+    {
+      const general = await prisma.chatRoom.findFirst({ where: { slug: "general" } }) ??
+        await prisma.chatRoom.findFirst({ where: { isPrivate: false }, orderBy: { createdAt: "asc" } })
+      if (!general) {
+        fail("stage announce: public room exists", "no public room")
+      } else {
+        // Announcements share the bot output budget — reset so the suite
+        // itself can't suppress a post and look like a privacy gate.
+        await prisma.rateLimit.deleteMany({
+          where: { key: { in: ["terpbot:out:global", `terpbot:out:room:${general.id}`] } },
+        }).catch(() => {})
+        const since = new Date()
+        const announcements = async (needle) =>
+          prisma.chatMessage.findMany({
+            where: { roomId: general.id, authorId: botId, createdAt: { gte: since }, content: { contains: needle } },
+            select: { id: true, content: true },
+          })
+        const waitFor = async (needle, minCount = 1, tries = 12) => {
+          for (let i = 0; i < tries; i++) {
+            const msgs = await announcements(needle)
+            if (msgs.length >= minCount) return msgs
+            await new Promise((r) => setTimeout(r, 500))
+          }
+          return announcements(needle)
+        }
+        const settle = () => new Promise((r) => setTimeout(r, 2500))
+        const mkDiary = (authorId, stage, visibility = "PUBLIC", slug = "") =>
+          prisma.growDiary.create({
+            data: {
+              title: `__bv stage ${TS}`, description: "t", growType: "INDOOR",
+              startDate: new Date(), authorId, stage, visibility,
+              slug: slug || undefined,
+            },
+          })
+        const postUpdate = (diaryId, stage, cookie = memberCookie) =>
+          api(`/api/diaries/updates`, {
+            method: "POST",
+            body: { diaryId, title: `__bv upd ${TS}`, content: "week update posting", stage },
+            cookie,
+          })
+
+        // PUBLIC diary: GERMINATION → VEGETATIVE announces once.
+        const d1 = await mkDiary(member.id, "GERMINATION", "PUBLIC", `__bv-stg-${TS}`)
+        diaryIds.push(d1.id)
+        const u1 = await postUpdate(d1.id, "VEGETATIVE")
+        u1.status === 201 ? pass("stage update posted") : fail("stage update posted", { status: u1.status, data: u1.data })
+        const ann1 = await waitFor(`__bv-stg-${TS}`)
+        ann1.length === 1 && /Germination → Vegetative/.test(ann1[0].content) && ann1[0].content.includes(`/diaries/__bv-stg-${TS}`)
+          ? pass("stage flip announces once with canonical slug")
+          : fail("stage flip announces once with canonical slug", ann1.map((m) => m.content))
+
+        // Same-stage edit → no second announcement.
+        await postUpdate(d1.id, "VEGETATIVE")
+        await settle()
+        const stillOne = await announcements(`__bv-stg-${TS}`)
+        stillOne.length === 1
+          ? pass("unchanged stage produces no announcement")
+          : fail("unchanged stage produces no announcement", stillOne.map((m) => m.content))
+
+        // A further transition announces exactly once — including retries.
+        const u2 = await postUpdate(d1.id, "FLOWER")
+        u2.status === 201 ? pass("second stage update posted") : fail("second stage update posted", u2.data)
+        const ann2 = await waitFor(`__bv-stg-${TS}`, 2)
+        ann2.length === 2 && /Vegetative → Flower/.test(ann2[1].content)
+          ? pass("subsequent transition announces")
+          : fail("subsequent transition announces", ann2.map((m) => m.content))
+        await postUpdate(d1.id, "FLOWER")
+        await settle()
+        const afterDup = await announcements(`__bv-stg-${TS}`)
+        afterDup.length === 2
+          ? pass("repeated same-stage update does not duplicate")
+          : fail("repeated same-stage update does not duplicate", afterDup.map((m) => m.content))
+
+        // PRIVATE + UNLISTED diaries never announce.
+        const dPriv = await mkDiary(member.id, "VEGETATIVE", "PRIVATE", `__bv-priv-${TS}`)
+        diaryIds.push(dPriv.id)
+        await postUpdate(dPriv.id, "FLOWER")
+        const dUnl = await mkDiary(member.id, "VEGETATIVE", "UNLISTED", `__bv-unl-${TS}`)
+        diaryIds.push(dUnl.id)
+        await postUpdate(dUnl.id, "FLOWER")
+        await settle()
+        const privCount = await announcements(`__bv-priv-${TS}`)
+        const unlCount = await announcements(`__bv-unl-${TS}`)
+        privCount.length === 0 ? pass("PRIVATE diary stage change silent") : fail("PRIVATE diary stage change silent", privCount.length)
+        unlCount.length === 0 ? pass("UNLISTED diary stage change silent") : fail("UNLISTED diary stage change silent", unlCount.length)
+
+        // Opted-out member never announces.
+        const opted = await createUser("opt", {})
+        extraUsers.push(opted.id)
+        await prisma.profile.update({ where: { userId: opted.id }, data: { publicMilestoneOptOut: true } })
+        const optedCookie = await login(opted.username, opted.password)
+        const dOpt = await mkDiary(opted.id, "VEGETATIVE", "PUBLIC", `__bv-opt-${TS}`)
+        diaryIds.push(dOpt.id)
+        await postUpdate(dOpt.id, "FLOWER", optedCookie)
+        await settle()
+        const optCount = await announcements(`__bv-opt-${TS}`)
+        optCount.length === 0
+          ? pass("opted-out member's stage change silent")
+          : fail("opted-out member's stage change silent", optCount.map((m) => m.content))
+
+        // Post-announce visibility flip: the announce lands while PUBLIC,
+        // then the real PATCH purge must remove the bot's message so the
+        // diary title+link can't outlive the diary's privacy.
+        const dStale = await mkDiary(member.id, "VEGETATIVE", "PUBLIC", `__bv-stale-${TS}`)
+        diaryIds.push(dStale.id)
+        await postUpdate(dStale.id, "FLOWER")
+        const staleLanded = await waitFor(`__bv-stale-${TS}`)
+        staleLanded.length === 1
+          ? pass("announcement posted while PUBLIC")
+          : fail("announcement posted while PUBLIC", staleLanded.map((m) => m.content))
+        const flip = await api(`/api/diaries/${dStale.id}`, {
+          method: "PATCH", body: { visibility: "PRIVATE" }, cookie: memberCookie,
+        })
+        flip.status === 200 ? pass("visibility flip PATCH accepted") : fail("visibility flip PATCH accepted", { status: flip.status, data: flip.data })
+        await settle()
+        const staleCount = await announcements(`__bv-stale-${TS}`)
+        staleCount.length === 0
+          ? pass("visibility flip purges posted announcement")
+          : fail("visibility flip purges posted announcement", staleCount.map((m) => m.content))
+      }
+    }
+
     // Bot replies must never contain the trigger — no self-loop possible.
     const allBotMsgs = await prisma.chatMessage.findMany({
       where: { authorId: botId, createdAt: { gte: new Date(Date.now() - 120_000) } },
@@ -492,6 +682,16 @@ async function main() {
       await prisma.chatMessage.deleteMany({ where: { roomId } }).catch(() => {})
       await prisma.chatRoom.delete({ where: { id: roomId } }).catch(() => {})
     }
+    await prisma.growSetup.deleteMany({ where: { id: { in: setupIds } } }).catch(() => {})
+    await prisma.diaryUpdate.deleteMany({ where: { diaryId: { in: diaryIds } } }).catch(() => {})
+    await prisma.growDiary.deleteMany({ where: { id: { in: diaryIds } } }).catch(() => {})
+    await prisma.chatMessage.deleteMany({
+      where: { authorId: botId, content: { contains: `__bv` } },
+    }).catch(() => {})
+    for (const did of diaryIds) {
+      await prisma.botEvent.deleteMany({ where: { key: { startsWith: `announce:stage:${did}:` } } }).catch(() => {})
+    }
+    for (const uid of extraUsers) await prisma.user.delete({ where: { id: uid } }).catch(() => {})
     await prisma.notification.deleteMany({ where: { userId: member.id } }).catch(() => {})
     await prisma.user.delete({ where: { id: member.id } }).catch(() => {})
     await prisma.user.delete({ where: { id: mod.id } }).catch(() => {})
