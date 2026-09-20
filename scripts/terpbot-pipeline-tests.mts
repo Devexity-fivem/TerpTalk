@@ -456,7 +456,7 @@ async function run() {
         setupIds.push(s.id)
         return s
       }
-      const s1 = await mkSetup(owner.id, {
+      await mkSetup(owner.id, {
         title: `__tbp tent ${SUFFIX}`, slug: `__tbp-tent-${SUFFIX}`,
         tent: "4x4 AC Infinity", lighting: "Mars Hydro TS1000", medium: "coco",
       })
@@ -706,14 +706,17 @@ async function run() {
       assert.equal(gctx.envCoverage, 1)
       assert.equal(gctx.missing.length, 0, "all schema metrics recorded")
 
-      const findings = evaluateContext(gctx)
-      const byId = (id: string) => findings.find((f) => f.ruleId === id)
-      assert.equal(byId("data.vpd-divergence")?.state, "confirmed", "VPD divergence → CONFIRMED finding")
-      assert.ok(byId("env.rh-flower-high"), "flower RH risk fires")
-      assert.ok(byId("chem.ph-band"), "pH-out-of-band fires for coco")
-      assert.ok(byId("chem.ec-drift"), "EC drift fires")
-      assert.ok(byId("env.rh-trend"), "RH trend fires")
-      assert.ok(!byId("growth.stalled"), "no stall finding in flower stage")
+      const diag = evaluateContext(gctx)
+      const byCand = (id: string) => diag.candidates.find((c) => c.id === id)
+      const byRule = (id: string) => diag.findings.find((f) => f.ruleId === id)
+      assert.equal(byRule("data.vpd-divergence")?.state, "confirmed", "VPD divergence → CONFIRMED finding")
+      const risk = byCand("env.moisture-disease-risk")
+      assert.ok(risk, "flower RH risk candidate fires")
+      assert.equal(risk!.state, "strong", "RH-elevated + rising trend accumulate to STRONG risk")
+      assert.equal(byCand("humidity_high")?.state, "strong", "same RH evidence feeds the migrated wizard candidate")
+      assert.ok(byCand("ph_lockout"), "pH-out-of-band → lockout candidate")
+      assert.ok(byCand("salt_buildup"), "EC drift + pH-out-of-band → salt candidate")
+      assert.ok(!byCand("stunted_growth"), "no stall candidate in flower stage")
 
       // /checkin surfaces the engine through the real command pipeline
       const ci = await runBotCommand("checkin", {
@@ -756,6 +759,21 @@ async function run() {
       })
       assert.ok(pci.ok && /No active grows/.test(pci.messages[0]), "PRIVATE diary stays out of room checkin")
       assert.ok(!pci.messages[0].includes(`__tbp priv ${SUFFIX}`), "private diary title never echoes")
+
+      // A soft-deleted linked setup is treated as absent — its free text
+      // must not leak into capability inference or the context view.
+      const delSetup = await prisma.growSetup.create({
+        data: { title: `__tbp dsetup ${SUFFIX}`, description: "t", authorId: intel.id, tent: "zzsecrettent", deleted: true },
+      })
+      setupIds.push(delSetup.id)
+      const ddiary = await prisma.growDiary.create({
+        data: { title: `__tbp dlink ${SUFFIX}`, description: "t", growType: "INDOOR", startDate: daysAgo(10), authorId: intel.id, stage: "VEGETATIVE", setupId: delSetup.id },
+      })
+      diaryIds.push(ddiary.id)
+      const dctx = await buildGrowContext(ddiary.id, { ownerId: intel.id, scope: "public" })
+      assert.ok(dctx, "context still builds with a deleted setup link")
+      assert.equal(dctx!.setup.present, false, "soft-deleted setup treated as absent")
+      assert.ok(!dctx!.setup.capabilities.length, "deleted setup contributes no capabilities")
 
       console.log("✓ intelligence engine: context → rules → /checkin")
     }

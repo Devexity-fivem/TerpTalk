@@ -34,8 +34,6 @@ type UpdateRow = {
   ph: number | null
   ec: number | null
   heightCm: number | null
-  feeding: string | null
-  training: string | null
 }
 
 type SeriesField = "temperature" | "humidity" | "vpd" | "ph" | "ec" | "heightCm"
@@ -82,8 +80,10 @@ export async function buildGrowContext(
       id: true, slug: true, title: true, stage: true, visibility: true,
       startDate: true, harvested: true,
       mediumType: true, lightType: true, growType: true, techniques: true,
+      // deleted included so a soft-deleted setup is treated as absent —
+      // soft-delete is a flag, setupId is not cleared on the diary.
       setup: {
-        select: { medium: true, ventilation: true, fans: true, controllers: true, equipment: true, lighting: true },
+        select: { deleted: true, medium: true, ventilation: true, fans: true, controllers: true, equipment: true, lighting: true },
       },
     },
   })
@@ -97,7 +97,7 @@ export async function buildGrowContext(
       select: {
         createdAt: true, stage: true,
         temperature: true, humidity: true, vpd: true, ph: true, ec: true,
-        heightCm: true, feeding: true, training: true,
+        heightCm: true,
       },
     }),
     // True start of the current stage: the newest update at a different
@@ -175,9 +175,9 @@ export async function buildGrowContext(
       techniques: diary.techniques,
     },
     setup: {
-      present: !!diary.setup,
-      medium: diary.setup?.medium ?? diary.mediumType,
-      capabilities: setupCapabilities(diary.setup),
+      present: !!diary.setup && !diary.setup.deleted,
+      medium: (diary.setup && !diary.setup.deleted ? diary.setup.medium : null) ?? diary.mediumType,
+      capabilities: setupCapabilities(diary.setup && !diary.setup.deleted ? diary.setup : null),
     },
     now,
     day: diaryDay(diary.startDate, new Date(now)),

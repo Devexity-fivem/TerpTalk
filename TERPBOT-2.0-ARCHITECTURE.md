@@ -1,7 +1,9 @@
 # TerpBot 2.0 — Deterministic Cannabis Grow Intelligence
 
 Architecture & implementation specification. Baseline: `ca2f198` (production).
-Status: **design only — no implementation yet.**
+Status: **Phase A (calc engine + GrowContext + rule engine → `/checkin`) shipped at
+`c381de9`. Phase D (candidate/diagnostic layer + wizard adapter) shipped next —
+see §15 status note.**
 
 ---
 
@@ -28,7 +30,7 @@ Natural language / command
 Three load-bearing findings from the audit shape this design:
 
 1. **A deterministic expert system already exists.** `src/lib/problem-wizard.ts` contains
-   ~16 decision nodes → ~35 diagnoses with `cause`/`fixes`/`severity`, plus
+   13 decision nodes → 48 diagnoses with `cause`/`fixes`/`severity`, plus
    `symptom-tags.ts` and `Thread.wizardResultId` wired into community solve-rate stats.
    TerpBot 2.0 generalizes this into a rule engine rather than building a second one.
 2. **The data ceiling is real.** DiaryUpdate carries temp(°F), RH%, user-entered VPD(kPa),
@@ -495,5 +497,44 @@ cannabis-established fact · fake engagement.
 
 *Prepared from full codebase audit (subagent reports: data-model/calc inventory, bot
 architecture deep-map) and literature review. All cited sources are in §6's registry;
-cannabis-specific vs general-science provenance is preserved per rule. This document is
-the implementation specification; nothing here has been implemented.*
+cannabis-specific vs general-science provenance is preserved per rule.*
+
+---
+
+## Implementation status (as built)
+
+The implementation landed flat `src/lib/terpbot-intel-*` modules rather than the
+`terpbot2/` tree sketched above — same architecture, repo-conventional paths.
+
+**Shipped — Phase A (`c381de9`):** calc suite (`terpbot-intel-calc.ts`),
+`GrowContext` builder (`terpbot-intel-context.ts`, 3 bounded queries, public/owner
+scope), source registry + thin rule engine (`terpbot-intel-knowledge.ts`,
+`terpbot-intel.ts`), `/checkin` integration, 1000-char-capped epistemic rendering.
+
+**Shipped — Phase D (diagnostic layer):** `CandidateDef` registry with
+`requiredInputs`/`discriminatingInputs`/`recommendedActions`/`severity`/`wizardResultId`
+/`maxState`; evidence carries `candidate` and pools per-candidate; deterministic
+5-state assessment (INSUFFICIENT/POSSIBLE/STRONG/CONFLICTING/CONFIRMED — CONFIRMED
+reserved for measured-fact findings and clamped per-candidate by `maxState`, never
+reachable by condition candidates); CONFLICTING preserved, never masked —
+`confirmed` counts as strong support for conflict detection; `info` evidence is
+neutral (never scored). Cross-candidate next-measurement scoring is documented
+deterministic ranking (state weight + conflict bonus + required-unblock bonus,
+priority-list + id tie-break), with per-candidate picks following declared
+`discriminatingInputs` order. First wizard branch migrated: `WIZARD_RESULTS
+.humidity_high` is *generated from* `CANDIDATES.humidity_high` via
+`terpbot-intel-wizard.ts` — identical output, `Thread.wizardResultId` and
+symptom-tag contracts unchanged. Combination rules land as `risk`-direction
+evidence into `env.moisture-disease-risk` — rendered as hazard language, never a
+disease diagnosis.
+
+**Known audit fixes folded into Phase D:** `info` no longer inflates `forScore`;
+missing-priority `indexOf(-1)` tie-break corrected; soft-deleted `GrowSetup` rows
+are treated as absent in `buildGrowContext` (privacy); dead `feeding`/`training`
+selects dropped.
+
+**Remaining for 2.0-E/F/G:** full wizard migration (adapter proven on one branch),
+NL symptom vocab, proactive assists, `/why` surface (every `CandidateResult`
+already carries `ruleIds`, `supporting`/`opposing`/`info`, `requiredMissing`,
+`sourceIds` — the explanation object exists, only the surface is missing),
+knowledge validator command.

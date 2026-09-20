@@ -76,9 +76,14 @@ export interface IntelEvidence {
   strength: EvidenceStrength
   /** rendered explanation line — already safe to display */
   text: string
-  /** true → a directly measured fact, not an inference (→ CONFIRMED) */
+  /** true → a directly measured fact, not an inference (→ CONFIRMED).
+   *  Reserved for observations whose truth survives even if every
+   *  declared/heuristic context field were wrong. */
   confirmed?: boolean
   measurement?: MeasurementHint
+  /** candidate this evidence pools into. Absent → standalone finding
+   *  (data-quality observations and gap signals, not hypotheses). */
+  candidate?: CandidateId
 }
 
 export type FindingKind =
@@ -171,4 +176,83 @@ export interface Finding {
   evidence: IntelEvidence[]
   nextMeasurement?: MeasurementHint
   sourceIds: string[]
+}
+
+// ── Diagnostic candidates ───────────────────────────────────────────
+// A candidate is what evidence accumulates INTO — many rules can feed
+// one candidate, and one rule can feed several. Candidates are the
+// unit of multi-hypothesis reasoning; standalone Findings are reserved
+// for data-quality observations and gap signals (never hypotheses).
+
+export type CandidateId = string
+
+/** Reuses the wizard severity vocabulary so WizardResult → CandidateDef
+ *  mapping needs no second enum (Thread.wizardResultId bridge). */
+export type CandidateSeverity = "urgent" | "moderate" | "watch"
+
+export interface CandidateDef {
+  /** For wizard-migrated branches this IS the wizard result id
+   *  ("humidity_high") so downstream stats/validation never see a
+   *  namespace change. Engine-native candidates use "<domain>.<slug>"
+   *  ("env.heat-stress") or a wizard-compatible slug when a future
+   *  migration target exists ("ph_lockout" ↔ "ph_drift"). */
+  id: CandidateId
+  domain: IntelRule["domain"]
+  /** "condition" = a state of the grow; "risk" = a hazard accumulating.
+   *  Risk candidates render as warnings, never as diagnoses. */
+  kind: "condition" | "risk"
+  name: string
+  /** Why this condition happens — maps to WizardResult.cause. */
+  mechanism: string
+  severity: CandidateSeverity
+  /** Ceiling on assessment state. Condition/risk candidates can never
+   *  be CONFIRMED — only measured data-quality facts are. */
+  maxState: "strong" | "possible"
+  /** metrics that must have data before this candidate can rise above
+   *  INSUFFICIENT */
+  requiredInputs: MetricId[]
+  /** measurements that separate this candidate from live rivals —
+   *  feeds next-measurement selection */
+  discriminatingInputs: MetricId[]
+  /** interventions — surfaced only at STRONG per the uncertainty rules;
+   *  below that the engine emits a measurement recommendation instead */
+  recommendedActions: string[]
+  sourceIds: string[]
+  /** WIZARD_RESULTS key this candidate is the engine-side mirror of.
+   *  Preserves Thread.wizardResultId → symptom-tag → solve-rate stats. */
+  wizardResultId?: string
+}
+
+/** A candidate after evaluation — carries the full evidence trail so a
+ *  future /why surface can explain for/against/missing without
+ *  re-running rules. */
+export interface CandidateResult {
+  id: CandidateId
+  name: string
+  domain: IntelRule["domain"]
+  kind: CandidateDef["kind"]
+  severity: CandidateSeverity
+  state: FindingState
+  forScore: number
+  againstScore: number
+  /** direction for|risk — what supports this candidate */
+  supporting: IntelEvidence[]
+  /** direction against — what argues against it (never hidden) */
+  opposing: IntelEvidence[]
+  /** direction info — neutral observations, display only */
+  info: IntelEvidence[]
+  /** ids of every rule that contributed evidence (rulesMatched trail) */
+  ruleIds: string[]
+  /** requiredInputs with no data in the context */
+  requiredMissing: MetricId[]
+  /** most useful measurement for THIS candidate, if determinable */
+  nextMeasurement?: MeasurementHint
+  sourceIds: string[]
+}
+
+export interface Diagnosis {
+  /** ranked hypotheses — deterministic order (see rankCandidates) */
+  candidates: CandidateResult[]
+  /** standalone data-quality / gap outputs (non-hypothesis) */
+  findings: Finding[]
 }

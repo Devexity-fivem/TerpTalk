@@ -20,6 +20,7 @@
     "test:diary": "node scripts/diary-verify.mjs",
     "test:bot": "node scripts/bot-verify.mjs",
     "test:terpbot": "tsx scripts/terpbot-tests.mts",
+    "test:terpbot2": "tsx scripts/terpbot2-tests.mts",
     "test:reputation": "tsx scripts/reputation-tests.mts",
     "test:reputation-referral": "tsx scripts/reputation-referral-integrity-tests.mts",
     "test:trust-safety": "node scripts/trust-safety-verify.mjs",

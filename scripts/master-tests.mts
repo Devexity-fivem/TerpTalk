@@ -76,6 +76,7 @@ const DB_PHASE: Suite[] = [
   { id: "privacy", file: "scripts/privacy-controls-tests.mts", runner: "tsx", cls: "B", label: "Privacy controls (mirror limits documented)" },
   { id: "self-service", file: "scripts/self-service-tests.mts", runner: "tsx", cls: "B", label: "Self-service account flows" },
   { id: "terpbot", file: "scripts/terpbot-tests.mts", runner: "tsx", cls: "A", label: "TerpBot command parse + permission boundaries" },
+  { id: "terpbot2", file: "scripts/terpbot2-tests.mts", runner: "tsx", cls: "A", label: "TerpBot 2.0 diagnostic engine (pure)" },
   { id: "chat", file: "scripts/chat-ux-tests.mts", runner: "tsx", cls: "A", label: "Chat UX helpers + room visibility (DB)" },
   { id: "community-analytics", file: "scripts/community-analytics-tests.mts", runner: "tsx", cls: "B", label: "Community analytics" },
   { id: "growth-analytics", file: "scripts/growth-analytics-tests.mts", runner: "tsx", cls: "B", label: "Growth analytics" },

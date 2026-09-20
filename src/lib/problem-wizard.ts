@@ -1,3 +1,5 @@
+import { wizardResultFromCandidate } from "@/lib/terpbot-intel-wizard"
+
 export interface WizardNode {
   id: string
   question: string
@@ -554,16 +556,11 @@ export const WIZARD_RESULTS: Record<string, WizardResult> = {
   },
 
   // Environment
-  humidity_high: {
-    title: "High humidity",
-    cause: "Condensation, slow growth, and mold risk — usually lack of extraction or overwatering.",
-    fixes: [
-      "Increase exhaust fan speed",
-      "Run a dehumidifier",
-      "Defoliate only lower fans to improve airflow",
-    ],
-    severity: "moderate",
-  },
+  // Migrated branch (TerpBot 2.0-D): this result is generated from the
+  // shared candidate registry — the diagnostic engine and the wizard
+  // consume the same knowledge record. Output is identical to the
+  // literal it replaced (pinned by tests).
+  humidity_high: wizardResultFromCandidate("humidity_high"),
   humidity_low: {
     title: "Low humidity",
     cause: "Crispy leaf edges, fast transpiration, nutrient burn symptoms — VPD is too high.",

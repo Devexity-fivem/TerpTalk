@@ -470,119 +470,129 @@ function run() {
     ...over,
   })
 
-  // vpd-divergence → CONFIRMED (measured fact)
+  const findCandidate = (ctx: GrowContextView, id: string) =>
+    evaluateContext(ctx).candidates.find((c) => c.id === id)
+  const findFinding = (ctx: GrowContextView, ruleId: string) =>
+    evaluateContext(ctx).findings.find((f) => f.ruleId === ruleId)
+
+  // vpd-divergence → CONFIRMED (measured fact) — standalone finding
   {
     const ctx = mkCtx({
       vpdDivergence: -0.5,
       series: { ...mkCtx().series, vpdEntered: mkSeries([0.8, 0.8], 0.15), vpdComputed: mkSeries([1.3, 1.3], 0.15) },
     })
-    const f = evaluateContext(ctx).find((f) => f.ruleId === "data.vpd-divergence")!
+    const f = findFinding(ctx, "data.vpd-divergence")!
     assert.equal(f.state, "confirmed", "vpd divergence → CONFIRMED")
     assert.equal(f.nextMeasurement?.id, "leafTemp", "divergence asks for leaf temp")
   }
   {
-    const f = evaluateContext(mkCtx({ vpdDivergence: 0.1 })).find((f) => f.ruleId === "data.vpd-divergence")
+    const f = findFinding(mkCtx({ vpdDivergence: 0.1 }), "data.vpd-divergence")
     assert.equal(f, undefined, "small divergence < 0.3 → no finding")
   }
 
-  // env.vpd-band — persistent high in flower
+  // env.vpd-band — persistent high in flower → env.heat-stress candidate
   {
     const ctx = mkCtx({ series: { ...mkCtx().series, vpdComputed: mkSeries([1.7, 1.8, 1.9, 1.8], 0.15) } })
-    const f = evaluateContext(ctx).find((f) => f.ruleId === "env.vpd-band")!
-    assert.equal(f.state, "possible", "persistent high VPD → possible (single moderate evidence)")
-    assert.match(f.evidence[0].text, /above the 1–1\.5/, "text names the band")
-    assert.ok(f.sourceIds.includes("cs-vpd-ranges"), "provenance attached")
+    const c = findCandidate(ctx, "env.heat-stress")!
+    assert.equal(c.state, "possible", "persistent high VPD → possible (single moderate evidence)")
+    assert.match(c.supporting[0].text, /above the 1–1\.5/, "text names the band")
+    assert.ok(c.ruleIds.includes("env.vpd-band"), "contributing rule recorded")
+    assert.ok(c.sourceIds.includes("cs-vpd-ranges"), "provenance attached")
   }
   {
     const ctx = mkCtx({ series: { ...mkCtx().series, vpdComputed: mkSeries([1.1, 1.2, 1.1], 0.15) } })
-    assert.equal(evaluateContext(ctx).find((f) => f.ruleId === "env.vpd-band"), undefined, "in-band VPD → no finding")
+    assert.equal(findCandidate(ctx, "env.heat-stress"), undefined, "in-band VPD → no candidate")
+    assert.equal(findCandidate(ctx, "humidity_high"), undefined, "in-band VPD → no humidity candidate either")
   }
   {
     const ctx = mkCtx({ series: { ...mkCtx().series, vpdComputed: mkSeries([1.8, 1.8], 0.15) } })
-    assert.equal(evaluateContext(ctx).find((f) => f.ruleId === "env.vpd-band"), undefined, "2 points → rule gated off (n≥3)")
+    assert.equal(findCandidate(ctx, "env.heat-stress"), undefined, "2 points → rule gated off (n≥3)")
   }
 
-  // env.rh-flower-high — needs FLOWER + ≥3 of last 5 ≥65%
+  // env.rh-flower-high — FLOWER + ≥3 of last 5 ≥65% feeds two candidates
   {
     const ctx = mkCtx({ series: { ...mkCtx().series, humidity: mkSeries([60, 66, 70, 68], 3) } })
-    const f = evaluateContext(ctx).find((f) => f.ruleId === "env.rh-flower-high")!
-    assert.equal(f.state, "possible")
-    assert.match(f.evidence[0].text, /bud-rot|powdery/i)
+    const risk = findCandidate(ctx, "env.moisture-disease-risk")!
+    // moderate (flower-high) + weak (rising trend) = 3 → strong
+    assert.equal(risk.state, "strong")
+    assert.match(risk.supporting[0].text, /bud-rot|powdery/i)
+    const hum = findCandidate(ctx, "humidity_high")!
+    assert.ok(hum, "same observation also supports the humidity_high candidate")
   }
   {
     const ctx = mkCtx({
       diary: { ...mkCtx().diary, stage: "VEGETATIVE" },
-      series: { ...mkCtx().series, humidity: mkSeries([70, 70, 70], 3) },
+      series: { ...mkCtx().series, humidity: mkSeries([64, 65, 66], 3) },
     })
-    assert.equal(evaluateContext(ctx).find((f) => f.ruleId === "env.rh-flower-high"), undefined, "same RH in veg → rule gated off")
+    assert.equal(findCandidate(ctx, "env.moisture-disease-risk"), undefined, "same RH in veg → disease-risk rule gated off")
   }
 
-  // env.temp-high — ≥60% of ≥3 readings > 86°F
+  // env.temp-high — ≥60% of ≥3 readings > 86°F → env.heat-stress
   {
     const ctx = mkCtx({ series: { ...mkCtx().series, temperature: mkSeries([88, 90, 87, 89], 2) } })
-    assert.ok(evaluateContext(ctx).find((f) => f.ruleId === "env.temp-high"), "persistent heat flagged")
+    assert.ok(findCandidate(ctx, "env.heat-stress"), "persistent heat flagged")
   }
   {
     const ctx = mkCtx({ series: { ...mkCtx().series, temperature: mkSeries([75, 90, 75, 76], 2) } })
-    assert.equal(evaluateContext(ctx).find((f) => f.ruleId === "env.temp-high"), undefined, "single spike ≠ sustained")
+    assert.equal(findCandidate(ctx, "env.heat-stress"), undefined, "single spike ≠ sustained")
   }
 
-  // chem.ph-band — coco band 5.5–6.2; latest out or ≥3 out
+  // chem.ph-band — coco band 5.5–6.2 → ph_lockout candidate
   {
     const ctx = mkCtx({ series: { ...mkCtx().series, ph: mkSeries([6.0, 6.1, 7.0], 0.15) } })
-    const f = evaluateContext(ctx).find((f) => f.ruleId === "chem.ph-band")!
-    assert.equal(f.state, "possible")
-    assert.equal(f.nextMeasurement?.id, "runoffPh", "asks for runoff pH")
+    const c = findCandidate(ctx, "ph_lockout")!
+    assert.equal(c.state, "possible")
+    assert.equal(c.nextMeasurement?.id, "runoffPh", "asks for runoff pH")
   }
   {
     const ctx = mkCtx({
       diary: { ...mkCtx().diary, mediumType: "SOIL" },
       series: { ...mkCtx().series, ph: mkSeries([6.4, 6.5], 0.15) },
     })
-    assert.equal(evaluateContext(ctx).find((f) => f.ruleId === "chem.ph-band"), undefined, "pH 6.5 fine in soil")
+    assert.equal(findCandidate(ctx, "ph_lockout"), undefined, "pH 6.5 fine in soil")
   }
   {
     const ctx = mkCtx({
       diary: { ...mkCtx().diary, mediumType: null },
       series: { ...mkCtx().series, ph: mkSeries([6.6], 0.15) },
     })
-    assert.equal(evaluateContext(ctx).find((f) => f.ruleId === "chem.ph-band"), undefined, "pH 6.6 inside wide unknown-medium band")
+    assert.equal(findCandidate(ctx, "ph_lockout"), undefined, "pH 6.6 inside wide unknown-medium band")
   }
 
-  // chem.ec-drift — rising EC → next measurement runoff EC
+  // chem.ec-drift — rising EC → salt_buildup candidate, runoff EC hint
   {
     const ctx = mkCtx({ series: { ...mkCtx().series, ec: mkSeries([1.2, 1.5, 1.9, 2.3], 0.2) } })
-    const f = evaluateContext(ctx).find((f) => f.ruleId === "chem.ec-drift")!
-    assert.equal(f.nextMeasurement?.id, "runoffEc")
+    const c = findCandidate(ctx, "salt_buildup")!
+    assert.equal(c.nextMeasurement?.id, "runoffEc")
   }
 
-  // growth.stalled — veg, ≥3 heights, ≥7d span, |rate|<0.2
+  // growth.stalled — veg, ≥3 heights, ≥7d span, |rate|<0.2 → stunted_growth
   {
     const ctx = mkCtx({
       diary: { ...mkCtx().diary, stage: "VEGETATIVE" },
       series: { ...mkCtx().series, height: mkSeries([30, 30.5, 30.2], 2) },
     })
     // pts default step = 1 day → span 2d < 7d → gated off
-    assert.equal(evaluateContext(ctx).find((f) => f.ruleId === "growth.stalled"), undefined, "short span gated")
+    assert.equal(findCandidate(ctx, "stunted_growth"), undefined, "short span gated")
     const wide = { ...seriesStats(pts([30, 30.5, 30.2], 4 * 86400000)), points: pts([30, 30.5, 30.2], 4 * 86400000), trend: "stable" as const }
     const ctx2 = mkCtx({
       diary: { ...mkCtx().diary, stage: "VEGETATIVE" },
       series: { ...mkCtx().series, height: wide },
     })
-    const f = evaluateContext(ctx2).find((f) => f.ruleId === "growth.stalled")!
-    assert.equal(f.state, "possible", "flat 8-day veg → stall flagged")
-    assert.match(f.evidence[0].text, /training can mask/i, "honest caveat included")
+    const c = findCandidate(ctx2, "stunted_growth")!
+    assert.equal(c.state, "possible", "flat 8-day veg → stall flagged")
+    assert.match(c.supporting[0].text, /training can mask/i, "honest caveat included")
   }
 
   // gap rules → INSUFFICIENT, drive next-measurement
   {
     const ctx = mkCtx({ envCoverage: 0.25 })
-    const f = evaluateContext(ctx).find((f) => f.ruleId === "data.sparse-env")!
+    const f = findFinding(ctx, "data.sparse-env")!
     assert.equal(f.state, "insufficient", "sparse env → INSUFFICIENT")
   }
   {
     const ctx = mkCtx()
-    const f = evaluateContext(ctx).find((f) => f.ruleId === "data.no-env")!
+    const f = findFinding(ctx, "data.no-env")!
     assert.equal(f.state, "insufficient", "no env at all → INSUFFICIENT")
     assert.equal(f.nextMeasurement?.id, "temperature")
   }
@@ -609,20 +619,24 @@ function run() {
     "weak-for + strong-against → possible (not conflicting — asymmetric)"
   )
 
-  // nextUsefulMeasurement — highest-state finding wins; deterministic ties
+  // nextUsefulMeasurement — discriminating a live hypothesis outranks a
+  // hint on a confirmed fact (confirmed = no residual uncertainty)
   {
-    const findings = evaluateContext(
-      mkCtx({
-        vpdDivergence: -0.5,
-        series: {
-          ...mkCtx().series,
-          vpdEntered: mkSeries([0.8, 0.8], 0.15),
-          vpdComputed: mkSeries([1.3, 1.3], 0.15),
-          ec: mkSeries([1.2, 1.5, 1.9], 0.2),
-        },
-      })
-    )
-    assert.equal(nextUsefulMeasurement(findings)?.id, "leafTemp", "confirmed-state finding's hint outranks weak")
+    const ctx = mkCtx({
+      vpdDivergence: -0.5,
+      series: {
+        ...mkCtx().series,
+        vpdEntered: mkSeries([0.8, 0.8], 0.15),
+        vpdComputed: mkSeries([1.3, 1.3], 0.15),
+        ec: mkSeries([1.2, 1.5, 1.9], 0.2),
+      },
+    })
+    const diag = evaluateContext(ctx)
+    assert.equal(nextUsefulMeasurement(ctx, diag)?.id, "runoffEc", "salt_buildup discriminating input wins")
+    // …but if the EC series were already logged as unavailable-vs-known,
+    // available metrics are never recommended:
+    const diag2 = evaluateContext(mkCtx())
+    assert.equal(nextUsefulMeasurement(mkCtx(), diag2)?.id, "temperature", "no-env gap asks for temp+RH")
   }
 
   // ── Rendering — OBSERVED/CALCULATED/interpretation/missing split ──────
@@ -641,6 +655,7 @@ function run() {
     assert.match(lines, /Calculated: VPD ≈1\.1 kPa/, "calculated line shows derived VPD")
     assert.match(lines, /leaf temp not logged/, "assumption disclosed")
     assert.match(lines, /Worth watching:/, "findings rendered")
+    assert.match(lines, /Assessment:/, "candidate assessment rendered")
     assert.match(lines, /Next useful measurement:/, "next measurement rendered")
   }
   {
