@@ -106,7 +106,7 @@ export default async function GuidePage({ params }: { params: Promise<{ slug: st
           { label: "Grow Guides", href: "/guides" },
           { label: guide.title },
         ]} />
-        <div className="bg-card rounded-xl border border-border p-6 md:p-8">
+        <div className="bg-card/80 rounded-2xl border border-border/70 p-6 md:p-8">
           <div className="flex items-center gap-2 text-xs text-muted-foreground mb-3">
             <BookOpen className="w-4 h-4 text-primary" />
             <span className="uppercase tracking-wide">{guide.topic}</span>
@@ -127,7 +127,7 @@ export default async function GuidePage({ params }: { params: Promise<{ slug: st
               </>
             )}
           </div>
-          <h1 className="text-3xl font-bold mb-6">{guide.title}</h1>
+          <h1 className="font-display text-3xl font-bold mb-6 tracking-tight">{guide.title}</h1>
           <div className="max-w-none text-foreground whitespace-pre-wrap break-words leading-relaxed">
             {guide.content}
           </div>
@@ -139,8 +139,8 @@ export default async function GuidePage({ params }: { params: Promise<{ slug: st
         {(relatedGuides.length > 0 || relatedThreads.length > 0) && (
           <div className="mt-6 space-y-6">
             {relatedGuides.length > 0 && (
-              <section className="bg-card rounded-xl border border-border p-5">
-                <h2 className="font-semibold mb-3 flex items-center gap-2">
+              <section className="bg-card/80 rounded-2xl border border-border/70 p-5">
+                <h2 className="font-display font-semibold mb-3 flex items-center gap-2">
                   <BookOpen className="w-4 h-4 text-primary" />
                   Related guides
                 </h2>
@@ -157,8 +157,8 @@ export default async function GuidePage({ params }: { params: Promise<{ slug: st
               </section>
             )}
             {relatedThreads.length > 0 && (
-              <section className="bg-card rounded-xl border border-border p-5">
-                <h2 className="font-semibold mb-3 flex items-center gap-2">
+              <section className="bg-card/80 rounded-2xl border border-border/70 p-5">
+                <h2 className="font-display font-semibold mb-3 flex items-center gap-2">
                   <MessageSquare className="w-4 h-4 text-primary" />
                   Related discussions
                 </h2>

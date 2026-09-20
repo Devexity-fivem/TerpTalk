@@ -49,12 +49,12 @@ export default function NewSetupPage() {
           <Link href="/setups" className="text-sm text-muted-foreground hover:text-foreground mb-2 block">
             ← Back to Setups
           </Link>
-          <h1 className="text-3xl font-bold mb-2">Share Your Grow Setup</h1>
+          <h1 className="font-display text-3xl font-bold mb-2 tracking-tight">Share Your Grow Setup</h1>
           <p className="text-muted-foreground">Show off your grow room and equipment to the community</p>
         </div>
 
         {/* Form */}
-        <div className="bg-card rounded-lg border border-border p-6">
+        <div className="bg-card/80 rounded-2xl border border-border/70 p-6">
           <SetupForm
             onSubmit={handleSubmit}
             submitLabel="Share Setup"

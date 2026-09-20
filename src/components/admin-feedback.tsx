@@ -188,7 +188,7 @@ export default function AdminFeedback() {
         </div>
         <button
           onClick={() => setShowObs(!showObs)}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
         >
           <Plus className="w-4 h-4" /> Add Observation
         </button>
@@ -196,8 +196,8 @@ export default function AdminFeedback() {
 
       {/* Add observation form */}
       {showObs && (
-        <form onSubmit={submitObservation} className="bg-card rounded-xl border border-border p-4 space-y-3">
-          <h3 className="text-sm font-semibold">Record an observation</h3>
+        <form onSubmit={submitObservation} className="bg-card/80 rounded-2xl border border-border/70 p-4 space-y-3">
+          <h3 className="font-display text-sm font-semibold">Record an observation</h3>
           <div className="flex flex-wrap gap-3">
             <select value={obsForm.type} onChange={(e) => setObsForm({ ...obsForm, type: e.target.value })} className={selectCls} aria-label="Type">
               {TYPES.map((t) => <option key={t} value={t}>{TYPE_LABEL[t]}</option>)}
@@ -225,7 +225,7 @@ export default function AdminFeedback() {
             className={inputCls}
           />
           <div className="flex gap-2">
-            <button type="submit" disabled={obsBusy} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-50">
+            <button type="submit" disabled={obsBusy} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-50">
               {obsBusy && <Loader2 className="w-3.5 h-3.5 animate-spin" />} Save observation
             </button>
             <button type="button" onClick={() => setShowObs(false)} className="px-3 py-1.5 rounded-lg bg-secondary text-sm hover:bg-secondary/70">Cancel</button>
@@ -254,7 +254,7 @@ export default function AdminFeedback() {
       {msg && <p className="text-sm text-primary">{msg}</p>}
 
       {/* List */}
-      <div className="bg-card rounded-xl border border-border overflow-hidden">
+      <div className="bg-card/80 rounded-2xl border border-border/70 overflow-hidden">
         {items.length === 0 && (
           <div className="py-12 text-center text-sm text-muted-foreground">No feedback matches these filters.</div>
         )}
@@ -314,7 +314,7 @@ export default function AdminFeedback() {
         <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4" onClick={() => setDetail(null)}>
           <div
             role="dialog" aria-modal="true" aria-labelledby="fb-detail-title"
-            className="bg-card border border-border rounded-xl w-full max-w-2xl max-h-[85vh] overflow-y-auto p-6"
+            className="bg-card/80 border border-border/70 rounded-2xl w-full max-w-2xl max-h-[85vh] overflow-y-auto p-6"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-start justify-between gap-3 mb-4">
@@ -324,7 +324,7 @@ export default function AdminFeedback() {
                   <Pill label={STATUS_LABEL[detail.status] ?? detail.status} cls={STATUS_CLS[detail.status] ?? STATUS_CLS.NEW} />
                   {detail.source === "ADMIN_OBSERVATION" && <Pill label="Observation" cls="bg-amber-500/10 text-amber-500" />}
                 </div>
-                <h2 id="fb-detail-title" className="text-lg font-semibold break-words">{detail.title}</h2>
+                <h2 id="fb-detail-title" className="font-display text-lg font-semibold break-words">{detail.title}</h2>
                 <div className="text-xs text-muted-foreground mt-1 flex flex-wrap gap-x-3">
                   <span>by @{detail.author?.profile?.username || detail.author?.name || "deleted"}</span>
                   {detail.pagePath && (
@@ -389,7 +389,7 @@ export default function AdminFeedback() {
               <button
                 onClick={saveDetail}
                 disabled={detailBusy}
-                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-50"
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-50"
               >
                 {detailBusy && <Loader2 className="w-3.5 h-3.5 animate-spin" />} Save changes
               </button>

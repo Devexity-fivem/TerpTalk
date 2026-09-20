@@ -11,11 +11,11 @@ import { Skeleton } from "@/components/ui/skeleton"
 function EnvChartsPlaceholder() {
   return (
     <div className="mb-6">
-      <section className="bg-card rounded-xl border border-border p-4">
+      <section className="bg-card/80 rounded-2xl border border-border/70 p-4">
         <Skeleton className="h-4 w-44 mb-3" />
         <Skeleton className="w-full h-[220px]" />
       </section>
-      <section className="bg-card rounded-xl border border-border p-4 mt-4">
+      <section className="bg-card/80 rounded-2xl border border-border/70 p-4 mt-4">
         <Skeleton className="h-4 w-48 mb-3" />
         <Skeleton className="w-full h-[200px]" />
       </section>

@@ -36,10 +36,10 @@ export default function SavedThreads() {
   }
 
   return (
-    <div className="bg-card rounded-lg border border-border p-6">
+    <div className="bg-card/80 rounded-2xl border border-border/70 p-6">
       <div className="flex items-center gap-2 mb-4">
         <Bookmark className="w-5 h-5 text-primary" />
-        <h2 className="text-lg font-semibold">Saved Threads</h2>
+        <h2 className="font-display text-lg font-semibold">Saved Threads</h2>
       </div>
       {loading ? (
         <p className="text-sm text-muted-foreground">Loading…</p>

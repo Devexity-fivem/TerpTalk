@@ -157,13 +157,13 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
         ]} />
 
         {/* Header */}
-        <div className="bg-card rounded-xl border border-border p-6 mb-6">
+        <div className="bg-card/80 rounded-2xl border border-border/70 p-6 mb-6">
           <div className="flex items-start gap-4">
             <div className="w-16 h-16 bg-primary/10 rounded-xl flex items-center justify-center shrink-0 ring-1 ring-primary/20">
               <Leaf className="w-8 h-8 text-primary" />
             </div>
             <div>
-              <h1 className="text-3xl font-bold tracking-tight break-words">{strain.name}</h1>
+              <h1 className="font-display text-3xl font-bold tracking-tight break-words">{strain.name}</h1>
               <div className="flex gap-3 text-sm text-muted-foreground mt-1 flex-wrap">
                 {strain.type && <span className="px-2 py-0.5 bg-primary/10 text-primary rounded">{strainTypeLabel(strain.type)}</span>}
                 {strain.breeder && <span>Breeder: {strain.breeder}</span>}
@@ -180,7 +180,7 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
               <div className="mt-3 flex items-center gap-2 flex-wrap">
                 <Link
                   href={`/diaries/new?strain=${strain.id}`}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
                 >
                   <Sprout className="w-4 h-4" />
                   Start a grow with this strain
@@ -194,19 +194,19 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
 
         <div className="grid md:grid-cols-2 gap-6 mb-6 items-start">
           {strain.genetics && (
-            <div className="bg-card rounded-xl border border-border p-5">
+            <div className="bg-card/80 rounded-2xl border border-border/70 p-5">
               <div className="flex items-center gap-2 mb-2">
                 <Dna className="w-4 h-4 text-primary" />
-                <h2 className="font-semibold">Genetics</h2>
+                <h2 className="font-display font-semibold">Genetics</h2>
               </div>
               <p className="text-sm text-muted-foreground whitespace-pre-wrap">{strain.genetics}</p>
             </div>
           )}
           {strain.growingInfo && (
-            <div className="bg-card rounded-xl border border-border p-5">
+            <div className="bg-card/80 rounded-2xl border border-border/70 p-5">
               <div className="flex items-center gap-2 mb-2">
                 <Sprout className="w-4 h-4 text-primary" />
-                <h2 className="font-semibold">Growing Info</h2>
+                <h2 className="font-display font-semibold">Growing Info</h2>
               </div>
               <p className="text-sm text-muted-foreground whitespace-pre-wrap">{strain.growingInfo}</p>
             </div>
@@ -214,18 +214,18 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
         </div>
 
         {strain.description && (
-          <div className="bg-card rounded-xl border border-border p-5 mb-6">
-            <h2 className="font-semibold mb-2">Description</h2>
+          <div className="bg-card/80 rounded-2xl border border-border/70 p-5 mb-6">
+            <h2 className="font-display font-semibold mb-2">Description</h2>
             <p className="text-sm text-muted-foreground whitespace-pre-wrap">{strain.description}</p>
           </div>
         )}
 
         {/* Community grow data — stats stay honest about sample size */}
         {growStats.tier !== "none" && (
-          <div className="bg-card rounded-xl border border-border p-5 mb-6">
+          <div className="bg-card/80 rounded-2xl border border-border/70 p-5 mb-6">
             <div className="flex items-center gap-2 mb-4 flex-wrap">
               <BarChart3 className="w-4 h-4 text-primary" />
-              <h2 className="font-semibold">Community grow data</h2>
+              <h2 className="font-display font-semibold">Community grow data</h2>
               <span className={`text-xs px-2 py-0.5 rounded ml-auto ${growStats.tier === "early" ? "bg-amber-500/10 text-amber-500" : "bg-secondary text-muted-foreground"}`}>
                 {growStats.label}
               </span>
@@ -323,10 +323,10 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
 
         {/* Member harvest reviews — real notes from growers who finished this strain */}
         {growStats.reviews.length > 0 && (
-          <div className="bg-card rounded-xl border border-border p-5 mb-6">
+          <div className="bg-card/80 rounded-2xl border border-border/70 p-5 mb-6">
             <div className="flex items-center gap-2 mb-4">
               <Star className="w-4 h-4 text-amber-500" />
-              <h2 className="font-semibold">Member reviews</h2>
+              <h2 className="font-display font-semibold">Member reviews</h2>
             </div>
             <ul className="space-y-4">
               {growStats.reviews.map((r) => (
@@ -347,10 +347,10 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
 
         {/* Community diaries for this strain */}
         {relatedDiaries.length > 0 && (
-          <div className="bg-card rounded-xl border border-border p-5 mb-6">
+          <div className="bg-card/80 rounded-2xl border border-border/70 p-5 mb-6">
             <div className="flex items-center gap-2 mb-4">
               <BookOpen className="w-4 h-4 text-primary" />
-              <h2 className="font-semibold">Grows with this strain</h2>
+              <h2 className="font-display font-semibold">Grows with this strain</h2>
             </div>
             <div className="grid sm:grid-cols-2 gap-3">
               {relatedDiaries.map((d) => (
@@ -359,7 +359,7 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
                   href={diaryPath(d)}
                   className="flex items-center gap-3 p-3 rounded-lg border border-border hover:bg-secondary/50 transition-colors"
                 >
-                  <div className="w-16 h-16 bg-secondary rounded-lg overflow-hidden shrink-0">
+                  <div className="w-16 h-16 bg-secondary rounded-xl overflow-hidden shrink-0">
                     {diaryThumb(d) ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img src={diaryThumb(d)} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
@@ -381,10 +381,10 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
 
         {/* Community setups for this strain */}
         {relatedSetups.length > 0 && (
-          <div className="bg-card rounded-xl border border-border p-5 mb-6">
+          <div className="bg-card/80 rounded-2xl border border-border/70 p-5 mb-6">
             <div className="flex items-center gap-2 mb-4">
               <Wrench className="w-4 h-4 text-primary" />
-              <h2 className="font-semibold">Setups growing this strain</h2>
+              <h2 className="font-display font-semibold">Setups growing this strain</h2>
             </div>
             <div className="grid sm:grid-cols-2 gap-3">
               {relatedSetups.map((s) => (
@@ -393,7 +393,7 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
                   href={setupPath(s)}
                   className="flex items-center gap-3 p-3 rounded-lg border border-border hover:bg-secondary/50 transition-colors"
                 >
-                  <div className="w-16 h-16 bg-secondary rounded-lg overflow-hidden shrink-0">
+                  <div className="w-16 h-16 bg-secondary rounded-xl overflow-hidden shrink-0">
                     {setupThumb(s) ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img src={setupThumb(s)} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
@@ -415,10 +415,10 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
 
         {/* Discussions about this strain */}
         {relatedThreads.length > 0 && (
-          <div className="bg-card rounded-xl border border-border p-5 mb-6">
+          <div className="bg-card/80 rounded-2xl border border-border/70 p-5 mb-6">
             <div className="flex items-center gap-2 mb-4">
               <MessageSquare className="w-4 h-4 text-primary" />
-              <h2 className="font-semibold">Discussions</h2>
+              <h2 className="font-display font-semibold">Discussions</h2>
             </div>
             <div className="divide-y divide-border -mx-5 px-5">
               {relatedThreads.map((t) => (
@@ -444,9 +444,9 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
         {(["PLANT", "FLOWER"] as const).map((kind) => {
           const photos = kind === "PLANT" ? plantPhotos : flowerPhotos
           return (
-            <div key={kind} className="bg-card rounded-xl border border-border p-5 mb-6">
+            <div key={kind} className="bg-card/80 rounded-2xl border border-border/70 p-5 mb-6">
               <div className="flex items-center justify-between mb-4">
-                <h2 className="font-semibold flex items-center gap-2">
+                <h2 className="font-display font-semibold flex items-center gap-2">
                   <ImageIcon className="w-4 h-4 text-primary" />
                   {kind === "PLANT" ? "Plant Photos" : "Harvested Flower"}
                 </h2>

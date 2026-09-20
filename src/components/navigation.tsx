@@ -237,7 +237,7 @@ export function Navigation() {
                   <input
                     name="q"
                     placeholder="Search..."
-                    className="w-40 rounded-lg border border-border bg-background py-1.5 pl-8 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring lg:w-52 xl:w-40 2xl:w-52"
+                    className="w-40 rounded-xl border border-border/70 bg-background py-1.5 pl-8 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring lg:w-52 xl:w-40 2xl:w-52"
                   />
                 </label>
               </form>
@@ -362,7 +362,7 @@ export function Navigation() {
                   <input
                     name="q"
                     placeholder="Search threads, strains, members..."
-                    className="w-full rounded-lg border border-border bg-background py-2.5 pl-9 pr-3 focus:outline-none focus:ring-2 focus:ring-ring"
+                    className="w-full rounded-xl border border-border/70 bg-background py-2.5 pl-9 pr-3 focus:outline-none focus:ring-2 focus:ring-ring"
                   />
                 </label>
               </form>

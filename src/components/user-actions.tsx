@@ -111,11 +111,11 @@ export default function UserActions({ userId, username, initiallyBlocked, initia
       </div>
 
       {showReport && (
-        <div className="p-3 bg-secondary/50 rounded-lg space-y-2 max-w-sm">
+        <div className="p-3 bg-secondary/50 rounded-xl space-y-2 max-w-sm">
           <select
             value={reason}
             onChange={(e) => setReason(e.target.value)}
-            className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm"
+            className="w-full px-3 py-2 rounded-xl border border-border/70 bg-background text-sm"
           >
             <option value="HARASSMENT">Harassment</option>
             <option value="SPAM">Spam</option>
@@ -129,7 +129,7 @@ export default function UserActions({ userId, username, initiallyBlocked, initia
             value={desc}
             onChange={(e) => setDesc(e.target.value)}
             placeholder="Optional details for moderators..."
-            className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm"
+            className="w-full px-3 py-2 rounded-xl border border-border/70 bg-background text-sm"
             maxLength={1000}
           />
           <button

@@ -16,11 +16,11 @@ export default function ApplyYoutuberPage() {
     return (
       <div className="min-h-screen flex items-center justify-center px-4">
         <div className="text-center max-w-md">
-          <h1 className="text-2xl font-bold mb-4">Apply as a Featured YouTuber</h1>
+          <h1 className="font-display text-2xl font-bold mb-4 tracking-tight">Apply as a Featured YouTuber</h1>
           <p className="text-muted-foreground mb-6">
             Sign in to submit your YouTube channel for review.
           </p>
-          <Link href="/auth/signin?callbackUrl=%2Fyoutubers%2Fapply" className="bg-primary text-primary-foreground px-6 py-3 rounded-lg font-medium hover:bg-primary/90">
+          <Link href="/auth/signin?callbackUrl=%2Fyoutubers%2Fapply" className="bg-primary text-primary-foreground px-6 py-3 rounded-full font-medium hover:bg-primary/90">
             Sign In
           </Link>
         </div>
@@ -73,7 +73,7 @@ export default function ApplyYoutuberPage() {
               <Video className="w-8 h-8 text-primary" />
             </div>
           </div>
-          <h1 className="text-2xl font-bold">Apply as a Featured YouTuber</h1>
+          <h1 className="font-display text-2xl font-bold tracking-tight">Apply as a Featured YouTuber</h1>
           <p className="text-muted-foreground mt-2">
             Submit your YouTube channel to be showcased on TerpTalk.
           </p>
@@ -91,7 +91,7 @@ export default function ApplyYoutuberPage() {
               value={url}
               onChange={(e) => setUrl(e.target.value)}
               placeholder="https://www.youtube.com/@yourchannel"
-              className="w-full px-4 py-2 rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary"
+              className="w-full px-4 py-2 rounded-xl border border-border/70 bg-background focus:outline-none focus:ring-2 focus:ring-primary"
             />
             <p className="text-xs text-muted-foreground mt-2">
               Must be a public YouTube channel URL. Staff will review your application.
@@ -113,7 +113,7 @@ export default function ApplyYoutuberPage() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-primary text-primary-foreground py-3 rounded-lg font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+            className="w-full bg-primary text-primary-foreground py-3 rounded-full font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
           >
             {loading ? (
               <>

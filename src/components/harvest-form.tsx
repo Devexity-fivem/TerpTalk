@@ -99,14 +99,14 @@ export default function HarvestForm({
   }
 
   return (
-    <div className="bg-card rounded-xl border border-border p-4 sm:p-5">
+    <div className="bg-card/80 rounded-2xl border border-border/70 p-4 sm:p-5">
       <div className="flex items-start sm:items-center justify-between gap-4 flex-col sm:flex-row">
         <div className="flex items-center gap-3">
           <div className="bg-emerald-500/10 p-2.5 rounded-lg">
             <Leaf className="w-5 h-5 text-emerald-500" />
           </div>
           <div>
-            <h3 className="font-semibold">{harvested ? "Harvest logged" : "Not yet harvested"}</h3>
+            <h3 className="font-display font-semibold">{harvested ? "Harvest logged" : "Not yet harvested"}</h3>
             <p className="text-sm text-muted-foreground">
               {harvested ? "This diary has reached harvest." : "Log yield and harvest date when the grow is done."}
             </p>
@@ -117,7 +117,7 @@ export default function HarvestForm({
             {!harvested ? (
               <button
                 onClick={() => setOpen(true)}
-                className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 px-4 py-2 text-sm font-medium rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+                className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 px-4 py-2 text-sm font-medium rounded-full bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
               >
                 <Scale className="w-4 h-4" /> Log harvest
               </button>
@@ -171,7 +171,7 @@ export default function HarvestForm({
                   value={amount}
                   onChange={(e) => setAmount(e.target.value)}
                   placeholder="0.00"
-                  className="mt-1 w-full px-3 py-2 rounded-lg border border-border bg-background text-sm"
+                  className="mt-1 w-full px-3 py-2 rounded-xl border border-border/70 bg-background text-sm"
                 />
               </label>
               <label className="block">
@@ -179,7 +179,7 @@ export default function HarvestForm({
                 <select
                   value={unit}
                   onChange={(e) => setUnit(e.target.value)}
-                  className="mt-1 w-full px-3 py-2 rounded-lg border border-border bg-background text-sm"
+                  className="mt-1 w-full px-3 py-2 rounded-xl border border-border/70 bg-background text-sm"
                 >
                   {UNITS.map((u) => (
                     <option key={u} value={u}>{u}</option>
@@ -193,7 +193,7 @@ export default function HarvestForm({
                 type="date"
                 value={at}
                 onChange={(e) => setAt(e.target.value)}
-                className="mt-1 w-full px-3 py-2 rounded-lg border border-border bg-background text-sm"
+                className="mt-1 w-full px-3 py-2 rounded-xl border border-border/70 bg-background text-sm"
               />
             </label>
 
@@ -216,7 +216,7 @@ export default function HarvestForm({
                       value={rating}
                       onChange={(e) => setRating(e.target.value)}
                       placeholder="—"
-                      className="mt-1 w-full px-3 py-2 rounded-lg border border-border bg-background text-sm"
+                      className="mt-1 w-full px-3 py-2 rounded-xl border border-border/70 bg-background text-sm"
                     />
                   </label>
                   <label className="block">
@@ -224,7 +224,7 @@ export default function HarvestForm({
                     <select
                       value={difficulty}
                       onChange={(e) => setDifficulty(e.target.value)}
-                      className="mt-1 w-full px-3 py-2 rounded-lg border border-border bg-background text-sm"
+                      className="mt-1 w-full px-3 py-2 rounded-xl border border-border/70 bg-background text-sm"
                     >
                       <option value="">—</option>
                       <option value="EASY">Easy</option>
@@ -241,7 +241,7 @@ export default function HarvestForm({
                     maxLength={1000}
                     rows={3}
                     placeholder="Tips for the next grower — feeding, training, what to watch for..."
-                    className="mt-1 w-full px-3 py-2 rounded-lg border border-border bg-background text-sm resize-none"
+                    className="mt-1 w-full px-3 py-2 rounded-xl border border-border/70 bg-background text-sm resize-none"
                   />
                   <span className="text-xs text-muted-foreground">{notes.length}/1000 — shown on the strain page</span>
                 </label>
@@ -252,7 +252,7 @@ export default function HarvestForm({
               <button
                 type="submit"
                 disabled={busy}
-                className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+                className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-full bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
               >
                 {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : "Save harvest"}
               </button>

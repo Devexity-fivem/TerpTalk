@@ -109,7 +109,7 @@ export default async function DiscoverPage({
         <div className="bg-card/80 rounded-2xl border border-border/70 p-4 sm:p-5">
           <div className="flex items-center gap-2 mb-4">
             {icon}
-            <h2 className="font-semibold">{heading}</h2>
+            <h2 className="font-display font-semibold">{heading}</h2>
           </div>
           {threads.length === 0 ? (
             <EmptyState
@@ -156,7 +156,7 @@ export default async function DiscoverPage({
                       </div>
                     </div>
                   </div>
-                  <h3 className="font-semibold mb-2 break-words group-hover:text-primary transition-colors">{thread.title}</h3>
+                  <h3 className="font-display font-semibold mb-2 break-words group-hover:text-primary transition-colors">{thread.title}</h3>
                   <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground mt-auto">
                     <span className="flex items-center gap-1"><Clock className="w-3.5 h-3.5" /> {new Date(thread.createdAt).toLocaleDateString()}</span>
                     <span className="flex items-center gap-1"><Eye className="w-3.5 h-3.5" /> {thread.views}</span>

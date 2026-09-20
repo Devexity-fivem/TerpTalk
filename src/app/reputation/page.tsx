@@ -35,7 +35,7 @@ export default function ReputationPage() {
       <div className="max-w-2xl mx-auto px-4 py-8">
         <div className="mb-8 text-center">
           <Sprout className="w-12 h-12 text-primary mx-auto mb-3" />
-          <h1 className="text-3xl font-bold mb-2">Grow your reputation</h1>
+          <h1 className="font-display text-3xl font-bold mb-2 tracking-tight">Grow your reputation</h1>
           <p className="text-muted-foreground">
             Reputation is your garden. You start as a seed — contribute, help other growers,
             document your grows — and your profile grows with you.
@@ -44,10 +44,10 @@ export default function ReputationPage() {
 
         <ProgressionPanel />
 
-        <div className="bg-card rounded-lg border border-border p-4 mb-4">
+        <div className="bg-card/80 rounded-2xl border border-border/70 p-4 mb-4">
           <div className="flex items-center gap-2 mb-3">
             <TrendingUp className="w-4 h-4 text-primary" />
-            <h2 className="text-lg font-semibold">Ways to grow</h2>
+            <h2 className="font-display text-lg font-semibold">Ways to grow</h2>
           </div>
           <div className="space-y-2">
             {SOURCES.map((s) => (
@@ -71,10 +71,10 @@ export default function ReputationPage() {
           </p>
         </div>
 
-        <div className="bg-card rounded-lg border border-border p-4 mb-4">
+        <div className="bg-card/80 rounded-2xl border border-border/70 p-4 mb-4">
           <div className="flex items-center gap-2 mb-3">
             <Target className="w-4 h-4 text-primary" />
-            <h2 className="text-lg font-semibold">Quests &amp; challenges</h2>
+            <h2 className="font-display text-lg font-semibold">Quests &amp; challenges</h2>
           </div>
           <p className="text-xs text-muted-foreground mb-3">
             Every day you get 2 small quests — reply somewhere, tend a diary, spread some likes.
@@ -98,8 +98,8 @@ export default function ReputationPage() {
           </div>
         </div>
 
-        <div className="bg-card rounded-lg border border-border p-4 mb-4">
-          <h2 className="text-lg font-semibold mb-1">The ladder</h2>
+        <div className="bg-card/80 rounded-2xl border border-border/70 p-4 mb-4">
+          <h2 className="font-display text-lg font-semibold mb-1">The ladder</h2>
           <p className="text-xs text-muted-foreground mb-3">
             {REP_LADDER.length} rungs total — tiers unlock the big rewards, grow stages in between keep you moving.
           </p>
@@ -116,11 +116,11 @@ export default function ReputationPage() {
           </div>
         </div>
 
-        <div className="bg-card rounded-lg border border-border p-4 mb-4">
-          <h2 className="text-lg font-semibold mb-3">Unlockable rewards</h2>
+        <div className="bg-card/80 rounded-2xl border border-border/70 p-4 mb-4">
+          <h2 className="font-display text-lg font-semibold mb-3">Unlockable rewards</h2>
           <div className="space-y-4">
             <div>
-              <h3 className="text-sm font-semibold mb-2">Avatar frames</h3>
+              <h3 className="font-display text-sm font-semibold mb-2">Avatar frames</h3>
               <div className="flex flex-wrap gap-2">
                 {AVATAR_FRAMES.map((f) => (
                   <Tooltip key={f.key} content={`${f.description} — unlocks at ${f.unlockedAt.toLocaleString()} rep`}>
@@ -134,7 +134,7 @@ export default function ReputationPage() {
               </div>
             </div>
             <div>
-              <h3 className="text-sm font-semibold mb-2">Profile titles</h3>
+              <h3 className="font-display text-sm font-semibold mb-2">Profile titles</h3>
               <div className="flex flex-wrap gap-2">
                 {PROFILE_TITLES.map((t) => (
                   <Tooltip key={t.key} content={`${t.description} — unlocks at ${t.unlockedAt.toLocaleString()} rep`}>
@@ -146,7 +146,7 @@ export default function ReputationPage() {
               </div>
             </div>
             <div>
-              <h3 className="text-sm font-semibold mb-2">Profile themes</h3>
+              <h3 className="font-display text-sm font-semibold mb-2">Profile themes</h3>
               <div className="flex flex-wrap gap-2">
                 {PROFILE_THEMES.map((t) => (
                   <Tooltip key={t.key} content={`${t.description} — unlocks at ${t.unlockedAt.toLocaleString()} rep`}>
@@ -160,10 +160,10 @@ export default function ReputationPage() {
           </div>
         </div>
 
-        <div className="bg-card rounded-lg border border-border p-4">
+        <div className="bg-card/80 rounded-2xl border border-border/70 p-4">
           <div className="flex items-center gap-2 mb-3">
             <ShieldCheck className="w-4 h-4 text-primary" />
-            <h2 className="text-lg font-semibold">Fair play</h2>
+            <h2 className="font-display text-lg font-semibold">Fair play</h2>
           </div>
           <ul className="space-y-2 text-sm text-muted-foreground list-disc list-inside">
             <li>You can&apos;t earn reputation from your own content or from TerpBot.</li>

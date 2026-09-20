@@ -89,15 +89,15 @@ export default function NotificationSettingsPage() {
           <ArrowLeft className="w-4 h-4" /> All settings
         </Link>
         <div className="mb-6">
-          <h1 className="text-2xl font-bold flex items-center gap-2">
+          <h1 className="font-display text-2xl font-bold flex items-center gap-2 tracking-tight">
             <Bell className="w-6 h-6 text-primary" /> Notifications & Privacy
           </h1>
           <p className="text-muted-foreground">Choose what you want to be notified about, and how visible you are to others.</p>
         </div>
 
-        <h2 id="notifications" className="text-lg font-semibold mb-3 scroll-mt-20">Notifications</h2>
+        <h2 id="notifications" className="font-display text-lg font-semibold mb-3 scroll-mt-20">Notifications</h2>
 
-        <div className="bg-card rounded-lg border border-border divide-y divide-border">
+        <div className="bg-card/80 rounded-2xl border border-border/70 divide-y divide-border">
           {TOGGLES.map(({ key, label, desc }) => (
             <label key={key} className="flex items-start justify-between gap-4 p-4 cursor-pointer hover:bg-secondary/30 transition-colors">
               <div>
@@ -114,8 +114,8 @@ export default function NotificationSettingsPage() {
           ))}
         </div>
 
-        <h2 id="privacy" className="text-lg font-semibold mt-8 mb-3 scroll-mt-20">Privacy</h2>
-        <div className="bg-card rounded-lg border border-border divide-y divide-border">
+        <h2 id="privacy" className="font-display text-lg font-semibold mt-8 mb-3 scroll-mt-20">Privacy</h2>
+        <div className="bg-card/80 rounded-2xl border border-border/70 divide-y divide-border">
           {PRIVACY_TOGGLES.map(({ key, label, desc }) => (
             <label key={key} className="flex items-start justify-between gap-4 p-4 cursor-pointer hover:bg-secondary/30 transition-colors">
               <div>
@@ -155,7 +155,7 @@ export default function NotificationSettingsPage() {
           <button
             onClick={handleSave}
             disabled={saving}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg font-medium disabled:opacity-50"
+            className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-full font-medium disabled:opacity-50"
           >
             {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
             Save preferences

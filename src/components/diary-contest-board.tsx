@@ -87,16 +87,16 @@ export default function DiaryContestBoard() {
   }
 
   if (error && !data) {
-    return <div className="bg-card rounded-xl border border-border p-6 text-sm text-muted-foreground">{error}</div>
+    return <div className="bg-card/80 rounded-2xl border border-border/70 p-6 text-sm text-muted-foreground">{error}</div>
   }
   if (!data) {
-    return <div className="bg-card rounded-xl border border-border p-6 flex justify-center"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div>
+    return <div className="bg-card/80 rounded-2xl border border-border/70 p-6 flex justify-center"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div>
   }
 
   return (
-    <div className="bg-card rounded-xl border border-border p-5">
+    <div className="bg-card/80 rounded-2xl border border-border/70 p-5">
       <p className="text-xs text-muted-foreground mb-4">
-        Enter a diary with 4+ updates this month and at least one photo. Community votes — most votes wins the <span className="text-amber-500 font-medium">Diary of the Month</span> badge. Voting requires a 7-day-old account with 10+ reputation.
+        Eligibility: 4+ updates this month and at least one photo. Voting requires a 7-day-old account with 10+ reputation.
       </p>
 
       {session && !data.alreadyEntered && data.eligible.length > 0 && (
@@ -104,7 +104,7 @@ export default function DiaryContestBoard() {
           <select
             value={pickId}
             onChange={(e) => setPickId(e.target.value)}
-            className="flex-1 px-3 py-2 rounded-lg border border-border bg-background text-sm"
+            className="flex-1 px-3 py-2 rounded-xl border border-border/70 bg-background text-sm"
           >
             <option value="">Choose an eligible diary…</option>
             {data.eligible.map((d) => (
@@ -114,7 +114,7 @@ export default function DiaryContestBoard() {
           <button
             onClick={enter}
             disabled={!pickId || busy}
-            className="px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-50 min-h-11"
+            className="px-4 py-2 rounded-full bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-50 min-h-11"
           >
             Enter
           </button>

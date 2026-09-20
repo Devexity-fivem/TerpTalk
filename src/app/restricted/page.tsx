@@ -56,10 +56,10 @@ export default function RestrictedPage() {
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center px-4">
-      <div className="w-full max-w-md bg-card border border-border rounded-xl p-6">
+      <div className="w-full max-w-md bg-card/80 border border-border/70 rounded-2xl p-6">
         <div className="flex items-center gap-2 mb-2">
           <Shield className="w-5 h-5 text-primary" />
-          <h1 className="text-xl font-bold">Restricted account</h1>
+          <h1 className="font-display text-xl font-bold">Restricted account</h1>
         </div>
         <p className="text-sm text-muted-foreground mb-5">
           If your account was suspended or banned, sign in below to see your status and
@@ -94,7 +94,7 @@ export default function RestrictedPage() {
                   rows={4}
                   maxLength={1000}
                   placeholder="Tell the moderation team anything relevant (optional)"
-                  className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                  className="w-full px-3 py-2 rounded-xl border border-border/70 bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                 />
                 <label className="flex items-start gap-2 text-sm text-muted-foreground">
                   <input
@@ -108,7 +108,7 @@ export default function RestrictedPage() {
                 <button
                   type="submit"
                   disabled={busy}
-                  className="w-full px-4 py-2 bg-primary text-primary-foreground rounded-lg font-medium disabled:opacity-50"
+                  className="w-full px-4 py-2 bg-primary text-primary-foreground rounded-full font-medium disabled:opacity-50"
                 >
                   {busy ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : "Send request to moderation team"}
                 </button>
@@ -124,7 +124,7 @@ export default function RestrictedPage() {
               placeholder="Username"
               autoComplete="username"
               required
-              className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+              className="w-full px-3 py-2 rounded-xl border border-border/70 bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary"
             />
             <input
               type="password"
@@ -133,12 +133,12 @@ export default function RestrictedPage() {
               placeholder="Password"
               autoComplete="current-password"
               required
-              className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+              className="w-full px-3 py-2 rounded-xl border border-border/70 bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary"
             />
             <button
               type="submit"
               disabled={busy}
-              className="w-full px-4 py-2 bg-primary text-primary-foreground rounded-lg font-medium disabled:opacity-50"
+              className="w-full px-4 py-2 bg-primary text-primary-foreground rounded-full font-medium disabled:opacity-50"
             >
               {busy ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : "Check my status"}
             </button>

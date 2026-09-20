@@ -104,7 +104,7 @@ export default function AchievementBadge({ name, earned = true, mode = "profile"
     <div
       className={cn(
         "pointer-events-none absolute z-50 left-1/2 -translate-x-1/2 bottom-full mb-2 w-56 sm:w-64",
-        "rounded-xl border border-border bg-card/95 backdrop-blur-sm p-3 text-left shadow-xl",
+        "rounded-2xl border border-border/70 bg-card/80/95 backdrop-blur-sm p-3 text-left shadow-xl",
         "opacity-0 scale-95 group-hover:opacity-100 group-hover:scale-100 group-focus-visible:opacity-100 group-focus-visible:scale-100",
         "transition-all duration-150 motion-reduce:transition-none",
         mode === "showcase" ? "-top-2 bottom-auto mb-0" : ""

@@ -55,7 +55,7 @@ export default async function DealsPage() {
           <div key={p.id} className="bg-gradient-to-br from-primary/15 to-card border border-primary/30 rounded-xl p-6 mb-8">
             <div className="flex flex-col sm:flex-row sm:items-center gap-4">
               <div className="flex-1">
-                <h2 className="text-2xl font-bold">{p.name}</h2>
+                <h2 className="font-display text-2xl font-bold tracking-tight">{p.name}</h2>
                 <p className="text-muted-foreground text-sm mt-1">{p.description}</p>
                 {p.promoText && (
                   <p className="text-sm mt-2 font-medium text-amber-500">🔥 {p.promoText}</p>
@@ -83,7 +83,7 @@ export default async function DealsPage() {
           <div className="flex flex-wrap gap-3 mb-8">
             {partners.filter((p) => !p.featured).map((p) => (
               <a key={p.id} href={`/go/${p.slug}?from=/deals`} rel="sponsored nofollow"
-                className="bg-card border border-border rounded-lg px-4 py-2 text-sm hover:border-primary/50 transition-colors">
+                className="bg-card/80 border border-border/70 rounded-2xl px-4 py-2 text-sm hover:border-primary/50 transition-colors">
                 {p.name} {p.promoCode && <span className="text-primary font-semibold">· code {p.promoCode}</span>}
               </a>
             ))}

@@ -114,8 +114,8 @@ export default async function SetupPage({ params }: { params: Promise<{ id: stri
           { label: setup.title },
         ]} />
 
-        <div className="bg-card rounded-xl border border-border p-6 mb-6">
-          <h1 className="text-3xl font-bold mb-2 break-words">{setup.title}</h1>
+        <div className="bg-card/80 rounded-2xl border border-border/70 p-6 mb-6">
+          <h1 className="font-display text-3xl font-bold mb-2 break-words tracking-tight">{setup.title}</h1>
           <p className="text-muted-foreground mb-4 whitespace-pre-wrap break-words">{setup.description}</p>
           <div className="flex items-center gap-4 text-sm text-muted-foreground mb-4">
             <Link
@@ -166,8 +166,8 @@ export default async function SetupPage({ params }: { params: Promise<{ id: stri
         </div>
 
         {/* Specs */}
-        <div className="bg-card rounded-xl border border-border p-6 mb-6">
-          <h2 className="font-semibold mb-4 flex items-center gap-2">
+        <div className="bg-card/80 rounded-2xl border border-border/70 p-6 mb-6">
+          <h2 className="font-display font-semibold mb-4 flex items-center gap-2">
             <Settings className="w-5 h-5 text-primary" /> Equipment &amp; Specs
           </h2>
           <div className="grid md:grid-cols-2 gap-4">
@@ -191,8 +191,8 @@ export default async function SetupPage({ params }: { params: Promise<{ id: stri
 
         {/* Grows using this setup */}
         {usedIn.length > 0 && (
-          <div className="bg-card rounded-xl border border-border p-6 mb-6">
-            <h2 className="font-semibold mb-4">Used in {usedIn.length} grow{usedIn.length === 1 ? "" : "s"}</h2>
+          <div className="bg-card/80 rounded-2xl border border-border/70 p-6 mb-6">
+            <h2 className="font-display font-semibold mb-4">Used in {usedIn.length} grow{usedIn.length === 1 ? "" : "s"}</h2>
             <ul className="grid sm:grid-cols-2 gap-3">
               {usedIn.map((d) => (
                 <li key={d.id}>
@@ -221,8 +221,8 @@ export default async function SetupPage({ params }: { params: Promise<{ id: stri
         )}
 
         {/* Comments */}
-        <div className="bg-card rounded-xl border border-border p-6">
-          <h2 className="font-semibold mb-4 flex items-center gap-2">
+        <div className="bg-card/80 rounded-2xl border border-border/70 p-6">
+          <h2 className="font-display font-semibold mb-4 flex items-center gap-2">
             <MessageSquare className="w-5 h-5 text-primary" /> Comments ({setup._count.comments})
           </h2>
           <div className="space-y-4 mb-6">

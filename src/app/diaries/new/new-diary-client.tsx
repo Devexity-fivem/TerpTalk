@@ -80,12 +80,12 @@ export default function NewDiaryClient({
           <Link href="/diaries" className="text-sm text-muted-foreground hover:text-foreground mb-2 block">
             ← Back to Diaries
           </Link>
-          <h1 className="text-3xl font-bold mb-2">Start New Grow Diary</h1>
+          <h1 className="font-display text-3xl font-bold mb-2 tracking-tight">Start New Grow Diary</h1>
           <p className="text-muted-foreground">Document your complete grow journey from seed to harvest</p>
         </div>
 
         {/* Form */}
-        <div className="bg-card rounded-lg border border-border p-6">
+        <div className="bg-card/80 rounded-2xl border border-border/70 p-6">
           <DiaryForm
             initial={{ ...EMPTY_FORM, ...(prefill ?? {}) }}
             submitLabel="Create Diary"

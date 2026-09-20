@@ -15,7 +15,7 @@ export default function ReputationRoadmap({ reputation, compact }: ReputationRoa
   const next = getNextTier(reputation)
 
   return (
-    <div className={cn("bg-card rounded-lg border border-border p-6", compact && "p-4")}>
+    <div className={cn("bg-card/80 rounded-2xl border border-border/70 p-6", compact && "p-4")}>
       <h3 className={cn("font-semibold mb-4 flex items-center gap-1.5", compact ? "text-base" : "text-lg")}>
         Reputation Roadmap
         <InfoTip content="Tiers unlock automatically at each reputation threshold. Filled markers are earned, the amber marker is next, and each tier lists the perk it grants." />

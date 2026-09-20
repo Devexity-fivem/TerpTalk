@@ -147,7 +147,7 @@ export default async function CategoryPage({
           <div className="bg-card/80 rounded-2xl border border-border/70 p-4 mb-6">
             <div className="flex items-center gap-2 mb-3">
               <BookOpen className="w-4 h-4 text-spectrum" />
-              <h2 className="font-semibold text-sm">Related Guides</h2>
+              <h2 className="font-display font-semibold text-sm">Related Guides</h2>
             </div>
             <div className="grid sm:grid-cols-2 gap-2">
               {category.guides.map((g) => (
@@ -196,7 +196,7 @@ export default async function CategoryPage({
           {category.threads.length === 0 ? (
             <div className="p-8 text-center">
               <MessageSquare className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
-              <h3 className="text-base font-semibold mb-1">No discussions yet</h3>
+              <h3 className="font-display text-base font-semibold mb-1">No discussions yet</h3>
               <p className="text-sm text-muted-foreground mb-3">Be the first to start a discussion in this category!</p>
               <Link
                 href={`/forum/new?category=${category.slug}`}
@@ -238,7 +238,7 @@ export default async function CategoryPage({
                             </span>
                           </Tooltip>
                         )}
-                        <h3 className="font-semibold">{thread.title}</h3>
+                        <h3 className="font-display font-semibold">{thread.title}</h3>
                       </div>
                       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
                         <span className="flex items-center gap-1">

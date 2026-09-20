@@ -54,17 +54,17 @@ export default async function SettingsPage() {
       <div className="max-w-2xl mx-auto px-4 py-8">
         <div className="mb-6 flex items-center gap-2">
           <Settings className="w-6 h-6 text-primary" />
-          <h1 className="text-2xl font-bold">Settings</h1>
+          <h1 className="font-display text-2xl font-bold tracking-tight">Settings</h1>
         </div>
 
         <div className="space-y-8">
           {SECTIONS.map((section) => (
             <section key={section.title} aria-labelledby={`settings-${section.title.toLowerCase()}`}>
-              <h2 id={`settings-${section.title.toLowerCase()}`} className="text-lg font-semibold mb-3 flex items-center gap-2">
+              <h2 id={`settings-${section.title.toLowerCase()}`} className="font-display text-lg font-semibold mb-3 flex items-center gap-2">
                 <section.icon className="w-4 h-4 text-primary" aria-hidden="true" />
                 {section.title}
               </h2>
-              <div className="bg-card rounded-lg border border-border divide-y divide-border">
+              <div className="bg-card/80 rounded-2xl border border-border/70 divide-y divide-border">
                 {section.items.map((item) => (
                   <Link
                     key={item.href + item.label}

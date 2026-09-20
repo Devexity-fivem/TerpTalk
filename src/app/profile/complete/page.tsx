@@ -134,7 +134,7 @@ export default function CompleteProfilePage() {
           <div className="bg-primary/10 p-4 rounded-full inline-flex mb-4">
             <Check className="w-12 h-12 text-primary" />
           </div>
-          <h1 className="text-2xl font-bold mb-2">Profile Complete!</h1>
+          <h1 className="font-display text-2xl font-bold mb-2 tracking-tight">Profile Complete!</h1>
           <p className="text-muted-foreground">Taking you to the community...</p>
         </div>
       </div>
@@ -150,7 +150,7 @@ export default function CompleteProfilePage() {
               <User className="w-8 h-8 text-primary" />
             </div>
           </div>
-          <h1 className="text-2xl font-bold">Complete Your TerpTalk Profile</h1>
+          <h1 className="font-display text-2xl font-bold tracking-tight">Complete Your TerpTalk Profile</h1>
           <p className="text-muted-foreground mt-2">Tell the community about yourself</p>
         </div>
 
@@ -198,7 +198,7 @@ export default function CompleteProfilePage() {
                 required
                 value={formData.username}
                 onChange={(e) => setFormData({ ...formData, username: e.target.value })}
-                className="w-full px-4 py-2 rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary"
+                className="w-full px-4 py-2 rounded-xl border border-border/70 bg-background focus:outline-none focus:ring-2 focus:ring-primary"
                 placeholder="Choose a unique username"
               />
             </div>
@@ -214,7 +214,7 @@ export default function CompleteProfilePage() {
                 value={formData.bio}
                 onChange={(e) => setFormData({ ...formData, bio: e.target.value })}
                 maxLength={150}
-                className="w-full px-4 py-2 rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary resize-none"
+                className="w-full px-4 py-2 rounded-xl border border-border/70 bg-background focus:outline-none focus:ring-2 focus:ring-primary resize-none"
                 placeholder="Tell us about your growing experience, interests, and what you hope to share with the community..."
               />
             </Tooltip>
@@ -229,7 +229,7 @@ export default function CompleteProfilePage() {
                 type="text"
                 value={formData.location}
                 onChange={(e) => setFormData({ ...formData, location: e.target.value })}
-                className="w-full px-4 py-2 rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary"
+                className="w-full px-4 py-2 rounded-xl border border-border/70 bg-background focus:outline-none focus:ring-2 focus:ring-primary"
                 placeholder="City, State, Country"
               />
             </div>
@@ -243,7 +243,7 @@ export default function CompleteProfilePage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-primary text-primary-foreground py-3 rounded-lg font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              className="w-full bg-primary text-primary-foreground py-3 rounded-full font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
               {loading ? (
                 <>

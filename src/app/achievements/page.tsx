@@ -121,7 +121,7 @@ export default function AchievementsPage() {
         <div className="mb-6">
           <div className="flex items-center gap-2 mb-1">
             <Award className="w-6 h-6 text-primary" />
-            <h1 className="text-2xl font-bold">Achievements</h1>
+            <h1 className="font-display text-2xl font-bold tracking-tight">Achievements</h1>
           </div>
           <p className="text-sm text-muted-foreground">
             {earnedCount} of {achievements.length} earned.
@@ -154,7 +154,7 @@ export default function AchievementsPage() {
 
         {grouped.map(([cat, list]) => (
           <div key={cat} className="mb-8">
-            <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-3">
+            <h2 className="font-display text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-3">
               {categories[cat] ?? cat}
             </h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -162,7 +162,7 @@ export default function AchievementsPage() {
                 <div
                   key={a.name ?? `hidden-${cat}-${i}`}
                   className={cn(
-                    "flex items-start gap-3 rounded-lg border border-border bg-card p-3",
+                    "flex items-start gap-3 rounded-2xl border border-border/70 bg-card/80 p-3",
                     !a.earned && "opacity-80"
                   )}
                 >

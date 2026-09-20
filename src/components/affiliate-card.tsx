@@ -17,7 +17,7 @@ export default async function AffiliateCard({ slug, from }: { slug: string; from
   const pros = product.pros?.split("\n").filter(Boolean) || []
 
   return (
-    <div className="bg-card border border-border rounded-xl p-4 my-3">
+    <div className="bg-card/80 border border-border/70 rounded-2xl p-4 my-3">
       <div className="flex gap-4">
         {product.imageUrl && (
           // eslint-disable-next-line @next/next/no-img-element
@@ -49,7 +49,7 @@ export default async function AffiliateCard({ slug, from }: { slug: string; from
         <a
           href={href}
           rel="sponsored nofollow"
-          className="inline-flex items-center gap-1.5 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:bg-primary/90 ml-auto"
+          className="inline-flex items-center gap-1.5 px-4 py-2 bg-primary text-primary-foreground rounded-full text-sm font-medium hover:bg-primary/90 ml-auto"
         >
           Shop {product.partner.name} <ExternalLink className="w-3.5 h-3.5" />
         </a>

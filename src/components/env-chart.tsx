@@ -47,8 +47,8 @@ export default function EnvCharts({ updates }: { updates: Reading[] }) {
   return (
     <div className="space-y-4 mb-6">
       {envData.length >= 2 && (
-        <section className="bg-card rounded-xl border border-border p-4" aria-label="Environment chart — temperature, humidity and VPD over time">
-          <h2 className="font-semibold text-sm mb-3 flex items-center gap-1.5">
+        <section className="bg-card/80 rounded-2xl border border-border/70 p-4" aria-label="Environment chart — temperature, humidity and VPD over time">
+          <h2 className="font-display font-semibold text-sm mb-3 flex items-center gap-1.5">
             Environment — Temp / RH / VPD
             <InfoTip content="RH = relative humidity. VPD = vapor pressure deficit (kPa) — how hard the air pulls moisture from leaves" />
           </h2>
@@ -84,8 +84,8 @@ export default function EnvCharts({ updates }: { updates: Reading[] }) {
       )}
 
       {chemData.length >= 2 && (
-        <section className="bg-card rounded-xl border border-border p-4" aria-label="Nutrient chart — pH and EC over time">
-          <h2 className="font-semibold text-sm mb-3 flex items-center gap-1.5">
+        <section className="bg-card/80 rounded-2xl border border-border/70 p-4" aria-label="Nutrient chart — pH and EC over time">
+          <h2 className="font-display font-semibold text-sm mb-3 flex items-center gap-1.5">
             Nutrients — pH / EC
             <InfoTip content="EC = electrical conductivity — a proxy for nutrient concentration" />
           </h2>

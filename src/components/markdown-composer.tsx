@@ -184,7 +184,7 @@ export default function MarkdownComposer({
   return (
     <div className="space-y-2 relative">
       {label && <label htmlFor={id} className="block text-sm font-medium">{label}</label>}
-      <div className="rounded-lg border border-border bg-background overflow-hidden">
+      <div className="rounded-xl border border-border/70 bg-background overflow-hidden">
         <div className="flex flex-wrap items-center justify-between gap-1 border-b border-border bg-secondary/30 px-2 py-1.5">
           <div className="flex flex-wrap items-center gap-0.5">
             <ToolbarButton title="Bold" onClick={() => insertAtCursor("**", "**", "bold text")} disabled={toolbarDisabled}>
@@ -256,7 +256,7 @@ export default function MarkdownComposer({
               style={{ minHeight: rows * 24 }}
             />
             {mention && mention.suggestions.length > 0 && (
-              <div className="absolute z-10 left-2 right-2 bottom-2 bg-card border border-border rounded-lg shadow-lg max-h-48 overflow-y-auto">
+              <div className="absolute z-10 left-2 right-2 bottom-2 bg-card/80 border border-border/70 rounded-2xl shadow-lg max-h-48 overflow-y-auto">
                 {mention.suggestions.map((user, i) => (
                   <button
                     key={user.id}

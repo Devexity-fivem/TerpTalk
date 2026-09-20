@@ -72,7 +72,7 @@ export default function BlockedMembers() {
 
   if (!blocks || blocks.length === 0) {
     return (
-      <div className="bg-card rounded-lg border border-border p-6 text-center">
+      <div className="bg-card/80 rounded-2xl border border-border/70 p-6 text-center">
         <Ban className="w-8 h-8 text-muted-foreground mx-auto mb-2" aria-hidden="true" />
         <p className="text-sm text-muted-foreground">
           You haven&apos;t blocked anyone. You can block a member from their profile — blocked members can&apos;t message or follow you.
@@ -83,7 +83,7 @@ export default function BlockedMembers() {
 
   return (
     <div>
-      <ul className="bg-card rounded-lg border border-border divide-y divide-border">
+      <ul className="bg-card/80 rounded-2xl border border-border/70 divide-y divide-border">
         {blocks.map((b) => (
           <li key={b.id} className="p-4">
             <div className="flex items-center gap-3">

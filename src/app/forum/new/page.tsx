@@ -147,12 +147,12 @@ function NewThreadForm() {
           <Link href="/forum" className="text-sm text-muted-foreground hover:text-foreground mb-2 block">
             ← Back to Discussions
           </Link>
-          <h1 className="text-3xl font-bold mb-2">Create New Discussion</h1>
+          <h1 className="font-display text-3xl font-bold mb-2 tracking-tight">Create New Discussion</h1>
           <p className="text-muted-foreground">Start a new discussion in the community</p>
         </div>
 
         {/* Form */}
-        <div className="bg-card rounded-lg border border-border p-6">
+        <div className="bg-card/80 rounded-2xl border border-border/70 p-6">
           <form onSubmit={handleSubmit} className="space-y-6">
             <div>
               <label htmlFor="category" className="block text-sm font-medium mb-2">
@@ -163,7 +163,7 @@ function NewThreadForm() {
                 required
                 value={formData.categoryId || prefillCategoryId || ""}
                 onChange={(e) => setFormData({ ...formData, categoryId: e.target.value })}
-                className="w-full px-4 py-2 rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary"
+                className="w-full px-4 py-2 rounded-xl border border-border/70 bg-background focus:outline-none focus:ring-2 focus:ring-primary"
               >
                 <option value="">Select a category</option>
                 {categories.map((category) => (
@@ -184,7 +184,7 @@ function NewThreadForm() {
                 required
                 value={formData.title}
                 onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                className="w-full px-4 py-2 rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary"
+                className="w-full px-4 py-2 rounded-xl border border-border/70 bg-background focus:outline-none focus:ring-2 focus:ring-primary"
                 placeholder="Enter a descriptive title for your thread"
                 maxLength={150}
               />
@@ -282,7 +282,7 @@ function NewThreadForm() {
               <button
                 type="submit"
                 disabled={loading}
-                className="flex-1 bg-primary text-primary-foreground py-3 rounded-lg font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                className="flex-1 bg-primary text-primary-foreground py-3 rounded-full font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
                 {loading ? (
                   <>
@@ -307,8 +307,8 @@ function NewThreadForm() {
         </div>
 
         {/* Guidelines */}
-        <div className="mt-6 bg-secondary/50 rounded-lg p-4">
-          <h3 className="font-semibold mb-2">Community Guidelines</h3>
+        <div className="mt-6 bg-secondary/50 rounded-xl p-4">
+          <h3 className="font-display font-semibold mb-2">Community Guidelines</h3>
           <ul className="text-sm text-muted-foreground space-y-1">
             <li>• Be respectful and constructive in your discussions</li>
             <li>• Search before posting to avoid duplicate threads</li>

@@ -151,14 +151,14 @@ export default function PostActions({
           <textarea
             value={content}
             onChange={(e) => setContent(e.target.value)}
-            className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm min-h-[80px]"
+            className="w-full px-3 py-2 rounded-xl border border-border/70 bg-background text-sm min-h-[80px]"
             maxLength={10000}
           />
           <div className="flex gap-2">
-            <button onClick={handleEdit} disabled={busy} className="px-3 py-1.5 text-xs bg-primary text-primary-foreground rounded-lg disabled:opacity-50">
+            <button onClick={handleEdit} disabled={busy} className="px-3 py-1.5 text-xs bg-primary text-primary-foreground rounded-full disabled:opacity-50">
               {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Save"}
             </button>
-            <button onClick={() => { setEditing(false); setContent(initialContent) }} className="px-3 py-1.5 text-xs bg-secondary rounded-lg">
+            <button onClick={() => { setEditing(false); setContent(initialContent) }} className="px-3 py-1.5 text-xs bg-secondary rounded-xl">
               Cancel
             </button>
           </div>
@@ -182,7 +182,7 @@ export default function PostActions({
             </button>
           </Tooltip>
           {showPicker && (
-            <div className="absolute bottom-full left-0 mb-2 flex gap-1 bg-card border border-border rounded-lg px-1.5 py-1 shadow-lg z-10">
+            <div className="absolute bottom-full left-0 mb-2 flex gap-1 bg-card/80 border border-border/70 rounded-2xl px-1.5 py-1 shadow-lg z-10">
               {ORDER.map((type) => (
                 <Tooltip key={type} content={type.toLowerCase()}>
                   <button
@@ -254,12 +254,12 @@ export default function PostActions({
       )}
 
       {showReport && (
-        <div className="p-2 bg-secondary/50 rounded-lg space-y-2 max-w-md">
+        <div className="p-2 bg-secondary/50 rounded-xl space-y-2 max-w-md">
           <p className="text-xs text-muted-foreground">Why are you reporting this post?</p>
           <select
             value={reportReason}
             onChange={(e) => setReportReason(e.target.value)}
-            className="w-full px-2 py-1.5 rounded-lg border border-border bg-background text-xs"
+            className="w-full px-2 py-1.5 rounded-xl border border-border/70 bg-background text-xs"
           >
             <option value="SPAM">Spam</option>
             <option value="HARASSMENT">Harassment</option>
@@ -273,7 +273,7 @@ export default function PostActions({
             value={reportDesc}
             onChange={(e) => setReportDesc(e.target.value)}
             placeholder="Optional details for moderators..."
-            className="w-full px-2 py-1.5 rounded-lg border border-border bg-background text-xs"
+            className="w-full px-2 py-1.5 rounded-xl border border-border/70 bg-background text-xs"
             maxLength={1000}
           />
           <button onClick={handleReport} disabled={busy} className="px-3 py-1.5 text-xs bg-destructive text-destructive-foreground rounded-lg disabled:opacity-50">

@@ -27,7 +27,7 @@ export default function ShareButtons({ path, title }: { path: string; title: str
     <div className="flex items-center gap-2">
       <button
         onClick={copy}
-        className="tap-target flex items-center gap-1.5 px-3 py-1.5 text-xs bg-secondary rounded-lg hover:bg-secondary/80 transition-colors"
+        className="tap-target flex items-center gap-1.5 px-3 py-1.5 text-xs bg-secondary rounded-xl hover:bg-secondary/80 transition-colors"
       >
         {copied ? <Check className="w-3.5 h-3.5 text-primary" /> : <Link2 className="w-3.5 h-3.5" />}
         {copied ? "Copied!" : "Copy link"}
@@ -36,7 +36,7 @@ export default function ShareButtons({ path, title }: { path: string; title: str
         href={xShare}
         target="_blank"
         rel="noopener noreferrer"
-        className="tap-target flex items-center gap-1.5 px-3 py-1.5 text-xs bg-secondary rounded-lg hover:bg-secondary/80 transition-colors"
+        className="tap-target flex items-center gap-1.5 px-3 py-1.5 text-xs bg-secondary rounded-xl hover:bg-secondary/80 transition-colors"
       >
         <Share2 className="w-3.5 h-3.5" /> X
       </a>
@@ -44,7 +44,7 @@ export default function ShareButtons({ path, title }: { path: string; title: str
         href={redditShare}
         target="_blank"
         rel="noopener noreferrer"
-        className="tap-target flex items-center gap-1.5 px-3 py-1.5 text-xs bg-secondary rounded-lg hover:bg-secondary/80 transition-colors"
+        className="tap-target flex items-center gap-1.5 px-3 py-1.5 text-xs bg-secondary rounded-xl hover:bg-secondary/80 transition-colors"
       >
         <Share2 className="w-3.5 h-3.5" /> Reddit
       </a>

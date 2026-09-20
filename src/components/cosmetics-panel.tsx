@@ -97,10 +97,10 @@ export default function CosmeticsPanel({ reputation, equipped, onSaved }: Cosmet
   }
 
   return (
-    <div className="bg-card rounded-lg border border-border p-6">
+    <div className="bg-card/80 rounded-2xl border border-border/70 p-6">
       <div className="flex items-center gap-2 mb-1">
         <Palette className="w-5 h-5 text-primary" />
-        <h2 className="text-lg font-semibold">Your Rewards</h2>
+        <h2 className="font-display text-lg font-semibold">Your Rewards</h2>
         <InfoTip content="Cosmetic rewards unlock automatically as your reputation grows — no claiming needed. Equip them here and they show up on your profile and posts." />
       </div>
       <p className="text-xs text-muted-foreground mb-4">Unlocked by reputation. Higher tiers unlock rarer looks.</p>

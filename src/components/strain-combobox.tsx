@@ -60,7 +60,7 @@ export default function StrainCombobox({ value, strainId, onChange, disabled }: 
           onChange(text, keep)
           setOpen(true)
         }}
-        className="w-full px-4 py-2 rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary"
+        className="w-full px-4 py-2 rounded-xl border border-border/70 bg-background focus:outline-none focus:ring-2 focus:ring-primary"
         placeholder="e.g., Blue Dream, OG Kush"
         autoComplete="off"
       />

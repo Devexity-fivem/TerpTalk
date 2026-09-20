@@ -215,17 +215,17 @@ const MessageRow = memo(function MessageRow({
 
   const menu = isMenuOpen && (
           reported ? (
-            <div className="mt-1 rounded-lg border border-border bg-card shadow-lg p-2.5 relative z-20">
+            <div className="mt-1 rounded-2xl border border-border/70 bg-card/80 shadow-lg p-2.5 relative z-20">
               <p role="status" className="text-xs text-muted-foreground">Report submitted — thank you. Our moderators will take a look.</p>
             </div>
           ) : reporting ? (
-            <div className="mt-1 rounded-lg border border-border bg-card shadow-lg p-2.5 space-y-2 relative z-20" role="group" aria-label="Report message">
+            <div className="mt-1 rounded-2xl border border-border/70 bg-card/80 shadow-lg p-2.5 space-y-2 relative z-20" role="group" aria-label="Report message">
               <p className="text-xs font-medium">Report this message?</p>
               <select
                 value={reportReason}
                 onChange={(e) => setReportReason(e.target.value)}
                 aria-label="Report reason"
-                className="w-full px-2 py-1.5 rounded-lg border border-border bg-background text-xs"
+                className="w-full px-2 py-1.5 rounded-xl border border-border/70 bg-background text-xs"
               >
                 <option value="SPAM">Spam</option>
                 <option value="HARASSMENT">Harassment</option>
@@ -240,7 +240,7 @@ const MessageRow = memo(function MessageRow({
                 onChange={(e) => setReportDesc(e.target.value)}
                 placeholder="Optional details for moderators..."
                 aria-label="Report details"
-                className="w-full px-2 py-1.5 rounded-lg border border-border bg-background text-xs"
+                className="w-full px-2 py-1.5 rounded-xl border border-border/70 bg-background text-xs"
                 maxLength={1000}
               />
               {reportError && <p role="alert" className="text-xs text-destructive">{reportError}</p>}
@@ -261,7 +261,7 @@ const MessageRow = memo(function MessageRow({
               </div>
             </div>
           ) : (
-          <div role="menu" className="mt-1 rounded-lg border border-border bg-card shadow-lg p-1.5 space-y-1 relative z-20">
+          <div role="menu" className="mt-1 rounded-2xl border border-border/70 bg-card/80 shadow-lg p-1.5 space-y-1 relative z-20">
             <button
               role="menuitem"
               onClick={() => onReply(msg)}
@@ -398,7 +398,7 @@ const MessageRow = memo(function MessageRow({
     <div className="group relative flex gap-2.5" data-mid={msg.id}>
       <Link
         href={`/u/${encodeURIComponent(displayName)}`}
-        className={cn("mt-0.5 shrink-0 rounded-full", frame?.className)}
+        className={cn("mt-0.5 shrink-0 self-start rounded-full", frame?.className)}
         aria-label={`${displayName}'s profile`}
         tabIndex={-1}
       >
@@ -1029,7 +1029,7 @@ export default function ChatRoom({ embedded = false, headerActions }: ChatRoomPr
               <div
                 role="listbox"
                 aria-label="Chat rooms"
-                className="absolute left-0 top-full z-30 mt-1 w-64 max-w-[calc(100vw-2rem)] rounded-xl border border-border bg-card p-1.5 shadow-lg"
+                className="absolute left-0 top-full z-30 mt-1 w-64 max-w-[calc(100vw-2rem)] rounded-2xl border border-border/70 bg-card/80 p-1.5 shadow-lg"
               >
                 {rooms.map((r) => (
                   <button
@@ -1086,7 +1086,7 @@ export default function ChatRoom({ embedded = false, headerActions }: ChatRoomPr
                 <button
                   onClick={() => setRetryCount((c) => c + 1)}
                   disabled={loading}
-                  className="p-1.5 hover:bg-secondary rounded-lg transition-colors disabled:opacity-50"
+                  className="p-1.5 hover:bg-secondary rounded-xl transition-colors disabled:opacity-50"
                   aria-label="Retry loading chat"
                 >
                   <RefreshCw className={cn("w-4 h-4", loading && "animate-spin")} />
@@ -1207,7 +1207,7 @@ export default function ChatRoom({ embedded = false, headerActions }: ChatRoomPr
                 id={listboxId}
                 role="listbox"
                 aria-label={showMentions ? "Mention suggestions" : "Command suggestions"}
-                className="mb-1.5 rounded-lg border border-border bg-card shadow-lg max-h-40 overflow-y-auto"
+                className="mb-1.5 rounded-2xl border border-border/70 bg-card/80 shadow-lg max-h-40 overflow-y-auto"
               >
                 {showMentions &&
                   mentionSuggestions.map((u, i) => (

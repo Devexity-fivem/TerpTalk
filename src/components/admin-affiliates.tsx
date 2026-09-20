@@ -96,8 +96,8 @@ export default function AdminAffiliates() {
       {msg && <div className="bg-primary/15 text-primary px-4 py-2 rounded-lg text-sm">{msg}</div>}
 
       {/* Disclosure */}
-      <div className="bg-card rounded-xl border border-border p-5">
-        <h2 className="font-semibold mb-2">Affiliate Disclosure</h2>
+      <div className="bg-card/80 rounded-2xl border border-border/70 p-5">
+        <h2 className="font-display font-semibold mb-2">Affiliate Disclosure</h2>
         <div className="flex gap-2">
           <input value={disclosure} onChange={(e) => setDisclosure(e.target.value)} className={inputCls} />
           <button
@@ -105,15 +105,15 @@ export default function AdminAffiliates() {
               const res = await fetch("/api/admin/affiliates/partners", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ type: "disclosure", value: disclosure }) })
               flash(res.ok ? "Disclosure saved" : "Failed")
             }}
-            className="px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm shrink-0"
+            className="px-4 py-2 bg-primary text-primary-foreground rounded-full text-sm shrink-0"
           >Save</button>
         </div>
       </div>
 
       {/* Stats */}
       {stats && (
-        <div className="bg-card rounded-xl border border-border p-5">
-          <h2 className="font-semibold mb-3">Click Analytics — {stats.total} total</h2>
+        <div className="bg-card/80 rounded-2xl border border-border/70 p-5">
+          <h2 className="font-display font-semibold mb-3">Click Analytics — {stats.total} total</h2>
           <div className="grid md:grid-cols-3 gap-4 text-sm">
             <div>
               <h3 className="text-xs text-muted-foreground mb-1">By partner</h3>
@@ -135,8 +135,8 @@ export default function AdminAffiliates() {
       )}
 
       {/* Partners */}
-      <div className="bg-card rounded-xl border border-border p-5">
-        <h2 className="font-semibold mb-4">Partners ({partners.length})</h2>
+      <div className="bg-card/80 rounded-2xl border border-border/70 p-5">
+        <h2 className="font-display font-semibold mb-4">Partners ({partners.length})</h2>
         <div className="space-y-3 mb-5">
           {partners.map((p) => (
             <div key={p.id} className="flex items-center justify-between gap-3 border border-border rounded-lg p-3">
@@ -168,7 +168,7 @@ export default function AdminAffiliates() {
           ))}
         </div>
 
-        <h3 className="text-sm font-semibold mb-3">{editPartner ? "Edit partner" : "Add partner"}</h3>
+        <h3 className="font-display text-sm font-semibold mb-3">{editPartner ? "Edit partner" : "Add partner"}</h3>
         <div className="grid sm:grid-cols-2 gap-3">
           <input placeholder="Partner name" value={partnerForm.name} onChange={(e) => setPartnerForm({ ...partnerForm, name: e.target.value })} className={inputCls} />
           <input placeholder="Website URL" value={partnerForm.websiteUrl} onChange={(e) => setPartnerForm({ ...partnerForm, websiteUrl: e.target.value })} className={inputCls} />
@@ -179,7 +179,7 @@ export default function AdminAffiliates() {
         </div>
         <div className="flex items-center gap-3 mt-3">
           <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={partnerForm.featured} onChange={(e) => setPartnerForm({ ...partnerForm, featured: e.target.checked })} /> Featured</label>
-          <button onClick={savePartner} disabled={busy} className="ml-auto px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm flex items-center gap-1.5 disabled:opacity-50">
+          <button onClick={savePartner} disabled={busy} className="ml-auto px-4 py-2 bg-primary text-primary-foreground rounded-full text-sm flex items-center gap-1.5 disabled:opacity-50">
             {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />} {editPartner ? "Save changes" : "Add partner"}
           </button>
           {editPartner && <button onClick={() => setEditPartner(null)} className="text-xs text-muted-foreground">Cancel</button>}
@@ -187,8 +187,8 @@ export default function AdminAffiliates() {
       </div>
 
       {/* Products */}
-      <div className="bg-card rounded-xl border border-border p-5">
-        <h2 className="font-semibold mb-4">Products ({products.length})</h2>
+      <div className="bg-card/80 rounded-2xl border border-border/70 p-5">
+        <h2 className="font-display font-semibold mb-4">Products ({products.length})</h2>
         <div className="space-y-3 mb-5">
           {products.map((p) => (
             <div key={p.id} className="flex items-center justify-between gap-3 border border-border rounded-lg p-3">
@@ -214,7 +214,7 @@ export default function AdminAffiliates() {
           ))}
         </div>
 
-        <h3 className="text-sm font-semibold mb-3">{editProduct ? "Edit product" : "Add product"}</h3>
+        <h3 className="font-display text-sm font-semibold mb-3">{editProduct ? "Edit product" : "Add product"}</h3>
         <div className="grid sm:grid-cols-2 gap-3">
           <input placeholder="Product name" value={productForm.name} onChange={(e) => setProductForm({ ...productForm, name: e.target.value })} className={inputCls} />
           <select value={productForm.partnerId} onChange={(e) => setProductForm({ ...productForm, partnerId: e.target.value })} className={inputCls}>
@@ -232,7 +232,7 @@ export default function AdminAffiliates() {
         </div>
         <div className="flex items-center gap-3 mt-3">
           <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={productForm.featured} onChange={(e) => setProductForm({ ...productForm, featured: e.target.checked })} /> Featured</label>
-          <button onClick={saveProduct} disabled={busy} className="ml-auto px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm flex items-center gap-1.5 disabled:opacity-50">
+          <button onClick={saveProduct} disabled={busy} className="ml-auto px-4 py-2 bg-primary text-primary-foreground rounded-full text-sm flex items-center gap-1.5 disabled:opacity-50">
             {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />} {editProduct ? "Save changes" : "Add product"}
           </button>
           {editProduct && <button onClick={() => setEditProduct(null)} className="text-xs text-muted-foreground">Cancel</button>}

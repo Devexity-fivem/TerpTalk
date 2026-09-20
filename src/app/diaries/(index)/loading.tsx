@@ -2,7 +2,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 
 function DiaryCardSkeleton() {
   return (
-    <div className="bg-card rounded-xl border border-border overflow-hidden">
+    <div className="bg-card/80 rounded-2xl border border-border/70 overflow-hidden">
       <Skeleton className="h-40 w-full rounded-none" />
       <div className="p-4">
         <Skeleton className="h-5 w-3/4 mb-2" />
@@ -25,7 +25,7 @@ export default function Loading() {
           <Skeleton className="h-8 w-44 mb-2" />
           <Skeleton className="h-4 w-full max-w-lg" />
         </div>
-        <section className="bg-card rounded-xl border border-border p-5 mb-6">
+        <section className="bg-card/80 rounded-2xl border border-border/70 p-5 mb-6">
           <Skeleton className="h-5 w-48 mb-4" />
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             {[0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-14 w-full" />)}

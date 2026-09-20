@@ -167,7 +167,7 @@ export default function ProfileClient() {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
-          <h1 className="text-2xl font-bold mb-2">User not found</h1>
+          <h1 className="font-display text-2xl font-bold mb-2 tracking-tight">User not found</h1>
           <p className="text-muted-foreground">This profile doesn&apos;t exist or isn&apos;t available.</p>
         </div>
       </div>
@@ -415,11 +415,11 @@ export default function ProfileClient() {
         </div>
 
         {!profile.isBot && recentRep.length > 0 && (
-          <div className="bg-card rounded-lg border border-border p-4 mb-4">
+          <div className="bg-card/80 rounded-2xl border border-border/70 p-4 mb-4">
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
                 <TrendingUp className="w-4 h-4 text-primary" />
-                <h2 className="text-lg font-semibold">Reputation</h2>
+                <h2 className="font-display text-lg font-semibold">Reputation</h2>
               </div>
               <Link href="/reputation" className="text-xs text-primary hover:underline">How it works</Link>
             </div>
@@ -439,10 +439,10 @@ export default function ProfileClient() {
 
         {profile.isBot ? (
           <>
-            <div className="bg-card rounded-lg border border-border p-4 mb-4">
+            <div className="bg-card/80 rounded-2xl border border-border/70 p-4 mb-4">
               <div className="flex items-center gap-2 mb-3">
                 <Bot className="w-4 h-4 text-primary" />
-                <h2 className="text-lg font-semibold">What I do</h2>
+                <h2 className="font-display text-lg font-semibold">What I do</h2>
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
                 {[
@@ -484,10 +484,10 @@ export default function ProfileClient() {
                 </div>
               )}
             </div>
-            <div className="bg-card rounded-lg border border-border p-4 mb-4">
+            <div className="bg-card/80 rounded-2xl border border-border/70 p-4 mb-4">
               <div className="flex items-center gap-2 mb-3">
                 <MessageSquare className="w-4 h-4 text-primary" />
-                <h2 className="text-lg font-semibold">How to use me</h2>
+                <h2 className="font-display text-lg font-semibold">How to use me</h2>
               </div>
               <div className="space-y-1.5">
                 {[
@@ -510,10 +510,10 @@ export default function ProfileClient() {
             </div>
           </>
         ) : (
-          <div className="bg-card rounded-lg border border-border p-4 mb-4">
+          <div className="bg-card/80 rounded-2xl border border-border/70 p-4 mb-4">
           <div className="flex items-center gap-2 mb-3">
             <MessageSquare className="w-4 h-4 text-primary" />
-            <h2 className="text-lg font-semibold">Recent Discussions</h2>
+            <h2 className="font-display text-lg font-semibold">Recent Discussions</h2>
           </div>
           {recentThreads.length === 0 ? (
             <p className="text-muted-foreground">No discussions yet</p>
@@ -544,7 +544,7 @@ export default function ProfileClient() {
         <div className="bg-card rounded-lg border border-amber-500/30 p-4 mb-4">
           <div className="flex items-center gap-2 mb-3">
             <Trophy className="w-4 h-4 text-amber-500" />
-            <h2 className="text-lg font-semibold">Harvest Shelf</h2>
+            <h2 className="font-display text-lg font-semibold">Harvest Shelf</h2>
             <span className="text-xs text-muted-foreground">{harvestShelf.length} completed grow{harvestShelf.length === 1 ? "" : "s"}</span>
           </div>
           <div className="grid gap-2 sm:grid-cols-2">
@@ -580,10 +580,10 @@ export default function ProfileClient() {
         )}
 
         {!profile.isBot && growSetups.length > 0 && (
-        <div className="bg-card rounded-lg border border-border p-4 mb-4">
+        <div className="bg-card/80 rounded-2xl border border-border/70 p-4 mb-4">
           <div className="flex items-center gap-2 mb-3">
             <Wrench className="w-4 h-4 text-primary" />
-            <h2 className="text-lg font-semibold">Grow Setups</h2>
+            <h2 className="font-display text-lg font-semibold">Grow Setups</h2>
             <span className="text-xs text-muted-foreground">{growSetups.length} shared</span>
           </div>
           <div className="grid gap-2 sm:grid-cols-2">
@@ -614,10 +614,10 @@ export default function ProfileClient() {
         )}
 
         {!profile.isBot && (
-        <div className="bg-card rounded-lg border border-border p-4 mb-4">
+        <div className="bg-card/80 rounded-2xl border border-border/70 p-4 mb-4">
           <div className="flex items-center gap-2 mb-3">
             <Sprout className="w-4 h-4 text-primary" />
-            <h2 className="text-lg font-semibold">Recent Grows</h2>
+            <h2 className="font-display text-lg font-semibold">Recent Grows</h2>
           </div>
           {growDiaries.length === 0 ? (
             <p className="text-muted-foreground">No grow diaries yet</p>

@@ -322,7 +322,7 @@ export default async function Home() {
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
             {/* Categories */}
             <div>
-              <h3 className="text-base font-semibold mb-3 flex items-center gap-2">
+              <h3 className="font-display text-base font-semibold mb-3 flex items-center gap-2">
                 <MessageSquare className="w-4 h-4 text-primary" />
                 Explore Topics
               </h3>
@@ -352,7 +352,7 @@ export default async function Home() {
 
             {/* Latest discussions */}
             <div>
-              <h3 className="text-base font-semibold mb-3 flex items-center gap-2">
+              <h3 className="font-display text-base font-semibold mb-3 flex items-center gap-2">
                 <Calendar className="w-4 h-4 text-primary" />
                 Latest Discussions
               </h3>
@@ -382,7 +382,7 @@ export default async function Home() {
 
             {/* Fresh grow updates */}
             <div>
-              <h3 className="text-base font-semibold mb-3 flex items-center gap-2">
+              <h3 className="font-display text-base font-semibold mb-3 flex items-center gap-2">
                 <Leaf className="w-4 h-4 text-primary" />
                 Fresh Grow Updates
               </h3>
@@ -535,7 +535,7 @@ export default async function Home() {
               <div className="flex flex-col sm:flex-row items-start sm:items-center gap-5">
                 <Avatar src={growerOfWeek.user.image ?? undefined} size="xl" alt={growerOfWeek.username ?? undefined} />
                 <div className="flex-1 min-w-0">
-                  <h3 className="text-2xl font-bold mb-1">{growerOfWeek.username}</h3>
+                  <h3 className="font-display text-2xl font-bold mb-1 tracking-tight">{growerOfWeek.username}</h3>
                   <p className="text-muted-foreground text-sm mb-3 max-w-xl">
                     {growerOfWeek.bio || `A dedicated cultivator sharing ${growerOfWeek.favoriteStrain ? `their love for ${growerOfWeek.favoriteStrain}` : "their grow journey"} with the community.`}
                   </p>
@@ -554,7 +554,7 @@ export default async function Home() {
                 </div>
                 <Link
                   href={`/u/${growerOfWeek.username}`}
-                  className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors shrink-0"
+                  className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-full bg-primary text-primary-foreground hover:bg-primary/90 transition-colors shrink-0"
                 >
                   View profile <ArrowRight className="w-4 h-4" />
                 </Link>

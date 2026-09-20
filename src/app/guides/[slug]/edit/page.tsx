@@ -34,7 +34,7 @@ export default async function EditGuidePage({ params }: { params: Promise<{ slug
     return (
       <div className="min-h-screen flex items-center justify-center px-4">
         <div className="text-center">
-          <h1 className="text-xl font-bold mb-2">Permission denied</h1>
+          <h1 className="font-display text-xl font-bold mb-2">Permission denied</h1>
           <p className="text-muted-foreground">Only the guide author or a moderator can edit this guide.</p>
         </div>
       </div>

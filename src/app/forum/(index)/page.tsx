@@ -167,7 +167,7 @@ export default async function ForumPage() {
                         <MessageSquare className="w-6 h-6 text-primary" />
                       </div>
                       <div className="flex-1 min-w-0">
-                        <h3 className="font-semibold mb-1 break-words">{category.name}</h3>
+                        <h3 className="font-display font-semibold mb-1 break-words">{category.name}</h3>
                         <p className="text-sm text-muted-foreground mb-2 break-words">{category.description}</p>
                         <div className="flex items-center gap-4 text-sm text-muted-foreground">
                           <span className="flex items-center gap-1">
@@ -202,7 +202,7 @@ export default async function ForumPage() {
                   >
                     <div className="flex items-start gap-4">
                       <div className="flex-1 min-w-0">
-                        <h3 className="font-semibold mb-1 flex items-center gap-2">
+                        <h3 className="font-display font-semibold mb-1 flex items-center gap-2">
                           {unreadThreadIds.has(thread.id) && (
                             <Tooltip content="New activity" className="shrink-0">
                               <span className="h-2 w-2 rounded-full bg-primary" role="img" aria-label="Unread" />

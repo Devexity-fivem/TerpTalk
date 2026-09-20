@@ -81,7 +81,7 @@ export default async function TagThreadsPage({
               >
                 <div className="flex items-start justify-between gap-4">
                   <div>
-                    <h2 className="font-semibold mb-1">{t.title}</h2>
+                    <h2 className="font-display font-semibold mb-1">{t.title}</h2>
                     <p className="text-sm text-muted-foreground">
                       {t.category.name} · by {t.author.profile?.username || t.author.name} <TierChip reputation={t.author.profile?.reputation ?? 0} publicMilestoneOptOut={t.author.profile?.publicMilestoneOptOut} /> · {t._count.posts} repl{t._count.posts === 1 ? "y" : "ies"}
                     </p>

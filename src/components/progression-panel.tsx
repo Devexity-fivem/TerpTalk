@@ -77,7 +77,7 @@ export default function ProgressionPanel() {
 
   if (status === "unauthenticated") {
     return (
-      <div className="bg-card rounded-lg border border-border p-4 mb-4 text-center">
+      <div className="bg-card/80 rounded-2xl border border-border/70 p-4 mb-4 text-center">
         <p className="text-sm text-muted-foreground">
           <Link href={signInHref("/reputation")} className="text-primary font-medium hover:underline">Sign in</Link>{" "}
           to see your grow level, next unlock, and weekly challenges.
@@ -91,10 +91,10 @@ export default function ProgressionPanel() {
   const completedChallenges = data.challenges.items.filter((c) => c.done).length
 
   return (
-    <section aria-label="Your progression" className="bg-card rounded-lg border border-border p-4 mb-4">
+    <section aria-label="Your progression" className="bg-card/80 rounded-2xl border border-border/70 p-4 mb-4">
       <div className="flex items-center gap-2 mb-3">
         <Sprout className="w-4 h-4 text-primary" />
-        <h2 className="text-lg font-semibold">Your garden</h2>
+        <h2 className="font-display text-lg font-semibold">Your garden</h2>
         <Tooltip content={data.tier.benefit ? `${data.tier.name} tier — ${data.tier.benefit}` : `${data.tier.name} reputation tier`} align="end" className="ml-auto">
           <span className={cn("inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium", data.tier.bg, data.tier.color)}>
             <span aria-hidden="true">{data.tier.icon}</span> {data.tier.name}

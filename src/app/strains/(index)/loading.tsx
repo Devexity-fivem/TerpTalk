@@ -17,7 +17,7 @@ export default function Loading() {
         <div className="grid md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {[0, 1, 2, 3, 4, 5, 6, 7].map((i) => (
             <div key={i} className={i === 0 ? "" : i < 2 ? "hidden md:block" : i < 3 ? "hidden lg:block" : "hidden xl:block"}>
-              <div className="bg-card rounded-xl border border-border p-4">
+              <div className="bg-card/80 rounded-2xl border border-border/70 p-4">
                 <Skeleton className="h-5 w-3/4 mb-2" />
                 <Skeleton className="h-3 w-1/2 mb-3" />
                 <div className="flex gap-2 mb-3">

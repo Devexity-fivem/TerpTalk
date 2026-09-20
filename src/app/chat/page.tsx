@@ -18,7 +18,7 @@ export default async function ChatPage() {
       <div className="min-h-screen bg-background flex items-center justify-center px-4">
         <div className="text-center max-w-sm">
           <MessageCircle className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
-          <h1 className="text-xl font-bold mb-2">Chat is temporarily disabled</h1>
+          <h1 className="font-display text-xl font-bold mb-2">Chat is temporarily disabled</h1>
           <p className="text-sm text-muted-foreground">The community chat is turned off right now. Check back later.</p>
         </div>
       </div>

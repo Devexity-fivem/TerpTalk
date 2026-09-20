@@ -194,13 +194,13 @@ function MessagesInner() {
   return (
     <div className="min-h-screen bg-background">
       <div className="max-w-5xl mx-auto px-4 py-8">
-        <h1 className="text-2xl font-bold mb-6 flex items-center gap-2">
+        <h1 className="font-display text-2xl font-bold mb-6 flex items-center gap-2 tracking-tight">
           <Mail className="w-6 h-6 text-primary" /> Messages
         </h1>
 
         <div className="grid md:grid-cols-3 gap-4 h-[70dvh] min-h-[320px]">
           {/* Conversation list */}
-          <div className="bg-card border border-border rounded-xl overflow-y-auto">
+          <div className="bg-card/80 border border-border/70 rounded-2xl overflow-y-auto">
             {convos.length === 0 ? (
               <EmptyState
                 icon={MessageCircle}
@@ -250,7 +250,7 @@ function MessagesInner() {
           </div>
 
           {/* Thread view */}
-          <div className="md:col-span-2 bg-card border border-border rounded-xl flex flex-col overflow-hidden">
+          <div className="md:col-span-2 bg-card/80 border border-border/70 rounded-2xl flex flex-col overflow-hidden">
             {!withId ? (
               <div className="flex-1 flex items-center justify-center text-muted-foreground text-sm">
                 Select a conversation
@@ -305,14 +305,14 @@ function MessagesInner() {
                       onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && (e.preventDefault(), send())}
                       placeholder="Type a message..."
                       maxLength={2000}
-                      className="flex-1 px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                      className="flex-1 px-3 py-2 rounded-xl border border-border/70 bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                     />
                     <Tooltip content="Send message">
                       <button
                         onClick={send}
                         disabled={sending || !draft.trim()}
                         aria-label="Send message"
-                        className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-50 transition-colors"
+                        className="px-4 py-2 bg-primary text-primary-foreground rounded-full hover:bg-primary/90 disabled:opacity-50 transition-colors"
                       >
                         {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
                       </button>

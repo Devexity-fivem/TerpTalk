@@ -124,7 +124,7 @@ export default function UserPopover({ username, children }: { username: string |
         <span
           role="dialog"
           aria-label={`${username} profile preview`}
-          className="absolute left-0 top-full z-50 mt-1 block w-64 rounded-lg border border-border bg-card p-3 text-left shadow-lg normal-case tracking-normal"
+          className="absolute left-0 top-full z-50 mt-1 block w-64 rounded-2xl border border-border/70 bg-card/80 p-3 text-left shadow-lg normal-case tracking-normal"
         >
           {card === undefined ? (
             <span className="flex items-center justify-center py-4 text-muted-foreground">

@@ -78,7 +78,7 @@ export default function StrainPhotoUpload({
       <button
         onClick={() => inputRef.current?.click()}
         disabled={uploading}
-        className="flex items-center gap-2 px-3 py-2 text-sm bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50"
+        className="flex items-center gap-2 px-3 py-2 text-sm bg-primary text-primary-foreground rounded-full hover:bg-primary/90 transition-colors disabled:opacity-50"
       >
         {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Camera className="w-4 h-4" />}
         {uploading ? "Uploading..." : kind === "PLANT" ? "Add Plant Photo" : "Add Flower Photo"}

@@ -103,7 +103,7 @@ export default function DiaryForm({ initial, submitLabel, pendingLabel, onSubmit
     <form onSubmit={handleSubmit} className="space-y-6">
       {/* Basic Information */}
       <div className="space-y-4">
-        <h3 className="font-semibold text-lg">Basic Information</h3>
+        <h3 className="font-display font-semibold text-lg">Basic Information</h3>
 
         <div>
           <label htmlFor="title" className="block text-sm font-medium mb-2">
@@ -235,7 +235,7 @@ export default function DiaryForm({ initial, submitLabel, pendingLabel, onSubmit
 
       {/* Grow Setup */}
       <div className="space-y-4">
-        <h3 className="font-semibold text-lg">Grow Setup</h3>
+        <h3 className="font-display font-semibold text-lg">Grow Setup</h3>
 
         <div className="grid md:grid-cols-2 gap-4">
           <div>
@@ -407,7 +407,7 @@ export default function DiaryForm({ initial, submitLabel, pendingLabel, onSubmit
         <button
           type="submit"
           disabled={loading}
-          className="flex-1 bg-primary text-primary-foreground py-3 rounded-lg font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+          className="flex-1 bg-primary text-primary-foreground py-3 rounded-full font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
         >
           {loading ? (
             <>

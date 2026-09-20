@@ -26,7 +26,7 @@ export default async function BlockedSettingsPage() {
         </Link>
         <div className="mb-6 flex items-center gap-2">
           <Ban className="w-6 h-6 text-primary" />
-          <h1 className="text-2xl font-bold">Blocked members</h1>
+          <h1 className="font-display text-2xl font-bold tracking-tight">Blocked members</h1>
         </div>
         <p className="text-sm text-muted-foreground mb-6">
           Blocked members can&apos;t send you direct messages or follow you. Blocking is private — they aren&apos;t notified.

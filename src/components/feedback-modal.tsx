@@ -98,12 +98,12 @@ export function FeedbackModal({ onClose }: { onClose: () => void }) {
         role="dialog"
         aria-modal="true"
         aria-labelledby="feedback-title"
-        className="bg-card border border-border rounded-xl w-full max-w-lg max-h-[85vh] overflow-y-auto p-6"
+        className="bg-card/80 border border-border/70 rounded-2xl w-full max-w-lg max-h-[85vh] overflow-y-auto p-6"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-start justify-between gap-3 mb-4">
           <div>
-            <h2 id="feedback-title" className="text-lg font-semibold flex items-center gap-2">
+            <h2 id="feedback-title" className="font-display text-lg font-semibold flex items-center gap-2">
               <MessageSquarePlus className="w-5 h-5 text-primary" /> Feedback
             </h2>
             <p className="text-xs text-muted-foreground mt-1">
@@ -184,7 +184,7 @@ export function FeedbackModal({ onClose }: { onClose: () => void }) {
             <button
               type="submit"
               disabled={sending}
-              className="w-full inline-flex items-center justify-center gap-2 rounded-lg bg-primary text-primary-foreground font-medium px-4 py-2.5 text-sm hover:bg-primary/90 transition-colors disabled:opacity-50"
+              className="w-full inline-flex items-center justify-center gap-2 rounded-full bg-primary text-primary-foreground font-medium px-4 py-2.5 text-sm hover:bg-primary/90 transition-colors disabled:opacity-50"
             >
               {sending && <Loader2 className="w-4 h-4 animate-spin" />}
               {session?.user ? "Send feedback" : "Sign in to send feedback"}

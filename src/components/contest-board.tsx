@@ -86,13 +86,13 @@ export default function ContestBoard() {
     <div>
       {/* Entry CTA */}
       {session && !alreadyEntered && (
-        <div className="bg-card border border-border rounded-xl p-4 mb-6 flex flex-col sm:flex-row gap-3">
+        <div className="bg-card/80 border border-border/70 rounded-2xl p-4 mb-6 flex flex-col sm:flex-row gap-3">
           <input
             value={caption}
             onChange={(e) => setCaption(e.target.value)}
             placeholder="Caption — strain, week of flower, etc. (optional)"
             maxLength={200}
-            className="flex-1 px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+            className="flex-1 px-3 py-2 rounded-xl border border-border/70 bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary"
           />
           <input
             ref={fileRef}
@@ -104,7 +104,7 @@ export default function ContestBoard() {
           <button
             onClick={() => fileRef.current?.click()}
             disabled={busy}
-            className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-50 flex items-center gap-2 text-sm font-medium shrink-0"
+            className="px-4 py-2 bg-primary text-primary-foreground rounded-full hover:bg-primary/90 disabled:opacity-50 flex items-center gap-2 text-sm font-medium shrink-0"
           >
             {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Camera className="w-4 h-4" />}
             Submit a photo
@@ -114,7 +114,7 @@ export default function ContestBoard() {
       {error && <p className="text-sm text-destructive mb-4">{error}</p>}
 
       {entries.length === 0 ? (
-        <div className="bg-card rounded-xl border border-border">
+        <div className="bg-card/80 rounded-2xl border border-border/70">
           <EmptyState
             icon={Trophy}
             title="No entries yet this week"
@@ -124,7 +124,7 @@ export default function ContestBoard() {
       ) : (
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {entries.map((e, i) => (
-            <div key={e.id} className="bg-card border border-border rounded-xl overflow-hidden">
+            <div key={e.id} className="bg-card/80 border border-border/70 rounded-2xl overflow-hidden">
               <div className="relative">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={e.imageUrl} alt={e.caption || "Budshot entry"} loading="lazy" decoding="async" className="w-full aspect-square object-cover" />

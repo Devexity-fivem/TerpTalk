@@ -46,17 +46,17 @@ export default function ProblemWizard() {
   const communityThreads = community?.forId === resultId ? community.threads : []
 
   return (
-    <div className="bg-card border border-border rounded-xl p-6">
+    <div className="bg-card/80 border border-border/70 rounded-2xl p-6">
       {result ? (
         <div>
           <div className="flex items-center justify-between mb-3">
-            <h2 className="text-xl font-bold">{result.title}</h2>
+            <h2 className="font-display text-xl font-bold">{result.title}</h2>
             <span className={`text-xs font-semibold px-2 py-1 rounded-full ${SEVERITY[result.severity].cls}`}>
               {SEVERITY[result.severity].label}
             </span>
           </div>
           <p className="text-sm text-muted-foreground mb-4">{result.cause}</p>
-          <h3 className="text-sm font-semibold mb-2">How to fix it</h3>
+          <h3 className="font-display text-sm font-semibold mb-2">How to fix it</h3>
           <ul className="space-y-2 mb-5">
             {result.fixes.map((f, i) => (
               <li key={i} className="flex gap-2 text-sm">
@@ -65,10 +65,10 @@ export default function ProblemWizard() {
             ))}
           </ul>
           <div className="flex flex-wrap gap-3">
-            <button onClick={reset} className="flex items-center gap-1.5 px-4 py-2 bg-secondary rounded-lg text-sm hover:bg-secondary/80">
+            <button onClick={reset} className="flex items-center gap-1.5 px-4 py-2 bg-secondary rounded-xl text-sm hover:bg-secondary/80">
               <RotateCcw className="w-4 h-4" /> Diagnose another issue
             </button>
-            <Link href={`/forum/new?category=plant-problems&result=${encodeURIComponent(resultId || "")}`} className="flex items-center gap-1.5 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm hover:bg-primary/90">
+            <Link href={`/forum/new?category=plant-problems&result=${encodeURIComponent(resultId || "")}`} className="flex items-center gap-1.5 px-4 py-2 bg-primary text-primary-foreground rounded-full text-sm hover:bg-primary/90">
               Ask in Plant Problems <ArrowRight className="w-4 h-4" />
             </Link>
           </div>
@@ -76,7 +76,7 @@ export default function ProblemWizard() {
           {/* Community threads — real member answers, not a diagnosis */}
           {communityThreads.length > 0 && (
             <div className="mt-5 pt-4 border-t border-border">
-              <h3 className="text-sm font-semibold mb-1 flex items-center gap-1.5">
+              <h3 className="font-display text-sm font-semibold mb-1 flex items-center gap-1.5">
                 <MessageSquare className="w-4 h-4 text-primary" />
                 Community threads about similar problems
               </h3>
@@ -109,7 +109,7 @@ export default function ProblemWizard() {
             <Stethoscope className="w-5 h-5 text-primary" />
             <span className="text-xs text-muted-foreground">Step {history.length + 1}</span>
           </div>
-          <h2 className="text-lg font-semibold mb-4">{node.question}</h2>
+          <h2 className="font-display text-lg font-semibold mb-4">{node.question}</h2>
           <div className="grid gap-2">
             {node.options.map((opt) => (
               <button

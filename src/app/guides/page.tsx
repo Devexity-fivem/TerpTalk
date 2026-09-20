@@ -48,14 +48,14 @@ export default async function GuidesPage() {
             <p className="text-muted-foreground">Staff-written knowledge — from seed to cure.</p>
           </div>
           {isStaff && (
-            <Link href="/guides/new" className="flex items-center gap-1.5 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm hover:bg-primary/90">
+            <Link href="/guides/new" className="flex items-center gap-1.5 px-4 py-2 bg-primary text-primary-foreground rounded-full text-sm hover:bg-primary/90">
               <Plus className="w-4 h-4" /> New Guide
             </Link>
           )}
         </div>
 
         {guides.length === 0 ? (
-          <div className="bg-card rounded-xl border border-border">
+          <div className="bg-card/80 rounded-2xl border border-border/70">
             <EmptyState
               icon={BookOpen}
               title="No guides yet"
@@ -65,11 +65,11 @@ export default async function GuidesPage() {
         ) : (
           topics.map((topic) => (
             <div key={topic} className="mb-8">
-              <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground mb-3">{topic}</h2>
+              <h2 className="font-display text-sm font-semibold uppercase tracking-wide text-muted-foreground mb-3">{topic}</h2>
               <div className="grid sm:grid-cols-2 gap-4">
                 {guides.filter((g) => g.topic === topic).map((g) => (
-                  <Link key={g.id} href={`/guides/${g.slug}`} className="bg-card border border-border rounded-xl p-5 hover:border-primary/50 transition-colors">
-                    <h3 className="font-semibold mb-1">{g.title}</h3>
+                  <Link key={g.id} href={`/guides/${g.slug}`} className="bg-card/80 border border-border/70 rounded-2xl p-5 hover:border-primary/50 transition-colors">
+                    <h3 className="font-display font-semibold mb-1">{g.title}</h3>
                     <p className="text-sm text-muted-foreground line-clamp-2">{g.excerpt}</p>
                     <p className="text-xs text-muted-foreground mt-2">
                       by {g.author.profile?.username || g.author.name} · {new Date(g.createdAt).toLocaleDateString()}

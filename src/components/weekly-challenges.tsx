@@ -39,10 +39,10 @@ export default function WeeklyChallenges() {
 
   if (challenges === null) {
     return (
-      <div className="bg-card rounded-lg border border-border p-6">
+      <div className="bg-card/80 rounded-2xl border border-border/70 p-6">
         <div className="flex items-center gap-2 mb-4">
           <Target className="w-5 h-5 text-primary" />
-          <h2 className="text-lg font-semibold">Weekly Challenges</h2>
+          <h2 className="font-display text-lg font-semibold">Weekly Challenges</h2>
         </div>
         <div className="h-16 animate-pulse bg-secondary/50 rounded" />
       </div>
@@ -50,10 +50,10 @@ export default function WeeklyChallenges() {
   }
 
   return (
-    <div className="bg-card rounded-lg border border-border p-6">
+    <div className="bg-card/80 rounded-2xl border border-border/70 p-6">
       <div className="flex items-center gap-2 mb-1">
         <Target className="w-5 h-5 text-primary" />
-        <h2 className="text-lg font-semibold">Weekly Challenges</h2>
+        <h2 className="font-display text-lg font-semibold">Weekly Challenges</h2>
         <InfoTip content="Optional tasks that reset every Monday. Hover a challenge to see how to complete it — finishing one pays the listed reputation automatically." />
       </div>
       <p className="text-xs text-muted-foreground mb-4">Resets every Monday. Optional — ignore them freely.</p>

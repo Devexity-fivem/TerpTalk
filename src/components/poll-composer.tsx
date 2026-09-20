@@ -83,7 +83,7 @@ export default function PollComposer({ value, onChange, disabled }: PollComposer
         placeholder="Poll question"
         disabled={disabled}
         maxLength={200}
-        className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm"
+        className="w-full px-3 py-2 rounded-xl border border-border/70 bg-background text-sm"
       />
       <div className="space-y-2">
         {options.map((opt, i) => (
@@ -95,7 +95,7 @@ export default function PollComposer({ value, onChange, disabled }: PollComposer
               placeholder={`Option ${i + 1}`}
               disabled={disabled}
               maxLength={100}
-              className="flex-1 px-3 py-2 rounded-lg border border-border bg-background text-sm"
+              className="flex-1 px-3 py-2 rounded-xl border border-border/70 bg-background text-sm"
             />
             {options.length > 2 && (
               <button

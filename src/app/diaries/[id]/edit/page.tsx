@@ -60,13 +60,13 @@ export default async function EditDiaryPage({ params }: { params: Promise<{ id: 
           <Link href={diaryPath(diary)} className="text-sm text-muted-foreground hover:text-foreground mb-2 block">
             ← Back to Diary
           </Link>
-          <h1 className="text-3xl font-bold mb-2">Edit Diary</h1>
+          <h1 className="font-display text-3xl font-bold mb-2 tracking-tight">Edit Diary</h1>
           <p className="text-muted-foreground">
             Update your diary&apos;s details — past updates, harvest results, and the discussion thread are not affected.
           </p>
         </div>
 
-        <div className="bg-card rounded-lg border border-border p-6">
+        <div className="bg-card/80 rounded-2xl border border-border/70 p-6">
           <EditDiaryForm
             diaryId={diary.id}
             diaryHref={diaryPath(diary)}

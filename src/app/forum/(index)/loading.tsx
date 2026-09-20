@@ -12,7 +12,7 @@ export default function Loading() {
         <div className="grid lg:grid-cols-3 gap-6">
           <div className="min-w-0 lg:col-span-2 space-y-6">
             {[0, 1].map((i) => (
-              <section key={i} className="bg-card rounded-lg border border-border p-4">
+              <section key={i} className="bg-card/80 rounded-2xl border border-border/70 p-4">
                 <Skeleton className="h-5 w-44 mb-4" />
                 <div className="space-y-3">
                   {[0, 1, 2].map((j) => (
@@ -29,7 +29,7 @@ export default function Loading() {
             ))}
           </div>
           <div className="space-y-6">
-            <section className="bg-card rounded-lg border border-border p-4">
+            <section className="bg-card/80 rounded-2xl border border-border/70 p-4">
               <Skeleton className="h-5 w-36 mb-3" />
               <div className="space-y-2">
                 {[0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-4 w-full" />)}

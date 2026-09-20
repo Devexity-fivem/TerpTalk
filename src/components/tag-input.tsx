@@ -88,7 +88,7 @@ export default function TagInput({ value, onChange, max = 5, disabled }: TagInpu
   return (
     <div className="space-y-2">
       <label className="block text-sm font-medium">Tags</label>
-      <div className="min-h-[44px] w-full rounded-lg border border-border bg-background px-3 py-2 focus-within:ring-2 focus-within:ring-primary">
+      <div className="min-h-[44px] w-full rounded-xl border border-border/70 bg-background px-3 py-2 focus-within:ring-2 focus-within:ring-primary">
         <div className="flex flex-wrap items-center gap-2">
           {value.map((tag) => (
             <span

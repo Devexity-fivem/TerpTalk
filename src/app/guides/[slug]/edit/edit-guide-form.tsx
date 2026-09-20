@@ -55,7 +55,7 @@ export default function EditGuideForm({
             <ArrowLeft className="w-4 h-4" /> Back to guide
           </Link>
         </div>
-        <h1 className="text-2xl font-bold mb-6">Edit Guide</h1>
+        <h1 className="font-display text-2xl font-bold mb-6 tracking-tight">Edit Guide</h1>
         <form onSubmit={submit} className="space-y-4">
           <div>
             <label className="block text-sm font-medium mb-1">Title</label>
@@ -64,7 +64,7 @@ export default function EditGuideForm({
               onChange={(e) => setForm({ ...form, title: e.target.value })}
               maxLength={150}
               required
-              className="w-full px-4 py-2 rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary"
+              className="w-full px-4 py-2 rounded-xl border border-border/70 bg-background focus:outline-none focus:ring-2 focus:ring-primary"
             />
           </div>
           <div>
@@ -72,7 +72,7 @@ export default function EditGuideForm({
             <select
               value={form.topic}
               onChange={(e) => setForm({ ...form, topic: e.target.value })}
-              className="w-full px-4 py-2 rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary"
+              className="w-full px-4 py-2 rounded-xl border border-border/70 bg-background focus:outline-none focus:ring-2 focus:ring-primary"
             >
               {TOPICS.map((t) => (
                 <option key={t.value} value={t.value}>{t.label}</option>
@@ -86,7 +86,7 @@ export default function EditGuideForm({
               onChange={(e) => setForm({ ...form, excerpt: e.target.value })}
               maxLength={500}
               rows={3}
-              className="w-full px-4 py-2 rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary resize-none"
+              className="w-full px-4 py-2 rounded-xl border border-border/70 bg-background focus:outline-none focus:ring-2 focus:ring-primary resize-none"
             />
           </div>
           <div>
@@ -95,7 +95,7 @@ export default function EditGuideForm({
               value={form.content}
               onChange={(e) => setForm({ ...form, content: e.target.value })}
               rows={16}
-              className="w-full px-4 py-2 rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary resize-y font-mono text-sm"
+              className="w-full px-4 py-2 rounded-xl border border-border/70 bg-background focus:outline-none focus:ring-2 focus:ring-primary resize-y font-mono text-sm"
             />
           </div>
           {error && (
@@ -104,7 +104,7 @@ export default function EditGuideForm({
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-primary text-primary-foreground py-3 rounded-lg font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+            className="w-full bg-primary text-primary-foreground py-3 rounded-full font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
           >
             {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} Save Guide
           </button>

@@ -44,13 +44,13 @@ export default async function EditSetupPage({ params }: { params: Promise<{ id: 
           <Link href={setupPath(setup)} className="text-sm text-muted-foreground hover:text-foreground mb-2 block">
             ← Back to Setup
           </Link>
-          <h1 className="text-3xl font-bold mb-2">Edit Setup</h1>
+          <h1 className="font-display text-3xl font-bold mb-2 tracking-tight">Edit Setup</h1>
           <p className="text-muted-foreground">
             Update your setup&apos;s details — linked grow diaries keep pointing to this setup.
           </p>
         </div>
 
-        <div className="bg-card rounded-lg border border-border p-6">
+        <div className="bg-card/80 rounded-2xl border border-border/70 p-6">
           <EditSetupForm
             setupId={setup.id}
             setupHref={setupPath(setup)}

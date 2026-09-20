@@ -17,7 +17,7 @@ export default function MemberGreeting({ name }: { name: string }) {
     () => "Welcome"
   )
   return (
-    <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
+    <h1 className="font-display text-2xl font-bold tracking-tight sm:text-3xl">
       {part}, {name}
     </h1>
   )

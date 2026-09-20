@@ -251,7 +251,7 @@ export default async function DiariesPage({
         <div className="bg-card/80 rounded-2xl border border-border/70 p-5 mb-6 tt-edge-card">
           <div className="flex items-center gap-2 mb-4 flex-wrap">
             <BarChart3 className="w-4 h-4 text-primary" />
-            <h2 className="font-semibold">Community grow data</h2>
+            <h2 className="font-display font-semibold">Community grow data</h2>
             {stats.label && (
               <span className={`text-xs px-2 py-0.5 rounded ml-auto ${stats.tier === "early" ? "bg-amber-500/10 text-amber-500" : "bg-secondary text-muted-foreground"}`}>
                 {stats.label}
@@ -350,7 +350,7 @@ export default async function DiariesPage({
           </div>
 
           {diaries.length === 0 ? (
-            <div className="bg-card rounded-xl border border-border">
+            <div className="bg-card/80 rounded-2xl border border-border/70">
               <EmptyState
                 icon={Leaf}
                 title={total === 0 ? "No grow diaries yet" : "No diaries on this page"}

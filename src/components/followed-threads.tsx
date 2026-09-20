@@ -46,8 +46,8 @@ export default function FollowedThreads({ items }: { items: FollowedThreadItem[]
   }
 
   return (
-    <div className="bg-card rounded-lg border border-border p-4">
-      <h3 className="text-base font-semibold mb-3 flex items-center gap-2">
+    <div className="bg-card/80 rounded-2xl border border-border/70 p-4">
+      <h3 className="font-display text-base font-semibold mb-3 flex items-center gap-2">
         <BellRing className="w-4 h-4 text-primary" />
         Discussions You Follow
       </h3>

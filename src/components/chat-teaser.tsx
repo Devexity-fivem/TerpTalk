@@ -56,7 +56,7 @@ export default function ChatTeaser({ onlineCount, roomName, roomSlug, latestAt }
   // secondary link keeps the dedicated /chat page one tap away.
   if (session) {
     return (
-      <div className="inline-flex max-w-full items-center gap-2.5 rounded-xl border border-border bg-card/80 px-4 py-2.5 text-sm shadow-sm transition-colors hover:border-primary/40">
+      <div className="inline-flex max-w-full items-center gap-2.5 rounded-2xl border border-border/70 bg-card/80/80 px-4 py-2.5 text-sm shadow-sm transition-colors hover:border-primary/40">
         {body}
         <button
           onClick={openPanel}
@@ -77,7 +77,7 @@ export default function ChatTeaser({ onlineCount, roomName, roomSlug, latestAt }
   return (
     <Link
       href={signInHref("/chat")}
-      className="group inline-flex max-w-full items-center gap-2.5 rounded-xl border border-border bg-card/80 px-4 py-2.5 text-sm shadow-sm transition-colors hover:border-primary/40"
+      className="group inline-flex max-w-full items-center gap-2.5 rounded-2xl border border-border/70 bg-card/80/80 px-4 py-2.5 text-sm shadow-sm transition-colors hover:border-primary/40"
     >
       {body}
       <span className="shrink-0 pl-1 text-xs font-medium text-primary group-hover:underline">

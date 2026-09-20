@@ -14,7 +14,7 @@ export default function Loading() {
         </div>
         <div className="space-y-3">
           {[0, 1, 2, 3, 4].map((i) => (
-            <div key={i} className="bg-card rounded-lg border border-border p-4">
+            <div key={i} className="bg-card/80 rounded-2xl border border-border/70 p-4">
               <Skeleton className="h-5 w-2/3 mb-2" />
               <Skeleton className="h-3.5 w-full" />
             </div>

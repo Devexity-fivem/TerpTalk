@@ -77,12 +77,12 @@ export default function NewStrainPage() {
           <Link href="/strains" className="text-sm text-muted-foreground hover:text-foreground mb-2 block">
             ← Back to Strains
           </Link>
-          <h1 className="text-3xl font-bold mb-2">Add New Strain</h1>
+          <h1 className="font-display text-3xl font-bold mb-2 tracking-tight">Add New Strain</h1>
           <p className="text-muted-foreground">Contribute to our community strain database</p>
         </div>
 
         {/* Form */}
-        <div className="bg-card rounded-lg border border-border p-6">
+        <div className="bg-card/80 rounded-2xl border border-border/70 p-6">
           <form onSubmit={handleSubmit} className="space-y-6">
             <div>
               <label htmlFor="name" className="block text-sm font-medium mb-2">
@@ -94,7 +94,7 @@ export default function NewStrainPage() {
                 required
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                className="w-full px-4 py-2 rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary"
+                className="w-full px-4 py-2 rounded-xl border border-border/70 bg-background focus:outline-none focus:ring-2 focus:ring-primary"
                 placeholder="e.g., Blue Dream, OG Kush"
                 maxLength={100}
               />
@@ -110,7 +110,7 @@ export default function NewStrainPage() {
                   type="text"
                   value={formData.genetics}
                   onChange={(e) => setFormData({ ...formData, genetics: e.target.value })}
-                  className="w-full px-4 py-2 rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary"
+                  className="w-full px-4 py-2 rounded-xl border border-border/70 bg-background focus:outline-none focus:ring-2 focus:ring-primary"
                   placeholder="e.g., Blueberry x Haze"
                 />
               </div>
@@ -124,7 +124,7 @@ export default function NewStrainPage() {
                   type="text"
                   value={formData.breeder}
                   onChange={(e) => setFormData({ ...formData, breeder: e.target.value })}
-                  className="w-full px-4 py-2 rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary"
+                  className="w-full px-4 py-2 rounded-xl border border-border/70 bg-background focus:outline-none focus:ring-2 focus:ring-primary"
                   placeholder="e.g., DJ Short, Barney's Farm"
                 />
               </div>
@@ -139,7 +139,7 @@ export default function NewStrainPage() {
                 required
                 value={formData.type}
                 onChange={(e) => setFormData({ ...formData, type: e.target.value })}
-                className="w-full px-4 py-2 rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary"
+                className="w-full px-4 py-2 rounded-xl border border-border/70 bg-background focus:outline-none focus:ring-2 focus:ring-primary"
               >
                 <option value="">Select type</option>
                 <option value="Sativa">Sativa</option>
@@ -160,7 +160,7 @@ export default function NewStrainPage() {
                 id="description"
                 value={formData.description}
                 onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                className="w-full px-4 py-2 rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary resize-none"
+                className="w-full px-4 py-2 rounded-xl border border-border/70 bg-background focus:outline-none focus:ring-2 focus:ring-primary resize-none"
                 placeholder="Describe the strain's effects, aroma, and characteristics..."
                 rows={4}
               />
@@ -174,7 +174,7 @@ export default function NewStrainPage() {
                 id="growingInfo"
                 value={formData.growingInfo}
                 onChange={(e) => setFormData({ ...formData, growingInfo: e.target.value })}
-                className="w-full px-4 py-2 rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary resize-none"
+                className="w-full px-4 py-2 rounded-xl border border-border/70 bg-background focus:outline-none focus:ring-2 focus:ring-primary resize-none"
                 placeholder="Flowering time, yield information, growing difficulty, etc."
                 rows={4}
               />
@@ -190,7 +190,7 @@ export default function NewStrainPage() {
               <button
                 type="submit"
                 disabled={loading}
-                className="flex-1 bg-primary text-primary-foreground py-3 rounded-lg font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                className="flex-1 bg-primary text-primary-foreground py-3 rounded-full font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
                 {loading ? (
                   <>

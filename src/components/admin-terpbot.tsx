@@ -29,7 +29,7 @@ interface TerpbotData {
 
 function Stat({ label, value }: { label: string; value: number | string }) {
   return (
-    <div className="bg-card border border-border rounded-xl p-3">
+    <div className="bg-card/80 border border-border/70 rounded-2xl p-3">
       <div className="text-lg font-bold leading-tight">{value}</div>
       <div className="text-[11px] text-muted-foreground mt-0.5">{label}</div>
     </div>
@@ -40,8 +40,8 @@ function Breakdown({ title, rows }: { title: string; rows: Record<string, number
   const entries = Object.entries(rows).sort((a, b) => b[1] - a[1])
   if (!entries.length) return null
   return (
-    <div className="bg-card border border-border rounded-xl p-4">
-      <h3 className="text-sm font-semibold mb-2">{title}</h3>
+    <div className="bg-card/80 border border-border/70 rounded-2xl p-4">
+      <h3 className="font-display text-sm font-semibold mb-2">{title}</h3>
       <div className="space-y-1">
         {entries.slice(0, 10).map(([k, v]) => (
           <div key={k} className="flex items-center justify-between text-sm">
@@ -88,8 +88,8 @@ export default function AdminTerpBot() {
       </div>
 
       {/* Health */}
-      <div className="bg-card border border-border rounded-xl p-4">
-        <h3 className="text-sm font-semibold mb-3">
+      <div className="bg-card/80 border border-border/70 rounded-2xl p-4">
+        <h3 className="font-display text-sm font-semibold mb-3">
           Health {failedChecks.length === 0
             ? <span className="text-primary font-normal">— all checks pass</span>
             : <span className="text-destructive font-normal">— {failedChecks.length} failing</span>}
@@ -111,7 +111,7 @@ export default function AdminTerpBot() {
 
       {/* Usage */}
       <div>
-        <h3 className="text-sm font-semibold mb-2">Usage</h3>
+        <h3 className="font-display text-sm font-semibold mb-2">Usage</h3>
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
           <Stat label="Commands answered" value={stats.commands} />
           <Stat label="Via @terpbot" value={stats.mentions} />
@@ -123,7 +123,7 @@ export default function AdminTerpBot() {
 
       {/* Reliability */}
       <div>
-        <h3 className="text-sm font-semibold mb-2">Reliability</h3>
+        <h3 className="font-display text-sm font-semibold mb-2">Reliability</h3>
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
           <Stat label="Unknown commands" value={stats.unknownCommands} />
           <Stat label="Mention fallbacks" value={stats.fallbacks} />
@@ -135,7 +135,7 @@ export default function AdminTerpBot() {
 
       {/* Activity */}
       <div>
-        <h3 className="text-sm font-semibold mb-2">Activity</h3>
+        <h3 className="font-display text-sm font-semibold mb-2">Activity</h3>
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
           <Stat label="Announcements" value={stats.announcements} />
           <Stat label="Welcomes" value={stats.welcomes} />

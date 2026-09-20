@@ -19,7 +19,7 @@ const ACTIONS = [
 
 export default function ReputationEarn({ compact }: { compact?: boolean }) {
   return (
-    <div className={cn("bg-card rounded-lg border border-border p-6", compact && "p-4")}>
+    <div className={cn("bg-card/80 rounded-2xl border border-border/70 p-6", compact && "p-4")}>
       <h3 className={cn("font-semibold mb-4 flex items-center gap-1.5", compact ? "text-base" : "text-lg")}>
         How to earn reputation
         <InfoTip content="Reputation comes from real contributions — posting, journaling, and helping other growers. Hover any action for details." />

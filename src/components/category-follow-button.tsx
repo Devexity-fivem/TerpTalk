@@ -16,7 +16,7 @@ export default function CategoryFollowButton({ categoryId, initiallyFollowing }:
   if (!session) {
     return (
       <Tooltip content="Sign in to follow this category">
-        <a href={signInHref(pathname)} className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors">
+        <a href={signInHref(pathname)} className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-primary text-primary-foreground rounded-full hover:bg-primary/90 transition-colors">
           <Bell className="w-4 h-4" /> Follow
         </a>
       </Tooltip>

@@ -109,7 +109,7 @@ export default function AboutPage() {
         <div className="space-y-4 mb-12">
           {FAQ.map((f) => (
             <div key={f.q} className="bg-card/80 border border-border/70 rounded-2xl p-5">
-              <h3 className="font-semibold mb-1.5">{f.q}</h3>
+              <h3 className="font-display font-semibold mb-1.5">{f.q}</h3>
               <p className="text-sm text-muted-foreground leading-relaxed">{f.a}</p>
             </div>
           ))}

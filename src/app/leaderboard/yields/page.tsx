@@ -103,7 +103,7 @@ export default async function YieldLeaderboardPage() {
     <div className="min-h-screen bg-background py-8 px-4 sm:px-6 lg:px-8">
       <div className="max-w-5xl mx-auto">
         <div className="mb-8">
-          <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2">
+          <h1 className="font-display text-3xl font-bold tracking-tight flex items-center gap-2">
             <Trophy className="w-8 h-8 text-amber-500" />
             Strain Yield Leaderboard
           </h1>
@@ -114,15 +114,15 @@ export default async function YieldLeaderboardPage() {
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
-          <div className="bg-card border border-border rounded-xl p-4">
+          <div className="bg-card/80 border border-border/70 rounded-2xl p-4">
             <div className="text-3xl font-bold text-primary">{totalHarvests}</div>
             <div className="text-sm text-muted-foreground">Community harvests</div>
           </div>
-          <div className="bg-card border border-border rounded-xl p-4">
+          <div className="bg-card/80 border border-border/70 rounded-2xl p-4">
             <div className="text-3xl font-bold text-primary">{rows.length}</div>
             <div className="text-sm text-muted-foreground">Strains represented</div>
           </div>
-          <div className="bg-card border border-border rounded-xl p-4">
+          <div className="bg-card/80 border border-border/70 rounded-2xl p-4">
             <div className="text-3xl font-bold text-primary">{toOz(totalGrams).toFixed(1)} oz</div>
             <div className="text-sm text-muted-foreground">Total reported yield</div>
           </div>
@@ -140,14 +140,14 @@ export default async function YieldLeaderboardPage() {
             {rows.map((row, i) => (
               <div
                 key={row.strain}
-                className="bg-card border border-border rounded-xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center gap-4 hover:border-primary/40 transition-colors"
+                className="bg-card/80 border border-border/70 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center gap-4 hover:border-primary/40 transition-colors"
               >
                 <div className="flex items-center gap-3 min-w-0">
                   <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary font-bold shrink-0">
                     {i + 1}
                   </div>
                   <div className="min-w-0">
-                    <h3 className="font-semibold truncate">
+                    <h3 className="font-display font-semibold truncate">
                       <Link
                         href={(() => {
                           return strainPathByName.get(row.strain.toLowerCase()) ?? `/strains?q=${encodeURIComponent(row.strain)}`

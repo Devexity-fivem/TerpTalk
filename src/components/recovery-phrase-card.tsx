@@ -52,10 +52,10 @@ export default function RecoveryPhraseCard() {
   }
 
   return (
-    <div className="bg-card rounded-lg border border-border p-6">
+    <div className="bg-card/80 rounded-2xl border border-border/70 p-6">
       <div className="flex items-center gap-2 mb-4">
         <KeyRound className="w-5 h-5 text-primary" />
-        <h2 className="text-lg font-semibold">Account Recovery</h2>
+        <h2 className="font-display text-lg font-semibold">Account Recovery</h2>
       </div>
       <p className="text-sm text-muted-foreground mb-4">
         No email? No problem. Your recovery phrase is a 12-word backup — like a crypto wallet seed.
@@ -88,7 +88,7 @@ export default function RecoveryPhraseCard() {
           </div>
           <button
             onClick={() => setPhrase("")}
-            className="px-4 py-2 text-sm bg-secondary rounded-lg hover:bg-secondary/80"
+            className="px-4 py-2 text-sm bg-secondary rounded-xl hover:bg-secondary/80"
           >
             I&apos;ve saved it
           </button>
@@ -107,7 +107,7 @@ export default function RecoveryPhraseCard() {
               required
               minLength={8}
               autoComplete="current-password"
-              className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+              className="w-full px-3 py-2 bg-background border border-border/70 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary"
               placeholder="Current password"
             />
             <p className="text-xs text-muted-foreground mt-1">
@@ -120,7 +120,7 @@ export default function RecoveryPhraseCard() {
             <button
               type="submit"
               disabled={busy || !password}
-              className="px-4 py-2 text-sm bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-50 flex items-center gap-2"
+              className="px-4 py-2 text-sm bg-primary text-primary-foreground rounded-full hover:bg-primary/90 disabled:opacity-50 flex items-center gap-2"
             >
               {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
               {hasPhrase ? "Regenerate phrase" : "Generate recovery phrase"}
@@ -128,7 +128,7 @@ export default function RecoveryPhraseCard() {
             <button
               type="button"
               onClick={() => { setConfirming(false); setPassword(""); setError("") }}
-              className="px-4 py-2 text-sm bg-secondary rounded-lg hover:bg-secondary/80"
+              className="px-4 py-2 text-sm bg-secondary rounded-xl hover:bg-secondary/80"
             >
               Cancel
             </button>
@@ -138,7 +138,7 @@ export default function RecoveryPhraseCard() {
         <div className="flex items-center gap-3">
           <button
             onClick={startGenerate}
-            className="px-4 py-2 text-sm bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 flex items-center gap-2"
+            className="px-4 py-2 text-sm bg-primary text-primary-foreground rounded-full hover:bg-primary/90 flex items-center gap-2"
           >
             {hasPhrase ? "Regenerate phrase" : "Generate recovery phrase"}
           </button>

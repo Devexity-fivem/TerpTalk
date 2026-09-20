@@ -25,14 +25,14 @@ export default async function YoutubersPage() {
         <div className="max-w-4xl mx-auto">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
             <div>
-              <h1 className="text-2xl font-bold">Featured YouTubers</h1>
+              <h1 className="font-display text-2xl font-bold tracking-tight">Featured YouTubers</h1>
               <p className="text-muted-foreground mt-1">
                 Cannabis grow content creators verified by the TerpTalk team.
               </p>
             </div>
             <Link
               href="/youtubers/apply"
-              className="inline-flex items-center justify-center gap-2 bg-primary text-primary-foreground px-4 py-2 rounded-lg font-medium hover:bg-primary/90 transition-colors"
+              className="inline-flex items-center justify-center gap-2 bg-primary text-primary-foreground px-4 py-2 rounded-full font-medium hover:bg-primary/90 transition-colors"
             >
               <Video className="w-4 h-4" />
               Apply to be featured
@@ -80,14 +80,14 @@ export default async function YoutubersPage() {
       <div className="max-w-4xl mx-auto">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
           <div>
-            <h1 className="text-2xl font-bold">Featured YouTubers</h1>
+            <h1 className="font-display text-2xl font-bold tracking-tight">Featured YouTubers</h1>
             <p className="text-muted-foreground mt-1">
               Cannabis grow content creators verified by the TerpTalk team.
             </p>
           </div>
           <Link
             href="/youtubers/apply"
-            className="inline-flex items-center justify-center gap-2 bg-primary text-primary-foreground px-4 py-2 rounded-lg font-medium hover:bg-primary/90 transition-colors"
+            className="inline-flex items-center justify-center gap-2 bg-primary text-primary-foreground px-4 py-2 rounded-full font-medium hover:bg-primary/90 transition-colors"
           >
             <Video className="w-4 h-4" />
             Apply to be featured

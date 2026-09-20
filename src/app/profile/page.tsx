@@ -50,10 +50,10 @@ function ProfileBadges({
 
   if (badges.length === 0) {
     return (
-      <div className="bg-card rounded-lg border border-border p-6">
+      <div className="bg-card/80 rounded-2xl border border-border/70 p-6">
         <div className="flex items-center gap-2 mb-4">
           <Award className="w-5 h-5 text-primary" />
-          <h2 className="text-lg font-semibold">Badges</h2>
+          <h2 className="font-display text-lg font-semibold">Badges</h2>
         </div>
         <p className="text-sm text-muted-foreground mb-2">No badges earned yet — post, grow, and share to earn them</p>
         <Link href="/achievements" className="text-xs text-primary hover:underline">View achievement progress →</Link>
@@ -62,11 +62,11 @@ function ProfileBadges({
   }
 
   return (
-    <div className="bg-card rounded-lg border border-border p-6">
+    <div className="bg-card/80 rounded-2xl border border-border/70 p-6">
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
           <Award className="w-5 h-5 text-primary" />
-          <h2 className="text-lg font-semibold">Badges</h2>
+          <h2 className="font-display text-lg font-semibold">Badges</h2>
         </div>
         <Link href="/achievements" className="text-xs text-primary hover:underline">Progress</Link>
       </div>
@@ -323,7 +323,7 @@ export default function ProfilePage() {
           <p className="text-sm text-muted-foreground mb-4">Something went wrong on our end — try again in a moment.</p>
           <button
             onClick={() => { setLoadError(false); setLoading(true); window.location.reload() }}
-            className="px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm hover:bg-primary/90 transition-colors"
+            className="px-4 py-2 bg-primary text-primary-foreground rounded-full text-sm hover:bg-primary/90 transition-colors"
           >
             Retry
           </button>
@@ -359,7 +359,7 @@ export default function ProfilePage() {
               <div className="flex-1">
                 <div className="flex items-start justify-between gap-4 flex-wrap">
                   <div>
-                    <h1 className="text-2xl font-bold mb-1 flex items-center gap-2">{profileData.profile?.username || profileData.user.name} <RoleBadge role={profileData.user.role} /> <TierChip reputation={profileData.profile?.reputation ?? 0} size="md" /></h1>
+                    <h1 className="font-display text-2xl font-bold mb-1 flex items-center gap-2 tracking-tight">{profileData.profile?.username || profileData.user.name} <RoleBadge role={profileData.user.role} /> <TierChip reputation={profileData.profile?.reputation ?? 0} size="md" /></h1>
                     {getProfileTitle(profileData.profile?.profileTitle) && (
                       <p className="text-xs font-medium uppercase tracking-wider text-primary/80 mb-1">
                         {getProfileTitle(profileData.profile?.profileTitle)?.name}
@@ -413,7 +413,7 @@ export default function ProfilePage() {
                       })
                       setEditing(true)
                     }}
-                    className="flex items-center gap-2 px-4 py-2 text-sm font-medium bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
+                    className="flex items-center gap-2 px-4 py-2 text-sm font-medium bg-primary text-primary-foreground rounded-full hover:bg-primary/90 transition-colors"
                   >
                     <Pencil className="w-4 h-4" /> Edit Profile
                   </button>
@@ -449,10 +449,10 @@ export default function ProfilePage() {
               role="dialog"
               aria-modal="true"
               aria-labelledby="edit-profile-title"
-              className="bg-card border border-border rounded-xl w-full max-w-lg max-h-[85vh] overflow-y-auto p-6"
+              className="bg-card/80 border border-border/70 rounded-2xl w-full max-w-lg max-h-[85vh] overflow-y-auto p-6"
               onClick={(e) => e.stopPropagation()}
             >
-              <h2 id="edit-profile-title" className="text-lg font-semibold mb-4">Edit Profile</h2>
+              <h2 id="edit-profile-title" className="font-display text-lg font-semibold mb-4">Edit Profile</h2>
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium mb-1">Profile Photo</label>
@@ -479,7 +479,7 @@ export default function ProfilePage() {
                             alert("Could not process that image")
                           }
                         }}
-                        className="text-sm text-muted-foreground file:mr-3 file:px-3 file:py-1.5 file:rounded-lg file:border-0 file:bg-primary file:text-primary-foreground file:text-xs file:font-medium hover:file:bg-primary/90"
+                        className="text-sm text-muted-foreground file:mr-3 file:px-3 file:py-1.5 file:rounded-full file:border-0 file:bg-primary file:text-primary-foreground file:text-xs file:font-medium hover:file:bg-primary/90"
                       />
                       <p className="text-xs text-muted-foreground">JPG, PNG, WebP or GIF — cropped to a square, max 5MB</p>
                       {editForm.avatarUrl && (
@@ -504,7 +504,7 @@ export default function ProfilePage() {
                     maxLength={150}
                     title="Maximum 150 characters"
                     placeholder="Tell the community about yourself..."
-                    className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary resize-none"
+                    className="w-full px-3 py-2 rounded-xl border border-border/70 bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary resize-none"
                   />
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -515,7 +515,7 @@ export default function ProfilePage() {
                       value={editForm.location}
                       onChange={(e) => setEditForm({ ...editForm, location: e.target.value })}
                       maxLength={100}
-                      className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                      className="w-full px-3 py-2 rounded-xl border border-border/70 bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                     />
                   </div>
                   <div>
@@ -526,7 +526,7 @@ export default function ProfilePage() {
                       onChange={(e) => setEditForm({ ...editForm, website: e.target.value })}
                       maxLength={200}
                       placeholder="https://..."
-                      className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                      className="w-full px-3 py-2 rounded-xl border border-border/70 bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                     />
                   </div>
                   <div>
@@ -534,7 +534,7 @@ export default function ProfilePage() {
                     <select
                       value={editForm.growExperience}
                       onChange={(e) => setEditForm({ ...editForm, growExperience: e.target.value })}
-                      className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                      className="w-full px-3 py-2 rounded-xl border border-border/70 bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                     >
                       <option value="">—</option>
                       {EXPERIENCE_LEVELS.map((l) => <option key={l} value={l}>{l}</option>)}
@@ -548,7 +548,7 @@ export default function ProfilePage() {
                       onChange={(e) => setEditForm({ ...editForm, growSpace: e.target.value })}
                       maxLength={100}
                       placeholder="e.g. 4x4 tent, outdoor"
-                      className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                      className="w-full px-3 py-2 rounded-xl border border-border/70 bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                     />
                   </div>
                   <div className="sm:col-span-2">
@@ -559,7 +559,7 @@ export default function ProfilePage() {
                       onChange={(e) => setEditForm({ ...editForm, favoriteStrain: e.target.value })}
                       maxLength={100}
                       placeholder="e.g. Northern Lights"
-                      className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                      className="w-full px-3 py-2 rounded-xl border border-border/70 bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                     />
                   </div>
                   <div className="sm:col-span-2 border-t border-border pt-4 mt-2">
@@ -575,7 +575,7 @@ export default function ProfilePage() {
                           onChange={(e) => setEditForm({ ...editForm, businessName: e.target.value })}
                           maxLength={80}
                           placeholder="e.g. Mephisto Genetics"
-                          className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                          className="w-full px-3 py-2 rounded-xl border border-border/70 bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                         />
                       </div>
                       <div>
@@ -583,7 +583,7 @@ export default function ProfilePage() {
                         <select
                           value={editForm.businessType}
                           onChange={(e) => setEditForm({ ...editForm, businessType: e.target.value })}
-                          className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                          className="w-full px-3 py-2 rounded-xl border border-border/70 bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                         >
                           <option value="">—</option>
                           <option value="BREEDER">Breeder</option>
@@ -600,7 +600,7 @@ export default function ProfilePage() {
                           onChange={(e) => setEditForm({ ...editForm, businessUrl: e.target.value })}
                           maxLength={200}
                           placeholder="https://..."
-                          className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                          className="w-full px-3 py-2 rounded-xl border border-border/70 bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                         />
                       </div>
                     </div>
@@ -697,7 +697,7 @@ export default function ProfilePage() {
                         alert(d.error || "Failed to save")
                       }
                     }}
-                    className="flex-1 px-4 py-2 bg-primary text-primary-foreground rounded-lg font-medium hover:bg-primary/90 transition-colors disabled:opacity-50"
+                    className="flex-1 px-4 py-2 bg-primary text-primary-foreground rounded-full font-medium hover:bg-primary/90 transition-colors disabled:opacity-50"
                   >
                     {saving ? "Saving..." : "Save Changes"}
                   </button>
@@ -733,10 +733,10 @@ export default function ProfilePage() {
         <div className="grid md:grid-cols-2 gap-4 md:gap-6">
           {tab === "profile" && (<>
           {/* Grow Diaries */}
-          <div className="bg-card rounded-lg border border-border p-6">
+          <div className="bg-card/80 rounded-2xl border border-border/70 p-6">
             <div className="flex items-center gap-2 mb-4">
               <Leaf className="w-5 h-5 text-primary" />
-              <h2 className="text-lg font-semibold">Grow Diaries</h2>
+              <h2 className="font-display text-lg font-semibold">Grow Diaries</h2>
             </div>
             {profileData.recentDiaries.length === 0 ? (
               <p className="text-sm text-muted-foreground">No grow diaries yet</p>
@@ -763,10 +763,10 @@ export default function ProfilePage() {
           </div>
 
           {/* Discussion Posts */}
-          <div className="bg-card rounded-lg border border-border p-6">
+          <div className="bg-card/80 rounded-2xl border border-border/70 p-6">
             <div className="flex items-center gap-2 mb-4">
               <MessageSquare className="w-5 h-5 text-primary" />
-              <h2 className="text-lg font-semibold">Recent Discussions</h2>
+              <h2 className="font-display text-lg font-semibold">Recent Discussions</h2>
             </div>
             {profileData.recentThreads.length === 0 ? (
               <p className="text-sm text-muted-foreground">No discussion posts yet</p>
@@ -813,10 +813,10 @@ export default function ProfilePage() {
           <div className="grid gap-4 md:gap-6 md:grid-cols-2 items-start">
           <div className="space-y-4 md:space-y-6">
           {/* Reputation Tier */}
-          <div className="bg-card rounded-lg border border-border p-6">
+          <div className="bg-card/80 rounded-2xl border border-border/70 p-6">
             <div className="flex items-center gap-2 mb-4">
               <TrendingUp className="w-5 h-5 text-primary" />
-              <h2 className="text-lg font-semibold">Your Growth</h2>
+              <h2 className="font-display text-lg font-semibold">Your Growth</h2>
               <InfoTip content="Your grow level rises with reputation. Levels are grouped into stages — finish a stage to level up. Reputation tiers are the long arc and unlock community perks." />
             </div>
             <div className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full ${profileData.stats.reputationTier.bg} ${profileData.stats.reputationTier.color} text-sm font-medium mb-1`}>
@@ -872,10 +872,10 @@ export default function ProfilePage() {
           {/* Hub link — /progress holds quests, trust, and unlock detail. */}
           <Link
             href="/progress"
-            className="bg-card rounded-lg border border-border p-6 flex items-center justify-between gap-3 hover:border-primary/40 transition-colors"
+            className="bg-card/80 rounded-2xl border border-border/70 p-6 flex items-center justify-between gap-3 hover:border-primary/40 transition-colors"
           >
             <div>
-              <h2 className="text-lg font-semibold">Your Progress</h2>
+              <h2 className="font-display text-lg font-semibold">Your Progress</h2>
               <p className="text-sm text-muted-foreground mt-1">Daily quests, trust standing, and what unlocks next.</p>
             </div>
             <ArrowRight className="w-5 h-5 text-primary shrink-0" />
@@ -895,10 +895,10 @@ export default function ProfilePage() {
           <SavedSearches />
 
           {/* Referrals */}
-          <div className="bg-card rounded-lg border border-border p-6">
+          <div className="bg-card/80 rounded-2xl border border-border/70 p-6">
             <div className="flex items-center gap-2 mb-4">
               <User className="w-5 h-5 text-primary" />
-              <h2 className="text-lg font-semibold">Referrals</h2>
+              <h2 className="font-display text-lg font-semibold">Referrals</h2>
             </div>
             <p className="text-sm text-muted-foreground mb-3">
               Invite growers — earn <span className="font-semibold text-amber-500">+{REP_POINTS.REFERRAL} reputation</span> once your invitee reaches {REFERRAL_MIN_REP} rep and has been a member for 24+ hours, and unlock the <span className="font-semibold text-amber-500">🤝 Recruiter</span> badge at 3 referrals. You&apos;ve referred <span className="font-semibold text-foreground">{profileData.stats.referrals}</span> member{profileData.stats.referrals !== 1 ? "s" : ""}.
@@ -908,7 +908,7 @@ export default function ProfilePage() {
                 readOnly
                 aria-label="Your referral link"
                 value={typeof window !== "undefined" ? `${window.location.origin}/auth/signup?ref=${profileData.profile?.username || profileData.user.name}` : ""}
-                className="flex-1 px-3 py-2 text-xs rounded-lg border border-border bg-background text-muted-foreground"
+                className="flex-1 px-3 py-2 text-xs rounded-xl border border-border/70 bg-background text-muted-foreground"
                 onFocus={(e) => e.target.select()}
               />
               <button
@@ -921,7 +921,7 @@ export default function ProfilePage() {
                     toast("Could not copy — select the link and copy manually.", "error")
                   }
                 }}
-                className="px-3 py-2 text-xs font-medium bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
+                className="px-3 py-2 text-xs font-medium bg-primary text-primary-foreground rounded-full hover:bg-primary/90 transition-colors"
               >
                 Copy
               </button>
@@ -937,8 +937,8 @@ export default function ProfilePage() {
           </div>
 
           {/* Account Controls */}
-          <div id="account" className="scroll-mt-20 bg-card rounded-lg border border-border p-6">
-            <h2 className="text-lg font-semibold mb-4">Privacy & Account</h2>
+          <div id="account" className="scroll-mt-20 bg-card/80 rounded-2xl border border-border/70 p-6">
+            <h2 className="font-display text-lg font-semibold mb-4">Privacy & Account</h2>
             <div className="space-y-3">
               <a
                 href="/api/profile/export"
@@ -965,7 +965,7 @@ export default function ProfilePage() {
                     onChange={(e) => setDeleteForm({ ...deleteForm, username: e.target.value })}
                     placeholder={`Type your username "${profileData.profile?.username || profileData.user.name}" to confirm`}
                     autoComplete="off"
-                    className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-destructive"
+                    className="w-full px-3 py-2 rounded-xl border border-border/70 bg-background text-sm focus:outline-none focus:ring-2 focus:ring-destructive"
                   />
                   <input
                     type="password"
@@ -973,7 +973,7 @@ export default function ProfilePage() {
                     onChange={(e) => setDeleteForm({ ...deleteForm, password: e.target.value })}
                     placeholder="Your current password"
                     autoComplete="current-password"
-                    className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-destructive"
+                    className="w-full px-3 py-2 rounded-xl border border-border/70 bg-background text-sm focus:outline-none focus:ring-2 focus:ring-destructive"
                   />
                   {deleteError && <p className="text-sm text-destructive">{deleteError}</p>}
                   <button

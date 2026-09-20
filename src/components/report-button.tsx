@@ -63,12 +63,12 @@ export default function ReportButton({
         </button>
       </Tooltip>
       {open && (
-        <div className="absolute right-0 mt-1 w-72 p-3 bg-card border border-border rounded-lg shadow-lg z-20 space-y-2">
+        <div className="absolute right-0 mt-1 w-72 p-3 bg-card/80 border border-border/70 rounded-2xl shadow-lg z-20 space-y-2">
           <p className="text-xs text-muted-foreground">Why are you reporting this?</p>
           <select
             value={reason}
             onChange={(e) => setReason(e.target.value)}
-            className="w-full px-2 py-1.5 rounded-lg border border-border bg-background text-xs"
+            className="w-full px-2 py-1.5 rounded-xl border border-border/70 bg-background text-xs"
           >
             <option value="SPAM">Spam</option>
             <option value="HARASSMENT">Harassment</option>
@@ -82,7 +82,7 @@ export default function ReportButton({
             value={desc}
             onChange={(e) => setDesc(e.target.value)}
             placeholder="Optional details for moderators..."
-            className="w-full px-2 py-1.5 rounded-lg border border-border bg-background text-xs"
+            className="w-full px-2 py-1.5 rounded-xl border border-border/70 bg-background text-xs"
             maxLength={1000}
             rows={3}
           />

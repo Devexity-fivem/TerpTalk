@@ -75,10 +75,10 @@ export default async function SetupsPage({
         </div>
 
         <div className="flex justify-between items-center mb-6 gap-3 flex-wrap">
-          <h2 className="text-xl font-semibold">All Setups</h2>
+          <h2 className="font-display text-xl font-semibold">All Setups</h2>
           <Link
             href="/setups/new"
-            className="bg-primary text-primary-foreground px-4 py-2 rounded-lg hover:bg-primary/90 transition-colors text-sm flex items-center gap-2"
+            className="bg-primary text-primary-foreground px-4 py-2 rounded-full hover:bg-primary/90 transition-colors text-sm flex items-center gap-2"
           >
             <Plus className="w-4 h-4" />
             Share Your Setup
@@ -86,7 +86,7 @@ export default async function SetupsPage({
         </div>
 
         {setups.length === 0 ? (
-          <div className="bg-card rounded-xl border border-border">
+          <div className="bg-card/80 rounded-2xl border border-border/70">
             <EmptyState
               icon={Settings}
               title={total === 0 ? "No setups shared yet" : "No setups on this page"}
@@ -100,7 +100,7 @@ export default async function SetupsPage({
               {setups.map((setup) => (
                 <div
                   key={setup.id}
-                  className="bg-card rounded-lg border border-border overflow-hidden hover:border-primary/50 transition-colors"
+                  className="bg-card/80 rounded-2xl border border-border/70 overflow-hidden hover:border-primary/50 transition-colors"
                 >
                   <Link href={setupPath(setup)} className="block">
                     {setup.images.length > 0 ? (
@@ -114,7 +114,7 @@ export default async function SetupsPage({
                   </Link>
                   <div className="p-4">
                     <Link href={setupPath(setup)} className="hover:text-primary transition-colors">
-                      <h3 className="font-semibold mb-1">{setup.title}</h3>
+                      <h3 className="font-display font-semibold mb-1">{setup.title}</h3>
                     </Link>
                     <p className="text-sm text-muted-foreground mb-3 line-clamp-2">{setup.description}</p>
                     <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground flex-wrap">

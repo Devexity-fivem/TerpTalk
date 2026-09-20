@@ -85,7 +85,7 @@ export default function DiaryReactions({
           </button>
         </Tooltip>
         {showPicker && (
-          <div className="absolute bottom-full left-0 mb-2 flex gap-1 bg-card border border-border rounded-lg px-1.5 py-1 shadow-lg z-10">
+          <div className="absolute bottom-full left-0 mb-2 flex gap-1 bg-card/80 border border-border/70 rounded-2xl px-1.5 py-1 shadow-lg z-10">
             {ORDER.map((type) => (
               <Tooltip key={type} content={type.toLowerCase()}>
                 <button

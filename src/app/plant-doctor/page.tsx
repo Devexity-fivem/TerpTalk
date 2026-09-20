@@ -18,7 +18,7 @@ export default async function PlantDoctorPage() {
       <div className="max-w-2xl mx-auto px-4 py-8">
         <div className="mb-8 text-center">
           <Stethoscope className="w-12 h-12 text-primary mx-auto mb-3" />
-          <h1 className="text-3xl font-bold mb-2">What&apos;s wrong with my plant?</h1>
+          <h1 className="font-display text-3xl font-bold mb-2 tracking-tight">What&apos;s wrong with my plant?</h1>
           <p className="text-muted-foreground">
             Answer a few questions and we&apos;ll point you at the most likely cause — and how to fix it.
             Looking for site help instead? Visit the <Link href="/help" className="text-primary hover:underline">Help Center</Link>.
@@ -27,10 +27,10 @@ export default async function PlantDoctorPage() {
         <ProblemWizard />
 
         {/* Community outcomes — aggregate-only stats from Plant Doctor threads */}
-        <div className="mt-8 bg-card rounded-xl border border-border p-5">
+        <div className="mt-8 bg-card/80 rounded-2xl border border-border/70 p-5">
           <div className="flex items-center gap-2 mb-3">
             <MessageSquare className="w-4 h-4 text-primary" />
-            <h2 className="font-semibold text-sm">Community outcomes</h2>
+            <h2 className="font-display font-semibold text-sm">Community outcomes</h2>
           </div>
           {stats.threadCount === 0 ? (
             <p className="text-xs text-muted-foreground">

@@ -476,10 +476,10 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
 
         {/* Harvest report — the grow's final result, shown to everyone */}
         {harvestReport && (
-          <div className="bg-card rounded-xl border border-border p-5 mt-4">
+          <div className="bg-card/80 rounded-2xl border border-border/70 p-5 mt-4">
             <div className="flex items-center gap-2 mb-4">
               <ClipboardCheck className="w-4 h-4 text-emerald-500" />
-              <h2 className="font-semibold">Harvest Report</h2>
+              <h2 className="font-display font-semibold">Harvest Report</h2>
               {harvestReport.yieldAmount != null && (
                 <span className="ml-auto px-2.5 py-1 rounded-lg bg-emerald-500/10 text-emerald-500 font-medium text-sm">
                   {harvestReport.yieldAmount} {harvestReport.yieldUnit || "g"}
@@ -569,7 +569,7 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
 
         {/* Completeness nudge — owner only, encourages better records */}
         {completeness && !diary.harvested && completeness.percent < 100 && (
-          <div className="bg-card rounded-xl border border-border p-4 mt-4">
+          <div className="bg-card/80 rounded-2xl border border-border/70 p-4 mt-4">
             <div className="flex items-center justify-between text-sm mb-2">
               <span className="font-medium">Log completeness</span>
               <span className="text-muted-foreground text-xs">{completeness.percent}%</span>
@@ -584,7 +584,7 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
         )}
 
         {/* Grow Setup Info */}
-        <details className="bg-card rounded-lg border border-border mb-8 group">
+        <details className="bg-card/80 rounded-2xl border border-border/70 mb-8 group">
           <summary className="p-4 text-sm font-semibold cursor-pointer flex items-center justify-between list-none marker:content-none">
             <span>Grow setup</span>
             <span aria-hidden="true" className="text-muted-foreground group-open:rotate-180 transition-transform">▼</span>
@@ -680,7 +680,7 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
         {/* Timeline — grouped by grow week */}
         <div className="space-y-4">
           <div className="flex justify-between items-center">
-            <h2 className="text-lg font-semibold">Grow Timeline</h2>
+            <h2 className="font-display text-lg font-semibold">Grow Timeline</h2>
             {canEdit && (
               <UpdateForm
                 diaryId={diary.id}
@@ -705,10 +705,10 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
             </nav>
           )}
 
-          <section className="bg-card rounded-xl border border-border p-4 mb-4" aria-label="Grow progress">
+          <section className="bg-card/80 rounded-2xl border border-border/70 p-4 mb-4" aria-label="Grow progress">
               <div className="flex items-center gap-2 mb-2">
                 <TrendingUp className="w-4 h-4 text-primary" />
-                <h2 className="font-semibold text-sm">Growth</h2>
+                <h2 className="font-display font-semibold text-sm">Growth</h2>
                 <span className="text-xs text-muted-foreground ml-auto">
                   day {growth.totalDays}{diary.harvested ? " (harvested)" : ""}
                 </span>
@@ -759,9 +759,9 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
           )}
 
           {updates.length === 0 ? (
-            <div className="bg-card rounded-lg border border-border p-8 text-center">
+            <div className="bg-card/80 rounded-2xl border border-border/70 p-8 text-center">
               <Leaf className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
-              <h3 className="text-base font-semibold mb-1">No updates yet</h3>
+              <h3 className="font-display text-base font-semibold mb-1">No updates yet</h3>
               <p className="text-sm text-muted-foreground">Start documenting your grow journey with your first update!</p>
             </div>
           ) : (
@@ -769,7 +769,7 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
               {weeks.map((week) => (
                 <section key={week.week} id={`week-${week.week}`} className="scroll-mt-20">
                   <div className="flex items-center gap-3 mb-3">
-                    <h3 className="text-sm font-semibold">
+                    <h3 className="font-display text-sm font-semibold">
                       Week {week.week}
                       <span className="text-muted-foreground font-normal"> — {week.stage.toLowerCase()}</span>
                     </h3>
@@ -823,7 +823,7 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
             <div className="grid md:grid-cols-2 gap-6 mt-8">
               {moreFromAuthor.length > 0 && (
                 <section>
-                  <h2 className="text-lg font-semibold mb-3 flex items-center gap-2">
+                  <h2 className="font-display text-lg font-semibold mb-3 flex items-center gap-2">
                     <Users className="w-5 h-5 text-primary" />
                     More from {authorName}
                   </h2>
@@ -832,7 +832,7 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
                       <Link
                         key={d.id}
                         href={diaryPath(d)}
-                        className="flex items-start gap-3 p-3 bg-card rounded-lg border border-border hover:border-primary/40 transition-colors"
+                        className="flex items-start gap-3 p-3 bg-card/80 rounded-2xl border border-border/70 hover:border-primary/40 transition-colors"
                       >
                         {d.updates[0]?.images[0]?.url ? (
                           // eslint-disable-next-line @next/next/no-img-element
@@ -856,7 +856,7 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
               )}
               {similarGrows.length > 0 && (
                 <section>
-                  <h2 className="text-lg font-semibold mb-3 flex items-center gap-2">
+                  <h2 className="font-display text-lg font-semibold mb-3 flex items-center gap-2">
                     <Sprout className="w-5 h-5 text-primary" />
                     Similar grows
                   </h2>
@@ -865,7 +865,7 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
                       <Link
                         key={d.id}
                         href={diaryPath(d)}
-                        className="flex items-start gap-3 p-3 bg-card rounded-lg border border-border hover:border-primary/40 transition-colors"
+                        className="flex items-start gap-3 p-3 bg-card/80 rounded-2xl border border-border/70 hover:border-primary/40 transition-colors"
                       >
                         {d.updates[0]?.images[0]?.url ? (
                           // eslint-disable-next-line @next/next/no-img-element

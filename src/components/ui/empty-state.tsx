@@ -28,14 +28,14 @@ export default function EmptyState({
           <Icon className="h-7 w-7 text-muted-foreground" aria-hidden="true" />
         </div>
       )}
-      <h3 className="text-base font-semibold text-foreground">{title}</h3>
+      <h3 className="font-display text-base font-semibold text-foreground">{title}</h3>
       {description && (
         <p className="mt-1.5 max-w-sm text-sm text-muted-foreground">{description}</p>
       )}
       {action && (
         <Link
           href={action.href}
-          className="mt-5 inline-flex h-10 items-center rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
+          className="mt-5 inline-flex h-10 items-center rounded-full bg-primary px-4 text-sm font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
         >
           {action.label}
         </Link>

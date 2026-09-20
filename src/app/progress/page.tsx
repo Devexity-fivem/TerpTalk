@@ -122,7 +122,7 @@ export default function ProgressPage() {
         <div className="mb-6">
           <div className="flex items-center gap-2 mb-1">
             <Sprout className="w-6 h-6 text-primary" />
-            <h1 className="text-2xl font-bold">My progress</h1>
+            <h1 className="font-display text-2xl font-bold tracking-tight">My progress</h1>
           </div>
           <p className="text-sm text-muted-foreground">
             Your garden, your goals, and what you can unlock next.
@@ -130,7 +130,7 @@ export default function ProgressPage() {
         </div>
 
         {/* Level card */}
-        <section aria-label="Level" className="bg-card rounded-lg border border-border p-4 mb-4">
+        <section aria-label="Level" className="bg-card/80 rounded-2xl border border-border/70 p-4 mb-4">
           <div className="flex items-baseline gap-2 mb-1">
             <span className="text-2xl font-bold">Grow Level {data.level}</span>
             <span className="text-sm text-muted-foreground">
@@ -228,10 +228,10 @@ export default function ProgressPage() {
 
         {/* Getting Rooted journey */}
         {data.journey && !data.journey.complete && (
-          <section aria-label="Getting Rooted journey" className="bg-card rounded-lg border border-border p-4 mb-4">
+          <section aria-label="Getting Rooted journey" className="bg-card/80 rounded-2xl border border-border/70 p-4 mb-4">
             <div className="flex items-center gap-2 mb-1">
               <Sprout className="w-4 h-4 text-primary" />
-              <h2 className="text-sm font-semibold">{data.journey.name}</h2>
+              <h2 className="font-display text-sm font-semibold">{data.journey.name}</h2>
               <span className="ml-auto text-xs text-muted-foreground">
                 {data.journey.doneCount}/{data.journey.steps.length} · +{data.journey.reward} rep
               </span>
@@ -265,10 +265,10 @@ export default function ProgressPage() {
 
         {/* Trust standing */}
         {data.trust && (
-          <section aria-label="Community trust" className="bg-card rounded-lg border border-border p-4 mb-4">
+          <section aria-label="Community trust" className="bg-card/80 rounded-2xl border border-border/70 p-4 mb-4">
             <div className="flex items-center gap-2 mb-2">
               <ShieldCheck className="w-4 h-4 text-primary" />
-              <h2 className="text-sm font-semibold">Community standing</h2>
+              <h2 className="font-display text-sm font-semibold">Community standing</h2>
               <span className={cn("ml-auto inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium", data.trust.standing.bg, data.trust.standing.color)}>
                 <span aria-hidden="true">{data.trust.standing.icon}</span> {data.trust.standing.name}
               </span>
@@ -288,10 +288,10 @@ export default function ProgressPage() {
 
         {/* Today's quests */}
         {data.quests && data.quests.items.length > 0 && (
-          <section aria-label="Daily quests" className="bg-card rounded-lg border border-border p-4 mb-4">
+          <section aria-label="Daily quests" className="bg-card/80 rounded-2xl border border-border/70 p-4 mb-4">
             <div className="flex items-center gap-2 mb-1">
               <Zap className="w-4 h-4 text-primary" />
-              <h2 className="text-sm font-semibold">Today&apos;s quests</h2>
+              <h2 className="font-display text-sm font-semibold">Today&apos;s quests</h2>
               <span className="ml-auto text-xs text-muted-foreground">
                 {questsDone}/{data.quests.items.length} · resets daily
               </span>
@@ -327,10 +327,10 @@ export default function ProgressPage() {
         )}
 
         {/* Weekly challenges */}
-        <section aria-label="Weekly challenges" className="bg-card rounded-lg border border-border p-4 mb-4">
+        <section aria-label="Weekly challenges" className="bg-card/80 rounded-2xl border border-border/70 p-4 mb-4">
           <div className="flex items-center gap-2 mb-1">
             <CalendarCheck className="w-4 h-4 text-primary" />
-            <h2 className="text-sm font-semibold">This week</h2>
+            <h2 className="font-display text-sm font-semibold">This week</h2>
             <span className="ml-auto text-xs text-muted-foreground">
               {challengesDone}/{data.challenges.items.length} · resets{" "}
               {new Date(data.challenges.endsAt).toLocaleDateString([], { weekday: "short" })}
@@ -361,10 +361,10 @@ export default function ProgressPage() {
 
         {/* Almost earned */}
         {data.nearBadges.length > 0 && (
-          <section aria-label="Almost earned" className="bg-card rounded-lg border border-border p-4 mb-4">
+          <section aria-label="Almost earned" className="bg-card/80 rounded-2xl border border-border/70 p-4 mb-4">
             <div className="flex items-center gap-2 mb-3">
               <Trophy className="w-4 h-4 text-primary" />
-              <h2 className="text-sm font-semibold">Almost earned</h2>
+              <h2 className="font-display text-sm font-semibold">Almost earned</h2>
               <Link href="/achievements" className="ml-auto text-xs text-primary hover:underline inline-flex items-center gap-0.5">
                 All achievements <ChevronRight className="w-3 h-3" aria-hidden="true" />
               </Link>
@@ -391,10 +391,10 @@ export default function ProgressPage() {
         )}
 
         {/* Recent wins + links */}
-        <section aria-label="Recent accomplishments" className="bg-card rounded-lg border border-border p-4">
+        <section aria-label="Recent accomplishments" className="bg-card/80 rounded-2xl border border-border/70 p-4">
           <div className="flex items-center gap-2 mb-3">
             <Award className="w-4 h-4 text-primary" />
-            <h2 className="text-sm font-semibold">Recent accomplishments</h2>
+            <h2 className="font-display text-sm font-semibold">Recent accomplishments</h2>
             <span className="ml-auto text-xs text-muted-foreground">{data.badgeCount} badges total</span>
           </div>
           {data.recentBadges.length > 0 ? (

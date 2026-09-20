@@ -53,10 +53,10 @@ export default function Poll({ poll, initialCounts, initialTotal, userVoteOption
   const showResults = votedOption !== null || !session
 
   return (
-    <div className="bg-card border border-border rounded-lg p-4 mb-4">
+    <div className="bg-card/80 border border-border/70 rounded-2xl p-4 mb-4">
       <div className="flex items-center gap-2 mb-3">
         <BarChart3 className="w-4 h-4 text-primary" />
-        <h3 className="font-semibold">{poll.question}</h3>
+        <h3 className="font-display font-semibold">{poll.question}</h3>
       </div>
       <div className="space-y-2">
         {poll.options.map((opt) => {
@@ -83,7 +83,7 @@ export default function Poll({ poll, initialCounts, initialTotal, userVoteOption
                   <button
                     onClick={() => handleVote(opt.id)}
                     disabled={loading !== null}
-                    className="w-full text-left px-4 py-2 rounded-lg border border-border bg-background hover:border-primary hover:bg-primary/5 transition-colors disabled:opacity-50 flex items-center justify-between"
+                    className="w-full text-left px-4 py-2 rounded-xl border border-border/70 bg-background hover:border-primary hover:bg-primary/5 transition-colors disabled:opacity-50 flex items-center justify-between"
                   >
                     <span>{opt.text}</span>
                     {loading === opt.id && <Loader2 className="w-4 h-4 animate-spin" />}

@@ -97,7 +97,7 @@ export default async function StrainsPage({ searchParams }: { searchParams: Prom
         </div>
 
         {strains.length === 0 ? (
-          <div className="bg-card rounded-xl border border-border">
+          <div className="bg-card/80 rounded-2xl border border-border/70">
             <EmptyState
               icon={Leaf}
               title={q ? `No strains match "${q}"` : total === 0 ? "No strains in the database yet" : "No strains on this page"}

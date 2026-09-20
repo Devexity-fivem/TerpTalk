@@ -308,11 +308,11 @@ export default function OnboardingStepper({
 
         {/* Step 0 — Welcome */}
         {step === 0 && (
-          <div className="bg-card border border-border rounded-xl p-8 text-center">
+          <div className="bg-card/80 border border-border/70 rounded-2xl p-8 text-center">
             <div className="bg-primary/10 p-4 rounded-full inline-flex mb-4">
               <Leaf className="w-10 h-10 text-primary" />
             </div>
-            <h1 ref={headingRef} tabIndex={-1} className="text-2xl font-bold mb-3 outline-none">Welcome to TerpTalk 🌱</h1>
+            <h1 ref={headingRef} tabIndex={-1} className="font-display text-2xl font-bold mb-3 outline-none tracking-tight">Welcome to TerpTalk 🌱</h1>
             <p className="text-muted-foreground mb-8 max-w-md mx-auto">
               A community built for growers, breeders, and cannabis enthusiasts.
               Customize your experience so we can show you discussions, growers,
@@ -334,10 +334,10 @@ export default function OnboardingStepper({
 
         {/* Step 1 — Interests */}
         {step === 1 && (
-          <div className="bg-card border border-border rounded-xl p-6 sm:p-8">
+          <div className="bg-card/80 border border-border/70 rounded-2xl p-6 sm:p-8">
             <div className="text-center mb-6">
               <Sparkles className="w-8 h-8 text-primary mx-auto mb-3" />
-              <h1 ref={headingRef} tabIndex={-1} className="text-2xl font-bold mb-2 outline-none">What are you into?</h1>
+              <h1 ref={headingRef} tabIndex={-1} className="font-display text-2xl font-bold mb-2 outline-none tracking-tight">What are you into?</h1>
               <p className="text-sm text-muted-foreground">
                 Pick topics to personalize your feed. You can change these anytime.
               </p>
@@ -410,10 +410,10 @@ export default function OnboardingStepper({
 
         {/* Step 2 — Profile */}
         {step === 2 && (
-          <div className="bg-card border border-border rounded-xl p-6 sm:p-8">
+          <div className="bg-card/80 border border-border/70 rounded-2xl p-6 sm:p-8">
             <div className="text-center mb-6">
               <User className="w-8 h-8 text-primary mx-auto mb-3" />
-              <h1 ref={headingRef} tabIndex={-1} className="text-2xl font-bold mb-2 outline-none">Make it yours</h1>
+              <h1 ref={headingRef} tabIndex={-1} className="font-display text-2xl font-bold mb-2 outline-none tracking-tight">Make it yours</h1>
               <p className="text-sm text-muted-foreground">Add an avatar and a short bio — all optional.</p>
             </div>
             <div className="space-y-5 mb-8">
@@ -454,7 +454,7 @@ export default function OnboardingStepper({
                   type="text"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
-                  className="w-full px-4 py-2 rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary"
+                  className="w-full px-4 py-2 rounded-xl border border-border/70 bg-background focus:outline-none focus:ring-2 focus:ring-primary"
                   minLength={3}
                   maxLength={20}
                 />
@@ -469,7 +469,7 @@ export default function OnboardingStepper({
                   value={bio}
                   onChange={(e) => setBio(e.target.value)}
                   maxLength={150}
-                  className="w-full px-4 py-2 rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary resize-none"
+                  className="w-full px-4 py-2 rounded-xl border border-border/70 bg-background focus:outline-none focus:ring-2 focus:ring-primary resize-none"
                   placeholder="A sentence about your grow setup or interests..."
                 />
               </div>
@@ -482,7 +482,7 @@ export default function OnboardingStepper({
                   value={location}
                   onChange={(e) => setLocation(e.target.value)}
                   maxLength={100}
-                  className="w-full px-4 py-2 rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary"
+                  className="w-full px-4 py-2 rounded-xl border border-border/70 bg-background focus:outline-none focus:ring-2 focus:ring-primary"
                   placeholder="Region — share only what you're comfortable with"
                 />
               </div>
@@ -501,10 +501,10 @@ export default function OnboardingStepper({
 
         {/* Step 3 — Recovery phrase */}
         {step === 3 && (
-          <div className="bg-card border border-border rounded-xl p-6 sm:p-8">
+          <div className="bg-card/80 border border-border/70 rounded-2xl p-6 sm:p-8">
             <div className="text-center mb-6">
               <KeyRound className="w-8 h-8 text-primary mx-auto mb-3" />
-              <h1 ref={headingRef} tabIndex={-1} className="text-2xl font-bold mb-2 outline-none">Secure your account</h1>
+              <h1 ref={headingRef} tabIndex={-1} className="font-display text-2xl font-bold mb-2 outline-none tracking-tight">Secure your account</h1>
               <p className="text-sm text-muted-foreground">
                 No email needed — your 12-word recovery phrase is the only way back in if you forget your password.
               </p>
@@ -543,7 +543,7 @@ export default function OnboardingStepper({
                 <button
                   onClick={() => setPhraseSaved(true)}
                   disabled={phraseSaved}
-                  className="mt-4 w-full min-h-11 bg-secondary rounded-lg hover:bg-secondary/80 text-sm font-medium disabled:opacity-60"
+                  className="mt-4 w-full min-h-11 bg-secondary rounded-xl hover:bg-secondary/80 text-sm font-medium disabled:opacity-60"
                 >
                   {phraseSaved ? "Saved — continue below" : "I've saved my phrase"}
                 </button>
@@ -562,7 +562,7 @@ export default function OnboardingStepper({
                     required
                     minLength={8}
                     autoComplete="current-password"
-                    className="w-full px-4 py-2 rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary"
+                    className="w-full px-4 py-2 rounded-xl border border-border/70 bg-background focus:outline-none focus:ring-2 focus:ring-primary"
                     placeholder="Current password"
                   />
                 </div>
@@ -586,10 +586,10 @@ export default function OnboardingStepper({
 
         {/* Step 4 — Suggested growers */}
         {step === 4 && (
-          <div className="bg-card border border-border rounded-xl p-6 sm:p-8">
+          <div className="bg-card/80 border border-border/70 rounded-2xl p-6 sm:p-8">
             <div className="text-center mb-6">
               <Users className="w-8 h-8 text-primary mx-auto mb-3" />
-              <h1 ref={headingRef} tabIndex={-1} className="text-2xl font-bold mb-2 outline-none">Growers to follow</h1>
+              <h1 ref={headingRef} tabIndex={-1} className="font-display text-2xl font-bold mb-2 outline-none tracking-tight">Growers to follow</h1>
               <p className="text-sm text-muted-foreground">
                 Follow a few members so your feed starts alive.
               </p>
@@ -670,11 +670,11 @@ export default function OnboardingStepper({
 
         {/* Step 5 — Done */}
         {step === 5 && (
-          <div className="bg-card border border-border rounded-xl p-8 text-center">
+          <div className="bg-card/80 border border-border/70 rounded-2xl p-8 text-center">
             <div className="bg-primary/10 p-4 rounded-full inline-flex mb-4">
               <Check className="w-10 h-10 text-primary" />
             </div>
-            <h1 ref={headingRef} tabIndex={-1} className="text-2xl font-bold mb-3 outline-none">You&apos;re all set 🌱</h1>
+            <h1 ref={headingRef} tabIndex={-1} className="font-display text-2xl font-bold mb-3 outline-none tracking-tight">You&apos;re all set 🌱</h1>
             <p className="text-muted-foreground mb-6 max-w-md mx-auto">
               Your TerpTalk feed is ready. Follow growers, join a discussion, hop into live chat, or start your own grow diary whenever you&apos;re ready.
             </p>

@@ -130,7 +130,7 @@ export default function UpdateForm({ diaryId, currentStage, currentDay, currentW
     return (
       <button
         onClick={() => setIsOpen(true)}
-        className="bg-primary text-primary-foreground px-4 py-2 rounded-lg hover:bg-primary/90 transition-colors text-sm flex items-center gap-2 min-h-11"
+        className="bg-primary text-primary-foreground px-4 py-2 rounded-full hover:bg-primary/90 transition-colors text-sm flex items-center gap-2 min-h-11"
       >
         <Plus className="w-4 h-4" />
         Add Update
@@ -139,9 +139,9 @@ export default function UpdateForm({ diaryId, currentStage, currentDay, currentW
   }
 
   return (
-    <div className="bg-card rounded-lg border border-border p-6 mb-6">
+    <div className="bg-card/80 rounded-2xl border border-border/70 p-6 mb-6">
       <div className="flex justify-between items-center mb-4">
-        <h3 className="font-semibold">Add New Update</h3>
+        <h3 className="font-display font-semibold">Add New Update</h3>
         <button
           onClick={() => setIsOpen(false)}
           className="p-1 hover:bg-secondary rounded transition-colors"
@@ -164,7 +164,7 @@ export default function UpdateForm({ diaryId, currentStage, currentDay, currentW
               required
               value={formData.title}
               onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-              className="w-full px-3 py-2 rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary text-sm"
+              className="w-full px-3 py-2 rounded-xl border border-border/70 bg-background focus:outline-none focus:ring-2 focus:ring-primary text-sm"
               placeholder="e.g., Pistils forming, defoliated lower canopy"
             />
           </div>
@@ -175,7 +175,7 @@ export default function UpdateForm({ diaryId, currentStage, currentDay, currentW
               <select
                 value={formData.stage}
                 onChange={(e) => setFormData({ ...formData, stage: e.target.value })}
-                className="w-full px-3 py-2 rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary text-sm"
+                className="w-full px-3 py-2 rounded-xl border border-border/70 bg-background focus:outline-none focus:ring-2 focus:ring-primary text-sm"
               >
                 <option value="GERMINATION">Germination</option>
                 <option value="SEEDLING">Seedling</option>
@@ -209,7 +209,7 @@ export default function UpdateForm({ diaryId, currentStage, currentDay, currentW
               required
               value={formData.content}
               onChange={(e) => setFormData({ ...formData, content: e.target.value })}
-              className="w-full px-3 py-2 rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary resize-none text-sm"
+              className="w-full px-3 py-2 rounded-xl border border-border/70 bg-background focus:outline-none focus:ring-2 focus:ring-primary resize-none text-sm"
               placeholder="Describe what's happening with your plants..."
               rows={4}
             />
@@ -357,7 +357,7 @@ export default function UpdateForm({ diaryId, currentStage, currentDay, currentW
                   <textarea
                     value={formData.feeding}
                     onChange={(e) => setFormData({ ...formData, feeding: e.target.value })}
-                    className="w-full px-3 py-2 rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary resize-none text-sm"
+                    className="w-full px-3 py-2 rounded-xl border border-border/70 bg-background focus:outline-none focus:ring-2 focus:ring-primary resize-none text-sm"
                     placeholder="Nutrients, feeding schedule..."
                     rows={2}
                   />
@@ -367,7 +367,7 @@ export default function UpdateForm({ diaryId, currentStage, currentDay, currentW
                   <textarea
                     value={formData.training}
                     onChange={(e) => setFormData({ ...formData, training: e.target.value })}
-                    className="w-full px-3 py-2 rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary resize-none text-sm"
+                    className="w-full px-3 py-2 rounded-xl border border-border/70 bg-background focus:outline-none focus:ring-2 focus:ring-primary resize-none text-sm"
                     placeholder="LST, topping, defoliation..."
                     rows={2}
                   />
@@ -394,7 +394,7 @@ export default function UpdateForm({ diaryId, currentStage, currentDay, currentW
             <button
               type="submit"
               disabled={loading}
-              className="bg-primary text-primary-foreground px-4 py-2 rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm flex items-center gap-2 min-h-11"
+              className="bg-primary text-primary-foreground px-4 py-2 rounded-full hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm flex items-center gap-2 min-h-11"
             >
               {loading ? (
                 <>

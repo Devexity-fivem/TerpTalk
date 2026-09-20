@@ -230,7 +230,7 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
       <div className="max-w-6xl mx-auto px-4 py-8">
         {/* Header */}
         <div className="mb-8">
-          <h1 className="text-3xl font-bold mb-2">TerpTalk Feed</h1>
+          <h1 className="font-display text-3xl font-bold mb-2 tracking-tight">TerpTalk Feed</h1>
           <p className="text-muted-foreground">Stay updated with the latest activity from across the community</p>
         </div>
 
@@ -243,7 +243,7 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
             </p>
             <Link
               href="/welcome"
-              className="min-h-11 inline-flex items-center px-4 rounded-lg bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90"
+              className="min-h-11 inline-flex items-center px-4 rounded-full bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90"
             >
               Finish setup
             </Link>
@@ -272,7 +272,7 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
         {/* First-action nudge — shown only to members who have never replied.
             Disappears permanently after their first post. */}
         {showFirstReplyNudge && (
-          <div className="mb-6 bg-card border border-border rounded-lg p-4 flex flex-wrap items-center gap-3">
+          <div className="mb-6 bg-card/80 border border-border/70 rounded-2xl p-4 flex flex-wrap items-center gap-3">
             <MessageSquare className="w-5 h-5 text-primary flex-shrink-0" />
             <p className="text-sm flex-1 min-w-[200px]">
               See something interesting? Join the conversation — your first reply helps other growers.
@@ -291,10 +291,10 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
           <div className="min-w-0 lg:col-span-2 space-y-6">
             {/* Top Picks for You */}
             {activeTab === "for-you" && feedItems.length > 0 && (
-              <div className="bg-card rounded-lg border border-border">
+              <div className="bg-card/80 rounded-2xl border border-border/70">
                 <div className="p-4 border-b border-border flex items-center gap-2">
                   <TrendingUp className="w-5 h-5 text-primary" />
-                  <h2 className="font-semibold">Top Picks for You</h2>
+                  <h2 className="font-display font-semibold">Top Picks for You</h2>
                 </div>
                 <div className="divide-y divide-border">
                   {feedItems.map((item) => {
@@ -362,10 +362,10 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
 
             {/* Recent Diary Updates */}
             {recentDiaryUpdates.length > 0 && (
-              <div className="bg-card rounded-lg border border-border">
+              <div className="bg-card/80 rounded-2xl border border-border/70">
                 <div className="p-4 border-b border-border flex items-center gap-2">
                   <Leaf className="w-5 h-5 text-primary" />
-                  <h2 className="font-semibold">Recent Grow Updates</h2>
+                  <h2 className="font-display font-semibold">Recent Grow Updates</h2>
                 </div>
                 <div className="divide-y divide-border">
                   {recentDiaryUpdates.map((update) => (
@@ -411,10 +411,10 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
 
             {/* Recent Forum Threads */}
             {recentThreads.length > 0 && (
-              <div className="bg-card rounded-lg border border-border">
+              <div className="bg-card/80 rounded-2xl border border-border/70">
                 <div className="p-4 border-b border-border flex items-center gap-2">
                   <MessageSquare className="w-5 h-5 text-primary" />
-                  <h2 className="font-semibold">New Discussions</h2>
+                  <h2 className="font-display font-semibold">New Discussions</h2>
                 </div>
                 <div className="divide-y divide-border">
                   {recentThreads.map((thread) => (
@@ -466,40 +466,40 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
 
             {/* Empty State */}
             {recentDiaryUpdates.length === 0 && recentThreads.length === 0 && (
-              <div className="bg-card rounded-lg border border-border p-12 text-center">
+              <div className="bg-card/80 rounded-2xl border border-border/70 p-12 text-center">
                 {!session?.user?.id && (activeTab === "following" || activeTab === "for-you") ? (
                   <>
                     <UserPlus className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
-                    <h3 className="text-lg font-semibold mb-2">Sign in to build your feed</h3>
+                    <h3 className="font-display text-lg font-semibold mb-2">Sign in to build your feed</h3>
                     <p className="text-muted-foreground mb-4">
                       Follow growers, diaries and topics — their activity shows up here.
                     </p>
-                    <Link href="/auth/signin" className="bg-primary text-primary-foreground px-6 py-2 rounded-lg hover:bg-primary/90 transition-colors inline-block">
+                    <Link href="/auth/signin" className="bg-primary text-primary-foreground px-6 py-2 rounded-full hover:bg-primary/90 transition-colors inline-block">
                       Sign in
                     </Link>
                   </>
                 ) : activeTab === "following" || activeTab === "for-you" ? (
                   <>
                     <UserPlus className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
-                    <h3 className="text-lg font-semibold mb-2">Nothing from your follows yet</h3>
+                    <h3 className="font-display text-lg font-semibold mb-2">Nothing from your follows yet</h3>
                     <p className="text-muted-foreground mb-4">
                       Follow growers on their profiles or follow diaries you like — their activity shows up here.
                     </p>
-                    <Link href="/diaries" className="bg-primary text-primary-foreground px-6 py-2 rounded-lg hover:bg-primary/90 transition-colors inline-block">
+                    <Link href="/diaries" className="bg-primary text-primary-foreground px-6 py-2 rounded-full hover:bg-primary/90 transition-colors inline-block">
                       Browse Diaries
                     </Link>
                   </>
                 ) : (
                 <>
                 <Calendar className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
-                <h3 className="text-lg font-semibold mb-2">No recent activity</h3>
+                <h3 className="font-display text-lg font-semibold mb-2">No recent activity</h3>
                 <p className="text-muted-foreground mb-4">
                   Be the first to share your grow journey or start a discussion!
                 </p>
                 <div className="flex gap-4 justify-center">
                   <Link
                     href="/diaries/new"
-                    className="bg-primary text-primary-foreground px-6 py-2 rounded-lg hover:bg-primary/90 transition-colors"
+                    className="bg-primary text-primary-foreground px-6 py-2 rounded-full hover:bg-primary/90 transition-colors"
                   >
                     Start Diary
                   </Link>
@@ -519,10 +519,10 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
           {/* Sidebar */}
           <div className="min-w-0 space-y-6">
             {/* Trending Diaries */}
-            <div className="bg-card rounded-lg border border-border">
+            <div className="bg-card/80 rounded-2xl border border-border/70">
               <div className="p-4 border-b border-border flex items-center gap-2">
                 <TrendingUp className="w-5 h-5 text-primary" />
-                <h2 className="font-semibold">Trending Diaries</h2>
+                <h2 className="font-display font-semibold">Trending Diaries</h2>
               </div>
               <div className="divide-y divide-border">
                 {trendingDiaries.map((diary) => (
@@ -555,8 +555,8 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
             </div>
 
             {/* Quick Stats */}
-            <div className="bg-card rounded-lg border border-border p-6">
-              <h3 className="font-semibold mb-4">Community Stats</h3>
+            <div className="bg-card/80 rounded-2xl border border-border/70 p-6">
+              <h3 className="font-display font-semibold mb-4">Community Stats</h3>
               <div className="space-y-3">
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Total Members</span>
@@ -574,8 +574,8 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
             </div>
 
             {/* Popular Categories */}
-            <div className="bg-card rounded-lg border border-border p-6">
-              <h3 className="font-semibold mb-4">Popular Categories</h3>
+            <div className="bg-card/80 rounded-2xl border border-border/70 p-6">
+              <h3 className="font-display font-semibold mb-4">Popular Categories</h3>
               <div className="space-y-2">
                 {popularCategories.map((c) => (
                   <Link key={c.slug} href={`/forum/category/${c.slug}`} className="block text-sm text-muted-foreground hover:text-foreground">

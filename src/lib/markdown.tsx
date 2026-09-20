@@ -261,7 +261,7 @@ export function MarkdownRenderer({ content }: { content: string }): React.ReactE
           case "ol":
             return <ol key={key} className="list-decimal pl-5 mb-3 space-y-1">{b.items.map((item, j) => <li key={`${key}-li-${j}`}>{parseInlineToNodes(item, `${key}-li-${j}`)}</li>)}</ol>
           case "code":
-            return <pre key={key} className="bg-secondary rounded-lg p-3 mb-3 overflow-x-auto text-sm font-mono"><code>{b.text}</code></pre>
+            return <pre key={key} className="bg-secondary rounded-xl p-3 mb-3 overflow-x-auto text-sm font-mono"><code>{b.text}</code></pre>
           case "hr":
             return <hr key={key} className="my-4 border-border" />
           default:

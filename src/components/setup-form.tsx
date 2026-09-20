@@ -145,7 +145,7 @@ export default function SetupForm({
     <form onSubmit={handleSubmit} className="space-y-6">
       {/* Basic Information */}
       <div className="space-y-4">
-        <h3 className="font-semibold text-lg">Basic Information</h3>
+        <h3 className="font-display font-semibold text-lg">Basic Information</h3>
 
         <div>
           <label htmlFor="title" className="block text-sm font-medium mb-2">
@@ -195,7 +195,7 @@ export default function SetupForm({
 
       {/* Equipment Details */}
       <div className="space-y-4">
-        <h3 className="font-semibold text-lg">Equipment Details</h3>
+        <h3 className="font-display font-semibold text-lg">Equipment Details</h3>
 
         <div className="grid md:grid-cols-2 gap-4">
           {specField("space", "Grow Space", "e.g., 4x4 tent, 10x10 room")}
@@ -290,7 +290,7 @@ export default function SetupForm({
         <button
           type="submit"
           disabled={loading}
-          className="flex-1 bg-primary text-primary-foreground py-3 rounded-lg font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+          className="flex-1 bg-primary text-primary-foreground py-3 rounded-full font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
         >
           {loading ? (
             <>

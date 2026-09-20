@@ -16,7 +16,7 @@ export default function DiaryFollowButton({ diaryId, initiallyFollowing }: { dia
   if (!session) {
     return (
       <Tooltip content="Sign in to follow this diary">
-        <a href={signInHref(pathname)} className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors">
+        <a href={signInHref(pathname)} className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-primary text-primary-foreground rounded-full hover:bg-primary/90 transition-colors">
           <Users className="w-4 h-4" /> Follow
         </a>
       </Tooltip>
