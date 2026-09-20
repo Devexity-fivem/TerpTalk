@@ -438,14 +438,75 @@ h1, h2, h3 {
   box-shadow: 0 0 0 1px var(--primary);
 }
 
-/* Cannabis Deity tier chip — a soft aurora shimmer. Pure CSS; the global
+/* Master Gardener tier chip — a soft aurora shimmer. Pure CSS; the global
    prefers-reduced-motion block below neutralises it for users who ask. */
 @keyframes tier-chip-deity-shimmer {
-  0%, 100% { box-shadow: 0 0 6px -1px rgba(125, 211, 252, 0.35); }
+  0%, 100% { box-shadow: 0 0 6px -1px rgba(251, 191, 36, 0.35); }
   50% { box-shadow: 0 0 12px -1px rgba(196, 181, 253, 0.55); }
 }
 .tier-chip-deity {
   animation: tier-chip-deity-shimmer 3s ease-in-out infinite;
+}
+
+/* ─── Nameplates — tier-granted username styling ────────────────────
+   Applied to the username text in chat and forum posts. A daily visible
+   flex: your name itself shows how far up the path you are. */
+.tt-nameplate-leaf {
+  color: rgb(var(--glow-primary));
+  font-weight: 600;
+}
+.tt-nameplate-bloom {
+  font-weight: 600;
+  background: linear-gradient(90deg, rgb(var(--glow-primary)), rgb(var(--glow-spectrum)));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.tt-nameplate-master {
+  font-weight: 700;
+  background: linear-gradient(90deg, rgb(var(--glow-spectrum)), rgb(var(--glow-accent)));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.tt-nameplate-grand {
+  font-weight: 700;
+  background: linear-gradient(90deg, rgb(var(--glow-accent)), rgb(var(--glow-spectrum)), rgb(var(--glow-primary)));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.tt-nameplate-gold {
+  font-weight: 700;
+  background: linear-gradient(90deg, #fbbf24, #f59e0b, #fde68a, #fbbf24);
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: tt-spectrum-flow 6s linear infinite;
+}
+
+/* ─── Animated avatar frames ──────────────────────────────────────────
+   tt-frame-pulse: breathing grow-light glow (Photon Pulse, 2,500 rep).
+   tt-frame-aurora: hue-drifting aurora (Northern Lights, 50,000 rep).
+   Both are CSS-only and neutralised by the reduced-motion block. */
+@keyframes tt-frame-pulse-glow {
+  0%, 100% { box-shadow: 0 0 6px -2px rgba(232, 121, 249, 0.4); }
+  50% { box-shadow: 0 0 16px -2px rgba(232, 121, 249, 0.8); }
+}
+.tt-frame-pulse {
+  animation: tt-frame-pulse-glow 2.4s ease-in-out infinite;
+}
+@keyframes tt-frame-aurora-glow {
+  0%, 100% {
+    box-shadow: 0 0 18px -2px rgba(125, 211, 252, 0.7), 0 0 10px -4px rgba(196, 181, 253, 0.8);
+  }
+  50% {
+    box-shadow: 0 0 18px -2px rgba(196, 181, 253, 0.8), 0 0 10px -4px rgba(110, 231, 183, 0.8);
+  }
+}
+.tt-frame-aurora {
+  animation: tt-frame-aurora-glow 4s ease-in-out infinite;
 }
 
 /* Honour users who ask for less motion */

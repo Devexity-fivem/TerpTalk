@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma"
 import { awardReputation } from "@/lib/reputation"
+import { getReputationTier } from "@/lib/reputation-config"
 import { notify } from "@/lib/notify"
 
 // Daily quests — a small deterministic rotation, not generated content.
@@ -107,7 +108,9 @@ export const DAILY_QUESTS: QuestDef[] = [
   },
 ]
 
-// 2/day — quests are seasoning, not the main progression loop.
+// Base 2/day — quests are seasoning, not the main progression loop.
+// Higher tiers unlock extra slots (TierPerks.questSlots) — a real income
+// perk, since each slot is a fresh rep opportunity every day.
 export const DAILY_QUEST_COUNT = 2
 export const PERFECT_DAY_BONUS = 5
 
@@ -127,10 +130,10 @@ function hash32(input: string): number {
 // Deterministic daily selection: sort the pool by hash(dayKey + userId +
 // slug) and take the first N. Stable for the day, different per member,
 // impossible to influence client-side.
-export function dailyQuestsFor(userId: string, dayKey = currentDayKey()): QuestDef[] {
+export function dailyQuestsFor(userId: string, dayKey = currentDayKey(), count = DAILY_QUEST_COUNT): QuestDef[] {
   return [...DAILY_QUESTS]
     .sort((a, b) => hash32(`${dayKey}:${userId}:${a.slug}`) - hash32(`${dayKey}:${userId}:${b.slug}`))
-    .slice(0, DAILY_QUEST_COUNT)
+    .slice(0, count)
 }
 
 export interface QuestProgress extends QuestDef {
@@ -144,7 +147,13 @@ export interface QuestProgress extends QuestDef {
 export async function getQuestProgress(userId: string, now = new Date()): Promise<QuestProgress[]> {
   const dayKey = currentDayKey(now)
   const since = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()))
-  const selected = dailyQuestsFor(userId, dayKey)
+  // Extra quest slots are a tier perk — one indexed profile read.
+  const profile = await prisma.profile.findUnique({
+    where: { userId },
+    select: { reputation: true },
+  })
+  const questSlots = getReputationTier(profile?.reputation ?? 0).perks.questSlots ?? DAILY_QUEST_COUNT
+  const selected = dailyQuestsFor(userId, dayKey, questSlots)
 
   const counts = await Promise.all(
     selected.map(async (q) => {

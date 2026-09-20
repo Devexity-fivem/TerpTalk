@@ -13,6 +13,11 @@ import PollComposer from "@/components/poll-composer"
 import Link from "next/link"
 import { WIZARD_RESULTS } from "@/lib/problem-wizard"
 import { SYMPTOM_TAGS, wizardResultToTag } from "@/lib/symptom-tags"
+import { getReputationTier, POLL_CREATION_REP } from "@/lib/reputation-config"
+
+// Client-side mirror of the server gate in POST /api/forum/threads —
+// isStaff() lives in a Prisma-importing module, so the role set is inlined.
+const STAFF = new Set(["SUPPORT", "MODERATOR", "ADMINISTRATOR"])
 
 interface Category {
   id: string
@@ -67,6 +72,8 @@ function NewThreadForm() {
     return t ? [t.name] : []
   })
   const [poll, setPoll] = useState<{ question: string; options: string[] } | null>(null)
+  // null = still loading; reputation decides whether the poll perk shows.
+  const [canCreatePoll, setCanCreatePoll] = useState<boolean | null>(null)
 
   useEffect(() => {
     fetch("/api/categories")
@@ -74,6 +81,17 @@ function NewThreadForm() {
       .then(data => setCategories(data.categories || []))
       .catch(() => setError("Failed to load categories"))
   }, [])
+
+  useEffect(() => {
+    if (status !== "authenticated") return
+    fetch("/api/profile")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => setCanCreatePoll(
+        STAFF.has((session?.user as { role?: string } | undefined)?.role ?? "") ||
+        getReputationTier(d?.reputation ?? 0).perks.pollCreation === true
+      ))
+      .catch(() => setCanCreatePoll(false))
+  }, [status, session])
 
   useEffect(() => {
     const t = setTimeout(() => {
@@ -268,7 +286,16 @@ function NewThreadForm() {
                     </div>
                   </div>
                 )}
-                <PollComposer value={poll} onChange={setPoll} disabled={loading} />
+                <PollComposer
+                  value={poll}
+                  onChange={setPoll}
+                  disabled={loading}
+                  lockedReason={
+                    canCreatePoll === false
+                      ? `Polls unlock at ${POLL_CREATION_REP.toLocaleString()} reputation (Rooted).`
+                      : null
+                  }
+                />
               </div>
             </details>
 

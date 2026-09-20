@@ -10,7 +10,7 @@ import { weekRange, resolveWeeklyRecognition, weeklyBoard, GROWER_OF_THE_WEEK_RE
 import { canAccessRoom, roomAccessInfo, GROW_ROOM_REP, GROW_ROOM_SLUG } from "@/lib/chat-access"
 import { getJourneyState, evaluateJourneys } from "@/lib/journeys"
 import { DAILY_QUEST_COUNT } from "@/lib/quests"
-import { REP_TIERS, getReputationTier } from "@/lib/reputation-config"
+import { getReputationTier, getTierByName } from "@/lib/reputation-config"
 import { SITE_SETTINGS } from "@/lib/settings"
 
 const T = `__test_r3_${Date.now()}`
@@ -414,7 +414,7 @@ async function main() {
     })
     await prisma.reaction.create({ data: { userId: rookie.id, type: "LIKE", diaryId: diary.id } })
     // Seed Sprout-level rep through a real ledger row.
-    const sprout = REP_TIERS[1].threshold
+    const sprout = getTierByName("Sprout")!.threshold
     await prisma.reputationEvent.create({
       data: { userId: rookie.id, type: "STAFF_ADJUSTMENT", amount: sprout, reason: "test seed", key: `${T}:seed` },
     })

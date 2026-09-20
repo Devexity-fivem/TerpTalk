@@ -77,10 +77,10 @@ export default function ReputationPage() {
             <h2 className="font-display text-lg font-semibold">Quests &amp; challenges</h2>
           </div>
           <p className="text-xs text-muted-foreground mb-3">
-            Every day you get 2 small quests — reply somewhere, tend a diary, spread some likes.
-            They reset at midnight UTC and missed ones just expire. Below are the weekly challenges:
-            optional goals that reset every Monday. Ignore all of it freely — they reward things
-            you&apos;d do anyway.
+            Every day you get a few small quests — reply somewhere, tend a diary, spread some
+            likes. Higher ranks unlock extra quest slots (up to 4/day). They reset at midnight UTC
+            and missed ones just expire. Below are the weekly challenges: optional goals that reset
+            every Monday. Ignore all of it freely — they reward things you&apos;d do anyway.
           </p>
           <div className="space-y-2">
             {WEEKLY_CHALLENGES.map((c) => (
@@ -99,9 +99,12 @@ export default function ReputationPage() {
         </div>
 
         <div className="bg-card/80 rounded-2xl border border-border/70 p-4 mb-4">
-          <h2 className="font-display text-lg font-semibold mb-1">The ladder</h2>
+          <h2 className="font-display text-lg font-semibold mb-1">The Path to Master Gardener</h2>
           <p className="text-xs text-muted-foreground mb-3">
-            {REP_LADDER.length} rungs total — tiers unlock the big rewards, grow stages in between keep you moving.
+            {REP_TIERS.length} ranks, {REP_LADDER.length} rungs total — every rank unlocks something
+            real: chat rooms, quest slots, polls, nameplates, frames. Grow stages in between keep you
+            moving. Check in daily to build your garden streak — milestone bonuses pay at 3, 7, 14,
+            30, 60, 100, and 365 days.
           </p>
           <div className="space-y-2">
             {REP_TIERS.map((t) => (

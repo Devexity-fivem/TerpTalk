@@ -36,7 +36,7 @@ export default function TierChip({ reputation, publicMilestoneOptOut, size = "sm
           tier.bg,
           tier.color,
           size === "sm" ? "px-1.5 py-0.5 text-[10px]" : "px-2 py-1 text-xs",
-          tier.name === "Cannabis Deity" && "tier-chip-deity",
+          tier.name === "Master Gardener" && "tier-chip-deity",
           className
         )}
       >

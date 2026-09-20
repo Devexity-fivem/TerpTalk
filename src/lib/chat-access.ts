@@ -14,13 +14,17 @@
 import { prisma } from "@/lib/prisma"
 import { isModerator, isStaff } from "@/lib/security"
 import { getBooleanSetting, SITE_SETTINGS } from "@/lib/settings"
-import { REP_TIERS } from "@/lib/reputation-config"
+import { getTierByName } from "@/lib/reputation-config"
 
 // The Grow Room opens at Cultivator — the canonical tier threshold, not a
 // magic number. Referenced here once so rooms, UI, and benefit text agree.
-export const GROW_ROOM_REP = REP_TIERS.find((t) => t.name === "Cultivator")?.threshold ?? 3500
+export const GROW_ROOM_REP = getTierByName("Cultivator")?.threshold ?? 3500
 
 export const GROW_ROOM_SLUG = "grow-room"
+
+// The Vault — the head table. Opens at Head Grower.
+export const VAULT_ROOM_REP = getTierByName("Head Grower")?.threshold ?? 15000
+export const VAULT_ROOM_SLUG = "the-vault"
 
 export interface RoomGate {
   isPrivate: boolean

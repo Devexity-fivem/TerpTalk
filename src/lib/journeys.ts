@@ -9,7 +9,7 @@
  */
 import { prisma } from "@/lib/prisma"
 import { awardReputation } from "@/lib/reputation"
-import { REP_TIERS } from "@/lib/reputation-config"
+import { TRUSTED_LINKS_REP } from "@/lib/reputation-config"
 import { getBooleanSetting, SITE_SETTINGS } from "@/lib/settings"
 
 export interface JourneyStep {
@@ -36,7 +36,7 @@ export interface JourneyState {
   paid: boolean
 }
 
-const SPROUT_THRESHOLD = REP_TIERS[1]?.threshold ?? 150
+const SPROUT_THRESHOLD = TRUSTED_LINKS_REP
 const JOURNEY_REWARD = 25
 const JOURNEY_SLUG = "getting-rooted"
 

@@ -22,25 +22,34 @@ export interface AvatarFrameDef extends CosmeticDef {
 }
 
 export const AVATAR_FRAMES: AvatarFrameDef[] = [
+  { key: "seed-shell", name: "Seed Shell", description: "Cracked open — your grow has begun.", unlockedAt: 50, className: "ring-2 ring-stone-400/70" },
   { key: "sprout-ring", name: "Sprout Ring", description: "A fresh green ring for a grow that's underway.", unlockedAt: 150, className: "ring-2 ring-green-500/70" },
+  { key: "seedling-loop", name: "Seedling Loop", description: "Two leaves and a dream.", unlockedAt: 300, className: "ring-2 ring-lime-500/80" },
   { key: "rooted-band", name: "Rooted Band", description: "Earthy amber — roots take hold.", unlockedAt: 500, className: "ring-2 ring-amber-600/80" },
+  { key: "canopy-weave", name: "Canopy Weave", description: "An even canopy, earned in veg.", unlockedAt: 1000, className: "ring-2 ring-emerald-600/80" },
   { key: "greenhouse-glow", name: "Greenhouse Glow", description: "Warm emerald light through the glass.", unlockedAt: 1500, className: "ring-2 ring-emerald-400/90 shadow-[0_0_10px_-2px_rgba(52,211,153,0.5)]" },
+  { key: "photon-pulse", name: "Photon Pulse", description: "An animated grow-light heartbeat.", unlockedAt: 2500, className: "tt-frame-pulse ring-2 ring-fuchsia-400/80" },
   { key: "led-bloom", name: "LED Bloom", description: "That pink-purple grow-light glow.", unlockedAt: 3500, className: "ring-2 ring-fuchsia-400/80 shadow-[0_0_12px_-2px_rgba(232,121,249,0.45)]" },
   { key: "pistil-fire", name: "Pistil Fire", description: "Orange hairs in full flower.", unlockedAt: 7000, className: "ring-2 ring-orange-500/90 shadow-[0_0_12px_-2px_rgba(249,115,22,0.5)]" },
   { key: "amber-jar", name: "Amber Jar", description: "Deep cured amber, settled and rich.", unlockedAt: 15000, className: "ring-[3px] ring-amber-400/90 shadow-[0_0_14px_-2px_rgba(251,191,36,0.55)]" },
   { key: "rosin-ring", name: "Rosin Ring", description: "Pressed gold — a legendary finish.", unlockedAt: 30000, className: "ring-4 ring-yellow-300/90 shadow-[0_0_16px_-2px_rgba(253,224,71,0.6)]" },
-  { key: "northern-lights", name: "Northern Lights", description: "An aurora only the garden's oldest hands ever see.", unlockedAt: 50000, className: "ring-4 ring-sky-300/80 [box-shadow:0_0_18px_-2px_rgba(125,211,252,0.7),0_0_10px_-4px_rgba(196,181,253,0.8)]" },
+  { key: "northern-lights", name: "Northern Lights", description: "An animated aurora only the garden's oldest hands ever see.", unlockedAt: 50000, className: "tt-frame-aurora ring-4 ring-sky-300/80" },
 ]
 
 // ─── Custom titles ───────────────────────────────────────────────────
 // Preset allowlist — members pick, never free-type.
 export const PROFILE_TITLES: CosmeticDef[] = [
+  { key: "first-timer", name: "First Timer", description: "Everyone starts with bagseed.", unlockedAt: 300 },
+  { key: "window-sill", name: "Window Sill Warrior", description: "Sunlight is a strategy.", unlockedAt: 300 },
   { key: "home-grower", name: "Home Grower", description: "Roots down, tents up.", unlockedAt: 500 },
   { key: "tent-tender", name: "Tent Tender", description: "Keeps the girls happy.", unlockedAt: 500 },
   { key: "micro-grower", name: "Micro Grower", description: "Big results, small space.", unlockedAt: 500 },
+  { key: "clone-keeper", name: "Clone Keeper", description: "Keeps the mothers happy.", unlockedAt: 1000 },
   { key: "pheno-hunter", name: "Pheno Hunter", description: "Always chasing the keeper cut.", unlockedAt: 1500 },
   { key: "trichome-farmer", name: "Trichome Farmer", description: "Farming frost, one cola at a time.", unlockedAt: 1500 },
   { key: "bud-tender", name: "Bud Tender", description: "Tends buds like a barkeep tends taps.", unlockedAt: 1500 },
+  { key: "bud-whisperer", name: "Bud Whisperer", description: "The plants lean in when you talk.", unlockedAt: 2500 },
+  { key: "terp-hunter", name: "Terp Hunter", description: "Follows the nose every time.", unlockedAt: 2500 },
   { key: "hydro-head", name: "Hydro Head", description: "Roots in water, head in the clouds.", unlockedAt: 3500 },
   { key: "living-soil-grower", name: "Living Soil Grower", description: "Feeds the soil, not the plant.", unlockedAt: 3500 },
   { key: "canopy-keeper", name: "Canopy Keeper", description: "An even canopy is a happy canopy.", unlockedAt: 3500 },
@@ -50,7 +59,7 @@ export const PROFILE_TITLES: CosmeticDef[] = [
   { key: "head-cultivator", name: "Head Cultivator", description: "Runs the whole grow.", unlockedAt: 15000 },
   { key: "terp-sommelier", name: "Terp Sommelier", description: "Swirls the jar before the grind.", unlockedAt: 30000 },
   { key: "hash-craftsman", name: "Hash Craftsman", description: "From trichome to temple ball.", unlockedAt: 30000 },
-  { key: "garden-legend", name: "Garden Legend", description: "The garden's oldest hand.", unlockedAt: 50000 },
+  { key: "master-gardener", name: "Master Gardener", description: "The garden's oldest hand.", unlockedAt: 50000 },
 ]
 
 // ─── Profile card themes ─────────────────────────────────────────────
@@ -62,12 +71,14 @@ export interface ProfileThemeDef extends CosmeticDef {
 }
 
 export const PROFILE_THEMES: ProfileThemeDef[] = [
+  { key: "dawn-patrol", name: "Dawn Patrol", description: "First light over the garden.", unlockedAt: 1000, className: "", borderClass: "border-lime-400/60" },
   { key: "evergreen", name: "Evergreen", description: "Deep garden green.", unlockedAt: 1500, className: "", borderClass: "border-emerald-500/50" },
+  { key: "ultraviolet", name: "Ultraviolet", description: "Full-spectrum bloom light.", unlockedAt: 2500, className: "", borderClass: "border-fuchsia-500/60" },
   { key: "golden-hour", name: "Golden Hour", description: "Late-day amber over the canopy.", unlockedAt: 3500, className: "", borderClass: "border-amber-500/60" },
   { key: "midnight-garden", name: "Midnight Garden", description: "Lights off, garden glowing violet.", unlockedAt: 7000, className: "", borderClass: "border-violet-500/60" },
   { key: "deep-water", name: "Deep Water", description: "Cool hydro blue.", unlockedAt: 15000, className: "", borderClass: "border-cyan-400/60" },
   { key: "amber-cure", name: "Amber Cure", description: "Cured-jar amber with a warm glow.", unlockedAt: 30000, className: "shadow-[0_0_24px_-6px_rgba(251,191,36,0.35)]", borderClass: "border-amber-400/70" },
-  { key: "deity-glow", name: "Deity Glow", description: "A soft aurora for a true cannabis deity.", unlockedAt: 50000, className: "shadow-[0_0_28px_-6px_rgba(125,211,252,0.45)]", borderClass: "border-sky-300/70" },
+  { key: "deity-glow", name: "Aurora Crown", description: "A soft aurora for a true master gardener.", unlockedAt: 50000, className: "shadow-[0_0_28px_-6px_rgba(125,211,252,0.45)]", borderClass: "border-sky-300/70" },
 ]
 
 // ─── Lookup helpers ──────────────────────────────────────────────────

@@ -3,9 +3,9 @@ import { revalidateTag } from "next/cache"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { unauthorized, publicUserSelect, LIMITS, getClientIp, logSecurityEvent, forbidden, containsExternalLink, isTrustedForLinks, isModerator, isAdmin, isBanned } from "@/lib/security"
+import { unauthorized, publicUserSelect, LIMITS, getClientIp, logSecurityEvent, forbidden, containsExternalLink, isTrustedForLinks, isModerator, isAdmin, isBanned, isStaff } from "@/lib/security"
 import { requireModerator } from "@/lib/require-staff"
-import { awardReputation, reverseReputationBySource, repRateLimit, getTierPerks, REP_POINTS, REP_TIERS } from "@/lib/reputation"
+import { awardReputation, reverseReputationBySource, repRateLimit, getTierPerks, REP_POINTS, TRUSTED_LINKS_REP, POLL_CREATION_REP } from "@/lib/reputation"
 import { THREAD_MIN_PAID_LENGTH } from "@/lib/reputation-config"
 import { notifyMentions } from "@/lib/mentions"
 import { notifyMany, invalidateNotificationsForLink, postDeepLink } from "@/lib/notify"
@@ -90,8 +90,11 @@ export async function POST(request: Request) {
       )
     }
 
+    // One profile read serves every tier-perk check on this route.
+    const tierPerks = await getTierPerks(session.user.id)
+
     // Head Grower+ can attach up to 7 tags instead of 5.
-    const tagCap = (await getTierPerks(session.user.id)).maxThreadTags ?? MAX_TAGS
+    const tagCap = tierPerks.maxThreadTags ?? MAX_TAGS
     if (tagInputs.length > tagCap) {
       return NextResponse.json({ error: `Maximum ${tagCap} tags per thread` }, { status: 400 })
     }
@@ -103,6 +106,11 @@ export async function POST(request: Request) {
 
     let pollData: { question: string; options: { text: string; order: number }[] } | undefined
     if (body.poll && typeof body.poll === "object" && !Array.isArray(body.poll)) {
+      // Poll creation is a Rooted-tier perk (poll *voting* is enforced
+      // separately on the vote route). Staff always can.
+      if (!isStaff(currentUser.role) && !tierPerks.pollCreation) {
+        return forbidden(`Creating polls unlocks at ${POLL_CREATION_REP} reputation (Rooted)`)
+      }
       const pollInput = body.poll as { question?: unknown; options?: unknown }
       if (typeof pollInput.question !== "string" || !pollInput.question.trim() || pollInput.question.length > 200) {
         return NextResponse.json({ error: "Poll question must be between 1 and 200 characters" }, { status: 400 })
@@ -169,7 +177,7 @@ export async function POST(request: Request) {
         metadata: { endpoint: "forum/threads", title: title.slice(0, 120) },
       })
       return NextResponse.json(
-        { error: `New users need 24 hours and ${REP_TIERS[1].threshold} reputation (Sprout tier) before posting links. Share plain text in the meantime.` },
+        { error: `New users need 24 hours and ${TRUSTED_LINKS_REP} reputation (Sprout tier) before posting links. Share plain text in the meantime.` },
         { status: 403 }
       )
     }

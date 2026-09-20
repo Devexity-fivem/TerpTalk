@@ -1,15 +1,20 @@
 "use client"
 
 import { useState } from "react"
-import { Plus, X, BarChart3 } from "lucide-react"
+import { Plus, X, BarChart3, Lock } from "lucide-react"
+import Link from "next/link"
 
 interface PollComposerProps {
   value: { question: string; options: string[] } | null
   onChange: (poll: { question: string; options: string[] } | null) => void
   disabled?: boolean
+  // Set when the member hasn't unlocked poll creation yet — renders a
+  // teaser instead of the toggle. Server still enforces; this is the
+  // discoverable version.
+  lockedReason?: string | null
 }
 
-export default function PollComposer({ value, onChange, disabled }: PollComposerProps) {
+export default function PollComposer({ value, onChange, disabled, lockedReason }: PollComposerProps) {
   const [enabled, setEnabled] = useState(!!value)
 
   const ensureEnabled = () => {
@@ -46,6 +51,18 @@ export default function PollComposer({ value, onChange, disabled }: PollComposer
     if (options.length <= 2) return
     const next = options.filter((_, idx) => idx !== i)
     onChange({ question, options: next })
+  }
+
+  if (lockedReason) {
+    return (
+      <p className="text-sm text-muted-foreground flex items-center gap-1.5">
+        <Lock className="w-3.5 h-3.5" />
+        {lockedReason}{" "}
+        <Link href="/progress" className="text-primary hover:underline">
+          Track progress
+        </Link>
+      </p>
+    )
   }
 
   if (!enabled) {

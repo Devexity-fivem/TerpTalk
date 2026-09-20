@@ -7,6 +7,7 @@ import { forbidden, unauthorized } from "@/lib/security"
 import { awardReputation } from "@/lib/reputation"
 import { evaluateChallenges } from "@/lib/challenges"
 import { evaluateQuests } from "@/lib/quests"
+import { evaluateStreaks } from "@/lib/streaks"
 import { pruneChatMessagesIfDue } from "@/lib/chat-cleanup"
 
 // POST — lightweight presence ping; updates lastSeenAt + ONLINE status.
@@ -61,6 +62,9 @@ export async function POST(request: NextRequest) {
       if (stale) {
         await evaluateChallenges(userId).catch(() => [])
         await evaluateQuests(userId).catch(() => [])
+        // Runs right after today's check-in award lands — streak
+        // milestones pay once-ever per member.
+        await evaluateStreaks(userId).catch(() => [])
       }
     })
 

@@ -845,7 +845,7 @@ export default function ProfilePage() {
               <div className="flex items-center justify-between text-[10px] text-muted-foreground mt-1">
                 <span>{profileData.stats.reputation} rep total</span>
                 {profileData.stats.tierProgress.next > profileData.stats.reputation && (
-                  <span>{profileData.stats.tierProgress.next - profileData.stats.reputation} to {profileData.stats.reputationTier.name === "Cannabis Deity" ? "max" : "next tier"}</span>
+                  <span>{profileData.stats.tierProgress.next - profileData.stats.reputation} to {profileData.stats.reputationTier.name === "Master Gardener" ? "max" : "next rank"}</span>
                 )}
               </div>
             </div>

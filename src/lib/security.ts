@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma"
 import { createHash } from "crypto"
 import { NextResponse } from "next/server"
-import { REP_TIERS } from "@/lib/reputation-config"
+import { TRUSTED_LINKS_REP } from "@/lib/reputation-config"
 import { TERPBOT_USERNAME } from "@/lib/terpbot-constants"
 
 // ─── Role & status helpers ──────────────────────────────────────────
@@ -84,7 +84,7 @@ export async function enforceLinkTrust(
     ip: getClientIp(request),
     metadata: { endpoint },
   })
-  return forbidden(`New users need 24 hours and ${REP_TIERS[1]?.threshold ?? 250} reputation (Sprout tier) before posting links. Share plain text in the meantime.`)
+  return forbidden(`New users need 24 hours and ${TRUSTED_LINKS_REP} reputation (Sprout tier) before posting links. Share plain text in the meantime.`)
 }
 
 /** Moderators and users older than 24h who have reached the Sprout tier can post links. */
@@ -96,8 +96,7 @@ export async function isTrustedForLinks(userId: string): Promise<boolean> {
   if (!user) return false
   if (isModerator(user.role)) return true
   const ageHours = (Date.now() - new Date(user.createdAt).getTime()) / (1000 * 60 * 60)
-  const sproutThreshold = REP_TIERS[1]?.threshold ?? 250
-  return ageHours >= 24 && (user.profile?.reputation ?? 0) >= sproutThreshold
+  return ageHours >= 24 && (user.profile?.reputation ?? 0) >= TRUSTED_LINKS_REP
 }
 
 /**

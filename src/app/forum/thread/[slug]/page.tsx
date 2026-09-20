@@ -27,6 +27,7 @@ import { JsonLd } from "@/components/json-ld"
 import { AcceptAnswerButton } from "@/components/accept-answer-button"
 import ViewTracker from "@/components/view-tracker"
 import ThreadFollowButton from "@/components/thread-follow-button"
+import { getReputationTier } from "@/lib/reputation-config"
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params
@@ -382,7 +383,13 @@ export default async function ThreadPage({
                 className="flex items-center gap-1 hover:text-foreground"
               >
                 <Users className="w-3.5 h-3.5" />
-                {thread.author.profile?.username || thread.author.name}
+                <span className={
+                  thread.author.profile?.publicMilestoneOptOut
+                    ? undefined
+                    : getReputationTier(thread.author.profile?.reputation ?? 0).perks.nameplate ?? undefined
+                }>
+                  {thread.author.profile?.username || thread.author.name}
+                </span>
               </Link>
             </UserPopover>
             <RoleBadge role={thread.author.role} />
@@ -476,7 +483,11 @@ export default async function ThreadPage({
                   <div className="min-w-0">
                     <Link
                       href={`/u/${acceptedPost.author.profile?.username || acceptedPost.author.name}`}
-                      className="font-semibold hover:text-primary truncate text-sm"
+                      className={`font-semibold hover:text-primary truncate text-sm ${
+                        acceptedPost.author.profile?.publicMilestoneOptOut
+                          ? ""
+                          : getReputationTier(acceptedPost.author.profile?.reputation ?? 0).perks.nameplate ?? ""
+                      }`}
                     >
                       {acceptedPost.author.profile?.username || acceptedPost.author.name}
                     </Link>
@@ -571,7 +582,11 @@ export default async function ThreadPage({
                         <UserPopover username={post.author.profile?.username}>
                           <Link
                             href={`/u/${post.author.profile?.username || post.author.name}`}
-                            className="font-semibold hover:text-primary truncate text-sm"
+                            className={`font-semibold hover:text-primary truncate text-sm ${
+                              post.author.profile?.publicMilestoneOptOut
+                                ? ""
+                                : getReputationTier(post.author.profile?.reputation ?? 0).perks.nameplate ?? ""
+                            }`}
                           >
                             {post.author.profile?.username || post.author.name}
                           </Link>

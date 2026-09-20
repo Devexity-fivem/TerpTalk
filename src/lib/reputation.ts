@@ -74,6 +74,11 @@ export {
   getNextTrustStanding,
   TRUST_EVENT_TYPES,
   type TrustStanding,
+  TRUSTED_LINKS_REP,
+  POLL_VOTING_REP,
+  POLL_CREATION_REP,
+  perkThreshold,
+  getTierByName,
 } from "@/lib/reputation-config"
 
 export interface AwardOptions {

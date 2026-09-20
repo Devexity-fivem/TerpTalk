@@ -20,6 +20,7 @@ import { getChallengeProgress, currentWeekKey, weekStart } from "@/lib/challenge
 import { getQuestProgress, currentDayKey } from "@/lib/quests"
 import { getJourneyState, evaluateJourneys } from "@/lib/journeys"
 import { pickNextAction } from "@/lib/next-action"
+import { getCheckinStreak, nextStreakMilestone } from "@/lib/streaks"
 
 // GET — consolidated progression state for the signed-in member. Powers
 // the "Your Garden" panel and the /progress dashboard. Owner-only: quest
@@ -33,7 +34,7 @@ export async function GET() {
     const rl = await rateLimit(`progression:${userId}`, 30, 60 * 1000)
     if (!rl.allowed) return NextResponse.json({ error: "Too many requests" }, { status: 429 })
 
-    const [profile, challenges, quests, recentBadges, trustScore, earnedBadges, journey, staleDiary] = await Promise.all([
+    const [profile, challenges, quests, recentBadges, trustScore, earnedBadges, journey, staleDiary, streak] = await Promise.all([
       prisma.profile.findUnique({
         where: { userId },
         select: { reputation: true, avatarFrame: true, profileTitle: true, profileTheme: true },
@@ -61,6 +62,7 @@ export async function GET() {
         orderBy: { updatedAt: "asc" },
         select: { id: true, slug: true, title: true },
       }),
+      getCheckinStreak(userId),
     ])
     if (!profile) return unauthorized()
 
@@ -172,6 +174,10 @@ export async function GET() {
         },
         challenges: { week: currentWeekKey(), endsAt: new Date(start.getTime() + 7 * 86400000), items: challenges },
         quests: { day: currentDayKey(), items: quests },
+        streak: {
+          days: streak,
+          next: nextStreakMilestone(streak),
+        },
         nearBadges,
         journey,
         badgeCount: earnedNames.size,

@@ -118,6 +118,8 @@ export const EARLY_SUPPORTER_LIMIT = 250
 //     (keyed journey:<slug>:<userId>)
 //   "WEEKLY_AWARD"                   — weekly recognition board winner
 //     (keyed weekly:<board>:<week>:<userId>)
+//   "STREAK_BONUS"                   — garden streak milestone reached
+//     (keyed streak:<days>:<userId>; amount per STREAK_MILESTONES)
 // Accounting model: EVERY row's amount counts toward the balance —
 // reversedAt/reversalOfId are audit status, not sum filters. Reversals and
 // reinstates record the actually-applied delta (clamped to the balance at
@@ -136,6 +138,7 @@ export const REP_EVENT_TYPES = {
   GROW_MILESTONE: "GROW_MILESTONE",
   JOURNEY_COMPLETE: "JOURNEY_COMPLETE",
   WEEKLY_AWARD: "WEEKLY_AWARD",
+  STREAK_BONUS: "STREAK_BONUS",
 } as const
 
 // Which event types are shown on a member's public reputation history.
@@ -162,6 +165,7 @@ export const PUBLIC_REP_TYPES = new Set<string>([
   "GROW_MILESTONE",
   "JOURNEY_COMPLETE",
   "WEEKLY_AWARD",
+  "STREAK_BONUS",
   "REVERSAL",
   "REINSTATE",
   "LEGACY_MIGRATION",
@@ -191,6 +195,7 @@ export function publicRepLabel(type: string): string {
     case "GROW_MILESTONE": return "Reached a grow milestone"
     case "JOURNEY_COMPLETE": return "Completed the Getting Rooted journey"
     case "WEEKLY_AWARD": return "Weekly recognition"
+    case "STREAK_BONUS": return "Garden streak milestone"
     case "ONBOARDING_COMPLETE": return "Finished onboarding"
     case "DAILY_LOGIN": return "Daily check-in"
     case "REVERSAL": return "Reputation adjustment"
@@ -215,40 +220,84 @@ export interface ReputationTier {
 }
 
 export interface TierPerks {
-  trustedLinks?: boolean // isTrustedForLinks — REP_TIERS[1].threshold
+  trustedLinks?: boolean // isTrustedForLinks — first tier granting it
   pollVoting?: boolean // can vote in forum polls
+  pollCreation?: boolean // can attach a poll to a new thread
   verifiedMember?: boolean // auto-promotion to VERIFIED_MEMBER (+rep bonus)
   rateLimitBoost?: number // multiplier on forum/chat rate limits
   slowmodeExempt?: boolean // immune to chat room slowmode
   imagesPerPost?: number // overrides MAX_POST_IMAGES
   maxThreadTags?: number // overrides MAX_TAGS
   showcaseSlots?: number // max pinned badges on the member's profile
+  questSlots?: number // daily quest count — extra slots mean more rep income
+  nameplate?: string // CSS class styling the member's username in chat/posts
 }
 
 const PERKS = {
   BASE: { showcaseSlots: 3 } as TierPerks,
+  GERM: { showcaseSlots: 3 } as TierPerks,
   SPROUT: { trustedLinks: true, showcaseSlots: 3 } as TierPerks,
-  ROOTED: { trustedLinks: true, pollVoting: true, showcaseSlots: 3 } as TierPerks,
-  GROWER: { trustedLinks: true, pollVoting: true, verifiedMember: true, showcaseSlots: 4 } as TierPerks,
-  CULTIVATOR: { trustedLinks: true, pollVoting: true, verifiedMember: true, rateLimitBoost: 1.5, showcaseSlots: 5 } as TierPerks,
-  MASTER: { trustedLinks: true, pollVoting: true, verifiedMember: true, rateLimitBoost: 1.5, slowmodeExempt: true, imagesPerPost: 6, showcaseSlots: 6 } as TierPerks,
-  HEAD: { trustedLinks: true, pollVoting: true, verifiedMember: true, rateLimitBoost: 2, slowmodeExempt: true, imagesPerPost: 8, maxThreadTags: 7, showcaseSlots: 8 } as TierPerks,
-  HASH: { trustedLinks: true, pollVoting: true, verifiedMember: true, rateLimitBoost: 2, slowmodeExempt: true, imagesPerPost: 8, maxThreadTags: 7, showcaseSlots: 10 } as TierPerks,
-  DEITY: { trustedLinks: true, pollVoting: true, verifiedMember: true, rateLimitBoost: 2, slowmodeExempt: true, imagesPerPost: 8, maxThreadTags: 7, showcaseSlots: 12 } as TierPerks,
+  SEEDLING: { trustedLinks: true, nameplate: "tt-nameplate-leaf", showcaseSlots: 3 } as TierPerks,
+  ROOTED: { trustedLinks: true, pollVoting: true, pollCreation: true, nameplate: "tt-nameplate-leaf", showcaseSlots: 3 } as TierPerks,
+  VEG: { trustedLinks: true, pollVoting: true, pollCreation: true, nameplate: "tt-nameplate-leaf", questSlots: 3, showcaseSlots: 4 } as TierPerks,
+  GROWER: { trustedLinks: true, pollVoting: true, pollCreation: true, verifiedMember: true, nameplate: "tt-nameplate-leaf", questSlots: 3, showcaseSlots: 4 } as TierPerks,
+  BLOOM: { trustedLinks: true, pollVoting: true, pollCreation: true, verifiedMember: true, nameplate: "tt-nameplate-bloom", questSlots: 3, showcaseSlots: 5 } as TierPerks,
+  CULTIVATOR: { trustedLinks: true, pollVoting: true, pollCreation: true, verifiedMember: true, rateLimitBoost: 1.5, nameplate: "tt-nameplate-bloom", questSlots: 3, showcaseSlots: 6 } as TierPerks,
+  MASTER: { trustedLinks: true, pollVoting: true, pollCreation: true, verifiedMember: true, rateLimitBoost: 1.5, slowmodeExempt: true, imagesPerPost: 6, nameplate: "tt-nameplate-master", questSlots: 3, showcaseSlots: 8 } as TierPerks,
+  HEAD: { trustedLinks: true, pollVoting: true, pollCreation: true, verifiedMember: true, rateLimitBoost: 2, slowmodeExempt: true, imagesPerPost: 8, maxThreadTags: 7, nameplate: "tt-nameplate-master", questSlots: 4, showcaseSlots: 10 } as TierPerks,
+  GRAND: { trustedLinks: true, pollVoting: true, pollCreation: true, verifiedMember: true, rateLimitBoost: 2, slowmodeExempt: true, imagesPerPost: 8, maxThreadTags: 7, nameplate: "tt-nameplate-grand", questSlots: 4, showcaseSlots: 12 } as TierPerks,
+  MASTER_GARDENER: { trustedLinks: true, pollVoting: true, pollCreation: true, verifiedMember: true, rateLimitBoost: 2, slowmodeExempt: true, imagesPerPost: 10, maxThreadTags: 7, nameplate: "tt-nameplate-gold", questSlots: 4, showcaseSlots: 14 } as TierPerks,
 }
 
+// The Path to Master Gardener — a cultivation career ladder. Thresholds
+// keep the milestone-badge spine (150/500/1500/3500/7000/15000/30000/50000)
+// so badge progress specs stay aligned, with extra rungs between them so
+// unlocks land every few weeks of normal play instead of months.
 // Cosmetic unlock keys in `benefit` text reference the registries in
 // lib/cosmetics.ts — every advertised reward must exist there.
 export const REP_TIERS: ReputationTier[] = [
   { threshold: 0, name: "Seed", color: "text-stone-500", bg: "bg-stone-500/10", icon: "🌰", benefit: "Every grow starts somewhere — post, grow, and share to earn rep.", perks: PERKS.BASE },
-  { threshold: 150, name: "Sprout", color: "text-amber-600", bg: "bg-amber-600/10", icon: "🌱", benefit: "Your links work instantly — no more new-member wait — and you unlock the Sprout Ring avatar frame.", perks: PERKS.SPROUT },
-  { threshold: 500, name: "Rooted", color: "text-green-500", bg: "bg-green-500/10", icon: "🌿", benefit: "Unlocks community poll voting, the Rooted Band frame, and custom profile titles.", perks: PERKS.ROOTED },
-  { threshold: 1500, name: "Grower", color: "text-emerald-500", bg: "bg-emerald-500/10", icon: "🪴", benefit: "Earns Verified Member status and a permanent 1.5× reputation bonus, plus the Greenhouse Glow frame and Evergreen theme.", perks: PERKS.GROWER },
-  { threshold: 3500, name: "Cultivator", color: "text-cyan-500", bg: "bg-cyan-500/10", icon: "✂️", benefit: "Unlocks The Grow Room — the members-only space for experienced growers — plus the LED Bloom frame and Golden Hour theme.", perks: PERKS.CULTIVATOR },
-  { threshold: 7000, name: "Master Grower", color: "text-purple-500", bg: "bg-purple-500/10", icon: "🏆", benefit: "Unlocks the Pistil Fire frame, the Midnight Garden theme, slowmode immunity, and 6 images per post.", perks: PERKS.MASTER },
-  { threshold: 15000, name: "Head Grower", color: "text-rose-400", bg: "bg-rose-500/10", icon: "🌟", benefit: "Unlocks the Amber Jar frame, the Deep Water theme, double rate limits, and 7 thread tags — the garden's head table.", perks: PERKS.HEAD },
-  { threshold: 30000, name: "Hash Maker", color: "text-violet-300", bg: "bg-violet-500/10", icon: "🔮", benefit: "Unlocks the Rosin Ring frame, the Amber Cure theme, and legendary titles — pressed to perfection.", perks: PERKS.HASH },
-  { threshold: 50000, name: "Cannabis Deity", color: "text-sky-300", bg: "bg-sky-500/10", icon: "🌌", benefit: "Unlocks the Northern Lights frame and the Deity Glow theme — the top of the ladder.", perks: PERKS.DEITY },
+  { threshold: 50, name: "Germinated", color: "text-lime-600", bg: "bg-lime-500/10", icon: "🌱", benefit: "Your first unlock lands fast — the Seed Shell avatar frame. Keep tending your garden.", perks: PERKS.GERM },
+  { threshold: 150, name: "Sprout", color: "text-amber-600", bg: "bg-amber-600/10", icon: "🌿", benefit: "Your links work instantly — no more new-member wait — and you unlock the Sprout Ring avatar frame.", perks: PERKS.SPROUT },
+  { threshold: 300, name: "Seedling", color: "text-green-500", bg: "bg-green-500/10", icon: "🌱", benefit: "Your username gets a leaf-green nameplate in chat and the forums — the garden knows your name.", perks: PERKS.SEEDLING },
+  { threshold: 500, name: "Rooted", color: "text-green-600", bg: "bg-green-600/10", icon: "🪴", benefit: "Unlocks community polls — vote AND create them — plus the Rooted Band frame and custom profile titles.", perks: PERKS.ROOTED },
+  { threshold: 1000, name: "Veg Grower", color: "text-emerald-500", bg: "bg-emerald-500/10", icon: "🌲", benefit: "A third daily quest slot — more quests means more rep every day — plus the Canopy Weave frame.", perks: PERKS.VEG },
+  { threshold: 1500, name: "Grower", color: "text-emerald-500", bg: "bg-emerald-500/10", icon: "🌳", benefit: "Earns Verified Member status and a permanent 1.5× reputation bonus, plus the Greenhouse Glow frame and Evergreen theme.", perks: PERKS.GROWER },
+  { threshold: 2500, name: "Bloom", color: "text-fuchsia-500", bg: "bg-fuchsia-500/10", icon: "🌸", benefit: "Your nameplate blooms violet, and you unlock the animated Photon Pulse frame and Ultraviolet theme.", perks: PERKS.BLOOM },
+  { threshold: 3500, name: "Cultivator", color: "text-cyan-500", bg: "bg-cyan-500/10", icon: "✂️", benefit: "Unlocks The Grow Room — the members-only space for experienced growers — plus the LED Bloom frame, Golden Hour theme, and 1.5× rate limits.", perks: PERKS.CULTIVATOR },
+  { threshold: 7000, name: "Master Grower", color: "text-purple-500", bg: "bg-purple-500/10", icon: "🏆", benefit: "Unlocks the Pistil Fire frame, the Midnight Garden theme, a glowing nameplate, slowmode immunity, and 6 images per post.", perks: PERKS.MASTER },
+  { threshold: 15000, name: "Head Grower", color: "text-rose-400", bg: "bg-rose-500/10", icon: "🌟", benefit: "Unlocks The Vault — the head table for top growers — a fourth daily quest, double rate limits, 8 images per post, and 7 thread tags.", perks: PERKS.HEAD },
+  { threshold: 30000, name: "Grandmaster", color: "text-violet-300", bg: "bg-violet-500/10", icon: "🔮", benefit: "Unlocks the Rosin Ring frame, the Amber Cure theme, and legendary titles — a name the whole garden recognizes.", perks: PERKS.GRAND },
+  { threshold: 50000, name: "Master Gardener", color: "text-amber-400", bg: "bg-amber-400/10", icon: "👑", benefit: "The top of the ladder — the aurora-animated Northern Lights frame, Deity Glow theme, a golden nameplate, and 10 images per post.", perks: PERKS.MASTER_GARDENER },
+]
+
+// ─── Perk-threshold helpers ──────────────────────────────────────────
+// The ladder grows rungs over time, so callers must never index REP_TIERS
+// positionally — look up the first tier granting a perk instead.
+export function getTierByName(name: string): ReputationTier | undefined {
+  return REP_TIERS.find((t) => t.name === name)
+}
+
+export function perkThreshold(perk: keyof TierPerks): number {
+  return REP_TIERS.find((t) => t.perks[perk])?.threshold ?? Infinity
+}
+
+export const TRUSTED_LINKS_REP = perkThreshold("trustedLinks")
+export const POLL_VOTING_REP = perkThreshold("pollVoting")
+export const POLL_CREATION_REP = perkThreshold("pollCreation")
+
+// ─── Garden streaks ──────────────────────────────────────────────────
+// Consecutive UTC days with a daily check-in (DAILY_LOGIN). Milestones
+// pay once-ever per member — a streak that breaks simply stops advancing;
+// reaching a higher personal-best milestone pays again.
+export const STREAK_MILESTONES: { days: number; reward: number }[] = [
+  { days: 3, reward: 10 },
+  { days: 7, reward: 25 },
+  { days: 14, reward: 50 },
+  { days: 30, reward: 100 },
+  { days: 60, reward: 150 },
+  { days: 100, reward: 250 },
+  { days: 365, reward: 500 },
 ]
 
 export function getReputationTier(reputation: number): ReputationTier {
@@ -280,8 +329,11 @@ export function getTierProgress(reputation: number): { current: number; next: nu
   }
 }
 
-// Verified-member auto-promotion threshold (the Grower tier).
-export const VERIFIED_MIN_REPUTATION = REP_TIERS[3].threshold
+// Verified-member auto-promotion — the first tier granting the perk.
+// Perk-based lookup (not an index) so the ladder can grow new rungs
+// without silently moving the gate.
+export const VERIFIED_MIN_REPUTATION =
+  REP_TIERS.find((t) => t.perks.verifiedMember)?.threshold ?? 1500
 // 30 days — the age gate is the only real defense against a farmed account
 // instantly amplifying to the 1.5× multiplier.
 export const VERIFIED_MIN_AGE_DAYS = 30
@@ -299,13 +351,17 @@ const TIER_STAGE_CHECKPOINTS: Record<string, number[]> = {
   // Every checkpoint must sit strictly inside its tier's gap — above the
   // tier's own threshold and below the NEXT tier's threshold — or
   // getRepStage()/getStageProgress() produce invalid ranges.
-  Sprout: [300],
-  Rooted: [750, 1000, 1250],
-  Grower: [2000, 2500, 3000],
-  Cultivator: [4000, 5000, 6000],
-  "Master Grower": [8000, 10000, 12000, 14000],
+  Germinated: [100],
+  Sprout: [200, 250],
+  Seedling: [400],
+  Rooted: [650, 800],
+  "Veg Grower": [1250],
+  Grower: [1800, 2200],
+  Bloom: [3000],
+  Cultivator: [4500, 5500],
+  "Master Grower": [9000, 11000, 13000],
   "Head Grower": [20000, 25000],
-  "Hash Maker": [35000, 40000, 45000],
+  Grandmaster: [35000, 40000, 45000],
 }
 
 // Grow-cycle names clipped to the number of stages in a tier gap.
@@ -439,7 +495,7 @@ export interface TrustStanding {
 export const TRUST_STANDINGS: TrustStanding[] = [
   { min: 0, name: "Unrooted", color: "text-stone-500", bg: "bg-stone-500/10", icon: "🌰" },
   { min: 25, name: "Known", color: "text-green-500", bg: "bg-green-500/10", icon: "🌱" },
-  { min: 100, name: "Trusted", color: "text-emerald-500", bg: "bg-emerald-500/10", icon: "🌿" },
+  { min: 100, name: "Trusted", color: "text-emerald-500", bg: "bg-emerald-500/10", icon: "" },
   { min: 300, name: "Respected", color: "text-cyan-500", bg: "bg-cyan-500/10", icon: "🪴" },
   { min: 800, name: "Pillar", color: "text-purple-500", bg: "bg-purple-500/10", icon: "🏛️" },
   { min: 2000, name: "Legend", color: "text-amber-500", bg: "bg-amber-500/10", icon: "🌟" },

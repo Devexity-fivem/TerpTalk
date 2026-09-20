@@ -1,4 +1,4 @@
-# Reputation 2.3 — Gamified Progression
+# Reputation 3.0 — The Path to Master Gardener
 
 TerpTalk's community trust and progression system. Every point has a reason,
 every award is traceable, and anything important is reversible.
@@ -46,8 +46,9 @@ Defined in `src/lib/reputation-config.ts` (`REP_POINTS`, `REP_CAPS`).
 | Budshot of the Week | +50 | per week | contest win |
 | Diary of the Month | +150 | per month | contest win |
 | Weekly challenge | +10–20 | per challenge per week | fixed roster, keyed `challenge:<week>:<slug>:<userId>` |
-| Daily quest | +5–10 | per quest per day | 3/day from a deterministic rotation, keyed `quest:<day>:<slug>:<userId>` |
-| Perfect day | +5 | once/day | all 3 daily quests done, keyed `quest-day:<day>:<userId>` |
+| Daily quest | +5–10 | per quest per day | 2–4/day from a deterministic rotation (slots scale with tier), keyed `quest:<day>:<slug>:<userId>` |
+| Perfect day | +5 | once/day | all daily quests done, keyed `quest-day:<day>:<userId>` |
+| Garden streak | +10–500 | once per milestone | consecutive daily check-ins; milestones at 3/7/14/30/60/100/365 days, keyed `streak:<days>:<userId>` |
 | Harvest logged | +15 | once per diary | first false→true harvest transition only |
 | Onboarding complete | +10 | once ever | profile-completion award, keyed |
 
@@ -75,25 +76,37 @@ Automatic reversal triggers:
 - User permanently banned → reverses awards they *caused* (likes they gave)
 - Staff reversal → `POST /api/moderation/reputation`
 
-## Tiers
+## Tiers — the Path to Master Gardener
 
-`REP_TIERS` — 9 tiers, each with a real enforced benefit:
+`REP_TIERS` — 13 ranks, each with real enforced perks. Early rungs are
+dense so new members feel progression within days; the badge-aligned spine
+(150/500/1500/3500/7000/15000/30000/50000) is preserved so milestone badges
+still line up.
 
-| Tier | Threshold | Benefit |
+| Rank | Threshold | Unlocks |
 |---|---|---|
 | Seed | 0 | — |
+| Germinated | 50 | Seed Shell frame |
 | Sprout | 150 | Sprout Ring frame; links don't need the new-member wait |
-| Rooted | 500 | Rooted Band frame, custom titles, poll voting |
-| Grower | 1,500 | Greenhouse Glow frame, Evergreen theme, auto Verified Member (+1.5× rep) |
-| Cultivator | 3,500 | LED Bloom frame, Golden Hour theme, 1.5× rate limits |
-| Master Grower | 7,000 | Pistil Fire frame, Midnight Garden theme, slowmode exempt, 6 images/post |
-| Head Grower | 15,000 | Amber Jar frame, Deep Water theme, 2× rate limits, 8 images/post, 7 tags |
-| Hash Maker | 30,000 | Rosin Ring frame, Amber Cure theme, legendary titles |
-| Cannabis Deity | 50,000 | Northern Lights frame, Deity Glow theme — top of the ladder |
+| Seedling | 300 | Leaf nameplate (username styling in chat/forum), first titles |
+| Rooted | 500 | Rooted Band frame, more titles, poll voting AND poll creation |
+| Veg Grower | 1,000 | 3rd daily quest slot, Canopy Weave frame, Dawn Patrol theme |
+| Grower | 1,500 | Verified Member (+1.5× rep), Greenhouse Glow frame, Evergreen theme |
+| Bloom | 2,500 | Violet nameplate, animated Photon Pulse frame, Ultraviolet theme |
+| Cultivator | 3,500 | The Grow Room chat, LED Bloom frame, Golden Hour theme, 1.5× rate limits |
+| Master Grower | 7,000 | Pistil Fire frame, Midnight Garden theme, glowing nameplate, slowmode exempt, 6 images/post |
+| Head Grower | 15,000 | The Vault chat, 4th daily quest slot, 2× rate limits, 8 images/post, 7 tags |
+| Grandmaster | 30,000 | Rosin Ring frame, Amber Cure theme, tri-color nameplate, legendary titles |
+| Master Gardener | 50,000 | Animated Northern Lights frame, Aurora Crown theme, golden nameplate, 10 images/post |
 
-Perks are enforced in code via `getTierPerks()` / `repRateLimit()` — never
-just advertised. `checkTierChange` notifies on tier-up; `demoteIfNeeded`
-strips Verified Member if rep falls back under the threshold.
+Perks live on `TierPerks` (`trustedLinks`, `pollVoting`, `pollCreation`,
+`verifiedMember`, `rateLimitBoost`, `slowmodeExempt`, `imagesPerPost`,
+`maxThreadTags`, `showcaseSlots`, `questSlots`, `nameplate`) and are
+enforced in code via `getTierPerks()` / `repRateLimit()` / perk-threshold
+helpers (`TRUSTED_LINKS_REP`, `POLL_VOTING_REP`, `POLL_CREATION_REP`) —
+never just advertised, never indexed by ladder position. `checkTierChange`
+notifies on tier-up; `demoteIfNeeded` strips Verified Member if rep falls
+back under the threshold.
 
 ## Milestones & celebrations (2.2)
 
@@ -135,7 +148,7 @@ classified `"tier"` or `"stage"` with the Grow Level landed on.
 
 Tiers are sparse, so `TIER_STAGE_CHECKPOINTS` defines sub-stages inside each
 tier gap (grow-cycle names: Germ → Veg → Flower → Flush → Harvest → Cure).
-`REP_LADDER` is the flat list of all rungs — 31 total — and `getRepStage()` /
+`REP_LADDER` is the flat list of all rungs — 33 total — and `getRepStage()` /
 `getStageProgress()` / `getRepLevel()` derive a member's current stage and a
 decorative Grow Level purely from the balance. Zero schema cost; reversals
 demote stages automatically.
@@ -246,7 +259,8 @@ threads don't count toward reply-based challenges.
 
 ## Daily quests
 
-`lib/quests.ts` — three quests per member per UTC day, selected by hashing
+`lib/quests.ts` — two quests per member per UTC day (3 at Veg Grower, 4 at
+Head Grower via the `questSlots` perk), selected by hashing
 `(dayKey, userId, slug)` over a fixed pool. No table, no cron: selection is
 deterministic and progress is recomputed from live rows/ledger entries the
 same way challenges are. Every quest requires distinct threads/members/days
@@ -256,6 +270,18 @@ perfect-day bonus; `evaluateQuests()` runs beside `evaluateChallenges()` in
 the `/api/ping` deferred block. Missed quests simply expire — no streak
 pressure, no punishment. Quest state is owner-only (`/progress`,
 `/api/progression`, TerpBot `/quests`).
+
+## Garden streaks
+
+`lib/streaks.ts` — consecutive UTC days with a `DAILY_LOGIN` check-in. The
+streak is DERIVED from the ledger (distinct-day scan over non-reversed
+check-ins), so there is no streak table to drift. `evaluateStreaks()` runs
+in the same `/api/ping` deferred block and pays `STREAK_MILESTONES`
+(3/7/14/30/60/100/365 days → +10/+25/+50/+100/+150/+250/+500) once-ever per
+member via keyed `STREAK_BONUS` rows (`streak:<days>:<userId>`). A broken
+streak loses nothing already earned — it just restarts the count, and
+re-climbing pays only milestones beyond the personal best. The member gets
+one `REPUTATION` notification per newly-paid milestone batch.
 
 ## Community standing (trust)
 

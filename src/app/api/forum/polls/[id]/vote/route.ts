@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma"
 import { unauthorized, forbidden, isBanned, isModerator, isStaff } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
 import { getTierPerks } from "@/lib/reputation"
-import { REP_TIERS } from "@/lib/reputation-config"
+import { POLL_VOTING_REP } from "@/lib/reputation-config"
 import { checkMaintenance } from "@/lib/maintenance"
 
 export async function POST(
@@ -29,7 +29,7 @@ export async function POST(
     if (!isStaff(session.user.role)) {
       const perks = await getTierPerks(session.user.id)
       if (!perks.pollVoting) {
-        return forbidden(`Poll voting unlocks at ${REP_TIERS[2].threshold} reputation (Rooted)`)
+        return forbidden(`Poll voting unlocks at ${POLL_VOTING_REP} reputation (Rooted)`)
       }
     }
 

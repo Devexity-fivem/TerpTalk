@@ -14,6 +14,7 @@ import TierChip from "@/components/tier-chip"
 import UserPopover from "@/components/user-popover"
 import { Avatar } from "@/components/ui/avatar"
 import { getAvatarFrame, getProfileTitle } from "@/lib/cosmetics"
+import { getReputationTier } from "@/lib/reputation-config"
 import { listCommandsForRole } from "@/lib/chat-commands"
 import { getSharedPusher, peekSharedPusher } from "@/lib/pusher-client"
 import {
@@ -174,6 +175,11 @@ const MessageRow = memo(function MessageRow({
   // Cosmetics render only for humans — the bot keeps its fixed identity.
   const frame = !isBot ? getAvatarFrame(msg.author.avatarFrame) : null
   const title = !isBot ? getProfileTitle(msg.author.profileTitle) : null
+  // Tier nameplate — the username itself shows rank. Opted-out members
+  // (publicMilestoneOptOut) keep the plain style, matching TierChip.
+  const nameplateClass = msg.author.publicMilestoneOptOut
+    ? null
+    : getReputationTier(msg.author.reputation ?? 0).perks.nameplate ?? null
 
   const menuButton = (
     <Tooltip content="Message options">
@@ -409,7 +415,7 @@ const MessageRow = memo(function MessageRow({
           <UserPopover username={msg.author.username ?? displayName}>
             <Link
               href={`/u/${encodeURIComponent(displayName)}`}
-              className="font-semibold text-xs hover:underline truncate"
+              className={cn("font-semibold text-xs hover:underline truncate", !isBot && nameplateClass)}
             >
               {displayName}
             </Link>

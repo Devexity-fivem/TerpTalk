@@ -11,10 +11,11 @@ import { useSession } from "next-auth/react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import {
-  Sprout, Lock, ChevronRight, Award, Loader2, ShieldCheck, Zap, CalendarCheck, Trophy,
+  Sprout, Lock, ChevronRight, Award, Loader2, ShieldCheck, Zap, CalendarCheck, Trophy, Flame, Check,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { signInHref } from "@/lib/callback-url"
+import { REP_TIERS } from "@/lib/reputation-config"
 
 interface ProgressionData {
   reputation: number
@@ -53,6 +54,7 @@ interface ProgressionData {
     day: string
     items: { slug: string; title: string; description: string; icon: string; reward: number; target: number; progress: number; done: boolean; paid: boolean }[]
   } | null
+  streak: { days: number; next: { days: number; reward: number } | null } | null
   nearBadges: { name: string; icon: string; rarity: string; current: number; target: number; percent: number }[]
   badgeCount: number
   recentBadges: { name: string; icon: string | null; earnedAt: string }[]
@@ -205,6 +207,81 @@ export default function ProgressPage() {
               ))}
             </div>
           )}
+        </section>
+
+        {/* Garden streak — consecutive daily check-ins pay once-ever
+            milestone bonuses. Missed days just restart the count. */}
+        <section aria-label="Garden streak" className="bg-card/80 rounded-2xl border border-border/70 p-4 mb-4">
+          <div className="flex items-center gap-2 mb-1">
+            <Flame className={cn("w-4 h-4", (data.streak?.days ?? 0) > 0 ? "text-amber-500" : "text-muted-foreground")} />
+            <h2 className="font-display text-sm font-semibold">Garden streak</h2>
+            <span className="ml-auto text-xs text-muted-foreground">
+              {data.streak && data.streak.days > 0 ? `${data.streak.days} day${data.streak.days === 1 ? "" : "s"}` : "not started"}
+            </span>
+          </div>
+          {data.streak && data.streak.days > 0 ? (
+            <p className="text-xs text-muted-foreground">
+              {data.streak.next ? (
+                <>
+                  <span className="text-foreground font-medium">{data.streak.next.days - data.streak.days} day{data.streak.next.days - data.streak.days === 1 ? "" : "s"}</span> to the {data.streak.next.days}-day milestone
+                  (+{data.streak.next.reward} rep). Check in daily to keep it alive.
+                </>
+              ) : (
+                "Every streak milestone claimed — a year of showing up. Legendary."
+              )}
+            </p>
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              Check in daily to grow your streak — milestone bonuses start at 3 days (+10 rep).
+            </p>
+          )}
+        </section>
+
+        {/* The Path — every rank on the road to Master Gardener */}
+        <section aria-label="The Path to Master Gardener" className="bg-card/80 rounded-2xl border border-border/70 p-4 mb-4">
+          <div className="flex items-center gap-2 mb-3">
+            <Trophy className="w-4 h-4 text-primary" />
+            <h2 className="font-display text-sm font-semibold">The Path to Master Gardener</h2>
+            <span className="ml-auto text-xs text-muted-foreground">{data.tier.name} · rank {REP_TIERS.findIndex((t) => t.name === data.tier.name) + 1} of {REP_TIERS.length}</span>
+          </div>
+          <ol className="space-y-1">
+            {REP_TIERS.map((t, i) => {
+              const reached = data.reputation >= t.threshold
+              const current = data.tier.name === t.name
+              return (
+                <li key={t.name} className="flex items-start gap-3">
+                  {/* Rail node + connector line */}
+                  <div className="flex flex-col items-center self-stretch">
+                    <span
+                      className={cn(
+                        "w-6 h-6 rounded-full flex items-center justify-center text-xs shrink-0 border",
+                        current
+                          ? "bg-primary text-primary-foreground border-primary shadow-[0_0_10px_-2px_var(--primary)]"
+                          : reached
+                            ? "bg-primary/15 text-primary border-primary/30"
+                            : "bg-secondary text-muted-foreground border-border"
+                      )}
+                      aria-hidden="true"
+                    >
+                      {reached ? <Check className="w-3 h-3" /> : <Lock className="w-2.5 h-2.5" />}
+                    </span>
+                    {i < REP_TIERS.length - 1 && (
+                      <span className={cn("w-px flex-1 min-h-3", reached ? "bg-primary/40" : "bg-border")} aria-hidden="true" />
+                    )}
+                  </div>
+                  <div className={cn("pb-2 min-w-0", !reached && "opacity-60")}>
+                    <div className="flex items-center gap-2 text-sm flex-wrap">
+                      <span aria-hidden="true">{t.icon}</span>
+                      <span className={cn("font-semibold", current && "text-primary")}>{t.name}</span>
+                      <span className="text-[11px] text-muted-foreground">{t.threshold.toLocaleString()} rep</span>
+                      {current && <span className="text-[10px] font-semibold uppercase tracking-wider text-primary">you are here</span>}
+                    </div>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">{t.benefit}</p>
+                  </div>
+                </li>
+              )
+            })}
+          </ol>
         </section>
 
         {/* Next Best Action */}

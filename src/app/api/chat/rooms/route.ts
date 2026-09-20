@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma"
 import { sessionCookieName } from "@/lib/auth"
 import { unauthorized, forbidden, isSessionValid, getClientIp, hashIp, isStaff } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
-import { GROW_ROOM_REP, GROW_ROOM_SLUG } from "@/lib/chat-access"
+import { GROW_ROOM_REP, GROW_ROOM_SLUG, VAULT_ROOM_REP, VAULT_ROOM_SLUG } from "@/lib/chat-access"
 import { getChatActivity, countOnline, withLatestActivity } from "@/lib/chat-activity"
 import { getBooleanSetting, SITE_SETTINGS } from "@/lib/settings"
 
@@ -63,6 +63,19 @@ export async function GET(request: NextRequest) {
           isPrivate: false,
           requiredRep: GROW_ROOM_REP,
           order: 2,
+        },
+      })
+      // The Vault — the head table, opens at Head Grower.
+      await prisma.chatRoom.upsert({
+        where: { slug: VAULT_ROOM_SLUG },
+        update: { requiredRep: VAULT_ROOM_REP },
+        create: {
+          name: "The Vault",
+          slug: VAULT_ROOM_SLUG,
+          description: `The head table — unlocks at ${VAULT_ROOM_REP.toLocaleString()} rep (Head Grower). Genetics vault talk, cup-level technique, and the garden's oldest hands.`,
+          isPrivate: false,
+          requiredRep: VAULT_ROOM_REP,
+          order: 3,
         },
       })
     }
