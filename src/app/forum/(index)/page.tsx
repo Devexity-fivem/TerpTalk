@@ -142,7 +142,8 @@ export default async function ForumPage() {
       <div className="max-w-7xl mx-auto px-4 py-8">
         {/* Header */}
         <div className="mb-6">
-          <h1 className="text-2xl font-bold mb-1">Discussions</h1>
+          <span className="tt-eyebrow">The commons</span>
+          <h1 className="font-display text-3xl font-bold mt-1.5 mb-1 tracking-tight">Discussions</h1>
           <p className="text-sm text-muted-foreground">Join discussions, share knowledge, and connect with fellow growers</p>
         </div>
 
@@ -150,19 +151,19 @@ export default async function ForumPage() {
           {/* Main Forum Categories */}
           <div className="min-w-0 lg:col-span-2 space-y-6">
             {/* Categories */}
-            <div className="bg-card rounded-lg border border-border">
-              <div className="p-4 border-b border-border">
-                <h2 className="text-lg font-semibold">Categories</h2>
+            <div className="bg-card/80 rounded-2xl border border-border/70 overflow-hidden">
+              <div className="p-4 border-b border-border/60">
+                <h2 className="font-display text-lg font-semibold">Categories</h2>
               </div>
-              <div className="divide-y divide-border">
+              <div className="divide-y divide-border/60">
                 {categories.map((category) => (
                   <Link
                     key={category.id}
                     href={`/forum/category/${category.slug}`}
-                    className="block p-4 hover:bg-secondary/50 transition-colors"
+                    className="tt-edge-card block p-4 hover:bg-secondary/50 transition-colors"
                   >
                     <div className="flex items-start gap-4">
-                      <div className="bg-primary/10 p-3 rounded-lg shrink-0">
+                      <div className="tt-brand-tile p-3 rounded-xl shrink-0">
                         <MessageSquare className="w-6 h-6 text-primary" />
                       </div>
                       <div className="flex-1 min-w-0">
@@ -188,16 +189,16 @@ export default async function ForumPage() {
             </div>
 
             {/* Recent Threads */}
-            <div className="bg-card rounded-lg border border-border">
-              <div className="p-4 border-b border-border">
-                <h2 className="text-lg font-semibold">Recent Discussions</h2>
+            <div className="bg-card/80 rounded-2xl border border-border/70 overflow-hidden">
+              <div className="p-4 border-b border-border/60">
+                <h2 className="font-display text-lg font-semibold">Recent Discussions</h2>
               </div>
-              <div className="divide-y divide-border">
+              <div className="divide-y divide-border/60">
                 {recentThreads.map((thread) => (
                   <Link
                     key={thread.id}
                     href={`/forum/thread/${thread.slug}`}
-                    className="block p-4 hover:bg-secondary/50 transition-colors"
+                    className="tt-edge-card block p-4 hover:bg-secondary/50 transition-colors"
                   >
                     <div className="flex items-start gap-4">
                       <div className="flex-1 min-w-0">
@@ -242,8 +243,8 @@ export default async function ForumPage() {
             <FollowedThreads items={followedItems} />
 
             {/* Forum Stats */}
-            <div className="bg-card rounded-lg border border-border p-4">
-              <h3 className="text-base font-semibold mb-3">Forum Statistics</h3>
+            <div className="bg-card/80 rounded-2xl border border-border/70 p-4">
+              <h3 className="font-display text-base font-semibold mb-3">Forum Statistics</h3>
               <div className="space-y-3">
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Total Threads</span>
@@ -261,9 +262,9 @@ export default async function ForumPage() {
             </div>
 
             {/* Trending Topics */}
-            <div className="bg-card rounded-lg border border-border p-4">
-              <h3 className="text-base font-semibold mb-3 flex items-center gap-2">
-                <TrendingUp className="w-4 h-4" />
+            <div className="bg-card/80 rounded-2xl border border-border/70 p-4">
+              <h3 className="font-display text-base font-semibold mb-3 flex items-center gap-2">
+                <TrendingUp className="w-4 h-4 text-spectrum" />
                 Trending Topics
               </h3>
               {trendingThreads.length === 0 ? (
@@ -280,24 +281,24 @@ export default async function ForumPage() {
             </div>
 
             {/* Quick Actions */}
-            <div className="bg-card rounded-lg border border-border p-4">
-              <h3 className="text-base font-semibold mb-3">Quick Actions</h3>
+            <div className="bg-card/80 rounded-2xl border border-border/70 p-4">
+              <h3 className="font-display text-base font-semibold mb-3">Quick Actions</h3>
               <div className="space-y-2">
                 <Link
                   href="/forum/new"
-                  className="block w-full text-center bg-primary text-primary-foreground px-4 py-2 rounded-lg hover:bg-primary/90 transition-colors"
+                  className="tt-cta block w-full text-center text-primary-foreground px-4 py-2.5 rounded-full font-semibold transition-all"
                 >
                   Create New Thread
                 </Link>
                 <Link
                   href="/search"
-                  className="block w-full text-center border border-border px-4 py-2 rounded-lg hover:bg-secondary transition-colors"
+                  className="block w-full text-center border border-border px-4 py-2 rounded-full hover:bg-secondary hover:border-primary/40 transition-colors"
                 >
                   Search Forum
                 </Link>
                 <Link
                   href="/forum/tags"
-                  className="block w-full text-center border border-border px-4 py-2 rounded-lg hover:bg-secondary transition-colors"
+                  className="block w-full text-center border border-border px-4 py-2 rounded-full hover:bg-secondary hover:border-primary/40 transition-colors"
                 >
                   Browse Tags
                 </Link>

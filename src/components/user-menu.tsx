@@ -76,7 +76,7 @@ export default function UserMenu() {
       {open && (
         <div
           role="menu"
-          className="absolute right-0 z-50 mt-2 w-64 rounded-xl border border-border bg-card p-1.5 shadow-lg"
+          className="absolute right-0 z-50 mt-2 w-64 rounded-2xl border border-border/70 tt-glass p-1.5 shadow-lg"
         >
           {/* Identity header */}
           <Link

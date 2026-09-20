@@ -46,7 +46,7 @@ export default function StageTimeline({ current, runs }: { current: string; runs
         </div>
         <div className="h-2 bg-secondary rounded-full overflow-hidden">
           <div
-            className="h-full bg-primary rounded-full transition-all"
+            className="h-full rounded-full bg-gradient-to-r from-primary via-primary to-spectrum transition-all"
             style={{ width: `${((currentIdx + 1) / STAGES.length) * 100}%` }}
           />
         </div>

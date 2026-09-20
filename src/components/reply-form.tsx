@@ -73,8 +73,8 @@ export default function ReplyForm({ threadId, wasFollowing }: ReplyFormProps) {
   }
 
   return (
-    <div className="mt-8 bg-card rounded-lg border border-border p-6">
-      <h3 className="font-semibold mb-4">Add to Discussion</h3>
+    <div className="mt-8 bg-card/80 rounded-2xl border border-border/70 p-5 sm:p-6">
+      <h3 className="font-display font-semibold mb-4">Add to Discussion</h3>
       {!session ? (
         <p className="text-muted-foreground">
           Please <a href={signInHref(pathname)} className="text-primary hover:underline">sign in</a> to reply to this discussion.
@@ -92,7 +92,7 @@ export default function ReplyForm({ threadId, wasFollowing }: ReplyFormProps) {
           />
           <ImageUploader value={images} onChange={setImages} disabled={loading} />
           {error && (
-            <div className="bg-destructive/10 text-destructive px-4 py-2 rounded-lg text-sm">
+            <div className="bg-destructive/10 text-destructive px-4 py-2.5 rounded-xl text-sm">
               {error}
             </div>
           )}
@@ -100,7 +100,7 @@ export default function ReplyForm({ threadId, wasFollowing }: ReplyFormProps) {
             <button
               type="submit"
               disabled={loading}
-              className="bg-primary text-primary-foreground px-6 py-2 rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              className="tt-cta px-6 py-2.5 rounded-full font-semibold text-primary-foreground transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
             >
               {loading ? (
                 <>

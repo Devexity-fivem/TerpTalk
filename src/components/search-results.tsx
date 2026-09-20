@@ -143,11 +143,11 @@ export default function SearchResults() {
             onFocus={() => { if (suggestions.length > 0) setShowSuggestions(true) }}
             onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
             placeholder="Search threads, guides, strains, growers..."
-            className="w-full pl-10 pr-4 py-3 rounded-xl border border-border bg-card text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+            className="w-full pl-10 pr-4 py-3 rounded-full border border-border/70 bg-card/80 text-sm focus:outline-none focus:ring-2 focus:ring-primary/60 focus:border-primary/50 transition-colors"
           />
         </div>
         {showSuggestions && suggestions.length > 0 && (
-          <div className="absolute z-10 left-0 right-0 mt-1 bg-card border border-border rounded-lg shadow-lg overflow-hidden">
+          <div className="absolute z-10 left-0 right-0 mt-2 tt-glass border border-border/70 rounded-2xl shadow-lg overflow-hidden">
             {suggestions.map((s) => {
               const Icon = SUGGEST_ICONS[s.type]
               const href =
@@ -202,7 +202,7 @@ export default function SearchResults() {
             <select
               value={sort}
               onChange={(e) => updateParams({ sort: e.target.value })}
-              className="px-3 py-1.5 rounded-lg border border-border bg-card text-sm"
+              className="px-3 py-1.5 rounded-full border border-border/70 bg-card/80 text-sm"
             >
               <option value="latest">Latest</option>
               <option value="popular">Popular</option>
@@ -264,8 +264,8 @@ export default function SearchResults() {
       {results && !loading && !error && (
         <div className="space-y-6">
           {results.threads.length > 0 && (
-            <section className="bg-card rounded-xl border border-border">
-              <h2 className="p-4 border-b border-border font-semibold flex items-center gap-2 text-sm">
+            <section className="bg-card/80 rounded-2xl border border-border/70">
+              <h2 className="p-4 border-b border-border/60 font-display font-semibold flex items-center gap-2 text-sm">
                 <MessageSquare className="w-4 h-4 text-primary" /> Threads
                 <span className="text-muted-foreground font-normal">({results.threads.length}{type === "all" ? " top" : ""})</span>
               </h2>
@@ -300,8 +300,8 @@ export default function SearchResults() {
           )}
 
           {results.guides.length > 0 && (
-            <section className="bg-card rounded-xl border border-border">
-              <h2 className="p-4 border-b border-border font-semibold flex items-center gap-2 text-sm">
+            <section className="bg-card/80 rounded-2xl border border-border/70">
+              <h2 className="p-4 border-b border-border/60 font-display font-semibold flex items-center gap-2 text-sm">
                 <BookOpen className="w-4 h-4 text-primary" /> Guides
                 <span className="text-muted-foreground font-normal">({results.guides.length}{type === "all" ? " top" : ""})</span>
               </h2>
@@ -317,8 +317,8 @@ export default function SearchResults() {
           )}
 
           {results.strains.length > 0 && (
-            <section className="bg-card rounded-xl border border-border">
-              <h2 className="p-4 border-b border-border font-semibold flex items-center gap-2 text-sm">
+            <section className="bg-card/80 rounded-2xl border border-border/70">
+              <h2 className="p-4 border-b border-border/60 font-display font-semibold flex items-center gap-2 text-sm">
                 <Dna className="w-4 h-4 text-primary" /> Strains
                 <span className="text-muted-foreground font-normal">({results.strains.length}{type === "all" ? " top" : ""})</span>
               </h2>
@@ -334,8 +334,8 @@ export default function SearchResults() {
           )}
 
           {results.diaries.length > 0 && (
-            <section className="bg-card rounded-xl border border-border">
-              <h2 className="p-4 border-b border-border font-semibold flex items-center gap-2 text-sm">
+            <section className="bg-card/80 rounded-2xl border border-border/70">
+              <h2 className="p-4 border-b border-border/60 font-display font-semibold flex items-center gap-2 text-sm">
                 <Leaf className="w-4 h-4 text-primary" /> Diaries
                 <span className="text-muted-foreground font-normal">({results.diaries.length}{type === "all" ? " top" : ""})</span>
               </h2>
@@ -351,8 +351,8 @@ export default function SearchResults() {
           )}
 
           {results.setups.length > 0 && (
-            <section className="bg-card rounded-xl border border-border">
-              <h2 className="p-4 border-b border-border font-semibold flex items-center gap-2 text-sm">
+            <section className="bg-card/80 rounded-2xl border border-border/70">
+              <h2 className="p-4 border-b border-border/60 font-display font-semibold flex items-center gap-2 text-sm">
                 <Wrench className="w-4 h-4 text-primary" /> Setups
                 <span className="text-muted-foreground font-normal">({results.setups.length}{type === "all" ? " top" : ""})</span>
               </h2>
@@ -371,8 +371,8 @@ export default function SearchResults() {
           )}
 
           {results.tags.length > 0 && (
-            <section className="bg-card rounded-xl border border-border">
-              <h2 className="p-4 border-b border-border font-semibold flex items-center gap-2 text-sm">
+            <section className="bg-card/80 rounded-2xl border border-border/70">
+              <h2 className="p-4 border-b border-border/60 font-display font-semibold flex items-center gap-2 text-sm">
                 <Tag className="w-4 h-4 text-primary" /> Tags
                 <span className="text-muted-foreground font-normal">({results.tags.length}{type === "all" ? " top" : ""})</span>
               </h2>
@@ -388,8 +388,8 @@ export default function SearchResults() {
           )}
 
           {results.users.length > 0 && (
-            <section className="bg-card rounded-xl border border-border">
-              <h2 className="p-4 border-b border-border font-semibold flex items-center gap-2 text-sm">
+            <section className="bg-card/80 rounded-2xl border border-border/70">
+              <h2 className="p-4 border-b border-border/60 font-display font-semibold flex items-center gap-2 text-sm">
                 <User className="w-4 h-4 text-primary" /> Growers
                 <span className="text-muted-foreground font-normal">({results.users.length}{type === "all" ? " top" : ""})</span>
               </h2>
@@ -419,7 +419,7 @@ export default function SearchResults() {
               {page > 1 && (
                 <button
                   onClick={() => updateParams({ page: page - 1 })}
-                  className="px-4 py-2 rounded-lg bg-secondary hover:bg-secondary/80 transition-colors"
+                  className="px-4 py-2 rounded-full bg-secondary hover:bg-secondary/80 transition-colors"
                 >
                   ← Previous
                 </button>
@@ -428,7 +428,7 @@ export default function SearchResults() {
               {hasMore && (
                 <button
                   onClick={() => updateParams({ page: page + 1 })}
-                  className="px-4 py-2 rounded-lg bg-secondary hover:bg-secondary/80 transition-colors"
+                  className="px-4 py-2 rounded-full bg-secondary hover:bg-secondary/80 transition-colors"
                 >
                   Next →
                 </button>

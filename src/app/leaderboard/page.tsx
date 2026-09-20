@@ -281,7 +281,8 @@ export default async function LeaderboardPage({
       <div className="max-w-3xl mx-auto px-4 py-8">
         <div className="mb-6 text-center">
           <Award className="w-12 h-12 text-primary mx-auto mb-3" />
-          <h1 className="text-3xl font-bold mb-2">Top Growers</h1>
+          <span className="tt-eyebrow">The ladder</span>
+          <h1 className="font-display text-3xl sm:text-4xl font-bold mt-1.5 mb-2 tracking-tight">Top Growers</h1>
           <p className="text-muted-foreground">
             Earn reputation by posting, journaling, adding strains, and helping the community.
           </p>

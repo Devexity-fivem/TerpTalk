@@ -66,7 +66,7 @@ export default async function TagThreadsPage({
           <Link href="/forum/tags" className="text-sm text-muted-foreground hover:text-foreground mb-2 block">
             ← All tags
           </Link>
-          <h1 className="text-3xl font-bold mb-2">#{tag.name}</h1>
+          <h1 className="font-display text-3xl font-bold mb-2 tracking-tight"><span className="text-spectrum">#</span>{tag.name}</h1>
           <p className="text-muted-foreground">{tag.threads.length} thread{tag.threads.length === 1 ? "" : "s"}</p>
         </div>
 
@@ -77,7 +77,7 @@ export default async function TagThreadsPage({
               <Link
                 key={t.id}
                 href={`/forum/thread/${t.slug}`}
-                className="block bg-card border border-border rounded-lg p-6 hover:border-primary transition-colors"
+                className="tt-edge-card block bg-card/80 border border-border/70 rounded-2xl p-5 hover:border-primary/50 transition-all"
               >
                 <div className="flex items-start justify-between gap-4">
                   <div>

@@ -184,7 +184,8 @@ export default function ProfileClient() {
   return (
     <div className="min-h-screen bg-background">
       <div className="max-w-4xl mx-auto px-4 py-8">
-        <div className={cn("bg-card rounded-lg border p-4 mb-5", theme ? theme.borderClass : "border-border", theme?.className)}>
+        <div className={cn("bg-card/80 rounded-2xl border p-4 mb-5 overflow-hidden", theme ? theme.borderClass : "border-border/70", theme?.className)}>
+          <div className="tt-spectrum-bar -mx-4 -mt-4 mb-4 h-1" />
           <div className="flex items-start gap-4 flex-wrap">
             <div className={cn("rounded-full shrink-0", frame?.className)}>
               <Avatar
@@ -198,7 +199,7 @@ export default function ProfileClient() {
             <div className="flex-1 min-w-0">
               <div className="flex items-start justify-between gap-4 flex-wrap">
                 <div>
-                  <h1 className="text-xl font-bold mb-1 break-words flex items-center gap-2">@{profile.username} <RoleBadge role={profile.role} />
+                  <h1 className="font-display text-2xl font-bold mb-1 break-words flex items-center gap-2 tracking-tight">@{profile.username} <RoleBadge role={profile.role} />
                       {profile.isBot && (
                         <Tooltip content="Automated community assistant — not a person">
                           <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider bg-primary/15 text-primary px-1.5 py-0.5 rounded">
@@ -249,7 +250,7 @@ export default function ProfileClient() {
                       </div>
                       <div className="h-2 w-full bg-secondary rounded-full overflow-hidden">
                         <div
-                          className="h-full bg-primary transition-all"
+                          className="h-full bg-gradient-to-r from-primary to-spectrum transition-all"
                           style={{ width: `${profile.stageProgress?.percent ?? profile.tierProgress.percent}%` }}
                         />
                       </div>

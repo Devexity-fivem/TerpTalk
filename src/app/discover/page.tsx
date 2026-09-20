@@ -84,8 +84,8 @@ export default async function DiscoverPage({
   const { threads } = await getDiscoverData(activeTab, session?.user?.id)
 
   const tabCls = (t: string) =>
-    `px-4 py-2 text-sm font-medium transition-colors ${
-      activeTab === t ? "border-b-2 border-primary text-primary" : "text-muted-foreground hover:text-foreground"
+    `px-4 py-2 text-sm font-medium rounded-full transition-colors ${
+      activeTab === t ? "bg-primary/12 text-primary ring-1 ring-inset ring-primary/25" : "text-muted-foreground hover:text-foreground hover:bg-secondary"
     }`
 
   const icon = activeTab === "trending" ? <Flame className="w-5 h-5 text-primary" /> : <MessageSquare className="w-5 h-5 text-primary" />
@@ -95,17 +95,18 @@ export default async function DiscoverPage({
     <div className="min-h-screen bg-background">
       <div className="max-w-4xl mx-auto px-4 py-8">
         <div className="mb-6">
-          <h1 className="text-3xl font-bold mb-2">Discover</h1>
+          <span className="tt-eyebrow">Fresh from the garden</span>
+          <h1 className="font-display text-3xl font-bold mt-1.5 mb-2 tracking-tight">Discover</h1>
           <p className="text-muted-foreground">Find the best and latest grower conversations.</p>
         </div>
 
-        <div className="flex gap-4 mb-6 border-b border-border">
+        <div className="flex gap-1.5 mb-6 p-1 rounded-full bg-secondary/50 border border-border/60 w-fit">
           <Link href="/discover?tab=latest" className={tabCls("latest")}>Latest</Link>
           <Link href="/discover?tab=trending" className={tabCls("trending")}><TrendingUp className="w-4 h-4 inline mr-1" /> Trending</Link>
           <Link href="/discover?tab=following" className={tabCls("following")}><Users className="w-4 h-4 inline mr-1" /> Following</Link>
         </div>
 
-        <div className="bg-card rounded-xl border border-border p-4">
+        <div className="bg-card/80 rounded-2xl border border-border/70 p-4 sm:p-5">
           <div className="flex items-center gap-2 mb-4">
             {icon}
             <h2 className="font-semibold">{heading}</h2>
@@ -141,7 +142,7 @@ export default async function DiscoverPage({
                 <Link
                   key={thread.id}
                   href={`/forum/thread/${thread.slug}`}
-                  className="group flex flex-col p-5 bg-secondary/30 rounded-xl border border-border hover:border-primary/40 hover:bg-secondary/50 transition-all"
+                  className="group flex flex-col p-5 bg-secondary/30 rounded-2xl border border-border/70 hover:border-primary/40 hover:bg-secondary/50 transition-all tt-edge-card"
                 >
                   <div className="flex items-start gap-3 mb-3">
                     <Avatar src={thread.author.image ?? undefined} size="sm" alt={thread.author.profile?.username ?? thread.author.name ?? undefined} />

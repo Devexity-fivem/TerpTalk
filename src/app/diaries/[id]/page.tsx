@@ -297,35 +297,35 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
         <div className="mb-5">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 mb-2 flex-wrap">
+              <div className="flex items-center gap-2 mb-3 flex-wrap">
                 {diary.featured && (
-                  <span className="text-xs text-primary px-2 py-1 bg-primary/10 rounded">
+                  <span className="rounded-full bg-amber-500/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-amber-500">
                     Featured
                   </span>
                 )}
-                <span className="text-xs text-muted-foreground px-2 py-1 bg-secondary rounded">
+                <span className="rounded-full bg-primary/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-primary">
                   {diary.growType}
                 </span>
-                <span className="text-xs text-muted-foreground px-2 py-1 bg-secondary rounded">
+                <span className="rounded-full bg-secondary px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                   {diary.stage}
                 </span>
                 {diary.harvested && (
-                  <span className="text-xs text-emerald-500 px-2 py-1 bg-emerald-500/10 rounded">
+                  <span className="rounded-full bg-emerald-500/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-emerald-500">
                     Harvested
                   </span>
                 )}
                 {canEdit && diary.visibility === "UNLISTED" && (
-                  <span className="text-xs text-muted-foreground px-2 py-1 bg-secondary rounded inline-flex items-center gap-1">
+                  <span className="rounded-full bg-secondary px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground inline-flex items-center gap-1">
                     <Link2 className="w-3 h-3" /> Unlisted
                   </span>
                 )}
                 {canEdit && diary.visibility === "PRIVATE" && (
-                  <span className="text-xs text-muted-foreground px-2 py-1 bg-secondary rounded inline-flex items-center gap-1">
+                  <span className="rounded-full bg-secondary px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground inline-flex items-center gap-1">
                     <Lock className="w-3 h-3" /> Private
                   </span>
                 )}
               </div>
-              <h1 className="text-2xl font-bold mb-2">{diary.title}</h1>
+              <h1 className="font-display text-3xl sm:text-4xl font-bold mb-2 tracking-tight">{diary.title}</h1>
               <p className="text-sm text-muted-foreground mb-3">{diary.description}</p>
               <div className="flex items-center flex-wrap gap-x-3 gap-y-1 text-sm text-muted-foreground">
                 <span className="flex items-center gap-1">

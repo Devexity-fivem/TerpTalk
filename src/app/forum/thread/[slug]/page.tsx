@@ -348,19 +348,19 @@ export default async function ThreadPage({
         <ViewTracker threadId={thread.id} />
         <Breadcrumbs items={breadcrumbs} />
         <div className="mb-5">
-          <div className="flex items-center gap-2 mb-2 flex-wrap">
-            <span className="text-xs text-muted-foreground px-2 py-1 bg-secondary rounded">
+          <div className="flex items-center gap-2 mb-3 flex-wrap">
+            <span className="rounded-full bg-primary/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-primary">
               {thread.category.name}
             </span>
             {thread.pinned && (
-              <span className="text-xs text-primary px-2 py-1 bg-primary/10 rounded">Pinned</span>
+              <span className="rounded-full bg-spectrum/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-spectrum">Pinned</span>
             )}
             {thread.locked && (
-              <span className="text-xs text-muted-foreground px-2 py-1 bg-secondary rounded">Locked</span>
+              <span className="rounded-full bg-secondary px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Locked</span>
             )}
             <ThreadModActions threadId={thread.id} authorId={thread.authorId} pinned={thread.pinned} locked={thread.locked} />
           </div>
-          <h1 className="text-2xl font-bold mb-2 break-words">{thread.title}</h1>
+          <h1 className="font-display text-3xl sm:text-4xl font-bold mb-2 break-words tracking-tight">{thread.title}</h1>
           {thread.tags.length > 0 && (
             <div className="flex flex-wrap gap-2 mb-2">
               {thread.tags.map((tt) => (
@@ -427,7 +427,7 @@ export default async function ThreadPage({
             <div className="mt-3 mb-2">
               <Link
                 href={diaryPath(diaryCtx)}
-                className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-primary/30 bg-primary/5 text-sm hover:bg-primary/10 transition-colors"
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-primary/30 bg-primary/5 text-sm hover:bg-primary/10 hover:border-primary/50 transition-colors"
               >
                 <BookOpen className="w-4 h-4 text-primary shrink-0" />
                 <span>Grow diary: {diaryCtx.title}</span>
@@ -458,7 +458,7 @@ export default async function ThreadPage({
 
         {/* Accepted answer — renders on every page, so its anchor always resolves */}
         {acceptedPost && (
-          <div id={`post-${acceptedPost.id}`} tabIndex={-1} className="bg-card rounded-lg border-2 border-green-500/50 p-4 mb-4 ring-1 ring-green-500/20">
+          <div id={`post-${acceptedPost.id}`} tabIndex={-1} className="bg-card rounded-2xl border-2 border-green-500/50 p-4 sm:p-5 mb-4 ring-1 ring-green-500/20">
             <div className="flex items-center gap-2 text-green-400 text-xs font-medium mb-3">
               <CheckCircle2 className="w-3.5 h-3.5" />
               <span>Accepted answer</span>
@@ -553,8 +553,8 @@ export default async function ThreadPage({
               <div
                 id={`post-${post.id}`}
                 tabIndex={-1}
-                className={`bg-card rounded-lg border border-border p-4 ${
-                  isOp ? "ring-2 ring-primary/20" : ""
+                className={`bg-card/80 rounded-2xl border border-border/70 p-4 sm:p-5 ${
+                  isOp ? "ring-1 ring-primary/25 shadow-md" : ""
                 }`}
               >
                 <div className="flex items-start gap-3">
@@ -624,21 +624,21 @@ export default async function ThreadPage({
           return (
             <div className="flex items-center justify-center gap-2 mt-6 mb-2 text-sm">
               {page > 1 && (
-                <Link href={`/forum/thread/${thread.slug}?page=${page - 1}`} className="px-3 py-1.5 rounded-md bg-secondary hover:bg-secondary/70">← Earlier replies</Link>
+                <Link href={`/forum/thread/${thread.slug}?page=${page - 1}`} className="px-4 py-1.5 rounded-full bg-secondary hover:bg-secondary/70 transition-colors">← Earlier replies</Link>
               )}
               <span className="text-muted-foreground">Page {page} of {totalPages}</span>
               {page < totalPages && (
-                <Link href={`/forum/thread/${thread.slug}?page=${page + 1}`} className="px-3 py-1.5 rounded-md bg-secondary hover:bg-secondary/70">Later replies →</Link>
+                <Link href={`/forum/thread/${thread.slug}?page=${page + 1}`} className="px-4 py-1.5 rounded-full bg-secondary hover:bg-secondary/70 transition-colors">Later replies →</Link>
               )}
             </div>
           )
         })()}
 
         {relatedThreads.length > 0 && (
-          <div className="mt-6 bg-card rounded-lg border border-border p-4">
+          <div className="mt-6 bg-card/80 rounded-2xl border border-border/70 p-5">
             <div className="flex items-center gap-2 mb-3">
-              <MessageSquare className="w-3.5 h-3.5 text-primary" />
-              <h2 className="text-base font-semibold">Related discussions</h2>
+              <MessageSquare className="w-3.5 h-3.5 text-spectrum" />
+              <h2 className="font-display text-base font-semibold">Related discussions</h2>
             </div>
             <ul className="space-y-2">
               {relatedThreads.map((t) => (
@@ -663,7 +663,7 @@ export default async function ThreadPage({
           <ReplyForm threadId={thread.id} wasFollowing={following} />
         )}
         {thread.locked && (
-          <div className="mt-6 p-4 bg-secondary/50 rounded-lg text-sm text-muted-foreground text-center">
+          <div className="mt-6 p-4 bg-secondary/50 rounded-2xl text-sm text-muted-foreground text-center">
             This thread is locked. No new replies can be posted.
           </div>
         )}

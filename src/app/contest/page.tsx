@@ -42,7 +42,8 @@ export default async function ContestPage() {
     <div className="min-h-screen bg-background">
       <div className="max-w-5xl mx-auto px-4 py-8">
         <div className="mb-8">
-          <h1 className="text-3xl font-bold mb-2 flex items-center gap-3">
+          <span className="tt-eyebrow">Weekly showdown</span>
+          <h1 className="font-display text-3xl sm:text-4xl font-bold mt-1.5 mb-2 flex items-center gap-3 tracking-tight">
             <Trophy className="w-8 h-8 text-amber-500" /> Budshot of the Week
           </h1>
           <p className="text-muted-foreground">

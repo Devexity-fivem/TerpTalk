@@ -195,15 +195,15 @@ export default function SignUpPage() {
       <div className="max-w-md w-full">
         <div className="text-center mb-8">
           <div className="flex justify-center mb-4">
-            <div className="bg-primary/10 p-3 rounded-full">
+            <div className="bg-primary/10 ring-1 ring-primary/20 p-3 rounded-full shadow-md">
               <Leaf className="w-8 h-8 text-primary" />
             </div>
           </div>
-          <h1 className="text-2xl font-bold">Join TerpTalk</h1>
+          <h1 className="font-display text-3xl font-bold tracking-tight">Join TerpTalk</h1>
           <p className="text-muted-foreground mt-2">Create your account — 21+ only</p>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="tt-glass rounded-2xl border border-border/70 p-6 space-y-4">
           <div>
             <label htmlFor="referralCode" className="block text-sm font-medium mb-2">
               Referral Username <span className="text-muted-foreground">(optional)</span>
@@ -213,7 +213,7 @@ export default function SignUpPage() {
               type="text"
               value={formData.referralCode}
               onChange={(e) => setFormData({ ...formData, referralCode: e.target.value })}
-              className="w-full px-4 py-2 rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary"
+              className="w-full px-4 py-2.5 rounded-xl border border-border/70 bg-background focus:outline-none focus:ring-2 focus:ring-primary/60 focus:border-primary/50 transition-colors"
               placeholder="Who invited you?"
               maxLength={20}
             />
@@ -229,7 +229,7 @@ export default function SignUpPage() {
               required
               value={formData.username}
               onChange={(e) => setFormData({ ...formData, username: e.target.value })}
-              className="w-full px-4 py-2 rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary"
+              className="w-full px-4 py-2.5 rounded-xl border border-border/70 bg-background focus:outline-none focus:ring-2 focus:ring-primary/60 focus:border-primary/50 transition-colors"
               placeholder="Choose a username"
               minLength={3}
               maxLength={20}
@@ -246,7 +246,7 @@ export default function SignUpPage() {
               required
               value={formData.password}
               onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-              className="w-full px-4 py-2 rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary"
+              className="w-full px-4 py-2.5 rounded-xl border border-border/70 bg-background focus:outline-none focus:ring-2 focus:ring-primary/60 focus:border-primary/50 transition-colors"
               placeholder="Minimum 8 characters"
             />
           </div>
@@ -261,7 +261,7 @@ export default function SignUpPage() {
               required
               value={formData.confirmPassword}
               onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
-              className="w-full px-4 py-2 rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary"
+              className="w-full px-4 py-2.5 rounded-xl border border-border/70 bg-background focus:outline-none focus:ring-2 focus:ring-primary/60 focus:border-primary/50 transition-colors"
               placeholder="Confirm your password"
             />
           </div>
@@ -296,7 +296,7 @@ export default function SignUpPage() {
                 required
                 value={captchaAnswer}
                 onChange={(e) => setCaptchaAnswer(e.target.value)}
-                className="w-full px-4 py-2 rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary"
+                className="w-full px-4 py-2.5 rounded-xl border border-border/70 bg-background focus:outline-none focus:ring-2 focus:ring-primary/60 focus:border-primary/50 transition-colors"
                 placeholder="Enter the answer"
                 autoComplete="off"
               />
@@ -324,13 +324,13 @@ export default function SignUpPage() {
             <Link href="/privacy" className="text-primary hover:underline">Privacy Policy</Link>.
           </p>
 
-          <p className="text-xs text-muted-foreground bg-secondary/50 border border-border rounded-lg px-3 py-2">
+          <p className="text-xs text-muted-foreground bg-secondary/50 border border-border/70 rounded-xl px-3 py-2">
             We never ask for your email. After signup you&apos;ll get a recovery phrase —{" "}
             <strong className="text-foreground">it&apos;s the only way back in</strong> if you forget your password. Write it down and keep it safe.
           </p>
 
           {error && (
-            <div className="bg-destructive/10 text-destructive px-4 py-2 rounded-lg text-sm">
+            <div className="bg-destructive/10 text-destructive px-4 py-2.5 rounded-xl text-sm">
               {error}
             </div>
           )}
@@ -338,7 +338,7 @@ export default function SignUpPage() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-primary text-primary-foreground py-3 rounded-lg font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            className="tt-cta w-full py-3 rounded-full font-semibold text-primary-foreground transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >
             {loading ? (
               <>

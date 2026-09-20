@@ -62,25 +62,22 @@ export default function LiveStats({ initial }: { initial: Stats }) {
     }
   }, [])
 
+  const num = "font-display text-3xl sm:text-4xl font-bold mb-1 tabular-nums text-transparent bg-clip-text bg-gradient-to-br from-primary to-spectrum"
+  const label = "text-xs sm:text-sm font-medium text-muted-foreground uppercase tracking-wider"
+
   return (
     <div className="grid grid-cols-3 gap-4 sm:gap-8">
       <div className="text-center">
-        <div className="text-3xl sm:text-4xl font-bold text-primary mb-1 tabular-nums">
-          {stats.members.toLocaleString()}
-        </div>
-        <div className="text-sm text-muted-foreground uppercase tracking-wide">Members</div>
+        <div className={num}>{stats.members.toLocaleString()}</div>
+        <div className={label}>Members</div>
       </div>
       <div className="text-center">
-        <div className="text-3xl sm:text-4xl font-bold text-primary mb-1 tabular-nums">
-          {stats.diaries.toLocaleString()}
-        </div>
-        <div className="text-sm text-muted-foreground uppercase tracking-wide">Grow Diaries</div>
+        <div className={num}>{stats.diaries.toLocaleString()}</div>
+        <div className={label}>Grow Diaries</div>
       </div>
       <div className="text-center">
-        <div className="text-3xl sm:text-4xl font-bold text-primary mb-1 tabular-nums">
-          {stats.discussions.toLocaleString()}
-        </div>
-        <div className="text-sm text-muted-foreground uppercase tracking-wide">Discussions</div>
+        <div className={num}>{stats.discussions.toLocaleString()}</div>
+        <div className={label}>Discussions</div>
       </div>
     </div>
   )

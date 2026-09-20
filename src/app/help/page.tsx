@@ -11,8 +11,8 @@ type QA = { q: string; a: React.ReactNode }
 function Section({ title, items }: { title: string; items: QA[] }) {
   return (
     <section>
-      <h2 className="text-lg font-semibold text-foreground mb-2">{title}</h2>
-      <div className="bg-card rounded-lg border border-border divide-y divide-border">
+      <h2 className="font-display text-lg font-semibold text-foreground mb-2">{title}</h2>
+      <div className="bg-card/80 rounded-2xl border border-border/70 divide-y divide-border/60">
         {items.map(({ q, a }) => (
           <details key={q} className="group p-4">
             <summary className="cursor-pointer font-medium text-sm text-foreground list-none flex items-center justify-between gap-3">
@@ -218,7 +218,7 @@ export default function HelpPage() {
       <div className="max-w-3xl mx-auto px-4 py-10">
         <div className="flex items-center gap-3 mb-2">
           <HelpCircle className="w-7 h-7 text-primary" />
-          <h1 className="text-3xl font-bold">Help Center</h1>
+          <h1 className="font-display text-3xl font-bold tracking-tight">Help Center</h1>
         </div>
         <p className="text-muted-foreground mb-8">
           How TerpTalk works — accounts, posting, diaries, chat, reputation, privacy, and moderation.
@@ -228,7 +228,7 @@ export default function HelpPage() {
 
         <Link
           href="/plant-doctor"
-          className="flex items-center gap-3 mb-8 bg-card border border-border rounded-lg p-4 hover:border-primary/40 transition-colors"
+          className="tt-edge-card flex items-center gap-3 mb-8 bg-card/80 border border-border/70 rounded-2xl p-4 hover:border-primary/40 transition-all"
         >
           <Stethoscope className="w-6 h-6 text-primary shrink-0" />
           <div>

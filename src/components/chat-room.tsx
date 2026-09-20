@@ -987,7 +987,7 @@ export default function ChatRoom({ embedded = false, headerActions }: ChatRoomPr
       <div className={cn(
         "flex-1 min-w-0 flex flex-col bg-card overflow-hidden",
         // The panel provides its own frame — no double card chrome inside.
-        !embedded && "rounded-xl border border-border"
+        !embedded && "rounded-2xl border border-border/70"
       )}>
         <div className="flex items-center gap-2 px-2 py-1.5 border-b border-border shrink-0">
           <div className="relative min-w-0" ref={pickerRef}>
@@ -1291,7 +1291,7 @@ export default function ChatRoom({ embedded = false, headerActions }: ChatRoomPr
                         ? `Reply to ${replyingTo.author.username || replyingTo.author.name}...`
                         : `Message ${room.name}... try @terpbot or /help`
                 }
-                className="flex-1 px-3 py-2 rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-ring text-sm"
+                className="flex-1 px-4 py-2 rounded-full border border-border/70 bg-background focus:outline-none focus:ring-2 focus:ring-primary/60 focus:border-primary/50 text-sm transition-colors"
                 disabled={!room || sending || (room?.locked && !isStaff)}
                 value={inputValue}
                 onChange={(e) => handleInputChange(e.target.value, e.target.selectionStart ?? e.target.value.length)}
@@ -1336,7 +1336,7 @@ export default function ChatRoom({ embedded = false, headerActions }: ChatRoomPr
                   type="submit"
                   disabled={!room || sending || (room?.locked && !isStaff)}
                   aria-label="Send message"
-                  className="bg-primary text-primary-foreground p-2 rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="tt-cta text-primary-foreground p-2.5 rounded-full transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {sending ? (
                     <Loader2 className="w-4 h-4 animate-spin" />

@@ -37,13 +37,13 @@ function ChatInner() {
       <div className="min-h-screen bg-background flex items-center justify-center px-4">
         <div className="text-center max-w-sm">
           <MessageCircle className="w-10 h-10 text-primary mx-auto mb-3" />
-          <h1 className="text-xl font-bold mb-2">Community Chat</h1>
+          <h1 className="font-display text-2xl font-bold mb-2 tracking-tight">Community Chat</h1>
           <p className="text-sm text-muted-foreground mb-4">
             Sign in to join the live conversation — and meet TerpBot, our community assistant.
           </p>
           <Link
             href={signInHref("/chat")}
-            className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
+            className="tt-cta inline-flex items-center gap-2 rounded-full px-5 py-2.5 text-sm font-semibold text-primary-foreground transition-all"
           >
             Sign in to chat
           </Link>

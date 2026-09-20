@@ -39,7 +39,7 @@ export default function CreateMenu() {
     <div ref={ref} className="relative">
       <button
         onClick={() => setOpen(!open)}
-        className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
+        className="tt-cta inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-semibold text-primary-foreground transition-all"
         aria-label="Create"
         aria-expanded={open}
         aria-haspopup="menu"
@@ -50,7 +50,7 @@ export default function CreateMenu() {
       {open && (
         <div
           role="menu"
-          className="absolute right-0 z-50 mt-2 w-56 rounded-xl border border-border bg-card p-1.5 shadow-lg"
+          className="absolute right-0 z-50 mt-2 w-56 rounded-2xl border border-border/70 tt-glass p-1.5 shadow-lg"
         >
           {OPTIONS.map((opt) => (
             <Link

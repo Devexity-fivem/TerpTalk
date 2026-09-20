@@ -157,25 +157,26 @@ export function Navigation() {
 
   const linkClass = (href: string) =>
     cn(
-      "flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+      "flex items-center gap-1.5 rounded-xl px-3 py-2 text-sm font-medium transition-colors",
       isActive(href)
-        ? "bg-primary/10 text-primary"
+        ? "bg-primary/12 text-primary ring-1 ring-inset ring-primary/25"
         : "text-muted-foreground hover:bg-secondary hover:text-foreground"
     )
 
   return (
     <>
-      <nav id="tt-top-nav" className="sticky top-0 z-50 border-b border-border bg-card/95 backdrop-blur">
-        <div className="mx-auto max-w-7xl px-3 sm:px-6 lg:px-8">
-          <div className="flex h-16 items-center justify-between gap-2">
+      <nav id="tt-top-nav" className="sticky top-2 z-50 px-2 sm:top-3 sm:px-3 lg:px-4">
+        <div className="tt-glass relative mx-auto max-w-7xl rounded-2xl border border-border/60 shadow-lg shadow-black/5">
+          <div className="tt-spectrum-bar absolute inset-x-8 bottom-0 h-[2px] rounded-full opacity-50" />
+          <div className="flex h-14 items-center justify-between gap-2 px-3 sm:h-16 sm:px-4">
             {/* Logo — compact below sm so the header fits 320px devices. */}
             <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
               <Tooltip content="Go to homepage" side="bottom">
                 <Link href="/" className="flex items-center gap-1.5 sm:gap-2" aria-label="TerpTalk home">
-                  <div className="rounded-xl bg-primary/15 p-1.5 ring-1 ring-primary/30 sm:p-2">
+                  <div className="tt-brand-tile rounded-full p-1.5 sm:p-2">
                     <CannabisLeaf className="h-5 w-5 text-primary sm:h-6 sm:w-6" />
                   </div>
-                  <span className="text-base font-bold tracking-tight sm:text-lg">TerpTalk</span>
+                  <span className="font-display text-base font-bold tracking-tight sm:text-lg">TerpTalk</span>
                 </Link>
               </Tooltip>
             </div>
@@ -292,7 +293,7 @@ export function Navigation() {
                   </Link>
                   <Link
                     href="/auth/signup"
-                    className="rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+                    className="tt-cta rounded-full px-4 py-2 text-sm font-semibold text-primary-foreground transition-all"
                   >
                     Sign Up
                   </Link>
@@ -342,10 +343,10 @@ export function Navigation() {
           </div>
         </div>
 
-        {/* Drawer */}
+        {/* Drawer — a second floating panel docked under the pill */}
         {menuOpen && (
-          <div id="tt-nav-drawer" className="max-h-[calc(100vh-4rem)] overflow-y-auto border-t border-border bg-card">
-            <div className="mx-auto grid max-w-7xl auto-rows-min grid-cols-1 gap-6 px-4 py-3 md:grid-cols-2 lg:grid-cols-3">
+          <div id="tt-nav-drawer" className="tt-glass animate-in mx-auto mt-2 max-h-[calc(100vh-6.5rem)] max-w-7xl overflow-y-auto rounded-2xl border border-border/60 shadow-xl">
+            <div className="grid auto-rows-min grid-cols-1 gap-6 px-4 py-4 md:grid-cols-2 lg:grid-cols-3">
               <form
                 action="/search"
                 onSubmit={(e) => {

@@ -24,14 +24,17 @@ export default function GrowLightCalculatorPage() {
     <div className="min-h-screen bg-background px-4 py-12">
       <div className="max-w-3xl mx-auto">
         <div className="flex justify-center mb-6">
-          <div className="bg-primary/10 p-4 rounded-2xl ring-1 ring-primary/30">
+          <div className="tt-brand-tile p-4 rounded-2xl">
             <CannabisLeaf className="w-12 h-12 text-primary" />
           </div>
         </div>
-        <h1 className="text-3xl sm:text-4xl font-bold text-center mb-2">Grow Light Cost Calculator</h1>
-        <p className="text-center text-muted-foreground mb-10 max-w-xl mx-auto">
-          Estimate how much it costs to run your grow lights. Plug in your wattage, schedule, and local kWh rate.
-        </p>
+        <div className="text-center mb-10">
+          <span className="tt-eyebrow">Know your burn</span>
+          <h1 className="font-display text-3xl sm:text-4xl font-bold mt-2 mb-2 tracking-tight">Grow Cost Calculator</h1>
+          <p className="text-muted-foreground max-w-xl mx-auto">
+            Estimate the electricity cost of running your grow setup. Enter the total wattage of everything that draws power, your schedule, and your local kWh rate.
+          </p>
+        </div>
 
         <div className="bg-card border border-border rounded-2xl p-6 sm:p-8 mb-8">
           <div className="grid sm:grid-cols-2 gap-6">
@@ -48,7 +51,7 @@ export default function GrowLightCalculatorPage() {
                 onChange={(e) => setWatts(Number(e.target.value) || 0)}
                 className="w-full px-4 py-2.5 rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary"
               />
-              <p className="text-xs text-muted-foreground mt-1.5">Combine all lights in your tent/room.</p>
+              <p className="text-xs text-muted-foreground mt-1.5">Add up everything that draws power — lights, fans, pumps, AC.</p>
             </div>
             <div>
               <label className="block text-sm font-medium mb-2 flex items-center gap-2">
@@ -121,7 +124,7 @@ export default function GrowLightCalculatorPage() {
         </div>
 
         <p className="text-center text-xs text-muted-foreground mt-8">
-          Estimates are for the lights only. Fans, pumps, AC, and other gear are not included.
+          Estimates cover whatever wattage you enter — your whole setup or just the lights.
         </p>
       </div>
     </div>

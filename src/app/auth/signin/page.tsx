@@ -57,15 +57,15 @@ export default function SignInPage() {
       <div className="max-w-md w-full">
         <div className="text-center mb-8">
           <div className="flex justify-center mb-4">
-            <div className="bg-primary/10 p-3 rounded-full">
+            <div className="bg-primary/10 ring-1 ring-primary/20 p-3 rounded-full shadow-md">
               <Leaf className="w-8 h-8 text-primary" />
             </div>
           </div>
-          <h1 className="text-2xl font-bold">Welcome to TerpTalk</h1>
+          <h1 className="font-display text-3xl font-bold tracking-tight">Welcome to TerpTalk</h1>
           <p className="text-muted-foreground mt-2">Sign in to your account</p>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="tt-glass rounded-2xl border border-border/70 p-6 space-y-4">
           <div>
             <label htmlFor="username" className="block text-sm font-medium mb-2">
               Username
@@ -76,7 +76,7 @@ export default function SignInPage() {
               required
               value={formData.username}
               onChange={(e) => setFormData({ ...formData, username: e.target.value })}
-              className="w-full px-4 py-2 rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary"
+              className="w-full px-4 py-2.5 rounded-xl border border-border/70 bg-background focus:outline-none focus:ring-2 focus:ring-primary/60 focus:border-primary/50 transition-colors"
               placeholder="Your username"
             />
           </div>
@@ -91,13 +91,13 @@ export default function SignInPage() {
               required
               value={formData.password}
               onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-              className="w-full px-4 py-2 rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary"
+              className="w-full px-4 py-2.5 rounded-xl border border-border/70 bg-background focus:outline-none focus:ring-2 focus:ring-primary/60 focus:border-primary/50 transition-colors"
               placeholder="Your password"
             />
           </div>
 
           {error && (
-            <div className="bg-destructive/10 text-destructive px-4 py-2 rounded-lg text-sm">
+            <div className="bg-destructive/10 text-destructive px-4 py-2.5 rounded-xl text-sm">
               {error === "restricted" ? (
                 <>
                   Your account is suspended or banned.{" "}
@@ -120,7 +120,7 @@ export default function SignInPage() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-primary text-primary-foreground py-3 rounded-lg font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            className="tt-cta w-full py-3 rounded-full font-semibold text-primary-foreground transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >
             {loading ? (
               <>

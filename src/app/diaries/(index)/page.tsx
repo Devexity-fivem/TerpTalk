@@ -2,7 +2,7 @@ import { prisma } from "@/lib/prisma"
 import { publicUserSelect, activeAuthor } from "@/lib/security"
 import { publicDiaryWhere } from "@/lib/diary-visibility"
 import { unstable_cache } from "next/cache"
-import { Leaf, Calendar, TrendingUp, Users, BarChart3, ChevronLeft, ChevronRight } from "lucide-react"
+import { Leaf, TrendingUp, Users, BarChart3, ChevronLeft, ChevronRight, Dna } from "lucide-react"
 import { getCommunityGrowStats, type Distribution } from "@/lib/community-stats"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
@@ -40,6 +40,7 @@ const getDiaries = unstable_cache(
         ],
         include: {
           author: { select: publicUserSelect },
+          strainRef: { select: { name: true } },
           // Latest update's first photo becomes the card cover.
           updates: {
             take: 1,
@@ -61,6 +62,7 @@ const getDiaries = unstable_cache(
             orderBy: { createdAt: "desc" },
             include: {
               author: { select: publicUserSelect },
+              strainRef: { select: { name: true } },
               updates: {
                 take: 1,
                 orderBy: { createdAt: "desc" },
@@ -99,12 +101,24 @@ function DistLine({ label, dist }: { label: string; dist: Distribution }) {
 
 type DiaryCardData = Awaited<ReturnType<typeof getDiaries>>["diaries"][number]
 
+// Lifecycle order — the segmented progress track renders the diary's
+// position seed → cure. Current segment glows violet (the LED spectrum),
+// completed segments stay emerald.
+const STAGE_ORDER = ["GERMINATION", "SEEDLING", "VEGETATIVE", "FLOWER", "HARVEST", "DRYING", "CURING", "COMPLETED"] as const
+const STAGE_LABEL: Record<string, string> = {
+  GERMINATION: "Germination", SEEDLING: "Seedling", VEGETATIVE: "Veg",
+  FLOWER: "Flower", HARVEST: "Harvest", DRYING: "Drying", CURING: "Curing", COMPLETED: "Done",
+}
+
 function DiaryCard({ diary, showFeatured = false }: { diary: DiaryCardData; showFeatured?: boolean }) {
   const authorName = diary.author.profile?.username || diary.author.name
+  const week = diary.updates[0]?.weekNumber
+  const stageIdx = Math.max(0, STAGE_ORDER.indexOf(diary.stage as (typeof STAGE_ORDER)[number]))
+  const strainName = diary.strainRef?.name || diary.strain
   return (
-    <div className="bg-card rounded-lg border border-border overflow-hidden hover:border-primary/50 transition-colors">
-      <Link href={diaryPath(diary)} className="block">
-        <div className="aspect-video bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center overflow-hidden">
+    <div className="group bg-card rounded-2xl border border-border/70 overflow-hidden tt-lift hover:border-primary/50">
+      <Link href={diaryPath(diary)} className="block relative">
+        <div className="aspect-[16/10] bg-gradient-to-br from-primary/15 via-secondary to-spectrum/10 flex items-center justify-center overflow-hidden">
           {diary.updates[0]?.images[0]?.url ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
@@ -112,32 +126,74 @@ function DiaryCard({ diary, showFeatured = false }: { diary: DiaryCardData; show
               alt=""
               loading="lazy"
               decoding="async"
-              className="w-full h-full object-cover"
+              className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
             />
           ) : (
             <Leaf className="w-10 h-10 text-primary/30" />
           )}
+          <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-black/55 to-transparent" />
         </div>
-      </Link>
-      <div className="p-4">
-        <div className="flex items-center gap-2 mb-2 flex-wrap">
+        {/* Overlay chips — stage + week badge, grow type, featured */}
+        <div className="absolute left-3 top-3 flex gap-1.5">
+          <span className="rounded-full bg-black/55 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-white backdrop-blur-sm">
+            {STAGE_LABEL[diary.stage] ?? diary.stage}{week != null && ` · Wk ${week}`}
+          </span>
           {(showFeatured || diary.featured) && (
-            <span className="text-xs text-primary px-2 py-1 bg-primary/10 rounded">
+            <span className="rounded-full bg-amber-500/85 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-black backdrop-blur-sm">
               Featured
             </span>
           )}
-          <span className="text-xs text-primary px-2 py-1 bg-primary/10 rounded">
-            {diary.growType}
-          </span>
-          <span className="text-xs text-muted-foreground px-2 py-1 bg-secondary rounded">
-            {diary.stage}
-          </span>
         </div>
+        <span className="absolute right-3 top-3 rounded-full bg-black/55 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-white backdrop-blur-sm">
+          {diary.growType}
+        </span>
+      </Link>
+      <div className="p-4">
         <Link href={diaryPath(diary)} className="hover:text-primary transition-colors">
-          <h3 className="font-semibold mb-1">{diary.title}</h3>
+          <h3 className="font-display font-semibold mb-1 line-clamp-1">{diary.title}</h3>
         </Link>
-        <p className="text-sm text-muted-foreground mb-3 line-clamp-2">{diary.description}</p>
-        <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground flex-wrap">
+        {strainName && (
+          <div className="mb-1.5 flex items-center gap-1.5 text-xs">
+            <Dna className="h-3 w-3 shrink-0 text-spectrum" />
+            <span className="truncate font-medium text-primary">{strainName}</span>
+            {diary.harvested && diary.harvestRating != null && (
+              <span className="ml-auto shrink-0 rounded-full bg-amber-500/10 px-2 py-0.5 font-semibold text-amber-500">
+                ★ {diary.harvestRating}/10
+              </span>
+            )}
+          </div>
+        )}
+        {diary.techniques.length > 0 && (
+          <div className="mb-3 flex flex-wrap gap-1">
+            {diary.techniques.slice(0, 4).map((t) => (
+              <span key={t} className="rounded bg-secondary px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                {t}
+              </span>
+            ))}
+          </div>
+        )}
+        {/* Lifecycle progress — where this grow sits seed → cure */}
+        <div className="mb-3">
+          <div className="flex gap-0.5" aria-label={`Stage: ${STAGE_LABEL[diary.stage] ?? diary.stage}`}>
+            {STAGE_ORDER.map((s, i) => (
+              <span
+                key={s}
+                className={
+                  i < stageIdx
+                    ? "h-1 flex-1 rounded-full bg-primary/70"
+                    : i === stageIdx
+                      ? "h-1 flex-1 rounded-full bg-spectrum"
+                      : "h-1 flex-1 rounded-full bg-secondary"
+                }
+              />
+            ))}
+          </div>
+          <div className="mt-1.5 flex items-center justify-between text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+            <span>{STAGE_LABEL[diary.stage] ?? diary.stage}</span>
+            <span>{diary._count.updates} update{diary._count.updates === 1 ? "" : "s"}</span>
+          </div>
+        </div>
+        <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground flex-wrap border-t border-border/50 pt-3">
           <span className="flex items-center gap-1 min-w-0">
             <Users className="w-3 h-3 shrink-0" />
             <Link href={`/u/${authorName}`} className="truncate hover:text-foreground hover:underline">
@@ -146,10 +202,11 @@ function DiaryCard({ diary, showFeatured = false }: { diary: DiaryCardData; show
             <RoleBadge role={diary.author.role} />
             <TierChip reputation={diary.author.profile?.reputation ?? 0} publicMilestoneOptOut={diary.author.profile?.publicMilestoneOptOut} />
           </span>
-          <span className="flex items-center gap-1 shrink-0">
-            <Calendar className="w-3 h-3" />
-            {diary._count.updates} updates
-          </span>
+          {diary._count.followers > 0 && (
+            <span className="flex items-center gap-1 shrink-0">
+              {diary._count.followers} follower{diary._count.followers === 1 ? "" : "s"}
+            </span>
+          )}
         </div>
       </div>
     </div>
@@ -185,12 +242,13 @@ export default async function DiariesPage({
       <div className="max-w-7xl mx-auto px-4 py-8">
         {/* Header */}
         <div className="mb-6">
-          <h1 className="text-2xl font-bold mb-1">Grow Diaries</h1>
+          <span className="tt-eyebrow">Seed to harvest</span>
+          <h1 className="font-display text-3xl font-bold mt-1.5 mb-1 tracking-tight">Grow Diaries</h1>
           <p className="text-sm text-muted-foreground">Document and share your complete grow journey from seed to harvest</p>
         </div>
 
         {/* Community grow data — aggregate-only stats, descriptive wording */}
-        <div className="bg-card rounded-xl border border-border p-5 mb-6">
+        <div className="bg-card/80 rounded-2xl border border-border/70 p-5 mb-6 tt-edge-card">
           <div className="flex items-center gap-2 mb-4 flex-wrap">
             <BarChart3 className="w-4 h-4 text-primary" />
             <h2 className="font-semibold">Community grow data</h2>
@@ -264,8 +322,8 @@ export default async function DiariesPage({
         {/* Featured Diaries — page 1 only */}
         {featured.length > 0 && (
           <div className="mb-6">
-            <h2 className="text-lg font-semibold mb-3 flex items-center gap-2">
-              <TrendingUp className="w-4 h-4 text-primary" />
+            <h2 className="font-display text-lg font-semibold mb-3 flex items-center gap-2">
+              <TrendingUp className="w-4 h-4 text-spectrum" />
               Featured Diaries
             </h2>
             <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -278,11 +336,14 @@ export default async function DiariesPage({
 
         {/* All Diaries */}
         <div>
-          <div className="flex justify-between items-center mb-3 gap-3 flex-wrap">
-            <h2 className="text-lg font-semibold">All Diaries</h2>
+          <div className="flex justify-between items-center mb-4 gap-3 flex-wrap">
+            <div>
+              <span className="tt-eyebrow">The journal wall</span>
+              <h2 className="font-display text-xl font-semibold mt-1">All Diaries</h2>
+            </div>
             <Link
               href="/diaries/new"
-              className="bg-primary text-primary-foreground px-4 py-2 rounded-lg hover:bg-primary/90 transition-colors text-sm"
+              className="tt-cta rounded-full px-5 py-2.5 text-sm font-semibold text-primary-foreground transition-all"
             >
               Start New Diary
             </Link>
@@ -309,7 +370,7 @@ export default async function DiariesPage({
                   {page > 1 ? (
                     <Link
                       href={pageHref(page - 1)}
-                      className="inline-flex items-center gap-1 px-4 py-2 rounded-lg bg-card border border-border text-sm font-medium hover:border-primary/40 transition-colors"
+                      className="inline-flex items-center gap-1 px-4 py-2 rounded-full bg-card border border-border text-sm font-medium hover:border-primary/40 transition-colors"
                     >
                       <ChevronLeft className="w-4 h-4" /> Previous
                     </Link>
@@ -322,7 +383,7 @@ export default async function DiariesPage({
                   {page < totalPages ? (
                     <Link
                       href={pageHref(page + 1)}
-                      className="inline-flex items-center gap-1 px-4 py-2 rounded-lg bg-card border border-border text-sm font-medium hover:border-primary/40 transition-colors"
+                      className="inline-flex items-center gap-1 px-4 py-2 rounded-full bg-card border border-border text-sm font-medium hover:border-primary/40 transition-colors"
                     >
                       Next <ChevronRight className="w-4 h-4" />
                     </Link>

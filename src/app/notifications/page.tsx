@@ -237,7 +237,7 @@ export default function NotificationsPage() {
         <div className="mb-6 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <Bell className="h-6 w-6 text-primary" />
-            <h1 className="text-2xl font-bold">Notifications</h1>
+            <h1 className="font-display text-2xl font-bold tracking-tight">Notifications</h1>
             {unread > 0 && (
               <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-medium text-primary" aria-live="polite">
                 {unread} new
@@ -278,7 +278,7 @@ export default function NotificationsPage() {
           </div>
         </div>
 
-        <ul className="divide-y divide-border rounded-lg border border-border bg-card" aria-label="Notifications">
+        <ul className="divide-y divide-border/60 rounded-2xl border border-border/70 bg-card/80" aria-label="Notifications">
           {notifications.length === 0 && (
             <li className="list-none">
               <EmptyState
@@ -370,7 +370,7 @@ export default function NotificationsPage() {
             <button
               onClick={loadMore}
               disabled={loadingMore}
-              className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground disabled:opacity-50"
+              className="rounded-full border border-border/70 px-4 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground disabled:opacity-50"
             >
               {loadingMore ? <Loader2 className="inline h-4 w-4 animate-spin" /> : "Load older notifications"}
             </button>

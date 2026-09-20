@@ -134,7 +134,8 @@ export default async function CategoryPage({
         <div className="mb-6">
           <div className="flex items-start justify-between gap-4 flex-wrap">
             <div>
-              <h1 className="text-2xl font-bold mb-1">{category.name}</h1>
+              <span className="tt-eyebrow">Category</span>
+              <h1 className="font-display text-3xl font-bold mt-1.5 mb-1 tracking-tight">{category.name}</h1>
               <p className="text-sm text-muted-foreground">{category.description}</p>
             </div>
             <CategoryFollowButton categoryId={category.id} initiallyFollowing={isFollowing} />
@@ -143,9 +144,9 @@ export default async function CategoryPage({
 
         {/* Related guides for this category's topics */}
         {category.guides.length > 0 && (
-          <div className="bg-card rounded-lg border border-border p-4 mb-6">
+          <div className="bg-card/80 rounded-2xl border border-border/70 p-4 mb-6">
             <div className="flex items-center gap-2 mb-3">
-              <BookOpen className="w-4 h-4 text-primary" />
+              <BookOpen className="w-4 h-4 text-spectrum" />
               <h2 className="font-semibold text-sm">Related Guides</h2>
             </div>
             <div className="grid sm:grid-cols-2 gap-2">
@@ -153,7 +154,7 @@ export default async function CategoryPage({
                 <Link
                   key={g.slug}
                   href={`/guides/${g.slug}`}
-                  className="text-sm p-2 rounded-md hover:bg-secondary/50 transition-colors"
+                  className="text-sm p-2.5 rounded-xl hover:bg-secondary/50 transition-colors"
                 >
                   <span className="font-medium text-primary line-clamp-1">{g.title}</span>
                   {g.excerpt && <span className="block text-xs text-muted-foreground line-clamp-1 mt-0.5">{g.excerpt}</span>}
@@ -164,21 +165,21 @@ export default async function CategoryPage({
         )}
 
         {/* Threads List */}
-        <div className="bg-card rounded-lg border border-border">
-          <div className="p-4 border-b border-border flex flex-wrap gap-2 items-center justify-between">
-            <div className="flex gap-2">
+        <div className="bg-card/80 rounded-2xl border border-border/70 overflow-hidden">
+          <div className="p-4 border-b border-border/60 flex flex-wrap gap-2 items-center justify-between">
+            <div className="flex gap-1.5 p-1 rounded-full bg-secondary/60">
               <Link
                 href={`/forum/category/${category.slug}`}
-                className={`px-3 py-1.5 rounded-md text-sm transition-colors ${
-                  !unanswered ? "bg-primary text-primary-foreground" : "bg-secondary hover:bg-secondary/80"
+                className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                  !unanswered ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"
                 }`}
               >
                 All
               </Link>
               <Link
                 href={`/forum/category/${category.slug}?filter=unanswered`}
-                className={`px-3 py-1.5 rounded-md text-sm transition-colors ${
-                  unanswered ? "bg-primary text-primary-foreground" : "bg-secondary hover:bg-secondary/80"
+                className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                  unanswered ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"
                 }`}
               >
                 Unanswered
@@ -186,7 +187,7 @@ export default async function CategoryPage({
             </div>
             <Link
               href={`/forum/new?category=${category.slug}`}
-              className="bg-primary text-primary-foreground px-4 py-2 rounded-lg hover:bg-primary/90 transition-colors text-sm"
+              className="tt-cta rounded-full px-5 py-2 text-sm font-semibold text-primary-foreground transition-all"
             >
               New Discussion
             </Link>
@@ -199,18 +200,18 @@ export default async function CategoryPage({
               <p className="text-sm text-muted-foreground mb-3">Be the first to start a discussion in this category!</p>
               <Link
                 href={`/forum/new?category=${category.slug}`}
-                className="bg-primary text-primary-foreground px-6 py-2 rounded-lg hover:bg-primary/90 transition-colors"
+                className="tt-cta inline-block rounded-full px-6 py-2.5 font-semibold text-primary-foreground transition-all"
               >
                 Create First Discussion
               </Link>
             </div>
           ) : (
-            <div className="divide-y divide-border">
+            <div className="divide-y divide-border/60">
               {category.threads.map((thread) => (
                 <Link
                   key={thread.id}
                   href={`/forum/thread/${thread.slug}`}
-                  className="block p-4 hover:bg-secondary/50 transition-colors"
+                  className="tt-edge-card block p-4 hover:bg-secondary/50 transition-colors"
                 >
                   <div className="flex items-start gap-4">
                     <div className="flex-1">
@@ -266,13 +267,13 @@ export default async function CategoryPage({
             const totalPages = Math.ceil(category._count.threads / THREADS_PER_PAGE)
             if (totalPages <= 1) return null
             return (
-              <div className="flex items-center justify-center gap-2 p-4 text-sm border-t border-border">
+              <div className="flex items-center justify-center gap-2 p-4 text-sm border-t border-border/60">
                 {page > 1 && (
-                  <Link href={`/forum/category/${category.slug}?page=${page - 1}${unanswered ? "&filter=unanswered" : ""}`} className="px-3 py-1.5 rounded-md bg-secondary hover:bg-secondary/70">← Previous</Link>
+                  <Link href={`/forum/category/${category.slug}?page=${page - 1}${unanswered ? "&filter=unanswered" : ""}`} className="px-4 py-1.5 rounded-full bg-secondary hover:bg-secondary/70 transition-colors">← Previous</Link>
                 )}
                 <span className="text-muted-foreground">Page {page} of {totalPages}</span>
                 {page < totalPages && (
-                  <Link href={`/forum/category/${category.slug}?page=${page + 1}${unanswered ? "&filter=unanswered" : ""}`} className="px-3 py-1.5 rounded-md bg-secondary hover:bg-secondary/70">Next →</Link>
+                  <Link href={`/forum/category/${category.slug}?page=${page + 1}${unanswered ? "&filter=unanswered" : ""}`} className="px-4 py-1.5 rounded-full bg-secondary hover:bg-secondary/70 transition-colors">Next →</Link>
                 )}
               </div>
             )

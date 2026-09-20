@@ -192,50 +192,124 @@ export default async function Home() {
   ])
   return (
     <div className="flex flex-col min-h-screen bg-background">
-      {/* Hero Section */}
-      <section className="relative overflow-hidden py-24 px-4 sm:px-6 lg:px-8">
-        {/* Glow backdrop */}
+      {/* Hero — asymmetric split: pitch left, live canopy panel right */}
+      <section className="relative overflow-hidden px-4 pb-16 pt-14 sm:px-6 lg:px-8 lg:pb-24 lg:pt-20">
+        {/* Grow-light backdrop — blueprint grid + emerald/violet/amber wash */}
         <div className="pointer-events-none absolute inset-0 -z-10">
-          <div className="absolute left-1/2 top-0 h-[400px] w-[700px] -translate-x-1/2 -translate-y-1/3 rounded-full bg-primary/15 blur-[120px]" />
+          <div className="tt-grid-bg absolute inset-0" />
+          <div className="absolute left-1/2 top-0 h-[440px] w-[780px] -translate-x-1/2 -translate-y-1/3 rounded-full bg-primary/20 blur-[130px]" />
+          <div className="absolute right-[4%] top-24 h-[280px] w-[280px] rounded-full bg-spectrum/20 blur-[110px]" />
+          <div className="absolute left-[6%] top-44 h-[200px] w-[200px] rounded-full bg-accent/15 blur-[100px]" />
         </div>
-        <div className="max-w-7xl mx-auto text-center">
-          <div className="flex justify-center mb-8">
-            <div className="bg-primary/10 p-5 rounded-2xl ring-1 ring-primary/30 shadow-[0_0_40px_-10px] shadow-primary/40">
-              <CannabisLeaf className="w-14 h-14 text-primary" />
+        <div className="mx-auto grid max-w-7xl items-center gap-12 lg:grid-cols-[1.05fr_0.95fr] lg:gap-16">
+          <div className="text-center lg:text-left">
+            <div className="mb-7 inline-flex items-center gap-2 rounded-full border border-primary/25 bg-primary/10 px-4 py-1.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-primary">
+              <CannabisLeaf className="h-3.5 w-3.5" />
+              21+ growers&apos; commons
+            </div>
+            <h1 className="font-display text-5xl sm:text-6xl md:text-7xl font-bold tracking-tight text-foreground mb-6">
+              Grow better,{" "}
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary via-emerald-500 to-spectrum">
+                together.
+              </span>
+            </h1>
+            <p className="text-lg sm:text-xl text-muted-foreground max-w-2xl mx-auto lg:mx-0 mb-4 leading-relaxed">
+              TerpTalk is a 21+ community built around cannabis cultivation. Ask questions, share your grow, compare genetics, troubleshoot problems, and learn from other growers.
+            </p>
+            {/* Primary and secondary actions (session-aware, client-side) */}
+            <HeroCta />
+            {chatTeaser && (
+              <div className="mt-5 flex justify-center lg:justify-start">
+                <ChatTeaser {...chatTeaser} />
+              </div>
+            )}
+          </div>
+
+          {/* Community canopy — a live panel rendered from real site data.
+              Desktop only; the stats strip below covers mobile. */}
+          <div className="relative hidden lg:block">
+            <div className="absolute -inset-6 -z-10 rounded-[2.5rem] bg-primary/10 blur-2xl" />
+            <div className="absolute -right-8 -top-8 -z-10 h-44 w-44 rounded-full bg-spectrum/25 blur-3xl" />
+            <div className="overflow-hidden rounded-3xl border border-border/70 bg-card/80 shadow-2xl backdrop-blur-xl">
+              <div className="tt-spectrum-animated h-1.5" />
+              <div className="p-6 sm:p-7">
+                <div className="mb-5 flex items-center justify-between">
+                  <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                    Community canopy
+                  </span>
+                  <span className="inline-flex items-center gap-1.5 text-xs font-medium text-primary">
+                    <span className="relative flex h-2 w-2">
+                      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-60" />
+                      <span className="relative inline-flex h-2 w-2 rounded-full bg-primary" />
+                    </span>
+                    {active.length} online
+                  </span>
+                </div>
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="rounded-xl bg-secondary/70 px-3 py-4 text-center">
+                    <div className="font-display text-2xl font-bold tabular-nums text-foreground">{stats.members.toLocaleString()}</div>
+                    <div className="mt-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Members</div>
+                  </div>
+                  <div className="rounded-xl bg-secondary/70 px-3 py-4 text-center">
+                    <div className="font-display text-2xl font-bold tabular-nums text-foreground">{stats.diaries.toLocaleString()}</div>
+                    <div className="mt-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Diaries</div>
+                  </div>
+                  <div className="rounded-xl bg-secondary/70 px-3 py-4 text-center">
+                    <div className="font-display text-2xl font-bold tabular-nums text-foreground">{stats.discussions.toLocaleString()}</div>
+                    <div className="mt-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Posts</div>
+                  </div>
+                </div>
+                {trending.length > 0 && (
+                  <div className="mt-6">
+                    <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                      Trending transmission
+                    </div>
+                    <div className="space-y-2">
+                      {trending.slice(0, 2).map((thread) => (
+                        <Link
+                          key={thread.id}
+                          href={`/forum/thread/${thread.slug}`}
+                          className="group flex items-center gap-3 rounded-xl border border-border/60 bg-background/60 px-3.5 py-2.5 transition-colors hover:border-primary/40"
+                        >
+                          <TrendingUp className="h-4 w-4 shrink-0 text-spectrum" />
+                          <span className="min-w-0 flex-1 truncate text-sm font-medium group-hover:text-primary">
+                            {thread.title}
+                          </span>
+                          <span className="shrink-0 text-xs text-muted-foreground">
+                            {thread._count.posts} repl{thread._count.posts === 1 ? "y" : "ies"}
+                          </span>
+                        </Link>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                <div className="mt-6 flex items-center justify-between border-t border-border/50 pt-4 text-[11px] text-muted-foreground">
+                  <span>21+ · pseudonymous · grower-run</span>
+                  <span className="inline-flex items-center gap-1">
+                    <Leaf className="h-3 w-3 text-primary" />
+                    Real growers, real data
+                  </span>
+                </div>
+              </div>
             </div>
           </div>
-          <h1 className="text-4xl sm:text-5xl md:text-6xl font-bold tracking-tight text-foreground mb-6">
-            Welcome to{" "}
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary to-emerald-300">
-              TerpTalk
-            </span>
-          </h1>
-          <p className="text-lg sm:text-xl text-muted-foreground max-w-2xl mx-auto mb-4">
-            A 21+ community built around cannabis cultivation. Ask questions, share your grow, compare genetics, troubleshoot problems, and learn from other growers.
-          </p>
-          {/* Primary and secondary actions (session-aware, client-side) */}
-          <HeroCta />
-          {chatTeaser && (
-            <div className="mt-5 flex justify-center">
-              <ChatTeaser {...chatTeaser} />
-            </div>
-          )}
         </div>
       </section>
 
       {/* Community Stats */}
-      <section className="py-14 px-4 sm:px-6 lg:px-8 border-y border-border bg-secondary/30">
+      <section className="tt-hairline-t py-14 px-4 sm:px-6 lg:px-8 border-y border-border/60 bg-secondary/40">
         <div className="max-w-7xl mx-auto">
           <LiveStats initial={stats} />
         </div>
       </section>
 
       {/* Community Stream */}
-      <section className="py-10 px-4 sm:px-6 lg:px-8 border-y border-border bg-secondary/20">
+      <section className="py-14 px-4 sm:px-6 lg:px-8 border-b border-border/60 bg-secondary/20">
         <div className="max-w-7xl mx-auto">
-          <div className="mb-5 flex items-end justify-between gap-4 flex-wrap">
+          <div className="mb-6 flex items-end justify-between gap-4 flex-wrap">
             <div>
-              <h2 className="text-2xl font-bold mb-1 tracking-tight">The TerpTalk Stream</h2>
+              <span className="tt-eyebrow">Live feed</span>
+              <h2 className="font-display text-3xl font-bold mt-2 mb-1 tracking-tight">The TerpTalk Stream</h2>
               <p className="text-sm text-muted-foreground">
                 Recent discussions, grow updates, and new diaries.
               </p>
@@ -257,7 +331,7 @@ export default async function Home() {
                   <Link
                     key={cat.slug}
                     href={`/forum/category/${cat.slug}`}
-                    className="flex items-center justify-between p-3 bg-card rounded-lg border border-border hover:border-primary/40 transition-colors"
+                    className="flex items-center justify-between p-3 bg-card/80 rounded-xl border border-border/70 hover:border-primary/50 tt-lift tt-edge-card"
                   >
                     <div>
                       <div className="font-medium text-sm">{cat.name}</div>
@@ -287,7 +361,7 @@ export default async function Home() {
                   <Link
                     key={thread.id}
                     href={`/forum/thread/${thread.slug}`}
-                    className="flex items-start gap-3 p-3 bg-card rounded-lg border border-border hover:border-primary/40 transition-colors"
+                    className="flex items-start gap-3 p-3 bg-card/80 rounded-xl border border-border/70 hover:border-primary/50 tt-lift tt-edge-card"
                   >
                     <Avatar src={thread.author.image ?? undefined} size="sm" alt={thread.author.profile?.username ?? thread.author.name ?? undefined} />
                     <div className="flex-1 min-w-0">
@@ -317,7 +391,7 @@ export default async function Home() {
                   <Link
                     key={update.id}
                     href={diaryPath(update.diary)}
-                    className="flex items-start gap-3 p-3 bg-card rounded-lg border border-border hover:border-primary/40 transition-colors"
+                    className="flex items-start gap-3 p-3 bg-card/80 rounded-xl border border-border/70 hover:border-primary/50 tt-lift tt-edge-card"
                   >
                     {update.images[0]?.url ? (
                       // eslint-disable-next-line @next/next/no-img-element
@@ -352,21 +426,27 @@ export default async function Home() {
       {/* Explore Section */}
       <section className="py-20 px-4 sm:px-6 lg:px-8">
         <div className="max-w-7xl mx-auto">
-          <h2 className="text-3xl font-bold text-center mb-3 tracking-tight">Explore the community</h2>
-          <p className="text-center text-muted-foreground mb-10 max-w-xl mx-auto">
-            The main places to grow, discuss, and discover.
-          </p>
+          <div className="text-center mb-10">
+            <span className="tt-eyebrow">Find your corner</span>
+            <h2 className="font-display text-3xl sm:text-4xl font-bold mt-2 mb-3 tracking-tight">Explore the community</h2>
+            <p className="text-muted-foreground max-w-xl mx-auto">
+              The main places to grow, discuss, and discover.
+            </p>
+          </div>
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {EXPLORE_CARDS.map(({ icon: Icon, title, desc, href }) => (
+            {EXPLORE_CARDS.map(({ icon: Icon, title, desc, href }, i) => (
               <Link key={title} href={href} className="block group">
-                <div className="bg-card p-5 rounded-xl border border-border h-full transition-all hover:border-primary/40 hover:-translate-y-1 hover:shadow-lg hover:shadow-primary/10 flex flex-col">
-                  <div className="bg-primary/10 w-10 h-10 rounded-lg flex items-center justify-center mb-3 ring-1 ring-primary/20">
+                <div className="relative bg-card/80 p-5 rounded-2xl border border-border/70 h-full tt-lift hover:border-primary/50 flex flex-col overflow-hidden">
+                  <span className="absolute right-4 top-4 font-display text-xs font-bold text-muted-foreground/40 tabular-nums">
+                    {String(i + 1).padStart(2, "0")}
+                  </span>
+                  <div className="tt-brand-tile w-10 h-10 rounded-xl flex items-center justify-center mb-3">
                     <Icon className="w-5 h-5 text-primary" />
                   </div>
-                  <h4 className="text-base font-semibold mb-1">{title}</h4>
+                  <h4 className="font-display text-base font-semibold mb-1">{title}</h4>
                   <p className="text-sm text-muted-foreground leading-relaxed flex-1">{desc}</p>
                   <div className="mt-3 flex items-center gap-1 text-xs font-medium text-primary">
-                    Open <ArrowRight className="w-3 h-3" />
+                    Open <ArrowRight className="w-3 h-3 transition-transform group-hover:translate-x-0.5" />
                   </div>
                 </div>
               </Link>
@@ -376,13 +456,14 @@ export default async function Home() {
       </section>
 
       {/* Community Pulse */}
-      <section className="py-14 px-4 sm:px-6 lg:px-8 border-y border-border bg-secondary/20">
+      <section className="tt-hairline-t py-14 px-4 sm:px-6 lg:px-8 border-y border-border/60 bg-secondary/20">
         <div className="max-w-7xl mx-auto">
           <div className="grid lg:grid-cols-2 gap-8">
             {/* Trending */}
             <div>
-              <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                <TrendingUp className="w-5 h-5 text-primary" />
+              <span className="tt-eyebrow">Heating up</span>
+              <h3 className="font-display text-xl font-semibold mb-4 mt-2 flex items-center gap-2">
+                <TrendingUp className="w-5 h-5 text-spectrum" />
                 Trending Now
               </h3>
               <div className="space-y-3">
@@ -390,7 +471,7 @@ export default async function Home() {
                   <Link
                     key={thread.id}
                     href={`/forum/thread/${thread.slug}`}
-                    className="flex items-start gap-3 p-4 bg-card rounded-xl border border-border hover:border-primary/40 transition-colors"
+                    className="flex items-start gap-3 p-4 bg-card/80 rounded-xl border border-border/70 hover:border-primary/50 tt-lift tt-edge-card"
                   >
                     <Avatar src={thread.author.image ?? undefined} size="sm" alt={thread.author.profile?.username ?? thread.author.name ?? undefined} />
                     <div className="flex-1 min-w-0">
@@ -412,7 +493,8 @@ export default async function Home() {
 
             {/* Active members */}
             <div>
-              <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+              <span className="tt-eyebrow">In the room</span>
+              <h3 className="font-display text-xl font-semibold mb-4 mt-2 flex items-center gap-2">
                 <Users className="w-5 h-5 text-primary" />
                 Active Growers
               </h3>
@@ -443,6 +525,7 @@ export default async function Home() {
         <section className="py-14 px-4 sm:px-6 lg:px-8 border-y border-border bg-secondary/20">
           <div className="max-w-7xl mx-auto">
             <div className="bg-card rounded-2xl border border-border p-6 sm:p-8 overflow-hidden relative">
+              <div className="tt-spectrum-bar absolute inset-x-0 top-0 h-1" />
               <div className="absolute top-0 right-0 p-3">
                 <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-500/10 text-amber-500 text-xs font-semibold uppercase tracking-wide">
                   <Award className="w-3.5 h-3.5" />
@@ -481,22 +564,27 @@ export default async function Home() {
         </section>
       )}
 
-      {/* CTA Section */}
-      <section className="relative overflow-hidden py-20 px-4 sm:px-6 lg:px-8">
-        <div className="pointer-events-none absolute inset-0 -z-10">
-          <div className="absolute left-1/2 bottom-0 h-[300px] w-[600px] -translate-x-1/2 translate-y-1/3 rounded-full bg-primary/10 blur-[100px]" />
-        </div>
-        <div className="max-w-4xl mx-auto text-center">
-          <h2 className="text-3xl font-bold mb-4 tracking-tight">Join TerpTalk Today</h2>
-          <p className="text-lg text-muted-foreground mb-8">
-            Create your account and start growing with the community. Refer friends with your personal link.
-          </p>
-          <Link
-            href="/auth/signup"
-            className="inline-block bg-primary text-primary-foreground px-8 py-3 rounded-xl font-semibold hover:bg-primary/90 transition-all shadow-lg shadow-primary/25"
-          >
-            Create Free Account
-          </Link>
+      {/* CTA — a contained grow-light banner rather than a bare strip */}
+      <section className="px-4 pb-20 pt-4 sm:px-6 lg:px-8">
+        <div className="relative mx-auto max-w-5xl overflow-hidden rounded-3xl border border-border/70 bg-card/70 px-6 py-14 text-center shadow-xl backdrop-blur-sm sm:px-10">
+          <div className="tt-spectrum-bar absolute inset-x-0 top-0 h-1" />
+          <div className="pointer-events-none absolute inset-0">
+            <div className="absolute left-1/2 top-0 h-[220px] w-[480px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary/15 blur-[90px]" />
+            <div className="absolute -right-10 bottom-0 h-[160px] w-[160px] rounded-full bg-spectrum/15 blur-[80px]" />
+          </div>
+          <div className="relative">
+            <span className="tt-eyebrow">Lights on</span>
+            <h2 className="font-display text-3xl sm:text-4xl font-bold mt-2 mb-4 tracking-tight">Join TerpTalk Today</h2>
+            <p className="text-lg text-muted-foreground mb-8 max-w-xl mx-auto">
+              Create your account and start growing with the community. Refer friends with your personal link.
+            </p>
+            <Link
+              href="/auth/signup"
+              className="tt-cta inline-block rounded-full px-9 py-3.5 font-semibold text-primary-foreground transition-all"
+            >
+              Create Free Account
+            </Link>
+          </div>
         </div>
       </section>
 

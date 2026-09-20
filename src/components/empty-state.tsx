@@ -14,19 +14,19 @@ export default function EmptyState({ icon: Icon, title, description, action, cla
   return (
     <div
       className={cn(
-        "bg-card border border-border rounded-xl p-8 text-center",
+        "bg-card/80 border border-border/70 rounded-2xl p-8 text-center",
         className
       )}
     >
-      <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-primary/10 mb-4">
+      <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-primary/10 ring-1 ring-primary/20 mb-4">
         <Icon className="w-6 h-6 text-primary" />
       </div>
-      <h3 className="text-lg font-semibold mb-1">{title}</h3>
+      <h3 className="font-display text-lg font-semibold mb-1">{title}</h3>
       <p className="text-sm text-muted-foreground max-w-md mx-auto mb-4">{description}</p>
       {action && (
         <Link
           href={action.href}
-          className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+          className="tt-cta inline-flex items-center gap-1.5 px-5 py-2.5 text-sm font-semibold rounded-full text-primary-foreground transition-all"
         >
           {action.label}
         </Link>

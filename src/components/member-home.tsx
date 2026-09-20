@@ -37,9 +37,9 @@ function Card({
   children: React.ReactNode
 }) {
   return (
-    <section className="min-w-0 bg-card rounded-xl border border-border p-4 sm:p-5">
+    <section className="min-w-0 bg-card/80 rounded-2xl border border-border/70 p-4 sm:p-5">
       <div className="mb-3 flex items-center justify-between gap-2">
-        <h2 className="flex items-center gap-2 text-sm font-semibold">
+        <h2 className="flex items-center gap-2 font-display text-sm font-semibold">
           {icon}
           {title}
           {tip && <InfoTip content={tip} />}
@@ -60,7 +60,7 @@ function Card({
 
 function MiniEmpty({ text, cta, children }: { text: string; cta?: { href: string; label: string }; children?: ReactNode }) {
   return (
-    <div className="rounded-lg bg-secondary/40 px-4 py-5 text-center">
+    <div className="rounded-xl bg-secondary/40 px-4 py-5 text-center">
       <p className="text-sm text-muted-foreground">{text}</p>
       {children}
       {cta && (
@@ -110,8 +110,9 @@ export default function MemberHome({ data }: { data: MemberHomeData }) {
         {/* Next action — the single most useful thing to do */}
         <Link
           href={data.nextAction.href}
-          className="group mb-6 flex items-center gap-4 rounded-xl border border-primary/30 bg-primary/5 p-4 transition-colors hover:border-primary/60 hover:bg-primary/10 sm:p-5"
+          className="group relative mb-6 flex items-center gap-4 overflow-hidden rounded-2xl border border-primary/30 bg-primary/5 p-4 transition-colors hover:border-primary/60 hover:bg-primary/10 sm:p-5"
         >
+          <span className="pointer-events-none absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r from-primary via-spectrum to-amber-500" aria-hidden="true" />
           <span className="text-2xl" aria-hidden="true">{data.nextAction.icon}</span>
           <div className="min-w-0 flex-1">
             <Tooltip content="Suggested next step — picked from your progress and activity">
@@ -121,7 +122,7 @@ export default function MemberHome({ data }: { data: MemberHomeData }) {
             </Tooltip>
             <p className="truncate text-sm font-medium sm:text-base">{data.nextAction.text}</p>
           </div>
-          <span className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground transition-colors group-hover:bg-primary/90">
+          <span className="tt-cta inline-flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-2 text-sm font-semibold text-primary-foreground transition-all">
             {data.nextAction.cta} <ArrowRight className="h-4 w-4" />
           </span>
         </Link>
@@ -154,7 +155,7 @@ export default function MemberHome({ data }: { data: MemberHomeData }) {
                       </div>
                       <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-secondary">
                         <div
-                          className="h-full rounded-full bg-primary transition-all"
+                          className="h-full rounded-full bg-gradient-to-r from-primary to-spectrum transition-all"
                           style={{ width: `${Math.min(100, Math.round((q.progress / q.target) * 100))}%` }}
                         />
                       </div>
@@ -192,7 +193,7 @@ export default function MemberHome({ data }: { data: MemberHomeData }) {
                   <li key={g.id}>
                     <Link
                       href={diaryPath(g)}
-                      className="block rounded-lg border border-border bg-secondary/30 p-3 transition-colors hover:border-primary/40"
+                      className="block rounded-xl border border-border/70 bg-secondary/30 p-3 transition-colors hover:border-primary/40"
                     >
                       <div className="flex items-center justify-between gap-2">
                         <p className="min-w-0 truncate text-sm font-medium">{g.title}</p>
@@ -231,7 +232,7 @@ export default function MemberHome({ data }: { data: MemberHomeData }) {
                   <li>
                     <Link
                       href="/notifications"
-                      className="flex items-center gap-2 rounded-lg bg-primary/10 px-3 py-2 font-medium text-primary hover:bg-primary/15"
+                      className="flex items-center gap-2 rounded-xl bg-primary/10 px-3 py-2 font-medium text-primary hover:bg-primary/15"
                     >
                       <Bell className="h-3.5 w-3.5 shrink-0" />
                       {s.unreadNotifications} unread notification{s.unreadNotifications === 1 ? "" : "s"}
@@ -242,7 +243,7 @@ export default function MemberHome({ data }: { data: MemberHomeData }) {
                   <li key={t.slug}>
                     <Link
                       href={`/forum/thread/${t.slug}`}
-                      className="group flex items-center gap-2 rounded-lg px-3 py-2 hover:bg-secondary/60"
+                      className="group flex items-center gap-2 rounded-xl px-3 py-2 hover:bg-secondary/60"
                     >
                       <Tooltip content="New activity since your last visit">
                         <Circle className="h-2 w-2 shrink-0 fill-primary text-primary" aria-label="New activity" />
@@ -267,7 +268,7 @@ export default function MemberHome({ data }: { data: MemberHomeData }) {
                   <li key={`${u.diaryId}-${i}`}>
                     <Link
                       href={diaryPath({ id: u.diaryId, slug: u.diarySlug })}
-                      className="group flex items-center gap-2 rounded-lg px-3 py-2 hover:bg-secondary/60"
+                      className="group flex items-center gap-2 rounded-xl px-3 py-2 hover:bg-secondary/60"
                     >
                       <Leaf className="h-3.5 w-3.5 shrink-0 text-emerald-500" />
                       <span className="min-w-0 flex-1 truncate group-hover:text-primary">
@@ -306,7 +307,7 @@ export default function MemberHome({ data }: { data: MemberHomeData }) {
                   <OpenChatButton />
                   <Link
                     href="/discover"
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3.5 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+                    className="inline-flex items-center gap-1.5 rounded-full border border-border/70 px-3.5 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
                   >
                     <TrendingUp className="h-4 w-4" aria-hidden="true" />
                     Discover

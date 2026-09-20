@@ -43,7 +43,8 @@ export default async function DealsPage() {
     <div className="min-h-screen bg-background">
       <div className="max-w-6xl mx-auto px-4 py-8">
         <div className="mb-8">
-          <h1 className="text-3xl font-bold mb-2 flex items-center gap-3">
+          <span className="tt-eyebrow">Gear locker</span>
+          <h1 className="font-display text-3xl sm:text-4xl font-bold mt-1.5 mb-2 flex items-center gap-3 tracking-tight">
             <Percent className="w-8 h-8 text-primary" /> TerpTalk Deals
           </h1>
           <p className="text-muted-foreground">Community-recommended grow gear — partner links support the site at no extra cost to you.</p>

@@ -53,8 +53,8 @@ export default function AboutPage() {
   return (
     <div className="min-h-screen bg-background">
       <div className="max-w-4xl mx-auto px-4 py-12">
-        <h1 className="text-4xl font-bold tracking-tight mb-4">
-          About <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary to-emerald-300">TerpTalk</span>
+        <h1 className="font-display text-4xl font-bold tracking-tight mb-4">
+          About <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary to-spectrum">TerpTalk</span>
         </h1>
         <p className="text-lg text-muted-foreground leading-relaxed mb-10 max-w-2xl">
           TerpTalk is a privacy-first, 21+ community built by growers, for growers.
@@ -64,17 +64,17 @@ export default function AboutPage() {
 
         <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-4 mb-14">
           {FEATURES.map(({ icon: Icon, label, href }) => (
-            <Link key={label} href={href} className="bg-card border border-border rounded-xl p-4 flex items-center gap-3 hover:border-primary/50 transition-colors">
+            <Link key={label} href={href} className="tt-edge-card bg-card/80 border border-border/70 rounded-2xl p-4 flex items-center gap-3 hover:border-primary/50 transition-all">
               <Icon className="w-5 h-5 text-primary shrink-0" />
               <span className="font-medium">{label}</span>
             </Link>
           ))}
         </div>
 
-        <div className="bg-card border border-border rounded-xl p-6 mb-14">
+        <div className="bg-card/80 border border-border/70 rounded-2xl p-6 mb-14">
           <div className="flex items-center gap-2 mb-3">
             <Bot className="w-5 h-5 text-primary" />
-            <h2 className="text-2xl font-bold">Meet TerpBot</h2>
+            <h2 className="font-display text-2xl font-bold">Meet TerpBot</h2>
           </div>
           <p className="text-sm text-muted-foreground leading-relaxed mb-3">
             TerpBot is our automated community assistant — a bot, not a person. It welcomes new
@@ -89,8 +89,8 @@ export default function AboutPage() {
           </Link>
         </div>
 
-        <div className="bg-card border border-border rounded-xl p-6 mb-14">
-          <h2 className="text-2xl font-bold mb-3">The short version of our rules</h2>
+        <div className="bg-card/80 border border-border/70 rounded-2xl p-6 mb-14">
+          <h2 className="font-display text-2xl font-bold mb-3">The short version of our rules</h2>
           <ul className="text-sm text-muted-foreground leading-relaxed space-y-1.5 list-disc list-inside">
             <li>21+ only — no exceptions.</li>
             <li>Be respectful — no harassment, hate speech, or personal attacks.</li>
@@ -105,20 +105,21 @@ export default function AboutPage() {
           </p>
         </div>
 
-        <h2 className="text-2xl font-bold mb-6">Frequently Asked Questions</h2>
+        <h2 className="font-display text-2xl font-bold mb-6">Frequently Asked Questions</h2>
         <div className="space-y-4 mb-12">
           {FAQ.map((f) => (
-            <div key={f.q} className="bg-card border border-border rounded-xl p-5">
+            <div key={f.q} className="bg-card/80 border border-border/70 rounded-2xl p-5">
               <h3 className="font-semibold mb-1.5">{f.q}</h3>
               <p className="text-sm text-muted-foreground leading-relaxed">{f.a}</p>
             </div>
           ))}
         </div>
 
-        <div className="text-center bg-card border border-border rounded-xl p-8 mb-8">
-          <h2 className="text-xl font-bold mb-2">Ready to grow with us?</h2>
+        <div className="relative overflow-hidden text-center bg-card/80 border border-border/70 rounded-2xl p-8 mb-8">
+          <span className="pointer-events-none absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-primary via-spectrum to-amber-500" aria-hidden="true" />
+          <h2 className="font-display text-xl font-bold mb-2">Ready to grow with us?</h2>
           <p className="text-sm text-muted-foreground mb-5">Free forever. No email required. 21+ only.</p>
-          <Link href="/auth/signup" className="inline-block bg-primary text-primary-foreground px-8 py-3 rounded-xl font-semibold hover:bg-primary/90 transition-colors">
+          <Link href="/auth/signup" className="tt-cta inline-block px-8 py-3 rounded-full font-semibold text-primary-foreground transition-all">
             Create Account
           </Link>
         </div>

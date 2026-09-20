@@ -1,48 +1,52 @@
 @import "tailwindcss";
 
-/* ── Palettes: single source of truth for every colour value ───────── */
+/* ── Palettes: single source of truth for every colour value ─────────
+   "Greenhouse" — light is the flagship: warm sage-paper surfaces, deep
+   forest ink, vivid emerald primary, warm amber accent.
+   "Grow-op at night" — the dark counterpart: near-black greens with
+   luminous emerald and amber grow-light accents. */
 :root {
-  /* Light */
-  --light-background: #ffffff;
-  --light-foreground: #171717;
-  --light-card: #ffffff;
-  --light-card-foreground: #171717;
+  /* Light — greenhouse morning */
+  --light-background: #f2f6ec;
+  --light-foreground: #15230f;
+  --light-card: #fcfef9;
+  --light-card-foreground: #15230f;
   --light-popover: #ffffff;
-  --light-popover-foreground: #171717;
-  --light-primary: #16a34a;
+  --light-popover-foreground: #15230f;
+  --light-primary: #15803d;
   --light-primary-foreground: #ffffff;
-  --light-secondary: #f3f4f6;
-  --light-secondary-foreground: #171717;
-  --light-muted: #f3f4f6;
-  --light-muted-foreground: #6b7280;
-  --light-accent: #16a34a;
+  --light-secondary: #e6eee0;
+  --light-secondary-foreground: #1b2814;
+  --light-muted: #e6eee0;
+  --light-muted-foreground: #5c6d50;
+  --light-accent: #b45309;
   --light-accent-foreground: #ffffff;
-  --light-destructive: #ef4444;
+  --light-destructive: #dc2626;
   --light-destructive-foreground: #ffffff;
-  --light-border: #e5e7eb;
-  --light-input: #e5e7eb;
+  --light-border: #d7e2ca;
+  --light-input: #d7e2ca;
   --light-ring: #16a34a;
 
-  /* Cannabis dark — deep forest-tinted blacks */
-  --dark-background: #0a0f0b;
-  --dark-foreground: #e8f0e9;
-  --dark-card: #111a13;
-  --dark-card-foreground: #e8f0e9;
-  --dark-popover: #111a13;
-  --dark-popover-foreground: #e8f0e9;
-  --dark-primary: #34d399;
-  --dark-primary-foreground: #04120b;
-  --dark-secondary: #1a241c;
-  --dark-secondary-foreground: #e8f0e9;
-  --dark-muted: #1a241c;
-  --dark-muted-foreground: #8fa392;
+  /* Dark — grow-op at night */
+  --dark-background: #050a05;
+  --dark-foreground: #e7f2e9;
+  --dark-card: #0c140c;
+  --dark-card-foreground: #e7f2e9;
+  --dark-popover: #0c140c;
+  --dark-popover-foreground: #e7f2e9;
+  --dark-primary: #3ee08c;
+  --dark-primary-foreground: #03150b;
+  --dark-secondary: #131d13;
+  --dark-secondary-foreground: #e7f2e9;
+  --dark-muted: #131d13;
+  --dark-muted-foreground: #8fa893;
   --dark-accent: #fbbf24;
-  --dark-accent-foreground: #04120b;
-  --dark-destructive: #ef4444;
-  --dark-destructive-foreground: #ffffff;
-  --dark-border: #223126;
-  --dark-input: #223126;
-  --dark-ring: #34d399;
+  --dark-accent-foreground: #1a1202;
+  --dark-destructive: #f87171;
+  --dark-destructive-foreground: #1f0603;
+  --dark-border: #1d2b1e;
+  --dark-input: #1d2b1e;
+  --dark-ring: #3ee08c;
 
   --radius: 0.5rem;
 }
@@ -68,6 +72,18 @@
   --border: var(--light-border);
   --input: var(--light-input);
   --ring: var(--light-ring);
+
+  /* Spectrum accent — the violet end of the LED grow-light strip */
+  --spectrum: #7c3aed;
+  --light-spectrum: #7c3aed;
+  --dark-spectrum: #c48dff;
+
+  /* Ambient + shadow material (rgb triplets) */
+  --glow-primary: 34 197 94;
+  --glow-spectrum: 124 58 237;
+  --glow-accent: 217 119 6;
+  --glow-strength: 0.08;
+  --shadow-color: 25 55 30;
 }
 
 /* Follow the OS when the user has not made an explicit choice */
@@ -92,12 +108,20 @@
     --border: var(--dark-border);
     --input: var(--dark-input);
     --ring: var(--dark-ring);
+
+    --spectrum: var(--dark-spectrum);
+    --glow-primary: 62 224 140;
+    --glow-spectrum: 196 141 255;
+    --glow-accent: 251 191 36;
+    --glow-strength: 0.14;
+    --shadow-color: 0 0 0;
   }
 }
 
 /* Explicit user choice always wins */
 :root[data-theme="dark"] {
   --background: var(--dark-background);
+  --spectrum: var(--dark-spectrum);
   --foreground: var(--dark-foreground);
   --card: var(--dark-card);
   --card-foreground: var(--dark-card-foreground);
@@ -116,6 +140,12 @@
   --border: var(--dark-border);
   --input: var(--dark-input);
   --ring: var(--dark-ring);
+
+  --glow-primary: 62 224 140;
+  --glow-spectrum: 196 141 255;
+  --glow-accent: 251 191 36;
+  --glow-strength: 0.14;
+  --shadow-color: 0 0 0;
 }
 
 @theme inline {
@@ -138,7 +168,24 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
+  --color-spectrum: var(--spectrum);
   --font-sans: var(--font-inter);
+  --font-display: var(--font-sora), var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+
+  /* Softer, theme-aware shadow scale — the colour resolves at runtime
+     so the same utility lifts correctly on both palettes. */
+  --shadow-sm: 0 1px 2px 0 rgb(var(--shadow-color) / 0.06);
+  --shadow-md: 0 4px 14px -3px rgb(var(--shadow-color) / 0.10);
+  --shadow-lg: 0 14px 34px -14px rgb(var(--shadow-color) / 0.16);
+  --shadow-xl: 0 24px 56px -18px rgb(var(--shadow-color) / 0.22);
+  --shadow-2xl: 0 32px 72px -20px rgb(var(--shadow-color) / 0.28);
+
+  /* Rounder, friendlier corners — one scale change reskins every
+     rounded-* utility site-wide. */
+  --radius-lg: 0.625rem;
+  --radius-xl: 0.875rem;
+  --radius-2xl: 1.25rem;
+  --radius-3xl: 1.75rem;
 }
 
 * {
@@ -162,6 +209,28 @@ body {
   overflow-x: clip;
 }
 
+/* Ambient "grow light" wash — emerald canopy overhead, a violet LED edge
+   on the right, and a warm amber glow low on the left. Fixed, behind
+   everything, zero layout cost. The strength token keeps it a whisper on
+   light and a signature on dark. */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(64rem 32rem at 50% -12%, rgb(var(--glow-primary) / var(--glow-strength)), transparent 62%),
+    radial-gradient(44rem 28rem at 108% 10%, rgb(var(--glow-spectrum) / calc(var(--glow-strength) * 0.8)), transparent 60%),
+    radial-gradient(36rem 24rem at -8% 32%, rgb(var(--glow-accent) / calc(var(--glow-strength) * 0.45)), transparent 60%);
+}
+
+/* Headings get the display face — one rule, site-wide typographic lift. */
+h1, h2, h3 {
+  font-family: var(--font-sora), var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: -0.015em;
+}
+
 ::selection {
   background: var(--primary);
   color: var(--primary-foreground);
@@ -169,24 +238,152 @@ body {
 
 /* Subtle scrollbar styling */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 10px;
+  height: 10px;
 }
 ::-webkit-scrollbar-track {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: var(--muted);
-  border-radius: 4px;
+  background: color-mix(in srgb, var(--muted-foreground) 35%, transparent);
+  border-radius: 6px;
+  border: 2px solid transparent;
+  background-clip: content-box;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--muted-foreground);
+  background: color-mix(in srgb, var(--primary) 55%, transparent);
+  border: 2px solid transparent;
+  background-clip: content-box;
 }
 
 /* Always show a clear focus ring for keyboard users */
 :focus-visible {
   outline: 2px solid var(--ring);
   outline-offset: 2px;
+}
+
+/* ── Surface helpers used by the redesigned chrome ────────────────── */
+
+/* Frosted surface for sticky chrome (nav, docks) */
+.tt-glass {
+  background: color-mix(in srgb, var(--card) 82%, transparent);
+  backdrop-filter: blur(14px) saturate(1.3);
+  -webkit-backdrop-filter: blur(14px) saturate(1.3);
+}
+
+/* Gradient hairline — an emerald line that fades at the edges. Used on
+   the nav's bottom edge and the footer's top edge. */
+.tt-hairline-b,
+.tt-hairline-t {
+  position: relative;
+}
+.tt-hairline-b::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 -1px 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgb(var(--glow-primary) / 0.4) 30%, rgb(var(--glow-primary) / 0.4) 70%, transparent);
+  pointer-events: none;
+}
+.tt-hairline-t::after {
+  content: "";
+  position: absolute;
+  inset: -1px 0 auto 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgb(var(--glow-primary) / 0.4) 30%, rgb(var(--glow-primary) / 0.4) 70%, transparent);
+  pointer-events: none;
+}
+
+/* Brand mark tile — gradient chip with a soft glow */
+.tt-brand-tile {
+  background: linear-gradient(135deg, rgb(var(--glow-primary) / 0.22), rgb(var(--glow-primary) / 0.08));
+  box-shadow: 0 0 0 1px rgb(var(--glow-primary) / 0.30), 0 4px 14px -4px rgb(var(--glow-primary) / 0.35);
+}
+
+/* Primary action glow — used on hero/signup CTAs */
+.tt-cta {
+  background: linear-gradient(135deg, var(--primary), color-mix(in srgb, var(--primary) 78%, #0c3d1e));
+  box-shadow: 0 10px 26px -10px rgb(var(--glow-primary) / 0.55);
+}
+.tt-cta:hover {
+  box-shadow: 0 14px 34px -10px rgb(var(--glow-primary) / 0.7);
+  transform: translateY(-1px);
+}
+
+/* Soft lift for interactive cards that opt in */
+.tt-lift {
+  transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease;
+}
+.tt-lift:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--tw-shadow, 0 14px 34px -14px rgb(var(--shadow-color) / 0.16));
+}
+
+/* LED spectrum strip — the grow-op signature. Emerald → violet → amber,
+   used as a thin accent line on the hero panel, banners, and footer. */
+.tt-spectrum-bar {
+  background: linear-gradient(90deg, rgb(var(--glow-primary) / 0.9), rgb(var(--glow-spectrum) / 0.9) 50%, rgb(var(--glow-accent) / 0.9));
+}
+
+/* Flowing variant — the LED strip breathes. Neutralised by the global
+   reduced-motion block. */
+@keyframes tt-spectrum-flow {
+  to {
+    background-position: 200% 0;
+  }
+}
+.tt-spectrum-animated {
+  background: linear-gradient(90deg, rgb(var(--glow-primary) / 0.9), rgb(var(--glow-spectrum) / 0.9) 33%, rgb(var(--glow-accent) / 0.9) 50%, rgb(var(--glow-spectrum) / 0.9) 66%, rgb(var(--glow-primary) / 0.9));
+  background-size: 200% 100%;
+  animation: tt-spectrum-flow 9s linear infinite;
+}
+
+/* Faint blueprint grid for hero surfaces — masked radially so it never
+   hard-crops at a section edge. */
+.tt-grid-bg {
+  background-image:
+    linear-gradient(to right, rgb(var(--glow-primary) / 0.07) 1px, transparent 1px),
+    linear-gradient(to bottom, rgb(var(--glow-primary) / 0.07) 1px, transparent 1px);
+  background-size: 44px 44px;
+  mask-image: radial-gradient(ellipse 75% 65% at 50% 35%, black 25%, transparent 75%);
+  -webkit-mask-image: radial-gradient(ellipse 75% 65% at 50% 35%, black 25%, transparent 75%);
+}
+
+/* Section eyebrow — small-caps label with a spectrum tick. */
+.tt-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--primary);
+}
+.tt-eyebrow::before {
+  content: "";
+  width: 1.25rem;
+  height: 2px;
+  border-radius: 1px;
+  background: linear-gradient(90deg, rgb(var(--glow-primary)), rgb(var(--glow-spectrum)));
+}
+
+/* Card edge reveal — a spectrum accent bar fades in on hover. */
+.tt-edge-card {
+  position: relative;
+}
+.tt-edge-card::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  border-radius: 3px 0 0 3px;
+  background: linear-gradient(180deg, rgb(var(--glow-primary) / 0.9), rgb(var(--glow-spectrum) / 0.9));
+  opacity: 0;
+  transition: opacity 160ms ease;
+}
+.tt-edge-card:hover::before {
+  opacity: 1;
 }
 
 /* Extends the hit area of small controls to ≥40px without changing their
@@ -234,7 +431,7 @@ body {
    targeted post gets a primary ring. Pure CSS: no JS, and the reduced-motion
    block below already neutralises the smooth scroll for users who ask. */
 [id^="post-"] {
-  scroll-margin-top: 6rem;
+  scroll-margin-top: 7rem;
 }
 [id^="post-"]:target {
   border-color: var(--primary);

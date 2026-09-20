@@ -66,29 +66,30 @@ export default async function StrainsPage({ searchParams }: { searchParams: Prom
       <div className="max-w-7xl mx-auto px-4 py-8">
         {/* Header */}
         <div className="mb-8">
-          <h1 className="text-3xl font-bold mb-2">Strain Database</h1>
+          <span className="tt-eyebrow">Genetics vault</span>
+          <h1 className="font-display text-3xl sm:text-4xl font-bold mt-1.5 mb-2 tracking-tight">Strain Database</h1>
           <p className="text-muted-foreground">Community-maintained database of cannabis strains, genetics, and growing characteristics</p>
         </div>
 
         {/* Search */}
         <form action="/strains" className="mb-6">
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
             <input
               type="text"
               name="q"
               defaultValue={q}
               placeholder="Search strains, genetics, breeders..."
-              className="w-full pl-10 pr-4 py-2 rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary"
+              className="w-full pl-11 pr-4 py-3 rounded-full border border-border bg-card/80 focus:outline-none focus:ring-2 focus:ring-primary"
             />
           </div>
         </form>
 
         <div className="flex justify-between items-center mb-6 gap-3 flex-wrap">
-          <h2 className="text-xl font-semibold">{q ? `Results for "${q}"` : "All Strains"}</h2>
+          <h2 className="font-display text-xl font-semibold">{q ? `Results for "${q}"` : "All Strains"}</h2>
           <Link
             href="/strains/new"
-            className="bg-primary text-primary-foreground px-4 py-2 rounded-lg hover:bg-primary/90 transition-colors text-sm flex items-center gap-2"
+            className="tt-cta rounded-full px-5 py-2.5 text-sm font-semibold text-primary-foreground transition-all flex items-center gap-2"
           >
             <Plus className="w-4 h-4" />
             Add Strain
@@ -111,37 +112,37 @@ export default async function StrainsPage({ searchParams }: { searchParams: Prom
                 <Link
                   key={strain.id}
                   href={strainPath(strain)}
-                  className="bg-card rounded-lg border border-border p-4 hover:border-primary/50 transition-colors"
+                  className="group bg-card rounded-2xl border border-border/70 overflow-hidden tt-lift hover:border-primary/50"
                 >
-                  <div className="flex items-center gap-3 mb-3">
-                    <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center overflow-hidden shrink-0">
-                      {strain.photos[0] ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={strain.photos[0].imageUrl} alt={strain.name} loading="lazy" decoding="async" className="w-full h-full object-cover" />
-                      ) : (
-                        <Leaf className="w-6 h-6 text-primary" />
-                      )}
-                    </div>
-                    <div>
-                      <h3 className="font-semibold">{strain.name}</h3>
-                      {strain.breeder && (
-                        <p className="text-xs text-muted-foreground">{strain.breeder}</p>
-                      )}
-                      {strain._count.photos > 0 && (
-                        <p className="text-xs text-primary">{strain._count.photos} photo{strain._count.photos !== 1 ? "s" : ""}</p>
-                      )}
-                    </div>
+                  <div className="relative aspect-[16/9] bg-gradient-to-br from-primary/15 via-secondary to-spectrum/10 flex items-center justify-center overflow-hidden">
+                    {strain.photos[0] ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={strain.photos[0].imageUrl} alt={strain.name} loading="lazy" decoding="async" className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" />
+                    ) : (
+                      <Leaf className="w-8 h-8 text-primary/30" />
+                    )}
+                    {strain.type && (
+                      <span className="absolute left-3 top-3 rounded-full bg-black/55 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-white backdrop-blur-sm">
+                        {strainTypeLabel(strain.type)}
+                      </span>
+                    )}
+                    {strain._count.photos > 0 && (
+                      <span className="absolute right-3 top-3 rounded-full bg-black/55 px-2.5 py-1 text-[10px] font-semibold text-white backdrop-blur-sm">
+                        {strain._count.photos} photo{strain._count.photos !== 1 ? "s" : ""}
+                      </span>
+                    )}
                   </div>
-                  {strain.type && (
-                    <div className="text-xs text-muted-foreground mb-2">
-                      {strainTypeLabel(strain.type)}
-                    </div>
-                  )}
-                  {strain.genetics && (
-                    <div className="text-xs text-muted-foreground line-clamp-1">
-                      {strain.genetics}
-                    </div>
-                  )}
+                  <div className="p-4">
+                    <h3 className="font-display font-semibold line-clamp-1 group-hover:text-primary transition-colors">{strain.name}</h3>
+                    {strain.breeder && (
+                      <p className="text-xs text-muted-foreground mt-0.5">by {strain.breeder}</p>
+                    )}
+                    {strain.genetics && (
+                      <p className="text-xs text-muted-foreground line-clamp-1 mt-1.5 border-t border-border/50 pt-1.5">
+                        {strain.genetics}
+                      </p>
+                    )}
+                  </div>
                 </Link>
               ))}
             </div>
@@ -150,7 +151,7 @@ export default async function StrainsPage({ searchParams }: { searchParams: Prom
                 {page > 1 ? (
                   <Link
                     href={pageHref(page - 1)}
-                    className="inline-flex items-center gap-1 px-4 py-2 rounded-lg bg-card border border-border text-sm font-medium hover:border-primary/40 transition-colors"
+                    className="inline-flex items-center gap-1 px-4 py-2 rounded-full bg-card border border-border text-sm font-medium hover:border-primary/40 transition-colors"
                   >
                     <ChevronLeft className="w-4 h-4" /> Previous
                   </Link>
@@ -163,7 +164,7 @@ export default async function StrainsPage({ searchParams }: { searchParams: Prom
                 {page < totalPages ? (
                   <Link
                     href={pageHref(page + 1)}
-                    className="inline-flex items-center gap-1 px-4 py-2 rounded-lg bg-card border border-border text-sm font-medium hover:border-primary/40 transition-colors"
+                    className="inline-flex items-center gap-1 px-4 py-2 rounded-full bg-card border border-border text-sm font-medium hover:border-primary/40 transition-colors"
                   >
                     Next <ChevronRight className="w-4 h-4" />
                   </Link>

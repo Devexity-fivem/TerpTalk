@@ -69,7 +69,8 @@ export default async function SetupsPage({
       <div className="max-w-7xl mx-auto px-4 py-8">
         {/* Header */}
         <div className="mb-8">
-          <h1 className="text-3xl font-bold mb-2">Grow Setup Showcases</h1>
+          <span className="tt-eyebrow">The grow rooms</span>
+          <h1 className="font-display text-3xl sm:text-4xl font-bold mt-1.5 mb-2 tracking-tight">Grow Setup Showcases</h1>
           <p className="text-muted-foreground">Show off your grow room and equipment. Get feedback and inspiration from the community.</p>
         </div>
 

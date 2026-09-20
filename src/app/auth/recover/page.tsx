@@ -37,16 +37,16 @@ export default function RecoverPage() {
   if (newPhrase) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center px-4">
-        <div className="bg-card border border-border rounded-xl p-8 max-w-md w-full">
+        <div className="tt-glass border border-border/70 rounded-2xl p-8 max-w-md w-full">
           <div className="text-center mb-5">
             <Check className="w-12 h-12 text-primary mx-auto mb-4" />
-            <h1 className="text-xl font-bold mb-2">Password reset</h1>
+            <h1 className="font-display text-xl font-bold mb-2">Password reset</h1>
             <p className="text-sm text-muted-foreground">
               Your password has been updated. Your old recovery phrase no longer works — here is your new one.
             </p>
           </div>
 
-          <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-4 mb-5">
+          <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-4 mb-5">
             <p className="text-xs text-amber-500 font-semibold mb-2 flex items-center gap-1">
               <AlertTriangle className="w-3.5 h-3.5" /> Shown only once — write it down now
             </p>
@@ -68,13 +68,13 @@ export default function RecoverPage() {
           </div>
 
           {acknowledged ? (
-            <Link href="/auth/signin" className="block text-center bg-primary text-primary-foreground px-6 py-2.5 rounded-lg font-semibold hover:bg-primary/90">
+            <Link href="/auth/signin" className="tt-cta block text-center px-6 py-2.5 rounded-full font-semibold text-primary-foreground transition-all">
               Sign in
             </Link>
           ) : (
             <button
               onClick={() => setAcknowledged(true)}
-              className="w-full bg-secondary px-6 py-2.5 rounded-lg font-semibold hover:bg-secondary/80"
+              className="w-full bg-secondary px-6 py-2.5 rounded-full font-semibold hover:bg-secondary/80 transition-colors"
             >
               I&apos;ve saved my new phrase
             </button>
@@ -86,10 +86,10 @@ export default function RecoverPage() {
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center px-4">
-      <div className="bg-card border border-border rounded-xl p-8 max-w-md w-full">
+      <div className="tt-glass border border-border/70 rounded-2xl p-8 max-w-md w-full">
         <div className="text-center mb-6">
           <KeyRound className="w-10 h-10 text-primary mx-auto mb-3" />
-          <h1 className="text-2xl font-bold">Recover your account</h1>
+          <h1 className="font-display text-2xl font-bold tracking-tight">Recover your account</h1>
           <p className="text-sm text-muted-foreground mt-1">
             Enter your username and the 12-word recovery phrase you saved.
           </p>
@@ -102,7 +102,7 @@ export default function RecoverPage() {
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               required
-              className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+              className="w-full px-3 py-2 rounded-xl border border-border/70 bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/60"
               placeholder="your username"
             />
           </div>
@@ -113,7 +113,7 @@ export default function RecoverPage() {
               onChange={(e) => setPhrase(e.target.value)}
               required
               rows={3}
-              className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary resize-none"
+              className="w-full px-3 py-2 rounded-xl border border-border/70 bg-background text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary/60 resize-none"
               placeholder="word1 word2 word3 ... word12"
             />
             <p className="text-xs text-muted-foreground mt-1">All 12 words, in order, separated by spaces.</p>
@@ -126,19 +126,19 @@ export default function RecoverPage() {
               onChange={(e) => setNewPassword(e.target.value)}
               required
               minLength={8}
-              className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+              className="w-full px-3 py-2 rounded-xl border border-border/70 bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/60"
               placeholder="At least 8 characters"
             />
           </div>
 
           {error && (
-            <div className="bg-destructive/10 text-destructive px-4 py-2 rounded-lg text-sm">{error}</div>
+            <div className="bg-destructive/10 text-destructive px-4 py-2.5 rounded-xl text-sm">{error}</div>
           )}
 
           <button
             type="submit"
             disabled={busy}
-            className="w-full bg-primary text-primary-foreground py-2.5 rounded-lg font-semibold hover:bg-primary/90 disabled:opacity-50 flex items-center justify-center gap-2"
+            className="tt-cta w-full py-2.5 rounded-full font-semibold text-primary-foreground transition-all disabled:opacity-50 flex items-center justify-center gap-2"
           >
             {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : "Reset password"}
           </button>

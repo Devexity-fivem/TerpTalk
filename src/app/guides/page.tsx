@@ -41,7 +41,8 @@ export default async function GuidesPage() {
       <div className="max-w-4xl mx-auto px-4 py-8">
         <div className="flex justify-between items-start mb-8">
           <div>
-            <h1 className="text-3xl font-bold mb-2 flex items-center gap-3">
+            <span className="tt-eyebrow">Knowledge base</span>
+            <h1 className="font-display text-3xl sm:text-4xl font-bold mt-1.5 mb-2 flex items-center gap-3 tracking-tight">
               <BookOpen className="w-8 h-8 text-primary" /> Grow Guides
             </h1>
             <p className="text-muted-foreground">Staff-written knowledge — from seed to cure.</p>

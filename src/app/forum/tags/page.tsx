@@ -20,7 +20,8 @@ export default async function TagsPage() {
     <div className="min-h-screen bg-background">
       <div className="max-w-4xl mx-auto px-4 py-8">
         <div className="mb-8">
-          <h1 className="text-3xl font-bold mb-2">Discussion Tags</h1>
+          <span className="tt-eyebrow">Topics</span>
+          <h1 className="font-display text-3xl font-bold mt-1.5 mb-2 tracking-tight">Discussion Tags</h1>
           <p className="text-muted-foreground">Find threads by topic, strain, or growing method.</p>
         </div>
 
@@ -32,7 +33,7 @@ export default async function TagsPage() {
               <Link
                 key={tag.id}
                 href={`/forum/tags/${tag.slug}`}
-                className="inline-flex items-center px-4 py-2 rounded-full bg-card border border-border hover:border-primary hover:text-primary transition-colors"
+                className="inline-flex items-center px-4 py-2 rounded-full bg-card/80 border border-border/70 hover:border-primary/60 hover:text-primary hover:shadow-md transition-all"
               >
                 <span className="font-medium">#{tag.name}</span>
                 <span className="ml-2 text-xs text-muted-foreground">{tag._count.threads} threads</span>
