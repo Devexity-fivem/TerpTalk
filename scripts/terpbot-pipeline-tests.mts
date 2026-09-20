@@ -17,6 +17,8 @@ import {
 } from "@/lib/terpbot-assist"
 import { getBotUserId, sanitizeEcho, announceStageTransition, purgeDiaryAnnouncements } from "@/lib/terpbot"
 import { runBotCommand } from "@/lib/terpbot-data"
+import { buildGrowContext } from "@/lib/terpbot-intel-context"
+import { evaluateContext } from "@/lib/terpbot-intel"
 
 const SUFFIX = String(Date.now()).slice(-8)
 const M1 = `__tbp_a_${SUFFIX}`
@@ -656,6 +658,106 @@ async function run() {
       assert.ok(stats.assists >= 5, `assists counted in bot stats (got ${stats.assists})`)
       assert.ok(stats.byAssist["first-diary"] >= 1, "per-kind assist breakdown")
       console.log("✓ getBotStats assist metrics")
+    }
+
+    // ── 16. Intelligence engine: GrowContext → rules → /checkin ────────
+    {
+      const intel = await mk(`__tbp_int_${SUFFIX}`)
+      const daysAgo = (n: number) => new Date(Date.now() - n * 86400000)
+      const diary = await prisma.growDiary.create({
+        data: {
+          title: `__tbp intel ${SUFFIX}`, description: "t", growType: "INDOOR",
+          mediumType: "COCO", lightType: "LED",
+          startDate: daysAgo(40), authorId: intel.id, stage: "FLOWER",
+        },
+      })
+      diaryIds.push(diary.id)
+      // 4 updates ~5d apart: RH climbing into the flower risk zone, pH
+      // drifting out of the coco band, EC rising, and entered VPD running
+      // materially below the temp/RH-derived value.
+      const upd = [
+        { d: 20, temp: 76, rh: 60, vpd: 1.0, ph: 6.0, ec: 1.4, h: 40 },
+        { d: 15, temp: 77, rh: 66, vpd: 0.8, ph: 6.2, ec: 1.6, h: 44 },
+        { d: 10, temp: 78, rh: 69, vpd: 0.6, ph: 6.6, ec: 1.9, h: 47 },
+        { d: 5, temp: 78, rh: 71, vpd: 0.5, ph: 6.9, ec: 2.1, h: 48 },
+      ]
+      for (const u of upd) {
+        await prisma.diaryUpdate.create({
+          data: {
+            title: `u${u.d}`, content: "x", stage: "FLOWER", diaryId: diary.id, authorId: intel.id,
+            createdAt: daysAgo(u.d),
+            temperature: u.temp, humidity: u.rh, vpd: u.vpd, ph: u.ph, ec: u.ec, heightCm: u.h,
+          },
+        })
+      }
+
+      const gctx = await buildGrowContext(diary.id, { ownerId: intel.id, scope: "public" })
+      assert.ok(gctx, "context builds for a public diary")
+      assert.equal(gctx.updateCount, 4, "window holds all 4 updates")
+      assert.equal(gctx.diary.stage, "FLOWER")
+      assert.equal(gctx.series.temperature.n, 4)
+      assert.equal(gctx.series.vpdComputed.n, 4, "VPD derived from temp/RH pairs")
+      assert.ok(gctx.series.vpdComputed.latest! > 0.9, `computed VPD sane (${gctx.series.vpdComputed.latest})`)
+      assert.equal(gctx.series.humidity.trend, "rising", "RH trend detected from real rows")
+      assert.equal(gctx.series.ec.trend, "rising", "EC drift detected")
+      assert.ok(gctx.vpdDivergence != null && gctx.vpdDivergence <= -0.3, `entered VPD diverges (${gctx.vpdDivergence})`)
+      assert.equal(gctx.stageStartCensored, true, "all-flower window → stage start censored")
+      assert.equal(gctx.daysSinceUpdate, 5)
+      assert.equal(gctx.envCoverage, 1)
+      assert.equal(gctx.missing.length, 0, "all schema metrics recorded")
+
+      const findings = evaluateContext(gctx)
+      const byId = (id: string) => findings.find((f) => f.ruleId === id)
+      assert.equal(byId("data.vpd-divergence")?.state, "confirmed", "VPD divergence → CONFIRMED finding")
+      assert.ok(byId("env.rh-flower-high"), "flower RH risk fires")
+      assert.ok(byId("chem.ph-band"), "pH-out-of-band fires for coco")
+      assert.ok(byId("chem.ec-drift"), "EC drift fires")
+      assert.ok(byId("env.rh-trend"), "RH trend fires")
+      assert.ok(!byId("growth.stalled"), "no stall finding in flower stage")
+
+      // /checkin surfaces the engine through the real command pipeline
+      const ci = await runBotCommand("checkin", {
+        userId: intel.id, role: "MEMBER", displayName: `__tbp_int_${SUFFIX}`, args: [], rest: "",
+      })
+      assert.ok(ci.ok, "checkin dispatched")
+      const out = ci.messages[0]
+      assert.match(out, /Grow check-in/, "existing checkin output intact")
+      assert.match(out, /Last update 5 days ago/, "existing recency check intact")
+      assert.match(out, /Reading the last 4 updates/, "intelligence header")
+      assert.match(out, /Observed: 78°F · 71% RH · pH 6\.9 · EC 2\.1/, "observed = latest logged values")
+      assert.match(out, /Calculated: VPD ≈/, "calculated VPD rendered")
+      assert.match(out, /leaf temp not logged/, "assumption disclosed")
+      assert.match(out, /Worth watching:/, "findings rendered")
+      assert.match(out, /Recorded VPD \(0\.5\) differs/, "confirmed divergence surfaced")
+      assert.match(out, /Next useful measurement:/, "discriminating measurement suggested")
+      assert.ok(out.length <= 1000, `checkin stays inside the chat cap (${out.length})`)
+
+      // Privacy: a PRIVATE diary is invisible to the public-scope context
+      // and to room output — but readable in owner scope for private paths.
+      const priv = await mk(`__tbp_prv_${SUFFIX}`)
+      const pdiary = await prisma.growDiary.create({
+        data: { title: `__tbp priv ${SUFFIX}`, description: "t", growType: "INDOOR", startDate: daysAgo(10), authorId: priv.id, stage: "VEGETATIVE", visibility: "PRIVATE" },
+      })
+      diaryIds.push(pdiary.id)
+      await prisma.diaryUpdate.create({
+        data: { title: "u", content: "x", stage: "VEGETATIVE", diaryId: pdiary.id, authorId: priv.id, temperature: 75, humidity: 60 },
+      })
+      assert.equal(
+        await buildGrowContext(pdiary.id, { ownerId: priv.id, scope: "public" }),
+        null,
+        "public scope refuses a PRIVATE diary"
+      )
+      assert.ok(
+        await buildGrowContext(pdiary.id, { ownerId: priv.id, scope: "owner" }),
+        "owner scope builds context for private paths"
+      )
+      const pci = await runBotCommand("checkin", {
+        userId: priv.id, role: "MEMBER", displayName: `__tbp_prv_${SUFFIX}`, args: [], rest: "",
+      })
+      assert.ok(pci.ok && /No active grows/.test(pci.messages[0]), "PRIVATE diary stays out of room checkin")
+      assert.ok(!pci.messages[0].includes(`__tbp priv ${SUFFIX}`), "private diary title never echoes")
+
+      console.log("✓ intelligence engine: context → rules → /checkin")
     }
 
     console.log("All TerpBot pipeline tests passed.")

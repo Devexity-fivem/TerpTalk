@@ -24,6 +24,8 @@ import { getGrowJourney } from "@/lib/grow-journey"
 import { notify } from "@/lib/notify"
 import { getBotUserId } from "@/lib/terpbot"
 import { buildHelpText } from "@/lib/chat-commands"
+import { buildGrowContext } from "@/lib/terpbot-intel-context"
+import { evaluateContext, renderIntelLines } from "@/lib/terpbot-intel"
 import { TERPBOT_USERNAME, randomGrowTip, sanitizeEcho as sanitizeEchoStrict } from "@/lib/terpbot"
 
 export interface BotCommandCtx {
@@ -661,7 +663,7 @@ async function handle(name: string, ctx: BotCommandCtx): Promise<BotCommandResul
       // Never diagnoses the plant; it only evaluates diary freshness.
       const weekAgo = new Date(Date.now() - 7 * 86400000)
       const blocks: string[] = []
-      for (const d of diaries) {
+      for (const [diaryIndex, d] of diaries.entries()) {
         const [latest, envThisWeek, meaningfulThisWeek] = await Promise.all([
           prisma.diaryUpdate.findFirst({
             where: { diaryId: d.id },
@@ -704,7 +706,17 @@ async function handle(name: string, ctx: BotCommandCtx): Promise<BotCommandResul
             : latest._count.images === 0 || envThisWeek === 0
               ? `Next useful action: add photos or env readings to your next update → ${diaryPath(d)}`
               : `On track — keep the weekly cadence → ${diaryPath(d)}`
-        blocks.push(`${sanitizeField(d.title, 40)} (${stageLabel(d.stage)}):\n${checks.join("\n")}\n${next}`)
+        // Intelligence slice (primary diary only — keeps the block inside
+        // the chat message cap). Same PUBLIC scope as the diary list above:
+        // this output posts to a room, so private diary data never enters.
+        let intel: string[] = []
+        if (diaryIndex === 0) {
+          const gctx = await buildGrowContext(d.id, { ownerId: ctx.userId, scope: "public" })
+          if (gctx) intel = renderIntelLines(gctx, evaluateContext(gctx))
+        }
+        blocks.push(
+          `${sanitizeField(d.title, 40)} (${stageLabel(d.stage)}):\n${[...checks, ...intel, next].join("\n")}`
+        )
       }
       return ok(`🌱 Grow check-in\n\n${blocks.join("\n\n")}`)
     }
