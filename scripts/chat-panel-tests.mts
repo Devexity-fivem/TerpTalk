@@ -122,7 +122,7 @@ check("embedded mode ignores the ?room= deep link", () => {
 })
 
 check("embedded mode drops the outer card frame (panel provides it)", () => {
-  assert.ok(/!embedded && "rounded-xl border/.test(room))
+  assert.ok(/!embedded && "rounded-2xl border/.test(room))
 })
 
 check("header actions slot renders", () => {

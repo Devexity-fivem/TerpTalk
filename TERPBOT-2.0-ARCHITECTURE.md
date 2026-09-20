@@ -3,7 +3,8 @@
 Architecture & implementation specification. Baseline: `ca2f198` (production).
 Status: **Phase A (calc engine + GrowContext + rule engine → `/checkin`) shipped at
 `c381de9`. Phase D (candidate/diagnostic layer + wizard adapter) shipped next —
-see §15 status note.**
+see §15 status note. Phase E (full wizard migration + NL observation channel +
+knowledge expansion) shipped after — see §18.**
 
 ---
 
@@ -466,6 +467,61 @@ BotEvent.entities reuse, cheap but F-dependent); automated strain-specific VPD t
 | Source disagreement | both rules may fire; engine reports the disagreement, never silently picks |
 | Stale rules | `reviewedAt` + `status:"review"` + validator lint |
 | Entered VPD ≠ computed VPD | surfaced as a *finding*, not silently trusted |
+
+---
+
+## 15b. Phase E implementation notes (shipped)
+
+**Full wizard migration.** All 48 wizard results are generated from `CANDIDATES`
+(`wizardResultFromCandidate`), byte-identical to the pre-migration literals —
+pinned by `scripts/fixtures/wizard-results.snapshot.json` and the snapshot
+equivalence test in `terpbot2-tests.mts`. Migrated candidates carry bare wizard
+ids (`heat_stress`, `stunt`, `ph_drift`, …) so the adapter contract
+`candidate.id === wizardResultId` holds unchanged; `Thread.wizardResultId`,
+`SYMPTOM_TAGS`, and solve-rate stats are untouched. Engine-native candidates keep
+namespaced ids (`env.moisture-disease-risk`, `env.cold-stress`, `env.instability`,
+`env.dry-quality-risk`, `ph_lockout`, `nutrition.excess`, `nutrition.undersupply`).
+
+**Reported-symptom channel (no schema change).** `DiaryUpdate.content` — already
+in the bounded 12-update window query — is parsed by `terpbot-nl-parse.ts` into
+`StructuredObservation[]` (symptom, location, stage, trend, period, provenance
+refId). Observations age out after 21 days and carry canonical ids only; raw
+text never enters the context or the render. Parsing is pure, bounded (200-char
+cap), deterministic, and never diagnoses.
+
+**NL layer.** `terpbot-nl-vocab.ts` holds controlled vocabulary: ~45 symptom
+entries with synonyms/grower slang, 14 locations, 7 stages (plus numeric
+`STAGE_PATTERNS` for "week 6 flower"/"f6"), metrics/units/trends/periods, guard
+phrases ("yellow sticky traps" can't mint yellowing), negation, and
+stage×location refinement tables encoding mobile-vs-immobile nutrient
+discrimination. Question-led and comparison text (`what pm level`,
+`light burn vs nutrient burn`) produces no observations. Metric+trend clauses
+("humidity keeps climbing at night") synthesize the matching observation.
+
+**New rule families.** Stage-conditioned temp/RH bands, RH/VPD trend rules,
+temperature–humidity disease windows (botrytis 63–75°F + RH≥70% in flower; PM
+75–86°F — PM needs no leaf wetness), environmental co-variation/instability,
+day/night spread detection, drying-room risk, pH drift/edge-proximity, the
+fed-but-locked-out signature, dangerously-low pH, EC stage floors, seedling EC
+ceiling, high-EC antagonism (Mg→Ca/K), late-flower senescence (yellowing →
+`bud_nutrient` support + honest opposition to deficiencies), and the aggregated
+`symptom.reported` rule (no self-stacking; direct sightings = strong, refined =
+moderate, else weak; negation dropped at parse).
+
+**Engine mechanics.** `requiredInputs` now gates: missing required metrics cap
+STRONG/CONFIRMED at POSSIBLE (CONFLICTING passes through). CONFLICTING extended:
+both sides ≥ moderate AND support doesn't dominate → conflicting. `risk`
+evidence binds `kind:"risk"` candidates; risk candidates render `Risk:` never
+`Assessment:`. Inspection asks (`inspect:leaf-undersides`, `inspect:roots`, …)
+are first-class next steps resolvable by matching observations. STRONG renders
+one proportional `Suggested:` action; weaker states get a measurement instead.
+`Reported:` renders canonical labels — never raw text.
+
+**Semantic changes vs the old wizard (documented per Phase 3):** symptom-only
+reports can no longer assert a diagnosis — they surface candidates capped by
+missing data; the wizard's question path keeps its literal result text (a user
+who answered the wizard *is* the evidence), while the engine's data path applies
+the uncertainty model. Two paths, one knowledge record.
 
 ---
 

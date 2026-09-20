@@ -468,6 +468,7 @@ function run() {
     vpdDivergence: null,
     missing: [],
     ...over,
+    observations: over.observations ?? [],
   })
 
   const findCandidate = (ctx: GrowContextView, id: string) =>
@@ -490,10 +491,10 @@ function run() {
     assert.equal(f, undefined, "small divergence < 0.3 → no finding")
   }
 
-  // env.vpd-band — persistent high in flower → env.heat-stress candidate
+  // env.vpd-band — persistent high in flower → heat_stress candidate
   {
     const ctx = mkCtx({ series: { ...mkCtx().series, vpdComputed: mkSeries([1.7, 1.8, 1.9, 1.8], 0.15) } })
-    const c = findCandidate(ctx, "env.heat-stress")!
+    const c = findCandidate(ctx, "heat_stress")!
     assert.equal(c.state, "possible", "persistent high VPD → possible (single moderate evidence)")
     assert.match(c.supporting[0].text, /above the 1–1\.5/, "text names the band")
     assert.ok(c.ruleIds.includes("env.vpd-band"), "contributing rule recorded")
@@ -501,12 +502,12 @@ function run() {
   }
   {
     const ctx = mkCtx({ series: { ...mkCtx().series, vpdComputed: mkSeries([1.1, 1.2, 1.1], 0.15) } })
-    assert.equal(findCandidate(ctx, "env.heat-stress"), undefined, "in-band VPD → no candidate")
+    assert.equal(findCandidate(ctx, "heat_stress"), undefined, "in-band VPD → no candidate")
     assert.equal(findCandidate(ctx, "humidity_high"), undefined, "in-band VPD → no humidity candidate either")
   }
   {
     const ctx = mkCtx({ series: { ...mkCtx().series, vpdComputed: mkSeries([1.8, 1.8], 0.15) } })
-    assert.equal(findCandidate(ctx, "env.heat-stress"), undefined, "2 points → rule gated off (n≥3)")
+    assert.equal(findCandidate(ctx, "heat_stress"), undefined, "2 points → rule gated off (n≥3)")
   }
 
   // env.rh-flower-high — FLOWER + ≥3 of last 5 ≥65% feeds two candidates
@@ -527,14 +528,14 @@ function run() {
     assert.equal(findCandidate(ctx, "env.moisture-disease-risk"), undefined, "same RH in veg → disease-risk rule gated off")
   }
 
-  // env.temp-high — ≥60% of ≥3 readings > 86°F → env.heat-stress
+  // env.temp-high — ≥60% of ≥3 readings > 86°F → heat_stress
   {
     const ctx = mkCtx({ series: { ...mkCtx().series, temperature: mkSeries([88, 90, 87, 89], 2) } })
-    assert.ok(findCandidate(ctx, "env.heat-stress"), "persistent heat flagged")
+    assert.ok(findCandidate(ctx, "heat_stress"), "persistent heat flagged")
   }
   {
     const ctx = mkCtx({ series: { ...mkCtx().series, temperature: mkSeries([75, 90, 75, 76], 2) } })
-    assert.equal(findCandidate(ctx, "env.heat-stress"), undefined, "single spike ≠ sustained")
+    assert.equal(findCandidate(ctx, "heat_stress"), undefined, "single spike ≠ sustained")
   }
 
   // chem.ph-band — coco band 5.5–6.2 → ph_lockout candidate
@@ -566,20 +567,20 @@ function run() {
     assert.equal(c.nextMeasurement?.id, "runoffEc")
   }
 
-  // growth.stalled — veg, ≥3 heights, ≥7d span, |rate|<0.2 → stunted_growth
+  // growth.stalled — veg, ≥3 heights, ≥7d span, |rate|<0.2 → stunt
   {
     const ctx = mkCtx({
       diary: { ...mkCtx().diary, stage: "VEGETATIVE" },
       series: { ...mkCtx().series, height: mkSeries([30, 30.5, 30.2], 2) },
     })
     // pts default step = 1 day → span 2d < 7d → gated off
-    assert.equal(findCandidate(ctx, "stunted_growth"), undefined, "short span gated")
+    assert.equal(findCandidate(ctx, "stunt"), undefined, "short span gated")
     const wide = { ...seriesStats(pts([30, 30.5, 30.2], 4 * 86400000)), points: pts([30, 30.5, 30.2], 4 * 86400000), trend: "stable" as const }
     const ctx2 = mkCtx({
       diary: { ...mkCtx().diary, stage: "VEGETATIVE" },
       series: { ...mkCtx().series, height: wide },
     })
-    const c = findCandidate(ctx2, "stunted_growth")!
+    const c = findCandidate(ctx2, "stunt")!
     assert.equal(c.state, "possible", "flat 8-day veg → stall flagged")
     assert.match(c.supporting[0].text, /training can mask/i, "honest caveat included")
   }
@@ -655,7 +656,10 @@ function run() {
     assert.match(lines, /Calculated: VPD ≈1\.1 kPa/, "calculated line shows derived VPD")
     assert.match(lines, /leaf temp not logged/, "assumption disclosed")
     assert.match(lines, /Worth watching:/, "findings rendered")
-    assert.match(lines, /Assessment:/, "candidate assessment rendered")
+    // Rising humidity during flower surfaces the moisture-disease RISK
+    // candidate — risk kinds render "Risk:", never "Assessment:".
+    assert.match(lines, /Risk: Moisture-related disease risk — POSSIBLE/, "risk candidate renders as warning")
+    assert.doesNotMatch(lines, /Assessment:/, "risk candidate does not render as diagnosis")
     assert.match(lines, /Next useful measurement:/, "next measurement rendered")
   }
   {

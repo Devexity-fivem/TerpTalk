@@ -25,6 +25,16 @@ export type MetricId =
   | "ppfd"
   | "photoperiod"
 
+/** Visual/physical inspections a grower can perform — recommendable as
+ *  next steps exactly like measurements, but never "logged" metrics.
+ *  "inspect:leaf-undersides", "inspect:sticky-cards", … */
+export type InspectionId = `inspect:${string}`
+
+/** Anything the engine can ask for next: an instrument reading or a
+ *  visual inspection. requiredInputs stays MetricId-only — those mean
+ *  data the schema can actually hold. */
+export type NextStepId = MetricId | InspectionId
+
 /** Per-metric noise floor for trend detection — the smallest step treated
  *  as real movement. These are statistical significance epsilons, NOT
  *  horticultural thresholds; rule bands live in the rules themselves. */
@@ -66,9 +76,59 @@ export type EvidenceStrength = "weak" | "moderate" | "strong"
 
 /** A measurement the engine can recommend to reduce uncertainty. */
 export interface MeasurementHint {
-  id: MetricId
+  id: NextStepId
   label: string
   why: string
+  /** observations whose presence satisfies an inspection ask — prevents
+   *  re-recommending "check leaf undersides" after webbing is reported */
+  resolvedBy?: SymptomId[]
+}
+
+// ── Structured observations (reported symptoms) ─────────────────────
+// Natural-language symptom reports normalized by terpbot-nl-parse into
+// canonical ids. Parsing produces observations ONLY — the rule engine
+// does the reasoning.
+
+export type SymptomId =
+  | "LEAF_YELLOWING" | "LEAF_PALE" | "LEAF_DARK_GREEN" | "LEAF_PURPLE_RED"
+  | "STEM_PURPLE" | "BROWNING" | "BLEACHING"
+  | "CLAW_DOWN" | "CURL_UP" | "CURL_UNDER" | "CRISPY" | "LIMP_SOFT"
+  | "DISTORTED" | "TIP_BURN" | "LIGHT_BURN" | "SPOTS" | "RUST_SPOTS"
+  | "DARK_SPOTS" | "STIPPLING" | "SILVERING" | "POWDERY" | "STICKY_RESIDUE"
+  | "WEBBING" | "SLIME_TRAIL" | "HOLES" | "FUZZ_MOLD"
+  | "STUNTED" | "STRETCHED" | "DROOPING" | "COLLAPSED"
+  | "MEDIUM_WET" | "MEDIUM_DRY" | "OVERWATERED" | "UNDERWATERED"
+  | "ENV_HOT" | "ENV_COLD" | "ENV_HUMID" | "ENV_DRY" | "WIND_BURN"
+  | "ROOT_ROT" | "ROOT_BOUND" | "BUD_ROT" | "HERMIE" | "AIRY_BUDS"
+  | "GRASSY_SMELL" | "STEM_SPLIT" | "NO_SPROUT" | "PH_UNSTABLE"
+  | "EC_RISING" | "SALT_CRUST"
+  | "PEST_MITES" | "PEST_MITES_OTHER" | "PEST_APHIDS" | "PEST_THRIPS"
+  | "PEST_FUNGUS_GNATS" | "PEST_WHITEFLIES" | "PEST_CATERPILLARS"
+  | "PEST_SLUGS" | "PEST_GENERIC"
+
+export type LocationId =
+  | "LOWER_OLD" | "UPPER_NEW" | "LEAF_TIPS" | "LEAF_MARGINS" | "VEINS"
+  | "INTERVEINAL" | "STEMS" | "BUDS" | "SUGAR_LEAVES" | "ROOTS"
+  | "UNDERSIDE" | "COTYLEDONS" | "BASE" | "WHOLE_PLANT"
+
+export interface StructuredObservation {
+  symptom: SymptomId
+  location?: LocationId
+  /** utterance-claimed stage; falls back to ctx.diary.stage in rules */
+  stage?: string
+  /** utterance-claimed period — "NIGHT" | "LIGHTS_ON" | "LIGHTS_OFF".
+   *  Matters because some symptoms are normal in a period (nyctinasty) */
+  period?: string
+  /** epoch ms of the report (update createdAt / mention time) */
+  t: number
+  source: "nl" | "diary-text"
+  /** diaryUpdate id — provenance for a future /why; never rendered */
+  refId?: string
+  /** wizard result ids this observation supports (after refinement) */
+  feeds: string[]
+  /** how the feeds list was derived — "refined" means a location or
+   *  stage discriminator fired, so the match carries more weight */
+  refined?: boolean
 }
 
 export interface IntelEvidence {
@@ -149,6 +209,10 @@ export interface GrowContextView {
   vpdDivergence: number | null
   /** schema metrics with zero readings in the window */
   missing: MetricId[]
+  /** normalized symptom reports parsed from diary update text —
+   *  [] when no parseable symptom was reported. Observations only;
+   *  the rule engine does the reasoning. */
+  observations: StructuredObservation[]
 }
 
 export interface IntelSeries extends SeriesStats {
@@ -158,7 +222,9 @@ export interface IntelSeries extends SeriesStats {
 
 export interface IntelRule {
   id: string
-  domain: "environment" | "chemistry" | "growth" | "stage" | "data"
+  domain:
+    | "environment" | "chemistry" | "growth" | "stage" | "data"
+    | "nutrition" | "pest" | "disease" | "watering"
   kind: FindingKind
   /** finding/candidate label, e.g. "Bud-rot risk" */
   title: string
@@ -209,11 +275,11 @@ export interface CandidateDef {
    *  be CONFIRMED — only measured data-quality facts are. */
   maxState: "strong" | "possible"
   /** metrics that must have data before this candidate can rise above
-   *  INSUFFICIENT */
+   *  POSSIBLE — the engine clamps state when any are missing */
   requiredInputs: MetricId[]
-  /** measurements that separate this candidate from live rivals —
-   *  feeds next-measurement selection */
-  discriminatingInputs: MetricId[]
+  /** measurements or inspections that separate this candidate from
+   *  live rivals — feeds next-step selection */
+  discriminatingInputs: NextStepId[]
   /** interventions — surfaced only at STRONG per the uncertainty rules;
    *  below that the engine emits a measurement recommendation instead */
   recommendedActions: string[]

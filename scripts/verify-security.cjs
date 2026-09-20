@@ -78,6 +78,11 @@ const apiFiles = () => {
     path.join("src", "lib", "grow-streak.ts"),
     path.join("src", "lib", "challenges.ts"),
     path.join("src", "lib", "quests.ts"),
+    // Rep 3.0: ledger aggregates (streak days, mutual-like detection,
+    // milestone/badge checks) — all parameterized tagged templates.
+    path.join("src", "lib", "streaks.ts"),
+    path.join("src", "lib", "trust-signals.ts"),
+    path.join("src", "lib", "reputation.ts"),
     path.join("src", "app", "api", "admin", "reputation", "flags", "route.ts"),
     // DISTINCT ON (partner) inbox query — reviewed raw SQL.
     path.join("src", "app", "api", "messages", "route.ts"),

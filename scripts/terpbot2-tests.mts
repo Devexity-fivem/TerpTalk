@@ -4,8 +4,10 @@
 // and determinism. Run: tsx scripts/terpbot2-tests.mts
 
 import { strict as assert } from "node:assert"
+import { readFileSync } from "node:fs"
 import { detectTrend, seriesStats } from "@/lib/terpbot-intel-calc"
 import {
+  INSPECTION_INFO,
   INTEL_RULES,
   assessCandidate,
   evaluateContext,
@@ -16,12 +18,16 @@ import {
 import { CANDIDATES, SOURCES } from "@/lib/terpbot-intel-knowledge"
 import { wizardResultFromCandidate } from "@/lib/terpbot-intel-wizard"
 import { WIZARD_NODES, WIZARD_RESULTS, WIZARD_START } from "@/lib/problem-wizard"
+import type { WizardResult } from "@/lib/problem-wizard"
 import { isValidWizardResultId, wizardResultToTag } from "@/lib/symptom-tags"
+import { parseGrowText } from "@/lib/terpbot-nl-parse"
 import type {
   CandidateResult,
   GrowContextView,
   IntelEvidence,
   IntelSeries,
+  MetricId,
+  StructuredObservation,
 } from "@/lib/terpbot-intel-types"
 
 const t0 = Date.UTC(2025, 0, 1)
@@ -54,6 +60,7 @@ const mkCtx = (over: Partial<GrowContextView> = {}): GrowContextView => ({
   vpdDivergence: null,
   missing: [],
   ...over,
+  observations: over.observations ?? [],
 })
 const withSeries = (over: Partial<GrowContextView["series"]>, ctxOver: Partial<GrowContextView> = {}) =>
   mkCtx({ series: { ...mkCtx().series, ...over }, ...ctxOver })
@@ -68,7 +75,11 @@ function run() {
     assert.ok(def.sourceIds.length > 0, `candidate ${id} has provenance`)
     for (const s of def.sourceIds) assert.ok(s in SOURCES, `candidate ${id} source ${s} resolves`)
     for (const m of [...def.requiredInputs, ...def.discriminatingInputs]) {
-      assert.ok(MEASUREMENT_LABELS.has(m), `candidate ${id} metric ${m} renderable`)
+      if (m.startsWith("inspect:")) {
+        assert.ok(m in INSPECTION_INFO, `candidate ${id} inspection ${m} renderable`)
+      } else {
+        assert.ok(MEASUREMENT_LABELS.has(m as MetricId), `candidate ${id} metric ${m} renderable`)
+      }
     }
   }
   // Every candidateId emitted by a rule resolves in the registry.
@@ -161,8 +172,8 @@ function run() {
     assert.match(lines, /Verify .* first/i, "conflict names the resolving measurement")
   }
   {
-    const ctx = withSeries({ humidity: mkSeries([60, 62, 61], 3) })
-    assert.equal(cand(ctx, "humidity_high"), undefined, "normal RH → no candidate")
+    const ctx = withSeries({ humidity: mkSeries([45, 48, 50], 3) })
+    assert.equal(cand(ctx, "humidity_high"), undefined, "in-band flower RH → no candidate")
   }
 
   // ── 5. env.instability — volatile trends ─────────────────────────────
@@ -178,8 +189,9 @@ function run() {
       humidity: mkSeries([50, 68, 48, 70, 50], 3),
     })
     const c = cand(ctx, "env.instability")!
-    assert.equal(c.state, "possible", "two weak volatile signals → possible")
-    assert.equal(c.forScore, 2)
+    assert.equal(c.state, "possible", "stacked instability evidence stays capped at possible")
+    // temp-volatile (1) + rh-volatile (1) + co-variation (2) + diurnal-swing (2)
+    assert.equal(c.forScore, 6)
   }
 
   // ── 6. Multi-hypothesis: salt_buildup vs ph_lockout ──────────────────
@@ -194,7 +206,9 @@ function run() {
     const lock = diag.candidates.find((c) => c.id === "ph_lockout")!
     assert.ok(salt && lock, "both hypotheses preserved")
     assert.equal(salt.state, "possible")
-    assert.equal(lock.state, "possible")
+    // pH out-of-band (moderate) + fed-but-locked-out signature (moderate)
+    // = two independent supports → STRONG, honestly earned
+    assert.equal(lock.state, "strong")
     // the discriminating measurement separates them
     const next = nextUsefulMeasurement(ctx, diag)
     assert.ok(next && /runoff/i.test(next.label), `next measurement is runoff-related (${next?.id})`)
@@ -225,7 +239,7 @@ function run() {
     // Deterministic tie-break: two possible candidates → priority order
     const ctx = withSeries({
       ph: mkSeries([6.0, 6.1, 7.0], 0.15), // ph_lockout possible → runoffPh+runoffEc
-      vpdComputed: mkSeries([1.7, 1.8, 1.9], 0.15), // env.heat-stress possible → leafTemp
+      vpdComputed: mkSeries([1.7, 1.8, 1.9], 0.15), // heat_stress possible → leafTemp
     })
     const diag = evaluateContext(ctx)
     assert.ok(diag.candidates.length >= 2)
@@ -268,6 +282,25 @@ function run() {
     assert.equal(wizardResultToTag("humidity_high")?.slug, "environment-ph")
   }
   {
+    // Phase E full-migration pin: EVERY wizard result must be generated
+    // from the shared candidate registry and byte-identical to the
+    // pre-migration literal (title/cause/fixes/severity).
+    const snapshot = JSON.parse(
+      readFileSync(new URL("./fixtures/wizard-results.snapshot.json", import.meta.url), "utf8")
+    ) as Record<string, WizardResult>
+    const resultIds = Object.keys(WIZARD_RESULTS)
+    assert.equal(resultIds.length, 48, `48 wizard results migrated (got ${resultIds.length})`)
+    for (const id of resultIds) {
+      assert.ok(id in snapshot, `result ${id} existed before migration`)
+      assert.deepEqual(WIZARD_RESULTS[id], snapshot[id], `result ${id} identical to pre-migration literal`)
+      // …and is literally generated from the shared candidate
+      assert.deepEqual(WIZARD_RESULTS[id], wizardResultFromCandidate(id), `result ${id} generated from candidate`)
+      // every wizard result has a live engine candidate + symptom tag
+      assert.ok(isValidWizardResultId(id), `result ${id} validates`)
+      assert.ok(wizardResultToTag(id), `result ${id} has a symptom tag`)
+    }
+  }
+  {
     // Graph integrity sweep — every wizard path still terminates in a
     // registered result (catches a migration that silently drops edges).
     const reachable = new Set<string>()
@@ -303,7 +336,7 @@ function run() {
     const c = cand(ctx, "salt_buildup")!
     assert.equal(c.state, "possible", "single weak evidence → possible")
     const lines = renderIntelLines(ctx, evaluateContext(ctx)).join("\n")
-    assert.match(lines, /Assessment: Salt accumulation \/ rising EC — POSSIBLE/)
+    assert.match(lines, /Assessment: Salt \/ nutrient buildup — POSSIBLE/)
   }
   {
     // Risk candidates render as risk language, never as diagnosis
@@ -314,6 +347,115 @@ function run() {
     const lines = renderIntelLines(ctx, evaluateContext(ctx)).join("\n")
     assert.doesNotMatch(lines, /has bud rot|you have/i, "never asserts disease presence")
     assert.match(lines, /risk/i, "risk language used")
+  }
+
+  // ── 9b. Phase E — reported symptoms + adversarial diagnostics ────────
+
+  const obsFrom = (text: string, t = t0 + 30 * 86400000): StructuredObservation[] =>
+    parseGrowText(text).observations.map((o) => ({
+      symptom: o.symptom,
+      location: o.location,
+      stage: o.stage,
+      period: o.period,
+      t,
+      source: "diary-text" as const,
+      refId: "u1",
+      feeds: o.feeds,
+      refined: o.refined,
+    }))
+
+  {
+    // requiredInputs gate: a symptom report alone can NEVER reach strong
+    // when the required metric is unlogged
+    const ctx = mkCtx({ observations: obsFrom("lower leaves yellowing") })
+    const c = cand(ctx, "nitrogen_def")!
+    assert.ok(c, "reported symptom surfaces the candidate")
+    assert.equal(c.state, "possible", "symptom + missing pH caps at possible")
+    assert.ok(c.requiredMissing.includes("ph"), "missing required input listed")
+    assert.equal(c.nextMeasurement?.id, "runoffPh", "next step asks for the discriminating measurement")
+  }
+  {
+    // senescence adversarial: late-flower lower-leaf yellowing must not
+    // read as pure deficiency — bud_nutrient gets support AND
+    // deficiencies get honest opposition
+    const ctx = mkCtx({
+      stageDays: 42,
+      observations: obsFrom("lower leaves yellowing"),
+      series: { ...mkCtx().series, ph: mkSeries([5.9, 6.0, 5.9], 0.15), ec: mkSeries([1.4, 1.5], 0.2) },
+    })
+    const sen = cand(ctx, "bud_nutrient")!
+    assert.ok(sen, "senescence hypothesis present")
+    const n = cand(ctx, "nitrogen_def")
+    assert.ok(n, "deficiency hypothesis also present")
+    assert.ok((n?.opposing.length ?? 0) > 0, "senescence opposes the deficiency read")
+    assert.notEqual(n?.state, "strong", "late-flower yellowing is not a strong deficiency")
+  }
+  {
+    // high EC + NO symptoms → risk/watch, never a burn diagnosis
+    const ctx = withSeries({ ec: mkSeries([2.6, 2.7, 2.8], 0.2) })
+    assert.equal(cand(ctx, "nutrient_burn"), undefined, "high EC alone is not nutrient burn")
+    const ex = cand(ctx, "nutrition.excess")
+    if (ex) {
+      assert.equal(ex.state, "possible", "EC >2.5 sustained is a watch signal, not a verdict")
+    }
+  }
+  {
+    // yellow leaves + perfectly normal pH/EC → possible, never strong
+    const ctx = mkCtx({
+      observations: obsFrom("lower leaves yellowing"),
+      series: { ...mkCtx().series, ph: mkSeries([5.9, 6.0, 5.9], 0.15), ec: mkSeries([1.4, 1.5, 1.5], 0.2) },
+    })
+    for (const id of ["nitrogen_def", "magnesium_def", "potassium_def"]) {
+      const c = cand(ctx, id)
+      assert.ok(!c || c.state === "possible", `${id} cannot be strong on one symptom report`)
+    }
+  }
+  {
+    // drooping right after lights-off → nyctinasty info, not watering
+    const ctx = mkCtx({ observations: obsFrom("plant drooping right after dark") })
+    assert.equal(cand(ctx, "overwater"), undefined, "lights-off droop never feeds watering candidates")
+  }
+  {
+    // tip burn + LOW EC → the burn read stays weak; no forced diagnosis
+    const ctx = mkCtx({
+      observations: obsFrom("leaf tips burned"),
+      series: { ...mkCtx().series, ec: mkSeries([1.0, 1.1, 0.9], 0.2) },
+    })
+    const burn = cand(ctx, "nutrient_burn")
+    assert.ok(!burn || burn.state === "possible", "tip burn + low EC stays possible")
+  }
+  {
+    // contradictory readings → CONFLICTING with both sides preserved
+    const ctx = withSeries({ temperature: mkSeries([90, 90, 90, 80], 2) })
+    const c = cand(ctx, "heat_stress")!
+    assert.equal(c.state, "conflicting", "sustained heat + corrected latest → conflicting")
+    assert.ok(c.supporting.length > 0 && c.opposing.length > 0, "both sides preserved")
+    const lines = renderIntelLines(ctx, evaluateContext(ctx)).join("\n")
+    assert.match(lines, /evidence conflicts/, "conflict rendered explicitly")
+  }
+  {
+    // a single environmental measurement → weak at most
+    const ctx = withSeries({ temperature: mkSeries([92], 2) })
+    const c = cand(ctx, "heat_stress")
+    assert.ok(!c || c.forScore <= 1, "one reading can never be strong")
+  }
+  {
+    // direct sighting → strong, and the next step is an INSPECTION
+    const ctx = mkCtx({ observations: obsFrom("webbing under the leaves") })
+    const c = cand(ctx, "spider_mites")!
+    assert.ok(c, "webbing sighting surfaces spider_mites")
+    assert.equal(c.state, "strong", "direct sighting earns strong")
+    assert.ok(c.nextMeasurement?.id.startsWith("inspect:"), "pest next-step is an inspection")
+    const lines = renderIntelLines(ctx, evaluateContext(ctx)).join("\n")
+    assert.match(lines, /Reported:/, "reported symptoms render (canonical labels)")
+    assert.match(lines, /Suggested:/, "strong surfaces a proportional action")
+    assert.doesNotMatch(lines, /webbing under the leaves/, "raw diary text never echoes")
+  }
+  {
+    // no raw text leakage — the rendered output only uses canonical labels
+    const ctx = mkCtx({ observations: obsFrom("my dog knocked the plant over, lower leaves yellowing") })
+    const lines = renderIntelLines(ctx, evaluateContext(ctx)).join("\n")
+    assert.doesNotMatch(lines, /dog|knocked/, "raw update text never reaches output")
   }
 
   // ── 10. Determinism ─────────────────────────────────────────────────

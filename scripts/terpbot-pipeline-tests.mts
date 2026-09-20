@@ -681,14 +681,20 @@ async function run() {
         { d: 10, temp: 78, rh: 69, vpd: 0.6, ph: 6.6, ec: 1.9, h: 47 },
         { d: 5, temp: 78, rh: 71, vpd: 0.5, ph: 6.9, ec: 2.1, h: 48 },
       ]
+      let symptomUpdateId = ""
       for (const u of upd) {
-        await prisma.diaryUpdate.create({
+        const created = await prisma.diaryUpdate.create({
           data: {
-            title: `u${u.d}`, content: "x", stage: "FLOWER", diaryId: diary.id, authorId: intel.id,
+            // Latest update reports a symptom in free text — exercises
+            // the parse → observation → evidence channel end-to-end.
+            title: `u${u.d}`,
+            content: u.d === 5 ? "lower leaves yellowing a bit" : "x",
+            stage: "FLOWER", diaryId: diary.id, authorId: intel.id,
             createdAt: daysAgo(u.d),
             temperature: u.temp, humidity: u.rh, vpd: u.vpd, ph: u.ph, ec: u.ec, heightCm: u.h,
           },
         })
+        if (u.d === 5) symptomUpdateId = created.id
       }
 
       const gctx = await buildGrowContext(diary.id, { ownerId: intel.id, scope: "public" })
@@ -705,6 +711,13 @@ async function run() {
       assert.equal(gctx.daysSinceUpdate, 5)
       assert.equal(gctx.envCoverage, 1)
       assert.equal(gctx.missing.length, 0, "all schema metrics recorded")
+      // Reported-symptom channel: update text parsed into a structured
+      // observation carrying provenance (update id), never raw text.
+      const leafObs = gctx.observations.find((o) => o.symptom === "LEAF_YELLOWING")
+      assert.ok(leafObs, "update text parsed into a LEAF_YELLOWING observation")
+      assert.equal(leafObs!.location, "LOWER_OLD")
+      assert.equal(leafObs!.refId, symptomUpdateId, "observation carries update-id provenance")
+      assert.equal(leafObs!.source, "diary-text")
 
       const diag = evaluateContext(gctx)
       const byCand = (id: string) => diag.candidates.find((c) => c.id === id)
@@ -716,7 +729,7 @@ async function run() {
       assert.equal(byCand("humidity_high")?.state, "strong", "same RH evidence feeds the migrated wizard candidate")
       assert.ok(byCand("ph_lockout"), "pH-out-of-band → lockout candidate")
       assert.ok(byCand("salt_buildup"), "EC drift + pH-out-of-band → salt candidate")
-      assert.ok(!byCand("stunted_growth"), "no stall candidate in flower stage")
+      assert.ok(!byCand("stunt"), "no stall candidate in flower stage")
 
       // /checkin surfaces the engine through the real command pipeline
       const ci = await runBotCommand("checkin", {
@@ -733,6 +746,8 @@ async function run() {
       assert.match(out, /Worth watching:/, "findings rendered")
       assert.match(out, /Recorded VPD \(0\.5\) differs/, "confirmed divergence surfaced")
       assert.match(out, /Next useful measurement:/, "discriminating measurement suggested")
+      assert.match(out, /Reported:.*yellowing/i, "reported symptoms surface as canonical labels")
+      assert.ok(!out.includes("lower leaves yellowing a bit"), "raw diary text never echoes")
       assert.ok(out.length <= 1000, `checkin stays inside the chat cap (${out.length})`)
 
       // Privacy: a PRIVATE diary is invisible to the public-scope context

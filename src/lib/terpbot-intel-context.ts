@@ -18,7 +18,13 @@ import {
   type MetricPoint,
 } from "@/lib/terpbot-intel-calc"
 import { METRIC_EPSILON } from "@/lib/terpbot-intel-types"
-import type { GrowContextView, IntelSeries, MetricId } from "@/lib/terpbot-intel-types"
+import type {
+  GrowContextView,
+  IntelSeries,
+  MetricId,
+  StructuredObservation,
+} from "@/lib/terpbot-intel-types"
+import { parseGrowText } from "@/lib/terpbot-nl-parse"
 
 // Last-12-updates window: enough for trend detection (min 3 points) and
 // recent-vs-baseline comparisons at typical weekly-ish cadence, while
@@ -26,8 +32,10 @@ import type { GrowContextView, IntelSeries, MetricId } from "@/lib/terpbot-intel
 export const INTEL_WINDOW = 12
 
 type UpdateRow = {
+  id: string
   createdAt: Date
   stage: string
+  content: string
   temperature: number | null
   humidity: number | null
   vpd: number | null
@@ -35,6 +43,10 @@ type UpdateRow = {
   ec: number | null
   heightCm: number | null
 }
+
+// Symptoms reported in update text count as evidence only while recent
+// — a yellowing report from 40 days ago is history, not a live signal.
+export const OBSERVATION_MAX_AGE_DAYS = 21
 
 type SeriesField = "temperature" | "humidity" | "vpd" | "ph" | "ec" | "heightCm"
 
@@ -95,7 +107,7 @@ export async function buildGrowContext(
       orderBy: { createdAt: "desc" },
       take: INTEL_WINDOW,
       select: {
-        createdAt: true, stage: true,
+        id: true, createdAt: true, stage: true, content: true,
         temperature: true, humidity: true, vpd: true, ph: true, ec: true,
         heightCm: true,
       },
@@ -155,6 +167,31 @@ export async function buildGrowContext(
   if (series.vpdEntered.n === 0) missing.push("vpd")
 
   const latest = rows[rows.length - 1]
+
+  // Reported-symptom channel: recent update text → structured
+  // observations. Parse only what's still evidence-relevant; store
+  // normalized ids + refIds, never the raw text.
+  const obsMaxAge = OBSERVATION_MAX_AGE_DAYS * 86400000
+  const observations: StructuredObservation[] = []
+  for (const u of rows) {
+    if (now - u.createdAt.getTime() > obsMaxAge) continue
+    if (!u.content) continue
+    const parsed = parseGrowText(u.content)
+    for (const o of parsed.observations) {
+      observations.push({
+        symptom: o.symptom,
+        location: o.location,
+        stage: o.stage ?? u.stage,
+        period: o.period,
+        t: u.createdAt.getTime(),
+        source: "diary-text",
+        refId: u.id,
+        feeds: o.feeds,
+        refined: o.refined,
+      })
+    }
+  }
+
   const stageDays = prevStage
     ? Math.max(0, Math.floor((now - prevStage.createdAt.getTime()) / 86400000))
     : Math.max(0, Math.floor((now - (rows[0]?.createdAt.getTime() ?? diary.startDate.getTime())) / 86400000))
@@ -197,5 +234,6 @@ export async function buildGrowContext(
     series,
     vpdDivergence: divergence,
     missing,
+    observations,
   }
 }
