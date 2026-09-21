@@ -63,6 +63,9 @@ const main = async () => {
   try {
     // give B an avatar+bio so it's eligible for the suggestion pool
     await prisma.profile.update({ where: { userId: userB.id }, data: { bio: "verification target", reputation: 5 } })
+    await prisma.reputationEvent.create({
+      data: { userId: userB.id, type: "STAFF_ADJUSTMENT", amount: 5, reason: "test seed" },
+    })
 
     const { cookie, session } = await login(userA.username, userA.password)
     session?.user?.id ? pass("login works") : fail("login works", session)

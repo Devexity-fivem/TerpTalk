@@ -5,7 +5,8 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { unauthorized, publicUserSelect, LIMITS, getClientIp, logSecurityEvent, forbidden, containsExternalLink, isTrustedForLinks, isModerator, isAdmin, isBanned, isStaff } from "@/lib/security"
 import { requireModerator } from "@/lib/require-staff"
-import { awardReputation, reverseReputationBySource, repRateLimit, getTierPerks, REP_POINTS, TRUSTED_LINKS_REP, POLL_CREATION_REP } from "@/lib/reputation"
+import { awardReputation, repRateLimit, getTierPerks, REP_POINTS, TRUSTED_LINKS_REP, POLL_CREATION_REP } from "@/lib/reputation"
+import { enqueueReversal, drainOne } from "@/lib/reputation-outbox"
 import { THREAD_MIN_PAID_LENGTH } from "@/lib/reputation-config"
 import { notifyMentions } from "@/lib/mentions"
 import { notifyMany, invalidateNotificationsForLink, postDeepLink } from "@/lib/notify"
@@ -410,6 +411,16 @@ export async function DELETE(request: Request) {
       return forbidden("Your account is suspended")
     }
 
+    // Fetch post ids up front — they feed both the reversal intents and the
+    // blob cleanup below.
+    const postIds = await prisma.post.findMany({
+      where: { threadId: id },
+      select: { id: true, images: { select: { url: true } } },
+    })
+
+    // Durable reversal intents ride inside the delete transaction — a crash
+    // after commit can never strand reputation on deleted content.
+    const reversalIds: string[] = []
     await prisma.$transaction(async (tx) => {
       await tx.thread.update({ where: { id }, data: { deleted: true } })
       // A deleted discussion thread frees the diary's canonical link.
@@ -419,6 +430,16 @@ export async function DELETE(request: Request) {
       await tx.postImage.deleteMany({
         where: { OR: [{ threadId: id }, { post: { threadId: id } }] },
       })
+      reversalIds.push(await enqueueReversal(tx, {
+        kind: "SOURCE", sourceType: "THREAD", sourceId: id,
+        reason: "Thread removed", requestedBy: session.user.id,
+      }))
+      for (const p of postIds) {
+        reversalIds.push(await enqueueReversal(tx, {
+          kind: "SOURCE", sourceType: "POST", sourceId: p.id,
+          reason: "Thread removed", requestedBy: session.user.id,
+        }))
+      }
     })
     await invalidateNotificationsForLink(`/forum/thread/${thread.slug}`)
 
@@ -438,16 +459,9 @@ export async function DELETE(request: Request) {
       }).catch(() => {})
     }
 
-    // Reputation reconciliation: reverse the thread award plus every event
-    // on posts inside it (post creation, likes, accepted answers).
-    await reverseReputationBySource("THREAD", thread.id, "Thread removed", session.user.id).catch(() => 0)
-    const postIds = await prisma.post.findMany({
-      where: { threadId: thread.id },
-      select: { id: true, images: { select: { url: true } } },
-    })
-    for (const p of postIds) {
-      await reverseReputationBySource("POST", p.id, "Thread removed", session.user.id).catch(() => 0)
-    }
+    // Best-effort immediate drain — preserves the instant-reversal UX while
+    // the outbox rows make any failure retryable via ping/cron.
+    for (const rid of reversalIds) await drainOne(rid).catch(() => false)
 
     // Soft-deleted content must not leave live public blobs behind.
     deleteImagesIfUnreferenced([

@@ -279,7 +279,7 @@ export default function SearchResults() {
                     <div className="font-medium text-sm flex items-center gap-2">
                       <span className="min-w-0 truncate">{t.title}</span>
                       {t.solved && (
-                        <span className="inline-flex items-center gap-1 text-[10px] uppercase tracking-wide text-green-500 shrink-0">
+                        <span className="inline-flex items-center gap-1 text-[10px] uppercase tracking-wide text-success shrink-0">
                           <CheckCircle2 className="w-3.5 h-3.5" /> Solved
                         </span>
                       )}
@@ -404,7 +404,7 @@ export default function SearchResults() {
                       fallback={<span className="text-primary font-bold text-sm">{u.username[0].toUpperCase()}</span>}
                     />
                     <div className="min-w-0">
-                      <div className="font-medium text-sm flex items-center gap-1.5">{u.username} <TierChip reputation={u.reputation} publicMilestoneOptOut={u.publicMilestoneOptOut} /> <span className="text-xs text-amber-500">{u.reputation} rep</span></div>
+                      <div className="font-medium text-sm flex items-center gap-1.5">{u.username} <TierChip reputation={u.reputation} publicMilestoneOptOut={u.publicMilestoneOptOut} /> <span className="text-xs text-warning">{u.reputation} rep</span></div>
                       {u.bio && <div className="text-xs text-muted-foreground truncate">{u.bio}</div>}
                     </div>
                   </Link>

@@ -68,6 +68,7 @@ export const ACCEPT_MIN_ACTOR_REP = 10
 // Paying content floors — content still posts below these, it just doesn't
 // earn rep. Stops 1-char threads and bare-name strain entries from paying.
 export const THREAD_MIN_PAID_LENGTH = 40
+export const POST_MIN_PAID_LENGTH = 40
 export const STRAIN_MIN_PAID_DESCRIPTION = 120
 
 // Only the first N chat messages per rolling day count toward the lifetime
@@ -257,18 +258,18 @@ const PERKS = {
 // lib/cosmetics.ts — every advertised reward must exist there.
 export const REP_TIERS: ReputationTier[] = [
   { threshold: 0, name: "Seed", color: "text-stone-500", bg: "bg-stone-500/10", icon: "🌰", benefit: "Every grow starts somewhere — post, grow, and share to earn rep.", perks: PERKS.BASE },
-  { threshold: 50, name: "Germinated", color: "text-lime-600", bg: "bg-lime-500/10", icon: "🌱", benefit: "Your first unlock lands fast — the Seed Shell avatar frame. Keep tending your garden.", perks: PERKS.GERM },
-  { threshold: 150, name: "Sprout", color: "text-amber-600", bg: "bg-amber-600/10", icon: "🌿", benefit: "Your links work instantly — no more new-member wait — and you unlock the Sprout Ring avatar frame.", perks: PERKS.SPROUT },
-  { threshold: 300, name: "Seedling", color: "text-green-500", bg: "bg-green-500/10", icon: "🌱", benefit: "Your username gets a leaf-green nameplate in chat and the forums — the garden knows your name.", perks: PERKS.SEEDLING },
-  { threshold: 500, name: "Rooted", color: "text-green-600", bg: "bg-green-600/10", icon: "🪴", benefit: "Unlocks community polls — vote AND create them — plus the Rooted Band frame and custom profile titles.", perks: PERKS.ROOTED },
-  { threshold: 1000, name: "Veg Grower", color: "text-emerald-500", bg: "bg-emerald-500/10", icon: "🌲", benefit: "A third daily quest slot — more quests means more rep every day — plus the Canopy Weave frame.", perks: PERKS.VEG },
-  { threshold: 1500, name: "Grower", color: "text-emerald-500", bg: "bg-emerald-500/10", icon: "🌳", benefit: "Earns Verified Member status and a permanent 1.5× reputation bonus, plus the Greenhouse Glow frame and Evergreen theme.", perks: PERKS.GROWER },
+  { threshold: 50, name: "Germinated", color: "text-success", bg: "bg-lime-500/10", icon: "🌱", benefit: "Your first unlock lands fast — the Seed Shell avatar frame. Keep tending your garden.", perks: PERKS.GERM },
+  { threshold: 150, name: "Sprout", color: "text-warning", bg: "bg-amber-600/10", icon: "🌿", benefit: "Your links work instantly — no more new-member wait — and you unlock the Sprout Ring avatar frame.", perks: PERKS.SPROUT },
+  { threshold: 300, name: "Seedling", color: "text-success", bg: "bg-green-500/10", icon: "🌱", benefit: "Your username gets a leaf-green nameplate in chat and the forums — the garden knows your name.", perks: PERKS.SEEDLING },
+  { threshold: 500, name: "Rooted", color: "text-success", bg: "bg-green-600/10", icon: "🪴", benefit: "Unlocks community polls — vote AND create them — plus the Rooted Band frame and custom profile titles.", perks: PERKS.ROOTED },
+  { threshold: 1000, name: "Veg Grower", color: "text-success", bg: "bg-emerald-500/10", icon: "🌲", benefit: "A third daily quest slot — more quests means more rep every day — plus the Canopy Weave frame.", perks: PERKS.VEG },
+  { threshold: 1500, name: "Grower", color: "text-success", bg: "bg-emerald-500/10", icon: "🌳", benefit: "Earns Verified Member status and a permanent 1.5× reputation bonus, plus the Greenhouse Glow frame and Evergreen theme.", perks: PERKS.GROWER },
   { threshold: 2500, name: "Bloom", color: "text-fuchsia-500", bg: "bg-fuchsia-500/10", icon: "🌸", benefit: "Your nameplate blooms violet, and you unlock the animated Photon Pulse frame and Ultraviolet theme.", perks: PERKS.BLOOM },
   { threshold: 3500, name: "Cultivator", color: "text-cyan-500", bg: "bg-cyan-500/10", icon: "✂️", benefit: "Unlocks The Grow Room — the members-only space for experienced growers — plus the LED Bloom frame, Golden Hour theme, and 1.5× rate limits.", perks: PERKS.CULTIVATOR },
   { threshold: 7000, name: "Master Grower", color: "text-purple-500", bg: "bg-purple-500/10", icon: "🏆", benefit: "Unlocks the Pistil Fire frame, the Midnight Garden theme, a glowing nameplate, slowmode immunity, and 6 images per post.", perks: PERKS.MASTER },
-  { threshold: 15000, name: "Head Grower", color: "text-rose-400", bg: "bg-rose-500/10", icon: "🌟", benefit: "Unlocks The Vault — the head table for top growers — a fourth daily quest, double rate limits, 8 images per post, and 7 thread tags.", perks: PERKS.HEAD },
+  { threshold: 15000, name: "Head Grower", color: "text-destructive", bg: "bg-rose-500/10", icon: "🌟", benefit: "Unlocks The Vault — the head table for top growers — a fourth daily quest, double rate limits, 8 images per post, and 7 thread tags.", perks: PERKS.HEAD },
   { threshold: 30000, name: "Grandmaster", color: "text-violet-300", bg: "bg-violet-500/10", icon: "🔮", benefit: "Unlocks the Rosin Ring frame, the Amber Cure theme, and legendary titles — a name the whole garden recognizes.", perks: PERKS.GRAND },
-  { threshold: 50000, name: "Master Gardener", color: "text-amber-400", bg: "bg-amber-400/10", icon: "👑", benefit: "The top of the ladder — the aurora-animated Northern Lights frame, Deity Glow theme, a golden nameplate, and 10 images per post.", perks: PERKS.MASTER_GARDENER },
+  { threshold: 50000, name: "Master Gardener", color: "text-warning", bg: "bg-amber-400/10", icon: "👑", benefit: "The top of the ladder — the aurora-animated Northern Lights frame, Deity Glow theme, a golden nameplate, and 10 images per post.", perks: PERKS.MASTER_GARDENER },
 ]
 
 // ─── Perk-threshold helpers ──────────────────────────────────────────
@@ -494,11 +495,11 @@ export interface TrustStanding {
 
 export const TRUST_STANDINGS: TrustStanding[] = [
   { min: 0, name: "Unrooted", color: "text-stone-500", bg: "bg-stone-500/10", icon: "🌰" },
-  { min: 25, name: "Known", color: "text-green-500", bg: "bg-green-500/10", icon: "🌱" },
-  { min: 100, name: "Trusted", color: "text-emerald-500", bg: "bg-emerald-500/10", icon: "" },
+  { min: 25, name: "Known", color: "text-success", bg: "bg-green-500/10", icon: "🌱" },
+  { min: 100, name: "Trusted", color: "text-success", bg: "bg-emerald-500/10", icon: "" },
   { min: 300, name: "Respected", color: "text-cyan-500", bg: "bg-cyan-500/10", icon: "🪴" },
   { min: 800, name: "Pillar", color: "text-purple-500", bg: "bg-purple-500/10", icon: "🏛️" },
-  { min: 2000, name: "Legend", color: "text-amber-500", bg: "bg-amber-500/10", icon: "🌟" },
+  { min: 2000, name: "Legend", color: "text-warning", bg: "bg-amber-500/10", icon: "🌟" },
 ]
 
 export function getTrustStanding(score: number): TrustStanding {

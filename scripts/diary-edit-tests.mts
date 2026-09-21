@@ -5,6 +5,7 @@
 // Run: npx tsx scripts/diary-edit-tests.mts   (dev DB only — guarded)
 import "./db-guard.mjs"
 import { strict as assert } from "node:assert"
+import { readFileSync } from "node:fs"
 import { prisma } from "@/lib/prisma"
 import { parseDiaryPatch, patchTouchesStrainStats, DIARY_EDITABLE_FIELDS } from "@/lib/diary-edit"
 import { escapeLike, strainFieldMatches, suggestStrainLink } from "@/lib/strain-stats"
@@ -38,7 +39,9 @@ async function mkUser(name: string, role = "MEMBER") {
   return u
 }
 
-// Mirror of the route's write path for a validated patch.
+// Mirror of the route's write path for a validated patch. `userId` plays the
+// route's session user: it gates the setup link AND the diary ownership
+// predicate — a non-owner's patch writes zero rows.
 async function applyPatch(diaryId: string, data: Record<string, unknown>, userId: string) {
   if (typeof data.strainId === "string") {
     const s = await prisma.strain.findUnique({ where: { id: data.strainId }, select: { id: true, name: true } })
@@ -49,7 +52,7 @@ async function applyPatch(diaryId: string, data: Record<string, unknown>, userId
     const setup = await prisma.growSetup.findUnique({ where: { id: data.setupId }, select: { id: true, authorId: true, deleted: true } })
     if (!setup || setup.deleted || setup.authorId !== userId) throw new Error("Setup not found")
   }
-  return prisma.growDiary.updateMany({ where: { id: diaryId, deleted: false }, data })
+  return prisma.growDiary.updateMany({ where: { id: diaryId, deleted: false, authorId: userId }, data })
 }
 
 const before = {
@@ -352,6 +355,33 @@ await check("lib: localDateInputValue formats local YYYY-MM-DD with padding", ()
   assert.equal(localDateInputValue(new Date(2026, 11, 31, 23, 59)), "2026-12-31")
   assert.equal(localDateInputValue(new Date(2026, 5, 7)), "2026-06-07")
   assert.match(localDateInputValue(), /^\d{4}-\d{2}-\d{2}$/)
+})
+
+// ─── Ownership + route source contract ───────────────────────────────
+await check("db: ownership predicate — non-owner patch is refused", async () => {
+  const own = await mkUser("diamown")
+  const other = await mkUser("diamother")
+  const dr = await prisma.growDiary.create({
+    data: { title: `__test_de_own_${tag}`, description: "", growType: "INDOOR", startDate: new Date(), authorId: own.id },
+  })
+  cleanup.diaryIds.push(dr.id)
+  const res = await applyPatch(dr.id, { title: "hijacked" }, other.id)
+  assert.equal(res.count, 0, "foreign actor must not write")
+  const after = await prisma.growDiary.findUnique({ where: { id: dr.id }, select: { title: true } })
+  assert.notEqual(after?.title, "hijacked")
+  const ok = await applyPatch(dr.id, { title: "renamed" }, own.id)
+  assert.equal(ok.count, 1, "owner write still succeeds")
+})
+
+await check("route: PATCH enforces ownership + soft-delete guards", () => {
+  const src = readFileSync("src/app/api/diaries/[id]/route.ts", "utf8")
+  const patch = src.slice(src.indexOf("export async function PATCH"))
+  assert.ok(patch.includes("diary.authorId === session.user.id"), "route must check diary author")
+  assert.ok(patch.includes("forbidden()"), "non-owner must get 403")
+  assert.ok(patch.includes("deleted: false"), "guarded write must exclude soft-deleted rows")
+  assert.ok(patch.includes("enforceLinkTrust"), "link trust required")
+  assert.ok(!patch.includes("awardReputation"), "PATCH never writes reputation")
+  assert.ok(!patch.includes('"startDate"'), "startDate is immutable — never patched")
 })
 
 // ─── Cleanup + summary ───────────────────────────────────────────────

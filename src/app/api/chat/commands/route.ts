@@ -28,7 +28,8 @@ import { runBotCommand } from "@/lib/terpbot-data"
 import { recordBotEvent, countEntityLinks } from "@/lib/terpbot-events"
 import { applyAccountActionInTx } from "@/lib/moderation"
 import { logSecurityEvent } from "@/lib/security"
-import { reverseReputationByActor, recordChatMessage } from "@/lib/reputation"
+import { recordChatMessage } from "@/lib/reputation"
+import { enqueueReversal, drainOne } from "@/lib/reputation-outbox"
 
 type ChatMessageWithAuthor = {
   id: string
@@ -165,8 +166,9 @@ export async function POST(request: NextRequest) {
       reason: string,
       durationDays?: number
     ) => {
-      const createdNotification = await prisma.$transaction((tx) =>
-        applyAccountActionInTx(tx, {
+      const reversalIds: string[] = []
+      const createdNotification = await prisma.$transaction(async (tx) => {
+        const n = await applyAccountActionInTx(tx, {
           actionType,
           targetUserId,
           reason,
@@ -175,16 +177,22 @@ export async function POST(request: NextRequest) {
           staffRole: user.role,
           staffName: displayName,
         })
-      )
+        // A permanent ban voids reputation the banned account granted
+        // others — durable intent committed atomically with the ban.
+        if (actionType === "PERMANENT_BAN") {
+          reversalIds.push(await enqueueReversal(tx, {
+            kind: "ACTOR", actorId: targetUserId,
+            reason: "Granting account permanently banned", requestedBy: userId,
+          }))
+        }
+        return n
+      })
 
       if (createdNotification) {
         emitNotificationPush(targetUserId, createdNotification)
       }
 
-      // A permanent ban voids reputation the banned account granted others.
-      if (actionType === "PERMANENT_BAN") {
-        await reverseReputationByActor(targetUserId, "Granting account permanently banned").catch(() => 0)
-      }
+      for (const rid of reversalIds) await drainOne(rid).catch(() => false)
 
       await logSecurityEvent("SUSPICIOUS_ACTIVITY", {
         userId,
@@ -270,7 +278,8 @@ export async function POST(request: NextRequest) {
         })
         await recordChatMessage(userId)
         const dto = toChatDto(message)
-        getPusher()?.trigger(`private-chat-${roomId}`, "new-message", dto).catch((e) => console.error("[pusher] command message push failed:", roomId, e))
+        // Content-free tickle — clients refetch via the block-filtered GET.
+        getPusher()?.trigger(`private-chat-${roomId}`, "new-message", { roomId, latestAt: dto.createdAt }).catch((e) => console.error("[pusher] command message push failed:", roomId, e))
         return NextResponse.json({ ok: true, message: dto })
       }
 

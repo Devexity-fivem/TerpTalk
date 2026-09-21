@@ -269,9 +269,9 @@ export default async function LeaderboardPage({
   }
 
   const medal = (i: number) =>
-    i === 0 ? <Trophy className="w-5 h-5 text-amber-400" /> :
+    i === 0 ? <Trophy className="w-5 h-5 text-warning" /> :
     i === 1 ? <Medal className="w-5 h-5 text-gray-300" /> :
-    i === 2 ? <Medal className="w-5 h-5 text-amber-700" /> :
+    i === 2 ? <Medal className="w-5 h-5 text-warning" /> :
     <span className="w-5 text-center text-sm text-muted-foreground">{i + 1}</span>
 
   const activeTab = TABS.find((t) => t.key === tab)!

@@ -209,7 +209,7 @@ export default async function Home() {
             </div>
             <h1 className="font-display text-5xl sm:text-6xl md:text-7xl font-bold tracking-tight text-foreground mb-6">
               Grow better,{" "}
-              <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary via-emerald-500 to-spectrum">
+              <span className="tt-gradient-text bg-gradient-to-r from-primary via-emerald-500 to-spectrum">
                 together.
               </span>
             </h1>
@@ -408,7 +408,7 @@ export default async function Home() {
                     <div className="flex-1 min-w-0">
                       <div className="font-medium text-sm mb-0.5 line-clamp-1">{update.title}</div>
                       <div className="text-xs text-muted-foreground flex items-center flex-wrap gap-x-2 gap-y-0.5">
-                        <span className="text-emerald-500">{update.diary.title}</span>
+                        <span className="text-success">{update.diary.title}</span>
                         <span className="inline-flex items-center gap-1">{update.author.profile?.username || update.author.name}<TierChip reputation={update.author.profile?.reputation ?? 0} publicMilestoneOptOut={update.author.profile?.publicMilestoneOptOut} /></span>
                       </div>
                     </div>
@@ -527,7 +527,7 @@ export default async function Home() {
             <div className="bg-card rounded-2xl border border-border p-6 sm:p-8 overflow-hidden relative">
               <div className="tt-spectrum-bar absolute inset-x-0 top-0 h-1" />
               <div className="absolute top-0 right-0 p-3">
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-500/10 text-amber-500 text-xs font-semibold uppercase tracking-wide">
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-500/10 text-warning text-xs font-semibold uppercase tracking-wide">
                   <Award className="w-3.5 h-3.5" />
                   Grower of the Week
                 </span>

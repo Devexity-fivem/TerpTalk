@@ -4,7 +4,8 @@ import { authOptions } from "@/lib/auth"
 import { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
 import { unauthorized, forbidden, getClientIp, logSecurityEvent, isBanned, blockExistsBetween } from "@/lib/security"
-import { awardReputation, reverseReputationByKey, repRateLimit, REP_POINTS } from "@/lib/reputation"
+import { awardReputation, repRateLimit, REP_POINTS } from "@/lib/reputation"
+import { enqueueReversal, drainOne } from "@/lib/reputation-outbox"
 import { LIKE_MIN_ACTOR_AGE_HOURS } from "@/lib/reputation-config"
 import { checkMaintenance } from "@/lib/maintenance"
 import { notify, postDeepLink } from "@/lib/notify"
@@ -145,22 +146,39 @@ export async function POST(request: Request) {
     }
 
     if (existingReaction) {
+      // Mutation + reversal intent in one transaction — an un-like can
+      // never strand the award it granted.
+      let reversalId: string | null = null
       if (existingReaction.type === type) {
         // Same type — toggle off
-        await prisma.reaction.delete({ where: { id: existingReaction.id } })
-        if (existingReaction.type === "LIKE") {
-          await reverseReputationByKey(likeKey, "Like removed").catch(() => null)
-        }
+        await prisma.$transaction(async (tx) => {
+          await tx.reaction.delete({ where: { id: existingReaction.id } })
+          if (existingReaction.type === "LIKE") {
+            reversalId = await enqueueReversal(tx, {
+              kind: "KEY", eventKey: likeKey, reason: "Like removed",
+              requestedBy: session.user.id,
+            })
+          }
+        })
+        if (reversalId) await drainOne(reversalId).catch(() => false)
         return NextResponse.json({ reaction: null, action: "removed" })
       }
       // Different type — switch reaction
-      const updated = await prisma.reaction.update({
-        where: { id: existingReaction.id },
-        data: { type },
+      const updated = await prisma.$transaction(async (tx) => {
+        const u = await tx.reaction.update({
+          where: { id: existingReaction.id },
+          data: { type },
+        })
+        if (existingReaction.type === "LIKE") {
+          reversalId = await enqueueReversal(tx, {
+            kind: "KEY", eventKey: likeKey, reason: "Like switched to another reaction",
+            requestedBy: session.user.id,
+          })
+        }
+        return u
       })
-      if (existingReaction.type === "LIKE") {
-        await reverseReputationByKey(likeKey, "Like switched to another reaction").catch(() => null)
-      } else if (type === "LIKE") {
+      if (reversalId) await drainOne(reversalId).catch(() => false)
+      if (existingReaction.type !== "LIKE" && type === "LIKE") {
         await payLike().catch(() => null)
       }
       return NextResponse.json({ reaction: updated, action: "switched" })

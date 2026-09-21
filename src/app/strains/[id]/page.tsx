@@ -226,7 +226,7 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
             <div className="flex items-center gap-2 mb-4 flex-wrap">
               <BarChart3 className="w-4 h-4 text-primary" />
               <h2 className="font-display font-semibold">Community grow data</h2>
-              <span className={`text-xs px-2 py-0.5 rounded ml-auto ${growStats.tier === "early" ? "bg-amber-500/10 text-amber-500" : "bg-secondary text-muted-foreground"}`}>
+              <span className={`text-xs px-2 py-0.5 rounded ml-auto ${growStats.tier === "early" ? "bg-amber-500/10 text-warning" : "bg-secondary text-muted-foreground"}`}>
                 {growStats.label}
               </span>
             </div>
@@ -249,13 +249,13 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
               </div>
               {growStats.avgRating != null && (
                 <div>
-                  <div className="text-2xl font-bold text-amber-500">{growStats.avgRating}/10</div>
+                  <div className="text-2xl font-bold text-warning">{growStats.avgRating}/10</div>
                   <div className="text-xs text-muted-foreground">member rating · {growStats.ratingSample} reviews</div>
                 </div>
               )}
               {growStats.avgYieldOz != null && (
                 <div>
-                  <div className="text-2xl font-bold text-emerald-500">{growStats.avgYieldOz} oz</div>
+                  <div className="text-2xl font-bold text-success">{growStats.avgYieldOz} oz</div>
                   <div className="text-xs text-muted-foreground">avg yield · {growStats.yieldSample} harvests</div>
                 </div>
               )}
@@ -325,14 +325,14 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
         {growStats.reviews.length > 0 && (
           <div className="bg-card/80 rounded-2xl border border-border/70 p-5 mb-6">
             <div className="flex items-center gap-2 mb-4">
-              <Star className="w-4 h-4 text-amber-500" />
+              <Star className="w-4 h-4 text-warning" />
               <h2 className="font-display font-semibold">Member reviews</h2>
             </div>
             <ul className="space-y-4">
               {growStats.reviews.map((r) => (
                 <li key={r.diaryId} className="text-sm">
                   <div className="flex flex-wrap items-center gap-2 mb-1">
-                    {r.rating != null && <span className="font-medium text-amber-500">{r.rating}/10</span>}
+                    {r.rating != null && <span className="font-medium text-warning">{r.rating}/10</span>}
                     {r.difficulty && <span className="text-xs text-muted-foreground">difficulty: {r.difficulty}</span>}
                     <Link href={`/diaries/${r.diarySlug ?? r.diaryId}`} className="text-xs text-primary hover:underline ml-auto">
                       {r.authorName}&apos;s grow →
@@ -429,7 +429,7 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
                 >
                   <span className="min-w-0 text-sm font-medium truncate flex items-center gap-2">
                     {t.title}
-                    {t.acceptedAnswer && !t.acceptedAnswer.deleted && <CheckCircle2 className="w-3.5 h-3.5 text-green-500 shrink-0" aria-label="Solved" />}
+                    {t.acceptedAnswer && !t.acceptedAnswer.deleted && <CheckCircle2 className="w-3.5 h-3.5 text-success shrink-0" aria-label="Solved" />}
                   </span>
                   <span className="text-xs text-muted-foreground shrink-0">
                     {t.category.name} · {t.replyCount} repl{t.replyCount === 1 ? "y" : "ies"}

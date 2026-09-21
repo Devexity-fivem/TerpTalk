@@ -2,6 +2,7 @@
 const { PrismaClient } = require("@prisma/client");
 const p = new PrismaClient();
 (async () => {
+  await import("./db-guard.mjs") // refuse production endpoints before any query
   const partner = await p.affiliatePartner.upsert({
     where: { slug: "mars-hydro" },
     update: {

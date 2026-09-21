@@ -44,6 +44,21 @@ export async function POST(request: Request) {
         { status: 429, headers: { "Retry-After": String(rl.retryAfterSeconds) } }
       )
     }
+    // Per-IP keys are spoofable when no trusted proxy header is present
+    // (x-real-ip/XFF are client-controlled off-platform), so bound total
+    // signup volume site-wide. This is a ceiling, not the primary limit.
+    const globalRl = await rateLimit("register:global", 60, 15 * 60 * 1000)
+    if (!globalRl.allowed) {
+      await logSecurityEvent("RATE_LIMIT_EXCEEDED", {
+        ip,
+        userAgent,
+        metadata: { endpoint: "auth/register", scope: "global" },
+      })
+      return NextResponse.json(
+        { error: "Too many signup attempts. Please try again later." },
+        { status: 429, headers: { "Retry-After": String(globalRl.retryAfterSeconds) } }
+      )
+    }
 
     const body = await request.json().catch(() => ({}))
     const { username, password, ageVerified, referralCode, captchaId, captchaAnswer, turnstileToken } = body
@@ -64,40 +79,54 @@ export async function POST(request: Request) {
         )
       }
     } else {
-      if (!username || !password || !captchaId || !captchaAnswer) {
+      // The math-captcha fallback exists for local dev/test only — in
+      // production its small answer space is too weak to be the bot gate.
+      // Fail closed rather than silently downgrading registration security.
+      if (process.env.NODE_ENV === "production") {
+        console.error("[register] TURNSTILE_SECRET_KEY is not configured — refusing registration in production")
+        await logSecurityEvent("REGISTRATION_FAILED", {
+          ip,
+          userAgent,
+          metadata: { reason: "turnstile_not_configured" },
+        })
+        return NextResponse.json(
+          { error: "Registration is temporarily unavailable" },
+          { status: 503 }
+        )
+      }
+
+      if (!username || !password || typeof captchaId !== "string" || !captchaId || captchaAnswer == null) {
         return NextResponse.json(
           { error: "Missing required fields" },
           { status: 400 }
         )
       }
 
-      // Verify math captcha
-      const captcha = await prisma.captcha.findUnique({
-        where: { id: captchaId },
+      // Atomic claim-then-verify: exactly one request can flip used→true,
+      // so concurrent submissions of the same captchaId can never both
+      // register. The claim happens BEFORE the answer check, so a wrong
+      // answer burns the challenge (same semantics as before).
+      const claimed = await prisma.captcha.updateMany({
+        where: { id: captchaId, used: false, expiresAt: { gt: new Date() } },
+        data: { used: true },
       })
-
-      if (!captcha || captcha.used || captcha.expiresAt < new Date()) {
+      if (!claimed.count) {
         return NextResponse.json(
           { error: "Challenge expired. Please refresh and try again." },
           { status: 400 }
         )
       }
 
-      if (captcha.answer !== String(captchaAnswer).trim()) {
-        await prisma.captcha.update({
-          where: { id: captchaId },
-          data: { used: true },
-        })
+      const captcha = await prisma.captcha.findUnique({
+        where: { id: captchaId },
+        select: { answer: true },
+      })
+      if (!captcha || captcha.answer !== String(captchaAnswer).trim()) {
         return NextResponse.json(
           { error: "Security check failed. Please try again." },
           { status: 400 }
         )
       }
-
-      await prisma.captcha.update({
-        where: { id: captchaId },
-        data: { used: true },
-      })
     }
 
     // Optional referral — a referrer's username; validate it exists if provided

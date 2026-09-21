@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma"
-import { awardReputation } from "@/lib/reputation"
+import { awardReputation, reverseReputationByKey } from "@/lib/reputation"
+import { reverseKeyDurable } from "@/lib/reputation-outbox"
 import { notify } from "@/lib/notify"
 
 // Weekly challenges — a fixed roster, not generated. Progress is recomputed
@@ -100,87 +101,114 @@ export function weekStart(now = new Date()): Date {
   return d
 }
 
+// Inverse of currentWeekKey — reconstruct a past week's Monday 00:00 UTC
+// from its "YYYY-Www" key. Jan 4 is always in ISO week 1.
+export function weekStartForKey(week: string): Date | null {
+  const m = /^(\d{4})-W(\d{2})$/.exec(week)
+  if (!m) return null
+  const year = Number(m[1])
+  const w = Number(m[2])
+  if (w < 1 || w > 53) return null
+  const jan4 = new Date(Date.UTC(year, 0, 4))
+  const dow = jan4.getUTCDay() || 7
+  const week1Monday = new Date(jan4.getTime() - (dow - 1) * 86400000)
+  return new Date(week1Monday.getTime() + (w - 1) * 7 * 86400000)
+}
+
 export interface ChallengeProgress extends ChallengeDef {
   progress: number
   done: boolean
   paid: boolean
 }
 
+// One challenge's progress inside a bounded [since, until) week window —
+// extracted so the weekly reconcile sweep can re-measure a past week
+// exactly. `until` bounds author-age checks to the window being measured.
+async function countChallengeProgress(userId: string, slug: string, since: Date, until: Date): Promise<number> {
+  switch (slug) {
+    case "show-up":
+      return prisma.$queryRaw<{ n: bigint }[]>`
+        SELECT COUNT(DISTINCT ("createdAt" AT TIME ZONE 'UTC')::date) AS n
+        FROM "ReputationEvent"
+        WHERE "userId" = ${userId} AND "type" = 'DAILY_LOGIN'
+          AND "reversedAt" IS NULL AND "createdAt" >= ${since} AND "createdAt" < ${until}`.then((r) => Number(r[0]?.n ?? 0))
+    case "join-the-talk":
+      // "Reply in N different threads" — sourceId is the post id, so count
+      // distinct threadIds via a join. Replies in one thread can't stack,
+      // and replies in your OWN threads don't count — self-bumping isn't
+      // joining the talk.
+      return prisma.$queryRaw<{ n: bigint }[]>`
+        SELECT COUNT(DISTINCT p."threadId") AS n
+        FROM "ReputationEvent" e
+        JOIN "Post" p ON p."id" = e."sourceId"
+        JOIN "Thread" t ON t."id" = p."threadId"
+        WHERE e."userId" = ${userId} AND e."type" = 'POST_CREATED'
+          AND e."reversedAt" IS NULL AND e."createdAt" >= ${since} AND e."createdAt" < ${until}
+          AND p."deleted" = false AND t."deleted" = false
+          AND t."authorId" <> ${userId}`.then((r) => Number(r[0]?.n ?? 0))
+    case "tend-the-diary":
+      return prisma.$queryRaw<{ n: bigint }[]>`
+        SELECT COUNT(DISTINCT ("createdAt" AT TIME ZONE 'UTC')::date) AS n
+        FROM "ReputationEvent"
+        WHERE "userId" = ${userId} AND "type" = 'DIARY_UPDATE'
+          AND "reversedAt" IS NULL AND "createdAt" >= ${since} AND "createdAt" < ${until}`.then((r) => Number(r[0]?.n ?? 0))
+    case "judge-the-buds":
+      return prisma.$queryRaw<{ n: bigint }[]>`
+        SELECT (
+          (SELECT COUNT(*) FROM "ContestVote" WHERE "userId" = ${userId} AND "createdAt" >= ${since} AND "createdAt" < ${until}) +
+          (SELECT COUNT(*) FROM "DiaryContestVote" WHERE "userId" = ${userId} AND "createdAt" >= ${since} AND "createdAt" < ${until})
+        )::bigint AS n`.then((r) => Number(r[0]?.n ?? 0))
+    case "share-the-answer":
+      return prisma.reputationEvent.count({
+        where: { userId, type: "HELPFUL_ANSWER", reversedAt: null, createdAt: { gte: since, lt: until } },
+      })
+    case "help-a-newcomer":
+      // Replies in threads started by members under 30 days old (measured
+      // at the window's end so a past-week recompute stays honest).
+      return prisma.$queryRaw<{ n: bigint }[]>`
+        SELECT COUNT(DISTINCT p."threadId") AS n
+        FROM "ReputationEvent" e
+        JOIN "Post" p ON p."id" = e."sourceId"
+        JOIN "Thread" t ON t."id" = p."threadId"
+        JOIN "User" tu ON tu."id" = t."authorId"
+        WHERE e."userId" = ${userId} AND e."type" = 'POST_CREATED'
+          AND e."reversedAt" IS NULL AND e."createdAt" >= ${since} AND e."createdAt" < ${until}
+          AND p."deleted" = false AND t."deleted" = false
+          AND t."authorId" <> ${userId}
+          AND tu."createdAt" >= ${new Date(until.getTime() - 30 * 86400000)}`.then((r) => Number(r[0]?.n ?? 0))
+    case "close-the-loop":
+      // Threads the member marked an accepted answer on this week —
+      // rewards closing the loop, which previously only paid the answerer.
+      return prisma.$queryRaw<{ n: bigint }[]>`
+        SELECT COUNT(*) AS n
+        FROM "ReputationEvent" e
+        WHERE e."userId" = ${userId} AND e."type" = 'ACCEPT_MARKED'
+          AND e."reversedAt" IS NULL AND e."createdAt" >= ${since} AND e."createdAt" < ${until}`.then((r) => Number(r[0]?.n ?? 0))
+    default:
+      return 0
+  }
+}
+
 // Live progress for a member this week. Ledger events only count while
 // unreversed — a deleted post un-earns its progress automatically.
 export async function getChallengeProgress(userId: string, now = new Date()): Promise<ChallengeProgress[]> {
   const since = weekStart(now)
+  const until = new Date(since.getTime() + 7 * 86400000)
   const week = currentWeekKey(now)
 
-  const [loginDays, replyThreads, diaryDays, contestVotes, answerCount, newcomerThreads, acceptsMarked, paidEvents] = await Promise.all([
-    prisma.$queryRaw<{ n: bigint }[]>`
-      SELECT COUNT(DISTINCT ("createdAt" AT TIME ZONE 'UTC')::date) AS n
-      FROM "ReputationEvent"
-      WHERE "userId" = ${userId} AND "type" = 'DAILY_LOGIN'
-        AND "reversedAt" IS NULL AND "createdAt" >= ${since}`,
-    // "Reply in N different threads" — sourceId is the post id, so count
-    // distinct threadIds via a join. Replies in one thread can't stack,
-    // and replies in your OWN threads don't count — self-bumping isn't
-    // joining the talk.
-    prisma.$queryRaw<{ n: bigint }[]>`
-      SELECT COUNT(DISTINCT p."threadId") AS n
-      FROM "ReputationEvent" e
-      JOIN "Post" p ON p."id" = e."sourceId"
-      JOIN "Thread" t ON t."id" = p."threadId"
-      WHERE e."userId" = ${userId} AND e."type" = 'POST_CREATED'
-        AND e."reversedAt" IS NULL AND e."createdAt" >= ${since}
-        AND p."deleted" = false AND t."deleted" = false
-        AND t."authorId" <> ${userId}`,
-    prisma.$queryRaw<{ n: bigint }[]>`
-      SELECT COUNT(DISTINCT ("createdAt" AT TIME ZONE 'UTC')::date) AS n
-      FROM "ReputationEvent"
-      WHERE "userId" = ${userId} AND "type" = 'DIARY_UPDATE'
-        AND "reversedAt" IS NULL AND "createdAt" >= ${since}`,
-    prisma.$queryRaw<{ n: bigint }[]>`
-      SELECT (
-        (SELECT COUNT(*) FROM "ContestVote" WHERE "userId" = ${userId} AND "createdAt" >= ${since}) +
-        (SELECT COUNT(*) FROM "DiaryContestVote" WHERE "userId" = ${userId} AND "createdAt" >= ${since})
-      )::bigint AS n`,
-    prisma.reputationEvent.count({
-      where: { userId, type: "HELPFUL_ANSWER", reversedAt: null, createdAt: { gte: since } },
-    }),
-    // Replies in threads started by members under 30 days old.
-    prisma.$queryRaw<{ n: bigint }[]>`
-      SELECT COUNT(DISTINCT p."threadId") AS n
-      FROM "ReputationEvent" e
-      JOIN "Post" p ON p."id" = e."sourceId"
-      JOIN "Thread" t ON t."id" = p."threadId"
-      JOIN "User" tu ON tu."id" = t."authorId"
-      WHERE e."userId" = ${userId} AND e."type" = 'POST_CREATED'
-        AND e."reversedAt" IS NULL AND e."createdAt" >= ${since}
-        AND p."deleted" = false AND t."deleted" = false
-        AND t."authorId" <> ${userId}
-        AND tu."createdAt" >= ${new Date(Date.now() - 30 * 86400000)}`,
-    // Threads the member marked an accepted answer on this week — rewards
-    // closing the loop, which previously only paid the answerer.
-    prisma.$queryRaw<{ n: bigint }[]>`
-      SELECT COUNT(*) AS n
-      FROM "ReputationEvent" e
-      WHERE e."userId" = ${userId} AND e."type" = 'ACCEPT_MARKED'
-        AND e."reversedAt" IS NULL AND e."createdAt" >= ${since}`,
-    // Only unreversed payouts count as paid — a staff reversal should make
-    // the challenge unpaid again (re-award reinstates via the same key).
-    prisma.reputationEvent.findMany({
-      where: { userId, type: "CHALLENGE_WEEKLY", key: { startsWith: `challenge:${week}:` }, reversedAt: null },
-      select: { key: true },
-    }),
-  ])
-
+  const countsArr = await Promise.all(
+    WEEKLY_CHALLENGES.map((c) => countChallengeProgress(userId, c.slug, since, until))
+  )
+  // Only unreversed payouts count as paid — a staff reversal should make
+  // the challenge unpaid again (re-award reinstates via the same key).
+  const paidEvents = await prisma.reputationEvent.findMany({
+    where: { userId, type: "CHALLENGE_WEEKLY", key: { startsWith: `challenge:${week}:` }, reversedAt: null },
+    select: { key: true },
+  })
   const paid = new Set(paidEvents.map((e) => e.key))
-  const counts: Record<string, number> = {
-    "show-up": Number(loginDays[0]?.n ?? 0),
-    "join-the-talk": Number(replyThreads[0]?.n ?? 0),
-    "tend-the-diary": Number(diaryDays[0]?.n ?? 0),
-    "judge-the-buds": Number(contestVotes[0]?.n ?? 0),
-    "share-the-answer": answerCount,
-    "help-a-newcomer": Number(newcomerThreads[0]?.n ?? 0),
-    "close-the-loop": Number(acceptsMarked[0]?.n ?? 0),
-  }
+  const counts: Record<string, number> = Object.fromEntries(
+    WEEKLY_CHALLENGES.map((c, i) => [c.slug, countsArr[i] ?? 0])
+  )
 
   return WEEKLY_CHALLENGES.map((c) => {
     const progress = Math.min(counts[c.slug] ?? 0, c.target)
@@ -197,6 +225,17 @@ export async function evaluateChallenges(userId: string): Promise<string[]> {
   const paidTitles: string[] = []
 
   for (const c of progress) {
+    if (c.paid && !c.done) {
+      // Sticky-payout fix: a paid challenge whose qualifying content was
+      // deleted un-earns the payout. Non-final — re-qualifying reinstates.
+      // Durable intent — survives a failed drain.
+      await reverseKeyDurable(
+        `challenge:${week}:${c.slug}:${userId}`,
+        "Challenge progress no longer met",
+        userId
+      ).catch(() => null)
+      continue
+    }
     if (!c.done || c.paid) continue
     const res = await awardReputation(userId, "CHALLENGE_WEEKLY", c.reward, `Weekly challenge: ${c.title}`, {
       key: `challenge:${week}:${c.slug}:${userId}`,
@@ -220,4 +259,59 @@ export async function evaluateChallenges(userId: string): Promise<string[]> {
   }
 
   return paidTitles
+}
+
+// ── Payout reconciliation ────────────────────────────────────────────────
+// Weekly twin of reconcileQuestPayouts — re-measures every recent
+// challenge payout inside its closed week window and non-finally reverses
+// payouts whose qualifying activity was deleted or reversed after the fact.
+export async function reconcileChallengePayouts(weeks = 3): Promise<{ checked: number; reversed: number }> {
+  const events = await prisma.reputationEvent.findMany({
+    where: {
+      type: "CHALLENGE_WEEKLY",
+      reversedAt: null,
+      reversalOfId: null,
+      key: { startsWith: "challenge:" },
+      createdAt: { gte: new Date(Date.now() - weeks * 7 * 86400000) },
+    },
+    select: { key: true, userId: true },
+    orderBy: { createdAt: "asc" },
+    take: 5000,
+  })
+
+  // Group by (userId, week): challenge:<week>:<slug>:<userId>
+  const groups = new Map<string, { userId: string; week: string; slugs: Set<string> }>()
+  for (const e of events) {
+    if (!e.key) continue
+    const parts = e.key.split(":")
+    const week = parts[1]
+    const slug = parts[2]
+    const gk = `${e.userId}|${week}`
+    const g = groups.get(gk) ?? { userId: e.userId, week, slugs: new Set() }
+    g.slugs.add(slug)
+    groups.set(gk, g)
+  }
+
+  let checked = 0
+  let reversed = 0
+  for (const g of groups.values()) {
+    const since = weekStartForKey(g.week)
+    if (!since) continue
+    const until = new Date(since.getTime() + 7 * 86400000)
+    for (const slug of g.slugs) {
+      checked++
+      const def = WEEKLY_CHALLENGES.find((c) => c.slug === slug)
+      if (!def) continue
+      const count = await countChallengeProgress(g.userId, slug, since, until)
+      if (count < def.target) {
+        const res = await reverseReputationByKey(
+          `challenge:${g.week}:${slug}:${g.userId}`,
+          "Challenge progress no longer met",
+          g.userId
+        ).catch(() => null)
+        if (res?.reversed) reversed++
+      }
+    }
+  }
+  return { checked, reversed }
 }

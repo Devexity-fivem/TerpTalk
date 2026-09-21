@@ -22,7 +22,23 @@ export interface RoomStateEvent {
 }
 
 export const CHAT_MESSAGE_EVENT = "new-message"
+export const CHAT_MESSAGE_DELETED_EVENT = "message-deleted"
 export const CHAT_ROOM_STATE_EVENT = "room-state"
+
+// new-message is a content-free "tickle" — it tells subscribers to refetch
+// so the server can apply per-viewer filters (blocks, deleted tombstones)
+// instead of broadcasting message content to every room subscriber.
+export interface ChatMessageTickle {
+  roomId: string
+  latestAt: string
+}
+
+// message-deleted carries ids only — never content, never author. A
+// deleted row must not leak anything through the event payload.
+export interface ChatMessageDeletedEvent {
+  roomId: string
+  ids: string[]
+}
 
 // ── Message list merging ────────────────────────────────────────────────
 
@@ -51,6 +67,33 @@ export function isStaleBatch(
   if (cancelled) return true
   if (!activeRoomId) return true
   return batchRoomId !== activeRoomId
+}
+
+// Tombstone deleted messages in place — same rendering as the GET DTO
+// ("[deleted]", italic). Also scrubs replyTo embeds: a deleted parent
+// must not stay readable inside other messages' quote previews.
+export function applyMessageDeletes<
+  T extends { id: string; content: string; replyTo?: { id: string; content: string } | null },
+>(prev: T[], ids: Set<string>): T[] {
+  if (ids.size === 0) return prev
+  return prev.map((m) => {
+    let next = m
+    if (ids.has(m.id)) next = { ...next, content: "[deleted]" }
+    if (next.replyTo && ids.has(next.replyTo.id)) {
+      next = { ...next, replyTo: { ...next.replyTo, content: "[deleted]" } }
+    }
+    return next
+  })
+}
+
+// Drop messages authored by users the viewer blocks (or is blocked by —
+// blockedUserIds is mutual). Used on already-rendered rows when a block
+// lands mid-session.
+export function filterBlockedAuthors<
+  T extends { author?: { id: string } | null },
+>(prev: T[], blockedIds: Set<string>): T[] {
+  if (blockedIds.size === 0) return prev
+  return prev.filter((m) => !m.author || !blockedIds.has(m.author.id))
 }
 
 // Apply a room-state event to the local room object. `cleared` is handled by

@@ -67,7 +67,7 @@ export default function RecoveryPhraseCard() {
       ) : phrase ? (
         <div className="space-y-4">
           <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-4">
-            <p className="text-xs text-amber-500 font-semibold mb-2 flex items-center gap-1">
+            <p className="text-xs text-warning font-semibold mb-2 flex items-center gap-1">
               <AlertTriangle className="w-3.5 h-3.5" /> Shown only once — write it down now
             </p>
             <div className="grid grid-cols-3 gap-2 font-mono text-sm">

@@ -6,7 +6,8 @@ import { unauthorized, publicUserSelect, LIMITS, getClientIp, logSecurityEvent, 
 import { rateLimit } from "@/lib/rate-limit"
 import { storeImages, deleteImagesIfUnreferenced } from "@/lib/blob"
 import { checkMaintenance } from "@/lib/maintenance"
-import { awardReputation, reverseReputationBySource, REP_POINTS } from "@/lib/reputation"
+import { awardReputation, REP_POINTS } from "@/lib/reputation"
+import { enqueueReversal, drainOne } from "@/lib/reputation-outbox"
 import { notificationLinkWhere } from "@/lib/notify"
 import { revalidateTag } from "next/cache"
 import { parseSetupPatch, setupPatchTouchesStrainStats, SETUP_MAX_IMAGES } from "@/lib/setup-edit"
@@ -201,6 +202,7 @@ export async function DELETE(request: Request) {
     }
     if (setup.authorId !== session.user.id) return forbidden()
 
+    let reversalId: string | null = null
     const imageUrls = await prisma.$transaction(async (tx) => {
       await tx.growSetup.update({ where: { id }, data: { deleted: true } })
       const imgs = await tx.setupImage.findMany({ where: { setupId: id }, select: { url: true } })
@@ -211,10 +213,15 @@ export async function DELETE(request: Request) {
           setup.slug ? [`/setups/${id}`, `/setups/${setup.slug}`] : `/setups/${id}`
         ),
       })
+      reversalId = await enqueueReversal(tx, {
+        kind: "SOURCE", sourceType: "SETUP", sourceId: id,
+        reason: "Setup removed", requestedBy: session.user.id,
+      })
       return imgs.map((i) => i.url)
     })
 
-    await reverseReputationBySource("SETUP", id, "Setup removed", session.user.id).catch(() => 0)
+    // Durable drain — the intent row was committed with the delete.
+    if (reversalId) await drainOne(reversalId).catch(() => false)
     deleteImagesIfUnreferenced(imageUrls).catch(() => {})
     revalidateTag("setups", { expire: 0 })
 

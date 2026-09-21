@@ -152,7 +152,7 @@ export default function ContestBoard() {
                       aria-label={e.mine ? "You can't vote on your own entry" : "Vote for this budshot"}
                       className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors disabled:opacity-60 ${
                         e.votedByMe
-                          ? "bg-red-500/15 text-red-500"
+                          ? "bg-red-500/15 text-destructive"
                           : "bg-secondary hover:bg-secondary/80"
                       }`}
                     >

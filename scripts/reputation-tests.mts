@@ -398,8 +398,11 @@ async function run() {
     assert.equal(await repOf(uid), REP_POINTS.POST_CREATED)
     const rows = await prisma.reputationEvent.count({ where: { key: "test:post:1" } })
     assert.equal(rows, 1, "reinstatement reuses the original row")
-    // And the counter-entry was voided.
-    const voided = await prisma.reputationEvent.findFirst({ where: { reversalOfId: ev!.id } })
+    // And the counter-entry was voided. (Filter to REVERSAL — the REINSTATE
+    // row also carries reversalOfId and legitimately has reversedAt null.)
+    const voided = await prisma.reputationEvent.findFirst({
+      where: { reversalOfId: ev!.id, type: REP_EVENT_TYPES.REVERSAL },
+    })
     assert.ok(voided!.reversedAt, "counter-entry voided on reinstatement")
 
     // Second re-award → duplicate no-op.

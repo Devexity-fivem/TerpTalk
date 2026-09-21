@@ -208,7 +208,7 @@ export default function ProfileClient() {
                         </Tooltip>
                       )}</h1>
                   {profile.customTitle && (
-                    <p className="text-xs font-semibold uppercase tracking-wider text-amber-500 mb-1">{profile.customTitle}</p>
+                    <p className="text-xs font-semibold uppercase tracking-wider text-warning mb-1">{profile.customTitle}</p>
                   )}
                   <p className="text-muted-foreground text-sm mb-2 flex items-center gap-2 flex-wrap">
                     <span>{profile.isBot ? "Active since" : "Member since"} {joinDate}</span>
@@ -371,7 +371,7 @@ export default function ProfileClient() {
               )}
               {profile.growStreak >= 2 && (
                 <Tooltip content="Consecutive days with a grow-diary update">
-                  <div className="mt-4 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-500/10 text-amber-500 text-xs font-semibold">
+                  <div className="mt-4 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-500/10 text-warning text-xs font-semibold">
                     <Flame className="w-3.5 h-3.5" /> {profile.growStreak}-day grow streak
                   </div>
                 </Tooltip>
@@ -543,7 +543,7 @@ export default function ProfileClient() {
         {!profile.isBot && harvestShelf.length > 0 && (
         <div className="bg-card rounded-lg border border-amber-500/30 p-4 mb-4">
           <div className="flex items-center gap-2 mb-3">
-            <Trophy className="w-4 h-4 text-amber-500" />
+            <Trophy className="w-4 h-4 text-warning" />
             <h2 className="font-display text-lg font-semibold">Harvest Shelf</h2>
             <span className="text-xs text-muted-foreground">{harvestShelf.length} completed grow{harvestShelf.length === 1 ? "" : "s"}</span>
           </div>
@@ -566,7 +566,7 @@ export default function ProfileClient() {
                   </p>
                   <p className="text-xs mt-1">
                     {h.yieldAmount != null && h.yieldUnit ? (
-                      <span className="text-amber-500 font-medium">{h.yieldAmount}{h.yieldUnit}</span>
+                      <span className="text-warning font-medium">{h.yieldAmount}{h.yieldUnit}</span>
                     ) : (
                       <span className="text-muted-foreground">yield not recorded</span>
                     )}

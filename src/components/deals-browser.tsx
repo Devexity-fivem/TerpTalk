@@ -64,7 +64,7 @@ export default function DealsBrowser({ products }: { products: Deal[] }) {
               )}
               <div className="flex items-center gap-2 flex-wrap">
                 <h3 className="font-display font-semibold text-sm">{p.name}</h3>
-                {p.featured && <span className="text-[10px] bg-amber-500/15 text-amber-500 px-1.5 py-0.5 rounded font-semibold">Featured</span>}
+                {p.featured && <span className="text-[10px] bg-amber-500/15 text-warning px-1.5 py-0.5 rounded font-semibold">Featured</span>}
               </div>
               <p className="text-xs text-muted-foreground mt-1 flex-1">{p.description}</p>
               {p.recommendedFor && <p className="text-[11px] text-muted-foreground mt-1">For: {p.recommendedFor}</p>}

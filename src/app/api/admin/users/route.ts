@@ -3,7 +3,8 @@ import { prisma } from "@/lib/prisma"
 import { forbidden, getClientIp, logSecurityEvent } from "@/lib/security"
 import { requireAdmin } from "@/lib/require-staff"
 import { getBadgeByName, STAFF_AWARDED_BADGES } from "@/lib/badge-registry"
-import { grantBadge, reverseReputationByKey } from "@/lib/reputation"
+import { grantBadge } from "@/lib/reputation"
+import { enqueueReversal, drainOne } from "@/lib/reputation-outbox"
 import { rateLimit } from "@/lib/rate-limit"
 import { emitNotificationPush } from "@/lib/notify"
 import { staffDisplayName } from "@/lib/moderation"
@@ -277,10 +278,17 @@ export async function PATCH(request: Request) {
           content: `Staff awarded you the "${badge}" badge — ${def?.description ?? ""}`,
         })
       } else {
-        await prisma.userBadge.deleteMany({ where: { userId, badgeId: row.id } })
         // Claw back the badge's rep bonus — non-final so a legitimate
-        // re-grant (badge re-earned or re-awarded) reinstates it.
-        await reverseReputationByKey(`badgebonus:${badge}:${userId}`, `Badge "${badge}" revoked`, admin.id).catch(() => null)
+        // re-grant (badge re-earned or re-awarded) reinstates it. The intent
+        // commits atomically with the revoke so it can never be lost.
+        const reversalId = await prisma.$transaction(async (tx) => {
+          await tx.userBadge.deleteMany({ where: { userId, badgeId: row.id } })
+          return enqueueReversal(tx, {
+            kind: "KEY", eventKey: `badgebonus:${badge}:${userId}`,
+            reason: `Badge "${badge}" revoked`, requestedBy: admin.id,
+          })
+        })
+        await drainOne(reversalId).catch(() => false)
       }
 
       await prisma.moderationAction.create({

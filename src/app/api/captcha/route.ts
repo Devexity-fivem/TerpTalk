@@ -4,6 +4,14 @@ import { getClientIp, hashIp } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
 
 export async function GET(request: Request) {
+  // The math captcha is the dev/test fallback for registration — in
+  // production Turnstile handles the bot gate, so a configured
+  // production deployment has no legitimate consumer for this issuer.
+  // Returning 404 also stops expired Captcha rows from accumulating.
+  if (process.env.NODE_ENV === "production" && process.env.TURNSTILE_SECRET_KEY) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 })
+  }
+
   const ip = getClientIp(request)
   const ipHash = hashIp(ip)
 

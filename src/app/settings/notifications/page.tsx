@@ -148,7 +148,7 @@ export default function NotificationSettingsPage() {
         </div>
 
         {message && (
-          <p className={`mt-4 text-sm ${message === "Saved." ? "text-green-500" : "text-destructive"}`}>{message}</p>
+          <p className={`mt-4 text-sm ${message === "Saved." ? "text-success" : "text-destructive"}`}>{message}</p>
         )}
 
         <div className="mt-6">

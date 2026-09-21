@@ -60,17 +60,20 @@ async function mkDiary(authorId: string, over: Record<string, unknown> = {}) {
   return dr
 }
 
-/** Mirror of the route's write path: scoped image diff + guarded updateMany. */
+/** Mirror of the route's write path: scoped image diff + guarded updateMany.
+ *  `actorId` mirrors the route's ownership guard — the write refuses to touch
+ *  an update the actor does not own. */
 async function applyPatch(
   updateId: string,
   data: Record<string, unknown>,
-  opts: { keepImageIds?: string[]; newImageUrls?: string[] } = {}
+  opts: { keepImageIds?: string[]; newImageUrls?: string[]; actorId?: string } = {}
 ) {
   const update = await prisma.diaryUpdate.findUnique({
     where: { id: updateId },
-    select: { images: { select: { id: true, order: true } } },
+    select: { authorId: true, images: { select: { id: true, order: true } } },
   })
   if (!update) throw new Error("not found")
+  if (opts.actorId && update.authorId !== opts.actorId) return { count: 0 }
   const { kept, removed } = diffUpdateImages(update.images, opts.keepImageIds)
   const nextOrder = kept.reduce((m, i) => Math.max(m, i.order), -1) + 1
   return prisma.$transaction(async (tx) => {
@@ -252,6 +255,19 @@ await check("db: guarded write — updateMany on missing row returns 0, no resur
   assert.equal(res.count, 0)
 })
 
+await check("db: ownership predicate — non-owner patch is refused", async () => {
+  const other = await mkUser("notowner")
+  const u = await prisma.diaryUpdate.create({
+    data: { diaryId: diary.id, authorId: owner.id, title: "mine", content: "x".repeat(12), stage: "VEGETATIVE", createdAt: d(7) },
+  })
+  const res = await applyPatch(u.id, { title: "hijacked" }, { actorId: other.id })
+  assert.equal((res as { count: number }).count, 0, "foreign actor must not write")
+  const after = await prisma.diaryUpdate.findUnique({ where: { id: u.id }, select: { title: true } })
+  assert.equal(after?.title, "mine")
+  const own = await applyPatch(u.id, { title: "renamed" }, { actorId: owner.id })
+  assert.equal((own as { count: number }).count, 1, "owner write still succeeds")
+})
+
 await check("db: stage edit flows into stage-duration inputs", async () => {
   const dr = await mkDiary(owner.id, { startDate: d(0), harvested: true, harvestedAt: d(40), stage: "HARVEST" })
   const u1 = await prisma.diaryUpdate.create({
@@ -369,6 +385,10 @@ await check("route: PATCH has no creation side effects or analytics bust", () =>
   assert.ok(patch.includes("enforceLinkTrust"), "link trust required")
   assert.ok(!patch.includes("growDiary.update"), "PATCH never writes the parent diary")
   assert.ok(patch.includes("MAX_POST_IMAGES"), "server enforces kept + new <= 4")
+  // Ownership is enforced in the route, not just in this mirror.
+  assert.ok(patch.includes("update.authorId !== session.user.id"), "route must check update author")
+  assert.ok(patch.includes("update.diary.authorId !== session.user.id"), "route must check diary author")
+  assert.ok(patch.includes("forbidden()"), "non-owner must get 403")
 })
 
 // ─── Summary + cleanup ───────────────────────────────────────────────

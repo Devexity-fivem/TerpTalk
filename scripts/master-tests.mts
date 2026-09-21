@@ -77,6 +77,7 @@ const DB_PHASE: Suite[] = [
   { id: "self-service", file: "scripts/self-service-tests.mts", runner: "tsx", cls: "B", label: "Self-service account flows" },
   { id: "terpbot", file: "scripts/terpbot-tests.mts", runner: "tsx", cls: "A", label: "TerpBot command parse + permission boundaries" },
   { id: "terpbot2", file: "scripts/terpbot2-tests.mts", runner: "tsx", cls: "A", label: "TerpBot 2.0 diagnostic engine (pure)" },
+  { id: "terpbot-nl", file: "scripts/terpbot-nl-tests.mts", runner: "tsx", cls: "A", label: "TerpBot NL observation parser" },
   { id: "chat", file: "scripts/chat-ux-tests.mts", runner: "tsx", cls: "A", label: "Chat UX helpers + room visibility (DB)" },
   { id: "community-analytics", file: "scripts/community-analytics-tests.mts", runner: "tsx", cls: "B", label: "Community analytics" },
   { id: "growth-analytics", file: "scripts/growth-analytics-tests.mts", runner: "tsx", cls: "B", label: "Growth analytics" },
@@ -88,6 +89,7 @@ const DB_PHASE: Suite[] = [
   { id: "diary-edit", file: "scripts/diary-edit-tests.mts", runner: "tsx", cls: "B", label: "Diary edit (mirror + source contract)" },
   { id: "diary-update-edit", file: "scripts/diary-update-edit-tests.mts", runner: "tsx", cls: "B", label: "Diary update edit (mirror + source contract)" },
   { id: "rewards3", file: "scripts/rewards3-tests.mts", runner: "tsx", cls: "A", label: "Rewards 3.0 anti-farming + weekly board" },
+  { id: "launch-hardening", file: "scripts/launch-hardening-tests.mts", runner: "tsx", cls: "A", label: "P1 launch-hardening regressions" },
   { id: "discovery-integration", file: "scripts/discovery-integration-tests.mts", runner: "tsx", cls: "B", label: "Discovery integration (DB + source)" },
 ]
 

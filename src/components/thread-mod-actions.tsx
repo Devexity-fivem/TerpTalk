@@ -58,7 +58,7 @@ export default function ThreadModActions({
         <button
           onClick={() => act("LOCK_THREAD")}
           disabled={busy}
-          className="flex items-center gap-1.5 px-2.5 py-1 text-xs bg-amber-500/10 text-amber-500 rounded-lg hover:bg-amber-500/20 disabled:opacity-50"
+          className="flex items-center gap-1.5 px-2.5 py-1 text-xs bg-amber-500/10 text-warning rounded-lg hover:bg-amber-500/20 disabled:opacity-50"
         >
           <Lock className="w-3 h-3" /> {locked ? "Unlock" : "Lock"}
         </button>

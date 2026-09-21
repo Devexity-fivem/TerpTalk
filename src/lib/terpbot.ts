@@ -159,7 +159,8 @@ export async function postBotMessage(roomId: string, text: string, replyToId?: s
           }
         : null,
     }
-    getPusher()?.trigger(`private-chat-${roomId}`, "new-message", dto).catch((e) => console.error("[pusher] terpbot message push failed:", roomId, e))
+    // Content-free tickle — same delivery contract as user messages.
+    getPusher()?.trigger(`private-chat-${roomId}`, "new-message", { roomId, latestAt: dto.createdAt }).catch((e) => console.error("[pusher] terpbot message push failed:", roomId, e))
     return dto
   } catch (error) {
     console.error("[terpbot] post failed:", error)
@@ -334,9 +335,22 @@ export async function purgeDiaryAnnouncements(diary: { id: string; slug?: string
     const botId = await getBotUserId()
     const links = [`/diaries/${diary.id}`]
     if (diary.slug) links.push(`/diaries/${diary.slug}`)
-    await prisma.chatMessage.deleteMany({
+    const rows = await prisma.chatMessage.findMany({
       where: { authorId: botId, OR: links.map((l) => ({ content: { contains: l } })) },
+      select: { id: true, roomId: true },
     })
+    if (rows.length === 0) return
+    await prisma.chatMessage.deleteMany({ where: { id: { in: rows.map((r) => r.id) } } })
+    // Tombstone open clients — one ids-only event per affected room.
+    const byRoom = new Map<string, string[]>()
+    for (const r of rows) {
+      const list = byRoom.get(r.roomId) ?? []
+      list.push(r.id)
+      byRoom.set(r.roomId, list)
+    }
+    for (const [roomId, ids] of byRoom) {
+      getPusher()?.trigger(`private-chat-${roomId}`, "message-deleted", { roomId, ids }).catch((e) => console.error("[pusher] announce purge push failed:", roomId, e))
+    }
   } catch (error) {
     console.error("[terpbot] diary announce purge failed:", error)
   }

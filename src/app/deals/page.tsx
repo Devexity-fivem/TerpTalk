@@ -58,7 +58,7 @@ export default async function DealsPage() {
                 <h2 className="font-display text-2xl font-bold tracking-tight">{p.name}</h2>
                 <p className="text-muted-foreground text-sm mt-1">{p.description}</p>
                 {p.promoText && (
-                  <p className="text-sm mt-2 font-medium text-amber-500">🔥 {p.promoText}</p>
+                  <p className="text-sm mt-2 font-medium text-warning">🔥 {p.promoText}</p>
                 )}
                 {p.promoCode && (
                   <p className="mt-2 inline-flex items-center gap-1.5 bg-primary/20 text-primary font-bold px-3 py-1.5 rounded-lg text-sm">

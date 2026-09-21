@@ -83,7 +83,7 @@ export default function RestrictedPage() {
             </div>
 
             {sent ? (
-              <p className="text-sm text-green-500">
+              <p className="text-sm text-success">
                 Request received. The moderation team will review it.
               </p>
             ) : (

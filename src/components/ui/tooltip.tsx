@@ -1,11 +1,19 @@
 "use client"
 
 // Lightweight styled tooltip — pure CSS via group-hover / group-focus-within.
-// Works on hover, keyboard focus, and mobile tap (tapping the focusable
-// wrapper focuses it, which triggers focus-within). The bubble is
+// Works on hover, keyboard focus, and mobile tap. The bubble is
 // pointer-events-none so it can never trap the cursor. Screen readers get
 // the same text through an sr-only copy inside the wrapper.
+//
+// Accessibility contract:
+// - If the child is already an interactive element (link/button/input or a
+//   component that accepts href/onClick/etc.), the wrapper is NOT focusable
+//   and NOT interactive — the child's own tab stop and focus ring are the
+//   trigger. This avoids nested interactive controls and duplicate tab stops.
+// - If the child is plain content, the wrapper gets tabIndex={0} with a
+//   visible focus ring so keyboard users can still reach the tooltip.
 
+import React from "react"
 import { Info } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -23,6 +31,28 @@ const ALIGN_CLASS: Record<Align, string> = {
   end: "right-0",
 }
 
+const INTERACTIVE_TAGS = new Set(["a", "button", "input", "select", "textarea", "summary"])
+
+function isInteractive(el: React.ReactNode, depth = 0): boolean {
+  if (!React.isValidElement(el)) return false
+  // Unwrap fragments / single-child wrappers one level so
+  // <><button/></> still counts as interactive.
+  if (depth < 2 && el.type === React.Fragment) {
+    const kids = React.Children.toArray((el.props as { children?: React.ReactNode }).children)
+    return kids.length === 1 && isInteractive(kids[0], depth + 1)
+  }
+  if (typeof el.type === "string") return INTERACTIVE_TAGS.has(el.type)
+  const p = el.props as Record<string, unknown>
+  return (
+    typeof p.href === "string" ||
+    typeof p.onClick === "function" ||
+    typeof p.onKeyDown === "function" ||
+    typeof p.tabIndex === "number" ||
+    p.role === "button" ||
+    p.role === "link"
+  )
+}
+
 interface TooltipProps {
   content: React.ReactNode
   children: React.ReactNode
@@ -32,8 +62,18 @@ interface TooltipProps {
 }
 
 export default function Tooltip({ content, children, side = "top", align = "center", className }: TooltipProps) {
+  const childInteractive = isInteractive(children)
   return (
-    <span tabIndex={0} className={cn("group/tt relative inline-flex outline-none", className)}>
+    <span
+      tabIndex={childInteractive ? undefined : 0}
+      className={cn(
+        "group/tt relative inline-flex rounded-sm",
+        // Visible keyboard focus — only the non-interactive wrapper needs a
+        // ring; interactive children show their own focus styles.
+        !childInteractive && "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1",
+        className
+      )}
+    >
       {children}
       {typeof content === "string" && <span className="sr-only">{content}</span>}
       <span
@@ -54,7 +94,8 @@ export default function Tooltip({ content, children, side = "top", align = "cent
 }
 
 // Small "i" affordance for section headers and jargon — the icon is the
-// trigger, the string is the explanation.
+// trigger, the string is the explanation. Standalone (non-interactive), so
+// Tooltip gives it a real tab stop with a visible focus ring.
 export function InfoTip({ content, side, align, className }: { content: string; side?: Side; align?: Align; className?: string }) {
   return (
     <Tooltip content={content} side={side} align={align} className={className}>

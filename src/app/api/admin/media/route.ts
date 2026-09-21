@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma"
 import { forbidden, getClientIp, logSecurityEvent } from "@/lib/security"
 import { deleteImagesIfUnreferenced } from "@/lib/blob"
 import { rateLimit } from "@/lib/rate-limit"
-import { reverseReputationBySource } from "@/lib/reputation"
+import { enqueueReversal, drainOne } from "@/lib/reputation-outbox"
 
 type MediaType = "post" | "diary" | "setup" | "strain" | "contest" | "avatar"
 
@@ -105,6 +105,7 @@ export async function POST(request: Request) {
   }
 
   let url: string | null = null
+  let reversalId: string | null = null
 
   await prisma.$transaction(async (tx) => {
     switch (type) {
@@ -126,6 +127,11 @@ export async function POST(request: Request) {
       case "strain": {
         const row = await tx.strainPhoto.delete({ where: { id }, select: { imageUrl: true } })
         url = row.imageUrl
+        // Reverse the STRAIN_PHOTO award — intent committed with the delete.
+        reversalId = await enqueueReversal(tx, {
+          kind: "SOURCE", sourceType: "STRAIN_PHOTO", sourceId: id,
+          reason: "Photo removed by staff", requestedBy: admin.id,
+        })
         break
       }
       // Note: only strain photos carry rep (STRAIN_PHOTO awards keyed to the
@@ -148,10 +154,7 @@ export async function POST(request: Request) {
     }
   })
 
-  if (type === "strain") {
-    // Reverse the STRAIN_PHOTO award — same path as member-side deletes.
-    await reverseReputationBySource("STRAIN_PHOTO", id, "Photo removed by staff", admin.id).catch(() => 0)
-  }
+  if (reversalId) await drainOne(reversalId).catch(() => false)
 
   if (url) {
     try {

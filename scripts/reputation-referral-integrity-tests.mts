@@ -15,6 +15,7 @@ import {
   reverseReputationEvent,
   runEffectStage,
 } from "@/lib/reputation"
+import { enqueueReversal, drainOne } from "@/lib/reputation-outbox"
 import { REP_POINTS, REFERRAL_MIN_REP } from "@/lib/reputation-config"
 
 const TS = Date.now()
@@ -469,9 +470,15 @@ async function run() {
   // exists. This simulates the route's exact sequence against real rows.
   const profileRouteSrc = readFileSync("src/app/api/profile/route.ts", "utf8")
   ok(
-    profileRouteSrc.includes('reverseReputationBySource("POST", p.id') &&
-    profileRouteSrc.includes("thread: { authorId: user.id }"),
-    "account deletion sweeps rep on third-party posts inside owned threads"
+    profileRouteSrc.includes("enqueueReversal") &&
+    profileRouteSrc.includes('sourceType: "POST"') &&
+    profileRouteSrc.includes("thread: { authorId: user.id }") &&
+    profileRouteSrc.includes("drainOne"),
+    "account deletion enqueues durable rep sweeps on third-party posts inside owned threads"
+  )
+  ok(
+    !/reverseReputationBy\w+\([^)]*\)\.catch\(\(\)\s*=>/.test(profileRouteSrc),
+    "no swallowed fire-and-forget reversals in the delete path"
   )
 
   const delUser = await makeUser("del")
@@ -515,18 +522,22 @@ async function run() {
   const replierBefore = await repOf(replier.id) // 2+2+8+2-2 = 12
   const delRefBefore = await repOf(delReferrer.id) // 25
 
-  // The route's exact sequence: byActor → bySource(THREAD) per owned
-  // thread → bySource(POST) per post inside them → user.delete.
-  await reverseReputationByActor(delUser.id, "Granting account deleted")
+  // The route's exact sequence: durable intents inside the SAME transaction
+  // as the cascade, then post-commit drains.
   const ownedThreads = await prisma.thread.findMany({ where: { authorId: delUser.id }, select: { id: true } })
   const threadPosts = await prisma.post.findMany({ where: { thread: { authorId: delUser.id } }, select: { id: true } })
-  for (const t of ownedThreads) {
-    await reverseReputationBySource("THREAD", t.id, "Thread removed", delUser.id)
-  }
-  for (const p of threadPosts) {
-    await reverseReputationBySource("POST", p.id, "Thread removed", delUser.id)
-  }
-  await prisma.user.delete({ where: { id: delUser.id } })
+  const reversalIds: string[] = []
+  await prisma.$transaction(async (tx) => {
+    reversalIds.push(await enqueueReversal(tx, { kind: "ACTOR", actorId: delUser.id, reason: "Granting account deleted", requestedBy: delUser.id }))
+    for (const t of ownedThreads) {
+      reversalIds.push(await enqueueReversal(tx, { kind: "SOURCE", sourceType: "THREAD", sourceId: t.id, reason: "Thread removed", requestedBy: delUser.id }))
+    }
+    for (const p of threadPosts) {
+      reversalIds.push(await enqueueReversal(tx, { kind: "SOURCE", sourceType: "POST", sourceId: p.id, reason: "Thread removed", requestedBy: delUser.id }))
+    }
+    await tx.user.delete({ where: { id: delUser.id } })
+  })
+  for (const rid of reversalIds) await drainOne(rid)
 
   ok((await prisma.post.findUnique({ where: { id: reply.id } })) === null, "thread cascade removes the third-party reply")
   ok((await prisma.user.findUnique({ where: { id: replier.id } })) !== null, "third-party member survives the deletion")

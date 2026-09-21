@@ -213,7 +213,7 @@ export default function ProgressPage() {
             milestone bonuses. Missed days just restart the count. */}
         <section aria-label="Garden streak" className="bg-card/80 rounded-2xl border border-border/70 p-4 mb-4">
           <div className="flex items-center gap-2 mb-1">
-            <Flame className={cn("w-4 h-4", (data.streak?.days ?? 0) > 0 ? "text-amber-500" : "text-muted-foreground")} />
+            <Flame className={cn("w-4 h-4", (data.streak?.days ?? 0) > 0 ? "text-warning" : "text-muted-foreground")} />
             <h2 className="font-display text-sm font-semibold">Garden streak</h2>
             <span className="ml-auto text-xs text-muted-foreground">
               {data.streak && data.streak.days > 0 ? `${data.streak.days} day${data.streak.days === 1 ? "" : "s"}` : "not started"}

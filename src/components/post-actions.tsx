@@ -220,7 +220,7 @@ export default function PostActions({
         )}
         {canModerate && !isOwner && (
           <Tooltip content="Remove this post (moderator action)">
-            <button onClick={handleDelete} aria-label="Remove post" className="tap-target p-1.5 text-amber-500 hover:text-amber-600 transition-colors rounded-lg hover:bg-amber-500/10">
+            <button onClick={handleDelete} aria-label="Remove post" className="tap-target p-1.5 text-warning hover:text-warning transition-colors rounded-lg hover:bg-amber-500/10">
               <Trash2 className="w-3.5 h-3.5" />
             </button>
           </Tooltip>

@@ -1,11 +1,14 @@
 import { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
+import { MEANINGFUL_UPDATE_SQL } from "@/lib/meaningful-update"
 
-// Streak = consecutive UTC days with at least one update, ending today or
-// yesterday. Computed from DISTINCT days (not raw update rows) so the fetch
-// is bounded by streak length in days — 400 days of updates returns 400
-// rows max instead of up to 1000 update rows. totalUpdates is a cheap
-// indexed count.
+// Streak = consecutive UTC days with at least one MEANINGFUL update (the
+// shared predicate from meaningful-update.ts — ≥10 chars, a photo, or env
+// readings), ending today or yesterday. Computed from DISTINCT days (not
+// raw update rows) so the fetch is bounded by streak length in days — 400
+// days of updates returns 400 rows max instead of up to 1000 update rows.
+// The predicate lives in SQL so a day of pure filler can't push real days
+// past the LIMIT window. totalUpdates is a cheap indexed count.
 // publicOnly scopes every count to PUBLIC diaries — use it anywhere the
 // result is shown to someone other than the author.
 export async function getGrowStreak(
@@ -18,6 +21,7 @@ export async function getGrowStreak(
       FROM "DiaryUpdate" du
       JOIN "GrowDiary" g ON g.id = du."diaryId"
       WHERE du."authorId" = ${userId} AND g."deleted" = false
+      AND ${MEANINGFUL_UPDATE_SQL}
       ${publicOnly ? Prisma.sql`AND g."visibility" = 'PUBLIC'` : Prisma.empty}
       ORDER BY d DESC
       LIMIT 400`,

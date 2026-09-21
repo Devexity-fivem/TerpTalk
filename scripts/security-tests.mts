@@ -128,10 +128,16 @@ async function run() {
     const now = new Date()
     const oldEnough = new Date(now.getTime() - 25 * 60 * 60 * 1000)
     await prisma.user.update({ where: { id: userId }, data: { createdAt: oldEnough } })
-    await prisma.profile.update({ where: { id: profileId }, data: { reputation: 250 } })
+    const seedRep = async (delta: number) => {
+      await prisma.profile.update({ where: { id: profileId }, data: { reputation: { increment: delta } } })
+      await prisma.reputationEvent.create({
+        data: { userId, type: "STAFF_ADJUSTMENT", amount: delta, reason: "test seed" },
+      })
+    }
+    await seedRep(250)
     assert.equal(await isTrustedForLinks(userId), true, "aged Sprout user should be trusted for links")
 
-    await prisma.profile.update({ where: { id: profileId }, data: { reputation: 0 } })
+    await seedRep(-250)
     assert.equal(await isTrustedForLinks(userId), false, "same user with 0 rep should not be trusted")
 
     // enforceLinkTrust — the shared policy used by posts, edits, chat, DMs,
@@ -144,13 +150,13 @@ async function run() {
       null,
       "untrusted user posting plain text should pass"
     )
-    await prisma.profile.update({ where: { id: profileId }, data: { reputation: 250 } })
+    await seedRep(250)
     assert.equal(
       await enforceLinkTrust("check https://ok.example out", userId, fakeReq, "test"),
       null,
       "trusted user posting a link should pass"
     )
-    await prisma.profile.update({ where: { id: profileId }, data: { reputation: 0 } })
+    await seedRep(-250)
 
     // Admin-only moderation actions — REMOVE_SUSPENSION must stay in this set
     // so a MODERATOR can never clear ban/suspension state.
@@ -235,8 +241,8 @@ async function run() {
     // Suggested growers — exclusion rules: self, already-followed, blocked
     // (either direction), banned/suspended, TerpBot.
     const stamp = Date.now()
-    const mkUser = async (tag: string, extra: { banned?: boolean; suspended?: boolean } = {}) =>
-      prisma.user.create({
+    const mkUser = async (tag: string, extra: { banned?: boolean; suspended?: boolean } = {}) => {
+      const u = await prisma.user.create({
         data: {
           name: `__test_sug_${tag}_${stamp}`,
           ageVerified: true,
@@ -245,6 +251,11 @@ async function run() {
           profile: { create: { username: `__tsug${tag}${stamp.toString(36)}`, bio: "test grower", reputation: 5000 } },
         },
       })
+      await prisma.reputationEvent.create({
+        data: { userId: u.id, type: "STAFF_ADJUSTMENT", amount: 5000, reason: "test seed" },
+      })
+      return u
+    }
     const sugVisible = await mkUser("v")
     const sugFollowed = await mkUser("f")
     const sugBanned = await mkUser("b", { banned: true })

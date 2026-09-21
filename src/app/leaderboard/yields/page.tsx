@@ -104,7 +104,7 @@ export default async function YieldLeaderboardPage() {
       <div className="max-w-5xl mx-auto">
         <div className="mb-8">
           <h1 className="font-display text-3xl font-bold tracking-tight flex items-center gap-2">
-            <Trophy className="w-8 h-8 text-amber-500" />
+            <Trophy className="w-8 h-8 text-warning" />
             Strain Yield Leaderboard
           </h1>
           <p className="text-muted-foreground mt-2 max-w-2xl">
@@ -167,7 +167,7 @@ export default async function YieldLeaderboardPage() {
                     <div className="text-xs text-muted-foreground">avg oz</div>
                   </div>
                   <div className="text-center">
-                    <div className="text-2xl font-bold text-emerald-500">{row.topOz.toFixed(2)}</div>
+                    <div className="text-2xl font-bold text-success">{row.topOz.toFixed(2)}</div>
                     <div className="text-xs text-muted-foreground">top oz</div>
                   </div>
                   <div className="flex items-center gap-2">

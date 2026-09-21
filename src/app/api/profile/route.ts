@@ -4,7 +4,8 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { unauthorized, forbidden, getClientIp, logSecurityEvent, LIMITS, isBanned, enforceLinkTrust } from "@/lib/security"
 import { storeImage, deleteImagesIfUnreferenced } from "@/lib/blob"
-import { getReputationTier, getTierProgress, getRepStage, getStageProgress, reverseReputationByActor, reverseReputationBySource } from "@/lib/reputation"
+import { getReputationTier, getTierProgress, getRepStage, getStageProgress } from "@/lib/reputation"
+import { enqueueReversal, drainOne } from "@/lib/reputation-outbox"
 import { canEquip } from "@/lib/cosmetics"
 import { Prisma } from "@prisma/client"
 import { rateLimit } from "@/lib/rate-limit"
@@ -576,31 +577,43 @@ export async function DELETE(request: Request) {
       }).catch(() => {})
     }
 
-    // Void reputation this account granted others (likes, accepted answers)
-    // before the cascade deletes their own ledger rows.
-    await reverseReputationByActor(user.id, "Granting account deleted").catch(() => 0)
-
     // The thread cascade also removes every reply other members posted in
     // this user's threads — claw back the rep they earned from those posts
     // (creation, likes, accepted answers), matching the owner/staff
-    // thread-removal policy. Idempotent keyed/source reversals.
+    // thread-removal policy.
     const [ownedThreads, threadPosts] = await Promise.all([
       prisma.thread.findMany({ where: { authorId: user.id }, select: { id: true } }),
       prisma.post.findMany({ where: { thread: { authorId: user.id } }, select: { id: true } }),
     ])
-    for (const t of ownedThreads) {
-      await reverseReputationBySource("THREAD", t.id, "Thread removed", user.id).catch(() => 0)
-    }
-    for (const p of threadPosts) {
-      await reverseReputationBySource("POST", p.id, "Thread removed", user.id).catch(() => 0)
-    }
 
-    // Cascade delete handles: profile, posts, threads, diaries, setups,
-    // chat messages, DMs, notifications, reactions, follows, badges,
-    // reputation events, reports filed, moderation actions, blocks
-    // chat messages, DMs, notifications, reactions, follows, badges,
-    // reputation events, reports filed, moderation actions, blocks
-    await prisma.user.delete({ where: { id: user.id } })
+    // Durable reversal intents are written in the SAME transaction as the
+    // account cascade — voiding the reputation this account granted others
+    // (likes, accepted answers) plus sweeps of its deleted threads/posts can
+    // never be stranded between the delete and a post-commit reversal.
+    const reversalIds: string[] = []
+    await prisma.$transaction(async (tx) => {
+      reversalIds.push(await enqueueReversal(tx, {
+        kind: "ACTOR", actorId: user.id,
+        reason: "Granting account deleted", requestedBy: user.id,
+      }))
+      for (const t of ownedThreads) {
+        reversalIds.push(await enqueueReversal(tx, {
+          kind: "SOURCE", sourceType: "THREAD", sourceId: t.id,
+          reason: "Thread removed", requestedBy: user.id,
+        }))
+      }
+      for (const p of threadPosts) {
+        reversalIds.push(await enqueueReversal(tx, {
+          kind: "SOURCE", sourceType: "POST", sourceId: p.id,
+          reason: "Thread removed", requestedBy: user.id,
+        }))
+      }
+      // Cascade delete handles: profile, posts, threads, diaries, setups,
+      // chat messages, DMs, notifications, reactions, follows, badges,
+      // reputation events, reports filed, moderation actions, blocks
+      await tx.user.delete({ where: { id: user.id } })
+    })
+    for (const rid of reversalIds) await drainOne(rid).catch(() => false)
 
     // Best-effort cleanup of owned Blob objects after the DB records are gone.
     try {

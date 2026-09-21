@@ -14,11 +14,10 @@
  * of same-day filler can never unlock a stage.
  */
 import { prisma } from "@/lib/prisma"
-import { awardReputation, reverseReputationByKey } from "@/lib/reputation"
+import { awardReputation } from "@/lib/reputation"
+import { reverseKeyDurable } from "@/lib/reputation-outbox"
 import { getBooleanSetting, SITE_SETTINGS } from "@/lib/settings"
-
-// Reuses the diary-update rep floor — one definition of "meaningful".
-const MIN_UPDATE_LENGTH = 10
+import { isMeaningfulUpdate } from "@/lib/meaningful-update"
 
 export const GROW_STAGES = [
   { key: "PLANTED", name: "Planted", icon: "🌱", rep: 0 },
@@ -68,29 +67,8 @@ interface JourneyDiary {
   deleted: boolean
 }
 
-function isMeaningfulUpdate(u: {
-  content: string
-  images: { id: string }[]
-  temperature: number | null
-  humidity: number | null
-  vpd: number | null
-  ph: number | null
-  ec: number | null
-  feeding: string | null
-  training: string | null
-}): boolean {
-  if (u.content.trim().length >= MIN_UPDATE_LENGTH) return true
-  if (u.images.length > 0) return true
-  return (
-    u.temperature != null ||
-    u.humidity != null ||
-    u.vpd != null ||
-    u.ph != null ||
-    u.ec != null ||
-    u.feeding != null ||
-    u.training != null
-  )
-}
+// isMeaningfulUpdate now lives in @/lib/meaningful-update — one canonical
+// predicate shared with the streak SQL so the two can never drift.
 
 const utcDay = (d: Date) => d.toISOString().slice(0, 10)
 
@@ -310,8 +288,9 @@ export async function evaluateGrowJourney(diaryId: string): Promise<void> {
       ).catch(() => {})
     } else {
       // Regressed (updates deleted, harvest undone) — claw the milestone
-      // back. No-op when no award exists.
-      await reverseReputationByKey(key, "Grow milestone no longer met").catch(() => null)
+      // back. Durable intent: a failed reversal retries via ping/cron
+      // instead of leaving phantom milestone rep. No-op when no award exists.
+      await reverseKeyDurable(key, "Grow milestone no longer met").catch(() => null)
     }
   }
 }

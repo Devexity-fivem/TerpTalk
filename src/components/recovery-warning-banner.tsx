@@ -34,15 +34,15 @@ export default function RecoveryWarningBanner() {
   if (!missing || dismissed) return null
 
   return (
-    <div className="bg-amber-500/10 text-amber-600 border-b border-amber-500/20 px-4 py-2.5">
+    <div className="bg-amber-500/10 text-warning border-b border-amber-500/20 px-4 py-2.5">
       <div className="max-w-6xl mx-auto flex items-start gap-3">
         <KeyRound className="w-4 h-4 shrink-0 mt-0.5" />
         <div className="flex-1 text-sm">
           <span className="font-semibold mr-1">Protect your account.</span>
-          <span className="text-amber-700">
+          <span className="text-warning">
             You haven&apos;t saved a recovery phrase — lose your password and there&apos;s no way back in.
           </span>
-          <Link href="/profile" className="tap-target ml-2 underline font-medium hover:text-amber-700">
+          <Link href="/profile" className="tap-target ml-2 underline font-medium hover:text-warning">
             Set one up
           </Link>
         </div>

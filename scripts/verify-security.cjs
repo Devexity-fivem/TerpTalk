@@ -39,7 +39,7 @@ const apiFiles = () => {
     const dbRoleCheck = /requireAdmin|requireModerator|requireStaff/.test(c)
       || (/isSessionValid/.test(c) && /prisma\.user\.findUnique/.test(c) && /isAdmin\(user\.role\)/.test(c));
     check(`${r}: uses DB-verified staff check`, dbRoleCheck);
-    check(`${r}: no bare JWT role check`, !/isAdmin\(session\.user\.role\)|isModerator\(session\.user\.role\)/.test(c) || r === "moderation/actions");
+    check(`${r}: no bare JWT role check`, !/isAdmin\(session\.user\.role\)|isModerator\(session\.user\.role\)/.test(c));
   }
 
   // ── 2. Mass assignment — no raw body spreads into prisma creates ──

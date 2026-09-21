@@ -130,7 +130,7 @@ export default function MemberHome({ data }: { data: MemberHomeData }) {
         <div className="grid gap-4 md:grid-cols-2">
           {/* Today's quests */}
           <Card
-            icon={<Zap className="h-4 w-4 text-amber-500" />}
+            icon={<Zap className="h-4 w-4 text-warning" />}
             title="Today's quests"
             tip="Small optional tasks that refresh daily — each pays the listed reputation. Hover a quest to see how to complete it."
             action={{ href: "/progress", label: "All progress" }}
@@ -270,7 +270,7 @@ export default function MemberHome({ data }: { data: MemberHomeData }) {
                       href={diaryPath({ id: u.diaryId, slug: u.diarySlug })}
                       className="group flex items-center gap-2 rounded-xl px-3 py-2 hover:bg-secondary/60"
                     >
-                      <Leaf className="h-3.5 w-3.5 shrink-0 text-emerald-500" />
+                      <Leaf className="h-3.5 w-3.5 shrink-0 text-success" />
                       <span className="min-w-0 flex-1 truncate group-hover:text-primary">
                         {u.title} <span className="text-muted-foreground">— {u.diaryTitle}</span>
                       </span>
@@ -283,7 +283,7 @@ export default function MemberHome({ data }: { data: MemberHomeData }) {
 
           {/* Live now */}
           <Card
-            icon={<Radio className="h-4 w-4 text-emerald-500" />}
+            icon={<Radio className="h-4 w-4 text-success" />}
             title="Live now"
             tip="Real-time community activity — who's online and the latest chat message."
           >

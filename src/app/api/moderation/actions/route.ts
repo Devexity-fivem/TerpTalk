@@ -6,9 +6,10 @@ import { unauthorized, isAdmin, forbidden, getClientIp, logSecurityEvent } from 
 import { requireModerator, ADMIN_ONLY_MOD_ACTIONS } from "@/lib/require-staff"
 import { rateLimit } from "@/lib/rate-limit"
 import { emitNotificationPush, notificationLinkWhere, postLinkWhere } from "@/lib/notify"
-import { reverseReputationBySource, reverseReputationByActor } from "@/lib/reputation"
+import { enqueueReversal, drainOne } from "@/lib/reputation-outbox"
 import { applyAccountActionInTx, staffDisplayName } from "@/lib/moderation"
 import { deleteImagesIfUnreferenced } from "@/lib/blob"
+import { getPusher } from "@/lib/pusher"
 import { revalidateTag } from "next/cache"
 
 const CONTENT_TYPES = new Set(["THREAD", "POST", "CHAT_MESSAGE", "DIARY", "SETUP", "STRAIN"])
@@ -76,6 +77,10 @@ export async function POST(request: Request) {
     let diaryContentDeleted = false
     let strainDeleted = false
     let strainPhotoIds: string[] = []
+    let deletedChatRoomId: string | null = null
+    // Durable reversal intents — committed atomically with the deletion so
+    // staff rep reconciliation can never be silently lost.
+    const reversalIds: string[] = []
     await prisma.$transaction(async (tx) => {
       if (isAccountAction) {
         // Shared enforcement — identical semantics to chat /warn /mute /ban.
@@ -88,6 +93,15 @@ export async function POST(request: Request) {
           staffRole: staff.role,
           staffName,
         })
+        // A permanent ban voids reputation the banned account granted others
+        // (likes they cast, answers they accepted). enqueuedAt bounds the
+        // sweep so a late drain can't claw back post-ban grants.
+        if (actionType === "PERMANENT_BAN") {
+          reversalIds.push(await enqueueReversal(tx, {
+            kind: "ACTOR", actorId: targetUserId,
+            reason: "Granting account permanently banned", requestedBy: staff.id,
+          }))
+        }
       } else {
         // Guards for content/thread actions — non-admin staff may not act
         // on fellow staff or administrators' content. Empty targetUserId is
@@ -137,6 +151,17 @@ export async function POST(request: Request) {
                 where: { OR: [{ threadId: targetId }, { post: { threadId: targetId } }] },
               })
               deletedBlobUrls.push(...imgs.map((i) => i.url))
+              reversalIds.push(await enqueueReversal(tx, {
+                kind: "SOURCE", sourceType: "THREAD", sourceId: targetId,
+                reason: "Content removed by staff", requestedBy: staff.id,
+              }))
+              const postIds = await tx.post.findMany({ where: { threadId: targetId }, select: { id: true } })
+              for (const p of postIds) {
+                reversalIds.push(await enqueueReversal(tx, {
+                  kind: "SOURCE", sourceType: "POST", sourceId: p.id,
+                  reason: "Content removed by staff", requestedBy: staff.id,
+                }))
+              }
             }
             break
           }
@@ -144,6 +169,10 @@ export async function POST(request: Request) {
             const p = await tx.post.findUnique({ where: { id: targetId }, select: { threadId: true } })
             ok = !!(await tx.post.updateMany({ where: { id: targetId, authorId: targetUserId }, data: { deleted: true } })).count
             if (ok) {
+              reversalIds.push(await enqueueReversal(tx, {
+                kind: "SOURCE", sourceType: "POST", sourceId: targetId,
+                reason: "Content removed by staff", requestedBy: staff.id,
+              }))
               // Deep-linked notifications (?post=/#post-) would dangle.
               await tx.notification.deleteMany({ where: postLinkWhere(targetId) })
               const imgs = await tx.postImage.findMany({ where: { postId: targetId }, select: { url: true } })
@@ -176,13 +205,20 @@ export async function POST(request: Request) {
             }
             break
           }
-          case "CHAT_MESSAGE":
+          case "CHAT_MESSAGE": {
+            const cm = await tx.chatMessage.findUnique({ where: { id: targetId }, select: { roomId: true } })
             ok = !!(await tx.chatMessage.updateMany({ where: { id: targetId, authorId: targetUserId }, data: { deleted: true } })).count
+            if (ok && cm) deletedChatRoomId = cm.roomId
             break
+          }
           case "DIARY": {
             const d = await tx.growDiary.findUnique({ where: { id: targetId }, select: { slug: true } })
             ok = !!(await tx.growDiary.updateMany({ where: { id: targetId, authorId: targetUserId }, data: { deleted: true, threadId: null } })).count
             if (ok) {
+              reversalIds.push(await enqueueReversal(tx, {
+                kind: "SOURCE", sourceType: "DIARY", sourceId: targetId,
+                reason: "Content removed by staff", requestedBy: staff.id,
+              }))
               // Notifications may store either the old id link or the slug
               // link — invalidate both forms.
               deletedLink = d?.slug ? [`/diaries/${targetId}`, `/diaries/${d.slug}`] : [`/diaries/${targetId}`]
@@ -200,6 +236,10 @@ export async function POST(request: Request) {
             const s = await tx.growSetup.findUnique({ where: { id: targetId }, select: { slug: true } })
             ok = !!(await tx.growSetup.updateMany({ where: { id: targetId, authorId: targetUserId }, data: { deleted: true } })).count
             if (ok) {
+              reversalIds.push(await enqueueReversal(tx, {
+                kind: "SOURCE", sourceType: "SETUP", sourceId: targetId,
+                reason: "Content removed by staff", requestedBy: staff.id,
+              }))
               deletedLink = s?.slug ? [`/setups/${targetId}`, `/setups/${s.slug}`] : [`/setups/${targetId}`]
               const imgs = await tx.setupImage.findMany({ where: { setupId: targetId }, select: { url: true } })
               await tx.setupImage.deleteMany({ where: { setupId: targetId } })
@@ -227,6 +267,17 @@ export async function POST(request: Request) {
             strainPhotoIds = strain.photos.map((p) => p.id)
             deletedBlobUrls.push(...strain.photos.map((p) => p.imageUrl))
             await tx.strain.delete({ where: { id: targetId } })
+            // STRAIN_CREATED on the catalog row + each photo's STRAIN_PHOTO.
+            reversalIds.push(await enqueueReversal(tx, {
+              kind: "SOURCE", sourceType: "STRAIN", sourceId: targetId,
+              reason: "Content removed by staff", requestedBy: staff.id,
+            }))
+            for (const pid of strainPhotoIds) {
+              reversalIds.push(await enqueueReversal(tx, {
+                kind: "SOURCE", sourceType: "STRAIN_PHOTO", sourceId: pid,
+                reason: "Content removed by staff", requestedBy: staff.id,
+              }))
+            }
             deletedLink = strain.slug ? [`/strains/${targetId}`, `/strains/${strain.slug}`] : [`/strains/${targetId}`]
             strainDeleted = true
             ok = true
@@ -297,30 +348,20 @@ export async function POST(request: Request) {
       emitNotificationPush(effectiveTargetUserId, createdNotification)
     }
 
+    // Tombstone the message for already-connected room clients — fired only
+    // after the tx commits so a rolled-back delete never announces.
+    if (deletedChatRoomId && typeof targetId === "string") {
+      getPusher()?.trigger(`private-chat-${deletedChatRoomId}`, "message-deleted", { roomId: deletedChatRoomId, ids: [targetId] }).catch((e) => console.error("[pusher] mod chat delete push failed:", deletedChatRoomId, e))
+    }
+
     // Soft-deleted content must not leave live public blobs behind.
     if (deletedBlobUrls.length > 0) {
       deleteImagesIfUnreferenced(deletedBlobUrls).catch(() => {})
     }
 
-    // Reputation reconciliation — idempotent counter-entries, never silent edits.
-    if (actionType === "CONTENT_DELETION" && typeof targetId === "string") {
-      if (targetType === "THREAD") {
-        const postIds = await prisma.post.findMany({ where: { threadId: targetId }, select: { id: true } })
-        await reverseReputationBySource("THREAD", targetId, "Content removed by staff", staff.id).catch(() => 0)
-        for (const p of postIds) {
-          await reverseReputationBySource("POST", p.id, "Content removed by staff", staff.id).catch(() => 0)
-        }
-      } else if (targetType === "POST" || targetType === "DIARY" || targetType === "SETUP") {
-        await reverseReputationBySource(targetType, targetId, "Content removed by staff", staff.id).catch(() => 0)
-      } else if (targetType === "STRAIN") {
-        // STRAIN_CREATED on the catalog row + each photo's STRAIN_PHOTO —
-        // photo ids were collected before the cascade removed the rows.
-        await reverseReputationBySource("STRAIN", targetId, "Content removed by staff", staff.id).catch(() => 0)
-        for (const pid of strainPhotoIds) {
-          await reverseReputationBySource("STRAIN_PHOTO", pid, "Content removed by staff", staff.id).catch(() => 0)
-        }
-      }
-    }
+    // Reputation reconciliation — intents were committed inside the tx;
+    // drain best-effort now, and ping/cron retries any stragglers.
+    for (const rid of reversalIds) await drainOne(rid).catch(() => false)
     // A moderated diary or strain must stop contributing to strain stats —
     // same invalidation as the owner-delete paths.
     if (diaryContentDeleted || strainDeleted) {
@@ -333,11 +374,7 @@ export async function POST(request: Request) {
     if (isAccountAction || (actionType === "CONTENT_DELETION" && targetType !== "STRAIN")) {
       revalidateTag("analytics", { expire: 0 })
     }
-    // A permanent ban voids reputation the banned account granted others
-    // (likes they cast, answers they accepted). Their own earned history stays.
-    if (actionType === "PERMANENT_BAN") {
-      await reverseReputationByActor(targetUserId, "Granting account permanently banned").catch(() => 0)
-    }
+
 
     await logSecurityEvent("SUSPICIOUS_ACTIVITY", {
       userId: staff.id,

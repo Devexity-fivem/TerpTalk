@@ -3,7 +3,8 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { unauthorized, publicUserSelect, LIMITS, getClientIp, logSecurityEvent, isBanned, forbidden, enforceLinkTrust } from "@/lib/security"
-import { awardReputation, checkBadges, repRateLimit, reverseReputationByKey, REP_POINTS } from "@/lib/reputation"
+import { awardReputation, checkBadges, repRateLimit, REP_POINTS } from "@/lib/reputation"
+import { enqueueReversal, drainOne } from "@/lib/reputation-outbox"
 import { storeImages, deleteImagesIfUnreferenced, MAX_POST_IMAGES } from "@/lib/blob"
 import { checkMaintenance } from "@/lib/maintenance"
 import { notifyMany } from "@/lib/notify"
@@ -302,22 +303,30 @@ export async function DELETE(request: Request) {
       return forbidden()
     }
 
-    await prisma.diaryUpdate.delete({ where: { id } })
-
     // Claw back the day's diary-update rep if this was the last remaining
     // update for that diary on that UTC day — otherwise delete-the-evidence
-    // keeps the payout. Reverse-by-key is a no-op when no award exists.
+    // keeps the payout. The intent is enqueued inside the delete tx so a
+    // crash can never strand the award; the drain is a no-op when no award
+    // exists.
     const dayStart = new Date(Date.UTC(
       update.createdAt.getUTCFullYear(), update.createdAt.getUTCMonth(), update.createdAt.getUTCDate()
     ))
     const dayEnd = new Date(dayStart.getTime() + 86400000)
-    const remaining = await prisma.diaryUpdate.count({
-      where: { diaryId: update.diaryId, createdAt: { gte: dayStart, lt: dayEnd } },
+    const dayKey = update.createdAt.toISOString().slice(0, 10)
+    let reversalId: string | null = null
+    await prisma.$transaction(async (tx) => {
+      await tx.diaryUpdate.delete({ where: { id } })
+      const remaining = await tx.diaryUpdate.count({
+        where: { diaryId: update.diaryId, createdAt: { gte: dayStart, lt: dayEnd } },
+      })
+      if (remaining === 0) {
+        reversalId = await enqueueReversal(tx, {
+          kind: "KEY", eventKey: `diaryupd:${update.diaryId}:${dayKey}`,
+          reason: "Diary update deleted",
+        })
+      }
     })
-    if (remaining === 0) {
-      const dayKey = update.createdAt.toISOString().slice(0, 10)
-      await reverseReputationByKey(`diaryupd:${update.diaryId}:${dayKey}`, "Diary update deleted").catch(() => null)
-    }
+    if (reversalId) await drainOne(reversalId).catch(() => false)
     // Losing a meaningful update day can regress a grow-journey stage —
     // reconciliation claws the milestone award back if it no longer holds.
     await evaluateGrowJourney(update.diaryId).catch(() => {})

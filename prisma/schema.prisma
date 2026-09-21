@@ -1038,6 +1038,32 @@ model Setting {
   updatedAt DateTime @updatedAt
 }
 
+// Durable outbox for reputation reversals. The intent row is written inside
+// the same transaction as the triggering delete/ban, so a reversal can be
+// delayed but never silently lost. Drained post-commit, throttled from
+// /api/ping, and swept by daily cron. Completion is verified by a fixpoint
+// check against the ledger — never by the callee's return value. All ids
+// are bare strings (no FKs) so account deletion never orphans or blocks
+// rows — same convention as SecurityEvent.userId and AbuseFlag.
+model PendingReversal {
+  id          String    @id @default(cuid())
+  kind        String    // SOURCE | KEY | ACTOR
+  eventKey    String?   // kind=KEY — ledger key to reverse
+  sourceType  String?   // kind=SOURCE
+  sourceId    String?   // kind=SOURCE
+  actorId     String?   // kind=ACTOR — bare string
+  reason      String
+  requestedBy String?   // session/staff user — bare string, survives deletion
+  enqueuedAt  DateTime  @default(now()) // ACTOR sweeps only touch events createdAt <= this
+  status      String    @default("PENDING") // PENDING | RUNNING | DEAD
+  claimedAt   DateTime? // RUNNING heartbeat; stale > 10min → reclaimable
+  attempts    Int       @default(0)
+  lastError   String?
+  createdAt   DateTime  @default(now())
+
+  @@index([status, createdAt])
+}
+
 // ─── Polls (one per thread) ─────────────────────────────────────────
 
 model Poll {

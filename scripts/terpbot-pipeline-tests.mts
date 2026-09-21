@@ -5,6 +5,7 @@
 // Run: npm run test:terpbot-pipeline
 import "./db-guard.mjs"
 import { strict as assert } from "node:assert"
+import { readFile } from "node:fs/promises"
 import { prisma } from "@/lib/prisma"
 import { claimBotEvent, releaseBotEvent, getBotStats } from "@/lib/terpbot-events"
 import {
@@ -422,7 +423,12 @@ async function run() {
       assert.match(await r("ask", "fungus gnats", ["fungus", "gnats"]), /fungus gnats|couldn't find|Try:/i, "ask → result or honest miss")
       assert.match(await r("hot"), /🔥|No /, "hot → bounded engagement list")
       assert.match(await r("new"), /🆕|No /, "new → recent threads")
-      assert.match(await r("unanswered"), /❓|No /, "unanswered → public only")
+      assert.match(await r("unanswered"), /🙋|✅|No /, "unanswered → list or honest empty state")
+      // Public-only contract: hidden categories and inactive/banned authors excluded.
+      const unansweredSrc = await readFile("src/lib/terpbot-data.ts", "utf8")
+      const unansweredBlock = unansweredSrc.split('case "unanswered"')[1]?.split('case "')[0] ?? ""
+      assert.match(unansweredBlock, /hidden:\s*false/, "unanswered → hidden categories excluded")
+      assert.match(unansweredBlock, /activeAuthor\(\)/, "unanswered → inactive authors excluded")
       assert.match(await r("active"), /online|members/i, "active → community snapshot")
       assert.match(await r("weekly"), /week/i, "weekly → real-count summary")
 

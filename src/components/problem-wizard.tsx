@@ -16,7 +16,7 @@ interface CommunityThread {
 
 const SEVERITY = {
   urgent: { label: "Act now", cls: "bg-destructive/15 text-destructive" },
-  moderate: { label: "Fix this week", cls: "bg-amber-500/15 text-amber-500" },
+  moderate: { label: "Fix this week", cls: "bg-amber-500/15 text-warning" },
   watch: { label: "Monitor", cls: "bg-primary/15 text-primary" },
 }
 
@@ -90,7 +90,7 @@ export default function ProblemWizard() {
                       href={`/forum/thread/${t.slug}`}
                       className="text-sm text-primary hover:underline flex items-center gap-2 flex-wrap"
                     >
-                      {t.solved && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />}
+                      {t.solved && <CheckCircle2 className="w-3.5 h-3.5 text-success shrink-0" />}
                       <span>{t.title}</span>
                       <span className="text-xs text-muted-foreground">
                         · {t.authorName} · {t.replyCount} repl{t.replyCount === 1 ? "y" : "ies"}

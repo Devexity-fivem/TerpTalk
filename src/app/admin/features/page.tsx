@@ -78,7 +78,7 @@ export default function AdminFeaturesPage() {
         <p className="text-muted-foreground mb-6">Toggle platform features without deploying code.</p>
 
         {message && (
-          <p className={`mb-4 text-sm ${message.startsWith("Saved") ? "text-green-500" : "text-destructive"}`}>{message}</p>
+          <p className={`mb-4 text-sm ${message.startsWith("Saved") ? "text-success" : "text-destructive"}`}>{message}</p>
         )}
 
         <div className="bg-card rounded-lg border border-border divide-y divide-border">

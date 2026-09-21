@@ -466,7 +466,7 @@ export default async function ThreadPage({
         {/* Accepted answer — renders on every page, so its anchor always resolves */}
         {acceptedPost && (
           <div id={`post-${acceptedPost.id}`} tabIndex={-1} className="bg-card rounded-2xl border-2 border-green-500/50 p-4 sm:p-5 mb-4 ring-1 ring-green-500/20">
-            <div className="flex items-center gap-2 text-green-400 text-xs font-medium mb-3">
+            <div className="flex items-center gap-2 text-success text-xs font-medium mb-3">
               <CheckCircle2 className="w-3.5 h-3.5" />
               <span>Accepted answer</span>
             </div>

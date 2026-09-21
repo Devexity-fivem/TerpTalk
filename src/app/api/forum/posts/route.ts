@@ -4,7 +4,9 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { unauthorized, publicUserSelect, LIMITS, getClientIp, logSecurityEvent, isBanned, forbidden, enforceLinkTrust, isModerator, isAdmin, blockExistsBetween } from "@/lib/security"
 import { requireModerator } from "@/lib/require-staff"
-import { awardReputation, reverseReputationBySource, repRateLimit, getTierPerks, REP_POINTS } from "@/lib/reputation"
+import { awardReputation, repRateLimit, getTierPerks, REP_POINTS } from "@/lib/reputation"
+import { POST_MIN_PAID_LENGTH } from "@/lib/reputation-config"
+import { enqueueReversal, drainOne } from "@/lib/reputation-outbox"
 import { storeImages, deleteImagesIfUnreferenced, MAX_POST_IMAGES } from "@/lib/blob"
 import { notifyMentions } from "@/lib/mentions"
 import { notify, notifyMany, postDeepLink, postLinkWhere } from "@/lib/notify"
@@ -143,13 +145,17 @@ export async function POST(request: Request) {
       return created
     })
 
-    await awardReputation(
-      session.user.id,
-      "POST_CREATED",
-      REP_POINTS.POST_CREATED,
-      `Replied in "${thread.title.slice(0, 60)}"`,
-      { key: `post:${post.id}`, sourceType: "POST", sourceId: post.id }
-    ).catch(() => {})
+    // Paying floor: short replies still post — they just don't earn rep or
+    // feed post-count quests. Same policy as THREAD_MIN_PAID_LENGTH.
+    if (content.trim().length >= POST_MIN_PAID_LENGTH) {
+      await awardReputation(
+        session.user.id,
+        "POST_CREATED",
+        REP_POINTS.POST_CREATED,
+        `Replied in "${thread.title.slice(0, 60)}"`,
+        { key: `post:${post.id}`, sourceType: "POST", sourceId: post.id }
+      ).catch(() => {})
+    }
 
     // Notify the thread author (if not self-reply; pref/block/ban handled by notify).
     // groupKey+dedupeMs bound reply-bombs: the same replier can't stack more
@@ -380,6 +386,7 @@ export async function DELETE(request: Request) {
     }
 
     let acceptedCleared = 0
+    let reversalId: string | null = null
     await prisma.$transaction(async (tx) => {
       await tx.post.update({ where: { id }, data: { deleted: true } })
       // Detach image rows so the blob cleanup's reference check sees the
@@ -413,6 +420,12 @@ export async function DELETE(request: Request) {
       ).count
       // Deep links to this post would now dangle — drop the notifications.
       await tx.notification.deleteMany({ where: postLinkWhere(post.id) })
+      // Durable reversal intent — same transaction as the delete, so a
+      // crash can't strand reputation on removed content.
+      reversalId = await enqueueReversal(tx, {
+        kind: "SOURCE", sourceType: "POST", sourceId: post.id,
+        reason: "Post removed", requestedBy: session.user.id,
+      })
     })
 
     // Staff deletion of another user's content is a moderation action —
@@ -431,10 +444,9 @@ export async function DELETE(request: Request) {
       }).catch(() => {})
     }
 
-    // Reputation reconciliation: reverse every active event tied to this post
-    // (creation award, likes on it, accepted-answer award). Counter-entries
-    // preserve the audit trail and are idempotent under retries.
-    await reverseReputationBySource("POST", post.id, "Post removed", session.user.id).catch(() => 0)
+    // Best-effort immediate drain — the outbox row makes any failure
+    // retryable via ping/cron instead of silently losing the reversal.
+    if (reversalId) await drainOne(reversalId).catch(() => false)
 
     // Soft-deleted content must not leave live public blobs behind.
     deleteImagesIfUnreferenced(post.images.map((i) => i.url)).catch(() => {})

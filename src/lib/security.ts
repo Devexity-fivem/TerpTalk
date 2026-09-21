@@ -303,15 +303,20 @@ export function getClientIp(request: { headers: Headers | Record<string, string 
     const cf = get("cf-connecting-ip")
     if (cf) return cf.split(",")[0].trim()
   }
-  // A single trusted proxy (e.g. nginx) sets x-real-ip and cannot be
-  // appended-to by the client — prefer it over the client-controllable XFF.
-  const realIp = get("x-real-ip")
-  if (realIp) return realIp.trim()
-  // Fallback: rightmost X-Forwarded-For entry is the closest proxy hop.
-  const forwarded = get("x-forwarded-for")
-  if (forwarded) {
-    const parts = forwarded.split(",").map((s) => s.trim()).filter(Boolean)
-    return parts[parts.length - 1] || forwarded.split(",")[0].trim()
+  // x-real-ip and X-Forwarded-For are client-controllable unless a known
+  // trusted proxy sets/strips them — only honor them when the deployment
+  // opts in via TRUST_PROXY_HEADERS=1. Without it, untrusted requests
+  // collapse to "unknown" and shared ceilings (e.g. register:global)
+  // carry the rate-limit load rather than trusting spoofable headers.
+  if (process.env.TRUST_PROXY_HEADERS === "1") {
+    const realIp = get("x-real-ip")
+    if (realIp) return realIp.trim()
+    // Fallback: rightmost X-Forwarded-For entry is the closest proxy hop.
+    const forwarded = get("x-forwarded-for")
+    if (forwarded) {
+      const parts = forwarded.split(",").map((s) => s.trim()).filter(Boolean)
+      return parts[parts.length - 1] || forwarded.split(",")[0].trim()
+    }
   }
   return "unknown"
 }

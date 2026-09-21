@@ -440,12 +440,15 @@ const ACTOR_GRANTED_TYPES = new Set([
   "REFERRAL",        // referee's qualification granted the referrer +25
 ])
 
-/** Reverse every active event a user *granted* (e.g. likes they cast). */
-export async function reverseReputationByActor(actorId: string, reason: string): Promise<number> {
+/** Reverse every active event a user *granted* (e.g. likes they cast).
+ * `before` bounds the sweep to events created at-or-before a timestamp —
+ * required for deferred/outbox retries so a late drain can't claw back
+ * grants made *after* the ban or deletion was issued. */
+export async function reverseReputationByActor(actorId: string, reason: string, opts: { before?: Date } = {}): Promise<number> {
   let events
   try {
     events = await prisma.reputationEvent.findMany({
-      where: { actorId, reversedAt: null, reversalOfId: null, type: { in: [...ACTOR_GRANTED_TYPES] } },
+      where: { actorId, reversedAt: null, reversalOfId: null, type: { in: [...ACTOR_GRANTED_TYPES] }, ...(opts.before ? { createdAt: { lte: opts.before } } : {}) },
       select: { id: true },
     })
   } catch (error) {

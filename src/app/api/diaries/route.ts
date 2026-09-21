@@ -4,7 +4,8 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { unauthorized, publicUserSelect, LIMITS, getClientIp, logSecurityEvent, isBanned, forbidden, enforceLinkTrust } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
-import { awardReputation, reverseReputationBySource, REP_POINTS } from "@/lib/reputation"
+import { awardReputation, REP_POINTS } from "@/lib/reputation"
+import { enqueueReversal, drainOne } from "@/lib/reputation-outbox"
 import { notificationLinkWhere, notifyMany } from "@/lib/notify"
 import { deleteImagesIfUnreferenced } from "@/lib/blob"
 import { checkMaintenance } from "@/lib/maintenance"
@@ -139,7 +140,14 @@ export async function POST(request: Request) {
       )
     }
     const now = new Date()
-    if (parsedStartDate.getTime() > now.getTime() + 365 * 24 * 60 * 60 * 1000 || parsedStartDate.getFullYear() < 1970) {
+    // Back-dating an in-progress grow is legitimate, but cap it: a reported
+    // start more than 2 years back only exists to poison span math and
+    // stats — no diary on this site can honestly document that far back.
+    const MAX_BACKDATE_MS = 730 * 24 * 60 * 60 * 1000
+    if (
+      parsedStartDate.getTime() > now.getTime() + 365 * 24 * 60 * 60 * 1000 ||
+      parsedStartDate.getTime() < now.getTime() - MAX_BACKDATE_MS
+    ) {
       return NextResponse.json({ error: "Invalid start date" }, { status: 400 })
     }
 
@@ -281,6 +289,7 @@ export async function DELETE(request: Request) {
     }
     if (diary.authorId !== session.user.id) return forbidden()
 
+    let reversalId: string | null = null
     const imageUrls = await prisma.$transaction(async (tx) => {
       // threadId goes null with the diary: the discussion thread survives as
       // a normal thread, and no diary context can leak through it.
@@ -297,6 +306,13 @@ export async function DELETE(request: Request) {
           diary.slug ? [`/diaries/${id}`, `/diaries/${diary.slug}`] : `/diaries/${id}`
         ),
       })
+      // Diary rep (DIARY_CREATED, per-day update awards, reactions) is all
+      // keyed sourceType=DIARY/sourceId=diaryId — one durable intent unwinds
+      // it, atomically committed with the delete itself.
+      reversalId = await enqueueReversal(tx, {
+        kind: "SOURCE", sourceType: "DIARY", sourceId: id,
+        reason: "Diary removed", requestedBy: session.user.id,
+      })
       return imgs.map((i) => i.url)
     })
 
@@ -304,9 +320,8 @@ export async function DELETE(request: Request) {
     // must not outlive the diary. Post-commit, best-effort.
     await purgeDiaryAnnouncements(diary).catch(() => {})
 
-    // Diary rep (DIARY_CREATED, per-day update awards, reactions) is all
-    // keyed sourceType=DIARY/sourceId=diaryId — one reversal unwinds it.
-    await reverseReputationBySource("DIARY", id, "Diary removed", session.user.id).catch(() => 0)
+    // Best-effort immediate drain — durable row retries via ping/cron.
+    if (reversalId) await drainOne(reversalId).catch(() => false)
     deleteImagesIfUnreferenced(imageUrls).catch(() => {})
     revalidateTag("diaries", { expire: 0 })
     // Strain stats aggregate this diary — bust the cache so deleted grows

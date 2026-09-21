@@ -56,17 +56,20 @@ async function mkSetup(authorId: string, over: Record<string, unknown> = {}) {
   return s
 }
 
-/** Mirror of the route's write path: scoped image diff + guarded updateMany. */
+/** Mirror of the route's write path: scoped image diff + guarded updateMany.
+ *  `actorId` mirrors the route's ownership guard — the write refuses to touch
+ *  a setup the actor does not own. */
 async function applyPatch(
   setupId: string,
   data: Record<string, unknown>,
-  opts: { keepImageIds?: string[]; newImageUrls?: string[] } = {}
+  opts: { keepImageIds?: string[]; newImageUrls?: string[]; actorId?: string } = {}
 ) {
   const setup = await prisma.growSetup.findUnique({
     where: { id: setupId },
-    select: { images: { select: { id: true, order: true } } },
+    select: { authorId: true, images: { select: { id: true, order: true } } },
   })
   if (!setup) throw new Error("not found")
+  if (opts.actorId && setup.authorId !== opts.actorId) return { count: 0 }
   const { kept, removed } = diffUpdateImages(setup.images, opts.keepImageIds)
   const nextOrder = kept.reduce((m, i) => Math.max(m, i.order), -1) + 1
   return prisma.$transaction(async (tx) => {
@@ -296,6 +299,20 @@ await check("route: PATCH has no creation side effects or unrelated busts", () =
   assert.ok(patch.includes("SETUP_MAX_IMAGES"), "server enforces kept + new <= 6")
   assert.ok(patch.includes("deleted: false"), "guarded write must exclude soft-deleted rows")
   assert.ok(!patch.includes("growDiary.update"), "PATCH never writes diaries")
+  // Ownership is enforced in the route, not just in this mirror.
+  assert.ok(patch.includes("setup.authorId !== session.user.id"), "route must check setup author")
+  assert.ok(patch.includes("forbidden()"), "non-owner must get 403")
+})
+
+await check("db: ownership predicate — non-owner patch is refused", async () => {
+  const otherUser = await mkUser("notowner")
+  const s = await mkSetup(owner.id)
+  const res = await applyPatch(s.id, { title: "hijacked" }, { actorId: otherUser.id })
+  assert.equal((res as { count: number }).count, 0, "foreign actor must not write")
+  const after = await prisma.growSetup.findUnique({ where: { id: s.id }, select: { title: true } })
+  assert.notEqual(after?.title, "hijacked")
+  const own = await applyPatch(s.id, { title: "renamed" }, { actorId: owner.id })
+  assert.equal((own as { count: number }).count, 1, "owner write still succeeds")
 })
 
 // ─── Summary + cleanup ───────────────────────────────────────────────

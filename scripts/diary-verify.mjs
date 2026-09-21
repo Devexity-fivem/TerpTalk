@@ -70,13 +70,19 @@ async function getHtml(path, cookie) {
 const main = async () => {
   // Owner is backdated + repped so the self-vote test reaches the self-vote
   // check rather than being stopped at the voter trust gate.
+  const seedRep = async (userId, amount) => {
+    await prisma.profile.update({ where: { userId }, data: { reputation: { increment: amount } } })
+    await prisma.reputationEvent.create({
+      data: { userId, type: "STAFF_ADJUSTMENT", amount, reason: "test seed" },
+    })
+  }
   const owner = await createUser("owner", { createdAt: new Date(Date.now() - 30 * 86400000) })
-  await prisma.profile.update({ where: { userId: owner.id }, data: { reputation: 50 } })
+  await seedRep(owner.id, 50)
   const viewer = await createUser("viewer")
   const banned = await createUser("banned")
   // Contest voter needs 7d age + 10 rep — backdate + grant reputation.
   const voter = await createUser("voter", { createdAt: new Date(Date.now() - 9 * 86400000) })
-  await prisma.profile.update({ where: { userId: voter.id }, data: { reputation: 50 } })
+  await seedRep(voter.id, 50)
   const users = [owner, viewer, banned, voter]
   const diaryIds = []
   const strainIds = []
@@ -196,6 +202,19 @@ const main = async () => {
     r.status === 200 ? pass("unharvest works") : fail("unharvest", r.status)
     // Re-harvest so the contest/stat fixtures see a harvested diary
     await callApi(`/api/diaries/${diaryId}/harvest`, { method: "PATCH", body: { harvested: true, yieldAmount: 100, yieldUnit: "oz" }, cookie: ownerCookie })
+
+    // ── Edit-path ownership (P1 — behavioral HTTP, not a mirrored query) ──
+    r = await callApi("/api/diaries/updates", { method: "PATCH", body: { id: upd.id, title: M("hijack") }, cookie: viewerCookie })
+    r.status === 403 ? pass("update PATCH rejects non-owner") : fail("update PATCH non-owner", r.status)
+
+    r = await callApi(`/api/diaries/${diaryId}`, { method: "PATCH", body: { title: M("hijack") }, cookie: viewerCookie })
+    r.status === 403 ? pass("diary PATCH rejects non-owner") : fail("diary PATCH non-owner", r.status)
+
+    r = await callApi("/api/diaries/updates", { method: "PATCH", body: { id: upd.id, title: M("edited") }, cookie: ownerCookie })
+    r.status === 200 ? pass("update PATCH succeeds for owner") : fail("update PATCH owner", { s: r.status, d: r.data })
+
+    r = await callApi(`/api/diaries/${diaryId}`, { method: "PATCH", body: { title: M("edited") }, cookie: ownerCookie })
+    r.status === 200 ? pass("diary PATCH succeeds for owner") : fail("diary PATCH owner", { s: r.status, d: r.data })
 
     // ── Diary of the Month ──────────────────────────────────────────
     // The diary needs 4+ updates this month — we have 2, add 2 more.
@@ -581,6 +600,8 @@ const main = async () => {
         : fail("setup redirect", { st: red.status, loc: red.location })
       page = await getHtml(`/setups/${sSetup.slug}`)
       page.status === 200 ? pass("setup slug URL serves page") : fail("setup slug 200", page.status)
+      r = await callApi("/api/setups", { method: "PATCH", body: { id: sSetup.id, title: `Hijacked ${TS}` }, cookie: viewerCookie })
+      r.status === 403 ? pass("setup PATCH rejects non-owner") : fail("setup PATCH non-owner", r.status)
       r = await callApi("/api/setups", { method: "PATCH", body: { id: sSetup.id, title: `Renamed Setup ${TS}` }, cookie: ownerCookie })
       const renamedSetup = await prisma.growSetup.findUnique({ where: { id: sSetup.id }, select: { slug: true } })
       r.status === 200 && renamedSetup?.slug === sSetup.slug

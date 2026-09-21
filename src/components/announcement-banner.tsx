@@ -45,15 +45,15 @@ export default function AnnouncementBanner() {
     setDismissed(true)
   }
 
-  const containerClass = "ml-2 underline font-medium hover:text-amber-700"
+  const containerClass = "ml-2 underline font-medium hover:text-warning"
 
   return (
-    <div className="bg-amber-500/10 text-amber-600 border-b border-amber-500/20 px-4 py-2.5">
+    <div className="bg-amber-500/10 text-warning border-b border-amber-500/20 px-4 py-2.5">
       <div className="max-w-6xl mx-auto flex items-start gap-3">
         <Megaphone className="w-4 h-4 shrink-0 mt-0.5" />
         <div className="flex-1 text-sm">
           {announcement.title && <span className="font-semibold mr-1">{announcement.title}</span>}
-          {announcement.content && <span className="text-amber-700">{announcement.content}</span>}
+          {announcement.content && <span className="text-warning">{announcement.content}</span>}
           {announcement.link && (
             <Link href={announcement.link} className={containerClass}>
               Learn more

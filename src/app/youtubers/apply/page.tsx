@@ -105,7 +105,7 @@ export default function ApplyYoutuberPage() {
           )}
 
           {success && (
-            <div className="bg-green-500/10 text-green-500 px-4 py-2 rounded-lg text-sm">
+            <div className="bg-green-500/10 text-success px-4 py-2 rounded-lg text-sm">
               Application submitted! You will be notified once it is reviewed.
             </div>
           )}

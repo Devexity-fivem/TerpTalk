@@ -114,7 +114,8 @@ export async function GET(request: NextRequest) {
         .map((r) => ({
           ...r,
           accessible: r.requiredRep == null || staff || rep >= r.requiredRep,
-        }))
+        })),
+      userId
     )
 
     return NextResponse.json({ rooms, onlineCount })

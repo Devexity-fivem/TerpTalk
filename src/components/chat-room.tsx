@@ -21,6 +21,8 @@ import {
   mergeMessages,
   isStaleBatch,
   applyRoomState,
+  applyMessageDeletes,
+  filterBlockedAuthors,
   getLastSeen,
   markRoomSeen,
   getLastRoom,
@@ -28,8 +30,12 @@ import {
   syncUnread,
   firstUnreadId,
   CHAT_SEEN_EVENT,
+  CHAT_MESSAGE_EVENT,
+  CHAT_MESSAGE_DELETED_EVENT,
   CHAT_ROOM_STATE_EVENT,
   type RoomStateEvent,
+  type ChatMessageTickle,
+  type ChatMessageDeletedEvent,
 } from "@/lib/chat-client"
 import { useToast } from "@/components/ui/toast"
 import Tooltip from "@/components/ui/tooltip"
@@ -289,7 +295,7 @@ const MessageRow = memo(function MessageRow({
                 onClick={() => setReporting(true)}
                 className="w-full flex items-center gap-1.5 px-2 py-1 rounded text-xs text-left hover:bg-secondary text-foreground"
               >
-                <Flag className="w-3 h-3 text-amber-500" /> Report message
+                <Flag className="w-3 h-3 text-warning" /> Report message
               </button>
             )}
             {isOwn && !isDeleted && (
@@ -316,7 +322,7 @@ const MessageRow = memo(function MessageRow({
                   onClick={() => onModerate("WARNING", msg.author.id)}
                   className="w-full flex items-center gap-1.5 px-2 py-1 rounded text-xs text-left hover:bg-secondary text-foreground"
                 >
-                  <AlertTriangle className="w-3 h-3 text-amber-500" /> Warn user
+                  <AlertTriangle className="w-3 h-3 text-warning" /> Warn user
                 </button>
                 {isAdmin && (
                   <>
@@ -489,6 +495,10 @@ export default function ChatRoom({ embedded = false, headerActions }: ChatRoomPr
   const inputRef = useRef<HTMLInputElement>(null)
   const pickerRef = useRef<HTMLDivElement>(null)
   const lastTsRef = useRef<string | null>(null)
+  // Deletions that arrived before the message did — blocks a late merge.
+  const tombstonesRef = useRef<Set<string>>(new Set())
+  // Server-reported mutual block set — purges already-rendered rows.
+  const blockedRef = useRef<Set<string>>(new Set())
   const nearBottomRef = useRef(true)
   const scrolledToUnreadRef = useRef(false)
 
@@ -638,6 +648,7 @@ export default function ChatRoom({ embedded = false, headerActions }: ChatRoomPr
 
     let cancelled = false
     let timer: ReturnType<typeof setTimeout> | null = null
+    let tickleTimer: ReturnType<typeof setTimeout> | null = null
     let subscribedChannel: string | null = null
     const roomId = room.id
 
@@ -646,7 +657,20 @@ export default function ChatRoom({ embedded = false, headerActions }: ChatRoomPr
     // anything tagged with a different roomId is dropped (room-switch guard).
     const mergeFresh = (fresh: Message[]) => {
       if (cancelled) return
-      const inRoom = fresh.filter((m) => m.roomId === roomId)
+      const inRoom = fresh
+        .filter(
+          (m) =>
+            m.roomId === roomId &&
+            // A delete event can beat the message here — never render it.
+            !tombstonesRef.current.has(m.id) &&
+            // Defensive: GET already filters, but don't render blocked authors.
+            !(m.author?.id && blockedRef.current.has(m.author.id))
+        )
+        .map((m) =>
+          m.replyTo && tombstonesRef.current.has(m.replyTo.id)
+            ? { ...m, replyTo: { ...m.replyTo, content: "[deleted]" } }
+            : m
+        )
       if (inRoom.length === 0) return
       const newest = inRoom[inRoom.length - 1].createdAt
       if (!lastTsRef.current || newest > lastTsRef.current) lastTsRef.current = newest
@@ -667,6 +691,19 @@ export default function ChatRoom({ embedded = false, headerActions }: ChatRoomPr
         // The effect's cleanup sets cancelled on room switch — a stale
         // response from the previous room can never land in the new list.
         if (cancelled) return
+        // Deletions since the cursor — tombstone rendered rows and remember
+        // the ids so a late-arriving copy is never rendered.
+        if (Array.isArray(data.deletedIds) && data.deletedIds.length > 0) {
+          const ids = new Set<string>(data.deletedIds)
+          ids.forEach((id) => tombstonesRef.current.add(id))
+          setMessages((prev) => applyMessageDeletes(prev, ids))
+        }
+        // Current block set — purges rows already rendered when a block
+        // landed mid-session, without requiring a reload.
+        if (Array.isArray(data.blockedIds)) {
+          blockedRef.current = new Set(data.blockedIds)
+          setMessages((prev) => filterBlockedAuthors(prev, blockedRef.current))
+        }
         const batch: Message[] = (data.messages || []).filter(
           (m: Message) => m.roomId === roomId
         )
@@ -706,9 +743,22 @@ export default function ChatRoom({ embedded = false, headerActions }: ChatRoomPr
         const channelName = `private-chat-${roomId}`
         const channel = p.subscribe(channelName)
         subscribedChannel = channelName
-        channel.bind("new-message", (m: Message) => {
-          if (isStaleBatch(m.roomId, roomId, cancelled)) return
-          mergeFresh([m])
+        // new-message is a content-free tickle — refetch through the
+        // block-filtered GET. Debounced so a message burst coalesces into
+        // one fetch. It must NOT advance lastTsRef — only mergeFresh does.
+        channel.bind(CHAT_MESSAGE_EVENT, (e: ChatMessageTickle) => {
+          if (isStaleBatch(e.roomId, roomId, cancelled)) return
+          if (tickleTimer) return
+          tickleTimer = setTimeout(() => {
+            tickleTimer = null
+            void load()
+          }, 150)
+        })
+        channel.bind(CHAT_MESSAGE_DELETED_EVENT, (d: ChatMessageDeletedEvent) => {
+          if (isStaleBatch(d.roomId, roomId, cancelled)) return
+          const ids = new Set(d.ids)
+          ids.forEach((id) => tombstonesRef.current.add(id))
+          setMessages((prev) => applyMessageDeletes(prev, ids))
         })
         // Staff room controls (lock/slowmode/clear) fan out on the same
         // channel so every subscriber's UI updates without a remount.
@@ -729,12 +779,15 @@ export default function ChatRoom({ embedded = false, headerActions }: ChatRoomPr
     document.addEventListener("visibilitychange", onVisible)
 
     lastTsRef.current = null
+    tombstonesRef.current = new Set()
+    blockedRef.current = new Set()
     subscribe()
     tick()
 
     return () => {
       cancelled = true
       if (timer) clearTimeout(timer)
+      if (tickleTimer) clearTimeout(tickleTimer)
       if (subscribedChannel) {
         peekSharedPusher()?.unsubscribe(subscribedChannel)
       }
@@ -924,7 +977,8 @@ export default function ChatRoom({ embedded = false, headerActions }: ChatRoomPr
         body: JSON.stringify({ id: msgId }),
       })
       if (res.ok) {
-        setMessages((prev) => prev.map((m) => (m.id === msgId ? { ...m, content: "[deleted]" } : m)))
+        tombstonesRef.current.add(msgId)
+        setMessages((prev) => applyMessageDeletes(prev, new Set([msgId])))
       } else {
         const body = await res.json().catch(() => ({}))
         throw new Error(body.error || `HTTP ${res.status}`)
@@ -960,7 +1014,8 @@ export default function ChatRoom({ embedded = false, headerActions }: ChatRoomPr
       }
       toast("Moderation action applied", "success")
       if (actionType === "CONTENT_DELETION" && opts?.targetId) {
-        setMessages((prev) => prev.map((m) => (m.id === opts.targetId ? { ...m, content: "[deleted]" } : m)))
+        tombstonesRef.current.add(opts.targetId)
+        setMessages((prev) => applyMessageDeletes(prev, new Set([opts.targetId!])))
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : "Moderation action failed"
@@ -1005,7 +1060,7 @@ export default function ChatRoom({ embedded = false, headerActions }: ChatRoomPr
               aria-label="Choose chat room"
             >
               {room?.accessible === false ? (
-                <Lock className="w-4 h-4 shrink-0 text-amber-500" aria-hidden="true" />
+                <Lock className="w-4 h-4 shrink-0 text-warning" aria-hidden="true" />
               ) : (
                 <Hash className="w-4 h-4 shrink-0 text-primary" aria-hidden="true" />
               )}
@@ -1014,7 +1069,7 @@ export default function ChatRoom({ embedded = false, headerActions }: ChatRoomPr
               </span>
               {room?.locked && (
                 <Tooltip content="Room locked — only moderators can post right now">
-                  <span className="inline-flex shrink-0 items-center gap-1 text-[10px] font-medium text-amber-500">
+                  <span className="inline-flex shrink-0 items-center gap-1 text-[10px] font-medium text-warning">
                     <Lock className="w-3 h-3" /> Locked
                   </span>
                 </Tooltip>
@@ -1118,10 +1173,10 @@ export default function ChatRoom({ embedded = false, headerActions }: ChatRoomPr
               </div>
             ) : room && room.accessible === false ? (
               <div className="text-center py-10 px-4">
-                <Lock className="w-8 h-8 text-amber-500 mx-auto mb-2" />
+                <Lock className="w-8 h-8 text-warning mx-auto mb-2" />
                 <p className="font-medium text-sm">{room.name} is a members-only room</p>
                 <p className="text-xs text-muted-foreground mt-1">
-                  Unlocks at <span className="text-amber-500 font-medium">{room.requiredRep?.toLocaleString()} reputation</span>
+                  Unlocks at <span className="text-warning font-medium">{room.requiredRep?.toLocaleString()} reputation</span>
                   {room.description ? ` — ${room.description}` : ""}
                 </p>
               </div>
@@ -1256,7 +1311,7 @@ export default function ChatRoom({ embedded = false, headerActions }: ChatRoomPr
             )}
 
             {room?.locked && !isStaff && (
-              <p className="mb-1.5 flex items-center gap-1.5 text-xs text-amber-500">
+              <p className="mb-1.5 flex items-center gap-1.5 text-xs text-warning">
                 <Lock className="w-3 h-3" /> This room is locked — only moderators can post right now.
               </p>
             )}

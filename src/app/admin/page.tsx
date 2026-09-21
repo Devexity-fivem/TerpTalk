@@ -303,7 +303,7 @@ export default function AdminPage() {
                 <div className="text-sm space-y-1">
                   <div>{stats.referrals.referredProfiles} referred · {stats.referrals.paidKeyed} paid · {stats.referrals.legacyUnkeyed} legacy · {stats.referrals.reversed} reversed</div>
                   {stats.referrals.eligibleUnpaid.length > 0 ? (
-                    <div className="text-amber-500">
+                    <div className="text-warning">
                       Eligible, unpaid: {stats.referrals.eligibleUnpaid.map((e) => `${e.username} (${e.reputation})`).join(", ")}
                     </div>
                   ) : (
@@ -355,7 +355,7 @@ export default function AdminPage() {
                     <div className="flex items-center gap-2 flex-wrap">
                       <Link href={`/u/${u.username}`} className="font-medium hover:text-primary">@{u.username}</Link>
                       <Link href={`/admin/users/${u.id}`} className="text-[10px] px-1.5 py-0.5 bg-secondary text-muted-foreground rounded font-semibold hover:text-foreground">MANAGE</Link>
-                      {u.role === "ADMINISTRATOR" && <span className="text-[10px] px-1.5 py-0.5 bg-amber-500/15 text-amber-500 rounded font-semibold">ADMIN</span>}
+                      {u.role === "ADMINISTRATOR" && <span className="text-[10px] px-1.5 py-0.5 bg-amber-500/15 text-warning rounded font-semibold">ADMIN</span>}
                       {u.role === "MODERATOR" && <span className="text-[10px] px-1.5 py-0.5 bg-blue-500/15 text-blue-500 rounded font-semibold">MOD</span>}
                       {u.role === "VERIFIED_MEMBER" && <span className="text-[10px] px-1.5 py-0.5 bg-primary/15 text-primary rounded font-semibold">VERIFIED</span>}
                       {u.isBeta && <span className="text-[10px] px-1.5 py-0.5 bg-purple-500/15 text-purple-500 rounded font-semibold">BETA</span>}
@@ -391,7 +391,7 @@ export default function AdminPage() {
                           setUserRole(u.id, "ADMINISTRATOR")
                         }}
                         disabled={busy === u.id}
-                        className="px-2.5 py-1.5 text-xs bg-amber-500/10 text-amber-500 rounded-lg hover:bg-amber-500/20 disabled:opacity-50">
+                        className="px-2.5 py-1.5 text-xs bg-amber-500/10 text-warning rounded-lg hover:bg-amber-500/20 disabled:opacity-50">
                         Make Admin
                       </button>
                       {u.isBeta ? (
@@ -433,13 +433,13 @@ export default function AdminPage() {
               <>
                 <div className="bg-card rounded-xl border border-border overflow-hidden">
                   <div className="p-4 border-b border-border font-semibold flex items-center gap-2">
-                    <TrendingUp className="w-4 h-4 text-amber-500" /> Unusual rep velocity (24h)
+                    <TrendingUp className="w-4 h-4 text-warning" /> Unusual rep velocity (24h)
                   </div>
                   <div className="divide-y divide-border">
                     {repFlags.velocity.length === 0 && <p className="p-4 text-sm text-muted-foreground">No members gained over 150 rep in the last 24 hours.</p>}
                     {repFlags.velocity.map((v) => (
                       <div key={v.userId} className="p-3 text-sm flex items-center justify-between gap-3">
-                        <span><Link href={`/admin/users/${v.userId}`} className="font-medium hover:text-primary">@{v.username}</Link> gained <span className="font-semibold text-amber-500">+{v.gained}</span> in 24h</span>
+                        <span><Link href={`/admin/users/${v.userId}`} className="font-medium hover:text-primary">@{v.username}</Link> gained <span className="font-semibold text-warning">+{v.gained}</span> in 24h</span>
                         <Link href={`/moderation`} className="text-xs text-primary hover:underline shrink-0">Review</Link>
                       </div>
                     ))}
@@ -448,7 +448,7 @@ export default function AdminPage() {
 
                 <div className="bg-card rounded-xl border border-border overflow-hidden">
                   <div className="p-4 border-b border-border font-semibold flex items-center gap-2">
-                    <UsersIcon className="w-4 h-4 text-amber-500" /> Reciprocal like pairs (7d)
+                    <UsersIcon className="w-4 h-4 text-warning" /> Reciprocal like pairs (7d)
                   </div>
                   <div className="divide-y divide-border">
                     {repFlags.reciprocalPairs.length === 0 && <p className="p-4 text-sm text-muted-foreground">No heavy mutual-like pairs detected.</p>}
@@ -463,7 +463,7 @@ export default function AdminPage() {
 
                 <div className="bg-card rounded-xl border border-border overflow-hidden">
                   <div className="p-4 border-b border-border font-semibold flex items-center gap-2">
-                    <UserCheck className="w-4 h-4 text-amber-500" /> Likes from brand-new accounts (7d)
+                    <UserCheck className="w-4 h-4 text-warning" /> Likes from brand-new accounts (7d)
                   </div>
                   <div className="divide-y divide-border">
                     {repFlags.newAccountLikes.length === 0 && <p className="p-4 text-sm text-muted-foreground">No members received 5+ likes from accounts under 48h old.</p>}

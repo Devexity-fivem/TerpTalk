@@ -6,6 +6,8 @@ import { prisma } from "@/lib/prisma"
 import {
   mergeMessages,
   isStaleBatch,
+  applyMessageDeletes,
+  filterBlockedAuthors,
   applyRoomState,
   getLastSeen,
   markRoomSeen,
@@ -13,6 +15,7 @@ import {
   setLastRoom,
   syncUnread,
   firstUnreadId,
+  CHAT_MESSAGE_DELETED_EVENT,
   type StorageLike,
 } from "@/lib/chat-client"
 import { getChatActivity, getChatTeaser } from "@/lib/chat-activity"
@@ -98,6 +101,85 @@ async function run() {
 
   check("isStaleBatch rejects everything after cleanup", () => {
     assert.equal(isStaleBatch("roomA", "roomA", true), true)
+  })
+
+  // ── Deletion propagation helpers ───────────────────────────────────
+
+  check("applyMessageDeletes tombstones content in place", () => {
+    const list = [
+      { id: "m1", content: "keep me" },
+      { id: "m2", content: "sensitive body" },
+    ]
+    const out = applyMessageDeletes(list, new Set(["m2"]))
+    assert.equal(out[0].content, "keep me")
+    assert.equal(out[1].content, "[deleted]", "deleted message renders as tombstone")
+    assert.equal(out[1].id, "m2", "row identity preserved — no reflow")
+  })
+
+  check("applyMessageDeletes scrubs reply previews of deleted parents", () => {
+    const list = [
+      { id: "p1", content: "parent body" },
+      { id: "c1", content: "child", replyTo: { id: "p1", content: "parent body" } },
+    ]
+    const out = applyMessageDeletes(list, new Set(["p1"]))
+    assert.equal(out[1].replyTo?.content, "[deleted]", "quoted copy must not outlive the deletion")
+  })
+
+  check("applyMessageDeletes with empty/unknown ids is a no-op", () => {
+    const list = [{ id: "m1", content: "keep" }]
+    assert.equal(applyMessageDeletes(list, new Set()), list)
+    const out = applyMessageDeletes(list, new Set(["nope"]))
+    assert.equal(out[0].content, "keep")
+  })
+
+  check("filterBlockedAuthors drops blocked and keeps unauthored", () => {
+    const list = [
+      { id: "m1", author: { id: "u1" } },
+      { id: "m2", author: { id: "u2" } },
+      { id: "m3", author: null }, // system/bot rows carry no author
+    ]
+    const out = filterBlockedAuthors(list, new Set(["u2"]))
+    assert.deepEqual(out.map((m) => m.id), ["m1", "m3"])
+  })
+
+  // ── Deletion/block wiring contracts ────────────────────────────────
+
+  check("client binds the message-deleted event and guards the merge", () => {
+    const c = src("components/chat-room.tsx")
+    assert.ok(c.includes("channel.bind(CHAT_MESSAGE_DELETED_EVENT"), "must bind message-deleted")
+    assert.equal(CHAT_MESSAGE_DELETED_EVENT, "message-deleted", "stable wire name")
+    assert.ok(c.includes("tombstonesRef.current.has(m.id)"), "delete-before-message ordering guard")
+    assert.ok(c.includes("applyMessageDeletes"), "rendered rows tombstone on delete")
+  })
+
+  check("tickle refetch cannot advance the incremental cursor", () => {
+    const c = src("components/chat-room.tsx")
+    const bind = c.slice(
+      c.indexOf("channel.bind(CHAT_MESSAGE_EVENT"),
+      c.indexOf("channel.bind(CHAT_MESSAGE_DELETED_EVENT")
+    )
+    assert.ok(bind.includes("void load()"), "tickle triggers a server-filtered load")
+    // lastTsRef is written ONLY inside mergeFresh — a tickle alone can never
+    // skip messages that arrived between the event and the fetch.
+    const mergeBody = c.slice(c.indexOf("const mergeFresh"), c.indexOf("const load ="))
+    assert.ok(mergeBody.includes("lastTsRef.current = newest"), "cursor advances inside mergeFresh")
+    assert.ok(!bind.includes("lastTsRef.current ="), "tickle path must not move the cursor")
+  })
+
+  check("GET returns deletedIds + blockedIds; DELETE emits the event", () => {
+    const r = src("app/api/chat/messages/route.ts")
+    assert.ok(r.includes("deletedIds"), "polling clients need tombstone ids")
+    assert.ok(r.includes("blockedIds"), "server ships the mutual block set")
+    assert.ok(r.includes("message-deleted"), "DELETE must emit the pusher event")
+    // The delete event payload is ids-only — no message content leak.
+    const trig = r.slice(r.indexOf("message-deleted"))
+    assert.ok(/\{[^}]*ids[^}]*\}/.test(trig) && !/trigger[^;]*content/i.test(trig), "payload carries ids, not bodies")
+  })
+
+  check("GET history filters blocked authors server-side", () => {
+    const r = src("app/api/chat/messages/route.ts")
+    assert.ok(r.includes("blockedUserIds") || r.includes("notBlockedAuthor"), "history must apply the block filter")
+    assert.ok(r.includes("getBotUserId") || r.includes("botUser"), "TerpBot stays exempt from member blocks")
   })
 
   check("isStaleBatch rejects when no room is active", () => {
@@ -278,6 +360,9 @@ async function run() {
   const highRep = await prisma.user.create({
     data: { name: `${TAG}_highrep`, ageVerified: true, sessionVersion: 1, profile: { create: { username: `${TAG}_highrep`, reputation: 99999 } } },
     select: { id: true },
+  })
+  await prisma.reputationEvent.create({
+    data: { userId: highRep.id, type: "STAFF_ADJUSTMENT", amount: 99999, reason: "test seed" },
   })
 
   const publicRoom = await prisma.chatRoom.create({

@@ -213,14 +213,14 @@ function NewThreadForm() {
 
             {similarThreads.length > 0 && (
               <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-4">
-                <p className="text-sm font-medium text-amber-400 mb-2">Similar discussions already exist</p>
+                <p className="text-sm font-medium text-warning mb-2">Similar discussions already exist</p>
                 <ul className="space-y-2">
                   {similarThreads.map((t) => (
                     <li key={t.id}>
                       <Link
                         href={`/forum/thread/${t.slug}`}
                         target="_blank"
-                        className="text-sm text-amber-300 hover:underline"
+                        className="text-sm text-warning hover:underline"
                       >
                         {t.title}
                       </Link>

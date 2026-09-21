@@ -142,7 +142,7 @@ export default function UserMenu() {
                 className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm hover:bg-secondary transition-colors"
                 role="menuitem"
               >
-                <Shield className="h-4 w-4 text-amber-500 shrink-0" />
+                <Shield className="h-4 w-4 text-warning shrink-0" />
                 <div>
                   <div className="font-medium">Moderation</div>
                   <div className="text-[11px] text-muted-foreground">Reports and queue</div>

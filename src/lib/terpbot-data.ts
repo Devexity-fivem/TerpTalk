@@ -5,7 +5,7 @@
 // publicUserSelect — never DirectMessage, Report, SecurityEvent, Block,
 // credentials, or staff-only tables.
 import { prisma } from "@/lib/prisma"
-import { activeAuthor, blockExistsBetween, blockedUserIds, containsExternalLink, LIMITS, USERNAME_REGEX, rankableProfile, REPUTATION_ORDER } from "@/lib/security"
+import { activeAuthor, blockExistsBetween, blockedUserIds, notBlockedAuthor, containsExternalLink, LIMITS, USERNAME_REGEX, rankableProfile, REPUTATION_ORDER } from "@/lib/security"
 import { extractThreadRef, type ThreadRef } from "@/lib/terpbot-context"
 import { postDeepLink } from "@/lib/notify"
 import { getNextTier, getTierProgress, getRepStage, getStageProgress, getTrustStanding, getNextTrustStanding } from "@/lib/reputation-config"
@@ -152,6 +152,8 @@ async function resolveThreadRef(ctx: BotCommandCtx): Promise<ThreadRef | null> {
     where: {
       roomId: ctx.roomId,
       deleted: false,
+      // A blocked author's link should not surface through bot output.
+      ...notBlockedAuthor(await blockedUserIds(ctx.userId).catch(() => [])),
       createdAt: { gte: new Date(Date.now() - 30 * 60 * 1000) },
       content: { contains: "/forum/thread/" },
     },

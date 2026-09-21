@@ -47,7 +47,7 @@ export function AcceptAnswerButton({
         disabled={loading}
         className={`flex items-center gap-1 text-xs px-2 py-1 rounded-lg transition-colors ${
           isAnswer
-            ? "bg-green-500/15 text-green-400 hover:bg-green-500/25"
+            ? "bg-green-500/15 text-success hover:bg-green-500/25"
             : "bg-secondary text-muted-foreground hover:text-foreground hover:bg-secondary/80"
         }`}
       >

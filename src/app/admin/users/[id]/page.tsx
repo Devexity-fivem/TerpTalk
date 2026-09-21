@@ -188,10 +188,10 @@ export default function AdminUserDetailPage() {
             <span className="text-sm">{user.banned ? `Permanently banned${user.bannedReason ? `: ${user.bannedReason}` : ""}` : user.suspendedUntil ? `Suspended until ${new Date(user.suspendedUntil).toLocaleString()}` : "No active restrictions"}</span>
           </div>
           <div className="flex flex-wrap gap-2">
-            <button onClick={() => act("WARNING")} disabled={busy} className="px-3 py-1.5 text-sm bg-amber-500/10 text-amber-500 rounded-lg hover:bg-amber-500/20 disabled:opacity-50 flex items-center gap-1"><AlertTriangle className="w-4 h-4" /> Warn</button>
+            <button onClick={() => act("WARNING")} disabled={busy} className="px-3 py-1.5 text-sm bg-amber-500/10 text-warning rounded-lg hover:bg-amber-500/20 disabled:opacity-50 flex items-center gap-1"><AlertTriangle className="w-4 h-4" /> Warn</button>
             <div className="flex items-center gap-2">
               <input type="number" min={1} max={365} value={duration} onChange={(e) => setDuration(Number(e.target.value))} className="w-16 px-2 py-1.5 rounded-lg border border-border bg-background text-sm" />
-              <button onClick={() => act("TEMPORARY_BAN")} disabled={busy} className="px-3 py-1.5 text-sm bg-amber-500/10 text-amber-500 rounded-lg hover:bg-amber-500/20 disabled:opacity-50">Suspend</button>
+              <button onClick={() => act("TEMPORARY_BAN")} disabled={busy} className="px-3 py-1.5 text-sm bg-amber-500/10 text-warning rounded-lg hover:bg-amber-500/20 disabled:opacity-50">Suspend</button>
             </div>
             <button onClick={() => act("PERMANENT_BAN")} disabled={busy} className="px-3 py-1.5 text-sm bg-destructive text-destructive-foreground rounded-lg hover:bg-destructive/90 disabled:opacity-50">Ban</button>
             <button onClick={() => act("UNBAN")} disabled={busy} className="px-3 py-1.5 text-sm bg-primary/10 text-primary rounded-lg hover:bg-primary/20 disabled:opacity-50">Unban / Unsuspend</button>
@@ -202,7 +202,7 @@ export default function AdminUserDetailPage() {
               </button>
             ) : (
               <button onClick={() => toggleBadge("Trusted Member", true)} disabled={busy}
-                className="px-3 py-1.5 text-sm bg-emerald-500/10 text-emerald-500 rounded-lg hover:bg-emerald-500/20 disabled:opacity-50">
+                className="px-3 py-1.5 text-sm bg-emerald-500/10 text-success rounded-lg hover:bg-emerald-500/20 disabled:opacity-50">
                 Grant Trusted Member
               </button>
             )}

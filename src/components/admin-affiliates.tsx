@@ -144,7 +144,7 @@ export default function AdminAffiliates() {
                 <div className="flex items-center gap-2">
                   <span className="font-medium text-sm">{p.name}</span>
                   {p.promoCode && <span className="text-xs bg-primary/15 text-primary px-1.5 py-0.5 rounded font-bold">{p.promoCode}</span>}
-                  {p.featured && <Star className="w-3.5 h-3.5 text-amber-500" />}
+                  {p.featured && <Star className="w-3.5 h-3.5 text-warning" />}
                   {!p.active && <span className="text-[10px] bg-destructive/15 text-destructive px-1.5 rounded">inactive</span>}
                 </div>
                 <p className="text-xs text-muted-foreground truncate">{p.affiliateUrl}</p>
@@ -153,7 +153,7 @@ export default function AdminAffiliates() {
               <div className="flex gap-1.5 shrink-0">
                 <Tooltip content="Toggle featured">
                   <button onClick={() => patchPartner(p.id, { featured: !p.featured })} className="p-1.5 rounded hover:bg-secondary" aria-label={`Toggle featured for ${p.name}`}>
-                    {p.featured ? <StarOff className="w-4 h-4 text-amber-500" /> : <Star className="w-4 h-4" />}
+                    {p.featured ? <StarOff className="w-4 h-4 text-warning" /> : <Star className="w-4 h-4" />}
                   </button>
                 </Tooltip>
                 <Tooltip content="Edit partner">

@@ -26,7 +26,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const { id } = await params
   const diary = await prisma.growDiary.findUnique({
     where: { id },
-    select: { id: true, authorId: true, deleted: true, startDate: true, harvested: true },
+    select: { id: true, authorId: true, deleted: true, startDate: true, createdAt: true, harvested: true },
   })
   if (!diary || diary.deleted) return NextResponse.json({ error: "Diary not found" }, { status: 404 })
 
@@ -178,8 +178,12 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     }
 
     // Photoperiod — a single diary spanning a whole season to harvest.
+    // startDate is user-supplied (logging a grow already in progress is
+    // legitimate), so the badge span is anchored on the immutable server-set
+    // createdAt — the same anti-farm rule grow-journey milestones use.
+    // harvestedAt can't exceed now+1d, so span ≈ real days the diary existed.
     const spanDays =
-      (new Date(updated.harvestedAt ?? Date.now()).getTime() - new Date(updated.startDate).getTime()) / 86400000
+      (new Date(updated.harvestedAt ?? Date.now()).getTime() - diary.createdAt.getTime()) / 86400000
     if (spanDays >= 120) {
       await grantBadge(diary.authorId, "Photoperiod", { announce: true }).catch(() => false)
     }

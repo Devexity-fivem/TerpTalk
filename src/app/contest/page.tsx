@@ -44,10 +44,10 @@ export default async function ContestPage() {
         <div className="mb-8">
           <span className="tt-eyebrow">Weekly showdown</span>
           <h1 className="font-display text-3xl sm:text-4xl font-bold mt-1.5 mb-2 flex items-center gap-3 tracking-tight">
-            <Trophy className="w-8 h-8 text-amber-500" /> Budshot of the Week
+            <Trophy className="w-8 h-8 text-warning" /> Budshot of the Week
           </h1>
           <p className="text-muted-foreground">
-            Submit your best budshot each week. The community votes — most votes earns the <span className="text-amber-500 font-medium">Weekly Winner</span> badge.
+            Submit your best budshot each week. The community votes — most votes earns the <span className="text-warning font-medium">Weekly Winner</span> badge.
           </p>
         </div>
 
@@ -56,7 +56,7 @@ export default async function ContestPage() {
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={lastWinner.imageUrl} alt="Last week's winner" loading="lazy" decoding="async" className="w-16 h-16 rounded-lg object-cover" />
             <div>
-              <p className="text-xs text-amber-500 font-semibold uppercase tracking-wide">Last week&apos;s winner</p>
+              <p className="text-xs text-warning font-semibold uppercase tracking-wide">Last week&apos;s winner</p>
               <Link
                 href={`/u/${lastWinner.user.profile?.username || lastWinner.user.name}`}
                 className="font-medium hover:text-primary inline-flex items-center gap-1.5"
@@ -66,7 +66,7 @@ export default async function ContestPage() {
               </Link>
               <p className="text-xs text-muted-foreground">{lastWinner._count.votes} votes</p>
             </div>
-            <Trophy className="w-6 h-6 text-amber-500 ml-auto" />
+            <Trophy className="w-6 h-6 text-warning ml-auto" />
           </div>
         )}
 
@@ -78,15 +78,15 @@ export default async function ContestPage() {
             <BookOpen className="w-7 h-7 text-primary" /> Diary of the Month
           </h2>
           <p className="text-muted-foreground">
-            Enter a well-documented grow diary — consistent updates and photos qualify. Most votes earns the <span className="text-amber-500 font-medium">Diary of the Month</span> badge.
+            Enter a well-documented grow diary — consistent updates and photos qualify. Most votes earns the <span className="text-warning font-medium">Diary of the Month</span> badge.
           </p>
         </div>
 
         {lastDiaryWinner && (
           <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-4 mb-6 flex items-center gap-4">
-            <BookOpen className="w-8 h-8 text-amber-500" />
+            <BookOpen className="w-8 h-8 text-warning" />
             <div>
-              <p className="text-xs text-amber-500 font-semibold uppercase tracking-wide">Last month&apos;s winner</p>
+              <p className="text-xs text-warning font-semibold uppercase tracking-wide">Last month&apos;s winner</p>
               <Link
                 href={diaryPath(lastDiaryWinner.diary)}
                 className="font-medium hover:text-primary"
@@ -97,7 +97,7 @@ export default async function ContestPage() {
                 <span className="inline-flex items-center gap-1">by {lastDiaryWinner.user.profile?.username || lastDiaryWinner.user.name} <TierChip reputation={lastDiaryWinner.user.profile?.reputation ?? 0} publicMilestoneOptOut={lastDiaryWinner.user.profile?.publicMilestoneOptOut} /></span> · {lastDiaryWinner._count.votes} votes
               </p>
             </div>
-            <Trophy className="w-6 h-6 text-amber-500 ml-auto" />
+            <Trophy className="w-6 h-6 text-warning ml-auto" />
           </div>
         )}
 

@@ -78,14 +78,14 @@ interface StaffOption { id: string; username: string; role: string }
 
 const PRIORITY_STYLES: Record<string, string> = {
   URGENT: "bg-destructive/15 text-destructive",
-  HIGH: "bg-amber-500/15 text-amber-500",
+  HIGH: "bg-amber-500/15 text-warning",
   NORMAL: "bg-secondary text-muted-foreground",
   LOW: "bg-secondary/60 text-muted-foreground/70",
 }
 const STATUS_STYLES: Record<string, string> = {
   PENDING: "bg-secondary text-muted-foreground",
   REVIEWING: "bg-blue-500/15 text-blue-500",
-  ESCALATED: "bg-amber-500/15 text-amber-500",
+  ESCALATED: "bg-amber-500/15 text-warning",
   RESOLVED: "bg-primary/10 text-primary",
   DISMISSED: "bg-secondary text-muted-foreground",
 }
@@ -229,7 +229,7 @@ export default function CasePage() {
 
         <div className="flex items-center gap-3 mb-6 flex-wrap">
           <span className="w-9 h-9 rounded-lg bg-secondary flex items-center justify-center">
-            {kind === "FLAG" ? <TrendingUp className="w-5 h-5 text-amber-500" /> : <Flag className="w-5 h-5 text-amber-500" />}
+            {kind === "FLAG" ? <TrendingUp className="w-5 h-5 text-warning" /> : <Flag className="w-5 h-5 text-warning" />}
           </span>
           <div>
             <div className="flex items-center gap-2 flex-wrap">
@@ -332,7 +332,7 @@ export default function CasePage() {
                     )}
                     {subject.banned && <span className="text-[10px] px-1.5 py-0.5 bg-destructive/15 text-destructive rounded font-semibold">BANNED</span>}
                     {subject.suspendedUntil && new Date(subject.suspendedUntil) > new Date() && (
-                      <span className="text-[10px] px-1.5 py-0.5 bg-amber-500/15 text-amber-500 rounded font-semibold">
+                      <span className="text-[10px] px-1.5 py-0.5 bg-amber-500/15 text-warning rounded font-semibold">
                         SUSPENDED until {new Date(subject.suspendedUntil).toLocaleDateString()}
                       </span>
                     )}
@@ -396,7 +396,7 @@ export default function CasePage() {
                 </button>
               )}
               <button onClick={() => act({ action: "status", status: "ESCALATED", resolution: note || undefined })} disabled={busy}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-amber-500/10 text-amber-500 rounded-lg hover:bg-amber-500/20 disabled:opacity-50">
+                className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-amber-500/10 text-warning rounded-lg hover:bg-amber-500/20 disabled:opacity-50">
                 <AlertTriangle className="w-4 h-4" /> Escalate
               </button>
               {canAct && (
@@ -451,7 +451,7 @@ export default function CasePage() {
                   </button>
                 )}
                 <button onClick={() => enforce("WARNING", "Warning reason:")} disabled={busy}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-amber-500/10 text-amber-500 rounded-lg hover:bg-amber-500/20 disabled:opacity-50">
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-amber-500/10 text-warning rounded-lg hover:bg-amber-500/20 disabled:opacity-50">
                   <AlertTriangle className="w-4 h-4" /> Warn user
                 </button>
                 {isAdminUser && (

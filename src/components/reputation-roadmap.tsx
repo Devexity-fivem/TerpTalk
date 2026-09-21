@@ -34,7 +34,7 @@ export default function ReputationRoadmap({ reputation, compact }: ReputationRoa
                   earned
                     ? "border-primary bg-primary text-primary-foreground"
                     : isNext
-                      ? "border-amber-500/50 bg-amber-950/40 text-amber-300"
+                      ? "border-amber-500/50 bg-amber-950/40 text-warning"
                       : "border-border bg-card text-muted-foreground"
                 )}
               >

@@ -26,9 +26,9 @@ const RARITY_STYLES: Record<BadgeRarity, { border: string; bg: string; text: str
   rare: {
     border: "border-emerald-500/40",
     bg: "bg-emerald-950/35",
-    text: "text-emerald-300",
+    text: "text-success",
     glow: "shadow-[0_0_10px_-2px_rgba(16,185,129,0.15)]",
-    icon: "text-emerald-400",
+    icon: "text-success",
     label: "Rare",
   },
   epic: {
@@ -42,9 +42,9 @@ const RARITY_STYLES: Record<BadgeRarity, { border: string; bg: string; text: str
   legendary: {
     border: "border-amber-400/50",
     bg: "bg-gradient-to-br from-amber-950/60 to-orange-950/35",
-    text: "text-amber-100",
+    text: "text-warning",
     glow: "shadow-[0_0_16px_-2px_rgba(251,191,36,0.28)]",
-    icon: "text-amber-300",
+    icon: "text-warning",
     label: "Legendary",
   },
 }

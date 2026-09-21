@@ -10,7 +10,7 @@ import { weekRange, resolveWeeklyRecognition, weeklyBoard, GROWER_OF_THE_WEEK_RE
 import { canAccessRoom, roomAccessInfo, GROW_ROOM_REP, GROW_ROOM_SLUG } from "@/lib/chat-access"
 import { getJourneyState, evaluateJourneys } from "@/lib/journeys"
 import { DAILY_QUEST_COUNT } from "@/lib/quests"
-import { getReputationTier, getTierByName } from "@/lib/reputation-config"
+import { getReputationTier, getTierByName, REP_EVENT_TYPES } from "@/lib/reputation-config"
 import { SITE_SETTINGS } from "@/lib/settings"
 
 const T = `__test_r3_${Date.now()}`
@@ -56,7 +56,7 @@ function updatesOnDays(days: number[], over = {}) {
 }
 
 async function makeUser(suffix: string, rep = 0) {
-  return prisma.user.create({
+  const user = await prisma.user.create({
     data: {
       name: `${T}_${suffix}`,
       ageVerified: true,
@@ -65,6 +65,13 @@ async function makeUser(suffix: string, rep = 0) {
     },
     select: { id: true },
   })
+  if (rep !== 0) {
+    // Ledger-matching seed row — a leaked fixture stays drift-free.
+    await prisma.reputationEvent.create({
+      data: { userId: user.id, type: REP_EVENT_TYPES.STAFF_ADJUSTMENT, amount: rep, reason: "test seed" },
+    })
+  }
+  return user
 }
 
 async function main() {

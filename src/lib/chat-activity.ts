@@ -3,7 +3,7 @@
 // staff-private rooms are never listed, and rep-gated rooms only appear for
 // members past the gate while the rollout flag is on.
 import { prisma } from "@/lib/prisma"
-import { isStaff } from "@/lib/security"
+import { isStaff, blockedUserIds, notBlockedAuthor } from "@/lib/security"
 import { getBooleanSetting, SITE_SETTINGS } from "@/lib/settings"
 
 export interface ChatActivityRoom {
@@ -40,12 +40,14 @@ async function visibleRooms(userId: string) {
 }
 
 // One indexed groupBy over the visible rooms — no message content, just the
-// newest createdAt per room.
-async function latestActivityByRoom(roomIds: string[]) {
+// newest createdAt per room. Blocked authors are excluded so a blocked
+// user's message can't light the unread dot for the blocker.
+async function latestActivityByRoom(roomIds: string[], viewerId?: string) {
   if (roomIds.length === 0) return new Map<string, Date>()
+  const blockedIds = viewerId ? await blockedUserIds(viewerId) : []
   const grouped = await prisma.chatMessage.groupBy({
     by: ["roomId"],
-    where: { roomId: { in: roomIds }, deleted: false },
+    where: { roomId: { in: roomIds }, deleted: false, ...notBlockedAuthor(blockedIds) },
     _max: { createdAt: true },
   })
   return new Map(grouped.map((g) => [g.roomId, g._max.createdAt!]))
@@ -66,7 +68,7 @@ export async function countOnline(): Promise<number> {
 // Nav badge payload: per-accessible-room latest activity + online count.
 export async function getChatActivity(userId: string) {
   const rooms = await visibleRooms(userId)
-  const latest = await latestActivityByRoom(rooms.map((r) => r.id))
+  const latest = await latestActivityByRoom(rooms.map((r) => r.id), userId)
   const onlineCount = await countOnline()
   return {
     onlineCount,
@@ -84,8 +86,8 @@ export async function getChatActivity(userId: string) {
 
 // Annotate a full room list with per-room latest activity — used by the
 // /chat room picker for unread dots.
-export async function withLatestActivity<T extends { id: string }>(rooms: T[]) {
-  const latest = await latestActivityByRoom(rooms.map((r) => r.id))
+export async function withLatestActivity<T extends { id: string }>(rooms: T[], viewerId?: string) {
+  const latest = await latestActivityByRoom(rooms.map((r) => r.id), viewerId)
   return rooms.map((r) => ({ ...r, latestAt: latest.get(r.id)?.toISOString() ?? null }))
 }
 

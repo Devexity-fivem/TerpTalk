@@ -16,7 +16,7 @@ export default function RoleBadge({ role }: { role?: string | null }) {
   if (role === "ADMINISTRATOR") {
     return (
       <Tooltip content="Site administrator">
-        <span className="inline-flex shrink-0 items-center gap-1 text-[10px] font-semibold uppercase tracking-wide bg-amber-500/15 text-amber-500 px-1.5 py-0.5 rounded align-middle">
+        <span className="inline-flex shrink-0 items-center gap-1 text-[10px] font-semibold uppercase tracking-wide bg-amber-500/15 text-warning px-1.5 py-0.5 rounded align-middle">
           <ShieldCheck className="w-3 h-3" />
           Admin
         </span>
@@ -36,7 +36,7 @@ export default function RoleBadge({ role }: { role?: string | null }) {
   if (role === "VERIFIED_MEMBER") {
     return (
       <Tooltip content="Verified member — established, trusted grower">
-        <span className="inline-flex shrink-0 items-center gap-1 text-[10px] font-semibold uppercase tracking-wide bg-green-500/15 text-green-500 px-1.5 py-0.5 rounded align-middle">
+        <span className="inline-flex shrink-0 items-center gap-1 text-[10px] font-semibold uppercase tracking-wide bg-green-500/15 text-success px-1.5 py-0.5 rounded align-middle">
           <CheckCircle className="w-3 h-3" />
           Verified
         </span>

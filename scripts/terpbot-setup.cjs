@@ -30,6 +30,7 @@ const BOT_PROFILE = {
 const prisma = new PrismaClient()
 
 async function main() {
+  await import("./db-guard.mjs") // refuse production endpoints before any query
   let user = await prisma.user.findFirst({
     where: { profile: { username: "terpbot" } },
     select: { id: true, role: true, profile: { select: { id: true } } },

@@ -2,13 +2,13 @@ import { NextRequest, NextResponse, after } from "next/server"
 import { getToken } from "next-auth/jwt"
 import { sessionCookieName } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { unauthorized, chatAuthorSelect, LIMITS, getClientIp, logSecurityEvent, isSessionValid, forbidden, isStaff, enforceLinkTrust } from "@/lib/security"
+import { unauthorized, chatAuthorSelect, LIMITS, getClientIp, logSecurityEvent, isSessionValid, forbidden, isStaff, enforceLinkTrust, blockedUserIds, notBlockedAuthor } from "@/lib/security"
 import { roomAccessInfo } from "@/lib/chat-access"
 import { rateLimit } from "@/lib/rate-limit"
 import { repRateLimit, getTierPerks, recordChatMessage } from "@/lib/reputation"
 import { notifyMentions } from "@/lib/mentions"
 import { getPusher } from "@/lib/pusher"
-import { postBotMessage } from "@/lib/terpbot"
+import { postBotMessage, getBotUserId } from "@/lib/terpbot"
 import { parseTerpbotIntent, TERPBOT_REFUSAL_TEXT, terpbotFallbackText } from "@/lib/terpbot-intents"
 import { runBotCommand } from "@/lib/terpbot-data"
 import { recordBotEvent, countEntityLinks } from "@/lib/terpbot-events"
@@ -127,10 +127,21 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // Blocks apply in chat like every other content surface — mutual
+    // (blockedUserIds covers both directions). TerpBot is exempt: blocking
+    // the bot would silence moderation echoes (/warn, /lock, /clear).
+    const [blockedRaw, botId] = await Promise.all([
+      blockedUserIds(userId),
+      getBotUserId().catch(() => null),
+    ])
+    const blockedIds = blockedRaw.filter((id) => id !== botId)
+    const blockedSet = new Set(blockedIds)
+
     const messages = await prisma.chatMessage.findMany({
       where: {
         roomId,
         deleted: false,
+        ...notBlockedAuthor(blockedIds),
         ...(afterDate && { createdAt: { gt: afterDate } }),
       },
       take: afterDate ? 100 : 50,
@@ -143,10 +154,28 @@ export async function GET(request: NextRequest) {
       },
     })
 
+    // On incremental fetches also report rows deleted since the cursor so
+    // polling-only clients tombstone them (Pusher clients get the event).
+    let deletedIds: string[] | undefined
+    if (afterDate) {
+      const rows = await prisma.chatMessage.findMany({
+        where: { roomId, deleted: true, updatedAt: { gt: afterDate } },
+        select: { id: true },
+      })
+      deletedIds = rows.map((r) => r.id)
+    }
+
     return NextResponse.json({
-      messages: (afterDate ? messages : messages.reverse()).map((m) =>
-        messageDto(m as unknown as ChatMessageWithAuthor)
-      ),
+      messages: (afterDate ? messages : messages.reverse()).map((m) => {
+        const msg = m as unknown as ChatMessageWithAuthor
+        // A blocked author's words must not leak through a reply embed.
+        if (msg.replyTo && msg.replyTo.author.id && blockedSet.has(msg.replyTo.author.id)) {
+          return { ...messageDto(msg), replyTo: null }
+        }
+        return messageDto(msg)
+      }),
+      ...(deletedIds ? { deletedIds } : {}),
+      blockedIds,
     })
   } catch (error) {
     console.error("Failed to fetch messages:", error)
@@ -310,8 +339,11 @@ export async function POST(request: NextRequest) {
       `the ${room.name} chat room`
     ).catch(() => {})
 
-    // Realtime fan-out when Pusher is configured (clients fall back to polling)
-    getPusher()?.trigger(`private-chat-${roomId}`, "new-message", dto).catch((e) => console.error("[pusher] chat message push failed:", roomId, e))
+    // Realtime fan-out when Pusher is configured (clients fall back to
+    // polling). The event is a content-free tickle — clients refetch through
+    // the block-filtered GET, so a blocked user's message never leaves the
+    // server destined for a blocker's browser.
+    getPusher()?.trigger(`private-chat-${roomId}`, "new-message", { roomId, latestAt: dto.createdAt }).catch((e) => console.error("[pusher] chat message push failed:", roomId, e))
 
     // TerpBot answers direct pings through the deterministic intent parser.
     // At most one bot reply per room per minute so it can't be spammed into
@@ -402,13 +434,24 @@ export async function DELETE(request: NextRequest) {
     }
 
     // Scoped update — a non-owned or already-deleted id just no-ops.
-    const res = await prisma.chatMessage.updateMany({
+    // roomId is fetched first so connected clients get a tombstone event.
+    const msg = await prisma.chatMessage.findFirst({
       where: { id, authorId: userId, deleted: false },
+      select: { roomId: true },
+    })
+    if (!msg) {
+      return NextResponse.json({ error: "Message not found" }, { status: 404 })
+    }
+    const res = await prisma.chatMessage.updateMany({
+      where: { id, deleted: false },
       data: { deleted: true },
     })
     if (!res.count) {
       return NextResponse.json({ error: "Message not found" }, { status: 404 })
     }
+
+    // ids-only payload — never message content or author.
+    getPusher()?.trigger(`private-chat-${msg.roomId}`, "message-deleted", { roomId: msg.roomId, ids: [id] }).catch((e) => console.error("[pusher] chat delete push failed:", msg.roomId, e))
 
     return NextResponse.json({ deleted: true })
   } catch (error) {

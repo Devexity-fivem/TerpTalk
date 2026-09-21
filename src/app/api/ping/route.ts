@@ -9,6 +9,8 @@ import { evaluateChallenges } from "@/lib/challenges"
 import { evaluateQuests } from "@/lib/quests"
 import { evaluateStreaks } from "@/lib/streaks"
 import { pruneChatMessagesIfDue } from "@/lib/chat-cleanup"
+import { drainPendingReversals } from "@/lib/reputation-outbox"
+import { rateLimit } from "@/lib/rate-limit"
 
 // POST — lightweight presence ping; updates lastSeenAt + ONLINE status.
 // Uses JWT verification instead of getServerSession to avoid an extra DB round-trip.
@@ -59,6 +61,10 @@ export async function POST(request: NextRequest) {
     // delays the ping.
     after(async () => {
       await pruneChatMessagesIfDue()
+      // Throttled reputation-outbox drain — bounds a failed reversal's
+      // phantom-rep lifetime to ~5 minutes instead of waiting for cron.
+      const drainOk = await rateLimit("reversal-drain", 1, 5 * 60 * 1000).then((r) => r.allowed).catch(() => false)
+      if (drainOk) await drainPendingReversals(10).catch(() => {})
       if (stale) {
         await evaluateChallenges(userId).catch(() => [])
         await evaluateQuests(userId).catch(() => [])

@@ -5,7 +5,7 @@ import { getClientIp, isAdmin, logSecurityEvent } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
 import { notificationLinkWhere } from "@/lib/notify"
 import { staffDisplayName } from "@/lib/moderation"
-import { reverseReputationBySource } from "@/lib/reputation"
+import { enqueueReversal, drainOne } from "@/lib/reputation-outbox"
 import { deleteImagesIfUnreferenced } from "@/lib/blob"
 import { revalidateTag } from "next/cache"
 
@@ -108,8 +108,9 @@ export async function POST(request: Request) {
     await prisma.$transaction(ops)
 
     // Reputation reconciliation for bulk deletes — same counter-entry
-    // semantics as single deletions. Sequential per-thread to stay
-    // bounded; each reversal is internally idempotent.
+    // semantics as single deletions. Durable intents are enqueued post-commit
+    // (a ≤100-thread batch can't hold per-post inserts in one interactive tx);
+    // ping/cron drains close the residual crash window.
     if (action === "delete") {
       const imgs = await prisma.postImage.findMany({
         where: { OR: [{ threadId: { in: ids } }, { post: { threadId: { in: ids } } }] },
@@ -121,10 +122,18 @@ export async function POST(request: Request) {
       deleteImagesIfUnreferenced(imgs.map((i) => i.url)).catch(() => {})
       for (const t of threads) {
         const postIds = await prisma.post.findMany({ where: { threadId: t.id }, select: { id: true } })
-        await reverseReputationBySource("THREAD", t.id, "Content removed by staff", staff.id).catch(() => 0)
+        const batch: string[] = []
+        batch.push(await enqueueReversal(prisma, {
+          kind: "SOURCE", sourceType: "THREAD", sourceId: t.id,
+          reason: "Content removed by staff", requestedBy: staff.id,
+        }))
         for (const p of postIds) {
-          await reverseReputationBySource("POST", p.id, "Content removed by staff", staff.id).catch(() => 0)
+          batch.push(await enqueueReversal(prisma, {
+            kind: "SOURCE", sourceType: "POST", sourceId: p.id,
+            reason: "Content removed by staff", requestedBy: staff.id,
+          }))
         }
+        for (const rid of batch) await drainOne(rid).catch(() => false)
       }
     }
 

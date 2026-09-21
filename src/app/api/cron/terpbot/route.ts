@@ -8,7 +8,11 @@ import { currentWeekKey, previousWeekKey, currentMonthKey, previousMonthKey } fr
 import { resolveWeeklyWinner, resolveMonthlyDiaryWinner } from "@/lib/contest-awards"
 import { resolveWeeklyRecognition } from "@/lib/weekly-recognition"
 import { materializeReputationFlags } from "@/lib/trust-signals"
-import { reconcileReferralPayouts } from "@/lib/reputation"
+import { reconcileReferralPayouts, findReputationDrift } from "@/lib/reputation"
+import { drainPendingReversals } from "@/lib/reputation-outbox"
+import { logSecurityEvent } from "@/lib/security"
+import { reconcileQuestPayouts } from "@/lib/quests"
+import { reconcileChallengePayouts } from "@/lib/challenges"
 
 // Daily TerpBot job — digests, grow tips, and contest-winner announcements.
 // Invoked by the Vercel cron configured in vercel.json.
@@ -214,6 +218,47 @@ export async function GET(request: NextRequest) {
     const { candidates, attempted, failed: sweepFailed } = await reconcileReferralPayouts()
     return `referral-sweep:${candidates}c/${attempted}a/${sweepFailed}f`
   }, posted, failed, "referral-sweep")
+
+  // ── Reputation outbox drain (once per UTC day) ────────────────────
+  // Backstop for reversal intents whose post-commit drain failed —
+  // deletes/bans already committed durably, this sweeps stragglers to
+  // fixpoint. /api/ping runs a throttled drain for faster convergence.
+  await runCronTask(`reputation:reversal-drain:${today}`, async () => {
+    const { drained, failed: drainFailed } = await drainPendingReversals(50)
+    return `reversal-drain:${drained}d/${drainFailed}f`
+  }, posted, failed, "reversal-drain")
+
+  // ── Quest/challenge payout reconciliation (once per UTC day) ──────
+  // Paid keys are re-measured inside their closed day/week windows —
+  // deleting qualifying content after payout un-earns the reward even
+  // when the member never pings again. Non-final reversals: re-earning
+  // reinstates via the same key.
+  await runCronTask(`reputation:quest-sweep:${today}`, async () => {
+    const { checked, reversed } = await reconcileQuestPayouts()
+    return `quest-sweep:${checked}c/${reversed}r`
+  }, posted, failed, "quest-sweep")
+  await runCronTask(`reputation:challenge-sweep:${today}`, async () => {
+    const { checked, reversed } = await reconcileChallengePayouts()
+    return `challenge-sweep:${checked}c/${reversed}r`
+  }, posted, failed, "challenge-sweep")
+
+  // ── Ledger drift detection (once per UTC day) ─────────────────────
+  // Detect-and-alert only: balance == SUM(ledger) drift means a bug or
+  // tampering — auto-"fixing" balances would mask it. Unresolved outbox
+  // rows are surfaced in the same signal.
+  await runCronTask(`reputation:drift-check:${today}`, async () => {
+    const [drift, pending] = await Promise.all([
+      findReputationDrift(),
+      prisma.pendingReversal.count({ where: { status: { in: ["PENDING", "RUNNING"] } } }),
+    ])
+    if (drift.length > 0 || pending > 0) {
+      console.error("[cron] reputation inconsistency:", { driftUsers: drift.length, pendingReversals: pending })
+      await logSecurityEvent("SUSPICIOUS_ACTIVITY", {
+        metadata: { reputationDrift: drift.length, pendingReversals: pending, sample: drift.slice(0, 10) },
+      }).catch(() => {})
+    }
+    return `drift:${drift.length}u/${pending}p`
+  }, posted, failed, "drift-check")
 
   // ── Trust & safety signal scan (once per UTC day) ──────────────────
   // A plain system task — not a TerpBot capability. Detectors only flag;

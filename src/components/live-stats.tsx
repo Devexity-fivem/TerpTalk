@@ -62,7 +62,7 @@ export default function LiveStats({ initial }: { initial: Stats }) {
     }
   }, [])
 
-  const num = "font-display text-3xl sm:text-4xl font-bold mb-1 tabular-nums text-transparent bg-clip-text bg-gradient-to-br from-primary to-spectrum"
+  const num = "font-display text-3xl sm:text-4xl font-bold mb-1 tabular-nums tt-gradient-text bg-gradient-to-br from-primary to-spectrum"
   const label = "text-xs sm:text-sm font-medium text-muted-foreground uppercase tracking-wider"
 
   return (

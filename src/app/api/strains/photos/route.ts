@@ -4,7 +4,8 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { unauthorized, getClientIp, logSecurityEvent, isBanned, forbidden, isModerator, isStaff, isAdmin } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
-import { awardReputation, reverseReputationBySource, REP_POINTS } from "@/lib/reputation"
+import { awardReputation, REP_POINTS } from "@/lib/reputation"
+import { enqueueReversal, drainOne } from "@/lib/reputation-outbox"
 import { storeImage, deleteImagesIfUnreferenced } from "@/lib/blob"
 import { checkMaintenance } from "@/lib/maintenance"
 import { revalidateTag } from "next/cache"
@@ -137,8 +138,15 @@ export async function DELETE(request: Request) {
       if (isStaff(photo.user?.role) && !isAdmin(user.role)) return forbidden()
     }
 
-    await prisma.strainPhoto.delete({ where: { id } })
-    await reverseReputationBySource("STRAIN_PHOTO", photo.id, "Photo removed", session.user.id).catch(() => 0)
+    // Delete + reversal intent in one tx — the award can't outlive the row.
+    const reversalId = await prisma.$transaction(async (tx) => {
+      await tx.strainPhoto.delete({ where: { id } })
+      return enqueueReversal(tx, {
+        kind: "SOURCE", sourceType: "STRAIN_PHOTO", sourceId: photo.id,
+        reason: "Photo removed", requestedBy: session.user.id,
+      })
+    })
+    await drainOne(reversalId).catch(() => false)
     revalidateTag("strains", { expire: 0 })
     deleteImagesIfUnreferenced([photo.imageUrl]).catch(() => {})
     return NextResponse.json({ deleted: true })

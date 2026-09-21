@@ -43,13 +43,13 @@ export default function ReputationEarn({ compact }: { compact?: boolean }) {
               </div>
             </div>
             <Tooltip content={`Earns +${a.points} reputation`} align="end">
-              <span className="text-sm font-bold text-amber-500">+{a.points}</span>
+              <span className="text-sm font-bold text-warning">+{a.points}</span>
             </Tooltip>
           </div>
         ))}
       </div>
       <div className="mt-4 rounded-lg bg-amber-500/10 border border-amber-500/20 p-3">
-        <p className="text-sm text-amber-200">
+        <p className="text-sm text-warning">
           <span className="font-semibold">Verified growers earn {VERIFIED_MULTIPLIER}x reputation.</span>{" "}
           Reach {VERIFIED_MIN_REPUTATION.toLocaleString()} rep and stay active for {VERIFIED_MIN_AGE_DAYS} days to become verified automatically.
         </p>

@@ -157,7 +157,7 @@ function DiaryCard({ diary, showFeatured = false }: { diary: DiaryCardData; show
             <Dna className="h-3 w-3 shrink-0 text-spectrum" />
             <span className="truncate font-medium text-primary">{strainName}</span>
             {diary.harvested && diary.harvestRating != null && (
-              <span className="ml-auto shrink-0 rounded-full bg-amber-500/10 px-2 py-0.5 font-semibold text-amber-500">
+              <span className="ml-auto shrink-0 rounded-full bg-amber-500/10 px-2 py-0.5 font-semibold text-warning">
                 ★ {diary.harvestRating}/10
               </span>
             )}
@@ -253,7 +253,7 @@ export default async function DiariesPage({
             <BarChart3 className="w-4 h-4 text-primary" />
             <h2 className="font-display font-semibold">Community grow data</h2>
             {stats.label && (
-              <span className={`text-xs px-2 py-0.5 rounded ml-auto ${stats.tier === "early" ? "bg-amber-500/10 text-amber-500" : "bg-secondary text-muted-foreground"}`}>
+              <span className={`text-xs px-2 py-0.5 rounded ml-auto ${stats.tier === "early" ? "bg-amber-500/10 text-warning" : "bg-secondary text-muted-foreground"}`}>
                 {stats.label}
               </span>
             )}

@@ -26,6 +26,18 @@
   --light-border: #d7e2ca;
   --light-input: #d7e2ca;
   --light-ring: #16a34a;
+  /* Semantic status text — darker shades that hold >=4.5:1 on the
+     light surfaces. Never use raw text-amber/green-* for meaningful text. */
+  --light-success: #15803d;
+  --light-warning: #a15907;
+  /* Nameplate gradient stops (rgb triplets) — readable on sage paper. */
+  --np-leaf: #15803d;
+  --np-a: #15803d;
+  --np-b: #6d28d9;
+  --np-c: #a15907;
+  --np-gold-1: #a16207;
+  --np-gold-2: #854d0e;
+  --np-gold-3: #713f12;
 
   /* Dark — grow-op at night */
   --dark-background: #050a05;
@@ -47,6 +59,17 @@
   --dark-border: #1d2b1e;
   --dark-input: #1d2b1e;
   --dark-ring: #3ee08c;
+  /* Semantic status text — luminous shades readable on near-black. */
+  --dark-success: #34d399;
+  --dark-warning: #fbbf24;
+  /* Nameplate gradient stops (rgb triplets) — luminous on dark. */
+  --np-leaf-dark: #3ee08c;
+  --np-a-dark: #3ee08c;
+  --np-b-dark: #c48dff;
+  --np-c-dark: #fbbf24;
+  --np-gold-1-dark: #fbbf24;
+  --np-gold-2-dark: #f59e0b;
+  --np-gold-3-dark: #fde68a;
 
   --radius: 0.5rem;
 }
@@ -72,6 +95,15 @@
   --border: var(--light-border);
   --input: var(--light-input);
   --ring: var(--light-ring);
+  --success: var(--light-success);
+  --warning: var(--light-warning);
+  --np-leaf-c: var(--np-leaf);
+  --np-a-c: var(--np-a);
+  --np-b-c: var(--np-b);
+  --np-c-c: var(--np-c);
+  --np-gold-1-c: var(--np-gold-1);
+  --np-gold-2-c: var(--np-gold-2);
+  --np-gold-3-c: var(--np-gold-3);
 
   /* Spectrum accent — the violet end of the LED grow-light strip */
   --spectrum: #7c3aed;
@@ -108,6 +140,15 @@
     --border: var(--dark-border);
     --input: var(--dark-input);
     --ring: var(--dark-ring);
+    --success: var(--dark-success);
+    --warning: var(--dark-warning);
+    --np-leaf-c: var(--np-leaf-dark);
+    --np-a-c: var(--np-a-dark);
+    --np-b-c: var(--np-b-dark);
+    --np-c-c: var(--np-c-dark);
+    --np-gold-1-c: var(--np-gold-1-dark);
+    --np-gold-2-c: var(--np-gold-2-dark);
+    --np-gold-3-c: var(--np-gold-3-dark);
 
     --spectrum: var(--dark-spectrum);
     --glow-primary: 62 224 140;
@@ -140,6 +181,15 @@
   --border: var(--dark-border);
   --input: var(--dark-input);
   --ring: var(--dark-ring);
+  --success: var(--dark-success);
+  --warning: var(--dark-warning);
+  --np-leaf-c: var(--np-leaf-dark);
+  --np-a-c: var(--np-a-dark);
+  --np-b-c: var(--np-b-dark);
+  --np-c-c: var(--np-c-dark);
+  --np-gold-1-c: var(--np-gold-1-dark);
+  --np-gold-2-c: var(--np-gold-2-dark);
+  --np-gold-3-c: var(--np-gold-3-dark);
 
   --glow-primary: 62 224 140;
   --glow-spectrum: 196 141 255;
@@ -169,6 +219,8 @@
   --color-input: var(--input);
   --color-ring: var(--ring);
   --color-spectrum: var(--spectrum);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
   --font-sans: var(--font-inter);
   --font-display: var(--font-sora), var(--font-inter), ui-sans-serif, system-ui, sans-serif;
 
@@ -452,38 +504,70 @@ h1, h2, h3 {
    Applied to the username text in chat and forum posts. A daily visible
    flex: your name itself shows how far up the path you are. */
 .tt-nameplate-leaf {
-  color: rgb(var(--glow-primary));
+  color: var(--np-leaf-c);
   font-weight: 600;
 }
+/* Gradient nameplates: the base `color` is a readable solid token (the
+   darkest gradient stop). The clipped gradient only applies where
+   background-clip:text is supported — otherwise usernames render in the
+   solid fallback instead of transparent-on-nothing. */
 .tt-nameplate-bloom {
   font-weight: 600;
-  background: linear-gradient(90deg, rgb(var(--glow-primary)), rgb(var(--glow-spectrum)));
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
+  color: var(--np-b-c);
 }
 .tt-nameplate-master {
   font-weight: 700;
-  background: linear-gradient(90deg, rgb(var(--glow-spectrum)), rgb(var(--glow-accent)));
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
+  color: var(--np-b-c);
 }
 .tt-nameplate-grand {
   font-weight: 700;
-  background: linear-gradient(90deg, rgb(var(--glow-accent)), rgb(var(--glow-spectrum)), rgb(var(--glow-primary)));
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
+  color: var(--np-b-c);
 }
 .tt-nameplate-gold {
   font-weight: 700;
-  background: linear-gradient(90deg, #fbbf24, #f59e0b, #fde68a, #fbbf24);
-  background-size: 200% 100%;
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-  animation: tt-spectrum-flow 6s linear infinite;
+  color: var(--np-gold-2-c);
+}
+@supports ((-webkit-background-clip: text) or (background-clip: text)) {
+  .tt-nameplate-bloom {
+    background: linear-gradient(90deg, var(--np-a-c), var(--np-b-c));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  .tt-nameplate-master {
+    background: linear-gradient(90deg, var(--np-b-c), var(--np-c-c));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  .tt-nameplate-grand {
+    background: linear-gradient(90deg, var(--np-c-c), var(--np-b-c), var(--np-a-c));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  .tt-nameplate-gold {
+    background: linear-gradient(90deg, var(--np-gold-1-c), var(--np-gold-2-c), var(--np-gold-3-c), var(--np-gold-1-c));
+    background-size: 200% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    animation: tt-spectrum-flow 6s linear infinite;
+  }
+}
+
+/* Gradient display text — pair with a bg-gradient-* utility. The solid
+   --primary fallback keeps the text readable where background-clip:text
+   is unsupported (otherwise it would render transparent). */
+.tt-gradient-text {
+  color: var(--primary);
+}
+@supports ((-webkit-background-clip: text) or (background-clip: text)) {
+  .tt-gradient-text {
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
 }
 
 /* ─── Animated avatar frames ──────────────────────────────────────────

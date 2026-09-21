@@ -115,7 +115,7 @@ export default function AdminAuditPage() {
               <div key={e.id} className="p-4 flex items-start justify-between gap-4 flex-wrap">
                 <div className="min-w-0">
                   <div className="flex items-center gap-2 flex-wrap mb-1">
-                    <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold ${e.kind === "security" ? "bg-amber-500/15 text-amber-500" : "bg-primary/15 text-primary"}`}>
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold ${e.kind === "security" ? "bg-amber-500/15 text-warning" : "bg-primary/15 text-primary"}`}>
                       {e.kind}
                     </span>
                     <span className="text-sm font-medium">{e.type.replace(/_/g, " ")}</span>

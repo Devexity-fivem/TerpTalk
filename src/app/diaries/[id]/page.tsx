@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma"
-import { publicUserSelect, activeAuthor } from "@/lib/security"
+import { publicUserSelect, activeAuthor, blockedUserIds, notBlockedAuthor } from "@/lib/security"
 import { notFound, permanentRedirect } from "next/navigation"
 import { Leaf, Calendar, Users, ClipboardCheck, Camera, TrendingUp, Pencil, Sprout, Link2, Lock } from "lucide-react"
 import Link from "next/link"
@@ -116,7 +116,10 @@ async function getDiaryData(id: string, viewerId?: string | null) {
 export default async function DiaryPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const session = await getServerSession(authOptions)
-  const diary = await getDiaryData(id, session?.user?.id)
+  const [diary, blockedIds] = await Promise.all([
+    getDiaryData(id, session?.user?.id),
+    blockedUserIds(session?.user?.id),
+  ])
   // Fetch the most recent 100 updates and restore chronological order for the timeline.
   const updates = [...diary.updates].reverse()
   // Related-grows matching: a structured strainId or setupId link is exact;
@@ -166,12 +169,14 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
       },
     }),
     // Similar grows — other growers only; this author's other diaries are
-    // covered by the section above.
+    // covered by the section above. Blocked authors are excluded, matching
+    // every other discovery surface.
     prisma.growDiary.findMany({
       where: {
         deleted: false,
         author: activeAuthor(),
         ...publicDiaryWhere,
+        ...notBlockedAuthor(blockedIds),
         id: { not: diary.id },
         authorId: { not: diary.author.id },
         OR: similarOr,
@@ -299,7 +304,7 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 mb-3 flex-wrap">
                 {diary.featured && (
-                  <span className="rounded-full bg-amber-500/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-amber-500">
+                  <span className="rounded-full bg-amber-500/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-warning">
                     Featured
                   </span>
                 )}
@@ -310,7 +315,7 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
                   {diary.stage}
                 </span>
                 {diary.harvested && (
-                  <span className="rounded-full bg-emerald-500/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-emerald-500">
+                  <span className="rounded-full bg-emerald-500/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-success">
                     Harvested
                   </span>
                 )}
@@ -360,7 +365,7 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
                 </Tooltip>
                 {streak >= 2 && (
                   <Tooltip content="Consecutive days with a diary update">
-                    <span className="flex items-center gap-1 text-amber-500 font-medium">
+                    <span className="flex items-center gap-1 text-warning font-medium">
                       🔥 {streak}-day streak
                     </span>
                   </Tooltip>
@@ -478,10 +483,10 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
         {harvestReport && (
           <div className="bg-card/80 rounded-2xl border border-border/70 p-5 mt-4">
             <div className="flex items-center gap-2 mb-4">
-              <ClipboardCheck className="w-4 h-4 text-emerald-500" />
+              <ClipboardCheck className="w-4 h-4 text-success" />
               <h2 className="font-display font-semibold">Harvest Report</h2>
               {harvestReport.yieldAmount != null && (
-                <span className="ml-auto px-2.5 py-1 rounded-lg bg-emerald-500/10 text-emerald-500 font-medium text-sm">
+                <span className="ml-auto px-2.5 py-1 rounded-lg bg-emerald-500/10 text-success font-medium text-sm">
                   {harvestReport.yieldAmount} {harvestReport.yieldUnit || "g"}
                 </span>
               )}
@@ -845,7 +850,7 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
                         <div className="flex-1 min-w-0">
                           <div className="font-medium text-sm mb-0.5 line-clamp-1">{d.title}</div>
                           <div className="text-xs text-muted-foreground flex items-center flex-wrap gap-x-2 gap-y-0.5">
-                            {d.strain && <span className="text-emerald-500">{d.strain}</span>}
+                            {d.strain && <span className="text-success">{d.strain}</span>}
                             <span>{d._count.updates} update{d._count.updates === 1 ? "" : "s"}</span>
                           </div>
                         </div>
@@ -878,7 +883,7 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
                         <div className="flex-1 min-w-0">
                           <div className="font-medium text-sm mb-0.5 line-clamp-1">{d.title}</div>
                           <div className="text-xs text-muted-foreground flex items-center flex-wrap gap-x-2 gap-y-0.5">
-                            {d.strain && <span className="text-emerald-500">{d.strain}</span>}
+                            {d.strain && <span className="text-success">{d.strain}</span>}
                             <span>{d.author.profile?.username || d.author.name}</span>
                             <span>{d._count.updates} update{d._count.updates === 1 ? "" : "s"}</span>
                           </div>

@@ -63,8 +63,11 @@ async function api(path, { method = "GET", body, cookie } = {}) {
 async function main() {
   const bot = await prisma.profile.findUnique({ where: { username: "terpbot" }, select: { userId: true } })
   if (!bot) {
-    console.log("SKIP — no terpbot profile in this database")
-    process.exit(0)
+    // TerpBot is required infrastructure — master-tests seeds it via
+    // terpbot-setup.cjs before this suite runs. Absence is a failure, never
+    // a skip: a green run without the bot would silently verify nothing.
+    console.error("FAIL — no terpbot profile in this database (run scripts/terpbot-setup.cjs first)")
+    process.exit(1)
   }
   const botId = bot.userId
 

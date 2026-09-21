@@ -54,7 +54,7 @@ export default function AboutPage() {
     <div className="min-h-screen bg-background">
       <div className="max-w-4xl mx-auto px-4 py-12">
         <h1 className="font-display text-4xl font-bold tracking-tight mb-4">
-          About <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary to-spectrum">TerpTalk</span>
+          About <span className="tt-gradient-text bg-gradient-to-r from-primary to-spectrum">TerpTalk</span>
         </h1>
         <p className="text-lg text-muted-foreground leading-relaxed mb-10 max-w-2xl">
           TerpTalk is a privacy-first, 21+ community built by growers, for growers.

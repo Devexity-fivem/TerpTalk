@@ -4,7 +4,8 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { isBanned, isModerator, forbidden, unauthorized, getClientIp, logSecurityEvent } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
-import { awardReputation, reverseReputationByKey, REP_POINTS } from "@/lib/reputation"
+import { awardReputation, REP_POINTS } from "@/lib/reputation"
+import { enqueueReversal, drainOne } from "@/lib/reputation-outbox"
 import { ACCEPT_MIN_ACTOR_AGE_HOURS, ACCEPT_MIN_ACTOR_REP } from "@/lib/reputation-config"
 import { checkMaintenance } from "@/lib/maintenance"
 import { notify, postDeepLink } from "@/lib/notify"
@@ -74,16 +75,31 @@ export async function POST(request: Request) {
 
     if (postId === null) {
       // Compare-and-set: bail if a concurrent request changed the pointer.
-      const cleared = await prisma.thread.updateMany({
-        where: { id: threadId, acceptedAnswerId: thread.acceptedAnswerId },
-        data: { acceptedAnswerId: null },
+      // Reversal intents ride inside the CAS transaction.
+      const reversalIds: string[] = []
+      const cleared = await prisma.$transaction(async (tx) => {
+        const res = await tx.thread.updateMany({
+          where: { id: threadId, acceptedAnswerId: thread.acceptedAnswerId },
+          data: { acceptedAnswerId: null },
+        })
+        if (res.count === 1 && thread.acceptedAnswerId) {
+          reversalIds.push(await enqueueReversal(tx, {
+            kind: "KEY", eventKey: `accept:${thread.acceptedAnswerId}`,
+            reason: "Answer unaccepted", requestedBy: user.id,
+          }))
+          // The OP's curation bonus must unwind too — otherwise unaccept
+          // leaves a sticky +rep for an answer that no longer exists.
+          reversalIds.push(await enqueueReversal(tx, {
+            kind: "KEY", eventKey: `accept-op:${threadId}`,
+            reason: "Answer unaccepted", requestedBy: user.id,
+          }))
+        }
+        return res
       })
       if (cleared.count === 0) {
         return NextResponse.json({ error: "Accepted answer changed concurrently — retry" }, { status: 409 })
       }
-      if (thread.acceptedAnswerId) {
-        await reverseReputationByKey(`accept:${thread.acceptedAnswerId}`, "Answer unaccepted", user.id).catch(() => null)
-      }
+      for (const rid of reversalIds) await drainOne(rid).catch(() => false)
       // Plant Doctor outcome stats track accepted answers.
       if (thread.wizardResultId) revalidateTag("analytics", { expire: 0 })
       return NextResponse.json({ success: true })
@@ -102,19 +118,26 @@ export async function POST(request: Request) {
     }
 
     // Compare-and-set on the current pointer — two parallel accepts must not
-    // both pay out. Loser gets a 409 and retries against fresh state.
-    const swapped = await prisma.thread.updateMany({
-      where: { id: threadId, acceptedAnswerId: thread.acceptedAnswerId },
-      data: { acceptedAnswerId: postId },
+    // both pay out. Loser gets a 409 and retries against fresh state. The
+    // old answer's reversal intent is written inside the CAS transaction.
+    const swapReversalIds: string[] = []
+    const swapped = await prisma.$transaction(async (tx) => {
+      const res = await tx.thread.updateMany({
+        where: { id: threadId, acceptedAnswerId: thread.acceptedAnswerId },
+        data: { acceptedAnswerId: postId },
+      })
+      if (res.count === 1 && thread.acceptedAnswerId && thread.acceptedAnswerId !== postId) {
+        swapReversalIds.push(await enqueueReversal(tx, {
+          kind: "KEY", eventKey: `accept:${thread.acceptedAnswerId}`,
+          reason: "Accepted answer changed", requestedBy: user.id,
+        }))
+      }
+      return res
     })
     if (swapped.count === 0) {
       return NextResponse.json({ error: "Accepted answer changed concurrently — retry" }, { status: 409 })
     }
-
-    // If a different post held the answer, reverse its award before paying the new one.
-    if (thread.acceptedAnswerId && thread.acceptedAnswerId !== postId) {
-      await reverseReputationByKey(`accept:${thread.acceptedAnswerId}`, "Accepted answer changed", user.id).catch(() => null)
-    }
+    for (const rid of swapReversalIds) await drainOne(rid).catch(() => false)
 
     // Award reputation for helpful answer — keyed per post so
     // unaccept/re-accept cycles can't farm it. The accept itself works for

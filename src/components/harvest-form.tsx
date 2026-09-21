@@ -103,7 +103,7 @@ export default function HarvestForm({
       <div className="flex items-start sm:items-center justify-between gap-4 flex-col sm:flex-row">
         <div className="flex items-center gap-3">
           <div className="bg-emerald-500/10 p-2.5 rounded-lg">
-            <Leaf className="w-5 h-5 text-emerald-500" />
+            <Leaf className="w-5 h-5 text-success" />
           </div>
           <div>
             <h3 className="font-display font-semibold">{harvested ? "Harvest logged" : "Not yet harvested"}</h3>
@@ -145,7 +145,7 @@ export default function HarvestForm({
       {harvested && (initialAmount || initialAt) && (
         <div className="mt-4 flex flex-wrap items-center gap-3 text-sm">
           {initialAmount ? (
-            <span className="px-2.5 py-1 rounded-lg bg-emerald-500/10 text-emerald-500 font-medium">
+            <span className="px-2.5 py-1 rounded-lg bg-emerald-500/10 text-success font-medium">
               Yield: {initialAmount} {initialUnit || "g"}
             </span>
           ) : null}

@@ -40,15 +40,15 @@ const TYPE_CLS: Record<string, string> = {
   BUG: "bg-destructive/10 text-destructive",
   UX: "bg-blue-500/10 text-blue-500",
   FEATURE: "bg-purple-500/10 text-purple-500",
-  CONTENT: "bg-amber-500/10 text-amber-500",
+  CONTENT: "bg-amber-500/10 text-warning",
   OTHER: "bg-secondary text-muted-foreground",
 }
 const STATUS_CLS: Record<string, string> = {
   NEW: "bg-primary/10 text-primary",
   REVIEWING: "bg-blue-500/10 text-blue-500",
   PLANNED: "bg-purple-500/10 text-purple-500",
-  IN_PROGRESS: "bg-amber-500/10 text-amber-500",
-  RESOLVED: "bg-green-500/10 text-green-500",
+  IN_PROGRESS: "bg-amber-500/10 text-warning",
+  RESOLVED: "bg-green-500/10 text-success",
   DECLINED: "bg-secondary text-muted-foreground",
 }
 
@@ -273,7 +273,7 @@ export default function AdminFeedback() {
                     <Pill label={f.priority} cls={f.priority === "HIGH" ? "bg-destructive/10 text-destructive" : "bg-secondary text-muted-foreground"} />
                   )}
                   {f.source === "ADMIN_OBSERVATION" && (
-                    <Pill label="Observation" cls="bg-amber-500/10 text-amber-500" />
+                    <Pill label="Observation" cls="bg-amber-500/10 text-warning" />
                   )}
                 </div>
                 <div className="font-medium text-sm break-words">{f.title}</div>
@@ -322,7 +322,7 @@ export default function AdminFeedback() {
                 <div className="flex flex-wrap items-center gap-1.5 mb-1.5">
                   <Pill label={TYPE_LABEL[detail.type] ?? detail.type} cls={TYPE_CLS[detail.type] ?? TYPE_CLS.OTHER} />
                   <Pill label={STATUS_LABEL[detail.status] ?? detail.status} cls={STATUS_CLS[detail.status] ?? STATUS_CLS.NEW} />
-                  {detail.source === "ADMIN_OBSERVATION" && <Pill label="Observation" cls="bg-amber-500/10 text-amber-500" />}
+                  {detail.source === "ADMIN_OBSERVATION" && <Pill label="Observation" cls="bg-amber-500/10 text-warning" />}
                 </div>
                 <h2 id="fb-detail-title" className="font-display text-lg font-semibold break-words">{detail.title}</h2>
                 <div className="text-xs text-muted-foreground mt-1 flex flex-wrap gap-x-3">

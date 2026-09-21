@@ -7,6 +7,7 @@ let pass = 0, fail = 0;
 const check = (name, ok) => { if (ok) { pass++ } else { fail++ } console.log(`${ok ? "PASS" : "FAIL"} ${name}`) };
 
 (async () => {
+  await import("./db-guard.mjs") // refuse production endpoints before any query
   // Partner seeded correctly
   const mh = await p.affiliatePartner.findUnique({ where: { slug: "mars-hydro" } });
   check("Mars Hydro partner exists", !!mh);

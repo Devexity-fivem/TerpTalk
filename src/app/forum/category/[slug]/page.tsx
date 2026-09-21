@@ -233,7 +233,7 @@ export default async function CategoryPage({
                         )}
                         {thread.acceptedAnswer && !thread.acceptedAnswer.deleted && (
                           <Tooltip content="The author accepted a reply as the answer" className="shrink-0">
-                            <span className="inline-flex items-center gap-1 text-xs text-green-500">
+                            <span className="inline-flex items-center gap-1 text-xs text-success">
                               <CheckCircle2 className="w-3.5 h-3.5" /> Solved
                             </span>
                           </Tooltip>

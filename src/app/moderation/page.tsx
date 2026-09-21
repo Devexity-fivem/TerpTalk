@@ -236,7 +236,7 @@ export default function ModerationPage() {
   const priorityChip = (p: string) => {
     const styles: Record<string, string> = {
       URGENT: "bg-destructive/15 text-destructive",
-      HIGH: "bg-amber-500/15 text-amber-500",
+      HIGH: "bg-amber-500/15 text-warning",
       NORMAL: "bg-secondary text-muted-foreground",
       LOW: "bg-secondary/60 text-muted-foreground/70",
     }
@@ -249,7 +249,7 @@ export default function ModerationPage() {
     const styles: Record<string, string> = {
       PENDING: "bg-secondary text-muted-foreground",
       REVIEWING: "bg-blue-500/15 text-blue-500",
-      ESCALATED: "bg-amber-500/15 text-amber-500",
+      ESCALATED: "bg-amber-500/15 text-warning",
       RESOLVED: "bg-primary/10 text-primary",
       DISMISSED: "bg-secondary text-muted-foreground",
     }
@@ -368,7 +368,7 @@ export default function ModerationPage() {
               >
                 {bulkLoading ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : "Run Bulk Action"}
               </button>
-              {bulkResult && <p className="text-sm text-green-600">{bulkResult}</p>}
+              {bulkResult && <p className="text-sm text-success">{bulkResult}</p>}
             </div>
           </div>
         )}
@@ -406,7 +406,7 @@ export default function ModerationPage() {
                         <span className="text-[10px] px-1.5 py-0.5 bg-destructive/15 text-destructive rounded font-semibold">BANNED</span>
                       )}
                       {lookupUser.openReports > 0 && (
-                        <span className="text-[10px] px-1.5 py-0.5 bg-amber-500/15 text-amber-500 rounded font-semibold">
+                        <span className="text-[10px] px-1.5 py-0.5 bg-amber-500/15 text-warning rounded font-semibold">
                           {lookupUser.openReports} open report{lookupUser.openReports !== 1 ? "s" : ""}
                         </span>
                       )}
@@ -421,7 +421,7 @@ export default function ModerationPage() {
                   {lookupUser.role !== "ADMINISTRATOR" && canAct && (
                     <div className="flex gap-2 flex-wrap">
                       <button onClick={() => actOnUser(lookupUser.id, "WARNING", "Warning reason:")} disabled={busy === lookupUser.id}
-                        className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-amber-500/10 text-amber-500 rounded-lg hover:bg-amber-500/20 disabled:opacity-50">
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-amber-500/10 text-warning rounded-lg hover:bg-amber-500/20 disabled:opacity-50">
                         <AlertTriangle className="w-4 h-4" /> Warn
                       </button>
                       {isAdminUser && !lookupUser.banned && (
@@ -565,7 +565,7 @@ export default function ModerationPage() {
                 )}
                 <Link href={`/moderation/cases/${it.id}?kind=${it.kind}`} className="flex items-center gap-3 min-w-0 flex-1">
                   <span className="w-8 h-8 rounded-lg bg-secondary flex items-center justify-center shrink-0">
-                    {it.kind === "FLAG" ? <TrendingUp className="w-4 h-4 text-amber-500" /> : <Flag className="w-4 h-4 text-amber-500" />}
+                    {it.kind === "FLAG" ? <TrendingUp className="w-4 h-4 text-warning" /> : <Flag className="w-4 h-4 text-warning" />}
                   </span>
                   <span className="min-w-0 flex-1">
                     <span className="flex items-center gap-2 flex-wrap">

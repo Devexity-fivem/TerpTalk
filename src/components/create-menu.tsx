@@ -74,7 +74,7 @@ export default function CreateMenu() {
               className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm hover:bg-secondary transition-colors border-t border-border mt-1 pt-2"
               role="menuitem"
             >
-              <BookOpen className="h-4 w-4 text-amber-500 shrink-0" />
+              <BookOpen className="h-4 w-4 text-warning shrink-0" />
               <div>
                 <div className="font-medium">Guide</div>
                 <div className="text-[11px] text-muted-foreground">Staff knowledge article</div>

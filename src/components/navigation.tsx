@@ -453,27 +453,27 @@ export function Navigation() {
                   the avatar menu for every staff role. */}
               {isAdmin && (
                 <div className="space-y-1 md:col-span-2 lg:col-span-3">
-                  <div className="px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-amber-500/80">
+                  <div className="px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-warning/80">
                     Admin
                   </div>
                   <div className="grid grid-cols-1 gap-1 md:grid-cols-2 lg:grid-cols-3">
-                    <Link href="/admin/audit" className={cn(linkClass("/admin/audit"), "!text-amber-500")} onClick={() => setMenuOpen(false)}>
+                    <Link href="/admin/audit" className={cn(linkClass("/admin/audit"), "!text-warning")} onClick={() => setMenuOpen(false)}>
                       <ScrollText className="h-4 w-4" />
                       Audit Log
                     </Link>
-                    <Link href="/admin/media" className={cn(linkClass("/admin/media"), "!text-amber-500")} onClick={() => setMenuOpen(false)}>
+                    <Link href="/admin/media" className={cn(linkClass("/admin/media"), "!text-warning")} onClick={() => setMenuOpen(false)}>
                       <ImageIcon className="h-4 w-4" />
                       Media Moderation
                     </Link>
-                    <Link href="/admin/settings" className={cn(linkClass("/admin/settings"), "!text-amber-500")} onClick={() => setMenuOpen(false)}>
+                    <Link href="/admin/settings" className={cn(linkClass("/admin/settings"), "!text-warning")} onClick={() => setMenuOpen(false)}>
                       <Settings className="h-4 w-4" />
                       Site Settings
                     </Link>
-                    <Link href="/admin/features" className={cn(linkClass("/admin/features"), "!text-amber-500")} onClick={() => setMenuOpen(false)}>
+                    <Link href="/admin/features" className={cn(linkClass("/admin/features"), "!text-warning")} onClick={() => setMenuOpen(false)}>
                       <Trophy className="h-4 w-4" />
                       Feature Flags
                     </Link>
-                    <Link href="/admin/youtubers" className={cn(linkClass("/admin/youtubers"), "!text-amber-500")} onClick={() => setMenuOpen(false)}>
+                    <Link href="/admin/youtubers" className={cn(linkClass("/admin/youtubers"), "!text-warning")} onClick={() => setMenuOpen(false)}>
                       <Video className="h-4 w-4" />
                       YouTubers
                     </Link>
