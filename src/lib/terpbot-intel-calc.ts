@@ -110,6 +110,7 @@ export interface SeriesStats {
 }
 
 export function seriesStats(points: MetricPoint[]): SeriesStats {
+// Array.prototype.sort is stable (ES2019) — equal timestamps keep input order
   const clean = points.filter((p) => Number.isFinite(p.t) && Number.isFinite(p.v)).sort((a, b) => a.t - b.t)
   const n = clean.length
   if (!n) return { n: 0, latest: null, mean: null, min: null, max: null, medianIntervalDays: null }
@@ -155,6 +156,7 @@ export function median(values: number[]): number {
 export type Trend = "rising" | "falling" | "stable" | "volatile" | "insufficient"
 
 export function detectTrend(points: MetricPoint[], epsilon: number): Trend {
+// Array.prototype.sort is stable (ES2019) — equal timestamps keep input order
   const clean = points.filter((p) => Number.isFinite(p.t) && Number.isFinite(p.v)).sort((a, b) => a.t - b.t)
   if (clean.length < 3) return "insufficient"
   const vals = clean.map((p) => p.v)
@@ -190,6 +192,7 @@ export interface ExcursionResult {
 }
 
 export function countExcursions(points: MetricPoint[], lo: number, hi: number): ExcursionResult {
+// Array.prototype.sort is stable (ES2019) — equal timestamps keep input order
   const clean = points.filter((p) => Number.isFinite(p.v)).sort((a, b) => a.t - b.t)
   let count = 0
   let longestRun = 0
@@ -218,6 +221,7 @@ export function countExcursions(points: MetricPoint[], lo: number, hi: number): 
 /** Height gain rate in cm/day over the window (latest − earliest over
  *  elapsed days). Requires ≥2 points and >0 elapsed days. */
 export function growthRateCmPerDay(points: MetricPoint[]): CalcResult {
+// Array.prototype.sort is stable (ES2019) — equal timestamps keep input order
   const clean = points.filter((p) => Number.isFinite(p.t) && Number.isFinite(p.v)).sort((a, b) => a.t - b.t)
   if (clean.length < 2) return calc({ unit: "cm/day", valid: false, missing: ["heightHistory"] })
   const days = (clean[clean.length - 1].t - clean[0].t) / 86400000

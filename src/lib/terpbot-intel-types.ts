@@ -10,20 +10,23 @@ export type { MetricPoint, SeriesStats, Trend }
 // Schema-backed metrics plus discriminating measurements the schema
 // cannot store yet — the engine may *recommend* them without pretending
 // they exist as data.
-export type MetricId =
-  | "temperature"
-  | "humidity"
-  | "vpd"
-  | "ph"
-  | "ec"
-  | "height"
-  | "runoffPh"
-  | "runoffEc"
-  | "substrateMoisture"
-  | "leafTemp"
-  | "watering"
-  | "ppfd"
-  | "photoperiod"
+export const METRIC_IDS = [
+  "temperature",
+  "humidity",
+  "vpd",
+  "ph",
+  "ec",
+  "height",
+  "runoffPh",
+  "runoffEc",
+  "substrateMoisture",
+  "leafTemp",
+  "watering",
+  "ppfd",
+  "photoperiod",
+] as const
+
+export type MetricId = (typeof METRIC_IDS)[number]
 
 /** Visual/physical inspections a grower can perform — recommendable as
  *  next steps exactly like measurements, but never "logged" metrics.
@@ -89,22 +92,25 @@ export interface MeasurementHint {
 // canonical ids. Parsing produces observations ONLY — the rule engine
 // does the reasoning.
 
-export type SymptomId =
-  | "LEAF_YELLOWING" | "LEAF_PALE" | "LEAF_DARK_GREEN" | "LEAF_PURPLE_RED"
-  | "STEM_PURPLE" | "BROWNING" | "BLEACHING"
-  | "CLAW_DOWN" | "CURL_UP" | "CURL_UNDER" | "CRISPY" | "LIMP_SOFT"
-  | "DISTORTED" | "TIP_BURN" | "LIGHT_BURN" | "SPOTS" | "RUST_SPOTS"
-  | "DARK_SPOTS" | "STIPPLING" | "SILVERING" | "POWDERY" | "STICKY_RESIDUE"
-  | "WEBBING" | "SLIME_TRAIL" | "HOLES" | "FUZZ_MOLD"
-  | "STUNTED" | "STRETCHED" | "DROOPING" | "COLLAPSED"
-  | "MEDIUM_WET" | "MEDIUM_DRY" | "OVERWATERED" | "UNDERWATERED"
-  | "ENV_HOT" | "ENV_COLD" | "ENV_HUMID" | "ENV_DRY" | "WIND_BURN"
-  | "ROOT_ROT" | "ROOT_BOUND" | "BUD_ROT" | "HERMIE" | "AIRY_BUDS"
-  | "GRASSY_SMELL" | "STEM_SPLIT" | "NO_SPROUT" | "PH_UNSTABLE"
-  | "EC_RISING" | "SALT_CRUST"
-  | "PEST_MITES" | "PEST_MITES_OTHER" | "PEST_APHIDS" | "PEST_THRIPS"
-  | "PEST_FUNGUS_GNATS" | "PEST_WHITEFLIES" | "PEST_CATERPILLARS"
-  | "PEST_SLUGS" | "PEST_GENERIC"
+export const SYMPTOM_IDS = [
+  "LEAF_YELLOWING", "LEAF_PALE", "LEAF_DARK_GREEN", "LEAF_PURPLE_RED",
+  "STEM_PURPLE", "BROWNING", "BLEACHING",
+  "CLAW_DOWN", "CURL_UP", "CURL_UNDER", "CRISPY", "LIMP_SOFT",
+  "DISTORTED", "TIP_BURN", "LIGHT_BURN", "SPOTS", "RUST_SPOTS",
+  "DARK_SPOTS", "STIPPLING", "SILVERING", "POWDERY", "STICKY_RESIDUE",
+  "WEBBING", "SLIME_TRAIL", "HOLES", "FUZZ_MOLD",
+  "STUNTED", "STRETCHED", "DROOPING", "COLLAPSED",
+  "MEDIUM_WET", "MEDIUM_DRY", "OVERWATERED", "UNDERWATERED",
+  "ENV_HOT", "ENV_COLD", "ENV_HUMID", "ENV_DRY", "WIND_BURN",
+  "ROOT_ROT", "ROOT_BOUND", "BUD_ROT", "HERMIE", "AIRY_BUDS",
+  "GRASSY_SMELL", "STEM_SPLIT", "NO_SPROUT", "PH_UNSTABLE",
+  "EC_RISING", "SALT_CRUST",
+  "PEST_MITES", "PEST_MITES_OTHER", "PEST_APHIDS", "PEST_THRIPS",
+  "PEST_FUNGUS_GNATS", "PEST_WHITEFLIES", "PEST_CATERPILLARS",
+  "PEST_SLUGS", "PEST_GENERIC",
+] as const
+
+export type SymptomId = (typeof SYMPTOM_IDS)[number]
 
 export type LocationId =
   | "LOWER_OLD" | "UPPER_NEW" | "LEAF_TIPS" | "LEAF_MARGINS" | "VEINS"
@@ -144,6 +150,10 @@ export interface IntelEvidence {
   /** candidate this evidence pools into. Absent → standalone finding
    *  (data-quality observations and gap signals, not hypotheses). */
   candidate?: CandidateId
+  /** the underlying signal this evidence is derived from; evidence
+   *  sharing a signal is correlated, not independent. Stamped by
+   *  evaluateContext from the emitting rule when unset. */
+  signal?: string
 }
 
 export type FindingKind =
@@ -220,6 +230,23 @@ export interface IntelSeries extends SeriesStats {
   trend: Trend
 }
 
+/** Rule-level signal ids — the shared underlying signal everything a
+ *  rule emits derives from. Evidence grouping keys on this so several
+ *  rules reading the SAME series can't stack as independent support. */
+export const SIGNAL_IDS = [
+  "humidity",
+  "temperature",
+  "env:temp-rh",
+  "ph",
+  "ec",
+  "chem:ph-ec",
+  "height",
+  "stage",
+  "data",
+] as const
+
+export type SignalId = (typeof SIGNAL_IDS)[number]
+
 export interface IntelRule {
   id: string
   domain:
@@ -228,6 +255,10 @@ export interface IntelRule {
   kind: FindingKind
   /** finding/candidate label, e.g. "Bud-rot risk" */
   title: string
+  /** default signal for everything the rule emits — evaluateContext
+   *  stamps it onto evidence that doesn't declare its own (symptom
+   *  rules stamp per-observation `symptom:<id>` signals instead). */
+  signal?: SignalId
   applies: (ctx: GrowContextView) => boolean
   evaluate: (ctx: GrowContextView) => IntelEvidence[]
   sourceIds: string[]
@@ -299,8 +330,17 @@ export interface CandidateResult {
   kind: CandidateDef["kind"]
   severity: CandidateSeverity
   state: FindingState
+  /** support score: Σ max-weights over `for` signal groups + Σ
+   *  max-weights over `risk` signal groups (risk capped at weak for
+   *  condition candidates — predisposition is never proof). */
   forScore: number
   againstScore: number
+  /** number of distinct (for|risk) signal groups — how many INDEPENDENT
+   *  signals support this candidate (correlated rules collapse to 1) */
+  independentSignals: number
+  /** per-signal evidence breakdown — the /why trail: which underlying
+   *  signals supported or opposed, and at what weight */
+  signals: { signal: string; direction: "for" | "risk" | "against"; weight: number }[]
   /** direction for|risk — what supports this candidate */
   supporting: IntelEvidence[]
   /** direction against — what argues against it (never hidden) */

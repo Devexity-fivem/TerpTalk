@@ -14,6 +14,7 @@ import {
   GUARD_PHRASES,
   LOCATION_REFINEMENTS,
   METRIC_TREND_OBSERVATIONS,
+  NEGATION_PHRASES,
   NEGATION_TOKENS,
   PLANT_NOUNS,
   QUESTION_LEAD,
@@ -50,6 +51,10 @@ export interface ParsedUtterance {
   measurements: ParsedMeasurement[]
   /** utterance-level stage claim ("i'm in week 5 flower") */
   stage?: string
+  /** question-led text that is not a comparison — a lookup, not a report */
+  question: boolean
+  /** comparison/lookup text — "vs", "worse than", "greener than last week" */
+  comparison: boolean
   /** unmatched text — remains eligible for /ask fallback */
   residual: string
 }
@@ -134,9 +139,13 @@ function matchClause(
 
 function clauseHasSignal(clause: string, base: number, consumed: boolean[]): boolean {
   const copy = consumed.slice()
-  return matchClause(clause, base, copy).some(
-    (h) => h.entry.family === "symptom" || h.entry.family === "metric"
-  )
+  return matchClause(clause, base, copy).some((h) => {
+    if (h.entry.family !== "symptom" && h.entry.family !== "metric") return false
+    // a negated hit carries no signal — "not yellow but pale" stays one
+    // clause so "pale" keeps the strong-sibling context
+    if (h.entry.family === "symptom" && isNegated(clause, h.start - base)) return false
+    return true
+  })
 }
 
 const CONJUNCTION_RE = /\b(and|also|plus|but then|but|then)\b/g
@@ -201,11 +210,16 @@ function segmentClauses(
 const NUMBER_RE =
   /\d+(?:\.\d+)?\s*(°f|°c|f\b|c\b|%|ppm|ms\/cm|kpa|cm\b|in\b|ml\/l)?/g
 
+/** a % in a clause about light intensity is dimmer output, never RH */
+const LIGHT_INTENSITY_RE = /\b(lights?|dimmer|dimmed|intensity)\b/
+
 const UNIT_TO_METRIC: Record<string, MetricId> = {
   "°f": "temperature",
   f: "temperature",
   "°c": "temperature",
   c: "temperature",
+  celsius: "temperature",
+  fahrenheit: "temperature",
   "%": "humidity",
   ppm: "ec",
   "ms/cm": "ec",
@@ -217,8 +231,10 @@ const UNIT_TO_METRIC: Record<string, MetricId> = {
 const UNIT_NORMALIZE: Record<string, string> = {
   "°f": "degF",
   f: "degF",
+  fahrenheit: "degF",
   "°c": "degC",
   c: "degC",
+  celsius: "degC",
   "%": "percent",
   ppm: "ppm",
   "ms/cm": "mscm",
@@ -228,10 +244,24 @@ const UNIT_NORMALIZE: Record<string, string> = {
   "ml/l": "mll",
 }
 
-function wordBefore(text: string, start: number): string | null {
-  const m = /([a-z']+)\s*$/.exec(text.slice(0, start))
-  return m ? m[1] : null
+function wordsBefore(text: string, start: number, count: number): string[] {
+  const before = text.slice(0, start).trimEnd()
+  if (!before) return []
+  return before.split(/\s+/).slice(-count)
 }
+
+/** negated when any of the last two words is a negation token, or a
+ *  multi-word negation phrase appears within the last four tokens */
+function isNegated(clause: string, offset: number): boolean {
+  const words = wordsBefore(clause, offset, 4)
+  if (!words.length) return false
+  if (words.slice(-2).some((w) => NEGATION_TOKENS.has(w))) return true
+  const window = words.join(" ")
+  return NEGATION_PHRASES.some((p) => window.includes(p))
+}
+
+const RUNOFF_PREFIX_RE = /\b(run[\s-]?off)\s*$/
+const BARE_CHEM_RE = /^(e\.?c\.?|p\.?h\.?)$/
 
 export function parseGrowText(raw: string): ParsedUtterance {
   const text = normalizeGrowText(raw)
@@ -282,7 +312,9 @@ export function parseGrowText(raw: string): ParsedUtterance {
   // "what pm level", "light burn vs nutrient burn" must not mint
   // symptom observations. Measurements still extract (numbers are data
   // either way).
-  const questionish = QUESTION_LEAD.test(text) || COMPARISON_RE.test(text)
+  const comparison = COMPARISON_RE.test(text)
+  const question = QUESTION_LEAD.test(text) && !comparison
+  const questionish = question || comparison
 
   clauses.forEach((seg, ci) => {
     const hits = clauseHits[ci]
@@ -297,9 +329,8 @@ export function parseGrowText(raw: string): ParsedUtterance {
         )
         if (!clausePlantNoun[ci] && !hasStrongSibling) return false
       }
-      // negation — "no yellowing", "not clawing"
-      const prev = wordBefore(seg.text, h.start - seg.base)
-      if (prev && NEGATION_TOKENS.has(prev)) return false
+      // negation — "no yellowing", "not clawing", "no longer yellowing"
+      if (isNegated(seg.text, h.start - seg.base)) return false
       return true
     })
 
@@ -399,26 +430,38 @@ export function parseGrowText(raw: string): ParsedUtterance {
       }
       if (!free) continue
 
+      // "i don't know my runoff EC" — negated mentions aren't data
+      if (isNegated(seg.text, nm.index)) continue
+
       const rawUnit = nm[1]?.trim()
       const unit = rawUnit ? UNIT_NORMALIZE[rawUnit] : undefined
 
-      // nearest metric phrase in the clause; else unit implies metric
-      let metric: MetricId | undefined
-      let best = Infinity
-      for (const mh of metrics) {
-        const d = Math.abs(mh.start - start)
-        if (d < best) {
-          best = d
-          metric = mh.entry.id as MetricId
+      // an explicit unit suffix on the number beats a nearby metric
+      // phrase ("84f and 40% rh" → temperature, not humidity); else
+      // nearest metric phrase; else a consumed unit hit implies it
+      let metric: MetricId | undefined = rawUnit
+        ? UNIT_TO_METRIC[rawUnit]
+        : undefined
+      let unitPhrase: string | undefined
+      if (!metric) {
+        let best = Infinity
+        for (const mh of metrics) {
+          const d = Math.abs(mh.start - start)
+          if (d < best) {
+            best = d
+            metric = mh.entry.id as MetricId
+          }
         }
       }
-      if (!metric && rawUnit) metric = UNIT_TO_METRIC[rawUnit]
       if (!metric) {
-        // a unit hit consumed as a phrase (e.g. "%") can imply metric
+        // a unit hit consumed as a phrase (e.g. "%", "celsius") can
+        // imply both metric and unit
         for (const uh of units) {
-          const implied = UNIT_TO_METRIC[seg.text.slice(uh.start - seg.base, uh.start - seg.base + uh.len)]
+          const text2 = seg.text.slice(uh.start - seg.base, uh.start - seg.base + uh.len)
+          const implied = UNIT_TO_METRIC[text2]
           if (implied) {
             metric = implied
+            unitPhrase = text2
             break
           }
         }
@@ -426,14 +469,36 @@ export function parseGrowText(raw: string): ParsedUtterance {
       if (!metric) continue // bare number → residual, never guessed
 
       // unit implied by the metric phrase itself ("ppm" → ppm)
-      const metricPhrase = metric
-        ? metrics.find((mh) => mh.entry.id === metric)
-        : undefined
+      let metricPhrase = metrics.find((mh) => mh.entry.id === metric)
+
+      // bare "ec"/"ph" with a runoff prefix nearby is the runoff metric
+      if ((metric === "ec" || metric === "ph") && metricPhrase) {
+        const pText = seg.text.slice(
+          metricPhrase.start - seg.base,
+          metricPhrase.start - seg.base + metricPhrase.len
+        )
+        if (BARE_CHEM_RE.test(pText)) {
+          const before = wordsBefore(seg.text, metricPhrase.start - seg.base, 2).join(" ")
+          if (RUNOFF_PREFIX_RE.test(before)) {
+            metric = metric === "ec" ? "runoffEc" : "runoffPh"
+            metricPhrase = undefined
+          }
+        }
+      }
+
+      // "lights are at 70%" — a % in a light-intensity clause with no
+      // humidity phrase is dimmer output, never an RH measurement
+      if (
+        metric === "humidity" &&
+        LIGHT_INTENSITY_RE.test(seg.text) &&
+        !metrics.some((mh) => mh.entry.id === "humidity")
+      ) continue
       const phraseText = metricPhrase
         ? seg.text.slice(metricPhrase.start - seg.base, metricPhrase.start - seg.base + metricPhrase.len)
         : undefined
       const impliedUnit =
         unit ??
+        (unitPhrase ? UNIT_NORMALIZE[unitPhrase] : undefined) ??
         (phraseText === "ppm" || phraseText === "tds"
           ? "ppm"
           : phraseText === "rh" || phraseText === "humidity"
@@ -478,5 +543,12 @@ export function parseGrowText(raw: string): ParsedUtterance {
   }
   residual = residual.replace(new RegExp(CLAUSE_SEP, "g"), " ").replace(/\s+/g, " ").trim()
 
-  return { observations: deduped, measurements, stage: utteranceStage, residual }
+  return {
+    observations: deduped,
+    measurements,
+    stage: utteranceStage,
+    question,
+    comparison,
+    residual,
+  }
 }

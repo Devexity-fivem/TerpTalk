@@ -136,6 +136,109 @@ function run() {
     assert.equal(parseGrowText("week 6 looking good").measurements.length, 0)
   }
 
+  // ── extended negation ─────────────────────────────────────────────
+  assert.equal(obs("leaves are no longer yellowing").length, 0, "phrase negation: no longer")
+  assert.equal(obs("no sign of yellowing").length, 0, "phrase negation: no sign of")
+  assert.equal(obs("i don't have yellow leaves").length, 0, "negator two tokens back")
+  assert.equal(obs("haven't seen webbing").length, 0, "phrase negation: haven't seen")
+  assert.equal(obs("free of pests").length, 0, "phrase negation: free of")
+  assert.equal(obs("not seeing any clawing").length, 0, "phrase negation: not seeing")
+  {
+    const s = syms("not yellow but pale")
+    assert.deepEqual(s, ["LEAF_PALE"], "negated first clause, second survives")
+  }
+
+  // ── question / comparison flags ───────────────────────────────────
+  {
+    const p = parseGrowText("why are my leaves yellow?")
+    assert.equal(p.question, true, "question-led text flagged")
+    assert.equal(p.observations.length, 0, "question suppresses observation")
+  }
+  {
+    const p = parseGrowText("my leaves are yellow.")
+    assert.equal(p.question, false)
+    assert.equal(p.comparison, false)
+    assert.deepEqual(syms("my leaves are yellow."), ["LEAF_YELLOWING"])
+  }
+  {
+    const p = parseGrowText("my plants are greener than last week")
+    assert.equal(p.comparison, true, "comparative 'greener than' flagged")
+    assert.equal(p.question, false)
+    assert.equal(p.observations.length, 0)
+  }
+  {
+    const p = parseGrowText("greener than last week")
+    assert.equal(p.comparison, true)
+    assert.equal(p.observations.length, 0)
+  }
+  {
+    const p = parseGrowText("light burn vs nutrient burn which is worse")
+    assert.equal(p.comparison, true)
+    assert.equal(p.observations.length, 0)
+  }
+
+  // ── measurement units + runoff + guards ───────────────────────────
+  {
+    const m = parseGrowText("81 F").measurements[0]
+    assert.equal(m.metric, "temperature")
+    assert.equal(m.value, 81)
+    assert.equal(m.unit, "degF")
+  }
+  {
+    const m = parseGrowText("24 C").measurements[0]
+    assert.equal(m.metric, "temperature")
+    assert.equal(m.value, 24)
+    assert.equal(m.unit, "degC", "celsius preserved, no conversion")
+  }
+  {
+    const m = parseGrowText("68% RH").measurements[0]
+    assert.equal(m.metric, "humidity")
+    assert.equal(m.unit, "percent")
+  }
+  {
+    const ms = parseGrowText("my tent is 84f and 40% rh").measurements
+    assert.equal(ms.length, 2, "two measurements in one sentence")
+    assert.equal(ms[0].metric, "temperature")
+    assert.equal(ms[1].metric, "humidity")
+  }
+  {
+    const m = parseGrowText("room is 80 degrees").measurements[0]
+    assert.equal(m.metric, "temperature")
+    assert.equal(m.value, 80)
+    assert.equal(m.unit, undefined, "bare 'degrees' implies no unit")
+  }
+  {
+    const m = parseGrowText("runoff ec was 2.4").measurements[0]
+    assert.equal(m.metric, "runoffEc")
+    assert.equal(m.value, 2.4)
+    assert.equal(m.unit, undefined, "runoff EC does not invent mscm")
+  }
+  {
+    const m = parseGrowText("run-off ph 6.8").measurements[0]
+    assert.equal(m.metric, "runoffPh")
+    assert.equal(m.value, 6.8)
+  }
+  {
+    const m = parseGrowText("the runoff ph is 5.9").measurements[0]
+    assert.equal(m.metric, "runoffPh")
+    assert.equal(m.value, 5.9)
+  }
+  assert.equal(
+    parseGrowText("i don't actually know my runoff ec").measurements.length,
+    0,
+    "negated runoff mention → no measurement"
+  )
+  assert.equal(
+    parseGrowText("lights are at 70%").measurements.length,
+    0,
+    "dimmer % is not a humidity measurement"
+  )
+  {
+    // humidity phrase present in the clause → % is still RH
+    const ms = parseGrowText("lights dimmed and rh is 40%").measurements
+    assert.ok(ms.some((m) => m.metric === "humidity"), "rh phrase wins over light guard")
+  }
+
   // ── false positives ───────────────────────────────────────────────
   assert.equal(obs("yellow sticky traps are working").length, 0, "guard kills 'yellow sticky traps'")
   assert.equal(obs("what's for dinner").length, 0)

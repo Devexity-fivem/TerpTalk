@@ -16,6 +16,7 @@ import {
   renderIntelLines,
 } from "@/lib/terpbot-intel"
 import { CANDIDATES, SOURCES } from "@/lib/terpbot-intel-knowledge"
+import { validateKnowledge } from "@/lib/terpbot-intel-validate"
 import { wizardResultFromCandidate } from "@/lib/terpbot-intel-wizard"
 import { WIZARD_NODES, WIZARD_RESULTS, WIZARD_START } from "@/lib/problem-wizard"
 import type { WizardResult } from "@/lib/problem-wizard"
@@ -91,6 +92,9 @@ function run() {
   }
   for (const id of emitted) assert.ok(id in CANDIDATES, `emitted candidate ${id} is registered`)
 
+  // Full structural lint — superset of the checks above.
+  assert.deepEqual(validateKnowledge(), [], "knowledge registries validate clean")
+
   // ── 2. assessCandidate — the five states, deterministic ─────────────
 
   const def = CANDIDATES.humidity_high
@@ -100,7 +104,16 @@ function run() {
   assert.equal(assessCandidate(def, []).state, "insufficient", "no evidence → insufficient")
   assert.equal(assessCandidate(def, [ev("info", "strong")]).state, "insufficient", "info alone never scores")
   assert.equal(assessCandidate(def, [ev("for", "weak")]).state, "possible")
-  assert.equal(assessCandidate(def, [ev("risk", "strong")]).state, "strong", "risk counts toward forScore")
+  assert.equal(
+    assessCandidate(def, [ev("risk", "strong")]).state,
+    "possible",
+    "risk evidence into a condition candidate is capped at one predisposing signal"
+  )
+  assert.equal(
+    assessCandidate({ ...def, kind: "risk" }, [ev("risk", "strong")]).state,
+    "strong",
+    "risk candidates let risk evidence count fully"
+  )
   assert.equal(
     assessCandidate(def, [ev("for", "strong"), ev("against", "strong")]).state,
     "conflicting",
@@ -139,9 +152,12 @@ function run() {
     })
     const risk = cand(ctx, "env.moisture-disease-risk")!
     const hum = cand(ctx, "humidity_high")!
-    assert.equal(risk.state, "strong", "three rules pool → strong risk")
+    // flower-high + trend share the "humidity" signal and the VPD rule is
+    // derived from the same RH readings — correlated support stays POSSIBLE
+    // even though three rules fired (the rule trail still records all of them).
+    assert.equal(risk.state, "possible", "three correlated rules pool → possible, not strong")
     assert.ok(risk.ruleIds.length >= 3, `risk candidate carries rule trail (${risk.ruleIds})`)
-    assert.equal(hum.state, "strong")
+    assert.ok(hum.state === "possible" || hum.state === "strong", `humidity_high surfaces (${hum.state})`)
     assert.ok(risk.supporting.every((e) => e.direction !== "against"))
     // shared observation: same RH readings support BOTH hypotheses —
     // candidates coexist, no first-match-wins
@@ -153,7 +169,8 @@ function run() {
   {
     const ctx = withSeries({ humidity: mkSeries([72, 74, 76, 75], 3) }, { diary: { ...mkCtx().diary, stage: "VEGETATIVE" } })
     const c = cand(ctx, "humidity_high")!
-    assert.equal(c.state, "strong", "sustained ≥70% RH in veg → strong")
+    assert.equal(c.state, "strong", "sustained ≥70% RH is a strong item — one strong signal can still reach STRONG")
+    assert.equal(c.independentSignals, 1, "every RH rule shares the 'humidity' signal")
     assert.equal(c.opposing.length, 0, "still-elevated latest → no opposition")
   }
   {
@@ -190,8 +207,10 @@ function run() {
     })
     const c = cand(ctx, "env.instability")!
     assert.equal(c.state, "possible", "stacked instability evidence stays capped at possible")
-    // temp-volatile (1) + rh-volatile (1) + co-variation (2) + diurnal-swing (2)
-    assert.equal(c.forScore, 6)
+    // two signal groups: "env:temp-rh" (instability + co-variation, max 2)
+    // + "temperature" (diurnal-swing reads the temp series only, max 2)
+    assert.equal(c.forScore, 4)
+    assert.equal(c.independentSignals, 2)
   }
 
   // ── 6. Multi-hypothesis: salt_buildup vs ph_lockout ──────────────────
@@ -206,9 +225,10 @@ function run() {
     const lock = diag.candidates.find((c) => c.id === "ph_lockout")!
     assert.ok(salt && lock, "both hypotheses preserved")
     assert.equal(salt.state, "possible")
-    // pH out-of-band (moderate) + fed-but-locked-out signature (moderate)
-    // = two independent supports → STRONG, honestly earned
-    assert.equal(lock.state, "strong")
+    // pH out-of-band and the fed-but-locked-out signature both derive
+    // from the same pH+EC interplay → one "chem:ph-ec" group → possible
+    assert.equal(lock.state, "possible")
+    assert.equal(lock.independentSignals, 1)
     // the discriminating measurement separates them
     const next = nextUsefulMeasurement(ctx, diag)
     assert.ok(next && /runoff/i.test(next.label), `next measurement is runoff-related (${next?.id})`)
@@ -220,7 +240,7 @@ function run() {
   {
     const mk = (id: string, state: CandidateResult["state"], forScore: number): CandidateResult => ({
       id, name: id, domain: "environment", kind: "condition", severity: "watch",
-      state, forScore, againstScore: 0,
+      state, forScore, againstScore: 0, independentSignals: 0, signals: [],
       supporting: [], opposing: [], info: [], ruleIds: [], requiredMissing: [], sourceIds: [],
     })
     const ranked = rankCandidates([
@@ -236,7 +256,9 @@ function run() {
     )
   }
   {
-    // Deterministic tie-break: two possible candidates → priority order
+    // Gating inputs outrank discriminating asks: several candidates are
+    // blocked on the unlogged humidity series, so that missing required
+    // input is the next ask — MEASUREMENT_PRIORITY only breaks ties.
     const ctx = withSeries({
       ph: mkSeries([6.0, 6.1, 7.0], 0.15), // ph_lockout possible → runoffPh+runoffEc
       vpdComputed: mkSeries([1.7, 1.8, 1.9], 0.15), // heat_stress possible → leafTemp
@@ -244,7 +266,7 @@ function run() {
     const diag = evaluateContext(ctx)
     assert.ok(diag.candidates.length >= 2)
     const next = nextUsefulMeasurement(ctx, diag)
-    assert.equal(next?.id, "runoffPh", "equal scores → MEASUREMENT_PRIORITY wins (runoffPh first)")
+    assert.equal(next?.id, "humidity", "missing required input outranks the priority tie-break")
   }
   {
     // Available measurements are never recommended

@@ -514,8 +514,9 @@ function run() {
   {
     const ctx = mkCtx({ series: { ...mkCtx().series, humidity: mkSeries([60, 66, 70, 68], 3) } })
     const risk = findCandidate(ctx, "env.moisture-disease-risk")!
-    // moderate (flower-high) + weak (rising trend) = 3 → strong
-    assert.equal(risk.state, "strong")
+    // moderate (flower-high) + weak (rising trend) share the "humidity"
+    // signal → one group, capped at possible
+    assert.equal(risk.state, "possible")
     assert.match(risk.supporting[0].text, /bud-rot|powdery/i)
     const hum = findCandidate(ctx, "humidity_high")!
     assert.ok(hum, "same observation also supports the humidity_high candidate")
@@ -656,11 +657,23 @@ function run() {
     assert.match(lines, /Calculated: VPD ≈1\.1 kPa/, "calculated line shows derived VPD")
     assert.match(lines, /leaf temp not logged/, "assumption disclosed")
     assert.match(lines, /Worth watching:/, "findings rendered")
-    // Rising humidity during flower surfaces the moisture-disease RISK
-    // candidate — risk kinds render "Risk:", never "Assessment:".
+    // The top candidate here is a condition — renders "Assessment:".
+    assert.match(lines, /Assessment: pH drift \/ instability — POSSIBLE/, "condition candidate renders as assessment")
+    assert.match(lines, /Next useful measurement:/, "next measurement rendered")
+  }
+  {
+    // A risk candidate on top renders "Risk:", never "Assessment:" —
+    // humidity rising in flower surfaces moisture-disease risk first.
+    const ctx = mkCtx({
+      series: {
+        ...mkCtx().series,
+        temperature: mkSeries([77, 78, 79], 2),
+        humidity: mkSeries([60, 64, 68, 70], 3),
+      },
+    })
+    const lines = renderIntelLines(ctx, evaluateContext(ctx)).join("\n")
     assert.match(lines, /Risk: Moisture-related disease risk — POSSIBLE/, "risk candidate renders as warning")
     assert.doesNotMatch(lines, /Assessment:/, "risk candidate does not render as diagnosis")
-    assert.match(lines, /Next useful measurement:/, "next measurement rendered")
   }
   {
     // Sparse diary with zero readings → engine declines gracefully

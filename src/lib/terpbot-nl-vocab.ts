@@ -319,9 +319,10 @@ export const VOCAB: VocabEntry[] = [
   { id: "height", family: "metric", phrases: [
     "height", "cm tall", "inches tall" ] },
   { id: "runoffPh", family: "metric", phrases: [
-    "runoff ph", "run off ph" ] },
+    "runoff ph", "run off ph", "run-off ph", "runoff p.h" ] },
   { id: "runoffEc", family: "metric", phrases: [
-    "runoff ec", "runoff ppm", "runoff tds" ] },
+    "runoff ec", "run off ec", "run-off ec", "runoff e.c",
+    "runoff ppm", "runoff tds" ] },
 
   // ── units (attach to nearest number in the same clause) ─────────
   { id: "degF", family: "unit", phrases: [
@@ -441,6 +442,15 @@ export const NEGATION_TOKENS = new Set([
   "dont", "don't", "doesnt", "doesn't", "wont", "won't",
 ])
 
+/** Multi-word negations — checked against the up-to-4-token window
+ *  preceding a hit ("leaves are no longer yellowing", "no sign of
+ *  yellowing", "free of pests"). */
+export const NEGATION_PHRASES = [
+  "no sign of", "no signs of", "no longer", "not seeing", "haven't seen",
+  "havent seen", "don't see", "dont see", "do not see", "free of",
+  "none of", "no trace of", "not any",
+]
+
 /** Question-led text is a lookup, not a report — "what is chlorosis"
  *  must stay on the /ask path even though it names a symptom. */
 export const QUESTION_LEAD =
@@ -449,7 +459,8 @@ export const QUESTION_LEAD =
 /** Comparison/lookup text anywhere in the clause — "light burn vs
  *  nutrient burn", "which is worse" — suppresses symptom observations
  *  the same way a leading question word does. */
-export const COMPARISON_RE = /\b(vs|versus|which is worse|which is better)\b/
+export const COMPARISON_RE =
+  /\b(vs|versus|which is worse|which is better)\b|\b(\w+er|more|less|worse|better)\s+than\b|\bthan (last|yesterday|before)\b/
 
 // ── metric + trend → observation synthesis ──────────────────────────
 // A clause like "humidity keeps climbing at night" names a metric and

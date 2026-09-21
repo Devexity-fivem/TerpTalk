@@ -209,7 +209,7 @@ export async function scanDormantThreads(opts: {
       author: activeAuthor(),
       ...authorScope,
     },
-    orderBy: { createdAt: "asc" },
+    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
     take: 50,
     select: { id: true, slug: true, title: true, authorId: true },
   })
@@ -228,7 +228,7 @@ export async function scanDormantThreads(opts: {
       author: activeAuthor(),
       ...authorScope,
     },
-    orderBy: { lastActivityAt: "asc" },
+    orderBy: [{ lastActivityAt: "asc" }, { id: "asc" }],
     take: 50,
     select: { id: true, slug: true, title: true, authorId: true, replyCount: true },
   })
@@ -284,7 +284,7 @@ export async function scanStaleDiaries(opts: {
       author: activeAuthor(),
       ...(opts.authorIds ? { authorId: { in: opts.authorIds } } : {}),
     },
-    orderBy: { updatedAt: "asc" },
+    orderBy: [{ updatedAt: "asc" }, { id: "asc" }],
     take: 100,
     select: { id: true, slug: true, title: true, authorId: true, startDate: true, createdAt: true },
   })

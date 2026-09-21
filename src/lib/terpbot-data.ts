@@ -76,7 +76,7 @@ async function searchThreadsForBot(q: string, take = 3) {
   let threads = await prisma.thread.findMany({
     where: { ...base, OR: [{ title: { contains: q, mode: "insensitive" } }, { tags: { some: { tag: { name: { contains: q, mode: "insensitive" } } } } }] },
     take,
-    orderBy: [{ pinned: "desc" }, { createdAt: "desc" }],
+    orderBy: [{ pinned: "desc" }, { createdAt: "desc" }, { id: "desc" }],
     select,
   })
   if (threads.length < take) {
@@ -85,7 +85,7 @@ async function searchThreadsForBot(q: string, take = 3) {
       const more = await prisma.thread.findMany({
         where: { ...base, OR: words.map((w) => ({ title: { contains: w, mode: "insensitive" } })) },
         take: take * 2,
-        orderBy: [{ pinned: "desc" }, { createdAt: "desc" }],
+        orderBy: [{ pinned: "desc" }, { createdAt: "desc" }, { id: "desc" }],
         select,
       })
       const seen = new Set(threads.map((t) => t.slug))
@@ -157,7 +157,7 @@ async function resolveThreadRef(ctx: BotCommandCtx): Promise<ThreadRef | null> {
       createdAt: { gte: new Date(Date.now() - 30 * 60 * 1000) },
       content: { contains: "/forum/thread/" },
     },
-    orderBy: { createdAt: "desc" },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     take: 50,
     select: { content: true, authorId: true },
   })
@@ -216,13 +216,13 @@ async function loadThreadContext(ref: ThreadRef): Promise<ThreadContext | null> 
   const [topReplies, recentReplies] = await Promise.all([
     prisma.post.findMany({
       where: { threadId: t.id, deleted: false, author: activeAuthor() },
-      orderBy: { reactions: { _count: "desc" } },
+      orderBy: [{ reactions: { _count: "desc" } }, { id: "desc" }],
       take: 3,
       select: postSelect,
     }),
     prisma.post.findMany({
       where: { threadId: t.id, deleted: false, author: activeAuthor() },
-      orderBy: { createdAt: "desc" },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       take: 3,
       select: postSelect,
     }),
@@ -301,7 +301,7 @@ const GROW_DIARY_SELECT = {
   setup: { select: { title: true } },
   _count: { select: { updates: true } },
   updates: {
-    orderBy: { createdAt: "desc" as const },
+    orderBy: { createdAt: "desc" as const, id: "desc" as const },
     take: 1,
     select: {
       title: true, stage: true, createdAt: true,
@@ -349,12 +349,12 @@ async function primaryGrow(userId: string, { publicOnly = false } = {}): Promise
   return (
     (await prisma.growDiary.findFirst({
       where: { authorId: userId, deleted: false, harvested: false, ...scope },
-      orderBy: { updatedAt: "desc" },
+      orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
       select: GROW_DIARY_SELECT,
     })) ??
     (await prisma.growDiary.findFirst({
       where: { authorId: userId, deleted: false, ...scope },
-      orderBy: { harvestedAt: "desc" },
+      orderBy: [{ harvestedAt: "desc" }, { id: "desc" }],
       select: GROW_DIARY_SELECT,
     }))
   )
@@ -507,7 +507,7 @@ async function handle(name: string, ctx: BotCommandCtx): Promise<BotCommandResul
         // No arg → list the requester's earned badges.
         const earned = await prisma.userBadge.findMany({
           where: { userId: ctx.userId },
-          orderBy: { earnedAt: "desc" },
+          orderBy: [{ earnedAt: "desc" }, { id: "desc" }],
           include: { badge: { select: { name: true } } },
         })
         if (!earned.length) {
@@ -564,12 +564,12 @@ async function handle(name: string, ctx: BotCommandCtx): Promise<BotCommandResul
       const diary =
         (await prisma.growDiary.findFirst({
           where: { authorId: t.userId, deleted: false, harvested: false, ...diaryScope },
-          orderBy: { updatedAt: "desc" },
+          orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
           select: diarySelect,
         })) ??
         (await prisma.growDiary.findFirst({
           where: { authorId: t.userId, deleted: false, ...diaryScope },
-          orderBy: { harvestedAt: "desc" },
+          orderBy: [{ harvestedAt: "desc" }, { id: "desc" }],
           select: diarySelect,
         }))
       if (!diary) {
@@ -632,7 +632,7 @@ async function handle(name: string, ctx: BotCommandCtx): Promise<BotCommandResul
     case "grows": {
       const diaries = await prisma.growDiary.findMany({
         where: { authorId: ctx.userId, deleted: false, harvested: false, ...publicDiaryWhere },
-        orderBy: { updatedAt: "desc" },
+        orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
         take: 5,
         select: { id: true, title: true, stage: true, strain: true, strainRef: { select: { name: true } }, startDate: true },
       })
@@ -654,7 +654,7 @@ async function handle(name: string, ctx: BotCommandCtx): Promise<BotCommandResul
     case "checkin": {
       const diaries = await prisma.growDiary.findMany({
         where: { authorId: ctx.userId, deleted: false, harvested: false, ...publicDiaryWhere },
-        orderBy: { updatedAt: "desc" },
+        orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
         take: 3,
         select: { id: true, slug: true, title: true, stage: true, updatedAt: true },
       })
@@ -669,7 +669,7 @@ async function handle(name: string, ctx: BotCommandCtx): Promise<BotCommandResul
         const [latest, envThisWeek, meaningfulThisWeek] = await Promise.all([
           prisma.diaryUpdate.findFirst({
             where: { diaryId: d.id },
-            orderBy: { createdAt: "desc" },
+            orderBy: [{ createdAt: "desc" }, { id: "desc" }],
             select: {
               createdAt: true,
               temperature: true, humidity: true, vpd: true, ph: true, ec: true,
@@ -810,7 +810,7 @@ async function handle(name: string, ctx: BotCommandCtx): Promise<BotCommandResul
       const q = escapeLike(sanitizeEcho(ctx.rest))
       const strain = await prisma.strain.findFirst({
         where: { name: { contains: q, mode: "insensitive" } },
-        orderBy: { name: "asc" },
+        orderBy: [{ name: "asc" }, { id: "asc" }],
       })
       if (!strain) return ok(`No strain matching that in the library — browse /strains or add it yourself!`)
       const stats = await getStrainGrowStats(strain.name, strain.id)
@@ -842,7 +842,7 @@ async function handle(name: string, ctx: BotCommandCtx): Promise<BotCommandResul
           ],
         },
         take: 3,
-        orderBy: { title: "asc" },
+        orderBy: [{ title: "asc" }, { id: "asc" }],
         select: { title: true, slug: true },
       })
       if (!guides.length) return ok(`No guides matching that — browse /guides`)
@@ -866,7 +866,7 @@ async function handle(name: string, ctx: BotCommandCtx): Promise<BotCommandResul
             ],
           },
           take: 2,
-          orderBy: { title: "asc" },
+          orderBy: [{ title: "asc" }, { id: "asc" }],
           select: { title: true, slug: true },
         }),
         prisma.strain.findMany({
@@ -878,7 +878,7 @@ async function handle(name: string, ctx: BotCommandCtx): Promise<BotCommandResul
             ],
           },
           take: 2,
-          orderBy: { name: "asc" },
+          orderBy: [{ name: "asc" }, { id: "asc" }],
           select: { id: true, slug: true, name: true },
         }),
         searchThreadsForBot(q, 3),
@@ -918,12 +918,12 @@ async function handle(name: string, ctx: BotCommandCtx): Promise<BotCommandResul
             ],
           },
           take: 2,
-          orderBy: { title: "asc" },
+          orderBy: [{ title: "asc" }, { id: "asc" }],
           select: { title: true, slug: true },
         }),
         prisma.strain.findFirst({
           where: { name: { contains: q, mode: "insensitive" } },
-          orderBy: { name: "asc" },
+          orderBy: [{ name: "asc" }, { id: "asc" }],
           select: { id: true, slug: true, name: true },
         }),
       ])
@@ -1002,7 +1002,7 @@ async function handle(name: string, ctx: BotCommandCtx): Promise<BotCommandResul
         }
         const setups = await prisma.growSetup.findMany({
           where: { deleted: false, authorId: targetId },
-          orderBy: { createdAt: "desc" },
+          orderBy: [{ createdAt: "desc" }, { id: "desc" }],
           take: 3,
           select: SETUP_SELECT,
         })
@@ -1022,7 +1022,7 @@ async function handle(name: string, ctx: BotCommandCtx): Promise<BotCommandResul
       if (!raw) {
         const setups = (await prisma.growSetup.findMany({
           where: base,
-          orderBy: { createdAt: "desc" },
+          orderBy: [{ createdAt: "desc" }, { id: "desc" }],
           take: 6, // fetch extra — blocked authors drop out below
           select: SETUP_SELECT,
         })).filter((s) => !blocked.has(s.authorId)).slice(0, 3)
@@ -1050,7 +1050,7 @@ async function handle(name: string, ctx: BotCommandCtx): Promise<BotCommandResul
             { strain: needle },
           ],
         },
-        orderBy: { createdAt: "desc" },
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
         take: 6,
         select: SETUP_SELECT,
       })).filter((s) => !blocked.has(s.authorId)).slice(0, 3)
@@ -1074,7 +1074,7 @@ async function handle(name: string, ctx: BotCommandCtx): Promise<BotCommandResul
       }
       const users = await prisma.user.findMany({
         where: presenceWhere,
-        orderBy: { lastSeenAt: "desc" },
+        orderBy: [{ lastSeenAt: "desc" }, { id: "desc" }],
         take: 6,
         select: { profile: { select: { username: true } } },
       })
@@ -1105,7 +1105,7 @@ async function handle(name: string, ctx: BotCommandCtx): Promise<BotCommandResul
         prisma.contestEntry.count({ where: { week, user: activeAuthor() } }),
         prisma.contestEntry.findFirst({
           where: { week, user: activeAuthor() },
-          orderBy: { votes: { _count: "desc" } },
+          orderBy: [{ votes: { _count: "desc" } }, { id: "desc" }],
           include: {
             user: { select: { name: true, profile: { select: { username: true } } } },
             _count: { select: { votes: true } },
@@ -1125,7 +1125,7 @@ async function handle(name: string, ctx: BotCommandCtx): Promise<BotCommandResul
       const since = new Date(Date.now() - 7 * 86400000)
       const threads = await prisma.thread.findMany({
         where: { deleted: false, createdAt: { gte: since }, category: { hidden: false }, author: activeAuthor() },
-        orderBy: [{ replyCount: "desc" }, { views: "desc" }],
+        orderBy: [{ replyCount: "desc" }, { views: "desc" }, { id: "desc" }],
         take: 5,
         select: { title: true, slug: true, replyCount: true, views: true },
       })
@@ -1139,7 +1139,7 @@ async function handle(name: string, ctx: BotCommandCtx): Promise<BotCommandResul
     case "new": {
       const threads = await prisma.thread.findMany({
         where: { deleted: false, category: { hidden: false }, author: activeAuthor() },
-        orderBy: { createdAt: "desc" },
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
         take: 5,
         select: { title: true, slug: true, createdAt: true, category: { select: { name: true } } },
       })
@@ -1160,7 +1160,7 @@ async function handle(name: string, ctx: BotCommandCtx): Promise<BotCommandResul
           category: { hidden: false },
           author: activeAuthor(),
         },
-        orderBy: { createdAt: "desc" },
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
         take: 5,
         select: { title: true, slug: true, createdAt: true, category: { select: { name: true } } },
       })
@@ -1342,7 +1342,7 @@ async function handle(name: string, ctx: BotCommandCtx): Promise<BotCommandResul
                   deleted: false,
                   OR: terms.map((w) => ({ content: { contains: w, mode: "insensitive" as const } })),
                 },
-                orderBy: { createdAt: "asc" },
+                orderBy: [{ createdAt: "asc" }, { id: "asc" }],
                 take: 2,
                 select: {
                   id: true, content: true,

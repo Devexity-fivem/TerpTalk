@@ -14,15 +14,19 @@
 //   • Strength is categorical: weak 1 / moderate 2 / strong 3.
 //
 // Per-candidate assessment (deterministic, documented — no percentages):
-//   forScore     = Σ(for) + Σ(risk)
-//   againstScore = Σ(against)
+//   Evidence groups by (direction, signal) — evidence sharing a signal
+//   is correlated, so a group contributes its MAX weight, not a sum.
+//   support      = Σ(for groups) + Σ(risk groups; capped at weak for
+//                  condition candidates — predisposition ≠ proof)
+//   againstScore = Σ(against groups)
+//   independentSignals = count of distinct (for|risk) signal groups
 //   no evidence                              → INSUFFICIENT
 //   a confirmed:true item with no opposition → CONFIRMED
 //     (measured facts only; contradiction drops through to CONFLICTING)
-//   forScore ≥3 AND againstScore ≥3          → CONFLICTING
-//   forScore ≥3                              → STRONG
-//   forScore ≥1                              → POSSIBLE
-//   otherwise                                → INSUFFICIENT
+//   support ≥2 AND against ≥2 AND support−against ≤1 → CONFLICTING
+//   support ≥3 AND (independentSignals ≥2 OR a strong item) → STRONG
+//   support ≥1                              → POSSIBLE
+//   otherwise                               → INSUFFICIENT
 //   then clamped to the candidate's maxState (condition/risk candidates
 //   can never be CONFIRMED; thin-provenance candidates cap at POSSIBLE).
 // Standalone findings use the same table, with kind:"gap" forced to
@@ -139,7 +143,7 @@ const DIRECT_SIGNAL = new Set<SymptomId>([
 ])
 
 /** Reports that actively argue against a rival candidate. */
-const CONTRA: Partial<Record<SymptomId, string[]>> = {
+export const CONTRA: Partial<Record<SymptomId, string[]>> = {
   MEDIUM_WET: ["underwater"],
   MEDIUM_DRY: ["overwater"],
   OVERWATERED: ["underwater"],
@@ -149,7 +153,7 @@ const CONTRA: Partial<Record<SymptomId, string[]>> = {
 /** Discriminating-measurement preference order — final tie-break between
  *  equally-scored next steps. Metrics first (they're loggable), then
  *  inspections, then the rest — a total order over NextStepId. */
-const MEASUREMENT_PRIORITY: NextStepId[] = [
+export const MEASUREMENT_PRIORITY: NextStepId[] = [
   "runoffEc",
   "runoffPh",
   "substrateMoisture",
@@ -178,7 +182,7 @@ const MEASUREMENT_PRIORITY: NextStepId[] = [
 /** Label + generic "why" for every recommendable measurement. Candidate-
  *  specific reasons come from the candidate's discriminatingInputs —
  *  this map is the fallback renderer vocabulary. */
-const MEASUREMENT_INFO: Record<MetricId, { label: string; why: string }> = {
+export const MEASUREMENT_INFO: Record<MetricId, { label: string; why: string }> = {
   runoffEc: { label: "runoff EC", why: "best separates salt buildup from under-watering" },
   runoffPh: { label: "runoff pH", why: "confirms whether the root zone is actually drifting" },
   substrateMoisture: { label: "substrate moisture / pot weight", why: "separates watering issues from environment issues" },
@@ -222,7 +226,7 @@ export const INSPECTION_INFO: Record<string, { label: string; why: string; resol
   "inspect:leaf-pattern": {
     label: "where on the plant the pattern starts (lower vs new growth)",
     why: "mobile deficiencies show on old leaves first; immobile on new — that split narrows the cause",
-    resolvedBy: ["LEAF_YELLOWING", "LEAF_PALE", "INTERVEINAL" as SymptomId],
+    resolvedBy: ["LEAF_YELLOWING", "LEAF_PALE"],
   },
   "inspect:stem-base": {
     label: "the stem base at soil line",
@@ -271,6 +275,7 @@ const f1 = (v: number) => Math.round(v * 10) / 10
 export const INTEL_RULES: IntelRule[] = [
   {
     id: "data.vpd-divergence",
+    signal: "env:temp-rh",
     domain: "data",
     kind: "observation",
     title: "Recorded vs calculated VPD mismatch",
@@ -288,6 +293,7 @@ export const INTEL_RULES: IntelRule[] = [
   },
   {
     id: "env.vpd-band",
+    signal: "env:temp-rh",
     domain: "environment",
     kind: "risk",
     title: "VPD outside stage range",
@@ -345,6 +351,7 @@ export const INTEL_RULES: IntelRule[] = [
   },
   {
     id: "env.rh-flower-high",
+    signal: "humidity",
     domain: "environment",
     kind: "risk",
     title: "Elevated humidity in flower",
@@ -372,6 +379,7 @@ export const INTEL_RULES: IntelRule[] = [
   },
   {
     id: "env.rh-sustained-high",
+    signal: "humidity",
     domain: "environment",
     kind: "assessment",
     title: "Sustained high humidity",
@@ -415,6 +423,7 @@ export const INTEL_RULES: IntelRule[] = [
   },
   {
     id: "env.rh-trend",
+    signal: "humidity",
     domain: "environment",
     kind: "risk",
     title: "Humidity trending upward",
@@ -447,6 +456,7 @@ export const INTEL_RULES: IntelRule[] = [
   },
   {
     id: "env.rh-trend-low",
+    signal: "humidity",
     domain: "environment",
     kind: "risk",
     title: "Humidity trending downward",
@@ -463,6 +473,7 @@ export const INTEL_RULES: IntelRule[] = [
   },
   {
     id: "env.temp-high",
+    signal: "temperature",
     domain: "environment",
     kind: "assessment",
     title: "Sustained high temperature",
@@ -503,6 +514,7 @@ export const INTEL_RULES: IntelRule[] = [
   },
   {
     id: "env.temp-low",
+    signal: "temperature",
     domain: "environment",
     kind: "assessment",
     title: "Sustained low temperature",
@@ -541,6 +553,7 @@ export const INTEL_RULES: IntelRule[] = [
   },
   {
     id: "env.instability",
+    signal: "env:temp-rh",
     domain: "environment",
     kind: "risk",
     title: "Volatile environment",
@@ -572,6 +585,7 @@ export const INTEL_RULES: IntelRule[] = [
   },
   {
     id: "chem.ph-band",
+    signal: "chem:ph-ec",
     domain: "chemistry",
     kind: "assessment",
     title: "pH outside medium range",
@@ -635,6 +649,7 @@ export const INTEL_RULES: IntelRule[] = [
   },
   {
     id: "chem.ec-drift",
+    signal: "ec",
     domain: "chemistry",
     kind: "risk",
     title: "EC trending",
@@ -664,6 +679,7 @@ export const INTEL_RULES: IntelRule[] = [
   },
   {
     id: "chem.ec-elevated",
+    signal: "ec",
     domain: "chemistry",
     kind: "risk",
     title: "EC running high",
@@ -707,6 +723,7 @@ export const INTEL_RULES: IntelRule[] = [
   },
   {
     id: "growth.stalled",
+    signal: "height",
     domain: "growth",
     kind: "assessment",
     title: "Height growth appears stalled",
@@ -736,6 +753,7 @@ export const INTEL_RULES: IntelRule[] = [
   // ── Environment: stage-band + interaction rules ───────────────────
   {
     id: "env.rh-low",
+    signal: "humidity",
     domain: "environment",
     kind: "assessment",
     title: "Sustained low humidity",
@@ -784,6 +802,7 @@ export const INTEL_RULES: IntelRule[] = [
   },
   {
     id: "env.rh-band-high",
+    signal: "humidity",
     domain: "environment",
     kind: "risk",
     title: "Humidity above stage ceiling",
@@ -830,6 +849,7 @@ export const INTEL_RULES: IntelRule[] = [
   },
   {
     id: "env.vpd-trend",
+    signal: "env:temp-rh",
     domain: "environment",
     kind: "risk",
     title: "Calculated VPD trending",
@@ -876,6 +896,7 @@ export const INTEL_RULES: IntelRule[] = [
   },
   {
     id: "env.disease-window",
+    signal: "env:temp-rh",
     domain: "disease",
     kind: "risk",
     title: "Temperature–humidity disease window",
@@ -948,6 +969,7 @@ export const INTEL_RULES: IntelRule[] = [
   },
   {
     id: "env.co-variation",
+    signal: "env:temp-rh",
     domain: "environment",
     kind: "risk",
     title: "Temperature–humidity co-variation",
@@ -992,6 +1014,7 @@ export const INTEL_RULES: IntelRule[] = [
   },
   {
     id: "env.diurnal-swing",
+    signal: "temperature",
     domain: "environment",
     kind: "risk",
     title: "Large temperature spread (possible day/night swing)",
@@ -1014,6 +1037,7 @@ export const INTEL_RULES: IntelRule[] = [
   },
   {
     id: "env.dry-band",
+    signal: "env:temp-rh",
     domain: "environment",
     kind: "risk",
     title: "Drying/curing room off-target",
@@ -1048,6 +1072,7 @@ export const INTEL_RULES: IntelRule[] = [
   // ── Chemistry: drift, lockout confounder, nutrition bands ─────────
   {
     id: "chem.ph-drift",
+    signal: "ph",
     domain: "chemistry",
     kind: "assessment",
     title: "pH trending / unstable",
@@ -1113,6 +1138,7 @@ export const INTEL_RULES: IntelRule[] = [
   },
   {
     id: "chem.lockout-signature",
+    signal: "chem:ph-ec",
     domain: "chemistry",
     kind: "assessment",
     title: "Fed but potentially locked out",
@@ -1124,13 +1150,23 @@ export const INTEL_RULES: IntelRule[] = [
       if (phLatest == null) return []
       const phOut = phLatest < lo || phLatest > hi
 
-      // deficiency candidates any reported symptom feeds
-      const fedDeficiencies = new Set<string>()
+      // deficiency candidates any reported symptom feeds — and which
+      // symptom(s) fed them, so emitted evidence can carry the real
+      // signal (a reported symptom, correlated across repeated reports)
+      const fedDeficiencySymptoms = new Map<string, Set<string>>()
       for (const o of ctx.observations) {
         const stage = o.stage ?? ctx.diary.stage
         const feeds = STAGE_REFINEMENTS[o.symptom]?.[stage] ?? o.feeds
-        for (const f of feeds) if (DEFICIENCY_CANDIDATES.has(f)) fedDeficiencies.add(f)
+        for (const f of feeds) {
+          if (!DEFICIENCY_CANDIDATES.has(f)) continue
+          const s = fedDeficiencySymptoms.get(f) ?? new Set<string>()
+          s.add(o.symptom)
+          fedDeficiencySymptoms.set(f, s)
+        }
       }
+      const fedDeficiencies = new Set(fedDeficiencySymptoms.keys())
+      const fedSignal = (d: string) =>
+        `symptom:${[...fedDeficiencySymptoms.get(d)!].sort().join("+")}`
 
       const ev: IntelEvidence[] = []
       if (phOut && ctx.series.ec.n === 0) {
@@ -1155,6 +1191,7 @@ export const INTEL_RULES: IntelRule[] = [
             direction: "against",
             strength: "weak",
             candidate: d,
+            signal: fedSignal(d),
             text: `pH ${phLatest} is out of band — deficiency-looking symptoms are more likely lockout than missing nutrients; fix pH first.`,
             measurement: hint("runoffPh"),
           })
@@ -1175,6 +1212,7 @@ export const INTEL_RULES: IntelRule[] = [
             direction: "info",
             strength: "weak",
             candidate: d,
+            signal: fedSignal(d),
             text: `pH ${phLatest} is inside the ${lo}–${hi} band — uptake isn't obviously locked out.`,
             measurement: hint("runoffPh"),
           })
@@ -1186,6 +1224,7 @@ export const INTEL_RULES: IntelRule[] = [
   },
   {
     id: "chem.ph-low-danger",
+    signal: "ph",
     domain: "chemistry",
     kind: "assessment",
     title: "pH dangerously low",
@@ -1211,6 +1250,7 @@ export const INTEL_RULES: IntelRule[] = [
   },
   {
     id: "chem.ec-stage-band",
+    signal: "ec",
     domain: "nutrition",
     kind: "assessment",
     title: "EC vs stage needs",
@@ -1265,6 +1305,7 @@ export const INTEL_RULES: IntelRule[] = [
   },
   {
     id: "chem.ec-falling",
+    signal: "ec",
     domain: "nutrition",
     kind: "risk",
     title: "EC trending downward",
@@ -1295,6 +1336,7 @@ export const INTEL_RULES: IntelRule[] = [
   },
   {
     id: "chem.seedling-ec",
+    signal: "ec",
     domain: "nutrition",
     kind: "assessment",
     title: "Feed strength at seedling stage",
@@ -1317,6 +1359,7 @@ export const INTEL_RULES: IntelRule[] = [
   },
   {
     id: "chem.high-ec-antagonism",
+    signal: "chem:ph-ec",
     domain: "nutrition",
     kind: "risk",
     title: "High-EC antagonism risk",
@@ -1392,6 +1435,7 @@ export const INTEL_RULES: IntelRule[] = [
             direction: "for",
             strength,
             candidate: cid,
+            signal: `symptom:${o.symptom}`,
             text: `Reported ${label}${locLabel}${persistent ? " (more than once)" : ""} — consistent with ${def.name.toLowerCase()}.`,
             measurement: nextStep ? hint(nextStep) : undefined,
           })
@@ -1401,6 +1445,7 @@ export const INTEL_RULES: IntelRule[] = [
             direction: "against",
             strength: "weak",
             candidate: cid,
+            signal: `symptom:${o.symptom}`,
             text: `Reported ${label}${locLabel} argues against ${CANDIDATES[cid]?.name.toLowerCase() ?? cid}.`,
           })
         }
@@ -1428,6 +1473,7 @@ export const INTEL_RULES: IntelRule[] = [
           direction: "for",
           strength: "moderate",
           candidate: "bud_nutrient",
+          signal: "symptom:LEAF_YELLOWING",
           text: `Lower-leaf yellowing at day ${ctx.stageDays} of flower is the normal finish pattern — the plant is moving stored nutrients into the buds.`,
           measurement: hint("ph"),
         },
@@ -1444,6 +1490,7 @@ export const INTEL_RULES: IntelRule[] = [
           direction: "against",
           strength: "moderate",
           candidate: d,
+          signal: "symptom:LEAF_YELLOWING",
           text: "Late-flower yellowing is usually senescence, not deficiency — check whether new growth is also affected before feeding more.",
           measurement: hint("inspect:leaf-pattern"),
         })
@@ -1455,6 +1502,7 @@ export const INTEL_RULES: IntelRule[] = [
 
   {
     id: "data.sparse-env",
+    signal: "data",
     domain: "data",
     kind: "gap",
     title: "Sparse environmental logging",
@@ -1474,6 +1522,7 @@ export const INTEL_RULES: IntelRule[] = [
   },
   {
     id: "data.no-env",
+    signal: "data",
     domain: "data",
     kind: "gap",
     title: "No environmental readings",
@@ -1510,16 +1559,45 @@ export function findingStateFor(kind: Finding["kind"], evidence: IntelEvidence[]
   return state
 }
 
-function scoreEvidence(evidence: IntelEvidence[]) {
-  let forScore = 0
-  let againstScore = 0
+/** Signal-grouped scoring: evidence sharing (direction, signal) is
+ *  correlated — each group contributes its MAX weight, never a sum.
+ *  A lone humidity series can't stack four rules into STRONG. */
+function scoreEvidence(evidence: IntelEvidence[], opts?: { candidateKind?: "condition" | "risk" }) {
   let confirmed = false
+  let hasStrongItem = false
+  const groups = new Map<string, { signal: string; direction: "for" | "risk" | "against"; weight: number }>()
   for (const e of evidence) {
     if (e.confirmed) confirmed = true
-    if (e.direction === "against") againstScore += W[e.strength]
-    else if (e.direction === "info") continue // neutral — never scored
-    else forScore += W[e.strength]
+    if (e.direction === "info") continue // neutral — never scored
+    if ((e.direction === "for" || e.direction === "risk") && e.strength === "strong") hasStrongItem = true
+    const direction = e.direction as "for" | "risk" | "against"
+    const signal = e.signal ?? "?"
+    const key = `${direction}|${signal}`
+    const g = groups.get(key)
+    if (!g || W[e.strength] > g.weight) groups.set(key, { signal, direction, weight: W[e.strength] })
   }
+  let forScore = 0
+  let riskScore = 0
+  let againstScore = 0
+  for (const g of groups.values()) {
+    if (g.direction === "for") forScore += g.weight
+    else if (g.direction === "risk") riskScore += g.weight
+    else againstScore += g.weight
+  }
+  // For condition candidates, favorable-environment evidence is one
+  // predisposing signal — never proof of the condition itself.
+  if (opts?.candidateKind === "condition") riskScore = Math.min(riskScore, W.weak)
+  const support = forScore + riskScore
+  // Independent signals are the *meaningful* support groups — moderate or
+  // stronger. Weak items still add to support but a weak second signal
+  // cannot by itself lift a candidate to STRONG (moderate + weak stays
+  // POSSIBLE; moderate + moderate from two signals is STRONG).
+  const independentSignals = [...groups.values()].filter(
+    (g) => (g.direction === "for" || g.direction === "risk") && g.weight >= W.moderate
+  ).length
+  const signalBreakdown = [...groups.values()].sort(
+    (a, b) => a.signal.localeCompare(b.signal) || a.direction.localeCompare(b.direction)
+  )
   let state: Finding["state"]
   if (!evidence.length) state = "insufficient"
   // A confirmed measured fact counts as strong support for conflict
@@ -1529,11 +1607,11 @@ function scoreEvidence(evidence: IntelEvidence[]) {
   // CONFLICTING: both sides carry real evidence AND support doesn't
   // clearly dominate (within one weight class). Moderate-only disputes
   // surface — spec: "pH fine + burn tips + EC high → CONFLICTING".
-  else if (forScore >= W.moderate && againstScore >= W.moderate && forScore - againstScore <= 1) state = "conflicting"
-  else if (forScore >= W.strong) state = "strong"
-  else if (forScore >= W.weak) state = "possible"
+  else if (support >= W.moderate && againstScore >= W.moderate && support - againstScore <= 1) state = "conflicting"
+  else if (support >= W.strong && (independentSignals >= 2 || hasStrongItem)) state = "strong"
+  else if (support >= W.weak) state = "possible"
   else state = "insufficient"
-  return { state, forScore, againstScore, confirmed }
+  return { state, forScore: support, againstScore, confirmed, independentSignals, signalBreakdown }
 }
 
 /** Candidate-level assessment: scoreEvidence + maxState clamp.
@@ -1542,12 +1620,18 @@ function scoreEvidence(evidence: IntelEvidence[]) {
 export function assessCandidate(
   def: CandidateDef,
   evidence: IntelEvidence[]
-): Pick<CandidateResult, "state" | "forScore" | "againstScore"> {
-  const { state, forScore, againstScore } = scoreEvidence(evidence)
+): Pick<CandidateResult, "state" | "forScore" | "againstScore" | "independentSignals" | "signals"> {
+  const { state, forScore, againstScore, independentSignals, signalBreakdown } = scoreEvidence(evidence, {
+    candidateKind: def.kind,
+  })
+  const signals = signalBreakdown
   if (state === "confirmed" || state === "strong") {
-    return { state: STATE_RANK[state] > STATE_RANK[def.maxState] ? def.maxState : state, forScore, againstScore }
+    return {
+      state: STATE_RANK[state] > STATE_RANK[def.maxState] ? def.maxState : state,
+      forScore, againstScore, independentSignals, signals,
+    }
   }
-  return { state, forScore, againstScore }
+  return { state, forScore, againstScore, independentSignals, signals }
 }
 
 /** Deterministic candidate ordering — conflicting first (needs
@@ -1566,6 +1650,7 @@ export function rankCandidates(candidates: CandidateResult[]): CandidateResult[]
     (a, b) =>
       order[a.state] - order[b.state] ||
       b.forScore - a.forScore ||
+      b.independentSignals - a.independentSignals ||
       b.supporting.length + b.opposing.length - (a.supporting.length + a.opposing.length) ||
       a.id.localeCompare(b.id)
   )
@@ -1579,7 +1664,12 @@ export function evaluateContext(ctx: GrowContextView): Diagnosis {
 
   for (const rule of INTEL_RULES) {
     if (!rule.applies(ctx)) continue
-    const evidence = rule.evaluate(ctx).filter((e) => e.text.trim().length > 0)
+    const evidence = rule
+      .evaluate(ctx)
+      .filter((e) => e.text.trim().length > 0)
+      // Evidence without its own signal inherits the rule's — rules
+      // that iterate observations stamp per-symptom signals themselves.
+      .map((e) => ({ ...e, signal: e.signal ?? rule.signal ?? rule.id }))
     // A rule that evaluated but found nothing produces nothing — an
     // empty finding is noise, not an INSUFFICIENT signal.
     if (!evidence.length) continue
@@ -1626,7 +1716,7 @@ export function evaluateContext(ctx: GrowContextView): Diagnosis {
       requiredMissing.length > 0 && (scored.state === "strong" || scored.state === "confirmed")
         ? "possible"
         : scored.state
-    const { forScore, againstScore } = scored
+    const { forScore, againstScore, independentSignals, signals } = scored
     candidates.push({
       id,
       name: def.name,
@@ -1636,6 +1726,8 @@ export function evaluateContext(ctx: GrowContextView): Diagnosis {
       state,
       forScore,
       againstScore,
+      independentSignals,
+      signals,
       // evidence sorted strongest-first (stable) so [0] is the best
       // line to render
       supporting: bucket.evidence
@@ -1730,7 +1822,10 @@ export function nextUsefulMeasurement(ctx: GrowContextView, diagnosis: Diagnosis
     for (const m of def.discriminatingInputs) {
       add(m, w + (c.state === "conflicting" ? 2 : 0))
     }
-    for (const m of c.requiredMissing) add(m, 1)
+    // a missing required input GATES the candidate — it must outrank
+    // ordinary discriminating asks or the grower is sent to refine a
+    // candidate that can't even progress
+    for (const m of c.requiredMissing) add(m, w + 4)
     for (const e of [...c.supporting, ...c.opposing, ...c.info]) add(e.measurement?.id, w)
   }
   for (const f of diagnosis.findings) {

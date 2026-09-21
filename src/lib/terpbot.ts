@@ -173,7 +173,7 @@ export async function postToGeneral(text: string) {
   try {
     const room =
       (await prisma.chatRoom.findFirst({ where: { slug: "general", isPrivate: false } })) ??
-      (await prisma.chatRoom.findFirst({ where: { isPrivate: false }, orderBy: { createdAt: "asc" } }))
+      (await prisma.chatRoom.findFirst({ where: { isPrivate: false }, orderBy: [{ createdAt: "asc" }, { id: "asc" }] }))
     if (!room) return null
     return postBotMessage(room.id, text)
   } catch (error) {

@@ -56,6 +56,8 @@ function buildSeries(rows: UpdateRow[], field: SeriesField, epsKey: string): Int
     const v = u[field]
     if (v != null && Number.isFinite(v)) points.push({ t: u.createdAt.getTime(), v })
   }
+  // Stable sort: rows already arrive ordered by (createdAt, id), so
+  // equal timestamps keep their DB order — output is deterministic.
   points.sort((a, b) => a.t - b.t)
   return { ...seriesStats(points), points, trend: detectTrend(points, METRIC_EPSILON[epsKey] ?? 1) }
 }
@@ -104,7 +106,7 @@ export async function buildGrowContext(
   const [windowDesc, prevStage] = await Promise.all([
     prisma.diaryUpdate.findMany({
       where: { diaryId: diary.id },
-      orderBy: { createdAt: "desc" },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       take: INTEL_WINDOW,
       select: {
         id: true, createdAt: true, stage: true, content: true,
@@ -117,12 +119,16 @@ export async function buildGrowContext(
     // earliest logged update (censored).
     prisma.diaryUpdate.findFirst({
       where: { diaryId: diary.id, stage: { not: diary.stage } },
-      orderBy: { createdAt: "desc" },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       select: { createdAt: true },
     }),
   ])
 
-  const rows = [...windowDesc].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
+  // Same total order as the query — (createdAt, id) — so equal
+  // timestamps can't reorder the window between runs.
+  const rows = [...windowDesc].sort(
+    (a, b) => a.createdAt.getTime() - b.createdAt.getTime() || a.id.localeCompare(b.id)
+  )
   const now = (opts.now ?? new Date()).getTime()
 
   const series = {
