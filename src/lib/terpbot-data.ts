@@ -31,7 +31,7 @@ import { mergeReported, mergeObservations } from "@/lib/terpbot-intel-merge"
 import { buildWhyTrail, renderWhy } from "@/lib/terpbot-intel-why"
 import { loadSession, saveSession } from "@/lib/terpbot-session"
 import { parseGrowText } from "@/lib/terpbot-nl-parse"
-import { SYMPTOM_LABELS, LOCATION_LABELS } from "@/lib/terpbot-nl-vocab"
+import { SYMPTOM_LABELS, LOCATION_LABELS, VOCAB } from "@/lib/terpbot-nl-vocab"
 import { rateLimit } from "@/lib/rate-limit"
 import type { GrowContextView, SessionState, SessionObservation, ReportedPoint, MetricId } from "@/lib/terpbot-intel-types"
 import { TERPBOT_USERNAME, randomGrowTip, sanitizeEcho as sanitizeEchoStrict } from "@/lib/terpbot"
@@ -54,6 +54,10 @@ export type BotCommandResult =
   | { ok: false; error: string; status?: number }
 
 const ok = (...messages: string[]): BotCommandResult => ({ ok: true, messages })
+
+// Canonical stage ids from the vocab — the only values a chat claim may
+// set on the session (no free-text stages).
+const SESSION_STAGE_IDS = new Set(VOCAB.filter((e) => e.family === "stage").map((e) => e.id))
 const err = (error: string, status = 400): BotCommandResult => ({ ok: false, error, status })
 
 // Never interpolate raw user input containing links into bot output — a
@@ -807,6 +811,10 @@ async function handle(name: string, ctx: BotCommandCtx): Promise<BotCommandResul
         ]
       }
 
+      // Utterance-claimed stage ("week 3 flower") — canonical ids only,
+      // newest wins; used only when no diary supplies a stage.
+      if (parsed.stage && SESSION_STAGE_IDS.has(parsed.stage)) state.stage = parsed.stage
+
       // Diary: the session's own, else the user's newest public unharvested
       // diary — private/unlisted diaries are never selected.
       let diaryId = session?.diaryId ?? null
@@ -820,7 +828,7 @@ async function handle(name: string, ctx: BotCommandCtx): Promise<BotCommandResul
       }
       const base: GrowContextView =
         (diaryId ? await buildGrowContext(diaryId, { ownerId: ctx.userId, scope: "public", now: new Date(now) }) : null) ??
-        emptyContext(now)
+        emptyContext(now, state.stage)
       const ctx2 = mergeObservations(mergeReported(base, state.reported, now), state.observations)
       const diagnosis = evaluateContext(ctx2)
       const next = nextUsefulMeasurement(ctx2, diagnosis)
@@ -879,9 +887,11 @@ async function handle(name: string, ctx: BotCommandCtx): Promise<BotCommandResul
       }
       if (next) {
         lines.push(
-          next.id.startsWith("inspect:")
-            ? `Next: ${next.label} — ${next.why}`
-            : `Next: tell me the ${next.label.toLowerCase()} — ${next.why}`
+          next.id === "inspect:stage"
+            ? `Next: which stage are you in (e.g. 'week 3 flower')?`
+            : next.id.startsWith("inspect:")
+              ? `Next: ${next.label} — ${next.why}`
+              : `Next: tell me the ${next.label.toLowerCase()} — ${next.why}`
         )
       }
       lines.push(`/why explains the reasoning.`)

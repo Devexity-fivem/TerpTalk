@@ -222,6 +222,16 @@ export const SOURCES: Record<string, KnowledgeSource> = {
     tier: "EXTENSION",
     cannabisSpecific: false, // general plant science — not cannabis fact
   },
+  "ncsu-pourthru-2009": {
+    id: "ncsu-pourthru-2009",
+    title: "The Pour-Through Extraction Procedure: A Nutrient Management Tool for Nursery Crops",
+    author: "LeBude, Bilderback",
+    publication: "North Carolina Cooperative Extension AG-717-W",
+    url: "https://www.ncagr.gov/ncsu-pour-through-extraction-procedure/download?attachment=",
+    year: 2009,
+    tier: "EXTENSION",
+    cannabisSpecific: false, // leachate EC/pH interpretation — substrate science, not cannabis
+  },
 }
 
 // ── Candidate registry ──────────────────────────────────────────────

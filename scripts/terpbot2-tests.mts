@@ -52,7 +52,7 @@ const mkCtx = (over: Partial<GrowContextView> = {}): GrowContextView => ({
   now: t0 + 40 * 86400000,
   day: 41, week: 6,
   stageDays: 20, stageStartCensored: false,
-  updateCount: 4, daysSinceUpdate: 1, medianUpdateIntervalDays: 7,
+  updateCount: 4, daysSinceUpdate: 1,
   envCoverage: 1,
   series: {
     temperature: emptySeries, humidity: emptySeries, ph: emptySeries,
@@ -458,14 +458,15 @@ function run() {
     assert.match(lines, /evidence conflicts/, "conflict rendered explicitly")
   }
   {
-    // a single environmental measurement → weak at most
+    // a single environmental measurement → never STRONG (env.snapshot
+    // caps at moderate; nothing else fires on n=1)
     const ctx = withSeries({ temperature: mkSeries([92], 2) })
     const c = cand(ctx, "heat_stress")
-    assert.ok(!c || c.forScore <= 1, "one reading can never be strong")
+    assert.ok(!c || c.state !== "strong", "one reading can never be strong")
   }
   {
     // direct sighting → strong, and the next step is an INSPECTION
-    const ctx = mkCtx({ observations: obsFrom("webbing under the leaves") })
+    const ctx = mkCtx({ observations: obsFrom("webbing under the leaves", t0 + 40 * 86400000) })
     const c = cand(ctx, "spider_mites")!
     assert.ok(c, "webbing sighting surfaces spider_mites")
     assert.equal(c.state, "strong", "direct sighting earns strong")

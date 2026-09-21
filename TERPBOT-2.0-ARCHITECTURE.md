@@ -1,10 +1,10 @@
 # TerpBot 2.0 — Deterministic Cannabis Grow Intelligence
 
 Architecture & implementation specification. Baseline: `ca2f198` (production).
-Status: **Phase A (calc engine + GrowContext + rule engine → `/checkin`) shipped at
-`c381de9`. Phase D (candidate/diagnostic layer + wizard adapter) shipped next —
-see §15 status note. Phase E (full wizard migration + NL observation channel +
-knowledge expansion) shipped after — see §18.**
+Status: **Phases A, D, E shipped (see §15b + Implementation status). Phase F
+shipped after: mention→`/diagnose` routing, `/why` + `BotSession` continuity,
+signal-grouped evidence scoring, snapshot rule, stale degradation, and the
+runoff channel. See Implementation status at the bottom.**
 
 ---
 
@@ -55,7 +55,11 @@ Rodriguez-Morrison et al. 2021; Saloner & Bernstein 2021/2022; Bevan et al. 2021
 **Surfaces.** Slash commands (`/api/chat/commands` → `runBotCommand`), `@terpbot` mentions
 (`/api/chat/messages` → `parseTerpbotIntent` → same dispatch, in `after()`), private channel
 (`BOT_ASSIST` notifications via `notify()`), public announcements (`postBotMessage` /
-`postToGeneral`), daily cron `0 14 * * *`.
+`postToGeneral`), daily cron `0 14 * * *`. Since Phase F, mentions that parse to
+measurements/observations route to `/diagnose`, `why…` phrasing routes to `/why`,
+and bare numbers route to `/diagnose` (resolved against session `pendingAsk`);
+recommendation questions like "best tent for seedlings" still fall through to
+the existing fallback.
 
 **Safety contract (unchanged).** MEMBER-role bot account, no password; rooms public-only;
 60/hr global + 10/min/room output caps; mention cap 1/min/room; assists 3/day/user + 7-day
@@ -64,9 +68,11 @@ cross-kind cushion; `sanitizeEcho`/`sanitizeField`/`sanitizeExcerpt` on all echo
 once-ever semantics; `publicMilestoneOptOut`, `hideOnlineStatus`, `notifyOnBotAssist`
 honored; `purgeDiaryAnnouncements` on visibility loss; aggregate-only telemetry.
 
-**Telemetry.** `BotEvent` (unique `key`, `type`, `command`, `entities` ≤2KB, indexed on
-`userId`+`type`+`createdAt`) → `getBotStats` → admin health dashboard. Key patterns:
-`cmd:*`, `mention:*`, `announce:<kind>:*`, `assist:<kind>:*`, `day:<date>`.
+**Telemetry.** `BotEvent` (unique `key`, `type`, `command`, `entities` — an Int
+counter of surfaced links, *not* a data stash) → `getBotStats` → admin health
+dashboard. Key patterns: `cmd:*`, `mention:*`, `announce:<kind>:*`,
+`assist:<kind>:*`, `day:<date>`. Per-user diagnostic state lives in `BotSession`
+(§10.4), not BotEvent.
 
 **Reusable-as-is for 2.0:** the entire assist pipeline, claim/release primitives, post-
 marker pattern, rate limiting, sanitizers, `after()` deferral, `BotCommandCtx`
@@ -90,7 +96,7 @@ Directly useful and realistically populated:
 | GrowSetup | growType, tentSize, lightType, lightWattage, lightBrand, ventilation, circulation, filter, ac, humidifier, dehumidifier, medium, containers, nutrients, phMeter, sensors (all free text ≤500) | capability inference ("has dehumidifier", "has pH meter"), env risk adjustment |
 | Strain | type, avgFlowerDays, difficulty | harvest-timing expectations, stage-duration anomaly detection |
 | Profile/User | notifyOnBotAssist, publicMilestoneOptOut, hideOnlineStatus, banned/suspended | all existing gates |
-| problem-wizard | 16 nodes, ~35 results (cause/fixes/severity), SYMPTOM_TAGS | seed knowledge base + symptom vocabulary |
+| problem-wizard | 13 nodes, 48 results (cause/fixes/severity), SYMPTOM_TAGS | seed knowledge base + symptom vocabulary |
 
 Already-computed helpers: `diaryDay/diaryWeek`, `groupUpdatesByWeek`, `stageDurations`,
 `growthSummary`, `buildHarvestReport`, `getStrainGrowStats` (sample-floored medians),
@@ -142,53 +148,45 @@ tree-shakeable into tests, zero migration, diffable provenance. A DB `KnowledgeR
 is *deferred* — it buys an admin-editor UI we don't need and costs a migration + cache
 layer. `knowledge/*.ts` modules export typed rule arrays.
 
+> **As-built note (Phase F):** the proposed `Condition`/`appliesWhen` DSL was
+> *not* implemented — it could not express per-candidate evidence, signal
+> attribution, or measurements-as-questions. The shipped shape is plain
+> TypeScript functions in `terpbot-intel.ts` / `terpbot-intel-types.ts`:
+
 ```ts
-// src/lib/terpbot2/knowledge/types.ts (proposed)
-type EvidenceTier =
-  | "PEER_REVIEWED" | "EXTENSION" | "GOVERNMENT"
-  | "PROFESSIONAL" | "COMMUNITY" | "INTERNAL_DATA";
-
-type SourceRef = {
-  id: string;              // "cockson-2019-nutrient-disorders"
-  title: string; author: string; publication: string;
-  url: string;             // DOI/extension URL — for provenance display only
-  year: number; tier: EvidenceTier;
-  cannabisSpecific: boolean;  // false → general plant science, labeled as such
-  reviewedAt: string;      // ISO date this rule set was re-checked
+// src/lib/terpbot-intel-types.ts (as built)
+type IntelRule = {
+  id: string;                 // "env.vpd-band"
+  title: string;
+  domain: "environment" | "chemistry" | "disease" | "pest" | "nutrition"
+        | "growth" | "stage" | "data";
+  kind: "assessment" | "risk" | "gap" | "observation" | "info";
+  signal?: SignalId;          // input group this rule's evidence derives from;
+                              // rules that iterate observations emit per-evidence
+                              // "symptom:<id>" signals instead
+  sourceIds: string[];        // ≥1 required except kind:"gap" (validator-enforced)
+  applies(ctx: GrowContextView): boolean;       // gate
+  evaluate(ctx: GrowContextView): IntelEvidence[];  // emissions when it fires
 };
 
-type Condition =                            // evaluated against GrowState
-  | { metric: MetricId; op: "lt"|"lte"|"gt"|"gte"|"eq"|"in"|"range"; value: number|number[]|string }
-  | { trend: MetricId; dir: "rising"|"falling"|"unstable"|"stable"; window?: number }
-  | { stage: StageId[] } | { medium: MediumId[] } | { light: LightId[] }
-  | { capability: "dehumidifier"|"phMeter"|"ac"|"fans"; has: boolean }
-  | { missing: MetricId }                       // missing-data is a first-class condition
-  | { and: Condition[] } | { or: Condition[] } | { not: Condition };
-
-type KnowledgeRule = {
-  id: string;                 // "env.vpd.flower-high"
-  version: number;
-  domain: Domain;             // env | nutrition | pest | disease | ...
-  status: "active" | "review" | "deprecated";
-  appliesWhen: Condition;     // gate — stage/medium/context scoping
-  observes?: MetricId[];      // inputs consumed (drives missing-data questions)
-  emits: Evidence[];          // what this rule contributes when it fires
-  source: SourceRef[];        // provenance, ≥1 required
-};
-
-type Evidence = {
-  candidate: CandidateId;     // "bud-rot-risk" | "ph-lockout" | "n-deficiency" | ...
-  direction: "for" | "against" | "risk";   // risk = raises hazard, not a diagnosis
-  weight: 1|2|3;              // weak | moderate | strong — categorical, no fake precision
-  explain: string;            // template string, slots filled from observation values
-  discriminatesBy?: MetricId[];  // measurements that separate this candidate from rivals
+type IntelEvidence = {
+  kind: "observation" | "assessment" | "risk" | "gap" | "info";
+  text: string;               // rendered-safe string — no raw user text
+  severity: "info" | "watch" | "action" | "urgent";
+  direction?: "for" | "risk" | "against" | "info";
+  strength?: "weak" | "moderate" | "strong";  // 1|2|3 — categorical
+  candidate?: CandidateId;    // pools into CANDIDATES
+  signal?: SignalId;          // overrides rule.signal for this item
+  metric?: MetricId | `inspect:${string}`;    // measurement hint
+  t?: number;                 // observation timestamp (stale checks)
 };
 ```
 
-This is deliberately NOT a generic production-rule language. Three primitives —
-`Condition` tree, `Evidence` emission, `discriminatesBy` — cover every pattern found in the
-audit. Rules that can't fit this shape are the exception worth a code review, not a bigger
-DSL.
+`EvidenceTier`, `SourceRef`, and the `cannabisSpecific` flag shipped as designed
+(`terpbot-intel-knowledge.ts` `SOURCES`; `reviewedAt` deferred — validator
+coverage took priority). `observes`/`discriminatesBy` live on `CandidateDef`
+(`requiredInputs`, `discriminatingInputs`) instead of per-rule, since the
+next-measurement question is chosen across candidates, not rules.
 
 **Rule interaction (the §"thousands of ifs" problem):** rules never fire conclusions
 directly. They emit weighted evidence into **candidates**; the diagnostic engine ranks
@@ -247,61 +245,78 @@ No hidden constants: every threshold lives in a `KnowledgeRule`, not inside calc
 
 ---
 
-## 8. Grow-context engine (`src/lib/terpbot2/engine/context.ts`)
+## 8. Grow-context engine (`src/lib/terpbot-intel-context.ts`)
 
-`buildGrowContext(userId, {scope:"public"|"private"}) → GrowState` — computed on demand,
-never persisted (Phase 1). One bounded query set: latest live diary + last ~50 updates +
-linked setup + strain row.
+`buildGrowContext(diaryId, {scope:"public"|"owner", ownerId, now}) → GrowContextView`
+— computed on demand, never persisted. Bounded query set: the diary row + its
+last `INTEL_WINDOW = 12` updates + linked setup (soft-delete treated as absent).
+Runoff pH/EC are parsed from `feeding`/`content` text (`mS/cm` only — ppm runoff
+values never enter the series).
 
 ```ts
-type GrowState = {
-  diary: { id, slug, stage, visibility, day, week, medium, growType, lightType,
-           techniques: TechniqueId[], strainId, strainName, harvested };
-  setup: { has: Capability[]; lightType?: string; medium?: string };  // vocab-parsed
-  strain: { avgFlowerDays?: number; difficulty?: string; type?: string };
-  env:    { tempF, rh, vpdEntered, vpdComputed, ph, ec }   // each: latest + Trend + n
-  growth: { heightCm, rateCmPerDay?, day, week };
-  cadence:{ lastUpdateDaysAgo, medianIntervalDays, updateCount };
-  feeding:{ recentText: string[]; changed: boolean; nutrients?: string };
-  missing: MetricId[];        // measurements never recorded — drives question selection
-  conflicts: Conflict[];      // e.g., entered VPD ≠ computed
-  stageDays: number;          // days in current stage
-  public: boolean;            // scope pin — private fields can't leak to room text
+// src/lib/terpbot-intel-types.ts (as built)
+type GrowContextView = {
+  diary: { id; title; stage; visibility; startDate; harvested;
+           stageDays: number | null; stageStartCensored: boolean;
+           medium; growType; lightType; techniques: string[] };
+  setup: { present: boolean; capabilities: string[] };
+  updateCount: number; daysSinceUpdate: number | null; envCoverage: number;
+  series: {                          // IntelSeries each: points + stats + trend
+    temperature; humidity; vpd;      // vpd = user-entered, unvalidated
+    vpdComputed; vpdDivergence;      // computed from temp/RH pairs
+    ph; ec; height; runoffPh; runoffEc };
+  freshness: Partial<Record<MetricId, number>>;  // age in days of latest point
+  missing: MetricId[];               // six schema metrics never recorded
+  unresolved?: ReportedPoint[];      // ambiguous chat values awaiting a unit
+  observations: StructuredObservation[];  // canonical, refId-linked, no raw text
 };
 ```
 
-The `scope` pin is structural: `buildGrowContext(uid, {scope:"public"})` filters
-`visibility:"PUBLIC"` at the query layer, so private data **cannot** reach the response
-path even if a later stage mishandles it — same defense-in-depth as `publicDiaryWhere`.
-Persisting GrowState snapshots is a Phase-later decision (only justified if proactive
-scans need cheap diffing; BotEvent `entities` already provides a ≤2KB audit stash).
+The `scope` pin is structural: `scope:"public"` applies `publicDiaryWhere` at
+the query layer, so private data **cannot** reach the response path even if a
+later stage mishandles it — same defense-in-depth as `publicDiaryWhere`.
+`emptyContext(now, stage?)` synthesizes a diary-free view (stage `"UNKNOWN"`)
+for `/diagnose` sessions with no eligible public diary.
 
 ---
 
-## 9. Diagnostic engine (`engine/diagnose.ts`)
+## 9. Diagnostic engine (`terpbot-intel.ts` `evaluateContext`)
 
-Pipeline per the brief, implemented as:
+As-built pipeline:
 
 ```
-observations (GrowState + parsed NL entities)
-  → collect candidates (every rule whose appliesWhen fires)
-  → score: Σ weights, separately tracking for/against/risk
-  → conflict detection (for≥2 AND against≥2 on same candidate → CONFLICTING)
+GrowContextView (+ merged session reports/observations)
+  → collect evidence: every rule whose applies(ctx) fires → IntelEvidence[]
+  → pool per candidate → group by (direction, signal)
+      correlated evidence sharing a signal contributes its MAX weight, not a sum
+      (four rules reading the same RH series = ONE humidity signal)
+      risk→kind:"condition" is capped at one weak group; info never scores
+  → conflict detection: both sides ≥ moderate and support doesn't dominate
+      → CONFLICTING, ranked first, never masked (confirmed counts as strong support)
   → rank → pick state:
-        CONFIRMED   hard-bounds violation (measured pH>7 in coco — measurement IS the fact)
-        STRONG      one candidate ≥2 strong-for, no strong-against
-        POSSIBLE    top candidate moderate-only, or two candidates within 1 weight
-        INSUFFICIENT no candidate reaches weak threshold
-        CONFLICTING for and against both strong
-  → if POSSIBLE/INSUFFICIENT: nextQuestion = argmax over discriminating power
-  → explanation object always built
+        CONFIRMED     measured-fact findings only; clamped per-candidate by maxState
+        STRONG        support ≥3 AND (≥2 independent signals OR one strong direct item)
+        POSSIBLE      below that; also the ceiling for missing requiredInputs and
+                      stale-only support (STALE_DAYS = 10 — see below)
+        INSUFFICIENT  no support
+        CONFLICTING   see above
+  → nextUsefulMeasurement(ctx, diagnosis) → deterministic next-step pick
+  → WhyTrail built and persisted to BotSession (see §10.2)
 ```
+
+**Stale degradation (Phase F):** after scoring, if *every* supporting signal group
+rests on readings ≥ `STALE_DAYS` old (per `GrowContextView.freshness`, or
+observation `t` for `symptom:*`), STRONG/CONFIRMED demotes to POSSIBLE and
+`CandidateResult.stale` is set — one fresh user-reported point lifts it.
+`data.stale` (gap rule) fires when the diary is ≥10 days idle with no fresh report.
 
 **Next-question selection — "the question that most reduces uncertainty," deterministically:**
-for each missing `MetricId`, score = number of top-3 candidates whose rule conditions
-reference it × tier weight; tie-break by measurement accessibility (a fixed order: pH →
-EC → temp/RH → symptom detail → substrate moisture → runoff → equipment check). No ML, no
-entropy math pretending to be Bayesian — a transparent ranking the tests can pin.
+score = highest-weighted non-insufficient candidate's state weight that lists the
+step in `requiredMissing`/`discriminatingInputs` (+4 required-unblock bonus, +1
+conflict bonus, +1 per stale metric it would refresh); tie-break by the fixed
+`measurementPriority` list, then id. Inspection steps (`inspect:*`) are
+first-class and resolve against `INSPECTION_INFO[].resolvedBy`. No ML, no entropy
+math pretending to be Bayesian — a transparent ranking the tests can pin.
 
 **UC IPM mapping** (the pest/disease branch follows the six-component framework):
 identify (symptom vocab → candidate pests) → monitor (suggest sticky-card/scouting cadence)
@@ -322,16 +337,34 @@ Five states above. Hard rules:
 - CONFLICTING produces "These measurements conflict — verify X first."
 - Every non-CONFIRMED response ends with what would upgrade the confidence.
 
-### 10.2 Explanation object (`engine/explain.ts`)
+### 10.2 Explanation object — `WhyTrail` + `BotSession` (shipped, Phase F)
+
+Every `CandidateResult` already carries `ruleIds`, `supporting`/`opposing`/`info`,
+`requiredMissing`, `sourceIds`, `signals`, and `independentSignals`. Phase F
+persists a bounded projection — `WhyTrail` (`terpbot-intel-why.ts`,
+`buildWhyTrail(ctx, diagnosis, now)`) — onto the `BotSession` row:
+
 ```ts
-{ question, observationsUsed: Observation[], rulesMatched: RuleHit[],
-  rulesRejected: RuleHit[], missingData: MetricId[], candidates: RankedCandidate[],
-  conclusion: ConclusionState, nextMeasurement?: MetricId,
-  actions: Action[], sources: SourceRef[] }
+WhyTrail = { knowledgeVersion, at, diaryTitle: string | null,
+  basis: { logged, reported, observations, staleDays, stageEstimated },
+  candidates: ≤4 × { id, name, kind, state, independentSignals,
+                     signals: ≤3 × { signal, direction, weight, text },
+                     opposing: ≤2, requiredMissing, next?, sourceIds },
+  findings: ≤3, next?: { id, label, why } }
 ```
-Built inside the engine on every diagnostic call; room output shows the condensed form
-(top candidate + evidence count + one action), `/why` (future) exposes the full object by
-looking up the user's last `BotEvent` entities stash. No conclusion without the trail.
+
+`renderWhy(trail, question?)` renders it deterministically: candidate name +
+state + independent-signal count, ≤3 top signals with safe labels ("RH
+readings", "temp/RH together", "reported <symptom label>"), opposing/missing
+lines, a "Not more certain because…" line (conflict / single-signal / missing
+input / stale data / risk-only), the next step, and up to 3 source citations
+each marked `cannabis-specific` or `general horticulture, applied cautiously`.
+Optional question text filters to a matching candidate/signal first.
+
+**Privacy contract:** the trail stores only already-safe rendered strings —
+no diary id, update id, refId, room id, or raw user text (`"curling"` never
+persists; only canonical `LEAF_CURL_UP`). `/why` output is verified against
+`/c[a-z0-9]{24}/` in pipeline tests. Chat replies pack to ≤2 × 1000 chars.
 
 ### 10.3 Natural-language layer (`nl/vocab.ts` + `nl/parse.ts`)
 Controlled vocabulary tables — the existing `SYMPTOM_TAGS` + wizard vocabulary is the seed:
@@ -346,15 +379,32 @@ Controlled vocabulary tables — the existing `SYMPTOM_TAGS` + wizard vocabulary
   rule. Everything unparseable keeps today's `/ask` → fallback path. STAFF_WORDS refusal
   stays upstream, unchanged.
 
-### 10.4 Multi-turn workflow — the honest constraint
-No conversation store exists and chat prunes at 3 days. Phase 1 therefore uses
-**single-shot enriched diagnosis**: one mention produces candidates + *the* next-question
-as its closing line ("tell me your runoff pH and I'll narrow this down"). A follow-up
-mention containing `ph 5.2` + `replyToContent` threading can be matched to the prior bot
-question — **poor-man's multi-turn via `replyToContent`, already in ctx**. A real
-`DiagnosticSession` table (pending question, expires 72h) is the deferred upgrade; it's
-the *only* schema addition proposed anywhere in this roadmap, and only if Phase-G proves
-the demand.
+### 10.4 Multi-turn workflow — `BotSession` (shipped, Phase F)
+
+The missing-conversation-store constraint is now solved by one row per user:
+`BotSession { userId @id, diaryId?, knowledgeVersion, state: Json, pendingAsk?,
+expiresAt }`, 24h TTL, `sweepExpiredSessions` in the daily cron.
+
+- **What it stores** (`SessionState` Json): `reported: ReportedPoint[]`
+  (`{metric, value, unit?, t}` — newest 24), `observations: SessionObservation[]`
+  (canonical `{symptom, location?, stage?, period?, t}` — newest 24), optional
+  `stage` (utterance-claimed, canonical id only), and the `WhyTrail`.
+- **What it never stores:** message text, room ids, other users' ids, refIds,
+  private diary content. `diaryId` may only reference a diary that passed
+  `publicDiaryWhere` + `authorId = userId`, re-verified on every use; it is
+  never rendered.
+- **Continuity flow:** `/diagnose` (or a `@terpbot` mention that parses to
+  measurements/observations — routing in `terpbot-intents.ts`) merges the
+  utterance into the session, rebuilds the context (`buildGrowContext` when a
+  public diary exists, `emptyContext(now, session.stage)` otherwise), evaluates,
+  renders, and re-persists state + trail + `pendingAsk`. A bare follow-up number
+  resolves against `pendingAsk` (ambiguous units stay in `ctx.unresolved` and
+  get asked: "84 — °F or °C?"). `/checkin` writes the same trail so `/why`
+  works after a check-in too.
+- **Expiry is read-time, not write-time:** `loadSession` returns null on
+  `expiresAt <= now`; `/why` then answers "I haven't reasoned about your grow
+  in the last 24h…". Per-user rate limit `bot-diagnose:<userId>` 6/min on top
+  of the existing room limiter.
 
 ### 10.5 Proactive assists (`assists/env-watch.ts`, cron)
 All private `BOT_ASSIST` through the existing pipeline (cushion, 3/day cap, claim-first,
@@ -416,8 +466,15 @@ Existing suites extended, no parallel harness:
   public scope → empty context); assist claim/cushion/cap tests cloned from stale-diary
   patterns.
 - **e2e**: `bot-verify.mjs` — real mention `"@terpbot why are my leaves yellow"` over HTTP.
-- **knowledge regression**: a `validate:knowledge` script — every rule has ≥1 source, all
-  `explain` slots resolve, no orphan CandidateIds, schema-version lint.
+- **knowledge regression (shipped):** `npm run validate:knowledge`
+  (`scripts/validate-knowledge.mts` + `validateKnowledge()` in
+  `terpbot-intel-validate.ts`) — candidate key↔id, enum/domain/kind checks,
+  `requiredInputs` ⊆ MetricIds, `discriminatingInputs` ⊆ metrics ∪ inspections,
+  sourceIds non-empty + resolvable (empty allowed only for `kind:"gap"`),
+  `wizardResultId === id` + every wizard result covered, CONTRA↔symptom↔candidate
+  resolution, stage/location refinements resolve, vocab `feeds` resolve,
+  inspection `resolvedBy` ∈ SymptomIds, `measurementLabels` cover all MetricIds,
+  unique rule ids, every rule signal ∈ SIGNAL_IDS.
 
 "Smart-looking but wrong" is defeated by: fixture diaries whose *expected answer* is known
 (e.g., senescence fixture must rank "normal senescence" over "N deficiency" when stage =
@@ -443,13 +500,15 @@ diagnostic evaluation exposed only in tests and (optionally) folded into the exi
 `/checkin` output as a private "things worth watching" line. Zero new user-facing surface,
 full engine exercised end-to-end, ships behind the existing suite.
 
-**Deliberately deferred (with reason):** `DiagnosticSession` table + true multi-turn (only
-if F proves demand — replyTo threading covers v1); PPFD/photoperiod/watering/runoff fields
-(real value, but that's a product schema decision — file separately); `KnowledgeRule` in DB
-(admin UI cost > benefit); percentile-benchmark assists ("your VPD vs community") — needs
-community-stats wiring, Phase-later; `/why` command (needs explanation persistence =
-BotEvent.entities reuse, cheap but F-dependent); automated strain-specific VPD tuning
-(evidence too thin — honest deferral).
+**Deliberately deferred (with reason):** PPFD/photoperiod/watering/runoff *columns*
+(real value, but that's a product schema decision — runoff is parsed from text
+for now); `KnowledgeRule` in DB (admin UI cost > benefit); percentile-benchmark
+assists ("your VPD vs community") — needs community-stats wiring, Phase-later;
+automated strain-specific VPD tuning (evidence too thin — honest deferral).
+*Shipped since this table was written:* `BotSession` + true multi-turn
+(`/diagnose` + `/why` + `pendingAsk`, Phase F — the demand was proven by the
+mention-routing gap), and the `/why` surface (persisted `WhyTrail`, not
+`BotEvent.entities` — entities stays an Int counter for aggregate telemetry).
 
 ---
 
@@ -458,7 +517,7 @@ BotEvent.entities reuse, cheap but F-dependent); automated strain-specific VPD t
 | Failure | Response |
 |---|---|
 | Contradictory inputs (pH fine + burn tips + high EC) | CONFLICTING state → "verify measurement X" |
-| Stale diary (last reading 40d ago) | freshness gate: diagnosis degraded to "based on data from X days ago" or refusal |
+| Stale diary (last reading 40d ago) | **implemented** — `data.stale` gap + STRONG→POSSIBLE stale clamp when all supporting signals are ≥`STALE_DAYS` (10d) old; `/why` shows "data is N days old" |
 | Missing measurements | `missing[]` drives next-question; never fill with assumed defaults |
 | Garbage user values (pH 12, 200°F) | plausibility bands → "verify your meter" not a diagnosis |
 | Unit confusion (°C entered as °F) | out-of-band detection + explicit "is that °F or °C?" |
@@ -589,8 +648,20 @@ missing-priority `indexOf(-1)` tie-break corrected; soft-deleted `GrowSetup` row
 are treated as absent in `buildGrowContext` (privacy); dead `feeding`/`training`
 selects dropped.
 
-**Remaining for 2.0-E/F/G:** full wizard migration (adapter proven on one branch),
-NL symptom vocab, proactive assists, `/why` surface (every `CandidateResult`
-already carries `ruleIds`, `supporting`/`opposing`/`info`, `requiredMissing`,
-`sourceIds` — the explanation object exists, only the surface is missing),
-knowledge validator command.
+**Shipped — Phase F (correctness + continuity):** signal-grouped evidence
+scoring (correlated items collapse by `signal`; STRONG needs ≥2 independent
+signals or one strong direct item; `risk`→condition capped at one weak group;
+`requiredInputs`/`maxState`/stale clamps); deterministic ordering and knowledge
+validation (`validate:knowledge`); hardened NL parser (negation, questions,
+unit-vs-phrase precedence, bare "curling"); `BotSession` (24h TTL, reported
+points + canonical observations + `WhyTrail`, no raw text — §10.4); `/diagnose`
++ `/why` commands and mention routing; `(you)` provenance marks;
+`env.snapshot` single-reading rule; `data.stage-unknown`/`inspect:stage`;
+`data.stale` + the stale clamp; runoff pH/EC channel (`chem.runoff-ec-gap`,
+`chem.runoff-ph-shift`, sourced to LeBude & Bilderback 2009 NCSU AG-717-W —
+general horticulture, labeled as such); `stageEstimated` surfaced in `/why`
+basis; dead `medianUpdateIntervalDays` removed. Rule/source inventory with
+per-rule thresholds and honest limitations: `TERPBOT-KNOWLEDGE.md`.
+
+**Remaining for 2.0-G+:** proactive env-watch assists, `DiagnosticSession`
+beyond the 24h window if needed, PPFD/photoperiod schema fields.

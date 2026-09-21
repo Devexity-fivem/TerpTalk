@@ -202,7 +202,6 @@ export interface GrowContextView {
   /** number of updates in the analysis window */
   updateCount: number
   daysSinceUpdate: number | null
-  medianUpdateIntervalDays: number | null
   /** fraction of window updates carrying ≥1 env metric (0–1) */
   envCoverage: number
   series: {
@@ -251,11 +250,32 @@ export const SIGNAL_IDS = [
   "ec",
   "chem:ph-ec",
   "height",
+  "runoff",
   "stage",
   "data",
 ] as const
 
 export type SignalId = (typeof SIGNAL_IDS)[number]
+
+/** Readings older than this no longer firm up a candidate on their own —
+ *  STRONG/CONFIRMED clamps to POSSIBLE until something fresh arrives. */
+export const STALE_DAYS = 10
+
+/** Which metric series feed each signal — used for the stale-evidence
+ *  clamp. `symptom:*` signals use the observation age instead; stage/data
+ *  signals are never stale. */
+export const SIGNAL_METRICS: Record<SignalId, MetricId[]> = {
+  humidity: ["humidity"],
+  temperature: ["temperature"],
+  "env:temp-rh": ["temperature", "humidity"],
+  ph: ["ph"],
+  ec: ["ec"],
+  "chem:ph-ec": ["ph", "ec"],
+  height: ["height"],
+  runoff: ["runoffEc", "runoffPh"],
+  stage: [],
+  data: [],
+}
 
 export interface IntelRule {
   id: string
@@ -364,6 +384,9 @@ export interface CandidateResult {
   /** most useful measurement for THIS candidate, if determinable */
   nextMeasurement?: MeasurementHint
   sourceIds: string[]
+  /** set when STRONG/CONFIRMED was clamped to POSSIBLE because every
+   *  supporting signal rests on readings ≥ STALE_DAYS old */
+  stale?: boolean
 }
 
 export interface Diagnosis {
@@ -400,6 +423,9 @@ export interface SessionObservation {
 export interface SessionState {
   reported: ReportedPoint[]
   observations: SessionObservation[]
+  /** canonical stage id the grower claimed in chat ("week 3 flower"),
+   *  when no public diary supplies one — newest wins */
+  stage?: string
   trail?: WhyTrail
 }
 
@@ -417,6 +443,8 @@ export interface WhyTrail {
     observations: number
     /** days since the newest logged/merged point; null when no data */
     staleDays: number | null
+    /** stage timing was estimated (stage boundary predates the window) */
+    stageEstimated?: boolean
   }
   candidates: {
     id: string
@@ -435,6 +463,8 @@ export interface WhyTrail {
     requiredMissing: MetricId[]
     next?: MeasurementHint
     sourceIds: string[]
+    /** stale-clamped — every supporting signal rests on old readings */
+    stale?: boolean
   }[]
   findings: { title: string; state: FindingState; text: string }[]
   next?: MeasurementHint

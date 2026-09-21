@@ -449,6 +449,7 @@ export function parseTerpbotIntent(content: string): TerpbotIntent {
   if (
     parsed.observations.length ||
     parsed.measurements.length ||
+    (parsed.stage && !parsed.question) ||
     /^\s*-?\d+(\.\d+)?\s*$/.test(text)
   ) {
     return { kind: "command", name: "diagnose", args: [text] }

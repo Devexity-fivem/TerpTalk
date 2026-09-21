@@ -40,6 +40,7 @@ import {
   STAGE_REFINEMENTS,
   SYMPTOM_LABELS,
 } from "@/lib/terpbot-nl-vocab"
+import { SIGNAL_METRICS, STALE_DAYS } from "@/lib/terpbot-intel-types"
 import type {
   CandidateDef,
   CandidateResult,
@@ -52,6 +53,7 @@ import type {
   MeasurementHint,
   MetricId,
   NextStepId,
+  SignalId,
   SymptomId,
 } from "@/lib/terpbot-intel-types"
 
@@ -187,7 +189,7 @@ export const MEASUREMENT_INFO: Record<MetricId, { label: string; why: string }> 
   runoffEc: { label: "runoff EC", why: "best separates salt buildup from under-watering" },
   runoffPh: { label: "runoff pH", why: "confirms whether the root zone is actually drifting" },
   substrateMoisture: { label: "substrate moisture / pot weight", why: "separates watering issues from environment issues" },
-  leafTemp: { label: "leaf/canopy temperature", why: "explains the gap between recorded and calculated VPD" },
+  leafTemp: { label: "leaf/canopy temperature", why: "leaf temperature, not air, drives transpiration — an IR reading tells whether the calculated VPD is what the canopy actually sees" },
   watering: { label: "watering interval/volume", why: "distinguishes over- vs under-watering patterns" },
   ph: { label: "pH", why: "the measurement most often behind mysterious deficiencies" },
   ec: { label: "EC", why: "feed-strength trend unlocks root-zone reasoning" },
@@ -254,6 +256,11 @@ export const INSPECTION_INFO: Record<string, { label: string; why: string; resol
     why: "light burn bleaches the crown first — distance tells light burn from deficiency",
     resolvedBy: ["BLEACHING"],
   },
+  // No resolvedBy — satisfied by a known stage, not a symptom report.
+  "inspect:stage": {
+    label: "which stage and week you're in",
+    why: "temperature/RH/VPD targets shift by stage",
+  },
 }
 
 const hint = (id: NextStepId): MeasurementHint => {
@@ -264,6 +271,40 @@ const hint = (id: NextStepId): MeasurementHint => {
   return { id, ...MEASUREMENT_INFO[id as MetricId] }
 }
 const f1 = (v: number) => Math.round(v * 10) / 10
+
+/** The newest point of a series came from a chat report, not a logged
+ *  update — the snapshot rule covers exactly that case. */
+const latestUserReported = (s: IntelSeries) =>
+  s.points[s.points.length - 1]?.provenance === "user-reported"
+
+/** Any series carries a user-reported point younger than STALE_DAYS —
+ *  a fresh report keeps stale logged data from suppressing analysis. */
+const hasFreshReport = (ctx: GrowContextView) =>
+  Object.values(ctx.series).some(
+    (s) =>
+      s.points[s.points.length - 1]?.provenance === "user-reported" &&
+      (ctx.now - s.points[s.points.length - 1].t) / 86400000 < STALE_DAYS
+  )
+
+/** Age in days of the newest point backing a signal — freshness for
+ *  metric-backed signals, observation age for `symptom:*`. Null when
+ *  the signal has no aging source (stage/data). */
+function signalAgeDays(ctx: GrowContextView, signal: string): number | null {
+  if (signal.startsWith("symptom:")) {
+    const symptom = signal.slice("symptom:".length)
+    const ts = ctx.observations.filter((o) => o.symptom === symptom).map((o) => o.t)
+    if (!ts.length) return null
+    return (ctx.now - Math.max(...ts)) / 86400000
+  }
+  const metrics = SIGNAL_METRICS[signal as SignalId]
+  if (!metrics?.length) return null
+  const ages = metrics
+    .map((m) => ctx.freshness[m])
+    .filter((a): a is number => a != null)
+  if (!ages.length) return null
+  // a signal is only as fresh as its oldest required series
+  return Math.max(...ages)
+}
 
 // ── First rule set ──────────────────────────────────────────────────
 // Deliberately small: only rules the current schema can feed without
@@ -1540,6 +1581,229 @@ export const INTEL_RULES: IntelRule[] = [
     ],
     sourceIds: [],
   },
+
+  // Single fresh reading — every trend rule needs n≥3 and a known stage,
+  // so one reported temp/RH pair previously contributed nothing. This
+  // rule scores the LATEST values only, never stronger than moderate:
+  // one reading is one reading.
+  {
+    id: "env.snapshot",
+    signal: "env:temp-rh",
+    domain: "environment",
+    kind: "assessment",
+    title: "Latest environment reading",
+    applies: (ctx) =>
+      (ctx.series.temperature.n > 0 || ctx.series.vpdComputed.n > 0) &&
+      (latestUserReported(ctx.series.temperature) ||
+        latestUserReported(ctx.series.humidity) ||
+        latestUserReported(ctx.series.vpdComputed) ||
+        ctx.series.temperature.n < 3),
+    evaluate: (ctx) => {
+      const stage = ctx.diary.stage
+      const stageKnown = stage in VPD_BANDS
+      const [vLo, vHi] = VPD_BANDS[stage] ?? [0.4, 1.5]
+      const [tLo, tHi] = TEMP_BANDS[stage] ?? TEMP_BAND_DEFAULT
+      const [rLo, rHi] = RH_BANDS[stage] ?? [40, 70]
+      const suffix = stageKnown ? "" : " (stage unknown — using the general range)"
+      const snapshot = "a single snapshot, so treat as a lead, not a trend"
+      const t = ctx.series.temperature.latest
+      const v = ctx.series.vpdComputed.latest
+      const rh = ctx.series.humidity.latest
+      const ev: IntelEvidence[] = []
+      if (t != null && t > tHi) {
+        ev.push({
+          direction: "for",
+          strength: stageKnown && t >= tHi + 4 ? "moderate" : "weak",
+          candidate: "heat_stress",
+          text: `Latest reading ${f1(t)}°F is above the ${tLo}–${tHi}°F ${stage.toLowerCase()} range${suffix} — ${snapshot}.`,
+          measurement: ctx.series.humidity.n ? hint("leafTemp") : hint("humidity"),
+        })
+      } else if (t != null && t < tLo) {
+        ev.push({
+          direction: "for",
+          strength: stageKnown && t <= tLo - 4 ? "moderate" : "weak",
+          candidate: "env.cold-stress",
+          text: `Latest reading ${f1(t)}°F is below the ${tLo}–${tHi}°F ${stage.toLowerCase()} range${suffix} — ${snapshot}.`,
+          measurement: hint("temperature"),
+        })
+      }
+      if (v != null && v > vHi) {
+        ev.push({
+          direction: "for",
+          strength: stageKnown && v >= vHi + 0.5 ? "moderate" : "weak",
+          candidate: "heat_stress",
+          text: `Latest VPD ≈${f1(v)} kPa is above the ${vLo}–${vHi} kPa ${stage.toLowerCase()} range${suffix} — ${snapshot}.`,
+          measurement: rh == null ? hint("humidity") : hint("leafTemp"),
+        })
+        if (rh != null && rh < rLo) {
+          ev.push({
+            direction: "for",
+            strength: stageKnown && v >= vHi + 0.5 ? "moderate" : "weak",
+            candidate: "humidity_low",
+            text: `Latest RH ${rh}% is under the ${rLo}–${rHi}% ${stage.toLowerCase()} floor${suffix} — ${snapshot}.`,
+            measurement: hint("humidity"),
+          })
+        }
+      } else if ((v != null && v < vLo) || (rh != null && rh > rHi)) {
+        const large = (v != null && v <= vLo - 0.3) || (rh != null && rh > rHi)
+        const strength = stageKnown && large ? "moderate" : "weak"
+        const cause =
+          v != null && v < vLo
+            ? `Latest VPD ≈${f1(v)} kPa is below the ${vLo}–${vHi} kPa ${stage.toLowerCase()} range${suffix}`
+            : `Latest RH ${rh}% is above the ${rLo}–${rHi}% ${stage.toLowerCase()} range${suffix}`
+        ev.push({
+          direction: "risk",
+          strength,
+          candidate: "env.moisture-disease-risk",
+          text: `${cause} — ${snapshot}.`,
+          measurement: hint("humidity"),
+        })
+        ev.push({
+          direction: "for",
+          strength,
+          candidate: "humidity_high",
+          text: `${cause} — ${snapshot}.`,
+          measurement: hint("humidity"),
+        })
+      }
+      return ev
+    },
+    sourceIds: [
+      "cs-vpd-ranges",
+      "chandra-2008-photosynthesis",
+      "terptalk-stage-tips",
+      "ieee-greenhouse-survey",
+      "fao56-svp",
+      "cornell-cannabis-guidebook",
+    ],
+  },
+
+  // Runoff vs feed EC: leachate running hotter than the input means the
+  // medium is accumulating salts. General substrate guidance (PourThru
+  // convention) — cannabis-specific runoff thresholds aren't published,
+  // so strength caps at moderate.
+  {
+    id: "chem.runoff-ec-gap",
+    signal: "runoff",
+    domain: "chemistry",
+    kind: "assessment",
+    title: "Runoff EC above feed EC",
+    applies: (ctx) =>
+      ctx.series.runoffEc.n >= 1 &&
+      ctx.series.ec.n >= 1 &&
+      Math.abs(
+        ctx.series.runoffEc.points[ctx.series.runoffEc.points.length - 1].t -
+          ctx.series.ec.points[ctx.series.ec.points.length - 1].t
+      ) <= 3 * 86400000,
+    evaluate: (ctx) => {
+      const r = ctx.series.runoffEc.latest!
+      const f = ctx.series.ec.latest!
+      const gap = f1(r - f)
+      const caveat = " (general substrate guidance — cannabis-specific runoff thresholds aren't published)"
+      if (gap >= 1.0) {
+        return [
+          {
+            direction: "for",
+            strength: "moderate",
+            candidate: "salt_buildup",
+            text: `Runoff EC ${r} is ${gap} mS/cm above feed EC ${f} — salts accumulating in the medium.${caveat}`,
+            measurement: hint("runoffPh"),
+          },
+        ]
+      }
+      if (gap >= 0.5) {
+        return [
+          {
+            direction: "for",
+            strength: "weak",
+            candidate: "salt_buildup",
+            text: `Runoff EC ${r} is ${gap} mS/cm above feed EC ${f} — early salt accumulation, watch the trend.${caveat}`,
+            measurement: hint("runoffPh"),
+          },
+        ]
+      }
+      if (gap <= -0.5) {
+        return [
+          {
+            direction: "info",
+            strength: "weak",
+            text: `Runoff EC ${r} is ${f1(f - r)} mS/cm below feed EC ${f} — the medium is being drawn down/leached rather than accumulating salts.${caveat}`,
+          },
+        ]
+      }
+      return []
+    },
+    sourceIds: ["ncsu-pourthru-2009"],
+  },
+  {
+    id: "chem.runoff-ph-shift",
+    signal: "runoff",
+    domain: "chemistry",
+    kind: "assessment",
+    title: "Runoff pH shifted from feed pH",
+    applies: (ctx) =>
+      ctx.series.runoffPh.n >= 1 &&
+      ctx.series.ph.n >= 1 &&
+      Math.abs(
+        ctx.series.runoffPh.points[ctx.series.runoffPh.points.length - 1].t -
+          ctx.series.ph.points[ctx.series.ph.points.length - 1].t
+      ) <= 3 * 86400000,
+    evaluate: (ctx) => {
+      const r = ctx.series.runoffPh.latest!
+      const f = ctx.series.ph.latest!
+      const shift = f1(r - f)
+      if (Math.abs(shift) < 0.5) return []
+      const caveat = " (general substrate guidance — cannabis-specific runoff thresholds aren't published)"
+      return [
+        {
+          direction: "for",
+          strength: Math.abs(shift) >= 0.8 ? "moderate" : "weak",
+          candidate: "ph_drift",
+          text: `Runoff pH ${r} is ${Math.abs(shift)} ${shift > 0 ? "above" : "below"} feed pH ${f} — the root zone is drifting ${shift > 0 ? "up" : "down"} from what's going in.${caveat}`,
+          measurement: hint("ph"),
+        },
+      ]
+    },
+    sourceIds: ["ncsu-pourthru-2009"],
+  },
+
+  {
+    id: "data.stage-unknown",
+    signal: "data",
+    domain: "data",
+    kind: "gap",
+    title: "Stage unknown",
+    applies: (ctx) => ctx.diary.stage === "UNKNOWN",
+    evaluate: () => [
+      {
+        direction: "info",
+        strength: "weak",
+        text: "I don't know your stage — say e.g. 'week 3 flower' so I can use the right ranges.",
+        measurement: hint("inspect:stage"),
+      },
+    ],
+    sourceIds: [],
+  },
+  {
+    id: "data.stale",
+    signal: "data",
+    domain: "data",
+    kind: "gap",
+    title: "Readings are stale",
+    applies: (ctx) =>
+      ctx.daysSinceUpdate != null &&
+      ctx.daysSinceUpdate >= STALE_DAYS &&
+      !hasFreshReport(ctx),
+    evaluate: (ctx) => [
+      {
+        direction: "info",
+        strength: "weak",
+        text: `Latest logged readings are ${ctx.daysSinceUpdate} days old — tell me current temp/RH (or log an update) before I lean on them.`,
+        measurement: hint("temperature"),
+      },
+    ],
+    sourceIds: [],
+  },
 ]
 
 // ── Assessment ──────────────────────────────────────────────────────
@@ -1713,10 +1977,36 @@ export function evaluateContext(ctx: GrowContextView): Diagnosis {
     // Missing required data caps STRONG/CONFIRMED at POSSIBLE — a
     // reported symptom can surface a candidate, never assert it.
     // CONFLICTING passes through: it's honest uncertainty.
-    const state =
+    let state =
       requiredMissing.length > 0 && (scored.state === "strong" || scored.state === "confirmed")
         ? "possible"
         : scored.state
+    // Stale-evidence clamp: when EVERY supporting signal group rests on
+    // readings ≥ STALE_DAYS old, STRONG/CONFIRMED can't stand — demote
+    // to POSSIBLE and say so. CONFLICTING is never touched.
+    const stale =
+      state === "strong" || state === "confirmed"
+        ? (() => {
+            const supportSignals = scored.signals.filter(
+              (s) => s.direction === "for" || s.direction === "risk"
+            )
+            if (!supportSignals.length) return false
+            return supportSignals.every((s) => {
+              const age = signalAgeDays(ctx, s.signal)
+              return age != null && age >= STALE_DAYS
+            })
+          })()
+        : false
+    if (stale) {
+      state = "possible"
+      bucket.evidence.push({
+        direction: "info",
+        strength: "weak",
+        candidate: id,
+        signal: "data",
+        text: `Based on readings ${Math.max(0, Math.round(ctx.daysSinceUpdate ?? STALE_DAYS))} days old — current values would firm this up.`,
+      })
+    }
     const { forScore, againstScore, independentSignals, signals } = scored
     candidates.push({
       id,
@@ -1742,6 +2032,7 @@ export function evaluateContext(ctx: GrowContextView): Diagnosis {
       requiredMissing,
       nextMeasurement: candidateNextMeasurement(def, ctx),
       sourceIds: [...bucket.sourceIds].sort(),
+      ...(stale ? { stale: true } : {}),
     })
   }
 
@@ -1778,6 +2069,7 @@ export function measurementAvailable(ctx: GrowContextView, m: MetricId): boolean
  *  data, inspections by a reported observation that covers them. */
 export function nextStepSatisfied(ctx: GrowContextView, id: NextStepId): boolean {
   if (id.startsWith("inspect:")) {
+    if (id === "inspect:stage") return ctx.diary.stage !== "UNKNOWN"
     const resolved = INSPECTION_INFO[id]?.resolvedBy
     return resolved ? ctx.observations.some((o) => resolved.includes(o.symptom)) : false
   }
@@ -1834,6 +2126,14 @@ export function nextUsefulMeasurement(ctx: GrowContextView, diagnosis: Diagnosis
   for (const f of diagnosis.findings) {
     add(f.nextMeasurement?.id, STATE_WEIGHT[f.state])
     for (const e of f.evidence) add(e.measurement?.id, STATE_WEIGHT[f.state])
+  }
+  // Refreshing an already-useful stale metric beats asking for something
+  // new — +1 to metrics that scored AND are ≥ STALE_DAYS old.
+  for (const [id, score] of scores) {
+    if (score > 0 && !id.startsWith("inspect:")) {
+      const age = ctx.freshness[id as MetricId]
+      if (age != null && age >= STALE_DAYS) scores.set(id, score + 1)
+    }
   }
 
   const best = [...scores.entries()].sort(

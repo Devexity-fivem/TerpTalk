@@ -459,7 +459,7 @@ function run() {
     now: t0 + 40 * 86400000,
     day: 41, week: 6,
     stageDays: 20, stageStartCensored: false,
-    updateCount: 4, daysSinceUpdate: 1, medianUpdateIntervalDays: 7,
+    updateCount: 4, daysSinceUpdate: 1,
     envCoverage: 1,
     series: {
       temperature: emptySeries, humidity: emptySeries, ph: emptySeries,
@@ -509,7 +509,11 @@ function run() {
   }
   {
     const ctx = mkCtx({ series: { ...mkCtx().series, vpdComputed: mkSeries([1.8, 1.8], 0.15) } })
-    assert.equal(findCandidate(ctx, "heat_stress"), undefined, "2 points → rule gated off (n≥3)")
+    // env.snapshot now covers sub-trend evidence: latest VPD above the
+    // band contributes a weak heat_stress lead where n≥3 rules stay off.
+    const snap = findCandidate(ctx, "heat_stress")
+    assert.ok(snap, "snapshot covers 2-point VPD excursion")
+    assert.equal(snap!.state, "possible", "2 readings → possible at most")
   }
 
   // env.rh-flower-high — FLOWER + ≥3 of last 5 ≥65% feeds two candidates

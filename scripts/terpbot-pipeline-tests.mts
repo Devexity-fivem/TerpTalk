@@ -886,6 +886,42 @@ async function run() {
       console.log("✓ diagnose/why: session, provenance, privacy, expiry, routing")
     }
 
+    // ── 13. Runoff channel — feeding text → runoff series ──────────
+    {
+      const ru = await mk(`__tbp_ro_${SUFFIX}`)
+      const d = await prisma.growDiary.create({
+        data: {
+          title: `__tbp ro ${SUFFIX}`, description: "t", growType: "INDOOR",
+          startDate: new Date(), authorId: ru.id, stage: "FLOWER", visibility: "PUBLIC",
+        },
+      })
+      diaryIds.push(d.id)
+      await prisma.diaryUpdate.create({
+        data: {
+          title: "u1", content: "x", stage: "FLOWER", diaryId: d.id, authorId: ru.id,
+          feeding: "runoff ec 2.9, fed at 1.6", ec: 1.6,
+        },
+      })
+      await prisma.diaryUpdate.create({
+        data: {
+          title: "u2", content: "x", stage: "FLOWER", diaryId: d.id, authorId: ru.id,
+          feeding: "runoff 1400 ppm yesterday",
+          createdAt: new Date(Date.now() - 86400000),
+        },
+      })
+      const g = await buildGrowContext(d.id, { ownerId: ru.id, scope: "public" })
+      assert.ok(g)
+      assert.equal(g!.series.runoffEc.latest, 2.9, "runoff EC parsed from feeding text")
+      assert.equal(g!.series.runoffEc.n, 1, "ppm runoff never enters the series")
+      const rdiag = evaluateContext(g!)
+      const salt = rdiag.candidates.find((c) => c.id === "salt_buildup")
+      assert.ok(
+        salt?.signals.some((s) => s.signal === "runoff"),
+        "runoff signal group feeds salt_buildup"
+      )
+      console.log("✓ runoff channel: feeding text → runoff series")
+    }
+
     console.log("All TerpBot pipeline tests passed.")
   } finally {
     await prisma.notification.deleteMany({ where: { id: { in: notificationIds } } }).catch(() => {})

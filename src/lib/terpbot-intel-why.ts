@@ -16,8 +16,6 @@ import type {
   WhyTrail,
 } from "@/lib/terpbot-intel-types"
 
-const DAY_MS = 86400000
-
 const SIGNAL_LABELS: Record<string, string> = {
   humidity: "RH readings",
   temperature: "temperature readings",
@@ -48,12 +46,10 @@ export function buildWhyTrail(
 ): WhyTrail {
   let logged = 0
   let reported = 0
-  let newest = 0
   for (const s of Object.values(ctx.series)) {
     for (const p of s.points) {
       if (p.provenance === "user-reported") reported++
       else logged++
-      if (p.t > newest) newest = p.t
     }
   }
 
@@ -79,6 +75,7 @@ export function buildWhyTrail(
       requiredMissing: c.requiredMissing,
       next: c.nextMeasurement,
       sourceIds: c.sourceIds,
+      ...(c.stale ? { stale: true } : {}),
     }))
 
   return {
@@ -89,7 +86,8 @@ export function buildWhyTrail(
       logged,
       reported,
       observations: ctx.observations.length,
-      staleDays: newest ? Math.max(0, Math.floor((now - newest) / DAY_MS)) : null,
+      staleDays: ctx.daysSinceUpdate,
+      ...(ctx.stageStartCensored ? { stageEstimated: true } : {}),
     },
     candidates,
     findings: diagnosis.findings
@@ -111,6 +109,7 @@ function uncertaintyLine(c: CandidateResult | WhyTrail["candidates"][number], st
       .map((m) => MEASUREMENT_INFO[m as keyof typeof MEASUREMENT_INFO]?.label ?? m)
       .join(", ")}`
   }
+  if (c.stale && staleDays != null) return `data is ${staleDays} days old`
   if (c.independentSignals <= 1) return "only one independent signal"
   if (staleDays != null && staleDays >= 3) return `data is ${staleDays} days old`
   if (c.state === "possible") return "risk conditions favor it but no symptom confirms it"
@@ -125,6 +124,7 @@ export function renderWhy(trail: WhyTrail, question?: string): string[] {
     `${b.logged} logged readings`,
     b.reported ? `${b.reported} you told me` : null,
     b.observations ? `${b.observations} reported symptoms` : null,
+    b.stageEstimated ? "stage timing estimated" : null,
   ].filter(Boolean)
   const lines: string[] = [
     `🔍 Why I said that (knowledge v${trail.knowledgeVersion}, ${bits.join(" · ")})`,

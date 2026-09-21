@@ -74,14 +74,14 @@ function emptySeries(): IntelSeries {
  *  the grower has told the bot. Stage "UNKNOWN" passes no stage gate
  *  (GROWTH_STAGES does not contain it), so stage-scoped rules simply
  *  do not apply. Pure — no Prisma. */
-export function emptyContext(now: number): GrowContextView {
+export function emptyContext(now: number, stage = "UNKNOWN"): GrowContextView {
   return {
     scope: "public",
     diary: {
       id: "",
       slug: null,
       title: "",
-      stage: "UNKNOWN",
+      stage,
       visibility: "PUBLIC",
       startDate: new Date(now),
       harvested: false,
@@ -98,7 +98,6 @@ export function emptyContext(now: number): GrowContextView {
     stageStartCensored: true,
     updateCount: 0,
     daysSinceUpdate: null,
-    medianUpdateIntervalDays: null,
     envCoverage: 0,
     series: {
       temperature: emptySeries(),
@@ -139,6 +138,32 @@ function setupCapabilities(setup: { ventilation: string | null; fans: string | n
   return [...caps]
 }
 
+/** First plausible runoff value in a row's feeding/content text, or
+ *  null. `runoffEc` accepts unit "mscm" or an unstated unit with value
+ *  ≤ 6 (growers write runoff in mS/cm by convention); ppm is rejected.
+ *  `runoffPh` accepts 0–14. */
+function runoffMeasurement(
+  u: { content: string | null; feeding: string | null },
+  metric: "runoffPh" | "runoffEc"
+): number | null {
+  const candidates = [u.feeding, u.content].filter((t): t is string => !!t)
+  for (const text of candidates) {
+    const hits = parseGrowText(text).measurements
+      .filter((m) => m.metric === metric && m.value != null)
+      .sort((a, b) => a.span[0] - b.span[0])
+    for (const m of hits) {
+      if (metric === "runoffPh" && m.value! >= 0 && m.value! <= 14) return m.value!
+      if (
+        metric === "runoffEc" &&
+        (m.unit === "mscm" || (m.unit == null && m.value! <= 6))
+      ) {
+        return m.value!
+      }
+    }
+  }
+  return null
+}
+
 export async function buildGrowContext(
   diaryId: string,
   opts: { ownerId: string; scope: "public" | "owner"; now?: Date }
@@ -165,7 +190,7 @@ export async function buildGrowContext(
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       take: INTEL_WINDOW,
       select: {
-        id: true, createdAt: true, stage: true, content: true,
+        id: true, createdAt: true, stage: true, content: true, feeding: true,
         temperature: true, humidity: true, vpd: true, ph: true, ec: true,
         heightCm: true,
       },
@@ -202,10 +227,27 @@ export async function buildGrowContext(
       }
       return { ...seriesStats(points), points, trend: detectTrend(points, METRIC_EPSILON.vpd) }
     })(),
-    // runoff metrics have no schema columns — populated later by
-    // user-reported points / parsed feeding text (mergeReported)
-    runoffPh: emptySeries(),
-    runoffEc: emptySeries(),
+    // Runoff metrics have no schema columns — they come out of `feeding`
+    // (and `content`) free text via the grow parser. Convention: runoff
+    // EC only counts when the unit is mS/cm or unstated with a plausible
+    // mS/cm value (≤6) — ppm is rejected, never converted. When one row
+    // yields several values for a metric, the first by span wins.
+    runoffPh: (() => {
+      const points: MetricPoint[] = []
+      for (const u of rows) {
+        const m = runoffMeasurement(u, "runoffPh")
+        if (m != null) points.push({ t: u.createdAt.getTime(), v: m })
+      }
+      return { ...seriesStats(points), points, trend: detectTrend(points, METRIC_EPSILON.ph) }
+    })(),
+    runoffEc: (() => {
+      const points: MetricPoint[] = []
+      for (const u of rows) {
+        const m = runoffMeasurement(u, "runoffEc")
+        if (m != null) points.push({ t: u.createdAt.getTime(), v: m })
+      }
+      return { ...seriesStats(points), points, trend: detectTrend(points, METRIC_EPSILON.ec) }
+    })(),
   }
 
   // Entered-vs-computed divergence on the newest update carrying both.
@@ -289,13 +331,6 @@ export async function buildGrowContext(
     stageStartCensored: !prevStage,
     updateCount: rows.length,
     daysSinceUpdate: latest ? Math.floor((now - latest.createdAt.getTime()) / 86400000) : null,
-    medianUpdateIntervalDays: (() => {
-      if (rows.length < 2) return null
-      const gaps: number[] = []
-      for (let i = 1; i < rows.length; i++) gaps.push(rows[i].createdAt.getTime() - rows[i - 1].createdAt.getTime())
-      gaps.sort((a, b) => a - b)
-      return Math.round((gaps[Math.floor(gaps.length / 2)] / 86400000) * 10) / 10
-    })(),
     envCoverage,
     series,
     vpdDivergence: divergence,

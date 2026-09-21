@@ -11,6 +11,7 @@ import {
   INTEL_RULES,
   assessCandidate,
   evaluateContext,
+  nextStepSatisfied,
   nextUsefulMeasurement,
   rankCandidates,
 } from "@/lib/terpbot-intel"
@@ -50,7 +51,7 @@ const mkCtx = (over: Partial<GrowContextView> = {}): GrowContextView => ({
   now: t0 + 40 * 86400000,
   day: 41, week: 6,
   stageDays: 20, stageStartCensored: false,
-  updateCount: 4, daysSinceUpdate: 1, medianUpdateIntervalDays: 7,
+  updateCount: 4, daysSinceUpdate: 1,
   envCoverage: 1,
   series: {
     temperature: emptySeries, humidity: emptySeries, ph: emptySeries,
@@ -391,6 +392,128 @@ function run() {
       candidates: [{ ...windTrail.candidates[0], sourceIds: ["cs-vpd-ranges"] }],
     }).join("\n")
     assert.ok(csOut.includes("cannabis-specific"), "cannabis source labelled")
+  }
+
+  // ── 12. env.snapshot — a single fresh reading contributes ────────
+  {
+    const now = t0 + 40 * 86400000
+    const reportedCtx = (stage: string) =>
+      mergeObservations(
+        mergeReported(
+          mkCtx({ diary: { ...mkCtx().diary, id: "", stage } }),
+          [
+            { metric: "temperature", value: 84, unit: "degF", t: now },
+            { metric: "humidity", value: 40, t: now },
+          ],
+          now
+        ),
+        [{ symptom: "CURL_UP", location: "UPPER_NEW", t: now }]
+      )
+
+    // Unknown stage → the snapshot item is weak; moderate symptom +
+    // weak env = POSSIBLE (one moderate independent signal).
+    const diagU = evaluateContext(reportedCtx("UNKNOWN"))
+    const hsU = diagU.candidates.find((c) => c.id === "heat_stress")
+    assert.ok(hsU, "snapshot feeds heat_stress with no diary")
+    assert.equal(hsU!.state, "possible", "weak snapshot + moderate symptom → POSSIBLE")
+    assert.ok(
+      hsU!.signals.some((s) => s.signal === "env:temp-rh"),
+      "snapshot contributes the env:temp-rh signal"
+    )
+    assert.ok(
+      hsU!.signals.some((s) => s.signal === "symptom:CURL_UP"),
+      "symptom contributes its own signal"
+    )
+    // Stage gap finding fires when stage is unknown.
+    assert.ok(
+      diagU.findings.some((f) => f.ruleId === "data.stage-unknown"),
+      "data.stage-unknown gap fires"
+    )
+    assert.ok(!nextStepSatisfied(reportedCtx("UNKNOWN"), "inspect:stage"))
+
+    // Known FLOWER stage → large VPD excursion → moderate snapshot;
+    // two moderate independent signals → STRONG.
+    const diagF = evaluateContext(reportedCtx("FLOWER"))
+    const hsF = diagF.candidates.find((c) => c.id === "heat_stress")
+    assert.equal(hsF?.state, "strong", "moderate snapshot + moderate symptom → STRONG")
+    assert.ok(hsF!.independentSignals >= 2)
+    assert.ok(!diagF.findings.some((f) => f.ruleId === "data.stage-unknown"))
+  }
+
+  // ── 13. Stale degradation — old readings can't hold STRONG ──────
+  {
+    const oldNow = t0 + 60 * 86400000
+    const staleRh = mkSeries([75, 75, 75, 75, 75, 75, 75, 75], 2)
+    const ctxStale = mkCtx({
+      now: oldNow,
+      daysSinceUpdate: 14,
+      series: { ...mkCtx().series, humidity: staleRh },
+      freshness: { humidity: 14 },
+    })
+    const diagS = evaluateContext(ctxStale)
+    const hh = diagS.candidates.find((c) => c.id === "humidity_high")
+    assert.ok(hh, "humidity_high fires on stale RH")
+    assert.notEqual(hh!.state, "strong", "stale readings can't hold STRONG")
+    assert.equal(hh!.stale, true, "stale flag set")
+    assert.ok(
+      hh!.info.some((e) => /days old/.test(e.text)),
+      "stale info evidence added"
+    )
+    assert.ok(
+      diagS.findings.some((f) => f.ruleId === "data.stale"),
+      "data.stale gap fires"
+    )
+
+    // One fresh user report lifts the clamp and silences data.stale.
+    const ctxFresh = mergeReported(
+      ctxStale,
+      [{ metric: "humidity", value: 75, t: oldNow }],
+      oldNow
+    )
+    const diagF2 = evaluateContext(ctxFresh)
+    const hh2 = diagF2.candidates.find((c) => c.id === "humidity_high")
+    assert.equal(hh2?.state, "strong", "fresh report lifts the stale clamp")
+    assert.ok(!hh2?.stale)
+    assert.ok(
+      !diagF2.findings.some((f) => f.ruleId === "data.stale"),
+      "fresh report silences data.stale"
+    )
+  }
+
+  // ── 14. Runoff rules — EC gap and pH shift ──────────────────────
+  {
+    const now = t0 + 40 * 86400000
+    const ctx = withSeries({
+      ec: mkSeries([2.6, 2.7, 2.6], 0.1), // ≥3 readings, ≥60% above 2.5 → chem.ec-elevated
+      runoffEc: mkSeries([3.9], 0.1),
+    })
+    const diag = evaluateContext(ctx)
+    const salt = diag.candidates.find((c) => c.id === "salt_buildup")
+    assert.ok(salt, "runoff EC gap feeds salt_buildup")
+    assert.ok(
+      salt!.signals.some((s) => s.signal === "runoff" && s.weight === 2),
+      "runoff signal group at moderate"
+    )
+    // with the ec series also feeding it (chem.ec rules), the candidate
+    // has ≥2 independent signals
+    assert.ok(salt!.independentSignals >= 2, `independentSignals ≥ 2, got ${salt!.independentSignals}`)
+
+    const neg = evaluateContext(
+      withSeries({ ec: mkSeries([2.0], 0.1), runoffEc: mkSeries([1.2], 0.1) })
+    )
+    assert.ok(
+      neg.findings.some((f) => f.ruleId === "chem.runoff-ec-gap"),
+      "negative gap renders an info finding"
+    )
+
+    const phShift = evaluateContext(
+      withSeries({ ph: mkSeries([5.8], 0.1), runoffPh: mkSeries([6.7], 0.1) })
+    )
+    const drift = phShift.candidates.find((c) => c.id === "ph_drift")
+    assert.ok(
+      drift?.signals.some((s) => s.signal === "runoff"),
+      "runoff pH shift feeds ph_drift"
+    )
   }
 
   console.log("All TerpBot intelligence tests passed.")
