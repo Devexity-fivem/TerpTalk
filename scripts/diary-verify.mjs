@@ -255,6 +255,64 @@ const main = async () => {
     r = await callApi("/api/reactions", { method: "POST", body: { type: "LIKE", diaryId }, cookie: viewerCookie })
     r.status === 403 ? pass("blocked user cannot react to diary") : fail("reaction block", r.status)
 
+    // ── Similar grows honor blocks ──────────────────────────────────
+    // Regression for the object-spread collision in diaries/[id]/page.tsx:
+    // `...notBlockedAuthor(ids)` produced `authorId: { notIn }` which the
+    // later `authorId: { not: diary.author.id }` key silently overwrote.
+    const simB = await createUser("simb")
+    const simC = await createUser("simc")
+    users.push(simB, simC)
+    const S = `__sim_${TS}`
+    const mkSim = (authorId, t) => prisma.growDiary.create({
+      data: {
+        title: M(t), description: "similar fixture", strain: S, growType: "INDOOR",
+        startDate: new Date(), authorId, visibility: "PUBLIC",
+      },
+    })
+    const anchor = await mkSim(owner.id, "anchor")
+    const ownerOther = await mkSim(owner.id, "owner-other")
+    const bDiary = await mkSim(simB.id, "sim-b")
+    const cDiary = await mkSim(simC.id, "sim-c")
+    diaryIds.push(anchor.id, ownerOther.id, bDiary.id, cDiary.id)
+
+    // "More from this grower" renders before "Similar grows" in the DOM, so
+    // slicing at the h2 keeps the author's own titles out of the region.
+    // Scripts are stripped first — the RSC flight payload at the page tail
+    // embeds every fetched title (incl. moreFromAuthor) in <script> chunks.
+    const simSlice = (html) => {
+      const clean = html.replace(/<script[\s\S]*?<\/script>/g, "")
+      const i = clean.indexOf("Similar grows")
+      return i === -1 ? "" : clean.slice(i)
+    }
+    page = await getHtml(`/diaries/${anchor.id}`, ownerCookie)
+    let simHtml = page.status === 200 ? simSlice(page.html) : ""
+    simHtml.includes(bDiary.title) && simHtml.includes(cDiary.title)
+      ? pass("similar grows lists eligible other growers")
+      : fail("similar grows eligible", { s: page.status, b: simHtml.includes(bDiary.title), c: simHtml.includes(cDiary.title) })
+    !simHtml.includes(ownerOther.title)
+      ? pass("similar grows excludes current author's other diaries")
+      : fail("similar grows author leak", ownerOther.id)
+
+    await prisma.block.create({ data: { blockerId: owner.id, blockedId: simB.id } })
+    page = await getHtml(`/diaries/${anchor.id}`, ownerCookie)
+    simHtml = page.status === 200 ? simSlice(page.html) : ""
+    simHtml.includes(cDiary.title) && !simHtml.includes(bDiary.title)
+      ? pass("similar grows hides blocked author")
+      : fail("similar grows blocked", { s: page.status, b: simHtml.includes(bDiary.title), c: simHtml.includes(cDiary.title) })
+
+    await prisma.block.deleteMany({ where: { blockerId: owner.id, blockedId: simB.id } })
+    page = await getHtml(`/diaries/${anchor.id}`, ownerCookie)
+    simHtml = page.status === 200 ? simSlice(page.html) : ""
+    simHtml.includes(bDiary.title)
+      ? pass("similar grows restores author after unblock")
+      : fail("similar grows unblock", { s: page.status })
+
+    page = await getHtml(`/diaries/${anchor.id}`)
+    simHtml = page.status === 200 ? simSlice(page.html) : ""
+    simHtml.includes(bDiary.title) && simHtml.includes(cDiary.title)
+      ? pass("similar grows visible to guests under public rules")
+      : fail("similar grows guest", { s: page.status, b: simHtml.includes(bDiary.title), c: simHtml.includes(cDiary.title) })
+
     // ── Strain stats honesty ────────────────────────────────────────
     // Run-unique strain + two more matching diaries (via prisma to avoid the
     // 5/day create cap) → "early" tier.

@@ -10,10 +10,19 @@
 //   component that accepts href/onClick/etc.), the wrapper is NOT focusable
 //   and NOT interactive — the child's own tab stop and focus ring are the
 //   trigger. This avoids nested interactive controls and duplicate tab stops.
-// - If the child is plain content, the wrapper gets tabIndex={0} with a
-//   visible focus ring so keyboard users can still reach the tooltip.
+// - If the child is plain content but the tooltip sits INSIDE an interactive
+//   ancestor (a link card, a button), the wrapper is likewise not focusable —
+//   a nested tab stop would be an invisible keyboard trap. The ancestor's
+//   focusin/focusout events drive tooltip visibility instead (React state,
+//   since the wrapper is outside the ancestor's group/ scope).
+// - Only a tooltip with a non-interactive child AND no interactive ancestor
+//   gets tabIndex={0} plus a visible focus ring, so keyboard users can reach
+//   the tooltip.
+// - Escape dismisses the tooltip until focus or the pointer leaves (wrapper
+//   keydown, or an ancestor keydown listener for the nested case). Escape is
+//   never stopped — modals/menus above still close.
 
-import React from "react"
+import React, { useEffect, useRef, useState } from "react"
 import { Info } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -63,14 +72,57 @@ interface TooltipProps {
 
 export default function Tooltip({ content, children, side = "top", align = "center", className }: TooltipProps) {
   const childInteractive = isInteractive(children)
+  const ref = useRef<HTMLSpanElement>(null)
+  // All three start false so server and client render identical markup.
+  const [insideInteractive, setInsideInteractive] = useState(false)
+  const [forced, setForced] = useState(false)
+  const [dismissed, setDismissed] = useState(false)
+
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const anc = el.parentElement?.closest(
+      'a,button,input,select,textarea,summary,[role="button"],[role="link"],[tabindex]:not([tabindex="-1"])'
+    )
+    if (!anc) return
+    setInsideInteractive(true)
+    const onFocusIn = () => setForced(true)
+    const onFocusOut = () => {
+      setForced(false)
+      setDismissed(false)
+    }
+    const onKeyDown = (e: Event) => {
+      if ((e as KeyboardEvent).key === "Escape") setDismissed(true)
+    }
+    anc.addEventListener("focusin", onFocusIn)
+    anc.addEventListener("focusout", onFocusOut)
+    anc.addEventListener("keydown", onKeyDown)
+    return () => {
+      anc.removeEventListener("focusin", onFocusIn)
+      anc.removeEventListener("focusout", onFocusOut)
+      anc.removeEventListener("keydown", onKeyDown)
+    }
+  }, [])
+
+  const focusable = !childInteractive && !insideInteractive
   return (
     <span
-      tabIndex={childInteractive ? undefined : 0}
+      ref={ref}
+      tabIndex={focusable ? 0 : undefined}
+      onKeyDown={(e) => {
+        if (e.key === "Escape") setDismissed(true)
+      }}
+      // The wrapper itself is the only focusable node inside, so any blur
+      // means focus left the trigger — re-arm the tooltip for next time.
+      onFocus={() => setDismissed(false)}
+      onBlur={() => setDismissed(false)}
+      onMouseLeave={() => setDismissed(false)}
       className={cn(
         "group/tt relative inline-flex rounded-sm",
-        // Visible keyboard focus — only the non-interactive wrapper needs a
-        // ring; interactive children show their own focus styles.
-        !childInteractive && "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1",
+        // Visible keyboard focus — only the standalone non-interactive
+        // wrapper needs a ring; interactive children and interactive
+        // ancestors show their own focus styles.
+        focusable && "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1",
         className
       )}
     >
@@ -81,8 +133,13 @@ export default function Tooltip({ content, children, side = "top", align = "cent
         className={cn(
           "pointer-events-none absolute z-50 w-max max-w-56 rounded-md border border-border bg-card px-2.5 py-1.5",
           "text-left text-xs font-normal leading-snug text-foreground shadow-lg",
-          "invisible opacity-0 transition-opacity duration-150",
-          "group-hover/tt:visible group-hover/tt:opacity-100 group-focus-within/tt:visible group-focus-within/tt:opacity-100",
+          dismissed
+            ? "invisible opacity-0"
+            : cn(
+                "invisible opacity-0 transition-opacity duration-150",
+                "group-hover/tt:visible group-hover/tt:opacity-100 group-focus-within/tt:visible group-focus-within/tt:opacity-100",
+                forced && "visible opacity-100"
+              ),
           SIDE_CLASS[side],
           ALIGN_CLASS[align]
         )}

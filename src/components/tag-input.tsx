@@ -115,6 +115,7 @@ export default function TagInput({ value, onChange, max = 5, disabled }: TagInpu
             onFocus={() => setFocused(true)}
             onBlur={() => setTimeout(() => setFocused(false), 150)}
             disabled={disabled || value.length >= max}
+            aria-label="Add tags"
             placeholder={value.length >= max ? "" : "Add tags..."}
             className="flex-1 min-w-[120px] bg-transparent outline-none text-sm"
           />

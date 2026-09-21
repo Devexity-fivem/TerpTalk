@@ -130,6 +130,8 @@ export default function ImageUploader({ value, onChange, max = 4, disabled }: Im
         accept={ACCEPT}
         multiple
         className="hidden"
+        aria-hidden="true"
+        tabIndex={-1}
         onChange={(e) => {
           void addFiles(Array.from(e.target.files ?? []))
           e.target.value = ""

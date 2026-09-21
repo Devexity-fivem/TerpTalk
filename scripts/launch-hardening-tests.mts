@@ -266,9 +266,21 @@ await check("diary PATCH: startDate is not editable", () => {
 await check("tooltip: no focusable wrapper around interactive children", () => {
   const src = readFileSync("src/components/ui/tooltip.tsx", "utf8")
   assert.ok(src.includes("isInteractive"), "interactive-child detection required")
-  assert.ok(src.includes("tabIndex={childInteractive ? undefined : 0}"), "conditional tabIndex required")
+  assert.ok(src.includes("insideInteractive"), "interactive-ancestor detection required")
+  assert.ok(src.includes("tabIndex={focusable ? 0 : undefined}"), "conditional tabIndex required")
   assert.ok(!/outline-none/.test(src.replace(/focus-visible:outline-none/g, "")), "focus outline must not be suppressed")
   assert.ok(src.includes("focus-visible"), "visible focus indicator required")
+  assert.ok(src.includes('"Escape"'), "Escape dismissal required")
+})
+
+await check("a11y: scoped inputs carry accessible names", () => {
+  assert.ok(readFileSync("src/components/chat-room.tsx", "utf8").includes('aria-label={room ? `Message ${room.name}` : "Chat message"}'), "chat composer aria-label")
+  assert.ok(readFileSync("src/components/tag-input.tsx", "utf8").includes('aria-label="Add tags"'), "TagInput aria-label")
+  const report = readFileSync("src/components/report-button.tsx", "utf8")
+  assert.ok(report.includes('aria-label="Report to moderators"'), "report dialog aria-label")
+  assert.ok(report.includes('aria-label="Report reason"'), "report reason aria-label")
+  assert.ok(report.includes('aria-label="Report details"'), "report details aria-label")
+  assert.ok(readFileSync("src/components/image-uploader.tsx", "utf8").includes('aria-hidden="true"'), "hidden file input out of a11y tree")
 })
 
 await check("nameplates: readable solid fallback + supports-gated gradient", () => {

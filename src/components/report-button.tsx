@@ -63,9 +63,10 @@ export default function ReportButton({
         </button>
       </Tooltip>
       {open && (
-        <div className="absolute right-0 mt-1 w-72 p-3 bg-card/80 border border-border/70 rounded-2xl shadow-lg z-20 space-y-2">
+        <div role="dialog" aria-label="Report to moderators" className="absolute right-0 mt-1 w-72 p-3 bg-card/80 border border-border/70 rounded-2xl shadow-lg z-20 space-y-2">
           <p className="text-xs text-muted-foreground">Why are you reporting this?</p>
           <select
+            aria-label="Report reason"
             value={reason}
             onChange={(e) => setReason(e.target.value)}
             className="w-full px-2 py-1.5 rounded-xl border border-border/70 bg-background text-xs"
@@ -79,6 +80,7 @@ export default function ReportButton({
             <option value="OTHER">Other</option>
           </select>
           <textarea
+            aria-label="Report details"
             value={desc}
             onChange={(e) => setDesc(e.target.value)}
             placeholder="Optional details for moderators..."

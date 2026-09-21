@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma"
-import { publicUserSelect, activeAuthor, blockedUserIds, notBlockedAuthor } from "@/lib/security"
+import { publicUserSelect, activeAuthor, blockedUserIds } from "@/lib/security"
 import { notFound, permanentRedirect } from "next/navigation"
 import { Leaf, Calendar, Users, ClipboardCheck, Camera, TrendingUp, Pencil, Sprout, Link2, Lock } from "lucide-react"
 import Link from "next/link"
@@ -176,9 +176,10 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
         deleted: false,
         author: activeAuthor(),
         ...publicDiaryWhere,
-        ...notBlockedAuthor(blockedIds),
         id: { not: diary.id },
-        authorId: { not: diary.author.id },
+        // Both constraints on one key — a spread + a second `authorId` key
+        // would silently clobber the block filter (object-spread collision).
+        authorId: { not: diary.author.id, ...(blockedIds.length ? { notIn: blockedIds } : {}) },
         OR: similarOr,
       },
       orderBy: { updatedAt: "desc" },

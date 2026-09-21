@@ -1343,6 +1343,7 @@ export default function ChatRoom({ embedded = false, headerActions }: ChatRoomPr
                 aria-controls={listboxId}
                 aria-activedescendant={suggestionCount > 0 ? `${listboxId}-opt-${suggestIndex}` : undefined}
                 aria-autocomplete="list"
+                aria-label={room ? `Message ${room.name}` : "Chat message"}
                 placeholder={
                   !room
                     ? "Loading chat room..."
