@@ -138,18 +138,22 @@ function setupCapabilities(setup: { ventilation: string | null; fans: string | n
   return [...caps]
 }
 
-/** First plausible runoff value in a row's feeding/content text, or
- *  null. `runoffEc` accepts unit "mscm" or an unstated unit with value
- *  ≤ 6 (growers write runoff in mS/cm by convention); ppm is rejected.
- *  `runoffPh` accepts 0–14. */
+/** First plausible runoff value in a row's parsed feeding/content text,
+ *  or null. `runoffEc` accepts unit "mscm" or an unstated unit with
+ *  value ≤ 6 (growers write runoff in mS/cm by convention); ppm is
+ *  rejected outright — never accepted, never converted ("runoff ppm 4"
+ *  can't smuggle in as 4 mS/cm). `runoffPh` accepts 0–14. The parser
+ *  itself guards proximity: a runoff metric phrase binds a number only
+ *  through a direct connector (was/is/at/of/= or adjacency), so
+ *  "runoff ec on 2 plants" can't mint a value here. */
 function runoffMeasurement(
-  u: { content: string | null; feeding: string | null },
+  parsed: (ReturnType<typeof parseGrowText> | null)[],
   metric: "runoffPh" | "runoffEc"
 ): number | null {
-  const candidates = [u.feeding, u.content].filter((t): t is string => !!t)
-  for (const text of candidates) {
-    const hits = parseGrowText(text).measurements
-      .filter((m) => m.metric === metric && m.value != null)
+  for (const p of parsed) {
+    if (!p) continue
+    const hits = p.measurements
+      .filter((m) => m.metric === metric && m.value != null && m.unit !== "ppm")
       .sort((a, b) => a.span[0] - b.span[0])
     for (const m of hits) {
       if (metric === "runoffPh" && m.value! >= 0 && m.value! <= 14) return m.value!
@@ -170,7 +174,8 @@ export async function buildGrowContext(
 ): Promise<GrowContextView | null> {
   const scope = opts.scope === "public" ? publicDiaryWhere : {}
   const diary = await prisma.growDiary.findFirst({
-    where: { id: diaryId, authorId: opts.ownerId, deleted: false, ...scope },
+    // harvested diaries produce no intelligence — the run is over
+    where: { id: diaryId, authorId: opts.ownerId, deleted: false, harvested: false, ...scope },
     select: {
       id: true, slug: true, title: true, stage: true, visibility: true,
       startDate: true, harvested: true,
@@ -212,6 +217,13 @@ export async function buildGrowContext(
   )
   const now = (opts.now ?? new Date()).getTime()
 
+  // Parse each row's free text once — feeding and content feed both the
+  // runoff series below and the reported-symptom observation pass.
+  const parsedRows = rows.map((u) => ({
+    feeding: u.feeding ? parseGrowText(u.feeding) : null,
+    content: u.content ? parseGrowText(u.content) : null,
+  }))
+
   const series = {
     temperature: buildSeries(rows, "temperature", "temperature"),
     humidity: buildSeries(rows, "humidity", "humidity"),
@@ -234,18 +246,18 @@ export async function buildGrowContext(
     // yields several values for a metric, the first by span wins.
     runoffPh: (() => {
       const points: MetricPoint[] = []
-      for (const u of rows) {
-        const m = runoffMeasurement(u, "runoffPh")
+      rows.forEach((u, i) => {
+        const m = runoffMeasurement([parsedRows[i].feeding, parsedRows[i].content], "runoffPh")
         if (m != null) points.push({ t: u.createdAt.getTime(), v: m })
-      }
+      })
       return { ...seriesStats(points), points, trend: detectTrend(points, METRIC_EPSILON.ph) }
     })(),
     runoffEc: (() => {
       const points: MetricPoint[] = []
-      for (const u of rows) {
-        const m = runoffMeasurement(u, "runoffEc")
+      rows.forEach((u, i) => {
+        const m = runoffMeasurement([parsedRows[i].feeding, parsedRows[i].content], "runoffEc")
         if (m != null) points.push({ t: u.createdAt.getTime(), v: m })
-      }
+      })
       return { ...seriesStats(points), points, trend: detectTrend(points, METRIC_EPSILON.ec) }
     })(),
   }
@@ -281,10 +293,10 @@ export async function buildGrowContext(
   // normalized ids + refIds, never the raw text.
   const obsMaxAge = OBSERVATION_MAX_AGE_DAYS * 86400000
   const observations: StructuredObservation[] = []
-  for (const u of rows) {
+  for (const [i, u] of rows.entries()) {
     if (now - u.createdAt.getTime() > obsMaxAge) continue
-    if (!u.content) continue
-    const parsed = parseGrowText(u.content)
+    const parsed = parsedRows[i].content
+    if (!parsed) continue
     for (const o of parsed.observations) {
       observations.push({
         symptom: o.symptom,

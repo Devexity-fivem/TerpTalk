@@ -35,6 +35,7 @@ export async function loadSession(userId: string, now: number): Promise<LoadedSe
     state: {
       reported: state.reported ?? [],
       observations: state.observations ?? [],
+      stage: state.stage,
       trail: state.trail,
     },
   }

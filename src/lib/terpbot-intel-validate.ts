@@ -140,6 +140,35 @@ export function validateKnowledge(reg?: Partial<KnowledgeRegistry>): string[] {
     }
   }
 
+  // ── sources ─────────────────────────────────────────────────────
+  // Registry hygiene: every entry must sit inside the tier taxonomy,
+  // carry a real citation URL (INTERNAL_DATA points at repo files via
+  // `publication` and is exempt), and be cited at least once — an
+  // uncited source is dead weight that drifts out of date.
+  const EVIDENCE_TIERS = new Set<string>([
+    "PEER_REVIEWED", "EXTENSION", "GOVERNMENT", "PROFESSIONAL",
+    "COMMUNITY", "INTERNAL_DATA",
+  ])
+  const citedSourceIds = new Set<string>()
+  for (const def of Object.values(r.candidates)) {
+    for (const s of def.sourceIds) citedSourceIds.add(s)
+  }
+  for (const rule of r.rules) {
+    for (const s of rule.sourceIds) citedSourceIds.add(s)
+  }
+  for (const [key, s] of Object.entries(r.sources)) {
+    if (s.id !== key) errors.push(`source:${key}: key does not match source.id "${s.id}"`)
+    if (!EVIDENCE_TIERS.has(s.tier)) {
+      errors.push(`source:${key}: tier "${s.tier}" not in the evidence taxonomy`)
+    }
+    if (s.tier !== "INTERNAL_DATA" && !/^https?:\/\/.+/.test(s.url)) {
+      errors.push(`source:${key}: url missing or not http(s)`)
+    }
+    if (!citedSourceIds.has(key)) {
+      errors.push(`source:${key}: registered but never cited by any rule or candidate`)
+    }
+  }
+
   // ── symptom-keyed tables ────────────────────────────────────────
   for (const [symptom, ids] of Object.entries(r.contra)) {
     if (!symptomIds.has(symptom)) errors.push(`contra:${symptom}: not a SymptomId`)

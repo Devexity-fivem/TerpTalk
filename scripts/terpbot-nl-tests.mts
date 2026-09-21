@@ -93,6 +93,11 @@ function run() {
   assert.equal(obs("no yellowing").length, 0, "negated symptom dropped")
   assert.equal(obs("not clawing anymore").length, 0, "not + symptom dropped")
   assert.equal(obs("leaves aren't curling").length, 0, "aren't + symptom dropped")
+  assert.equal(
+    obs("i don't think it's nutrient burn").length,
+    0,
+    "negator three tokens back — 'i don't think it's X'"
+  )
 
   // ── trend/period + metric-trend synthesis ─────────────────────────
   {
@@ -116,7 +121,7 @@ function run() {
   }
   {
     const m = parseGrowText("runoff 1400ppm").measurements[0]
-    assert.equal(m.metric, "ec", "ppm implies EC-family")
+    assert.equal(m.metric, "runoffEc", "runoff prefix + ppm → runoff EC")
     assert.equal(m.unit, "ppm")
     assert.equal(m.value, 1400)
   }
@@ -146,6 +151,14 @@ function run() {
   {
     const s = syms("not yellow but pale")
     assert.deepEqual(s, ["LEAF_PALE"], "negated first clause, second survives")
+  }
+  {
+    // "but only the oldest ones" — a location-only second half does not
+    // soft-split, so the location refines the yellowing observation
+    const o = obs("my leaves are yellow but only the oldest ones")[0]
+    assert.equal(o.symptom, "LEAF_YELLOWING")
+    assert.equal(o.location, "LOWER_OLD", "'oldest ones' resolves to lower/older leaves")
+    assert.ok(o.feeds.includes("nitrogen_def"), "lower/older yellowing feeds mobile-nutrient candidates")
   }
 
   // ── question / comparison flags ───────────────────────────────────
@@ -214,6 +227,56 @@ function run() {
     assert.equal(m.unit, undefined, "runoff EC does not invent mscm")
   }
   {
+    const m = parseGrowText("runoff ec was 2.9").measurements[0]
+    assert.equal(m.metric, "runoffEc")
+    assert.equal(m.value, 2.9)
+  }
+  {
+    // unit-implied EC right after "runoff" — no metric word needed
+    const m = parseGrowText("runoff 2.4 ms/cm").measurements[0]
+    assert.equal(m.metric, "runoffEc")
+    assert.equal(m.value, 2.4)
+    assert.equal(m.unit, "mscm")
+  }
+  {
+    const m = parseGrowText("the runoff is 2.4 ms/cm").measurements[0]
+    assert.equal(m.metric, "runoffEc")
+    assert.equal(m.value, 2.4)
+    assert.equal(m.unit, "mscm")
+  }
+  {
+    // a runoff ppm measurement is minted but stamped ppm — downstream
+    // (accept()/runoffMeasurement) rejects it, never converts to mS/cm
+    const m = parseGrowText("runoff ppm 4").measurements[0]
+    assert.equal(m.metric, "runoffEc")
+    assert.equal(m.unit, "ppm", "ppm stays ppm — never silently mS/cm")
+    assert.equal(m.value, 4)
+  }
+  assert.equal(
+    parseGrowText("checked runoff ec on 2 plants").measurements.length,
+    0,
+    "runoff ec on N plants — 'on' is not a value connector"
+  )
+  assert.equal(
+    parseGrowText("should runoff ec be under 3?").measurements.length,
+    0,
+    "question about runoff ec mints no measurement"
+  )
+  {
+    // a number binds to the metric phrase whose edge is nearest —
+    // preceding phrase wins ties over a following one
+    const ms = parseGrowText("runoff ph 5.6 ec 2.4").measurements
+    assert.equal(ms[0].metric, "runoffPh")
+    assert.equal(ms[0].value, 5.6)
+    assert.equal(ms[1].metric, "ec")
+    assert.equal(ms[1].value, 2.4)
+  }
+  {
+    const ms = parseGrowText("my runoff ph is 5.9 and ec is 2.8").measurements
+    assert.equal(ms[0].metric, "runoffPh")
+    assert.equal(ms[1].metric, "ec")
+  }
+  {
     const m = parseGrowText("run-off ph 6.8").measurements[0]
     assert.equal(m.metric, "runoffPh")
     assert.equal(m.value, 6.8)
@@ -222,6 +285,15 @@ function run() {
     const m = parseGrowText("the runoff ph is 5.9").measurements[0]
     assert.equal(m.metric, "runoffPh")
     assert.equal(m.value, 5.9)
+  }
+  {
+    // explicitMetric marks a grower-named metric; a bare unit implies one
+    const named = parseGrowText("ph 5.2").measurements[0]
+    assert.equal(named.explicitMetric, true, "metric phrase → explicit")
+    const implied = parseGrowText("72f").measurements[0]
+    assert.ok(!implied.explicitMetric, "unit-implied metric → not explicit")
+    const runoff = parseGrowText("runoff 2.4 ms/cm").measurements[0]
+    assert.equal(runoff.explicitMetric, true, "runoff prefix counts as explicit")
   }
   assert.equal(
     parseGrowText("i don't actually know my runoff ec").measurements.length,

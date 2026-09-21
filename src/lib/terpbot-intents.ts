@@ -406,7 +406,9 @@ export function extractTerpbotQuery(content: string): string {
   return content
     .slice(m.index + m[0].length)
     .toLowerCase()
-    .replace(/[?!.,";:]+/g, " ")
+    // Strip sentence punctuation but keep decimals — a "." followed by a
+    // digit is part of a measurement ("ph is 5.8"), not punctuation.
+    .replace(/[?!,";:]+|\.(?!\d)/g, " ")
     .replace(/\s+/g, " ")
     .trim()
     .slice(0, 200)
@@ -419,8 +421,13 @@ export function parseTerpbotIntent(content: string): TerpbotIntent {
   const text = extractTerpbotQuery(content)
   if (!text) return { kind: "help" }
 
-  // Hard block: staff vocabulary never reaches a matcher.
-  if (STAFF_WORDS.test(text)) return { kind: "refusal" }
+  // Hard block: staff vocabulary never reaches a matcher — unless the
+  // text is actually a data report ("report runoff ec 2.4"): growers
+  // preface readings with "report", and measurements can't be a
+  // moderation request.
+  if (STAFF_WORDS.test(text) && !parseGrowText(text).measurements.length) {
+    return { kind: "refusal" }
+  }
 
   for (const matcher of MATCHERS) {
     for (const pattern of matcher.patterns) {

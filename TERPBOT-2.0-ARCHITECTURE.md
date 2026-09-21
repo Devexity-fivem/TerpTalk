@@ -10,7 +10,7 @@ runoff channel. See Implementation status at the bottom.**
 
 ## 1. Executive summary
 
-TerpBot today is a deterministic retrieval/command bot: 36 public commands, a regex intent
+TerpBot today is a deterministic retrieval/command bot: 41 public commands, a regex intent
 parser, event-driven announcements, and private assists — all least-privilege, public-room
 only, claim-first idempotent, PUBLIC-scoped for grow data.
 
@@ -160,7 +160,7 @@ type IntelRule = {
   title: string;
   domain: "environment" | "chemistry" | "disease" | "pest" | "nutrition"
         | "growth" | "stage" | "data";
-  kind: "assessment" | "risk" | "gap" | "observation" | "info";
+  kind: "assessment" | "risk" | "gap" | "observation";
   signal?: SignalId;          // input group this rule's evidence derives from;
                               // rules that iterate observations emit per-evidence
                               // "symptom:<id>" signals instead
@@ -170,15 +170,13 @@ type IntelRule = {
 };
 
 type IntelEvidence = {
-  kind: "observation" | "assessment" | "risk" | "gap" | "info";
-  text: string;               // rendered-safe string — no raw user text
-  severity: "info" | "watch" | "action" | "urgent";
-  direction?: "for" | "risk" | "against" | "info";
-  strength?: "weak" | "moderate" | "strong";  // 1|2|3 — categorical
-  candidate?: CandidateId;    // pools into CANDIDATES
+  direction: "for" | "risk" | "against" | "info";   // required
+  strength: "weak" | "moderate" | "strong";          // required — 1|2|3, categorical
+  text: string;               // required — rendered-safe string, no raw user text
+  confirmed?: boolean;        // directly measured fact → CONFIRMED findings
+  measurement?: MeasurementHint;  // next-step hint attached to the evidence
+  candidate?: CandidateId;    // pools into CANDIDATES; absent → standalone finding
   signal?: SignalId;          // overrides rule.signal for this item
-  metric?: MetricId | `inspect:${string}`;    // measurement hint
-  t?: number;                 // observation timestamp (stale checks)
 };
 ```
 
@@ -207,9 +205,12 @@ Provenance is shown on demand (`/why`), never spammed — a response footer like
 **Honesty rules baked into the evaluator:**
 - `cannabisSpecific:false` sources produce explanation text saying "general horticulture,
   not cannabis-specific research."
-- A rule whose only source is COMMUNITY tier can never produce weight 3 evidence.
-- Single-study findings (e.g., veg EC 4.0 optimum) are capped at weight 2 and tagged
-  `"replication": "single-study"` in the source record.
+- ~~A rule whose only source is COMMUNITY tier can never produce weight 3 evidence~~ —
+  **not implemented (deferred).** The tier exists in the taxonomy but no evidence-weight
+  cap reads it yet.
+- ~~Single-study findings are capped at weight 2 and tagged `"replication": "single-study"`~~ —
+  **not implemented (deferred).** No `replication` field exists on `KnowledgeSource`; thin-
+  provenance knowledge instead uses the per-candidate `maxState` ceiling.
 
 Seed source registry (~15 entries): Cockson 2019 (Appl Sci 9:4432); Chandra 2008/2011
 (PMC3550641/3550580); Rodriguez-Morrison 2021 (Front Plant Sci 12:646020); Westmoreland
@@ -256,17 +257,21 @@ values never enter the series).
 ```ts
 // src/lib/terpbot-intel-types.ts (as built)
 type GrowContextView = {
-  diary: { id; title; stage; visibility; startDate; harvested;
-           stageDays: number | null; stageStartCensored: boolean;
-           medium; growType; lightType; techniques: string[] };
-  setup: { present: boolean; capabilities: string[] };
+  scope: "public" | "owner";
+  diary: { id; slug; title; stage; visibility; startDate; harvested;
+           mediumType; lightType; growType; techniques: string[] };
+  setup: { present: boolean; medium: string | null; capabilities: string[] };
+  now: number; day: number; week: number;
+  stageDays: number; stageStartCensored: boolean;   // top-level, not on diary
   updateCount: number; daysSinceUpdate: number | null; envCoverage: number;
   series: {                          // IntelSeries each: points + stats + trend
-    temperature; humidity; vpd;      // vpd = user-entered, unvalidated
-    vpdComputed; vpdDivergence;      // computed from temp/RH pairs
-    ph; ec; height; runoffPh; runoffEc };
+    temperature; humidity; ph; ec; height;
+    vpdEntered;                      // user-entered VPD, unvalidated
+    vpdComputed;                     // computed from temp/RH pairs
+    runoffPh; runoffEc };            // parsed from feeding/content text
+  vpdDivergence: number | null;      // top-level: newest entered−computed diff
+  missing: MetricId[];               // schema metrics with zero readings
   freshness: Partial<Record<MetricId, number>>;  // age in days of latest point
-  missing: MetricId[];               // six schema metrics never recorded
   unresolved?: ReportedPoint[];      // ambiguous chat values awaiting a unit
   observations: StructuredObservation[];  // canonical, refId-linked, no raw text
 };
@@ -436,9 +441,9 @@ bands (temp 32–130°F plausible-range warning; pH<4 or >9 flagged "verify your
 ## 12. Cost & scale (Vercel Hobby + Neon)
 
 - Rules and vocab: static TS modules — zero DB cost, bundled.
-- GrowState: ≤3 indexed queries/diagnostic call (diary + 50 updates + setup/strain) —
-  on-demand only, never per-poll.
-- Trend calc: O(n≤50) in memory.
+- GrowState: ≤3 indexed queries/diagnostic call (diary + INTEL_WINDOW=12 updates +
+  setup/strain) — on-demand only, never per-poll.
+- Trend calc: O(n≤12) in memory.
 - Cron: one additional bounded job reusing `claimTask` (`terpbot:env-watch:<day>`),
   ≤100 candidate diaries, ≤20 sends — same envelope as existing scans. If the member base
   outgrows a 60s daily scan, split by weekday bucket (`diaryId hash % 7`) before reaching

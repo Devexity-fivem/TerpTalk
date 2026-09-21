@@ -26,6 +26,7 @@ const SIGNAL_LABELS: Record<string, string> = {
   height: "growth",
   stage: "stage timing",
   data: "data coverage",
+  runoff: "runoff readings",
 }
 
 function signalLabel(signal: string): string {

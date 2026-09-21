@@ -213,8 +213,9 @@ export interface GrowContextView {
     vpdEntered: IntelSeries
     /** VPD computed from temp+RH pairs — distinct from user-entered */
     vpdComputed: IntelSeries
-    /** runoff measurements — not schema columns; populated only from
-     *  user-reported points (and later, parsed feeding text) */
+    /** runoff measurements — not schema columns; populated by the
+     *  context builder from parsed diary feeding/content text and by
+     *  session-reported points merged at query time */
     runoffPh: IntelSeries
     runoffEc: IntelSeries
   }

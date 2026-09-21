@@ -33,10 +33,14 @@ update this file in the same commit.
 - **maxState.** Candidates declare a ceiling (`strong` or `possible`); thin-
   provenance knowledge (e.g. single-study micronutrient mapping) can never
   reach STRONG.
-- **Snapshot rule.** `env.snapshot` scores the *latest* temperature/VPD only —
+- **Snapshot rule.** `env.snapshot` scores the *latest* temperature/VPD/RH only —
   weak by default, moderate only with a known stage AND a large excursion,
-  never strong. It exists so a single fresh chat report isn't invisible to the
-  engine.
+  never strong. Temperature feeds `heat_stress`/`env.cold-stress`, VPD feeds
+  `heat_stress`, and the RH floor/ceiling branches feed `humidity_low`,
+  `humidity_high`, and `env.moisture-disease-risk`. Each branch gates on its
+  own series being thin (n<3) so snapshot evidence can't stack on a series
+  the trend rules already cover. It exists so a single fresh chat report
+  isn't invisible to the engine.
 - **Provenance.** `MetricPoint.provenance`: `undefined` = logged diary data,
   `"user-reported"` = chat report. Logged points are never modified; reported
   points are additive. `latest` is by time, so a fresh report supersedes a stale
@@ -106,7 +110,7 @@ to their rule id.
 | `chem.high-ec-antagonism` | nutrition | chem:ph-ec | risk | high EC + pH interaction (Mg→Ca/K antagonism) | morad-bernstein-2023-mg, hershkowitz-2025-ec | yes | mechanism from veg-phase Mg study |
 | `symptom.reported` | data | per-evidence `symptom:*` | assessment | observations → vocab `feeds`; direct sighting strong / refined moderate / else weak | cockson-2019-nutrient-disorders | yes | symptom→candidate map is one study + extension vocab |
 | `symptom.senescence` | stage | per-evidence `symptom:LEAF_YELLOWING` | assessment | late-flower day threshold | cockson-2019-nutrient-disorders, terptalk-stage-tips | yes | day-count senescence is approximate |
-| `env.snapshot` | environment | env:temp-rh | assessment | latest temp vs TEMP_BANDS, VPD vs VPD_BANDS; moderate only stageKnown + large excursion (temp ≥ hi+4°F, VPD ≥ hi+0.5 / ≤ lo−0.3) | cs-vpd-ranges, chandra-2008-photosynthesis, terptalk-stage-tips, ieee-greenhouse-survey, fao56-svp, cornell-cannabis-guidebook | mixed | one reading is a lead, never a trend — capped moderate |
+| `env.snapshot` | environment | env:temp-rh | assessment | latest temp vs TEMP_BANDS, VPD vs VPD_BANDS, RH vs RH_BANDS floor/ceiling (→ humidity_low, humidity_high, env.moisture-disease-risk); moderate only stageKnown + large excursion (temp ≥ hi+4°F, VPD ≥ hi+0.5 / ≤ lo−0.3); each branch silent once its series reaches n≥3 | cs-vpd-ranges, chandra-2008-photosynthesis, terptalk-stage-tips, ieee-greenhouse-survey, fao56-svp, cornell-cannabis-guidebook | mixed | one reading is a lead, never a trend — capped moderate |
 | `chem.runoff-ec-gap` | chemistry | runoff | assessment | runoffEC − feedEC ≥ 1.0 → moderate; ≥0.5 → weak; ≤−0.5 → info; paired within 3 days | ncsu-pourthru-2009 | no | general substrate guidance — cannabis runoff thresholds unpublished |
 | `chem.runoff-ph-shift` | chemistry | runoff | assessment | \|runoffPh − feedPh\| ≥ 0.8 → moderate; ≥0.5 → weak; paired within 3 days | ncsu-pourthru-2009 | no | general substrate guidance |
 | `data.sparse-env` | data | data | gap | envCoverage < 50% | — | — | logging-quality signal, no horticulture claim |

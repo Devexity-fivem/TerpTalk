@@ -44,6 +44,12 @@ export interface ParsedMeasurement {
   period?: string
   clause: number
   span: [number, number]
+  /** true when the metric was named by a metric-family vocab hit or a
+   *  "runoff" prefix — the grower SAID the metric word. Absent when the
+   *  metric was implied by a bare unit ("2.4 ms/cm" → ec). Lets a
+   *  pending question reinterpret implied metrics without ever
+   *  overriding an explicit one. */
+  explicitMetric?: boolean
 }
 
 export interface ParsedUtterance {
@@ -273,18 +279,40 @@ function wordsBefore(text: string, start: number, count: number): string[] {
   return before.split(/\s+/).slice(-count)
 }
 
-/** negated when any of the last two words is a negation token, or a
+/** A conjunction closes the negation window — "not yellow but pale"
+ *  negates only the first symptom; "pale" stands on its own. */
+const NEGATION_BOUNDARY_WORDS = new Set(["and", "also", "plus", "but", "then"])
+
+/** negated when any of the last three words is a negation token, or a
  *  multi-word negation phrase appears within the last four tokens */
 function isNegated(clause: string, offset: number): boolean {
-  const words = wordsBefore(clause, offset, 4)
+  let words = wordsBefore(clause, offset, 4)
   if (!words.length) return false
-  if (words.slice(-2).some((w) => NEGATION_TOKENS.has(w))) return true
+  for (let i = words.length - 1; i >= 0; i--) {
+    if (NEGATION_BOUNDARY_WORDS.has(words[i])) {
+      words = words.slice(i + 1)
+      break
+    }
+  }
+  if (!words.length) return false
+  if (words.slice(-3).some((w) => NEGATION_TOKENS.has(w))) return true
   const window = words.join(" ")
   return NEGATION_PHRASES.some((p) => window.includes(p))
 }
 
 const RUNOFF_PREFIX_RE = /\b(run[\s-]?off)\s*$/
 const BARE_CHEM_RE = /^(e\.?c\.?|p\.?h\.?)$/
+
+/** "runoff <number>" with at most a light connector between — the unit-
+ *  implied remap for "runoff 2.4 ms/cm" / "the runoff is 2.4 ms/cm". */
+const RUNOFF_CONTEXT_RE = /\b(run[\s-]?off)\s*(is|was|of|at|=|:)?\s*$/
+
+/** Connectors a runoff metric phrase may reach a number through —
+ *  "runoff ec was 2.9" yes, "runoff ec on 2 plants" / "be under 3" no. */
+const RUNOFF_CONNECTORS = new Set([
+  "", "was", "is", "at", "of", "=", ":", "about", "around", "~",
+  "is at", "was at",
+])
 
 export function parseGrowText(raw: string): ParsedUtterance {
   const text = normalizeGrowText(raw)
@@ -444,8 +472,15 @@ export function parseGrowText(raw: string): ParsedUtterance {
     while ((nm = NUMBER_RE.exec(seg.text))) {
       const start = seg.base + nm.index
       const end = start + nm[0].length
+      const rawUnit = nm[1]?.trim()
+      const unit = rawUnit ? UNIT_NORMALIZE[rawUnit] : undefined
+      // Only the numeric part must be unconsumed — a unit suffix may
+      // already be claimed as a vocab phrase ("2.4 ms/cm" has "ms/cm"
+      // consumed by the ec phrase entry) and still names the unit.
+      // nm[0] can end in \s* whitespace, so measure the digits alone.
+      const numLen = /^\d+(?:\.\d+)?/.exec(nm[0])![0].length
       let free = true
-      for (let k = nm.index; k < nm.index + nm[0].length; k++) {
+      for (let k = nm.index; k < nm.index + numLen; k++) {
         if (consumed[seg.base + k]) {
           free = false
           break
@@ -456,9 +491,6 @@ export function parseGrowText(raw: string): ParsedUtterance {
       // "i don't know my runoff EC" — negated mentions aren't data
       if (isNegated(seg.text, nm.index)) continue
 
-      const rawUnit = nm[1]?.trim()
-      const unit = rawUnit ? UNIT_NORMALIZE[rawUnit] : undefined
-
       // an explicit unit suffix on the number beats a nearby metric
       // phrase ("84f and 40% rh" → temperature, not humidity); else
       // nearest metric phrase; else a consumed unit hit implies it
@@ -466,13 +498,26 @@ export function parseGrowText(raw: string): ParsedUtterance {
         ? UNIT_TO_METRIC[rawUnit]
         : undefined
       let unitPhrase: string | undefined
+      // the vocab hit that named the metric — its presence means the
+      // grower said the metric word (explicitMetric)
+      let metricHit: Hit | undefined
       if (!metric) {
+        // distance to the nearer edge — a phrase that ends just before
+        // the number beats one that starts just after it
         let best = Infinity
+        const numEnd = nm.index + numLen
         for (const mh of metrics) {
-          const d = Math.abs(mh.start - start)
+          const hs = mh.start - seg.base
+          const d =
+            hs + mh.len <= nm.index
+              ? nm.index - (hs + mh.len)
+              : hs >= numEnd
+                ? hs - numEnd
+                : 0
           if (d < best) {
             best = d
             metric = mh.entry.id as MetricId
+            metricHit = mh
           }
         }
       }
@@ -490,9 +535,26 @@ export function parseGrowText(raw: string): ParsedUtterance {
         }
       }
       if (!metric) continue // bare number → residual, never guessed
+      let explicitMetric = !!metricHit
+
+      // unit-implied EC right after a runoff word is runoff EC —
+      // "runoff 2.4 ms/cm", "the runoff is 2.4 ms/cm". "feed ec …" and
+      // bare "ec …" don't carry the prefix and keep their metric.
+      if (
+        metric === "ec" &&
+        !metricHit &&
+        RUNOFF_CONTEXT_RE.test(seg.text.slice(0, nm.index))
+      ) {
+        metric = "runoffEc"
+        explicitMetric = true
+      }
 
       // unit implied by the metric phrase itself ("ppm" → ppm)
-      let metricPhrase = metrics.find((mh) => mh.entry.id === metric)
+      let metricPhrase = metricHit ?? metrics.find((mh) => mh.entry.id === metric)
+      // the vocab hit a runoff binding must connect through (checked
+      // below): the direct "runoff ec" phrase or a prefixed bare "ec"
+      let runoffHit: Hit | undefined =
+        metric === "runoffEc" || metric === "runoffPh" ? metricPhrase : undefined
 
       // bare "ec"/"ph" with a runoff prefix nearby is the runoff metric
       if ((metric === "ec" || metric === "ph") && metricPhrase) {
@@ -503,8 +565,10 @@ export function parseGrowText(raw: string): ParsedUtterance {
         if (BARE_CHEM_RE.test(pText)) {
           const before = wordsBefore(seg.text, metricPhrase.start - seg.base, 2).join(" ")
           if (RUNOFF_PREFIX_RE.test(before)) {
+            runoffHit = metricPhrase
             metric = metric === "ec" ? "runoffEc" : "runoffPh"
             metricPhrase = undefined
+            explicitMetric = true
           }
         }
       }
@@ -516,13 +580,26 @@ export function parseGrowText(raw: string): ParsedUtterance {
         LIGHT_INTENSITY_RE.test(seg.text) &&
         !metrics.some((mh) => mh.entry.id === "humidity")
       ) continue
+
+      // a runoff metric phrase binds a number only through a direct
+      // connector — "runoff ec was 2.9" parses, "runoff ec on 2 plants"
+      // and "should runoff ec be under 3?" name the metric without
+      // reporting a value
+      if (runoffHit && runoffHit.start + runoffHit.len <= start) {
+        const connector = seg.text.slice(
+          runoffHit.start - seg.base + runoffHit.len,
+          nm.index
+        )
+        if (connector.length > 12 || !RUNOFF_CONNECTORS.has(connector.trim())) continue
+      }
+
       const phraseText = metricPhrase
         ? seg.text.slice(metricPhrase.start - seg.base, metricPhrase.start - seg.base + metricPhrase.len)
         : undefined
       const impliedUnit =
         unit ??
         (unitPhrase ? UNIT_NORMALIZE[unitPhrase] : undefined) ??
-        (phraseText === "ppm" || phraseText === "tds"
+        (phraseText && /(?:^|\s)(ppm|tds|parts per million)$/.test(phraseText)
           ? "ppm"
           : phraseText === "rh" || phraseText === "humidity"
             ? "percent"
@@ -541,6 +618,7 @@ export function parseGrowText(raw: string): ParsedUtterance {
         period: periods.length === 1 ? periods[0].entry.id : undefined,
         clause: ci,
         span: [start, end],
+        explicitMetric: explicitMetric || undefined,
       })
     }
   })

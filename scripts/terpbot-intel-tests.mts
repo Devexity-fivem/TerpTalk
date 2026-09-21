@@ -15,7 +15,7 @@ import {
   nextUsefulMeasurement,
   rankCandidates,
 } from "@/lib/terpbot-intel"
-import { CANDIDATES } from "@/lib/terpbot-intel-knowledge"
+import { CANDIDATES, SOURCES } from "@/lib/terpbot-intel-knowledge"
 import { validateKnowledge } from "@/lib/terpbot-intel-validate"
 import { mergeObservations, mergeReported } from "@/lib/terpbot-intel-merge"
 import { buildWhyTrail, renderWhy } from "@/lib/terpbot-intel-why"
@@ -513,6 +513,137 @@ function run() {
     assert.ok(
       drift?.signals.some((s) => s.signal === "runoff"),
       "runoff pH shift feeds ph_drift"
+    )
+  }
+
+  // ── 15. chem.ph-band — one pH series is ONE signal, never a stack ─
+  {
+    // Below the COCO band three readings running: chem.ph-band and
+    // chem.ph-low-danger both read ONLY the ph series, so both must
+    // stamp signal "ph" and collapse into one group — a lone pH series
+    // can never reach STRONG.
+    const ctx = withSeries({ ph: mkSeries([4.7, 4.8, 4.9], 0.15) })
+    const c = cand(ctx, "ph_lockout")!
+    assert.ok(c, "low pH series feeds ph_lockout")
+    assert.notEqual(c.state, "strong", "one pH series can never stack to STRONG")
+    const forSignals = [...new Set(
+      c.signals.filter((s) => s.direction === "for").map((s) => s.signal)
+    )]
+    assert.deepEqual(
+      forSignals,
+      ["ph"],
+      `pH-only evidence collapses to a single "ph" group (got ${forSignals})`
+    )
+  }
+
+  // ── 16. env.snapshot — a thick series silences its own branch ────
+  {
+    // temp has n≥3 logged readings at/above the flower band — the trend
+    // rule covers it. A fresh user report on top must not re-fire the
+    // temperature snapshot branch and stack duplicate env evidence.
+    const now = t0 + 40 * 86400000
+    const loggedOnly = withSeries({ temperature: mkSeries([89, 90, 91], 2) })
+    const withReport = mergeReported(
+      loggedOnly,
+      [{ metric: "temperature", value: 90, unit: "degF", t: now }],
+      now
+    )
+    const base = cand(loggedOnly, "heat_stress")!.supporting.map((e) => e.text)
+    const merged = cand(withReport, "heat_stress")!.supporting.map((e) => e.text)
+    assert.ok(
+      !merged.some((t) => t.includes("single snapshot")),
+      "n≥3 temperature series never emits snapshot evidence"
+    )
+    assert.equal(
+      merged.length,
+      base.length,
+      "a user report on a thick series adds no stacked env evidence"
+    )
+  }
+
+  // ── 17. nextUsefulMeasurement — a stale metric can still win ─────
+  {
+    // runoffEc is present (satisfied), so the ordinary scoring pass can
+    // never recommend it. At ≥STALE_DAYS old it still backs salt_buildup —
+    // the stale bypass must put re-measuring it back on the table.
+    const oldNow = t0 + 60 * 86400000
+    const ctx = mkCtx({
+      now: oldNow,
+      daysSinceUpdate: 14,
+      series: {
+        ...mkCtx().series,
+        ec: mkSeries([2.6, 2.7, 2.6], 0.1),
+        runoffEc: mkSeries([3.9], 0.1),
+      },
+      freshness: { ec: 1, runoffEc: 14 },
+    })
+    const next = nextUsefulMeasurement(ctx, evaluateContext(ctx))
+    assert.equal(
+      next?.id,
+      "runoffEc",
+      "a stale series backing a live candidate is the best re-measurement"
+    )
+
+    // Control: same data fresh → satisfied, never recommended.
+    const fresh = mkCtx({
+      now: oldNow,
+      daysSinceUpdate: 1,
+      series: {
+        ...mkCtx().series,
+        ec: mkSeries([2.6, 2.7, 2.6], 0.1),
+        runoffEc: mkSeries([3.9], 0.1),
+      },
+      freshness: { ec: 1, runoffEc: 1 },
+    })
+    const nextFresh = nextUsefulMeasurement(fresh, evaluateContext(fresh))
+    assert.notEqual(
+      nextFresh?.id,
+      "runoffEc",
+      "a fresh satisfied series is never the next ask"
+    )
+  }
+
+  // ── 18. Validator — bad-tier and orphan sources ──────────────────
+  {
+    // A source outside the evidence taxonomy is reported even when cited.
+    const errors = validateKnowledge({
+      sources: {
+        ...SOURCES,
+        "bad-tier-src": {
+          id: "bad-tier-src", title: "x", author: "x", publication: "x",
+          url: "https://example.com/page", year: 2024,
+          tier: "FORUM_POST" as never, cannabisSpecific: false,
+        },
+      },
+      candidates: {
+        ...CANDIDATES,
+        citing: {
+          ...CANDIDATES.humidity_high,
+          id: "citing",
+          sourceIds: ["bad-tier-src"],
+        },
+      },
+    })
+    assert.ok(
+      errors.some((e) => e.includes("bad-tier-src") && e.includes("tier")),
+      `bad tier reported: ${errors}`
+    )
+  }
+  {
+    // A registered source no rule or candidate cites is dead weight.
+    const errors = validateKnowledge({
+      sources: {
+        ...SOURCES,
+        "ghost-src": {
+          id: "ghost-src", title: "x", author: "x", publication: "x",
+          url: "https://example.com/page", year: 2024,
+          tier: "PEER_REVIEWED", cannabisSpecific: false,
+        },
+      },
+    })
+    assert.ok(
+      errors.some((e) => e.includes("ghost-src") && e.includes("never cited")),
+      `orphan source reported: ${errors}`
     )
   }
 

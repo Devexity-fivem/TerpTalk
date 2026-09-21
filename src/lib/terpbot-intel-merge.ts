@@ -64,6 +64,13 @@ const SERIES_KEY: Partial<Record<MetricId, keyof GrowContextView["series"]>> = {
   runoffEc: "runoffEc",
 }
 
+/** Metrics a chat-reported value can actually land on — the SERIES_KEY
+ *  set. A pendingAsk outside this set (leafTemp, ppfd, watering,
+ *  substrateMoisture, photoperiod, …) has no series to receive an
+ *  answer, so it must never be persisted: its answers would drop to
+ *  `unresolved` forever and the bot would re-ask endlessly. */
+export const REPORTABLE_METRICS = new Set<MetricId>(Object.keys(SERIES_KEY) as MetricId[])
+
 const round1 = (v: number) => Math.round(v * 10) / 10
 const degCtoF = (c: number) => round1(c * 1.8 + 32)
 const inchToCm = (v: number) => Math.round(v * 2.54 * 10) / 10

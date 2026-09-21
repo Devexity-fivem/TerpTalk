@@ -272,11 +272,6 @@ const hint = (id: NextStepId): MeasurementHint => {
 }
 const f1 = (v: number) => Math.round(v * 10) / 10
 
-/** The newest point of a series came from a chat report, not a logged
- *  update — the snapshot rule covers exactly that case. */
-const latestUserReported = (s: IntelSeries) =>
-  s.points[s.points.length - 1]?.provenance === "user-reported"
-
 /** Any series carries a user-reported point younger than STALE_DAYS —
  *  a fresh report keeps stale logged data from suppressing analysis. */
 const hasFreshReport = (ctx: GrowContextView) =>
@@ -638,11 +633,17 @@ export const INTEL_RULES: IntelRule[] = [
       const exc = countExcursions(ctx.series.ph.points, lo, hi)
       if (!exc.latestOutside && exc.count < 3) return []
       const wide = !(medium in PH_BANDS)
+      // Every item derived ONLY from the pH series stamps signal "ph" —
+      // chem.ph-low-danger reads the same series under "ph", and the
+      // two must collapse to ONE signal group (a lone pH series can
+      // never reach STRONG). Only the EC-combination item below keeps
+      // this rule's "chem:ph-ec" signal — it genuinely reads EC too.
       const ev: IntelEvidence[] = [
         {
           direction: "for",
           strength: exc.count >= 3 ? "moderate" : "weak",
           candidate: "ph_lockout",
+          signal: "ph",
           text: `pH ${ctx.series.ph.latest} is outside the ${lo}–${hi} range ${wide ? "generally used" : `for ${medium.toLowerCase().replace("_", " ")}`} — off-range pH can lock nutrients out.`,
           measurement: hint("runoffPh"),
         },
@@ -652,6 +653,7 @@ export const INTEL_RULES: IntelRule[] = [
           direction: "against",
           strength: "weak",
           candidate: "ph_lockout",
+          signal: "ph",
           text: `Latest pH (${ctx.series.ph.latest}) is back inside the ${lo}–${hi} band — the drift may already be correcting.`,
         })
       }
@@ -662,6 +664,7 @@ export const INTEL_RULES: IntelRule[] = [
           direction: "info",
           strength: "weak",
           candidate: "ph_lockout",
+          signal: "ph",
           text: "Living soil buffers pH in the root zone — input pH matters less than the soil itself; verify with a slurry or runoff before correcting.",
           measurement: hint("runoffPh"),
         })
@@ -671,11 +674,13 @@ export const INTEL_RULES: IntelRule[] = [
           direction: "info",
           strength: "weak",
           candidate: "ph_lockout",
+          signal: "ph",
           text: "Reservoir pH moves fast in water culture — one off-band reading needs a repeat, not a correction.",
         })
       }
       // Combination: out-of-band pH alongside rising EC is a salt-
-      // accumulation signature, not just a pH problem.
+      // accumulation signature, not just a pH problem. This item DOES
+      // read the EC series — it keeps the rule's chem:ph-ec signal.
       if (ctx.series.ec.trend === "rising") {
         ev.push({
           direction: "for",
@@ -1585,7 +1590,9 @@ export const INTEL_RULES: IntelRule[] = [
   // Single fresh reading — every trend rule needs n≥3 and a known stage,
   // so one reported temp/RH pair previously contributed nothing. This
   // rule scores the LATEST values only, never stronger than moderate:
-  // one reading is one reading.
+  // one reading is one reading. Per-branch gating: once a series is
+  // thick enough for the trend rules (n≥3) the matching branch goes
+  // silent so snapshot and trend rules can't stack on the same data.
   {
     id: "env.snapshot",
     signal: "env:temp-rh",
@@ -1593,11 +1600,9 @@ export const INTEL_RULES: IntelRule[] = [
     kind: "assessment",
     title: "Latest environment reading",
     applies: (ctx) =>
-      (ctx.series.temperature.n > 0 || ctx.series.vpdComputed.n > 0) &&
-      (latestUserReported(ctx.series.temperature) ||
-        latestUserReported(ctx.series.humidity) ||
-        latestUserReported(ctx.series.vpdComputed) ||
-        ctx.series.temperature.n < 3),
+      (ctx.series.temperature.n > 0 && ctx.series.temperature.n < 3) ||
+      (ctx.series.vpdComputed.n > 0 && ctx.series.vpdComputed.n < 3) ||
+      (ctx.series.humidity.n > 0 && ctx.series.humidity.n < 3),
     evaluate: (ctx) => {
       const stage = ctx.diary.stage
       const stageKnown = stage in VPD_BANDS
@@ -1609,8 +1614,11 @@ export const INTEL_RULES: IntelRule[] = [
       const t = ctx.series.temperature.latest
       const v = ctx.series.vpdComputed.latest
       const rh = ctx.series.humidity.latest
+      const tempThin = ctx.series.temperature.n < 3
+      const vpdThin = ctx.series.vpdComputed.n < 3
+      const rhThin = ctx.series.humidity.n < 3
       const ev: IntelEvidence[] = []
-      if (t != null && t > tHi) {
+      if (tempThin && t != null && t > tHi) {
         ev.push({
           direction: "for",
           strength: stageKnown && t >= tHi + 4 ? "moderate" : "weak",
@@ -1618,7 +1626,7 @@ export const INTEL_RULES: IntelRule[] = [
           text: `Latest reading ${f1(t)}°F is above the ${tLo}–${tHi}°F ${stage.toLowerCase()} range${suffix} — ${snapshot}.`,
           measurement: ctx.series.humidity.n ? hint("leafTemp") : hint("humidity"),
         })
-      } else if (t != null && t < tLo) {
+      } else if (tempThin && t != null && t < tLo) {
         ev.push({
           direction: "for",
           strength: stageKnown && t <= tLo - 4 ? "moderate" : "weak",
@@ -1627,7 +1635,7 @@ export const INTEL_RULES: IntelRule[] = [
           measurement: hint("temperature"),
         })
       }
-      if (v != null && v > vHi) {
+      if (vpdThin && v != null && v > vHi) {
         ev.push({
           direction: "for",
           strength: stageKnown && v >= vHi + 0.5 ? "moderate" : "weak",
@@ -1635,7 +1643,7 @@ export const INTEL_RULES: IntelRule[] = [
           text: `Latest VPD ≈${f1(v)} kPa is above the ${vLo}–${vHi} kPa ${stage.toLowerCase()} range${suffix} — ${snapshot}.`,
           measurement: rh == null ? hint("humidity") : hint("leafTemp"),
         })
-        if (rh != null && rh < rLo) {
+        if (rhThin && rh != null && rh < rLo) {
           ev.push({
             direction: "for",
             strength: stageKnown && v >= vHi + 0.5 ? "moderate" : "weak",
@@ -1644,11 +1652,11 @@ export const INTEL_RULES: IntelRule[] = [
             measurement: hint("humidity"),
           })
         }
-      } else if ((v != null && v < vLo) || (rh != null && rh > rHi)) {
-        const large = (v != null && v <= vLo - 0.3) || (rh != null && rh > rHi)
+      } else if ((vpdThin && v != null && v < vLo) || (rhThin && rh != null && rh > rHi)) {
+        const large = (vpdThin && v != null && v <= vLo - 0.3) || (rhThin && rh != null && rh > rHi)
         const strength = stageKnown && large ? "moderate" : "weak"
         const cause =
-          v != null && v < vLo
+          vpdThin && v != null && v < vLo
             ? `Latest VPD ≈${f1(v)} kPa is below the ${vLo}–${vHi} kPa ${stage.toLowerCase()} range${suffix}`
             : `Latest RH ${rh}% is above the ${rLo}–${rHi}% ${stage.toLowerCase()} range${suffix}`
         ev.push({
@@ -1984,27 +1992,29 @@ export function evaluateContext(ctx: GrowContextView): Diagnosis {
     // Stale-evidence clamp: when EVERY supporting signal group rests on
     // readings ≥ STALE_DAYS old, STRONG/CONFIRMED can't stand — demote
     // to POSSIBLE and say so. CONFLICTING is never touched.
+    const supportSignals = scored.signals.filter(
+      (s) => s.direction === "for" || s.direction === "risk"
+    )
     const stale =
-      state === "strong" || state === "confirmed"
-        ? (() => {
-            const supportSignals = scored.signals.filter(
-              (s) => s.direction === "for" || s.direction === "risk"
-            )
-            if (!supportSignals.length) return false
-            return supportSignals.every((s) => {
-              const age = signalAgeDays(ctx, s.signal)
-              return age != null && age >= STALE_DAYS
-            })
-          })()
-        : false
+      (state === "strong" || state === "confirmed") &&
+      supportSignals.length > 0 &&
+      supportSignals.every((s) => {
+        const age = signalAgeDays(ctx, s.signal)
+        return age != null && age >= STALE_DAYS
+      })
     if (stale) {
       state = "possible"
+      // Render the real age of the stalest supporting signal — daysSinceUpdate
+      // can be null when all data came from chat reports.
+      const displayAge = Math.round(
+        Math.max(...supportSignals.map((s) => signalAgeDays(ctx, s.signal) ?? 0))
+      )
       bucket.evidence.push({
         direction: "info",
         strength: "weak",
         candidate: id,
         signal: "data",
-        text: `Based on readings ${Math.max(0, Math.round(ctx.daysSinceUpdate ?? STALE_DAYS))} days old — current values would firm this up.`,
+        text: `Based on readings ${displayAge} days old — current values would firm this up.`,
       })
     }
     const { forScore, againstScore, independentSignals, signals } = scored
@@ -2046,7 +2056,9 @@ export function evaluateContext(ctx: GrowContextView): Diagnosis {
 //            + 1 per candidate where m is a missing requiredInput (unblocks it)
 //   findings' hints score by their finding's state weight.
 // Measurements already present in the context are eliminated — never
-// recommend data the grower already logged.
+// recommend data the grower already logged — EXCEPT stale ones: a metric
+// ≥ STALE_DAYS old that still backs a live candidate/finding is worth
+// re-measuring, so it scores through a separate bypass pass.
 // Tie-break: MEASUREMENT_PRIORITY order, then id — a total order.
 
 const SCHEMA_SERIES: Partial<Record<MetricId, keyof GrowContextView["series"]>> = {
@@ -2127,13 +2139,34 @@ export function nextUsefulMeasurement(ctx: GrowContextView, diagnosis: Diagnosis
     add(f.nextMeasurement?.id, STATE_WEIGHT[f.state])
     for (const e of f.evidence) add(e.measurement?.id, STATE_WEIGHT[f.state])
   }
-  // Refreshing an already-useful stale metric beats asking for something
-  // new — +1 to metrics that scored AND are ≥ STALE_DAYS old.
-  for (const [id, score] of scores) {
-    if (score > 0 && !id.startsWith("inspect:")) {
-      const age = ctx.freshness[id as MetricId]
-      if (age != null && age >= STALE_DAYS) scores.set(id, score + 1)
+
+  // Stale-refresh pass — a metric that already HAS data is skipped by
+  // `add`, but when that data is ≥ STALE_DAYS old and still backs a live
+  // candidate or finding, re-measuring it is the best next step. Write
+  // directly, bypassing the satisfied-check intentionally.
+  const bumpStale = (m: NextStepId | undefined, w: number) => {
+    if (!m || m.startsWith("inspect:")) return
+    const age = ctx.freshness[m as MetricId]
+    if (age != null && age >= STALE_DAYS) {
+      scores.set(m, (scores.get(m) ?? 0) + w)
     }
+  }
+  for (const c of diagnosis.candidates
+    .filter((c) => c.state !== "insufficient")
+    .slice(0, 3)) {
+    const def = CANDIDATES[c.id]
+    if (!def) continue
+    const w = STATE_WEIGHT[c.state]
+    for (const m of def.discriminatingInputs) bumpStale(m, w)
+    for (const e of [...c.supporting, ...c.opposing, ...c.info]) {
+      bumpStale(e.measurement?.id, w)
+    }
+  }
+  for (const f of diagnosis.findings) {
+    if (f.state === "insufficient") continue
+    const w = STATE_WEIGHT[f.state]
+    bumpStale(f.nextMeasurement?.id, w)
+    for (const e of f.evidence) bumpStale(e.measurement?.id, w)
   }
 
   const best = [...scores.entries()].sort(

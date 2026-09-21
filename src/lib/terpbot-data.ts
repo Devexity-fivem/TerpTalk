@@ -27,7 +27,7 @@ import { getBotUserId } from "@/lib/terpbot"
 import { buildHelpText } from "@/lib/chat-commands"
 import { buildGrowContext, emptyContext } from "@/lib/terpbot-intel-context"
 import { evaluateContext, renderIntelLines, nextUsefulMeasurement } from "@/lib/terpbot-intel"
-import { mergeReported, mergeObservations } from "@/lib/terpbot-intel-merge"
+import { mergeReported, mergeObservations, REPORTABLE_METRICS } from "@/lib/terpbot-intel-merge"
 import { buildWhyTrail, renderWhy } from "@/lib/terpbot-intel-why"
 import { loadSession, saveSession } from "@/lib/terpbot-session"
 import { parseGrowText } from "@/lib/terpbot-nl-parse"
@@ -35,6 +35,17 @@ import { SYMPTOM_LABELS, LOCATION_LABELS, VOCAB } from "@/lib/terpbot-nl-vocab"
 import { rateLimit } from "@/lib/rate-limit"
 import type { GrowContextView, SessionState, SessionObservation, ReportedPoint, MetricId } from "@/lib/terpbot-intel-types"
 import { TERPBOT_USERNAME, randomGrowTip, sanitizeEcho as sanitizeEchoStrict } from "@/lib/terpbot"
+
+/** Metrics an implied-metric answer may be re-pointed to when they're
+ *  the pending ask — only within the same channel (feed ↔ runoff).
+ *  A unit-implied "ec" answers a "runoffEc" ask, but a "temperature"
+ *  report never answers a "humidity" ask. */
+const PENDING_ASK_CHANNELS: Partial<Record<MetricId, MetricId[]>> = {
+  runoffEc: ["ec"],
+  ec: ["runoffEc"],
+  runoffPh: ["ph"],
+  ph: ["runoffPh"],
+}
 
 export interface BotCommandCtx {
   userId: string
@@ -747,7 +758,9 @@ async function handle(name: string, ctx: BotCommandCtx): Promise<BotCommandResul
               {
                 diaryId: d.id,
                 state: { ...state, trail: buildWhyTrail(gctx, diagnosis, now) },
-                pendingAsk: next && !next.id.startsWith("inspect:") ? next.id : null,
+                // Only reportable metrics may be asked — an unanswerable
+                // ask (leafTemp, ppfd…) can never receive a stored answer.
+                pendingAsk: next && REPORTABLE_METRICS.has(next.id as MetricId) ? next.id : null,
               },
               now
             )
@@ -790,6 +803,29 @@ async function handle(name: string, ctx: BotCommandCtx): Promise<BotCommandResul
         // Questions with no reportable content route to knowledge search.
         if (parsed.question && !parsed.observations.length && !parsed.measurements.length && ctx.rest.trim()) {
           return ok(`🤖 That sounds like a question — try /ask ${sanitizeField(ctx.rest, 60)} or tell me what you're seeing.`)
+        }
+        // Pending-ask override: a single unit-implied measurement answers
+        // the open question when its implied metric sits in the asked
+        // metric's channel ("2.4 ms/cm" while runoffEc was asked →
+        // runoffEc). An explicit metric phrase always wins — the grower
+        // meant what they said — and an unrelated implied metric ("72f"
+        // while RH was asked) is stored under its own metric, never the
+        // asked one.
+        const pendingMetric = session?.pendingAsk as MetricId | null | undefined
+        const implied = parsed.measurements[0]?.metric
+        const sameChannel =
+          !!pendingMetric &&
+          !!implied &&
+          PENDING_ASK_CHANNELS[pendingMetric]?.includes(implied)
+        if (
+          pendingMetric &&
+          REPORTABLE_METRICS.has(pendingMetric) &&
+          parsed.measurements.length === 1 &&
+          implied !== pendingMetric &&
+          !parsed.measurements[0].explicitMetric &&
+          sameChannel
+        ) {
+          parsed.measurements[0].metric = pendingMetric
         }
         state.reported = [
           ...state.reported,
@@ -838,7 +874,7 @@ async function handle(name: string, ctx: BotCommandCtx): Promise<BotCommandResul
         {
           diaryId: base.diary.id ? base.diary.id : null,
           state: { ...state, trail },
-          pendingAsk: next && !next.id.startsWith("inspect:") ? next.id : null,
+          pendingAsk: next && REPORTABLE_METRICS.has(next.id as MetricId) ? next.id : null,
         },
         now
       )

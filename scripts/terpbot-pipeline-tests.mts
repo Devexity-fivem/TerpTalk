@@ -22,6 +22,7 @@ import { buildGrowContext } from "@/lib/terpbot-intel-context"
 import { evaluateContext } from "@/lib/terpbot-intel"
 import { parseTerpbotIntent } from "@/lib/terpbot-intents"
 import { sweepExpiredSessions } from "@/lib/terpbot-session"
+import { REPORTABLE_METRICS } from "@/lib/terpbot-intel-merge"
 
 const SUFFIX = String(Date.now()).slice(-8)
 const M1 = `__tbp_a_${SUFFIX}`
@@ -909,10 +910,28 @@ async function run() {
           createdAt: new Date(Date.now() - 86400000),
         },
       })
+      await prisma.diaryUpdate.create({
+        data: {
+          title: "u3", content: "x", stage: "FLOWER", diaryId: d.id, authorId: ru.id,
+          feeding: "runoff ppm 4",
+          createdAt: new Date(Date.now() - 2 * 86400000),
+        },
+      })
+      await prisma.diaryUpdate.create({
+        data: {
+          title: "u4", content: "x", stage: "FLOWER", diaryId: d.id, authorId: ru.id,
+          feeding: "checked runoff ec on 2 plants",
+          createdAt: new Date(Date.now() - 3 * 86400000),
+        },
+      })
       const g = await buildGrowContext(d.id, { ownerId: ru.id, scope: "public" })
       assert.ok(g)
       assert.equal(g!.series.runoffEc.latest, 2.9, "runoff EC parsed from feeding text")
-      assert.equal(g!.series.runoffEc.n, 1, "ppm runoff never enters the series")
+      assert.equal(
+        g!.series.runoffEc.n,
+        1,
+        "ppm runoff and non-value 'on N plants' mentions never enter the series"
+      )
       const rdiag = evaluateContext(g!)
       const salt = rdiag.candidates.find((c) => c.id === "salt_buildup")
       assert.ok(
@@ -920,6 +939,122 @@ async function run() {
         "runoff signal group feeds salt_buildup"
       )
       console.log("✓ runoff channel: feeding text → runoff series")
+    }
+
+    // ── 14. pendingAsk — reportable gating + answer override ────────
+    {
+      const pa = await mk(`__tbp_pa_${SUFFIX}`)
+      const ctx = (rest: string) =>
+        ({ userId: pa.id, role: "MEMBER", displayName: pa.name ?? "x", args: [] as string[], rest })
+
+      // The 84°F/40%/curling probe must not park on an unanswerable ask:
+      // leafTemp/ppfd have no series — pendingAsk is null or reportable.
+      const r1 = await runBotCommand("diagnose", ctx("my tent is 84f and 40% rh and the top leaves are curling"))
+      assert.ok(r1.ok, "diagnose runs")
+      const s1 = await prisma.botSession.findUnique({ where: { userId: pa.id } })
+      assert.ok(s1, "session persisted")
+      const pa1 = s1!.pendingAsk
+      assert.ok(
+        pa1 == null || REPORTABLE_METRICS.has(pa1 as never),
+        `pendingAsk "${pa1}" is answerable or absent`
+      )
+      assert.notEqual(pa1, "leafTemp", "unreportable metric never parked as the ask")
+
+      // pendingAsk=runoffEc → "2.4 ms/cm" answers the ask — stored as
+      // runoffEc, not the unit-implied feed EC.
+      await prisma.botSession.update({ where: { userId: pa.id }, data: { pendingAsk: "runoffEc" } })
+      const r2 = await runBotCommand("diagnose", ctx("2.4 ms/cm"))
+      assert.ok(r2.ok)
+      const st2 = (await prisma.botSession.findUnique({ where: { userId: pa.id } }))!.state as {
+        reported: { metric: string; value: number }[]
+      }
+      const last2 = st2.reported[st2.reported.length - 1]
+      assert.equal(last2.metric, "runoffEc", "unit-implied answer lands on the asked metric")
+      assert.equal(last2.value, 2.4)
+
+      // An explicitly named metric wins over the pending ask — "runoff
+      // ph 5.9" while runoffEc is asked stores runoffPh, never runoffEc.
+      await prisma.botSession.update({ where: { userId: pa.id }, data: { pendingAsk: "runoffEc" } })
+      const r3 = await runBotCommand("diagnose", ctx("runoff ph 5.9"))
+      assert.ok(r3.ok)
+      const st3 = (await prisma.botSession.findUnique({ where: { userId: pa.id } }))!.state as {
+        reported: { metric: string; value: number }[]
+      }
+      const last3 = st3.reported[st3.reported.length - 1]
+      assert.equal(last3.metric, "runoffPh", "explicit metric wins over the pending ask")
+      await prisma.botSession.deleteMany({ where: { userId: pa.id } })
+      console.log("✓ pendingAsk: reportable gating + answer override")
+    }
+
+    // ── 15. Stage persistence — a chat-claimed stage survives ───────
+    {
+      const sp = await mk(`__tbp_sp_${SUFFIX}`)
+      const ctx = (rest: string) =>
+        ({ userId: sp.id, role: "MEMBER", displayName: sp.name ?? "x", args: [] as string[], rest })
+
+      const r1 = await runBotCommand("diagnose", ctx("week 4 flower"))
+      assert.ok(r1.ok)
+      const s1 = await prisma.botSession.findUnique({ where: { userId: sp.id } })
+      assert.equal(
+        (s1!.state as { stage?: string }).stage,
+        "FLOWER",
+        "claimed stage persisted on the session"
+      )
+
+      // Next turn, still no diary: the stage must carry over — no
+      // re-ask, no "stage unknown".
+      const r2 = await runBotCommand("diagnose", ctx("top leaves curling"))
+      assert.ok(r2.ok)
+      const out2 = r2.messages.join("\n")
+      assert.ok(!/which stage are you in/i.test(out2), `no stage re-ask: ${out2}`)
+      assert.ok(!/stage unknown/i.test(out2), `stage not unknown: ${out2}`)
+      const s2 = await prisma.botSession.findUnique({ where: { userId: sp.id } })
+      assert.equal(
+        (s2!.state as { stage?: string }).stage,
+        "FLOWER",
+        "stage survives the second turn"
+      )
+
+      // FLOWER banding in action: 60% RH sits inside the generic 40–70%
+      // band but above the 40–55% flower ceiling — only a stage-aware
+      // context flags it, and it says "flower" in the evidence text.
+      const r3 = await runBotCommand("diagnose", ctx("it's 60% rh in the tent"))
+      assert.ok(r3.ok)
+      const out3 = r3.messages.join("\n")
+      assert.ok(!/stage unknown/i.test(out3), `no unknown-stage suffix: ${out3}`)
+      assert.ok(/flower/i.test(out3), `FLOWER banding shows in output: ${out3}`)
+      await prisma.botSession.deleteMany({ where: { userId: sp.id } })
+      console.log("✓ stage persistence across diagnose turns")
+    }
+
+    // ── 16. Mention decimals + staff-word measurement bypass ────────
+    {
+      assert.deepEqual(
+        parseTerpbotIntent("@terpbot my ph is 5.8"),
+        { kind: "command", name: "diagnose", args: ["my ph is 5.8"] },
+        "decimal survives mention normalization"
+      )
+      assert.deepEqual(
+        parseTerpbotIntent("@terpbot 5.8"),
+        { kind: "command", name: "diagnose", args: ["5.8"] },
+        "bare decimal routes to diagnose"
+      )
+      assert.deepEqual(
+        parseTerpbotIntent("@terpbot my ph is 5.8."),
+        { kind: "command", name: "diagnose", args: ["my ph is 5.8"] },
+        "trailing period stripped, decimal kept"
+      )
+      assert.deepEqual(
+        parseTerpbotIntent("@terpbot report runoff ec 2.4"),
+        { kind: "command", name: "diagnose", args: ["report runoff ec 2.4"] },
+        "a measurement-bearing 'report' is a grow report, not a staff request"
+      )
+      assert.deepEqual(
+        parseTerpbotIntent("@terpbot report @someone spamming"),
+        { kind: "refusal" },
+        "staff vocabulary without data still refuses"
+      )
+      console.log("✓ mention decimals + staff-word bypass")
     }
 
     console.log("All TerpBot pipeline tests passed.")

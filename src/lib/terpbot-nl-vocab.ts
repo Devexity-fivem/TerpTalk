@@ -238,7 +238,7 @@ export const VOCAB: VocabEntry[] = [
   { id: "LOWER_OLD", family: "location", phrases: [
     "lower fan leaves", "lower leaves", "bottom leaves", "lower",
     "bottom", "old growth", "older leaves", "older", "old leaves",
-    "old", "bottom of the plant" ] },
+    "oldest leaves", "oldest", "old", "bottom of the plant" ] },
   { id: "UPPER_NEW", family: "location", phrases: [
     "new growth", "new leaves", "newest growth", "top leaves",
     "upper leaves", "top of the plant", "top of plant", "tops",
