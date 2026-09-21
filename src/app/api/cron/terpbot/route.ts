@@ -13,6 +13,7 @@ import { drainPendingReversals } from "@/lib/reputation-outbox"
 import { logSecurityEvent } from "@/lib/security"
 import { reconcileQuestPayouts } from "@/lib/quests"
 import { reconcileChallengePayouts } from "@/lib/challenges"
+import { sweepExpiredSessions } from "@/lib/terpbot-session"
 
 // Daily TerpBot job — digests, grow tips, and contest-winner announcements.
 // Invoked by the Vercel cron configured in vercel.json.
@@ -188,6 +189,12 @@ export async function GET(request: NextRequest) {
     })
     return "notification-cleanup"
   }, posted, failed, "notification-cleanup")
+
+  // ── Expired bot sessions (once per UTC day) ────────────────────────
+  await runCronTask(`terpbot:session-sweep:${today}`, async () => {
+    const n = await sweepExpiredSessions(Date.now())
+    return `session-sweep:${n}`
+  }, posted, failed, "session-sweep")
 
   // ── Dormant-thread assists (once per UTC day) ──────────────────────
   // Threads that went quiet send the OP one private TerpBot nudge —

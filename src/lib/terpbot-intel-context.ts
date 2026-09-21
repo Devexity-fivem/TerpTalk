@@ -25,6 +25,7 @@ import type {
   StructuredObservation,
 } from "@/lib/terpbot-intel-types"
 import { parseGrowText } from "@/lib/terpbot-nl-parse"
+import { freshnessOf } from "@/lib/terpbot-intel-merge"
 
 // Last-12-updates window: enough for trend detection (min 3 points) and
 // recent-vs-baseline comparisons at typical weekly-ish cadence, while
@@ -60,6 +61,61 @@ function buildSeries(rows: UpdateRow[], field: SeriesField, epsKey: string): Int
   // equal timestamps keep their DB order — output is deterministic.
   points.sort((a, b) => a.t - b.t)
   return { ...seriesStats(points), points, trend: detectTrend(points, METRIC_EPSILON[epsKey] ?? 1) }
+}
+
+function emptySeries(): IntelSeries {
+  return {
+    n: 0, latest: null, mean: null, min: null, max: null,
+    medianIntervalDays: null, points: [], trend: "insufficient",
+  }
+}
+
+/** A context with no diary — used when reasoning runs purely on what
+ *  the grower has told the bot. Stage "UNKNOWN" passes no stage gate
+ *  (GROWTH_STAGES does not contain it), so stage-scoped rules simply
+ *  do not apply. Pure — no Prisma. */
+export function emptyContext(now: number): GrowContextView {
+  return {
+    scope: "public",
+    diary: {
+      id: "",
+      slug: null,
+      title: "",
+      stage: "UNKNOWN",
+      visibility: "PUBLIC",
+      startDate: new Date(now),
+      harvested: false,
+      mediumType: null,
+      lightType: null,
+      growType: "INDOOR",
+      techniques: [],
+    },
+    setup: { present: false, medium: null, capabilities: [] },
+    now,
+    day: 1,
+    week: 1,
+    stageDays: 0,
+    stageStartCensored: true,
+    updateCount: 0,
+    daysSinceUpdate: null,
+    medianUpdateIntervalDays: null,
+    envCoverage: 0,
+    series: {
+      temperature: emptySeries(),
+      humidity: emptySeries(),
+      ph: emptySeries(),
+      ec: emptySeries(),
+      height: emptySeries(),
+      vpdEntered: emptySeries(),
+      vpdComputed: emptySeries(),
+      runoffPh: emptySeries(),
+      runoffEc: emptySeries(),
+    },
+    vpdDivergence: null,
+    missing: ["temperature", "humidity", "ph", "ec", "height", "vpd"],
+    freshness: {},
+    observations: [],
+  }
 }
 
 // Capability hints keyword-matched from setup free text — heuristic by
@@ -146,6 +202,10 @@ export async function buildGrowContext(
       }
       return { ...seriesStats(points), points, trend: detectTrend(points, METRIC_EPSILON.vpd) }
     })(),
+    // runoff metrics have no schema columns — populated later by
+    // user-reported points / parsed feeding text (mergeReported)
+    runoffPh: emptySeries(),
+    runoffEc: emptySeries(),
   }
 
   // Entered-vs-computed divergence on the newest update carrying both.
@@ -240,6 +300,7 @@ export async function buildGrowContext(
     series,
     vpdDivergence: divergence,
     missing,
+    freshness: freshnessOf(series, now),
     observations,
   }
 }

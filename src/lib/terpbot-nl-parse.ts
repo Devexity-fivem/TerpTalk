@@ -61,6 +61,29 @@ export interface ParsedUtterance {
 
 const CLAUSE_SEP = "¶"
 
+const VOCAB_BY_ID = new Map(VOCAB.map((e) => [e.id, e]))
+
+/** The feeds a symptom observation pools into — same stage/location
+ *  refinement rules the parser applies per-clause. Exported so
+ *  session-merged observations get identical resolution without
+ *  re-parsing text. */
+export function feedsForSymptom(
+  symptom: SymptomId,
+  location?: LocationId,
+  stage?: string
+): { feeds: string[]; refined: boolean } {
+  const feeds = VOCAB_BY_ID.get(symptom)?.feeds ?? []
+  const stageRef = stage ? STAGE_REFINEMENTS[symptom]?.[stage] : undefined
+  const locRef = location ? LOCATION_REFINEMENTS[symptom]?.[location] : undefined
+  if (stageRef && locRef) {
+    const inter = stageRef.filter((f) => locRef.includes(f))
+    return { feeds: inter.length ? inter : stageRef, refined: true }
+  }
+  if (stageRef) return { feeds: stageRef, refined: true }
+  if (locRef) return { feeds: locRef, refined: true }
+  return { feeds, refined: false }
+}
+
 export function normalizeGrowText(raw: string): string {
   return raw
     .toLowerCase()

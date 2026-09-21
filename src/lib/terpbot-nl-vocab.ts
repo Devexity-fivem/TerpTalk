@@ -57,7 +57,8 @@ export const VOCAB: VocabEntry[] = [
   { id: "CURL_UP", family: "symptom", feeds: ["heat_stress", "light_burn"], phrases: [
     "tacoing", "taco'd", "tacoed", "taco", "tacos", "canoeing", "canoe",
     "canoes", "cupping up", "cupped up", "curling up", "curling upward",
-    "curled up", "edges curling up", "leaves cupping", "canoed" ] },
+    "curled up", "edges curling up", "leaves cupping", "canoed",
+    "curling", "curled", "leaf curl", "leaves curling" ] },
   { id: "CURL_UNDER", family: "symptom", feeds: ["wind_or_dry", "potassium_def"], phrases: [
     "curling under", "curled under", "curling in", "rolled under",
     "rolling in", "edges curling", "edges rolled", "leaf edges curling" ] },

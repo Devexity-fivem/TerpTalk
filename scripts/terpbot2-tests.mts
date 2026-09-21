@@ -57,9 +57,11 @@ const mkCtx = (over: Partial<GrowContextView> = {}): GrowContextView => ({
   series: {
     temperature: emptySeries, humidity: emptySeries, ph: emptySeries,
     ec: emptySeries, height: emptySeries, vpdEntered: emptySeries, vpdComputed: emptySeries,
+    runoffPh: emptySeries, runoffEc: emptySeries,
   },
   vpdDivergence: null,
   missing: [],
+  freshness: {},
   ...over,
   observations: over.observations ?? [],
 })

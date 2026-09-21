@@ -20,6 +20,8 @@ import { getBotUserId, sanitizeEcho, announceStageTransition, purgeDiaryAnnounce
 import { runBotCommand } from "@/lib/terpbot-data"
 import { buildGrowContext } from "@/lib/terpbot-intel-context"
 import { evaluateContext } from "@/lib/terpbot-intel"
+import { parseTerpbotIntent } from "@/lib/terpbot-intents"
+import { sweepExpiredSessions } from "@/lib/terpbot-session"
 
 const SUFFIX = String(Date.now()).slice(-8)
 const M1 = `__tbp_a_${SUFFIX}`
@@ -731,8 +733,10 @@ async function run() {
       assert.equal(byRule("data.vpd-divergence")?.state, "confirmed", "VPD divergence → CONFIRMED finding")
       const risk = byCand("env.moisture-disease-risk")
       assert.ok(risk, "flower RH risk candidate fires")
-      assert.equal(risk!.state, "strong", "RH-elevated + rising trend accumulate to STRONG risk")
-      assert.equal(byCand("humidity_high")?.state, "strong", "same RH evidence feeds the migrated wizard candidate")
+      // Grouped scoring: the elevated-RH and rising-trend rules share the
+      // "humidity" signal → one independent group → POSSIBLE, not STRONG.
+      assert.equal(risk!.state, "possible", "correlated RH evidence collapses to one signal group")
+      assert.equal(byCand("humidity_high")?.state, "possible", "same correlated RH group feeds the migrated wizard candidate")
       assert.ok(byCand("ph_lockout"), "pH-out-of-band → lockout candidate")
       assert.ok(byCand("salt_buildup"), "EC drift + pH-out-of-band → salt candidate")
       assert.ok(!byCand("stunt"), "no stall candidate in flower stage")
@@ -799,6 +803,89 @@ async function run() {
       console.log("✓ intelligence engine: context → rules → /checkin")
     }
 
+    // ── 12. Diagnose/why — session continuity + provenance ─────────
+    {
+      const u = await mk(`__tbp_diag_${SUFFIX}`)
+      const u2 = await mk(`__tbp_diagb_${SUFFIX}`)
+      const ctx = (rest: string, user = u) =>
+        ({ userId: user.id, role: "MEMBER", displayName: user.name ?? "x", args: [] as string[], rest })
+
+      const r1 = await runBotCommand("diagnose", ctx("my tent is 84f and 40% rh and the top leaves are curling"))
+      assert.ok(r1.ok, "diagnose runs")
+      const out1 = r1.messages.join("\n")
+      assert.ok(out1.includes("84°F (you)"), `reported temp marked (you): ${out1}`)
+      assert.ok(out1.includes("40% RH (you)"), `reported RH marked (you): ${out1}`)
+      assert.ok(/POSSIBLE|STRONG|conflicts/.test(out1), `candidate line present: ${out1}`)
+      assert.ok(out1.includes("Next:") || out1.includes("/why explains"), "next/why footer")
+
+      const sess = await prisma.botSession.findUnique({ where: { userId: u.id } })
+      assert.ok(sess, "session row persisted")
+      const st = sess!.state as { reported?: unknown[] }
+      assert.equal((st.reported ?? []).length, 2, "two reported points stored")
+      assert.ok(!JSON.stringify(sess!.state).includes("curling"), "no raw text in session state")
+
+      // Bare-number follow-ups resolve against pendingAsk.
+      await prisma.botSession.update({ where: { userId: u.id }, data: { pendingAsk: "temperature" } })
+      const r2 = await runBotCommand("diagnose", ctx("62"))
+      assert.ok(r2.ok); assert.ok(r2.messages.join("\n").includes("°F or °C"), "bare temp asks for unit")
+      await prisma.botSession.update({ where: { userId: u.id }, data: { pendingAsk: "humidity" } })
+      const r3 = await runBotCommand("diagnose", ctx("62"))
+      assert.ok(r3.ok, "humidity answer accepted")
+      const st2 = (await prisma.botSession.findUnique({ where: { userId: u.id } }))!.state as { reported: unknown[] }
+      assert.equal(st2.reported.length, 3, "accepted answer appended")
+
+      // /why renders the persisted trail — no ids, no cuid-like tokens.
+      const r4 = await runBotCommand("why", ctx(""))
+      assert.ok(r4.ok)
+      const wout = r4.messages.join("\n")
+      assert.ok(wout.includes("Why I said that"), `why renders trail: ${wout}`)
+      assert.ok(!/c[a-z0-9]{24}/.test(wout), "no cuid in why output")
+      const sessD = await prisma.botSession.findUnique({ where: { userId: u.id } })
+      assert.ok(sessD?.diaryId == null || !wout.includes(sessD.diaryId), "no diary id in why output")
+
+      // Another user cannot see the trail.
+      const r5 = await runBotCommand("why", ctx("", u2))
+      assert.ok(r5.ok); assert.ok(r5.messages.join("\n").includes("haven't reasoned"), "B cannot see A's trail")
+
+      // Privacy: a PRIVATE-only diary is never linked.
+      const pU = await mk(`__tbp_priv_${SUFFIX}`)
+      await prisma.growDiary.create({
+        data: {
+          title: `__tbp priv ${SUFFIX}`, description: "t", growType: "INDOOR",
+          startDate: new Date(), authorId: pU.id, stage: "FLOWER", visibility: "PRIVATE",
+        },
+      }).then((d) => diaryIds.push(d.id))
+      const r6 = await runBotCommand("diagnose", ctx("my leaves are curling", pU))
+      assert.ok(r6.ok); assert.ok(r6.messages.join("\n").includes("no public diary linked"), "private diary never linked")
+      const pSess = await prisma.botSession.findUnique({ where: { userId: pU.id } })
+      assert.equal(pSess?.diaryId ?? null, null, "session diaryId stays null")
+
+      // Expiry: stale session invisible to /why, swept by the cron helper.
+      await prisma.botSession.update({ where: { userId: u.id }, data: { expiresAt: new Date(Date.now() - 1000) } })
+      const r7 = await runBotCommand("why", ctx(""))
+      assert.ok(r7.ok); assert.ok(r7.messages.join("\n").includes("haven't reasoned"), "expired session invisible")
+      const swept = await sweepExpiredSessions(Date.now())
+      assert.ok(swept >= 1, "sweep removes expired sessions")
+      assert.equal(await prisma.botSession.findUnique({ where: { userId: u.id } }), null)
+
+      // Mention routing (pure intent parser).
+      assert.deepEqual(
+        parseTerpbotIntent("@terpbot my leaves are curling"),
+        { kind: "command", name: "diagnose", args: ["my leaves are curling"] }
+      )
+      assert.deepEqual(
+        parseTerpbotIntent("@terpbot why did you say that"),
+        { kind: "command", name: "why", args: ["did you say that"] }
+      )
+      assert.deepEqual(
+        parseTerpbotIntent("@terpbot 62"),
+        { kind: "command", name: "diagnose", args: ["62"] }
+      )
+
+      await prisma.botSession.deleteMany({ where: { userId: { in: [u.id, u2.id, pU.id] } } })
+      console.log("✓ diagnose/why: session, provenance, privacy, expiry, routing")
+    }
+
     console.log("All TerpBot pipeline tests passed.")
   } finally {
     await prisma.notification.deleteMany({ where: { id: { in: notificationIds } } }).catch(() => {})
@@ -811,6 +898,8 @@ async function run() {
     await prisma.botEvent.deleteMany({ where: { key: { in: botEventKeys } } }).catch(() => {})
     await prisma.botEvent.deleteMany({ where: { key: { startsWith: "assist:" }, userId: { in: ids } } }).catch(() => {})
     await prisma.rateLimit.deleteMany({ where: { key: { in: rateLimitKeys } } }).catch(() => {})
+    await prisma.rateLimit.deleteMany({ where: { key: { startsWith: "bot-diagnose:" } } }).catch(() => {})
+    await prisma.botSession.deleteMany({ where: { userId: { in: ids } } }).catch(() => {})
     await prisma.category.deleteMany({ where: { slug: { startsWith: `__tbp-` } } }).catch(() => {})
     await prisma.user.deleteMany({ where: { id: { in: ids } } }).catch(() => {})
     await prisma.$disconnect()

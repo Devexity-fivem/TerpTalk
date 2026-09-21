@@ -7,6 +7,10 @@
 
 import type { CandidateDef, KnowledgeSource } from "@/lib/terpbot-intel-types"
 
+/** bumped when candidates/rules/sources change materially — stamped
+ *  on persisted sessions so a stale /why trail can't be misread */
+export const KNOWLEDGE_VERSION = "2.1"
+
 export const SOURCES: Record<string, KnowledgeSource> = {
   "fao56-svp": {
     id: "fao56-svp",

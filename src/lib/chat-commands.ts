@@ -51,6 +51,8 @@ export const CHAT_COMMANDS: ChatCommandMeta[] = [
   { name: "milestones", usage: "/milestones", description: "What you're closest to unlocking next", permission: P, surfaces: BOTH, handledBy: "bot", category: "grow", example: "@terpbot what am I close to?" },
   { name: "progress", usage: "/progress", description: "Your rep, tier, quests and streak in one view", permission: P, surfaces: BOTH, handledBy: "bot", category: "grow", example: "@terpbot my progress" },
   { name: "quests", usage: "/quests", description: "Today's daily quests", permission: P, surfaces: BOTH, handledBy: "bot", category: "grow" },
+  { name: "diagnose", usage: "/diagnose <what you see or measured>", description: "Reason over your grow — report symptoms or readings", permission: P, surfaces: BOTH, handledBy: "bot", category: "grow", example: "@terpbot my leaves are curling" },
+  { name: "why", usage: "/why [topic]", description: "Explain the last thing TerpBot said about your grow", permission: P, surfaces: BOTH, handledBy: "bot", category: "grow", example: "@terpbot why did you say that" },
 
   // ── Community ────────────────────────────────────────────────────
   { name: "stats", usage: "/stats", description: "Community stats", permission: P, surfaces: BOTH, handledBy: "bot", category: "community" },

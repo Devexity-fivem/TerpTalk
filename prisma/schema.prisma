@@ -69,6 +69,7 @@ model User {
   bookmarks     Bookmark[]
   diaryFollows  DiaryFollow[]
   feedback      Feedback[]
+  botSession    BotSession?
 
   @@index([role])
   @@index([status])
@@ -1155,4 +1156,21 @@ model BotEvent {
 
   @@index([type, createdAt])
   @@index([userId])
+}
+
+// TerpBot continuity — one expiring row per user holding the bounded
+// session state (reported measurements, structured observations, last
+// /why trail). Never stores message text, room ids, or diary content.
+model BotSession {
+  userId           String   @id
+  diaryId          String?
+  knowledgeVersion String
+  state            Json
+  pendingAsk       String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  expiresAt        DateTime
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([expiresAt])
 }

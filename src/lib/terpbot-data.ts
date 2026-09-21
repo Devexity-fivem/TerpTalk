@@ -5,6 +5,7 @@
 // publicUserSelect — never DirectMessage, Report, SecurityEvent, Block,
 // credentials, or staff-only tables.
 import { prisma } from "@/lib/prisma"
+import type { Prisma } from "@prisma/client"
 import { activeAuthor, blockExistsBetween, blockedUserIds, notBlockedAuthor, containsExternalLink, LIMITS, USERNAME_REGEX, rankableProfile, REPUTATION_ORDER } from "@/lib/security"
 import { extractThreadRef, type ThreadRef } from "@/lib/terpbot-context"
 import { postDeepLink } from "@/lib/notify"
@@ -24,8 +25,15 @@ import { getGrowJourney } from "@/lib/grow-journey"
 import { notify } from "@/lib/notify"
 import { getBotUserId } from "@/lib/terpbot"
 import { buildHelpText } from "@/lib/chat-commands"
-import { buildGrowContext } from "@/lib/terpbot-intel-context"
-import { evaluateContext, renderIntelLines } from "@/lib/terpbot-intel"
+import { buildGrowContext, emptyContext } from "@/lib/terpbot-intel-context"
+import { evaluateContext, renderIntelLines, nextUsefulMeasurement } from "@/lib/terpbot-intel"
+import { mergeReported, mergeObservations } from "@/lib/terpbot-intel-merge"
+import { buildWhyTrail, renderWhy } from "@/lib/terpbot-intel-why"
+import { loadSession, saveSession } from "@/lib/terpbot-session"
+import { parseGrowText } from "@/lib/terpbot-nl-parse"
+import { SYMPTOM_LABELS, LOCATION_LABELS } from "@/lib/terpbot-nl-vocab"
+import { rateLimit } from "@/lib/rate-limit"
+import type { GrowContextView, SessionState, SessionObservation, ReportedPoint, MetricId } from "@/lib/terpbot-intel-types"
 import { TERPBOT_USERNAME, randomGrowTip, sanitizeEcho as sanitizeEchoStrict } from "@/lib/terpbot"
 
 export interface BotCommandCtx {
@@ -293,6 +301,13 @@ const stageLabel = (s: string) => STAGE_LABELS[s] ?? s.charAt(0) + s.slice(1).to
 // The grow commands all need the requester's most relevant diary: the
 // recently-touched active one first, otherwise the latest harvest. The
 // select carries the newest update so "last update / readings" is free.
+// UPDATES_ORDER lives outside the `as const` literal: Prisma's nested
+// relation orderBy needs a mutable array (readonly fails the type, a
+// multi-key object fails at runtime).
+const UPDATES_ORDER: Prisma.DiaryUpdateOrderByWithRelationInput[] = [
+  { createdAt: "desc" },
+  { id: "desc" },
+]
 const GROW_DIARY_SELECT = {
   id: true, slug: true, title: true, stage: true, growType: true, strain: true, strainId: true,
   startDate: true, harvested: true, harvestedAt: true, yieldAmount: true, yieldUnit: true,
@@ -301,7 +316,7 @@ const GROW_DIARY_SELECT = {
   setup: { select: { title: true } },
   _count: { select: { updates: true } },
   updates: {
-    orderBy: { createdAt: "desc" as const, id: "desc" as const },
+    orderBy: UPDATES_ORDER,
     take: 1,
     select: {
       title: true, stage: true, createdAt: true,
@@ -714,13 +729,186 @@ async function handle(name: string, ctx: BotCommandCtx): Promise<BotCommandResul
         let intel: string[] = []
         if (diaryIndex === 0) {
           const gctx = await buildGrowContext(d.id, { ownerId: ctx.userId, scope: "public" })
-          if (gctx) intel = renderIntelLines(gctx, evaluateContext(gctx))
+          if (gctx) {
+            const now = Date.now()
+            const diagnosis = evaluateContext(gctx)
+            intel = renderIntelLines(gctx, diagnosis)
+            // Persist the reasoning so /why works after a check-in too.
+            // Rendered output stays based on the diary context alone.
+            const session = await loadSession(ctx.userId, now)
+            const state: SessionState = session?.state ?? { reported: [], observations: [] }
+            const next = nextUsefulMeasurement(gctx, diagnosis)
+            await saveSession(
+              ctx.userId,
+              {
+                diaryId: d.id,
+                state: { ...state, trail: buildWhyTrail(gctx, diagnosis, now) },
+                pendingAsk: next && !next.id.startsWith("inspect:") ? next.id : null,
+              },
+              now
+            )
+          }
         }
         blocks.push(
           `${sanitizeField(d.title, 40)} (${stageLabel(d.stage)}):\n${[...checks, ...intel, next].join("\n")}`
         )
       }
       return ok(`🌱 Grow check-in\n\n${blocks.join("\n\n")}`)
+    }
+
+    case "diagnose": {
+      const cap = await rateLimit(`bot-diagnose:${ctx.userId}`, 6, 60_000)
+      if (!cap.allowed) return ok(`🤖 Give me a minute between diagnoses — try again shortly.`)
+      const now = Date.now()
+      const session = await loadSession(ctx.userId, now)
+      const state: SessionState = session?.state ?? { reported: [], observations: [] }
+      const parsed = parseGrowText(ctx.rest)
+
+      // A bare number answers the open question when there is one.
+      const bareNum = ctx.rest.match(/^\s*(-?\d+(?:\.\d+)?)\s*$/)
+      if (bareNum && !parsed.measurements.length && !parsed.observations.length) {
+        const ask = session?.pendingAsk
+        if (!ask) {
+          return ok(`🤖 I don't have an open question for you — tell me what you're seeing or run /checkin.`)
+        }
+        if (ask === "temperature") return ok(`🤖 ${bareNum[1]} — °F or °C?`)
+        if (ask === "ec" || ask === "runoffEc") return ok(`🤖 ${bareNum[1]} — mS/cm or ppm (and which ppm scale)?`)
+        state.reported = [
+          ...state.reported,
+          {
+            metric: ask as MetricId,
+            value: parseFloat(bareNum[1]),
+            unit: ask === "humidity" ? "percent" : undefined,
+            t: now,
+          },
+        ]
+      } else {
+        // Questions with no reportable content route to knowledge search.
+        if (parsed.question && !parsed.observations.length && !parsed.measurements.length && ctx.rest.trim()) {
+          return ok(`🤖 That sounds like a question — try /ask ${sanitizeField(ctx.rest, 60)} or tell me what you're seeing.`)
+        }
+        state.reported = [
+          ...state.reported,
+          ...parsed.measurements.flatMap((m): ReportedPoint[] =>
+            m.value == null ? [] : [{ metric: m.metric, value: m.value, unit: m.unit, t: now }]
+          ),
+        ]
+        state.observations = [
+          ...state.observations,
+          ...parsed.observations.map(
+            (o): SessionObservation => ({
+              symptom: o.symptom,
+              location: o.location,
+              stage: o.stage,
+              period: o.period,
+              t: now,
+            })
+          ),
+        ]
+      }
+
+      // Diary: the session's own, else the user's newest public unharvested
+      // diary — private/unlisted diaries are never selected.
+      let diaryId = session?.diaryId ?? null
+      if (!diaryId) {
+        const d = await prisma.growDiary.findFirst({
+          where: { authorId: ctx.userId, deleted: false, harvested: false, ...publicDiaryWhere },
+          orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
+          select: { id: true },
+        })
+        diaryId = d?.id ?? null
+      }
+      const base: GrowContextView =
+        (diaryId ? await buildGrowContext(diaryId, { ownerId: ctx.userId, scope: "public", now: new Date(now) }) : null) ??
+        emptyContext(now)
+      const ctx2 = mergeObservations(mergeReported(base, state.reported, now), state.observations)
+      const diagnosis = evaluateContext(ctx2)
+      const next = nextUsefulMeasurement(ctx2, diagnosis)
+      const trail = buildWhyTrail(ctx2, diagnosis, now)
+      await saveSession(
+        ctx.userId,
+        {
+          diaryId: base.diary.id ? base.diary.id : null,
+          state: { ...state, trail },
+          pendingAsk: next && !next.id.startsWith("inspect:") ? next.id : null,
+        },
+        now
+      )
+
+      // Render — symptoms and "(you)"-marked reported readings; candidates
+      // as warnings/assessments, never diagnoses.
+      const you = (s: { points: { provenance?: string }[] }) =>
+        s.points[s.points.length - 1]?.provenance === "user-reported" ? " (you)" : ""
+      const reported: string[] = []
+      for (const o of ctx2.observations) {
+        const label = SYMPTOM_LABELS[o.symptom]
+        if (!label) continue
+        const s = `${label}${o.location ? ` (${LOCATION_LABELS[o.location]})` : ""}`
+        if (!reported.includes(s)) reported.push(s)
+      }
+      if (ctx2.series.temperature.latest != null) reported.push(`${ctx2.series.temperature.latest}°F${you(ctx2.series.temperature)}`)
+      if (ctx2.series.humidity.latest != null) reported.push(`${ctx2.series.humidity.latest}% RH${you(ctx2.series.humidity)}`)
+      if (ctx2.series.ph.latest != null) reported.push(`pH ${ctx2.series.ph.latest}${you(ctx2.series.ph)}`)
+      if (ctx2.series.ec.latest != null) reported.push(`EC ${ctx2.series.ec.latest}${you(ctx2.series.ec)}`)
+      if (ctx2.series.runoffPh.latest != null) reported.push(`runoff pH ${ctx2.series.runoffPh.latest}${you(ctx2.series.runoffPh)}`)
+      if (ctx2.series.runoffEc.latest != null) reported.push(`runoff EC ${ctx2.series.runoffEc.latest}${you(ctx2.series.runoffEc)}`)
+
+      const lines: string[] = [
+        `🔬 Working from ${base.diary.id ? `your "${sanitizeField(base.diary.title, 40)}"` : "what you've told me (no public diary linked)"}:`,
+      ]
+      if (reported.length) lines.push(`Reported: ${reported.slice(0, 6).join(" · ")}`)
+      if (ctx2.series.vpdComputed.latest != null) {
+        lines.push(`Calculated: VPD ≈${ctx2.series.vpdComputed.latest} kPa (${you(ctx2.series.vpdComputed) ? "from your reported temp/RH" : "from logged values"})`)
+      }
+      for (const c of diagnosis.candidates.filter((c) => c.state !== "insufficient").slice(0, 2)) {
+        if (c.state === "conflicting") {
+          lines.push(`⚠ ${c.name}: evidence conflicts — ${c.supporting[0]?.text ?? c.name} / ${c.opposing[0]?.text ?? "counter-evidence"} — ${c.independentSignals} independent signal(s)`)
+        } else {
+          const marker = c.state === "strong" ? "•" : "·"
+          lines.push(`${marker} ${c.supporting[0]?.text ?? c.name} — ${c.name} (${c.state.toUpperCase()}, ${c.independentSignals} independent signal${c.independentSignals === 1 ? "" : "s"})`)
+        }
+      }
+      if (ctx2.unresolved?.length) {
+        const u = ctx2.unresolved[ctx2.unresolved.length - 1]
+        const hint =
+          u.metric === "temperature" ? "°F or °C?"
+          : u.metric === "ec" || u.metric === "runoffEc" ? "mS/cm or ppm?"
+          : u.metric === "humidity" ? "out of range — 0–100?"
+          : "which unit?"
+        lines.push(`Unresolved: "${u.value} — ${hint}"`)
+      }
+      if (next) {
+        lines.push(
+          next.id.startsWith("inspect:")
+            ? `Next: ${next.label} — ${next.why}`
+            : `Next: tell me the ${next.label.toLowerCase()} — ${next.why}`
+        )
+      }
+      lines.push(`/why explains the reasoning.`)
+      return ok(...(lines.join("\n").length <= 1000 ? [lines.join("\n")] : [lines.slice(0, 4).join("\n"), lines.slice(4).join("\n")]))
+    }
+
+    case "why": {
+      const cap = await rateLimit(`bot-diagnose:${ctx.userId}`, 6, 60_000)
+      if (!cap.allowed) return ok(`🤖 Give me a minute between explanations — try again shortly.`)
+      const session = await loadSession(ctx.userId, Date.now())
+      if (!session?.state.trail) {
+        return ok(`🤖 I haven't reasoned about your grow in the last 24h — tell me what you're seeing or run /checkin.`)
+      }
+      // Chat messages cap at 1000 chars — pack the trail into ≤2 messages.
+      const wlines = renderWhy(session.state.trail, ctx.rest || undefined)
+      const msgs: string[] = []
+      let cur = ""
+      for (const l of wlines) {
+        if (cur && (cur + "\n" + l).length > 1000) {
+          msgs.push(cur)
+          cur = l
+        } else {
+          cur = cur ? `${cur}\n${l}` : l
+        }
+      }
+      if (cur) msgs.push(cur)
+      return ok(...msgs.slice(0, 2))
     }
 
     case "growhelp": {

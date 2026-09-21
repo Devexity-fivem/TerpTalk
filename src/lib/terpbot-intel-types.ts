@@ -214,11 +214,21 @@ export interface GrowContextView {
     vpdEntered: IntelSeries
     /** VPD computed from temp+RH pairs — distinct from user-entered */
     vpdComputed: IntelSeries
+    /** runoff measurements — not schema columns; populated only from
+     *  user-reported points (and later, parsed feeding text) */
+    runoffPh: IntelSeries
+    runoffEc: IntelSeries
   }
   /** latest entered−computed VPD difference, or null */
   vpdDivergence: number | null
   /** schema metrics with zero readings in the window */
   missing: MetricId[]
+  /** age in days of each series' latest point, measured from `now` —
+   *  present only for series with n > 0 */
+  freshness: Partial<Record<MetricId, number>>
+  /** user-reported values that couldn't be accepted unambiguously
+   *  (unit or scale unclear) — surfaced so the response can ask */
+  unresolved?: ReportedPoint[]
   /** normalized symptom reports parsed from diary update text —
    *  [] when no parseable symptom was reported. Observations only;
    *  the rule engine does the reasoning. */
@@ -361,4 +371,71 @@ export interface Diagnosis {
   candidates: CandidateResult[]
   /** standalone data-quality / gap outputs (non-hypothesis) */
   findings: Finding[]
+}
+
+// ── Session state + /why trail ──────────────────────────────────────
+// Persisted on BotSession.state (Json). PRIVACY: no raw message text,
+// no spans, no refIds, no room ids — only structured values and the
+// already-render-safe evidence texts.
+
+/** a value the grower told the bot in chat */
+export interface ReportedPoint {
+  metric: MetricId
+  value: number
+  unit?: string
+  /** epoch ms of the report */
+  t: number
+}
+
+/** a symptom the grower reported in chat — no provenance back to the
+ *  message it came from */
+export interface SessionObservation {
+  symptom: SymptomId
+  location?: LocationId
+  stage?: string
+  period?: string
+  t: number
+}
+
+export interface SessionState {
+  reported: ReportedPoint[]
+  observations: SessionObservation[]
+  trail?: WhyTrail
+}
+
+/** The persisted explanation — enough to answer "why did you say
+ *  that" for 24h without storing a diagnosis snapshot of everything. */
+export interface WhyTrail {
+  knowledgeVersion: string
+  /** epoch ms the diagnosis was produced */
+  at: number
+  /** null when reasoning ran without a public diary */
+  diaryTitle: string | null
+  basis: {
+    logged: number
+    reported: number
+    observations: number
+    /** days since the newest logged/merged point; null when no data */
+    staleDays: number | null
+  }
+  candidates: {
+    id: string
+    name: string
+    kind: "condition" | "risk"
+    state: FindingState
+    independentSignals: number
+    signals: {
+      signal: string
+      direction: "for" | "risk" | "against"
+      weight: number
+      /** the rendered evidence text — already safe to display */
+      text: string
+    }[]
+    opposing: string[]
+    requiredMissing: MetricId[]
+    next?: MeasurementHint
+    sourceIds: string[]
+  }[]
+  findings: { title: string; state: FindingState; text: string }[]
+  next?: MeasurementHint
 }

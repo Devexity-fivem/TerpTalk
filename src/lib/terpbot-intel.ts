@@ -48,6 +48,7 @@ import type {
   GrowContextView,
   IntelEvidence,
   IntelRule,
+  IntelSeries,
   MeasurementHint,
   MetricId,
   NextStepId,
@@ -1764,6 +1765,8 @@ const SCHEMA_SERIES: Partial<Record<MetricId, keyof GrowContextView["series"]>> 
   ec: "ec",
   height: "height",
   vpd: "vpdEntered",
+  runoffPh: "runoffPh",
+  runoffEc: "runoffEc",
 }
 
 export function measurementAvailable(ctx: GrowContextView, m: MetricId): boolean {
@@ -1845,13 +1848,23 @@ export function nextUsefulMeasurement(ctx: GrowContextView, diagnosis: Diagnosis
 // derived, interpretation = candidate evidence, missing = what would
 // help. Candidates render as warnings/assessments — never as diagnoses.
 
-export function renderIntelLines(ctx: GrowContextView, diagnosis: Diagnosis): string[] {
+export function renderIntelLines(
+  ctx: GrowContextView,
+  diagnosis: Diagnosis,
+  opts?: { provenanceMarks?: boolean }
+): string[] {
   const lines: string[] = []
+  // "(you)" marks a latest point that came from a chat report rather than a
+  // logged diary update — only when the caller opts in (diagnose).
+  const you = (s: IntelSeries) =>
+    opts?.provenanceMarks && s.points[s.points.length - 1]?.provenance === "user-reported"
+      ? " (you)"
+      : ""
   const observed: string[] = []
-  if (ctx.series.temperature.latest != null) observed.push(`${ctx.series.temperature.latest}°F`)
-  if (ctx.series.humidity.latest != null) observed.push(`${ctx.series.humidity.latest}% RH`)
-  if (ctx.series.ph.latest != null) observed.push(`pH ${ctx.series.ph.latest}`)
-  if (ctx.series.ec.latest != null) observed.push(`EC ${ctx.series.ec.latest}`)
+  if (ctx.series.temperature.latest != null) observed.push(`${ctx.series.temperature.latest}°F${you(ctx.series.temperature)}`)
+  if (ctx.series.humidity.latest != null) observed.push(`${ctx.series.humidity.latest}% RH${you(ctx.series.humidity)}`)
+  if (ctx.series.ph.latest != null) observed.push(`pH ${ctx.series.ph.latest}${you(ctx.series.ph)}`)
+  if (ctx.series.ec.latest != null) observed.push(`EC ${ctx.series.ec.latest}${you(ctx.series.ec)}`)
   const calculated: string[] = []
   if (ctx.series.vpdComputed.latest != null) calculated.push(`VPD ≈${ctx.series.vpdComputed.latest} kPa`)
 
@@ -1885,7 +1898,11 @@ export function renderIntelLines(ctx: GrowContextView, diagnosis: Diagnosis): st
 
   lines.push(`📊 Reading the last ${ctx.updateCount} update${ctx.updateCount === 1 ? "" : "s"}:`)
   if (observed.length) lines.push(`Observed: ${observed.join(" · ")}`)
-  if (calculated.length) lines.push(`Calculated: ${calculated.join(" · ")} (air temp — leaf temp not logged)`)
+  const vpdYou = you(ctx.series.vpdComputed)
+  if (calculated.length)
+    lines.push(
+      `Calculated: ${calculated.join(" · ")} (${vpdYou ? "from your reported temp/RH" : "air temp — leaf temp not logged"})`
+    )
   if (reported.length) lines.push(`Reported: ${reported.slice(0, 3).join(" · ")}`)
 
   if (confirmedFindings.length || watchCandidates.length) {

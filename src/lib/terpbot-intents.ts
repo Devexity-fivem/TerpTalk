@@ -6,6 +6,7 @@
 // path from free text to a staff command. Moderation vocabulary is
 // hard-blocked before any matcher runs.
 import { isMentionCommand } from "@/lib/chat-commands"
+import { parseGrowText } from "@/lib/terpbot-nl-parse"
 
 export type TerpbotIntent =
   | { kind: "command"; name: string; args: string[] }
@@ -438,6 +439,26 @@ export function parseTerpbotIntent(content: string): TerpbotIntent {
     if (m && m[m.length - 1]?.trim().length >= 3) {
       return { kind: "command", name: "ask", args: [m[m.length - 1].trim()] }
     }
+  }
+
+  // Grow-report fallback → diagnose. The deterministic parser finds
+  // symptoms/measurements in free text ("my leaves are curling",
+  // "tent is 84f"); a bare number is a pending-ask answer the handler
+  // resolves against the session.
+  const parsed = parseGrowText(text)
+  if (
+    parsed.observations.length ||
+    parsed.measurements.length ||
+    /^\s*-?\d+(\.\d+)?\s*$/.test(text)
+  ) {
+    return { kind: "command", name: "diagnose", args: [text] }
+  }
+  const why = text.match(/^(why|how come|what makes you)\b\s*(.*)/)
+  if (why && !why[2].trim()) {
+    return { kind: "command", name: "why", args: [] }
+  }
+  if (why) {
+    return { kind: "command", name: "why", args: [why[2].trim()] }
   }
 
   return { kind: "fallback" }

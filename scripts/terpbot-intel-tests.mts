@@ -16,6 +16,8 @@ import {
 } from "@/lib/terpbot-intel"
 import { CANDIDATES } from "@/lib/terpbot-intel-knowledge"
 import { validateKnowledge } from "@/lib/terpbot-intel-validate"
+import { mergeObservations, mergeReported } from "@/lib/terpbot-intel-merge"
+import { buildWhyTrail, renderWhy } from "@/lib/terpbot-intel-why"
 import { parseGrowText } from "@/lib/terpbot-nl-parse"
 import type {
   CandidateResult,
@@ -23,6 +25,7 @@ import type {
   IntelEvidence,
   IntelSeries,
   StructuredObservation,
+  WhyTrail,
 } from "@/lib/terpbot-intel-types"
 
 const t0 = Date.UTC(2025, 0, 1)
@@ -52,9 +55,11 @@ const mkCtx = (over: Partial<GrowContextView> = {}): GrowContextView => ({
   series: {
     temperature: emptySeries, humidity: emptySeries, ph: emptySeries,
     ec: emptySeries, height: emptySeries, vpdEntered: emptySeries, vpdComputed: emptySeries,
+    runoffPh: emptySeries, runoffEc: emptySeries,
   },
   vpdDivergence: null,
   missing: [],
+  freshness: {},
   ...over,
   observations: over.observations ?? [],
 })
@@ -260,6 +265,132 @@ function run() {
       ["a", "b", "c"],
       "equal state/score candidates rank by ascending id"
     )
+  }
+
+  // ── 9. mergeReported — units, ambiguity, pairing, freshness ─────
+  {
+    const now = t0 + 40 * 86400000
+    const ctx = withSeries(
+      { temperature: mkSeries([70], 0.5) },
+      { missing: ["humidity"] }
+    )
+    const c2 = mergeReported(
+      ctx,
+      [
+        { metric: "temperature", value: 25, unit: "degC", t: now }, // 77°F
+        { metric: "temperature", value: 84, t: now },               // bare → unresolved
+        { metric: "ec", value: 700, unit: "ppm", t: now },          // ppm → unresolved
+        { metric: "humidity", value: 62, t: now },                  // bare RH accepted
+        { metric: "humidity", value: 140, t: now },                 // out of range → unresolved
+      ],
+      now
+    )
+    const temps = c2.series.temperature.points
+    assert.equal(temps[0].v, 70, "logged points untouched")
+    assert.equal(temps[0].provenance, undefined, "logged provenance unset")
+    assert.equal(temps[temps.length - 1].v, 77, "degC converts to °F")
+    assert.equal(temps[temps.length - 1].provenance, "user-reported")
+    assert.equal(c2.series.temperature.latest, 77, "latest by time")
+    assert.equal(c2.series.humidity.latest, 62, "bare RH accepted")
+    assert.ok(!c2.missing.includes("humidity"), "missing recomputed")
+    assert.deepEqual(
+      c2.unresolved?.map((u) => u.value).sort((a, b) => a - b),
+      [84, 140, 700],
+      "ambiguous/out-of-range points unresolved"
+    )
+    assert.equal(c2.series.ec.latest, null, "ppm EC never converted")
+    assert.equal(c2.freshness.temperature, 0, "freshness recomputed")
+    assert.ok(c2.series.vpdComputed.latest != null, "VPD from paired reported temp/RH")
+    assert.equal(
+      c2.series.vpdComputed.points[c2.series.vpdComputed.points.length - 1].provenance,
+      "user-reported"
+    )
+    // original ctx untouched (pure)
+    assert.equal(ctx.series.humidity.n, 0)
+
+    const c3 = mergeReported(
+      mkCtx(),
+      [
+        { metric: "height", value: 20, unit: "inch", t: now },
+        { metric: "vpd", value: 1.2, unit: "kpa", t: now },
+        { metric: "runoffPh", value: 6.1, t: now },
+        { metric: "runoffEc", value: 2.4, unit: "mscm", t: now },
+        { metric: "runoffEc", value: 2.4, t: now }, // no unit → unresolved
+      ],
+      now
+    )
+    assert.equal(Math.round(c3.series.height.points[0].v * 10) / 10, 50.8, "inch→cm")
+    assert.equal(c3.series.vpdEntered.latest, 1.2, "kpa VPD accepted")
+    assert.equal(c3.series.runoffPh.latest, 6.1)
+    assert.equal(c3.series.runoffEc.latest, 2.4)
+    assert.equal(c3.unresolved?.length, 1)
+  }
+
+  // ── 10. mergeObservations — dedupe + feeds resolution ───────────
+  {
+    const ctx = mkCtx()
+    const merged = mergeObservations(ctx, [
+      { symptom: "LEAF_YELLOWING", location: "LOWER_OLD", t: t0 },
+      { symptom: "LEAF_YELLOWING", location: "LOWER_OLD", t: t0 + 3600000 }, // same day → dedupe
+      { symptom: "CURL_UP", t: t0 + 86400000 },
+    ])
+    assert.equal(merged.observations.length, 2, "same-day duplicate collapsed")
+    assert.equal(merged.observations[0].source, "nl")
+    assert.ok(merged.observations[0].feeds.length > 0, "feeds resolved from vocab")
+    assert.equal(merged.observations[0].refId, undefined)
+    const again = mergeObservations(merged, [
+      { symptom: "LEAF_YELLOWING", location: "LOWER_OLD", t: t0 + 7200000 },
+    ])
+    assert.equal(again.observations.length, 2, "dedupe against existing observations")
+  }
+
+  // ── 11. Why trail — provenance, no raw text, determinism ────────
+  {
+    const ctx = withSeries(
+      { humidity: mkSeries([68, 68, 68, 68, 68, 68, 68, 68], 2) },
+      { observations: obsFrom("top leaves curling ZEBRA-9931") }
+    )
+    const diag = evaluateContext(ctx)
+    const trail = buildWhyTrail(ctx, diag, ctx.now)
+    const trailJson = JSON.stringify(trail)
+    assert.ok(!trailJson.includes("ZEBRA-9931"), "raw text never enters the trail")
+    assert.ok(!trailJson.includes("d1"), "no diary id in the trail")
+    assert.ok(!/refId/.test(trailJson), "no refIds in the trail")
+    const out = renderWhy(trail).join("\n")
+    assert.ok(!out.includes("ZEBRA-9931"), "raw text never renders")
+    assert.ok(out.includes("Why I said that"), "header renders")
+    for (const tc of trail.candidates) {
+      assert.equal(
+        tc.state,
+        diag.candidates.find((c) => c.id === tc.id)?.state,
+        `trail state matches diagnosis for ${tc.id}`
+      )
+    }
+    assert.equal(
+      JSON.stringify(renderWhy(trail)),
+      JSON.stringify(renderWhy(structuredClone(trail))),
+      "renderWhy deterministic"
+    )
+    // Attribution labels: a trail containing fao56-svp marks it general
+    // horticulture; cannabis-specific sources mark cannabis-specific.
+    const windTrail: WhyTrail = {
+      knowledgeVersion: "2.1", at: ctx.now, diaryTitle: "t",
+      basis: { logged: 0, reported: 0, observations: 0, staleDays: null },
+      candidates: [{
+        id: "wind_burn", name: "Wind burn or low humidity", kind: "condition",
+        state: "possible", independentSignals: 1,
+        signals: [{ signal: "symptom:LEAF_CURL", direction: "for", weight: 2, text: "curl reported" }],
+        opposing: [], requiredMissing: [], sourceIds: ["fao56-svp"],
+      }],
+      findings: [],
+    }
+    const wOut = renderWhy(windTrail).join("\n")
+    assert.ok(wOut.includes("general horticulture"), "non-cannabis source labelled")
+    const csOut = renderWhy({
+      ...windTrail,
+      candidates: [{ ...windTrail.candidates[0], sourceIds: ["cs-vpd-ranges"] }],
+    }).join("\n")
+    assert.ok(csOut.includes("cannabis-specific"), "cannabis source labelled")
   }
 
   console.log("All TerpBot intelligence tests passed.")

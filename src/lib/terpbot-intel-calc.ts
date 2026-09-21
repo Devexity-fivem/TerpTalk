@@ -9,6 +9,9 @@ export interface MetricPoint {
   /** epoch ms */
   t: number
   v: number
+  /** "logged" = a diary update column; "user-reported" = a value the
+   *  grower told the bot in chat. Undefined is treated as logged. */
+  provenance?: "logged" | "user-reported"
 }
 
 export interface CalcResult {
