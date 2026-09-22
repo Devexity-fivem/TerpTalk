@@ -365,13 +365,55 @@ export const VOCAB: VocabEntry[] = [
 ]
 
 /** Numeric stage claims that phrases can't express — "week 6 flower",
- *  "day 40 of veg". Deterministic regexes, applied per-clause. */
+ *  "day 40 of veg". Deterministic regexes, applied per-clause. Matched
+ *  spans are consumed so "week 6 flower" can never mint a phantom
+ *  "6" measurement on a nearby metric. */
 export const STAGE_PATTERNS: { re: RegExp; stage: string }[] = [
   { re: /\b(?:week|wk)\s*\d+\s*(?:of\s+)?(?:flower|bloom|budding)\b/, stage: "FLOWER" },
   { re: /\b(?:week|wk)\s*\d+\s*(?:of\s+)?(?:veg|vegetative)\b/, stage: "VEGETATIVE" },
   { re: /\bday\s*\d+\s*(?:of\s+)?(?:flower|bloom)\b/, stage: "FLOWER" },
   { re: /\bf\s*\d+\b/, stage: "FLOWER" }, // grower shorthand: "f6"
   { re: /\bv\s*\d+\b/, stage: "VEGETATIVE" }, // "v4"
+]
+
+// ── recency phrases ─────────────────────────────────────────────────
+// Deterministic "how long ago" claims — resolved to an integer age in
+// days (every staleness threshold is day-granular) or "past" when the
+// claim is clearly historical but unbounded. Matched spans are consumed
+// WITH their digits so "3 days ago" can never mint a phantom
+// measurement. This is a whitelist, not a time engine — anything not
+// listed leaves timing unresolved (never invent a timestamp).
+
+/** number words accepted inside "N units ago" phrases */
+export const TEMPORAL_NUM_WORDS: Record<string, number> = {
+  a: 1, an: 1, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6,
+  seven: 7, eight: 8, nine: 9, ten: 10, eleven: 11, twelve: 12,
+  thirteen: 13, fourteen: 14, couple: 2, few: 3,
+}
+
+/** oldest age resolved to a timestamp — anything older collapses to
+ *  the cap; the 24h session window doesn't outlive it anyway */
+export const TEMPORAL_MAX_AGE_DAYS = 30
+
+const TEMPORAL_NUM = "(?:a|an|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|couple(?:\\s+of)?|few|\\d+)"
+
+export const TEMPORAL_PATTERNS: {
+  re: RegExp
+  /** fixed days, "past" (unbounded historical), or "capture" (N × unitDays) */
+  days: number | "past" | "capture"
+  unitDays?: number
+}[] = [
+  // same-day anchors — "last night" is both a period cue and age 0
+  { re: /\b(?:right now|just now|currently|today|tonight|this morning|this afternoon|this evening|earlier today|last night)\b/g, days: 0 },
+  { re: /\byesterday\b/g, days: 1 },
+  { re: new RegExp(`\\b(?:an?\\s+)?${TEMPORAL_NUM}\\s+days?\\s+ago\\b`, "g"), days: "capture", unitDays: 1 },
+  { re: /\blast\s+week\b/g, days: 7 },
+  { re: new RegExp(`\\b(?:an?\\s+)?${TEMPORAL_NUM}\\s+weeks?\\s+ago\\b`, "g"), days: "capture", unitDays: 7 },
+  { re: /\blast\s+month\b/g, days: 30 },
+  { re: new RegExp(`\\b(?:an?\\s+)?${TEMPORAL_NUM}\\s+months?\\s+ago\\b`, "g"), days: "capture", unitDays: 30 },
+  // clearly-past but unbounded — never assigned a date. Bare "earlier"
+  // lands here: it could mean hours or days, so it stays approximate.
+  { re: /\b(?:a\s+while\s+(?:back|ago)|some\s+time\s+ago|a\s+bit\s+ago|back\s+then|earlier)\b/g, days: "past" },
 ]
 
 // ── refinement tables ─────────────────────────────────────────────

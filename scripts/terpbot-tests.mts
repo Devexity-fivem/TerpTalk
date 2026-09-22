@@ -508,9 +508,14 @@ function run() {
     assert.equal(findCandidate(ctx, "humidity_high"), undefined, "in-band VPD → no humidity candidate either")
   }
   {
-    const ctx = mkCtx({ series: { ...mkCtx().series, vpdComputed: mkSeries([1.8, 1.8], 0.15) } })
     // env.snapshot now covers sub-trend evidence: latest VPD above the
     // band contributes a weak heat_stress lead where n≥3 rules stay off.
+    // Points must be CURRENT (within 48h of ctx.now) — the rule no
+    // longer treats a historical latest as "now".
+    const vpd = mkSeries([1.8, 1.8], 0.15)
+    const now = t0 + 40 * 86400000
+    vpd.points = vpd.points.map((p, i) => ({ ...p, t: now - (vpd.points.length - 1 - i) * 3600000 }))
+    const ctx = mkCtx({ series: { ...mkCtx().series, vpdComputed: vpd } })
     const snap = findCandidate(ctx, "heat_stress")
     assert.ok(snap, "snapshot covers 2-point VPD excursion")
     assert.equal(snap!.state, "possible", "2 readings → possible at most")

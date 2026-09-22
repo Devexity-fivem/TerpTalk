@@ -130,9 +130,11 @@ export function validateKnowledge(reg?: Partial<KnowledgeRegistry>): string[] {
     if (rule.signal != null && !signalIds.has(rule.signal)) {
       errors.push(`rule:${rule.id}: signal "${rule.signal}" not in SIGNAL_IDS`)
     }
-    // gap findings report missing data — provenance is only required
+    // gap findings report missing data and data-domain rules assert
+    // provenance facts about the readings themselves (never a
+    // horticultural claim) — provenance citations are only required
     // for rules that assert something about the grow
-    if (rule.kind !== "gap" && !rule.sourceIds.length) {
+    if (rule.kind !== "gap" && rule.domain !== "data" && !rule.sourceIds.length) {
       errors.push(`rule:${rule.id}: sourceIds is empty`)
     }
     for (const s of rule.sourceIds) {
@@ -176,13 +178,20 @@ export function validateKnowledge(reg?: Partial<KnowledgeRegistry>): string[] {
       if (!(cid in r.candidates)) errors.push(`contra:${symptom}: candidate "${cid}" not registered`)
     }
   }
-  for (const [table, refinements] of [
-    ["stageRefinements", r.stageRefinements],
-    ["locationRefinements", r.locationRefinements],
+  // refinement table KEYS must be real vocabulary ids — a typo'd stage
+  // or location key silently never fires (audit: this was unchecked)
+  const stageIds = new Set(VOCAB.filter((e) => e.family === "stage").map((e) => e.id))
+  const locationIds = new Set(VOCAB.filter((e) => e.family === "location").map((e) => e.id))
+  for (const [table, refinements, keyIds] of [
+    ["stageRefinements", r.stageRefinements, stageIds],
+    ["locationRefinements", r.locationRefinements, locationIds],
   ] as const) {
     for (const [symptom, byKey] of Object.entries(refinements)) {
       if (!symptomIds.has(symptom)) errors.push(`${table}:${symptom}: not a SymptomId`)
       for (const [refKey, ids] of Object.entries(byKey ?? {})) {
+        if (!keyIds.has(refKey)) {
+          errors.push(`${table}:${symptom}: key "${refKey}" is not a known ${table === "stageRefinements" ? "stage" : "location"} id`)
+        }
         for (const cid of ids ?? []) {
           if (!(cid in r.candidates)) {
             errors.push(`${table}:${symptom}.${refKey}: candidate "${cid}" not registered`)
@@ -192,6 +201,7 @@ export function validateKnowledge(reg?: Partial<KnowledgeRegistry>): string[] {
     }
   }
   for (const entry of r.vocabFeeds) {
+    if (!symptomIds.has(entry.id)) errors.push(`vocab:${entry.id}: not a SymptomId`)
     for (const cid of entry.feeds) {
       if (!(cid in r.candidates)) errors.push(`vocab:${entry.id}: feeds "${cid}" not registered`)
     }
@@ -199,6 +209,9 @@ export function validateKnowledge(reg?: Partial<KnowledgeRegistry>): string[] {
 
   // ── next-step registries ────────────────────────────────────────
   for (const [id, info] of Object.entries(r.inspectionInfo)) {
+    if (!id.startsWith("inspect:")) {
+      errors.push(`inspection:${id}: key must carry the "inspect:" prefix`)
+    }
     for (const s of info.resolvedBy ?? []) {
       if (!symptomIds.has(s)) errors.push(`inspection:${id}: resolvedBy "${s}" is not a SymptomId`)
     }

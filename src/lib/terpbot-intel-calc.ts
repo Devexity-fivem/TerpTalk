@@ -6,12 +6,16 @@
 // module only does math and statistics.
 
 export interface MetricPoint {
-  /** epoch ms */
+  /** epoch ms of the EVENT the point measures (update createdAt for
+   *  logged points; resolved event time for reported points) */
   t: number
   v: number
   /** "logged" = a diary update column; "user-reported" = a value the
    *  grower told the bot in chat. Undefined is treated as logged. */
   provenance?: "logged" | "user-reported"
+  /** the timestamp is an unbounded approximation ("a while back") —
+   *  excluded from "current reading" paths but kept as history */
+  tApproximate?: boolean
 }
 
 export interface CalcResult {

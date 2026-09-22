@@ -37,6 +37,13 @@ const mkSeries = (vals: number[], eps: number, stepMs = 86400000): IntelSeries =
   const points = pts(vals, stepMs)
   return { ...seriesStats(points), points, trend: detectTrend(points, eps) }
 }
+// Same values, re-timed so the latest point lands ~now — needed for
+// rules that only claim CURRENT state (latestIsCurrent guard).
+const fresh = (s: IntelSeries): IntelSeries => {
+  const now = t0 + 40 * 86400000
+  const points = s.points.map((p, i) => ({ ...p, t: now - (s.points.length - 1 - i) * 86400000 }))
+  return { ...s, points }
+}
 const emptySeries: IntelSeries = {
   n: 0, latest: null, mean: null, min: null, max: null,
   medianIntervalDays: null, points: [], trend: "insufficient",
@@ -219,8 +226,8 @@ function run() {
 
   {
     const ctx = withSeries({
-      ec: mkSeries([1.4, 1.6, 1.9, 2.1], 0.2),
-      ph: mkSeries([6.0, 6.1, 6.6, 6.9], 0.15),
+      ec: fresh(mkSeries([1.4, 1.6, 1.9, 2.1], 0.2)),
+      ph: fresh(mkSeries([6.0, 6.1, 6.6, 6.9], 0.15)),
     })
     const diag = evaluateContext(ctx)
     const salt = diag.candidates.find((c) => c.id === "salt_buildup")!

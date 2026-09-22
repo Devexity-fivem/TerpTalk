@@ -52,6 +52,7 @@ import type {
   IntelSeries,
   MeasurementHint,
   MetricId,
+  MetricPoint,
   NextStepId,
   SignalId,
   SymptomId,
@@ -272,14 +273,85 @@ const hint = (id: NextStepId): MeasurementHint => {
 }
 const f1 = (v: number) => Math.round(v * 10) / 10
 
-/** Any series carries a user-reported point younger than STALE_DAYS —
- *  a fresh report keeps stale logged data from suppressing analysis. */
+/** Any series carries a user-reported point whose EVENT is younger
+ *  than STALE_DAYS — a fresh report keeps stale logged data from
+ *  suppressing analysis. Approximate historical points can't count:
+ *  "runoff EC was 2.1 a while back" is history, not a fresh reading. */
 const hasFreshReport = (ctx: GrowContextView) =>
-  Object.values(ctx.series).some(
-    (s) =>
-      s.points[s.points.length - 1]?.provenance === "user-reported" &&
-      (ctx.now - s.points[s.points.length - 1].t) / 86400000 < STALE_DAYS
-  )
+  Object.values(ctx.series).some((s) => {
+    const p = s.points[s.points.length - 1]
+    return (
+      p?.provenance === "user-reported" &&
+      !p.tApproximate &&
+      (ctx.now - p.t) / 86400000 < STALE_DAYS
+    )
+  })
+
+/** A reading describing "now" must be recent — older than this it's
+ *  history (staleness handles the >STALE_DAYS case; this guards the
+ *  gap in between, and excludes approximate points entirely). */
+const CURRENT_MS = 2 * 86400000
+
+/** Is the series' newest point usable as a CURRENT reading? Approximate
+ *  points never qualify; a point older than CURRENT_MS doesn't either. */
+const latestIsCurrent = (s: { points: MetricPoint[] }, now: number) => {
+  const p = s.points[s.points.length - 1]
+  return p != null && !p.tApproximate && now - p.t <= CURRENT_MS
+}
+
+/** Two readings of the same metric disagree meaningfully only when they
+ *  claim to describe the same time — |Δevent| beyond this isn't a
+ *  contradiction, it's two different days. */
+const CONFLICT_WINDOW_MS = 2 * 86400000
+
+/** Per-series material difference + display format. Height is absent:
+ *  growth makes different-day heights legitimately different. */
+const CONFLICT_DELTA: [
+  keyof GrowContextView["series"],
+  SignalId,
+  number,
+  (v: number) => string,
+][] = [
+  ["temperature", "temperature", 5, (v) => `${f1(v)}°F`],
+  ["humidity", "humidity", 10, (v) => `${Math.round(v)}% RH`],
+  ["ph", "ph", 0.4, (v) => `pH ${f1(v)}`],
+  ["ec", "ec", 0.5, (v) => `EC ${f1(v)}`],
+  ["vpdEntered", "env:temp-rh", 0.3, (v) => `VPD ${f1(v)} kPa`],
+  ["runoffPh", "runoff", 0.4, (v) => `runoff pH ${f1(v)}`],
+  ["runoffEc", "runoff", 0.5, (v) => `runoff EC ${f1(v)}`],
+]
+
+/** Latest logged vs latest user-reported point on each series —
+ *  a material disagreement between two provenance channels describing
+ *  the same time window. Neither side is assumed right. */
+function metricConflicts(ctx: GrowContextView) {
+  const out: { signal: SignalId; metric: MetricId; text: string }[] = []
+  for (const [key, signal, delta, fmt] of CONFLICT_DELTA) {
+    const pts = ctx.series[key].points
+    const logged = [...pts].reverse().find((p) => (p.provenance ?? "logged") === "logged")
+    const reported = [...pts].reverse().find((p) => p.provenance === "user-reported")
+    if (!logged || !reported || reported.tApproximate) continue
+    if (Math.abs(logged.t - reported.t) > CONFLICT_WINDOW_MS) continue
+    if (Math.abs(logged.v - reported.v) < delta) continue
+    const newest = reported.t >= logged.t ? "your report" : "the logged value"
+    out.push({
+      signal,
+      metric: SERIES_TO_CONFLICT_METRIC[key],
+      text: `Logged ${fmt(logged.v)} vs your reported ${fmt(reported.v)} disagree — timing, spot, or instrument may explain it. I'm working from ${newest}.`,
+    })
+  }
+  return out
+}
+
+const SERIES_TO_CONFLICT_METRIC: Record<string, MetricId> = {
+  temperature: "temperature",
+  humidity: "humidity",
+  ph: "ph",
+  ec: "ec",
+  vpdEntered: "vpd",
+  runoffPh: "runoffPh",
+  runoffEc: "runoffEc",
+}
 
 /** Age in days of the newest point backing a signal — freshness for
  *  metric-backed signals, observation age for `symptom:*`. Null when
@@ -327,6 +399,27 @@ export const INTEL_RULES: IntelRule[] = [
       },
     ],
     sourceIds: ["fao56-svp"],
+  },
+  {
+    // Logged vs chat-reported disagreement on the same metric inside a
+    // shared window — surfaced, never silently resolved. Data-quality
+    // observation only; no horticultural claim → no sources.
+    id: "data.metric-conflict",
+    signal: "data",
+    domain: "data",
+    kind: "observation",
+    title: "Logged and reported readings disagree",
+    applies: (ctx) => metricConflicts(ctx).length > 0,
+    evaluate: (ctx) =>
+      metricConflicts(ctx).map((c) => ({
+        direction: "info" as const,
+        strength: "strong" as const,
+        confirmed: true,
+        signal: c.signal,
+        text: c.text,
+        measurement: hint(c.metric),
+      })),
+    sourceIds: [],
   },
   {
     id: "env.vpd-band",
@@ -631,6 +724,11 @@ export const INTEL_RULES: IntelRule[] = [
       const medium = ctx.diary.mediumType ?? "OTHER"
       const [lo, hi] = PH_BANDS[medium] ?? PH_BAND_UNKNOWN
       const exc = countExcursions(ctx.series.ph.points, lo, hi)
+      // An out-of-band latest still supports the candidate when it's
+      // old — but "is outside" is a current claim, so stale readings
+      // render past-tense (the ≥STALE_DAYS clamp handles real aging).
+      const phCurrent = latestIsCurrent(ctx.series.ph, ctx.now)
+      const latestOut = exc.latestOutside && phCurrent
       if (!exc.latestOutside && exc.count < 3) return []
       const wide = !(medium in PH_BANDS)
       // Every item derived ONLY from the pH series stamps signal "ph" —
@@ -644,11 +742,13 @@ export const INTEL_RULES: IntelRule[] = [
           strength: exc.count >= 3 ? "moderate" : "weak",
           candidate: "ph_lockout",
           signal: "ph",
-          text: `pH ${ctx.series.ph.latest} is outside the ${lo}–${hi} range ${wide ? "generally used" : `for ${medium.toLowerCase().replace("_", " ")}`} — off-range pH can lock nutrients out.`,
+          text: latestOut
+            ? `pH ${ctx.series.ph.latest} is outside the ${lo}–${hi} range ${wide ? "generally used" : `for ${medium.toLowerCase().replace("_", " ")}`} — off-range pH can lock nutrients out.`
+            : `pH last ran outside the ${lo}–${hi} range ${wide ? "generally used" : `for ${medium.toLowerCase().replace("_", " ")}`} (${exc.count} reading${exc.count === 1 ? "" : "s"} out) — verify it's still off before correcting.`,
           measurement: hint("runoffPh"),
         },
       ]
-      if (!exc.latestOutside && exc.count >= 2) {
+      if (!exc.latestOutside && phCurrent && exc.count >= 2) {
         ev.push({
           direction: "against",
           strength: "weak",
@@ -943,7 +1043,10 @@ export const INTEL_RULES: IntelRule[] = [
   },
   {
     id: "env.disease-window",
-    signal: "env:temp-rh",
+    // humidity is the driver — temperature only qualifies which window.
+    // Stamping env:temp-rh would let one RH series masquerade as a
+    // second independent signal alongside the pure-RH rules.
+    signal: "humidity",
     domain: "disease",
     kind: "risk",
     title: "Temperature–humidity disease window",
@@ -1193,9 +1296,15 @@ export const INTEL_RULES: IntelRule[] = [
     evaluate: (ctx) => {
       const medium = ctx.diary.mediumType ?? "OTHER"
       const [lo, hi] = PH_BANDS[medium] ?? PH_BAND_UNKNOWN
+      // A current-state signature — historical readings can't claim
+      // "fed but locked out NOW". Same for the EC half of the pair.
+      if (!latestIsCurrent(ctx.series.ph, ctx.now)) return []
       const phLatest = ctx.series.ph.latest
       if (phLatest == null) return []
       const phOut = phLatest < lo || phLatest > hi
+      const ecLatest = latestIsCurrent(ctx.series.ec, ctx.now)
+        ? ctx.series.ec.latest
+        : null
 
       // deficiency candidates any reported symptom feeds — and which
       // symptom(s) fed them, so emitted evidence can carry the real
@@ -1216,20 +1325,20 @@ export const INTEL_RULES: IntelRule[] = [
         `symptom:${[...fedDeficiencySymptoms.get(d)!].sort().join("+")}`
 
       const ev: IntelEvidence[] = []
-      if (phOut && ctx.series.ec.n === 0) {
+      if (phOut && ecLatest == null) {
         ev.push({
           direction: "info",
           strength: "weak",
           candidate: "ph_lockout",
-          text: "pH is off-band and no EC is logged — can't tell whether feed is reaching the plant.",
+          text: "pH is off-band and no current EC is available — can't tell whether feed is reaching the plant.",
           measurement: hint("ec"),
         })
-      } else if (phOut && ctx.series.ec.latest != null && ctx.series.ec.latest >= EC_FEED_MIN && ctx.series.ec.latest <= EC_ELEVATED) {
+      } else if (phOut && ecLatest != null && ecLatest >= EC_FEED_MIN && ecLatest <= EC_ELEVATED) {
         ev.push({
           direction: "for",
           strength: "moderate",
           candidate: "ph_lockout",
-          text: `Feed strength looks adequate (EC ${ctx.series.ec.latest}) but pH ${phLatest} is outside ${lo}–${hi} — nutrients can be present yet unavailable; verify runoff pH before adding feed.`,
+          text: `Feed strength looks adequate (EC ${ecLatest}) but pH ${phLatest} is outside ${lo}–${hi} — nutrients can be present yet unavailable; verify runoff pH before adding feed.`,
           measurement: hint("runoffPh"),
         })
         // the confounder: reported symptoms point at availability, not supply
@@ -1243,7 +1352,7 @@ export const INTEL_RULES: IntelRule[] = [
             measurement: hint("runoffPh"),
           })
         }
-      } else if (phOut && ctx.series.ec.latest != null && ctx.series.ec.latest > EC_ELEVATED) {
+      } else if (phOut && ecLatest != null && ecLatest > EC_ELEVATED) {
         ev.push({
           direction: "for",
           strength: "weak",
@@ -1276,20 +1385,23 @@ export const INTEL_RULES: IntelRule[] = [
     kind: "assessment",
     title: "pH dangerously low",
     applies: (ctx) =>
-      ctx.series.ph.n >= 2 && ctx.series.ph.latest != null && ctx.series.ph.latest < PH_DANGER_LOW,
+      ctx.series.ph.n >= 2 &&
+      latestIsCurrent(ctx.series.ph, ctx.now) &&
+      ctx.series.ph.latest != null &&
+      ctx.series.ph.latest < PH_DANGER_LOW,
     evaluate: (ctx) => [
       {
         direction: "for",
         strength: "moderate",
         candidate: "ph_lockout",
-        text: `pH ${ctx.series.ph.latest} is below ${PH_DANGER_LOW} — cannabis growth is measurably inhibited below this and micronutrient availability spikes. Low pH is the dangerous direction, not high.`,
+        text: `pH ${ctx.series.ph.latest} is below ${PH_DANGER_LOW} — risk climbs sharply in this range (cannabis hydro showed measured growth inhibition around pH ≤4.0) and micronutrient solubility rises as pH falls. Low pH is the dangerous direction, not high.`,
         measurement: hint("runoffPh"),
       },
       {
         direction: "against",
         strength: "weak",
         candidate: "nutrition.undersupply",
-        text: "Very low pH increases nutrient solubility — apparent deficiency at pH <5 is availability/toxicity, not supply.",
+        text: `Very low pH increases nutrient solubility — apparent deficiency below ~pH ${PH_DANGER_LOW} is availability/toxicity, not supply.`,
         measurement: hint("runoffPh"),
       },
     ],
@@ -1388,7 +1500,9 @@ export const INTEL_RULES: IntelRule[] = [
     kind: "assessment",
     title: "Feed strength at seedling stage",
     applies: (ctx) =>
-      ["SEEDLING", "GERMINATION"].includes(ctx.diary.stage) && ctx.series.ec.n >= 1,
+      ["SEEDLING", "GERMINATION"].includes(ctx.diary.stage) &&
+      ctx.series.ec.n >= 1 &&
+      latestIsCurrent(ctx.series.ec, ctx.now),
     evaluate: (ctx) => {
       const latest = ctx.series.ec.latest!
       if (latest <= EC_SEEDLING_CEILING) return []
@@ -1611,9 +1725,13 @@ export const INTEL_RULES: IntelRule[] = [
       const [rLo, rHi] = RH_BANDS[stage] ?? [40, 70]
       const suffix = stageKnown ? "" : " (stage unknown — using the general range)"
       const snapshot = "a single snapshot, so treat as a lead, not a trend"
-      const t = ctx.series.temperature.latest
-      const v = ctx.series.vpdComputed.latest
-      const rh = ctx.series.humidity.latest
+      // Only readings describing NOW count — a historical report
+      // ("temp hit 95 last week") can't be a current snapshot.
+      const cur = (s: IntelSeries) =>
+        latestIsCurrent(s, ctx.now) ? s.latest : null
+      const t = cur(ctx.series.temperature)
+      const v = cur(ctx.series.vpdComputed)
+      const rh = cur(ctx.series.humidity)
       const tempThin = ctx.series.temperature.n < 3
       const vpdThin = ctx.series.vpdComputed.n < 3
       const rhThin = ctx.series.humidity.n < 3

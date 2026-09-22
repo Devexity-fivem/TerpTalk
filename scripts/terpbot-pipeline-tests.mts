@@ -21,7 +21,7 @@ import { runBotCommand } from "@/lib/terpbot-data"
 import { buildGrowContext } from "@/lib/terpbot-intel-context"
 import { evaluateContext } from "@/lib/terpbot-intel"
 import { parseTerpbotIntent } from "@/lib/terpbot-intents"
-import { sweepExpiredSessions } from "@/lib/terpbot-session"
+import { loadSession, saveSession, sweepExpiredSessions } from "@/lib/terpbot-session"
 import { REPORTABLE_METRICS } from "@/lib/terpbot-intel-merge"
 
 const SUFFIX = String(Date.now()).slice(-8)
@@ -1025,6 +1025,65 @@ async function run() {
       assert.ok(/flower/i.test(out3), `FLOWER banding shows in output: ${out3}`)
       await prisma.botSession.deleteMany({ where: { userId: sp.id } })
       console.log("✓ stage persistence across diagnose turns")
+    }
+
+    // ── 16b. Session CAS — concurrent writes merge, never clobber ────
+    {
+      const u = await mk(`__tbp_cas_${SUFFIX}`)
+      const now = Date.now()
+      // Two turns racing the same absent row: one wins the create, the
+      // other must P2002-retry and merge its delta — neither is lost.
+      await Promise.all([
+        saveSession(u.id, {
+          diaryId: null, pendingAsk: null,
+          addReported: [{ metric: "humidity", value: 65, t: now }],
+        }, now),
+        saveSession(u.id, {
+          diaryId: null, pendingAsk: null,
+          addReported: [{ metric: "temperature", value: 84, unit: "degF", t: now }],
+          addObservations: [{ symptom: "CURL_UP", t: now }],
+        }, now),
+      ])
+      const s1 = await loadSession(u.id, now)
+      assert.ok(s1, "session row exists")
+      assert.equal(s1!.state.reported.length, 2, "both concurrent reports survived")
+      assert.equal(s1!.state.observations.length, 1, "concurrent observation survived")
+      const row = await prisma.botSession.findUnique({ where: { userId: u.id } })
+      assert.equal(row!.version, 2, "one row — create stamped v1, racing write CAS-merged to v2")
+
+      // Sequential deltas accumulate; replace fields overwrite.
+      await saveSession(u.id, {
+        diaryId: null, pendingAsk: "humidity",
+        addReported: [{ metric: "ec", value: 1.8, unit: "mscm", t: now + 1000 }],
+      }, now + 1000)
+      const s2 = await loadSession(u.id, now + 1000)
+      assert.equal(s2!.state.reported.length, 3, "sequential append accumulates")
+      assert.equal(s2!.pendingAsk, "humidity", "pendingAsk replaced")
+      const row2 = await prisma.botSession.findUnique({ where: { userId: u.id } })
+      assert.equal(row2!.version, 3, "version increments per write")
+
+      // A delta with no appends must not erase existing arrays.
+      await saveSession(u.id, { diaryId: null, pendingAsk: null }, now + 2000)
+      const s3 = await loadSession(u.id, now + 2000)
+      assert.equal(s3!.state.reported.length, 3, "trail-only save preserves reported points")
+      assert.equal(s3!.pendingAsk, null, "pendingAsk cleared")
+
+      // Historical reports persist with event time, not report time.
+      const u2 = await mk(`__tbp_hist_${SUFFIX}`)
+      const ctx2 = (rest: string) =>
+        ({ userId: u2.id, role: "MEMBER", displayName: u2.name ?? "x", args: [] as string[], rest })
+      const rHist = await runBotCommand("diagnose", ctx2("rh was 88% two weeks ago"))
+      assert.ok(rHist.ok)
+      const hout = rHist.messages.join("\n")
+      assert.ok(hout.includes("14d ago"), `historical report labeled with age: ${hout}`)
+      assert.ok(!hout.includes("88% RH (you)"), "historical value not presented as current")
+      const hSess = await prisma.botSession.findUnique({ where: { userId: u2.id } })
+      const hRep = (hSess!.state as { reported: { metric: string; eventT?: number; t: number }[] }).reported
+      assert.equal(hRep.length, 1)
+      assert.ok(hRep[0].eventT != null && hRep[0].eventT < hRep[0].t - 13 * 86400000, "event time ~14d before report time")
+
+      await prisma.botSession.deleteMany({ where: { userId: { in: [u.id, u2.id] } } })
+      console.log("✓ session CAS: concurrent merge, version, append/replace semantics, event-time")
     }
 
     // ── 16. Mention decimals + staff-word measurement bypass ────────

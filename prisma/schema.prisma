@@ -1167,6 +1167,9 @@ model BotSession {
   knowledgeVersion String
   state            Json
   pendingAsk       String?
+  // optimistic-concurrency token — saveSession CAS-checks it so
+  // concurrent commands merge instead of clobbering each other
+  version          Int      @default(0)
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
   expiresAt        DateTime

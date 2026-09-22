@@ -351,6 +351,68 @@ function run() {
     }
   }
 
+  // ── temporal extraction (Phase G) ─────────────────────────────────
+  // Recency phrases resolve to ageDays / pastUnresolved AND consume
+  // their digits — a temporal number can never mint a measurement.
+  {
+    const p = parseGrowText("ph 6.5 3 days ago")
+    assert.equal(p.measurements.length, 1, "one measurement, no phantom")
+    assert.equal(p.measurements[0].metric, "ph")
+    assert.equal(p.measurements[0].value, 6.5)
+    assert.equal(p.measurements[0].ageDays, 3, "resolved age")
+  }
+  {
+    const p = parseGrowText("runoff 2.1 ms/cm two weeks ago")
+    assert.equal(p.measurements.length, 1)
+    assert.equal(p.measurements[0].metric, "runoffEc")
+    assert.equal(p.measurements[0].ageDays, 14)
+  }
+  {
+    const p = parseGrowText("ph 5.8 week 6 flower")
+    assert.equal(p.measurements.length, 1, "week digit consumed — no phantom ph=6")
+    assert.equal(p.measurements[0].value, 5.8)
+    assert.equal(p.stage, "FLOWER")
+  }
+  {
+    const p = parseGrowText("rh was 72% a while back")
+    assert.equal(p.measurements.length, 1)
+    assert.equal(p.measurements[0].value, 72)
+    assert.ok(p.measurements[0].pastUnresolved, "unbounded past marked")
+    assert.equal(p.measurements[0].ageDays, undefined, "no invented age")
+  }
+  {
+    const p = parseGrowText("temp 84 and rh 40 yesterday")
+    assert.equal(p.measurements.length, 2, "utterance-level age covers both clauses")
+    assert.ok(p.measurements.every((m) => m.ageDays === 1))
+  }
+  {
+    const o = obs("leaves were yellowing last week")[0]
+    assert.equal(o.symptom, "LEAF_YELLOWING")
+    assert.equal(o.ageDays, 7, "observation carries the age too")
+  }
+  {
+    const p = parseGrowText("ph 6.5 yesterday but ec 1.8 today")
+    const ph = p.measurements.find((m) => m.metric === "ph")
+    const ec = p.measurements.find((m) => m.metric === "ec")
+    assert.equal(ph?.ageDays, 1, "per-clause age beats utterance mix")
+    assert.equal(ec?.ageDays, 0)
+  }
+  {
+    // "earlier" alone is ambiguous (hours? days?) → approximate, not current
+    const p = parseGrowText("rh was around 70 earlier")
+    assert.ok(p.measurements[0].pastUnresolved, "bare 'earlier' stays unbounded")
+  }
+  {
+    const p = parseGrowText("temp is 84f right now")
+    assert.equal(p.measurements[0].ageDays, 0, "same-day anchor resolves current")
+  }
+  {
+    // no temporal phrase → no age fields at all
+    const p = parseGrowText("ph 6.5")
+    assert.equal(p.measurements[0].ageDays, undefined)
+    assert.equal(p.measurements[0].pastUnresolved, undefined)
+  }
+
   // ── normalization ─────────────────────────────────────────────────
   assert.equal(normalizeGrowText("Hello!! World???"), "hello world")
   assert.equal(normalizeGrowText("a,b;c"), "a ¶ b c", "comma → clause split, semicolon stripped")

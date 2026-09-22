@@ -647,6 +647,119 @@ function run() {
     )
   }
 
+  // ── 19. Event-time merge — history never becomes "current" ────────
+  {
+    const now = t0 + 40 * 86400000
+    const ctx = withSeries({ temperature: mkSeries([78], 0.5, 3600000) })
+    // mkSeries points sit at t0 — shift the logged point to "now" so it
+    // is genuinely fresher than the historical report
+    ctx.series.temperature.points = [{ t: now - 3600000, v: 78 }]
+    const c2 = mergeReported(
+      ctx,
+      [
+        // "temp hit 95 two weeks ago" — event time, not report time
+        { metric: "temperature", value: 95, unit: "degF", t: now, eventT: now - 14 * 86400000 },
+      ],
+      now
+    )
+    assert.equal(c2.series.temperature.latest, 78, "historical report never outranks a fresher logged value")
+    assert.equal(c2.series.temperature.points[0].v, 95, "history kept in the series")
+    assert.equal(c2.series.temperature.points[0].provenance, "user-reported")
+    assert.equal(c2.freshness.temperature, 0, "freshness tracks the newest EVENT")
+
+    // Unbounded past → approximate point bounded ~30d old, never latest
+    const c3 = mergeReported(
+      ctx,
+      [{ metric: "temperature", value: 99, unit: "degF", t: now, pastUnresolved: true }],
+      now
+    )
+    const approx = c3.series.temperature.points[0]
+    assert.equal(approx.v, 99)
+    assert.ok(approx.tApproximate, "pastUnresolved marks the point approximate")
+    assert.ok(now - approx.t >= 29 * 86400000, "approximate point parked ~30d old")
+    assert.equal(c3.series.temperature.latest, 78, "approximate point can never be .latest")
+
+    // An approximate temp can't pair into VPD with a current RH
+    const c4 = mergeReported(
+      mkCtx(),
+      [
+        { metric: "temperature", value: 95, unit: "degF", t: now, pastUnresolved: true },
+        { metric: "humidity", value: 40, t: now },
+      ],
+      now
+    )
+    assert.equal(c4.series.vpdComputed.n, 0, "approximate point never pairs into VPD")
+  }
+
+  // ── 20. latestIsCurrent guards — stale reports can't claim "now" ──
+  {
+    const now = t0 + 40 * 86400000
+    const old = now - 5 * 86400000 // inside STALE_DAYS, outside CURRENT_MS
+    const staleTemp = mkSeries([97], 0.5)
+    staleTemp.points = [{ t: old, v: 97, provenance: "user-reported" }]
+    const ctxStale = withSeries({ temperature: staleTemp }, { missing: ["humidity"] })
+    const evStale = evaluateContext(ctxStale)
+    assert.ok(
+      !evStale.candidates.some((c) => c.ruleIds.includes("env.snapshot")),
+      "old reported temp can't drive a current snapshot claim"
+    )
+    const freshTemp = mkSeries([97], 0.5)
+    freshTemp.points = [{ t: now - 3600000, v: 97, provenance: "user-reported" }]
+    const evFresh = evaluateContext(withSeries({ temperature: freshTemp }, { missing: ["humidity"] }))
+    assert.ok(
+      evFresh.candidates.some((c) => c.ruleIds.includes("env.snapshot")),
+      "fresh reported temp still drives the snapshot rule"
+    )
+
+    // chem.ph-low-danger: a 5-day-old low pH is history, not a danger now
+    const phOld = mkSeries([4.8, 4.7], 0.15)
+    phOld.points = [{ t: old - 86400000, v: 4.8 }, { t: old, v: 4.7 }]
+    const evOld = evaluateContext(withSeries({ ph: phOld }))
+    assert.ok(
+      !evOld.candidates.some((c) => c.ruleIds.includes("chem.ph-low-danger")),
+      "stale low pH doesn't fire the danger rule"
+    )
+    const phNow = mkSeries([4.8, 4.7], 0.15)
+    phNow.points = [{ t: now - 90000000, v: 4.8 }, { t: now - 3600000, v: 4.7 }]
+    const evNow = evaluateContext(withSeries({ ph: phNow }))
+    assert.ok(
+      evNow.candidates.some((c) => c.ruleIds.includes("chem.ph-low-danger")),
+      "current low pH still fires"
+    )
+
+    // chem.lockout-signature goes silent without a current pH
+    const lockOld = evaluateContext(withSeries({ ph: phOld }))
+    assert.ok(
+      !lockOld.candidates.some((c) => c.ruleIds.includes("chem.lockout-signature")),
+      "stale pH can't produce a current lockout signature"
+    )
+  }
+
+  // ── 21. data.metric-conflict — provenance disagreement surfaced ───
+  {
+    const now = t0 + 40 * 86400000
+    const conflict = (rhLogged: number, rhReported: number, gapMs: number, approx = false) => {
+      const s = mkSeries([rhLogged], 3)
+      s.points = [{ t: now - gapMs, v: rhLogged }]
+      const ctx = mergeReported(
+        withSeries({ humidity: s }),
+        [{
+          metric: "humidity", value: rhReported, t: now,
+          eventT: approx ? undefined : now,
+          pastUnresolved: approx || undefined,
+        }],
+        now
+      )
+      return evaluateContext(ctx).findings.find((f) => f.ruleId === "data.metric-conflict")
+    }
+    assert.ok(conflict(42, 68, 86400000), "logged 42 vs reported 68 within a day → conflict surfaced")
+    assert.ok(!conflict(42, 45, 86400000), "within-tolerance disagreement stays quiet")
+    assert.ok(!conflict(42, 68, 10 * 86400000), "readings 10d apart aren't a contradiction")
+    assert.ok(!conflict(42, 68, 86400000, true), "approximate reports never conflict")
+    const f = conflict(42, 68, 86400000)
+    assert.ok(f!.evidence[0].text.includes("42") && f!.evidence[0].text.includes("68"), "both values named")
+  }
+
   console.log("All TerpBot intelligence tests passed.")
 }
 

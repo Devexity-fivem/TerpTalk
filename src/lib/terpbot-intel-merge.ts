@@ -1,11 +1,15 @@
 // TerpBot intelligence — merge user-reported data into a context.
 //
 // Precedence: logged diary points are NEVER modified or removed;
-// user-reported points are strictly additive. `latest` is the newest-t
-// point regardless of provenance, so a fresh chat report supersedes a
-// stale logged reading for "current" purposes while history stays
-// intact. Ambiguous values are never guessed at — they land on
-// `unresolved` so the response can ask.
+// user-reported points are strictly additive. `latest` is the newest
+// EVENT-time point regardless of provenance, so a fresh chat report
+// supersedes a stale logged reading for "current" purposes while
+// history stays intact — and a report ABOUT the past ("runoff EC was
+// 2.1 two weeks ago") lands in history, never on `.latest`. Unbounded-
+// past reports ("a while back") merge as approximate points ~30d old:
+// visible as history, excluded from every current-reading path.
+// Ambiguous values are never guessed at — they land on `unresolved`
+// so the response can ask.
 //
 // Pure — no Prisma, no I/O.
 
@@ -140,7 +144,17 @@ export function mergeReported(
       unresolved.push(p)
       continue
     }
-    const point: MetricPoint = { t: p.t, v: ok.v, provenance: "user-reported" }
+    // Event time, not report time: a resolved recency phrase back-dates
+    // the point; an unbounded-past claim becomes an approximate point a
+    // bounded 30d old (never invent a more precise timestamp; ~30d is
+    // already stale beyond every rule's threshold). Neither can become
+    // a falsely-current `.latest`.
+    const point: MetricPoint = {
+      t: p.eventT ?? (p.pastUnresolved ? p.t - 30 * DAY_MS : p.t),
+      v: ok.v,
+      provenance: "user-reported",
+      tApproximate: p.pastUnresolved || undefined,
+    }
     const list = acceptedByMetric.get(p.metric) ?? []
     list.push(point)
     acceptedByMetric.set(p.metric, list)
@@ -158,7 +172,9 @@ export function mergeReported(
   if (reportedTemp?.length && reportedRh?.length) {
     const tT = reportedTemp[reportedTemp.length - 1]
     const tH = reportedRh[reportedRh.length - 1]
-    if (Math.abs(tT.t - tH.t) <= PAIR_MS) {
+    // approximate points never pair — a "while back" temp and a current
+    // RH don't describe the same air
+    if (!tT.tApproximate && !tH.tApproximate && Math.abs(tT.t - tH.t) <= PAIR_MS) {
       const r = vpdFromTempRh(tT.v, tH.v)
       if (r.valid && r.value != null) {
         const at = Math.max(tT.t, tH.t)
@@ -188,7 +204,8 @@ export function mergeReported(
 const dayOf = (t: number) => Math.floor(t / DAY_MS)
 
 /** Merge session observations into the context — deduped against
- *  existing observations on (symptom, location, stage, day). */
+ *  existing observations on (symptom, location, stage, EVENT day), so
+ *  "yellowing last week" and "yellowing today" are distinct reports. */
 export function mergeObservations(
   ctx: GrowContextView,
   obs: SessionObservation[]
@@ -202,7 +219,10 @@ export function mergeObservations(
   const added: StructuredObservation[] = []
   for (const o of obs) {
     const stage = o.stage ?? (ctx.diary.stage !== "UNKNOWN" ? ctx.diary.stage : undefined)
-    const key = `${o.symptom}|${o.location ?? ""}|${stage ?? ""}|${dayOf(o.t)}`
+    // event time — a recency phrase back-dates the observation, an
+    // unbounded-past claim parks it ~30d out as approximate history
+    const t = o.eventT ?? (o.pastUnresolved ? o.t - 30 * DAY_MS : o.t)
+    const key = `${o.symptom}|${o.location ?? ""}|${stage ?? ""}|${dayOf(t)}`
     if (seen.has(key)) continue
     seen.add(key)
     const { feeds, refined } = feedsForSymptom(o.symptom, o.location, stage)
@@ -211,7 +231,8 @@ export function mergeObservations(
       location: o.location,
       stage,
       period: o.period,
-      t: o.t,
+      t,
+      tApproximate: o.pastUnresolved || undefined,
       source: "nl",
       feeds,
       refined,

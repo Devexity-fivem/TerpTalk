@@ -125,8 +125,12 @@ export interface StructuredObservation {
   /** utterance-claimed period — "NIGHT" | "LIGHTS_ON" | "LIGHTS_OFF".
    *  Matters because some symptoms are normal in a period (nyctinasty) */
   period?: string
-  /** epoch ms of the report (update createdAt / mention time) */
+  /** epoch ms of the EVENT — update createdAt for diary-text
+   *  observations; resolved event time for session observations */
   t: number
+  /** timestamp is an unbounded approximation ("a while back") —
+   *  historical context only, never a "current" claim */
+  tApproximate?: boolean
   source: "nl" | "diary-text"
   /** diaryUpdate id — provenance for a future /why; never rendered */
   refId?: string
@@ -407,8 +411,16 @@ export interface ReportedPoint {
   metric: MetricId
   value: number
   unit?: string
-  /** epoch ms of the report */
+  /** epoch ms of the report — when the grower TOLD us */
   t: number
+  /** epoch ms of the EVENT, when a recency phrase resolved one
+   *  ("runoff EC was 2.1 two weeks ago"). Absent → the report is
+   *  treated as current. Never invented — unresolved timing leaves
+   *  this unset. */
+  eventT?: number
+  /** clearly-historical but unbounded ("a while back") — merges at
+   *  report time but is excluded from every "current reading" path */
+  pastUnresolved?: boolean
 }
 
 /** a symptom the grower reported in chat — no provenance back to the
@@ -419,6 +431,12 @@ export interface SessionObservation {
   stage?: string
   period?: string
   t: number
+  /** epoch ms of the EVENT when the report carried a resolvable
+   *  recency phrase — same contract as ReportedPoint.eventT */
+  eventT?: number
+  /** clearly-historical but unbounded — merges as an old approximate
+   *  point, never a current observation */
+  pastUnresolved?: boolean
 }
 
 export interface SessionState {

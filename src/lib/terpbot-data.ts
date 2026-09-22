@@ -750,14 +750,12 @@ async function handle(name: string, ctx: BotCommandCtx): Promise<BotCommandResul
             intel = renderIntelLines(gctx, diagnosis)
             // Persist the reasoning so /why works after a check-in too.
             // Rendered output stays based on the diary context alone.
-            const session = await loadSession(ctx.userId, now)
-            const state: SessionState = session?.state ?? { reported: [], observations: [] }
             const next = nextUsefulMeasurement(gctx, diagnosis)
             await saveSession(
               ctx.userId,
               {
                 diaryId: d.id,
-                state: { ...state, trail: buildWhyTrail(gctx, diagnosis, now) },
+                trail: buildWhyTrail(gctx, diagnosis, now),
                 // Only reportable metrics may be asked — an unanswerable
                 // ask (leafTemp, ppfd…) can never receive a stored answer.
                 pendingAsk: next && REPORTABLE_METRICS.has(next.id as MetricId) ? next.id : null,
@@ -780,6 +778,10 @@ async function handle(name: string, ctx: BotCommandCtx): Promise<BotCommandResul
       const session = await loadSession(ctx.userId, now)
       const state: SessionState = session?.state ?? { reported: [], observations: [] }
       const parsed = parseGrowText(ctx.rest)
+      // This turn's contributions only — saveSession merges them onto
+      // the live row via CAS, so a concurrent /checkin can't be lost.
+      const addReported: ReportedPoint[] = []
+      const addObservations: SessionObservation[] = []
 
       // A bare number answers the open question when there is one.
       const bareNum = ctx.rest.match(/^\s*(-?\d+(?:\.\d+)?)\s*$/)
@@ -790,15 +792,12 @@ async function handle(name: string, ctx: BotCommandCtx): Promise<BotCommandResul
         }
         if (ask === "temperature") return ok(`🤖 ${bareNum[1]} — °F or °C?`)
         if (ask === "ec" || ask === "runoffEc") return ok(`🤖 ${bareNum[1]} — mS/cm or ppm (and which ppm scale)?`)
-        state.reported = [
-          ...state.reported,
-          {
-            metric: ask as MetricId,
-            value: parseFloat(bareNum[1]),
-            unit: ask === "humidity" ? "percent" : undefined,
-            t: now,
-          },
-        ]
+        addReported.push({
+          metric: ask as MetricId,
+          value: parseFloat(bareNum[1]),
+          unit: ask === "humidity" ? "percent" : undefined,
+          t: now,
+        })
       } else {
         // Questions with no reportable content route to knowledge search.
         if (parsed.question && !parsed.observations.length && !parsed.measurements.length && ctx.rest.trim()) {
@@ -827,14 +826,21 @@ async function handle(name: string, ctx: BotCommandCtx): Promise<BotCommandResul
         ) {
           parsed.measurements[0].metric = pendingMetric
         }
-        state.reported = [
-          ...state.reported,
+        addReported.push(
           ...parsed.measurements.flatMap((m): ReportedPoint[] =>
-            m.value == null ? [] : [{ metric: m.metric, value: m.value, unit: m.unit, t: now }]
-          ),
-        ]
-        state.observations = [
-          ...state.observations,
+            m.value == null
+              ? []
+              : [{
+                  metric: m.metric,
+                  value: m.value,
+                  unit: m.unit,
+                  t: now,
+                  eventT: m.ageDays != null ? now - m.ageDays * 86400000 : undefined,
+                  pastUnresolved: m.pastUnresolved || undefined,
+                }]
+          )
+        )
+        addObservations.push(
           ...parsed.observations.map(
             (o): SessionObservation => ({
               symptom: o.symptom,
@@ -842,14 +848,17 @@ async function handle(name: string, ctx: BotCommandCtx): Promise<BotCommandResul
               stage: o.stage,
               period: o.period,
               t: now,
+              eventT: o.ageDays != null ? now - o.ageDays * 86400000 : undefined,
+              pastUnresolved: o.pastUnresolved || undefined,
             })
-          ),
-        ]
+          )
+        )
       }
 
       // Utterance-claimed stage ("week 3 flower") — canonical ids only,
       // newest wins; used only when no diary supplies a stage.
-      if (parsed.stage && SESSION_STAGE_IDS.has(parsed.stage)) state.stage = parsed.stage
+      const stageClaim =
+        parsed.stage && SESSION_STAGE_IDS.has(parsed.stage) ? parsed.stage : undefined
 
       // Diary: the session's own, else the user's newest public unharvested
       // diary — private/unlisted diaries are never selected.
@@ -864,8 +873,10 @@ async function handle(name: string, ctx: BotCommandCtx): Promise<BotCommandResul
       }
       const base: GrowContextView =
         (diaryId ? await buildGrowContext(diaryId, { ownerId: ctx.userId, scope: "public", now: new Date(now) }) : null) ??
-        emptyContext(now, state.stage)
-      const ctx2 = mergeObservations(mergeReported(base, state.reported, now), state.observations)
+        emptyContext(now, stageClaim ?? state.stage)
+      const reportedMerged = [...state.reported, ...addReported]
+      const obsMerged = [...state.observations, ...addObservations]
+      const ctx2 = mergeObservations(mergeReported(base, reportedMerged, now), obsMerged)
       const diagnosis = evaluateContext(ctx2)
       const next = nextUsefulMeasurement(ctx2, diagnosis)
       const trail = buildWhyTrail(ctx2, diagnosis, now)
@@ -873,36 +884,49 @@ async function handle(name: string, ctx: BotCommandCtx): Promise<BotCommandResul
         ctx.userId,
         {
           diaryId: base.diary.id ? base.diary.id : null,
-          state: { ...state, trail },
           pendingAsk: next && REPORTABLE_METRICS.has(next.id as MetricId) ? next.id : null,
+          stage: stageClaim,
+          trail,
+          addReported,
+          addObservations,
         },
         now
       )
 
-      // Render — symptoms and "(you)"-marked reported readings; candidates
-      // as warnings/assessments, never diagnoses.
-      const you = (s: { points: { provenance?: string }[] }) =>
-        s.points[s.points.length - 1]?.provenance === "user-reported" ? " (you)" : ""
+      // Render — symptoms and provenance/age-marked readings; candidates
+      // as warnings/assessments, never diagnoses. A historical report is
+      // labeled with its age — never presented as the current reading.
+      const ageTag = (p: { tApproximate?: boolean; t: number }) =>
+        p.tApproximate ? "≈30d ago" : `${Math.floor((now - p.t) / 86400000)}d ago`
+      const tag = (s: { points: { provenance?: string; tApproximate?: boolean; t: number }[] }) => {
+        const p = s.points[s.points.length - 1]
+        if (!p) return ""
+        if (p.tApproximate || now - p.t >= 86400000) {
+          return ` (${p.provenance === "user-reported" ? "you" : "logged"} · ${ageTag(p)})`
+        }
+        return p.provenance === "user-reported" ? " (you)" : ""
+      }
       const reported: string[] = []
       for (const o of ctx2.observations) {
         const label = SYMPTOM_LABELS[o.symptom]
         if (!label) continue
-        const s = `${label}${o.location ? ` (${LOCATION_LABELS[o.location]})` : ""}`
+        const age = o.tApproximate || now - o.t >= 86400000 ? ` · ${ageTag(o)}` : ""
+        const s = `${label}${o.location ? ` (${LOCATION_LABELS[o.location]})` : ""}${age}`
         if (!reported.includes(s)) reported.push(s)
       }
-      if (ctx2.series.temperature.latest != null) reported.push(`${ctx2.series.temperature.latest}°F${you(ctx2.series.temperature)}`)
-      if (ctx2.series.humidity.latest != null) reported.push(`${ctx2.series.humidity.latest}% RH${you(ctx2.series.humidity)}`)
-      if (ctx2.series.ph.latest != null) reported.push(`pH ${ctx2.series.ph.latest}${you(ctx2.series.ph)}`)
-      if (ctx2.series.ec.latest != null) reported.push(`EC ${ctx2.series.ec.latest}${you(ctx2.series.ec)}`)
-      if (ctx2.series.runoffPh.latest != null) reported.push(`runoff pH ${ctx2.series.runoffPh.latest}${you(ctx2.series.runoffPh)}`)
-      if (ctx2.series.runoffEc.latest != null) reported.push(`runoff EC ${ctx2.series.runoffEc.latest}${you(ctx2.series.runoffEc)}`)
+      if (ctx2.series.temperature.latest != null) reported.push(`${ctx2.series.temperature.latest}°F${tag(ctx2.series.temperature)}`)
+      if (ctx2.series.humidity.latest != null) reported.push(`${ctx2.series.humidity.latest}% RH${tag(ctx2.series.humidity)}`)
+      if (ctx2.series.ph.latest != null) reported.push(`pH ${ctx2.series.ph.latest}${tag(ctx2.series.ph)}`)
+      if (ctx2.series.ec.latest != null) reported.push(`EC ${ctx2.series.ec.latest}${tag(ctx2.series.ec)}`)
+      if (ctx2.series.runoffPh.latest != null) reported.push(`runoff pH ${ctx2.series.runoffPh.latest}${tag(ctx2.series.runoffPh)}`)
+      if (ctx2.series.runoffEc.latest != null) reported.push(`runoff EC ${ctx2.series.runoffEc.latest}${tag(ctx2.series.runoffEc)}`)
 
       const lines: string[] = [
         `🔬 Working from ${base.diary.id ? `your "${sanitizeField(base.diary.title, 40)}"` : "what you've told me (no public diary linked)"}:`,
       ]
       if (reported.length) lines.push(`Reported: ${reported.slice(0, 6).join(" · ")}`)
       if (ctx2.series.vpdComputed.latest != null) {
-        lines.push(`Calculated: VPD ≈${ctx2.series.vpdComputed.latest} kPa (${you(ctx2.series.vpdComputed) ? "from your reported temp/RH" : "from logged values"})`)
+        lines.push(`Calculated: VPD ≈${ctx2.series.vpdComputed.latest} kPa (${ctx2.series.vpdComputed.points[ctx2.series.vpdComputed.points.length - 1]?.provenance === "user-reported" ? "from your reported temp/RH" : "from logged values"})`)
       }
       for (const c of diagnosis.candidates.filter((c) => c.state !== "insufficient").slice(0, 2)) {
         if (c.state === "conflicting") {
@@ -911,6 +935,13 @@ async function handle(name: string, ctx: BotCommandCtx): Promise<BotCommandResul
           const marker = c.state === "strong" ? "•" : "·"
           lines.push(`${marker} ${c.supporting[0]?.text ?? c.name} — ${c.name} (${c.state.toUpperCase()}, ${c.independentSignals} independent signal${c.independentSignals === 1 ? "" : "s"})`)
         }
+      }
+      // Confirmed data-quality findings (provenance conflicts, VPD
+      // divergence) — measured disagreements, surfaced not resolved.
+      for (const f of diagnosis.findings
+        .filter((f) => f.state === "confirmed" || f.state === "strong")
+        .slice(0, 2)) {
+        lines.push(`⚠ ${f.evidence[0]?.text ?? f.title}`)
       }
       if (ctx2.unresolved?.length) {
         const u = ctx2.unresolved[ctx2.unresolved.length - 1]

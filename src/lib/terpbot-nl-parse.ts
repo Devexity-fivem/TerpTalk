@@ -20,6 +20,9 @@ import {
   QUESTION_LEAD,
   STAGE_PATTERNS,
   STAGE_REFINEMENTS,
+  TEMPORAL_MAX_AGE_DAYS,
+  TEMPORAL_NUM_WORDS,
+  TEMPORAL_PATTERNS,
   VOCAB,
   type VocabEntry,
 } from "./terpbot-nl-vocab"
@@ -34,6 +37,13 @@ export interface ParsedObservation {
   span: [number, number]
   feeds: string[]
   refined: boolean
+  /** resolved recency claim ("yellowing two weeks ago" → 14) — integer
+   *  days from a TEMPORAL_PATTERNS whitelist hit; absent when no
+   *  recency phrase was present */
+  ageDays?: number
+  /** a clearly-historical but unbounded recency claim ("a while back")
+   *  — the event is in the past but no honest timestamp exists */
+  pastUnresolved?: boolean
 }
 
 export interface ParsedMeasurement {
@@ -50,6 +60,13 @@ export interface ParsedMeasurement {
    *  pending question reinterpret implied metrics without ever
    *  overriding an explicit one. */
   explicitMetric?: boolean
+  /** resolved recency claim in integer days — "runoff EC was 2.1 two
+   *  weeks ago" → 14. Absent means the report carries no temporal
+   *  qualifier (treated as current). */
+  ageDays?: number
+  /** clearly-past but unbounded ("a while back") — lands at report
+   *  time but is excluded from every "current reading" path */
+  pastUnresolved?: boolean
 }
 
 export interface ParsedUtterance {
@@ -329,7 +346,67 @@ export function parseGrowText(raw: string): ParsedUtterance {
     }
   }
 
+  // temporal pass — consume recency phrases INCLUDING their digits so
+  // "ph 6.5 3 days ago" can't mint a phantom ph=3 measurement. Runs
+  // before clause segmentation/vocab matching; no vocab phrase overlaps
+  // a temporal span.
+  const temporalHits: { start: number; end: number; days: number | "past" }[] = []
+  for (const tp of TEMPORAL_PATTERNS) {
+    tp.re.lastIndex = 0
+    let tm: RegExpExecArray | null
+    while ((tm = tp.re.exec(text))) {
+      const s = tm.index
+      const e = s + tm[0].length
+      if (temporalHits.some((h) => s < h.end && e > h.start)) continue
+      let days: number | "past"
+      if (tp.days === "past") days = "past"
+      else if (tp.days === "capture") {
+        // bare "a"/"an" is deliberately absent from the word list —
+        // "a few days ago" must resolve "few" (3), not the article (1);
+        // "a day ago" finds nothing and defaults to 1.
+        const digits = /\d+/.exec(tm[0])
+        const word = /(couple|few|thirteen|fourteen|eleven|twelve|three|seven|eight|nine|four|five|six|ten|two|one)\b/.exec(tm[0])
+        const n = digits
+          ? parseInt(digits[0], 10)
+          : word
+            ? TEMPORAL_NUM_WORDS[word[1]] ?? 1
+            : 1
+        days = Math.min(TEMPORAL_MAX_AGE_DAYS, n * (tp.unitDays ?? 1))
+      } else days = tp.days
+      temporalHits.push({ start: s, end: e, days })
+      for (let k = s; k < e; k++) consumed[k] = true
+    }
+  }
+
   const clauses = segmentClauses(text, consumed)
+
+  // Per-clause recency: a clause resolves to an age only when its
+  // temporal hits agree; mixed or unbounded claims mark it
+  // pastUnresolved. Clauses with no hit inherit the utterance age when
+  // exactly one resolved age exists overall ("temp 84 and rh 40
+  // yesterday" ages both) — never when the utterance mixes claims.
+  const clauseTemporal = clauses.map((seg) => {
+    const hits = temporalHits.filter(
+      (h) => h.start >= seg.base && h.start < seg.base + seg.text.length
+    )
+    if (!hits.length) return undefined
+    const numeric = [...new Set(hits.filter((h) => h.days !== "past").map((h) => h.days as number))]
+    if (numeric.length === 1 && hits.every((h) => h.days !== "past")) {
+      return { ageDays: numeric[0] }
+    }
+    return { pastUnresolved: true }
+  })
+  const resolvedAges = new Set(
+    clauseTemporal.filter((c) => c?.ageDays != null).map((c) => c!.ageDays!)
+  )
+  const anyPastClaim = clauseTemporal.some((c) => c?.pastUnresolved)
+  const utteranceAgeDays =
+    resolvedAges.size === 1 && !anyPastClaim ? [...resolvedAges][0] : undefined
+  const ageFor = (ci: number): { ageDays?: number; pastUnresolved?: boolean } => {
+    const c = clauseTemporal[ci]
+    if (c) return c
+    return utteranceAgeDays != null ? { ageDays: utteranceAgeDays } : {}
+  }
 
   const observations: ParsedObservation[] = []
   const measurements: ParsedMeasurement[] = []
@@ -350,9 +427,17 @@ export function parseGrowText(raw: string): ParsedUtterance {
     for (const h of hits) {
       if (h.entry.family === "stage") stageHits.push({ id: h.entry.id, clause: ci })
     }
-    // numeric stage claims — "week 6 flower", "f6" — can't be phrases
+    // numeric stage claims — "week 6 flower", "f6" — can't be phrases;
+    // consume the whole match so the digit can't mint a phantom
+    // measurement on a nearby metric ("ph 5.8 week 6 flower" ≠ ph 6)
     for (const { re, stage } of STAGE_PATTERNS) {
-      if (re.test(seg.text)) stageHits.push({ id: stage, clause: ci })
+      const sm = re.exec(seg.text)
+      if (sm) {
+        stageHits.push({ id: stage, clause: ci })
+        for (let k = sm.index; k < sm.index + sm[0].length; k++) {
+          consumed[seg.base + k] = true
+        }
+      }
     }
   })
 
@@ -440,6 +525,7 @@ export function parseGrowText(raw: string): ParsedUtterance {
         span: [h.start, h.start + h.len],
         feeds,
         refined,
+        ...ageFor(ci),
       })
     }
 
@@ -460,6 +546,7 @@ export function parseGrowText(raw: string): ParsedUtterance {
             span: [mh.start, mh.start + mh.len],
             feeds: synth.feeds,
             refined: false,
+            ...ageFor(ci),
           })
           break // one trend per clause is enough
         }
@@ -619,16 +706,18 @@ export function parseGrowText(raw: string): ParsedUtterance {
         clause: ci,
         span: [start, end],
         explicitMetric: explicitMetric || undefined,
+        ...ageFor(ci),
       })
     }
   })
 
-  // dedupe observations on (symptom, location, stage, period) keeping
-  // earliest span; then total ordering — output never depends on
-  // vocab array order
+  // dedupe observations on (symptom, location, stage, period, age) —
+  // "yellowing last week" and "yellowing today" are two distinct
+  // reports, not one. Keeps earliest span; then total ordering —
+  // output never depends on vocab array order
   const seen = new Set<string>()
   const deduped = observations.filter((o) => {
-    const key = `${o.symptom}|${o.location ?? ""}|${o.stage ?? ""}|${o.period ?? ""}`
+    const key = `${o.symptom}|${o.location ?? ""}|${o.stage ?? ""}|${o.period ?? ""}|${o.ageDays ?? (o.pastUnresolved ? "past" : "")}`
     if (seen.has(key)) return false
     seen.add(key)
     return true
