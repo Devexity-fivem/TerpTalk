@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma"
 import { runCronTask } from "@/lib/cron-claim"
 import { postToGeneral, GROW_TIPS, sanitizeEcho } from "@/lib/terpbot"
 import { scanDormantThreads, scanStaleDiaries } from "@/lib/terpbot-assist"
+import { scanGrowAssists } from "@/lib/terpbot-assist-grow"
 import { recordBotEvent } from "@/lib/terpbot-events"
 import { currentWeekKey, previousWeekKey, currentMonthKey, previousMonthKey } from "@/lib/week"
 import { resolveWeeklyWinner, resolveMonthlyDiaryWinner } from "@/lib/contest-awards"
@@ -204,6 +205,20 @@ export async function GET(request: NextRequest) {
     const { dormant, unresolved } = await scanDormantThreads()
     return `dormant:${dormant},unresolved:${unresolved}`
   }, posted, failed, "dormant-scan")
+
+  // ── Longitudinal grow assists (once per UTC day) ─────────────────
+  // Evidence-triggered private BOT_ASSIST: evaluates each eligible
+  // grower's owner-scope context against the deterministic trigger
+  // registry (stale critical measurement, persistent unresolved issue,
+  // baseline shift, intervention follow-up, recurrence, gap filled).
+  // Runs BEFORE diary-stale so the richer evidence-backed assist wins
+  // the shared 7-day cushion slot when both would qualify.
+  // Per-assist BotEvent claims make retries idempotent; the 7-day
+  // cushion + 3/day cap inside botAssist keep it quiet by design.
+  await runCronTask(`terpbot:grow-assist:${today}`, async () => {
+    const { scanned, sent } = await scanGrowAssists()
+    return `grow-assist:${scanned}scanned/${sent}sent`
+  }, posted, failed, "grow-assist")
 
   // ── Stale-diary reminders (once per UTC day) ─────────────────────
   // Active grows that haven't been updated in 5+ days get one private

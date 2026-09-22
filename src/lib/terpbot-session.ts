@@ -214,8 +214,10 @@ const obsKey = (o: SessionObservation) =>
 
 const DAY = 86400000
 
-/** one adjustment of a kind per target per day — CAS-retry safe */
-const interventionKey = (i: InterventionRecord) =>
+/** one adjustment of a kind per target per day — CAS-retry safe.
+ *  Exported: BOT_ASSIST dedupe keys reuse the same intervention
+ *  identity so a follow-up assist fires at most once per adjustment. */
+export const interventionKey = (i: InterventionRecord) =>
   `${i.type}|${i.targetMetric ?? ""}|${i.direction ?? ""}|${Math.floor((i.eventT ?? i.at) / DAY)}`
 
 const resolutionKey = (r: Omit<ResolutionClaim, "source">) =>

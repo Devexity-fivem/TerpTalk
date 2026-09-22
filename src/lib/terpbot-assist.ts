@@ -18,9 +18,10 @@
 //   SecurityEvent, or any staff-only table — those events never produce
 //   bot output.
 import { prisma } from "@/lib/prisma"
+import type { Prisma } from "@prisma/client"
 import { notify, postDeepLink } from "@/lib/notify"
 import { rateLimit } from "@/lib/rate-limit"
-import { claimBotEvent } from "@/lib/terpbot-events"
+import { claimBotEvent, releaseBotEvent } from "@/lib/terpbot-events"
 import { getBotUserId, sanitizeEcho } from "@/lib/terpbot"
 import { activeAuthor } from "@/lib/security"
 import { diaryPath } from "@/lib/slugs"
@@ -35,10 +36,11 @@ const ASSIST_GROUP_PREFIX = "bot-assist"
 /**
  * The single pipeline every event-driven assist flows through.
  *
- * Returns "sent" when a notification was created, "claimed" when the event
- * was claimed but delivery was dropped by notify() (pref-off, banned —
- * the claim is kept: opted-out means opted out, not retry-forever), or
- * "skipped" when eligibility/cooldown/dedupe refused before claiming.
+ * Returns "sent" when a notification was created, or "skipped" when
+ * eligibility (banned/suspended/pref-off), cooldown, cap, or dedupe
+ * refused — policy refusals are checked before the claim so they never
+ * consume a once-ever key. A delivery failure AFTER the claim releases
+ * it, keeping the evidence epoch retryable.
  */
 export async function botAssist(opts: {
   /** Once-ever dedupe key, e.g. `assist:first-diary:<userId>` */
@@ -51,20 +53,34 @@ export async function botAssist(opts: {
   link?: string
   /** Skip the 7-day cross-kind cushion (default: cushion applies) */
   noCushion?: boolean
-}): Promise<"sent" | "claimed" | "skipped"> {
+  /** structured payload carried on Notification.metadata — canonical
+   *  ids/labels only, never raw user text */
+  metadata?: Prisma.InputJsonValue
+}): Promise<"sent" | "skipped"> {
+  // Track whether THIS call claimed the key — a catch-path release is
+  // only safe then (releasing unconditionally could delete a prior
+  // legitimate claim and cause a duplicate send next run).
+  let claimedHere = false
   try {
     const botId = await getBotUserId()
     if (opts.userId === botId) return "skipped"
 
-    // Recipient must exist and be active before we burn a claim.
+    // Recipient must exist, be active, and not have opted out — all
+    // checked before we burn a claim so a policy refusal never consumes
+    // a once-ever key or a daily-cap slot.
     const recipient = await prisma.user.findUnique({
       where: { id: opts.userId },
-      select: { banned: true, suspendedUntil: true },
+      select: {
+        banned: true,
+        suspendedUntil: true,
+        profile: { select: { notifyOnBotAssist: true } },
+      },
     })
     if (
       !recipient ||
       recipient.banned ||
-      (recipient.suspendedUntil && recipient.suspendedUntil > new Date())
+      (recipient.suspendedUntil && recipient.suspendedUntil > new Date()) ||
+      recipient.profile?.notifyOnBotAssist === false
     ) {
       return "skipped"
     }
@@ -85,6 +101,17 @@ export async function botAssist(opts: {
       if (recent) return "skipped"
     }
 
+    // Dead-key fast path: scans replay claimed keys every run (a
+    // dormant thread matches for weeks, a monthly stale key is dead all
+    // month). Exit BEFORE the daily counter so replayed keys can't
+    // drain the 3/day cap and starve fresh assists. claimBotEvent's
+    // unique constraint is still the atomic backstop for the race.
+    const dead = await prisma.botEvent.findUnique({
+      where: { key: opts.key },
+      select: { key: true },
+    })
+    if (dead) return "skipped"
+
     const cap = await rateLimit(
       `terpbot:assist:user:${opts.userId}`,
       ASSIST_USER_DAILY_CAP,
@@ -99,6 +126,7 @@ export async function botAssist(opts: {
       command: opts.kind,
     })
     if (!claimed) return "skipped" // already handled — once ever
+    claimedHere = true
 
     const n = await notify({
       userId: opts.userId,
@@ -108,10 +136,19 @@ export async function botAssist(opts: {
       link: opts.link ?? null,
       actorId: botId,
       groupKey: `${ASSIST_GROUP_PREFIX}:${opts.kind}:${opts.userId}`,
+      ...(opts.metadata ? { metadata: opts.metadata } : {}),
     })
-    return n ? "sent" : "claimed"
+    if (!n) {
+      // Delivery failed after the claim — release it so the evidence
+      // epoch stays retryable instead of being permanently burned by a
+      // transient failure or an edge-case recipient drop.
+      await releaseBotEvent(opts.key).catch(() => {})
+      return "skipped"
+    }
+    return "sent"
   } catch (e) {
     console.error("[terpbot] assist failed:", opts.key, e)
+    if (claimedHere) await releaseBotEvent(opts.key).catch(() => {})
     return "skipped"
   }
 }

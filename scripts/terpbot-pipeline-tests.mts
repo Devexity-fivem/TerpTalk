@@ -16,6 +16,7 @@ import {
   scanDormantThreads,
   scanStaleDiaries,
 } from "@/lib/terpbot-assist"
+import { scanGrowAssists } from "@/lib/terpbot-assist-grow"
 import { getBotUserId, sanitizeEcho, announceStageTransition, purgeDiaryAnnouncements } from "@/lib/terpbot"
 import { runBotCommand } from "@/lib/terpbot-data"
 import { buildGrowContext } from "@/lib/terpbot-intel-context"
@@ -158,14 +159,15 @@ async function run() {
         0, "bot gets no assist notifications"
       )
 
-      // Pref off → claimed (once-ever kept) but nothing delivered
+      // Pref off → refused before the claim: no key burned, no slot spent
       await prisma.profile.update({ where: { userId: m3.id }, data: { notifyOnBotAssist: false } })
       const kP = `assist:pref:${m3.id}:${SUFFIX}`
       botEventKeys.push(kP)
       rateLimitKeys.push(`terpbot:assist:user:${m3.id}`)
       const rP = await botAssist({ key: kP, kind: "x", userId: m3.id, title: "t", content: "c" })
-      assert.equal(rP, "claimed", "pref-off keeps the claim without delivering")
+      assert.equal(rP, "skipped", "pref-off refuses before claiming")
       assert.equal(await prisma.notification.count({ where: { userId: m3.id, type: "BOT_ASSIST" } }), 0)
+      assert.equal(await prisma.botEvent.count({ where: { key: kP } }), 0, "pref-off does not burn the once-ever key")
       await prisma.profile.update({ where: { userId: m3.id }, data: { notifyOnBotAssist: true } })
       console.log("✓ eligibility: banned / suspended / self / pref-off")
     }
@@ -184,6 +186,28 @@ async function run() {
       assert.equal(rOver, "skipped", "4th assist in a day capped")
       assert.equal(await prisma.botEvent.count({ where: { key: kOver } }), 0)
       console.log("✓ per-user daily cap")
+    }
+
+    // ── 5b. Dead keys don't drain the daily cap ──────────────────────
+    {
+      // A user with ONE claimed key replayed 5+ times (what the dormant
+      // scan does daily) must still be able to receive fresh assists —
+      // replayed dead keys exit before the counter is touched.
+      const mDead = await mk(`__tbp_dead_${SUFFIX}`)
+      rateLimitKeys.push(`terpbot:assist:user:${mDead.id}`)
+      const kDead = `assist:dead:${mDead.id}:${SUFFIX}`
+      botEventKeys.push(kDead)
+      assert.equal(await botAssist({ key: kDead, kind: "x", userId: mDead.id, title: "t", content: "c", noCushion: true }), "sent")
+      for (let i = 0; i < 6; i++) {
+        assert.equal(await botAssist({ key: kDead, kind: "x", userId: mDead.id, title: "t", content: "c", noCushion: true }), "skipped")
+      }
+      const kFresh = `assist:fresh:${mDead.id}:${SUFFIX}`
+      botEventKeys.push(kFresh)
+      assert.equal(
+        await botAssist({ key: kFresh, kind: "y", userId: mDead.id, title: "t", content: "c", noCushion: true }),
+        "sent", "6 dead-key replays must not exhaust the 3/day cap"
+      )
+      console.log("✓ dead-key replays don't drain the daily cap")
     }
 
     // ── 6. assistWelcome: once-ever, noCushion ────────────────────────
@@ -382,6 +406,122 @@ async function run() {
       const res2 = await scanStaleDiaries({ authorIds: [m8.id, bannedDiaryAuthor.id] })
       assert.equal(res2.sent, 0, "monthly claim key suppresses re-send")
       console.log("✓ scanStaleDiaries eligibility + monthly idempotency")
+    }
+
+    // ── 10b. scanGrowAssists: owner scope + evidence triggers ────────
+    {
+      const DAY = 86400000
+      const ga = await mk(`__tbp_ga_${SUFFIX}`)
+      const gb = await mk(`__tbp_gb_${SUFFIX}`)
+      rateLimitKeys.push(`terpbot:assist:user:${ga.id}`, `terpbot:assist:user:${gb.id}`)
+
+      // PRIVATE diary — owner-scope proof: the assist may only ever
+      // reach the diary's own author.
+      const priv = await prisma.growDiary.create({
+        data: {
+          title: `__tbp priv ${SUFFIX}`, description: "t", growType: "INDOOR",
+          startDate: new Date(Date.now() - 20 * DAY), authorId: ga.id,
+          visibility: "PRIVATE",
+        },
+      })
+      diaryIds.push(priv.id)
+      // control user: diary exists but carries no trigger evidence
+      const plain = await prisma.growDiary.create({
+        data: {
+          title: `__tbp plain ${SUFFIX}`, description: "t", growType: "INDOOR",
+          startDate: new Date(Date.now() - 20 * DAY), authorId: gb.id,
+        },
+      })
+      diaryIds.push(plain.id)
+
+      // ga's session carries a 3-day-old RH intervention with no
+      // follow-up reading → intervention-followup trigger evidence.
+      // Unlinked session (diaryId null) — the scan binds it to the
+      // newest diary and must NOT write the private id back.
+      await saveSession(ga.id, {
+        diaryId: null,
+        pendingAsk: null,
+        addInterventions: [{
+          type: "RH_DOWN",
+          at: Date.now() - 3 * DAY,
+          direction: "down",
+          targetMetric: "humidity",
+        }],
+      }, Date.now())
+
+      const res = await scanGrowAssists({ authorIds: [ga.id, gb.id] })
+      assert.equal(res.sent, 1, "only the evidence-backed grower is assisted")
+      assert.equal(res.scanned, 2, "both candidate users were evaluated")
+
+      const n = await prisma.notification.findFirst({
+        where: { userId: ga.id, type: "BOT_ASSIST" },
+        orderBy: { createdAt: "desc" },
+      })
+      assert.ok(n, "private assist delivered to the owner")
+      assert.equal(n!.actorId, botId, "assist authored by TerpBot")
+      assert.match(n!.title, /Follow-up/i, "intervention follow-up copy")
+      assert.ok(!/priv |__tbp/.test(`${n!.title} ${n!.content}`), "no raw diary title in the assist")
+      const meta = n!.metadata as { triggerId?: string; actionClass?: string } | null
+      assert.equal(meta?.triggerId, "intervention-followup")
+      assert.equal(meta?.actionClass, "MEASURE")
+      notificationIds.push(n!.id)
+      assert.equal(
+        await prisma.notification.count({ where: { userId: gb.id } }),
+        0, "no evidence → silence, not engagement"
+      )
+
+      // a PRIVATE-diary assist must NOT persist a /why trail, snapshot,
+      // or the private diary id — all three render (trail, snapshot via
+      // /changes) or re-resolve (diaryId) on public-scope surfaces and
+      // would echo owner-scope readings into a room. pendingAsk is a
+      // canonical metric id, so it still binds.
+      const sAfter = await loadSession(ga.id, Date.now())
+      assert.ok(!sAfter?.state.trail, "private-diary assist persists no public-renderable trail")
+      assert.ok(!sAfter?.state.snapshot, "private-diary assist persists no snapshot (leaks readings via /changes)")
+      assert.notEqual(sAfter?.diaryId ?? null, priv.id, "private diary id never lands on the public-scope session link")
+      assert.equal(sAfter?.pendingAsk, "humidity", "the asked metric binds as pendingAsk")
+
+      // idempotent: a second scan of unchanged evidence sends nothing
+      const res2 = await scanGrowAssists({ authorIds: [ga.id, gb.id] })
+      assert.equal(res2.sent, 0, "claim key suppresses the duplicate")
+      assert.equal(
+        await prisma.notification.count({ where: { userId: ga.id, type: "BOT_ASSIST" } }),
+        1, "still exactly one assist"
+      )
+
+      // public-diary twin: same evidence → the /why trail persists
+      const gc = await mk(`__tbp_gc_${SUFFIX}`)
+      rateLimitKeys.push(`terpbot:assist:user:${gc.id}`)
+      const pub = await prisma.growDiary.create({
+        data: {
+          title: `__tbp pub ${SUFFIX}`, description: "t", growType: "INDOOR",
+          startDate: new Date(Date.now() - 20 * DAY), authorId: gc.id,
+        },
+      })
+      diaryIds.push(pub.id)
+      await saveSession(gc.id, {
+        diaryId: pub.id,
+        pendingAsk: null,
+        addInterventions: [{
+          type: "RH_DOWN",
+          at: Date.now() - 3 * DAY,
+          direction: "down",
+          targetMetric: "humidity",
+        }],
+      }, Date.now())
+      const res3 = await scanGrowAssists({ authorIds: [gc.id] })
+      assert.equal(res3.sent, 1, "public-diary owner is assisted")
+      const sPub = await loadSession(gc.id, Date.now())
+      assert.ok(sPub?.state.trail, "public-diary assist persists a /why trail")
+      assert.ok(sPub?.state.snapshot, "public-diary assist persists the /changes snapshot")
+      assert.equal(sPub?.diaryId, pub.id, "public assist links the session to the diary")
+      assert.equal(sPub?.pendingAsk, "humidity", "public trail keeps the asked metric")
+      const nPub = await prisma.notification.findFirst({
+        where: { userId: gc.id, type: "BOT_ASSIST" },
+        orderBy: { createdAt: "desc" },
+      })
+      if (nPub) notificationIds.push(nPub.id)
+      console.log("✓ scanGrowAssists owner scope + trigger + idempotency")
     }
 
     // ── 11. Command dispatch: grow/knowledge/community handlers ──────

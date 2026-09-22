@@ -277,6 +277,8 @@ export function snapshotFrom(
       .map((e) => e.symptom)
       .slice(0, 8),
     ...(top ? { topCandidate: { id: top.id, state: top.state } } : {}),
+    ...(ctx.missing.length ? { missing: [...ctx.missing] } : {}),
+    ...(ctx.diary.id ? { diaryId: ctx.diary.id } : {}),
   }
 }
 
@@ -288,7 +290,9 @@ export function renderChanges(
   diagnosis: Diagnosis,
   prev: SessionSnapshot | undefined
 ): string[] {
-  if (!prev) {
+  if (!prev || (prev.diaryId && prev.diaryId !== ctx.diary.id)) {
+    // a snapshot taken on a different diary must never diff against
+    // this context — its readings/stage belong to another grow
     return [
       "📈 No earlier snapshot to compare against — run /status first, then /changes next time.",
     ]

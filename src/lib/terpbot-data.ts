@@ -419,24 +419,37 @@ async function intelContextFor(userId: string, now: number) {
   const session = await loadSession(userId, now)
   const state = session?.state ?? { reported: [], observations: [] }
   let diaryId = session?.diaryId ?? null
-  if (!diaryId) {
+  let base: GrowContextView | null = diaryId
+    ? await buildGrowContext(diaryId, { ownerId: userId, scope: "public", now: new Date(now) })
+    : null
+  if (!base) {
+    // the session-linked diary may be private/unlisted (an owner-scope
+    // writer can put it there) or gone — fall back to the newest PUBLIC
+    // live diary rather than an empty context that masks real grows
     const d = await prisma.growDiary.findFirst({
       where: { authorId: userId, deleted: false, harvested: false, ...publicDiaryWhere },
       orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
       select: { id: true },
     })
     diaryId = d?.id ?? null
-  }
-  const base: GrowContextView =
-    (diaryId
+    base = diaryId
       ? await buildGrowContext(diaryId, { ownerId: userId, scope: "public", now: new Date(now) })
-      : null) ?? emptyContext(now, state.stage)
+      : null
+  }
+  const view = base ?? emptyContext(now, state.stage)
+  // Session evidence only merges onto the diary it was recorded
+  // against — when the session is linked to a different diary (e.g. a
+  // private one that fell back to the newest public), its observations
+  // and interventions belong to that grow, not this one.
+  const s = !session?.diaryId || session.diaryId === diaryId
+    ? state
+    : { reported: [], observations: [] }
   const merged = mergeInterventions(
     mergeResolutions(
-      mergeObservations(mergeReported(base, state.reported, now), state.observations ?? []),
-      state.resolutions ?? []
+      mergeObservations(mergeReported(view, s.reported, now), s.observations ?? []),
+      s.resolutions ?? []
     ),
-    state.interventions ?? []
+    s.interventions ?? []
   )
   return { session, merged }
 }

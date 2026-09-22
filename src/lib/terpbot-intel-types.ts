@@ -591,6 +591,12 @@ export interface SessionSnapshot {
   symptoms: SymptomId[]
   /** top candidate at snapshot time, if any */
   topCandidate?: { id: string; state: FindingState }
+  /** metrics with no data at snapshot time — the gap set that lets a
+   *  later BOT_ASSIST notice when fresh evidence closes one */
+  missing?: MetricId[]
+  /** the diary this snapshot describes — gap-fill assists must not
+   *  apply a snapshot taken on one grow to another */
+  diaryId?: string
 }
 
 // ── Next-action engine ──────────────────────────────────────────────

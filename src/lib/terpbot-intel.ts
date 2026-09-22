@@ -3041,7 +3041,7 @@ export function evaluateContext(ctx: GrowContextView): Diagnosis {
 // re-measuring, so it scores through a separate bypass pass.
 // Tie-break: MEASUREMENT_PRIORITY order, then id — a total order.
 
-const SCHEMA_SERIES: Partial<Record<MetricId, keyof GrowContextView["series"]>> = {
+export const SCHEMA_SERIES: Partial<Record<MetricId, keyof GrowContextView["series"]>> = {
   temperature: "temperature",
   humidity: "humidity",
   ph: "ph",
