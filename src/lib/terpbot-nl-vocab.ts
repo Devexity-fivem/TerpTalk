@@ -8,6 +8,7 @@ import type { LocationId, SymptomId } from "./terpbot-intel-types"
 
 export type VocabFamily =
   | "symptom" | "location" | "stage" | "metric" | "unit" | "trend" | "period"
+  | "intervention" | "progression"
 
 export interface VocabEntry {
   /** SymptomId for symptom entries; LocationId/MetricId/etc. elsewhere */
@@ -20,6 +21,10 @@ export interface VocabEntry {
   /** "weak" entries only match when a plant noun appears in the same
    *  clause — the false-positive gate */
   confidence?: "strong" | "weak"
+  /** intervention family: intended direction of the adjustment */
+  direction?: "up" | "down"
+  /** intervention family: the metric the adjustment targets */
+  targetMetric?: string
 }
 
 export const VOCAB: VocabEntry[] = [
@@ -362,6 +367,112 @@ export const VOCAB: VocabEntry[] = [
     "during the day", "daytime" ] },
   { id: "LIGHTS_OFF", family: "period", phrases: [
     "when lights go off", "after lights out", "right after dark" ] },
+
+  // ── interventions ─────────────────────────────────────────────────
+  // Grower-reported adjustments — "i lowered rh", "raised the light".
+  // These record INTENT, never a measured value: a number in the clause
+  // binds as a claimed setpoint, not a reading. Phrases stay multiword
+  // or verb-led so "i bought ph up" can't mint an intervention.
+  { id: "RH_DOWN", family: "intervention", direction: "down", targetMetric: "humidity", phrases: [
+    "lowered rh", "lowered the rh", "dropped rh", "brought rh down",
+    "reduced humidity", "reduced the humidity", "lowered humidity",
+    "lowered the humidity", "rh down", "bumped rh down",
+    "turned the dehumidifier on", "added a dehumidifier",
+    "running a dehumidifier", "increased exhaust", "turned up the exhaust",
+    "dropped the humidity", "brought the humidity down", "dropped humidity" ] },
+  { id: "RH_UP", family: "intervention", direction: "up", targetMetric: "humidity", phrases: [
+    "raised rh", "raised the rh", "rh up", "brought rh up",
+    "added a humidifier", "turned the humidifier on", "running a humidifier",
+    "increased humidity", "increased the humidity", "raised humidity",
+    "raised the humidity", "bumped rh up" ] },
+  { id: "TEMP_DOWN", family: "intervention", direction: "down", targetMetric: "temperature", phrases: [
+    "lowered temps", "lowered the temp", "lowered temp", "dropped temps",
+    "dropped the temp", "brought temps down", "brought the temp down",
+    "turned the ac on", "turned on the ac", "running the ac",
+    "cooled it down", "cooling it down", "reduced temps" ] },
+  { id: "TEMP_UP", family: "intervention", direction: "up", targetMetric: "temperature", phrases: [
+    "raised temps", "raised the temp", "raised temp", "warmed it up",
+    "warming it up", "heat mat on", "turned the heater on",
+    "increased temps", "brought temps up" ] },
+  { id: "EC_DOWN", family: "intervention", direction: "down", targetMetric: "ec", phrases: [
+    "lowered ec", "lowered the ec", "reduced ec", "reduced the ec",
+    "cut the feed", "cut back the feed", "cut back feed", "weaker feed",
+    "diluted the feed", "diluted the res", "backed off the nutes",
+    "half strength", "reduced feed", "reduced the feed",
+    "lowered feed strength", "lighter feed" ] },
+  { id: "EC_UP", family: "intervention", direction: "up", targetMetric: "ec", phrases: [
+    "raised ec", "raised the ec", "upped the feed", "increased ec",
+    "increased the ec", "stronger feed", "increased feed",
+    "bumped the feed up", "heavier feed" ] },
+  { id: "PH_ADJUST", family: "intervention", targetMetric: "ph", phrases: [
+    "adjusted ph", "corrected ph", "adjusted the ph", "corrected the ph",
+    "brought ph down", "brought ph up", "brought the ph down",
+    "brought the ph up", "ph'd it down", "ph'd it up", "ph'd it",
+    "lowered the ph", "raised the ph", "lowered ph", "raised ph" ] },
+  { id: "LIGHT_RAISED", family: "intervention", phrases: [
+    "raised the light", "raised the lights", "moved the light up",
+    "moved the lights up", "light further away", "lights further away",
+    "moved light further", "moved the light further", "hung it higher" ] },
+  { id: "LIGHT_LOWERED", family: "intervention", phrases: [
+    "lowered the light", "lowered the lights", "moved the light closer",
+    "moved light closer", "moved the lights closer", "hung it lower" ] },
+  { id: "LIGHT_DIMMED", family: "intervention", phrases: [
+    "dimmed the light", "dimmed the lights", "turned the light down",
+    "turned the lights down", "turned lights down", "backed off the light",
+    "lowered intensity", "reduced intensity", "dimmed" ] },
+  { id: "LIGHT_BRIGHTER", family: "intervention", phrases: [
+    "turned the light up", "turned the lights up", "turned lights up",
+    "increased intensity", "bumped the light up" ] },
+  { id: "WATER_LESS", family: "intervention", direction: "down", targetMetric: "watering", phrases: [
+    "watering less", "water less", "watering less often",
+    "less frequent watering", "longer between waterings",
+    "letting it dry out", "letting the medium dry", "waiting longer to water" ] },
+  { id: "WATER_MORE", family: "intervention", direction: "up", targetMetric: "watering", phrases: [
+    "watering more", "watering more often", "watering more frequently",
+    "increased watering", "more frequent watering" ] },
+  { id: "FLUSH", family: "intervention", direction: "down", targetMetric: "ec", phrases: [
+    "flushed the medium", "flushed the soil", "flushed the coco",
+    "flushed the pot", "flushed with plain water", "flushed with water",
+    "flushing the medium", "flushing with plain water", "flushing the pot",
+    "flushing the soil", "ran plain water through", "leached the medium",
+    "leached the pot" ] },
+  { id: "AIRFLOW", family: "intervention", phrases: [
+    "added a fan", "added another fan", "moved the fan", "moved the fans",
+    "pointed the fan away", "pointed the fans away", "increased airflow",
+    "opened the vent", "opened a vent", "improved airflow" ] },
+  { id: "DEFOLIATE", family: "intervention", phrases: [
+    "defoliated", "removed the affected leaves", "removed affected leaves",
+    "cut off the burnt leaves", "removed the dead leaves", "pruned" ] },
+  { id: "REPOT", family: "intervention", phrases: [
+    "transplanted", "repotted", "up-potted", "uppotted", "potted up" ] },
+  { id: "PEST_ACTION", family: "intervention", phrases: [
+    "sprayed for pests", "released predators", "released beneficials",
+    "put out sticky cards", "put up sticky cards", "applied neem",
+    "released ladybugs", "hung sticky traps" ] },
+
+  // ── progression ───────────────────────────────────────────────────
+  // Grower claims about symptom trajectory — resolution, improvement,
+  // worsening, stability. A progression hit co-occurring with a symptom
+  // routes the symptom to a resolution claim instead of an observation.
+  { id: "RESOLVED", family: "progression", phrases: [
+    "cleared up", "cleared", "went away", "gone away", "has stopped",
+    "it stopped", "they stopped", "stopped on its own", "resolved",
+    "all gone", "is gone", "are gone", "no longer showing", "fixed now" ] },
+  { id: "IMPROVING", family: "progression", phrases: [
+    "looking better", "geting better", "getting better", "improving",
+    "improved", "on the mend", "perking up", "perked up", "bounced back",
+    "bouncing back", "recovering", "coming back", "new growth looks good",
+    "new growth looks healthy", "new growth is clean",
+    "healthy new growth", "new leaves look fine", "new growth is fine",
+    "looks healthier", "looking healthier" ] },
+  { id: "WORSENING", family: "progression", phrases: [
+    "getting worse", "still spreading", "keeps spreading", "spreading",
+    "worse now", "more leaves affected", "getting worse not better",
+    "keep spreading" ] },
+  { id: "STEADY", family: "progression", phrases: [
+    "no worse", "not getting worse", "hasn't spread", "hasnt spread",
+    "not spreading", "stayed the same", "unchanged", "holding steady",
+    "no better no worse", "same as before" ] },
 ]
 
 /** Numeric stage claims that phrases can't express — "week 6 flower",

@@ -69,9 +69,42 @@ export interface ParsedMeasurement {
   pastUnresolved?: boolean
 }
 
+/** a grower-reported adjustment — intent, never a reading. A number in
+ *  the clause binds as a claimed SETPOINT, not a measurement. */
+export interface ParsedIntervention {
+  /** canonical intervention vocab id ("RH_DOWN", "FLUSH", …) */
+  type: string
+  direction?: "up" | "down"
+  targetMetric?: MetricId
+  /** claimed target value — "lowered rh to 50" → 50. Not a reading. */
+  setpoint?: number
+  setpointUnit?: string
+  clause: number
+  span: [number, number]
+  ageDays?: number
+  pastUnresolved?: boolean
+}
+
+/** a grower claim about symptom trajectory — "cleared up", "no longer
+ *  yellowing", "getting worse". Emitted instead of an observation when
+ *  a progression phrase or phrase-negation applies. */
+export interface ParsedResolution {
+  /** undefined = unscoped claim ("looking better") — applies to the
+   *  most recent active episode */
+  symptom?: SymptomId
+  location?: LocationId
+  kind: "resolved" | "improving" | "stable" | "worsening"
+  clause: number
+  span: [number, number]
+  ageDays?: number
+  pastUnresolved?: boolean
+}
+
 export interface ParsedUtterance {
   observations: ParsedObservation[]
   measurements: ParsedMeasurement[]
+  interventions: ParsedIntervention[]
+  resolutions: ParsedResolution[]
   /** utterance-level stage claim ("i'm in week 5 flower") */
   stage?: string
   /** question-led text that is not a comparison — a lookup, not a report */
@@ -317,6 +350,28 @@ function isNegated(clause: string, offset: number): boolean {
   return NEGATION_PHRASES.some((p) => window.includes(p))
 }
 
+/** Negations that are ABSENCE-OVER-TIME claims — "no longer yellowing",
+ *  "haven't seen webbing", "no more spots" report a resolution, unlike a
+ *  bare-token denial ("not yellow but pale") which just suppresses. */
+const RESOLUTION_NEGATIONS = [
+  ...NEGATION_PHRASES,
+  "no more", "any more", "anymore",
+]
+
+function negationResolves(clause: string, offset: number): boolean {
+  let words = wordsBefore(clause, offset, 5)
+  if (!words.length) return false
+  for (let i = words.length - 1; i >= 0; i--) {
+    if (NEGATION_BOUNDARY_WORDS.has(words[i])) {
+      words = words.slice(i + 1)
+      break
+    }
+  }
+  if (!words.length) return false
+  const window = words.join(" ")
+  return RESOLUTION_NEGATIONS.some((p) => window.includes(p))
+}
+
 const RUNOFF_PREFIX_RE = /\b(run[\s-]?off)\s*$/
 const BARE_CHEM_RE = /^(e\.?c\.?|p\.?h\.?)$/
 
@@ -410,6 +465,8 @@ export function parseGrowText(raw: string): ParsedUtterance {
 
   const observations: ParsedObservation[] = []
   const measurements: ParsedMeasurement[] = []
+  const interventions: ParsedIntervention[] = []
+  const resolutions: ParsedResolution[] = []
   let utteranceStage: string | undefined
 
   // collect stage hits across the whole utterance first — a single
@@ -456,7 +513,22 @@ export function parseGrowText(raw: string): ParsedUtterance {
     const hits = clauseHits[ci]
     const clauseStage = stageHits.find((h) => h.clause === ci)?.id
 
+    // progression + intervention hits — suppressed on lookups ("should
+    // i lower my rh" reports nothing). First hit in clause order wins.
+    const progs = questionish
+      ? []
+      : hits.filter((h) => h.entry.family === "progression")
+    const intHits = questionish
+      ? []
+      : hits.filter((h) => h.entry.family === "intervention")
+    const progKind = progs.length
+      ? ({ RESOLVED: "resolved", IMPROVING: "improving", WORSENING: "worsening", STEADY: "stable" } as const)[
+          progs[0].entry.id as "RESOLVED" | "IMPROVING" | "WORSENING" | "STEADY"
+        ]
+      : undefined
+
     const surviving = hits.filter((h) => {
+      if (h.entry.family === "intervention" || h.entry.family === "progression") return true
       if (h.entry.family !== "symptom") return true
       if (questionish) return false
       if (h.entry.confidence === "weak") {
@@ -469,6 +541,39 @@ export function parseGrowText(raw: string): ParsedUtterance {
       if (isNegated(seg.text, h.start - seg.base)) return false
       return true
     })
+
+    // Negation harvest — a symptom suppressed only by an
+    // absence-over-time negation is a resolution claim, not silence.
+    // ("yellowing cleared up" handles itself via progKind below.)
+    if (!questionish) {
+      for (const h of hits) {
+        if (h.entry.family !== "symptom") continue
+        if (surviving.includes(h)) continue
+        const off = h.start - seg.base
+        if (isNegated(seg.text, off) && negationResolves(seg.text, off)) {
+          resolutions.push({
+            symptom: h.entry.id as SymptomId,
+            kind: "resolved",
+            clause: ci,
+            span: [h.start, h.start + h.len],
+            ...ageFor(ci),
+          })
+        }
+      }
+    }
+
+    // interventions — emitted before the measurement pass so a bound
+    // number can reroute to setpoint
+    for (const ih of intHits) {
+      interventions.push({
+        type: ih.entry.id,
+        direction: ih.entry.direction,
+        targetMetric: ih.entry.targetMetric as MetricId | undefined,
+        clause: ci,
+        span: [ih.start, ih.start + ih.len],
+        ...ageFor(ci),
+      })
+    }
 
     const locations = surviving.filter((h) => h.entry.family === "location")
     const stages = surviving.filter((h) => h.entry.family === "stage")
@@ -516,6 +621,21 @@ export function parseGrowText(raw: string): ParsedUtterance {
 
       const period = periods.length === 1 ? periods[0].entry.id : undefined
 
+      // a progression claim in the clause routes the symptom to a
+      // resolution — "yellowing cleared up" never mints an active
+      // LEAF_YELLOWING
+      if (progKind) {
+        resolutions.push({
+          symptom,
+          location,
+          kind: progKind,
+          clause: ci,
+          span: [h.start, h.start + h.len],
+          ...ageFor(ci),
+        })
+        continue
+      }
+
       observations.push({
         symptom,
         location,
@@ -525,6 +645,17 @@ export function parseGrowText(raw: string): ParsedUtterance {
         span: [h.start, h.start + h.len],
         feeds,
         refined,
+        ...ageFor(ci),
+      })
+    }
+
+    // unscoped progression — "looking better" / "still spreading" with
+    // no symptom named in the clause
+    if (progKind && !surviving.some((h) => h.entry.family === "symptom")) {
+      resolutions.push({
+        kind: progKind,
+        clause: ci,
+        span: [progs[0].start, progs[0].start + progs[0].len],
         ...ageFor(ci),
       })
     }
@@ -621,7 +752,23 @@ export function parseGrowText(raw: string): ParsedUtterance {
           }
         }
       }
-      if (!metric) continue // bare number → residual, never guessed
+      if (!metric) {
+        // a bare number in an intervention clause is the claimed
+        // setpoint — "lowered rh to 50": the metric word was consumed
+        // by the intervention phrase, so no metric hit exists to bind
+        const iv = intHits.find((ih) => ih.entry.targetMetric)
+        const num = parseFloat(nm[0])
+        if (iv && Number.isFinite(num)) {
+          const rec = interventions.find(
+            (i) => i.clause === ci && i.span[0] === iv.start
+          )
+          if (rec && rec.setpoint == null) {
+            rec.setpoint = num
+            continue
+          }
+        }
+        continue // bare number → residual, never guessed
+      }
       let explicitMetric = !!metricHit
 
       // unit-implied EC right after a runoff word is runoff EC —
@@ -697,6 +844,24 @@ export function parseGrowText(raw: string): ParsedUtterance {
                 : undefined)
 
       const value = parseFloat(nm[0])
+
+      // a number bound to an intervention's target metric is the claimed
+      // SETPOINT — "i lowered rh to 50" adjusts to 50; it is not a
+      // measured RH. Reroute instead of minting a false reading.
+      const intForMetric = intHits.find(
+        (ih) => (ih.entry.targetMetric as MetricId | undefined) === metric
+      )
+      if (intForMetric && Number.isFinite(value)) {
+        const iv = interventions.find(
+          (i) => i.clause === ci && i.span[0] === intForMetric.start
+        )
+        if (iv && iv.setpoint == null) {
+          iv.setpoint = value
+          iv.setpointUnit = impliedUnit
+          continue
+        }
+      }
+
       measurements.push({
         metric,
         value: Number.isFinite(value) ? value : undefined,
@@ -736,6 +901,8 @@ export function parseGrowText(raw: string): ParsedUtterance {
   return {
     observations: deduped,
     measurements,
+    interventions,
+    resolutions,
     stage: utteranceStage,
     question,
     comparison,

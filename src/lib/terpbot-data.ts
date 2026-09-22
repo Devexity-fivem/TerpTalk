@@ -26,14 +26,15 @@ import { notify } from "@/lib/notify"
 import { getBotUserId } from "@/lib/terpbot"
 import { buildHelpText } from "@/lib/chat-commands"
 import { buildGrowContext, emptyContext } from "@/lib/terpbot-intel-context"
-import { evaluateContext, renderIntelLines, nextUsefulMeasurement } from "@/lib/terpbot-intel"
-import { mergeReported, mergeObservations, REPORTABLE_METRICS } from "@/lib/terpbot-intel-merge"
+import { evaluateContext, renderIntelLines, nextUsefulMeasurement, nextActions } from "@/lib/terpbot-intel"
+import { mergeReported, mergeObservations, mergeResolutions, mergeInterventions, REPORTABLE_METRICS } from "@/lib/terpbot-intel-merge"
+import { renderStatus, renderChanges, renderCheck, renderMeasurements, snapshotFrom } from "@/lib/terpbot-intel-status"
 import { buildWhyTrail, renderWhy } from "@/lib/terpbot-intel-why"
 import { loadSession, saveSession } from "@/lib/terpbot-session"
 import { parseGrowText } from "@/lib/terpbot-nl-parse"
 import { SYMPTOM_LABELS, LOCATION_LABELS, VOCAB } from "@/lib/terpbot-nl-vocab"
 import { rateLimit } from "@/lib/rate-limit"
-import type { GrowContextView, SessionState, SessionObservation, ReportedPoint, MetricId } from "@/lib/terpbot-intel-types"
+import type { GrowContextView, SessionState, SessionObservation, ReportedPoint, MetricId, InterventionRecord } from "@/lib/terpbot-intel-types"
 import { TERPBOT_USERNAME, randomGrowTip, sanitizeEcho as sanitizeEchoStrict } from "@/lib/terpbot"
 
 /** Metrics an implied-metric answer may be re-pointed to when they're
@@ -409,6 +410,53 @@ function envReadingsLine(u: GrowDiaryRow["updates"][number]): string | null {
   return parts.length ? parts.join(" · ") : null
 }
 
+/** Shared context assembly for the longitudinal commands — the session's
+ *  linked public diary (or the newest public active diary) plus session
+ *  reports/observations/interventions/resolutions merged in. Always
+ *  scope:"public" — these outputs post to rooms, so private/unlisted
+ *  diary data never enters the view. */
+async function intelContextFor(userId: string, now: number) {
+  const session = await loadSession(userId, now)
+  const state = session?.state ?? { reported: [], observations: [] }
+  let diaryId = session?.diaryId ?? null
+  if (!diaryId) {
+    const d = await prisma.growDiary.findFirst({
+      where: { authorId: userId, deleted: false, harvested: false, ...publicDiaryWhere },
+      orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
+      select: { id: true },
+    })
+    diaryId = d?.id ?? null
+  }
+  const base: GrowContextView =
+    (diaryId
+      ? await buildGrowContext(diaryId, { ownerId: userId, scope: "public", now: new Date(now) })
+      : null) ?? emptyContext(now, state.stage)
+  const merged = mergeInterventions(
+    mergeResolutions(
+      mergeObservations(mergeReported(base, state.reported, now), state.observations ?? []),
+      state.resolutions ?? []
+    ),
+    state.interventions ?? []
+  )
+  return { session, merged }
+}
+
+/** Split rendered lines into ≤1000-char messages — the chat cap. */
+function toMessages(lines: string[]): string[] {
+  const msgs: string[] = []
+  let cur = ""
+  for (const l of lines) {
+    if (cur && (cur + "\n" + l).length > 1000) {
+      msgs.push(cur)
+      cur = l
+    } else {
+      cur = cur ? `${cur}\n${l}` : l
+    }
+  }
+  if (cur) msgs.push(cur)
+  return msgs.slice(0, 2)
+}
+
 async function handle(name: string, ctx: BotCommandCtx): Promise<BotCommandResult> {
   switch (name) {
     case "help":
@@ -759,6 +807,7 @@ async function handle(name: string, ctx: BotCommandCtx): Promise<BotCommandResul
                 // Only reportable metrics may be asked — an unanswerable
                 // ask (leafTemp, ppfd…) can never receive a stored answer.
                 pendingAsk: next && REPORTABLE_METRICS.has(next.id as MetricId) ? next.id : null,
+                snapshot: snapshotFrom(gctx, diagnosis, now),
               },
               now
             )
@@ -855,6 +904,27 @@ async function handle(name: string, ctx: BotCommandCtx): Promise<BotCommandResul
         )
       }
 
+      // Grower-reported adjustments + trajectory claims — structured
+      // intent only (canonical ids, resolved times), never raw text.
+      const addInterventions: InterventionRecord[] = parsed.interventions.map((iv) => ({
+        type: iv.type,
+        at: now,
+        eventT: iv.ageDays != null ? now - iv.ageDays * 86400000 : undefined,
+        pastUnresolved: iv.pastUnresolved || undefined,
+        direction: iv.direction,
+        targetMetric: iv.targetMetric,
+        ...(iv.setpoint != null ? { setpoint: { value: iv.setpoint, unit: iv.setpointUnit } } : {}),
+      }))
+      // event-time t — "cleared up 3 days ago" is a claim ABOUT 3 days
+      // ago; an unbounded "a while back" parks ~30d out so a fresher
+      // report still supersedes it
+      const addResolutions = parsed.resolutions.map((r) => ({
+        symptom: r.symptom,
+        location: r.location,
+        kind: r.kind,
+        t: r.ageDays != null ? now - r.ageDays * 86400000 : r.pastUnresolved ? now - 30 * 86400000 : now,
+      }))
+
       // Utterance-claimed stage ("week 3 flower") — canonical ids only,
       // newest wins; used only when no diary supplies a stage.
       const stageClaim =
@@ -876,7 +946,13 @@ async function handle(name: string, ctx: BotCommandCtx): Promise<BotCommandResul
         emptyContext(now, stageClaim ?? state.stage)
       const reportedMerged = [...state.reported, ...addReported]
       const obsMerged = [...state.observations, ...addObservations]
-      const ctx2 = mergeObservations(mergeReported(base, reportedMerged, now), obsMerged)
+      const ctx2 = mergeInterventions(
+        mergeResolutions(
+          mergeObservations(mergeReported(base, reportedMerged, now), obsMerged),
+          [...(state.resolutions ?? []), ...addResolutions]
+        ),
+        [...(state.interventions ?? []), ...addInterventions]
+      )
       const diagnosis = evaluateContext(ctx2)
       const next = nextUsefulMeasurement(ctx2, diagnosis)
       const trail = buildWhyTrail(ctx2, diagnosis, now)
@@ -889,6 +965,9 @@ async function handle(name: string, ctx: BotCommandCtx): Promise<BotCommandResul
           trail,
           addReported,
           addObservations,
+          addInterventions,
+          addResolutions,
+          snapshot: snapshotFrom(ctx2, diagnosis, now),
         },
         now
       )
@@ -986,6 +1065,76 @@ async function handle(name: string, ctx: BotCommandCtx): Promise<BotCommandResul
       }
       if (cur) msgs.push(cur)
       return ok(...msgs.slice(0, 2))
+    }
+
+    case "status": {
+      const cap = await rateLimit(`bot-status:${ctx.userId}`, 6, 60_000)
+      if (!cap.allowed) return ok(`🤖 Give me a minute between status checks — try again shortly.`)
+      const now = Date.now()
+      const { session, merged } = await intelContextFor(ctx.userId, now)
+      const diagnosis = evaluateContext(merged)
+      const actions = nextActions(merged, diagnosis)
+      const lines = renderStatus(merged, diagnosis, actions)
+      await saveSession(
+        ctx.userId,
+        {
+          diaryId: merged.diary.id || session?.diaryId || null,
+          pendingAsk: session?.pendingAsk ?? null,
+          trail: buildWhyTrail(merged, diagnosis, now),
+          snapshot: snapshotFrom(merged, diagnosis, now),
+        },
+        now
+      )
+      return ok(...toMessages(lines))
+    }
+
+    case "changes": {
+      const cap = await rateLimit(`bot-status:${ctx.userId}`, 6, 60_000)
+      if (!cap.allowed) return ok(`🤖 Give me a minute — try again shortly.`)
+      const now = Date.now()
+      const { session, merged } = await intelContextFor(ctx.userId, now)
+      const diagnosis = evaluateContext(merged)
+      const lines = renderChanges(merged, diagnosis, session?.state.snapshot)
+      await saveSession(
+        ctx.userId,
+        {
+          diaryId: merged.diary.id || session?.diaryId || null,
+          pendingAsk: session?.pendingAsk ?? null,
+          snapshot: snapshotFrom(merged, diagnosis, now),
+        },
+        now
+      )
+      return ok(...toMessages(lines))
+    }
+
+    case "check": {
+      const cap = await rateLimit(`bot-status:${ctx.userId}`, 6, 60_000)
+      if (!cap.allowed) return ok(`🤖 Give me a minute — try again shortly.`)
+      const now = Date.now()
+      const { session, merged } = await intelContextFor(ctx.userId, now)
+      const diagnosis = evaluateContext(merged)
+      const actions = nextActions(merged, diagnosis)
+      const lines = renderCheck(actions)
+      const topStep = actions.find((a) => a.stepId && REPORTABLE_METRICS.has(a.stepId as MetricId))
+      await saveSession(
+        ctx.userId,
+        {
+          diaryId: merged.diary.id || session?.diaryId || null,
+          pendingAsk: topStep?.stepId ?? session?.pendingAsk ?? null,
+          trail: buildWhyTrail(merged, diagnosis, now),
+          snapshot: snapshotFrom(merged, diagnosis, now),
+        },
+        now
+      )
+      return ok(...toMessages(lines))
+    }
+
+    case "measurements": {
+      const cap = await rateLimit(`bot-status:${ctx.userId}`, 6, 60_000)
+      if (!cap.allowed) return ok(`🤖 Give me a minute — try again shortly.`)
+      const now = Date.now()
+      const { merged } = await intelContextFor(ctx.userId, now)
+      return ok(...toMessages(renderMeasurements(merged)))
     }
 
     case "growhelp": {

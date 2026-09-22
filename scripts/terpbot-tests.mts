@@ -459,6 +459,7 @@ function run() {
     now: t0 + 40 * 86400000,
     day: 41, week: 6,
     stageDays: 20, stageStartCensored: false,
+    stageTransitions: [],
     updateCount: 4, daysSinceUpdate: 1,
     envCoverage: 1,
     series: {
@@ -471,6 +472,7 @@ function run() {
     freshness: {},
     ...over,
     observations: over.observations ?? [],
+    baselines: over.baselines ?? {},
   })
 
   const findCandidate = (ctx: GrowContextView, id: string) =>

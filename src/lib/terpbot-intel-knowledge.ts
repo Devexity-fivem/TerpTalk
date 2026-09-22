@@ -7,8 +7,11 @@
  *  on persisted sessions so a stale /why trail can't be misread.
  *  2.1 → 2.2: postharvest domain (3 candidates), lockout-shadow,
  *  dew-point, pest-pattern, droop-split, stretch/light-compound and
- *  harvest-window rules; CONTRA + refinement-intersection fixes. */
-export const KNOWLEDGE_VERSION = "2.2"
+ *  harvest-window rules; CONTRA + refinement-intersection fixes.
+ *  2.2 → 2.3: longitudinal rules (episode status, intervention
+ *  follow-through, baseline-relative shift), recurring-excursion and
+ *  stage-transition rules; no new candidates or sources. */
+export const KNOWLEDGE_VERSION = "2.3"
 
 export { SOURCES } from "@/lib/terpbot-knowledge/sources"
 import { NUTRITION_CANDIDATES } from "@/lib/terpbot-knowledge/candidates-nutrition"

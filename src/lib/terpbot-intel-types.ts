@@ -2,9 +2,16 @@
 // Pure type/constant module: imported by the calc layer, the context
 // builder, the rule engine, and tests. No Prisma, no I/O.
 
-import type { MetricPoint, SeriesStats, Trend } from "@/lib/terpbot-intel-calc"
+import type {
+  BaselineTier,
+  ChangeResult,
+  MetricBaseline,
+  MetricPoint,
+  SeriesStats,
+  Trend,
+} from "@/lib/terpbot-intel-calc"
 
-export type { MetricPoint, SeriesStats, Trend }
+export type { BaselineTier, ChangeResult, MetricBaseline, MetricPoint, SeriesStats, Trend }
 
 // ── Measurements ────────────────────────────────────────────────────
 // Schema-backed metrics plus discriminating measurements the schema
@@ -203,6 +210,11 @@ export interface GrowContextView {
    *  boundary predates the fetched window */
   stageDays: number
   stageStartCensored: boolean
+  /** stage boundaries detected within the analysis window plus the
+   *  boundary into the current stage (censored when it predates the
+   *  window). Ordered by time. Diary-derived provenance — never a
+   *  user claim. */
+  stageTransitions: StageTransition[]
   /** number of updates in the analysis window */
   updateCount: number
   daysSinceUpdate: number | null
@@ -237,11 +249,121 @@ export interface GrowContextView {
    *  [] when no parseable symptom was reported. Observations only;
    *  the rule engine does the reasoning. */
   observations: StructuredObservation[]
+  /** per-metric personal baselines — logged provenance only, derived
+   *  on read. Detects change-vs-own-norm; never asserts correctness. */
+  baselines: Partial<Record<MetricId, MetricBaseline>>
+  /** grower resolution/progression claims (diary text + session),
+   *  canonical ids only — feeds episode derivation */
+  resolutions?: ResolutionClaim[]
+  /** grower-reported adjustments from the session — evaluated against
+   *  the series, never fed as measurements */
+  interventions?: InterventionRecord[]
+  /** derived per (symptom, location) episode status — computed at
+   *  evaluateContext time, never persisted */
+  episodes?: SymptomEpisode[]
+}
+
+/** A grower's claim that a symptom resolved/improved/worsened/stabilized —
+ *  never raw text; produced by the parser's negation/progression harvest. */
+export interface ResolutionClaim {
+  /** the symptom the claim refers to — undefined for unscoped claims
+   *  ("looking better") which apply to the most recent active episode */
+  symptom?: SymptomId
+  location?: LocationId
+  kind: "resolved" | "improving" | "stable" | "worsening"
+  /** epoch ms of the claim event */
+  t: number
+  source: "nl" | "diary-text"
+}
+
+export type EpisodeStatus = "active" | "stable" | "improving" | "resolved" | "recurred"
+
+export interface SymptomEpisode {
+  symptom: SymptomId
+  location?: LocationId
+  firstSeen: number
+  lastSeen: number
+  status: EpisodeStatus
+  /** epoch ms the status last changed */
+  statusAt: number
+  /** 1 on first occurrence; +1 per resolved→recurred cycle */
+  episodeCount: number
+  lastResolvedAt?: number
+}
+
+/** A grower-reported adjustment — structured intent, never raw text.
+ *  Persisted in session state; evaluated against later series points. */
+export interface InterventionRecord {
+  /** canonical intervention id from the vocab table ("RH_DOWN", …) */
+  type: string
+  /** epoch ms of the report */
+  at: number
+  /** resolved event time ("lowered rh yesterday") — same contract as
+   *  ReportedPoint.eventT */
+  eventT?: number
+  pastUnresolved?: boolean
+  /** intended direction of the adjustment */
+  direction?: "up" | "down"
+  /** the metric it targets when one exists */
+  targetMetric?: MetricId
+  /** claimed setpoint — NOT a reading; "lowered rh to 50" */
+  setpoint?: { value: number; unit?: string }
+  /** newest non-approximate series point ≤ eventT at capture time —
+   *  the honest "before"; absent when nothing was logged */
+  beforeReading?: { v: number; t: number }
 }
 
 export interface IntelSeries extends SeriesStats {
   points: MetricPoint[]
   trend: Trend
+  /** median(recent) − median(earlier), epsilon-gated — the grow's own
+   *  baseline-relative movement. Absent on hand-built series. */
+  change?: ChangeResult
+}
+
+// ── Grow timeline ───────────────────────────────────────────────────
+// Derived-on-read chronology — DiaryUpdate rows are editable, so the
+// timeline is rebuilt from source rows every time and never persisted.
+// Events carry references + canonical scalars only (no raw text).
+
+export type TimelineEventKind =
+  | "grow-start"
+  | "stage-change"
+  | "env-reading"
+  | "measurement"
+  | "feeding"
+  | "training"
+  | "symptom"
+  | "photo"
+  | "harvest"
+  | "completed"
+
+export interface GrowTimelineEvent {
+  /** deterministic id: "<kind>:<refId>" ("<kind>:diary:<diaryId>" for
+   *  diary-level events) — stable across rebuilds */
+  id: string
+  kind: TimelineEventKind
+  /** epoch ms — update createdAt / diary startDate / harvestedAt.
+   *  Never dayNumber/weekNumber (user annotations are untrusted). */
+  t: number
+  refId: string
+  refModel: "DiaryUpdate" | "GrowDiary"
+  /** canonical stage id the event occurred under */
+  stage?: string
+  /** canonical scalars only — metric ids/values, symptom ids, counts */
+  data?: Record<string, number | string | boolean>
+}
+
+/** A detected stage boundary. `censored` marks a transition whose exact
+ *  time predates the fetched window — the boundary is real but `t` is a
+ *  lower bound, not a fact. */
+export interface StageTransition {
+  from: string
+  to: string
+  /** epoch ms of the first update at the new stage (or the boundary
+   *  estimate for censored transitions) */
+  t: number
+  censored?: boolean
 }
 
 /** Rule-level signal ids — the shared underlying signal everything a
@@ -446,6 +568,68 @@ export interface SessionState {
    *  when no public diary supplies one — newest wins */
   stage?: string
   trail?: WhyTrail
+  /** grower-reported adjustments — bounded, canonical ids only */
+  interventions?: InterventionRecord[]
+  /** grower resolution/progression claims — bounded */
+  resolutions?: (Omit<ResolutionClaim, "source">)[]
+  /** compact snapshot of the last status render — the diff base for
+   *  /changes. Canonical ids + numbers + one timestamp only. */
+  snapshot?: SessionSnapshot
+}
+
+/** What /changes diffs against — written at each /checkin//status.
+ *  Bounded: latest-per-metric + symptom ids + stage + counts. */
+export interface SessionSnapshot {
+  at: number
+  stage: string
+  updateCount: number
+  latest: Partial<Record<MetricId, number>>
+  /** distinct active symptom ids at snapshot time */
+  symptoms: SymptomId[]
+  /** top candidate at snapshot time, if any */
+  topCandidate?: { id: string; state: FindingState }
+}
+
+// ── Next-action engine ──────────────────────────────────────────────
+
+export type ActionClass =
+  | "MEASURE" // instrument reading that reduces uncertainty
+  | "OBSERVE" // visual check or stage claim
+  | "COMPARE" // resolve a CONFLICTING pair / provenance disagreement
+  | "WAIT" // evidence says do nothing — time is the discriminator
+  | "VERIFY" // re-measure stale/conflicting data
+  | "ADJUST" // whitelisted low-risk intervention at strong evidence
+  | "LOG" // diary upkeep — coverage/freshness, not a diagnosis
+
+export type RiskTier = "none" | "low" | "medium" | "never"
+
+export interface ActionRequest {
+  actionClass: ActionClass
+  /** MEASURE/OBSERVE/COMPARE/VERIFY target */
+  stepId?: NextStepId
+  /** ADJUST — verbatim from CandidateDef.recommendedActions */
+  actionText?: string
+  /** every candidate this step discriminates/unblocks */
+  candidateIds: CandidateId[]
+  /** rule ids of contributing standalone findings */
+  findingIds?: string[]
+  /** render-safe reason line */
+  reason: string
+  /** live rivals this step separates */
+  discriminates: CandidateId[]
+  /** state of the best candidate this action serves */
+  confidence: FindingState
+  riskTier: RiskTier
+  /** explainable factor breakdown — every contributor named, never an
+   *  opaque score */
+  factors: {
+    stateWeight: number
+    unblocksRequired: boolean
+    resolvesConflict: boolean
+    refreshesStale: boolean
+    evidenceHints: number
+    priorityIndex: number
+  }
 }
 
 /** The persisted explanation — enough to answer "why did you say
@@ -497,4 +681,15 @@ export interface WhyTrail {
   }[]
   findings: { title: string; state: FindingState; text: string }[]
   next?: MeasurementHint
+  /** longitudinal state at trail time — canonical ids + scalars only */
+  longitudinal?: {
+    /** metric shifts vs the grower's own baseline (bounded: 3) */
+    changes: { metric: MetricId; direction: "up" | "down"; delta: number; durationDays: number | null }[]
+    /** non-active episode states (bounded: 3) — resolved/improving/recurred */
+    episodes: { symptom: SymptomId; status: EpisodeStatus; lastSeenDaysAgo: number }[]
+    /** interventions awaiting an after-reading (bounded: 2) */
+    pendingInterventions: { type: string; targetMetric?: MetricId; daysAgo: number }[]
+    /** the chosen next action — class + target, matching /check */
+    action?: { class: ActionClass; stepId?: NextStepId; reason: string }
+  }
 }

@@ -33,15 +33,18 @@
 // INSUFFICIENT. CONFLICTING preserves BOTH sides plus a resolving
 // measurement — evidence is never hidden to produce a cleaner answer.
 
-import { countExcursions, dewPointFromTempRh } from "@/lib/terpbot-intel-calc"
+import { countExcursions, dewPointFromTempRh, excursionEpisodes } from "@/lib/terpbot-intel-calc"
+import { episodesFromObservations } from "@/lib/terpbot-intel-episodes"
 import { feedsForSymptom } from "@/lib/terpbot-nl-parse"
 import { CANDIDATES, SOURCES } from "@/lib/terpbot-intel-knowledge"
 import {
   LOCATION_LABELS,
   SYMPTOM_LABELS,
 } from "@/lib/terpbot-nl-vocab"
-import { SIGNAL_METRICS, STALE_DAYS } from "@/lib/terpbot-intel-types"
+import { METRIC_EPSILON, SIGNAL_METRICS, STALE_DAYS } from "@/lib/terpbot-intel-types"
 import type {
+  ActionClass,
+  ActionRequest,
   CandidateDef,
   CandidateResult,
   Diagnosis,
@@ -2482,7 +2485,295 @@ export const INTEL_RULES: IntelRule[] = [
     ],
     sourceIds: [],
   },
+
+  // ── Longitudinal rules (Phase H) ─────────────────────────────────
+  // Episodes, interventions, baselines — temporal bookkeeping over the
+  // grower's OWN history. These rules never assert horticultural truth
+  // from history alone: a resolved/improving claim COUNTER-WEIGHS the
+  // symptom's standing evidence, a recurrence RE-RAISES it, an
+  // intervention is evaluated against the series honestly, and a
+  // personal-baseline deviation is info-only (their norm ≠ correct).
+
+  {
+    id: "longitudinal.episode",
+    domain: "data",
+    kind: "observation",
+    title: "Symptom episode status",
+    applies: (ctx) => (ctx.episodes?.length ?? 0) > 0,
+    evaluate: (ctx) => {
+      const ev: IntelEvidence[] = []
+      for (const ep of ctx.episodes ?? []) {
+        const label = SYMPTOM_LABELS[ep.symptom] ?? ep.symptom.toLowerCase()
+        const loc = ep.location ? ` on ${LOCATION_LABELS[ep.location]}` : ""
+        const signal = `symptom:${ep.symptom}`
+        const feeds = feedsForSymptom(ep.symptom, ep.location, ctx.diary.stage).feeds
+        const quietDays = Math.floor((ctx.now - ep.lastSeen) / 86400000)
+
+        if (ep.status === "resolved") {
+          for (const cid of feeds) {
+            ev.push({
+              direction: "against",
+              strength: "moderate",
+              candidate: cid,
+              signal,
+              text: `You reported the ${label}${loc} resolved — the earlier reports shouldn't still weigh for ${CANDIDATES[cid]?.name.toLowerCase() ?? cid}.`,
+            })
+          }
+          continue
+        }
+        if (ep.status === "improving") {
+          for (const cid of feeds) {
+            ev.push({
+              direction: "against",
+              strength: "weak",
+              candidate: cid,
+              signal,
+              text: `Reported ${label}${loc} improving — still counted, but the trajectory argues against ${CANDIDATES[cid]?.name.toLowerCase() ?? cid} progressing.`,
+            })
+          }
+          continue
+        }
+        if (ep.status === "recurred") {
+          for (const cid of feeds) {
+            ev.push({
+              direction: "for",
+              strength: "moderate",
+              candidate: cid,
+              signal,
+              text: `${label}${loc} returned after a reported resolution — a recurring pattern, not a first occurrence.`,
+            })
+          }
+          ev.push({
+            direction: "info",
+            strength: "moderate",
+            signal,
+            text: `Recurring: ${label}${loc} resolved then came back (episode ${ep.episodeCount}).`,
+          })
+          continue
+        }
+        if (ep.status === "stable") {
+          ev.push({
+            direction: "info",
+            strength: "weak",
+            signal,
+            text: `${label}${loc} reported stable — still present, not progressing.`,
+          })
+          continue
+        }
+        // active/recurred episodes with no fresh reports are "quiet" —
+        // unresolved, never silently closed
+        if (quietDays >= 5) {
+          ev.push({
+            direction: "info",
+            strength: "weak",
+            signal,
+            text: `No new ${label}${loc} reports in ${quietDays}d — unresolved; silence isn't resolution.`,
+          })
+        }
+      }
+      return ev
+    },
+    sourceIds: [],
+  },
+  {
+    id: "longitudinal.intervention",
+    domain: "data",
+    kind: "observation",
+    title: "Intervention follow-through",
+    applies: (ctx) => (ctx.interventions?.length ?? 0) > 0,
+    evaluate: (ctx) => {
+      const ev: IntelEvidence[] = []
+      for (const iv of ctx.interventions ?? []) {
+        const key = iv.targetMetric ? SCHEMA_SERIES[iv.targetMetric] : undefined
+        const metricLabel = iv.targetMetric ? MEASUREMENT_INFO[iv.targetMetric]?.label ?? iv.targetMetric : null
+        const signal = iv.targetMetric ? METRIC_SIGNAL[iv.targetMetric] : "data"
+        const at = iv.eventT ?? iv.at
+        const daysAgo = Math.max(0, Math.floor((ctx.now - at) / 86400000))
+
+        if (!key || !iv.targetMetric) {
+          ev.push({
+            direction: "info",
+            strength: "weak",
+            signal,
+            text: `You reported an adjustment (${daysAgo === 0 ? "today" : `${daysAgo}d ago`}) — I'll watch the next readings for movement.`,
+          })
+          continue
+        }
+        const series = ctx.series[key]
+        const after = series.points.filter((p) => !p.tApproximate && p.t > at)
+        const before = iv.beforeReading
+        const eps = METRIC_EPSILON[iv.targetMetric] ?? 1
+
+        if (!before) {
+          ev.push({
+            direction: "info",
+            strength: "weak",
+            signal,
+            text: `No ${metricLabel} reading before your reported change — nothing to compare against.`,
+            measurement: hint(iv.targetMetric),
+          })
+          continue
+        }
+        if (!after.length) {
+          ev.push({
+            direction: "info",
+            strength: "weak",
+            signal,
+            text: `${metricLabel} hasn't been logged since the reported change (${daysAgo === 0 ? "today" : `${daysAgo}d ago`}) — a new reading shows whether it moved.`,
+            measurement: hint(iv.targetMetric),
+          })
+          continue
+        }
+        const latest = after[after.length - 1]
+        const delta = Math.round((latest.v - before.v) * 100) / 100
+        const moved = Math.abs(delta) >= eps
+        const intended =
+          !iv.direction ||
+          (iv.direction === "down" && delta < 0) ||
+          (iv.direction === "up" && delta > 0)
+        ev.push({
+          direction: "info",
+          strength: moved && intended ? "moderate" : "weak",
+          signal,
+          text: moved
+            ? intended
+              ? `${metricLabel} moved ${before.v} → ${latest.v} after your reported change — timing is consistent, not proof it caused it.`
+              : `${metricLabel} moved ${before.v} → ${latest.v} — opposite the intended direction of your reported change.`
+            : `${metricLabel} hasn't measurably moved since your reported change (${before.v} → ${latest.v}).`,
+        })
+      }
+      return ev
+    },
+    sourceIds: [],
+  },
+  {
+    // Personal-baseline deviation — info ONLY. "Above your usual" is a
+    // change statement, never a correctness claim: their norm isn't
+    // horticulturally endorsed (Phase H spec §29).
+    id: "longitudinal.baseline",
+    domain: "data",
+    kind: "observation",
+    title: "Shift from your recent norm",
+    applies: (ctx) =>
+      BASELINE_SERIES.some(
+        ([metric, key]) =>
+          ctx.baselines[metric]?.tier !== undefined &&
+          ctx.baselines[metric]!.tier !== "insufficient" &&
+          (ctx.series[key].change?.direction === "up" || ctx.series[key].change?.direction === "down")
+      ),
+    evaluate: (ctx) => {
+      const ev: IntelEvidence[] = []
+      for (const [metric, key] of BASELINE_SERIES) {
+        const b = ctx.baselines[metric]
+        const ch = ctx.series[key].change
+        if (!b || b.tier === "insufficient" || !ch || (ch.direction !== "up" && ch.direction !== "down")) continue
+        const label = MEASUREMENT_INFO[metric]?.label ?? metric
+        const band = b.lo != null && b.hi != null ? `usual ${b.lo}–${b.hi}` : `usual ≈${b.median}`
+        ev.push({
+          direction: "info",
+          strength: b.tier === "established" ? "moderate" : "weak",
+          signal: METRIC_SIGNAL[metric],
+          text: `${label} is running ${ch.direction === "up" ? "above" : "below"} your ${band} (${b.tier} baseline, ${b.n} readings) — a change from your norm, not a verdict.`,
+        })
+      }
+      return ev
+    },
+    sourceIds: [],
+  },
+  {
+    // Recurring out-of-band RH — episode segmentation, not a single
+    // spike. ≥2 closed episodes = a recurring pattern; an open episode
+    // after a closed one = "it's back".
+    id: "env.rh-episodes",
+    domain: "environment",
+    signal: "humidity",
+    kind: "risk",
+    title: "Recurring humidity excursions",
+    applies: (ctx) => ctx.series.humidity.n >= 4,
+    evaluate: (ctx) => {
+      const band = RH_BANDS[ctx.diary.stage]
+      if (!band) return []
+      const eps = excursionEpisodes(ctx.series.humidity.points, -Infinity, band[1])
+      if (eps.length < 2) return []
+      const open = eps[eps.length - 1].end == null
+      const spanDays = Math.round((eps[eps.length - 1].start - eps[0].start) / 86400000)
+      const ev: IntelEvidence[] = [
+        {
+          direction: "for",
+          strength: "moderate",
+          candidate: "humidity_high",
+          signal: "humidity",
+          text: `RH above ${band[1]}% has happened in ${eps.length} separate episodes over ~${spanDays}d — a recurring pattern, not one spike.`,
+        },
+      ]
+      if (ctx.diary.stage === "FLOWER") {
+        ev.push({
+          direction: "risk",
+          strength: "weak",
+          candidate: "bud_rot",
+          signal: "humidity",
+          text: `Repeated elevated-RH episodes in flower keep the bud-rot window open${open ? " — and it's elevated right now" : ""}.`,
+          measurement: hint("inspect:bud-interior"),
+        })
+      }
+      if (open) {
+        ev.push({
+          direction: "info",
+          strength: "weak",
+          signal: "humidity",
+          text: "The latest readings are still above the band — the current episode hasn't closed.",
+        })
+      }
+      return ev
+    },
+    sourceIds: ["punja-2022-botrytis", "bc-cannabis-diseases"],
+  },
+  {
+    // Recent stage transition — ranges changed; say so once.
+    id: "stage.transition",
+    domain: "stage",
+    signal: "stage",
+    kind: "observation",
+    title: "Stage changed",
+    applies: (ctx) =>
+      ctx.stageTransitions.length > 0 &&
+      (ctx.now - ctx.stageTransitions[ctx.stageTransitions.length - 1].t) / 86400000 <= 3,
+    evaluate: (ctx) => {
+      const tr = ctx.stageTransitions[ctx.stageTransitions.length - 1]
+      return [
+        {
+          direction: "info",
+          strength: "weak",
+          signal: "stage",
+          text: `Stage moved ${tr.from.toLowerCase()} → ${tr.to.toLowerCase()}${tr.censored ? " (boundary predates the fetched window)" : ` ${Math.max(0, Math.floor((ctx.now - tr.t) / 86400000))}d ago`} — targets and tolerances shift with it.`,
+        },
+      ]
+    },
+    sourceIds: ["terptalk-stage-tips"],
+  },
 ]
+
+// series key per baseline-eligible metric — baselines exist only where
+// a logged series exists
+const BASELINE_SERIES: [MetricId, keyof GrowContextView["series"]][] = [
+  ["temperature", "temperature"],
+  ["humidity", "humidity"],
+  ["ph", "ph"],
+  ["ec", "ec"],
+  ["runoffPh", "runoffPh"],
+  ["runoffEc", "runoffEc"],
+]
+
+const METRIC_SIGNAL: Partial<Record<MetricId, SignalId>> = {
+  temperature: "temperature",
+  humidity: "humidity",
+  ph: "ph",
+  ec: "ec",
+  height: "height",
+  runoffPh: "runoff",
+  runoffEc: "runoff",
+  vpd: "env:temp-rh",
+}
 
 // ── Assessment ──────────────────────────────────────────────────────
 
@@ -2605,10 +2896,17 @@ export function evaluateContext(ctx: GrowContextView): Diagnosis {
   const findings: Finding[] = []
   const byCandidate = new Map<string, { ruleIds: Set<string>; sourceIds: Set<string>; evidence: IntelEvidence[] }>()
 
+  // Episodes derive at eval time from observations + resolution claims —
+  // never persisted (they'd go stale under edited diary updates).
+  const evalCtx: GrowContextView = {
+    ...ctx,
+    episodes: episodesFromObservations(ctx.observations, ctx.resolutions ?? []),
+  }
+
   for (const rule of INTEL_RULES) {
-    if (!rule.applies(ctx)) continue
+    if (!rule.applies(evalCtx)) continue
     const evidence = rule
-      .evaluate(ctx)
+      .evaluate(evalCtx)
       .filter((e) => e.text.trim().length > 0)
       // Evidence without its own signal inherits the rule's — rules
       // that iterate observations stamp per-symptom signals themselves.
@@ -2650,7 +2948,7 @@ export function evaluateContext(ctx: GrowContextView): Diagnosis {
   for (const [id, bucket] of byCandidate) {
     const def = CANDIDATES[id]
     if (!def) continue // orphan candidateId — validateRuleEmissions catches this
-    const requiredMissing = def.requiredInputs.filter((m) => !measurementAvailable(ctx, m))
+    const requiredMissing = def.requiredInputs.filter((m) => !measurementAvailable(evalCtx, m))
     const scored = assessCandidate(def, bucket.evidence)
     // Missing required data caps STRONG/CONFIRMED at POSSIBLE — a
     // reported symptom can surface a candidate, never assert it.
@@ -2669,7 +2967,7 @@ export function evaluateContext(ctx: GrowContextView): Diagnosis {
       (state === "strong" || state === "confirmed") &&
       supportSignals.length > 0 &&
       supportSignals.every((s) => {
-        const age = signalAgeDays(ctx, s.signal)
+        const age = signalAgeDays(evalCtx, s.signal)
         return age != null && age >= STALE_DAYS
       })
     if (stale) {
@@ -2677,7 +2975,7 @@ export function evaluateContext(ctx: GrowContextView): Diagnosis {
       // Render the real age of the stalest supporting signal — daysSinceUpdate
       // can be null when all data came from chat reports.
       const displayAge = Math.round(
-        Math.max(...supportSignals.map((s) => signalAgeDays(ctx, s.signal) ?? 0))
+        Math.max(...supportSignals.map((s) => signalAgeDays(evalCtx, s.signal) ?? 0))
       )
       bucket.evidence.push({
         direction: "info",
@@ -2710,7 +3008,7 @@ export function evaluateContext(ctx: GrowContextView): Diagnosis {
       info: bucket.evidence.filter((e) => e.direction === "info"),
       ruleIds: [...bucket.ruleIds].sort(),
       requiredMissing,
-      nextMeasurement: candidateNextMeasurement(def, ctx),
+      nextMeasurement: candidateNextMeasurement(def, evalCtx),
       sourceIds: [...bucket.sourceIds].sort(),
       ...(stale ? { stale: true } : {}),
     })
@@ -2786,6 +3084,13 @@ function candidateNextMeasurement(
 /** The single most uncertainty-reducing measurement across the whole
  *  diagnosis. Documented deterministic ranking, not Bayesian gain. */
 export function nextUsefulMeasurement(ctx: GrowContextView, diagnosis: Diagnosis): MeasurementHint | null {
+  const best = scoredSteps(ctx, diagnosis)[0]
+  return best ? hint(best[0]) : null
+}
+
+/** Every recommendable step with its deterministic score, best first.
+ *  Total order: score desc → MEASUREMENT_PRIORITY → id. */
+function scoredSteps(ctx: GrowContextView, diagnosis: Diagnosis): [NextStepId, number][] {
   const scores = new Map<NextStepId, number>()
   const add = (m: NextStepId | undefined, w: number) => {
     if (!m || nextStepSatisfied(ctx, m)) return
@@ -2839,10 +3144,170 @@ export function nextUsefulMeasurement(ctx: GrowContextView, diagnosis: Diagnosis
     for (const e of f.evidence) bumpStale(e.measurement?.id, w)
   }
 
-  const best = [...scores.entries()].sort(
+  return [...scores.entries()].sort(
     (a, b) => b[1] - a[1] || priorityOf(a[0]) - priorityOf(b[0]) || a[0].localeCompare(b[0])
-  )[0]
-  return best ? hint(best[0]) : null
+  )
+}
+
+// ── Action engine (Phase H4) ────────────────────────────────────────
+// Classifies the ranked steps into explicit action classes. The list is
+// what "what's the single most useful thing to do next" draws from.
+//
+// Class rules:
+//   COMPARE — the step discriminates a CONFLICTING candidate (a live
+//             dispute it can resolve)
+//   VERIFY  — the target metric already has data but it's stale —
+//             re-measuring tests whether the old reading still holds
+//   MEASURE — a fresh instrument reading that reduces uncertainty
+//   OBSERVE — a visual inspection ("inspect:*")
+//   ADJUST  — emitted ONLY at STRONG with zero opposing evidence on a
+//             non-urgent candidate; the text is verbatim from the
+//             candidate's author-vetted recommendedActions. Never at
+//             POSSIBLE — measurement beats adjustment under uncertainty.
+//   WAIT    — a recent intervention hasn't had a follow-up reading yet;
+//             time is the discriminator
+//   LOG     — sparse logging is itself the limiting factor
+
+export function nextActions(ctx: GrowContextView, diagnosis: Diagnosis): ActionRequest[] {
+  const actions: ActionRequest[] = []
+
+  // step-classified actions — top 3 scored steps
+  for (const [id, score] of scoredSteps(ctx, diagnosis).slice(0, 3)) {
+    const isInspect = id.startsWith("inspect:")
+    const stale =
+      !isInspect &&
+      measurementAvailable(ctx, id as MetricId) &&
+      (ctx.freshness[id as MetricId] ?? 0) >= STALE_DAYS
+    const serves = diagnosis.candidates.filter((c) => {
+      const def = CANDIDATES[c.id]
+      if (!def) return false
+      return (
+        def.discriminatingInputs.includes(id) ||
+        def.requiredInputs.includes(id as MetricId) ||
+        [...c.supporting, ...c.opposing, ...c.info].some((e) => e.measurement?.id === id)
+      )
+    })
+    const conflicting = serves.filter((c) => c.state === "conflicting").map((c) => c.id)
+    const cls: ActionClass = isInspect
+      ? "OBSERVE"
+      : conflicting.length
+        ? "COMPARE"
+        : stale
+          ? "VERIFY"
+          : "MEASURE"
+    const h = hint(id)
+    actions.push({
+      actionClass: cls,
+      stepId: id,
+      candidateIds: serves.map((c) => c.id),
+      findingIds: diagnosis.findings
+        .filter((f) => f.nextMeasurement?.id === id || f.evidence.some((e) => e.measurement?.id === id))
+        .map((f) => f.ruleId),
+      reason: h.why,
+      discriminates: conflicting,
+      confidence: serves[0]?.state ?? "insufficient",
+      riskTier: "none",
+      factors: {
+        stateWeight: score,
+        unblocksRequired: serves.some((c) => c.requiredMissing.includes(id as MetricId)),
+        resolvesConflict: conflicting.length > 0,
+        refreshesStale: stale,
+        evidenceHints: serves.length,
+        priorityIndex: priorityOf(id),
+      },
+    })
+  }
+
+  // ADJUST — gated: STRONG, no opposing evidence, non-urgent, authored
+  // action exists. One at most, always below measurement classes.
+  const top = diagnosis.candidates[0]
+  if (top && top.state === "strong" && top.againstScore === 0) {
+    const def = CANDIDATES[top.id]
+    const action = def?.recommendedActions[0]
+    if (def && action && def.severity !== "urgent") {
+      actions.push({
+        actionClass: "ADJUST",
+        actionText: action,
+        candidateIds: [top.id],
+        reason: `${def.name} reached STRONG with no opposing evidence — the listed adjustment is the low-risk next step.`,
+        discriminates: [],
+        confidence: "strong",
+        riskTier: "low",
+        factors: {
+          stateWeight: STATE_WEIGHT.strong,
+          unblocksRequired: false,
+          resolvesConflict: false,
+          refreshesStale: false,
+          evidenceHints: 0,
+          priorityIndex: MEASUREMENT_PRIORITY.length,
+        },
+      })
+    }
+  }
+
+  // WAIT — a reported intervention with no after-reading is waiting on
+  // time, not on the grower measuring more right now
+  const pending = (ctx.interventions ?? []).filter((iv) => {
+    const key = iv.targetMetric ? SCHEMA_SERIES[iv.targetMetric] : undefined
+    if (!key) return false
+    const at = iv.eventT ?? iv.at
+    return (
+      (ctx.now - at) / 86400000 <= 7 &&
+      !ctx.series[key].points.some((p) => !p.tApproximate && p.t > at)
+    )
+  })
+  if (pending.length) {
+    const iv = pending[pending.length - 1]
+    const label = iv.targetMetric ? MEASUREMENT_INFO[iv.targetMetric]?.label ?? iv.targetMetric : "the affected readings"
+    actions.push({
+      actionClass: "WAIT",
+      candidateIds: [],
+      reason: `You reported an adjustment ${Math.floor((ctx.now - (iv.eventT ?? iv.at)) / 86400000)}d ago — ${label} hasn't been logged since. Give it ~2 days, then re-measure.`,
+      discriminates: [],
+      confidence: "possible",
+      riskTier: "none",
+      factors: {
+        stateWeight: 0,
+        unblocksRequired: false,
+        resolvesConflict: false,
+        refreshesStale: false,
+        evidenceHints: 0,
+        priorityIndex: MEASUREMENT_PRIORITY.length,
+      },
+    })
+  }
+
+  // LOG — sparse data is itself the bottleneck
+  if (ctx.updateCount > 0 && (ctx.envCoverage < 0.5 || (ctx.daysSinceUpdate ?? 0) >= 4)) {
+    actions.push({
+      actionClass: "LOG",
+      candidateIds: [],
+      reason:
+        ctx.envCoverage < 0.5
+          ? `Only ${Math.round(ctx.envCoverage * 100)}% of recent updates logged environment data — a temp/RH/pH/EC entry unlocks the most reasoning.`
+          : `Last update was ${ctx.daysSinceUpdate}d ago — a fresh update keeps the picture current.`,
+      discriminates: [],
+      confidence: "insufficient",
+      riskTier: "none",
+      factors: {
+        stateWeight: 0,
+        unblocksRequired: false,
+        resolvesConflict: false,
+        refreshesStale: false,
+        evidenceHints: 0,
+        priorityIndex: MEASUREMENT_PRIORITY.length,
+      },
+    })
+  }
+
+  // WAIT outranks ADJUST — never stack a second adjustment on top of an
+  // intervention that hasn't had an after-reading yet.
+  const CLASS_RANK: Record<ActionClass, number> = {
+    COMPARE: 0, VERIFY: 1, MEASURE: 2, OBSERVE: 3, WAIT: 4, ADJUST: 5, LOG: 6,
+  }
+  return actions
+    .sort((a, b) => CLASS_RANK[a.actionClass] - CLASS_RANK[b.actionClass])
+    .slice(0, 4)
 }
 
 // ── Rendering ───────────────────────────────────────────────────────

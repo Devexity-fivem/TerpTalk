@@ -11,6 +11,8 @@ import { prisma } from "@/lib/prisma"
 import { publicDiaryWhere } from "@/lib/diary-visibility"
 import { diaryDay, diaryWeek } from "@/lib/diary-weeks"
 import {
+  buildMetricBaseline,
+  detectChange,
   detectTrend,
   seriesStats,
   vpdDivergence,
@@ -21,11 +23,14 @@ import { METRIC_EPSILON } from "@/lib/terpbot-intel-types"
 import type {
   GrowContextView,
   IntelSeries,
+  MetricBaseline,
   MetricId,
+  ResolutionClaim,
   StructuredObservation,
 } from "@/lib/terpbot-intel-types"
 import { parseGrowText } from "@/lib/terpbot-nl-parse"
 import { freshnessOf } from "@/lib/terpbot-intel-merge"
+import { stageTransitions } from "@/lib/terpbot-intel-timeline"
 
 // Last-12-updates window: enough for trend detection (min 3 points) and
 // recent-vs-baseline comparisons at typical weekly-ish cadence, while
@@ -51,7 +56,7 @@ export const OBSERVATION_MAX_AGE_DAYS = 21
 
 type SeriesField = "temperature" | "humidity" | "vpd" | "ph" | "ec" | "heightCm"
 
-function buildSeries(rows: UpdateRow[], field: SeriesField, epsKey: string): IntelSeries {
+function buildSeries(rows: UpdateRow[], field: SeriesField, epsKey: string, now: number): IntelSeries {
   const points: MetricPoint[] = []
   for (const u of rows) {
     const v = u[field]
@@ -60,7 +65,13 @@ function buildSeries(rows: UpdateRow[], field: SeriesField, epsKey: string): Int
   // Stable sort: rows already arrive ordered by (createdAt, id), so
   // equal timestamps keep their DB order — output is deterministic.
   points.sort((a, b) => a.t - b.t)
-  return { ...seriesStats(points), points, trend: detectTrend(points, METRIC_EPSILON[epsKey] ?? 1) }
+  const eps = METRIC_EPSILON[epsKey] ?? 1
+  return {
+    ...seriesStats(points),
+    points,
+    trend: detectTrend(points, eps),
+    change: detectChange(points, eps, { now }),
+  }
 }
 
 function emptySeries(): IntelSeries {
@@ -96,6 +107,7 @@ export function emptyContext(now: number, stage = "UNKNOWN"): GrowContextView {
     week: 1,
     stageDays: 0,
     stageStartCensored: true,
+    stageTransitions: [],
     updateCount: 0,
     daysSinceUpdate: null,
     envCoverage: 0,
@@ -114,6 +126,7 @@ export function emptyContext(now: number, stage = "UNKNOWN"): GrowContextView {
     missing: ["temperature", "humidity", "ph", "ec", "height", "vpd"],
     freshness: {},
     observations: [],
+    baselines: {},
   }
 }
 
@@ -206,7 +219,7 @@ export async function buildGrowContext(
     prisma.diaryUpdate.findFirst({
       where: { diaryId: diary.id, stage: { not: diary.stage } },
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-      select: { createdAt: true },
+      select: { createdAt: true, stage: true },
     }),
   ])
 
@@ -224,20 +237,27 @@ export async function buildGrowContext(
     content: u.content ? parseGrowText(u.content) : null,
   }))
 
+  const mkSeries = (points: MetricPoint[], eps: number): IntelSeries => ({
+    ...seriesStats(points),
+    points,
+    trend: detectTrend(points, eps),
+    change: detectChange(points, eps, { now }),
+  })
+
   const series = {
-    temperature: buildSeries(rows, "temperature", "temperature"),
-    humidity: buildSeries(rows, "humidity", "humidity"),
-    ph: buildSeries(rows, "ph", "ph"),
-    ec: buildSeries(rows, "ec", "ec"),
-    height: buildSeries(rows, "heightCm", "height"),
-    vpdEntered: buildSeries(rows, "vpd", "vpd"),
+    temperature: buildSeries(rows, "temperature", "temperature", now),
+    humidity: buildSeries(rows, "humidity", "humidity", now),
+    ph: buildSeries(rows, "ph", "ph", now),
+    ec: buildSeries(rows, "ec", "ec", now),
+    height: buildSeries(rows, "heightCm", "height", now),
+    vpdEntered: buildSeries(rows, "vpd", "vpd", now),
     vpdComputed: (() => {
       const points: MetricPoint[] = []
       for (const u of rows) {
         const r = vpdFromTempRh(u.temperature, u.humidity)
         if (r.valid && r.value != null) points.push({ t: u.createdAt.getTime(), v: r.value })
       }
-      return { ...seriesStats(points), points, trend: detectTrend(points, METRIC_EPSILON.vpd) }
+      return mkSeries(points, METRIC_EPSILON.vpd)
     })(),
     // Runoff metrics have no schema columns — they come out of `feeding`
     // (and `content`) free text via the grow parser. Convention: runoff
@@ -250,7 +270,7 @@ export async function buildGrowContext(
         const m = runoffMeasurement([parsedRows[i].feeding, parsedRows[i].content], "runoffPh")
         if (m != null) points.push({ t: u.createdAt.getTime(), v: m })
       })
-      return { ...seriesStats(points), points, trend: detectTrend(points, METRIC_EPSILON.ph) }
+      return mkSeries(points, METRIC_EPSILON.ph)
     })(),
     runoffEc: (() => {
       const points: MetricPoint[] = []
@@ -258,8 +278,21 @@ export async function buildGrowContext(
         const m = runoffMeasurement([parsedRows[i].feeding, parsedRows[i].content], "runoffEc")
         if (m != null) points.push({ t: u.createdAt.getTime(), v: m })
       })
-      return { ...seriesStats(points), points, trend: detectTrend(points, METRIC_EPSILON.ec) }
+      return mkSeries(points, METRIC_EPSILON.ec)
     })(),
+  }
+
+  // Personal baselines — logged points only (session reports never
+  // build "normal"). Detects change vs the grow's own usual range;
+  // never asserts the usual range is correct.
+  const baselines: Partial<Record<MetricId, MetricBaseline>> = {}
+  for (const [key, metric] of [
+    ["temperature", "temperature"], ["humidity", "humidity"], ["ph", "ph"],
+    ["ec", "ec"], ["height", "height"], ["vpdComputed", "vpd"],
+    ["runoffPh", "runoffPh"], ["runoffEc", "runoffEc"],
+  ] as [keyof typeof series, MetricId][]) {
+    const b = buildMetricBaseline(series[key].points, now)
+    if (b.tier !== "insufficient") baselines[metric] = b
   }
 
   // Entered-vs-computed divergence on the newest update carrying both.
@@ -293,6 +326,7 @@ export async function buildGrowContext(
   // normalized ids + refIds, never the raw text.
   const obsMaxAge = OBSERVATION_MAX_AGE_DAYS * 86400000
   const observations: StructuredObservation[] = []
+  const resolutions: ResolutionClaim[] = []
   for (const [i, u] of rows.entries()) {
     if (now - u.createdAt.getTime() > obsMaxAge) continue
     const parsed = parsedRows[i].content
@@ -310,11 +344,24 @@ export async function buildGrowContext(
         refined: o.refined,
       })
     }
+    // resolution/progression claims in diary text — same evidence
+    // window as observations
+    for (const r of parsed.resolutions) {
+      resolutions.push({
+        symptom: r.symptom,
+        location: r.location,
+        kind: r.kind,
+        t: u.createdAt.getTime(),
+        source: "diary-text",
+      })
+    }
   }
 
   const stageDays = prevStage
     ? Math.max(0, Math.floor((now - prevStage.createdAt.getTime()) / 86400000))
     : Math.max(0, Math.floor((now - (rows[0]?.createdAt.getTime() ?? diary.startDate.getTime())) / 86400000))
+
+  const transitions = stageTransitions(rows, diary.stage, prevStage)
 
   return {
     scope: opts.scope,
@@ -341,6 +388,7 @@ export async function buildGrowContext(
     week: diaryWeek(diary.startDate, new Date(now)),
     stageDays,
     stageStartCensored: !prevStage,
+    stageTransitions: transitions,
     updateCount: rows.length,
     daysSinceUpdate: latest ? Math.floor((now - latest.createdAt.getTime()) / 86400000) : null,
     envCoverage,
@@ -349,5 +397,7 @@ export async function buildGrowContext(
     missing,
     freshness: freshnessOf(series, now),
     observations,
+    baselines,
+    resolutions,
   }
 }

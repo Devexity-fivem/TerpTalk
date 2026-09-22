@@ -8,12 +8,15 @@ import { KNOWLEDGE_VERSION, SOURCES } from "@/lib/terpbot-intel-knowledge"
 import { SYMPTOM_LABELS } from "@/lib/terpbot-nl-vocab"
 import {
   MEASUREMENT_INFO,
+  nextActions,
   signalAgeDays,
 } from "@/lib/terpbot-intel"
+import { episodesFromObservations } from "@/lib/terpbot-intel-episodes"
 import type {
   CandidateResult,
   Diagnosis,
   GrowContextView,
+  MetricId,
   WhyTrail,
 } from "@/lib/terpbot-intel-types"
 
@@ -45,6 +48,17 @@ const SIGNAL_CLASS: Record<string, "observed" | "derived" | "inferred"> = {
   "env:temp-rh": "derived",
   "chem:ph-ec": "derived",
   data: "inferred",
+}
+
+const SERIES_OF: Partial<Record<MetricId, keyof GrowContextView["series"]>> = {
+  temperature: "temperature",
+  humidity: "humidity",
+  ph: "ph",
+  ec: "ec",
+  height: "height",
+  vpd: "vpdEntered",
+  runoffPh: "runoffPh",
+  runoffEc: "runoffEc",
 }
 
 function signalClass(signal: string): "observed" | "derived" | "inferred" {
@@ -130,6 +144,74 @@ export function buildWhyTrail(
         text: f.evidence[0]?.text ?? f.title,
       })),
     next: next ?? diagnosis.candidates.find((c) => c.nextMeasurement)?.nextMeasurement,
+    longitudinal: buildLongitudinal(ctx, diagnosis),
+  }
+}
+
+/** Bounded longitudinal slice for /why — changes vs own baseline,
+ *  episode states, pending interventions, the chosen action. Canonical
+ *  ids + scalars only; no diary ids, no raw text. */
+function buildLongitudinal(
+  ctx: GrowContextView,
+  diagnosis: Diagnosis
+): NonNullable<WhyTrail["longitudinal"]> | undefined {
+  const changes: NonNullable<WhyTrail["longitudinal"]>["changes"] = []
+  const pairs: [MetricId, keyof GrowContextView["series"]][] = [
+    ["temperature", "temperature"],
+    ["humidity", "humidity"],
+    ["ph", "ph"],
+    ["ec", "ec"],
+    ["runoffPh", "runoffPh"],
+    ["runoffEc", "runoffEc"],
+  ]
+  for (const [metric, key] of pairs) {
+    const ch = ctx.series[key].change
+    if (!ch || (ch.direction !== "up" && ch.direction !== "down") || ch.vsBaselineDelta == null) continue
+    changes.push({
+      metric,
+      direction: ch.direction,
+      delta: ch.vsBaselineDelta,
+      durationDays: ch.durationDays,
+    })
+  }
+  changes.sort((a, b) => a.metric.localeCompare(b.metric))
+
+  // Episodes derive at read time — evaluateContext attaches them to its
+  // internal eval copy, not to the caller's ctx, so derive here too.
+  const episodes = (ctx.episodes ?? episodesFromObservations(ctx.observations, ctx.resolutions ?? []))
+    .filter((e) => e.status !== "active")
+    .slice(0, 3)
+    .map((e) => ({
+      symptom: e.symptom,
+      status: e.status,
+      lastSeenDaysAgo: Math.max(0, Math.floor((ctx.now - e.lastSeen) / 86400000)),
+    }))
+
+  const pendingInterventions = (ctx.interventions ?? [])
+    .filter((iv) => {
+      const key = iv.targetMetric ? SERIES_OF[iv.targetMetric] : undefined
+      if (!key) return false
+      const at = iv.eventT ?? iv.at
+      return !ctx.series[key].points.some((p) => !p.tApproximate && p.t > at)
+    })
+    .slice(-2)
+    .map((iv) => ({
+      type: iv.type,
+      targetMetric: iv.targetMetric,
+      daysAgo: Math.max(0, Math.floor((ctx.now - (iv.eventT ?? iv.at)) / 86400000)),
+    }))
+
+  const top = nextActions(ctx, diagnosis)[0]
+  const action = top
+    ? { class: top.actionClass, stepId: top.stepId, reason: top.reason }
+    : undefined
+
+  if (!changes.length && !episodes.length && !pendingInterventions.length && !action) return undefined
+  return {
+    changes: changes.slice(0, 3),
+    episodes,
+    pendingInterventions,
+    ...(action ? { action } : {}),
   }
 }
 
@@ -210,6 +292,36 @@ export function renderWhy(trail: WhyTrail, question?: string): string[] {
   for (const f of trail.findings) {
     lines.push(`· ${f.text}`)
   }
+
+  // Longitudinal evidence — what changed vs the grow's own norm,
+  // episode states, pending before/after checks
+  const lon = trail.longitudinal
+  if (lon) {
+    for (const ch of lon.changes) {
+      const label = MEASUREMENT_INFO[ch.metric]?.label ?? ch.metric
+      const dur = ch.durationDays != null && ch.durationDays >= 1 ? ` for ~${Math.round(ch.durationDays)}d` : ""
+      lines.push(`Changed: ${label} moved ${ch.direction === "up" ? "up" : "down"} ${Math.abs(ch.delta)} from your earlier readings${dur} — a shift from your norm, not a verdict.`)
+    }
+    for (const e of lon.episodes) {
+      const label = SYMPTOM_LABELS[e.symptom] ?? e.symptom.toLowerCase()
+      const statusText =
+        e.status === "resolved" ? `reported resolved` :
+        e.status === "improving" ? `reported improving` :
+        e.status === "stable" ? `reported stable — still present` :
+        `returned after a reported resolution (recurrence)`
+      lines.push(`Episode: ${label} — ${statusText} (last seen ${e.lastSeenDaysAgo}d ago)`)
+    }
+    for (const iv of lon.pendingInterventions) {
+      const label = iv.targetMetric ? (MEASUREMENT_INFO[iv.targetMetric]?.label ?? iv.targetMetric) : null
+      lines.push(
+        `Intervention: you reported an adjustment ${iv.daysAgo}d ago${label ? ` — no ${label} reading logged since, so before/after can't be checked yet` : " — watching the next readings"}.`
+      )
+    }
+    if (lon.action) {
+      lines.push(`Suggested action class: ${lon.action.class}${lon.action.stepId ? ` — ${MEASUREMENT_INFO[lon.action.stepId as MetricId]?.label ?? lon.action.stepId}` : ""}`)
+    }
+  }
+
   if (trail.next) lines.push(`Next: ${trail.next.label} — ${trail.next.why}`)
 
   // dedup sources across shown candidates, candidates' order then id

@@ -13,15 +13,17 @@
 //
 // Pure — no Prisma, no I/O.
 
-import { detectTrend, seriesStats, vpdFromTempRh } from "@/lib/terpbot-intel-calc"
+import { detectChange, detectTrend, seriesStats, vpdFromTempRh } from "@/lib/terpbot-intel-calc"
 import { feedsForSymptom } from "@/lib/terpbot-nl-parse"
 import {
   METRIC_EPSILON,
   type GrowContextView,
   type IntelSeries,
+  type InterventionRecord,
   type MetricId,
   type MetricPoint,
   type ReportedPoint,
+  type ResolutionClaim,
   type SessionObservation,
   type StructuredObservation,
 } from "@/lib/terpbot-intel-types"
@@ -111,16 +113,18 @@ function accept(p: ReportedPoint): { v: number } | null {
   }
 }
 
-function rebuild(points: MetricPoint[], metric: MetricId): IntelSeries {
+function rebuild(points: MetricPoint[], metric: MetricId, now: number): IntelSeries {
   // sort by t then provenance — logged first on ties so a same-time
   // report never rewrites the logged record's position
   const sorted = [...points].sort(
     (a, b) => a.t - b.t || (a.provenance ?? "logged").localeCompare(b.provenance ?? "logged")
   )
+  const eps = METRIC_EPSILON[metric] ?? 1
   return {
     ...seriesStats(sorted),
     points: sorted,
-    trend: detectTrend(sorted, METRIC_EPSILON[metric] ?? 1),
+    trend: detectTrend(sorted, eps),
+    change: detectChange(sorted, eps, { now }),
   }
 }
 
@@ -162,7 +166,7 @@ export function mergeReported(
 
   for (const [metric, added] of acceptedByMetric) {
     const key = SERIES_KEY[metric]!
-    series[key] = rebuild([...series[key].points, ...added], metric)
+    series[key] = rebuild([...series[key].points, ...added], metric, now)
   }
 
   // a user-reported temp+RH pair close in time yields a computed VPD
@@ -180,7 +184,8 @@ export function mergeReported(
         const at = Math.max(tT.t, tH.t)
         series.vpdComputed = rebuild(
           [...series.vpdComputed.points, { t: at, v: r.value, provenance: "user-reported" }],
-          "vpd"
+          "vpd",
+          now
         )
       }
     }
@@ -239,4 +244,51 @@ export function mergeObservations(
     })
   }
   return { ...ctx, observations: [...ctx.observations, ...added] }
+}
+
+/** Merge session resolution claims onto the context — appended after
+ *  the diary-derived claims; deduped on (symptom, location, kind,
+ *  event-day) so CAS retries and repeated turns can't stack claims. */
+export function mergeResolutions(
+  ctx: GrowContextView,
+  claims: (Omit<ResolutionClaim, "source">)[]
+): GrowContextView {
+  if (!claims.length) return ctx
+  const seen = new Set(
+    (ctx.resolutions ?? []).map(
+      (r) => `${r.symptom ?? ""}|${r.location ?? ""}|${r.kind}|${dayOf(r.t)}`
+    )
+  )
+  const added: ResolutionClaim[] = []
+  for (const c of claims) {
+    const key = `${c.symptom ?? ""}|${c.location ?? ""}|${c.kind}|${dayOf(c.t)}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    added.push({ ...c, source: "nl" })
+  }
+  return { ...ctx, resolutions: [...(ctx.resolutions ?? []), ...added] }
+}
+
+/** Attach session interventions to the context for evaluation. The
+ *  newest non-approximate series point at/before the intervention's
+ *  event time is snapshotted as `beforeReading` — the honest "before"
+ *  for later before/after evaluation. */
+export function mergeInterventions(
+  ctx: GrowContextView,
+  interventions: InterventionRecord[]
+): GrowContextView {
+  if (!interventions.length) return ctx
+  const out = interventions.map((iv) => {
+    if (iv.beforeReading || !iv.targetMetric) return iv
+    const key = SERIES_KEY[iv.targetMetric]
+    if (!key) return iv
+    const at = iv.eventT ?? iv.at
+    let before: { v: number; t: number } | undefined
+    for (const p of ctx.series[key].points) {
+      if (p.tApproximate || p.t > at) continue
+      if (!before || p.t > before.t) before = { v: p.v, t: p.t }
+    }
+    return before ? { ...iv, beforeReading: before } : iv
+  })
+  return { ...ctx, interventions: out }
 }

@@ -185,6 +185,16 @@ const MATCHERS: Matcher[] = [
     },
   },
   {
+    // before growhelp/grow — "what do you have on my grow" contains
+    // "my grow" but is a data-inventory question, not a grow lookup
+    name: "measurements",
+    patterns: [
+      /\bwhat do you (know|have) (about|on) my (grow|plant|diary)\b/,
+      /\bmy (measurements|readings|data)\b/,
+      /\bwhat (measurements|readings|data) do you have\b/,
+    ],
+  },
+  {
     name: "growhelp",
     patterns: [
       /\b(help|advice) (for|with|about|on) my (grow|diary|plant|girls?)\b/,
@@ -220,6 +230,33 @@ const MATCHERS: Matcher[] = [
       /\bis my (diary|grow) (up to date|current|stale|overdue)\b/,
       /\bdiary (check|freshness|status)\b/,
       /\boverdue (update|diary)\b/,
+    ],
+  },
+  {
+    name: "status",
+    patterns: [
+      /\b(my|grow|plant|diary) status\b/,
+      /\bhow('?s| is) my (grow|plant|diary) (doing|looking|going)\b/,
+      /\bwhere (is|stands) my (grow|plant)\b/,
+      /\bgrow health\b/,
+    ],
+  },
+  {
+    name: "changes",
+    patterns: [
+      /\bwhat('s| has| have) (changed|new since)\b/,
+      /\bwhat changed\b/,
+      /\bchanges? since\b/,
+      /\bany(thing)? (new|different|changed) (in|with|on) my (grow|diary|plant)\b/,
+    ],
+  },
+  {
+    name: "check",
+    patterns: [
+      /\bwhat (should|do) i (check|measure|look at|look for)\b/,
+      /\bwhat to (check|measure|inspect) (next|first)\b/,
+      /\bnext (check|measurement)\b/,
+      /\bwhat('s| is) worth (checking|measuring|inspecting)\b/,
     ],
   },
   {

@@ -53,6 +53,10 @@ export const CHAT_COMMANDS: ChatCommandMeta[] = [
   { name: "quests", usage: "/quests", description: "Today's daily quests", permission: P, surfaces: BOTH, handledBy: "bot", category: "grow" },
   { name: "diagnose", usage: "/diagnose <what you see or measured>", description: "Reason over your grow — report symptoms or readings", permission: P, surfaces: BOTH, handledBy: "bot", category: "grow", example: "@terpbot my leaves are curling" },
   { name: "why", usage: "/why [topic]", description: "Explain the last thing TerpBot said about your grow", permission: P, surfaces: BOTH, handledBy: "bot", category: "grow", example: "@terpbot why did you say that" },
+  { name: "status", usage: "/status", description: "Where your grow is — stage, readings, changes, open concerns", permission: P, surfaces: BOTH, handledBy: "bot", category: "grow", example: "@terpbot how is my grow doing" },
+  { name: "changes", usage: "/changes", description: "What changed since your last check-in", permission: P, surfaces: BOTH, handledBy: "bot", category: "grow", example: "@terpbot what changed" },
+  { name: "check", usage: "/check", description: "The most useful thing to measure or check next", permission: P, surfaces: BOTH, handledBy: "bot", category: "grow", example: "@terpbot what should I check" },
+  { name: "measurements", usage: "/measurements", description: "What TerpBot actually has — known, derived, stale, missing", permission: P, surfaces: BOTH, handledBy: "bot", category: "grow", example: "@terpbot what do you know about my grow" },
 
   // ── Community ────────────────────────────────────────────────────
   { name: "stats", usage: "/stats", description: "Community stats", permission: P, surfaces: BOTH, handledBy: "bot", category: "community" },

@@ -75,6 +75,8 @@ const fixtureCtx = (stage: string, medium: string | null, stale: boolean): GrowC
   week: 9,
   stageDays: stage === "FLOWER" ? 56 : 14,
   stageStartCensored: false,
+  stageTransitions: [],
+  baselines: {},
   updateCount: 20,
   daysSinceUpdate: stale ? 20 : 1,
   envCoverage: 0.9,

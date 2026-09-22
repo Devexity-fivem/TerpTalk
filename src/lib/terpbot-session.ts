@@ -18,14 +18,19 @@
 import { prisma } from "@/lib/prisma"
 import { KNOWLEDGE_VERSION } from "@/lib/terpbot-intel-knowledge"
 import type {
+  InterventionRecord,
   NextStepId,
   ReportedPoint,
+  ResolutionClaim,
   SessionObservation,
+  SessionSnapshot,
   SessionState,
 } from "@/lib/terpbot-intel-types"
 
 export const SESSION_TTL_MS = 24 * 60 * 60 * 1000
 const MAX_POINTS = 24
+const MAX_INTERVENTIONS = 12
+const MAX_RESOLUTIONS = 12
 const CAS_ATTEMPTS = 3
 
 export interface LoadedSession {
@@ -46,6 +51,9 @@ export async function loadSession(userId: string, now: number): Promise<LoadedSe
       observations: state.observations ?? [],
       stage: state.stage,
       trail: state.trail,
+      interventions: state.interventions ?? [],
+      resolutions: state.resolutions ?? [],
+      snapshot: state.snapshot,
     },
   }
 }
@@ -66,6 +74,12 @@ export interface SessionDelta {
   addReported?: ReportedPoint[]
   /** append — symptom observations reported this turn */
   addObservations?: SessionObservation[]
+  /** append — interventions reported this turn */
+  addInterventions?: InterventionRecord[]
+  /** append — resolution/progression claims this turn */
+  addResolutions?: (Omit<ResolutionClaim, "source">)[]
+  /** replace only when provided — status snapshot for /changes */
+  snapshot?: SessionSnapshot
 }
 
 const isP2002 = (e: unknown) =>
@@ -87,6 +101,9 @@ export async function saveSession(
       observations: curState?.observations ?? [],
       stage: curState?.stage,
       trail: curState?.trail,
+      interventions: curState?.interventions ?? [],
+      resolutions: curState?.resolutions ?? [],
+      snapshot: curState?.snapshot,
     }
 
     const next: SessionState = {
@@ -96,6 +113,15 @@ export async function saveSession(
       ),
       stage: delta.stage !== undefined ? delta.stage : cur.stage,
       trail: delta.trail !== undefined ? delta.trail : cur.trail,
+      interventions: trimByT(
+        mergeByKey(cur.interventions ?? [], delta.addInterventions ?? [], interventionKey),
+        MAX_INTERVENTIONS
+      ),
+      resolutions: trimByT(
+        mergeByKey(cur.resolutions ?? [], delta.addResolutions ?? [], resolutionKey),
+        MAX_RESOLUTIONS
+      ),
+      snapshot: delta.snapshot !== undefined ? delta.snapshot : cur.snapshot,
     }
 
     if (!live) {
@@ -175,6 +201,29 @@ const pointKey = (p: ReportedPoint) =>
 
 const obsKey = (o: SessionObservation) =>
   `${o.symptom}|${o.location ?? ""}|${o.stage ?? ""}|${o.period ?? ""}|${o.t}|${o.eventT ?? ""}`
+
+const DAY = 86400000
+
+/** one adjustment of a kind per target per day — CAS-retry safe */
+const interventionKey = (i: InterventionRecord) =>
+  `${i.type}|${i.targetMetric ?? ""}|${i.direction ?? ""}|${Math.floor((i.eventT ?? i.at) / DAY)}`
+
+const resolutionKey = (r: Omit<ResolutionClaim, "source">) =>
+  `${r.symptom ?? ""}|${r.location ?? ""}|${r.kind}|${Math.floor(r.t / DAY)}`
+
+function mergeByKey<T>(cur: T[], add: T[], keyFn: (x: T) => string): T[] {
+  if (!add.length) return cur
+  const seen = new Set(cur.map(keyFn))
+  return [...cur, ...add.filter((x) => !seen.has(keyFn(x)))]
+}
+
+function trimByT<T extends object>(items: T[], max: number): T[] {
+  const time = (x: T) => {
+    const o = x as { eventT?: number; at?: number; t?: number }
+    return o.eventT ?? o.at ?? o.t ?? 0
+  }
+  return [...items].sort((a, b) => time(a) - time(b)).slice(-max)
+}
 
 // newest N points, ordered by t then metric — deterministic both in
 // storage order and in what survives the trim

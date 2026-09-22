@@ -59,6 +59,7 @@ const mkCtx = (over: Partial<GrowContextView> = {}): GrowContextView => ({
   now: t0 + 40 * 86400000,
   day: 41, week: 6,
   stageDays: 20, stageStartCensored: false,
+  stageTransitions: [],
   updateCount: 4, daysSinceUpdate: 1,
   envCoverage: 1,
   series: {
@@ -71,6 +72,7 @@ const mkCtx = (over: Partial<GrowContextView> = {}): GrowContextView => ({
   freshness: {},
   ...over,
   observations: over.observations ?? [],
+  baselines: over.baselines ?? {},
 })
 const withSeries = (over: Partial<GrowContextView["series"]>, ctxOver: Partial<GrowContextView> = {}) =>
   mkCtx({ series: { ...mkCtx().series, ...over }, ...ctxOver })

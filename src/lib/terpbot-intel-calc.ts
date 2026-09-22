@@ -168,6 +168,151 @@ export function median(values: number[]): number {
   return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2
 }
 
+/** Quantile over an already-sorted array (linear interpolation-free:
+ *  nearest-rank on the sorted copy — deterministic and honest for the
+ *  tiny windows this engine sees). */
+export function quantile(sortedValues: number[], q: number): number {
+  if (!sortedValues.length) return NaN
+  const s = [...sortedValues].sort((a, b) => a - b)
+  const idx = Math.min(s.length - 1, Math.max(0, Math.round(q * (s.length - 1))))
+  return s[idx]
+}
+
+// ── Personal-grow baselines ─────────────────────────────────────────
+// A baseline is "what this grow usually runs", computed over logged
+// diary points ONLY — session chat reports are ≤24h old and must never
+// redefine "normal". Baselines detect CHANGE; they never assert that
+// the usual range is horticulturally correct.
+
+export type BaselineTier = "insufficient" | "emerging" | "established"
+
+export interface MetricBaseline {
+  tier: BaselineTier
+  /** contributing points (excludes tApproximate + user-reported) */
+  n: number
+  /** distinct calendar days covered — kills single-session "baselines" */
+  distinctDays: number
+  /** span from oldest to newest contributing point, days */
+  windowDays: number
+  median: number | null
+  /** central range [p25, p75] — the "usual" band, NOT a correct band */
+  lo: number | null
+  hi: number | null
+  /** days since the newest contributing point at `now` */
+  ageDays: number | null
+}
+
+export const BASELINE_EMERGING_N = 3
+export const BASELINE_EMERGING_DAYS = 3
+export const BASELINE_ESTABLISHED_N = 7
+export const BASELINE_ESTABLISHED_DAYS = 7
+/** staleness decay — established demotes to emerging past 10d of no new
+ *  data (STALE_DAYS), and a baseline dies entirely past 21d
+ *  (OBSERVATION_MAX_AGE_DAYS) */
+export const BASELINE_STALE_DAYS = 10
+export const BASELINE_EXPIRE_DAYS = 21
+
+export function buildMetricBaseline(points: MetricPoint[], now: number): MetricBaseline {
+  const none: MetricBaseline = {
+    tier: "insufficient", n: 0, distinctDays: 0, windowDays: 0,
+    median: null, lo: null, hi: null, ageDays: null,
+  }
+  // logged provenance only — user-reported points never build "normal"
+  const clean = points
+    .filter((p) => Number.isFinite(p.t) && Number.isFinite(p.v) && !p.tApproximate && p.provenance !== "user-reported")
+    .sort((a, b) => a.t - b.t)
+  if (!clean.length) return none
+  const days = new Set(clean.map((p) => Math.floor(p.t / 86400000)))
+  const n = clean.length
+  const windowDays = (clean[n - 1].t - clean[0].t) / 86400000
+  const ageDays = Math.max(0, Math.floor((now - clean[n - 1].t) / 86400000))
+  const vals = clean.map((p) => p.v)
+  const base: MetricBaseline = {
+    ...none,
+    n,
+    distinctDays: days.size,
+    windowDays: Math.round(windowDays * 10) / 10,
+    median: median(vals),
+    lo: quantile(vals, 0.25),
+    hi: quantile(vals, 0.75),
+    ageDays,
+  }
+  if (ageDays > BASELINE_EXPIRE_DAYS) return { ...base, tier: "insufficient" }
+  if (n >= BASELINE_ESTABLISHED_N && windowDays >= BASELINE_ESTABLISHED_DAYS && ageDays <= BASELINE_STALE_DAYS) {
+    return { ...base, tier: "established" }
+  }
+  if (n >= BASELINE_EMERGING_N && days.size >= BASELINE_EMERGING_DAYS) {
+    return { ...base, tier: "emerging" }
+  }
+  return base
+}
+
+// ── Change detection ────────────────────────────────────────────────
+// "Change" = the recent level differs from the grow's own earlier level
+// by more than the metric's noise floor. Median-vs-median so one spike
+// can't fabricate a change; no inferential statistics — n≤12 irregular
+// samples can't support them.
+
+export type ChangeDirection = "up" | "down" | "unchanged" | "insufficient"
+
+export interface ChangeResult {
+  direction: ChangeDirection
+  /** median(recent) − median(baseline), signed, series units */
+  vsBaselineDelta: number | null
+  magnitude: number | null
+  /** days the new level has held — how long readings have stayed on
+   *  the delta side of the old median ± epsilon */
+  durationDays: number | null
+  recentN: number
+  baselineN: number
+}
+
+export function detectChange(
+  points: MetricPoint[],
+  epsilon: number,
+  opts?: { recentN?: number; now?: number }
+): ChangeResult {
+  const none: ChangeResult = {
+    direction: "insufficient", vsBaselineDelta: null, magnitude: null,
+    durationDays: null, recentN: 0, baselineN: 0,
+  }
+  const clean = points
+    .filter((p) => Number.isFinite(p.t) && Number.isFinite(p.v) && !p.tApproximate)
+    .sort((a, b) => a.t - b.t)
+  const recentN = opts?.recentN ?? 3
+  const recent = clean.slice(-recentN)
+  const baseline = clean.slice(0, clean.length - recent.length)
+  // a change needs something to change FROM
+  if (!recent.length || baseline.length < 2) {
+    return { ...none, recentN: recent.length, baselineN: baseline.length }
+  }
+  const rMed = median(recent.map((p) => p.v))
+  const bMed = median(baseline.map((p) => p.v))
+  const delta = Math.round((rMed - bMed) * 1000) / 1000
+  if (Math.abs(delta) < epsilon) {
+    return {
+      direction: "unchanged", vsBaselineDelta: delta, magnitude: Math.abs(delta),
+      durationDays: null, recentN: recent.length, baselineN: baseline.length,
+    }
+  }
+  // walk back while points hold on the delta side of the old median ± ε
+  const sign = Math.sign(delta)
+  let runStart = recent[0].t
+  for (let i = clean.length - 1; i >= 0; i--) {
+    if (sign * (clean[i].v - bMed) >= -epsilon) runStart = clean[i].t
+    else break
+  }
+  const anchor = opts?.now ?? clean[clean.length - 1].t
+  return {
+    direction: delta > 0 ? "up" : "down",
+    vsBaselineDelta: delta,
+    magnitude: Math.abs(delta),
+    durationDays: Math.round(Math.max(0, (anchor - runStart) / 86400000) * 10) / 10,
+    recentN: recent.length,
+    baselineN: baseline.length,
+  }
+}
+
 // ── Trend detection ─────────────────────────────────────────────────
 // Deterministic, scale-free structure; the caller supplies `epsilon` —
 // the smallest per-step change treated as real movement (a noise floor,
@@ -244,6 +389,39 @@ export function countExcursions(points: MetricPoint[], lo: number, hi: number): 
     fraction: clean.length ? count / clean.length : 0,
     latestOutside: last ? last.v < lo || last.v > hi : false,
   }
+}
+
+/** Episode segmentation of a band excursion — consecutive out-of-band
+ *  runs with start/end timestamps. An open final episode = the
+ *  condition persists now; a closed episode followed by a new one =
+ *  recurrence; a closed final episode = the condition left the band. */
+export interface ExcursionEpisode {
+  /** epoch ms of the first out-of-band point in the episode */
+  start: number
+  /** epoch ms of the first in-band point after the episode; null while
+   *  the episode is still open (series ends out-of-band) */
+  end: number | null
+  /** out-of-band points in the episode */
+  n: number
+}
+
+export function excursionEpisodes(points: MetricPoint[], lo: number, hi: number): ExcursionEpisode[] {
+  const clean = points.filter((p) => Number.isFinite(p.v) && !p.tApproximate).sort((a, b) => a.t - b.t)
+  const eps: ExcursionEpisode[] = []
+  let cur: ExcursionEpisode | null = null
+  for (const p of clean) {
+    const out = p.v < lo || p.v > hi
+    if (out) {
+      if (!cur) cur = { start: p.t, end: null, n: 0 }
+      cur.n++
+    } else if (cur) {
+      cur.end = p.t
+      eps.push(cur)
+      cur = null
+    }
+  }
+  if (cur) eps.push(cur)
+  return eps
 }
 
 // ── Growth ──────────────────────────────────────────────────────────
