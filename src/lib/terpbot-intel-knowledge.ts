@@ -4,8 +4,11 @@
 // engine, validator, and wizard bridge all import from.
 
 /** bumped when candidates/rules/sources change materially — stamped
- *  on persisted sessions so a stale /why trail can't be misread */
-export const KNOWLEDGE_VERSION = "2.1"
+ *  on persisted sessions so a stale /why trail can't be misread.
+ *  2.1 → 2.2: postharvest domain (3 candidates), lockout-shadow,
+ *  dew-point, pest-pattern, droop-split, stretch/light-compound and
+ *  harvest-window rules; CONTRA + refinement-intersection fixes. */
+export const KNOWLEDGE_VERSION = "2.2"
 
 export { SOURCES } from "@/lib/terpbot-knowledge/sources"
 import { NUTRITION_CANDIDATES } from "@/lib/terpbot-knowledge/candidates-nutrition"
@@ -16,6 +19,7 @@ import { STAGE_CANDIDATES } from "@/lib/terpbot-knowledge/candidates-stage"
 import { WATERING_CANDIDATES } from "@/lib/terpbot-knowledge/candidates-watering"
 import { PEST_CANDIDATES } from "@/lib/terpbot-knowledge/candidates-pest"
 import { DISEASE_CANDIDATES } from "@/lib/terpbot-knowledge/candidates-disease"
+import { POSTHARVEST_CANDIDATES } from "@/lib/terpbot-knowledge/candidates-postharvest"
 import type { CandidateDef } from "@/lib/terpbot-intel-types"
 
 export const CANDIDATES: Record<string, CandidateDef> = {
@@ -27,4 +31,5 @@ export const CANDIDATES: Record<string, CandidateDef> = {
   ...WATERING_CANDIDATES,
   ...PEST_CANDIDATES,
   ...DISEASE_CANDIDATES,
+  ...POSTHARVEST_CANDIDATES,
 }

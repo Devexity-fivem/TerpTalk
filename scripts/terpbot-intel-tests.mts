@@ -380,7 +380,7 @@ function run() {
       candidates: [{
         id: "wind_burn", name: "Wind burn or low humidity", kind: "condition",
         state: "possible", independentSignals: 1,
-        signals: [{ signal: "symptom:LEAF_CURL", direction: "for", weight: 2, text: "curl reported" }],
+        signals: [{ signal: "symptom:LEAF_CURL", direction: "for", weight: 2, evidenceClass: "observed", text: "curl reported" }],
         opposing: [], requiredMissing: [], sourceIds: ["fao56-svp"],
       }],
       findings: [],
@@ -758,6 +758,315 @@ function run() {
     assert.ok(!conflict(42, 68, 86400000, true), "approximate reports never conflict")
     const f = conflict(42, 68, 86400000)
     assert.ok(f!.evidence[0].text.includes("42") && f!.evidence[0].text.includes("68"), "both values named")
+  }
+
+  // ── 22. G-knowledge — new rules and domains ───────────────────────
+  {
+    const now = t0 + 40 * 86400000
+    // points ending AT now — currentness guards need a fresh latest
+    const fresh = (vals: number[], eps: number, stepMs = 86400000): IntelSeries => {
+      const points = vals.map((v, i) => ({ t: now - (vals.length - 1 - i) * stepMs, v }))
+      return { ...seriesStats(points), points, trend: detectTrend(points, eps) }
+    }
+    const obsNow = (text: string): StructuredObservation[] =>
+      parseGrowText(text).observations.map((o) => ({
+        symptom: o.symptom, location: o.location, stage: o.stage, period: o.period,
+        t: now, source: "diary-text" as const, feeds: o.feeds, refined: o.refined,
+      }))
+
+    // chem.lockout-signature shadow: off-band pH + LOW ec → lockout, not underfeeding
+    {
+      const ctx = withSeries(
+        { ph: fresh([6.0, 7.1], 0.15), ec: fresh([0.5, 0.4], 0.2) },
+        { observations: obsNow("lower leaves yellowing") }
+      )
+      const lock = cand(ctx, "ph_lockout")
+      const under = cand(ctx, "nutrition.undersupply")
+      assert.ok(
+        lock && lock.ruleIds.includes("chem.lockout-signature"),
+        "lockout-shadow: low EC + off-band pH still flags lockout"
+      )
+      assert.ok(under && under.againstScore >= 1, "lockout-shadow argues against underfeeding")
+    }
+
+    // nutrition.ec-burn-signature: burnt tips + current elevated EC
+    {
+      const ctx = withSeries(
+        { ec: fresh([2.0, 2.6, 2.8], 0.2) },
+        { observations: obsNow("tips are brown") }
+      )
+      const burn = cand(ctx, "nutrient_burn")
+      assert.ok(burn && burn.ruleIds.includes("nutrition.ec-burn-signature"), "ec-burn-signature fires")
+      assert.deepEqual(
+        burn!.signals.filter((s) => s.direction === "for").map((s) => s.signal).sort(),
+        ["ec", "symptom:TIP_BURN"],
+        "symptom + ec arrive as two distinct signal groups"
+      )
+      const staleCtx = withSeries(
+        { ec: mkSeries([2.0, 2.6, 2.8], 0.2) }, // ends ~38d before now
+        { observations: obsNow("tips are brown") }
+      )
+      assert.ok(
+        !cand(staleCtx, "nutrient_burn")?.ruleIds.includes("nutrition.ec-burn-signature"),
+        "stale EC can't pair with fresh tip burn"
+      )
+    }
+
+    // env.dew-point: air near saturation → condensation risk flag
+    {
+      // 70°F / 90% RH → dew ≈ 66.9°F → depression ~3.1°F → moderate
+      const ctx = withSeries({
+        temperature: fresh([70, 70, 70], 3),
+        humidity: fresh([90, 90, 90], 3),
+      })
+      const risk = cand(ctx, "env.moisture-disease-risk")
+      assert.ok(risk && risk.ruleIds.includes("env.dew-point"), "dew-point rule fires near saturation")
+      // dry air stays quiet: 80°F / 40% → dew ≈ 54°F → depression ~26°F
+      const dry = withSeries({
+        temperature: fresh([80, 80], 3),
+        humidity: fresh([40, 40], 3),
+      })
+      assert.ok(
+        !cand(dry, "env.moisture-disease-risk")?.ruleIds.includes("env.dew-point"),
+        "dew-point silent in dry air"
+      )
+    }
+
+    // pest.stipple-pattern: stippling + silvery sheen → thrips
+    {
+      const ctx = mkCtx({ observations: obsNow("stippling on the leaves, silver patches") })
+      assert.ok(
+        cand(ctx, "thrips")?.ruleIds.includes("pest.stipple-pattern"),
+        "stipple+silver → thrips evidence"
+      )
+      const mites = mkCtx({ observations: obsNow("stippling and fine webbing under the leaves") })
+      assert.ok(
+        cand(mites, "spider_mites")?.ruleIds.includes("pest.stipple-pattern"),
+        "stipple+webbing → spider_mites evidence"
+      )
+    }
+
+    // pest.gnats-moisture: gnats + wet medium point the same direction
+    {
+      const ctx = mkCtx({ observations: obsNow("fungus gnats everywhere and the soil stays wet") })
+      assert.ok(
+        cand(ctx, "fungus_gnats")?.ruleIds.includes("pest.gnats-moisture"),
+        "gnats+wet → gnats evidence"
+      )
+      assert.ok(
+        cand(ctx, "overwater")?.ruleIds.includes("pest.gnats-moisture"),
+        "gnats+wet → weak overwater evidence"
+      )
+      const solo = mkCtx({ observations: obsNow("fungus gnats") })
+      assert.ok(
+        !cand(solo, "fungus_gnats")?.ruleIds.includes("pest.gnats-moisture"),
+        "gnats without wet medium → no compound"
+      )
+    }
+
+    // watering.droop-split: the medium's moisture splits the droop verdict
+    {
+      const wet = mkCtx({ observations: obsNow("plants are drooping and the soil is soggy") })
+      assert.ok(
+        cand(wet, "overwater")?.ruleIds.includes("watering.droop-split"),
+        "droop+soggy → overwater"
+      )
+      assert.ok(
+        (cand(wet, "underwater")?.againstScore ?? 0) >= 1,
+        "droop+soggy argues against underwater"
+      )
+      const dry = mkCtx({ observations: obsNow("plants are drooping and the soil is bone dry") })
+      assert.ok(
+        cand(dry, "underwater")?.ruleIds.includes("watering.droop-split"),
+        "droop+bone-dry → underwater"
+      )
+      const solo = mkCtx({ observations: obsNow("plants are drooping") })
+      assert.ok(
+        !cand(solo, "overwater")?.ruleIds.includes("watering.droop-split"),
+        "droop alone doesn't fire the split"
+      )
+      // night droop is nyctinasty — never a watering signal
+      const night = mkCtx({
+        observations: obsNow("plants are drooping after lights out and the soil is soggy").map(
+          (o) => (o.symptom === "DROOPING" ? { ...o, period: "LIGHTS_OFF" } : o)
+        ),
+      })
+      assert.ok(
+        !cand(night, "overwater")?.ruleIds.includes("watering.droop-split"),
+        "lights-off droop can't feed the split"
+      )
+      // a droop report and a wet-medium report 3 weeks apart never
+      // co-occurred — no compound signature
+      const far = mkCtx({
+        observations: [
+          ...obsNow("plants are drooping").map((o) => ({ ...o, t: now - 21 * 86400000 })),
+          ...obsNow("the soil is soggy"),
+        ],
+      })
+      assert.ok(
+        !cand(far, "overwater")?.ruleIds.includes("watering.droop-split"),
+        "temporally distant reports can't pair"
+      )
+    }
+
+    // growth.stretch-context: early-flower stretch is normal; hot veg stretch isn't
+    {
+      const ctx = mkCtx({ observations: obsNow("stretching tall") }) // FLOWER, stageDays 20 ≤ 21
+      assert.ok(
+        (cand(ctx, "insufficient_light")?.againstScore ?? 0) >= 1,
+        "early-flower stretch argues against light verdict"
+      )
+      // censored stage timing → the "natural stretch" claim must not print
+      const censored = mkCtx({
+        observations: obsNow("stretching tall"),
+        stageStartCensored: true,
+      })
+      const stretchC = cand(censored, "stretch")
+      assert.ok(
+        !stretchC?.info.some((e) => e.text.includes("natural stretch")),
+        "censored stage timing can't claim early-flower normalcy"
+      )
+      const hot = mkCtx({
+        diary: { ...mkCtx().diary, stage: "VEGETATIVE" },
+        observations: obsNow("stretching tall"),
+        series: { ...mkCtx().series, temperature: fresh([90, 90], 3) },
+      })
+      assert.ok(
+        cand(hot, "stretch")?.ruleIds.includes("growth.stretch-context"),
+        "hot stretch → stretch-context evidence"
+      )
+      assert.ok(
+        cand(hot, "heat_stress")?.ruleIds.includes("growth.stretch-context"),
+        "hot stretch → heat evidence"
+      )
+    }
+
+    // env.light-heat-compound: bleaching tops + high temp → light_burn
+    {
+      const ctx = withSeries(
+        { temperature: fresh([90, 90], 3) },
+        { observations: obsNow("top leaves are bleaching") }
+      )
+      const lb = cand(ctx, "light_burn")
+      assert.ok(
+        lb?.ruleIds.includes("env.light-heat-compound"),
+        "light symptom + heat → light_burn"
+      )
+      assert.ok(
+        lb!.supporting.some((e) => e.strength === "moderate"),
+        "upper-canopy bleach + heat upgrades to moderate"
+      )
+      const cool = withSeries(
+        { temperature: fresh([70, 70], 3) },
+        { observations: obsNow("top leaves are bleaching") }
+      )
+      assert.ok(
+        !cand(cool, "light_burn")?.ruleIds.includes("env.light-heat-compound"),
+        "cool temps → no compound"
+      )
+    }
+
+    // stage.harvest-window: week count alone is info, never a verdict
+    {
+      const ctx = mkCtx({ stageDays: 56 })
+      const d = evaluateContext(ctx)
+      const fnd = d.findings.find((x) => x.ruleId === "stage.harvest-window")
+      assert.ok(fnd, "8wk flower → harvest-window info finding")
+      assert.equal(fnd!.evidence[0].measurement?.id, "inspect:trichomes", "harvest-window asks trichomes")
+      assert.ok(
+        !d.candidates.some((c) => c.state === "confirmed"),
+        "week count alone never confirms anything"
+      )
+    }
+
+    // postharvest domain: DRYING mold risk + CURING moisture band
+    {
+      const drying = withSeries(
+        { humidity: fresh([72, 74, 73], 3), temperature: fresh([62, 62, 62], 3) },
+        { diary: { ...mkCtx().diary, stage: "DRYING" } }
+      )
+      const mold = cand(drying, "post.dry-mold-risk")
+      assert.ok(mold && mold.forScore > 0, "72% RH in dry room → mold risk")
+      const curing = withSeries(
+        { humidity: fresh([71, 71], 3) },
+        { diary: { ...mkCtx().diary, stage: "CURING" } }
+      )
+      const cm = cand(curing, "post.cure-moisture")
+      assert.ok(cm && cm.forScore > 0, "71% jar RH → cure moisture candidate")
+      const goodCure = withSeries(
+        { humidity: fresh([60, 60], 3) },
+        { diary: { ...mkCtx().diary, stage: "CURING" } }
+      )
+      const gc = cand(goodCure, "post.cure-moisture")
+      assert.ok(gc && gc.forScore === 0 && gc.info.length >= 1, "in-band cure is info-only")
+      const dryCure = withSeries(
+        { humidity: fresh([50, 50], 3) },
+        { diary: { ...mkCtx().diary, stage: "CURING" } }
+      )
+      assert.ok(
+        cand(dryCure, "post.cure-moisture")!.forScore > 0,
+        "50% jar RH → over-dry evidence"
+      )
+      const fastDry = withSeries(
+        { humidity: fresh([40, 40], 3), temperature: fresh([75, 75], 3) },
+        { diary: { ...mkCtx().diary, stage: "DRYING" } }
+      )
+      const tf = cand(fastDry, "post.dry-too-fast")
+      assert.ok(tf && tf.forScore > 0, "40% RH dry room → too-fast risk")
+      assert.ok(
+        tf!.signals.some((s) => s.signal === "temperature"),
+        "temp-only branch stamps the temperature signal"
+      )
+      // warm + humid is mold territory, never "drying too fast"
+      const warmWet = withSeries(
+        { humidity: fresh([72, 72], 3), temperature: fresh([72, 72], 3) },
+        { diary: { ...mkCtx().diary, stage: "DRYING" } }
+      )
+      assert.ok(cand(warmWet, "post.dry-mold-risk")!.forScore > 0, "72°F/72% → mold risk")
+      assert.ok(
+        (cand(warmWet, "post.dry-too-fast")?.forScore ?? 0) === 0,
+        "warm humid air can't be 'too fast'"
+      )
+    }
+
+    // CONTRA: dark green foliage argues against deficiencies
+    {
+      const ctx = mkCtx({ observations: obsNow("leaves are dark green") })
+      assert.ok(
+        (cand(ctx, "nitrogen_def")?.againstScore ?? 0) >= 1,
+        "dark green argues against N deficiency"
+      )
+    }
+
+    // /why: evidence classes + historical age labels
+    {
+      const ctx = withSeries(
+        { humidity: fresh([75, 76, 75], 3), temperature: fresh([70, 70, 70], 3) },
+        { observations: obsNow("leaves yellowing") }
+      )
+      const trail = buildWhyTrail(ctx, evaluateContext(ctx), now)
+      const out = renderWhy(trail).join("\n")
+      assert.ok(/\[(observed|derived|inferred)/.test(out), "/why labels evidence class")
+      for (const c of trail.candidates) {
+        for (const s of c.signals) {
+          assert.ok(["observed", "derived", "inferred"].includes(s.evidenceClass), "signal class persisted")
+        }
+      }
+      const old = mkCtx({
+        freshness: { humidity: 38, temperature: 38 },
+        series: {
+          ...mkCtx().series,
+          humidity: mkSeries([75, 76, 75], 3), // ends ~38d before now → stale
+          temperature: mkSeries([70, 70, 70], 3),
+        },
+      })
+      const oldTrail = buildWhyTrail(old, evaluateContext(old), now)
+      const aged = oldTrail.candidates.flatMap((c) => c.signals).filter((s) => s.ageDays != null)
+      assert.ok(aged.length >= 1, "stale-backed signals carry ageDays")
+      assert.ok(aged.every((s) => s.ageDays! >= 30), "ages reflect the real data age")
+      const oldOut = renderWhy(oldTrail).join("\n")
+      assert.ok(/\(stale\)/.test(oldOut), "old signals labelled stale")
+    }
   }
 
   console.log("All TerpBot intelligence tests passed.")

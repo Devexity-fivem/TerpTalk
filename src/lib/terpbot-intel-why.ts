@@ -8,6 +8,7 @@ import { KNOWLEDGE_VERSION, SOURCES } from "@/lib/terpbot-intel-knowledge"
 import { SYMPTOM_LABELS } from "@/lib/terpbot-nl-vocab"
 import {
   MEASUREMENT_INFO,
+  signalAgeDays,
 } from "@/lib/terpbot-intel"
 import type {
   CandidateResult,
@@ -27,6 +28,28 @@ const SIGNAL_LABELS: Record<string, string> = {
   stage: "stage timing",
   data: "data coverage",
   runoff: "runoff readings",
+}
+
+/** OBSERVED — a measurement the grower logged or reported, or a
+ *  symptom they described. DERIVED — a value calculated from
+ *  measurements (VPD, dew point, paired pH+EC). INFERRED — an engine
+ *  judgment about context or data coverage, not a reading. */
+const SIGNAL_CLASS: Record<string, "observed" | "derived" | "inferred"> = {
+  humidity: "observed",
+  temperature: "observed",
+  ph: "observed",
+  ec: "observed",
+  runoff: "observed",
+  height: "observed",
+  stage: "observed",
+  "env:temp-rh": "derived",
+  "chem:ph-ec": "derived",
+  data: "inferred",
+}
+
+function signalClass(signal: string): "observed" | "derived" | "inferred" {
+  if (signal.startsWith("symptom:")) return "observed"
+  return SIGNAL_CLASS[signal] ?? "inferred"
 }
 
 function signalLabel(signal: string): string {
@@ -64,15 +87,22 @@ export function buildWhyTrail(
       state: c.state,
       independentSignals: c.independentSignals,
       signals: [...c.supporting, ...c.opposing]
-        .map((e) => ({
-          signal: e.signal ?? "?",
-          direction: e.direction as "for" | "risk" | "against",
-          weight: { weak: 1, moderate: 2, strong: 3 }[e.strength],
-          text: e.text,
-        }))
+        .map((e) => {
+          const sig = e.signal ?? "?"
+          const age = signalAgeDays(ctx, sig)
+          return {
+            signal: sig,
+            direction: e.direction as "for" | "risk" | "against",
+            weight: { weak: 1, moderate: 2, strong: 3 }[e.strength],
+            evidenceClass: signalClass(sig),
+            ...(age != null ? { ageDays: Math.round(age) } : {}),
+            text: e.text,
+          }
+        })
         .sort((a, b) => b.weight - a.weight || a.signal.localeCompare(b.signal))
         .slice(0, 3),
       opposing: c.opposing.map((e) => e.text).slice(0, 2),
+      ...(c.info.length ? { info: c.info.slice(0, 1).map((e) => e.text) } : {}),
       requiredMissing: c.requiredMissing,
       next: c.nextMeasurement,
       sourceIds: c.sourceIds,
@@ -148,10 +178,23 @@ export function renderWhy(trail: WhyTrail, question?: string): string[] {
       `${c.name} — ${c.state.toUpperCase()} (${c.independentSignals} independent signal${c.independentSignals === 1 ? "" : "s"})`
     )
     for (const s of c.signals) {
-      lines.push(`  · ${signalLabel(s.signal)}: ${s.text}`)
+      const cls =
+        s.evidenceClass === "derived"
+          ? "derived"
+          : s.evidenceClass === "inferred"
+            ? "inferred"
+            : "observed"
+      const age =
+        s.ageDays != null && s.ageDays >= 2
+          ? ` · ${s.ageDays}d ago${s.ageDays >= 10 ? " (stale)" : ""}`
+          : ""
+      lines.push(`  · ${signalLabel(s.signal)} [${cls}${age}]: ${s.text}`)
     }
     for (const o of c.opposing) {
       lines.push(`  · Against: ${o}`)
+    }
+    for (const t of c.info ?? []) {
+      lines.push(`  · Note: ${t}`)
     }
     if (c.requiredMissing.length) {
       lines.push(

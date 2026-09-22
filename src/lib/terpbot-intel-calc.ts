@@ -89,6 +89,29 @@ export function vpdDivergence(entered: number | null, computed: number | null): 
   return Math.round((entered - computed) * 100) / 100
 }
 
+/** Dew point (°F) — Magnus inversion of the FAO-56 SVP form used for
+ *  VPD. This is a DERIVED value: it estimates the temperature at which
+ *  the reported air would saturate (condensation on surfaces/foliage).
+ *  It is never a measured leaf-wetness reading. */
+export function dewPointFromTempRh(tempF: number | null | undefined, rh: number | null | undefined): CalcResult {
+  const missing: string[] = []
+  if (tempF == null || !Number.isFinite(tempF)) missing.push("temperature")
+  if (rh == null || !Number.isFinite(rh)) missing.push("humidity")
+  if (missing.length || tempF == null || rh == null) return calc({ unit: "°F", valid: false, missing })
+  if (tempF < -40 || tempF > 140 || rh <= 0 || rh > 100) {
+    return calc({ unit: "°F", valid: false, missing: [], assumptions: ["input outside plausible range"] })
+  }
+  const tC = fToC(tempF)
+  // γ = ln(RH/100) + b·T/(c+T); Td = c·γ/(b−γ)  (Magnus, b=17.27 c=237.3)
+  const g = Math.log(rh / 100) + (17.27 * tC) / (tC + 237.3)
+  const dewC = (237.3 * g) / (17.27 - g)
+  return calc({
+    unit: "°F",
+    value: Math.round(cToF(dewC) * 10) / 10,
+    assumptions: ["calculated from air temp + RH — not a leaf-wetness measurement"],
+  })
+}
+
 // ── DLI ─────────────────────────────────────────────────────────────
 // DLI (mol/m²/day) = PPFD (μmol/m²/s) × photoperiod (h) × 3600 / 1e6.
 // The schema has no PPFD or photoperiod field — callers must supply both.

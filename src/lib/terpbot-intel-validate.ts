@@ -24,6 +24,8 @@ import {
   SIGNAL_IDS,
   SYMPTOM_IDS,
   type CandidateDef,
+  type GrowContextView,
+  type IntelEvidence,
   type IntelRule,
   type KnowledgeSource,
   type NextStepId,
@@ -47,7 +49,7 @@ export interface KnowledgeRegistry {
 
 const RULE_DOMAINS = new Set([
   "environment", "chemistry", "growth", "stage", "data",
-  "nutrition", "pest", "disease", "watering",
+  "nutrition", "pest", "disease", "watering", "postharvest",
 ])
 const CANDIDATE_KINDS = new Set(["condition", "risk"])
 const SEVERITIES = new Set(["urgent", "moderate", "watch"])
@@ -223,5 +225,59 @@ export function validateKnowledge(reg?: Partial<KnowledgeRegistry>): string[] {
     if (!(m in r.measurementLabels)) errors.push(`measurementLabels: metric "${m}" has no label/why`)
   }
 
+  return errors
+}
+
+/** Behavioral sweep — evaluate every rule against fixture contexts and
+ *  check what it EMITS. Evidence-level `candidate`, `signal`, and
+ *  `measurement` ids live inside evaluate() where the structural pass
+ *  can't see them: a typo'd candidate silently drops at runtime, a
+ *  typo'd signal mints a phantom independence group, a typo'd hint
+ *  degrades to a blank label. Returns error strings ([] = clean). */
+export function validateRuleEmissions(
+  contexts: GrowContextView[],
+  reg?: Partial<KnowledgeRegistry>
+): string[] {
+  const r: KnowledgeRegistry = { ...defaults(), ...reg }
+  const errors: string[] = []
+  const ruleIds = new Set(r.rules.map((x) => x.id))
+  const inspectIds = new Set(Object.keys(r.inspectionInfo))
+  const fired = new Set<string>()
+
+  for (const rule of r.rules) {
+    for (const ctx of contexts) {
+      let ev: IntelEvidence[]
+      try {
+        if (!rule.applies(ctx)) continue
+        ev = rule.evaluate(ctx)
+      } catch (e) {
+        errors.push(`rule:${rule.id}: threw on fixture context — ${(e as Error).message}`)
+        continue
+      }
+      fired.add(rule.id)
+      for (const e of ev) {
+        const sig = e.signal ?? rule.signal ?? rule.id
+        const sigOk =
+          signalIds.has(sig) ||
+          ruleIds.has(sig) ||
+          (sig.startsWith("symptom:") &&
+            sig
+              .slice("symptom:".length)
+              .split("+")
+              .every((p) => symptomIds.has(p)))
+        if (!sigOk) {
+          errors.push(
+            `rule:${rule.id}: emitted signal "${sig}" — not a SignalId, rule id, or symptom group`
+          )
+        }
+        if (e.candidate != null && !(e.candidate in r.candidates)) {
+          errors.push(`rule:${rule.id}: emitted candidate "${e.candidate}" not in CANDIDATES`)
+        }
+        if (e.measurement && !metricIds.has(e.measurement.id) && !inspectIds.has(e.measurement.id)) {
+          errors.push(`rule:${rule.id}: emitted measurement "${e.measurement.id}" — not a metric or inspection`)
+        }
+      }
+    }
+  }
   return errors
 }

@@ -33,11 +33,11 @@
 // INSUFFICIENT. CONFLICTING preserves BOTH sides plus a resolving
 // measurement — evidence is never hidden to produce a cleaner answer.
 
-import { countExcursions } from "@/lib/terpbot-intel-calc"
+import { countExcursions, dewPointFromTempRh } from "@/lib/terpbot-intel-calc"
+import { feedsForSymptom } from "@/lib/terpbot-nl-parse"
 import { CANDIDATES, SOURCES } from "@/lib/terpbot-intel-knowledge"
 import {
   LOCATION_LABELS,
-  STAGE_REFINEMENTS,
   SYMPTOM_LABELS,
 } from "@/lib/terpbot-nl-vocab"
 import { SIGNAL_METRICS, STALE_DAYS } from "@/lib/terpbot-intel-types"
@@ -141,10 +141,14 @@ const DIRECT_SIGNAL = new Set<SymptomId>([
   "PEST_FUNGUS_GNATS", "PEST_WHITEFLIES", "PEST_CATERPILLARS",
   "PEST_SLUGS", "WEBBING", "POWDERY", "SLIME_TRAIL", "FUZZ_MOLD",
   "ROOT_ROT", "BUD_ROT", "HERMIE", "STEM_SPLIT", "NO_SPROUT",
-  "SALT_CRUST", "GRASSY_SMELL", "OVERWATERED", "UNDERWATERED",
-  "MEDIUM_WET", "MEDIUM_DRY", "WIND_BURN", "LIGHT_BURN",
+  "SALT_CRUST", "GRASSY_SMELL", "WIND_BURN", "LIGHT_BURN",
   "PH_UNSTABLE", "EC_RISING",
 ])
+
+/** Current-state reports in words — "the soil is soggy" is closer to a
+ *  moisture reading than a sighting, so it lands moderate, not strong.
+ *  Self-diagnoses ("I overwatered") aren't even that — they stay weak. */
+const STATE_REPORT = new Set<SymptomId>(["MEDIUM_WET", "MEDIUM_DRY"])
 
 /** Reports that actively argue against a rival candidate. */
 export const CONTRA: Partial<Record<SymptomId, string[]>> = {
@@ -152,6 +156,10 @@ export const CONTRA: Partial<Record<SymptomId, string[]>> = {
   MEDIUM_DRY: ["overwater"],
   OVERWATERED: ["underwater"],
   UNDERWATERED: ["overwater"],
+  // Deep glossy green is adequate-N foliage — it argues against the
+  // deficiencies that read as pale/yellow. NOT phosphorus: cannabis P
+  // deficiency itself presents as dark green with purple/red stems.
+  LEAF_DARK_GREEN: ["nitrogen_def", "sulfur_def"],
 }
 
 /** Discriminating-measurement preference order — final tie-break between
@@ -356,12 +364,18 @@ const SERIES_TO_CONFLICT_METRIC: Record<string, MetricId> = {
 /** Age in days of the newest point backing a signal — freshness for
  *  metric-backed signals, observation age for `symptom:*`. Null when
  *  the signal has no aging source (stage/data). */
-function signalAgeDays(ctx: GrowContextView, signal: string): number | null {
+export function signalAgeDays(ctx: GrowContextView, signal: string): number | null {
   if (signal.startsWith("symptom:")) {
-    const symptom = signal.slice("symptom:".length)
-    const ts = ctx.observations.filter((o) => o.symptom === symptom).map((o) => o.t)
-    if (!ts.length) return null
-    return (ctx.now - Math.max(...ts)) / 86400000
+    // composite "symptom:A+B" groups age at their OLDEST member —
+    // the compound claim is only as fresh as its stalest part
+    const members = signal.slice("symptom:".length).split("+")
+    const ages = members
+      .map((m) => {
+        const ts = ctx.observations.filter((o) => o.symptom === m).map((o) => o.t)
+        return ts.length ? (ctx.now - Math.max(...ts)) / 86400000 : null
+      })
+      .filter((a): a is number => a != null)
+    return ages.length ? Math.max(...ages) : null
   }
   const metrics = SIGNAL_METRICS[signal as SignalId]
   if (!metrics?.length) return null
@@ -1312,7 +1326,10 @@ export const INTEL_RULES: IntelRule[] = [
       const fedDeficiencySymptoms = new Map<string, Set<string>>()
       for (const o of ctx.observations) {
         const stage = o.stage ?? ctx.diary.stage
-        const feeds = STAGE_REFINEMENTS[o.symptom]?.[stage] ?? o.feeds
+        // Intersect stage×location refinements — a FLOWER interveinal
+        // report keeps iron (both tables agree) instead of widening
+        // back to the stage's generic set.
+        const feeds = feedsForSymptom(o.symptom, o.location, stage).feeds
         for (const f of feeds) {
           if (!DEFICIENCY_CANDIDATES.has(f)) continue
           const s = fedDeficiencySymptoms.get(f) ?? new Set<string>()
@@ -1360,6 +1377,34 @@ export const INTEL_RULES: IntelRule[] = [
           text: "High EC plus off-band pH — salt accumulation and lockout feed each other.",
           measurement: hint("runoffEc"),
         })
+      } else if (phOut && ecLatest != null && ecLatest < EC_FEED_MIN) {
+        // Lockout shadow: low feed EC + off-band pH. Raising feed here
+        // is the classic wrong move — uptake is gated by pH, so added
+        // nutrients just accumulate as salts.
+        ev.push({
+          direction: "for",
+          strength: "weak",
+          candidate: "ph_lockout",
+          text: `EC ${ecLatest} is low AND pH ${phLatest} is outside ${lo}–${hi} — correct pH before raising feed; locked-out nutrients don't reach the plant at any feed strength.`,
+          measurement: hint("runoffPh"),
+        })
+        ev.push({
+          direction: "against",
+          strength: "weak",
+          candidate: "nutrition.undersupply",
+          text: "Low EC under off-band pH looks like underfeeding but the pH problem gates uptake first — don't raise feed until pH is in band.",
+          measurement: hint("runoffPh"),
+        })
+        for (const d of fedDeficiencies) {
+          ev.push({
+            direction: "against",
+            strength: "weak",
+            candidate: d,
+            signal: fedSignal(d),
+            text: `pH ${phLatest} is out of band — deficiency-looking symptoms are more likely lockout than missing nutrients; fix pH first.`,
+            measurement: hint("runoffPh"),
+          })
+        }
       } else if (!phOut && fedDeficiencies.size) {
         // in-band pH removes the usual confounder — info only, NOT
         // support: an absence-of-lockout doesn't raise every deficiency.
@@ -1575,9 +1620,12 @@ export const INTEL_RULES: IntelRule[] = [
         }
 
         const effStage = o.stage ?? ctx.diary.stage
-        const stageRef = STAGE_REFINEMENTS[o.symptom]?.[effStage]
-        const feeds = stageRef ?? o.feeds
-        const refined = !!stageRef || !!o.refined
+        // Intersect stage×location refinements — replacing feeds with
+        // the stage table alone would silently widen e.g. FLOWER
+        // interveinal yellowing back to the generic nutrient set.
+        const res = feedsForSymptom(o.symptom, o.location, effStage)
+        const feeds = res.feeds
+        const refined = res.refined || !!o.refined
 
         const label = SYMPTOM_LABELS[o.symptom] ?? o.symptom.toLowerCase()
         const locLabel = o.location ? ` on ${LOCATION_LABELS[o.location]}` : ""
@@ -1586,7 +1634,11 @@ export const INTEL_RULES: IntelRule[] = [
         // evidence; location/stage-refined or repeated reports are
         // moderate; everything else stays weak.
         const strength =
-          DIRECT_SIGNAL.has(o.symptom) ? "strong" : refined || persistent ? "moderate" : "weak"
+          DIRECT_SIGNAL.has(o.symptom)
+            ? "strong"
+            : STATE_REPORT.has(o.symptom) || refined || persistent
+              ? "moderate"
+              : "weak"
 
         for (const cid of feeds) {
           const def = CANDIDATES[cid]
@@ -1643,7 +1695,7 @@ export const INTEL_RULES: IntelRule[] = [
       const fed = new Set<string>()
       for (const o of ctx.observations) {
         if (o.symptom !== "LEAF_YELLOWING") continue
-        const feeds = STAGE_REFINEMENTS[o.symptom]?.[o.stage ?? ctx.diary.stage] ?? o.feeds
+        const feeds = feedsForSymptom(o.symptom, o.location, o.stage ?? ctx.diary.stage).feeds
         for (const f of feeds) if (DEFICIENCY_CANDIDATES.has(f)) fed.add(f)
       }
       for (const d of fed) {
@@ -1894,6 +1946,506 @@ export const INTEL_RULES: IntelRule[] = [
   },
 
   {
+    id: "nutrition.ec-burn-signature",
+    // the compound signature pairs a reported symptom with a measured
+    // feed/runoff value — the measurement side is the independent signal
+    signal: "ec",
+    domain: "nutrition",
+    kind: "assessment",
+    title: "Tip burn + elevated feed",
+    applies: (ctx) =>
+      ctx.observations.some((o) => o.symptom === "TIP_BURN") &&
+      (ctx.series.ec.n >= 1 || ctx.series.runoffEc.n >= 1),
+    evaluate: (ctx) => {
+      const ev: IntelEvidence[] = []
+      // Only pair a current reading with a recent report — burnt tips
+      // from weeks ago plus today's EC are not the same event.
+      const tipRecent = ctx.observations.some(
+        (o) => o.symptom === "TIP_BURN" && ctx.now - o.t <= 7 * 86400000
+      )
+      if (!tipRecent) return []
+      const ecLatest = latestIsCurrent(ctx.series.ec, ctx.now)
+        ? ctx.series.ec.latest
+        : null
+      if (ecLatest != null && ecLatest >= EC_ELEVATED) {
+        ev.push({
+          direction: "for",
+          strength: "moderate",
+          candidate: "nutrient_burn",
+          text: `Burnt tips reported while feed EC is ${ecLatest} — the pair is the classic over-feed signature. Cannabis tolerated EC 4.0 in one hydro study, so this is a signature, not proof.`,
+          measurement: hint("runoffEc"),
+        })
+      }
+      const r = ctx.series.runoffEc.latest
+      const f = ctx.series.ec.latest
+      // the pair must be near in time AND near the present — a
+      // three-week-old EC pair + fresh tip-burn isn't one event
+      const paired =
+        ctx.series.runoffEc.n >= 1 &&
+        ctx.series.ec.n >= 1 &&
+        Math.abs(
+          ctx.series.runoffEc.points[ctx.series.runoffEc.points.length - 1].t -
+            ctx.series.ec.points[ctx.series.ec.points.length - 1].t
+        ) <= 3 * 86400000 &&
+        ctx.now -
+          Math.max(
+            ctx.series.runoffEc.points[ctx.series.runoffEc.points.length - 1].t,
+            ctx.series.ec.points[ctx.series.ec.points.length - 1].t
+          ) <=
+          7 * 86400000
+      if (paired && r != null && f != null && r - f >= 0.5) {
+        ev.push({
+          direction: "for",
+          strength: "moderate",
+          candidate: "salt_buildup",
+          signal: "runoff",
+          text: `Burnt tips while runoff EC ${r} sits ${f1(r - f)} above feed EC ${f} — salts concentrating in the medium fits the tip burn.`,
+          measurement: hint("runoffPh"),
+        })
+      }
+      return ev
+    },
+    sourceIds: ["hershkowitz-2025-ec", "ncsu-pourthru-2009", "cockson-2019-nutrient-disorders"],
+  },
+  {
+    id: "env.dew-point",
+    // humidity is the driver — temperature only sets the dew point.
+    // Stamping env:temp-rh would let the same RH series stack as a
+    // second independent signal beside the pure-RH disease rules.
+    signal: "humidity",
+    domain: "disease",
+    kind: "risk",
+    title: "Calculated dew-point proximity",
+    applies: (ctx) =>
+      ["SEEDLING", "VEGETATIVE", "FLOWER"].includes(ctx.diary.stage) &&
+      ctx.series.temperature.n >= 1 &&
+      ctx.series.humidity.n >= 1,
+    evaluate: (ctx) => {
+      // Pair each RH point with the nearest temp reading ≤6h away.
+      // Approximate ("a while back") points never pair — they don't
+      // describe the same air.
+      let last: { t: number; tempF: number; rh: number } | null = null
+      for (const h of ctx.series.humidity.points) {
+        if (h.tApproximate) continue
+        let best: MetricPoint | null = null
+        for (const tp of ctx.series.temperature.points) {
+          if (tp.tApproximate) continue
+          const d = Math.abs(tp.t - h.t)
+          if (d <= 6 * 3600000 && (!best || d < Math.abs(best.t - h.t))) best = tp
+        }
+        if (best) last = { t: Math.max(h.t, best.t), tempF: best.v, rh: h.v }
+      }
+      // A historical pairing isn't a current condensation risk.
+      if (!last || ctx.now - last.t > 2 * 86400000) return []
+      const dp = dewPointFromTempRh(last.tempF, last.rh)
+      if (!dp.valid || dp.value == null) return []
+      const depression = last.tempF - dp.value // °F air-above-dew-point
+      if (depression > 7) return [] // ~4°C of headroom — air comfortably unsaturated
+      const ev: IntelEvidence[] = [
+        {
+          direction: "risk",
+          strength: depression <= 3.6 ? "moderate" : "weak",
+          candidate: "env.moisture-disease-risk",
+          text:
+            depression <= 3.6
+              ? `Calculated dew point ${dp.value}°F from ${f1(last.tempF)}°F / ${last.rh}% RH — within ~2°C of air temperature, so cool surfaces and dense canopy interiors can reach leaf wetness. A risk flag, not a disease diagnosis.`
+              : `Calculated dew point ${dp.value}°F from ${f1(last.tempF)}°F / ${last.rh}% RH — air is within ~4°C of saturation; night drops could push surfaces to condensation.`,
+        },
+      ]
+      if (ctx.diary.stage === "FLOWER" && depression <= 3.6) {
+        ev.push({
+          direction: "risk",
+          strength: "weak",
+          candidate: "env.moisture-disease-risk",
+          text: "In flower, condensation inside dense colas is the classic bud-rot setup — keep airflow through the canopy.",
+          measurement: hint("inspect:bud-interior"),
+        })
+      }
+      return ev
+    },
+    sourceIds: ["fao56-svp", "punja-2022-botrytis", "bc-cannabis-diseases"],
+  },
+  {
+    id: "pest.stipple-pattern",
+    domain: "pest",
+    kind: "assessment",
+    title: "Stipple pattern",
+    applies: (ctx) => ctx.observations.some((o) => o.symptom === "STIPPLING" && !o.tApproximate),
+    evaluate: (ctx) => {
+      // pest signs persist — a 7d pairing window is honest co-occurrence
+      const near = (sym: SymptomId) =>
+        ctx.observations.some(
+          (o) =>
+            o.symptom === "STIPPLING" &&
+            !o.tApproximate &&
+            ctx.observations.some(
+              (m) => m.symptom === sym && !m.tApproximate && Math.abs(m.t - o.t) <= 7 * 86400000
+            )
+        )
+      const ev: IntelEvidence[] = []
+      if (near("SILVERING")) {
+        ev.push({
+          direction: "for",
+          strength: "moderate",
+          candidate: "thrips",
+          // stamp the primary observation — the silvering half already
+          // contributes its own symptom:SILVERING signal via
+          // symptom.reported; a combined key would mint a third signal
+          // out of the same two facts
+          signal: "symptom:STIPPLING",
+          text: "Stippling plus a silvery sheen is the classic thrips feeding pattern — confirm on the leaf undersides before treating.",
+          measurement: hint("inspect:leaf-undersides"),
+        })
+      }
+      if (near("WEBBING") || near("PEST_MITES")) {
+        ev.push({
+          direction: "for",
+          strength: "moderate",
+          candidate: "spider_mites",
+          signal: "symptom:STIPPLING",
+          text: "Stippling with mites or webbing sighted — the damage pattern and the pest agree; confirm population on undersides.",
+          measurement: hint("inspect:leaf-undersides"),
+        })
+      }
+      return ev
+    },
+    sourceIds: ["bc-cannabis-diseases", "cornell-cannabis-guidebook"],
+  },
+  {
+    id: "pest.gnats-moisture",
+    domain: "pest",
+    kind: "assessment",
+    title: "Gnats + wet medium",
+    applies: (ctx) =>
+      ctx.observations.some(
+        (o) =>
+          o.symptom === "PEST_FUNGUS_GNATS" &&
+          !o.tApproximate &&
+          ctx.observations.some(
+            (m) =>
+              (m.symptom === "MEDIUM_WET" || m.symptom === "OVERWATERED") &&
+              !m.tApproximate &&
+              Math.abs(m.t - o.t) <= 7 * 86400000
+          )
+      ),
+    evaluate: () => [
+      {
+        direction: "for",
+        strength: "moderate",
+        candidate: "fungus_gnats",
+        // merges with the sighting's own symptom:PEST_FUNGUS_GNATS
+        // signal — the wet-medium half keeps its own MEDIUM_WET signal
+        signal: "symptom:PEST_FUNGUS_GNATS",
+        text: "Fungus gnats breed in consistently moist media — the wet-medium report and the pest sighting point the same direction.",
+        measurement: hint("watering"),
+      },
+      {
+        direction: "for",
+        strength: "weak",
+        candidate: "overwater",
+        signal: "symptom:PEST_FUNGUS_GNATS",
+        text: "An established gnat population is weak evidence the medium is staying wet — larvae need moist substrate.",
+      },
+    ],
+    sourceIds: ["bc-cannabis-diseases", "cornell-cannabis-guidebook"],
+  },
+  {
+    id: "watering.droop-split",
+    domain: "watering",
+    kind: "assessment",
+    title: "Droop + medium moisture",
+    applies: (ctx) =>
+      ctx.observations.some(
+        (o) =>
+          o.symptom === "DROOPING" &&
+          o.period !== "NIGHT" &&
+          o.period !== "LIGHTS_OFF" &&
+          !o.tApproximate &&
+          ctx.observations.some(
+            (m) =>
+              (m.symptom === "MEDIUM_WET" || m.symptom === "MEDIUM_DRY") &&
+              !m.tApproximate &&
+              Math.abs(m.t - o.t) <= 3 * 86400000
+          )
+      ),
+    evaluate: (ctx) => {
+      const ev: IntelEvidence[] = []
+      const has = (sym: SymptomId) =>
+        ctx.observations.some(
+          (o) =>
+            o.symptom === "DROOPING" &&
+            o.period !== "NIGHT" &&
+            o.period !== "LIGHTS_OFF" &&
+            !o.tApproximate &&
+            ctx.observations.some(
+              (m) => m.symptom === sym && !m.tApproximate && Math.abs(m.t - o.t) <= 3 * 86400000
+            )
+        )
+      if (has("MEDIUM_WET")) {
+        ev.push({
+          direction: "for",
+          strength: "moderate",
+          candidate: "overwater",
+          // the droop signal upgrades to moderate; the wet-medium
+          // report keeps its own symptom:MEDIUM_WET signal — two
+          // observations, two signals, no third minted
+          signal: "symptom:DROOPING",
+          text: "Drooping while the medium is wet is the overwatering shape — roots can't take up water they can't breathe around.",
+          measurement: hint("watering"),
+        })
+        ev.push({
+          direction: "against",
+          strength: "weak",
+          candidate: "underwater",
+          // the wet-medium report is what argues — stamp it so this
+          // merges with CONTRA's same-direction evidence instead of
+          // summing a second weak group
+          signal: "symptom:MEDIUM_WET",
+          text: "A wet medium argues against underwatering as the droop cause.",
+        })
+      }
+      if (has("MEDIUM_DRY")) {
+        ev.push({
+          direction: "for",
+          strength: "moderate",
+          candidate: "underwater",
+          signal: "symptom:DROOPING",
+          text: "Drooping while the medium is dry is the underwatering shape — the simplest explanation fits.",
+          measurement: hint("watering"),
+        })
+        ev.push({
+          direction: "against",
+          strength: "weak",
+          candidate: "overwater",
+          signal: "symptom:MEDIUM_DRY",
+          text: "A dry medium argues against overwatering as the droop cause.",
+        })
+      }
+      return ev
+    },
+    sourceIds: ["cornell-cannabis-guidebook", "fao56-svp"],
+  },
+  {
+    id: "growth.stretch-context",
+    domain: "growth",
+    kind: "assessment",
+    title: "Stretch in context",
+    applies: (ctx) => ctx.observations.some((o) => o.symptom === "STRETCHED"),
+    evaluate: (ctx) => {
+      const ev: IntelEvidence[] = []
+      // Weeks 1–3 of flower carry a normal stretch — the same report
+      // means something different there than in veg. stageStartCensored
+      // means stageDays is a floor, not a fact — don't print it.
+      if (ctx.diary.stage === "FLOWER" && !ctx.stageStartCensored && ctx.stageDays <= 21) {
+        ev.push({
+          direction: "info",
+          strength: "weak",
+          candidate: "stretch",
+          signal: "stage",
+          text: `Day ${ctx.stageDays} of flower — the first ~3 weeks carry a natural stretch as the plant sets its frame; it isn't a light problem by itself.`,
+        })
+        ev.push({
+          direction: "against",
+          strength: "weak",
+          candidate: "insufficient_light",
+          signal: "stage",
+          text: "Early-flower stretch is expected — it doesn't prove the light is short, though canopy PPFD would settle it.",
+          measurement: hint("ppfd"),
+        })
+        return ev
+      }
+      const tLatest = latestIsCurrent(ctx.series.temperature, ctx.now)
+        ? ctx.series.temperature.latest
+        : null
+      const [, tHi] = TEMP_BANDS[ctx.diary.stage] ?? TEMP_BAND_DEFAULT
+      if (tLatest != null && tLatest >= tHi) {
+        // emit for the stage-refined stretch target — at SEEDLING the
+        // report refines to seedling_stretch, not the generic candidate
+        const obs = ctx.observations.find((o) => o.symptom === "STRETCHED")
+        const targets = feedsForSymptom("STRETCHED", obs?.location, obs?.stage ?? ctx.diary.stage)
+          .feeds.filter((f) => f in CANDIDATES && (f === "stretch" || f === "seedling_stretch"))
+        for (const cid of targets.length ? targets : ["stretch"]) {
+          ev.push({
+            direction: "for",
+            strength: "moderate",
+            candidate: cid,
+            signal: "temperature",
+            text: `Stretching while temps run ${f1(tLatest)}°F (≥${tHi}°F) — heat and light limits can both sit behind elongation; can't separate them without a light reading.`,
+            measurement: hint("ppfd"),
+          })
+        }
+        ev.push({
+          direction: "for",
+          strength: "weak",
+          candidate: "heat_stress",
+          signal: "temperature",
+          text: `Stretch plus ${f1(tLatest)}°F is consistent with heat pushing elongation.`,
+          measurement: hint("leafTemp"),
+        })
+      }
+      return ev
+    },
+    sourceIds: ["rodriguez-morrison-2021-light", "cornell-cannabis-guidebook"],
+  },
+  {
+    id: "env.light-heat-compound",
+    domain: "environment",
+    kind: "assessment",
+    title: "Light symptom + high temperature",
+    applies: (ctx) =>
+      ctx.observations.some((o) => o.symptom === "LIGHT_BURN" || o.symptom === "BLEACHING") &&
+      ctx.series.temperature.n >= 1,
+    evaluate: (ctx) => {
+      const tLatest = latestIsCurrent(ctx.series.temperature, ctx.now)
+        ? ctx.series.temperature.latest
+        : null
+      const [, tHi] = TEMP_BANDS[ctx.diary.stage] ?? TEMP_BAND_DEFAULT
+      if (tLatest == null || tLatest < tHi) return []
+      const upperOnly = ctx.observations.some(
+        (o) => (o.symptom === "LIGHT_BURN" || o.symptom === "BLEACHING") && o.location === "UPPER_NEW"
+      )
+      return [
+        {
+          direction: "for",
+          strength: upperOnly ? "moderate" : "weak",
+          candidate: "light_burn",
+          signal: "temperature",
+          text: `Light-burn symptoms${upperOnly ? " on the upper canopy" : ""} while canopy temps run ${f1(tLatest)}°F — light and heat stress compound; actual PPFD at the tops would separate them.`,
+          measurement: hint("ppfd"),
+        },
+      ]
+    },
+    sourceIds: ["rodriguez-morrison-2021-light", "chandra-2008-photosynthesis"],
+  },
+  {
+    id: "stage.harvest-window",
+    signal: "stage",
+    domain: "stage",
+    kind: "assessment",
+    title: "Typical harvest window",
+    applies: (ctx) =>
+      ctx.diary.stage === "FLOWER" && !ctx.stageStartCensored && ctx.stageDays >= 49,
+    evaluate: (ctx) => [
+      {
+        direction: "info",
+        strength: "strong",
+        // a context fact (days in flower) rendered as a finding — not a
+        // readiness verdict; week count alone never proves harvest
+        confirmed: true,
+        text: `Day ${ctx.stageDays} of flower — many cultivars finish somewhere in the 8–10+ week range, but week count alone never proves readiness; trichome colour is the indicator to check.`,
+        measurement: hint("inspect:trichomes"),
+      },
+    ],
+    sourceIds: ["cornell-cannabis-guidebook", "postharvest-review-2022"],
+  },
+  {
+    id: "post.dry-env",
+    signal: "humidity",
+    domain: "postharvest",
+    kind: "risk",
+    title: "Drying-room conditions",
+    applies: (ctx) =>
+      ctx.diary.stage === "DRYING" &&
+      (ctx.series.humidity.n >= 1 || ctx.series.temperature.n >= 1),
+    evaluate: (ctx) => {
+      const ev: IntelEvidence[] = []
+      const rh = latestIsCurrent(ctx.series.humidity, ctx.now)
+        ? ctx.series.humidity.latest
+        : null
+      const t = latestIsCurrent(ctx.series.temperature, ctx.now)
+        ? ctx.series.temperature.latest
+        : null
+      if (rh != null && rh > 65) {
+        ev.push({
+          direction: "risk",
+          strength: rh >= 70 ? "moderate" : "weak",
+          candidate: "post.dry-mold-risk",
+          text: `Drying space at ${rh}% RH — above ~65% slows the dry enough for mold to set inside dense buds; aim for roughly 50–60%.`,
+          measurement: hint("temperature"),
+        })
+      }
+      if (rh != null && rh < 45) {
+        ev.push({
+          direction: "risk",
+          strength: "weak",
+          candidate: "post.dry-too-fast",
+          signal: "humidity",
+          text: `Dry space at ${rh}% RH — fast drying crusts the outside while cores stay wet; target a slow ~10–14 day dry for even moisture loss.`,
+          measurement: hint("temperature"),
+        })
+      }
+      // the warm arm only applies when the air isn't already wet —
+      // warm HUMID air dries slowly (that's the mold branch above)
+      if (t != null && t > 68 && (rh == null || rh <= 55)) {
+        ev.push({
+          direction: "risk",
+          strength: "weak",
+          candidate: "post.dry-too-fast",
+          signal: "temperature",
+          text: `Dry space at ${f1(t)}°F — warm dry air strips surface moisture too fast; aim nearer ~60°F.`,
+          measurement: hint("humidity"),
+        })
+      }
+      if (rh != null && rh >= 45 && rh <= 65 && (t == null || t <= 68)) {
+        ev.push({
+          direction: "info",
+          strength: "weak",
+          candidate: "post.dry-mold-risk",
+          text: `Dry space at ${rh}% RH${t != null ? ` / ${f1(t)}°F` : ""} — inside the commonly targeted slow-dry envelope.`,
+        })
+      }
+      return ev
+    },
+    sourceIds: ["postharvest-review-2022"],
+  },
+  {
+    id: "post.cure-rh",
+    signal: "humidity",
+    domain: "postharvest",
+    kind: "assessment",
+    title: "Cure moisture",
+    applies: (ctx) => ctx.diary.stage === "CURING" && ctx.series.humidity.n >= 1,
+    evaluate: (ctx) => {
+      const rh = latestIsCurrent(ctx.series.humidity, ctx.now)
+        ? ctx.series.humidity.latest
+        : null
+      if (rh == null) return []
+      // the humidity series is ambient logging — a jar hygrometer
+      // reading tells the same story but the label must stay honest
+      if (rh > 65) {
+        return [
+          {
+            direction: "for",
+            strength: rh >= 70 ? "moderate" : "weak",
+            candidate: "post.cure-moisture",
+            text: `Logged cure-space humidity at ${rh}% — if the jars read the same, that's mold territory; burp more often and check buds aren't clumping.`,
+            measurement: hint("humidity"),
+          },
+        ]
+      }
+      if (rh < 55) {
+        return [
+          {
+            direction: "for",
+            strength: "weak",
+            candidate: "post.cure-moisture",
+            text: `Logged cure-space humidity at ${rh}% — below ~55% the cure stalls; buds may be over-dried.`,
+          },
+        ]
+      }
+      return [
+        {
+          direction: "info",
+          strength: "weak",
+          candidate: "post.cure-moisture",
+          text: `Logged cure-space humidity at ${rh}% — inside the commonly targeted 55–65% band.`,
+        },
+      ]
+    },
+    sourceIds: ["postharvest-review-2022"],
+  },
+
+  {
     id: "data.stage-unknown",
     signal: "data",
     domain: "data",
@@ -2097,7 +2649,7 @@ export function evaluateContext(ctx: GrowContextView): Diagnosis {
   const candidates: CandidateResult[] = []
   for (const [id, bucket] of byCandidate) {
     const def = CANDIDATES[id]
-    if (!def) continue // orphan candidateId — validator catches this
+    if (!def) continue // orphan candidateId — validateRuleEmissions catches this
     const requiredMissing = def.requiredInputs.filter((m) => !measurementAvailable(ctx, m))
     const scored = assessCandidate(def, bucket.evidence)
     // Missing required data caps STRONG/CONFIRMED at POSSIBLE — a

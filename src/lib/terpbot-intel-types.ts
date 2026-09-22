@@ -286,7 +286,7 @@ export interface IntelRule {
   id: string
   domain:
     | "environment" | "chemistry" | "growth" | "stage" | "data"
-    | "nutrition" | "pest" | "disease" | "watering"
+    | "nutrition" | "pest" | "disease" | "watering" | "postharvest"
   kind: FindingKind
   /** finding/candidate label, e.g. "Bud-rot risk" */
   title: string
@@ -475,10 +475,20 @@ export interface WhyTrail {
       signal: string
       direction: "for" | "risk" | "against"
       weight: number
+      /** OBSERVED = a measurement or reported symptom; DERIVED = a value
+       *  calculated from measurements (VPD, dew point, pH+EC pairs);
+       *  INFERRED = an engine judgment about data/context, not a reading */
+      evidenceClass: "observed" | "derived" | "inferred"
+      /** age of the newest underlying point in days — historical
+       *  evidence is labeled, never hidden */
+      ageDays?: number
       /** the rendered evidence text — already safe to display */
       text: string
     }[]
     opposing: string[]
+    /** direction-info lines (in-band readings, honest caveats) — capped
+     *  at 1, rendered as context, never scored */
+    info?: string[]
     requiredMissing: MetricId[]
     next?: MeasurementHint
     sourceIds: string[]
