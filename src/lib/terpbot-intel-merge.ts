@@ -59,7 +59,11 @@ export function freshnessOf(
   return out
 }
 
-const SERIES_KEY: Partial<Record<MetricId, keyof GrowContextView["series"]>> = {
+/** Metrics with a real backing series — exported for the capability
+ *  model (terpbot-intel-capability.ts); same content as intel.ts's
+ *  SCHEMA_SERIES, kept in sync by construction (both derive reportable
+ *  answers from the same series map). */
+export const SERIES_KEY: Partial<Record<MetricId, keyof GrowContextView["series"]>> = {
   temperature: "temperature",
   humidity: "humidity",
   ph: "ph",
@@ -128,6 +132,16 @@ function rebuild(points: MetricPoint[], metric: MetricId, now: number): IntelSer
   }
 }
 
+/** Diary-attribution gate (Phase I): a session record merges only onto
+ *  the diary it was reported against — including the no-diary empty
+ *  context, where a stamped record must NOT land (it would render
+ *  another grow's evidence as unattributed). Un-attributed records
+ *  (legacy rows, or turns with no diary linked) keep the permissive
+ *  merge — 24h TTL bounds the exposure. */
+function forThisDiary(ctx: GrowContextView, diaryId: string | undefined): boolean {
+  return diaryId == null || diaryId === ctx.diary.id
+}
+
 /** Merge user-reported measurements into the context — returns a NEW
  *  view; the input is not mutated. */
 export function mergeReported(
@@ -135,6 +149,7 @@ export function mergeReported(
   reported: ReportedPoint[],
   now: number
 ): GrowContextView {
+  reported = reported.filter((p) => forThisDiary(ctx, p.diaryId))
   if (!reported.length) return ctx
 
   const series = { ...ctx.series }
@@ -215,6 +230,7 @@ export function mergeObservations(
   ctx: GrowContextView,
   obs: SessionObservation[]
 ): GrowContextView {
+  obs = obs.filter((o) => forThisDiary(ctx, o.diaryId))
   if (!obs.length) return ctx
   const seen = new Set(
     ctx.observations.map(
@@ -253,6 +269,7 @@ export function mergeResolutions(
   ctx: GrowContextView,
   claims: (Omit<ResolutionClaim, "source">)[]
 ): GrowContextView {
+  claims = claims.filter((c) => forThisDiary(ctx, c.diaryId))
   if (!claims.length) return ctx
   const seen = new Set(
     (ctx.resolutions ?? []).map(
@@ -277,6 +294,7 @@ export function mergeInterventions(
   ctx: GrowContextView,
   interventions: InterventionRecord[]
 ): GrowContextView {
+  interventions = interventions.filter((iv) => forThisDiary(ctx, iv.diaryId))
   if (!interventions.length) return ctx
   const out = interventions.map((iv) => {
     if (iv.beforeReading || !iv.targetMetric) return iv

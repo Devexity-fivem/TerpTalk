@@ -274,6 +274,9 @@ export interface ResolutionClaim {
   /** epoch ms of the claim event */
   t: number
   source: "nl" | "diary-text"
+  /** diary attribution for session-persisted claims — same contract as
+   *  ReportedPoint.diaryId; diary-text claims carry their own diary */
+  diaryId?: string
 }
 
 export type EpisodeStatus = "active" | "stable" | "improving" | "resolved" | "recurred"
@@ -314,6 +317,8 @@ export interface InterventionRecord {
   /** newest non-approximate series point ≤ eventT at capture time —
    *  the honest "before"; absent when nothing was logged */
   beforeReading?: { v: number; t: number }
+  /** diary attribution — same contract as ReportedPoint.diaryId */
+  diaryId?: string
 }
 
 export interface IntelSeries extends SeriesStats {
@@ -546,6 +551,10 @@ export interface ReportedPoint {
   /** clearly-historical but unbounded ("a while back") — merges at
    *  report time but is excluded from every "current reading" path */
   pastUnresolved?: boolean
+  /** diary this report was attributed to at write time (Phase I) —
+   *  internal routing only, never rendered. Absent on legacy records:
+   *  those merge onto any diary (24h session TTL bounds the window). */
+  diaryId?: string
 }
 
 /** a symptom the grower reported in chat — no provenance back to the
@@ -562,6 +571,8 @@ export interface SessionObservation {
   /** clearly-historical but unbounded — merges as an old approximate
    *  point, never a current observation */
   pastUnresolved?: boolean
+  /** diary attribution — same contract as ReportedPoint.diaryId */
+  diaryId?: string
 }
 
 export interface SessionState {

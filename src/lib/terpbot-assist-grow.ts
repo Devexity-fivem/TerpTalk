@@ -35,9 +35,10 @@ import {
 } from "@/lib/terpbot-intel-merge"
 import { snapshotFrom } from "@/lib/terpbot-intel-status"
 import { evaluateContext, MEASUREMENT_INFO } from "@/lib/terpbot-intel"
+import { REPORTABLE_METRICS } from "@/lib/terpbot-intel-merge"
 import { buildWhyTrail } from "@/lib/terpbot-intel-why"
 import { loadSession, saveSession } from "@/lib/terpbot-session"
-import type { GrowContextView } from "@/lib/terpbot-intel-types"
+import type { GrowContextView, MetricId } from "@/lib/terpbot-intel-types"
 
 const DAY = 86400000
 const SCAN_USER_CAP = 100
@@ -235,7 +236,13 @@ export async function scanGrowAssists(opts: {
           userId,
           {
             diaryId: pub ? (diaryId ?? null) : (composed.session?.diaryId ?? null),
-            pendingAsk: fire.stepId ?? composed.session?.pendingAsk ?? null,
+            // only a reportable metric can be ANSWERED — an inspect:*
+            // or series-less step (ppfd, leafTemp) as pendingAsk would
+            // park answers in `unresolved` forever
+            pendingAsk:
+              fire.stepId && REPORTABLE_METRICS.has(fire.stepId as MetricId)
+                ? fire.stepId
+                : (composed.session?.pendingAsk ?? null),
             ...(pub
               ? {
                   trail: buildWhyTrail(

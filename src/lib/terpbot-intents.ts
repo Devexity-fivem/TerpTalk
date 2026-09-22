@@ -185,6 +185,21 @@ const MATCHERS: Matcher[] = [
     },
   },
   {
+    // before grow/quests/check/milestones — "the plan for my grow" is a
+    // checklist request, not a grow lookup or a next-milestone question
+    name: "plan",
+    patterns: [
+      /\bmy (grow |stage )?plan\b/,
+      /\bplan for (my |the |this )?(grow|plant|stage|week|diary)\b/,
+      /\bwhat('s| is) the plan\b/,
+      /\bstage (checklist|plan)\b/,
+      /\bwhat('s| is) (left|next) (in|for) (this|the|my) (stage|phase)\b/,
+      /\bgrow (plan|checklist)\b/,
+      /\bwhat should i (be )?(watching|monitoring|doing) (in|for|during) (this|the|my) (stage|phase|grow)\b/,
+      /^plan$/,
+    ],
+  },
+  {
     // before growhelp/grow — "what do you have on my grow" contains
     // "my grow" but is a data-inventory question, not a grow lookup
     name: "measurements",

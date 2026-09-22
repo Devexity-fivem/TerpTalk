@@ -106,19 +106,28 @@ export async function saveSession(
       snapshot: curState?.snapshot,
     }
 
+    // Phase I: stamp this turn's diary onto appended evidence that
+    // doesn't carry its own attribution — records then merge ONLY onto
+    // the diary they were reported against (or any diary when the turn
+    // was unlinked). Legacy un-attributed rows keep old behavior.
+    const stamp = <T extends { diaryId?: string }>(rows: T[]): T[] =>
+      delta.diaryId
+        ? rows.map((r) => (r.diaryId ? r : { ...r, diaryId: delta.diaryId as string }))
+        : rows
+
     const next: SessionState = {
-      reported: trimPoints(mergeReportedPoints(cur.reported, delta.addReported ?? [])),
+      reported: trimPoints(mergeReportedPoints(cur.reported, stamp(delta.addReported ?? []))),
       observations: trimObservations(
-        mergeSessionObservations(cur.observations, delta.addObservations ?? [])
+        mergeSessionObservations(cur.observations, stamp(delta.addObservations ?? []))
       ),
       stage: delta.stage !== undefined ? delta.stage : cur.stage,
       trail: delta.trail !== undefined ? delta.trail : cur.trail,
       interventions: trimByT(
-        mergeByKey(cur.interventions ?? [], delta.addInterventions ?? [], interventionKey),
+        mergeByKey(cur.interventions ?? [], stamp(delta.addInterventions ?? []), interventionKey),
         MAX_INTERVENTIONS
       ),
       resolutions: trimByT(
-        mergeByKey(cur.resolutions ?? [], delta.addResolutions ?? [], resolutionKey),
+        mergeByKey(cur.resolutions ?? [], stamp(delta.addResolutions ?? []), resolutionKey),
         MAX_RESOLUTIONS
       ),
       snapshot: delta.snapshot !== undefined ? delta.snapshot : cur.snapshot,
@@ -206,22 +215,25 @@ function mergeSessionObservations(
   })]
 }
 
+// Dedupe keys carry diaryId (Phase I) — the same report attributed to
+// two different diaries is two records, not a collision. Records with
+// no attribution ("" prefix) dedupe against each other as before.
 const pointKey = (p: ReportedPoint) =>
-  `${p.metric}|${p.value}|${p.unit ?? ""}|${p.t}|${p.eventT ?? ""}`
+  `${p.diaryId ?? ""}|${p.metric}|${p.value}|${p.unit ?? ""}|${p.t}|${p.eventT ?? ""}`
 
 const obsKey = (o: SessionObservation) =>
-  `${o.symptom}|${o.location ?? ""}|${o.stage ?? ""}|${o.period ?? ""}|${o.t}|${o.eventT ?? ""}`
+  `${o.diaryId ?? ""}|${o.symptom}|${o.location ?? ""}|${o.stage ?? ""}|${o.period ?? ""}|${o.t}|${o.eventT ?? ""}`
 
 const DAY = 86400000
 
-/** one adjustment of a kind per target per day — CAS-retry safe.
- *  Exported: BOT_ASSIST dedupe keys reuse the same intervention
+/** one adjustment of a kind per target per diary per day — CAS-retry
+ *  safe. Exported: BOT_ASSIST dedupe keys reuse the same intervention
  *  identity so a follow-up assist fires at most once per adjustment. */
 export const interventionKey = (i: InterventionRecord) =>
-  `${i.type}|${i.targetMetric ?? ""}|${i.direction ?? ""}|${Math.floor((i.eventT ?? i.at) / DAY)}`
+  `${i.diaryId ?? ""}|${i.type}|${i.targetMetric ?? ""}|${i.direction ?? ""}|${Math.floor((i.eventT ?? i.at) / DAY)}`
 
 const resolutionKey = (r: Omit<ResolutionClaim, "source">) =>
-  `${r.symptom ?? ""}|${r.location ?? ""}|${r.kind}|${Math.floor(r.t / DAY)}`
+  `${r.diaryId ?? ""}|${r.symptom ?? ""}|${r.location ?? ""}|${r.kind}|${Math.floor(r.t / DAY)}`
 
 function mergeByKey<T>(cur: T[], add: T[], keyFn: (x: T) => string): T[] {
   if (!add.length) return cur

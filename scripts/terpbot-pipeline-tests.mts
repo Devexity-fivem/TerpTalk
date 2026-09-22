@@ -1256,6 +1256,72 @@ async function run() {
       console.log("✓ mention decimals + staff-word bypass")
     }
 
+    // ── 17. Phase I — /plan, harvested reachability, evidence stamping ──
+    {
+      const daysAgo = (n: number) => new Date(Date.now() - n * 86400000)
+      const u = await mk(`__tbp_pi_${SUFFIX}`)
+      const ctxC = (rest = ""): Parameters<typeof runBotCommand>[1] =>
+        ({ userId: u.id, role: "MEMBER", displayName: u.name ?? "x", args: [], rest })
+
+      // A harvested diary in a post-harvest stage still builds context —
+      // drying/curing intelligence must be reachable.
+      const h = await prisma.growDiary.create({
+        data: {
+          title: `__tbp hv ${SUFFIX}`, description: "t", growType: "INDOOR",
+          startDate: daysAgo(70), authorId: u.id, stage: "DRYING",
+          harvested: true, visibility: "PUBLIC",
+        },
+      })
+      diaryIds.push(h.id)
+      await prisma.diaryUpdate.create({
+        data: { title: "u", content: "x", stage: "DRYING", diaryId: h.id, authorId: u.id, temperature: 62, humidity: 58 },
+      })
+      const hctx = await buildGrowContext(h.id, { ownerId: u.id, scope: "public" })
+      assert.ok(hctx, "harvested diary builds context — post-harvest intel reachable")
+      assert.equal(hctx!.diary.stage, "DRYING")
+      assert.equal(hctx!.diary.harvested, true)
+
+      // /plan renders the drying playbook for a harvested-only user —
+      // intelContextFor's harvested fallback reaches it.
+      const rp = await runBotCommand("plan", ctxC())
+      assert.ok(rp.ok, "plan runs")
+      const pout = rp.messages.join("\n")
+      assert.ok(/Plan — /.test(pout), `plan header renders: ${pout}`)
+      assert.ok(/drying|Drying/.test(pout), `drying playbook in plan: ${pout}`)
+      assert.ok(!pout.includes(`__tbp hv ${SUFFIX}`), "diary title never echoes")
+      assert.ok(pout.length <= 2000, `plan bounded (${pout.length})`)
+
+      // Session evidence is stamped with the diary it was recorded against.
+      const rd = await runBotCommand("diagnose", ctxC("tent is at 59f"))
+      assert.ok(rd.ok)
+      const ps = await prisma.botSession.findUnique({ where: { userId: u.id } })
+      const reps = (ps!.state as { reported: { diaryId?: string }[] }).reported
+      assert.equal(ps!.diaryId, h.id, "session linked to the harvested diary")
+      assert.ok(reps.length >= 1 && reps.every((r) => r.diaryId === h.id),
+        "reported points stamped with the source diaryId")
+
+      // A private-only diary user gets a generic plan — private data
+      // never enters the public-scope command path.
+      const pv = await mk(`__tbp_pip_${SUFFIX}`)
+      const pd = await prisma.growDiary.create({
+        data: {
+          title: `__tbp pipriv ${SUFFIX}`, description: "t", growType: "INDOOR",
+          startDate: daysAgo(20), authorId: pv.id, stage: "FLOWER", visibility: "PRIVATE",
+        },
+      })
+      diaryIds.push(pd.id)
+      const rpv = await runBotCommand("plan", {
+        userId: pv.id, role: "MEMBER", displayName: pv.name ?? "x", args: [], rest: "",
+      })
+      assert.ok(rpv.ok)
+      const pvout = rpv.messages.join("\n")
+      assert.ok(!pvout.includes(`__tbp pipriv ${SUFFIX}`), "private diary title never echoes")
+      assert.ok(!/flower/i.test(pvout), "private FLOWER stage never surfaces in room plan")
+
+      await prisma.botSession.deleteMany({ where: { userId: { in: [u.id, pv.id] } } })
+      console.log("✓ phase I: /plan, harvested reachability, evidence stamping, privacy")
+    }
+
     console.log("All TerpBot pipeline tests passed.")
   } finally {
     await prisma.notification.deleteMany({ where: { id: { in: notificationIds } } }).catch(() => {})

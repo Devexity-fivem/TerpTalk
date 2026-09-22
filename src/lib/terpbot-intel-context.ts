@@ -139,6 +139,16 @@ const CAPABILITY_PATTERNS: [RegExp, string][] = [
   [/\bac\b|air ?con/i, "ac"],
   [/fan|circulat|exhaust|inline/i, "airflow"],
   [/sensor|controller|automat|inkbird|ac infinity|vivosun/i, "controllers/sensors"],
+  // Measurement instruments — evidence a metric CAN be produced, used by
+  // the capability model as "plausible" (never "proven": a keyword is a
+  // claim, a series point is proof).
+  [/\bph\s*(meter|pen|tester|probe|kit|strips?)\b|bluelab/i, "ph-meter"],
+  [/\b(ec|tds|ppm)\s*(meter|pen|tester|probe)\b|truncheon|bluelab|conductivity/i, "ec-meter"],
+  [/hygrometer|thermometer|thermo[- ]?hygro|sensorpush|govee/i, "env-monitor"],
+  [/\b(par|ppfd|dli|lux)\s*(meter|sensor)\b|quantum sensor|apogee|photone/i, "light-meter"],
+  [/loupe|microscope|jewel/i, "loupe"],
+  [/\bco2\b|carbon dioxide/i, "co2"],
+  [/autopot|blumat|drip|ebb ?(and|&) ?flow|flood ?(and|&) ?drain|self[- ]?water|auto[- ]?water|irrigation/i, "auto-irrigation"],
 ]
 
 function setupCapabilities(setup: { ventilation: string | null; fans: string | null; controllers: string | null; equipment: string | null; lighting: string | null } | null): string[] {
@@ -187,8 +197,11 @@ export async function buildGrowContext(
 ): Promise<GrowContextView | null> {
   const scope = opts.scope === "public" ? publicDiaryWhere : {}
   const diary = await prisma.growDiary.findFirst({
-    // harvested diaries produce no intelligence — the run is over
-    where: { id: diaryId, authorId: opts.ownerId, deleted: false, harvested: false, ...scope },
+    // harvested diaries DO produce intelligence — post-harvest stages
+    // (HARVEST/DRYING/CURING) have their own rules and playbooks. The
+    // harvested flag reaches the view; selection layers (intelContextFor
+    // fallback, assist scan, primaryGrow) still prefer active diaries.
+    where: { id: diaryId, authorId: opts.ownerId, deleted: false, ...scope },
     select: {
       id: true, slug: true, title: true, stage: true, visibility: true,
       startDate: true, harvested: true,
@@ -380,7 +393,9 @@ export async function buildGrowContext(
     },
     setup: {
       present: !!diary.setup && !diary.setup.deleted,
-      medium: (diary.setup && !diary.setup.deleted ? diary.setup.medium : null) ?? diary.mediumType,
+      // normalized enum only — the raw GrowSetup.medium free text is
+      // never carried into the view (nothing should render user text)
+      medium: diary.mediumType,
       capabilities: setupCapabilities(diary.setup && !diary.setup.deleted ? diary.setup : null),
     },
     now,

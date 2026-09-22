@@ -716,7 +716,7 @@ section("longitudinal /why")
   assert.ok(/Intervention:/.test(text))
   // no raw ids leaked
   assert.ok(!/d1|u1|refId/i.test(text))
-  assert.ok(/knowledge v2\.3/.test(text))
+  assert.ok(/knowledge v2\.4/.test(text))
 }
 
 // ── Adversarial (H.37) ──────────────────────────────────────────────

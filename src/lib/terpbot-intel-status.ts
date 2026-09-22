@@ -17,6 +17,10 @@ import { INSPECTION_INFO, MEASUREMENT_INFO } from "@/lib/terpbot-intel"
 import { episodesFromObservations } from "@/lib/terpbot-intel-episodes"
 import { CANDIDATES } from "@/lib/terpbot-intel-knowledge"
 import { LOCATION_LABELS, SYMPTOM_LABELS } from "@/lib/terpbot-nl-vocab"
+import { stageLabel } from "@/lib/terpbot-constants"
+import { REPORTABLE_METRICS } from "@/lib/terpbot-intel-merge"
+import type { ChecklistItem } from "@/lib/terpbot-intel-checklist"
+import type { GrowIntelligenceSnapshot } from "@/lib/terpbot-intel-snapshot"
 import type {
   ActionRequest,
   Diagnosis,
@@ -152,6 +156,23 @@ export function renderStatus(
     observed.push(`${fmt(metric, s.latest)}${prov}`)
   }
   if (observed.length) lines.push(`Now: ${observed.join(" · ")}`)
+
+  // Setup — declared diary enums + heuristic capability ids only. Raw
+  // GrowSetup free text NEVER renders (it's public-showcase text, not a
+  // fact store); keyword hits are labeled as reported, not verified.
+  const setupBits: string[] = []
+  if (ctx.diary.mediumType) setupBits.push(SETUP_MEDIUM_LABELS[ctx.diary.mediumType] ?? ctx.diary.mediumType.toLowerCase())
+  if (ctx.diary.lightType) setupBits.push(SETUP_LIGHT_LABELS[ctx.diary.lightType] ?? ctx.diary.lightType.toLowerCase())
+  setupBits.push(SETUP_GROW_LABELS[ctx.diary.growType] ?? ctx.diary.growType.toLowerCase())
+  const controls = ctx.setup.capabilities
+    .map((c) => CONTROL_LABELS[c] ?? c)
+    .slice(0, 4)
+  if (ctx.diary.id && (ctx.diary.mediumType || ctx.diary.lightType || ctx.setup.present)) {
+    lines.push(
+      `Setup: ${setupBits.join(" · ")}` +
+        (controls.length ? ` · controls: ${controls.join(", ")} (setup text)` : "")
+    )
+  }
 
   // meaningful changes vs own baseline
   const changes: string[] = []
@@ -290,9 +311,10 @@ export function renderChanges(
   diagnosis: Diagnosis,
   prev: SessionSnapshot | undefined
 ): string[] {
-  if (!prev || (prev.diaryId && prev.diaryId !== ctx.diary.id)) {
-    // a snapshot taken on a different diary must never diff against
-    // this context — its readings/stage belong to another grow
+  if (!prev || (prev.diaryId ?? "") !== ctx.diary.id) {
+    // a snapshot must only diff against the diary it was taken on —
+    // a mismatched (or legacy un-attributed) snapshot would conflate
+    // another grow's readings with this context's
     return [
       "📈 No earlier snapshot to compare against — run /status first, then /changes next time.",
     ]
@@ -345,5 +367,127 @@ export function renderChanges(
   } else {
     lines.push(...out.slice(0, 8).map((l) => `- ${l}`))
   }
+  return lines
+}
+
+// ── /plan (Phase I) ─────────────────────────────────────────────────
+// The cultivation plan view over the shared Grow Intelligence
+// Snapshot + checklist engine. Sections map to checklist states:
+//   ⚠ concern · WATCH watch · MEASURE due-reportable · OBSERVE
+//   due-inspection/unreportable · UNKNOWN missing data · UPCOMING
+//   stage-fixed expectations.
+// Deliberately NOT a dump of nextActions() — the single live diagnostic
+// step stays behind /check. ≤2 chat messages via toMessages.
+
+const SETUP_MEDIUM_LABELS: Record<string, string> = {
+  SOIL: "soil", LIVING_SOIL: "living soil", COCO: "coco",
+  HYDRO: "hydro", DWC: "DWC", OTHER: "other medium",
+}
+const SETUP_LIGHT_LABELS: Record<string, string> = {
+  LED: "LED", HPS: "HPS", CMH: "CMH", FLUORESCENT: "fluorescent",
+  SUN: "sun", OTHER: "other light",
+}
+const SETUP_GROW_LABELS: Record<string, string> = {
+  INDOOR: "indoor", OUTDOOR: "outdoor", GREENHOUSE: "greenhouse",
+}
+/** Canonical capability id → display label. Keyword hits render under
+ *  "(setup text)" — a claim, never a verified fact. */
+const CONTROL_LABELS: Record<string, string> = {
+  dehumidifier: "dehumidifier",
+  humidifier: "humidifier",
+  ac: "AC",
+  airflow: "airflow",
+  "controllers/sensors": "controllers",
+  "ph-meter": "pH meter",
+  "ec-meter": "EC meter",
+  "env-monitor": "temp/RH monitor",
+  "light-meter": "light meter",
+  loupe: "loupe",
+  co2: "CO₂",
+  "auto-irrigation": "auto-irrigation",
+}
+
+/** Stage-forward expectation — fixed per stage, never a schedule with
+ *  dates. Observable endpoints beat calendar claims. */
+const UPCOMING: Record<string, (s: GrowIntelligenceSnapshot) => string | null> = {
+  GERMINATION: () => "seedling — once the first true leaves show",
+  SEEDLING: () => "vegetative — growth accelerates; the training window opens",
+  VEGETATIVE: () => "flower transition — RH targets tighten and stretch begins",
+  FLOWER: (s) =>
+    s.stageDays >= 35
+      ? "harvest — judge maturity on trichomes, not the calendar"
+      : "late flower — humidity discipline matters more as buds densify",
+  HARVEST: () => "drying — ~57–68°F / 50–65% RH with gentle airflow",
+  DRYING: () => "curing — when stems snap rather than bend",
+  CURING: () => "completed — the cure keeps improving for weeks; keep logging jar RH",
+  COMPLETED: () => null,
+}
+
+export function renderPlan(
+  snap: GrowIntelligenceSnapshot,
+  checklist: ChecklistItem[]
+): string[] {
+  const items = checklist.filter((i) => i.state !== "not_applicable")
+  const stageTxt = snap.stage !== "UNKNOWN" ? stageLabel(snap.stage) : "stage unknown"
+
+  const lines: string[] = [
+    `🗺 Plan — ${stageTxt}` +
+      (snap.stage !== "UNKNOWN"
+        ? ` · day ${snap.stageDays} · week ${snap.week}${snap.stageCensored ? " (stage start est.)" : ""}`
+        : "") +
+      (snap.harvested && snap.stage !== snap.declaredStage ? " (harvested)" : ""),
+  ]
+
+  // Setup — declared enums + heuristic capability ids only
+  const setupBits: string[] = []
+  if (snap.setup.mediumType) setupBits.push(SETUP_MEDIUM_LABELS[snap.setup.mediumType] ?? snap.setup.mediumType.toLowerCase())
+  if (snap.setup.lightType) setupBits.push(SETUP_LIGHT_LABELS[snap.setup.lightType] ?? snap.setup.lightType.toLowerCase())
+  setupBits.push(SETUP_GROW_LABELS[snap.setup.growType] ?? snap.setup.growType.toLowerCase())
+  const controls = snap.setup.controls.map((c) => CONTROL_LABELS[c] ?? c).slice(0, 4)
+  if (snap.diaryLinked && (snap.setup.mediumType || snap.setup.lightType || snap.setup.present)) {
+    lines.push(
+      `Setup: ${setupBits.join(" · ")}` +
+        (controls.length ? ` · ${controls.join(", ")} (setup text)` : "")
+    )
+  }
+
+  const concerns = items.filter((i) => i.state === "concern")
+  const watch = items.filter((i) => i.state === "watch")
+  const due = items.filter((i) => i.state === "due")
+  const unknown = items.filter((i) => i.state === "unknown")
+
+  for (const i of concerns.slice(0, 3)) lines.push(`⚠ ${i.label}`)
+
+  if (watch.length) lines.push(`Watch: ${watch.slice(0, 3).map((i) => i.label).join(" · ")}`)
+
+  const measure = due.filter((i) => i.stepId && REPORTABLE_METRICS.has(i.stepId as MetricId))
+  const observe = due.filter(
+    (i) => !i.stepId || i.stepId.startsWith("inspect:") || !REPORTABLE_METRICS.has(i.stepId as MetricId)
+  )
+  if (measure.length) {
+    lines.push(
+      `Measure: ${measure
+        .slice(0, 3)
+        .map((i) => metricLabel(i.stepId as MetricId))
+        .join(" · ")}`
+    )
+  }
+  if (observe.length) {
+    lines.push(`Observe: ${observe.slice(0, 3).map((i) => i.label).join(" · ")}`)
+  }
+
+  const upcoming = UPCOMING[snap.stage]?.(snap) ?? null
+  if (upcoming) lines.push(`Upcoming: ${upcoming}`)
+
+  if (unknown.length) {
+    lines.push(`Unknown: ${unknown.slice(0, 3).map((i) => i.label).join(" · ")}`)
+  }
+  // capability honesty — reportable metrics with no evidence either way
+  const unproven = snap.capabilityUnknown.slice(0, 3).map((m) => metricLabel(m))
+  if (unproven.length) {
+    lines.push(`No evidence of: ${unproven.join(" · ")} (missing data ≠ missing equipment)`)
+  }
+
+  if (snap.nextStep) lines.push(`Live diagnostic step → /check`)
   return lines
 }

@@ -26,9 +26,11 @@ import { notify } from "@/lib/notify"
 import { getBotUserId } from "@/lib/terpbot"
 import { buildHelpText } from "@/lib/chat-commands"
 import { buildGrowContext, emptyContext } from "@/lib/terpbot-intel-context"
-import { evaluateContext, renderIntelLines, nextUsefulMeasurement, nextActions } from "@/lib/terpbot-intel"
+import { evaluateContext, renderIntelLines, nextUsefulMeasurement } from "@/lib/terpbot-intel"
 import { mergeReported, mergeObservations, mergeResolutions, mergeInterventions, REPORTABLE_METRICS } from "@/lib/terpbot-intel-merge"
-import { renderStatus, renderChanges, renderCheck, renderMeasurements, snapshotFrom } from "@/lib/terpbot-intel-status"
+import { renderStatus, renderChanges, renderCheck, renderMeasurements, renderPlan, snapshotFrom } from "@/lib/terpbot-intel-status"
+import { buildSnapshot } from "@/lib/terpbot-intel-snapshot"
+import { activeChecklist } from "@/lib/terpbot-intel-checklist"
 import { buildWhyTrail, renderWhy } from "@/lib/terpbot-intel-why"
 import { loadSession, saveSession } from "@/lib/terpbot-session"
 import { parseGrowText } from "@/lib/terpbot-nl-parse"
@@ -425,25 +427,33 @@ async function intelContextFor(userId: string, now: number) {
   if (!base) {
     // the session-linked diary may be private/unlisted (an owner-scope
     // writer can put it there) or gone — fall back to the newest PUBLIC
-    // live diary rather than an empty context that masks real grows
-    const d = await prisma.growDiary.findFirst({
-      where: { authorId: userId, deleted: false, harvested: false, ...publicDiaryWhere },
-      orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
-      select: { id: true },
-    })
+    // live diary rather than an empty context that masks real grows.
+    // Harvested diaries are a second-tier fallback so DRYING/CURING
+    // plans stay reachable when the user has no active grow.
+    const d =
+      (await prisma.growDiary.findFirst({
+        where: { authorId: userId, deleted: false, harvested: false, ...publicDiaryWhere },
+        orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
+        select: { id: true },
+      })) ??
+      (await prisma.growDiary.findFirst({
+        where: { authorId: userId, deleted: false, harvested: true, ...publicDiaryWhere },
+        orderBy: [{ harvestedAt: "desc" }, { id: "desc" }],
+        select: { id: true },
+      }))
     diaryId = d?.id ?? null
     base = diaryId
       ? await buildGrowContext(diaryId, { ownerId: userId, scope: "public", now: new Date(now) })
       : null
   }
-  const view = base ?? emptyContext(now, state.stage)
   // Session evidence only merges onto the diary it was recorded
   // against — when the session is linked to a different diary (e.g. a
-  // private one that fell back to the newest public), its observations
-  // and interventions belong to that grow, not this one.
+  // private one that fell back to the newest public), its observations,
+  // interventions, and stage claim belong to that grow, not this one.
   const s = !session?.diaryId || session.diaryId === diaryId
     ? state
     : { reported: [], observations: [] }
+  const view = base ?? emptyContext(now, s.stage)
   const merged = mergeInterventions(
     mergeResolutions(
       mergeObservations(mergeReported(view, s.reported, now), s.observations ?? []),
@@ -976,7 +986,12 @@ async function handle(name: string, ctx: BotCommandCtx): Promise<BotCommandResul
       await saveSession(
         ctx.userId,
         {
-          diaryId: base.diary.id ? base.diary.id : null,
+          // Preserve an existing session link when the public build
+          // failed (deleted/private diary) — clearing it would leave
+          // this turn's records un-attributed and mergeable onto a
+          // different grow. The id is already on the session; we never
+          // introduce a private link here.
+          diaryId: base.diary.id || session?.diaryId || null,
           pendingAsk: next && REPORTABLE_METRICS.has(next.id as MetricId) ? next.id : null,
           stage: stageClaim,
           trail,
@@ -1089,16 +1104,15 @@ async function handle(name: string, ctx: BotCommandCtx): Promise<BotCommandResul
       if (!cap.allowed) return ok(`🤖 Give me a minute between status checks — try again shortly.`)
       const now = Date.now()
       const { session, merged } = await intelContextFor(ctx.userId, now)
-      const diagnosis = evaluateContext(merged)
-      const actions = nextActions(merged, diagnosis)
-      const lines = renderStatus(merged, diagnosis, actions)
+      const snap = buildSnapshot(merged)
+      const lines = renderStatus(merged, snap.diagnosis, snap.actions)
       await saveSession(
         ctx.userId,
         {
           diaryId: merged.diary.id || session?.diaryId || null,
           pendingAsk: session?.pendingAsk ?? null,
-          trail: buildWhyTrail(merged, diagnosis, now),
-          snapshot: snapshotFrom(merged, diagnosis, now),
+          trail: buildWhyTrail(merged, snap.diagnosis, now),
+          snapshot: snapshotFrom(merged, snap.diagnosis, now),
         },
         now
       )
@@ -1110,14 +1124,14 @@ async function handle(name: string, ctx: BotCommandCtx): Promise<BotCommandResul
       if (!cap.allowed) return ok(`🤖 Give me a minute — try again shortly.`)
       const now = Date.now()
       const { session, merged } = await intelContextFor(ctx.userId, now)
-      const diagnosis = evaluateContext(merged)
-      const lines = renderChanges(merged, diagnosis, session?.state.snapshot)
+      const snap = buildSnapshot(merged)
+      const lines = renderChanges(merged, snap.diagnosis, session?.state.snapshot)
       await saveSession(
         ctx.userId,
         {
           diaryId: merged.diary.id || session?.diaryId || null,
           pendingAsk: session?.pendingAsk ?? null,
-          snapshot: snapshotFrom(merged, diagnosis, now),
+          snapshot: snapshotFrom(merged, snap.diagnosis, now),
         },
         now
       )
@@ -1129,17 +1143,36 @@ async function handle(name: string, ctx: BotCommandCtx): Promise<BotCommandResul
       if (!cap.allowed) return ok(`🤖 Give me a minute — try again shortly.`)
       const now = Date.now()
       const { session, merged } = await intelContextFor(ctx.userId, now)
-      const diagnosis = evaluateContext(merged)
-      const actions = nextActions(merged, diagnosis)
-      const lines = renderCheck(actions)
-      const topStep = actions.find((a) => a.stepId && REPORTABLE_METRICS.has(a.stepId as MetricId))
+      const snap = buildSnapshot(merged)
+      const lines = renderCheck(snap.actions)
+      const topStep = snap.actions.find((a) => a.stepId && REPORTABLE_METRICS.has(a.stepId as MetricId))
       await saveSession(
         ctx.userId,
         {
           diaryId: merged.diary.id || session?.diaryId || null,
           pendingAsk: topStep?.stepId ?? session?.pendingAsk ?? null,
-          trail: buildWhyTrail(merged, diagnosis, now),
-          snapshot: snapshotFrom(merged, diagnosis, now),
+          trail: buildWhyTrail(merged, snap.diagnosis, now),
+          snapshot: snapshotFrom(merged, snap.diagnosis, now),
+        },
+        now
+      )
+      return ok(...toMessages(lines))
+    }
+
+    case "plan": {
+      const cap = await rateLimit(`bot-status:${ctx.userId}`, 6, 60_000)
+      if (!cap.allowed) return ok(`🤖 Give me a minute — try again shortly.`)
+      const now = Date.now()
+      const { session, merged } = await intelContextFor(ctx.userId, now)
+      const snap = buildSnapshot(merged)
+      const lines = renderPlan(snap, activeChecklist(snap))
+      await saveSession(
+        ctx.userId,
+        {
+          diaryId: merged.diary.id || session?.diaryId || null,
+          pendingAsk: session?.pendingAsk ?? null,
+          trail: buildWhyTrail(merged, snap.diagnosis, now),
+          snapshot: snapshotFrom(merged, snap.diagnosis, now),
         },
         now
       )

@@ -247,7 +247,9 @@ async function awardBotBadge(userId: string, name: string): Promise<boolean> {
 }
 
 // Evaluate bot achievements after a recorded event. Steady state is one
-// cheap query (earned badge names) with an early return once all are held.
+// cheap query (earned badge names) with an early return once all are
+// held; while badges are pending, ONE grouped aggregate proves most of
+// them unreachable before the ~15-query stats bundle ever runs.
 export async function checkBotBadges() {
   const bot = await prisma.profile.findUnique({
     where: { username: TERPBOT_USERNAME },
@@ -260,6 +262,42 @@ export async function checkBotBadges() {
   const earned = new Set(bot.user.badges.map((b) => b.badge.name))
   const pending = BOT_BADGE_REGISTRY.filter((d) => !earned.has(d.name))
   if (!pending.length) return
+
+  // Cheap impossibility gate: one groupBy gives exact counts per
+  // (type, command) plus the entity-link sum — everything a badge rule
+  // reads except membersAssisted, whose upper bound is the command row
+  // count (distinct users can't exceed rows). A badge that fails under
+  // upper bounds can never be earned by this event — skip the full
+  // stats fan-out. Exact semantics: a gate hit is only ever a skip.
+  const rows = await prisma.botEvent.groupBy({
+    by: ["type", "command"],
+    _count: { _all: true },
+    _sum: { entities: true },
+  })
+  const upper: Record<string, number> = {
+    commands: 0, mentions: 0, membersAssisted: 0, entityLinks: 0,
+    welcomes: 0, announcements: 0, daysActive: 0, unknownCommands: 0,
+    fallbacks: 0, refusals: 0, helps: 0, assists: 0,
+  }
+  for (const r of rows) {
+    const n = r._count._all
+    const cmd = r.command
+    if (r.type === "COMMAND_SLASH" || r.type === "COMMAND_MENTION") {
+      upper.commands += n
+      upper.entityLinks += r._sum.entities ?? 0
+      if (r.type === "COMMAND_MENTION") upper.mentions += n
+    } else if (r.type === "ANNOUNCEMENT") {
+      upper.announcements += n
+      if (cmd === "welcome") upper.welcomes += n
+    } else if (r.type === "DAY_ACTIVE") upper.daysActive += n
+    else if (r.type === "COMMAND_UNKNOWN") upper.unknownCommands += n
+    else if (r.type === "MENTION_FALLBACK") upper.fallbacks += n
+    else if (r.type === "MENTION_REFUSAL") upper.refusals += n
+    else if (r.type === "MENTION_HELP") upper.helps += n
+    else if (r.type === "ASSIST") upper.assists += n
+  }
+  upper.membersAssisted = upper.commands // upper bound: distinct ≤ rows
+  if (!pending.some((d) => BOT_BADGE_RULES[d.name]?.(upper as unknown as BotStats))) return
 
   const stats = await getBotStats()
   const newlyEarned: string[] = []

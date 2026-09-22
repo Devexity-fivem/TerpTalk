@@ -10,8 +10,15 @@
  *  harvest-window rules; CONTRA + refinement-intersection fixes.
  *  2.2 → 2.3: longitudinal rules (episode status, intervention
  *  follow-through, baseline-relative shift), recurring-excursion and
- *  stage-transition rules; no new candidates or sources. */
-export const KNOWLEDGE_VERSION = "2.3"
+ *  stage-transition rules; no new candidates or sources.
+ *  2.3 → 2.4: Phase I — Grow Intelligence Snapshot, stage playbook
+ *  checklist (all items cite the existing source registry), capability-
+ *  aware next-step ranking (excluded steps never surface; proven/
+ *  plausible capability is a bounded tie-break bonus), setup enums +
+ *  capability ids on /status and /plan, post-harvest stages reachable.
+ *  No new candidates, rules, or sources — the knowledge split is
+ *  unchanged, the planning surface is new. */
+export const KNOWLEDGE_VERSION = "2.4"
 
 export { SOURCES } from "@/lib/terpbot-knowledge/sources"
 import { NUTRITION_CANDIDATES } from "@/lib/terpbot-knowledge/candidates-nutrition"

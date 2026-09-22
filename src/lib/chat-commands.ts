@@ -57,6 +57,7 @@ export const CHAT_COMMANDS: ChatCommandMeta[] = [
   { name: "changes", usage: "/changes", description: "What changed since your last check-in", permission: P, surfaces: BOTH, handledBy: "bot", category: "grow", example: "@terpbot what changed" },
   { name: "check", usage: "/check", description: "The most useful thing to measure or check next", permission: P, surfaces: BOTH, handledBy: "bot", category: "grow", example: "@terpbot what should I check" },
   { name: "measurements", usage: "/measurements", description: "What TerpBot actually has — known, derived, stale, missing", permission: P, surfaces: BOTH, handledBy: "bot", category: "grow", example: "@terpbot what do you know about my grow" },
+  { name: "plan", usage: "/plan", description: "Current-stage cultivation plan — what to watch, measure, observe", permission: P, surfaces: BOTH, handledBy: "bot", category: "grow", example: "@terpbot what's the plan for my grow" },
 
   // ── Community ────────────────────────────────────────────────────
   { name: "stats", usage: "/stats", description: "Community stats", permission: P, surfaces: BOTH, handledBy: "bot", category: "community" },

@@ -35,7 +35,7 @@
 
 import { countExcursions, dewPointFromTempRh, excursionEpisodes } from "@/lib/terpbot-intel-calc"
 import { episodesFromObservations } from "@/lib/terpbot-intel-episodes"
-import { REPORTABLE_METRICS } from "@/lib/terpbot-intel-merge"
+import { feasibilityBonus, stepCapability } from "@/lib/terpbot-intel-capability"
 import { feedsForSymptom } from "@/lib/terpbot-nl-parse"
 import { CANDIDATES, SOURCES } from "@/lib/terpbot-intel-knowledge"
 import {
@@ -70,7 +70,11 @@ const W = { weak: 1, moderate: 2, strong: 3 } as const
 //    inside calculators) ─────────────────────────────────────────────
 // VPD targets: Cannabis Sci&Tech (0.8–1.1 veg / 1.0–1.5 flower),
 // IEEE greenhouse survey (~0.8 propagation). Seedling band widened down.
-const VPD_BANDS: Record<string, [number, number]> = {
+// Band tables exported (Phase I) — the Grow Intelligence Snapshot and
+// checklist engine resolve "is the current reading in range" from the
+// SAME constants the rules use; one source of truth, no duplicated
+// thresholds.
+export const VPD_BANDS: Record<string, [number, number]> = {
   GERMINATION: [0.4, 0.9],
   SEEDLING: [0.4, 0.9],
   VEGETATIVE: [0.8, 1.2],
@@ -79,19 +83,19 @@ const VPD_BANDS: Record<string, [number, number]> = {
 }
 // pH bands keyed by structured mediumType; soilless per CANNA coco /
 // stage-tips hydro guidance, soil per stage-tips/Cornell soil band.
-const PH_BANDS: Record<string, [number, number]> = {
+export const PH_BANDS: Record<string, [number, number]> = {
   SOIL: [6.0, 6.8],
   LIVING_SOIL: [6.0, 6.8],
   COCO: [5.5, 6.2],
   HYDRO: [5.5, 6.2],
   DWC: [5.5, 6.2],
 }
-const PH_BAND_UNKNOWN: [number, number] = [5.5, 7.0]
+export const PH_BAND_UNKNOWN: [number, number] = [5.5, 7.0]
 
 // Stage-conditioned temperature bands (°F). Growth-stage ceiling 86°F
 // = ~30°C adverse edge (Chandra 2008). Germination/seedling bands are
 // tighter — small root zones buffer less (stage-tips 22–25°C germ).
-const TEMP_BANDS: Record<string, [number, number]> = {
+export const TEMP_BANDS: Record<string, [number, number]> = {
   GERMINATION: [70, 80],
   SEEDLING: [68, 82],
   VEGETATIVE: [64, 86],
@@ -100,11 +104,11 @@ const TEMP_BANDS: Record<string, [number, number]> = {
   DRYING: [57, 68],
   CURING: [58, 68],
 }
-const TEMP_BAND_DEFAULT: [number, number] = [62, 86]
+export const TEMP_BAND_DEFAULT: [number, number] = [62, 86]
 
 // Stage-conditioned RH bands — floors feed humidity_low, ceilings catch
 // "elevated for this stage" below the stage-agnostic 70% disease line.
-const RH_BANDS: Record<string, [number, number]> = {
+export const RH_BANDS: Record<string, [number, number]> = {
   GERMINATION: [60, 85],
   SEEDLING: [55, 75],
   VEGETATIVE: [40, 70],
@@ -113,7 +117,7 @@ const RH_BANDS: Record<string, [number, number]> = {
   CURING: [55, 65],
 }
 
-const RH_FLOWER_RISK = 65 // Punja 2022: botrytis favored >70% RH; 65 = approaching
+export const RH_FLOWER_RISK = 65 // Punja 2022: botrytis favored >70% RH; 65 = approaching
 const RH_SUSTAINED = 70 // sustained-high threshold for the humidity_high candidate
 const RH_DISEASE = 70 // confirmed favorable-RH line (Punja/UTIA/BC)
 const BOTRYTIS_TEMP_F: [number, number] = [63, 75] // 17–24°C — Punja 2022
@@ -123,8 +127,8 @@ const TEMP_SWING_F = 15 // window spread suggesting day/night swing
 const EC_ELEVATED = 2.5 // mS/cm — above typical coco/hydro feed range
 const EC_VERY_HIGH = 4.0 // Hershkowitz 2025 tolerance bound — beyond is genuinely extreme
 const EC_FEED_MIN = 0.8 // below this, "feeding at strength" can't be claimed
-const EC_FLOOR: Record<string, number> = { VEGETATIVE: 0.8, FLOWER: 1.0 }
-const EC_SEEDLING_CEILING = 1.0 // seedlings need minimal feed (convention)
+export const EC_FLOOR: Record<string, number> = { VEGETATIVE: 0.8, FLOWER: 1.0 }
+export const EC_SEEDLING_CEILING = 1.0 // seedlings need minimal feed (convention)
 const PH_DANGER_LOW = 5.0 // Whipker/agg2: growth measurably inhibited below
 const PH_EDGE = 0.3 // distance to band edge that makes drift actionable
 const LATE_FLOWER_TAPER_DAYS = 42 // ~week 6+ — senescence/flush territory
@@ -132,7 +136,7 @@ const GROWTH_STAGES = new Set(["GERMINATION", "SEEDLING", "VEGETATIVE", "FLOWER"
 
 /** Deficiency candidates a reported symptom can feed — the lockout
  *  confounder rule emits against/for into this set. */
-const DEFICIENCY_CANDIDATES = new Set([
+export const DEFICIENCY_CANDIDATES = new Set([
   "nitrogen_def", "magnesium_def", "potassium_def", "iron_def",
   "sulfur_def", "phosphorus_def", "cal_mag", "zinc_boron",
 ])
@@ -3093,14 +3097,21 @@ function candidateNextMeasurement(
   return hint(wanted)
 }
 
+/** A step the grower can actually answer AND that isn't structurally
+ *  excluded for this grow (DWC runoff, outdoor env control). Feasibility
+ *  *evidence* (proven/plausible/unknown) ranks within feasibility —
+ *  missing data never means missing equipment. */
+function askable(ctx: GrowContextView, id: NextStepId): boolean {
+  const cap = stepCapability(ctx, id)
+  return cap.feasibility !== "excluded" && cap.feasibility !== "unreportable"
+}
+
 /** The single most uncertainty-reducing measurement across the whole
  *  diagnosis. Documented deterministic ranking, not Bayesian gain. */
 export function nextUsefulMeasurement(ctx: GrowContextView, diagnosis: Diagnosis): MeasurementHint | null {
-  // skip unreportable metrics — a step the grower can never answer is
+  // skip steps the grower can never answer — an unanswerable ask is
   // not an ask, it's a loop (same gate as nextActions)
-  const best = scoredSteps(ctx, diagnosis).find(
-    ([id]) => id.startsWith("inspect:") || REPORTABLE_METRICS.has(id as MetricId)
-  )
+  const best = scoredSteps(ctx, diagnosis).find(([id]) => askable(ctx, id))
   return best ? hint(best[0]) : null
 }
 
@@ -3110,6 +3121,12 @@ function scoredSteps(ctx: GrowContextView, diagnosis: Diagnosis): [NextStepId, n
   const scores = new Map<NextStepId, number>()
   const add = (m: NextStepId | undefined, w: number) => {
     if (!m || nextStepSatisfied(ctx, m)) return
+    // Feasibility: excluded/unreportable steps never score. The
+    // proven/plausible bonus is applied ONCE per step below — it must
+    // not compound per referencing candidate, or a widely-referenced
+    // plausible metric could bury a required-input gate (+4).
+    const cap = stepCapability(ctx, m)
+    if (cap.feasibility === "excluded" || cap.feasibility === "unreportable") return
     scores.set(m, (scores.get(m) ?? 0) + w)
   }
 
@@ -3137,6 +3154,7 @@ function scoredSteps(ctx: GrowContextView, diagnosis: Diagnosis): [NextStepId, n
   // directly, bypassing the satisfied-check intentionally.
   const bumpStale = (m: NextStepId | undefined, w: number) => {
     if (!m || m.startsWith("inspect:")) return
+    if (!askable(ctx, m)) return
     const age = ctx.freshness[m as MetricId]
     if (age != null && age >= STALE_DAYS) {
       scores.set(m, (scores.get(m) ?? 0) + w)
@@ -3158,6 +3176,14 @@ function scoredSteps(ctx: GrowContextView, diagnosis: Diagnosis): [NextStepId, n
     const w = STATE_WEIGHT[f.state]
     bumpStale(f.nextMeasurement?.id, w)
     for (const e of f.evidence) bumpStale(e.measurement?.id, w)
+  }
+
+  // Feasibility bonus, once per step: proven (+2) and plausible (+1)
+  // capabilities break near-ties toward what the grower can actually
+  // produce — bounded so it can never bury a required-input gate (+4).
+  for (const [m, s] of scores) {
+    if (m.startsWith("inspect:")) continue
+    scores.set(m, s + feasibilityBonus(stepCapability(ctx, m)))
   }
 
   return [...scores.entries()].sort(
@@ -3187,12 +3213,12 @@ function scoredSteps(ctx: GrowContextView, diagnosis: Diagnosis): [NextStepId, n
 export function nextActions(ctx: GrowContextView, diagnosis: Diagnosis): ActionRequest[] {
   const actions: ActionRequest[] = []
 
-  // step-classified actions — top 3 scored steps. Skip metrics the
-  // grower can never report (no diary field, no parser vocab, no
-  // series): asking for ppfd/leafTemp/substrateMoisture would nag
-  // forever (spec §25) — they're inspection-adjacent context, not asks.
-  const reportable = (id: string) =>
-    id.startsWith("inspect:") || REPORTABLE_METRICS.has(id as MetricId)
+  // step-classified actions — top 3 scored steps. Skip steps the grower
+  // can never answer (no diary field, no parser vocab, no series — or
+  // structurally excluded like DWC runoff): asking for ppfd/leafTemp/
+  // substrateMoisture would nag forever (spec §25) — they're
+  // inspection-adjacent context, not asks.
+  const reportable = (id: NextStepId) => askable(ctx, id)
   for (const [id, score] of scoredSteps(ctx, diagnosis).filter(([id]) => reportable(id)).slice(0, 3)) {
     const isInspect = id.startsWith("inspect:")
     const stale =

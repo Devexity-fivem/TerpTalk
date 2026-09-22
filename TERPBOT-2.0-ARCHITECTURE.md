@@ -668,5 +668,59 @@ general horticulture, labeled as such); `stageEstimated` surfaced in `/why`
 basis; dead `medianUpdateIntervalDays` removed. Rule/source inventory with
 per-rule thresholds and honest limitations: `TERPBOT-KNOWLEDGE.md`.
 
-**Remaining for 2.0-G+:** proactive env-watch assists, `DiagnosticSession`
-beyond the 24h window if needed, PPFD/photoperiod schema fields.
+**Shipped — Phase H (longitudinal + private assists):** metric baselines and
+change detection, symptom episodes, intervention tracking, next-best-action
+engine, `/status` `/changes` `/check` `/measurements` `/why` longitudinal
+surfaces, and six deterministic evidence-triggered BOT_ASSIST notifications
+(owner-scope, once-ever dedupe keys, 3/day + 7-day-cushion delivery, private
+diaries persist no trail/snapshot). Session evidence records carry a `diaryId`
+stamp so observations/interventions merge only onto the diary they were
+recorded against.
+
+**Shipped — Phase I (setup intelligence + planning):**
+
+- **Capability model** (`terpbot-intel-capability.ts`) — per-step feasibility:
+  `proven` (a series with data, or an instrument-free observation),
+  `plausible` (setup keyword heuristic or declared soilless medium implies a
+  meter), `unknown` (no evidence either way — missing data is never "no
+  meter"), `excluded` (structurally impossible: DWC has no runoff, outdoors
+  has no environmental adjustment), `unreportable` (no series path, e.g.
+  PPFD/leafTemp — recommendable as an inspection, never persisted as a
+  `pendingAsk`). VPD is proven when temperature+RH data exists even without
+  an entered series. Setup free text only produces `(setup text)`-labeled
+  heuristics; the raw string never renders.
+- **Grow Intelligence Snapshot** (`terpbot-intel-snapshot.ts`) — one shared
+  pure derivation over `GrowContextView`: effective stage (harvested diary +
+  growth stage → HARVEST), stage-conditioned bands (exported VPD/pH/temp/RH
+  tables), current readings with provenance + staleness, baseline-relative
+  changes, capability inventory, missing-vs-not-applicable reportable metrics,
+  diagnosis + ranked actions. `/status`, `/changes`, `/check`, `/plan`, and
+  the assist path all consume it — one source of truth, different renderers.
+- **Checklist engine** (`terpbot-intel-checklist.ts`) — stage playbooks
+  (GERMINATION through CURING) produce items with deterministic states
+  `done` / `due` / `watch` / `unknown` / `concern` / `not_applicable`, each
+  carrying a source id for provenance. Items evaluate from the snapshot:
+  band conformance, series freshness, capability exclusions, stage gates.
+  No scores, no fertilizer recipes — monitoring intelligence only.
+- **`/plan`** — room command rendering the active checklist in bounded
+  sections (Watch / Measure / Observe / Upcoming / Unknown). Adapts to stage,
+  declared setup enums, and live evidence: two growers at the same stage get
+  different plans when their readings differ. Registered in `CHAT_COMMANDS`,
+  matched before broad `grow`/`check` intents.
+- **Setup-aware `/check`** — action ranking adds a bounded feasibility bonus
+  (proven +2, plausible +1, unknown/inspect 0) and structurally-excluded or
+  unreportable steps never surface as asks or `pendingAsk`s, so the bot can
+  never loop on an impossible measurement (e.g. runoff EC on DWC).
+- **Post-harvest reachability** — `buildGrowContext` no longer filters
+  `harvested`; `intelContextFor` falls back active-first-then-harvested so a
+  user whose only grow is drying still gets real plans instead of an empty
+  context.
+- **H7 debt** — session evidence diary attribution (above); `checkBotBadges`
+  now loads the bot + earned badge names first and returns early when nothing
+  is pending, so the steady state no longer runs the full aggregate bundle.
+
+Knowledge version `2.4` — new renderable surfaces (`/plan`, setup section in
+`/status`) and the capability-aware `/check` ordering materially change output.
+
+**Remaining:** `DiagnosticSession` beyond the 24h window if needed,
+PPFD/photoperiod schema fields (today they are `unreportable` capabilities).
