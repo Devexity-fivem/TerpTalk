@@ -482,8 +482,17 @@ function run() {
     assert.ok(c.nextMeasurement?.id.startsWith("inspect:"), "pest next-step is an inspection")
     const lines = renderIntelLines(ctx, evaluateContext(ctx)).join("\n")
     assert.match(lines, /Reported:/, "reported symptoms render (canonical labels)")
-    assert.match(lines, /Suggested:/, "strong surfaces a proportional action")
+    assert.doesNotMatch(lines, /Suggested:/, "urgent-severity candidates never surface an adjustment")
     assert.doesNotMatch(lines, /webbing under the leaves/, "raw diary text never echoes")
+  }
+  {
+    // non-urgent STRONG with zero opposing evidence → proportional action
+    const ctx = withSeries({ humidity: mkSeries([72, 74, 76, 75], 3) }, { diary: { ...mkCtx().diary, stage: "VEGETATIVE" } })
+    const c = cand(ctx, "humidity_high")!
+    assert.equal(c.state, "strong")
+    assert.equal(c.opposing.length, 0)
+    const lines = renderIntelLines(ctx, evaluateContext(ctx)).join("\n")
+    assert.match(lines, /Suggested:/, "non-urgent STRONG surfaces a proportional action")
   }
   {
     // no raw text leakage — the rendered output only uses canonical labels

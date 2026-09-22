@@ -56,12 +56,40 @@ export function episodesFromObservations(
     bucket(o.symptom, o.location).evs.push({ t: o.t, kind: "report", approximate: o.tApproximate })
   }
 
-  // scoped claims land on their own key; unscoped claims apply to the
-  // most recently active episode (resolved below)
+  // claims land on their own key when the grower named a location that
+  // has reports; a symptom-scoped claim with no (or a foreign) location
+  // falls back to that symptom's most recently reported bucket — the
+  // grower means the thing they reported, not a phantom new episode
+  const reportBucketsOf = (s: SymptomId) =>
+    [...byKey.values()].filter(
+      (b) => b.symptom === s && b.evs.some((e) => e.kind === "report")
+    )
   const unscoped: Ev[] = []
   for (const r of resolutions) {
-    if (r.symptom) bucket(r.symptom, r.location).evs.push({ t: r.t, kind: r.kind })
-    else unscoped.push({ t: r.t, kind: r.kind })
+    if (!r.symptom) {
+      unscoped.push({ t: r.t, kind: r.kind })
+      continue
+    }
+    const exact = byKey.get(key(r.symptom, r.location))
+    let target = exact && exact.evs.some((e) => e.kind === "report") ? exact : undefined
+    if (!target) {
+      // deterministic fallback: the same-symptom bucket whose latest
+      // report is closest to (and not after) the claim
+      for (const b of reportBucketsOf(r.symptom)) {
+        const lastReport = Math.max(
+          ...b.evs.filter((e) => e.kind === "report").map((e) => e.t)
+        )
+        if (lastReport > r.t) continue
+        if (
+          !target ||
+          lastReport >
+            Math.max(...target.evs.filter((e) => e.kind === "report").map((e) => e.t))
+        ) {
+          target = b
+        }
+      }
+    }
+    (target ?? bucket(r.symptom, r.location)).evs.push({ t: r.t, kind: r.kind })
   }
 
   const episodes: SymptomEpisode[] = []
@@ -69,13 +97,14 @@ export function episodesFromObservations(
 
   // process scoped events per key
   const sortedKeys = [...byKey.keys()].sort()
-  const episodesByKey = new Map<string, SymptomEpisode>()
   for (const k of sortedKeys) {
     const b = byKey.get(k)!
     const evs = b.evs.sort((a, c) => a.t - c.t || KIND_ORDER[a.kind as keyof typeof KIND_ORDER] - KIND_ORDER[c.kind as keyof typeof KIND_ORDER])
     let ep: SymptomEpisode | null = null
+    let lastReportApprox = false
     for (const e of evs) {
       if (!ep) {
+        lastReportApprox = e.kind === "report" && !!e.approximate
         ep = {
           symptom: b.symptom,
           location: b.location,
@@ -93,6 +122,7 @@ export function episodesFromObservations(
       }
       if (e.kind === "report" || e.kind === "worsening") {
         ep.lastSeen = e.t
+        if (e.kind === "report") lastReportApprox = !!e.approximate
         if (ep.status === "resolved") {
           // a positive report (or worsening claim) after resolution —
           // recurrence, not a new problem
@@ -120,18 +150,22 @@ export function episodesFromObservations(
         ep.statusAt = e.t
       }
     }
-    if (ep) {
-      episodes.push(ep)
-      episodesByKey.set(k, ep)
-    }
+    // tApproximate reports open/extend history but can't mint a
+    // "current" episode — the episode is marked approximate so
+    // renderers/rules don't treat it as a fresh sighting
+    if (ep && lastReportApprox) ep.approximate = true
+    if (ep) episodes.push(ep)
   }
 
-  // unscoped claims apply to the most recently active episode existing
-  // at claim time — deterministic: latest lastSeen ≤ claim t
+  // unscoped claims apply to the most recently relevant episode
+  // existing at claim time — deterministic: latest lastSeen ≤ claim t.
+  // worsening claims may also target a resolved episode (recurrence).
   for (const e of unscoped.sort((a, b) => a.t - b.t)) {
     let target: SymptomEpisode | null = null
     for (const ep of episodes) {
-      if (ep.status === "resolved" || ep.status === "improving") continue
+      if (e.kind === "worsening"
+        ? ep.status === "improving"
+        : ep.status === "resolved" || ep.status === "improving") continue
       if (ep.lastSeen > e.t || ep.statusAt > e.t) continue
       if (!target || ep.lastSeen > target.lastSeen) target = ep
     }
@@ -142,6 +176,10 @@ export function episodesFromObservations(
       target.lastResolvedAt = e.t
     } else if (e.kind === "improving" || e.kind === "stable") {
       target.status = e.kind
+      target.statusAt = e.t
+    } else if (target.status === "resolved") {
+      target.status = "recurred"
+      target.episodeCount++
       target.statusAt = e.t
     } else {
       target.status = "active"

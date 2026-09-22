@@ -184,7 +184,12 @@ export async function sweepExpiredSessions(now: number): Promise<number> {
 function mergeReportedPoints(cur: ReportedPoint[], add: ReportedPoint[]): ReportedPoint[] {
   if (!add.length) return cur
   const seen = new Set(cur.map(pointKey))
-  return [...cur, ...add.filter((p) => !seen.has(pointKey(p)))]
+  return [...cur, ...add.filter((p) => {
+    const k = pointKey(p)
+    if (seen.has(k)) return false
+    seen.add(k)
+    return true
+  })]
 }
 
 function mergeSessionObservations(
@@ -193,7 +198,12 @@ function mergeSessionObservations(
 ): SessionObservation[] {
   if (!add.length) return cur
   const seen = new Set(cur.map(obsKey))
-  return [...cur, ...add.filter((o) => !seen.has(obsKey(o)))]
+  return [...cur, ...add.filter((o) => {
+    const k = obsKey(o)
+    if (seen.has(k)) return false
+    seen.add(k)
+    return true
+  })]
 }
 
 const pointKey = (p: ReportedPoint) =>
@@ -214,7 +224,14 @@ const resolutionKey = (r: Omit<ResolutionClaim, "source">) =>
 function mergeByKey<T>(cur: T[], add: T[], keyFn: (x: T) => string): T[] {
   if (!add.length) return cur
   const seen = new Set(cur.map(keyFn))
-  return [...cur, ...add.filter((x) => !seen.has(keyFn(x)))]
+  // dedupe within the batch too — identical parser hits in one message
+  // must not double-append
+  return [...cur, ...add.filter((x) => {
+    const k = keyFn(x)
+    if (seen.has(k)) return false
+    seen.add(k)
+    return true
+  })]
 }
 
 function trimByT<T extends object>(items: T[], max: number): T[] {

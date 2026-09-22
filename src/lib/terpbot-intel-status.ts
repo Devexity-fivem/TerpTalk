@@ -13,8 +13,9 @@
 // Chat messages cap at 1000 chars — every renderer is bounded.
 
 import { METRIC_EPSILON } from "@/lib/terpbot-intel-types"
-import { MEASUREMENT_INFO } from "@/lib/terpbot-intel"
+import { INSPECTION_INFO, MEASUREMENT_INFO } from "@/lib/terpbot-intel"
 import { episodesFromObservations } from "@/lib/terpbot-intel-episodes"
+import { CANDIDATES } from "@/lib/terpbot-intel-knowledge"
 import { LOCATION_LABELS, SYMPTOM_LABELS } from "@/lib/terpbot-nl-vocab"
 import type {
   ActionRequest,
@@ -54,6 +55,19 @@ const fmt = (metric: MetricId, v: number) =>
   : `${v}`
 
 const metricLabel = (m: MetricId) => MEASUREMENT_INFO[m]?.label ?? m
+
+/** user-authored free text (diary title) is markup/URL-launderable —
+ *  bot messages bypass link-trust checks, so strip it before render.
+ *  Same rules as terpbot-data's sanitizeField, kept local so this
+ *  module stays Prisma-free. */
+const scrub = (s: string, max = 60) =>
+  s.replace(/[\r\n]+/g, " ").replace(/[[\]()*`<>\\@]/g, "").replace(/\s+/g, " ").trim().slice(0, max)
+
+/** inspect:* ids render via their authored label, never raw */
+const stepLabel = (id: string) =>
+  id.startsWith("inspect:")
+    ? INSPECTION_INFO[id]?.label ?? "inspection"
+    : MEASUREMENT_INFO[id as MetricId]?.label ?? id
 
 /** Episodes derive at read time — same contract as evaluateContext's
  *  internal derivation (ctx.episodes may already be set by the engine;
@@ -124,7 +138,7 @@ export function renderStatus(
   const lines: string[] = []
   const stage = ctx.diary.stage !== "UNKNOWN" ? ctx.diary.stage.toLowerCase() : null
   lines.push(
-    `📋 Grow status${ctx.diary.id ? ` — "${ctx.diary.title}"` : " (no public diary linked)"}` +
+    `📋 Grow status${ctx.diary.id ? ` — "${scrub(ctx.diary.title)}"` : " (no public diary linked)"}` +
       (stage ? `\nStage: ${stage}${ctx.stageDays != null ? ` · day ${ctx.stageDays}` : ""}${ctx.stageStartCensored ? " (start estimated)" : ""}` : "")
   )
 
@@ -162,7 +176,9 @@ export function renderStatus(
     lines.push(
       e.status === "recurred"
         ? `⚠ ${label}${loc} — returned after a reported resolution (episode ${e.episodeCount})`
-        : `· ${label}${loc} — active since ${ageText(ctx, e.firstSeen)}`
+        : e.approximate
+          ? `· ${label}${loc} — reported earlier (timing approximate)`
+          : `· ${label}${loc} — active since ${ageText(ctx, e.firstSeen)}`
     )
   }
   for (const e of settled.slice(0, 1)) {
@@ -182,9 +198,7 @@ export function renderStatus(
     if (!key || !after.length) {
       lines.push(`Adjustment: reported ${ageText(ctx, at)}${label ? ` — ${label} not logged since` : ""}`)
     } else if (iv.beforeReading) {
-      const delta = Math.round((after[after.length - 1].v - iv.beforeReading.v) * 100) / 100
       lines.push(`Adjustment: ${label} ${iv.beforeReading.v} → ${after[after.length - 1].v} since your change — consistent timing, not proof of cause`)
-      void delta
     }
   }
 
@@ -224,7 +238,7 @@ function renderActionLine(a: ActionRequest): string {
     case "MEASURE":
       return `Measure ${a.stepId ? metricLabel(a.stepId as MetricId) : "readings"} — ${a.reason}`
     case "OBSERVE":
-      return `Check ${a.stepId ? MEASUREMENT_INFO[a.stepId as MetricId]?.label ?? a.stepId : ""} — ${a.reason}`
+      return `Check ${a.stepId ? stepLabel(a.stepId) : ""} — ${a.reason}`
     case "COMPARE":
       return `Measure ${a.stepId ? metricLabel(a.stepId as MetricId) : ""} — evidence conflicts between ${a.discriminates.length} live possibilities; this separates them`
     case "VERIFY":
@@ -319,7 +333,7 @@ export function renderChanges(
   if (top && prev.topCandidate?.id !== top.id) {
     out.push(`main watch is now ${top.name} (${top.state})`)
   } else if (!top && prev.topCandidate) {
-    out.push(`previous watch (${prev.topCandidate.id}) no longer meets the bar`)
+    out.push(`previous watch (${CANDIDATES[prev.topCandidate.id]?.name ?? "the earlier concern"}) no longer meets the bar`)
   }
 
   if (!out.length) {

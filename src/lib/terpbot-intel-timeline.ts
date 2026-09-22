@@ -82,7 +82,10 @@ export function stageTransitions(
       censored: !firstCurrent,
     })
   }
-  return out
+  // stage flapping can append a boundary transition stamped earlier than
+  // the last in-window one — sort so the LAST element is always the
+  // newest boundary (stable sort keeps same-t order deterministic)
+  return out.sort((a, b) => a.t - b.t)
 }
 
 const TRAINING_TAGS = new Set([
@@ -119,6 +122,21 @@ export function timelineFromRows(
       if (tr) transitionByRow.set(r.id, tr)
     }
     prev = r.stage
+  }
+  // a transition with no matching row boundary (censored — the boundary
+  // predates the fetched window) still emits a stage-change event at
+  // its lower-bound t, flagged so consumers don't over-read the timing
+  const attached = new Set(transitionByRow.values())
+  for (const tr of transitions) {
+    if (attached.has(tr)) continue
+    events.push({
+      id: `stage-change:diary:${diary.id}:${tr.from}-${tr.to}:${tr.t}`,
+      kind: tr.to === "COMPLETED" ? "completed" : "stage-change",
+      t: tr.t,
+      ...diaryRef,
+      stage: tr.to,
+      data: { from: tr.from, to: tr.to, censored: true },
+    })
   }
 
   for (const u of rows) {
@@ -170,9 +188,12 @@ export function timelineFromRows(
     }
     if (u.content) {
       const parsed = parseGrowText(u.content)
+      const symSeen = new Map<string, number>()
       for (const o of parsed.observations) {
+        const seen = symSeen.get(o.symptom) ?? 0
+        symSeen.set(o.symptom, seen + 1)
         events.push({
-          id: `symptom:${u.id}:${o.symptom}`,
+          id: `symptom:${u.id}:${o.symptom}${seen ? `:${seen}` : ""}`,
           kind: "symptom",
           t,
           ...ref,

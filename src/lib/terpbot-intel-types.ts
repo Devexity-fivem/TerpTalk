@@ -289,6 +289,9 @@ export interface SymptomEpisode {
   /** 1 on first occurrence; +1 per resolved→recurred cycle */
   episodeCount: number
   lastResolvedAt?: number
+  /** the newest report is an unbounded approximation ("a while back") —
+   *  the episode is real history, not a current sighting */
+  approximate?: boolean
 }
 
 /** A grower-reported adjustment — structured intent, never raw text.

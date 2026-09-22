@@ -238,7 +238,10 @@ export function buildMetricBaseline(points: MetricPoint[], now: number): MetricB
     ageDays,
   }
   if (ageDays > BASELINE_EXPIRE_DAYS) return { ...base, tier: "insufficient" }
-  if (n >= BASELINE_ESTABLISHED_N && windowDays >= BASELINE_ESTABLISHED_DAYS && ageDays <= BASELINE_STALE_DAYS) {
+  // established also requires ≥3 distinct days — a same-day burst of
+  // 7 readings isn't a baseline, it's one afternoon
+  if (n >= BASELINE_ESTABLISHED_N && windowDays >= BASELINE_ESTABLISHED_DAYS
+    && days.size >= BASELINE_EMERGING_DAYS && ageDays <= BASELINE_STALE_DAYS) {
     return { ...base, tier: "established" }
   }
   if (n >= BASELINE_EMERGING_N && days.size >= BASELINE_EMERGING_DAYS) {
@@ -277,7 +280,8 @@ export function detectChange(
     durationDays: null, recentN: 0, baselineN: 0,
   }
   const clean = points
-    .filter((p) => Number.isFinite(p.t) && Number.isFinite(p.v) && !p.tApproximate)
+    .filter((p) => Number.isFinite(p.t) && Number.isFinite(p.v) && !p.tApproximate
+      && p.provenance !== "user-reported")
     .sort((a, b) => a.t - b.t)
   const recentN = opts?.recentN ?? 3
   const recent = clean.slice(-recentN)
@@ -295,11 +299,13 @@ export function detectChange(
       durationDays: null, recentN: recent.length, baselineN: baseline.length,
     }
   }
-  // walk back while points hold on the delta side of the old median ± ε
+  // walk back while points hold at least epsilon past the old median in
+  // the delta direction — a point AT the old median is not part of the
+  // new level (looser bounds silently absorb the whole flat baseline)
   const sign = Math.sign(delta)
   let runStart = recent[0].t
   for (let i = clean.length - 1; i >= 0; i--) {
-    if (sign * (clean[i].v - bMed) >= -epsilon) runStart = clean[i].t
+    if (sign * (clean[i].v - bMed) >= epsilon) runStart = clean[i].t
     else break
   }
   const anchor = opts?.now ?? clean[clean.length - 1].t
@@ -368,7 +374,7 @@ export interface ExcursionResult {
 
 export function countExcursions(points: MetricPoint[], lo: number, hi: number): ExcursionResult {
 // Array.prototype.sort is stable (ES2019) — equal timestamps keep input order
-  const clean = points.filter((p) => Number.isFinite(p.v)).sort((a, b) => a.t - b.t)
+  const clean = points.filter((p) => Number.isFinite(p.v) && !p.tApproximate).sort((a, b) => a.t - b.t)
   let count = 0
   let longestRun = 0
   let run = 0

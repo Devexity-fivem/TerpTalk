@@ -7,6 +7,7 @@
 import type {
   LocationId,
   MetricId,
+  ResolutionClaim,
   SymptomId,
 } from "./terpbot-intel-types"
 import {
@@ -514,13 +515,19 @@ export function parseGrowText(raw: string): ParsedUtterance {
     const clauseStage = stageHits.find((h) => h.clause === ci)?.id
 
     // progression + intervention hits — suppressed on lookups ("should
-    // i lower my rh" reports nothing). First hit in clause order wins.
+    // i lower my rh" reports nothing) and on negation ("i never
+    // lowered rh" / "it hasn't cleared up" are not events). First hit
+    // in clause order wins.
     const progs = questionish
       ? []
-      : hits.filter((h) => h.entry.family === "progression")
+      : hits.filter(
+          (h) => h.entry.family === "progression" && !isNegated(seg.text, h.start - seg.base)
+        )
     const intHits = questionish
       ? []
-      : hits.filter((h) => h.entry.family === "intervention")
+      : hits.filter(
+          (h) => h.entry.family === "intervention" && !isNegated(seg.text, h.start - seg.base)
+        )
     const progKind = progs.length
       ? ({ RESOLVED: "resolved", IMPROVING: "improving", WORSENING: "worsening", STEADY: "stable" } as const)[
           progs[0].entry.id as "RESOLVED" | "IMPROVING" | "WORSENING" | "STEADY"
@@ -755,9 +762,18 @@ export function parseGrowText(raw: string): ParsedUtterance {
       if (!metric) {
         // a bare number in an intervention clause is the claimed
         // setpoint — "lowered rh to 50": the metric word was consumed
-        // by the intervention phrase, so no metric hit exists to bind
-        const iv = intHits.find((ih) => ih.entry.targetMetric)
+        // by the intervention phrase, so no metric hit exists to bind.
+        // Requires the number to FOLLOW the phrase with only a short
+        // connector between ("to 50", "at 50") — "lowered rh on 3
+        // plants" must not bind 3.
         const num = parseFloat(nm[0])
+        const numIdx = nm.index
+        const numStart = seg.base + numIdx
+        const iv = intHits.find((ih) => {
+          if (!ih.entry.targetMetric || ih.start + ih.len > numStart) return false
+          const between = seg.text.slice(ih.start + ih.len - seg.base, numIdx)
+          return /^(?:\s+(?:to|at))?\s*$/.test(between)
+        })
         if (iv && Number.isFinite(num)) {
           const rec = interventions.find(
             (i) => i.clause === ci && i.span[0] === iv.start
@@ -852,14 +868,26 @@ export function parseGrowText(raw: string): ParsedUtterance {
         (ih) => (ih.entry.targetMetric as MetricId | undefined) === metric
       )
       if (intForMetric && Number.isFinite(value)) {
-        const iv = interventions.find(
-          (i) => i.clause === ci && i.span[0] === intForMetric.start
-        )
-        if (iv && iv.setpoint == null) {
-          iv.setpoint = value
-          iv.setpointUnit = impliedUnit
-          continue
+        // setpoint needs a setpoint connector — "lowered rh to 50"
+        // binds, "lowered rh on 3 plants" does not bind 3
+        const anchor = metricPhrase && metricPhrase.start + metricPhrase.len <= start
+          ? metricPhrase.start + metricPhrase.len - seg.base
+          : intForMetric.start + intForMetric.len - seg.base
+        const between = seg.text.slice(anchor, nm.index)
+        if (/^(?:\s+(?:to|at))?\s*$/.test(between)) {
+          const iv = interventions.find(
+            (i) => i.clause === ci && i.span[0] === intForMetric.start
+          )
+          if (iv && iv.setpoint == null) {
+            iv.setpoint = value
+            iv.setpointUnit = impliedUnit
+            continue
+          }
         }
+        // an intervention targets this metric but the number doesn't
+        // connect to it — it's an adjunct ("on 3 plants"), not a
+        // reading. Drop to residual rather than mint a false value.
+        continue
       }
 
       measurements.push({
@@ -875,6 +903,47 @@ export function parseGrowText(raw: string): ParsedUtterance {
       })
     }
   })
+
+  // Conjunction heal — "yellowing and curling cleared up" / "yellowing
+  // cleared up and curling too" split the symptom list from its
+  // resolution verb: the symptom in the conjunction-adjacent clause
+  // joins the claim instead of minting a fresh active observation.
+  // Only across "and"/"also"/"plus" — never "but"/"then" (contrast).
+  const HEAL_CONN_RE = /^\s*(?:,?\s*(?:and|also|plus))\s*$/
+  const healedIdx = new Set<number>()
+  const heals: { obs: number; kind: ResolutionClaim["kind"] }[] = []
+  observations.forEach((o, oi) => {
+    for (const ci of [o.clause - 1, o.clause + 1]) {
+      if (ci < 0 || ci >= clauses.length) continue
+      const r = resolutions.find((x) => x.clause === ci)
+      if (!r) continue
+      const a = clauses[Math.min(o.clause, ci)]
+      const b = clauses[Math.max(o.clause, ci)]
+      const between = text.slice(a.base + a.text.length, b.base)
+      if (!HEAL_CONN_RE.test(between)) continue
+      heals.push({ obs: oi, kind: r.kind })
+      break
+    }
+  })
+  for (const { obs, kind } of heals) {
+    if (healedIdx.has(obs)) continue
+    healedIdx.add(obs)
+    const o = observations[obs]
+    resolutions.push({
+      symptom: o.symptom,
+      location: o.location,
+      kind,
+      clause: o.clause,
+      span: o.span,
+      ...(o.ageDays != null ? { ageDays: o.ageDays } : {}),
+      ...(o.pastUnresolved ? { pastUnresolved: true } : {}),
+    })
+  }
+  if (healedIdx.size) {
+    for (let i = observations.length - 1; i >= 0; i--) {
+      if (healedIdx.has(i)) observations.splice(i, 1)
+    }
+  }
 
   // dedupe observations on (symptom, location, stage, period, age) —
   // "yellowing last week" and "yellowing today" are two distinct

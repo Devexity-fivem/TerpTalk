@@ -35,6 +35,7 @@
 
 import { countExcursions, dewPointFromTempRh, excursionEpisodes } from "@/lib/terpbot-intel-calc"
 import { episodesFromObservations } from "@/lib/terpbot-intel-episodes"
+import { REPORTABLE_METRICS } from "@/lib/terpbot-intel-merge"
 import { feedsForSymptom } from "@/lib/terpbot-nl-parse"
 import { CANDIDATES, SOURCES } from "@/lib/terpbot-intel-knowledge"
 import {
@@ -2694,9 +2695,11 @@ export const INTEL_RULES: IntelRule[] = [
       const band = RH_BANDS[ctx.diary.stage]
       if (!band) return []
       const eps = excursionEpisodes(ctx.series.humidity.points, -Infinity, band[1])
-      if (eps.length < 2) return []
-      const open = eps[eps.length - 1].end == null
+      // need substance, not flicker: ≥2 episodes, ≥3 total out-of-band
+      // points, spread over ≥1 day
       const spanDays = Math.round((eps[eps.length - 1].start - eps[0].start) / 86400000)
+      if (eps.length < 2 || eps.reduce((a, e) => a + e.n, 0) < 3 || spanDays < 1) return []
+      const open = eps[eps.length - 1].end == null
       const ev: IntelEvidence[] = [
         {
           direction: "for",
@@ -2735,9 +2738,18 @@ export const INTEL_RULES: IntelRule[] = [
     signal: "stage",
     kind: "observation",
     title: "Stage changed",
-    applies: (ctx) =>
-      ctx.stageTransitions.length > 0 &&
-      (ctx.now - ctx.stageTransitions[ctx.stageTransitions.length - 1].t) / 86400000 <= 3,
+    applies: (ctx) => {
+      const tr = ctx.stageTransitions[ctx.stageTransitions.length - 1]
+      if (!tr) return false
+      // a censored t is a LOWER bound on the boundary — age-gating on
+      // it overestimates age and drops genuinely recent transitions.
+      // When the transition lands on the current stage, stageDays is
+      // the tighter bound.
+      if (tr.censored && tr.to === ctx.diary.stage && ctx.stageDays != null) {
+        return ctx.stageDays <= 3
+      }
+      return (ctx.now - tr.t) / 86400000 <= 3
+    },
     evaluate: (ctx) => {
       const tr = ctx.stageTransitions[ctx.stageTransitions.length - 1]
       return [
@@ -3084,7 +3096,11 @@ function candidateNextMeasurement(
 /** The single most uncertainty-reducing measurement across the whole
  *  diagnosis. Documented deterministic ranking, not Bayesian gain. */
 export function nextUsefulMeasurement(ctx: GrowContextView, diagnosis: Diagnosis): MeasurementHint | null {
-  const best = scoredSteps(ctx, diagnosis)[0]
+  // skip unreportable metrics — a step the grower can never answer is
+  // not an ask, it's a loop (same gate as nextActions)
+  const best = scoredSteps(ctx, diagnosis).find(
+    ([id]) => id.startsWith("inspect:") || REPORTABLE_METRICS.has(id as MetricId)
+  )
   return best ? hint(best[0]) : null
 }
 
@@ -3171,8 +3187,13 @@ function scoredSteps(ctx: GrowContextView, diagnosis: Diagnosis): [NextStepId, n
 export function nextActions(ctx: GrowContextView, diagnosis: Diagnosis): ActionRequest[] {
   const actions: ActionRequest[] = []
 
-  // step-classified actions — top 3 scored steps
-  for (const [id, score] of scoredSteps(ctx, diagnosis).slice(0, 3)) {
+  // step-classified actions — top 3 scored steps. Skip metrics the
+  // grower can never report (no diary field, no parser vocab, no
+  // series): asking for ppfd/leafTemp/substrateMoisture would nag
+  // forever (spec §25) — they're inspection-adjacent context, not asks.
+  const reportable = (id: string) =>
+    id.startsWith("inspect:") || REPORTABLE_METRICS.has(id as MetricId)
+  for (const [id, score] of scoredSteps(ctx, diagnosis).filter(([id]) => reportable(id)).slice(0, 3)) {
     const isInspect = id.startsWith("inspect:")
     const stale =
       !isInspect &&
@@ -3218,10 +3239,26 @@ export function nextActions(ctx: GrowContextView, diagnosis: Diagnosis): ActionR
     })
   }
 
+  // WAIT — a reported intervention with no after-reading is waiting on
+  // time, not on the grower measuring more right now. Computed before
+  // ADJUST because a pending intervention SUPPRESSES adjustment
+  // suggestions entirely — never stack a second change on an
+  // unverified first one.
+  const pending = (ctx.interventions ?? []).filter((iv) => {
+    const key = iv.targetMetric ? SCHEMA_SERIES[iv.targetMetric] : undefined
+    if (!key) return false
+    const at = iv.eventT ?? iv.at
+    return (
+      (ctx.now - at) / 86400000 <= 7 &&
+      !ctx.series[key].points.some((p) => !p.tApproximate && p.t > at)
+    )
+  })
+
   // ADJUST — gated: STRONG, no opposing evidence, non-urgent, authored
-  // action exists. One at most, always below measurement classes.
+  // action exists, no pending intervention. One at most, always below
+  // measurement classes.
   const top = diagnosis.candidates[0]
-  if (top && top.state === "strong" && top.againstScore === 0) {
+  if (top && top.state === "strong" && top.againstScore === 0 && !pending.length) {
     const def = CANDIDATES[top.id]
     const action = def?.recommendedActions[0]
     if (def && action && def.severity !== "urgent") {
@@ -3245,17 +3282,6 @@ export function nextActions(ctx: GrowContextView, diagnosis: Diagnosis): ActionR
     }
   }
 
-  // WAIT — a reported intervention with no after-reading is waiting on
-  // time, not on the grower measuring more right now
-  const pending = (ctx.interventions ?? []).filter((iv) => {
-    const key = iv.targetMetric ? SCHEMA_SERIES[iv.targetMetric] : undefined
-    if (!key) return false
-    const at = iv.eventT ?? iv.at
-    return (
-      (ctx.now - at) / 86400000 <= 7 &&
-      !ctx.series[key].points.some((p) => !p.tApproximate && p.t > at)
-    )
-  })
   if (pending.length) {
     const iv = pending[pending.length - 1]
     const label = iv.targetMetric ? MEASUREMENT_INFO[iv.targetMetric]?.label ?? iv.targetMetric : "the affected readings"
@@ -3393,9 +3419,14 @@ export function renderIntelLines(
   if (showAssessment) {
     // Risk candidates render as warnings — never as diagnoses.
     lines.push(`${top.kind === "risk" ? "Risk" : "Assessment"}: ${top.name} — ${top.state.toUpperCase()}`)
-    // Actions are proportional to certainty: only STRONG surfaces a
-    // suggested intervention; weaker states get a measurement instead.
-    const action = top.state === "strong" ? CANDIDATES[top.id]?.recommendedActions[0] : undefined
+    // Actions are proportional to certainty: only STRONG with zero
+    // opposing evidence on a non-urgent candidate surfaces a suggested
+    // intervention — same gate as the action engine's ADJUST class.
+    const def = CANDIDATES[top.id]
+    const action =
+      top.state === "strong" && top.againstScore === 0 && def?.severity !== "urgent"
+        ? def?.recommendedActions[0]
+        : undefined
     if (action) lines.push(`Suggested: ${action}`)
   }
   if (next) lines.push(`Next useful measurement: ${next.label} — ${next.why}`)

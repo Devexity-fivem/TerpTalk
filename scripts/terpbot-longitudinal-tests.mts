@@ -37,6 +37,7 @@ import type {
   GrowContextView,
   IntelSeries,
   InterventionRecord,
+  LocationId,
   MetricPoint,
   ResolutionClaim,
   StructuredObservation,
@@ -625,6 +626,42 @@ section("parser")
   const iv = p.interventions.find((i) => i.type === "RH_DOWN")
   assert.ok(iv)
   assert.equal(iv!.ageDays, 3)
+}
+
+{
+  // audit regressions — negation gates, setpoint connectors, heal
+  const p1 = parseGrowText("i never lowered rh")
+  assert.equal(p1.interventions.length, 0, "negated intervention mints nothing")
+  const p2 = parseGrowText("it hasn't cleared up")
+  assert.ok(!p2.resolutions.some((r) => r.kind === "resolved"), "negated progression ≠ resolved")
+  const p3 = parseGrowText("i lowered rh on 3 plants")
+  const iv3 = p3.interventions.find((i) => i.type === "RH_DOWN")
+  assert.ok(iv3)
+  assert.equal(iv3!.setpoint, undefined, "unconnected number is not a setpoint")
+  const p4 = parseGrowText("yellowing and curling cleared up")
+  assert.ok(!p4.observations.some((o) => o.symptom === "LEAF_YELLOWING"), "conjunction sibling joins the claim")
+  assert.ok(p4.resolutions.some((r) => r.symptom === "LEAF_YELLOWING" && r.kind === "resolved"))
+}
+
+{
+  // location-less claim falls back to the most-reported bucket —
+  // "tips yellowing" then "cleared up" resolves the located episode
+  const eps = episodesFromObservations(
+    [obs("LEAF_YELLOWING", 1, { location: "LEAF_TIPS" as LocationId })],
+    [{ symptom: "LEAF_YELLOWING", kind: "resolved", t: t0 + 3 * DAY, source: "nl" }]
+  )
+  assert.equal(eps.length, 1, "no phantom episode from a location-less claim")
+  assert.equal(eps[0].status, "resolved")
+}
+
+{
+  // tApproximate reports open history but don't mint a "current" episode
+  const eps = episodesFromObservations(
+    [obs("SPOTS", 1, { tApproximate: true })],
+    []
+  )
+  assert.equal(eps[0].status, "active")
+  assert.ok(eps[0].approximate, "approximate-only episode is flagged")
 }
 
 // ── Session merge + merge layer ─────────────────────────────────────

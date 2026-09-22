@@ -909,7 +909,11 @@ async function handle(name: string, ctx: BotCommandCtx): Promise<BotCommandResul
       const addInterventions: InterventionRecord[] = parsed.interventions.map((iv) => ({
         type: iv.type,
         at: now,
-        eventT: iv.ageDays != null ? now - iv.ageDays * 86400000 : undefined,
+        // "a while back" parks ~30d out — same convention as reports and
+        // resolutions — so the event doesn't anchor at read time and
+        // before/after splits see the true event side
+        eventT: iv.ageDays != null ? now - iv.ageDays * 86400000
+          : iv.pastUnresolved ? now - 30 * 86400000 : undefined,
         pastUnresolved: iv.pastUnresolved || undefined,
         direction: iv.direction,
         targetMetric: iv.targetMetric,

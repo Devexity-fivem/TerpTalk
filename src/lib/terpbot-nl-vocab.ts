@@ -594,6 +594,8 @@ export const GUARD_PHRASES = [
 export const NEGATION_TOKENS = new Set([
   "no", "not", "never", "without", "isnt", "isn't", "arent", "aren't",
   "dont", "don't", "doesnt", "doesn't", "wont", "won't",
+  "hasnt", "hasn't", "havent", "haven't", "hadnt", "hadn't",
+  "didnt", "didn't",
 ])
 
 /** Multi-word negations — checked against the up-to-4-token window

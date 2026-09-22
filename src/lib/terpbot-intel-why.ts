@@ -7,6 +7,7 @@
 import { KNOWLEDGE_VERSION, SOURCES } from "@/lib/terpbot-intel-knowledge"
 import { SYMPTOM_LABELS } from "@/lib/terpbot-nl-vocab"
 import {
+  INSPECTION_INFO,
   MEASUREMENT_INFO,
   nextActions,
   signalAgeDays,
@@ -126,7 +127,9 @@ export function buildWhyTrail(
   return {
     knowledgeVersion: KNOWLEDGE_VERSION,
     at: now,
-    diaryTitle: ctx.diary.title || null,
+    // diary title is user-authored free text — renderers never print it,
+    // so persist only whether a diary was linked, not its content
+    diaryTitle: ctx.diary.id ? "linked" : null,
     basis: {
       logged,
       reported,
@@ -318,7 +321,12 @@ export function renderWhy(trail: WhyTrail, question?: string): string[] {
       )
     }
     if (lon.action) {
-      lines.push(`Suggested action class: ${lon.action.class}${lon.action.stepId ? ` — ${MEASUREMENT_INFO[lon.action.stepId as MetricId]?.label ?? lon.action.stepId}` : ""}`)
+      const stepLabel = lon.action.stepId?.startsWith("inspect:")
+        ? INSPECTION_INFO[lon.action.stepId]?.label ?? "inspection"
+        : lon.action.stepId
+          ? MEASUREMENT_INFO[lon.action.stepId as MetricId]?.label ?? lon.action.stepId
+          : undefined
+      lines.push(`Suggested action class: ${lon.action.class}${stepLabel ? ` — ${stepLabel}` : ""}`)
     }
   }
 
