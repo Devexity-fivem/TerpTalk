@@ -9,9 +9,11 @@ import { SYMPTOM_LABELS } from "@/lib/terpbot-nl-vocab"
 import {
   INSPECTION_INFO,
   MEASUREMENT_INFO,
-  nextActions,
+  interventionState,
   signalAgeDays,
 } from "@/lib/terpbot-intel"
+import { buildCultivationDecisions, type CultivationDecisionSet } from "@/lib/terpbot-intel-decisions"
+import { buildSnapshot } from "@/lib/terpbot-intel-snapshot"
 import { episodesFromObservations } from "@/lib/terpbot-intel-episodes"
 import type {
   CandidateResult,
@@ -51,17 +53,6 @@ const SIGNAL_CLASS: Record<string, "observed" | "derived" | "inferred"> = {
   data: "inferred",
 }
 
-const SERIES_OF: Partial<Record<MetricId, keyof GrowContextView["series"]>> = {
-  temperature: "temperature",
-  humidity: "humidity",
-  ph: "ph",
-  ec: "ec",
-  height: "height",
-  vpd: "vpdEntered",
-  runoffPh: "runoffPh",
-  runoffEc: "runoffEc",
-}
-
 function signalClass(signal: string): "observed" | "derived" | "inferred" {
   if (signal.startsWith("symptom:")) return "observed"
   return SIGNAL_CLASS[signal] ?? "inferred"
@@ -81,7 +72,8 @@ export function buildWhyTrail(
   ctx: GrowContextView,
   diagnosis: Diagnosis,
   now: number,
-  next?: WhyTrail["next"]
+  next?: WhyTrail["next"],
+  decisions?: CultivationDecisionSet
 ): WhyTrail {
   let logged = 0
   let reported = 0
@@ -147,7 +139,7 @@ export function buildWhyTrail(
         text: f.evidence[0]?.text ?? f.title,
       })),
     next: next ?? diagnosis.candidates.find((c) => c.nextMeasurement)?.nextMeasurement,
-    longitudinal: buildLongitudinal(ctx, diagnosis),
+    longitudinal: buildLongitudinal(ctx, decisions),
   }
 }
 
@@ -156,7 +148,7 @@ export function buildWhyTrail(
  *  ids + scalars only; no diary ids, no raw text. */
 function buildLongitudinal(
   ctx: GrowContextView,
-  diagnosis: Diagnosis
+  decisions?: CultivationDecisionSet
 ): NonNullable<WhyTrail["longitudinal"]> | undefined {
   const changes: NonNullable<WhyTrail["longitudinal"]>["changes"] = []
   const pairs: [MetricId, keyof GrowContextView["series"]][] = [
@@ -190,12 +182,14 @@ function buildLongitudinal(
       lastSeenDaysAgo: Math.max(0, Math.floor((ctx.now - e.lastSeen) / 86400000)),
     }))
 
+  // "still unanswered" = pending or lapsed under the canonical
+  // intervention contract — a measurable intervention with no real
+  // after-reading, regardless of age (the trail shows it as history
+  // awaiting follow-up; cooldown itself is the decision engine's job)
   const pendingInterventions = (ctx.interventions ?? [])
     .filter((iv) => {
-      const key = iv.targetMetric ? SERIES_OF[iv.targetMetric] : undefined
-      if (!key) return false
-      const at = iv.eventT ?? iv.at
-      return !ctx.series[key].points.some((p) => !p.tApproximate && p.t > at)
+      const st = interventionState(ctx, iv)
+      return st === "pending" || st === "lapsed"
     })
     .slice(-2)
     .map((iv) => ({
@@ -204,10 +198,13 @@ function buildLongitudinal(
       daysAgo: Math.max(0, Math.floor((ctx.now - (iv.eventT ?? iv.at)) / 86400000)),
     }))
 
-  const top = nextActions(ctx, diagnosis)[0]
-  const action = top
-    ? { class: top.actionClass, stepId: top.stepId, reason: top.reason }
-    : undefined
+  // The trail's action is the canonical decision top — same answer
+  // /next would give, never a parallel selector's.
+  const top = (decisions ?? buildCultivationDecisions(buildSnapshot(ctx))).top
+  const action =
+    top && top.class !== "HOLD"
+      ? { class: top.class, stepId: top.stepId, reason: top.reason }
+      : undefined
 
   if (!changes.length && !episodes.length && !pendingInterventions.length && !action) return undefined
   return {

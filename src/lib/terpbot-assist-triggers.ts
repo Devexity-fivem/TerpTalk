@@ -20,7 +20,8 @@
 //   the data doesn't contain, never a causation claim.
 
 import { CANDIDATES } from "@/lib/terpbot-intel-knowledge"
-import { SCHEMA_SERIES, MEASUREMENT_INFO } from "@/lib/terpbot-intel"
+import { SCHEMA_SERIES, MEASUREMENT_INFO, interventionState } from "@/lib/terpbot-intel"
+import { topAskableMetric, type CultivationDecisionSet } from "@/lib/terpbot-intel-decisions"
 import { interventionKey } from "@/lib/terpbot-session"
 import { SYMPTOM_LABELS, LOCATION_LABELS } from "@/lib/terpbot-nl-vocab"
 import { STALE_DAYS } from "@/lib/terpbot-intel-types"
@@ -58,6 +59,9 @@ export interface AssistFire {
 interface AssistInput {
   ctx: GrowContextView
   diagnosis: Diagnosis
+  /** the canonical Phase J decision set — the "what's the most useful
+   *  thing next" answers come from here, not a trigger-local selector */
+  decisions: CultivationDecisionSet
   /** derived at read time — caller runs episodesFromObservations */
   episodes: SymptomEpisode[]
   /** last persisted session snapshot — the gap-fill diff base */
@@ -92,17 +96,12 @@ const symptomLabel = (e: SymptomEpisode) =>
 const placeLabel = (e: SymptomEpisode) =>
   e.location ? ` (${(LOCATION_LABELS[e.location] ?? e.location).toLowerCase()})` : ""
 
-/** The most useful next measurement a live candidate is missing — the
- *  "one useful next step" the assist copy points at. */
-function discriminator(diagnosis: Diagnosis): { metric: MetricId; label: string } | null {
-  for (const c of diagnosis.candidates) {
-    if (c.state === "insufficient") continue
-    const m = c.nextMeasurement?.id ?? c.requiredMissing[0]
-    if (m && SCHEMA_SERIES[m as MetricId]) {
-      return { metric: m as MetricId, label: metricLabel(m as MetricId) }
-    }
-  }
-  return null
+/** The most useful next measurement — read off the canonical
+ *  CultivationDecisionSet (Phase J) rather than a trigger-local
+ *  selector, so an assist points at the same step /next would give. */
+function discriminator(input: AssistInput): { metric: MetricId; label: string } | null {
+  const m = topAskableMetric(input.decisions)
+  return m ? { metric: m, label: metricLabel(m) } : null
 }
 
 // ── T1 · stale critical measurement ────────────────────────────────
@@ -151,8 +150,9 @@ function staleMeasurement({ ctx, diagnosis }: AssistInput): AssistFire[] {
 // epoch: the episode's firstSeen day — one assist per episode instance.
 // A recurred episode is T5's job, not this one's.
 
-function persistentSymptom({ ctx, diagnosis, episodes }: AssistInput): AssistFire[] {
-  const disc = discriminator(diagnosis)
+function persistentSymptom(input: AssistInput): AssistFire[] {
+  const { ctx, episodes } = input
+  const disc = discriminator(input)
   const fires: AssistFire[] = []
   for (const ep of episodes) {
     if (ep.status !== "active" || ep.approximate) continue
@@ -244,15 +244,14 @@ function baselineShift({ ctx }: AssistInput): AssistFire[] {
 function interventionFollowup({ ctx }: AssistInput): AssistFire[] {
   const fires: AssistFire[] = []
   for (const iv of ctx.interventions ?? []) {
-    if (iv.pastUnresolved) continue
     const m = iv.targetMetric
-    const key = m ? SCHEMA_SERIES[m] : undefined
-    if (!m || !key) continue
-    const at = iv.eventT ?? iv.at
-    const days = Math.floor((ctx.now - at) / DAY)
-    if (days < 2 || days > 7) continue
-    const answered = ctx.series[key].points.some((p) => !p.tApproximate && p.t > at)
-    if (answered) continue
+    if (!m) continue
+    // Canonical contract — "pending" already means measurable target,
+    // not pastUnresolved, no real after-reading, ≤7d. The trigger adds
+    // its own 2-day quiet window on top.
+    if (interventionState(ctx, iv) !== "pending") continue
+    const days = Math.floor((ctx.now - (iv.eventT ?? iv.at)) / DAY)
+    if (days < 2) continue
     fires.push({
       triggerId: "intervention-followup",
       severity: "INFO",

@@ -709,7 +709,8 @@ export interface WhyTrail {
     episodes: { symptom: SymptomId; status: EpisodeStatus; lastSeenDaysAgo: number }[]
     /** interventions awaiting an after-reading (bounded: 2) */
     pendingInterventions: { type: string; targetMetric?: MetricId; daysAgo: number }[]
-    /** the chosen next action — class + target, matching /check */
-    action?: { class: ActionClass; stepId?: NextStepId; reason: string }
+    /** the chosen next action — the canonical decision class + target,
+     *  matching /next and /check (MONITOR is a decision-layer class) */
+    action?: { class: ActionClass | "MONITOR"; stepId?: NextStepId; reason: string }
   }
 }

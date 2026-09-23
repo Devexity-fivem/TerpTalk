@@ -13,12 +13,14 @@
 // Chat messages cap at 1000 chars — every renderer is bounded.
 
 import { METRIC_EPSILON } from "@/lib/terpbot-intel-types"
-import { INSPECTION_INFO, MEASUREMENT_INFO } from "@/lib/terpbot-intel"
+import { INSPECTION_INFO, MEASUREMENT_INFO, interventionState } from "@/lib/terpbot-intel"
 import { episodesFromObservations } from "@/lib/terpbot-intel-episodes"
 import { CANDIDATES } from "@/lib/terpbot-intel-knowledge"
 import { LOCATION_LABELS, SYMPTOM_LABELS } from "@/lib/terpbot-nl-vocab"
 import { stageLabel } from "@/lib/terpbot-constants"
 import { REPORTABLE_METRICS } from "@/lib/terpbot-intel-merge"
+import { decisionLine } from "@/lib/terpbot-intel-decisions"
+import type { CultivationDecisionSet } from "@/lib/terpbot-intel-decisions"
 import type { ChecklistItem } from "@/lib/terpbot-intel-checklist"
 import type { GrowIntelligenceSnapshot } from "@/lib/terpbot-intel-snapshot"
 import type {
@@ -137,7 +139,8 @@ export function renderMeasurements(ctx: GrowContextView): string[] {
 export function renderStatus(
   ctx: GrowContextView,
   diagnosis: Diagnosis,
-  actions: ActionRequest[]
+  actions: ActionRequest[],
+  decisions?: CultivationDecisionSet
 ): string[] {
   const lines: string[] = []
   const stage = ctx.diary.stage !== "UNKNOWN" ? ctx.diary.stage.toLowerCase() : null
@@ -207,19 +210,23 @@ export function renderStatus(
     lines.push(`✓ ${label} — reported ${e.status}`)
   }
 
-  // pending interventions — honest before/after
+  // pending interventions — honest before/after, evaluated through the
+  // canonical interventionState contract (Phase J)
   for (const iv of (ctx.interventions ?? []).slice(-1)) {
-    const key = iv.targetMetric
-      ? (METRIC_ORDER.find(([m]) => m === iv.targetMetric)?.[1] ??
-        (iv.targetMetric === "vpd" ? "vpdComputed" : undefined))
-      : undefined
     const at = iv.eventT ?? iv.at
-    const after = key ? ctx.series[key].points.filter((p) => !p.tApproximate && p.t > at) : []
+    const st = interventionState(ctx, iv)
     const label = iv.targetMetric ? metricLabel(iv.targetMetric) : null
-    if (!key || !after.length) {
+    if (st !== "answered") {
       lines.push(`Adjustment: reported ${ageText(ctx, at)}${label ? ` — ${label} not logged since` : ""}`)
     } else if (iv.beforeReading) {
-      lines.push(`Adjustment: ${label} ${iv.beforeReading.v} → ${after[after.length - 1].v} since your change — consistent timing, not proof of cause`)
+      const key = iv.targetMetric
+        ? (METRIC_ORDER.find(([m]) => m === iv.targetMetric)?.[1] ??
+          (iv.targetMetric === "vpd" ? "vpdComputed" : undefined))
+        : undefined
+      const after = key ? ctx.series[key].points.filter((p) => !p.tApproximate && p.t > at) : []
+      if (after.length) {
+        lines.push(`Adjustment: ${label} ${iv.beforeReading.v} → ${after[after.length - 1].v} since your change — consistent timing, not proof of cause`)
+      }
     }
   }
 
@@ -228,29 +235,57 @@ export function renderStatus(
   if (top && top.state !== "insufficient") {
     lines.push(`${top.kind === "risk" ? "Risk" : "Watch"}: ${top.name} — ${top.state.toUpperCase()}`)
   }
-  const act = actions[0]
-  if (act) {
-    lines.push(`Next: ${renderActionLine(act)}`)
-  } else if (ctx.daysSinceUpdate != null && ctx.daysSinceUpdate >= 4) {
-    lines.push(`Next: log an update — last one was ${ctx.daysSinceUpdate}d ago`)
+  if (decisions) {
+    // Canonical decision layer (Phase J): the priority line and the
+    // waitingOn state come from the same set /next renders — no second
+    // selector.
+    const d = decisions.top
+    lines.push(`Next: ${decisionLine(d)}`)
+    if (decisions.waitingOn.length) {
+      lines.push(`Waiting on: ${decisions.waitingOn.join(" · ")}`)
+    }
+  } else {
+    const act = actions[0]
+    if (act) {
+      lines.push(`Next: ${renderActionLine(act)}`)
+    } else if (ctx.daysSinceUpdate != null && ctx.daysSinceUpdate >= 4) {
+      lines.push(`Next: log an update — last one was ${ctx.daysSinceUpdate}d ago`)
+    }
   }
   return lines
 }
 
 // ── /check ──────────────────────────────────────────────────────────
 
-/** Ranked next actions — the measure-vs-adjust order is explicit in the
- *  class labels. */
-export function renderCheck(actions: ActionRequest[]): string[] {
-  if (!actions.length) {
+/** Ranked next actions from the canonical decision set — the
+ *  measure-vs-adjust order is explicit in the class labels, and the
+ *  top decision carries its own "why first". */
+export function renderCheck(set: CultivationDecisionSet): string[] {
+  const top = set.top
+  if (top.class === "HOLD") {
     return [
       "✅ Nothing to check right now — measurements are current and nothing is unresolved.",
+      `Next: ${decisionLine(top)}`,
     ]
   }
   const lines = ["🔎 What would help most, in order:"]
-  actions.forEach((a, i) => {
-    lines.push(`${i + 1}. ${renderActionLine(a)}`)
+  set.decisions.slice(0, 4).forEach((d, i) => {
+    lines.push(`${i + 1}. ${decisionLine(d)}`)
   })
+  if (top.whyFirst) lines.push(`Why first: ${top.whyFirst}`)
+  if (set.waitingOn.length) lines.push(`Waiting on: ${set.waitingOn.join(" · ")}`)
+  return lines
+}
+
+// ── /next (Phase J) ─────────────────────────────────────────────────
+// The simplest daily interaction: exactly one recommendation, plus
+// why it comes first and what the engine is waiting for. Never a list.
+
+export function renderNext(set: CultivationDecisionSet): string[] {
+  const d = set.top
+  const lines = [`➡ Next: ${decisionLine(d)}`]
+  if (d.whyFirst) lines.push(`Why first: ${d.whyFirst}`)
+  if (set.waitingOn.length) lines.push(`Waiting on: ${set.waitingOn.join(" · ")}`)
   return lines
 }
 
@@ -309,7 +344,8 @@ export function snapshotFrom(
 export function renderChanges(
   ctx: GrowContextView,
   diagnosis: Diagnosis,
-  prev: SessionSnapshot | undefined
+  prev: SessionSnapshot | undefined,
+  decisions?: CultivationDecisionSet
 ): string[] {
   if (!prev || (prev.diaryId ?? "") !== ctx.diary.id) {
     // a snapshot must only diff against the diary it was taken on —
@@ -366,6 +402,12 @@ export function renderChanges(
     lines.push("Nothing meaningful changed — readings are inside their noise bands.")
   } else {
     lines.push(...out.slice(0, 8).map((l) => `- ${l}`))
+    // A delta is not automatically a problem — the decision layer says
+    // whether the shift is worth verifying and what to look at next.
+    const verify = decisions?.decisions.find(
+      (d) => d.class === "COMPARE" || d.class === "VERIFY"
+    )
+    if (verify) lines.push(`Worth verifying: ${decisionLine(verify)}`)
   }
   return lines
 }
@@ -425,7 +467,8 @@ const UPCOMING: Record<string, (s: GrowIntelligenceSnapshot) => string | null> =
 
 export function renderPlan(
   snap: GrowIntelligenceSnapshot,
-  checklist: ChecklistItem[]
+  checklist: ChecklistItem[],
+  decisions?: CultivationDecisionSet
 ): string[] {
   const items = checklist.filter((i) => i.state !== "not_applicable")
   const stageTxt = snap.stage !== "UNKNOWN" ? stageLabel(snap.stage) : "stage unknown"
@@ -437,6 +480,21 @@ export function renderPlan(
         : "") +
       (snap.harvested && snap.stage !== snap.declaredStage ? " (harvested)" : ""),
   ]
+
+  // TOP PRIORITY (Phase J) — the canonical decision layer's answer to
+  // "what matters most right now", before the routine checklist below.
+  if (decisions) {
+    const d = decisions.top
+    lines.push(
+      d.class === "HOLD"
+        ? `Top priority: none — ${d.reason}`
+        : `Top priority: ${decisionLine(d)}`
+    )
+    if (d.whyFirst && d.class !== "HOLD") lines.push(`Why first: ${d.whyFirst}`)
+    if (decisions.waitingOn.length) {
+      lines.push(`Waiting on: ${decisions.waitingOn.join(" · ")}`)
+    }
+  }
 
   // Setup — declared enums + heuristic capability ids only
   const setupBits: string[] = []
@@ -488,6 +546,6 @@ export function renderPlan(
     lines.push(`No evidence of: ${unproven.join(" · ")} (missing data ≠ missing equipment)`)
   }
 
-  if (snap.nextStep) lines.push(`Live diagnostic step → /check`)
+  if (snap.nextStep) lines.push(`One-step answer → /next · ranked steps → /check`)
   return lines
 }

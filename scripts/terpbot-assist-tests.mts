@@ -9,6 +9,8 @@ import assert from "node:assert"
 import { evaluateAssists, type AssistFire } from "../src/lib/terpbot-assist-triggers"
 import { interventionKey } from "../src/lib/terpbot-session"
 import { detectChange, seriesStats } from "../src/lib/terpbot-intel-calc"
+import { buildSnapshot } from "../src/lib/terpbot-intel-snapshot"
+import { buildCultivationDecisions } from "../src/lib/terpbot-intel-decisions"
 import type {
   CandidateResult,
   Diagnosis,
@@ -93,7 +95,17 @@ const evaluate = (
   diagnosis = mkDiag(),
   episodes: SymptomEpisode[] = [],
   snapshot?: SessionSnapshot
-): AssistFire[] => evaluateAssists({ ctx, diagnosis, episodes, snapshot })
+): AssistFire[] =>
+  evaluateAssists({
+    ctx,
+    diagnosis,
+    // canonical decision set — derived from the same ctx the triggers
+    // see (snapshot's own evaluation; the mock diagnosis above only
+    // feeds candidate-driven trigger conditions)
+    decisions: buildCultivationDecisions(buildSnapshot(ctx)),
+    episodes,
+    snapshot,
+  })
 
 const fire = (
   ctx: GrowContextView,

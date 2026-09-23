@@ -476,7 +476,8 @@ export const CHECKLIST: ChecklistItemDef[] = [
     stages: ["HARVEST"],
     label: "drying space conditions (~60°F / ~60% RH)",
     why: "the dry room is decided before the chop — measure it, don't guess it",
-    sourceIds: ["postharvest-review-2022"],
+    // 60/60 is the internal stage-tips convention, not a review figure
+    sourceIds: ["postharvest-review-2022", "terptalk-stage-tips"],
     stepId: "temperature",
     evaluate: (s) =>
       has(s, "temperature") && has(s, "humidity") && !stale(s, "temperature") && !stale(s, "humidity")

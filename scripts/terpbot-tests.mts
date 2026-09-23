@@ -226,7 +226,7 @@ function run() {
     ["@terpbot milestones", "milestones"],
     ["@terpbot what am I close to", "milestones"],
     ["@terpbot what's my next milestone", "milestones"],
-    ["@terpbot what should I do next", "milestones"],
+    ["@terpbot what should I do next", "next"],
     ["@terpbot my digest", "mydigest"],
     ["@terpbot what did I miss", "mydigest"],
     ["@terpbot catch me up", "mydigest"],

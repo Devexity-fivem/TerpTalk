@@ -82,6 +82,7 @@ const DB_PHASE: Suite[] = [
   { id: "terpbot-longitudinal", file: "scripts/terpbot-longitudinal-tests.mts", runner: "tsx", cls: "A", label: "TerpBot longitudinal intelligence (pure)" },
   { id: "terpbot-assist", file: "scripts/terpbot-assist-tests.mts", runner: "tsx", cls: "A", label: "TerpBot BOT_ASSIST triggers (pure)" },
   { id: "terpbot-plan", file: "scripts/terpbot-plan-tests.mts", runner: "tsx", cls: "A", label: "TerpBot Phase I snapshot/capability/plan (pure)" },
+  { id: "terpbot-decisions", file: "scripts/terpbot-decisions-tests.mts", runner: "tsx", cls: "A", label: "TerpBot Phase J decision engine (pure)" },
   { id: "validate-knowledge", file: "scripts/validate-knowledge.mts", runner: "tsx", cls: "C", label: "TerpBot knowledge validator" },
   { id: "chat", file: "scripts/chat-ux-tests.mts", runner: "tsx", cls: "A", label: "Chat UX helpers + room visibility (DB)" },
   { id: "community-analytics", file: "scripts/community-analytics-tests.mts", runner: "tsx", cls: "B", label: "Community analytics" },

@@ -20,6 +20,7 @@
 
 import {
   evaluateContext,
+  interventionState,
   nextActions,
   EC_FLOOR,
   PH_BANDS,
@@ -28,6 +29,7 @@ import {
   TEMP_BANDS,
   TEMP_BAND_DEFAULT,
   VPD_BANDS,
+  type InterventionState,
 } from "@/lib/terpbot-intel"
 import {
   adjustCapabilities,
@@ -46,7 +48,6 @@ import type {
   EpisodeStatus,
   GrowContextView,
   IntelSeries,
-  InterventionRecord,
   MetricId,
   SymptomId,
   Trend,
@@ -132,9 +133,19 @@ export interface SnapshotEpisode {
 export interface SnapshotIntervention {
   type: string
   targetMetric?: MetricId
+  /** intended direction of the reported change, when the vocab carries one */
+  direction?: "up" | "down"
   ageDays: number
-  /** no real series point landed on the target after the event */
+  /** canonical cooldown state — see interventionState():
+   *  pending = ≤7d unanswered (cooldown), answered = follow-up data
+   *  exists, lapsed = >7d unanswered, untracked = no measurable target */
+  state: InterventionState
+  /** state === "pending" — kept for renderer convenience */
   pending: boolean
+  /** a real after-reading exists — before/after is meaningful */
+  answered: boolean
+  /** newest real value at capture time — the honest "before" */
+  beforeValue?: number
 }
 
 export interface GrowIntelligenceSnapshot {
@@ -246,22 +257,6 @@ function vpdRow(ctx: GrowContextView, stage: string): SnapshotReading | null {
   )
 }
 
-/** pending = intervention ≤7d old with no real after-reading on its
- *  target series — same contract as the action engine's WAIT class. */
-function interventionPending(ctx: GrowContextView, iv: InterventionRecord): boolean {
-  if (!iv.targetMetric) return false
-  const key = ({
-    temperature: "temperature", humidity: "humidity", ph: "ph", ec: "ec",
-    height: "height", vpd: "vpdEntered", runoffPh: "runoffPh", runoffEc: "runoffEc",
-  } as Partial<Record<MetricId, keyof GrowContextView["series"]>>)[iv.targetMetric]
-  if (!key) return false
-  const at = iv.eventT ?? iv.at
-  return (
-    (ctx.now - at) / DAY_MS <= 7 &&
-    !ctx.series[key].points.some((p) => !p.tApproximate && p.t > at)
-  )
-}
-
 /** Build the shared snapshot. Deterministic: identical context →
  *  identical snapshot. Costs zero DB queries — derives from the
  *  already-bounded context view. */
@@ -352,14 +347,27 @@ export function buildSnapshot(ctx: GrowContextView): GrowIntelligenceSnapshot {
     capabilityUnknown,
     unresolvedCount: ctx.unresolved?.length ?? 0,
     episodes,
+    // Every pending/untracked intervention is kept — truncating the tail
+    // could drop an unanswered change and lose its WAIT/VERIFY display.
+    // Beyond that, the newest few give the renderer its cooldown window.
     interventions: (ctx.interventions ?? [])
-      .slice(-4)
-      .map((iv) => ({
-        type: iv.type,
-        targetMetric: iv.targetMetric,
-        ageDays: Math.max(0, Math.floor((ctx.now - (iv.eventT ?? iv.at)) / DAY_MS)),
-        pending: interventionPending(ctx, iv),
-      })),
+      .filter((iv, i, all) => {
+        const st = interventionState(ctx, iv)
+        return st === "pending" || st === "untracked" || i >= all.length - 4
+      })
+      .map((iv) => {
+        const state = interventionState(ctx, iv)
+        return {
+          type: iv.type,
+          targetMetric: iv.targetMetric,
+          direction: iv.direction,
+          ageDays: Math.max(0, Math.floor((ctx.now - (iv.eventT ?? iv.at)) / DAY_MS)),
+          state,
+          pending: state === "pending",
+          answered: state === "answered",
+          beforeValue: iv.beforeReading?.v,
+        }
+      }),
     diagnosis,
     actions,
     nextStep: actions[0] ?? null,

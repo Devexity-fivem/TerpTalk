@@ -413,8 +413,8 @@ function run() {
 
   // ── 18. Knowledge version pin ────────────────────────────────────
   {
-    assert.equal(KNOWLEDGE_VERSION, "2.4", "Phase I knowledge version")
-    ok("knowledge version 2.4")
+    assert.equal(KNOWLEDGE_VERSION, "2.5", "Phase J knowledge version")
+    ok("knowledge version 2.5")
   }
 
   // ── 19. Audit pins — honesty under weak/absent evidence ──────────

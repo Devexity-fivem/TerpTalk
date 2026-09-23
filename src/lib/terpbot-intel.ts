@@ -54,6 +54,7 @@ import type {
   IntelEvidence,
   IntelRule,
   IntelSeries,
+  InterventionRecord,
   MeasurementHint,
   MetricId,
   MetricPoint,
@@ -1447,7 +1448,7 @@ export const INTEL_RULES: IntelRule[] = [
         direction: "for",
         strength: "moderate",
         candidate: "ph_lockout",
-        text: `pH ${ctx.series.ph.latest} is below ${PH_DANGER_LOW} — risk climbs sharply in this range (cannabis hydro showed measured growth inhibition around pH ≤4.0) and micronutrient solubility rises as pH falls. Low pH is the dangerous direction, not high.`,
+        text: `pH ${ctx.series.ph.latest} is below ${PH_DANGER_LOW} — risk climbs sharply in this range (cannabis hydro showed measured growth inhibition below pH 5.0) and micronutrient solubility rises as pH falls. Low pH is the dangerous direction, not high.`,
         measurement: hint("runoffPh"),
       },
       {
@@ -2701,8 +2702,9 @@ export const INTEL_RULES: IntelRule[] = [
       const eps = excursionEpisodes(ctx.series.humidity.points, -Infinity, band[1])
       // need substance, not flicker: ≥2 episodes, ≥3 total out-of-band
       // points, spread over ≥1 day
+      if (eps.length < 2 || eps.reduce((a, e) => a + e.n, 0) < 3) return []
       const spanDays = Math.round((eps[eps.length - 1].start - eps[0].start) / 86400000)
-      if (eps.length < 2 || eps.reduce((a, e) => a + e.n, 0) < 3 || spanDays < 1) return []
+      if (spanDays < 1) return []
       const open = eps[eps.length - 1].end == null
       const ev: IntelEvidence[] = [
         {
@@ -2973,19 +2975,25 @@ export function evaluateContext(ctx: GrowContextView): Diagnosis {
       requiredMissing.length > 0 && (scored.state === "strong" || scored.state === "confirmed")
         ? "possible"
         : scored.state
-    // Stale-evidence clamp: when EVERY supporting signal group rests on
-    // readings ≥ STALE_DAYS old, STRONG/CONFIRMED can't stand — demote
-    // to POSSIBLE and say so. CONFLICTING is never touched.
+    // Stale-evidence clamp: when the majority of supporting weight rests
+    // on readings ≥ STALE_DAYS old, STRONG/CONFIRMED can't stand —
+    // demote to POSSIBLE and say so. CONFLICTING is never touched.
     const supportSignals = scored.signals.filter(
       (s) => s.direction === "for" || s.direction === "risk"
     )
+    // Demote when stale signals carry MORE than half the support
+    // weight — a fresh weak item must not keep STRONG alive when most
+    // of its support rests on old readings (all-stale included). An
+    // even split survives: the fresh half independently supports it.
+    const totalW = supportSignals.reduce((sum, s) => sum + s.weight, 0)
+    const staleW = supportSignals.reduce((sum, s) => {
+      const age = signalAgeDays(evalCtx, s.signal)
+      return sum + (age != null && age >= STALE_DAYS ? s.weight : 0)
+    }, 0)
     const stale =
       (state === "strong" || state === "confirmed") &&
       supportSignals.length > 0 &&
-      supportSignals.every((s) => {
-        const age = signalAgeDays(evalCtx, s.signal)
-        return age != null && age >= STALE_DAYS
-      })
+      staleW * 2 > totalW
     if (stale) {
       state = "possible"
       // Render the real age of the stalest supporting signal — daysSinceUpdate
@@ -3191,6 +3199,106 @@ function scoredSteps(ctx: GrowContextView, diagnosis: Diagnosis): [NextStepId, n
   )
 }
 
+// ── Intervention state (Phase J) ────────────────────────────────────
+// ONE canonical contract for "did the grower follow up with data?" —
+// replaces the divergent pending checks that grew up across the action
+// engine, the snapshot, /status, /checkin, and the /why trail.
+//
+//   pending   — ≤7d since the reported event, no real after-reading on
+//               the target series. Cooldown applies: never stack a
+//               second change on an unverified first one.
+//   answered  — a real (non-approximate) series point exists after the
+//               event time. Before/after comparison is meaningful.
+//   lapsed    — >7d unanswered. History, not a live gate — the moment
+//               to cheaply verify has passed.
+//   untracked — no measurable target (LIGHT_*, AIRFLOW, watering) or
+//               a report flagged pastUnresolved — can't verify by data.
+
+export type InterventionState = "pending" | "answered" | "lapsed" | "untracked"
+
+export function interventionState(ctx: GrowContextView, iv: InterventionRecord): InterventionState {
+  if (iv.pastUnresolved) return "untracked"
+  const key = iv.targetMetric ? SCHEMA_SERIES[iv.targetMetric] : undefined
+  if (!key) return "untracked"
+  const at = iv.eventT ?? iv.at
+  if (ctx.series[key].points.some((p) => !p.tApproximate && p.t > at)) return "answered"
+  return (ctx.now - at) / 86400000 <= 7 ? "pending" : "lapsed"
+}
+
+/** Interventions still inside their verification window — the
+ *  canonical "don't stack another change yet" set. */
+export function pendingInterventions(ctx: GrowContextView): InterventionRecord[] {
+  return (ctx.interventions ?? []).filter((iv) => interventionState(ctx, iv) === "pending")
+}
+
+/** ANY intervention reported within `days` — regardless of whether it
+ *  has a measurable target. "I raised the light" has no targetMetric but
+ *  still means a variable just changed; cooldown covers it too. */
+export function recentInterventions(ctx: GrowContextView, days: number): InterventionRecord[] {
+  return (ctx.interventions ?? []).filter(
+    (iv) => !iv.pastUnresolved && (ctx.now - (iv.eventT ?? iv.at)) / 86400000 <= days
+  )
+}
+
+/** The ONLY candidates whose authored first action may ever surface as
+ *  an ADJUST — reversible, low-risk environmental/procedural moves.
+ *  Feeding changes, flushes, chemical treatments, transplants, light
+ *  intensity changes with ambiguous text, and pest actions stay
+ *  informational: the engine answers those with MEASURE/VERIFY/WAIT. */
+export const ADJUST_ELIGIBLE: ReadonlySet<string> = new Set([
+  "heat_stress", // dim/raise light, exhaust — reversible
+  "humidity_high", // exhaust / dehumidifier
+  "humidity_low", // humidifier
+  "wind_or_dry", // fan aim
+  "env.cold-stress", // root-zone warmth
+  "env.dry-quality-risk", // dry-space environment
+  "post.dry-too-fast", // dry-space RH/temp
+  "post.cure-moisture", // burping — procedural
+  // NOT eligible by design: env.moisture-disease-risk and
+  // post.dry-mold-risk are urgent-severity (urgent → verify/observe
+  // first, always); light-intensity candidates carry ambiguous action
+  // text; every feed/flush/chemical/structural/pest action stays
+  // informational.
+])
+
+/** Allowlisted adjustments that only make sense inside an enclosed
+ *  grow space — outdoors the weather decides, so suggesting an exhaust
+ *  or dehumidifier move for a field grow is wrong, not merely risky. */
+export const FIELD_ADJUST: ReadonlySet<string> = new Set([
+  "heat_stress",
+  "humidity_high",
+  "humidity_low",
+  "wind_or_dry",
+  "env.cold-stress",
+])
+
+/** THE adjustment gate — every surface that renders a suggested change
+ *  calls this, never a local copy (Phase H7 audit: /checkin once
+ *  diverged from /check by omitting the pending-intervention clause).
+ *  An adjustment surfaces only when ALL of these hold:
+ *    1. top candidate is STRONG with zero opposing evidence
+ *    2. candidate is not urgent (urgent → verify/observe first, always)
+ *    3. candidate is on ADJUST_ELIGIBLE (reversible, low-risk only)
+ *    4. no intervention is still pending its after-reading
+ *    5. no intervention of ANY kind was reported in the last 3 days —
+ *       one variable at a time; a fresh change needs observation time
+ *    6. not a field-environment adjustment on an outdoor grow */
+export function isAdjustSafe(ctx: GrowContextView, diagnosis: Diagnosis): boolean {
+  const top = diagnosis.candidates[0]
+  if (!top || top.state !== "strong" || top.againstScore !== 0) return false
+  const def = CANDIDATES[top.id]
+  if (!def || def.severity === "urgent" || !def.recommendedActions[0]) return false
+  if (!ADJUST_ELIGIBLE.has(top.id)) return false
+  if (ctx.diary.growType === "OUTDOOR" && FIELD_ADJUST.has(top.id)) return false
+  // Raising RH is the mold-risk direction once flowers form — "add a
+  // humidifier" may be technically eligible but it's the wrong
+  // imperative for the stage; observe/verify wins instead.
+  if (top.id === "humidity_low" && ["FLOWER", "HARVEST", "DRYING", "CURING"].includes(ctx.diary.stage)) return false
+  if (pendingInterventions(ctx).length) return false
+  if (recentInterventions(ctx, 3).length) return false
+  return true
+}
+
 // ── Action engine (Phase H4) ────────────────────────────────────────
 // Classifies the ranked steps into explicit action classes. The list is
 // what "what's the single most useful thing to do next" draws from.
@@ -3270,24 +3378,17 @@ export function nextActions(ctx: GrowContextView, diagnosis: Diagnosis): ActionR
   // ADJUST because a pending intervention SUPPRESSES adjustment
   // suggestions entirely — never stack a second change on an
   // unverified first one.
-  const pending = (ctx.interventions ?? []).filter((iv) => {
-    const key = iv.targetMetric ? SCHEMA_SERIES[iv.targetMetric] : undefined
-    if (!key) return false
-    const at = iv.eventT ?? iv.at
-    return (
-      (ctx.now - at) / 86400000 <= 7 &&
-      !ctx.series[key].points.some((p) => !p.tApproximate && p.t > at)
-    )
-  })
+  const pending = pendingInterventions(ctx)
 
-  // ADJUST — gated: STRONG, no opposing evidence, non-urgent, authored
-  // action exists, no pending intervention. One at most, always below
+  // ADJUST — the centralized isAdjustSafe gate: STRONG + zero opposing
+  // + non-urgent + allowlisted reversible action + no pending or very
+  // recent intervention + field-applicable. One at most, always below
   // measurement classes.
   const top = diagnosis.candidates[0]
-  if (top && top.state === "strong" && top.againstScore === 0 && !pending.length) {
+  if (top && isAdjustSafe(ctx, diagnosis)) {
     const def = CANDIDATES[top.id]
     const action = def?.recommendedActions[0]
-    if (def && action && def.severity !== "urgent") {
+    if (def && action) {
       actions.push({
         actionClass: "ADJUST",
         actionText: action,
@@ -3445,14 +3546,13 @@ export function renderIntelLines(
   if (showAssessment) {
     // Risk candidates render as warnings — never as diagnoses.
     lines.push(`${top.kind === "risk" ? "Risk" : "Assessment"}: ${top.name} — ${top.state.toUpperCase()}`)
-    // Actions are proportional to certainty: only STRONG with zero
-    // opposing evidence on a non-urgent candidate surfaces a suggested
-    // intervention — same gate as the action engine's ADJUST class.
+    // Actions are proportional to certainty — and gated by THE SAME
+    // centralized predicate as the action engine's ADJUST class. A
+    // pending or very recent intervention suppresses suggestions here
+    // exactly as it does in /check — a suggestion must never bypass the
+    // gate by coming from a different renderer.
     const def = CANDIDATES[top.id]
-    const action =
-      top.state === "strong" && top.againstScore === 0 && def?.severity !== "urgent"
-        ? def?.recommendedActions[0]
-        : undefined
+    const action = isAdjustSafe(ctx, diagnosis) ? def?.recommendedActions[0] : undefined
     if (action) lines.push(`Suggested: ${action}`)
   }
   if (next) lines.push(`Next useful measurement: ${next.label} — ${next.why}`)

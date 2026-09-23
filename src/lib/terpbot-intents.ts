@@ -185,6 +185,20 @@ const MATCHERS: Matcher[] = [
     },
   },
   {
+    // before plan/milestones — "what should I do next" is a grow-
+    // decision question (Phase J /next), not a stage plan or an unlock
+    // milestone. "work on next" still reaches milestones below.
+    name: "next",
+    patterns: [
+      /^next$/,
+      /\bnext step\b/,
+      /\bwhat('s| is) (the |my )?next (step|thing|move|action)\b/,
+      /\bwhat (should|do) i do (next|first|now|right now)\b/,
+      /\bwhat now\b/,
+      /\bwhat('s| is) the (single |most |best )?(most useful|best) (next )?(thing|step|move)\b/,
+    ],
+  },
+  {
     // before grow/quests/check/milestones — "the plan for my grow" is a
     // checklist request, not a grow lookup or a next-milestone question
     name: "plan",

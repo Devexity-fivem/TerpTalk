@@ -34,7 +34,9 @@ import {
   mergeResolutions,
 } from "@/lib/terpbot-intel-merge"
 import { snapshotFrom } from "@/lib/terpbot-intel-status"
-import { evaluateContext, MEASUREMENT_INFO } from "@/lib/terpbot-intel"
+import { MEASUREMENT_INFO } from "@/lib/terpbot-intel"
+import { buildSnapshot } from "@/lib/terpbot-intel-snapshot"
+import { buildCultivationDecisions } from "@/lib/terpbot-intel-decisions"
 import { REPORTABLE_METRICS } from "@/lib/terpbot-intel-merge"
 import { buildWhyTrail } from "@/lib/terpbot-intel-why"
 import { loadSession, saveSession } from "@/lib/terpbot-session"
@@ -113,7 +115,7 @@ export async function scanGrowAssists(opts: {
       ...(opts.authorIds ? { userId: { in: opts.authorIds } } : {}),
       user: activeAuthor(),
     },
-    orderBy: { updatedAt: "desc" },
+    orderBy: [{ updatedAt: "desc" }, { userId: "desc" }],
     take: SCAN_USER_CAP,
     select: { userId: true, diaryId: true },
   })
@@ -177,7 +179,13 @@ export async function scanGrowAssists(opts: {
         })
       }
 
-      const diagnosis = evaluateContext(composed.merged)
+      // One snapshot → diagnosis + canonical decision set (Phase J):
+      // the triggers read "what's the most useful next step" off the
+      // same decision layer /next and /check consume — no assist-local
+      // selector.
+      const snap = buildSnapshot(composed.merged)
+      const decisions = buildCultivationDecisions(snap)
+      const diagnosis = snap.diagnosis
       const episodes = episodesFromObservations(
         composed.merged.observations,
         composed.merged.resolutions ?? []
@@ -185,6 +193,7 @@ export async function scanGrowAssists(opts: {
       const fires = evaluateAssists({
         ctx: composed.merged,
         diagnosis,
+        decisions,
         episodes,
         snapshot: composed.session?.state.snapshot,
       })
@@ -257,7 +266,8 @@ export async function scanGrowAssists(opts: {
                           // reason (it carries candidate ids)
                           why: MEASUREMENT_INFO[fire.stepId]?.why ?? fire.title,
                         }
-                      : undefined
+                      : undefined,
+                    decisions
                   ),
                   snapshot: snapshotFrom(composed.merged, diagnosis, now),
                 }

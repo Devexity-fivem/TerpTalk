@@ -55,7 +55,8 @@ export const CHAT_COMMANDS: ChatCommandMeta[] = [
   { name: "why", usage: "/why [topic]", description: "Explain the last thing TerpBot said about your grow", permission: P, surfaces: BOTH, handledBy: "bot", category: "grow", example: "@terpbot why did you say that" },
   { name: "status", usage: "/status", description: "Where your grow is — stage, readings, changes, open concerns", permission: P, surfaces: BOTH, handledBy: "bot", category: "grow", example: "@terpbot how is my grow doing" },
   { name: "changes", usage: "/changes", description: "What changed since your last check-in", permission: P, surfaces: BOTH, handledBy: "bot", category: "grow", example: "@terpbot what changed" },
-  { name: "check", usage: "/check", description: "The most useful thing to measure or check next", permission: P, surfaces: BOTH, handledBy: "bot", category: "grow", example: "@terpbot what should I check" },
+  { name: "check", usage: "/check", description: "The most useful things to measure or check, ranked", permission: P, surfaces: BOTH, handledBy: "bot", category: "grow", example: "@terpbot what should I check" },
+  { name: "next", usage: "/next", description: "The single most useful next step for your grow — and why it's first", permission: P, surfaces: BOTH, handledBy: "bot", category: "grow", example: "@terpbot what's next" },
   { name: "measurements", usage: "/measurements", description: "What TerpBot actually has — known, derived, stale, missing", permission: P, surfaces: BOTH, handledBy: "bot", category: "grow", example: "@terpbot what do you know about my grow" },
   { name: "plan", usage: "/plan", description: "Current-stage cultivation plan — what to watch, measure, observe", permission: P, surfaces: BOTH, handledBy: "bot", category: "grow", example: "@terpbot what's the plan for my grow" },
 

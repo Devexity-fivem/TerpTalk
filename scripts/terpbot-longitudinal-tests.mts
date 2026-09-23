@@ -29,6 +29,8 @@ import {
   renderStatus,
   snapshotFrom,
 } from "../src/lib/terpbot-intel-status"
+import { buildSnapshot } from "../src/lib/terpbot-intel-snapshot"
+import { buildCultivationDecisions } from "../src/lib/terpbot-intel-decisions"
 import { buildWhyTrail, renderWhy } from "../src/lib/terpbot-intel-why"
 import { parseGrowText } from "../src/lib/terpbot-nl-parse"
 import { parseTerpbotIntent } from "../src/lib/terpbot-intents"
@@ -570,14 +572,22 @@ section("status renderers")
 }
 
 {
-  // /check renders ranked actions
+  // /check renders ranked decisions from the canonical decision set
   const ctx = mkCtx({ observations: [obs("STIPPLING", 0)] })
-  const actions = nextActions(ctx, evaluateContext(ctx))
-  const lines = renderCheck(actions)
+  const lines = renderCheck(buildCultivationDecisions(buildSnapshot(ctx)))
   assert.ok(/1\./.test(lines.join("\n")))
-  // empty → calm negative
-  const empty = renderCheck([])
-  assert.ok(/nothing to check/i.test(empty.join("")))
+  // stable grow with fresh in-band env data → calm negative (HOLD).
+  // (a data-empty grow correctly produces a data-collection MEASURE — spec §32)
+  const stable = mkRecent([70, 71, 70, 72, 71], 1.5)
+  const stableRh = mkRecent([55, 56, 55, 57, 56], 3)
+  const empty = renderCheck(
+    buildCultivationDecisions(buildSnapshot(mkCtx({
+      observations: [],
+      diary: { ...mkCtx().diary, stage: "VEGETATIVE" },
+      series: { ...mkCtx().series, temperature: stable, humidity: stableRh },
+    })))
+  )
+  assert.ok(/nothing to check|no change/i.test(empty.join("")))
 }
 
 // ── Parser events (H3) ──────────────────────────────────────────────
@@ -716,7 +726,7 @@ section("longitudinal /why")
   assert.ok(/Intervention:/.test(text))
   // no raw ids leaked
   assert.ok(!/d1|u1|refId/i.test(text))
-  assert.ok(/knowledge v2\.4/.test(text))
+  assert.ok(/knowledge v2\.5/.test(text))
 }
 
 // ── Adversarial (H.37) ──────────────────────────────────────────────
@@ -785,10 +795,11 @@ section("adversarial")
     assert.equal(intent.kind, "command", input)
     if (intent.kind === "command") assert.equal(intent.name, cmd, input)
   }
-  // existing commands not shadowed
+  // existing commands not shadowed — "what should i do next" is now
+  // intentionally the Phase J /next command (spec §29)
   for (const [input, cmd] of [
     ["@terpbot contest status", "contest"],
-    ["@terpbot what should i do next", "milestones"],
+    ["@terpbot what should i do next", "next"],
     ["@terpbot check in", "checkin"],
   ] as const) {
     const intent = parseTerpbotIntent(input)

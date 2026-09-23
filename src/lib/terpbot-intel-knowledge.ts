@@ -18,7 +18,19 @@
  *  capability ids on /status and /plan, post-harvest stages reachable.
  *  No new candidates, rules, or sources — the knowledge split is
  *  unchanged, the planning surface is new. */
-export const KNOWLEDGE_VERSION = "2.4"
+/* v2.5 — Phase J: deterministic cultivation decision engine.
+ *  CultivationDecisionSet derived from the snapshot (/next, /check,
+ *  /plan, /status, /changes, BOT_ASSIST consume it); WAIT/MONITOR/HOLD
+ *  become first-class decisions; the ADJUST gate is centralized
+ *  (isAdjustSafe) and restricted to an explicit reversible-environmental
+ *  allowlist — feeding/flush/chemical/structural actions no longer
+ *  surface as automatic adjustments anywhere; pending-intervention and
+ *  recent-change cooldown are one canonical contract; intervention
+ *  states (pending/answered/lapsed/untracked) are recorded on the
+ *  snapshot; ph-low-danger text aligned to its cited threshold (5.0);
+ *  harv-dryspace cites the internal stage-tips convention its 60/60
+ *  figure actually comes from. */
+export const KNOWLEDGE_VERSION = "2.5"
 
 export { SOURCES } from "@/lib/terpbot-knowledge/sources"
 import { NUTRITION_CANDIDATES } from "@/lib/terpbot-knowledge/candidates-nutrition"
