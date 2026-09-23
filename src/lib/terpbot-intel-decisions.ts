@@ -272,10 +272,20 @@ function adjustmentRetry(
     return null // new evidence — the suggestion is legitimately live again
 
   const attemptLabel = ivLabel(attempt)
-  if (attempt.state !== "answered") {
-    // Lapsed/untracked — the change never got a follow-up. The honest
-    // next step is the measurement that was skipped, not a repeat.
-    const metric = attempt.targetMetric ?? mem.metric
+  const metric = attempt.targetMetric ?? mem.metric
+  // Untracked attempts have no targetMetric, so interventionState can
+  // never mark them "answered" — but the grower may still have logged
+  // the metric after the change. A post-attempt reading IS the
+  // follow-up: claiming "never logged" would be factually wrong and
+  // would suppress a legitimate suggestion. Route those to the same
+  // different-discriminator path as answered attempts.
+  const followed =
+    attempt.state === "answered" ||
+    (!!metric &&
+      snap.readings.some((r) => r.metric === metric && r.ageDays < attempt.ageDays))
+  if (!followed) {
+    // Lapsed/untracked with genuinely no follow-up — the honest next
+    // step is the measurement that was skipped, not a repeat.
     const cap = metric ? capabilityOf(snap, metric) : null
     if (
       metric &&

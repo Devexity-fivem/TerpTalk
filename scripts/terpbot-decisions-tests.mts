@@ -733,11 +733,15 @@ function run() {
     const fresh = decisions(withSeries(strongRh))
     assert.ok(fresh.decisions.some((d) => d.class === "ADJUST"), "control: fresh suggestion fires")
     // An untracked AIRFLOW attempt 5d ago is past the 3d gate — without
-    // memory this is the exact adjust→wait→adjust loop.
+    // memory this is the exact adjust→wait→adjust loop. The humidity
+    // series ends 6d ago (before the attempt) so no follow-up exists.
     const tried = decisions(
-      withSeries(strongRh, {
-        interventions: [iv({ type: "AIRFLOW", targetMetric: undefined, at: NOW - 5 * DAY })],
-      })
+      withSeries(
+        { humidity: agedSeries([72, 73, 74, 71], 4, 6) },
+        {
+          interventions: [iv({ type: "AIRFLOW", targetMetric: undefined, at: NOW - 5 * DAY })],
+        }
+      )
     )
     assert.ok(
       !tried.decisions.some((d) => d.class === "ADJUST"),
@@ -749,6 +753,35 @@ function run() {
     assert.ok(verify, "attempted + unfollowed → VERIFY the skipped follow-up")
     assert.match(verify!.reason, /never logged a follow-up|before adjusting again/i)
     ok("action memory — attempted adjustment → VERIFY, not repeat ADJUST")
+  }
+
+  // ══ 29b. Action memory — post-attempt data is not called "missing" ═
+  {
+    // Same untracked attempt, but humidity WAS logged after it (fresh
+    // series ends 1d ago, attempt is 5d old). Claiming "never logged a
+    // follow-up" would be false — the engine must take the
+    // different-discriminator path instead (P1 regression).
+    const set = decisions(
+      withSeries(
+        { humidity: freshSeries([72, 73, 74, 71], 4) },
+        {
+          interventions: [iv({ type: "AIRFLOW", targetMetric: undefined, at: NOW - 5 * DAY })],
+        }
+      )
+    )
+    assert.ok(
+      !set.decisions.some((d) => d.class === "ADJUST"),
+      "still no blind re-suggestion"
+    )
+    assert.ok(
+      !set.decisions.some((d) => /never logged a follow-up/i.test(d.reason)),
+      "must not claim a follow-up that exists is missing"
+    )
+    assert.ok(
+      set.decisions.some((d) => d.class === "OBSERVE" || d.class === "MEASURE"),
+      "post-attempt data → different discriminator (OBSERVE/MEASURE)"
+    )
+    ok("action memory — post-attempt data routes to discriminator, never a false claim")
   }
 
   // ══ 30. Re-suggestion — new contradictory evidence re-enables ════
