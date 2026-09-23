@@ -2,63 +2,16 @@
 // protections end-to-end against a running dev server. Temp fixtures use
 // `__bv_<ts>` markers and are fully cleaned up.
 // Run: node scripts\bot-verify.mjs   (requires `npm run dev` on :3000)
-import "./db-guard.mjs"
-import { PrismaClient } from "@prisma/client"
-import bcrypt from "bcryptjs"
+import { makeHarness } from "./lib/http-harness.mjs"
 
-const BASE = process.env.VERIFY_URL || "http://localhost:3000"
-const prisma = new PrismaClient()
-const results = []
-function pass(n) { results.push(["PASS", n]); console.log(`  PASS ${n}`) }
-function fail(n, i) { results.push(["FAIL", n]); console.log(`  FAIL ${n} — ${JSON.stringify(i)?.slice(0, 300)}`) }
-
-const TS = Date.now().toString(36)
-
-async function createUser(tag, extra = {}) {
-  const password = "VerifyPass123!"
-  const user = await prisma.user.create({
-    data: {
-      name: `__bvuser_${tag}_${TS}`,
-      ageVerified: true,
-      password: await bcrypt.hash(password, 12),
-      sessionVersion: 1,
-      onboardingCompletedAt: new Date(),
-      profile: { create: { username: `__bv_${TS}_${tag}` } },
-      ...extra,
-    },
-    include: { profile: true },
-  })
-  return { ...user, password, username: user.profile.username }
-}
-
-async function login(username, password) {
-  const csrfRes = await fetch(`${BASE}/api/auth/csrf`)
-  const { csrfToken } = await csrfRes.json()
-  const csrfCookie = (csrfRes.headers.getSetCookie?.() || [csrfRes.headers.get("set-cookie")]).filter(Boolean).map((c) => c.split(";")[0]).join("; ")
-  const res = await fetch(`${BASE}/api/auth/callback/credentials`, {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded", cookie: csrfCookie },
-    body: new URLSearchParams({ csrfToken, username, password, json: "true" }),
-    redirect: "manual",
-  })
-  const cookies = [...(csrfCookie ? [csrfCookie] : []), ...(res.headers.getSetCookie?.() || []).map((c) => c.split(";")[0])].join("; ")
-  return cookies
-}
-
-async function api(path, { method = "GET", body, cookie } = {}) {
-  const headers = {}
-  if (body) headers["Content-Type"] = "application/json"
-  if (cookie) headers["cookie"] = cookie
-  let res
-  try {
-    res = await fetch(`${BASE}${path}`, { method, headers, body: body ? JSON.stringify(body) : undefined, redirect: "manual" })
-  } catch (e) {
-    return { status: 0, data: { fetchError: String(e) } }
-  }
-  let data = null
-  try { data = await res.json() } catch { /* html/redirect */ }
-  return { status: res.status, data }
-}
+const { prisma, ts: TS, pass, fail, createUser, login, api, finish } = makeHarness({
+  username: (tag, ts) => `__bv_${ts}_${tag}`,
+  name: (tag, ts) => `__bvuser_${tag}_${ts}`,
+  passMark: "PASS",
+  failMark: "FAIL",
+  loginShape: "string",
+  summary: "counts",
+})
 
 async function main() {
   const bot = await prisma.profile.findUnique({ where: { username: "terpbot" }, select: { userId: true } })
@@ -231,7 +184,7 @@ async function main() {
     })
     mentionRows === 0 ? pass("no MENTION notification delivered to bot") : fail("no MENTION notification delivered to bot", mentionRows)
 
-    // ── Phase 2: registry-dispatched informational commands ─────────
+    // ── Section 2: registry-dispatched informational commands ─────────
     // Per-room bot output cap is 10/min and these commands run back-to-back —
     // clear the room's counter before each command so the budget doesn't
     // suppress replies mid-phase (mention() uses a fresh room for the same
@@ -295,7 +248,7 @@ async function main() {
       ? pass("bot refuses to echo links in command output")
       : fail("bot refuses to echo links in command output", { status: launder.status, data: launder.data })
 
-    // ── Phase 2: @terpbot intent routing ────────────────────────────
+    // ── Section 2: @terpbot intent routing ────────────────────────────
     // Each mention gets a fresh room — the 60s/room bot floor would
     // otherwise suppress consecutive replies.
     async function mention(content) {
@@ -345,7 +298,7 @@ async function main() {
       ? pass("intent: unknown input falls back gracefully")
       : fail("intent: unknown input falls back gracefully", fallbackM.reply?.content)
 
-    // ── Phase 3: thread-context commands ──────────────────────────
+    // ── Section 3: thread-context commands ──────────────────────────
     // Fixtures: a public thread with an accepted answer, plus a hidden-
     // category thread that must never be acknowledged.
     const ctxCat = await prisma.category.create({
@@ -445,7 +398,7 @@ async function main() {
       await prisma.category.deleteMany({ where: { id: { in: [ctxCat.id, ctxHidCat.id] } } }).catch(() => {})
     }
 
-    // ── Phase 3: /u/terpbot profile API ───────────────────────────
+    // ── Section 3: /u/terpbot profile API ───────────────────────────
     const prof = await api(`/api/users/terpbot`, { cookie: memberCookie })
     prof.status === 200 && prof.data?.profile?.isBot === true
       ? pass("profile API marks terpbot as isBot")
@@ -458,7 +411,7 @@ async function main() {
       ? pass("profile API returns real botStats")
       : fail("profile API returns real botStats", bs)
 
-    // ── Phase 3: referral hole — the bot can never be a referrer ──
+    // ── Section 3: referral hole — the bot can never be a referrer ──
     const refCaptcha = await prisma.captcha.create({
       data: { answer: "7", expiresAt: new Date(Date.now() + 10 * 60 * 1000) },
     })
@@ -485,7 +438,7 @@ async function main() {
       fail("referral-guard registration returns 201", { status: reg.status, data: reg.data })
     }
 
-    // ── Phase 4: /setup command + setup mention intents ────────────
+    // ── Section 4: /setup command + setup mention intents ────────────
     {
       const ownSetup = await prisma.growSetup.create({
         data: {
@@ -549,7 +502,7 @@ async function main() {
         : fail("intent: show me @user's setup", showM.reply?.content)
     }
 
-    // ── Phase 4b: stage-flip announcements via the real update path ──
+    // ── Section 4b: stage-flip announcements via the real update path ──
     {
       const general = await prisma.chatRoom.findFirst({ where: { slug: "general" } }) ??
         await prisma.chatRoom.findFirst({ where: { isPrivate: false }, orderBy: { createdAt: "asc" } })
@@ -701,9 +654,7 @@ async function main() {
     await prisma.$disconnect()
   }
 
-  const failed = results.filter(([s]) => s === "FAIL")
-  console.log(`\n${results.length - failed.length} passed, ${failed.length} failed`)
-  process.exit(failed.length ? 1 : 0)
+  process.exit(finish())
 }
 
 main().catch(async (e) => {

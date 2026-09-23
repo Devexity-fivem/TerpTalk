@@ -145,6 +145,17 @@ async function run() {
       "duplicate mentions should produce exactly one notification"
     )
 
+    // 10b. notifyMentions — two separate calls from the same actor pointing
+    // at the same link dedupe (distinct case from §10's duplicate handles
+    // inside a single message).
+    const mentionLink = `/forum/thread/n2-${STAMP}`
+    await notifyMentions(`hi @${RECIP_USERNAME}`, actor.id, ACTOR_USERNAME, mentionLink, "a test post")
+    await notifyMentions(`again @${RECIP_USERNAME}`, actor.id, ACTOR_USERNAME, mentionLink, "another post")
+    const mentionDeduped = await prisma.notification.count({
+      where: { userId: recip.id, type: "MENTION", link: mentionLink },
+    })
+    assert.equal(mentionDeduped, 1, "same actor+link mention within the window dedupes")
+
     // 11. Link invalidation removes notifications pointing at deleted content
     await invalidateNotificationsForLink("/forum/thread/x")
     const stale = await prisma.notification.count({ where: { link: "/forum/thread/x" } })

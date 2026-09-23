@@ -15,7 +15,7 @@ import {
   reverseReputationEvent,
   runEffectStage,
 } from "@/lib/reputation"
-import { enqueueReversal, drainOne } from "@/lib/reputation-outbox"
+import { enqueueReversal, drainOne, drainPendingReversals } from "@/lib/reputation-outbox"
 import { REP_POINTS, REFERRAL_MIN_REP } from "@/lib/reputation-config"
 
 const TS = Date.now()
@@ -78,6 +78,19 @@ async function pushRep(userId: string, target: number, tag: string) {
     })
   }
   return repOf(userId)
+}
+
+// Ledger row + profile credit in one tx — mirrors applyReputationAward's
+// invariant so a fixture never produces ledger-vs-balance drift.
+async function mkEvent(userId: string, over: Record<string, unknown>) {
+  const amount = (over.amount as number | undefined) ?? 5
+  return prisma.$transaction(async (tx) => {
+    const ev = await tx.reputationEvent.create({
+      data: { userId, type: "POST_CREATED", amount, reason: "test fixture", ...over } as never,
+    })
+    await tx.profile.update({ where: { userId }, data: { reputation: { increment: amount } } })
+    return ev
+  })
 }
 
 async function run() {
@@ -568,6 +581,70 @@ async function run() {
     await reverseReputationBySource("POST", p.id, "Thread removed", delUser.id)
   }
   ok((await repOf(replier.id)) === replierMid, "re-running the deletion sweep is a no-op")
+
+  // ── Outbox edge cases ────────────────────────────────────────────
+  // A fresh RUNNING claim must not be stealable by another drain.
+  {
+    const id = await enqueueReversal(prisma, { kind: "KEY", eventKey: `${P}:cas`, reason: "outbox-edge" })
+    await prisma.pendingReversal.update({ where: { id }, data: { status: "RUNNING", claimedAt: new Date() } })
+    ok((await drainOne(id)) === false, "fresh RUNNING claim is not stealable")
+    const row = await prisma.pendingReversal.findUnique({ where: { id } })
+    ok(row?.status === "RUNNING", "fresh claim still marked RUNNING")
+    await prisma.pendingReversal.delete({ where: { id } }).catch(() => {})
+  }
+
+  // An ACTOR sweep is bounded to grants made before the intent was enqueued.
+  {
+    const granter = await makeUser("actgrant")
+    const target = await makeUser("acttgt")
+    const oldEv = await mkEvent(target.id, {
+      type: "LIKE_RECEIVED", actorId: granter.id, key: `${P}:old`,
+      createdAt: new Date(Date.now() - 60000),
+    })
+    const id = await enqueueReversal(prisma, { kind: "ACTOR", actorId: granter.id, reason: "outbox-edge" })
+    // Grant AFTER the intent was enqueued — must survive the sweep.
+    const newEv = await mkEvent(target.id, {
+      type: "LIKE_RECEIVED", actorId: granter.id, key: `${P}:new`,
+      createdAt: new Date(Date.now() + 60000),
+    })
+    ok(await drainOne(id), "ACTOR intent drains")
+    const old = await prisma.reputationEvent.findUnique({ where: { id: oldEv.id }, select: { reversedAt: true } })
+    const fresh = await prisma.reputationEvent.findUnique({ where: { id: newEv.id }, select: { reversedAt: true } })
+    ok(old?.reversedAt !== null && old?.reversedAt !== undefined, "pre-enqueue grant reversed")
+    ok(fresh?.reversedAt === null, "post-enqueue grant survives")
+    await prisma.pendingReversal.delete({ where: { id } }).catch(() => {})
+  }
+
+  // A successful drainOne removes its outbox row — nothing is left to
+  // retry once the reversal lands.
+  {
+    const tgt = await makeUser("srcdel")
+    await mkEvent(tgt.id, { sourceType: "THREAD", sourceId: `__rr_sd_${P}`, key: `__rr_sdk_${P}` })
+    const id = await enqueueReversal(prisma, { kind: "SOURCE", sourceType: "THREAD", sourceId: `__rr_sd_${P}`, reason: "outbox-edge" })
+    ok(await drainOne(id), "SOURCE intent drains")
+    ok((await prisma.pendingReversal.findUnique({ where: { id } })) === null, "SOURCE intent row self-deletes after drainOne")
+    await prisma.pendingReversal.delete({ where: { id } }).catch(() => {})
+  }
+
+  // A KEY intent whose event no longer exists completes cleanly.
+  {
+    const id = await enqueueReversal(prisma, { kind: "KEY", eventKey: `__rr_nokey_${P}`, reason: "outbox-edge" })
+    ok((await drainOne(id)) === true, "KEY intent on a missing event completes")
+    await prisma.pendingReversal.delete({ where: { id } }).catch(() => {})
+  }
+
+  // drainPendingReversals consumes a backlog batch.
+  {
+    const u = await makeUser("outback")
+    const ev = await mkEvent(u.id, { sourceType: "THREAD", sourceId: `__rr_backlog_${P}`, key: `__rr_backlogk_${P}` })
+    const id = await enqueueReversal(prisma, { kind: "SOURCE", sourceType: "THREAD", sourceId: `__rr_backlog_${P}`, reason: "outbox-edge" })
+    const r = await drainPendingReversals(50)
+    ok(r.drained >= 1, `backlog drain consumes pending intents (drained=${r.drained})`)
+    const after = await prisma.reputationEvent.findUnique({ where: { id: ev.id }, select: { reversedAt: true } })
+    ok(after?.reversedAt !== null && after?.reversedAt !== undefined, "backlog-drained event is reversed")
+    ok((await prisma.pendingReversal.findUnique({ where: { id } })) === null, "drained backlog intent is gone")
+    await prisma.pendingReversal.delete({ where: { id } }).catch(() => {})
+  }
 
   // ── Reconciliation bound + field minimality ──────────────────────
   const bounded = await reconcileReferralPayouts(1)

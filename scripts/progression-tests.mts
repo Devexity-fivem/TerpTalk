@@ -16,12 +16,37 @@ import {
   getNextTrustStanding,
   publicRepLabel,
 } from "@/lib/reputation-config"
-import { DAILY_QUESTS, DAILY_QUEST_COUNT, PERFECT_DAY_BONUS, dailyQuestsFor, currentDayKey, getQuestProgress, evaluateQuests } from "@/lib/quests"
+import { DAILY_QUESTS, DAILY_QUEST_COUNT, PERFECT_DAY_BONUS, dailyQuestsFor, currentDayKey, getQuestProgress, evaluateQuests, reconcileQuestPayouts } from "@/lib/quests"
 import { BADGE_REGISTRY, getBadgeByName, STAFF_AWARDED_BADGES } from "@/lib/badge-registry"
 import { awardReputation, getTrustScore } from "@/lib/reputation"
-import { WEEKLY_CHALLENGES } from "@/lib/challenges"
+import { WEEKLY_CHALLENGES, reconcileChallengePayouts, currentWeekKey } from "@/lib/challenges"
 
 const TEST_USERNAME = `__test_prog_${Date.now()}`
+
+// Ledger row + profile credit in one tx — mirrors applyReputationAward's
+// invariant so a fixture never produces ledger-vs-balance drift.
+async function mkEvent(userId: string, over: Record<string, unknown>) {
+  const amount = (over.amount as number | undefined) ?? 5
+  return prisma.$transaction(async (tx) => {
+    const ev = await tx.reputationEvent.create({
+      data: { userId, type: "POST_CREATED", amount, reason: "test fixture", ...over } as never,
+    })
+    await tx.profile.update({ where: { userId }, data: { reputation: { increment: amount } } })
+    return ev
+  })
+}
+
+async function mkTestUser(suffix: string) {
+  return prisma.user.create({
+    data: {
+      name: `${TEST_USERNAME}_${suffix}`,
+      ageVerified: true,
+      sessionVersion: 1,
+      profile: { create: { username: `${TEST_USERNAME}_${suffix}` } },
+    },
+    select: { id: true },
+  })
+}
 
 async function run() {
   console.log("── quest selection ──")
@@ -177,6 +202,54 @@ async function run() {
     // history with a safe label (not the raw reason string).
     assert.ok(PUBLIC_REP_TYPES.has("QUEST_DAILY"))
     assert.equal(publicRepLabel("QUEST_DAILY"), "Daily quest completed")
+
+    // ── Sticky payout reconciliation ──────────────────────────────
+    // Payouts whose qualifying content disappears must be clawed back by
+    // the sweep; payouts still backed by real activity must survive.
+    {
+      const stickyUser = await mkTestUser("sticky")
+      const earnedUser = await mkTestUser("earned")
+      const chalUser = await mkTestUser("chal")
+      let stickyDiaryId = ""
+      try {
+        const dayKey = new Date().toISOString().slice(0, 10)
+        const ev = await mkEvent(stickyUser.id, {
+          type: "QUEST_DAILY", key: `quest:${dayKey}:tend-the-garden:${stickyUser.id}`, amount: 15,
+        })
+        const res = await reconcileQuestPayouts()
+        const after = await prisma.reputationEvent.findUnique({ where: { id: ev.id }, select: { reversedAt: true } })
+        assert.ok(after?.reversedAt, `unearned quest payout must be reversed (checked=${res.checked} reversed=${res.reversed})`)
+
+        // tend-the-garden counts live DIARY_UPDATE reputation events today.
+        const dr = await prisma.growDiary.create({
+          data: { title: `${TEST_USERNAME}_qd`, description: "", growType: "INDOOR", startDate: new Date(), authorId: earnedUser.id },
+          select: { id: true },
+        })
+        stickyDiaryId = dr.id
+        await mkEvent(earnedUser.id, { type: "DIARY_UPDATE", sourceType: "DIARY", sourceId: dr.id })
+        const ev2 = await mkEvent(earnedUser.id, {
+          type: "QUEST_DAILY", key: `quest:${dayKey}:tend-the-garden:${earnedUser.id}`, amount: 15,
+        })
+        await reconcileQuestPayouts()
+        const after2 = await prisma.reputationEvent.findUnique({ where: { id: ev2.id }, select: { reversedAt: true } })
+        assert.equal(after2?.reversedAt, null, "earned payout must not be reversed")
+
+        const ev3 = await mkEvent(chalUser.id, {
+          type: "CHALLENGE_WEEKLY", key: `challenge:${currentWeekKey()}:tend-the-diary:${chalUser.id}`, amount: 50,
+        })
+        await reconcileChallengePayouts()
+        const after3 = await prisma.reputationEvent.findUnique({ where: { id: ev3.id }, select: { reversedAt: true } })
+        assert.ok(after3?.reversedAt, "unearned challenge payout must be reversed")
+      } finally {
+        if (stickyDiaryId) {
+          await prisma.diaryUpdate.deleteMany({ where: { diaryId: stickyDiaryId } }).catch(() => {})
+          await prisma.growDiary.delete({ where: { id: stickyDiaryId } }).catch(() => {})
+        }
+        for (const u of [stickyUser, earnedUser, chalUser]) {
+          await prisma.user.delete({ where: { id: u.id } }).catch(() => {})
+        }
+      }
+    }
 
     console.log("── all progression tests passed ──")
   } finally {

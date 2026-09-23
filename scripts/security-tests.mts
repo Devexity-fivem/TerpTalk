@@ -20,6 +20,12 @@ import { recordBotEvent, getBotStats } from "@/lib/terpbot-events"
 import { BADGE_REGISTRY, BOT_BADGE_REGISTRY, isBotBadge } from "@/lib/badge-registry"
 import { checkBadges, BADGE_RULES } from "@/lib/reputation"
 import { notifyMentions } from "@/lib/mentions"
+import { claimTask, markDone, releaseClaim, runCronTask } from "@/lib/cron-claim"
+import React from "react"
+import { renderToString } from "react-dom/server"
+import { MarkdownRenderer, sanitizeHref } from "@/lib/markdown"
+import { applyAccountActionInTx } from "@/lib/moderation"
+import { authOptions } from "@/lib/auth"
 
 const TEST_USERNAME = `__test_security_${Date.now()}`
 const TEST_NAME = `__test_security_name_${Date.now()}`
@@ -34,6 +40,8 @@ async function run() {
   console.log("Starting security regression tests...")
 
   let userId = ""
+  const claimKeys: string[] = []
+  const captchaIds: string[] = []
   try {
     const user = await prisma.user.create({
       data: {
@@ -281,7 +289,7 @@ async function run() {
       }
     }
 
-    // ── Phase 6 pure-helper units ──────────────────────────────────
+    // ── Pure-helper units ──────────────────────────────────
 
     // LIKE escaping — user-created strain names must not inject wildcards
     assert.equal(escapeLike("Blue%"), "Blue\\%", "% wildcard escaped")
@@ -459,7 +467,7 @@ async function run() {
         await prisma.user.delete({ where: { id: mentionable.id } }).catch(() => {})
       }
 
-      // ── Phase 3: thread-context visibility gate ──────────────────
+      // ── Thread-context visibility gate ──────────────────
       // Hidden-category, deleted, and nonexistent threads must produce
       // the SAME refusal — the bot is never an existence oracle.
       const tag = Date.now()
@@ -541,7 +549,7 @@ async function run() {
         await prisma.category.deleteMany({ where: { id: { in: [visCat.id, hidCat.id] } } }).catch(() => {})
       }
 
-      // ── Phase 3: BotEvent telemetry + bot badges + human-badge guard ──
+      // ── BotEvent telemetry + bot badges + human-badge guard ──
       const evKey = `__test:${tag}`
       await recordBotEvent({ type: "COMMAND_SLASH", key: evKey, userId, command: "summarize", entities: 1 })
       await recordBotEvent({ type: "COMMAND_SLASH", key: evKey, userId, command: "summarize", entities: 1 })
@@ -594,6 +602,206 @@ async function run() {
       await prisma.chatRoom.deleteMany({ where: { id: { in: [privateRoom.id, publicRoom.id] } } }).catch(() => {})
     }
 
+    // ── Cron claim integrity ──────────────────────────────────────
+    {
+      const ck = `__test_cron_${Date.now()}`
+      claimKeys.push(ck)
+      assert.equal(await claimTask(ck), true, "first claim wins")
+      assert.equal(await claimTask(ck), false, "active claim blocks second claim")
+      await releaseClaim(ck)
+      assert.equal(await claimTask(ck), true, "released claim can be reclaimed")
+      await markDone(ck)
+      assert.equal(await claimTask(ck), false, "completed task cannot be reclaimed")
+
+      // Stale running claims are reclaimable.
+      const ck2 = `__test_cron_stale_${Date.now()}`
+      claimKeys.push(ck2)
+      await prisma.setting.create({ data: { key: ck2, value: `running:${Date.now() - 11 * 60 * 1000}` } })
+      assert.equal(await claimTask(ck2), true, "stale claim is reclaimable")
+      // …but only once — the swap is conditional on the stale value.
+      assert.equal(await claimTask(ck2), false, "fresh claim blocks again")
+
+      // runCronTask: a failed task releases its claim and retries next run.
+      const kf = `__test_cron_fail_${Date.now()}`
+      claimKeys.push(kf)
+      {
+        const posted: string[] = []; const failed: string[] = []
+        await runCronTask(kf, async () => { throw new Error("boom") }, posted, failed, "t1")
+        assert.deepEqual(failed, ["t1"])
+        assert.equal(await prisma.setting.findUnique({ where: { key: kf } }), null)
+        await runCronTask(kf, async () => "t1-ok", posted, failed, "t1")
+        assert.deepEqual(posted, ["t1-ok"])
+        assert.equal((await prisma.setting.findUnique({ where: { key: kf } }))?.value, "1")
+      }
+
+      // runCronTask: one task's failure does not prevent later tasks.
+      const ks1 = `__test_cron_seq1_${Date.now()}`; const ks2 = `__test_cron_seq2_${Date.now()}`
+      claimKeys.push(ks1, ks2)
+      {
+        const posted: string[] = []; const failed: string[] = []
+        await runCronTask(ks1, async () => { throw new Error("first fails") }, posted, failed, "first")
+        await runCronTask(ks2, async () => "second-ok", posted, failed, "second")
+        assert.deepEqual(failed, ["first"])
+        assert.deepEqual(posted, ["second-ok"])
+      }
+
+      // runCronTask: a completed task is not re-executed.
+      const kd = `__test_cron_done_${Date.now()}`
+      claimKeys.push(kd)
+      {
+        const posted: string[] = []; const failed: string[] = []
+        let runs = 0
+        await runCronTask(kd, async () => { runs++; return "x" }, posted, failed, "dup")
+        await runCronTask(kd, async () => { runs++; return "x" }, posted, failed, "dup")
+        assert.equal(runs, 1)
+        assert.deepEqual(posted, ["x"])
+      }
+    }
+
+    // ── CAPTCHA claim atomicity ────────────────────────────────────
+    {
+      const c = await prisma.captcha.create({
+        data: { answer: "42", expiresAt: new Date(Date.now() + 600000) },
+      })
+      captchaIds.push(c.id)
+      const claims = await Promise.all(
+        Array.from({ length: 6 }, () =>
+          prisma.captcha.updateMany({
+            where: { id: c.id, used: false, expiresAt: { gt: new Date() } },
+            data: { used: true },
+          })
+        )
+      )
+      const winners = claims.filter((r) => r.count === 1).length
+      assert.equal(winners, 1, `expected exactly 1 winning claim, got ${winners}`)
+
+      const used = await prisma.captcha.create({ data: { answer: "1", expiresAt: new Date(Date.now() + 600000), used: true } })
+      const expired = await prisma.captcha.create({ data: { answer: "1", expiresAt: new Date(Date.now() - 1000) } })
+      captchaIds.push(used.id, expired.id)
+      for (const id of [used.id, expired.id]) {
+        const r = await prisma.captcha.updateMany({
+          where: { id, used: false, expiresAt: { gt: new Date() } },
+          data: { used: true },
+        })
+        assert.equal(r.count, 0)
+      }
+    }
+
+    // ── Markdown / link safety ────────────────────────────────────
+    // sanitizeHref — backslash & protocol-relative bypasses.
+    assert.equal(sanitizeHref("/forum"), "/forum")
+    assert.equal(sanitizeHref("https://example.com"), "https://example.com")
+    assert.equal(sanitizeHref("mailto:a@b.c"), "mailto:a@b.c")
+    assert.equal(sanitizeHref("/\\evil.com"), null, "backslash pseudo-path must be rejected")
+    assert.equal(sanitizeHref("//evil.com"), null, "protocol-relative must be rejected")
+    assert.equal(sanitizeHref("\\evil.com"), null)
+    assert.equal(sanitizeHref("javascript:alert(1)"), null)
+    assert.equal(sanitizeHref("/a\\b"), null, "embedded backslash must be rejected")
+
+    // Markdown tokenizer — unmatched delimiters must not hang. A delimiter
+    // char failing every inline pattern used to consume 0 characters and
+    // loop forever; renderToString is synchronous, so a regression stalls
+    // this suite rather than silently passing.
+    const md = (c: string) => renderToString(React.createElement(MarkdownRenderer, { content: c }))
+    const text = (c: string) => md(c).replace(/<[^>]*>/g, "")
+    assert.ok(md("Tag me (@terpbot) for help").includes("/u/terpbot"), "mention renders as a profile link")
+    assert.equal(text("wow!"), "wow!", "lone ! renders literally")
+    assert.equal(text("5 * 3 = 15"), "5 * 3 = 15", "lone * renders literally")
+    assert.equal(text("a_b"), "a_b", "lone _ renders literally")
+    assert.equal(text("back`tick"), "back`tick", "lone ` renders literally")
+    assert.equal(text("x~y"), "x~y", "lone ~ renders literally")
+    assert.equal(text("see [this"), "see [this", "unclosed [ renders literally")
+    assert.ok(!md("email a@b.com").includes("/u/"), "email addresses are not mentions")
+
+    // ── Moderation role guards (lib-level) ────────────────────────
+    {
+      const stamp = Date.now().toString(36)
+      const mkRole = (t: string, role: string) =>
+        prisma.user.create({
+          data: { name: `__sec_${t}_${stamp}`, ageVerified: true, sessionVersion: 1, role, profile: { create: { username: `__sec${t}${stamp}` } } },
+        })
+      const modUser = await mkRole("md", "MODERATOR")
+      const adminUser = await mkRole("ad", "ADMINISTRATOR")
+      const supportUser = await mkRole("sp", "SUPPORT")
+      try {
+        const attempt = (p: Parameters<typeof applyAccountActionInTx>[1]) =>
+          prisma.$transaction((tx) => applyAccountActionInTx(tx, p)).then(
+            () => "ok",
+            (e: Error) => e.message
+          )
+        assert.equal(await attempt({
+          actionType: "WARNING", targetUserId: modUser.id, reason: "x",
+          staffId: modUser.id, staffRole: "MODERATOR", staffName: "m",
+        }), "FORBIDDEN", "self-target must be blocked")
+        assert.equal(await attempt({
+          actionType: "WARNING", targetUserId: adminUser.id, reason: "x",
+          staffId: modUser.id, staffRole: "MODERATOR", staffName: "m",
+        }), "FORBIDDEN", "moderator cannot act on an administrator")
+        assert.equal(await attempt({
+          actionType: "WARNING", targetUserId: supportUser.id, reason: "x",
+          staffId: modUser.id, staffRole: "MODERATOR", staffName: "m",
+        }), "FORBIDDEN", "moderator cannot warn SUPPORT")
+        assert.equal(await attempt({
+          actionType: "PERMANENT_BAN", targetUserId: userId, reason: "x",
+          staffId: modUser.id, staffRole: "MODERATOR", staffName: "m",
+        }), "FORBIDDEN", "moderator cannot issue bans (admin-only)")
+        assert.equal(await attempt({
+          actionType: "PERMANENT_BAN", targetUserId: userId, reason: "x",
+          staffId: supportUser.id, staffRole: "SUPPORT", staffName: "s",
+        }), "FORBIDDEN", "SUPPORT cannot issue bans")
+        assert.equal(await attempt({
+          actionType: "WARNING", targetUserId: userId, reason: "x",
+          staffId: modUser.id, staffRole: "MODERATOR", staffName: "m",
+        }), "ok", "moderator warning a member succeeds")
+      } finally {
+        for (const u of [modUser, adminUser, supportUser]) {
+          await prisma.user.delete({ where: { id: u.id } }).catch(() => {})
+        }
+      }
+    }
+
+    // ── Session invalidation via the real authOptions callback ────
+    {
+      const sessionCb = authOptions.callbacks?.session
+      assert.ok(sessionCb)
+      const session = { user: { id: "x" }, expires: "x" } as never
+      // Unknown user — the invalidation path.
+      const out = await sessionCb!({ session, token: { id: `__test_sec_nouser_${Date.now()}` } } as never)
+      assert.deepEqual((out as { user: object }).user, {})
+      // Valid user still gets a populated session.
+      const ok = await sessionCb!({
+        session: { user: {}, expires: "x" } as never,
+        token: { id: userId, sessionVersion: 2 },
+      } as never)
+      assert.equal((ok.user as { id?: string }).id, userId)
+    }
+
+    // ── Case-insensitive usernames ────────────────────────────────
+    {
+      const caseStamp = Date.now().toString(36)
+      const caseUser = await prisma.user.create({
+        data: { name: `__sec_case_${caseStamp}`, ageVerified: true, sessionVersion: 1, profile: { create: { username: `CaseMiXeD${caseStamp}` } } },
+        include: { profile: true },
+      })
+      try {
+        const canonical = caseUser.profile!.username!
+        const lower = canonical.toLowerCase()
+        const upper = canonical.toUpperCase()
+        for (const variant of [canonical, lower, upper]) {
+          const hit = await prisma.profile.findFirst({
+            where: { username: { equals: variant, mode: "insensitive" } },
+            select: { id: true },
+          })
+          assert.equal(hit?.id, caseUser.profile!.id, `variant ${variant} failed`)
+        }
+        // Old exact-match query would have missed case variants.
+        const miss = await prisma.profile.findUnique({ where: { username: lower } })
+        assert.equal(miss, null)
+      } finally {
+        await prisma.user.delete({ where: { id: caseUser.id } }).catch(() => {})
+      }
+    }
+
     // ── blockedUserIds / notBlockedAuthor ─────────────────────────
     // Mutual block semantics — same as blockExistsBetween: a block in
     // either direction hides the other party's content from the viewer.
@@ -634,6 +842,8 @@ async function run() {
     if (userId) {
       await prisma.user.delete({ where: { id: userId } }).catch(() => {})
     }
+    if (claimKeys.length) await prisma.setting.deleteMany({ where: { key: { in: claimKeys } } }).catch(() => {})
+    if (captchaIds.length) await prisma.captcha.deleteMany({ where: { id: { in: captchaIds } } }).catch(() => {})
     await prisma.$disconnect().catch(() => {})
   }
 }

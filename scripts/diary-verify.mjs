@@ -1,66 +1,16 @@
 // Phase 6 verification — grow diary API contracts, week grouping, harvest
 // report, strain stats honesty tiers, Diary of the Month contest, reactions
 // block check. Temp users/diaries/strains fully cleaned up.
-import "./db-guard.mjs"
-import { PrismaClient } from "@prisma/client"
-import bcrypt from "bcryptjs"
+import { makeHarness } from "./lib/http-harness.mjs"
 
-const BASE = process.env.VERIFY_URL || "http://localhost:3000"
-const prisma = new PrismaClient()
-const results = []
-function pass(n) { results.push(["PASS", n]); console.log(`  ✓ ${n}`) }
-function fail(n, i) { results.push(["FAIL", n]); console.log(`  ✗ ${n} — ${JSON.stringify(i)?.slice(0, 300)}`) }
+const { prisma, BASE, ts: TS, pass, fail, createUser, login, api: callApi, finish } = makeHarness({
+  username: (tag, ts) => `__dv_${tag}_${ts}`,
+  summary: "fraction",
+})
 
-const TS = Date.now().toString(36)
 const M = (l) => `__dv_${l}_${TS}`
 
 const TINY_PNG = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
-
-async function createUser(tag, extra = {}) {
-  const password = "VerifyPass123!"
-  const user = await prisma.user.create({
-    data: {
-      name: `__verify_${tag}_${TS}`,
-      ageVerified: true,
-      password: await bcrypt.hash(password, 12),
-      sessionVersion: 1,
-      onboardingCompletedAt: new Date(),
-      profile: { create: { username: `__dv_${tag}_${TS}` } },
-      ...extra,
-    },
-    include: { profile: true },
-  })
-  return { ...user, password, username: user.profile.username }
-}
-
-async function login(username, password) {
-  const csrfRes = await fetch(`${BASE}/api/auth/csrf`)
-  const { csrfToken } = await csrfRes.json()
-  const csrfCookie = (csrfRes.headers.getSetCookie?.() || [csrfRes.headers.get("set-cookie")]).filter(Boolean).map((c) => c.split(";")[0]).join("; ")
-  const res = await fetch(`${BASE}/api/auth/callback/credentials`, {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded", cookie: csrfCookie },
-    body: new URLSearchParams({ csrfToken, username, password, json: "true" }),
-    redirect: "manual",
-  })
-  const cookies = [...(csrfCookie ? [csrfCookie] : []), ...(res.headers.getSetCookie?.() || []).map((c) => c.split(";")[0])].join("; ")
-  return { cookie: cookies }
-}
-
-async function callApi(path, { method = "GET", body, cookie } = {}) {
-  const headers = {}
-  if (body) headers["Content-Type"] = "application/json"
-  if (cookie) headers["cookie"] = cookie
-  let res
-  try {
-    res = await fetch(`${BASE}${path}`, { method, headers, body: body ? JSON.stringify(body) : undefined, redirect: "manual" })
-  } catch (e) {
-    return { status: 0, data: { fetchError: String(e) }, location: null }
-  }
-  let data = null
-  try { data = await res.json() } catch { /* html/redirect */ }
-  return { status: res.status, data, location: res.headers.get("location") }
-}
 
 async function getHtml(path, cookie) {
   const res = await fetch(`${BASE}${path}`, { headers: cookie ? { cookie } : {}, redirect: "manual" })
@@ -215,6 +165,24 @@ const main = async () => {
 
     r = await callApi(`/api/diaries/${diaryId}`, { method: "PATCH", body: { title: M("edited") }, cookie: ownerCookie })
     r.status === 200 ? pass("diary PATCH succeeds for owner") : fail("diary PATCH owner", { s: r.status, d: r.data })
+
+    // ── strainId linkage through the real PATCH route ──
+    const patchStrain = await prisma.strain.create({ data: { name: M("patchstrain"), createdById: owner.id } })
+    strainIds.push(patchStrain.id)
+    r = await callApi(`/api/diaries/${diaryId}`, { method: "PATCH", body: { strainId: patchStrain.id }, cookie: ownerCookie })
+    const dLinked = await prisma.growDiary.findUnique({ where: { id: diaryId }, select: { strain: true, strainId: true } })
+    r.status === 200 && dLinked?.strainId === patchStrain.id && dLinked?.strain === patchStrain.name
+      ? pass("diary PATCH strainId links + syncs strain text to catalog name")
+      : fail("diary PATCH strainId link", { s: r.status, dLinked })
+    r = await callApi(`/api/diaries/${diaryId}`, { method: "PATCH", body: { strainId: null }, cookie: ownerCookie })
+    const dUnlinked = await prisma.growDiary.findUnique({ where: { id: diaryId }, select: { strain: true, strainId: true } })
+    r.status === 200 && dUnlinked?.strainId === null && dUnlinked?.strain === patchStrain.name
+      ? pass("diary PATCH strainId null unlinks, keeps strain text")
+      : fail("diary PATCH strainId null", { s: r.status, dUnlinked })
+    r = await callApi(`/api/diaries/${diaryId}`, { method: "PATCH", body: { strainId: "nonexistent" }, cookie: ownerCookie })
+    r.status === 400 && r.data?.error === "Strain not found"
+      ? pass("diary PATCH unknown strainId → 400 Strain not found")
+      : fail("diary PATCH unknown strainId", { s: r.status, d: r.data })
 
     // ── Diary of the Month ──────────────────────────────────────────
     // The diary needs 4+ updates this month — we have 2, add 2 more.
@@ -689,9 +657,7 @@ const main = async () => {
     await prisma.$disconnect()
   }
 
-  const failed = results.filter((r) => r[0] === "FAIL")
-  console.log(`\n${results.length - failed.length}/${results.length} passed`)
-  process.exit(failed.length ? 1 : 0)
+  process.exit(finish())
 }
 
 main()

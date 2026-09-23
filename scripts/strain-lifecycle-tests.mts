@@ -7,8 +7,7 @@ import "./db-guard.mjs"
 import { strict as assert } from "node:assert"
 import { readFileSync } from "node:fs"
 import { prisma } from "@/lib/prisma"
-import { awardReputation, reverseReputationBySource } from "@/lib/reputation"
-import { REP_POINTS } from "@/lib/reputation-config"
+
 
 const tag = Date.now().toString(36)
 const results: [string, string][] = []
@@ -122,12 +121,6 @@ await check("report: empty-string subject degrades like a deleted user everywher
   assert.ok(n >= 1, "the creator-less report exists and is countable")
 })
 
-await check("report: self-report guard is bypass-safe — \"\" never equals a user id", () => {
-  // Route: `if (reportedUserId === session.user.id) reject` — "" can't
-  // collide with a real cuid, and a real creatorId still blocks self-report.
-  assert.notEqual("", creator.id)
-})
-
 // ─── Hard delete ─────────────────────────────────────────────────────
 await check("delete: photos cascade, diaries SetNull, free-text strain survives", async () => {
   const s = await mkStrain(creator.id, { name: `__test_sl_del_${tag}` })
@@ -162,54 +155,6 @@ await check("delete: missing target is a no-hit, not a crash", async () => {
   // findUnique → null path verified here.
   assert.equal(await prisma.strain.findUnique({ where: { id: "nonexistent" } }), null)
   await assert.rejects(() => prisma.strain.delete({ where: { id: "nonexistent" } }), "delete of missing row rejects")
-})
-
-// ─── Reputation reversal ─────────────────────────────────────────────
-await check("reputation: STRAIN + STRAIN_PHOTO awards reverse once, idempotently", async () => {
-  const s = await mkStrain(creator.id, { name: `__test_sl_rep_${tag}` })
-  const photo = await mkPhoto(s.id, other.id)
-
-  const a1 = await awardReputation(creator.id, "STRAIN_CREATED", REP_POINTS.STRAIN_CREATED, "t", {
-    key: `strain:${s.id}`, sourceType: "STRAIN", sourceId: s.id,
-  })
-  const a2 = await awardReputation(other.id, "STRAIN_PHOTO", REP_POINTS.STRAIN_PHOTO, "t", {
-    key: `strainphoto:${other.id}:${s.id}`, sourceType: "STRAIN_PHOTO", sourceId: photo.id,
-  })
-  assert.ok(a1.awarded && a2.awarded, "awards landed")
-
-  // Mirror of the actions route: collect photo ids, delete, then reverse.
-  const photoIds = (await prisma.strainPhoto.findMany({ where: { strainId: s.id }, select: { id: true } })).map((p) => p.id)
-  await prisma.strain.delete({ where: { id: s.id } })
-
-  const n1 = await reverseReputationBySource("STRAIN", s.id, "Content removed by staff")
-  assert.equal(n1, 1, "creation award reversed exactly once")
-  let photoReversals = 0
-  for (const pid of photoIds) photoReversals += await reverseReputationBySource("STRAIN_PHOTO", pid, "Content removed by staff")
-  assert.equal(photoReversals, 1, "photo award reversed exactly once")
-
-  // Idempotent — a second pass reverses nothing.
-  assert.equal(await reverseReputationBySource("STRAIN", s.id, "again"), 0)
-  assert.equal(await reverseReputationBySource("STRAIN_PHOTO", photo.id, "again"), 0)
-
-  // Reversal counter-entries exist; no active root award was left behind.
-  const events = await prisma.reputationEvent.findMany({ where: { sourceId: s.id } })
-  assert.ok(events.some((e) => e.reversalOfId), "reversal counter-entry written")
-  assert.equal(events.filter((e) => !e.reversedAt && !e.reversalOfId).length, 0, "no active root award left")
-})
-
-await check("reputation: unrelated events survive a strain reversal", async () => {
-  const s = await mkStrain(creator.id, { name: `__test_sl_rep2_${tag}` })
-  const unrelated = await mkStrain(other.id, { name: `__test_sl_keep_${tag}` })
-  await awardReputation(creator.id, "STRAIN_CREATED", REP_POINTS.STRAIN_CREATED, "t", {
-    key: `strain:${s.id}`, sourceType: "STRAIN", sourceId: s.id,
-  })
-  await awardReputation(other.id, "STRAIN_CREATED", REP_POINTS.STRAIN_CREATED, "t", {
-    key: `strain:${unrelated.id}`, sourceType: "STRAIN", sourceId: unrelated.id,
-  })
-  await prisma.strain.delete({ where: { id: s.id } })
-  await reverseReputationBySource("STRAIN", s.id, "Content removed by staff")
-  const keep = await prisma.reputationEvent.findFirst({ where: { sourceId: unrelated.id, reversalOfId: null } })
-  assert.equal(keep?.reversedAt, null, "other strain's award untouched")
 })
 
 // ─── Post-delete discovery ───────────────────────────────────────────

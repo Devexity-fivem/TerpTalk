@@ -1,4 +1,5 @@
-// Persistent global Chat panel — structural regression coverage.
+// UI structural + accessibility contracts — static source checks for the
+// chat panel, accessibility invariants, and client-side state handling.
 // The panel is a presentation-layer change over the existing chat stack;
 // behavioral guarantees (dedupe, room guard, unread, visibility) live in
 // scripts/chat-ux-tests.mts and are re-run alongside this suite.
@@ -210,6 +211,68 @@ check("ChatRoom unsubscribes on unmount/room switch (socket cleanup)", () => {
     /return \(\) => \{[\s\S]*?^\s*peekSharedPusher\(\)\?\.unsubscribe\(/m.test(room),
     "unsubscribe must run in the subscription effect's cleanup"
   )
+})
+
+// ── Client state contracts ───────────────────────────────────────────
+
+check("messages page: conversation switch resets state and cursor", () => {
+  const page = src("app/messages/page.tsx")
+  assert.ok(page.includes("activeWithRef.current = withId"))
+  assert.ok(page.includes("cursorRef.current = null"))
+  assert.ok(page.includes("setMessages([])"))
+  assert.ok(page.includes("activeWithRef.current !== uid")) // stale-response guard
+  assert.ok(page.includes("!seen.has(m.id)")) // id dedupe on append
+  assert.ok(page.includes("unread: 0")) // unread zeroed on open
+})
+
+check("navigation: invalid session triggers client signOut", () => {
+  assert.ok(nav.includes("signOut({ redirect: false })"))
+  assert.ok(nav.includes("!userId) return"))
+})
+
+check("profile page: failed/malformed response never stored as data", () => {
+  const page = src("app/profile/page.tsx")
+  assert.ok(page.includes("res.ok"))
+  assert.ok(page.includes("data?.user?.createdAt"))
+  assert.ok(page.includes("loadError"))
+})
+
+// ── Accessibility contracts ──────────────────────────────────────────
+
+check("tooltip: no focusable wrapper around interactive children", () => {
+  const tip = src("components/ui/tooltip.tsx")
+  assert.ok(tip.includes("isInteractive"), "interactive-child detection required")
+  assert.ok(tip.includes("insideInteractive"), "interactive-ancestor detection required")
+  assert.ok(tip.includes("tabIndex={focusable ? 0 : undefined}"), "conditional tabIndex required")
+  assert.ok(!/outline-none/.test(tip.replace(/focus-visible:outline-none/g, "")), "focus outline must not be suppressed")
+  assert.ok(tip.includes("focus-visible"), "visible focus indicator required")
+  assert.ok(tip.includes('"Escape"'), "Escape dismissal required")
+})
+
+check("a11y: scoped inputs carry accessible names", () => {
+  assert.ok(src("components/chat-room.tsx").includes('aria-label={room ? `Message ${room.name}` : "Chat message"}'), "chat composer aria-label")
+  assert.ok(src("components/tag-input.tsx").includes('aria-label="Add tags"'), "TagInput aria-label")
+  const report = src("components/report-button.tsx")
+  assert.ok(report.includes('aria-label="Report to moderators"'), "report dialog aria-label")
+  assert.ok(report.includes('aria-label="Report reason"'), "report reason aria-label")
+  assert.ok(report.includes('aria-label="Report details"'), "report details aria-label")
+  assert.ok(src("components/image-uploader.tsx").includes('aria-hidden="true"'), "hidden file input out of a11y tree")
+})
+
+check("nameplates: readable solid fallback + supports-gated gradient", () => {
+  const css = src("app/globals.css")
+  assert.ok(css.includes("--np-leaf"), "nameplate tokens required")
+  assert.ok(css.includes("@supports ((-webkit-background-clip: text)"), "gradient must be supports-gated")
+  const npBlock = css.slice(css.indexOf(".tt-nameplate-leaf"), css.indexOf("@supports ((-webkit-background-clip: text)"))
+  assert.ok(!/color:\s*transparent/.test(npBlock), "no transparent text outside @supports")
+  assert.ok(css.includes(".tt-gradient-text"), "shared gradient-text fallback class required")
+})
+
+check("tokens: semantic success/warning colors exist per theme", () => {
+  const css = src("app/globals.css")
+  assert.ok(css.includes("--light-success") && css.includes("--dark-success"), "success token both themes")
+  assert.ok(css.includes("--light-warning") && css.includes("--dark-warning"), "warning token both themes")
+  assert.ok(css.includes("--color-success") && css.includes("--color-warning"), "tailwind color registration")
 })
 
 console.log(`\n${passed} passed, ${failed} failed`)

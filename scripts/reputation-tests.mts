@@ -605,6 +605,73 @@ async function run() {
       await prisma.user.delete({ where: { id: streakUser.id } }).catch(() => {})
     }
 
+    // ── DB: reversal-cycle ledger — no double-deduction ────────────
+    // award(+10 keyed, source POST:x) → unlike (reverse) → re-like
+    // (reinstate) → source deleted (reverse by source). Final balance
+    // must equal SUM(ledger) and reflect exactly one deduction.
+    const cycUser = await prisma.user.create({
+      data: { name: `${TEST_USERNAME}_cyc`, ageVerified: true, sessionVersion: 1, profile: { create: { username: `${TEST_USERNAME}_cyc` } } },
+      select: { id: true },
+    })
+    const cycActor = await prisma.user.create({
+      data: { name: `${TEST_USERNAME}_cyca`, ageVerified: true, sessionVersion: 1, profile: { create: { username: `${TEST_USERNAME}_cyca` } } },
+      select: { id: true },
+    })
+    const cycStaff = await prisma.user.create({
+      data: { name: `${TEST_USERNAME}_cym`, ageVerified: true, sessionVersion: 1, role: "MODERATOR", profile: { create: { username: `${TEST_USERNAME}_cym` } } },
+      select: { id: true },
+    })
+    try {
+      const srcId = `post_test_${TEST_USERNAME}`
+      const key = `like:${cycActor.id}:post:${srcId}`
+      const a1 = await applyReputationAward(cycUser.id, "LIKE_RECEIVED", 10, "t", {
+        key, actorId: cycActor.id, sourceType: "POST", sourceId: srcId,
+      })
+      assert.equal(a1.awarded, true)
+      assert.equal(await repOf(cycUser.id), 10)
+
+      const ev = await prisma.reputationEvent.findUnique({ where: { key }, select: { id: true } })
+      assert.ok(ev)
+      const r1 = await reverseReputationEvent(ev!.id, "unlike", cycActor.id)
+      assert.equal(r1.reversed, true)
+      assert.equal(await repOf(cycUser.id), 0)
+
+      // Re-like reinstates the original (restore == -sum(counter-entries)).
+      const a2 = await applyReputationAward(cycUser.id, "LIKE_RECEIVED", 10, "t", {
+        key, actorId: cycActor.id, sourceType: "POST", sourceId: srcId,
+      })
+      assert.equal(a2.awarded, true)
+      assert.equal(a2.reinstated, true)
+      assert.equal(await repOf(cycUser.id), 10)
+
+      // Post deleted — must deduct exactly once even though a REINSTATE row
+      // shares the sourceType/sourceId.
+      const n = await reverseReputationBySource("POST", srcId, "content removed")
+      assert.equal(n, 1, "only the root award may be reversed")
+      assert.equal(await repOf(cycUser.id), 0)
+      assert.equal(await ledgerSum(cycUser.id), 0, "balance must equal SUM(ledger)")
+
+      // Final staff reversal blocks organic re-trigger.
+      const srcId2 = `post_test2_${TEST_USERNAME}`
+      const key2 = `like:${cycActor.id}:post:${srcId2}`
+      await applyReputationAward(cycUser.id, "LIKE_RECEIVED", 10, "t", {
+        key: key2, actorId: cycActor.id, sourceType: "POST", sourceId: srcId2,
+      })
+      const ev2 = await prisma.reputationEvent.findUnique({ where: { key: key2 }, select: { id: true } })
+      await reverseReputationEvent(ev2!.id, "staff reversal", cycStaff.id, { final: true })
+      assert.equal(await repOf(cycUser.id), 0)
+      const a3 = await applyReputationAward(cycUser.id, "LIKE_RECEIVED", 10, "t", {
+        key: key2, actorId: cycActor.id, sourceType: "POST", sourceId: srcId2,
+      })
+      assert.equal(a3.awarded, false)
+      assert.equal(a3.skippedReason, "locked", "final reversal must refuse reinstatement")
+      assert.equal(await repOf(cycUser.id), 0)
+    } finally {
+      for (const u of [cycUser, cycActor, cycStaff]) {
+        await prisma.user.delete({ where: { id: u.id } }).catch(() => {})
+      }
+    }
+
     // Markers never move the balance.
     assert.equal(await repOf(uid), await ledgerSum(uid), "markers keep balance == ledger")
 

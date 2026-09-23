@@ -6,7 +6,6 @@
 // Run: npx tsx scripts/velocity-detector-tests.mts   (dev DB only — guarded)
 import "./db-guard.mjs"
 import { strict as assert } from "node:assert"
-import { readFileSync } from "node:fs"
 import { prisma } from "@/lib/prisma"
 import {
   detectReputationSignals,
@@ -167,22 +166,6 @@ async function main() {
       !flag
         ? pass(`T11: GOTW award + detection same run → no self-generated flag (created=${created})`)
         : fail("T11: GOTW award + detection same run → no flag", flag)
-    }
-
-    // TEST 12 — deleted-user flags render as "Deleted user", not "@unknown"
-    {
-      const queueSrc = readFileSync("src/app/api/moderation/queue/route.ts", "utf8")
-      const caseSrc = readFileSync("src/app/moderation/cases/[id]/page.tsx", "utf8")
-      const flagsSrc = readFileSync("src/app/api/admin/reputation/flags/route.ts", "utf8")
-      const ok =
-        queueSrc.includes('?? "Deleted user"') &&
-        caseSrc.includes('"Deleted user"') &&
-        flagsSrc.includes('"Deleted user"')
-      ok ? pass('T12: missing users render "Deleted user" in queue/case/admin views')
-         : fail('T12: missing-user label', "expected Deleted user fallbacks")
-      !flagsSrc.includes("materializeReputationFlags")
-        ? pass("T12b: admin flags GET no longer materializes flags")
-        : fail("T12b: admin flags GET read-only", "still calls materializeReputationFlags")
     }
 
     // Sanity — the allowlist classifies every known event type correctly

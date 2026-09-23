@@ -1,59 +1,14 @@
 // Phase 3 authenticated verification — thread follows, reply notifications,
 // unread state, first-action nudge. Temp users/threads fully cleaned up.
-import "./db-guard.mjs"
-import { PrismaClient } from "@prisma/client"
-import bcrypt from "bcryptjs"
+import { makeHarness } from "./lib/http-harness.mjs"
 
-const BASE = process.env.VERIFY_URL || "http://localhost:3000"
-const prisma = new PrismaClient()
-const results = []
-function pass(n) { results.push(["PASS", n]); console.log(`  ✓ ${n}`) }
-function fail(n, i) { results.push(["FAIL", n]); console.log(`  ✗ ${n} — ${JSON.stringify(i)?.slice(0, 300)}`) }
-
-async function createUser(tag) {
-  const password = "VerifyPass123!"
-  const user = await prisma.user.create({
-    data: {
-      name: `__verify_${tag}_${Date.now()}`,
-      ageVerified: true,
-      password: await bcrypt.hash(password, 12),
-      sessionVersion: 1,
-      onboardingCompletedAt: new Date(),
-      profile: { create: { username: `__v_${tag}_${Date.now().toString(36)}` } },
-    },
-    include: { profile: true },
-  })
-  return { ...user, password, username: user.profile.username }
-}
-
-async function login(username, password) {
-  const csrfRes = await fetch(`${BASE}/api/auth/csrf`)
-  const { csrfToken } = await csrfRes.json()
-  const csrfCookie = (csrfRes.headers.getSetCookie?.() || [csrfRes.headers.get("set-cookie")]).filter(Boolean).map((c) => c.split(";")[0]).join("; ")
-  const res = await fetch(`${BASE}/api/auth/callback/credentials`, {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded", cookie: csrfCookie },
-    body: new URLSearchParams({ csrfToken, username, password, json: "true" }),
-    redirect: "manual",
-  })
-  const cookies = [...(csrfCookie ? [csrfCookie] : []), ...(res.headers.getSetCookie?.() || []).map((c) => c.split(";")[0])].join("; ")
-  return { cookie: cookies }
-}
-
-async function callApi(path, { method = "GET", body, cookie } = {}) {
-  const headers = {}
-  if (body) headers["Content-Type"] = "application/json"
-  if (cookie) headers["cookie"] = cookie
-  let res
-  try {
-    res = await fetch(`${BASE}${path}`, { method, headers, body: body ? JSON.stringify(body) : undefined, redirect: "manual" })
-  } catch (e) {
-    return { status: 0, data: { fetchError: String(e) }, location: null }
-  }
-  let data = null
-  try { data = await res.json() } catch { /* html/redirect */ }
-  return { status: res.status, data, location: res.headers.get("location") }
-}
+// forum users get a fresh timestamp per createUser call (names/usernames
+// embed Date.now() directly, not the shared run marker).
+const { prisma, BASE, results, pass, fail, createUser, login, api: callApi, finish } = makeHarness({
+  username: (tag) => `__v_${tag}_${Date.now().toString(36)}`,
+  name: (tag) => `__verify_${tag}_${Date.now()}`,
+  summary: "none",
+})
 
 // after() fan-out lands after the response — poll briefly for async work.
 async function waitFor(fn, tries = 12) {
@@ -542,5 +497,5 @@ const main = async () => {
 }
 
 main()
-  .then(() => process.exit(results.some(([s]) => s === "FAIL") ? 1 : 0))
+  .then(() => process.exit(finish()))
   .catch((e) => { console.error(e); process.exit(1) })

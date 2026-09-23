@@ -55,10 +55,35 @@ DATABASE_URL="postgresql://USER:PASSWORD@ep-XXXX.us-east-1.aws.neon.tech/neondb?
 ## Testing
 
 ```bash
-npm run test:master          # authoritative suite — boots a dev server, runs every scripts/*-tests / *-verify against the Neon dev branch
+npm run test:fast            # ~10s — pure + static suites only (no dev server, no DB writes); run on every iteration
+npm run test:master          # THE release gate — fast + full tiers; boots a dev server, runs HTTP + DB suites against the Neon dev branch
+npm run test:slow            # analytics/aggregate suites (community, growth, knowledge-compounding) — not release-blocking
+npm run test:all             # everything (master + slow)
 npm run test:<name>          # any single suite (see package.json)
 npx tsc --noEmit && npm run lint
 ```
+
+`scripts/master-tests.mts` is the single manifest: every suite is registered with a tier (`fast` | `full` | `slow`) and a phase (static → pure → HTTP → DB serial → drift → final). A suite file missing from disk fails the run; `MASTER_ONLY` matching nothing fails the run. There is exactly one release answer: `npm run test:master` green.
+
+Test domains (one canonical suite each — extend these, don't add one-off scripts):
+
+| Domain | Suite |
+|---|---|
+| Static route/security contracts | `verify-security.cjs` · UI structure/a11y `ui-contracts-tests.mts` · content `info-pages-tests.mts` |
+| TerpBot (pure) | `terpbot-parser` · `terpbot-commands` · `terpbot-intelligence` · `terpbot-longitudinal` · `terpbot-decisions` · `terpbot-assist` · `validate-knowledge` |
+| TerpBot (integration) | `terpbot-pipeline-tests.mts` (DB) · `bot-verify.mjs` (HTTP) |
+| HTTP boundaries | `account-verify` (auth, onboarding, DMs, deletion, captcha) · `forum-verify` · `search-verify` · `diary-verify` · `trust-safety-verify` · `feedback-tests` |
+| Security + platform libs | `security-tests.mts` (sessions, roles, uploads, links, cron, captcha, markdown) |
+| Privacy / account | `privacy-controls-tests.mts` · `self-service-tests.mts` · `notification-2-tests.mts` |
+| Reputation / progression | `reputation-tests` · `reputation-referral-integrity-tests` · `rewards3-tests` · `progression-tests` · `velocity-detector-tests` · `check-drift` |
+| Content | `content-edit-tests.mts` · `strain-lifecycle-tests.mts` · `discovery-integration-tests.mts` · `chat-ux-tests.mts` |
+
+Rules:
+- **Behavior over source strings.** Authorization, privacy, ownership, reputation, parsing, diagnosis, session and chat behavior are tested by exercising the code (HTTP boundary preferred, then the real lib function). `readFileSync(src)` assertions are allowed only for contracts with no behavioral surface (a new route missing `requireStaff`, config presence, forbidden imports, a11y attributes, CSS gating) and live in the static suites.
+- **No route mirrors.** A test must not re-implement a route's query/predicate and assert its own copy; call the route (HTTP) or the exported lib function.
+- **No conditional skips.** Create the fixture you need; never `if (row) assert(...)`.
+- **New behavior → existing suite.** Add a section to the canonical domain suite above. A new file is justified only for a genuinely new domain, and it must be registered in the master manifest with a tier.
+- **Fixtures keep invariants.** Any fixture that writes `Profile.reputation` writes the matching ledger row in the same transaction (see `mkEvent` in `progression-tests.mts`).
 
 All mutation-capable test scripts import `scripts/db-guard.mjs`. Content seeds (`prisma/seed.ts`, `scripts/seed-strains.cjs`, `scripts/seed-mars-hydro-products.cjs`) are idempotent upserts and are the only unguarded writers — run them deliberately.
 

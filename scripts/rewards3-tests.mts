@@ -6,10 +6,12 @@ import "./db-guard.mjs"
 import { strict as assert } from "node:assert"
 import { prisma } from "@/lib/prisma"
 import { computeGrowJourney, GROW_STAGES, evaluateGrowJourney } from "@/lib/grow-journey"
-import { weekRange, resolveWeeklyRecognition, weeklyBoard, GROWER_OF_THE_WEEK_REP } from "@/lib/weekly-recognition"
+import { weekRange, resolveWeeklyRecognition, weeklyBoard, GROWER_OF_THE_WEEK_REP, WEEKLY_BOARD_TYPES } from "@/lib/weekly-recognition"
 import { canAccessRoom, roomAccessInfo, GROW_ROOM_REP, GROW_ROOM_SLUG } from "@/lib/chat-access"
 import { getJourneyState, evaluateJourneys } from "@/lib/journeys"
 import { DAILY_QUEST_COUNT } from "@/lib/quests"
+import { isMeaningfulUpdate, MIN_UPDATE_LENGTH } from "@/lib/meaningful-update"
+import { getGrowStreak } from "@/lib/grow-streak"
 import { getReputationTier, getTierByName, REP_EVENT_TYPES } from "@/lib/reputation-config"
 import { SITE_SETTINGS } from "@/lib/settings"
 
@@ -172,7 +174,56 @@ async function main() {
     assert.equal(getReputationTier(3500).name, "Cultivator")
     assert.equal(GROW_ROOM_SLUG, "grow-room")
     assert.ok(GROW_STAGES[GROW_STAGES.length - 1].key === "COMPLETE")
+    // Weekly board allowlist — member-driven types + REVERSAL only.
+    assert.ok(WEEKLY_BOARD_TYPES.includes("REVERSAL"))
+    assert.ok(WEEKLY_BOARD_TYPES.includes("THREAD_CREATED"))
+    assert.ok(!WEEKLY_BOARD_TYPES.includes("WEEKLY_AWARD"))
+    assert.ok(!WEEKLY_BOARD_TYPES.includes("BADGE_BONUS"))
+    assert.ok(!WEEKLY_BOARD_TYPES.includes("LEGACY_MIGRATION"))
     console.log("config invariants ok")
+  }
+
+  // ─── Meaningful update predicate + grow streak ─────────────────────
+  {
+    const blank = {
+      content: "", images: [] as { id: string }[],
+      temperature: null, humidity: null, vpd: null, ph: null, ec: null,
+      feeding: null, training: null,
+    }
+    for (const junk of ["", "x", "         x", "123456789"]) {
+      assert.equal(isMeaningfulUpdate({ ...blank, content: junk }), false, `junk ${JSON.stringify(junk)}`)
+    }
+    assert.ok(isMeaningfulUpdate({ ...blank, content: "x".repeat(MIN_UPDATE_LENGTH) }))
+    assert.ok(isMeaningfulUpdate({ ...blank, images: [{ id: "i1" }] }))
+    for (const f of ["temperature", "humidity", "vpd", "ph", "ec", "feeding", "training"] as const) {
+      assert.ok(isMeaningfulUpdate({ ...blank, [f]: f === "feeding" || f === "training" ? "x" : 1 }), f)
+    }
+
+    // A junk-update day must not extend the streak.
+    const streaker = await makeUser("streak", 0)
+    let streakDiaryId = ""
+    try {
+      const dr = await prisma.growDiary.create({
+        data: { title: `${T} streak diary`, description: "", growType: "INDOOR", startDate: new Date(), authorId: streaker.id },
+        select: { id: true },
+      })
+      streakDiaryId = dr.id
+      const today = new Date(Math.floor(Date.now() / DAY) * DAY)
+      // Junk today, meaningful yesterday → streak must be 1, not 2.
+      await prisma.diaryUpdate.create({
+        data: { diaryId: dr.id, authorId: streaker.id, title: "j", content: "x", stage: "VEGETATIVE", createdAt: today, dayNumber: 1, weekNumber: 1 },
+      })
+      await prisma.diaryUpdate.create({
+        data: { diaryId: dr.id, authorId: streaker.id, title: "m", content: "real grow log entry here", stage: "VEGETATIVE", createdAt: new Date(today.getTime() - DAY), dayNumber: 1, weekNumber: 1 },
+      })
+      const s = await getGrowStreak(streaker.id)
+      assert.equal(s.streak, 1, `junk day must not extend streak (got ${s.streak})`)
+      assert.equal(s.totalUpdates, 2, "raw update count unchanged — predicate only gates streaks")
+    } finally {
+      if (streakDiaryId) await prisma.growDiary.delete({ where: { id: streakDiaryId } }).catch(() => {})
+      await prisma.user.delete({ where: { id: streaker.id } }).catch(() => {})
+    }
+    console.log("meaningful update + grow streak ok")
   }
 
   // ─── DB: chat room access ───────────────────────────────────────────
@@ -386,6 +437,7 @@ async function main() {
 
   // ─── DB: Getting Rooted journey ─────────────────────────────────────
   const rookie = await makeUser("rookie", 0)
+  let journeyCatId = ""
   try {
     const s0 = await getJourneyState(rookie.id)
     assert.ok(s0 && !s0.complete && s0.doneCount === 0, "fresh member at step 0")
@@ -393,19 +445,23 @@ async function main() {
     assert.equal((await prisma.profile.findUnique({ where: { userId: rookie.id } }))!.reputation, 0, "no award before completion")
 
     // Walk every step: onboarding, thread, like, diary, update, Sprout rep.
+    // Dedicated category fixture — the thread step and the completion
+    // assertion must run regardless of dev-DB contents.
     await prisma.user.update({ where: { id: rookie.id }, data: { onboardingCompletedAt: new Date() } })
-    const cat = await prisma.category.findFirst({ select: { id: true } })
-    if (cat) {
-      await prisma.thread.create({
-        data: {
-          title: `${T} thread`,
-          slug: `${T}-thread`,
-          content: "hello forum, this is a real first post body",
-          categoryId: cat.id,
-          authorId: rookie.id,
-        },
-      })
-    }
+    const cat = await prisma.category.create({
+      data: { name: `${T} cat`, slug: `__test_r3_cat_${T.slice(10)}`, description: "test" },
+      select: { id: true },
+    })
+    journeyCatId = cat.id
+    await prisma.thread.create({
+      data: {
+        title: `${T} thread`,
+        slug: `${T}-thread`,
+        content: "hello forum, this is a real first post body",
+        categoryId: cat.id,
+        authorId: rookie.id,
+      },
+    })
     const diary = await prisma.growDiary.create({
       data: {
         title: `${T} diary`,
@@ -429,7 +485,7 @@ async function main() {
 
     const s1 = await getJourneyState(rookie.id)
     assert.ok(s1, "journey state derived")
-    if (cat) assert.equal(s1!.complete, true, `all steps done (got ${s1!.doneCount}/${s1!.steps.length})`)
+    assert.equal(s1!.complete, true, `all steps done (got ${s1!.doneCount}/${s1!.steps.length})`)
     await evaluateJourneys(rookie.id, s1)
     await evaluateJourneys(rookie.id, s1) // idempotent
     const journeyEvents = await prisma.reputationEvent.count({
@@ -443,6 +499,7 @@ async function main() {
 
     console.log("getting rooted journey ok")
   } finally {
+    if (journeyCatId) await prisma.category.delete({ where: { id: journeyCatId } }).catch(() => {})
     await prisma.user.delete({ where: { id: rookie.id } }).catch(() => {})
   }
 

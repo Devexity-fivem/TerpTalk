@@ -1256,7 +1256,7 @@ async function run() {
       console.log("✓ mention decimals + staff-word bypass")
     }
 
-    // ── 17. Phase I — /plan, harvested reachability, evidence stamping ──
+    // ── 17. /plan, harvested reachability, evidence stamping ──
     {
       const daysAgo = (n: number) => new Date(Date.now() - n * 86400000)
       const u = await mk(`__tbp_pi_${SUFFIX}`)

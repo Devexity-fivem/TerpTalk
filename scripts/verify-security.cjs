@@ -119,6 +119,19 @@ const apiFiles = () => {
   const reg = read("app/api/auth/register/route.ts");
   check("register: insensitive uniqueness", reg.includes('mode: "insensitive"'));
   check("register: bcrypt 12", reg.includes("bcrypt.hash(password, 12)"));
+  // All public username surfaces resolve case-insensitively.
+  for (const f of [
+    "app/u/[username]/page.tsx",
+    "app/api/users/[username]/route.ts",
+    "app/api/users/[username]/card/route.ts",
+    "app/api/auth/register/route.ts",
+  ]) {
+    check(`${f}: insensitive username lookup`, read(f).includes('mode: "insensitive"'));
+  }
+  // Register: captcha claim is atomic; Turnstile fails closed in prod.
+  check("register: captcha atomic claim", reg.includes("updateMany") && reg.includes("used: false") && reg.includes("expiresAt"));
+  check("register: Turnstile fails closed in prod", /turnstile_not_configured|production/.test(reg));
+  check("register: captchaId type guard", reg.includes('typeof captchaId !== "string"'));
 
   // ── 7. Security headers ──
   const cfg = fs.readFileSync("next.config.ts", "utf8");
@@ -168,7 +181,7 @@ const apiFiles = () => {
   check("schema: no email collection", !/\bemail\s+String/.test(schema));
   check("schema: IP stored hashed only", !/\bip\s+String\b/.test(schema) || /ipHash/.test(schema));
 
-  // ── 11. Discovery security invariants (Phase 5) ──
+  // ── 11. Discovery security invariants ──
   const search = read("app/api/search/route.ts");
   check("search: hidden categories filtered", search.includes("hidden: false"));
   check("search: suspended users excluded", search.includes("suspendedUntil"));
@@ -201,7 +214,7 @@ const apiFiles = () => {
   const sitemap = read("app/sitemap.ts");
   check("sitemap: only published guides", sitemap.includes("published: true"));
 
-  // ── 12. Grow Data Engine invariants (Phase 6) ──
+  // ── 12. Grow Data Engine invariants ──
   const updatesRoute = read("app/api/diaries/updates/route.ts");
   check("diary updates: rate limited", /repRateLimit|rateLimit/.test(updatesRoute));
   check("diary updates: env values bounded", updatesRoute.includes("RANGES"));
@@ -284,6 +297,23 @@ const apiFiles = () => {
   const progRoute = read("app/api/progression/route.ts");
   check("progression api: owner-only (session + no-store)",
     progRoute.includes("session?.user?.id") && progRoute.includes("no-store"));
+
+  // ── 14. Cron route fail-loud contracts ──
+  const cronSrc = read("app/api/cron/terpbot/route.ts");
+  check("cron: BotEvent markers prevent duplicate announcements", cronSrc.includes("wasAnnounced"));
+  for (const t of ["digest post to #general failed", "grower-of-the-week post to #general failed",
+    "contest-winner post to #general failed", "diary-contest-winner post to #general failed"]) {
+    check(`cron: throws on failure — ${t}`, cronSrc.includes(`throw new Error("${t}")`));
+  }
+
+  // ── 15. Input bound + payout floor contracts ──
+  const diariesPost = read("app/api/diaries/route.ts");
+  check("diaries POST: startDate server-bounded (MAX_BACKDATE_MS)", diariesPost.includes("MAX_BACKDATE_MS"));
+  check("diaries POST: invalid start date rejected", diariesPost.includes("Invalid start date"));
+  const harvestPost = read("app/api/diaries/[id]/harvest/route.ts");
+  check("harvest: reward span anchors on createdAt", harvestPost.includes("createdAt") && /spanDays[\s\S]*createdAt/.test(harvestPost));
+  const forumPosts = read("app/api/forum/posts/route.ts");
+  check("posts: reply reputation paid-content floor", forumPosts.includes("POST_MIN_PAID_LENGTH"));
 
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);

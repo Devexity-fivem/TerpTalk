@@ -70,26 +70,12 @@ async function run() {
       "terpbot excluded from rankable surfaces"
     )
 
-    // ── 3. Presence filter hides hideOnlineStatus users ───────────────
-    const presenceWhere = {
-      lastSeenAt: { gte: new Date(Date.now() - 15 * 60 * 1000) },
-      banned: false,
-      AND: [
-        { profile: { isNot: { username: TERPBOT_USERNAME } } },
-        { OR: [{ profile: { hideOnlineStatus: false } }, { profile: null }] },
-      ],
-    }
+    // ── 3. hideOnlineStatus fixture flag ────────────────────────────
+    // Presence behavior itself is covered through the real getChatActivity
+    // in chat-ux; this flag stays set on b because §11 asserts the two
+    // privacy flags act independently on the public profile API.
     await prisma.user.update({ where: { id: b.id }, data: { lastSeenAt: new Date(), status: "ONLINE" } })
-    assert.ok(
-      await prisma.user.findFirst({ where: { ...presenceWhere, id: b.id } }),
-      "visible member appears in presence query"
-    )
     await prisma.profile.update({ where: { userId: b.id }, data: { hideOnlineStatus: true } })
-    assert.equal(
-      await prisma.user.findFirst({ where: { ...presenceWhere, id: b.id } }),
-      null,
-      "hidden member excluded from presence query"
-    )
 
     // ── 4. DM policy: FOLLOWING requires recipient→sender follow ──────
     await prisma.profile.update({ where: { userId: a.id }, data: { dmPolicy: "FOLLOWING" } })
@@ -185,8 +171,11 @@ async function run() {
     )
 
     // ── 8. Chat message soft-delete doesn't touch the lifetime counter ─
-    const room = await prisma.chatRoom.findFirst({ select: { id: true } })
-    if (room) {
+    const room = await prisma.chatRoom.create({
+      data: { name: `__pv_room_${SUFFIX}`, slug: `__pv-room-${SUFFIX}` },
+      select: { id: true },
+    })
+    try {
       const msg = await prisma.chatMessage.create({
         data: { roomId: room.id, authorId: a.id, content: "test" },
       })
@@ -196,6 +185,9 @@ async function run() {
       })
       const prof = await prisma.profile.findUnique({ where: { userId: a.id }, select: { chatMessageCount: true } })
       assert.equal(prof?.chatMessageCount, 0, "counter unaffected by delete (increment is on send)")
+    } finally {
+      await prisma.chatMessage.deleteMany({ where: { roomId: room.id } }).catch(() => {})
+      await prisma.chatRoom.delete({ where: { id: room.id } }).catch(() => {})
     }
 
     // ── 9. APPEAL report round-trips for the restricted flow ──────────

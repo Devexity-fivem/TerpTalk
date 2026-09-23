@@ -1,8 +1,8 @@
-// TerpBot 2.0 Phase E — deterministic NL parser tests (pure, no DB).
+// TerpBot deterministic NL parser tests (pure, no DB).
 // Pin the observation matrix: synonyms, misspellings, locations,
 // stages, trends, negation, compounds, false positives, measurements.
 // The parser NEVER diagnoses — it only produces observations.
-// Run: tsx scripts/terpbot-nl-tests.mts
+// Run: tsx scripts/terpbot-parser-tests.mts
 
 import { strict as assert } from "node:assert"
 import { normalizeGrowText, parseGrowText } from "@/lib/terpbot-nl-parse"
@@ -351,7 +351,7 @@ function run() {
     }
   }
 
-  // ── temporal extraction (Phase G) ─────────────────────────────────
+  // ── temporal extraction ───────────────────────────────────────────
   // Recency phrases resolve to ageDays / pastUnresolved AND consume
   // their digits — a temporal number can never mint a measurement.
   {

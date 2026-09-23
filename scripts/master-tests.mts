@@ -12,6 +12,11 @@
 //   MASTER_ONLY="velocity,drift"   run only suites whose id matches
 //   MASTER_BASE_URL=http://…       default http://localhost:3000
 //   MASTER_DEV_COMMAND="…"         override the dev-server spawn command
+//   MASTER_TIER=fast|full|slow|all tier selection (or --tier=<t>; CLI wins)
+//     fast — pure/static suites only; no dev server, no DB seeders/checks
+//     full — fast + full tiers; the release gate (default)
+//     slow — the heavy analytics suites only (DB, no server)
+//     all  — everything
 
 import { spawn, spawnSync, type ChildProcess } from "node:child_process"
 import { existsSync, readFileSync, writeFileSync } from "node:fs"
@@ -35,6 +40,7 @@ const ONLY = (process.env.MASTER_ONLY ?? "")
 
 type SuiteClass = "A" | "B" | "C" | "D"
 type Runner = "node" | "tsx"
+type Tier = "fast" | "full" | "slow"
 
 interface Suite {
   id: string
@@ -42,75 +48,105 @@ interface Suite {
   runner: Runner
   cls: SuiteClass // A strong behavioral · B behavioral w/ limits · C structural · D static
   label: string
+  tier: Tier
   timeoutMs?: number
 }
 
 const STATIC_PHASE: Suite[] = [
-  { id: "verify-security", file: "scripts/verify-security.cjs", runner: "node", cls: "C", label: "Security source invariants" },
-  { id: "chat-panel", file: "scripts/chat-panel-tests.mts", runner: "tsx", cls: "C", label: "Chat Panel structural invariants" },
-  { id: "info-pages", file: "scripts/info-pages-tests.mts", runner: "tsx", cls: "D", label: "Info pages static/config checks" },
+  { id: "verify-security", file: "scripts/verify-security.cjs", runner: "node", cls: "C", label: "Security source invariants", tier: "fast" },
+  { id: "ui-contracts", file: "scripts/ui-contracts-tests.mts", runner: "tsx", cls: "C", label: "UI structural + accessibility contracts", tier: "fast" },
+  { id: "info-pages", file: "scripts/info-pages-tests.mts", runner: "tsx", cls: "D", label: "Info pages static/config checks", tier: "fast" },
+]
+
+// Pure suites — no server, no DB. TerpBot layers plus structural checks.
+const PURE_PHASE: Suite[] = [
+  { id: "terpbot-parser", file: "scripts/terpbot-parser-tests.mts", runner: "tsx", cls: "A", label: "TerpBot NL parser", tier: "fast" },
+  { id: "terpbot-commands", file: "scripts/terpbot-commands-tests.mts", runner: "tsx", cls: "A", label: "TerpBot command registry + intent routing", tier: "fast" },
+  { id: "terpbot-intelligence", file: "scripts/terpbot-intelligence-tests.mts", runner: "tsx", cls: "A", label: "TerpBot evidence engine (candidates, scoring, classifier, wizard)", tier: "fast" },
+  { id: "terpbot-longitudinal", file: "scripts/terpbot-longitudinal-tests.mts", runner: "tsx", cls: "A", label: "TerpBot longitudinal context (timeline, baselines, interventions)", tier: "fast" },
+  { id: "terpbot-decisions", file: "scripts/terpbot-decisions-tests.mts", runner: "tsx", cls: "A", label: "TerpBot decisions (snapshot, capabilities, plan, decision engine)", tier: "fast" },
+  { id: "terpbot-assist", file: "scripts/terpbot-assist-tests.mts", runner: "tsx", cls: "A", label: "TerpBot BOT_ASSIST triggers", tier: "fast" },
+  { id: "validate-knowledge", file: "scripts/validate-knowledge.mts", runner: "tsx", cls: "C", label: "TerpBot knowledge validator", tier: "fast" },
 ]
 
 // Requires a healthy dev server at BASE_URL. Serial: suites share the dev DB
 // and bot-verify toggles global settings / rate-limit rows.
 const HTTP_PHASE: Suite[] = [
-  { id: "onboarding", file: "scripts/onboarding-verify.mjs", runner: "node", cls: "A", label: "Onboarding / auth HTTP flow" },
-  { id: "forum", file: "scripts/forum-verify.mjs", runner: "node", cls: "A", label: "Forum HTTP behavior" },
-  { id: "search", file: "scripts/search-verify.mjs", runner: "node", cls: "A", label: "Search HTTP behavior" },
-  { id: "diary", file: "scripts/diary-verify.mjs", runner: "node", cls: "A", label: "Grow diary HTTP behavior" },
-  { id: "bot", file: "scripts/bot-verify.mjs", runner: "node", cls: "A", label: "TerpBot HTTP end-to-end", timeoutMs: 12 * 60_000 },
-  { id: "trust-safety", file: "scripts/trust-safety-verify.mjs", runner: "node", cls: "A", label: "Trust & safety HTTP behavior" },
-  { id: "feedback", file: "scripts/feedback-tests.mjs", runner: "node", cls: "A", label: "Feedback auth/privacy/rate-limit" },
+  { id: "account", file: "scripts/account-verify.mjs", runner: "node", cls: "A", label: "Account lifecycle HTTP (auth, onboarding, DMs, deletion, captcha)", tier: "full" },
+  { id: "forum", file: "scripts/forum-verify.mjs", runner: "node", cls: "A", label: "Forum HTTP behavior", tier: "full" },
+  { id: "search", file: "scripts/search-verify.mjs", runner: "node", cls: "A", label: "Search HTTP behavior", tier: "full" },
+  { id: "diary", file: "scripts/diary-verify.mjs", runner: "node", cls: "A", label: "Grow diary HTTP behavior", tier: "full" },
+  { id: "bot", file: "scripts/bot-verify.mjs", runner: "node", cls: "A", label: "TerpBot HTTP end-to-end", tier: "full", timeoutMs: 12 * 60_000 },
+  { id: "trust-safety", file: "scripts/trust-safety-verify.mjs", runner: "node", cls: "A", label: "Trust & safety HTTP behavior", tier: "full" },
+  { id: "feedback", file: "scripts/feedback-tests.mjs", runner: "node", cls: "A", label: "Feedback auth/privacy/rate-limit", tier: "full" },
 ]
 
 // STRICTLY SERIAL — all create DB fixtures; several mutate shared global
 // settings (chat_enabled, GROW_ROOM_ENABLED) and rate-limit rows.
 const DB_PHASE: Suite[] = [
-  { id: "security", file: "scripts/security-tests.mts", runner: "tsx", cls: "A", label: "Security lib-level (uploads, callback URLs, link trust)" },
-  { id: "notifications", file: "scripts/notification-2-tests.mts", runner: "tsx", cls: "A", label: "Notification persistence + delivery" },
-  { id: "reputation", file: "scripts/reputation-tests.mts", runner: "tsx", cls: "A", label: "Reputation award/reverse ledger" },
-  { id: "reputation-referral", file: "scripts/reputation-referral-integrity-tests.mts", runner: "tsx", cls: "A", label: "Reputation referral integrity" },
-  { id: "stabilization", file: "scripts/stabilization-tests.mts", runner: "tsx", cls: "A", label: "Stabilization regressions" },
-  { id: "terpbot-pipeline", file: "scripts/terpbot-pipeline-tests.mts", runner: "tsx", cls: "A", label: "TerpBot pipeline (DB)" },
-  { id: "progression", file: "scripts/progression-tests.mts", runner: "tsx", cls: "A", label: "Progression / trust thresholds" },
-  { id: "privacy", file: "scripts/privacy-controls-tests.mts", runner: "tsx", cls: "B", label: "Privacy controls (mirror limits documented)" },
-  { id: "self-service", file: "scripts/self-service-tests.mts", runner: "tsx", cls: "B", label: "Self-service account flows" },
-  { id: "terpbot", file: "scripts/terpbot-tests.mts", runner: "tsx", cls: "A", label: "TerpBot command parse + permission boundaries" },
-  { id: "terpbot2", file: "scripts/terpbot2-tests.mts", runner: "tsx", cls: "A", label: "TerpBot 2.0 diagnostic engine (pure)" },
-  { id: "terpbot-nl", file: "scripts/terpbot-nl-tests.mts", runner: "tsx", cls: "A", label: "TerpBot NL observation parser" },
-  { id: "terpbot-intel", file: "scripts/terpbot-intel-tests.mts", runner: "tsx", cls: "A", label: "TerpBot 2.0 intelligence scoring (pure)" },
-  { id: "terpbot-longitudinal", file: "scripts/terpbot-longitudinal-tests.mts", runner: "tsx", cls: "A", label: "TerpBot longitudinal intelligence (pure)" },
-  { id: "terpbot-assist", file: "scripts/terpbot-assist-tests.mts", runner: "tsx", cls: "A", label: "TerpBot BOT_ASSIST triggers (pure)" },
-  { id: "terpbot-plan", file: "scripts/terpbot-plan-tests.mts", runner: "tsx", cls: "A", label: "TerpBot Phase I snapshot/capability/plan (pure)" },
-  { id: "terpbot-decisions", file: "scripts/terpbot-decisions-tests.mts", runner: "tsx", cls: "A", label: "TerpBot Phase J decision engine (pure)" },
-  { id: "validate-knowledge", file: "scripts/validate-knowledge.mts", runner: "tsx", cls: "C", label: "TerpBot knowledge validator" },
-  { id: "chat", file: "scripts/chat-ux-tests.mts", runner: "tsx", cls: "A", label: "Chat UX helpers + room visibility (DB)" },
-  { id: "community-analytics", file: "scripts/community-analytics-tests.mts", runner: "tsx", cls: "B", label: "Community analytics" },
-  { id: "growth-analytics", file: "scripts/growth-analytics-tests.mts", runner: "tsx", cls: "B", label: "Growth analytics" },
-  { id: "knowledge-compounding", file: "scripts/knowledge-compounding-tests.mts", runner: "tsx", cls: "B", label: "Knowledge compounding" },
-  { id: "p1-bugfix", file: "scripts/p1-bugfix-tests.mts", runner: "tsx", cls: "B", label: "P1 bugfix regressions" },
-  { id: "setup-edit", file: "scripts/setup-edit-tests.mts", runner: "tsx", cls: "B", label: "Setup edit (route-query mirror)" },
-  { id: "strain-lifecycle", file: "scripts/strain-lifecycle-tests.mts", runner: "tsx", cls: "B", label: "Strain lifecycle" },
-  { id: "velocity-detector", file: "scripts/velocity-detector-tests.mts", runner: "tsx", cls: "B", label: "Reputation velocity detector" },
-  { id: "diary-edit", file: "scripts/diary-edit-tests.mts", runner: "tsx", cls: "B", label: "Diary edit (mirror + source contract)" },
-  { id: "diary-update-edit", file: "scripts/diary-update-edit-tests.mts", runner: "tsx", cls: "B", label: "Diary update edit (mirror + source contract)" },
-  { id: "rewards3", file: "scripts/rewards3-tests.mts", runner: "tsx", cls: "A", label: "Rewards 3.0 anti-farming + weekly board" },
-  { id: "launch-hardening", file: "scripts/launch-hardening-tests.mts", runner: "tsx", cls: "A", label: "P1 launch-hardening regressions" },
-  { id: "discovery-integration", file: "scripts/discovery-integration-tests.mts", runner: "tsx", cls: "B", label: "Discovery integration (DB + source)" },
+  { id: "security", file: "scripts/security-tests.mts", runner: "tsx", cls: "A", label: "Security + platform lib-level (sessions, roles, uploads, links, cron, captcha, markdown)", tier: "full" },
+  { id: "notifications", file: "scripts/notification-2-tests.mts", runner: "tsx", cls: "A", label: "Notification persistence + delivery", tier: "full" },
+  { id: "reputation", file: "scripts/reputation-tests.mts", runner: "tsx", cls: "A", label: "Reputation award/reverse ledger", tier: "full" },
+  { id: "reputation-referral", file: "scripts/reputation-referral-integrity-tests.mts", runner: "tsx", cls: "A", label: "Reputation referral integrity", tier: "full" },
+  { id: "terpbot-pipeline", file: "scripts/terpbot-pipeline-tests.mts", runner: "tsx", cls: "A", label: "TerpBot pipeline (DB)", tier: "full" },
+  { id: "progression", file: "scripts/progression-tests.mts", runner: "tsx", cls: "A", label: "Progression / trust thresholds", tier: "full" },
+  { id: "privacy", file: "scripts/privacy-controls-tests.mts", runner: "tsx", cls: "B", label: "Privacy controls (block, hide, DM policy)", tier: "full" },
+  { id: "self-service", file: "scripts/self-service-tests.mts", runner: "tsx", cls: "B", label: "Self-service account flows", tier: "full" },
+  { id: "chat", file: "scripts/chat-ux-tests.mts", runner: "tsx", cls: "A", label: "Chat UX helpers + room visibility (DB)", tier: "full" },
+  { id: "community-analytics", file: "scripts/community-analytics-tests.mts", runner: "tsx", cls: "B", label: "Community analytics", tier: "slow" },
+  { id: "growth-analytics", file: "scripts/growth-analytics-tests.mts", runner: "tsx", cls: "B", label: "Growth analytics", tier: "slow" },
+  { id: "knowledge-compounding", file: "scripts/knowledge-compounding-tests.mts", runner: "tsx", cls: "B", label: "Knowledge compounding", tier: "slow" },
+  { id: "content-edit", file: "scripts/content-edit-tests.mts", runner: "tsx", cls: "B", label: "Content edit parsers + strain linkage", tier: "full" },
+  { id: "strain-lifecycle", file: "scripts/strain-lifecycle-tests.mts", runner: "tsx", cls: "B", label: "Strain lifecycle + staff deletion", tier: "full" },
+  { id: "velocity-detector", file: "scripts/velocity-detector-tests.mts", runner: "tsx", cls: "B", label: "Reputation velocity detector", tier: "full" },
+  { id: "rewards3", file: "scripts/rewards3-tests.mts", runner: "tsx", cls: "A", label: "Grow journey, weekly recognition, streaks, room gates", tier: "full" },
+  { id: "discovery-integration", file: "scripts/discovery-integration-tests.mts", runner: "tsx", cls: "B", label: "Discovery filters + sitemap (DB)", tier: "full" },
 ]
 
 // Whole-DB scan — runs alone, after every fixture suite has cleaned up.
 const DRIFT_PHASE: Suite[] = [
-  { id: "check-drift", file: "scripts/check-drift.mts", runner: "tsx", cls: "B", label: "Reputation ledger drift scan" },
+  { id: "check-drift", file: "scripts/check-drift.mts", runner: "tsx", cls: "B", label: "Reputation ledger drift scan", tier: "full" },
 ]
 
 // Remaining verification. verify-affiliates asserts ops seed data, so its
 // idempotent seeder runs as a setup step first.
 const FINAL_PHASE: Suite[] = [
-  { id: "verify-affiliates", file: "scripts/verify-affiliates.cjs", runner: "node", cls: "B", label: "Affiliate integrity (seeded data)" },
+  { id: "verify-affiliates", file: "scripts/verify-affiliates.cjs", runner: "node", cls: "B", label: "Affiliate integrity (seeded data)", tier: "full" },
 ]
 
-const ALL_SUITES = [...STATIC_PHASE, ...HTTP_PHASE, ...DB_PHASE, ...DRIFT_PHASE, ...FINAL_PHASE]
+const ALL_SUITES = [...STATIC_PHASE, ...PURE_PHASE, ...HTTP_PHASE, ...DB_PHASE, ...DRIFT_PHASE, ...FINAL_PHASE]
+
+// ---------------------------------------------------------------------------
+// Tier selection — --tier=<t> wins over MASTER_TIER; default "full" (release
+// gate). Tier-excluded suites are not run, not counted, and not listed.
+// ---------------------------------------------------------------------------
+
+type TierSelection = "fast" | "full" | "slow" | "all"
+
+const cliTier = process.argv.find((a) => a.startsWith("--tier="))?.slice("--tier=".length)
+const rawTier = (cliTier ?? process.env.MASTER_TIER ?? "full").trim().toLowerCase()
+if (!["fast", "full", "slow", "all"].includes(rawTier)) {
+  console.error(`unknown tier "${rawTier}" — expected fast|full|slow|all (MASTER_TIER or --tier=)`)
+  process.exit(1)
+}
+const TIER = rawTier as TierSelection
+
+const TIER_OK: Record<TierSelection, (t: Tier) => boolean> = {
+  fast: (t) => t === "fast",
+  full: (t) => t !== "slow",
+  slow: (t) => t === "slow",
+  all: () => true,
+}
+const tierOk = TIER_OK[TIER]
+const STATIC_S = STATIC_PHASE.filter((s) => tierOk(s.tier))
+const PURE_S = PURE_PHASE.filter((s) => tierOk(s.tier))
+const HTTP_S = HTTP_PHASE.filter((s) => tierOk(s.tier))
+const DB_S = DB_PHASE.filter((s) => tierOk(s.tier))
+const DRIFT_S = DRIFT_PHASE.filter((s) => tierOk(s.tier))
+const FINAL_S = FINAL_PHASE.filter((s) => tierOk(s.tier))
+const SELECTED_SUITES = [...STATIC_S, ...PURE_S, ...HTTP_S, ...DB_S, ...DRIFT_S, ...FINAL_S]
+const needsServer = HTTP_S.length > 0
+const needsDb = TIER !== "fast" // fast tier runs no DB prerequisites
 
 const MANUAL_COVERAGE = [
   "Chat Panel desktop behavior (open/close, resize, unread dot)",
@@ -278,7 +314,7 @@ function tail(s: string, n = 30): string {
   return lines.slice(-n).map((l) => `      | ${l}`).join("\n")
 }
 
-async function validateEnvironment(): Promise<string[]> {
+async function validateEnvironment(checkDb: boolean): Promise<string[]> {
   const problems: string[] = []
 
   if (process.cwd() !== ROOT) process.chdir(ROOT)
@@ -298,7 +334,7 @@ async function validateEnvironment(): Promise<string[]> {
     problems.push("DATABASE_URL points at the production Neon endpoint — tests refused (db-guard rule)")
   }
 
-  if (problems.length === 0) {
+  if (checkDb && problems.length === 0) {
     try {
       const { prisma } = await import("../src/lib/prisma")
       await prisma.$queryRawUnsafe("SELECT 1")
@@ -322,6 +358,7 @@ async function validateEnvironment(): Promise<string[]> {
 
 interface SuiteResult { suite: Suite; res: ChildResult; ok: boolean; skipped: boolean }
 const results: SuiteResult[] = []
+const phaseTimes: { title: string; ms: number }[] = []
 
 function selected(s: Suite): boolean {
   return ONLY.length === 0 || ONLY.some((f) => s.id.toLowerCase().includes(f))
@@ -345,8 +382,11 @@ async function runSuites(suites: Suite[], extraEnv: Record<string, string> = {})
 }
 
 async function runPhase(title: string, suites: Suite[], extraEnv: Record<string, string> = {}) {
+  if (suites.length === 0) return
   log(`\n[${title}]`)
+  const before = results.length
   await runSuites(suites, extraEnv)
+  phaseTimes.push({ title, ms: results.slice(before).reduce((a, r) => a + r.res.ms, 0) })
 }
 
 async function runSetupStep(label: string, cmd: string, args: string[]): Promise<boolean> {
@@ -367,60 +407,85 @@ async function main() {
   log("╚══════════════════════════════════════════════════════════╝")
   log(`  root: ${ROOT}`)
   log(`  base: ${BASE_URL}   node: ${process.version}   log: ${LOG_FILE}`)
+  const excluded = ALL_SUITES.length - SELECTED_SUITES.length
+  log(`  tier: ${TIER}${TIER === "all"
+    ? ` (${SELECTED_SUITES.length} suites)`
+    : ` (${SELECTED_SUITES.length} suites; ${excluded} ${TIER === "full" ? "slow-tier" : "other-tier"} suites excluded — run MASTER_TIER=${TIER === "full" ? "slow or all" : "all"})`}`)
   if (ONLY.length) log(`  filter: MASTER_ONLY=${ONLY.join(",")} (unlisted suites reported as SKIP)`)
 
-  // Phase 1 — environment
-  log(`\n[1/7] Environment`)
-  const problems = await validateEnvironment()
+  // MASTER_ONLY that matches nothing in the selected tier is a config
+  // error — fail loudly rather than report a green empty run.
+  if (ONLY.length && !SELECTED_SUITES.some(selected)) {
+    log(`\n  ✗ MASTER_ONLY matched zero suites in tier "${TIER}". Valid ids:`)
+    for (const s of SELECTED_SUITES) log(`    - ${s.id}`)
+    return finish(1)
+  }
+
+  // Phase 1 — environment (fast tier skips DB prerequisites entirely)
+  log(`\n[1/8] Environment`)
+  const problems = await validateEnvironment(needsDb)
   for (const p of problems) log(`  ✗ ${p}`)
   if (problems.length) return finish(1)
 
-  // prerequisites: idempotent seeders so required suites run for real
-  if (!(await runSetupStep("terpbot account", process.execPath, ["scripts/terpbot-setup.cjs"]))) return finish(1)
-  if (!(await runSetupStep("affiliate partner seed", process.execPath, ["scripts/seed-affiliates.cjs"]))) return finish(1)
+  if (needsDb) {
+    // prerequisites: idempotent seeders so required suites run for real
+    if (!(await runSetupStep("terpbot account", process.execPath, ["scripts/terpbot-setup.cjs"]))) return finish(1)
+    if (!(await runSetupStep("affiliate partner seed", process.execPath, ["scripts/seed-affiliates.cjs"]))) return finish(1)
+  }
   log(`  ✓ environment validated`)
 
   // Phase 2 — static / structural (no server, no DB writes)
-  await runPhase("2/7 Static / Structural", STATIC_PHASE)
+  await runPhase("2/8 Static / Structural", STATIC_S)
 
-  // Phase 3 — HTTP (requires healthy dev server; failure = master failure)
-  log(`\n[3/7] HTTP`)
-  let server: ServerHandle | null = null
-  try {
-    server = await startServer()
-    activeServer = server
-  } catch (e) {
-    log(`  ✗ dev server unavailable: ${e instanceof Error ? e.message : String(e)}`)
-    for (const s of HTTP_PHASE) {
-      results.push({ suite: s, res: { code: null, signal: null, timedOut: false, output: "dev server unavailable", ms: 0 }, ok: false, skipped: false })
-      log(`  ✗ ${s.label} [${s.cls}] FAIL (no server — not skipped)`)
+  // Phase 3 — pure suites (no server, no DB)
+  await runPhase("3/8 Pure", PURE_S)
+
+  // Phase 4 — HTTP (requires healthy dev server; failure = master failure)
+  if (needsServer) {
+    log(`\n[4/8] HTTP`)
+    let server: ServerHandle | null = null
+    try {
+      server = await startServer()
+      activeServer = server
+    } catch (e) {
+      log(`  ✗ dev server unavailable: ${e instanceof Error ? e.message : String(e)}`)
+      for (const s of HTTP_S) {
+        results.push({ suite: s, res: { code: null, signal: null, timedOut: false, output: "dev server unavailable", ms: 0 }, ok: false, skipped: false })
+        log(`  ✗ ${s.label} [${s.cls}] FAIL (no server — not skipped)`)
+      }
+    }
+    if (server) {
+      const before = results.length
+      await runSuites(HTTP_S, { VERIFY_URL: BASE_URL })
+      phaseTimes.push({ title: "4/8 HTTP", ms: results.slice(before).reduce((a, r) => a + r.res.ms, 0) })
+      stopServer(server)
+      activeServer = null
     }
   }
-  if (server) {
-    await runSuites(HTTP_PHASE, { VERIFY_URL: BASE_URL })
-    stopServer(server)
-    activeServer = null
-  }
 
-  // Phase 4 — database-backed behavioral suites, strictly serial
-  await runPhase("4/7 Database (serial)", DB_PHASE)
+  // Phase 5 — database-backed behavioral suites, strictly serial
+  await runPhase("5/8 Database (serial)", DB_S)
 
-  // Phase 5 — drift, alone, after all fixtures cleaned up
-  await runPhase("5/7 Drift", DRIFT_PHASE)
+  // Phase 6 — drift, alone, after all fixtures cleaned up
+  await runPhase("6/8 Drift", DRIFT_S)
 
-  // Phase 6 — remaining verification
-  await runPhase("6/7 Final verification", FINAL_PHASE)
+  // Phase 7 — remaining verification
+  await runPhase("7/8 Final verification", FINAL_S)
 
   return finish(results.some((r) => !r.ok && !r.skipped) ? 1 : 0)
 }
 
 function finish(code: number) {
-  log(`\n[7/7] Summary`)
+  log(`\n[8/8] Summary`)
   const passed = results.filter((r) => r.ok)
   const failed = results.filter((r) => !r.ok && !r.skipped)
   const skipped = results.filter((r) => r.skipped)
   for (const r of failed) log(`  FAIL ${r.suite.id} (${r.suite.file})`)
-  log(`\n  PASS: ${passed.length}   FAIL: ${failed.length}   SKIP: ${skipped.length}   total automated suites: ${ALL_SUITES.length}`)
+  if (phaseTimes.length) {
+    log(`\n  phase elapsed (sum of suite times):`)
+    for (const p of phaseTimes) log(`    ${p.title}: ${(p.ms / 1000).toFixed(1)}s`)
+  }
+  log(`\n  PASS: ${passed.length}   FAIL: ${failed.length}   SKIP: ${skipped.length}   total automated suites: ${SELECTED_SUITES.length}`)
   if (skipped.length) log(`  skipped were filtered by MASTER_ONLY — none were silently dropped`)
   log(`\n  Manual verification still required (no browser/runtime coverage exists):`)
   for (const m of MANUAL_COVERAGE) log(`    · ${m}`)

@@ -1,4 +1,4 @@
-// TerpBot Phase H — longitudinal intelligence tests.
+// TerpBot longitudinal intelligence tests.
 // Covers: timeline, baselines, change detection, episodes, interventions,
 // the action engine, status renderers, session merge, parser events,
 // longitudinal /why, and adversarial cases. Pure logic — no DB.
@@ -14,42 +14,40 @@ import {
   BASELINE_EMERGING_N,
   BASELINE_EMERGING_DAYS,
   BASELINE_ESTABLISHED_N,
-} from "../src/lib/terpbot-intel-calc"
-import { episodesFromObservations } from "../src/lib/terpbot-intel-episodes"
-import { stageTransitions, timelineFromRows, type TimelineRow } from "../src/lib/terpbot-intel-timeline"
+} from "@/lib/terpbot-intel-calc"
+import { episodesFromObservations } from "@/lib/terpbot-intel-episodes"
+import { stageTransitions, timelineFromRows, type TimelineRow } from "@/lib/terpbot-intel-timeline"
 import {
   evaluateContext,
   nextActions,
   nextUsefulMeasurement,
-} from "../src/lib/terpbot-intel"
+} from "@/lib/terpbot-intel"
 import {
   renderChanges,
   renderCheck,
   renderMeasurements,
   renderStatus,
   snapshotFrom,
-} from "../src/lib/terpbot-intel-status"
-import { buildSnapshot } from "../src/lib/terpbot-intel-snapshot"
-import { buildCultivationDecisions } from "../src/lib/terpbot-intel-decisions"
-import { buildWhyTrail, renderWhy } from "../src/lib/terpbot-intel-why"
-import { parseGrowText } from "../src/lib/terpbot-nl-parse"
-import { parseTerpbotIntent } from "../src/lib/terpbot-intents"
-import { mergeInterventions, mergeResolutions, mergeReported, mergeObservations } from "../src/lib/terpbot-intel-merge"
+} from "@/lib/terpbot-intel-status"
+import { buildSnapshot } from "@/lib/terpbot-intel-snapshot"
+import { buildCultivationDecisions } from "@/lib/terpbot-intel-decisions"
+import { buildWhyTrail, renderWhy } from "@/lib/terpbot-intel-why"
+import { parseGrowText } from "@/lib/terpbot-nl-parse"
+import { parseTerpbotIntent } from "@/lib/terpbot-intents"
+import { mergeInterventions, mergeResolutions, mergeReported, mergeObservations } from "@/lib/terpbot-intel-merge"
+import { pts, emptySeries as EMPTY_SERIES } from "./lib/terpbot-fixtures"
 import type {
   GrowContextView,
   IntelSeries,
   InterventionRecord,
   LocationId,
-  MetricPoint,
   ResolutionClaim,
   StructuredObservation,
   SymptomId,
-} from "../src/lib/terpbot-intel-types"
+} from "@/lib/terpbot-intel-types"
 
 const DAY = 86400000
 const t0 = Date.UTC(2025, 0, 1)
-const pts = (vals: number[], stepMs = DAY, prov?: "user-reported"): MetricPoint[] =>
-  vals.map((v, i) => ({ t: t0 + i * stepMs, v, ...(prov ? { provenance: prov } : {}) }))
 const mkSeries = (vals: number[], eps: number, now = t0 + vals.length * DAY): IntelSeries => {
   const points = pts(vals)
   return { ...seriesStats(points), points, trend: detectTrend(points, eps), change: detectChange(points, eps, { now }) }
@@ -61,10 +59,7 @@ const mkRecent = (vals: number[], eps: number, daysBack = 1): IntelSeries => {
   const points = vals.map((v, i) => ({ t: start + i * DAY, v }))
   return { ...seriesStats(points), points, trend: detectTrend(points, eps), change: detectChange(points, eps, { now: NOW }) }
 }
-const emptySeries: IntelSeries = {
-  n: 0, latest: null, mean: null, min: null, max: null,
-  medianIntervalDays: null, points: [], trend: "insufficient",
-}
+const emptySeries = EMPTY_SERIES
 
 const mkCtx = (over: Partial<GrowContextView> = {}): GrowContextView => ({
   scope: "public",
@@ -250,7 +245,7 @@ section("baselines")
   assert.ok(eps2[0].end != null)
 }
 
-// ── Episodes (H2/H3) ────────────────────────────────────────────────
+// ── Episodes ────────────────────────────────────────────────────────────────────────────────────────────────────────
 section("episodes")
 
 {
@@ -525,7 +520,7 @@ section("action engine")
   }
 }
 
-// ── Status renderers (H5) ───────────────────────────────────────────
+// ── Status renderers ───────────────────────────────────────────────────────────────────────────────────────────
 section("status renderers")
 
 {
@@ -599,7 +594,7 @@ section("status renderers")
   assert.ok(/nothing to check|no change/i.test(empty.join("")))
 }
 
-// ── Parser events (H3) ──────────────────────────────────────────────
+// ── Parser events ──────────────────────────────────────────────────────────────────────────────────────────────────
 section("parser")
 
 {
@@ -738,7 +733,7 @@ section("longitudinal /why")
   assert.ok(/knowledge v2\.6/.test(text))
 }
 
-// ── Adversarial (H.37) ──────────────────────────────────────────────
+// ── Adversarial ────────────────────────────────────────────────────────────────────────────────────────────────────
 section("adversarial")
 
 {
@@ -805,7 +800,7 @@ section("adversarial")
     if (intent.kind === "command") assert.equal(intent.name, cmd, input)
   }
   // existing commands not shadowed — "what should i do next" is now
-  // intentionally the Phase J /next command (spec §29)
+  // intentionally the /next command (spec §29)
   for (const [input, cmd] of [
     ["@terpbot contest status", "contest"],
     ["@terpbot what should i do next", "next"],
@@ -817,4 +812,4 @@ section("adversarial")
   }
 }
 
-console.log("\nAll Phase H longitudinal tests passed.")
+console.log("\nAll longitudinal tests passed.")

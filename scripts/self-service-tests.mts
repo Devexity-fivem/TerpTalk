@@ -85,40 +85,6 @@ async function run() {
     assert.ok(await blockExistsBetween(a.id, c.id), "B cannot unblock A's block — ownership scoped")
     await prisma.block.deleteMany({ where: { blockerId: a.id, blockedId: c.id } })
 
-    // ── DM POLICY ──────────────────────────────────────────────────────
-    // Route logic mirror: policy checks happen after block check.
-    const dmCheck = async (senderId: string, recipientId: string) => {
-      if (await blockExistsBetween(senderId, recipientId)) return "BLOCKED"
-      const target = await prisma.profile.findUnique({ where: { userId: recipientId }, select: { dmPolicy: true } })
-      const policy = target?.dmPolicy ?? "EVERYONE"
-      if (policy === "NONE") return "POLICY_NONE"
-      if (policy === "FOLLOWING") {
-        const followed = await prisma.follow.findFirst({
-          where: { followerId: recipientId, followingId: senderId },
-          select: { id: true },
-        })
-        return followed ? "OK" : "POLICY_FOLLOWING"
-      }
-      return "OK"
-    }
-    assert.equal(await dmCheck(a.id, b.id), "OK", "EVERYONE (default) allows DM")
-    await prisma.profile.update({ where: { userId: b.id }, data: { dmPolicy: "NONE" } })
-    assert.equal(await dmCheck(a.id, b.id), "POLICY_NONE", "NONE rejects DM")
-    await prisma.profile.update({ where: { userId: b.id }, data: { dmPolicy: "FOLLOWING" } })
-    assert.equal(await dmCheck(a.id, b.id), "POLICY_FOLLOWING", "FOLLOWING rejects stranger")
-    // Sender following recipient is NOT enough — recipient must follow sender
-    await prisma.follow.create({ data: { followerId: a.id, followingId: b.id } })
-    assert.equal(await dmCheck(a.id, b.id), "POLICY_FOLLOWING", "wrong-direction follow still rejected")
-    await prisma.follow.create({ data: { followerId: b.id, followingId: a.id } })
-    assert.equal(await dmCheck(a.id, b.id), "OK", "recipient-follows-sender allows DM")
-    // Block overrides even an EVERYONE policy
-    await prisma.profile.update({ where: { userId: c.id }, data: { dmPolicy: "EVERYONE" } })
-    await prisma.block.create({ data: { blockerId: c.id, blockedId: a.id } })
-    assert.equal(await dmCheck(a.id, c.id), "BLOCKED", "block beats EVERYONE policy")
-    await prisma.block.deleteMany({ where: { blockerId: c.id, blockedId: a.id } })
-    await prisma.follow.deleteMany({ where: { OR: [{ followerId: a.id }, { followerId: b.id }] } })
-    await prisma.profile.update({ where: { userId: b.id }, data: { dmPolicy: "EVERYONE" } })
-
     // ── REPORTS ────────────────────────────────────────────────────────
     const reportsSrc = read("src/app/api/reports/route.ts")
     // Allowlist sanity: APPEAL is created only by /api/restricted, not /api/reports

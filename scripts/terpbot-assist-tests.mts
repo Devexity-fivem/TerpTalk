@@ -1,4 +1,4 @@
-// TerpBot Phase H7 — BOT_ASSIST trigger tests.
+// TerpBot BOT_ASSIST trigger tests.
 // Pure logic: evaluateAssists over hand-built contexts — no DB.
 // Per-trigger coverage: positive fire, near-miss negatives, key
 // idempotency (same evidence → same key), evidence-epoch re-arm
@@ -6,11 +6,12 @@
 // Run: npx tsx scripts/terpbot-assist-tests.mts
 
 import assert from "node:assert"
-import { evaluateAssists, type AssistFire } from "../src/lib/terpbot-assist-triggers"
-import { interventionKey } from "../src/lib/terpbot-session"
-import { detectChange, seriesStats } from "../src/lib/terpbot-intel-calc"
-import { buildSnapshot } from "../src/lib/terpbot-intel-snapshot"
-import { buildCultivationDecisions } from "../src/lib/terpbot-intel-decisions"
+import { evaluateAssists, type AssistFire } from "@/lib/terpbot-assist-triggers"
+import { interventionKey } from "@/lib/terpbot-session"
+import { detectChange, seriesStats } from "@/lib/terpbot-intel-calc"
+import { buildSnapshot } from "@/lib/terpbot-intel-snapshot"
+import { buildCultivationDecisions } from "@/lib/terpbot-intel-decisions"
+import { emptySeries as EMPTY_SERIES } from "./lib/terpbot-fixtures"
 import type {
   CandidateResult,
   Diagnosis,
@@ -21,15 +22,12 @@ import type {
   SessionSnapshot,
   StructuredObservation,
   SymptomEpisode,
-} from "../src/lib/terpbot-intel-types"
+} from "@/lib/terpbot-intel-types"
 
 const DAY = 86400000
 const NOW = Date.UTC(2026, 0, 30)
 
-const emptySeries: IntelSeries = {
-  n: 0, latest: null, mean: null, min: null, max: null,
-  medianIntervalDays: null, points: [], trend: "insufficient",
-}
+const emptySeries = EMPTY_SERIES
 
 const mkCtx = (over: Partial<GrowContextView> = {}): GrowContextView => ({
   scope: "owner",
