@@ -184,7 +184,7 @@ function stepFeasibility(snap: GrowIntelligenceSnapshot, stepId: NextStepId): De
  *  Any-of semantics: one matching capability makes it feasible; none
  *  leaves it partially_feasible (manual paths exist — opening a vent,
  *  moving a fan — but there's no equipment evidence). */
-const ADJUST_NEED: Record<string, string[]> = {
+export const ADJUST_NEED: Record<string, string[]> = {
   heat_stress: [], // raising/dimming a fixture needs no claimed equipment
   humidity_high: ["humidity-down", "airflow"],
   humidity_low: ["humidity-up"],
@@ -204,6 +204,150 @@ function adjustFeasibility(snap: GrowIntelligenceSnapshot, candidateId: string):
   if (!need.length) return "partially_feasible"
   const have = new Set(snap.setup.adjusts.map((a) => a.id))
   return need.some((n) => have.has(n)) ? "feasible" : "partially_feasible"
+}
+
+// ── Action memory ───────────────────────────────────────────────────
+// A reported intervention IS the memory of "this was already tried".
+// Without it the engine loops: adjust → wait → adjust the same thing
+// → wait → …  14d is the memory window — older attempts are stale
+// context, not a live constraint. This is not a permanent suppression
+// and not an ever-growing cooldown: fresh contradictory evidence
+// re-opens the suggestion immediately.
+
+const ATTEMPT_MEMORY_DAYS = 14
+
+/** Which intervention vocabulary constitutes "this adjustment was
+ *  already tried" for each allowlisted candidate, plus the metric
+ *  whose adverse drift counts as NEW evidence re-opening it. */
+const ADJUST_ATTEMPTS: Record<
+  string,
+  { ivTypes: string[]; metric?: MetricId; adverse?: "up" | "down" }
+> = {
+  heat_stress: {
+    ivTypes: ["TEMP_DOWN", "LIGHT_RAISED", "LIGHT_DIMMED"],
+    metric: "temperature",
+    adverse: "up",
+  },
+  humidity_high: {
+    ivTypes: ["RH_DOWN", "AIRFLOW"],
+    metric: "humidity",
+    adverse: "up",
+  },
+  humidity_low: { ivTypes: ["RH_UP"], metric: "humidity", adverse: "down" },
+  wind_or_dry: { ivTypes: ["AIRFLOW"], metric: "humidity", adverse: "down" },
+  "env.cold-stress": {
+    ivTypes: ["TEMP_UP"],
+    metric: "temperature",
+    adverse: "down",
+  },
+  "env.dry-quality-risk": {
+    ivTypes: ["RH_DOWN", "RH_UP", "TEMP_DOWN", "TEMP_UP"],
+  },
+  "post.dry-too-fast": { ivTypes: ["RH_UP"], metric: "humidity", adverse: "down" },
+  "post.cure-moisture": { ivTypes: ["AIRFLOW"] },
+}
+
+/** If this adjustment was already attempted recently, returns the
+ *  decision that should REPLACE it — a different discriminator, never
+ *  the same suggestion again. Returns null when the suggestion is
+ *  genuinely fresh, or when new evidence (a recurred episode, or an
+ *  adverse drift on the target metric after the attempt) justifies
+ *  re-suggesting it. */
+function adjustmentRetry(
+  snap: GrowIntelligenceSnapshot,
+  candidateId: string
+): CultivationDecision | null {
+  const mem = ADJUST_ATTEMPTS[candidateId]
+  if (!mem) return null
+  const attempt = snap.interventions
+    .filter((iv) => mem.ivTypes.includes(iv.type) && iv.ageDays <= ATTEMPT_MEMORY_DAYS)
+    .sort((a, b) => a.ageDays - b.ageDays)[0]
+  if (!attempt || attempt.state === "pending") return null // fresh, or the cooldown path already owns it
+
+  const recurred = snap.episodes.some((e) => e.status === "recurred")
+  const reading = mem.metric
+    ? snap.readings.find((r) => r.metric === mem.metric && !r.stale)
+    : undefined
+  if (recurred || (!!mem.adverse && reading?.changeDirection === mem.adverse))
+    return null // new evidence — the suggestion is legitimately live again
+
+  const attemptLabel = ivLabel(attempt)
+  if (attempt.state !== "answered") {
+    // Lapsed/untracked — the change never got a follow-up. The honest
+    // next step is the measurement that was skipped, not a repeat.
+    const metric = attempt.targetMetric ?? mem.metric
+    const cap = metric ? capabilityOf(snap, metric) : null
+    if (
+      metric &&
+      REPORTABLE_METRICS.has(metric) &&
+      cap &&
+      cap.feasibility !== "excluded" &&
+      cap.feasibility !== "unreportable"
+    ) {
+      return {
+        class: "VERIFY",
+        stepId: metric,
+        title: `Re-measure ${metricLabel(metric)}`,
+        reason:
+          `You reported a ${attemptLabel} ${ageText(attempt.ageDays)} but never logged a follow-up ` +
+          `${metricLabel(metric)} reading — verify what the change did before adjusting again.`,
+        strength: "moderate",
+        signals: 1,
+        feasibility: stepFeasibility(snap, metric),
+        candidateIds: [candidateId],
+        riskTier: "none",
+        evaluatesIntervention: true,
+      }
+    }
+    return {
+      class: "OBSERVE",
+      title: `Check the result of your ${attemptLabel}`,
+      reason:
+        `You reported a ${attemptLabel} ${ageText(attempt.ageDays)} with no logged follow-up — ` +
+        `check the response before changing the same variable again.`,
+      strength: "moderate",
+      signals: 1,
+      feasibility: "feasible",
+      candidateIds: [candidateId],
+      riskTier: "none",
+      evaluatesIntervention: true,
+    }
+  }
+
+  // Answered — the change was measured and the picture still points the
+  // same way. Repeating the move needs a DIFFERENT discriminator first:
+  // an unmeasured required input, then a plain look for another cause.
+  const cand = snap.diagnosis.candidates.find((c) => c.id === candidateId)
+  const other = cand?.requiredMissing.find(
+    (m) => m !== attempt.targetMetric && snap.missingReportable.includes(m)
+  )
+  if (other) {
+    return {
+      class: "MEASURE",
+      stepId: other,
+      title: `Measure ${metricLabel(other)}`,
+      reason:
+        `The ${attemptLabel} ${ageText(attempt.ageDays)} didn't resolve this — ` +
+        `${metricLabel(other)} is the next discriminator before trying the same adjustment again.`,
+      strength: "moderate",
+      signals: 1,
+      feasibility: stepFeasibility(snap, other),
+      candidateIds: [candidateId],
+      riskTier: "none",
+    }
+  }
+  return {
+    class: "OBSERVE",
+    title: "Look for another cause",
+    reason:
+      `You already tried a ${attemptLabel} ${ageText(attempt.ageDays)} and this still points the same way — ` +
+      `inspect the plant and setup for a cause the adjustment couldn't reach before repeating it.`,
+    strength: "moderate",
+    signals: 1,
+    feasibility: "feasible",
+    candidateIds: [candidateId],
+    riskTier: "none",
+  }
 }
 
 // ── Action → decision mapping ───────────────────────────────────────
@@ -267,29 +411,71 @@ function fromAction(a: ActionRequest, snap: GrowIntelligenceSnapshot): Cultivati
 // The central trust surface: every top decision explains why it comes
 // before everything else, in deterministic wording tied to its class.
 
-function whyFirst(d: CultivationDecision): string {
-  switch (d.class) {
+/** What the runner-up IS, in grower terms — no internal ids. */
+const CLASS_PHRASE: Record<DecisionClass, string> = {
+  COMPARE: "the comparison reading",
+  VERIFY: "the verification",
+  MEASURE: "the next measurement",
+  OBSERVE: "the direct look",
+  WAIT: "waiting out the recent change",
+  MONITOR: "monitoring the settling change",
+  ADJUST: "the adjustment",
+  LOG: "logging more data",
+  HOLD: "holding steady",
+}
+
+/** Why the top outranks THIS runner-up — one clause, appended to the
+ *  class template. Deterministic on (top.class, next.class). */
+function runnerUpReason(top: CultivationDecision, next: CultivationDecision): string {
+  const nr = CLASS_PHRASE[next.class]
+  switch (top.class) {
     case "COMPARE":
-      return "first because evidence conflicts — this reading separates the live possibilities before anything else is worth doing"
+      return `${nr} can't resolve the conflict — this reading can`
     case "VERIFY":
-      return d.evaluatesIntervention
-        ? "first because it evaluates the change you already made"
-        : "first because the data backing this is old enough to have changed"
+      return `${nr} comes after confirming what the data actually shows now`
     case "MEASURE":
-      return "first because it's the highest-value missing input — it unblocks or discriminates the most"
+      return `${nr} would add less diagnostic information with the current data`
     case "OBSERVE":
-      return "first because a direct look settles it faster than another number"
+      return `${nr} waits behind a direct look`
     case "WAIT":
-      return "recommended because you changed something recently and there isn't enough new data to evaluate the result"
+      return `${nr} is deferred so the recent change can be evaluated cleanly`
     case "MONITOR":
-      return "recommended because things are settling — another change now would blur what worked"
+      return `${nr} is deferred — acting while things settle blurs attribution`
     case "ADJUST":
-      return "strong evidence with no opposing signals, and the action is reversible and low-risk"
+      return `${nr} — the evidence supports acting, not just collecting more`
     case "LOG":
-      return "first because the picture is too thin to reason about — more data before interpretation"
+      return `${nr} can't be interpreted meaningfully until the data exists`
     case "HOLD":
-      return "first because no finding, missing input, or open intervention outranks staying the course"
+      return `${nr} isn't warranted — nothing active needs doing`
   }
+}
+
+function whyFirst(d: CultivationDecision, next?: CultivationDecision): string {
+  const head = (() => {
+    switch (d.class) {
+      case "COMPARE":
+        return "first because evidence conflicts — this reading separates the live possibilities before anything else is worth doing"
+      case "VERIFY":
+        return d.evaluatesIntervention
+          ? "first because it evaluates the change you already made"
+          : "first because the data backing this is old enough to have changed"
+      case "MEASURE":
+        return "first because it's the highest-value missing input — it unblocks or discriminates the most"
+      case "OBSERVE":
+        return "first because a direct look settles it faster than another number"
+      case "WAIT":
+        return "recommended because you changed something recently and there isn't enough new data to evaluate the result"
+      case "MONITOR":
+        return "recommended because things are settling — another change now would blur what worked"
+      case "ADJUST":
+        return "strong evidence with no opposing signals, and the action is reversible and low-risk"
+      case "LOG":
+        return "first because the picture is too thin to reason about — more data before interpretation"
+      case "HOLD":
+        return "first because no finding, missing input, or open intervention outranks staying the course"
+    }
+  })()
+  return next ? `${head}; ${runnerUpReason(d, next)}` : head
 }
 
 // ── Engine ──────────────────────────────────────────────────────────
@@ -306,14 +492,29 @@ export function buildCultivationDecisions(
   //    decision layer re-labels and re-gates it, never re-scores it.
   //    WAIT is skipped here: cooldown decisions are rebuilt below with
   //    explicit intervention state (the engine's WAIT carries no
-  //    waitingOn and can't distinguish answered-vs-lapsed).
+  //    waitingOn and can't distinguish answered-vs-lapsed). A metric
+  //    owed by a pending intervention is skipped too — the §2 follow-up
+  //    VERIFY owns it with the intervention-aware reason.
+  const pendingTargets = new Set<string>(
+    snap.interventions
+      .filter((i) => i.state === "pending" && i.targetMetric)
+      .map((i) => i.targetMetric!)
+  )
   for (const a of snap.actions) {
     if (a.actionClass === "WAIT") continue
+    if (a.stepId && pendingTargets.has(a.stepId)) continue
     if (
       a.actionClass === "ADJUST" &&
       adjustFeasibility(snap, a.candidateIds[0] ?? "") === "not_available"
     )
       continue // structurally impossible for this grow — not a suggestion
+    if (a.actionClass === "ADJUST") {
+      const retry = adjustmentRetry(snap, a.candidateIds[0] ?? "")
+      if (retry) {
+        out.push(retry) // already tried — emit the different discriminator
+        continue
+      }
+    }
     out.push(fromAction(a, snap))
   }
 
@@ -535,7 +736,7 @@ export function buildCultivationDecisions(
     .slice(0, MAX_DECISIONS)
 
   const top = ranked[0]
-  top.whyFirst = whyFirst(top)
+  top.whyFirst = whyFirst(top, ranked[1])
 
   const waitingOn = ranked
     .filter((d) => d.class === "WAIT" && d.waitingOn)

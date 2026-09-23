@@ -37,6 +37,7 @@ import {
 } from "@/lib/terpbot-intel"
 import { buildSnapshot } from "@/lib/terpbot-intel-snapshot"
 import {
+  ADJUST_NEED,
   buildCultivationDecisions,
   decisionLine,
   topAskableMetric,
@@ -47,6 +48,8 @@ import { activeChecklist } from "@/lib/terpbot-intel-checklist"
 import { CANDIDATES, KNOWLEDGE_VERSION } from "@/lib/terpbot-intel-knowledge"
 import { parseTerpbotIntent } from "@/lib/terpbot-intents"
 import { getChatCommand } from "@/lib/chat-commands"
+import { mergeSessionState } from "@/lib/terpbot-intel-merge"
+import { episodesFromObservations } from "@/lib/terpbot-intel-episodes"
 import type {
   CandidateResult,
   Diagnosis,
@@ -171,6 +174,11 @@ function run() {
       ],
       "ADJUST_ELIGIBLE membership changed — justify the new entry's reversibility"
     )
+    // ADJUST_NEED (feasibility table) is keyed off the same ids — a stale
+    // entry there would outlive a removed allowlist member.
+    for (const id of Object.keys(ADJUST_NEED)) {
+      assert.ok(ADJUST_ELIGIBLE.has(id), `ADJUST_NEED key "${id}" is not in ADJUST_ELIGIBLE — drift`)
+    }
     ok("ADJUST_ELIGIBLE ⊆ CANDIDATES, non-urgent, safe domains, pinned")
   }
 
@@ -571,7 +579,7 @@ function run() {
     const check = renderCheck(set)
     assert.ok(check.some((l) => /1\./.test(l)))
     // /status takes the decision set — priority + waitingOn lines
-    const status = renderStatus(ctx, evaluateContext(ctx), [], set)
+    const status = renderStatus(ctx, evaluateContext(ctx), set)
     assert.ok(status.some((l) => /^Next: /.test(l)))
     // /plan top-priority section
     const snap = buildSnapshot(ctx)
@@ -676,8 +684,159 @@ function run() {
 
   // ══ 26. Knowledge version pin ════════════════════════════════════
   {
-    assert.equal(KNOWLEDGE_VERSION, "2.5")
-    ok("knowledge version 2.5")
+    assert.equal(KNOWLEDGE_VERSION, "2.6")
+    ok("knowledge version 2.6")
+  }
+
+  // ══ 27. HOLD — stable sparse-data grow is not given a chore ══════
+  {
+    // Text/photo-only logger: low envCoverage, quiet diary, nothing live.
+    // The sparse-env gap finding exists but is insufficient-state — it
+    // must not circularly justify a LOG.
+    const sparse = mkCtx({
+      diary: { ...mkCtx().diary, stage: "VEGETATIVE" },
+      stageDays: 20,
+      envCoverage: 0.3,
+    })
+    assert.equal(klass(decisions(sparse)), "HOLD", "stable sparse grow → HOLD, not manufactured LOG")
+    // A covered but quiet (≥4d) grow holds too.
+    const quiet = mkCtx({
+      diary: { ...mkCtx().diary, stage: "VEGETATIVE" },
+      stageDays: 20,
+      daysSinceUpdate: 6,
+    })
+    assert.equal(klass(decisions(quiet)), "HOLD", "stable quiet grow → HOLD")
+    ok("stable sparse/quiet grows → HOLD, no manufactured logging chore")
+  }
+
+  // ══ 28. LOG stays purposeful when data blocks live reasoning ═════
+  {
+    const ctx = mkCtx({
+      diary: { ...mkCtx().diary, stage: "VEGETATIVE" },
+      stageDays: 20,
+      envCoverage: 0.3,
+      interventions: [iv({ type: "RH_DOWN", targetMetric: "humidity", at: NOW - 2 * DAY })],
+    })
+    const set = decisions(ctx)
+    assert.ok(
+      set.decisions.some((d) => d.class === "LOG"),
+      "sparse data + pending intervention → LOG is purposeful and stays"
+    )
+    assert.notEqual(klass(set), "HOLD")
+    ok("sparse data + live work → LOG retained (purposeful collection)")
+  }
+
+  // ══ 29. Action memory — attempted adjustment is not re-suggested ═
+  {
+    const strongRh = { humidity: freshSeries([72, 73, 74, 71], 4) }
+    // Control: no attempt → the adjustment IS suggested.
+    const fresh = decisions(withSeries(strongRh))
+    assert.ok(fresh.decisions.some((d) => d.class === "ADJUST"), "control: fresh suggestion fires")
+    // An untracked AIRFLOW attempt 5d ago is past the 3d gate — without
+    // memory this is the exact adjust→wait→adjust loop.
+    const tried = decisions(
+      withSeries(strongRh, {
+        interventions: [iv({ type: "AIRFLOW", targetMetric: undefined, at: NOW - 5 * DAY })],
+      })
+    )
+    assert.ok(
+      !tried.decisions.some((d) => d.class === "ADJUST"),
+      "recently-attempted adjustment must not resurface unchanged"
+    )
+    const verify = tried.decisions.find(
+      (d) => d.class === "VERIFY" && d.stepId === "humidity"
+    )
+    assert.ok(verify, "attempted + unfollowed → VERIFY the skipped follow-up")
+    assert.match(verify!.reason, /never logged a follow-up|before adjusting again/i)
+    ok("action memory — attempted adjustment → VERIFY, not repeat ADJUST")
+  }
+
+  // ══ 30. Re-suggestion — new contradictory evidence re-enables ════
+  {
+    // Same attempt as #29, but humidity has now drifted UP vs the
+    // grow's own baseline — new evidence, the suggestion is live again.
+    const points = [...[55, 56, 55], ...[72, 73, 74, 71, 73]].map((v, i) => ({
+      t: NOW - (8 - i) * DAY,
+      v,
+    }))
+    const humidity: IntelSeries = {
+      ...seriesStats(points),
+      points,
+      trend: detectTrend(points, 4),
+      change: detectChange(points, 4, { now: NOW }),
+    }
+    const ctx = withSeries(
+      { humidity },
+      {
+        interventions: [iv({ type: "AIRFLOW", targetMetric: undefined, at: NOW - 5 * DAY })],
+        baselines: {
+          humidity: {
+            tier: "established", n: 8, distinctDays: 8, windowDays: 9,
+            median: 56, lo: 54, hi: 58, ageDays: 1,
+          },
+        },
+      }
+    )
+    assert.equal(
+      ctx.series.humidity.change?.direction, "up",
+      "fixture sanity — adverse drift present"
+    )
+    const set = decisions(ctx)
+    assert.ok(
+      set.decisions.some((d) => d.class === "ADJUST"),
+      "adverse drift after the attempt → re-suggestion is justified"
+    )
+    ok("action memory — new adverse evidence re-enables the adjustment")
+  }
+
+  // ══ 31. whyFirst — explains the runner-up deferral ═══════════════
+  {
+    const ctx = mkCtx({
+      interventions: [iv({ type: "RH_DOWN", targetMetric: "humidity", at: NOW - 2 * DAY })],
+    })
+    const set = decisions(ctx)
+    assert.equal(klass(set), "VERIFY", "pending intervention → follow-up VERIFY first")
+    const runnerUp = set.decisions[1]
+    assert.ok(runnerUp, "a runner-up exists to defer")
+    // The top must say WHY it outranks — a second clause naming what
+    // was deferred, not just the class template.
+    const wf = set.top.whyFirst ?? ""
+    assert.ok(/;/.test(wf), "whyFirst carries the runner-up clause")
+    assert.match(
+      wf,
+      /measurement|waiting|verification|adjustment|direct look|monitoring|logging|holding|comparison/i,
+      "whyFirst names the deferred runner-up"
+    )
+    ok("whyFirst — top decision explains the runner-up deferral")
+  }
+
+  // ══ 32. Episodes derived once in mergeSessionState ═══════════════
+  {
+    const ctx = mergeSessionState(
+      mkCtx(),
+      {
+        reported: [],
+        observations: [
+          { symptom: "LEAF_YELLOWING", t: NOW - 9 * DAY },
+          { symptom: "LEAF_YELLOWING", t: NOW - 5 * DAY },
+          { symptom: "SPOTS", t: NOW - 1 * DAY },
+        ],
+        resolutions: [],
+        interventions: [],
+      },
+      NOW
+    )
+    assert.ok(ctx.episodes, "merged context carries derived episodes")
+    assert.deepEqual(
+      ctx.episodes,
+      episodesFromObservations(ctx.observations, ctx.resolutions ?? []),
+      "ctx.episodes is the canonical derivation — no second pass needed"
+    )
+    // evaluateContext consumes ctx.episodes (identical output either way).
+    const a = evaluateContext(ctx)
+    const b = evaluateContext({ ...ctx, episodes: undefined })
+    assert.equal(JSON.stringify(a), JSON.stringify(b), "precomputed vs derived episodes → identical diagnosis")
+    ok("episodes — derived once at merge, reused downstream")
   }
 }
 

@@ -15,6 +15,7 @@
 
 import { detectChange, detectTrend, seriesStats, vpdFromTempRh } from "@/lib/terpbot-intel-calc"
 import { feedsForSymptom } from "@/lib/terpbot-nl-parse"
+import { episodesFromObservations } from "@/lib/terpbot-intel-episodes"
 import {
   METRIC_EPSILON,
   type GrowContextView,
@@ -25,6 +26,7 @@ import {
   type ReportedPoint,
   type ResolutionClaim,
   type SessionObservation,
+  type SessionState,
   type StructuredObservation,
 } from "@/lib/terpbot-intel-types"
 const DAY_MS = 86400000
@@ -309,4 +311,30 @@ export function mergeInterventions(
     return before ? { ...iv, beforeReading: before } : iv
   })
   return { ...ctx, interventions: out }
+}
+
+/** Merge one session's evidence onto a diary context — the ONLY way
+ *  interventions/reports/observations reach reasoning. Any surface
+ *  that skips this sees a ctx with `interventions: []`, which makes
+ *  the pending-intervention safety gate vacuous (the H7 bug class).
+ *
+ *  Episodes are derived ONCE here on the fully-merged view — every
+ *  downstream consumer (evaluateContext, buildSnapshot, episodesOf,
+ *  buildLongitudinal) reads `ctx.episodes` instead of re-deriving. */
+export function mergeSessionState(
+  view: GrowContextView,
+  s: Pick<SessionState, "reported" | "observations" | "resolutions" | "interventions">,
+  now: number
+): GrowContextView {
+  const merged = mergeInterventions(
+    mergeResolutions(
+      mergeObservations(mergeReported(view, s.reported, now), s.observations ?? []),
+      s.resolutions ?? []
+    ),
+    s.interventions ?? []
+  )
+  return {
+    ...merged,
+    episodes: episodesFromObservations(merged.observations, merged.resolutions ?? []),
+  }
 }

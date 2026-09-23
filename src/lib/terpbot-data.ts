@@ -27,7 +27,7 @@ import { getBotUserId } from "@/lib/terpbot"
 import { buildHelpText } from "@/lib/chat-commands"
 import { buildGrowContext, emptyContext } from "@/lib/terpbot-intel-context"
 import { evaluateContext, renderIntelLines, pendingInterventions } from "@/lib/terpbot-intel"
-import { mergeReported, mergeObservations, mergeResolutions, mergeInterventions, REPORTABLE_METRICS, SERIES_KEY } from "@/lib/terpbot-intel-merge"
+import { mergeSessionState, REPORTABLE_METRICS, SERIES_KEY } from "@/lib/terpbot-intel-merge"
 import { renderStatus, renderChanges, renderCheck, renderMeasurements, renderNext, renderPlan, snapshotFrom } from "@/lib/terpbot-intel-status"
 import { buildSnapshot } from "@/lib/terpbot-intel-snapshot"
 import { buildCultivationDecisions, topAskableMetric, decisionLine } from "@/lib/terpbot-intel-decisions"
@@ -458,20 +458,6 @@ async function intelContextFor(userId: string, now: number) {
   return { session, merged: mergeSessionState(view, s, now) }
 }
 
-/** Merge one session's evidence onto a diary context — the ONLY way
- *  interventions/reports/observations reach reasoning. Any surface
- *  that skips this sees a ctx with `interventions: []`, which makes
- *  the pending-intervention safety gate vacuous (the H7 bug class). */
-function mergeSessionState(view: GrowContextView, s: SessionState, now: number): GrowContextView {
-  return mergeInterventions(
-    mergeResolutions(
-      mergeObservations(mergeReported(view, s.reported, now), s.observations ?? []),
-      s.resolutions ?? []
-    ),
-    s.interventions ?? []
-  )
-}
-
 /** A stored pendingAsk survives a decision set that currently asks for
  *  nothing ONLY while it's still genuinely open — a pending follow-up
  *  intervention on that metric, or no fresh real reading yet. Once a
@@ -484,6 +470,24 @@ function pendingAskStillOpen(ctx: GrowContextView, ask: MetricId, now: number): 
   if (pendingInterventions(ctx).some((iv) => iv.targetMetric === ask)) return true
   const s = ctx.series[key]
   return !s.points.some((p) => !p.tApproximate && p.t > now - 3 * 86400000)
+}
+
+/** Carry-forward predicate for a stored pendingAsk. The ask only
+ *  survives on the diary that minted it — saveSession can relink
+ *  diaryId (checkin always stamps the rendered diary; intelContextFor
+ *  can fall back to a different public diary), and carrying an ask
+ *  minted on grow B across a relink to grow A would stamp the next
+ *  bare-number answer onto A's series. Unlinked sessions merge their
+ *  state onto whichever diary resolves, so their asks carry. */
+function pendingAskCarries(
+  session: { diaryId?: string | null; pendingAsk?: string | null } | null | undefined,
+  ctx: GrowContextView,
+  now: number
+): string | null {
+  const ask = session?.pendingAsk
+  if (!ask) return null
+  if (session.diaryId && ctx.diary.id && session.diaryId !== ctx.diary.id) return null
+  return pendingAskStillOpen(ctx, ask as MetricId, now) ? ask : null
 }
 
 /** Split rendered lines into ≤1000-char messages — the chat cap. */
@@ -862,7 +866,9 @@ async function handle(name: string, ctx: BotCommandCtx): Promise<BotCommandResul
                 trail: buildWhyTrail(gctx, diagnosis, now, undefined, decisions),
                 // Only reportable metrics may be asked — an unanswerable
                 // ask (leafTemp, ppfd…) can never receive a stored answer.
-                pendingAsk: ask ?? (session?.pendingAsk && pendingAskStillOpen(gctx, session.pendingAsk as MetricId, now) ? session.pendingAsk : null),
+                // pendingAskCarries blocks an ask minted on another diary
+                // from riding this saveSession's relink to d.id.
+                pendingAsk: ask ?? pendingAskCarries(session, gctx, now),
                 snapshot: snapshotFrom(gctx, diagnosis, now),
               },
               now
@@ -1006,12 +1012,15 @@ async function handle(name: string, ctx: BotCommandCtx): Promise<BotCommandResul
         emptyContext(now, stageClaim ?? state.stage)
       const reportedMerged = [...state.reported, ...addReported]
       const obsMerged = [...state.observations, ...addObservations]
-      const ctx2 = mergeInterventions(
-        mergeResolutions(
-          mergeObservations(mergeReported(base, reportedMerged, now), obsMerged),
-          [...(state.resolutions ?? []), ...addResolutions]
-        ),
-        [...(state.interventions ?? []), ...addInterventions]
+      const ctx2 = mergeSessionState(
+        base,
+        {
+          reported: reportedMerged,
+          observations: obsMerged,
+          resolutions: [...(state.resolutions ?? []), ...addResolutions],
+          interventions: [...(state.interventions ?? []), ...addInterventions],
+        },
+        now
       )
       const diagnosis = evaluateContext(ctx2)
       // One canonical answer — the same decision set /next renders.
@@ -1140,16 +1149,12 @@ async function handle(name: string, ctx: BotCommandCtx): Promise<BotCommandResul
       const { session, merged } = await intelContextFor(ctx.userId, now)
       const snap = buildSnapshot(merged)
       const decisions = buildCultivationDecisions(snap)
-      const lines = renderStatus(merged, snap.diagnosis, snap.actions, decisions)
+      const lines = renderStatus(merged, snap.diagnosis, decisions)
       await saveSession(
         ctx.userId,
         {
           diaryId: merged.diary.id || session?.diaryId || null,
-          pendingAsk: topAskableMetric(decisions) ?? (
-            session?.pendingAsk && pendingAskStillOpen(merged, session.pendingAsk as MetricId, now)
-              ? session.pendingAsk
-              : null
-          ),
+          pendingAsk: topAskableMetric(decisions) ?? pendingAskCarries(session, merged, now),
           trail: buildWhyTrail(merged, snap.diagnosis, now, undefined, decisions),
           snapshot: snapshotFrom(merged, snap.diagnosis, now),
         },
@@ -1170,11 +1175,7 @@ async function handle(name: string, ctx: BotCommandCtx): Promise<BotCommandResul
         ctx.userId,
         {
           diaryId: merged.diary.id || session?.diaryId || null,
-          pendingAsk: topAskableMetric(decisions) ?? (
-            session?.pendingAsk && pendingAskStillOpen(merged, session.pendingAsk as MetricId, now)
-              ? session.pendingAsk
-              : null
-          ),
+          pendingAsk: topAskableMetric(decisions) ?? pendingAskCarries(session, merged, now),
           snapshot: snapshotFrom(merged, snap.diagnosis, now),
         },
         now
@@ -1194,11 +1195,7 @@ async function handle(name: string, ctx: BotCommandCtx): Promise<BotCommandResul
         ctx.userId,
         {
           diaryId: merged.diary.id || session?.diaryId || null,
-          pendingAsk: topAskableMetric(decisions) ?? (
-            session?.pendingAsk && pendingAskStillOpen(merged, session.pendingAsk as MetricId, now)
-              ? session.pendingAsk
-              : null
-          ),
+          pendingAsk: topAskableMetric(decisions) ?? pendingAskCarries(session, merged, now),
           trail: buildWhyTrail(merged, snap.diagnosis, now, undefined, decisions),
           snapshot: snapshotFrom(merged, snap.diagnosis, now),
         },
@@ -1219,11 +1216,7 @@ async function handle(name: string, ctx: BotCommandCtx): Promise<BotCommandResul
         ctx.userId,
         {
           diaryId: merged.diary.id || session?.diaryId || null,
-          pendingAsk: topAskableMetric(decisions) ?? (
-            session?.pendingAsk && pendingAskStillOpen(merged, session.pendingAsk as MetricId, now)
-              ? session.pendingAsk
-              : null
-          ),
+          pendingAsk: topAskableMetric(decisions) ?? pendingAskCarries(session, merged, now),
           trail: buildWhyTrail(merged, snap.diagnosis, now, undefined, decisions),
           snapshot: snapshotFrom(merged, snap.diagnosis, now),
         },
@@ -1244,11 +1237,7 @@ async function handle(name: string, ctx: BotCommandCtx): Promise<BotCommandResul
         ctx.userId,
         {
           diaryId: merged.diary.id || session?.diaryId || null,
-          pendingAsk: topAskableMetric(decisions) ?? (
-            session?.pendingAsk && pendingAskStillOpen(merged, session.pendingAsk as MetricId, now)
-              ? session.pendingAsk
-              : null
-          ),
+          pendingAsk: topAskableMetric(decisions) ?? pendingAskCarries(session, merged, now),
           trail: buildWhyTrail(merged, snap.diagnosis, now, undefined, decisions),
           snapshot: snapshotFrom(merged, snap.diagnosis, now),
         },

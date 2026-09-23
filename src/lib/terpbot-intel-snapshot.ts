@@ -349,11 +349,15 @@ export function buildSnapshot(ctx: GrowContextView): GrowIntelligenceSnapshot {
     episodes,
     // Every pending/untracked intervention is kept — truncating the tail
     // could drop an unanswered change and lose its WAIT/VERIFY display.
-    // Beyond that, the newest few give the renderer its cooldown window.
+    // Anything ≤14d old is kept too: the decision layer's action memory
+    // needs recent answered/lapsed attempts to avoid re-suggesting an
+    // adjustment that was already tried. Newest 4 beyond that for
+    // rendering context.
     interventions: (ctx.interventions ?? [])
       .filter((iv, i, all) => {
         const st = interventionState(ctx, iv)
-        return st === "pending" || st === "untracked" || i >= all.length - 4
+        const ageDays = (ctx.now - (iv.eventT ?? iv.at)) / DAY_MS
+        return st === "pending" || st === "untracked" || ageDays <= 14 || i >= all.length - 4
       })
       .map((iv) => {
         const state = interventionState(ctx, iv)

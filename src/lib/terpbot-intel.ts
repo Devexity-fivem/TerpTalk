@@ -2915,10 +2915,12 @@ export function evaluateContext(ctx: GrowContextView): Diagnosis {
   const byCandidate = new Map<string, { ruleIds: Set<string>; sourceIds: Set<string>; evidence: IntelEvidence[] }>()
 
   // Episodes derive at eval time from observations + resolution claims —
-  // never persisted (they'd go stale under edited diary updates).
+  // never persisted (they'd go stale under edited diary updates). A
+  // caller that already derived them (mergeSessionState) passes them
+  // through — one derivation per request, not per consumer.
   const evalCtx: GrowContextView = {
     ...ctx,
-    episodes: episodesFromObservations(ctx.observations, ctx.resolutions ?? []),
+    episodes: ctx.episodes ?? episodesFromObservations(ctx.observations, ctx.resolutions ?? []),
   }
 
   for (const rule of INTEL_RULES) {
@@ -3321,13 +3323,30 @@ export function isAdjustSafe(ctx: GrowContextView, diagnosis: Diagnosis): boolea
 export function nextActions(ctx: GrowContextView, diagnosis: Diagnosis): ActionRequest[] {
   const actions: ActionRequest[] = []
 
+  // Pending interventions first — they feed both the liveWork gate
+  // below and the WAIT/ADJUST sections further down.
+  const pending = pendingInterventions(ctx)
+
+  // Live-work gate: is there anything a measurement/look could actually
+  // inform? Sparse data alone is NOT work — a quiet, stable diary run
+  // by a text/photo-only logger produces no actions here and the
+  // decision layer answers HOLD. Work exists when a candidate or real
+  // finding is live, a follow-up is owed, or a symptom was recently
+  // reported. Gap findings (state "insufficient" — e.g. sparse-env
+  // itself) can't count: that's circular justification for collection.
+  const liveWork =
+    diagnosis.candidates.some((c) => c.state !== "insufficient") ||
+    diagnosis.findings.some((f) => f.state !== "insufficient") ||
+    pending.length > 0 ||
+    ctx.observations.some((o) => ctx.now - o.t <= 14 * 86400000)
+
   // step-classified actions — top 3 scored steps. Skip steps the grower
   // can never answer (no diary field, no parser vocab, no series — or
   // structurally excluded like DWC runoff): asking for ppfd/leafTemp/
   // substrateMoisture would nag forever (spec §25) — they're
   // inspection-adjacent context, not asks.
   const reportable = (id: NextStepId) => askable(ctx, id)
-  for (const [id, score] of scoredSteps(ctx, diagnosis).filter(([id]) => reportable(id)).slice(0, 3)) {
+  for (const [id, score] of (liveWork ? scoredSteps(ctx, diagnosis) : []).filter(([id]) => reportable(id)).slice(0, 3)) {
     const isInspect = id.startsWith("inspect:")
     const stale =
       !isInspect &&
@@ -3372,13 +3391,6 @@ export function nextActions(ctx: GrowContextView, diagnosis: Diagnosis): ActionR
       },
     })
   }
-
-  // WAIT — a reported intervention with no after-reading is waiting on
-  // time, not on the grower measuring more right now. Computed before
-  // ADJUST because a pending intervention SUPPRESSES adjustment
-  // suggestions entirely — never stack a second change on an
-  // unverified first one.
-  const pending = pendingInterventions(ctx)
 
   // ADJUST — the centralized isAdjustSafe gate: STRONG + zero opposing
   // + non-urgent + allowlisted reversible action + no pending or very
@@ -3430,8 +3442,14 @@ export function nextActions(ctx: GrowContextView, diagnosis: Diagnosis): ActionR
     })
   }
 
-  // LOG — sparse data is itself the bottleneck
-  if (ctx.updateCount > 0 && (ctx.envCoverage < 0.5 || (ctx.daysSinceUpdate ?? 0) >= 4)) {
+  // LOG — sparse data is the bottleneck only when there's live
+  // reasoning work it would inform (the same gate as the scored steps
+  // above): collection is purposeful, never a manufactured chore.
+  if (
+    ctx.updateCount > 0 &&
+    liveWork &&
+    (ctx.envCoverage < 0.5 || (ctx.daysSinceUpdate ?? 0) >= 4)
+  ) {
     actions.push({
       actionClass: "LOG",
       candidateIds: [],

@@ -22,6 +22,7 @@ import { stepCapability, adjustCapabilities, feasibilityBonus } from "@/lib/terp
 import { buildSnapshot, capabilityOf, readingOf } from "@/lib/terpbot-intel-snapshot"
 import { buildChecklist, activeChecklist } from "@/lib/terpbot-intel-checklist"
 import { renderPlan, renderStatus } from "@/lib/terpbot-intel-status"
+import { buildCultivationDecisions } from "@/lib/terpbot-intel-decisions"
 import { mergeReported, mergeObservations, mergeInterventions, mergeResolutions, REPORTABLE_METRICS } from "@/lib/terpbot-intel-merge"
 import { KNOWLEDGE_VERSION } from "@/lib/terpbot-intel-knowledge"
 import { getChatCommand } from "@/lib/chat-commands"
@@ -318,7 +319,7 @@ function run() {
       setup: { present: true, medium: "raw free text", capabilities: ["ph-meter"] },
     })
     const snap = buildSnapshot(ctx)
-    const lines = renderStatus(ctx, snap.diagnosis, snap.actions)
+    const lines = renderStatus(ctx, snap.diagnosis, buildCultivationDecisions(snap))
     const setupLine = lines.find((l) => l.startsWith("Setup:"))
     assert.ok(setupLine, "setup section renders")
     assert.ok(setupLine!.includes("coco") && setupLine!.includes("LED"))
@@ -413,8 +414,8 @@ function run() {
 
   // ── 18. Knowledge version pin ────────────────────────────────────
   {
-    assert.equal(KNOWLEDGE_VERSION, "2.5", "Phase J knowledge version")
-    ok("knowledge version 2.5")
+    assert.equal(KNOWLEDGE_VERSION, "2.6", "Phase J stabilization knowledge version")
+    ok("knowledge version 2.6")
   }
 
   // ── 19. Audit pins — honesty under weak/absent evidence ──────────

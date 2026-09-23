@@ -13,7 +13,7 @@
 // Chat messages cap at 1000 chars — every renderer is bounded.
 
 import { METRIC_EPSILON } from "@/lib/terpbot-intel-types"
-import { INSPECTION_INFO, MEASUREMENT_INFO, interventionState } from "@/lib/terpbot-intel"
+import { MEASUREMENT_INFO, interventionState } from "@/lib/terpbot-intel"
 import { episodesFromObservations } from "@/lib/terpbot-intel-episodes"
 import { CANDIDATES } from "@/lib/terpbot-intel-knowledge"
 import { LOCATION_LABELS, SYMPTOM_LABELS } from "@/lib/terpbot-nl-vocab"
@@ -24,7 +24,6 @@ import type { CultivationDecisionSet } from "@/lib/terpbot-intel-decisions"
 import type { ChecklistItem } from "@/lib/terpbot-intel-checklist"
 import type { GrowIntelligenceSnapshot } from "@/lib/terpbot-intel-snapshot"
 import type {
-  ActionRequest,
   Diagnosis,
   GrowContextView,
   MetricId,
@@ -68,12 +67,6 @@ const metricLabel = (m: MetricId) => MEASUREMENT_INFO[m]?.label ?? m
  *  module stays Prisma-free. */
 const scrub = (s: string, max = 60) =>
   s.replace(/[\r\n]+/g, " ").replace(/[[\]()*`<>\\@]/g, "").replace(/\s+/g, " ").trim().slice(0, max)
-
-/** inspect:* ids render via their authored label, never raw */
-const stepLabel = (id: string) =>
-  id.startsWith("inspect:")
-    ? INSPECTION_INFO[id]?.label ?? "inspection"
-    : MEASUREMENT_INFO[id as MetricId]?.label ?? id
 
 /** Episodes derive at read time — same contract as evaluateContext's
  *  internal derivation (ctx.episodes may already be set by the engine;
@@ -139,8 +132,7 @@ export function renderMeasurements(ctx: GrowContextView): string[] {
 export function renderStatus(
   ctx: GrowContextView,
   diagnosis: Diagnosis,
-  actions: ActionRequest[],
-  decisions?: CultivationDecisionSet
+  decisions: CultivationDecisionSet
 ): string[] {
   const lines: string[] = []
   const stage = ctx.diary.stage !== "UNKNOWN" ? ctx.diary.stage.toLowerCase() : null
@@ -244,13 +236,6 @@ export function renderStatus(
     if (decisions.waitingOn.length) {
       lines.push(`Waiting on: ${decisions.waitingOn.join(" · ")}`)
     }
-  } else {
-    const act = actions[0]
-    if (act) {
-      lines.push(`Next: ${renderActionLine(act)}`)
-    } else if (ctx.daysSinceUpdate != null && ctx.daysSinceUpdate >= 4) {
-      lines.push(`Next: log an update — last one was ${ctx.daysSinceUpdate}d ago`)
-    }
   }
   return lines
 }
@@ -287,25 +272,6 @@ export function renderNext(set: CultivationDecisionSet): string[] {
   if (d.whyFirst) lines.push(`Why first: ${d.whyFirst}`)
   if (set.waitingOn.length) lines.push(`Waiting on: ${set.waitingOn.join(" · ")}`)
   return lines
-}
-
-function renderActionLine(a: ActionRequest): string {
-  switch (a.actionClass) {
-    case "MEASURE":
-      return `Measure ${a.stepId ? metricLabel(a.stepId as MetricId) : "readings"} — ${a.reason}`
-    case "OBSERVE":
-      return `Check ${a.stepId ? stepLabel(a.stepId) : ""} — ${a.reason}`
-    case "COMPARE":
-      return `Measure ${a.stepId ? metricLabel(a.stepId as MetricId) : ""} — evidence conflicts between ${a.discriminates.length} live possibilities; this separates them`
-    case "VERIFY":
-      return `Re-measure ${a.stepId ? metricLabel(a.stepId as MetricId) : ""} — the reading backing this is old enough to have changed`
-    case "ADJUST":
-      return `${a.actionText} (${a.confidence.toUpperCase()} evidence, no opposing signals)`
-    case "WAIT":
-      return a.reason
-    case "LOG":
-      return a.reason
-  }
 }
 
 // ── /changes ────────────────────────────────────────────────────────

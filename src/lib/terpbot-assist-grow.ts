@@ -26,18 +26,11 @@ import { activeAuthor } from "@/lib/security"
 import { botAssist } from "@/lib/terpbot-assist"
 import { evaluateAssists } from "@/lib/terpbot-assist-triggers"
 import { buildGrowContext } from "@/lib/terpbot-intel-context"
-import { episodesFromObservations } from "@/lib/terpbot-intel-episodes"
-import {
-  mergeInterventions,
-  mergeObservations,
-  mergeReported,
-  mergeResolutions,
-} from "@/lib/terpbot-intel-merge"
+import { mergeSessionState, REPORTABLE_METRICS } from "@/lib/terpbot-intel-merge"
 import { snapshotFrom } from "@/lib/terpbot-intel-status"
-import { MEASUREMENT_INFO } from "@/lib/terpbot-intel"
+import { MEASUREMENT_INFO, interventionState } from "@/lib/terpbot-intel"
 import { buildSnapshot } from "@/lib/terpbot-intel-snapshot"
 import { buildCultivationDecisions } from "@/lib/terpbot-intel-decisions"
-import { REPORTABLE_METRICS } from "@/lib/terpbot-intel-merge"
 import { buildWhyTrail } from "@/lib/terpbot-intel-why"
 import { loadSession, saveSession } from "@/lib/terpbot-session"
 import type { GrowContextView, MetricId } from "@/lib/terpbot-intel-types"
@@ -67,15 +60,15 @@ async function assistContextFor(userId: string, diaryId: string, now: number) {
   // contaminate this grow's context with a different grow's reports.
   const linked = !session?.diaryId || session.diaryId === diaryId
   const state = linked ? session?.state : undefined
-  const merged = mergeInterventions(
-    mergeResolutions(
-      mergeObservations(
-        mergeReported(base, state?.reported ?? [], now),
-        state?.observations ?? []
-      ),
-      state?.resolutions ?? []
-    ),
-    state?.interventions ?? []
+  const merged = mergeSessionState(
+    base,
+    {
+      reported: state?.reported ?? [],
+      observations: state?.observations ?? [],
+      resolutions: state?.resolutions ?? [],
+      interventions: state?.interventions ?? [],
+    },
+    now
   )
   return { session, merged }
 }
@@ -167,11 +160,11 @@ export async function scanGrowAssists(opts: {
       // exists so T4 can actually reach them later in the week. Read
       // from the merged context — interventions recorded against a
       // different diary don't keep a session alive for this one.
-      const hasPendingWindowIv = (composed.merged.interventions ?? []).some((iv) => {
-        if (iv.pastUnresolved || !iv.targetMetric) return false
-        const d = (now - (iv.eventT ?? iv.at)) / DAY
-        return d >= 2 && d <= 7
-      })
+      const hasPendingWindowIv = (composed.merged.interventions ?? []).some(
+        // Canonical pending = measurable, ≤7d, no after-reading — an
+        // answered intervention must NOT keep the session alive.
+        (iv) => interventionState(composed.merged, iv) === "pending"
+      )
       if (hasPendingWindowIv) {
         await prisma.botSession.updateMany({
           where: { userId, expiresAt: { gt: new Date(now) } },
@@ -186,10 +179,8 @@ export async function scanGrowAssists(opts: {
       const snap = buildSnapshot(composed.merged)
       const decisions = buildCultivationDecisions(snap)
       const diagnosis = snap.diagnosis
-      const episodes = episodesFromObservations(
-        composed.merged.observations,
-        composed.merged.resolutions ?? []
-      )
+      // Episodes were derived once in mergeSessionState — no second pass.
+      const episodes = composed.merged.episodes ?? []
       const fires = evaluateAssists({
         ctx: composed.merged,
         diagnosis,

@@ -30,7 +30,17 @@
  *  snapshot; ph-low-danger text aligned to its cited threshold (5.0);
  *  harv-dryspace cites the internal stage-tips convention its 60/60
  *  figure actually comes from. */
-export const KNOWLEDGE_VERSION = "2.5"
+/* v2.6 — Phase J stabilization (feature freeze). Reasoning-layer
+ *  changes only — no new candidates, rules, or sources: measurement
+ *  and logging decisions now require live reasoning work (a stable,
+ *  quiet grow returns HOLD instead of a manufactured data chore);
+ *  adjustment suggestions carry action memory — an already-attempted
+ *  change is replaced by its skipped follow-up or a different
+ *  discriminator unless new contradictory evidence re-opens it;
+ *  whyFirst explains what the top decision outranks; a pending
+ *  intervention's target metric is owned by the follow-up VERIFY,
+ *  not a generic measurement. */
+export const KNOWLEDGE_VERSION = "2.6"
 
 export { SOURCES } from "@/lib/terpbot-knowledge/sources"
 import { NUTRITION_CANDIDATES } from "@/lib/terpbot-knowledge/candidates-nutrition"

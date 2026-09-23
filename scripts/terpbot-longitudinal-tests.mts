@@ -498,16 +498,26 @@ section("action engine")
 }
 
 {
-  // LOG when coverage is sparse
-  const ctx = mkCtx({ envCoverage: 0.2, updateCount: 5 })
+  // LOG when coverage is sparse AND there's live reasoning work —
+  // sparse alone is not a chore (stabilization: HOLD wins there).
+  const ctx = mkCtx({
+    envCoverage: 0.2, updateCount: 5,
+    interventions: [{
+      type: "RH_DOWN", at: t0 + 38 * DAY, direction: "down", targetMetric: "humidity",
+    }],
+  })
   const d = evaluateContext(ctx)
   const actions = nextActions(ctx, d)
   assert.ok(actions.some((a) => a.actionClass === "LOG"))
+  // and the sparse-only case emits nothing collect-y at all
+  const quiet = nextActions(mkCtx({ envCoverage: 0.2, updateCount: 5 }), evaluateContext(mkCtx({ envCoverage: 0.2, updateCount: 5 })))
+  assert.ok(!quiet.some((a) => a.actionClass === "LOG"), "sparse alone → no manufactured LOG")
 }
 
 {
-  // measure-vs-adjust ordering: every step-class action precedes ADJUST
-  const rank: Record<string, number> = { COMPARE: 0, VERIFY: 1, MEASURE: 2, OBSERVE: 3, ADJUST: 4, WAIT: 5, LOG: 6 }
+  // measure-vs-adjust ordering: matches the engine's CLASS_RANK —
+  // WAIT outranks ADJUST (never stack a change on an unverified one).
+  const rank: Record<string, number> = { COMPARE: 0, VERIFY: 1, MEASURE: 2, OBSERVE: 3, WAIT: 4, ADJUST: 5, LOG: 6 }
   const ctx = mkCtx({ observations: [obs("LEAF_YELLOWING", 0), obs("TIP_BURN", 0)] })
   const actions = nextActions(ctx, evaluateContext(ctx))
   for (let i = 1; i < actions.length; i++) {
@@ -527,15 +537,14 @@ section("status renderers")
     observations: [obs("LEAF_YELLOWING", 0)],
   })
   const d = evaluateContext(ctx)
-  const actions = nextActions(ctx, d)
-  const lines = renderStatus(ctx, d, actions)
+  const lines = renderStatus(ctx, d, buildCultivationDecisions(buildSnapshot(ctx)))
   const text = lines.join("\n")
   assert.ok(/Grow status/i.test(text))
   assert.ok(/flower/i.test(text))
   assert.ok(/↑|↓|Changed:/i.test(text))
   assert.ok(/Next:/.test(text))
   // deterministic
-  assert.deepEqual(lines, renderStatus(ctx, d, nextActions(ctx, d)))
+  assert.deepEqual(lines, renderStatus(ctx, d, buildCultivationDecisions(buildSnapshot(ctx))))
 }
 
 {
@@ -726,7 +735,7 @@ section("longitudinal /why")
   assert.ok(/Intervention:/.test(text))
   // no raw ids leaked
   assert.ok(!/d1|u1|refId/i.test(text))
-  assert.ok(/knowledge v2\.5/.test(text))
+  assert.ok(/knowledge v2\.6/.test(text))
 }
 
 // ── Adversarial (H.37) ──────────────────────────────────────────────
