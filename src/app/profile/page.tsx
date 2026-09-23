@@ -4,7 +4,7 @@ import { signInHref } from "@/lib/callback-url"
 
 import { useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react"
 import { User, Award, MessageSquare, Leaf, Loader2, Download, Trash2, Pencil, MapPin, Globe, Sprout, Dna, Store, TrendingUp, ChevronDown, ChevronUp, Bookmark, Settings, ArrowRight } from "lucide-react"
 import { signOut } from "next-auth/react"
 import Link from "next/link"
@@ -227,10 +227,23 @@ export default function ProfilePage() {
   const [saving, setSaving] = useState(false)
   const [showAllBadges, setShowAllBadges] = useState(false)
   // Honor deep links (/profile#rewards, /profile#recovery, /profile#account)
-  // by landing on the tab that holds that section.
-  const [tab, setTab] = useState<ProfileTab>(() =>
-    typeof window === "undefined" ? "profile" : HASH_TAB[window.location.hash.slice(1)] ?? "profile"
+  // by landing on the tab that holds that section. The hash is read through
+  // useSyncExternalStore so SSR and first client render agree (server
+  // snapshot is ""), then the real hash applies after mount without a
+  // hydration mismatch. A hashchange clears any manual selection so deep
+  // links keep working.
+  const [selectedTab, setSelectedTab] = useState<ProfileTab | null>(null)
+  const setTab = setSelectedTab
+  const hash = useSyncExternalStore(
+    useCallback((notify: () => void) => {
+      const onHash = () => { setSelectedTab(null); notify() }
+      window.addEventListener("hashchange", onHash)
+      return () => window.removeEventListener("hashchange", onHash)
+    }, []),
+    () => window.location.hash,
+    () => ""
   )
+  const tab: ProfileTab = selectedTab ?? HASH_TAB[hash.slice(1)] ?? "profile"
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [deleteForm, setDeleteForm] = useState({ username: "", password: "" })
   const [deleteBusy, setDeleteBusy] = useState(false)
@@ -272,15 +285,6 @@ export default function ProfilePage() {
     return () => window.removeEventListener("keydown", onKeyDown)
   }, [editing])
 
-  // Same-page hash navigation doesn't remount — keep deep links working.
-  useEffect(() => {
-    const onHash = () => {
-      const target = HASH_TAB[window.location.hash.slice(1)]
-      if (target) setTab(target)
-    }
-    window.addEventListener("hashchange", onHash)
-    return () => window.removeEventListener("hashchange", onHash)
-  }, [])
 
   useEffect(() => {
     if (status === "authenticated") {

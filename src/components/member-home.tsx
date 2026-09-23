@@ -260,7 +260,7 @@ export default function MemberHome({ data }: { data: MemberHomeData }) {
                             <span className="shrink-0 text-xs">{g.stageLabel}</span>
                           </Tooltip>
                         </div>
-                        <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                        <p className="mt-0.5 truncate text-xs text-muted-foreground" suppressHydrationWarning>
                           {[
                             g.strain?.name,
                             g.day != null ? `day ${g.day}` : null,
@@ -378,7 +378,7 @@ export default function MemberHome({ data }: { data: MemberHomeData }) {
                     </span>
                   </Tooltip>
                 </div>
-                <p className="text-sm text-muted-foreground">
+                <p className="text-sm text-muted-foreground" suppressHydrationWarning>
                   {data.live.latestAt
                     ? <>Last message in <span className="font-medium text-foreground">#{data.live.roomName}</span> {timeAgo(data.live.latestAt)}</>
                     : <>#{data.live.roomName} is quiet — be the first to say hi.</>}

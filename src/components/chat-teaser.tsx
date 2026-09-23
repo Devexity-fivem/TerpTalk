@@ -45,7 +45,7 @@ export default function ChatTeaser({ onlineCount, roomName, roomSlug, latestAt }
             <span className="font-normal text-muted-foreground"> · {onlineCount} online</span>
           )}
         </span>
-        <span className="block truncate text-xs text-muted-foreground">
+        <span className="block truncate text-xs text-muted-foreground" suppressHydrationWarning>
           {latestAt ? `Active ${timeAgo(latestAt)} in ${roomName}` : `Say hi in ${roomName}`}
         </span>
       </span>

@@ -7,7 +7,7 @@ import Link from "next/link"
 import {
   Leaf, User, Camera, Loader2, Check, Copy, AlertTriangle, KeyRound, Users, Sparkles,
 } from "lucide-react"
-import { INTEREST_GROUPS, type SuggestedUser } from "@/lib/onboarding"
+import { INTEREST_GROUPS, type SuggestedUser } from "@/lib/onboarding-shared"
 import RoleBadge from "@/components/role-badge"
 
 interface Category {

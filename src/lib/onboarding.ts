@@ -8,17 +8,12 @@ import { REPUTATION_ORDER } from "@/lib/security"
 // The candidate pool is bounded (top 100 by reputation among users with
 // a completed-ish profile) and cached; per-viewer exclusions (self,
 // already followed, blocks either way, TerpBot) are applied after.
+//
+// SuggestedUser + INTEREST_GROUPS live in ./onboarding-shared (pure module)
+// so client components don't pull Prisma into the browser bundle.
 
-export interface SuggestedUser {
-  id: string
-  username: string | null
-  name: string | null
-  image: string | null
-  role: string
-  bio: string | null
-  reputation: number
-  followers: number
-}
+export type { SuggestedUser } from "@/lib/onboarding-shared"
+import type { SuggestedUser } from "@/lib/onboarding-shared"
 
 async function fetchCandidatePool() {
     const now = new Date()
@@ -136,25 +131,4 @@ export async function getSuggestedUsers(viewerId: string, limit = 10): Promise<S
 // onboarding step stays scannable. Slugs not listed here fall under
 // "More topics".
 
-export const INTEREST_GROUPS: { label: string; slugs: string[] }[] = [
-  { label: "Getting started", slugs: ["new-grower-questions"] },
-  { label: "Grow environment", slugs: ["indoor-growing", "outdoor-growing", "greenhouse-growing"] },
-  { label: "Medium & feeding", slugs: ["soil-living-soil", "hydroponics", "nutrients"] },
-  {
-    label: "Technique & lifecycle",
-    slugs: [
-      "seeds-starting-plants",
-      "training-trellising",
-      "flowering",
-      "harvest-curing",
-      "plant-problems",
-      "advanced-growing",
-      "genetics-breeding",
-    ],
-  },
-  { label: "Gear", slugs: ["lighting", "ventilation", "diy-equipment"] },
-  {
-    label: "Community",
-    slugs: ["smoke-reports", "general-cannabis-discussion", "cannabis-memes", "off-topic"],
-  },
-]
+export { INTEREST_GROUPS } from "@/lib/onboarding-shared"
