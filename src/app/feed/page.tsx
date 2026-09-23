@@ -3,7 +3,7 @@ import { publicUserSelect, activeAuthor, blockedUserIds, notBlockedAuthor } from
 import { publicDiaryWhere } from "@/lib/diary-visibility"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
-import { Leaf, MessageSquare, TrendingUp, Calendar, Users, UserPlus } from "lucide-react"
+import { Leaf, MessageSquare, TrendingUp, Calendar, Users, UserPlus, Sprout, Award } from "lucide-react"
 import Link from "next/link"
 import RoleBadge from "@/components/role-badge"
 import TierChip from "@/components/tier-chip"
@@ -133,6 +133,22 @@ async function getFeedData(userId?: string, tab = "latest") {
     feedItems.splice(12)
   }
 
+  // Harvests — completed grows, unique mode content
+  const recentHarvests = await prisma.growDiary.findMany({
+    where: {
+      ...diaryWhere,
+      harvested: true,
+      harvestedAt: { not: null },
+    },
+    take: 8,
+    orderBy: { harvestedAt: "desc" },
+    include: {
+      author: { select: publicUserSelect },
+      updates: { take: 1, orderBy: { createdAt: "desc" }, include: { images: { take: 1, orderBy: { order: "asc" } } } },
+      _count: { select: { updates: true, followers: true } },
+    },
+  })
+
   const trendingDiaries = await prisma.growDiary.findMany({
     where: diaryWhere,
     take: 5,
@@ -163,6 +179,7 @@ async function getFeedData(userId?: string, tab = "latest") {
   return {
     recentDiaryUpdates,
     recentThreads,
+    recentHarvests,
     feedItems,
     trendingDiaries,
     memberCount,
@@ -173,7 +190,7 @@ async function getFeedData(userId?: string, tab = "latest") {
   }
 }
 
-const TABS = ["latest", "following", "for-you"] as const
+const TABS = ["latest", "following", "for-you", "discussions", "grows", "harvests"] as const
 
 // First-reply nudge eligibility: zero posts and an account under 30 days old.
 async function isEligibleForFirstReplyNudge(userId: string) {
@@ -190,7 +207,7 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
   const { tab } = await searchParams
   const session = await getServerSession(authOptions)
   const activeTab = TABS.includes((tab || "") as (typeof TABS)[number]) ? (tab as (typeof TABS)[number]) : "latest"
-  const { recentDiaryUpdates, recentThreads, feedItems, trendingDiaries, memberCount, threadCount, diaryCount, popularCategories, coldStart } =
+  const { recentDiaryUpdates, recentThreads, recentHarvests, feedItems, trendingDiaries, memberCount, threadCount, diaryCount, popularCategories, coldStart } =
     await getFeedData(session?.user?.id, activeTab)
 
   // The nudge is for new members only — suppress it while the cold-start note
@@ -251,10 +268,15 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
         )}
 
         {/* Feed Tabs */}
-        <div className="flex gap-4 mb-6 border-b border-border">
+        <div className="flex gap-2 mb-6 border-b border-border overflow-x-auto scrollbar-none">
           <Link href="/feed" className={tabCls("latest")}>Latest</Link>
           <Link href="/feed?tab=following" className={tabCls("following")}>Following</Link>
           <Link href="/feed?tab=for-you" className={tabCls("for-you")}>For You</Link>
+          <Link href="/feed?tab=discussions" className={tabCls("discussions")}>Discussions</Link>
+          <Link href="/feed?tab=grows" className={tabCls("grows")}>Grows</Link>
+          {recentHarvests.length > 0 && (
+            <Link href="/feed?tab=harvests" className={tabCls("harvests")}>Harvests</Link>
+          )}
         </div>
 
         {/* Cold-start note — content below is global, not personalized */}
@@ -360,8 +382,163 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
               </div>
             )}
 
+            {/* Discussions-only mode */}
+            {activeTab === "discussions" && recentThreads.length > 0 && (
+              <div className="bg-card/80 rounded-2xl border border-border/70">
+                <div className="p-4 border-b border-border flex items-center gap-2">
+                  <MessageSquare className="w-5 h-5 text-primary" />
+                  <h2 className="font-display font-semibold">Discussions</h2>
+                </div>
+                <div className="divide-y divide-border">
+                  {recentThreads.map((thread) => (
+                    <Link
+                      key={thread.id}
+                      href={`/forum/thread/${thread.slug}`}
+                      className="block p-4 hover:bg-secondary/50 transition-colors"
+                    >
+                      <div className="flex items-start gap-3">
+                        <div className="flex-shrink-0 w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center">
+                          <Users className="w-5 h-5 text-primary" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="flex min-w-0 items-center gap-1 font-semibold text-sm">
+                              <span className="truncate">{thread.author.profile?.username || thread.author.name}</span>
+                              <RoleBadge role={thread.author.role} />
+                              <TierChip reputation={thread.author.profile?.reputation ?? 0} publicMilestoneOptOut={thread.author.profile?.publicMilestoneOptOut} />
+                            </span>
+                          </div>
+                          <h3 className="font-medium mb-1 flex items-center gap-2">
+                            {unreadThreadIds.has(thread.id) && (
+                              <Tooltip content="New activity" className="shrink-0">
+                                <span className="h-2 w-2 rounded-full bg-primary" role="img" aria-label="Unread" />
+                              </Tooltip>
+                            )}
+                            {thread.title}
+                          </h3>
+                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                            <span className="flex items-center gap-1"><MessageSquare className="w-3 h-3" /> {thread.category.name}</span>
+                            <span>•</span>
+                            <span>{thread.replyCount} repl{thread.replyCount === 1 ? "y" : "ies"}</span>
+                            <span>•</span>
+                            <span>{new Date(thread.createdAt).toLocaleDateString()}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Grows-only mode */}
+            {activeTab === "grows" && recentDiaryUpdates.length > 0 && (
+              <div className="bg-card/80 rounded-2xl border border-border/70">
+                <div className="p-4 border-b border-border flex items-center gap-2">
+                  <Sprout className="w-5 h-5 text-primary" />
+                  <h2 className="font-display font-semibold">Grow Updates</h2>
+                </div>
+                <div className="divide-y divide-border">
+                  {recentDiaryUpdates.map((update) => (
+                    <Link
+                      key={update.id}
+                      href={diaryPath(update.diary)}
+                      className="block p-4 hover:bg-secondary/50 transition-colors"
+                    >
+                      <div className="flex items-start gap-3">
+                        {update.images[0]?.url ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={update.images[0].url} alt="" loading="lazy" decoding="async" className="w-16 h-16 rounded-xl object-cover shrink-0" />
+                        ) : (
+                          <div className="flex-shrink-0 w-16 h-16 bg-primary/10 rounded-xl flex items-center justify-center">
+                            <Leaf className="w-6 h-6 text-primary" />
+                          </div>
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="flex min-w-0 items-center gap-1 text-sm">
+                              <span className="font-semibold truncate">{update.author.profile?.username || update.author.name}</span>
+                              <TierChip reputation={update.author.profile?.reputation ?? 0} publicMilestoneOptOut={update.author.profile?.publicMilestoneOptOut} />
+                            </span>
+                            <span className="text-xs text-muted-foreground ml-auto shrink-0">
+                              {new Date(update.createdAt).toLocaleDateString()}
+                            </span>
+                          </div>
+                          <h3 className="font-medium text-sm mb-0.5">{update.title}</h3>
+                          <p className="text-xs text-muted-foreground line-clamp-2 mb-1">{update.content}</p>
+                          <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                            <Leaf className="w-3 h-3" />
+                            <span className="truncate">{update.diary.title}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Harvests mode — completed grows */}
+            {activeTab === "harvests" && recentHarvests.length > 0 && (
+              <div className="bg-card/80 rounded-2xl border border-border/70">
+                <div className="p-4 border-b border-border flex items-center gap-2">
+                  <Award className="w-5 h-5 text-success" />
+                  <h2 className="font-display font-semibold">Recent Harvests</h2>
+                </div>
+                <div className="grid sm:grid-cols-2 gap-3 p-4">
+                  {recentHarvests.map((diary) => {
+                    const thumb = diary.updates[0]?.images[0]?.url
+                    const dayCount = diary.harvestedAt && diary.startDate
+                      ? Math.max(0, Math.floor((new Date(diary.harvestedAt).getTime() - new Date(diary.startDate).getTime()) / 86400000))
+                      : null
+                    return (
+                      <Link
+                        key={diary.id}
+                        href={diaryPath(diary)}
+                        className="group flex flex-col rounded-xl border border-border/70 hover:border-primary/40 overflow-hidden transition-all"
+                      >
+                        <div className="relative h-32 bg-secondary">
+                          {thumb ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={thumb} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center">
+                              <Leaf className="w-8 h-8 text-muted-foreground" />
+                            </div>
+                          )}
+                          <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/60 to-transparent px-3 py-2">
+                            {diary.strain && (
+                              <span className="text-[11px] font-medium text-white/90">{diary.strain}</span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="p-3 flex-1">
+                          <h3 className="font-medium text-sm mb-1 line-clamp-1 group-hover:text-primary transition-colors">{diary.title}</h3>
+                          <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
+                            <span className="truncate">{diary.author.profile?.username || diary.author.name}</span>
+                            <TierChip reputation={diary.author.profile?.reputation ?? 0} publicMilestoneOptOut={diary.author.profile?.publicMilestoneOptOut} />
+                          </div>
+                          <div className="flex items-center gap-3 text-xs">
+                            {dayCount != null && (
+                              <span className="text-muted-foreground">{dayCount}d grow</span>
+                            )}
+                            {diary.yieldAmount != null && (
+                              <span className="font-medium text-success">{diary.yieldAmount} {diary.yieldUnit || "g"}</span>
+                            )}
+                            {diary.harvestRating != null && (
+                              <span className="font-medium text-warning">{diary.harvestRating}/10</span>
+                            )}
+                          </div>
+                        </div>
+                      </Link>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+
             {/* Recent Diary Updates */}
-            {recentDiaryUpdates.length > 0 && (
+            {activeTab !== "discussions" && activeTab !== "harvests" && recentDiaryUpdates.length > 0 && (
               <div className="bg-card/80 rounded-2xl border border-border/70">
                 <div className="p-4 border-b border-border flex items-center gap-2">
                   <Leaf className="w-5 h-5 text-primary" />
@@ -410,7 +587,7 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
             )}
 
             {/* Recent Forum Threads */}
-            {recentThreads.length > 0 && (
+            {activeTab !== "grows" && activeTab !== "harvests" && recentThreads.length > 0 && (
               <div className="bg-card/80 rounded-2xl border border-border/70">
                 <div className="p-4 border-b border-border flex items-center gap-2">
                   <MessageSquare className="w-5 h-5 text-primary" />
@@ -464,8 +641,11 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
               </div>
             )}
 
-            {/* Empty State */}
-            {recentDiaryUpdates.length === 0 && recentThreads.length === 0 && (
+            {/* Empty State — mode-aware */}
+            {((activeTab === "discussions" && recentThreads.length === 0) ||
+              (activeTab === "grows" && recentDiaryUpdates.length === 0) ||
+              (activeTab === "harvests" && recentHarvests.length === 0) ||
+              (!["discussions", "grows", "harvests"].includes(activeTab) && recentDiaryUpdates.length === 0 && recentThreads.length === 0)) && (
               <div className="bg-card/80 rounded-2xl border border-border/70 p-12 text-center">
                 {!session?.user?.id && (activeTab === "following" || activeTab === "for-you") ? (
                   <>
@@ -485,6 +665,33 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
                     <p className="text-muted-foreground mb-4">
                       Follow growers on their profiles or follow diaries you like — their activity shows up here.
                     </p>
+                    <Link href="/diaries" className="bg-primary text-primary-foreground px-6 py-2 rounded-full hover:bg-primary/90 transition-colors inline-block">
+                      Browse Diaries
+                    </Link>
+                  </>
+                ) : activeTab === "discussions" ? (
+                  <>
+                    <MessageSquare className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+                    <h3 className="font-display text-lg font-semibold mb-2">No discussions yet</h3>
+                    <p className="text-muted-foreground mb-4">Be the first grower to start a conversation.</p>
+                    <Link href="/forum/new" className="bg-primary text-primary-foreground px-6 py-2 rounded-full hover:bg-primary/90 transition-colors inline-block">
+                      Start Discussion
+                    </Link>
+                  </>
+                ) : activeTab === "grows" ? (
+                  <>
+                    <Sprout className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+                    <h3 className="font-display text-lg font-semibold mb-2">No grow updates yet</h3>
+                    <p className="text-muted-foreground mb-4">Be the first to share your grow journey.</p>
+                    <Link href="/diaries/new" className="bg-primary text-primary-foreground px-6 py-2 rounded-full hover:bg-primary/90 transition-colors inline-block">
+                      Start a Diary
+                    </Link>
+                  </>
+                ) : activeTab === "harvests" ? (
+                  <>
+                    <Award className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+                    <h3 className="font-display text-lg font-semibold mb-2">No harvests yet</h3>
+                    <p className="text-muted-foreground mb-4">Completed grows and their results will appear here.</p>
                     <Link href="/diaries" className="bg-primary text-primary-foreground px-6 py-2 rounded-full hover:bg-primary/90 transition-colors inline-block">
                       Browse Diaries
                     </Link>

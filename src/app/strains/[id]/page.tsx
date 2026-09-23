@@ -192,6 +192,10 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
           </div>
         </div>
 
+        {/* Desktop two-column layout: main content + context rail */}
+        <div className="lg:grid lg:grid-cols-[1fr_240px] lg:gap-6">
+        <div className="min-w-0">
+
         <div className="grid md:grid-cols-2 gap-6 mb-6 items-start">
           {strain.genetics && (
             <div className="bg-card/80 rounded-2xl border border-border/70 p-5">
@@ -440,6 +444,23 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
           </div>
         )}
 
+        {/* Discussions empty state — encourage first conversation */}
+        {relatedThreads.length === 0 && (
+          <div className="bg-card/80 rounded-2xl border border-border/70 p-5 mb-6 text-center">
+            <MessageSquare className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
+            <h3 className="font-display font-semibold text-sm mb-1">No discussions yet</h3>
+            <p className="text-xs text-muted-foreground mb-3">Be the first to start a conversation about {strain.name}.</p>
+            {session && (
+              <Link
+                href={`/forum/new`}
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
+              >
+                <MessageSquare className="w-3.5 h-3.5" /> Start a discussion
+              </Link>
+            )}
+          </div>
+        )}
+
         {/* Photo galleries */}
         {(["PLANT", "FLOWER"] as const).map((kind) => {
           const photos = kind === "PLANT" ? plantPhotos : flowerPhotos
@@ -489,6 +510,106 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
             </div>
           )
         })}
+
+        </div>{/* end main column */}
+
+        {/* ── Strain context rail — desktop only ──────────────────── */}
+        <aside className="hidden lg:block" aria-label="Strain context">
+          <div className="sticky top-20 space-y-4">
+            {/* Quick stats */}
+            {growStats.tier !== "none" && (
+              <div className="bg-card/80 rounded-2xl border border-border/70 p-4">
+                <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Community data</h3>
+                <dl className="space-y-2 text-sm">
+                  <div className="flex items-center justify-between">
+                    <dt className="text-muted-foreground">Grows</dt>
+                    <dd className="font-medium tabular-nums">{growStats.growCount}</dd>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <dt className="text-muted-foreground">Growers</dt>
+                    <dd className="font-medium tabular-nums">{growStats.growerCount}</dd>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <dt className="text-muted-foreground">Harvested</dt>
+                    <dd className="font-medium tabular-nums">{growStats.harvestedCount}</dd>
+                  </div>
+                  {growStats.avgRating != null && (
+                    <div className="flex items-center justify-between">
+                      <dt className="text-muted-foreground">Rating</dt>
+                      <dd className="font-medium text-warning tabular-nums">{growStats.avgRating}/10</dd>
+                    </div>
+                  )}
+                  {growStats.avgYieldOz != null && (
+                    <div className="flex items-center justify-between">
+                      <dt className="text-muted-foreground">Avg yield</dt>
+                      <dd className="font-medium text-success tabular-nums">{growStats.avgYieldOz} oz</dd>
+                    </div>
+                  )}
+                  {growStats.avgFlowerDays != null && (
+                    <div className="flex items-center justify-between">
+                      <dt className="text-muted-foreground">Flower time</dt>
+                      <dd className="font-medium tabular-nums">{growStats.avgFlowerDays}d</dd>
+                    </div>
+                  )}
+                </dl>
+              </div>
+            )}
+
+            {/* Related content counts */}
+            <div className="bg-card/80 rounded-2xl border border-border/70 p-4">
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Content</h3>
+              <div className="space-y-2 text-sm">
+                {relatedDiaries.length > 0 && (
+                  <div className="flex items-center justify-between text-muted-foreground">
+                    <span className="flex items-center gap-1.5"><BookOpen className="w-3.5 h-3.5" /> Diaries</span>
+                    <span className="font-medium text-foreground tabular-nums">{relatedDiaries.length}</span>
+                  </div>
+                )}
+                {relatedSetups.length > 0 && (
+                  <div className="flex items-center justify-between text-muted-foreground">
+                    <span className="flex items-center gap-1.5"><Wrench className="w-3.5 h-3.5" /> Setups</span>
+                    <span className="font-medium text-foreground tabular-nums">{relatedSetups.length}</span>
+                  </div>
+                )}
+                {relatedThreads.length > 0 && (
+                  <div className="flex items-center justify-between text-muted-foreground">
+                    <span className="flex items-center gap-1.5"><MessageSquare className="w-3.5 h-3.5" /> Discussions</span>
+                    <span className="font-medium text-foreground tabular-nums">{relatedThreads.length}</span>
+                  </div>
+                )}
+                <div className="flex items-center justify-between text-muted-foreground">
+                  <span className="flex items-center gap-1.5"><ImageIcon className="w-3.5 h-3.5" /> Photos</span>
+                  <span className="font-medium text-foreground tabular-nums">{strain.photos.length}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Quick actions */}
+            <div className="bg-card/80 rounded-2xl border border-border/70 p-4 space-y-2">
+              <Link
+                href={`/diaries/new?strain=${strain.id}`}
+                className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-primary hover:bg-secondary/60 transition-colors w-full"
+              >
+                <Sprout className="w-4 h-4" /> Start a grow
+              </Link>
+              <Link
+                href="/forum/new"
+                className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-secondary/60 hover:text-foreground transition-colors w-full"
+              >
+                <MessageSquare className="w-4 h-4" /> Start a discussion
+              </Link>
+            </div>
+
+            {/* Genetics info */}
+            {strain.genetics && (
+              <div className="bg-card/80 rounded-2xl border border-border/70 p-4">
+                <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">Genetics</h3>
+                <p className="text-sm text-muted-foreground line-clamp-4">{strain.genetics}</p>
+              </div>
+            )}
+          </div>
+        </aside>
+        </div>{/* end grid */}
       </div>
     </div>
   )

@@ -1090,47 +1090,72 @@ export default function ChatRoom({ embedded = false, headerActions }: ChatRoomPr
               <div
                 role="listbox"
                 aria-label="Chat rooms"
-                className="absolute left-0 top-full z-30 mt-1 w-64 max-w-[calc(100vw-2rem)] rounded-2xl border border-border/70 bg-card/80 p-1.5 shadow-lg"
+                className="absolute left-0 top-full z-30 mt-1 w-72 max-w-[calc(100vw-2rem)] rounded-2xl border border-border/70 bg-card/80 p-1.5 shadow-lg"
               >
-                {rooms.map((r) => (
-                  <button
-                    key={r.id}
-                    role="option"
-                    aria-selected={room?.id === r.id}
-                    onClick={() => {
-                      switchRoom(r.slug)
-                      setPickerOpen(false)
-                    }}
-                    className={cn(
-                      "w-full flex items-center gap-2 rounded-lg px-2.5 py-2 text-left text-sm transition-colors",
-                      room?.id === r.id
-                        ? "bg-primary/10 text-primary font-medium"
-                        : "text-muted-foreground hover:bg-secondary hover:text-foreground"
-                    )}
-                  >
-                    {r.accessible === false ? (
-                      <Lock className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
-                    ) : (
-                      <Hash className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
-                    )}
-                    <span className="truncate flex-1">{r.name}</span>
-                    {unreadIds.has(r.id) && (
-                      <span
-                        className="h-2 w-2 shrink-0 rounded-full bg-primary"
-                        role="status"
-                        aria-label="New activity"
-                      />
-                    )}
-                    {r.locked && <Lock className="w-3 h-3 shrink-0" aria-label="Locked" />}
-                    {r.accessible === false && (
-                      <Tooltip content={`Requires ${r.requiredRep?.toLocaleString()} reputation to join`}>
-                        <span className="shrink-0 text-[9px] text-muted-foreground">
-                          {r.requiredRep?.toLocaleString()} rep
-                        </span>
-                      </Tooltip>
-                    )}
-                  </button>
-                ))}
+                {rooms.map((r) => {
+                  const activityAge = r.latestAt
+                    ? Math.round((Date.now() - new Date(r.latestAt).getTime()) / 60000)
+                    : null
+                  const activityLabel = activityAge != null
+                    ? activityAge < 1 ? "Active now"
+                      : activityAge < 60 ? `Active ${activityAge}m ago`
+                        : activityAge < 1440 ? `Active ${Math.round(activityAge / 60)}h ago`
+                          : null
+                    : null
+                  return (
+                    <button
+                      key={r.id}
+                      role="option"
+                      aria-selected={room?.id === r.id}
+                      onClick={() => {
+                        switchRoom(r.slug)
+                        setPickerOpen(false)
+                      }}
+                      className={cn(
+                        "w-full flex items-start gap-2 rounded-lg px-2.5 py-2 text-left text-sm transition-colors",
+                        room?.id === r.id
+                          ? "bg-primary/10 text-primary font-medium"
+                          : "text-muted-foreground hover:bg-secondary hover:text-foreground"
+                      )}
+                    >
+                      <div className="pt-0.5 shrink-0">
+                        {r.accessible === false ? (
+                          <Lock className="w-3.5 h-3.5" aria-hidden="true" />
+                        ) : (
+                          <Hash className="w-3.5 h-3.5" aria-hidden="true" />
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <span className="truncate font-medium text-sm">{r.name}</span>
+                          {unreadIds.has(r.id) && (
+                            <span className="h-2 w-2 shrink-0 rounded-full bg-primary" role="status" aria-label="New activity" />
+                          )}
+                          {r.locked && <Lock className="w-3 h-3 shrink-0 text-warning" aria-label="Locked" />}
+                        </div>
+                        {r.description && (
+                          <p className="text-[11px] text-muted-foreground line-clamp-1 mt-0.5">{r.description}</p>
+                        )}
+                        <div className="flex items-center gap-2 mt-0.5">
+                          {activityLabel && (
+                            <span className={cn(
+                              "text-[10px]",
+                              activityAge != null && activityAge < 5 ? "text-success" : "text-muted-foreground"
+                            )}>
+                              {activityLabel}
+                            </span>
+                          )}
+                          {r._count.messages > 0 && (
+                            <span className="text-[10px] text-muted-foreground">{r._count.messages.toLocaleString()} msgs</span>
+                          )}
+                          {r.accessible === false && (
+                            <span className="text-[10px] text-muted-foreground">{r.requiredRep?.toLocaleString()} rep</span>
+                          )}
+                        </div>
+                      </div>
+                    </button>
+                  )
+                })}
               </div>
             )}
           </div>

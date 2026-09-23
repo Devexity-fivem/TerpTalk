@@ -123,17 +123,30 @@ export default function UpdateEditSection({ update, day, dateLabel, edited }: Up
 
   const envInput = "w-full px-2 py-2 sm:py-1 rounded border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary text-xs min-h-9"
 
+  // Derive visual event type chips from the update data
+  const eventChips: { label: string; color: string }[] = []
+  if (update.images.length > 0) eventChips.push({ label: "Photo", color: "text-primary bg-primary/10" })
+  if (update.heightCm != null || update.temperature != null || update.humidity != null || update.ph != null || update.ec != null)
+    eventChips.push({ label: "Measurement", color: "text-foreground bg-secondary" })
+  if (update.training) eventChips.push({ label: "Training", color: "text-warning bg-warning/10" })
+  if (update.feeding) eventChips.push({ label: "Feeding", color: "text-success bg-success/10" })
+
   return (
     <div className="bg-card/80 rounded-2xl border border-border/70 p-4">
       <div className="flex flex-wrap items-start justify-between gap-2 mb-3">
         <div>
-          <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+          <div className="flex items-center gap-1.5 mb-1.5 flex-wrap">
             <span className="text-xs text-muted-foreground px-2 py-1 bg-secondary rounded">
               {update.stage}
             </span>
             <span className="text-xs text-muted-foreground px-2 py-1 bg-secondary rounded">
               Day {day}
             </span>
+            {eventChips.map((chip) => (
+              <span key={chip.label} className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${chip.color}`}>
+                {chip.label}
+              </span>
+            ))}
           </div>
           {!editing && <h4 className="font-display font-semibold text-sm">{update.title}</h4>}
         </div>

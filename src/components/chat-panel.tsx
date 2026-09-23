@@ -31,7 +31,7 @@ import {
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { useSession } from "next-auth/react"
-import { Loader2, Maximize2, MessagesSquare, X } from "lucide-react"
+import { Loader2, Maximize2, MessageSquare, MessagesSquare, X } from "lucide-react"
 import ChatRoom from "@/components/chat-room"
 import Tooltip from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
@@ -192,6 +192,16 @@ export function ChatDock() {
 
   const actions = (
     <>
+      <Tooltip content="Continue as a discussion">
+        <Link
+          href="/forum/new"
+          onClick={closePanel}
+          className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+          aria-label="Start a discussion from this conversation"
+        >
+          <MessageSquare className="h-4 w-4" />
+        </Link>
+      </Tooltip>
       <Tooltip content="Open full chat">
         <Link
           href="/chat"

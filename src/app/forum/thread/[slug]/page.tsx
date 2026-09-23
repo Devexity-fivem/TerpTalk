@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma"
 import { publicUserSelect, isModerator, activeAuthor, blockedUserIds, notBlockedAuthor } from "@/lib/security"
 import { diaryPath } from "@/lib/slugs"
 import { notFound, redirect } from "next/navigation"
-import { MessageSquare, Users, Clock, CheckCircle2, Eye, BookOpen } from "lucide-react"
+import { MessageSquare, MessagesSquare, Users, Clock, CheckCircle2, Eye, BookOpen } from "lucide-react"
 import Link from "next/link"
 import ReplyForm from "@/components/reply-form"
 import PostActions from "@/components/post-actions"
@@ -783,6 +783,16 @@ export default async function ThreadPage({
               {thread.category.description && (
                 <p className="mt-1 text-xs text-muted-foreground line-clamp-2">{thread.category.description}</p>
               )}
+            </div>
+
+            {/* Chat / community actions */}
+            <div className="bg-card/80 rounded-2xl border border-border/70 p-4 space-y-2">
+              <Link
+                href="/chat"
+                className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-secondary/60 hover:text-foreground transition-colors w-full"
+              >
+                <MessagesSquare className="w-4 h-4 text-primary" /> Discuss live in chat
+              </Link>
             </div>
           </div>
         </aside>

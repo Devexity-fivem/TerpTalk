@@ -308,6 +308,15 @@ h1, h2, h3 {
   background-clip: content-box;
 }
 
+/* Hide scrollbar on horizontally-scrolled tab bars (mobile tabs) */
+.scrollbar-none {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
 /* Always show a clear focus ring for keyboard users */
 :focus-visible {
   outline: 2px solid var(--ring);

@@ -453,6 +453,43 @@ export default function ProfileClient() {
 
         {/* ── Tab content ────────────────────────────────────────── */}
 
+        {/* Currently growing / Featured grow — top of overview */}
+        {!profile.isBot && activeTab === "overview" && (() => {
+          const activeGrows = growDiaries.filter((d) => d.stage !== "HARVESTED" && d.stage !== "CURING" && d.stage !== "DRYING")
+          const featured = growDiaries.find((d) => d.featured) ?? activeGrows[0]
+          if (!featured) return null
+          return (
+            <div className="bg-card/80 rounded-2xl border border-primary/20 p-4 mb-4">
+              <div className="flex items-center gap-2 mb-3">
+                <Leaf className="w-4 h-4 text-primary" />
+                <h2 className="font-display text-sm font-semibold">{featured.featured ? "Featured Grow" : "Currently Growing"}</h2>
+              </div>
+              <Link
+                href={diaryPath(featured)}
+                className="flex items-center gap-3 rounded-xl hover:bg-secondary/40 p-2 -m-2 transition-colors"
+              >
+                <div className="w-12 h-12 bg-primary/10 rounded-xl flex items-center justify-center shrink-0">
+                  <Sprout className="w-6 h-6 text-primary" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="font-medium text-sm truncate">{featured.title}</p>
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <span className="px-1.5 py-0.5 bg-secondary rounded text-[10px]">{featured.stage.toLowerCase()}</span>
+                    {featured.strain && <span className="truncate">{featured.strain}</span>}
+                    <span>{featured._count.updates} updates</span>
+                    {featured._count.followers > 0 && <span>{featured._count.followers} followers</span>}
+                  </div>
+                </div>
+              </Link>
+              {activeGrows.length > 1 && (
+                <p className="text-[11px] text-muted-foreground mt-2">
+                  + {activeGrows.length - 1} more active grow{activeGrows.length - 1 === 1 ? "" : "s"}
+                </p>
+              )}
+            </div>
+          )
+        })()}
+
         {/* Overview tab — rep + recent discussions + featured grow */}
         {(profile.isBot || activeTab === "overview") && !profile.isBot && recentRep.length > 0 && (
           <div className="bg-card/80 rounded-2xl border border-border/70 p-4 mb-4">

@@ -94,10 +94,11 @@ function getActions(openChat: () => void): Action[] {
     { id: "setups", label: "Setups", icon: Tent, href: "/setups", section: "Navigate", keywords: "equipment" },
     { id: "deals", label: "Deals", icon: Tag, href: "/deals", section: "Navigate", keywords: "discount coupon" },
     // Create
-    { id: "new-thread", label: "Start a discussion", icon: Plus, href: "/forum/new", section: "Create", auth: true, keywords: "post thread question" },
-    { id: "new-diary", label: "Start a grow diary", icon: Sprout, href: "/diaries/new", section: "Create", auth: true, keywords: "journal grow log" },
-    { id: "new-setup", label: "Share a setup", icon: Tent, href: "/setups/new", section: "Create", auth: true, keywords: "equipment build" },
-    { id: "new-strain", label: "Add a strain", icon: Dna, href: "/strains/new", section: "Create", auth: true, keywords: "genetics variety" },
+    { id: "new-thread", label: "Start a discussion", icon: Plus, href: "/forum/new", section: "Create", auth: true, keywords: "post thread conversation" },
+    { id: "new-question", label: "Ask the community", icon: Search, href: "/forum/new?category=questions", section: "Create", auth: true, keywords: "question help problem" },
+    { id: "new-diary", label: "Start a grow diary", icon: Sprout, href: "/diaries/new", section: "Create", auth: true, keywords: "journal grow log track" },
+    { id: "new-setup", label: "Share a setup", icon: Tent, href: "/setups/new", section: "Create", auth: true, keywords: "equipment build gear" },
+    { id: "new-strain", label: "Add a strain", icon: Dna, href: "/strains/new", section: "Create", auth: true, keywords: "genetics variety database" },
     // Personal
     { id: "profile", label: "My profile", icon: User, href: "/profile", section: "Personal", auth: true },
     { id: "progress", label: "My progress", icon: Trophy, href: "/progress", section: "Personal", auth: true, keywords: "achievements badges quests rank" },

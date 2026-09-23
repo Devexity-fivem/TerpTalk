@@ -86,6 +86,30 @@ function typeLabel(type: string, kind?: string) {
   return TYPE_LABELS[type] ?? "Notification"
 }
 
+// ── Notification grouping ──────────────────────────────────────────
+type NotifGroup = "all" | "social" | "grows" | "progress" | "system"
+
+const SOCIAL_TYPES = new Set(["FOLLOW", "REACTION", "REPLY", "MENTION", "THREAD_ACTIVITY", "COMMENT", "DIRECT_MESSAGE", "FOLLOWED_CONTENT"])
+const GROW_TYPES = new Set(["DIARY_UPDATE", "BOT_ASSIST"])
+const PROGRESS_TYPES = new Set(["BADGE", "REPUTATION", "REFERRAL"])
+const SYSTEM_TYPES = new Set(["MODERATOR_ANNOUNCEMENT", "ACCEPTED_ANSWER"])
+
+function notifGroup(type: string): NotifGroup {
+  if (SOCIAL_TYPES.has(type)) return "social"
+  if (GROW_TYPES.has(type)) return "grows"
+  if (PROGRESS_TYPES.has(type)) return "progress"
+  if (SYSTEM_TYPES.has(type)) return "system"
+  return "social"
+}
+
+const GROUP_LABELS: { key: NotifGroup; label: string; icon: typeof Bell }[] = [
+  { key: "all", label: "All", icon: Bell },
+  { key: "social", label: "Social", icon: MessageSquare },
+  { key: "grows", label: "Grows", icon: Leaf },
+  { key: "progress", label: "Progress", icon: TrendingUp },
+  { key: "system", label: "System", icon: Shield },
+]
+
 export default function NotificationsPage() {
   const { status } = useSession()
   const router = useRouter()
@@ -95,6 +119,7 @@ export default function NotificationsPage() {
   const [loadingMore, setLoadingMore] = useState(false)
   const [error, setError] = useState(false)
   const [marking, setMarking] = useState(false)
+  const [activeGroup, setActiveGroup] = useState<NotifGroup>("all")
   const seen = useRef(new Set<string>())
 
   const load = useCallback(async (cursor?: string) => {
@@ -230,11 +255,18 @@ export default function NotificationsPage() {
   }
 
   const unread = notifications.filter((n) => !n.read).length
+  const filteredNotifications = activeGroup === "all"
+    ? notifications
+    : notifications.filter((n) => notifGroup(n.type) === activeGroup)
+
+  // Per-group unread counts for tab badges
+  const groupUnread = (g: NotifGroup) =>
+    g === "all" ? unread : notifications.filter((n) => !n.read && notifGroup(n.type) === g).length
 
   return (
     <div className="min-h-screen bg-background">
       <div className="mx-auto max-w-2xl px-4 py-8">
-        <div className="mb-6 flex items-center justify-between">
+        <div className="mb-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <Bell className="h-6 w-6 text-primary" />
             <h1 className="font-display text-2xl font-bold tracking-tight">Notifications</h1>
@@ -278,17 +310,56 @@ export default function NotificationsPage() {
           </div>
         </div>
 
+        {/* Notification group tabs */}
+        <div className="mb-4 flex gap-1 overflow-x-auto scrollbar-none rounded-xl bg-secondary/40 p-1" role="tablist" aria-label="Notification categories">
+          {GROUP_LABELS.map(({ key, label, icon: GIcon }) => {
+            const count = groupUnread(key)
+            return (
+              <button
+                key={key}
+                role="tab"
+                aria-selected={activeGroup === key}
+                onClick={() => setActiveGroup(key)}
+                className={cn(
+                  "flex items-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+                  activeGroup === key
+                    ? "bg-card text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground hover:bg-card/50"
+                )}
+              >
+                <GIcon className="h-3.5 w-3.5" />
+                {label}
+                {count > 0 && (
+                  <span className="ml-0.5 rounded-full bg-primary/15 px-1.5 py-0.5 text-[10px] font-semibold text-primary tabular-nums">
+                    {count}
+                  </span>
+                )}
+              </button>
+            )
+          })}
+        </div>
+
         <ul className="divide-y divide-border/60 rounded-2xl border border-border/70 bg-card/80" aria-label="Notifications">
-          {notifications.length === 0 && (
+          {filteredNotifications.length === 0 && (
             <li className="list-none">
               <EmptyState
-                icon={Bell}
-                title="No notifications yet"
-                description="Replies, mentions, reactions, and follows will show up here."
+                icon={activeGroup === "all" ? Bell : GROUP_LABELS.find((g) => g.key === activeGroup)?.icon ?? Bell}
+                title={activeGroup === "all" ? "No notifications yet" : `No ${activeGroup} notifications`}
+                description={
+                  activeGroup === "all"
+                    ? "Replies, mentions, reactions, and follows will show up here."
+                    : activeGroup === "social"
+                      ? "Replies, mentions, follows, and reactions will appear here."
+                      : activeGroup === "grows"
+                        ? "Updates from followed diaries and TerpBot insights will appear here."
+                        : activeGroup === "progress"
+                          ? "Badge unlocks, reputation changes, and quest progress will appear here."
+                          : "System and moderation notices will appear here."
+                }
               />
             </li>
           )}
-          {notifications.map((n) => {
+          {filteredNotifications.map((n) => {
             const Icon = typeIcon(n.type, n.metadata?.kind)
             const row = (
               <div className="flex items-start gap-3">

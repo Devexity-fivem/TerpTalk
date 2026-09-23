@@ -773,8 +773,21 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
             </div>
           ) : (
             <div className="space-y-6">
-              {weeks.map((week) => (
+              {weeks.map((week, wi) => {
+                const prevStage = wi > 0 ? weeks[wi - 1].stage : null
+                const stageChanged = prevStage != null && prevStage !== week.stage
+                return (
                 <section key={week.week} id={`week-${week.week}`} className="scroll-mt-20">
+                  {/* Stage transition marker */}
+                  {stageChanged && (
+                    <div className="flex items-center gap-2 mb-3 -mt-1">
+                      <Sprout className="w-4 h-4 text-primary shrink-0" />
+                      <span className="text-xs font-semibold text-primary uppercase tracking-wider">
+                        {week.stage.toLowerCase()} stage
+                      </span>
+                      <span className="flex-1 border-t border-primary/25" />
+                    </div>
+                  )}
                   <div className="flex items-center gap-3 mb-3">
                     <h3 className="font-display text-sm font-semibold">
                       Week {week.week}
@@ -820,7 +833,8 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
                     ))}
                   </div>
                 </section>
-              ))}
+                )
+              })}
             </div>
           )}
 
