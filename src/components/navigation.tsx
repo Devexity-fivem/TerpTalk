@@ -19,6 +19,7 @@ import { cn } from "@/lib/utils"
 import { signInHref } from "@/lib/callback-url"
 import { getSharedPusher, peekSharedPusher } from "@/lib/pusher-client"
 import { useChatPanel } from "@/components/chat-panel"
+import { useCommandPalette } from "@/components/command-palette"
 
 const NAV_LINKS = [
   { href: "/", label: "Home", icon: Home, section: "Explore" },
@@ -55,6 +56,7 @@ export function Navigation() {
   // Chat activity signal lives in the panel provider so the nav, the
   // bottom bar, and the closed-panel FAB all share one poll.
   const { chatUnread, openPanel } = useChatPanel()
+  const { openPalette } = useCommandPalette()
   const [menuOpen, setMenuOpen] = useState(false)
   const role = (session?.user as { role?: string } | undefined)?.role
   const isAdmin = role === "ADMINISTRATOR"
@@ -220,27 +222,20 @@ export function Navigation() {
 
             {/* Right side */}
             <div className="flex min-w-0 items-center gap-1 sm:gap-1.5">
-              {/* Search — full input only while the inline links are hidden;
-                  at xl (when every control competes for the 1280px container)
-                  it collapses to an icon so the bar doesn't crowd. */}
-              <form
-                action="/search"
-                className="hidden md:block xl:hidden"
-                onSubmit={(e) => {
-                  const input = e.currentTarget.elements.namedItem("q") as HTMLInputElement
-                  if (!input.value.trim()) e.preventDefault()
-                }}
+              {/* Search trigger — opens the command palette instead of a
+                  plain search form. Shows as a fake input on md-xl, as an
+                  icon on sm and xl+. */}
+              <button
+                onClick={openPalette}
+                className="hidden md:flex xl:hidden items-center gap-2 w-40 lg:w-52 rounded-xl border border-border/70 bg-background py-1.5 pl-3 pr-2 text-sm text-muted-foreground hover:border-primary/40 transition-colors"
+                aria-label="Search TerpTalk"
               >
-                <label className="relative block">
-                  <span className="sr-only">Search TerpTalk</span>
-                  <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                  <input
-                    name="q"
-                    placeholder="Search..."
-                    className="w-40 rounded-xl border border-border/70 bg-background py-1.5 pl-8 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring lg:w-52 xl:w-40 2xl:w-52"
-                  />
-                </label>
-              </form>
+                <Search className="h-4 w-4 shrink-0" />
+                <span className="flex-1 text-left truncate">Search...</span>
+                <kbd className="hidden lg:inline-flex items-center gap-0.5 rounded border border-border bg-secondary px-1 py-0.5 text-[10px] font-medium">
+                  ⌘K
+                </kbd>
+              </button>
 
               {status === "loading" ? (
                 <div className="h-8 w-8 animate-pulse rounded-full bg-secondary" />
@@ -300,29 +295,27 @@ export function Navigation() {
                 </>
               )}
 
-              {/* Mobile search entry — the search input is md+; below sm the
-                  drawer's search field is the search path so the header fits
-                  320px devices. */}
+              {/* Mobile search entry — opens the command palette */}
               <Tooltip content="Search TerpTalk" side="bottom" className="hidden sm:inline-flex md:hidden">
-                <Link
-                  href="/search"
+                <button
+                  onClick={openPalette}
                   className="rounded-lg p-2 transition-colors hover:bg-secondary"
                   aria-label="Search"
                 >
                   <Search className="h-5 w-5" />
-                </Link>
+                </button>
               </Tooltip>
 
-              {/* Search icon for xl+ — replaces the input while the inline
-                  desktop links are shown so the bar stays uncrowded. */}
+              {/* Search icon for xl+ — replaces the trigger input while the
+                  inline desktop links are shown so the bar stays uncrowded. */}
               <Tooltip content="Search TerpTalk" side="bottom" className="hidden xl:inline-flex">
-                <Link
-                  href="/search"
+                <button
+                  onClick={openPalette}
                   className="rounded-lg p-2 transition-colors hover:bg-secondary"
                   aria-label="Search"
                 >
                   <Search className="h-5 w-5" />
-                </Link>
+                </button>
               </Tooltip>
 
               {/* Drawer trigger */}
@@ -347,25 +340,14 @@ export function Navigation() {
         {menuOpen && (
           <div id="tt-nav-drawer" className="tt-glass animate-in mx-auto mt-2 max-h-[calc(100vh-6.5rem)] max-w-7xl overflow-y-auto rounded-2xl border border-border/60 shadow-xl">
             <div className="grid auto-rows-min grid-cols-1 gap-6 px-4 py-4 md:grid-cols-2 lg:grid-cols-3">
-              <form
-                action="/search"
-                onSubmit={(e) => {
-                  const input = e.currentTarget.elements.namedItem("q") as HTMLInputElement
-                  if (!input.value.trim()) e.preventDefault()
-                  else setMenuOpen(false)
-                }}
-                className="pb-2 lg:hidden"
+              <button
+                onClick={() => { setMenuOpen(false); openPalette() }}
+                className="flex w-full items-center gap-2 rounded-xl border border-border/70 bg-background py-2.5 pl-3 pr-3 text-sm text-muted-foreground hover:border-primary/40 transition-colors lg:hidden"
+                aria-label="Search TerpTalk"
               >
-                <label className="relative block">
-                  <span className="sr-only">Search TerpTalk</span>
-                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                  <input
-                    name="q"
-                    placeholder="Search threads, strains, members..."
-                    className="w-full rounded-xl border border-border/70 bg-background py-2.5 pl-9 pr-3 focus:outline-none focus:ring-2 focus:ring-ring"
-                  />
-                </label>
-              </form>
+                <Search className="h-4 w-4 shrink-0" />
+                <span className="flex-1 text-left">Search threads, strains, members...</span>
+              </button>
 
               {NAV_SECTIONS.map((section) => (
                 <div key={section} className="space-y-1">

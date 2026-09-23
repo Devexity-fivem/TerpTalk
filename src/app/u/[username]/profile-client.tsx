@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import { useSession } from "next-auth/react"
 import { useParams } from "next/navigation"
-import { User, MessageSquare, Loader2, MapPin, Globe, Sprout, Dna, Leaf, Store, Flame, ChevronDown, ChevronUp, Bot, Zap, Users, Link2, HandMetal, CalendarClock, TrendingUp, Search, BookOpen, Trophy, BarChart3, AlertTriangle, Megaphone, Wrench } from "lucide-react"
+import { User, MessageSquare, Loader2, MapPin, Globe, Sprout, Dna, Leaf, Store, Flame, ChevronDown, ChevronUp, Bot, Zap, Users, Link2, HandMetal, CalendarClock, TrendingUp, Search, BookOpen, Trophy, BarChart3, AlertTriangle, Megaphone, Wrench, Award } from "lucide-react"
 import Link from "next/link"
 import UserActions from "@/components/user-actions"
 import RoleBadge from "@/components/role-badge"
@@ -143,6 +143,7 @@ export default function ProfileClient() {
   const [loading, setLoading] = useState(true)
   const [notFound, setNotFound] = useState(false)
   const [showAllBadges, setShowAllBadges] = useState(false)
+  const [activeTab, setActiveTab] = useState<"overview" | "grows" | "discussions" | "achievements">("overview")
 
   useEffect(() => {
     fetch(`/api/users/${encodeURIComponent(username)}`, { cache: "no-store" })
@@ -414,7 +415,46 @@ export default function ProfileClient() {
           </div>
         </div>
 
-        {!profile.isBot && recentRep.length > 0 && (
+        {/* ── Tab navigation ──────────────────────────────────────── */}
+        {!profile.isBot && (
+          <div className="mb-4 flex items-center gap-1 overflow-x-auto rounded-xl bg-secondary/60 p-1" role="tablist">
+            {([
+              { id: "overview" as const, label: "Overview", icon: User },
+              { id: "grows" as const, label: "Grows", icon: Sprout, count: growDiaries.length + harvestShelf.length },
+              { id: "discussions" as const, label: "Discussions", icon: MessageSquare, count: profile.stats.threadCreator },
+              { id: "achievements" as const, label: "Achievements", icon: Award, count: profile.badges.length },
+            ]).map(({ id, label, icon: Icon, count }) => (
+              <button
+                key={id}
+                role="tab"
+                aria-selected={activeTab === id}
+                onClick={() => setActiveTab(id)}
+                className={cn(
+                  "flex items-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-1.5 text-sm font-medium transition-all",
+                  activeTab === id
+                    ? "bg-card text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                <Icon className="h-3.5 w-3.5" />
+                {label}
+                {typeof count === "number" && count > 0 && (
+                  <span className={cn(
+                    "inline-flex items-center justify-center rounded-full h-4 min-w-4 px-1 text-[10px] tabular-nums",
+                    activeTab === id ? "bg-primary/12 text-primary" : "bg-muted text-muted-foreground"
+                  )}>
+                    {count}
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* ── Tab content ────────────────────────────────────────── */}
+
+        {/* Overview tab — rep + recent discussions + featured grow */}
+        {(profile.isBot || activeTab === "overview") && !profile.isBot && recentRep.length > 0 && (
           <div className="bg-card/80 rounded-2xl border border-border/70 p-4 mb-4">
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
@@ -510,6 +550,8 @@ export default function ProfileClient() {
             </div>
           </>
         ) : (
+          <>
+          {(activeTab === "overview" || activeTab === "discussions") && (
           <div className="bg-card/80 rounded-2xl border border-border/70 p-4 mb-4">
           <div className="flex items-center gap-2 mb-3">
             <MessageSquare className="w-4 h-4 text-primary" />
@@ -528,9 +570,9 @@ export default function ProfileClient() {
                   <h3 className="font-medium mb-1 break-words">{t.title}</h3>
                   <div className="flex items-center gap-2 text-xs text-muted-foreground">
                     <span>{t.category.name}</span>
-                    <span>•</span>
+                    <span>·</span>
                     <span>{t.replyCount} repl{t.replyCount === 1 ? "y" : "ies"}</span>
-                    <span>•</span>
+                    <span>·</span>
                     <span>{new Date(t.createdAt).toLocaleDateString()}</span>
                   </div>
                 </Link>
@@ -538,9 +580,11 @@ export default function ProfileClient() {
             </div>
           )}
         </div>
+          )}
+          </>
         )}
 
-        {!profile.isBot && harvestShelf.length > 0 && (
+        {!profile.isBot && (activeTab === "overview" || activeTab === "grows") && harvestShelf.length > 0 && (
         <div className="bg-card rounded-lg border border-amber-500/30 p-4 mb-4">
           <div className="flex items-center gap-2 mb-3">
             <Trophy className="w-4 h-4 text-warning" />
@@ -579,7 +623,7 @@ export default function ProfileClient() {
         </div>
         )}
 
-        {!profile.isBot && growSetups.length > 0 && (
+        {!profile.isBot && (activeTab === "overview" || activeTab === "grows") && growSetups.length > 0 && (
         <div className="bg-card/80 rounded-2xl border border-border/70 p-4 mb-4">
           <div className="flex items-center gap-2 mb-3">
             <Wrench className="w-4 h-4 text-primary" />
@@ -613,11 +657,11 @@ export default function ProfileClient() {
         </div>
         )}
 
-        {!profile.isBot && (
+        {!profile.isBot && (activeTab === "overview" || activeTab === "grows") && (
         <div className="bg-card/80 rounded-2xl border border-border/70 p-4 mb-4">
           <div className="flex items-center gap-2 mb-3">
             <Sprout className="w-4 h-4 text-primary" />
-            <h2 className="font-display text-lg font-semibold">Recent Grows</h2>
+            <h2 className="font-display text-lg font-semibold">{activeTab === "grows" ? "All Grows" : "Recent Grows"}</h2>
           </div>
           {growDiaries.length === 0 ? (
             <p className="text-muted-foreground">No grow diaries yet</p>
@@ -638,6 +682,59 @@ export default function ProfileClient() {
             </div>
           )}
         </div>
+        )}
+
+        {/* Achievements tab — full badge display */}
+        {!profile.isBot && activeTab === "achievements" && (
+          <div className="bg-card/80 rounded-2xl border border-border/70 p-4 mb-4">
+            <div className="flex items-center gap-2 mb-3">
+              <Award className="w-4 h-4 text-spectrum" />
+              <h2 className="font-display text-lg font-semibold">Achievements</h2>
+              <span className="text-xs text-muted-foreground">{profile.badges.length} earned</span>
+            </div>
+            {profile.badges.length === 0 ? (
+              <p className="text-muted-foreground text-sm">No achievements yet — keep growing and contributing!</p>
+            ) : (
+              <>
+                {pinnedBadges.length > 0 && (
+                  <div className="mb-4">
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">Showcase</p>
+                    <div className="flex flex-wrap gap-2">
+                      {pinnedBadges.map((b) => (
+                        <AchievementBadge key={b.name} name={b.name} mode="showcase" />
+                      ))}
+                    </div>
+                  </div>
+                )}
+                <div className="flex flex-wrap gap-2">
+                  {restBadges.map((b) => (
+                    <AchievementBadge key={b.name} name={b.name} mode="profile" />
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        )}
+
+        {/* Achievements tab — reputation history */}
+        {!profile.isBot && activeTab === "achievements" && recentRep.length > 0 && (
+          <div className="bg-card/80 rounded-2xl border border-border/70 p-4 mb-4">
+            <div className="flex items-center gap-2 mb-3">
+              <TrendingUp className="w-4 h-4 text-primary" />
+              <h2 className="font-display text-lg font-semibold">Reputation history</h2>
+            </div>
+            <div className="space-y-1">
+              {recentRep.map((e) => (
+                <div key={e.id} className={`flex items-center justify-between text-sm py-1 ${e.reversed ? "opacity-50" : ""}`}>
+                  <span className={`truncate ${e.reversed ? "line-through" : ""}`}>{e.label}{e.reversed ? " (reversed)" : ""}</span>
+                  <span className="flex items-center gap-3 shrink-0 ml-3">
+                    <span className="text-xs text-muted-foreground">{new Date(e.createdAt).toLocaleDateString()}</span>
+                    <span className={`font-medium w-10 text-right ${e.amount >= 0 ? "text-primary" : "text-destructive"}`}>{e.amount >= 0 ? "+" : ""}{e.amount}</span>
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
         )}
       </div>
     </div>

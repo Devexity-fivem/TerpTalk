@@ -2,6 +2,7 @@ import Link from "next/link"
 import type { ReactNode } from "react"
 import {
   Zap, Sprout, Bell, ArrowRight, Leaf, Users, Radio, TrendingUp, CheckCircle2, Circle,
+  MessageCircle, Eye,
 } from "lucide-react"
 import MemberGreeting from "@/components/member-greeting"
 import OpenChatButton from "@/components/open-chat-button"
@@ -321,6 +322,45 @@ export default function MemberHome({ data }: { data: MemberHomeData }) {
             )}
           </Card>
         </div>
+
+        {/* Community pulse — trending threads make the cockpit feel alive */}
+        {data.trending.length > 0 && (
+          <section className="mt-6 bg-card/80 rounded-2xl border border-border/70 p-4 sm:p-5">
+            <div className="mb-3 flex items-center justify-between gap-2">
+              <h2 className="flex items-center gap-2 font-display text-sm font-semibold">
+                <TrendingUp className="h-4 w-4 text-spectrum" />
+                Community pulse
+                <InfoTip content="Trending discussions from the past week — ranked by activity velocity." />
+              </h2>
+              <Link
+                href="/discover"
+                className="tap-target shrink-0 text-xs font-medium text-primary inline-flex items-center gap-0.5 hover:underline"
+              >
+                Discover more <ArrowRight className="h-3 w-3" />
+              </Link>
+            </div>
+            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+              {data.trending.map((t) => (
+                <Link
+                  key={t.slug}
+                  href={`/forum/thread/${t.slug}`}
+                  className="group flex items-start gap-3 rounded-xl border border-border/60 bg-secondary/30 p-3 transition-colors hover:border-primary/40 hover:bg-secondary/50"
+                >
+                  <TrendingUp className="h-4 w-4 shrink-0 mt-0.5 text-spectrum" aria-hidden="true" />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium line-clamp-1 group-hover:text-primary">{t.title}</p>
+                    <p className="mt-0.5 flex items-center flex-wrap gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
+                      <span className="text-primary">{t.category}</span>
+                      <span>{t.authorName}</span>
+                      <span className="inline-flex items-center gap-0.5"><MessageCircle className="h-3 w-3" />{t.replyCount}</span>
+                      <span className="inline-flex items-center gap-0.5"><Eye className="h-3 w-3" />{t.views}</span>
+                    </p>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          </section>
+        )}
       </div>
     </div>
   )

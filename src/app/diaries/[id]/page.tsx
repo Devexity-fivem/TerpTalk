@@ -683,8 +683,9 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
           </div>
         </details>
 
-        {/* Timeline — grouped by grow week */}
-        <div className="space-y-4">
+        {/* Timeline — grouped by grow week, with desktop context rail */}
+        <div className="lg:grid lg:grid-cols-[1fr_240px] lg:gap-6">
+        <div className="space-y-4 min-w-0">
           <div className="flex justify-between items-center">
             <h2 className="font-display text-lg font-semibold">Grow Timeline</h2>
             {canEdit && (
@@ -896,7 +897,133 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
               )}
             </div>
           )}
-        </div>
+        </div>{/* end main timeline column */}
+
+        {/* ── Diary context rail — desktop only ───────────────────── */}
+        <aside className="hidden lg:block" aria-label="Grow context">
+          <div className="sticky top-20 space-y-4">
+            {/* Grow summary card */}
+            <div className="bg-card/80 rounded-2xl border border-border/70 p-4">
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Grow summary</h3>
+              <dl className="space-y-2 text-sm">
+                <div className="flex items-center justify-between">
+                  <dt className="text-muted-foreground">Day</dt>
+                  <dd className="font-medium text-primary tabular-nums">{dayCount}</dd>
+                </div>
+                <div className="flex items-center justify-between">
+                  <dt className="text-muted-foreground">Week</dt>
+                  <dd className="font-medium tabular-nums">{Math.ceil(dayCount / 7) || 1}</dd>
+                </div>
+                <div className="flex items-center justify-between">
+                  <dt className="text-muted-foreground">Stage</dt>
+                  <dd className="text-xs">{diary.harvested ? "Harvested" : diary.stage}</dd>
+                </div>
+                <div className="flex items-center justify-between">
+                  <dt className="text-muted-foreground">Updates</dt>
+                  <dd className="font-medium tabular-nums">{diary._count.updates}</dd>
+                </div>
+                <div className="flex items-center justify-between">
+                  <dt className="text-muted-foreground">Followers</dt>
+                  <dd className="font-medium tabular-nums">{diary._count.followers}</dd>
+                </div>
+                {streak >= 2 && (
+                  <div className="flex items-center justify-between">
+                    <dt className="text-warning">Streak</dt>
+                    <dd className="font-medium text-warning tabular-nums">{streak} days</dd>
+                  </div>
+                )}
+                {avgTemp && (
+                  <div className="flex items-center justify-between">
+                    <dt className="text-muted-foreground">Avg temp</dt>
+                    <dd className="tabular-nums">{avgTemp}°</dd>
+                  </div>
+                )}
+                {avgRh != null && (
+                  <div className="flex items-center justify-between">
+                    <dt className="text-muted-foreground">Avg RH</dt>
+                    <dd className="tabular-nums">{avgRh}%</dd>
+                  </div>
+                )}
+                {harvestEta !== null && harvestEta > 0 && (
+                  <div className="flex items-center justify-between">
+                    <dt className="text-muted-foreground">Est. harvest</dt>
+                    <dd className="text-primary font-medium tabular-nums">{harvestEta}d</dd>
+                  </div>
+                )}
+              </dl>
+            </div>
+
+            {/* Grower card */}
+            <div className="bg-card/80 rounded-2xl border border-border/70 p-4">
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Grower</h3>
+              <Link
+                href={`/u/${diary.author.profile?.username || diary.author.name}`}
+                className="flex items-center gap-2 rounded-lg p-1 -mx-1 hover:bg-secondary/60 transition-colors"
+              >
+                <span className="font-medium text-sm hover:text-primary">{authorName}</span>
+                <TierChip reputation={diary.author.profile?.reputation ?? 0} publicMilestoneOptOut={diary.author.profile?.publicMilestoneOptOut} />
+              </Link>
+            </div>
+
+            {/* Strain link */}
+            {strainLink && (
+              <div className="bg-card/80 rounded-2xl border border-border/70 p-4">
+                <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Strain</h3>
+                <Link
+                  href={strainPath(strainLink)}
+                  className="text-sm font-medium text-primary hover:underline"
+                >
+                  {diary.strain || strainLink.name}
+                </Link>
+              </div>
+            )}
+
+            {/* Discussion link */}
+            {diary.discussion && !diary.discussion.deleted && (
+              <div className="bg-card/80 rounded-2xl border border-border/70 p-4">
+                <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Discussion</h3>
+                <Link
+                  href={`/forum/thread/${diary.discussion.slug}`}
+                  className="text-sm font-medium text-primary hover:underline inline-flex items-center gap-1"
+                >
+                  <Leaf className="w-3.5 h-3.5" /> Join the conversation
+                </Link>
+              </div>
+            )}
+
+            {/* Setup link */}
+            {diary.setup && !diary.setup.deleted && (
+              <div className="bg-card/80 rounded-2xl border border-border/70 p-4">
+                <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Setup</h3>
+                <Link
+                  href={setupPath(diary.setup)}
+                  className="text-sm font-medium text-primary hover:underline"
+                >
+                  {diary.setup.title}
+                </Link>
+              </div>
+            )}
+
+            {/* Week jump — mini nav */}
+            {weeks.length > 1 && (
+              <div className="bg-card/80 rounded-2xl border border-border/70 p-4">
+                <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Jump to week</h3>
+                <div className="flex flex-wrap gap-1">
+                  {weeks.map((w) => (
+                    <a
+                      key={w.week}
+                      href={`#week-${w.week}`}
+                      className="inline-flex items-center justify-center w-7 h-7 rounded-md text-xs font-medium bg-secondary/60 text-muted-foreground hover:bg-primary/12 hover:text-primary transition-colors tabular-nums"
+                    >
+                      {w.week}
+                    </a>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </aside>
+        </div>{/* end grid */}
       </div>
     </div>
   )

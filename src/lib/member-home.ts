@@ -4,7 +4,7 @@
 // notifications (unread count), and the shared chat teaser (presence +
 // room activity). No new models, no new realtime, no polling.
 import { prisma } from "@/lib/prisma"
-import { activeAuthor } from "@/lib/security"
+import { activeAuthor, publicUserSelect } from "@/lib/security"
 import { REP_LADDER, getRepStage, getNextTier } from "@/lib/reputation-config"
 import { getQuestProgress } from "@/lib/quests"
 import { getJourneyState } from "@/lib/journeys"
@@ -46,6 +46,15 @@ export interface MemberHomeData {
     unreadNotifications: number
   }
   live: ChatTeaser | null
+  /** Community pulse — trending threads to make the cockpit feel alive */
+  trending: {
+    title: string
+    slug: string
+    category: string
+    replyCount: number
+    views: number
+    authorName: string
+  }[]
 }
 
 const GROW_STAGE_LABELS: Record<string, string> = Object.fromEntries(
@@ -53,7 +62,7 @@ const GROW_STAGE_LABELS: Record<string, string> = Object.fromEntries(
 )
 
 export async function getMemberHomeData(userId: string): Promise<MemberHomeData | null> {
-  const [user, quests, journey, staleDiary, diaries, followedThreads, followedDiaries, unreadNotifications, live] =
+  const [user, quests, journey, staleDiary, diaries, followedThreads, followedDiaries, unreadNotifications, live, trendingCandidates] =
     await Promise.all([
       prisma.user.findUnique({
         where: { id: userId },
@@ -120,6 +129,25 @@ export async function getMemberHomeData(userId: string): Promise<MemberHomeData 
       }),
       prisma.notification.count({ where: { userId, read: false } }),
       getChatTeaser(),
+      // Trending threads for the community pulse — lightweight existing query
+      prisma.thread.findMany({
+        where: {
+          deleted: false,
+          category: { hidden: false },
+          createdAt: { gte: new Date(Date.now() - 7 * 86400000) },
+          author: activeAuthor(),
+        },
+        take: 50,
+        select: {
+          slug: true,
+          title: true,
+          views: true,
+          replyCount: true,
+          createdAt: true,
+          author: { select: publicUserSelect },
+          category: { select: { name: true } },
+        },
+      }),
     ])
 
   if (!user) return null
@@ -151,6 +179,15 @@ export async function getMemberHomeData(userId: string): Promise<MemberHomeData 
 
   // Journey states for the member's active grows — bounded at 3 diaries.
   const journeyStates = await Promise.all(diaries.map((d) => getGrowJourney(d.id)))
+
+  // Score trending threads by velocity (same algorithm as the guest landing)
+  const trending = trendingCandidates
+    .map((t) => {
+      const hours = (Date.now() - new Date(t.createdAt).getTime()) / 36e5
+      return { ...t, score: (t.views + t.replyCount * 5) / Math.pow(hours + 2, 1.5) }
+    })
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 3)
 
   return {
     displayName: user.profile?.username || user.name || "grower",
@@ -204,5 +241,13 @@ export async function getMemberHomeData(userId: string): Promise<MemberHomeData 
       unreadNotifications,
     },
     live,
+    trending: trending.map((t) => ({
+      title: t.title,
+      slug: t.slug,
+      category: t.category.name,
+      replyCount: t.replyCount,
+      views: t.views,
+      authorName: t.author.profile?.username || t.author.name || "a grower",
+    })),
   }
 }

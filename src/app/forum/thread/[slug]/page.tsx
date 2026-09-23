@@ -344,15 +344,27 @@ export default async function ThreadPage({
 
   return (
     <div className="min-h-screen bg-background">
-      <div className="max-w-4xl mx-auto px-4 py-8">
+      <div className="mx-auto max-w-7xl px-4 py-8">
         <JsonLd data={discussionSchema} />
         <ViewTracker threadId={thread.id} />
+
+        <div className="lg:grid lg:grid-cols-[1fr_280px] lg:gap-6 xl:grid-cols-[1fr_300px]">
+        {/* ── Main column ────────────────────────────────────────── */}
+        <div className="min-w-0">
         <Breadcrumbs items={breadcrumbs} />
         <div className="mb-5">
           <div className="flex items-center gap-2 mb-3 flex-wrap">
-            <span className="rounded-full bg-primary/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-primary">
+            <Link
+              href={`/forum/category/${thread.category.slug}`}
+              className="rounded-full bg-primary/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-primary hover:bg-primary/20 transition-colors"
+            >
               {thread.category.name}
-            </span>
+            </Link>
+            {thread.acceptedAnswer && (
+              <span className="rounded-full bg-emerald-500/12 px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-success ring-1 ring-inset ring-emerald-500/20">
+                <CheckCircle2 className="inline w-3 h-3 mr-0.5 -mt-0.5" />Solved
+              </span>
+            )}
             {thread.pinned && (
               <span className="rounded-full bg-spectrum/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-spectrum">Pinned</span>
             )}
@@ -361,9 +373,9 @@ export default async function ThreadPage({
             )}
             <ThreadModActions threadId={thread.id} authorId={thread.authorId} pinned={thread.pinned} locked={thread.locked} />
           </div>
-          <h1 className="font-display text-3xl sm:text-4xl font-bold mb-2 break-words tracking-tight">{thread.title}</h1>
+          <h1 className="font-display text-3xl sm:text-4xl font-bold mb-3 break-words tracking-tight">{thread.title}</h1>
           {thread.tags.length > 0 && (
-            <div className="flex flex-wrap gap-2 mb-2">
+            <div className="flex flex-wrap gap-1.5 mb-3">
               {thread.tags.map((tt) => (
                 <Link
                   key={tt.tagId}
@@ -376,36 +388,44 @@ export default async function ThreadPage({
               ))}
             </div>
           )}
-          <div className="flex items-center gap-x-3 gap-y-1 text-xs text-muted-foreground flex-wrap">
-            <UserPopover username={thread.author.profile?.username}>
-              <Link
-                href={`/u/${thread.author.profile?.username || thread.author.name}`}
-                className="flex items-center gap-1 hover:text-foreground"
-              >
-                <Users className="w-3.5 h-3.5" />
-                <span className={
-                  thread.author.profile?.publicMilestoneOptOut
-                    ? undefined
-                    : getReputationTier(thread.author.profile?.reputation ?? 0).perks.nameplate ?? undefined
-                }>
-                  {thread.author.profile?.username || thread.author.name}
+          {/* Author + metadata row */}
+          <div className="flex items-center gap-3 mb-3">
+            <Avatar src={thread.author.image ?? undefined} size="md" alt={thread.author.profile?.username ?? thread.author.name ?? undefined} />
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <UserPopover username={thread.author.profile?.username}>
+                  <Link
+                    href={`/u/${thread.author.profile?.username || thread.author.name}`}
+                    className={`font-semibold text-sm hover:text-primary ${
+                      thread.author.profile?.publicMilestoneOptOut
+                        ? ""
+                        : getReputationTier(thread.author.profile?.reputation ?? 0).perks.nameplate ?? ""
+                    }`}
+                  >
+                    {thread.author.profile?.username || thread.author.name}
+                  </Link>
+                </UserPopover>
+                <RoleBadge role={thread.author.role} />
+                <TierChip reputation={thread.author.profile?.reputation ?? 0} publicMilestoneOptOut={thread.author.profile?.publicMilestoneOptOut} />
+              </div>
+              <div className="flex items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground flex-wrap mt-0.5">
+                <span className="flex items-center gap-1">
+                  <Clock className="w-3 h-3" />
+                  {new Date(thread.createdAt).toLocaleDateString()}
                 </span>
-              </Link>
-            </UserPopover>
-            <RoleBadge role={thread.author.role} />
-            <TierChip reputation={thread.author.profile?.reputation ?? 0} publicMilestoneOptOut={thread.author.profile?.publicMilestoneOptOut} />
-            <span className="flex items-center gap-1">
-              <Clock className="w-3.5 h-3.5" />
-              {new Date(thread.createdAt).toLocaleDateString()}
-            </span>
-            <span className="flex items-center gap-1">
-              <MessageSquare className="w-3.5 h-3.5" />
-              {thread.replyCount} repl{thread.replyCount === 1 ? "y" : "ies"}
-            </span>
-            <span className="flex items-center gap-1">
-              <Eye className="w-3.5 h-3.5" />
-              {thread.views} views
-            </span>
+                <span className="flex items-center gap-1">
+                  <MessageSquare className="w-3 h-3" />
+                  {thread.replyCount} repl{thread.replyCount === 1 ? "y" : "ies"}
+                </span>
+                <span className="flex items-center gap-1">
+                  <Eye className="w-3 h-3" />
+                  {thread.views} views
+                </span>
+              </div>
+            </div>
+          </div>
+          {/* Action bar */}
+          <div className="flex items-center gap-2 flex-wrap text-xs text-muted-foreground">
             <BookmarkButton threadId={thread.id} initiallySaved={saved} />
             <ThreadFollowButton threadId={thread.id} initiallyFollowing={following} />
             <ShareButtons path={`/forum/thread/${thread.slug}`} title={thread.title} />
@@ -649,29 +669,32 @@ export default async function ThreadPage({
           )
         })()}
 
-        {relatedThreads.length > 0 && (
-          <div className="mt-6 bg-card/80 rounded-2xl border border-border/70 p-5">
-            <div className="flex items-center gap-2 mb-3">
-              <MessageSquare className="w-3.5 h-3.5 text-spectrum" />
-              <h2 className="font-display text-base font-semibold">Related discussions</h2>
+        {/* Related discussions — shown inline on mobile, moved to sidebar on lg */}
+        <div className="lg:hidden">
+          {relatedThreads.length > 0 && (
+            <div className="mt-6 bg-card/80 rounded-2xl border border-border/70 p-5">
+              <div className="flex items-center gap-2 mb-3">
+                <MessageSquare className="w-3.5 h-3.5 text-spectrum" />
+                <h2 className="font-display text-base font-semibold">Related discussions</h2>
+              </div>
+              <ul className="space-y-2">
+                {relatedThreads.map((t) => (
+                  <li key={t.id}>
+                    <Link
+                      href={`/forum/thread/${t.slug}`}
+                      className="text-sm hover:text-primary hover:underline"
+                    >
+                      {t.title}
+                      <span className="ml-2 text-xs text-muted-foreground">
+                        {t.category.name} · {t._count.posts} repl{t._count.posts === 1 ? "y" : "ies"}
+                      </span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
             </div>
-            <ul className="space-y-2">
-              {relatedThreads.map((t) => (
-                <li key={t.id}>
-                  <Link
-                    href={`/forum/thread/${t.slug}`}
-                    className="text-sm hover:text-primary hover:underline"
-                  >
-                    {t.title}
-                    <span className="ml-2 text-xs text-muted-foreground">
-                      {t.category.name} • {t._count.posts} repl{t._count.posts === 1 ? "y" : "ies"}
-                    </span>
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
+          )}
+        </div>
 
         {/* Reply Form */}
         {!thread.locked && (
@@ -682,6 +705,88 @@ export default async function ThreadPage({
             This thread is locked. No new replies can be posted.
           </div>
         )}
+        </div>{/* end main column */}
+
+        {/* ── Context rail — desktop only ─────────────────────────── */}
+        <aside className="hidden lg:block" aria-label="Discussion context">
+          <div className="sticky top-20 space-y-4">
+            {/* Thread summary */}
+            <div className="bg-card/80 rounded-2xl border border-border/70 p-4">
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Thread info</h3>
+              <dl className="space-y-2 text-sm">
+                <div className="flex items-center justify-between">
+                  <dt className="text-muted-foreground">Replies</dt>
+                  <dd className="font-medium tabular-nums">{thread.replyCount}</dd>
+                </div>
+                <div className="flex items-center justify-between">
+                  <dt className="text-muted-foreground">Views</dt>
+                  <dd className="font-medium tabular-nums">{thread.views.toLocaleString()}</dd>
+                </div>
+                <div className="flex items-center justify-between">
+                  <dt className="text-muted-foreground">Created</dt>
+                  <dd className="text-xs">{new Date(thread.createdAt).toLocaleDateString()}</dd>
+                </div>
+                <div className="flex items-center justify-between">
+                  <dt className="text-muted-foreground">Last activity</dt>
+                  <dd className="text-xs">{new Date(thread.lastActivityAt).toLocaleDateString()}</dd>
+                </div>
+              </dl>
+            </div>
+
+            {/* Diary context — in sidebar */}
+            {diaryCtx && (
+              <div className="bg-card/80 rounded-2xl border border-border/70 p-4">
+                <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Linked grow</h3>
+                <Link
+                  href={diaryPath(diaryCtx)}
+                  className="group block rounded-xl border border-border/60 bg-secondary/30 p-3 transition-colors hover:border-primary/40"
+                >
+                  <p className="text-sm font-medium group-hover:text-primary line-clamp-1">{diaryCtx.title}</p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    {diaryCtx.strain ? `${diaryCtx.strain} · ` : ""}{diaryCtx.harvested ? "Harvested" : diaryCtx.stage}
+                  </p>
+                </Link>
+              </div>
+            )}
+
+            {/* Related discussions — desktop sidebar */}
+            {relatedThreads.length > 0 && (
+              <div className="bg-card/80 rounded-2xl border border-border/70 p-4">
+                <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Related</h3>
+                <ul className="space-y-2">
+                  {relatedThreads.map((t) => (
+                    <li key={t.id}>
+                      <Link
+                        href={`/forum/thread/${t.slug}`}
+                        className="group block rounded-lg p-2 -mx-1 transition-colors hover:bg-secondary/60"
+                      >
+                        <p className="text-sm font-medium line-clamp-2 group-hover:text-primary">{t.title}</p>
+                        <p className="mt-0.5 text-xs text-muted-foreground">
+                          {t.category.name} · {t._count.posts} repl{t._count.posts === 1 ? "y" : "ies"}
+                        </p>
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {/* Category link */}
+            <div className="bg-card/80 rounded-2xl border border-border/70 p-4">
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Category</h3>
+              <Link
+                href={`/forum/category/${thread.category.slug}`}
+                className="inline-flex items-center gap-2 text-sm font-medium text-primary hover:underline"
+              >
+                {thread.category.name}
+              </Link>
+              {thread.category.description && (
+                <p className="mt-1 text-xs text-muted-foreground line-clamp-2">{thread.category.description}</p>
+              )}
+            </div>
+          </div>
+        </aside>
+        </div>{/* end grid */}
       </div>
     </div>
   )
