@@ -17,8 +17,12 @@
 
 import { prisma } from "@/lib/prisma"
 import { KNOWLEDGE_VERSION } from "@/lib/terpbot-intel-knowledge"
+import { pendingInterventions } from "@/lib/terpbot-intel"
+import { SERIES_KEY } from "@/lib/terpbot-intel-merge"
 import type {
+  GrowContextView,
   InterventionRecord,
+  MetricId,
   NextStepId,
   ReportedPoint,
   ResolutionClaim,
@@ -268,4 +272,37 @@ function trimObservations(obs: SessionObservation[]): SessionObservation[] {
   return [...obs]
     .sort((a, b) => a.t - b.t || a.symptom.localeCompare(b.symptom))
     .slice(-MAX_POINTS)
+}
+
+/** A stored pendingAsk survives a decision set that currently asks for
+ *  nothing ONLY while it's still genuinely open — a pending follow-up
+ *  intervention on that metric, or no fresh real reading yet. Once a
+ *  real point lands (or the intervention is answered) the ask must not
+ *  be resurrected: the next bare number would be force-attributed to a
+ *  metric nobody asked for. */
+export function pendingAskStillOpen(ctx: GrowContextView, ask: MetricId, now: number): boolean {
+  const key = SERIES_KEY[ask]
+  if (!key) return false
+  if (pendingInterventions(ctx).some((iv) => iv.targetMetric === ask)) return true
+  const s = ctx.series[key]
+  return !s.points.some((p) => !p.tApproximate && p.t > now - 3 * 86400000)
+}
+
+/** Carry-forward predicate for a stored pendingAsk. The ask only
+ *  survives on the diary that minted it — saveSession can relink
+ *  diaryId (checkin always stamps the rendered diary; intelContextFor
+ *  and the assist scan can fall back to a different public diary), and
+ *  carrying an ask minted on grow B across a relink to grow A would
+ *  stamp the next bare-number answer onto A's series. Unlinked sessions
+ *  merge their state onto whichever diary resolves, so their asks
+ *  carry. */
+export function pendingAskCarries(
+  session: { diaryId?: string | null; pendingAsk?: string | null } | null | undefined,
+  ctx: GrowContextView,
+  now: number
+): string | null {
+  const ask = session?.pendingAsk
+  if (!ask) return null
+  if (session.diaryId && ctx.diary.id && session.diaryId !== ctx.diary.id) return null
+  return pendingAskStillOpen(ctx, ask as MetricId, now) ? ask : null
 }

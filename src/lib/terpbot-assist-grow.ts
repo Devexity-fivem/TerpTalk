@@ -32,7 +32,7 @@ import { MEASUREMENT_INFO, interventionState } from "@/lib/terpbot-intel"
 import { buildSnapshot } from "@/lib/terpbot-intel-snapshot"
 import { buildCultivationDecisions } from "@/lib/terpbot-intel-decisions"
 import { buildWhyTrail } from "@/lib/terpbot-intel-why"
-import { loadSession, saveSession } from "@/lib/terpbot-session"
+import { loadSession, saveSession, pendingAskCarries } from "@/lib/terpbot-session"
 import type { GrowContextView, MetricId } from "@/lib/terpbot-intel-types"
 
 const DAY = 86400000
@@ -242,7 +242,10 @@ export async function scanGrowAssists(opts: {
             pendingAsk:
               fire.stepId && REPORTABLE_METRICS.has(fire.stepId as MetricId)
                 ? fire.stepId
-                : (composed.session?.pendingAsk ?? null),
+                // Same diary-attribution gate as the command layer — a
+                // foreign-diary ask must not ride a fallback relink,
+                // and an answered ask must not persist.
+                : pendingAskCarries(composed.session, composed.merged, now),
             ...(pub
               ? {
                   trail: buildWhyTrail(

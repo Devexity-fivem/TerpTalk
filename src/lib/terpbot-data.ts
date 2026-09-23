@@ -26,14 +26,14 @@ import { notify } from "@/lib/notify"
 import { getBotUserId } from "@/lib/terpbot"
 import { buildHelpText } from "@/lib/chat-commands"
 import { buildGrowContext, emptyContext } from "@/lib/terpbot-intel-context"
-import { evaluateContext, renderIntelLines, pendingInterventions } from "@/lib/terpbot-intel"
-import { mergeSessionState, REPORTABLE_METRICS, SERIES_KEY } from "@/lib/terpbot-intel-merge"
+import { evaluateContext, renderIntelLines } from "@/lib/terpbot-intel"
+import { mergeSessionState, REPORTABLE_METRICS } from "@/lib/terpbot-intel-merge"
 import { renderStatus, renderChanges, renderCheck, renderMeasurements, renderNext, renderPlan, snapshotFrom } from "@/lib/terpbot-intel-status"
 import { buildSnapshot } from "@/lib/terpbot-intel-snapshot"
 import { buildCultivationDecisions, topAskableMetric, decisionLine } from "@/lib/terpbot-intel-decisions"
 import { activeChecklist } from "@/lib/terpbot-intel-checklist"
 import { buildWhyTrail, renderWhy } from "@/lib/terpbot-intel-why"
-import { loadSession, saveSession } from "@/lib/terpbot-session"
+import { loadSession, saveSession, pendingAskCarries } from "@/lib/terpbot-session"
 import { parseGrowText } from "@/lib/terpbot-nl-parse"
 import { SYMPTOM_LABELS, LOCATION_LABELS, VOCAB } from "@/lib/terpbot-nl-vocab"
 import { rateLimit } from "@/lib/rate-limit"
@@ -456,38 +456,6 @@ async function intelContextFor(userId: string, now: number) {
     : { reported: [], observations: [] }
   const view = base ?? emptyContext(now, s.stage)
   return { session, merged: mergeSessionState(view, s, now) }
-}
-
-/** A stored pendingAsk survives a decision set that currently asks for
- *  nothing ONLY while it's still genuinely open — a pending follow-up
- *  intervention on that metric, or no fresh real reading yet. Once a
- *  real point lands (or the intervention is answered) the ask must not
- *  be resurrected: the next bare number would be force-attributed to a
- *  metric nobody asked for. */
-function pendingAskStillOpen(ctx: GrowContextView, ask: MetricId, now: number): boolean {
-  const key = SERIES_KEY[ask]
-  if (!key) return false
-  if (pendingInterventions(ctx).some((iv) => iv.targetMetric === ask)) return true
-  const s = ctx.series[key]
-  return !s.points.some((p) => !p.tApproximate && p.t > now - 3 * 86400000)
-}
-
-/** Carry-forward predicate for a stored pendingAsk. The ask only
- *  survives on the diary that minted it — saveSession can relink
- *  diaryId (checkin always stamps the rendered diary; intelContextFor
- *  can fall back to a different public diary), and carrying an ask
- *  minted on grow B across a relink to grow A would stamp the next
- *  bare-number answer onto A's series. Unlinked sessions merge their
- *  state onto whichever diary resolves, so their asks carry. */
-function pendingAskCarries(
-  session: { diaryId?: string | null; pendingAsk?: string | null } | null | undefined,
-  ctx: GrowContextView,
-  now: number
-): string | null {
-  const ask = session?.pendingAsk
-  if (!ask) return null
-  if (session.diaryId && ctx.diary.id && session.diaryId !== ctx.diary.id) return null
-  return pendingAskStillOpen(ctx, ask as MetricId, now) ? ask : null
 }
 
 /** Split rendered lines into ≤1000-char messages — the chat cap. */

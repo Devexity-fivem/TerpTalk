@@ -12,13 +12,14 @@ import {
   interventionState,
   signalAgeDays,
 } from "@/lib/terpbot-intel"
-import { buildCultivationDecisions, type CultivationDecisionSet } from "@/lib/terpbot-intel-decisions"
+import { buildCultivationDecisions, topAskableMetric, type CultivationDecisionSet } from "@/lib/terpbot-intel-decisions"
 import { buildSnapshot } from "@/lib/terpbot-intel-snapshot"
 import { episodesFromObservations } from "@/lib/terpbot-intel-episodes"
 import type {
   CandidateResult,
   Diagnosis,
   GrowContextView,
+  MeasurementHint,
   MetricId,
   WhyTrail,
 } from "@/lib/terpbot-intel-types"
@@ -138,9 +139,19 @@ export function buildWhyTrail(
         state: f.state,
         text: f.evidence[0]?.text ?? f.title,
       })),
-    next: next ?? diagnosis.candidates.find((c) => c.nextMeasurement)?.nextMeasurement,
+    // The rendered "Next:" must be the canonical decision set's ask —
+    // never a candidate-local nextMeasurement, which can contradict
+    // the decision top (even HOLD) printed in the same output.
+    next: next ?? canonicalNext(decisions),
     longitudinal: buildLongitudinal(ctx, decisions),
   }
+}
+
+/** The decision set's askable metric as a MeasurementHint — the only
+ *  "next" /why may print alongside the canonical action line. */
+function canonicalNext(decisions?: CultivationDecisionSet): MeasurementHint | undefined {
+  const m = decisions ? topAskableMetric(decisions) : undefined
+  return m ? { id: m, label: MEASUREMENT_INFO[m]?.label ?? m, why: MEASUREMENT_INFO[m]?.why ?? "" } : undefined
 }
 
 /** Bounded longitudinal slice for /why — changes vs own baseline,
