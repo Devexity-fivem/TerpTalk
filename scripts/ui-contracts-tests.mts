@@ -275,5 +275,49 @@ check("tokens: semantic success/warning colors exist per theme", () => {
   assert.ok(css.includes("--color-success") && css.includes("--color-warning"), "tailwind color registration")
 })
 
+// ── Grow intelligence surfaces ─────────────────────────────────────
+
+check("grow intel route: owner-only + rate-limited + deterministic actions", () => {
+  const route = src("app/api/diaries/[id]/intel/route.ts")
+  assert.ok(route.includes("unauthorized()"), "auth required")
+  assert.ok(route.includes("isBanned"), "banned members blocked")
+  assert.ok(route.includes("rateLimit"), "rate limited")
+  assert.ok(route.includes("getGrowIntel(id, session.user.id)"), "owner scope via getGrowIntel")
+  assert.ok(route.includes('"Diary not found"'), "non-owner gets 404 — no existence leak")
+  for (const a of ["next", "status", "check", "plan", "measurements", "changes"]) {
+    assert.ok(route.includes(`"${a}"`), `action ${a}`)
+  }
+  assert.ok(!/openai|anthropic|\bllm\b/i.test(route), "no LLM calls")
+})
+
+check("grow-intel lib: owner scope + deterministic projections only", () => {
+  const lib = src("lib/grow-intel.ts")
+  assert.ok(lib.includes('scope: "owner"'), "owner scope")
+  assert.ok(lib.includes("buildSnapshot"), "snapshot pipeline")
+  assert.ok(lib.includes("buildCultivationDecisions"), "decision engine")
+  assert.ok(lib.includes("activeChecklist"), "checklist engine")
+  assert.ok(lib.includes("decisionLine"), "canonical decision phrasing")
+})
+
+check("intel panel: quick actions hit the deterministic API, not generation", () => {
+  const panel = src("components/grow-intel-panel.tsx")
+  assert.ok(panel.includes("/api/diaries/"), "API-backed")
+  for (const a of ["next", "status", "check", "plan", "measurements", "changes"]) {
+    assert.ok(panel.includes(`"${a}"`), `quick action ${a}`)
+  }
+  assert.ok(panel.includes("useShareComposer"), "community prefill bridge")
+  assert.ok(panel.includes('"use client"'), "client boundary declared")
+})
+
+check("grow comparison: honesty-tier gated + neutral phrasing", () => {
+  const lib = src("lib/grow-compare.ts")
+  assert.ok(lib.includes('tier === "none"'), "honesty tier respected")
+  assert.ok(lib.includes("median"), "median-based community values")
+  assert.ok(!/winner|leaderboard|best grower|\branks?\b|\branked\b|\branking\b/i.test(lib), "no ranking language")
+  const page = src("app/diaries/[id]/page.tsx")
+  assert.ok(page.includes("buildGrowComparison"), "diary page renders comparison")
+  assert.ok(page.includes("getGrowIntel"), "diary page renders owner intel")
+})
+
 console.log(`\n${passed} passed, ${failed} failed`)
 if (failed > 0) process.exit(1)

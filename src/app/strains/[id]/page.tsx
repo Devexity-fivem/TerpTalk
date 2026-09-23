@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma"
 import { notFound, permanentRedirect } from "next/navigation"
-import { Leaf, Dna, Sprout, ImageIcon, BookOpen, Wrench, MessageSquare, CheckCircle2, BarChart3, Star } from "lucide-react"
+import { Leaf, Dna, Sprout, ImageIcon, BookOpen, Wrench, MessageSquare, CheckCircle2, BarChart3, Star, Bot } from "lucide-react"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import StrainPhotoUpload from "@/components/strain-photo-upload"
@@ -69,7 +69,7 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
     strain.photos = strain.photos.filter((p) => !blockedIds.includes(p.user.id))
   }
 
-  const [relatedDiariesRaw, relatedSetupsRaw, relatedThreads, growStats] = await Promise.all([
+  const [relatedDiariesRaw, relatedSetupsRaw, relatedThreads, growStats, myDiaries] = await Promise.all([
     prisma.growDiary.findMany({
       where: {
         deleted: false,
@@ -123,6 +123,23 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
       },
     }),
     getStrainGrowStats(strain.name, strain.id),
+    // Personal context — the viewer's own diaries on this strain (all
+    // visibilities; it's their own data, never shown to others).
+    session?.user?.id
+      ? prisma.growDiary.findMany({
+          where: {
+            authorId: session.user.id,
+            deleted: false,
+            OR: [
+              { strainId: strain.id },
+              { strain: { equals: strain.name, mode: "insensitive" } },
+            ],
+          },
+          orderBy: { updatedAt: "desc" },
+          take: 3,
+          select: { id: true, slug: true, title: true, stage: true, harvested: true },
+        })
+      : Promise.resolve([]),
   ])
 
   // `contains` is a recall pre-filter — apply the same precision post-filter
@@ -191,6 +208,41 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
             </div>
           </div>
         </div>
+
+        {/* Personal context — you're growing this */}
+        {myDiaries.length > 0 && (
+          <div className="bg-primary/5 rounded-2xl border border-primary/25 p-4 sm:p-5 mb-6">
+            <div className="flex items-center gap-2 mb-3">
+              <Sprout className="w-4 h-4 text-primary" />
+              <h2 className="font-display text-sm font-semibold">
+                {myDiaries.some((d) => !d.harvested) ? "You're growing this" : "You grew this"}
+              </h2>
+            </div>
+            <ul className="space-y-1.5">
+              {myDiaries.map((d) => (
+                <li key={d.id}>
+                  <Link
+                    href={diaryPath(d)}
+                    className="group flex items-center gap-2 rounded-xl px-3 py-2 -mx-1 hover:bg-primary/10 transition-colors"
+                  >
+                    <Leaf className="h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" />
+                    <span className="min-w-0 flex-1 truncate text-sm font-medium group-hover:text-primary">
+                      {d.title}
+                    </span>
+                    <span className="shrink-0 text-xs text-muted-foreground">
+                      {d.harvested ? "harvested" : d.stage.toLowerCase()}
+                    </span>
+                    {!d.harvested && (
+                      <span className="hidden sm:inline-flex shrink-0 items-center gap-1 text-xs text-muted-foreground">
+                        <Bot className="h-3 w-3" /> intel on your diary
+                      </span>
+                    )}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
 
         {/* Desktop two-column layout: main content + context rail */}
         <div className="lg:grid lg:grid-cols-[1fr_240px] lg:gap-6">

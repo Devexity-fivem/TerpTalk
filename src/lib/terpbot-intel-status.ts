@@ -50,7 +50,7 @@ const METRIC_ORDER: [MetricId, keyof GrowContextView["series"], string][] = [
   ["height", "height", " cm"],
 ]
 
-const fmt = (metric: MetricId, v: number) =>
+export const fmt = (metric: MetricId, v: number) =>
   metric === "temperature" ? `${v}°F`
   : metric === "humidity" ? `${v}%`
   : metric === "vpd" ? `≈${v} kPa`
@@ -59,7 +59,7 @@ const fmt = (metric: MetricId, v: number) =>
   : metric === "height" ? `${v} cm`
   : `${v}`
 
-const metricLabel = (m: MetricId) => MEASUREMENT_INFO[m]?.label ?? m
+export const metricLabel = (m: MetricId) => MEASUREMENT_INFO[m]?.label ?? m
 
 /** user-authored free text (diary title) is markup/URL-launderable —
  *  bot messages bypass link-trust checks, so strip it before render.

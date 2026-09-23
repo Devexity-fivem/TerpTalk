@@ -28,6 +28,11 @@ import { MEDIUM_LABELS, LIGHT_LABELS, TECHNIQUE_LABELS, DIFFICULTY_LABELS } from
 import { canViewDiary, publicDiaryWhere } from "@/lib/diary-visibility"
 import { diaryPath, strainPath, setupPath } from "@/lib/slugs"
 import Tooltip from "@/components/ui/tooltip"
+import GrowIntelPanel from "@/components/grow-intel-panel"
+import { getGrowIntel } from "@/lib/grow-intel"
+import { getStrainGrowStats } from "@/lib/strain-stats"
+import { buildGrowComparison } from "@/lib/grow-compare"
+import { toGrams, toOz } from "@/lib/yield"
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -262,6 +267,35 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
   }
 
   const canEdit = session?.user?.id === diary.author.id || (session?.user as { role?: string } | undefined)?.role === "ADMINISTRATOR"
+
+  // TerpBot intel — owner-scope only (private diaries get their
+  // intelligence surface here; chat commands stay public-scope). Admin
+  // editors don't get another member's intel.
+  const isOwner = session?.user?.id === diary.author.id
+  const growIntel = isOwner
+    ? await getGrowIntel(diary.id, session!.user!.id).catch(() => null)
+    : null
+
+  // Community comparison — aggregate strain stats (public/UNLISTED only,
+  // min-sample gated) against facts already visible on this page.
+  const strainStats = strainLink
+    ? await getStrainGrowStats(strainLink.name, strainLink.id).catch(() => null)
+    : null
+  const compareRows = strainStats
+    ? buildGrowComparison({
+        stageRuns,
+        totalDays: growth.totalDays,
+        harvested: diary.harvested,
+        yieldOz:
+          diary.yieldAmount != null
+            ? Math.round(toOz(toGrams(diary.yieldAmount, diary.yieldUnit)) * 10) / 10
+            : null,
+        harvestRating: diary.harvestRating,
+        avgTemp: avgTemp != null ? Number(avgTemp) : null,
+        avgRh,
+        stats: strainStats,
+      })
+    : []
 
   // Week-organized timeline — weeks derived from update dates vs startDate
   const weeks = groupUpdatesByWeek(updates, diary.startDate)
@@ -744,6 +778,14 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
               )}
             </section>
 
+          {growIntel && (
+            <GrowIntelPanel
+              diaryId={diary.id}
+              intel={growIntel.intel}
+              strainName={diary.strainRef?.name ?? diary.strain ?? null}
+            />
+          )}
+
           {hasEnvChartData && (
             <EnvCharts
               updates={updates.map((u) => ({
@@ -757,6 +799,37 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
                 ec: u.ec,
               }))}
             />
+          )}
+
+          {compareRows.length > 0 && strainLink && (
+            <section
+              className="bg-card/80 rounded-2xl border border-border/70 p-4 mb-4"
+              aria-label="Community comparison"
+            >
+              <div className="flex items-center gap-2 mb-3">
+                <Users className="w-4 h-4 text-spectrum" />
+                <h2 className="font-display font-semibold text-sm">
+                  Compared to community {strainLink.name} grows
+                </h2>
+                <span className="text-xs text-muted-foreground ml-auto">
+                  {strainStats!.growCount} public grow{strainStats!.growCount === 1 ? "" : "s"}
+                </span>
+              </div>
+              <dl className="space-y-2 text-sm">
+                {compareRows.map((r) => (
+                  <div key={r.label} className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                    <dt className="w-28 shrink-0 text-muted-foreground">{r.label}</dt>
+                    <dd className="font-medium tabular-nums">{r.yours}</dd>
+                    <dd className="text-xs text-muted-foreground">
+                      {r.community}{r.note ? ` — ${r.note}` : ""}
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+              <p className="mt-3 text-[11px] text-muted-foreground">
+                Aggregated from public community grows only — private diaries are never included.
+              </p>
+            </section>
           )}
 
           {truncated && (

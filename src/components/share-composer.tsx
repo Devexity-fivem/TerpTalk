@@ -21,8 +21,18 @@ const STAFF = new Set(["SUPPORT", "MODERATOR", "ADMINISTRATOR"])
 
 // ── Context ────────────────────────────────────────────────────────
 
+/** Optional prefill — lets surfaces like the grow intel panel open the
+ *  composer with a question already framed. The type selector still
+ *  shows so the member can change their mind. */
+export interface ComposerPrefill {
+  type?: ComposerType
+  title?: string
+  content?: string
+  tags?: string[]
+}
+
 interface ShareComposerContextValue {
-  open: () => void
+  open: (prefill?: ComposerPrefill) => void
   close: () => void
 }
 
@@ -33,14 +43,14 @@ export function useShareComposer() {
 }
 
 export function ShareComposerProvider({ children }: { children: ReactNode }) {
-  const [open, setOpen] = useState(false)
-  const handleOpen = useCallback(() => setOpen(true), [])
-  const handleClose = useCallback(() => setOpen(false), [])
+  const [state, setState] = useState<{ open: boolean; prefill?: ComposerPrefill }>({ open: false })
+  const handleOpen = useCallback((prefill?: ComposerPrefill) => setState({ open: true, prefill }), [])
+  const handleClose = useCallback(() => setState((s) => ({ ...s, open: false })), [])
 
   return (
     <ShareComposerContext.Provider value={{ open: handleOpen, close: handleClose }}>
       {children}
-      {open && <ShareComposerDialog onClose={handleClose} />}
+      {state.open && <ShareComposerDialog prefill={state.prefill} onClose={handleClose} />}
     </ShareComposerContext.Provider>
   )
 }
@@ -115,13 +125,13 @@ const INPUT =
 
 // ── Dialog ─────────────────────────────────────────────────────────
 
-function ShareComposerDialog({ onClose }: { onClose: () => void }) {
+function ShareComposerDialog({ prefill, onClose }: { prefill?: ComposerPrefill; onClose: () => void }) {
   const { data: session, status } = useSession()
   const pathname = usePathname()
   const router = useRouter()
   const dialogRef = useRef<HTMLDivElement>(null)
   const [ctx] = useState(() => getPageContext(pathname))
-  const [type, setType] = useState<ComposerType>(getDefaultType(ctx))
+  const [type, setType] = useState<ComposerType>(prefill?.type ?? getDefaultType(ctx))
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState("")
 
@@ -399,6 +409,9 @@ function ShareComposerDialog({ onClose }: { onClose: () => void }) {
               canCreatePoll={canCreatePoll}
               submitting={submitting}
               onSubmit={handleSubmit}
+              initialTitle={prefill?.title}
+              initialContent={prefill?.content}
+              initialTags={prefill?.tags}
             />
           ) : type === "grow-update" ? (
             <GrowUpdateForm
@@ -436,20 +449,23 @@ interface FormProps {
   onSubmit: (data: Record<string, unknown>) => void
 }
 
-function ThreadForm({ categories, variant, strainName, canCreatePoll, submitting, onSubmit }: FormProps & {
+function ThreadForm({ categories, variant, strainName, canCreatePoll, submitting, onSubmit, initialTitle, initialContent, initialTags }: FormProps & {
   categories: { id: string; name: string; slug: string }[]
   variant: "discussion" | "question" | "moment" | "poll"
   strainName?: string
   canCreatePoll: boolean | null
+  initialTitle?: string
+  initialContent?: string
+  initialTags?: string[]
 }) {
   const isQuestion = variant === "question"
   const isMoment = variant === "moment"
   const isPoll = variant === "poll"
 
-  const [title, setTitle] = useState("")
-  const [content, setContent] = useState("")
+  const [title, setTitle] = useState(initialTitle ?? "")
+  const [content, setContent] = useState(initialContent ?? "")
   const [categoryId, setCategoryId] = useState("")
-  const [tags, setTags] = useState("")
+  const [tags, setTags] = useState(initialTags?.join(", ") ?? "")
   const [images, setImages] = useState<string[]>([])
   const [poll, setPoll] = useState<{ question: string; options: string[] } | null>(
     isPoll ? { question: "", options: ["", ""] } : null

@@ -377,6 +377,38 @@ export default function ProfileClient() {
                   </div>
                 </Tooltip>
               )}
+              {/* Most-grown strains — derived from the diaries already on
+                  this profile (visibility-scoped upstream), so it only ever
+                  shows strains the viewer is allowed to see. */}
+              {(() => {
+                const counts = new Map<string, number>()
+                for (const d of [...growDiaries, ...harvestShelf]) {
+                  const name = d.strain?.trim()
+                  if (name) counts.set(name, (counts.get(name) ?? 0) + 1)
+                }
+                const top = [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3)
+                if (top.length === 0) return null
+                return (
+                  <div className="mt-4">
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">
+                      {top[0][1] > 1 ? "Most-grown strains" : "Growing"}
+                    </p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {top.map(([name, n]) => (
+                        <Link
+                          key={name}
+                          href={`/strains?q=${encodeURIComponent(name)}`}
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-secondary/60 text-xs text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"
+                        >
+                          <Dna className="w-3 h-3" />
+                          {name}
+                          {n > 1 && <span className="text-primary font-medium">×{n}</span>}
+                        </Link>
+                      ))}
+                    </div>
+                  </div>
+                )
+              })()}
               {pinnedBadges.length > 0 && (
                 <div className="mt-4">
                   <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">Showcase</p>

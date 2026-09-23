@@ -11,6 +11,13 @@ import { getJourneyState } from "@/lib/journeys"
 import { getGrowJourney, GROW_STAGES, type GrowJourneyState } from "@/lib/grow-journey"
 import { getChatTeaser, type ChatTeaser } from "@/lib/chat-activity"
 import { pickNextAction, type NextAction } from "@/lib/next-action"
+import {
+  attentionFor,
+  getGrowIntel,
+  postureLabel,
+  type AttentionItem,
+} from "@/lib/grow-intel"
+import { diaryPath } from "@/lib/slugs"
 
 export interface MemberHomeData {
   displayName: string
@@ -38,7 +45,28 @@ export interface MemberHomeData {
     updatedAt: string
     updates: number
     followers: number
+    /** structured strain link when the diary has one */
+    strain: { id: string; slug: string | null; name: string } | null
+    /** grow age from the deterministic snapshot (startDate-based) */
+    day: number | null
+    week: number | null
+    /** latest photo from the diary window, if any */
+    photo: string | null
+    /** latest reading with data — "temperature 74°F" style */
+    latestReading: string | null
+    /** deterministic posture + canonical next-step line */
+    posture: string | null
+    nextStep: string | null
+    /** number of open deterministic flags (concern/due/episode/intervention) */
+    flagCount: number
   }[]
+  /** "What deserves my attention" — deterministic signals only, owner scope */
+  attention: AttentionItem[]
+  /** Community content around the strains the member is actively growing */
+  aroundGrows: {
+    threads: { slug: string; title: string; category: string; authorName: string; replyCount: number }[]
+    harvests: { id: string; slug: string | null; title: string; strainName: string; yieldText: string | null; authorName: string }[]
+  }
   sinceLastVisit: {
     unreadThreads: { title: string; slug: string; category: string }[]
     unreadThreadCount: number
@@ -95,6 +123,9 @@ export async function getMemberHomeData(userId: string): Promise<MemberHomeData 
           title: true,
           stage: true,
           updatedAt: true,
+          strain: true,
+          strainId: true,
+          strainRef: { select: { id: true, slug: true, name: true } },
           _count: { select: { updates: true, followers: true } },
         },
       }),
@@ -177,8 +208,86 @@ export async function getMemberHomeData(userId: string): Promise<MemberHomeData 
   const stage = getRepStage(rep)
   const nextTier = getNextTier(rep)
 
-  // Journey states for the member's active grows — bounded at 3 diaries.
-  const journeyStates = await Promise.all(diaries.map((d) => getGrowJourney(d.id)))
+  // Journey states + deterministic intel for the member's active grows —
+  // bounded at 3 diaries (each getGrowIntel is 3 indexed queries).
+  const [journeyStates, intelStates, latestPhotos] = await Promise.all([
+    Promise.all(diaries.map((d) => getGrowJourney(d.id))),
+    Promise.all(diaries.map((d) => getGrowIntel(d.id, userId).catch(() => null))),
+    diaries.length
+      ? prisma.diaryImage.findMany({
+          where: { update: { diaryId: { in: diaries.map((d) => d.id) } } },
+          orderBy: { createdAt: "desc" },
+          take: 12,
+          select: { url: true, update: { select: { diaryId: true } } },
+        })
+      : Promise.resolve([]),
+  ])
+
+  const photoByDiary = new Map<string, string>()
+  for (const img of latestPhotos) {
+    if (!photoByDiary.has(img.update.diaryId)) photoByDiary.set(img.update.diaryId, img.url)
+  }
+
+  // Community content around the strains the member is actively growing —
+  // public-scope only, capped, excludes the member's own threads (their
+  // own activity already lands in sinceLastVisit/notifications). Threads
+  // have no strainId column — the strain page's precise signal is a tag
+  // equal to the strain name, reused here.
+  const strainIds = [...new Set(diaries.map((d) => d.strainId).filter((s): s is string => !!s))]
+  const strainNames = [
+    ...new Set(
+      diaries
+        .map((d) => d.strainRef?.name ?? d.strain ?? null)
+        .filter((s): s is string => !!s)
+    ),
+  ]
+  const [aroundThreads, aroundHarvests] = strainNames.length
+    ? await Promise.all([
+        prisma.thread.findMany({
+          where: {
+            deleted: false,
+            category: { hidden: false },
+            author: activeAuthor(),
+            authorId: { not: userId },
+            tags: { some: { tag: { name: { in: strainNames, mode: "insensitive" } } } },
+          },
+          orderBy: { lastActivityAt: "desc" },
+          take: 4,
+          select: {
+            slug: true,
+            title: true,
+            replyCount: true,
+            author: { select: publicUserSelect },
+            category: { select: { name: true } },
+          },
+        }),
+        prisma.growDiary.findMany({
+          where: {
+            harvested: true,
+            deleted: false,
+            visibility: "PUBLIC",
+            authorId: { not: userId },
+            author: activeAuthor(),
+            OR: [
+              ...(strainIds.length ? [{ strainId: { in: strainIds } }] : []),
+              { strain: { in: strainNames, mode: "insensitive" as const } },
+            ],
+          },
+          orderBy: { updatedAt: "desc" },
+          take: 4,
+          select: {
+            id: true,
+            slug: true,
+            title: true,
+            yieldAmount: true,
+            yieldUnit: true,
+            strain: true,
+            strainRef: { select: { name: true } },
+            author: { select: publicUserSelect },
+          },
+        }),
+      ])
+    : [[], []]
 
   // Score trending threads by velocity (same algorithm as the guest landing)
   const trending = trendingCandidates
@@ -211,19 +320,67 @@ export async function getMemberHomeData(userId: string): Promise<MemberHomeData 
       progress: q.progress,
       done: q.done,
     })),
-    grows: diaries.map((d, i) => ({
-      id: d.id,
-      slug: d.slug,
-      title: d.title,
-      stageLabel:
-        journeyStates[i] != null
-          ? GROW_STAGE_LABELS[journeyStates[i]!.stage] ?? d.stage
-          : d.stage,
-      journey: journeyStates[i] ?? null,
-      updatedAt: d.updatedAt.toISOString(),
-      updates: d._count.updates,
-      followers: d._count.followers,
-    })),
+    grows: diaries.map((d, i) => {
+      const intel = intelStates[i]?.intel ?? null
+      return {
+        id: d.id,
+        slug: d.slug,
+        title: d.title,
+        stageLabel:
+          journeyStates[i] != null
+            ? GROW_STAGE_LABELS[journeyStates[i]!.stage] ?? d.stage
+            : d.stage,
+        journey: journeyStates[i] ?? null,
+        updatedAt: d.updatedAt.toISOString(),
+        updates: d._count.updates,
+        followers: d._count.followers,
+        strain: d.strainRef
+          ? { id: d.strainRef.id, slug: d.strainRef.slug, name: d.strainRef.name }
+          : d.strain
+            ? { id: "", slug: null, name: d.strain }
+            : null,
+        day: intel?.day ?? null,
+        week: intel?.week ?? null,
+        photo: photoByDiary.get(d.id) ?? null,
+        latestReading: intel?.readings[0]
+          ? `${intel.readings[0].label} ${intel.readings[0].value}`
+          : null,
+        posture: intel ? postureLabel(intel.posture) : null,
+        nextStep: intel?.nextStep ?? null,
+        flagCount: intel
+          ? intel.concerns.length +
+            intel.due.length +
+            intel.episodes.length +
+            intel.pendingInterventions.length
+          : 0,
+      }
+    }),
+    attention: diaries
+      .flatMap((d, i) =>
+        intelStates[i]
+          ? attentionFor(intelStates[i]!.intel, d.title, diaryPath(d))
+          : []
+      )
+      .sort((a, b) => a.rank - b.rank)
+      .slice(0, 6),
+    aroundGrows: {
+      threads: aroundThreads.map((t) => ({
+        slug: t.slug,
+        title: t.title,
+        category: t.category.name,
+        authorName: t.author.profile?.username || t.author.name || "a grower",
+        replyCount: t.replyCount,
+      })),
+      harvests: aroundHarvests.map((h) => ({
+        id: h.id,
+        slug: h.slug,
+        title: h.title,
+        strainName: h.strainRef?.name ?? h.strain ?? "strain",
+        yieldText:
+          h.yieldAmount != null && h.yieldUnit ? `${h.yieldAmount}${h.yieldUnit}` : null,
+        authorName: h.author.profile?.username || h.author.name || "a grower",
+      })),
+    },
     sinceLastVisit: {
       unreadThreads: unreadThreads.slice(0, 4).map((f) => ({
         title: f.thread.title,

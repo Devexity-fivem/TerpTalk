@@ -2,7 +2,7 @@ import Link from "next/link"
 import type { ReactNode } from "react"
 import {
   Zap, Sprout, Bell, ArrowRight, Leaf, Users, Radio, TrendingUp, CheckCircle2, Circle,
-  MessageCircle, Eye,
+  MessageCircle, Eye, AlertTriangle, Gauge, Bug, Wrench, Clock, Wheat,
 } from "lucide-react"
 import MemberGreeting from "@/components/member-greeting"
 import OpenChatButton from "@/components/open-chat-button"
@@ -128,6 +128,46 @@ export default function MemberHome({ data }: { data: MemberHomeData }) {
           </span>
         </Link>
 
+        {/* Needs attention — deterministic grow signals, not notifications */}
+        {data.attention.length > 0 && (
+          <section className="mb-6 bg-card/80 rounded-2xl border border-warning/30 p-4 sm:p-5">
+            <div className="mb-3 flex items-center justify-between gap-2">
+              <h2 className="flex items-center gap-2 font-display text-sm font-semibold">
+                <AlertTriangle className="h-4 w-4 text-warning" />
+                Needs attention
+                <InfoTip content="Signals from the deterministic grow engine — out-of-band readings, open symptom reports, pending adjustments and stale logs. Not notifications; nothing here is manufactured." />
+              </h2>
+            </div>
+            <ul className="space-y-1.5">
+              {data.attention.map((a, i) => (
+                <li key={`${a.diaryId}-${i}`}>
+                  <Link
+                    href={a.href}
+                    className="group flex items-center gap-2.5 rounded-xl px-3 py-2 hover:bg-secondary/60"
+                  >
+                    {a.kind === "concern" ? (
+                      <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-warning" aria-label="Reading out of range" />
+                    ) : a.kind === "episode" ? (
+                      <Bug className="h-3.5 w-3.5 shrink-0 text-destructive" aria-label="Open symptom report" />
+                    ) : a.kind === "due" ? (
+                      <Gauge className="h-3.5 w-3.5 shrink-0 text-primary" aria-label="Measurement due" />
+                    ) : a.kind === "intervention" ? (
+                      <Wrench className="h-3.5 w-3.5 shrink-0 text-spectrum" aria-label="Adjustment awaiting follow-up" />
+                    ) : (
+                      <Clock className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-label="Diary going stale" />
+                    )}
+                    <span className="min-w-0 flex-1 truncate text-sm">
+                      {a.text}
+                      <span className="text-muted-foreground"> — {a.diaryTitle}</span>
+                    </span>
+                    <ArrowRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+
         <div className="grid gap-4 md:grid-cols-2">
           {/* Today's quests */}
           <Card
@@ -180,7 +220,7 @@ export default function MemberHome({ data }: { data: MemberHomeData }) {
           <Card
             icon={<Sprout className="h-4 w-4 text-primary" />}
             title="Your grows"
-            tip="Your active grow diaries — each shows its current stage and the next journey milestone."
+            tip="Your active grow diaries — stage, age, latest readings and what the deterministic engine suggests next."
             action={data.grows.length > 0 ? { href: "/diaries", label: "All diaries" } : undefined}
           >
             {data.grows.length === 0 ? (
@@ -194,20 +234,54 @@ export default function MemberHome({ data }: { data: MemberHomeData }) {
                   <li key={g.id}>
                     <Link
                       href={diaryPath(g)}
-                      className="block rounded-xl border border-border/70 bg-secondary/30 p-3 transition-colors hover:border-primary/40"
+                      className="flex items-start gap-3 rounded-xl border border-border/70 bg-secondary/30 p-3 transition-colors hover:border-primary/40"
                     >
-                      <div className="flex items-center justify-between gap-2">
-                        <p className="min-w-0 truncate text-sm font-medium">{g.title}</p>
-                        <Tooltip content="Current grow stage — advances as you log diary updates" align="end">
-                          <span className="shrink-0 text-xs">{g.stageLabel}</span>
-                        </Tooltip>
+                      {g.photo && (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={g.photo}
+                          alt=""
+                          className="h-14 w-14 shrink-0 rounded-lg border border-border/50 object-cover"
+                        />
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="min-w-0 truncate text-sm font-medium">{g.title}</p>
+                          <Tooltip
+                            content={
+                              g.journey?.next
+                                ? `Journey: next milestone is ${g.journey.next.name} — ${g.journey.next.summary}`
+                                : "Grow journey complete"
+                            }
+                            align="end"
+                          >
+                            <span className="shrink-0 text-xs">{g.stageLabel}</span>
+                          </Tooltip>
+                        </div>
+                        <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                          {[
+                            g.strain?.name,
+                            g.day != null ? `day ${g.day}` : null,
+                            g.week != null && g.week > 0 ? `wk ${g.week}` : null,
+                            g.latestReading,
+                            timeAgo(g.updatedAt),
+                          ]
+                            .filter(Boolean)
+                            .join(" · ")}
+                        </p>
+                        {g.nextStep && (
+                          <p className={cn(
+                            "mt-1 truncate text-xs",
+                            g.flagCount > 0 ? "text-foreground/90" : "text-muted-foreground"
+                          )}>
+                            <span className={cn(
+                              "mr-1 inline-block h-1.5 w-1.5 rounded-full align-middle",
+                              g.flagCount > 0 ? "bg-warning" : "bg-primary"
+                            )} aria-hidden="true" />
+                            {g.nextStep}
+                          </p>
+                        )}
                       </div>
-                      <p className="mt-1 truncate text-xs text-muted-foreground">
-                        {g.journey?.next
-                          ? `Next: ${g.journey.next.name} — ${g.journey.next.summary}`
-                          : "Journey complete"}{" "}
-                        · {g.updates} update{g.updates === 1 ? "" : "s"} · {timeAgo(g.updatedAt)}
-                      </p>
                     </Link>
                   </li>
                 ))}
@@ -322,6 +396,56 @@ export default function MemberHome({ data }: { data: MemberHomeData }) {
             )}
           </Card>
         </div>
+
+        {/* Around your grows — community activity tied to what you're growing */}
+        {(data.aroundGrows.threads.length > 0 || data.aroundGrows.harvests.length > 0) && (
+          <section className="mt-4 bg-card/80 rounded-2xl border border-border/70 p-4 sm:p-5">
+            <div className="mb-3 flex items-center justify-between gap-2">
+              <h2 className="flex items-center gap-2 font-display text-sm font-semibold">
+                <Leaf className="h-4 w-4 text-primary" />
+                Around your grows
+                <InfoTip content="Discussions and harvested community grows for the strains you're running right now." />
+              </h2>
+            </div>
+            <div className="grid gap-x-6 gap-y-2 sm:grid-cols-2">
+              <ul className="space-y-1.5">
+                {data.aroundGrows.threads.map((t) => (
+                  <li key={t.slug}>
+                    <Link
+                      href={`/forum/thread/${t.slug}`}
+                      className="group flex items-center gap-2 rounded-xl px-3 py-2 hover:bg-secondary/60"
+                    >
+                      <MessageCircle className="h-3.5 w-3.5 shrink-0 text-spectrum" aria-hidden="true" />
+                      <span className="min-w-0 flex-1 truncate text-sm group-hover:text-primary">{t.title}</span>
+                      <span className="shrink-0 text-xs text-muted-foreground">
+                        {t.replyCount} repl{t.replyCount === 1 ? "y" : "ies"}
+                      </span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+              <ul className="space-y-1.5">
+                {data.aroundGrows.harvests.map((h) => (
+                  <li key={h.id}>
+                    <Link
+                      href={diaryPath(h)}
+                      className="group flex items-center gap-2 rounded-xl px-3 py-2 hover:bg-secondary/60"
+                    >
+                      <Wheat className="h-3.5 w-3.5 shrink-0 text-warning" aria-hidden="true" />
+                      <span className="min-w-0 flex-1 truncate text-sm group-hover:text-primary">
+                        {h.title}
+                        <span className="text-muted-foreground"> — {h.strainName}</span>
+                      </span>
+                      {h.yieldText && (
+                        <span className="shrink-0 text-xs text-muted-foreground">{h.yieldText}</span>
+                      )}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </section>
+        )}
 
         {/* Community pulse — trending threads make the cockpit feel alive */}
         {data.trending.length > 0 && (
