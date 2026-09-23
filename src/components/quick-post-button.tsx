@@ -1,14 +1,10 @@
 "use client"
 
-import { useSession } from "next-auth/react"
 import { Plus } from "lucide-react"
 import { useShareComposer } from "@/components/share-composer"
 
 export default function QuickPostButton() {
-  const { data: session } = useSession()
   const composer = useShareComposer()
-
-  if (!session) return null
 
   return (
     /* Bottom-right, lifted above the mobile bottom navigation. */

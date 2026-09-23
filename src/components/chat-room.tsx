@@ -486,6 +486,19 @@ export default function ChatRoom({ embedded = false, headerActions }: ChatRoomPr
   const [showEmoji, setShowEmoji] = useState(false)
   const [suggestIndex, setSuggestIndex] = useState(0)
   const [pickerOpen, setPickerOpen] = useState(false)
+  // Timestamp captured when the picker opens — "Active Xm ago" labels are
+  // computed against it so render stays pure (no Date.now in render).
+  const [pickerNow, setPickerNow] = useState(0)
+  // Toggle the room picker; on open, capture a baseline timestamp so the
+  // "Active Xm ago" labels render against a fixed instant (pure render).
+  // Room metadata refresh is handled by the pickerOpen effect below.
+  const togglePicker = useCallback(() => {
+    setPickerOpen((o) => {
+      if (!o) setPickerNow(Date.now())
+      return !o
+    })
+  }, [])
+
   // "New" divider anchor for the active room — set on entry, this visit only.
   const [unreadBoundaryId, setUnreadBoundaryId] = useState<string | null>(null)
   // Bumped whenever a room is marked seen — recomputes picker unread dots.
@@ -618,6 +631,23 @@ export default function ChatRoom({ embedded = false, headerActions }: ChatRoomPr
     // eslint-disable-next-line react-hooks/exhaustive-deps -- searchParams read once on mount
   }, [session, retryCount, toast])
 
+  // Refresh room metadata when the picker opens — one bounded fetch on
+  // demand, so the list reflects real activity without subscribing to
+  // every room or polling in the background.
+  useEffect(() => {
+    if (!pickerOpen || !session) return
+    let cancelled = false
+    fetch("/api/chat/rooms")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (cancelled || !data) return
+        setRooms(data.rooms || [])
+        if (typeof data.onlineCount === "number") setOnlineCount(data.onlineCount)
+      })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [pickerOpen, session])
+
   const switchRoom = (slug: string) => {
     const next = rooms.find((r) => r.slug === slug)
     if (!next || next.id === room?.id) return
@@ -675,6 +705,12 @@ export default function ChatRoom({ embedded = false, headerActions }: ChatRoomPr
       const newest = inRoom[inRoom.length - 1].createdAt
       if (!lastTsRef.current || newest > lastTsRef.current) lastTsRef.current = newest
       setMessages((prev) => mergeMessages(prev, inRoom))
+      // Keep the room picker's activity metadata honest for the room
+      // we're subscribed to — other rooms stay server-fresh via the
+      // picker's on-open refetch.
+      setRooms((prev) =>
+        prev.map((r) => (r.id === roomId && (r.latestAt ?? "") < newest ? { ...r, latestAt: newest } : r))
+      )
       if (!document.hidden) markSeenNow(roomId, newest)
     }
 
@@ -1053,7 +1089,7 @@ export default function ChatRoom({ embedded = false, headerActions }: ChatRoomPr
         <div className="flex items-center gap-2 px-2 py-1.5 border-b border-border shrink-0">
           <div className="relative min-w-0" ref={pickerRef}>
             <button
-              onClick={() => setPickerOpen((o) => !o)}
+              onClick={togglePicker}
               className="flex max-w-full items-center gap-1.5 rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-secondary"
               aria-haspopup="listbox"
               aria-expanded={pickerOpen}
@@ -1093,8 +1129,8 @@ export default function ChatRoom({ embedded = false, headerActions }: ChatRoomPr
                 className="absolute left-0 top-full z-30 mt-1 w-72 max-w-[calc(100vw-2rem)] rounded-2xl border border-border/70 bg-card/80 p-1.5 shadow-lg"
               >
                 {rooms.map((r) => {
-                  const activityAge = r.latestAt
-                    ? Math.round((Date.now() - new Date(r.latestAt).getTime()) / 60000)
+                  const activityAge = r.latestAt && pickerNow
+                    ? Math.round((pickerNow - new Date(r.latestAt).getTime()) / 60000)
                     : null
                   const activityLabel = activityAge != null
                     ? activityAge < 1 ? "Active now"

@@ -280,6 +280,10 @@ export function Navigation() {
                 </>
               ) : (
                 <>
+                  {/* Guests see the same Create affordance — the composer
+                      opens with a sign-in gate so they can preview the
+                      creation model before being asked for an account. */}
+                  <CreateMenu />
                   <Link
                     href={signInHref(pathname)}
                     className="px-3 py-2 text-sm font-medium transition-colors hover:text-foreground"

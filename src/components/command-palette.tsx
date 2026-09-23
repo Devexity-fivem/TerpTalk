@@ -165,12 +165,10 @@ function CommandPaletteDialog({ onClose }: { onClose: () => void }) {
     return acc
   }, {})
 
-  // Search API when query is long enough
+  // Search API when query is long enough. Results/selection are reset in
+  // the input's onChange handler so no synchronous setState runs here.
   useEffect(() => {
-    if (query.length < 2) {
-      setResults([])
-      return
-    }
+    if (query.length < 2) return
     const controller = new AbortController()
     const timer = setTimeout(() => {
       setSearching(true)
@@ -193,11 +191,6 @@ function CommandPaletteDialog({ onClose }: { onClose: () => void }) {
     ...results.map((r) => ({ type: "result" as const, item: r })),
     ...filteredActions.map((a) => ({ type: "action" as const, item: a })),
   ]
-
-  // Reset index when list changes
-  useEffect(() => {
-    setSelectedIndex(0)
-  }, [query])
 
   // Keyboard navigation
   const onKeyDown = (e: React.KeyboardEvent) => {
@@ -269,7 +262,12 @@ function CommandPaletteDialog({ onClose }: { onClose: () => void }) {
               placeholder="Search TerpTalk or type a command..."
               className="h-12 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
               value={query}
-              onChange={(e) => setQuery(e.target.value)}
+              onChange={(e) => {
+                const v = e.target.value
+                setQuery(v)
+                setSelectedIndex(0)
+                if (v.length < 2) setResults([])
+              }}
               onKeyDown={onKeyDown}
               aria-label="Search or command"
               autoComplete="off"

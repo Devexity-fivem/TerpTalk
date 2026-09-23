@@ -5,12 +5,19 @@ import { useSession } from "next-auth/react"
 import { usePathname, useRouter } from "next/navigation"
 import { createPortal } from "react-dom"
 import {
-  X, MessageSquare, HelpCircle, Sprout, Camera, Dna, Loader2,
-  BarChart3, Leaf, Settings, ArrowLeft, Send,
+  X, MessageSquare, HelpCircle, Sprout, Dna, Loader2,
+  BarChart3, Leaf, Settings, ArrowLeft, Send, ImageIcon, Wheat,
 } from "lucide-react"
-import { resizeImage } from "@/components/update-form"
+import ImageUploader from "@/components/image-uploader"
+import PollComposer from "@/components/poll-composer"
+import { getReputationTier, POLL_CREATION_REP } from "@/lib/reputation-config"
+import { signInHref } from "@/lib/callback-url"
 import { cn } from "@/lib/utils"
 import type { LucideIcon } from "lucide-react"
+
+// Client-side mirror of the server gate in POST /api/forum/threads —
+// isStaff() lives in a Prisma-importing module, so the role set is inlined.
+const STAFF = new Set(["SUPPORT", "MODERATOR", "ADMINISTRATOR"])
 
 // ── Context ────────────────────────────────────────────────────────
 
@@ -40,7 +47,16 @@ export function ShareComposerProvider({ children }: { children: ReactNode }) {
 
 // ── Content types ──────────────────────────────────────────────────
 
-type ComposerType = "discussion" | "question" | "grow-update" | "diary" | "setup" | "strain"
+type ComposerType =
+  | "discussion"
+  | "question"
+  | "grow-update"
+  | "diary"
+  | "moment"
+  | "harvest"
+  | "poll"
+  | "setup"
+  | "strain"
 
 interface ComposerOption {
   type: ComposerType
@@ -50,26 +66,24 @@ interface ComposerOption {
 }
 
 const COMPOSER_TYPES: ComposerOption[] = [
-  { type: "discussion", label: "Discussion", icon: MessageSquare, description: "Start a conversation with the community" },
-  { type: "question", label: "Question", icon: HelpCircle, description: "Ask the community a focused question" },
-  { type: "grow-update", label: "Grow Update", icon: Camera, description: "Share what's happening in your grow" },
-  { type: "diary", label: "Grow Diary", icon: Sprout, description: "Start tracking a new grow" },
-  { type: "setup", label: "Setup", icon: Settings, description: "Document your grow space and gear" },
-  { type: "strain", label: "Strain", icon: Dna, description: "Add a strain to the database" },
+  { type: "discussion", label: "Discussion", icon: MessageSquare, description: "Start a conversation" },
+  { type: "question", label: "Question", icon: HelpCircle, description: "Ask a focused question" },
+  { type: "grow-update", label: "Grow Update", icon: Sprout, description: "Update an active grow" },
+  { type: "diary", label: "Grow Diary", icon: Leaf, description: "Track a new grow" },
+  { type: "moment", label: "Photo / Moment", icon: ImageIcon, description: "Share something visual" },
+  { type: "harvest", label: "Harvest", icon: Wheat, description: "Log a completed grow" },
+  { type: "poll", label: "Poll", icon: BarChart3, description: "Ask the community to weigh in" },
+  { type: "setup", label: "Setup", icon: Settings, description: "Document your gear" },
+  { type: "strain", label: "Strain", icon: Dna, description: "Add to the strain database" },
 ]
 
 // ── Helpers ────────────────────────────────────────────────────────
 
 interface PageContext {
-  /** Diary ID if on a diary detail page */
+  /** Diary slug/id from the URL — the real id comes from data-tt-diary */
   diaryId?: string
-  diaryTitle?: string
-  diaryStage?: string
-  /** Strain ID if on a strain page */
+  /** Strain slug/id from the URL */
   strainId?: string
-  strainName?: string
-  /** Thread slug if on a thread page */
-  threadSlug?: string
 }
 
 function getPageContext(pathname: string): PageContext {
@@ -80,9 +94,6 @@ function getPageContext(pathname: string): PageContext {
   if (parts[0] === "strains" && parts[1] && parts[1] !== "new") {
     return { strainId: parts[1] }
   }
-  if (parts[0] === "forum" && parts[1] === "thread" && parts[2]) {
-    return { threadSlug: parts[2] }
-  }
   return {}
 }
 
@@ -92,15 +103,20 @@ function getDefaultType(ctx: PageContext): ComposerType {
   return "discussion"
 }
 
-// ── Stage list (matches UPDATE_STAGES on the server) ───────────────
+// ── Stage/grow vocab (matches the server enums) ────────────────────
 
 const UPDATE_STAGES = ["GERMINATION", "SEEDLING", "VEGETATIVE", "FLOWER", "HARVEST", "DRYING", "CURING", "COMPLETED"] as const
 const GROW_TYPES = ["INDOOR", "OUTDOOR", "GREENHOUSE", "HYDROPONIC", "OTHER"] as const
+const YIELD_UNITS = ["g", "oz", "lb", "kg"] as const
+const HARVEST_DIFFICULTIES = ["EASY", "NORMAL", "HARD"] as const
+
+const INPUT =
+  "w-full px-3 py-2 rounded-xl border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary text-sm"
 
 // ── Dialog ─────────────────────────────────────────────────────────
 
 function ShareComposerDialog({ onClose }: { onClose: () => void }) {
-  const { data: session } = useSession()
+  const { data: session, status } = useSession()
   const pathname = usePathname()
   const router = useRouter()
   const dialogRef = useRef<HTMLDivElement>(null)
@@ -109,38 +125,57 @@ function ShareComposerDialog({ onClose }: { onClose: () => void }) {
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState("")
 
-  // Fetch context data (diary info, strain info, categories)
   const [categories, setCategories] = useState<{ id: string; name: string; slug: string }[]>([])
-  const [diaryInfo, setDiaryInfo] = useState<{ id: string; title: string; stage: string } | null>(null)
+  const [diaryInfo, setDiaryInfo] = useState<{ id: string; title: string; stage: string; harvested?: boolean; own?: boolean } | null>(null)
   const [strainInfo, setStrainInfo] = useState<{ id: string; name: string } | null>(null)
+  const [ctxChecked, setCtxChecked] = useState(false)
+  // null = still loading — reputation decides whether the poll type is
+  // unlocked. Staff bypass the fetch entirely.
+  const [pollPerk, setPollPerk] = useState<boolean | null>(null)
 
-  // Load initial data
+  const isStaff = STAFF.has((session?.user as { role?: string } | undefined)?.role ?? "")
+  const canCreatePoll = isStaff ? true : pollPerk
+
+  // Load initial data. The DOM attribute reads are deferred to a microtask
+  // so no setState runs synchronously inside the effect body.
   useEffect(() => {
-    // Fetch categories for discussion/question forms
     fetch("/api/categories").then((r) => r.json()).then((d) => setCategories(d.categories ?? [])).catch(() => {})
 
-    // Read diary context from data attribute (set by the diary page)
-    if (ctx.diaryId) {
-      const el = document.querySelector("[data-tt-diary]")
-      if (el) {
-        try {
-          const d = JSON.parse(el.getAttribute("data-tt-diary") || "{}")
-          if (d.id) setDiaryInfo(d)
-        } catch { /* ignore */ }
+    queueMicrotask(() => {
+      if (ctx.diaryId) {
+        const el = document.querySelector("[data-tt-diary]")
+        if (el) {
+          try {
+            const d = JSON.parse(el.getAttribute("data-tt-diary") || "{}")
+            if (d.id) setDiaryInfo(d)
+          } catch { /* ignore */ }
+        }
       }
-    }
 
-    // Read strain context from data attribute (set by the strain page)
-    if (ctx.strainId) {
-      const el = document.querySelector("[data-tt-strain]")
-      if (el) {
-        try {
-          const s = JSON.parse(el.getAttribute("data-tt-strain") || "{}")
-          if (s.id) setStrainInfo(s)
-        } catch { /* ignore */ }
+      if (ctx.strainId) {
+        const el = document.querySelector("[data-tt-strain]")
+        if (el) {
+          try {
+            const s = JSON.parse(el.getAttribute("data-tt-strain") || "{}")
+            if (s.id) setStrainInfo(s)
+          } catch { /* ignore */ }
+        }
       }
-    }
+
+      setCtxChecked(true)
+    })
   }, [ctx.diaryId, ctx.strainId])
+
+  // Poll perk gate — mirrors POST /api/forum/threads; server still enforces.
+  // Staff bypass is derived during render so no synchronous setState is
+  // needed in the effect; non-staff users are checked via /api/profile.
+  useEffect(() => {
+    if (!session || isStaff) return
+    fetch("/api/profile")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => setPollPerk(getReputationTier(d?.reputation ?? 0).perks.pollCreation === true))
+      .catch(() => setPollPerk(false))
+  }, [session, isStaff])
 
   // Keyboard: Escape to close
   useEffect(() => {
@@ -149,29 +184,26 @@ function ShareComposerDialog({ onClose }: { onClose: () => void }) {
     return () => document.removeEventListener("keydown", onKey)
   }, [onClose])
 
-  // Focus trap
+  // Focus the first form field when the type changes — keeps keyboard
+  // users inside the form instead of landing on a header button.
   useEffect(() => {
     const el = dialogRef.current
     if (!el) return
-    const focusable = el.querySelectorAll<HTMLElement>("button, input, select, textarea, [tabindex]")
-    if (focusable.length > 0) focusable[0].focus()
+    const field = el.querySelector<HTMLElement>("input:not([type=hidden]):not([type=file]), textarea, select")
+    field?.focus()
   }, [type])
 
-  if (!session) {
-    router.push("/auth/signin")
-    return null
-  }
-
-  const handleSubmit = async (data: Record<string, unknown>) => {
+  const handleSubmit = async (data: Record<string, unknown>, method: "POST" | "PATCH" = "POST") => {
     setSubmitting(true)
     setError("")
     try {
       let url = ""
-      let redirectPath = ""
 
       switch (type) {
         case "discussion":
         case "question":
+        case "moment":
+        case "poll":
           url = "/api/forum/threads"
           break
         case "grow-update":
@@ -180,33 +212,34 @@ function ShareComposerDialog({ onClose }: { onClose: () => void }) {
         case "diary":
           url = "/api/diaries"
           break
+        case "harvest":
+          url = `/api/diaries/${diaryInfo?.id}/harvest`
+          break
         case "setup":
         case "strain":
-          // These use their own forms — redirect to the dedicated page
+          // Dedicated multi-field forms — navigate rather than duplicate logic
           onClose()
           router.push(type === "setup" ? "/setups/new" : "/strains/new")
           return
       }
 
       const res = await fetch(url, {
-        method: "POST",
+        method,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
       })
 
       if (!res.ok) {
-        const d = await res.json()
+        const d = await res.json().catch(() => ({}))
         throw new Error(d.error || "Failed to create")
       }
 
       const result = await res.json()
       onClose()
 
-      // Navigate to the created content
       if (result.thread?.slug) router.push(`/forum/thread/${result.thread.slug}`)
       else if (result.diary?.slug) router.push(`/diaries/${result.diary.slug}`)
       else if (result.diary?.id) router.push(`/diaries/${result.diary.id}`)
-      else if (result.update) router.refresh()
       else router.refresh()
     } catch (e) {
       setError((e as Error).message)
@@ -214,6 +247,13 @@ function ShareComposerDialog({ onClose }: { onClose: () => void }) {
       setSubmitting(false)
     }
   }
+
+  // ctx.diaryId means we're on a diary page but diaryInfo may still be
+  // resolving from the DOM attribute — show a brief loading state rather
+  // than flashing the "open a diary" prompt. ctxChecked guarantees we
+  // never spin forever if the attribute is absent.
+  const contextPending = !!ctx.diaryId && diaryInfo === null && !ctxChecked
+  const needsDiary = (type === "grow-update" || type === "harvest") && !contextPending && (!diaryInfo || diaryInfo.own !== true)
 
   return createPortal(
     <div
@@ -225,7 +265,7 @@ function ShareComposerDialog({ onClose }: { onClose: () => void }) {
     >
       <div
         ref={dialogRef}
-        className="w-full max-w-lg bg-card border border-border/70 rounded-t-2xl sm:rounded-2xl shadow-xl max-h-[90vh] overflow-y-auto overscroll-contain"
+        className="w-full max-w-lg bg-card border border-border/70 rounded-t-2xl sm:rounded-2xl shadow-xl max-h-[90vh] overflow-y-auto overscroll-contain pb-[env(safe-area-inset-bottom)]"
       >
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-border sticky top-0 bg-card z-10">
@@ -250,87 +290,133 @@ function ShareComposerDialog({ onClose }: { onClose: () => void }) {
           </button>
         </div>
 
-        {/* Type selector — shown when on the default view or general context */}
         <div className="p-4">
-          <div className="grid grid-cols-3 gap-2 mb-4">
+          {/* Type selector — always visible so guests see the creation model */}
+          <div className="grid grid-cols-3 gap-2 mb-4" role="tablist" aria-label="Content type">
             {COMPOSER_TYPES.map((opt) => (
               <button
                 key={opt.type}
                 onClick={() => setType(opt.type)}
                 className={cn(
-                  "flex flex-col items-center gap-1.5 p-3 rounded-xl border transition-all text-center",
+                  "flex flex-col items-center gap-1.5 p-3 rounded-xl border transition-all text-center min-h-[64px]",
                   type === opt.type
                     ? "border-primary bg-primary/5 text-primary"
                     : "border-border hover:border-border/80 hover:bg-secondary/50 text-muted-foreground"
                 )}
                 role="tab"
                 aria-selected={type === opt.type}
+                title={opt.description}
               >
                 <opt.icon className="w-5 h-5" />
-                <span className="text-xs font-medium">{opt.label}</span>
+                <span className="text-xs font-medium leading-tight">{opt.label}</span>
               </button>
             ))}
           </div>
 
-          {/* Context banner */}
-          {ctx.diaryId && diaryInfo && (
+          {/* Context banners */}
+          {diaryInfo && (type === "grow-update" || type === "harvest" || type === "moment") && (
             <div className="mb-4 p-3 rounded-xl bg-primary/5 border border-primary/20 text-sm">
               <div className="flex items-center gap-2 text-primary font-medium">
                 <Sprout className="w-4 h-4" />
-                <span>{diaryInfo.title}</span>
+                <span className="truncate">{diaryInfo.title}</span>
               </div>
               <p className="text-xs text-muted-foreground mt-1">Stage: {diaryInfo.stage.toLowerCase()}</p>
             </div>
           )}
-          {ctx.strainId && strainInfo && (
+          {strainInfo && (type === "diary" || type === "discussion" || type === "question") && (
             <div className="mb-4 p-3 rounded-xl bg-primary/5 border border-primary/20 text-sm">
               <div className="flex items-center gap-2 text-primary font-medium">
                 <Leaf className="w-4 h-4" />
-                <span>{strainInfo.name}</span>
+                <span className="truncate">{strainInfo.name}</span>
               </div>
             </div>
           )}
 
-          {/* Forms */}
           {error && (
             <div className="mb-4 p-3 rounded-xl bg-destructive/10 border border-destructive/20 text-sm text-destructive" role="alert">
               {error}
             </div>
           )}
 
-          {type === "discussion" || type === "question" ? (
+          {/* Guest gate — show the creation model, require sign-in to post.
+              While the session is still resolving, show a spinner so
+              signed-in users never see the guest prompt flash. */}
+          {status === "loading" ? (
+            <div className="py-6 text-center" role="status" aria-label="Loading">
+              <Loader2 className="w-5 h-5 animate-spin text-muted-foreground mx-auto" />
+            </div>
+          ) : !session ? (
+            <div className="text-center py-6">
+              <p className="text-sm text-muted-foreground mb-1">
+                {COMPOSER_TYPES.find((o) => o.type === type)?.description ?? "Share something"}
+              </p>
+              <p className="text-sm text-muted-foreground mb-4">
+                Sign in to share with the TerpTalk community.
+              </p>
+              <div className="flex gap-3 justify-center">
+                <button
+                  onClick={() => { onClose(); router.push(signInHref(pathname)) }}
+                  className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-full bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors min-h-11"
+                >
+                  Sign in
+                </button>
+                <button
+                  onClick={() => { onClose(); router.push("/auth/signup") }}
+                  className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-full border border-border text-sm font-medium hover:bg-secondary transition-colors min-h-11"
+                >
+                  Create account
+                </button>
+              </div>
+            </div>
+          ) : contextPending && (type === "grow-update" || type === "harvest") ? (
+            <div className="py-6 text-center" role="status" aria-label="Loading grow context">
+              <Loader2 className="w-5 h-5 animate-spin text-muted-foreground mx-auto" />
+            </div>
+          ) : needsDiary ? (
+            <div className="text-center py-6">
+              <Sprout className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
+              <p className="text-sm text-muted-foreground mb-3">
+                {diaryInfo && diaryInfo.own !== true
+                  ? "This grow belongs to another member — only its grower can post updates or log a harvest."
+                  : type === "harvest"
+                    ? "Harvest logging happens on a grow diary — open your grow first."
+                    : "Open a grow diary to share an update, or start a new one."}
+              </p>
+              {(!diaryInfo || diaryInfo.own === true) && (
+                <button
+                  onClick={() => setType("diary")}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors min-h-11"
+                >
+                  <Sprout className="w-4 h-4" /> Start a grow diary
+                </button>
+              )}
+            </div>
+          ) : type === "discussion" || type === "question" || type === "moment" || type === "poll" ? (
             <ThreadForm
               categories={categories}
-              isQuestion={type === "question"}
+              variant={type}
               strainName={strainInfo?.name}
+              canCreatePoll={canCreatePoll}
               submitting={submitting}
               onSubmit={handleSubmit}
             />
           ) : type === "grow-update" ? (
-            diaryInfo ? (
-              <GrowUpdateForm
-                diaryId={diaryInfo.id}
-                currentStage={diaryInfo.stage}
-                submitting={submitting}
-                onSubmit={handleSubmit}
-              />
-            ) : (
-              <div className="text-center py-6">
-                <Sprout className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
-                <p className="text-sm text-muted-foreground mb-3">
-                  Open a grow diary to share an update, or start a new one.
-                </p>
-                <button
-                  onClick={() => setType("diary")}
-                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
-                >
-                  <Sprout className="w-4 h-4" /> Start a grow diary
-                </button>
-              </div>
-            )
+            <GrowUpdateForm
+              diaryId={diaryInfo!.id}
+              currentStage={diaryInfo!.stage}
+              submitting={submitting}
+              onSubmit={handleSubmit}
+            />
+          ) : type === "harvest" ? (
+            <HarvestForm
+              diaryTitle={diaryInfo!.title}
+              alreadyHarvested={diaryInfo!.harvested === true}
+              submitting={submitting}
+              onSubmit={(d) => handleSubmit(d, "PATCH")}
+            />
           ) : type === "diary" ? (
             <DiaryForm
-              strainId={ctx.strainId}
+              strainId={strainInfo?.id}
               strainName={strainInfo?.name}
               submitting={submitting}
               onSubmit={handleSubmit}
@@ -350,66 +436,162 @@ interface FormProps {
   onSubmit: (data: Record<string, unknown>) => void
 }
 
-function ThreadForm({ categories, isQuestion, strainName, submitting, onSubmit }: FormProps & {
+function ThreadForm({ categories, variant, strainName, canCreatePoll, submitting, onSubmit }: FormProps & {
   categories: { id: string; name: string; slug: string }[]
-  isQuestion: boolean
+  variant: "discussion" | "question" | "moment" | "poll"
   strainName?: string
+  canCreatePoll: boolean | null
 }) {
+  const isQuestion = variant === "question"
+  const isMoment = variant === "moment"
+  const isPoll = variant === "poll"
+
   const [title, setTitle] = useState("")
   const [content, setContent] = useState("")
   const [categoryId, setCategoryId] = useState("")
   const [tags, setTags] = useState("")
+  const [images, setImages] = useState<string[]>([])
+  const [poll, setPoll] = useState<{ question: string; options: string[] } | null>(
+    isPoll ? { question: "", options: ["", ""] } : null
+  )
 
-  const effectiveCategoryId = categoryId || (isQuestion
-    ? categories.find((c) => c.slug === "questions")?.id ?? categories[0]?.id ?? ""
-    : categories[0]?.id ?? "")
+  const effectiveCategoryId =
+    categoryId ||
+    (isQuestion
+      ? categories.find((c) => c.slug === "new-grower-questions" || c.slug === "questions")?.id ?? categories[0]?.id ?? ""
+      : categories.find((c) => c.slug === "general-cannabis-discussion")?.id ?? categories[0]?.id ?? "")
+
+  const tagList = [
+    ...(tags ? tags.split(",").map((t) => t.trim()).filter(Boolean) : []),
+    ...(strainName ? [strainName] : []),
+  ]
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    if (!title.trim() || !content.trim() || !effectiveCategoryId) return
+    // The thread API requires non-empty content — a Moment uses the
+    // caption as the body when no details were written.
+    const body = content.trim() || title.trim()
+    if (!title.trim() || !body || !effectiveCategoryId) return
+    if (isMoment && images.length === 0) return
+    if (isPoll) {
+      const opts = poll?.options.map((o) => o.trim()).filter(Boolean) ?? []
+      if (!poll?.question.trim() || opts.length < 2) return
+      onSubmit({
+        title: title.trim(),
+        content: body,
+        categoryId: effectiveCategoryId,
+        tags: tagList,
+        images,
+        poll: { question: poll.question.trim(), options: opts },
+      })
+      return
+    }
     onSubmit({
       title: title.trim(),
-      content: content.trim(),
+      content: body,
       categoryId: effectiveCategoryId,
-      tags: tags ? tags.split(",").map((t) => t.trim()).filter(Boolean) : [],
-      ...(strainName ? { tags: [...(tags ? tags.split(",").map((t) => t.trim()).filter(Boolean) : []), strainName] } : {}),
+      tags: tagList,
+      images,
     })
   }
 
+  const submitDisabled =
+    submitting ||
+    !title.trim() ||
+    !(content.trim() || (isMoment && title.trim())) ||
+    !effectiveCategoryId ||
+    (isMoment && images.length === 0) ||
+    (isPoll &&
+      (!poll?.question.trim() ||
+        poll.options.map((o) => o.trim()).filter(Boolean).length < 2))
+
   return (
     <form onSubmit={handleSubmit} className="space-y-3">
+      {isMoment && (
+        <ImageUploader value={images} onChange={setImages} max={4} disabled={submitting} />
+      )}
       <div>
-        <label className="block text-sm font-medium mb-1">{isQuestion ? "Question" : "Title"}</label>
+        <label className="block text-sm font-medium mb-1">
+          {isPoll ? "Poll title" : isMoment ? "Caption" : isQuestion ? "Question" : "Title"}
+        </label>
         <input
           type="text"
           value={title}
           onChange={(e) => setTitle(e.target.value)}
-          placeholder={isQuestion ? "What do you want to ask?" : "What's the discussion about?"}
+          placeholder={
+            isPoll ? "What are you asking the community?"
+            : isMoment ? "Give this moment a caption"
+            : isQuestion ? "What do you want to ask?"
+            : "What's the discussion about?"
+          }
           maxLength={150}
-          className="w-full px-3 py-2 rounded-xl border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary text-sm"
+          className={INPUT}
           required
         />
         <span className="text-[10px] text-muted-foreground">{title.length}/150</span>
       </div>
-      <div>
-        <label className="block text-sm font-medium mb-1">Details</label>
-        <textarea
-          value={content}
-          onChange={(e) => setContent(e.target.value)}
-          placeholder={isQuestion ? "Describe what you're seeing — the more detail, the better the answers." : "Share your thoughts..."}
-          rows={4}
-          maxLength={10000}
-          className="w-full px-3 py-2 rounded-xl border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary text-sm resize-y"
-          required
-        />
-      </div>
+      {!isPoll && (
+        <div>
+          <label className="block text-sm font-medium mb-1">{isMoment ? "Details (optional)" : "Details"}</label>
+          <textarea
+            value={content}
+            onChange={(e) => setContent(e.target.value)}
+            placeholder={
+              isMoment ? "Add context about this photo..."
+              : isQuestion ? "Describe what you're seeing — the more detail, the better the answers."
+              : "Share your thoughts..."
+            }
+            rows={isMoment ? 2 : 4}
+            maxLength={10000}
+            className={cn(INPUT, "resize-y")}
+            required={!isMoment}
+          />
+        </div>
+      )}
+      {isPoll && (
+        <>
+          <div>
+            <label className="block text-sm font-medium mb-1">Details (optional)</label>
+            <textarea
+              value={content}
+              onChange={(e) => setContent(e.target.value)}
+              placeholder="Add context for the poll..."
+              rows={2}
+              maxLength={10000}
+              className={cn(INPUT, "resize-y")}
+            />
+          </div>
+          {canCreatePoll === null ? (
+            <div className="py-2 text-center" role="status" aria-label="Checking poll permissions">
+              <Loader2 className="w-4 h-4 animate-spin text-muted-foreground mx-auto" />
+            </div>
+          ) : (
+            <PollComposer
+              value={poll}
+              onChange={setPoll}
+              disabled={submitting}
+              lockedReason={
+                canCreatePoll === false
+                  ? `Polls unlock at ${POLL_CREATION_REP.toLocaleString()} reputation (Rooted).`
+                  : null
+              }
+            />
+          )}
+        </>
+      )}
+      {!isMoment && (
+        <div>
+          <label className="block text-sm font-medium mb-1">Photos</label>
+          <ImageUploader value={images} onChange={setImages} max={4} disabled={submitting} />
+        </div>
+      )}
       <div className="grid grid-cols-2 gap-3">
         <div>
           <label className="block text-sm font-medium mb-1">Category</label>
           <select
             value={effectiveCategoryId}
             onChange={(e) => setCategoryId(e.target.value)}
-            className="w-full px-3 py-2 rounded-xl border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary text-sm"
+            className={INPUT}
           >
             {categories.map((c) => (
               <option key={c.id} value={c.id}>{c.name}</option>
@@ -423,7 +605,7 @@ function ThreadForm({ categories, isQuestion, strainName, submitting, onSubmit }
             value={tags}
             onChange={(e) => setTags(e.target.value)}
             placeholder="comma-separated"
-            className="w-full px-3 py-2 rounded-xl border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary text-sm"
+            className={INPUT}
           />
         </div>
       </div>
@@ -434,11 +616,11 @@ function ThreadForm({ categories, isQuestion, strainName, submitting, onSubmit }
       )}
       <button
         type="submit"
-        disabled={submitting || !title.trim() || !content.trim() || !effectiveCategoryId}
-        className="w-full flex items-center justify-center gap-2 bg-primary text-primary-foreground px-4 py-2.5 rounded-full font-medium hover:bg-primary/90 transition-colors disabled:opacity-50"
+        disabled={submitDisabled}
+        className="w-full flex items-center justify-center gap-2 bg-primary text-primary-foreground px-4 py-2.5 rounded-full font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 min-h-11"
       >
         {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-        {isQuestion ? "Ask question" : "Post discussion"}
+        {isPoll ? "Post poll" : isMoment ? "Share moment" : isQuestion ? "Ask question" : "Post discussion"}
       </button>
     </form>
   )
@@ -453,19 +635,6 @@ function GrowUpdateForm({ diaryId, currentStage, submitting, onSubmit }: FormPro
   const [content, setContent] = useState("")
   const [stage, setStage] = useState(currentStage ?? "VEGETATIVE")
   const [photos, setPhotos] = useState<string[]>([])
-  const fileRef = useRef<HTMLInputElement>(null)
-
-  const addPhotos = async (files: FileList | null) => {
-    if (!files) return
-    for (const f of Array.from(files)) {
-      if (photos.length >= 4) break
-      if (f.size > 10 * 1024 * 1024) continue
-      try {
-        const resized = await resizeImage(f)
-        setPhotos((prev) => (prev.length < 4 ? [...prev, resized] : prev))
-      } catch { /* ignore */ }
-    }
-  }
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -489,7 +658,7 @@ function GrowUpdateForm({ diaryId, currentStage, submitting, onSubmit }: FormPro
           onChange={(e) => setTitle(e.target.value)}
           placeholder="What's happening in your grow?"
           maxLength={100}
-          className="w-full px-3 py-2 rounded-xl border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary text-sm"
+          className={INPUT}
           required
         />
       </div>
@@ -501,7 +670,7 @@ function GrowUpdateForm({ diaryId, currentStage, submitting, onSubmit }: FormPro
           placeholder="Describe what you observed, measured, or did..."
           rows={3}
           maxLength={10000}
-          className="w-full px-3 py-2 rounded-xl border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary text-sm resize-y"
+          className={cn(INPUT, "resize-y")}
           required
         />
       </div>
@@ -510,7 +679,7 @@ function GrowUpdateForm({ diaryId, currentStage, submitting, onSubmit }: FormPro
         <select
           value={stage}
           onChange={(e) => setStage(e.target.value)}
-          className="w-full px-3 py-2 rounded-xl border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary text-sm"
+          className={INPUT}
         >
           {UPDATE_STAGES.map((s) => (
             <option key={s} value={s}>{s.charAt(0) + s.slice(1).toLowerCase()}</option>
@@ -519,38 +688,116 @@ function GrowUpdateForm({ diaryId, currentStage, submitting, onSubmit }: FormPro
       </div>
       <div>
         <label className="block text-sm font-medium mb-1">Photos</label>
-        <div className="flex gap-2">
-          {photos.map((p, i) => (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img key={i} src={p} alt="" className="w-16 h-16 rounded-lg object-cover border border-border" />
-          ))}
-          {photos.length < 4 && (
-            <button
-              type="button"
-              onClick={() => fileRef.current?.click()}
-              className="w-16 h-16 rounded-lg border border-dashed border-border flex items-center justify-center text-muted-foreground hover:bg-secondary/50 transition-colors"
-              aria-label="Add photo"
-            >
-              <Camera className="w-5 h-5" />
-            </button>
-          )}
-          <input
-            ref={fileRef}
-            type="file"
-            accept="image/*"
-            multiple
-            className="hidden"
-            onChange={(e) => addPhotos(e.target.files)}
-          />
-        </div>
+        <ImageUploader value={photos} onChange={setPhotos} max={4} disabled={submitting} />
       </div>
       <button
         type="submit"
         disabled={submitting || !selectedDiary || !title.trim() || !content.trim()}
-        className="w-full flex items-center justify-center gap-2 bg-primary text-primary-foreground px-4 py-2.5 rounded-full font-medium hover:bg-primary/90 transition-colors disabled:opacity-50"
+        className="w-full flex items-center justify-center gap-2 bg-primary text-primary-foreground px-4 py-2.5 rounded-full font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 min-h-11"
       >
         {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
         Share update
+      </button>
+    </form>
+  )
+}
+
+function HarvestForm({ diaryTitle, alreadyHarvested, submitting, onSubmit }: FormProps & {
+  diaryTitle: string
+  alreadyHarvested: boolean
+}) {
+  const [yieldAmount, setYieldAmount] = useState("")
+  const [yieldUnit, setYieldUnit] = useState<string>("g")
+  const [rating, setRating] = useState("")
+  const [difficulty, setDifficulty] = useState("")
+  const [notes, setNotes] = useState("")
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    const payload: Record<string, unknown> = { harvested: true }
+    if (yieldAmount.trim()) {
+      const n = parseFloat(yieldAmount)
+      if (Number.isFinite(n) && n >= 0) {
+        payload.yieldAmount = n
+        payload.yieldUnit = yieldUnit
+      }
+    }
+    if (rating) {
+      const r = parseInt(rating, 10)
+      if (r >= 1 && r <= 10) payload.harvestRating = r
+    }
+    if (difficulty) payload.harvestDifficulty = difficulty
+    if (notes.trim()) payload.harvestNotes = notes.trim()
+    onSubmit(payload)
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-3">
+      {alreadyHarvested && (
+        <p className="text-xs text-muted-foreground p-2 rounded-lg bg-secondary/40">
+          This grow is already marked harvested — submitting will update the record.
+        </p>
+      )}
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="block text-sm font-medium mb-1">Yield</label>
+          <input
+            type="number"
+            min="0"
+            step="any"
+            value={yieldAmount}
+            onChange={(e) => setYieldAmount(e.target.value)}
+            placeholder="e.g. 120"
+            className={INPUT}
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium mb-1">Unit</label>
+          <select value={yieldUnit} onChange={(e) => setYieldUnit(e.target.value)} className={INPUT}>
+            {YIELD_UNITS.map((u) => (
+              <option key={u} value={u}>{u}</option>
+            ))}
+          </select>
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="block text-sm font-medium mb-1">Rating</label>
+          <select value={rating} onChange={(e) => setRating(e.target.value)} className={INPUT}>
+            <option value="">No rating</option>
+            {Array.from({ length: 10 }, (_, i) => i + 1).map((n) => (
+              <option key={n} value={n}>{n}/10</option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="block text-sm font-medium mb-1">Difficulty</label>
+          <select value={difficulty} onChange={(e) => setDifficulty(e.target.value)} className={INPUT}>
+            <option value="">Not set</option>
+            {HARVEST_DIFFICULTIES.map((d) => (
+              <option key={d} value={d}>{d.charAt(0) + d.slice(1).toLowerCase()}</option>
+            ))}
+          </select>
+        </div>
+      </div>
+      <div>
+        <label className="block text-sm font-medium mb-1">Harvest notes</label>
+        <textarea
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+          placeholder={`How did ${diaryTitle} turn out?`}
+          rows={3}
+          maxLength={1000}
+          className={cn(INPUT, "resize-y")}
+        />
+      </div>
+      <button
+        type="submit"
+        disabled={submitting}
+        className="w-full flex items-center justify-center gap-2 bg-primary text-primary-foreground px-4 py-2.5 rounded-full font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 min-h-11"
+      >
+        {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wheat className="w-4 h-4" />}
+        Log harvest
       </button>
     </form>
   )
@@ -587,7 +834,7 @@ function DiaryForm({ strainId, strainName, submitting, onSubmit }: FormProps & {
           onChange={(e) => setTitle(e.target.value)}
           placeholder="e.g. Blue Dream — Tent Grow 2026"
           maxLength={100}
-          className="w-full px-3 py-2 rounded-xl border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary text-sm"
+          className={INPUT}
           required
         />
       </div>
@@ -600,7 +847,7 @@ function DiaryForm({ strainId, strainName, submitting, onSubmit }: FormProps & {
             onChange={(e) => setStrain(e.target.value)}
             placeholder="Strain name"
             maxLength={500}
-            className="w-full px-3 py-2 rounded-xl border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary text-sm"
+            className={INPUT}
           />
           {strainName && <p className="text-[10px] text-muted-foreground mt-0.5">Pre-selected from {strainName}</p>}
         </div>
@@ -609,7 +856,7 @@ function DiaryForm({ strainId, strainName, submitting, onSubmit }: FormProps & {
           <select
             value={growType}
             onChange={(e) => setGrowType(e.target.value)}
-            className="w-full px-3 py-2 rounded-xl border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary text-sm"
+            className={INPUT}
           >
             {GROW_TYPES.map((g) => (
               <option key={g} value={g}>{g.charAt(0) + g.slice(1).toLowerCase()}</option>
@@ -623,14 +870,14 @@ function DiaryForm({ strainId, strainName, submitting, onSubmit }: FormProps & {
           type="date"
           value={startDate}
           onChange={(e) => setStartDate(e.target.value)}
-          className="w-full px-3 py-2 rounded-xl border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary text-sm"
+          className={INPUT}
           required
         />
       </div>
       <button
         type="submit"
         disabled={submitting || !title.trim()}
-        className="w-full flex items-center justify-center gap-2 bg-primary text-primary-foreground px-4 py-2.5 rounded-full font-medium hover:bg-primary/90 transition-colors disabled:opacity-50"
+        className="w-full flex items-center justify-center gap-2 bg-primary text-primary-foreground px-4 py-2.5 rounded-full font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 min-h-11"
       >
         {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sprout className="w-4 h-4" />}
         Start grow diary

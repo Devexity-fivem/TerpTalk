@@ -125,31 +125,31 @@ async function getFeedData(userId?: string, tab = "latest") {
     },
   })
 
-  // Build a mixed feed — used for Latest (chronological), Following, and For You
+  // Build a mixed feed — used for Latest (chronological), Following, and For You.
+  // For the impersonal "latest" tab the score IS recency — engagement
+  // weighting would let old hot content outrank fresh posts, which
+  // contradicts what "Latest" promises.
   const feedItems: { type: "thread" | "update" | "harvest"; score: number; data: (typeof recentDiaryUpdates)[number] | (typeof recentThreads)[number] | (typeof recentHarvests)[number] }[] = []
   {
-    const isLatest = !personal
     const now = Date.now()
     const weekMs = 7 * 24 * 60 * 60 * 1000
     const threadItems = recentThreads.map((t) => {
-      const age = now - new Date(t.createdAt).getTime()
-      const recency = Math.max(0, 1 - age / weekMs)
+      const ts = new Date(t.createdAt).getTime()
+      const recency = Math.max(0, 1 - (now - ts) / weekMs)
       const engagement = Math.min(1, (t.replyCount + t.views) / 100)
-      return { type: "thread" as const, score: recency * 0.6 + engagement * 0.4, data: t }
+      return { type: "thread" as const, score: personal ? recency * 0.6 + engagement * 0.4 : ts, data: t }
     })
     const updateItems = recentDiaryUpdates.map((u) => {
-      const age = now - new Date(u.createdAt).getTime()
-      const recency = Math.max(0, 1 - age / weekMs)
-      const diaryFollowers = u.diary._count?.followers ?? 0
-      const diaryUpdates = u.diary._count?.updates ?? 0
-      const engagement = Math.min(1, (diaryFollowers + diaryUpdates) / 20)
-      return { type: "update" as const, score: recency * 0.6 + engagement * 0.4, data: u }
+      const ts = new Date(u.createdAt).getTime()
+      const recency = Math.max(0, 1 - (now - ts) / weekMs)
+      const engagement = Math.min(1, ((u.diary._count?.followers ?? 0) + (u.diary._count?.updates ?? 0)) / 20)
+      return { type: "update" as const, score: personal ? recency * 0.6 + engagement * 0.4 : ts, data: u }
     })
     const harvestItems = recentHarvests.map((h) => {
-      const age = now - new Date(h.harvestedAt ?? h.createdAt).getTime()
-      const recency = Math.max(0, 1 - age / weekMs)
+      const ts = new Date(h.harvestedAt ?? h.createdAt).getTime()
+      const recency = Math.max(0, 1 - (now - ts) / weekMs)
       const engagement = Math.min(1, (h._count?.followers ?? 0) / 20)
-      return { type: "harvest" as const, score: recency * 0.7 + engagement * 0.3, data: h }
+      return { type: "harvest" as const, score: personal ? recency * 0.7 + engagement * 0.3 : ts, data: h }
     })
     feedItems.push(...threadItems, ...updateItems, ...harvestItems)
     feedItems.sort((a, b) => b.score - a.score)

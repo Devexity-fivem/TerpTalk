@@ -1,15 +1,10 @@
 "use client"
 
-import { useState } from "react"
 import { Plus } from "lucide-react"
-import { useSession } from "next-auth/react"
 import { useShareComposer } from "@/components/share-composer"
 
 export default function CreateMenu() {
-  const { data: session } = useSession()
   const composer = useShareComposer()
-
-  if (!session) return null
 
   return (
     <button

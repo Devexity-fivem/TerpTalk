@@ -292,7 +292,7 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
   }
 
   return (
-    <div className="min-h-screen bg-background" data-tt-diary={JSON.stringify({ id: diary.id, title: diary.title, stage: diary.stage })}>
+    <div className="min-h-screen bg-background" data-tt-diary={JSON.stringify({ id: diary.id, title: diary.title, stage: diary.stage, harvested: diary.harvested, own: canEdit })}>
       <div className="max-w-7xl mx-auto px-4 py-8">
         {diary.visibility === "PUBLIC" && <JsonLd data={diarySchema} />}
         <Breadcrumbs items={[
