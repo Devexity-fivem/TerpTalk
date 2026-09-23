@@ -361,6 +361,17 @@ export default function NotificationsPage() {
           )}
           {filteredNotifications.map((n) => {
             const Icon = typeIcon(n.type, n.metadata?.kind)
+            // Derive link destination context for the notification
+            const linkContext = n.link
+              ? n.link.startsWith("/diaries/") ? "View grow"
+                : n.link.startsWith("/forum/") ? "View discussion"
+                : n.link.startsWith("/u/") ? "View profile"
+                : n.link.startsWith("/messages") ? "Open message"
+                : n.link.startsWith("/progress") ? "View progress"
+                : n.link.startsWith("/achievements") ? "View achievement"
+                : "View"
+              : null
+
             const row = (
               <div className="flex items-start gap-3">
                 <div className="relative shrink-0 pt-0.5">
@@ -376,14 +387,16 @@ export default function NotificationsPage() {
                     {n.title}
                   </p>
                   <p className="text-sm text-muted-foreground break-words line-clamp-2">{n.content}</p>
-                  <Tooltip content={new Date(n.createdAt).toLocaleString()} align="start">
-                    <time
-                      className="mt-1 block text-xs text-muted-foreground"
-                      dateTime={n.createdAt}
-                    >
-                      {formatRelativeTime(n.createdAt)}
-                    </time>
-                  </Tooltip>
+                  <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
+                    <Tooltip content={new Date(n.createdAt).toLocaleString()} align="start">
+                      <time dateTime={n.createdAt}>
+                        {formatRelativeTime(n.createdAt)}
+                      </time>
+                    </Tooltip>
+                    {linkContext && (
+                      <span className="text-primary/70 font-medium">{linkContext} →</span>
+                    )}
+                  </div>
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
                   {!n.read && (

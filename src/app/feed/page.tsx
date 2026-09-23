@@ -109,9 +109,26 @@ async function getFeedData(userId?: string, tab = "latest") {
     },
   })
 
-  // For personalized tabs, build a ranked, mixed feed from followed users and categories.
-  const feedItems: { type: "thread" | "update"; score: number; data: (typeof recentDiaryUpdates)[number] | (typeof recentThreads)[number] }[] = []
-  if (personal) {
+  // Harvests — completed grows, needed for both mixed feed and harvests mode
+  const recentHarvests = await prisma.growDiary.findMany({
+    where: {
+      ...diaryWhere,
+      harvested: true,
+      harvestedAt: { not: null },
+    },
+    take: 8,
+    orderBy: { harvestedAt: "desc" },
+    include: {
+      author: { select: publicUserSelect },
+      updates: { take: 1, orderBy: { createdAt: "desc" }, include: { images: { take: 1, orderBy: { order: "asc" } } } },
+      _count: { select: { updates: true, followers: true } },
+    },
+  })
+
+  // Build a mixed feed — used for Latest (chronological), Following, and For You
+  const feedItems: { type: "thread" | "update" | "harvest"; score: number; data: (typeof recentDiaryUpdates)[number] | (typeof recentThreads)[number] | (typeof recentHarvests)[number] }[] = []
+  {
+    const isLatest = !personal
     const now = Date.now()
     const weekMs = 7 * 24 * 60 * 60 * 1000
     const threadItems = recentThreads.map((t) => {
@@ -128,26 +145,16 @@ async function getFeedData(userId?: string, tab = "latest") {
       const engagement = Math.min(1, (diaryFollowers + diaryUpdates) / 20)
       return { type: "update" as const, score: recency * 0.6 + engagement * 0.4, data: u }
     })
-    feedItems.push(...threadItems, ...updateItems)
+    const harvestItems = recentHarvests.map((h) => {
+      const age = now - new Date(h.harvestedAt ?? h.createdAt).getTime()
+      const recency = Math.max(0, 1 - age / weekMs)
+      const engagement = Math.min(1, (h._count?.followers ?? 0) / 20)
+      return { type: "harvest" as const, score: recency * 0.7 + engagement * 0.3, data: h }
+    })
+    feedItems.push(...threadItems, ...updateItems, ...harvestItems)
     feedItems.sort((a, b) => b.score - a.score)
     feedItems.splice(12)
   }
-
-  // Harvests — completed grows, unique mode content
-  const recentHarvests = await prisma.growDiary.findMany({
-    where: {
-      ...diaryWhere,
-      harvested: true,
-      harvestedAt: { not: null },
-    },
-    take: 8,
-    orderBy: { harvestedAt: "desc" },
-    include: {
-      author: { select: publicUserSelect },
-      updates: { take: 1, orderBy: { createdAt: "desc" }, include: { images: { take: 1, orderBy: { order: "asc" } } } },
-      _count: { select: { updates: true, followers: true } },
-    },
-  })
 
   const trendingDiaries = await prisma.growDiary.findMany({
     where: diaryWhere,
@@ -311,12 +318,14 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
         <div className="grid lg:grid-cols-3 gap-6">
           {/* Main Feed */}
           <div className="min-w-0 lg:col-span-2 space-y-6">
-            {/* Top Picks for You */}
-            {activeTab === "for-you" && feedItems.length > 0 && (
+            {/* Mixed feed — Latest and For You use the unified stream */}
+            {(activeTab === "for-you" || activeTab === "latest" || activeTab === "following") && feedItems.length > 0 && (
               <div className="bg-card/80 rounded-2xl border border-border/70">
                 <div className="p-4 border-b border-border flex items-center gap-2">
                   <TrendingUp className="w-5 h-5 text-primary" />
-                  <h2 className="font-display font-semibold">Top Picks for You</h2>
+                  <h2 className="font-display font-semibold">
+                    {activeTab === "for-you" ? "Top Picks for You" : activeTab === "following" ? "From Your Follows" : "Community Feed"}
+                  </h2>
                 </div>
                 <div className="divide-y divide-border">
                   {feedItems.map((item) => {
@@ -342,11 +351,53 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
                                 {t.title}
                               </div>
                               <div className="text-xs text-muted-foreground flex items-center gap-2 flex-wrap">
+                                <span className="flex items-center gap-1">
+                                  <span className="truncate">{t.author.profile?.username || t.author.name}</span>
+                                  <TierChip reputation={t.author.profile?.reputation ?? 0} publicMilestoneOptOut={t.author.profile?.publicMilestoneOptOut} />
+                                </span>
+                                <span>•</span>
                                 <span>{t.category.name}</span>
                                 <span>•</span>
                                 <span>{t.replyCount} repl{t.replyCount === 1 ? "y" : "ies"}</span>
                                 <span>•</span>
                                 <span>{new Date(t.createdAt).toLocaleDateString()}</span>
+                              </div>
+                            </div>
+                          </div>
+                        </Link>
+                      )
+                    } else if (item.type === "harvest") {
+                      const h = item.data as (typeof recentHarvests)[number]
+                      const thumb = h.updates[0]?.images[0]?.url
+                      const dayCount = h.harvestedAt && h.startDate
+                        ? Math.max(0, Math.floor((new Date(h.harvestedAt).getTime() - new Date(h.startDate).getTime()) / 86400000))
+                        : null
+                      return (
+                        <Link
+                          key={`h-${h.id}`}
+                          href={diaryPath(h)}
+                          className="block p-4 hover:bg-secondary/50 transition-colors"
+                        >
+                          <div className="flex items-start gap-3">
+                            {thumb ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img src={thumb} alt="" loading="lazy" decoding="async" className="w-16 h-16 rounded-xl object-cover shrink-0" />
+                            ) : (
+                              <div className="flex-shrink-0 w-16 h-16 bg-success/10 rounded-xl flex items-center justify-center">
+                                <Leaf className="w-6 h-6 text-success" />
+                              </div>
+                            )}
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 mb-0.5">
+                                <span className="text-xs font-medium text-success">Harvested</span>
+                                {h.strain && <span className="text-xs text-muted-foreground truncate">{h.strain}</span>}
+                              </div>
+                              <h3 className="font-medium text-sm mb-1">{h.title}</h3>
+                              <div className="text-xs text-muted-foreground flex items-center gap-2 flex-wrap">
+                                <span>{h.author.profile?.username || h.author.name}</span>
+                                {dayCount != null && <span>• {dayCount}d</span>}
+                                {h.yieldAmount != null && <span className="text-success font-medium">• {h.yieldAmount} {h.yieldUnit || "g"}</span>}
+                                {h.harvestRating != null && <span className="text-warning">• {h.harvestRating}/10</span>}
                               </div>
                             </div>
                           </div>
@@ -361,14 +412,19 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
                           className="block p-4 hover:bg-secondary/50 transition-colors"
                         >
                           <div className="flex items-start gap-3">
-                            <div className="flex-shrink-0 w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center">
-                              <Leaf className="w-5 h-5 text-primary" />
-                            </div>
+                            {u.images[0]?.url ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img src={u.images[0].url} alt="" loading="lazy" decoding="async" className="w-10 h-10 rounded-lg object-cover shrink-0" />
+                            ) : (
+                              <div className="flex-shrink-0 w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center">
+                                <Leaf className="w-5 h-5 text-primary" />
+                              </div>
+                            )}
                             <div className="flex-1 min-w-0">
                               <div className="font-semibold text-sm mb-1">{u.title}</div>
                               <p className="text-xs text-muted-foreground line-clamp-1 mb-1">{u.content}</p>
                               <div className="text-xs text-muted-foreground flex items-center gap-2 flex-wrap">
-                                <span>{u.diary.title}</span>
+                                <span className="truncate">{u.diary.title}</span>
                                 <span>•</span>
                                 <span>{new Date(u.createdAt).toLocaleDateString()}</span>
                               </div>
@@ -537,8 +593,8 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
               </div>
             )}
 
-            {/* Recent Diary Updates */}
-            {activeTab !== "discussions" && activeTab !== "harvests" && recentDiaryUpdates.length > 0 && (
+            {/* Recent Diary Updates — only when no mixed feed items exist */}
+            {activeTab !== "discussions" && activeTab !== "harvests" && activeTab !== "grows" && feedItems.length === 0 && recentDiaryUpdates.length > 0 && (
               <div className="bg-card/80 rounded-2xl border border-border/70">
                 <div className="p-4 border-b border-border flex items-center gap-2">
                   <Leaf className="w-5 h-5 text-primary" />
@@ -586,8 +642,8 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
               </div>
             )}
 
-            {/* Recent Forum Threads */}
-            {activeTab !== "grows" && activeTab !== "harvests" && recentThreads.length > 0 && (
+            {/* Recent Forum Threads — fallback when mixed feed is empty */}
+            {activeTab !== "grows" && activeTab !== "harvests" && activeTab !== "discussions" && feedItems.length === 0 && recentThreads.length > 0 && (
               <div className="bg-card/80 rounded-2xl border border-border/70">
                 <div className="p-4 border-b border-border flex items-center gap-2">
                   <MessageSquare className="w-5 h-5 text-primary" />

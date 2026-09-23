@@ -149,7 +149,7 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
     s.images[0]?.url
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background" data-tt-strain={JSON.stringify({ id: strain.id, name: strain.name })}>
       <div className="max-w-4xl mx-auto px-4 py-8">
         <Breadcrumbs items={[
           { label: "Strains", href: "/strains" },

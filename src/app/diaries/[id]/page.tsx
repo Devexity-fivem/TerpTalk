@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma"
 import { publicUserSelect, activeAuthor, blockedUserIds } from "@/lib/security"
 import { notFound, permanentRedirect } from "next/navigation"
-import { Leaf, Calendar, Users, ClipboardCheck, Camera, TrendingUp, Pencil, Sprout, Link2, Lock } from "lucide-react"
+import { Leaf, Calendar, Users, ClipboardCheck, Camera, TrendingUp, Pencil, Sprout, Link2, Lock, MessagesSquare } from "lucide-react"
 import Link from "next/link"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
@@ -292,7 +292,7 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background" data-tt-diary={JSON.stringify({ id: diary.id, title: diary.title, stage: diary.stage })}>
       <div className="max-w-7xl mx-auto px-4 py-8">
         {diary.visibility === "PUBLIC" && <JsonLd data={diarySchema} />}
         <Breadcrumbs items={[
@@ -1004,6 +1004,16 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
                 </Link>
               </div>
             )}
+
+            {/* Live chat */}
+            <div className="bg-card/80 rounded-2xl border border-border/70 p-4">
+              <Link
+                href="/chat"
+                className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-secondary/60 hover:text-foreground transition-colors -mx-3 -my-2"
+              >
+                <MessagesSquare className="w-4 h-4 text-primary" /> Discuss in chat
+              </Link>
+            </div>
 
             {/* Setup link */}
             {diary.setup && !diary.setup.deleted && (
