@@ -319,5 +319,91 @@ check("grow comparison: honesty-tier gated + neutral phrasing", () => {
   assert.ok(page.includes("getGrowIntel"), "diary page renders owner intel")
 })
 
+// ── Grow experiments ─────────────────────────────────────────────
+
+check("experiments lib: pure module, deterministic follow-up, grower-stated outcomes", () => {
+  const lib = src("lib/experiments.ts")
+  assert.ok(!lib.includes("@/lib/prisma"), "no Prisma import — pure module")
+  assert.ok(lib.includes("experimentFollowUp"), "follow-up rule")
+  assert.ok(lib.includes("EXPERIMENT_FOLLOW_UP_DAYS"), "explicit staleness window")
+  assert.ok(lib.includes("ENDED"), "endedAt stamping on terminal states")
+  assert.ok(lib.includes("parseExperimentCreate") && lib.includes("parseExperimentPatch"), "payload validation")
+  // Honesty contract: the vocabulary for results is grower-stated only,
+  // and renderers may never assert causality.
+  assert.ok(lib.includes("WORKED") && lib.includes("DID_NOT_WORK") && lib.includes("INCONCLUSIVE"), "outcome vocabulary")
+  assert.ok(!/\bcaused\b|\bproven\b|\bguaranteed\b/i.test(lib), "no causality/proof language")
+})
+
+check("experiment routes: owner-only writes, private diaries leak nothing", () => {
+  const col = src("app/api/diaries/[id]/experiments/route.ts")
+  const item = src("app/api/diaries/[id]/experiments/[experimentId]/route.ts")
+  for (const r of [col, item]) {
+    assert.ok(r.includes("unauthorized()"), "auth required")
+    assert.ok(r.includes("isBanned"), "banned members blocked")
+    assert.ok(!/openai|anthropic|\bllm\b/i.test(r), "no LLM calls")
+  }
+  assert.ok(col.includes("rateLimit"), "create rate-limited")
+  assert.ok(col.includes("enforceLinkTrust"), "member text passes the link gate")
+  assert.ok(col.includes('visibility === "PRIVATE"'), "private diary hides experiments")
+  assert.ok(col.includes('"Diary not found"'), "one 404 — no existence oracle")
+  assert.ok(item.includes('"forbidden"'), "item route distinguishes 403 vs 404")
+  assert.ok(item.includes("updateMany"), "guarded write")
+})
+
+check("update route: experiment link is same-diary + advances ACTIVE→OBSERVING", () => {
+  const route = src("app/api/diaries/updates/route.ts")
+  assert.ok(route.includes("exp.diaryId !== diaryId"), "cross-diary link rejected")
+  assert.ok(route.includes('status: "ACTIVE"') && route.includes('status: "OBSERVING"'), "guarded transition")
+})
+
+check("diary page: experiments merge into the existing timeline", () => {
+  const page = src("app/diaries/[id]/page.tsx")
+  assert.ok(page.includes("serializeExperiment"), "experiment serialization")
+  assert.ok(page.includes("ExperimentCard"), "evidence card rendered")
+  assert.ok(page.includes("GrowLessons"), "lessons section rendered")
+  // One timeline: experiments fold into the week groups, not a parallel list
+  assert.ok(/weeks\.map|weeksMerged/.test(page), "weeks grouping reused")
+  assert.ok((page.match(/groupUpdatesByWeek\(/g) || []).length === 1, "single timeline grouping")
+})
+
+check("strain evidence: public scope + min-sample thresholds", () => {
+  const lib = src("lib/strain-stats.ts")
+  assert.ok(lib.includes("getStrainEvidence"), "evidence service")
+  const fn = lib.slice(lib.indexOf("getEvidence"))
+  assert.ok(fn.includes("publicDiaryWhere"), "public diaries only")
+  assert.ok(fn.includes("activeAuthor"), "deleted/banned authors excluded")
+  assert.ok(fn.includes("experimentDiaryCount >= 3"), "category threshold ≥3 grows")
+  assert.ok(fn.includes("outcomeTotal >= 3"), "outcome threshold ≥3 statements")
+  assert.ok(!/\bproven\b|\brequired\b/i.test(fn), "no efficacy claims")
+})
+
+check("terpbot: experiment commands registered + public-scope only", () => {
+  const reg = src("lib/chat-commands.ts")
+  assert.ok(reg.includes('"experiments"') && reg.includes('"experiment"'), "commands registered")
+  const data = src("lib/terpbot-data.ts")
+  assert.ok(data.includes("growExperiment.findMany"), "queries recorded experiments")
+  assert.ok(/growExperiment\.findMany[\s\S]{0,400}publicDiaryWhere/.test(data), "room output stays public-scope")
+})
+
+check("experiment card: evidence wording, editable ask-community, owner controls", () => {
+  const card = src("components/experiment-card.tsx")
+  assert.ok(card.includes("observation"), "evidence count shown")
+  assert.ok(card.includes("EXPERIMENT_OUTCOME_LABELS"), "grower-stated outcome label")
+  assert.ok(card.includes("useShareComposer"), "ask-community bridge")
+  assert.ok(card.includes("type: \"question\""), "prefills an editable question")
+  assert.ok(!/\bcaused\b|\bproven\b|\bfixed the\b/i.test(card), "no causality wording")
+})
+
+check("grow intel + cockpit: experiments are first-class deterministic signals", () => {
+  const lib = src("lib/grow-intel.ts")
+  assert.ok(lib.includes("growExperiment.findMany"), "experiments in projection")
+  assert.ok(lib.includes("experimentFollowUp"), "deterministic follow-up in attention")
+  const route = src("app/api/diaries/[id]/intel/route.ts")
+  assert.ok(route.includes('"experiments"'), "intel action registered")
+  const home = src("components/member-home.tsx")
+  assert.ok(home.includes("data.knowledge"), "grow-knowledge card")
+  assert.ok(home.includes("activeExperiments"), "grow cards carry experiment counts")
+})
+
 console.log(`\n${passed} passed, ${failed} failed`)
 if (failed > 0) process.exit(1)

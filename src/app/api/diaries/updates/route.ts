@@ -53,6 +53,7 @@ export async function POST(request: Request) {
       feeding,
       training,
       images,
+      experimentId,
     } = body
 
     if (
@@ -136,6 +137,21 @@ export async function POST(request: Request) {
       )
     }
 
+    // Optional experiment link — the experiment must belong to this same
+    // diary. A linked update is follow-up evidence for that change.
+    if (experimentId !== undefined && experimentId !== null) {
+      if (typeof experimentId !== "string") {
+        return NextResponse.json({ error: "Invalid experiment" }, { status: 400 })
+      }
+      const exp = await prisma.growExperiment.findUnique({
+        where: { id: experimentId },
+        select: { id: true, diaryId: true, status: true },
+      })
+      if (!exp || exp.diaryId !== diaryId) {
+        return NextResponse.json({ error: "Experiment not found" }, { status: 400 })
+      }
+    }
+
     const linkBlock = await enforceLinkTrust(`${title}\n${content}`, session.user.id, request, "diaries/updates")
     if (linkBlock) return linkBlock
 
@@ -168,6 +184,7 @@ export async function POST(request: Request) {
           heightCm: typeof heightCm === "number" ? heightCm : null,
           feeding: cleanUpdateString(feeding, 300),
           training: cleanUpdateString(training, 300),
+          ...(typeof experimentId === "string" && experimentId ? { experimentId } : {}),
           // Attach up to 4 client-resized photos
           ...(storedImages.length > 0 && {
             images: {
@@ -189,6 +206,15 @@ export async function POST(request: Request) {
         await tx.growDiary.update({
           where: { id: diaryId },
           data: { stage },
+        })
+      }
+      // A linked observation deterministically advances ACTIVE → OBSERVING —
+      // the grower recorded evidence about the change. Other states are
+      // grower-controlled and never move implicitly.
+      if (typeof experimentId === "string" && experimentId) {
+        await tx.growExperiment.updateMany({
+          where: { id: experimentId, status: "ACTIVE" },
+          data: { status: "OBSERVING" },
         })
       }
       return created

@@ -3,9 +3,10 @@
 import { useState } from "react"
 import {
   Bot, Loader2, AlertTriangle, Gauge, Bug, Wrench, MessagesSquare,
-  ListChecks, Activity, ClipboardList, Ruler, History, Sparkles,
+  ListChecks, Activity, ClipboardList, Ruler, History, Sparkles, FlaskConical,
 } from "lucide-react"
 import type { GrowIntel } from "@/lib/grow-intel"
+import { EXPERIMENT_STATUS_LABELS, EXPERIMENT_FOLLOW_UP_LABELS } from "@/lib/experiments"
 import { useShareComposer } from "@/components/share-composer"
 import { cn } from "@/lib/utils"
 
@@ -24,6 +25,7 @@ const ACTIONS: { action: string; label: string; icon: typeof Activity }[] = [
   { action: "plan", label: "Plan", icon: ClipboardList },
   { action: "measurements", label: "Readings", icon: Ruler },
   { action: "changes", label: "What changed", icon: History },
+  { action: "experiments", label: "Experiments", icon: FlaskConical },
 ]
 
 // Mirrors postureLabel in grow-intel.ts — kept client-local so this
@@ -169,6 +171,31 @@ export default function GrowIntelPanel({
               <span>{f.text}</span>
             </li>
           ))}
+        </ul>
+      )}
+
+      {/* Open experiments — grower-recorded changes under observation */}
+      {intel.experiments.length > 0 && (
+        <ul className="space-y-1 mb-3 text-sm">
+          {intel.experiments
+            .filter((e) => e.status !== "COMPLETED" && e.status !== "ABANDONED")
+            .slice(0, 3)
+            .map((e) => (
+              <li key={e.id} className="flex items-start gap-2">
+                <FlaskConical className="h-3.5 w-3.5 mt-0.5 shrink-0 text-primary" aria-label="Experiment" />
+                <span className="min-w-0">
+                  <span className="font-medium">{e.title}</span>
+                  <span className="text-muted-foreground">
+                    {" — "}
+                    {EXPERIMENT_STATUS_LABELS[e.status]?.toLowerCase() ?? e.status.toLowerCase()}
+                    {" · "}{e.observationCount} obs
+                    {e.followUp && (
+                      <span className="text-amber-500"> · {EXPERIMENT_FOLLOW_UP_LABELS[e.followUp]}</span>
+                    )}
+                  </span>
+                </span>
+              </li>
+            ))}
         </ul>
       )}
 

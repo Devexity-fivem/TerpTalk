@@ -6,10 +6,11 @@ import { usePathname, useRouter } from "next/navigation"
 import { createPortal } from "react-dom"
 import {
   X, MessageSquare, HelpCircle, Sprout, Dna, Loader2,
-  BarChart3, Leaf, Settings, ArrowLeft, Send, ImageIcon, Wheat,
+  BarChart3, Leaf, Settings, ArrowLeft, Send, ImageIcon, Wheat, FlaskConical,
 } from "lucide-react"
 import ImageUploader from "@/components/image-uploader"
 import PollComposer from "@/components/poll-composer"
+import ExperimentForm from "@/components/experiment-form"
 import { getReputationTier, POLL_CREATION_REP } from "@/lib/reputation-config"
 import { signInHref } from "@/lib/callback-url"
 import { cn } from "@/lib/utils"
@@ -29,6 +30,8 @@ export interface ComposerPrefill {
   title?: string
   content?: string
   tags?: string[]
+  /** link a grow update to a documented experiment (follow-up evidence) */
+  experimentId?: string
 }
 
 interface ShareComposerContextValue {
@@ -61,6 +64,7 @@ type ComposerType =
   | "discussion"
   | "question"
   | "grow-update"
+  | "experiment"
   | "diary"
   | "moment"
   | "harvest"
@@ -79,6 +83,7 @@ const COMPOSER_TYPES: ComposerOption[] = [
   { type: "discussion", label: "Discussion", icon: MessageSquare, description: "Start a conversation" },
   { type: "question", label: "Question", icon: HelpCircle, description: "Ask a focused question" },
   { type: "grow-update", label: "Grow Update", icon: Sprout, description: "Update an active grow" },
+  { type: "experiment", label: "Experiment", icon: FlaskConical, description: "Document a change you're watching" },
   { type: "diary", label: "Grow Diary", icon: Leaf, description: "Track a new grow" },
   { type: "moment", label: "Photo / Moment", icon: ImageIcon, description: "Share something visual" },
   { type: "harvest", label: "Harvest", icon: Wheat, description: "Log a completed grow" },
@@ -263,7 +268,7 @@ function ShareComposerDialog({ prefill, onClose }: { prefill?: ComposerPrefill; 
   // than flashing the "open a diary" prompt. ctxChecked guarantees we
   // never spin forever if the attribute is absent.
   const contextPending = !!ctx.diaryId && diaryInfo === null && !ctxChecked
-  const needsDiary = (type === "grow-update" || type === "harvest") && !contextPending && (!diaryInfo || diaryInfo.own !== true)
+  const needsDiary = (type === "grow-update" || type === "harvest" || type === "experiment") && !contextPending && (!diaryInfo || diaryInfo.own !== true)
 
   return createPortal(
     <div
@@ -378,7 +383,7 @@ function ShareComposerDialog({ prefill, onClose }: { prefill?: ComposerPrefill; 
                 </button>
               </div>
             </div>
-          ) : contextPending && (type === "grow-update" || type === "harvest") ? (
+          ) : contextPending && (type === "grow-update" || type === "harvest" || type === "experiment") ? (
             <div className="py-6 text-center" role="status" aria-label="Loading grow context">
               <Loader2 className="w-5 h-5 animate-spin text-muted-foreground mx-auto" />
             </div>
@@ -387,8 +392,8 @@ function ShareComposerDialog({ prefill, onClose }: { prefill?: ComposerPrefill; 
               <Sprout className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
               <p className="text-sm text-muted-foreground mb-3">
                 {diaryInfo && diaryInfo.own !== true
-                  ? "This grow belongs to another member — only its grower can post updates or log a harvest."
-                  : type === "harvest"
+                  ? "This grow belongs to another member — only its grower can post updates, experiments, or a harvest."
+                  : type === "harvest" || type === "experiment"
                     ? "Harvest logging happens on a grow diary — open your grow first."
                     : "Open a grow diary to share an update, or start a new one."}
               </p>
@@ -417,9 +422,12 @@ function ShareComposerDialog({ prefill, onClose }: { prefill?: ComposerPrefill; 
             <GrowUpdateForm
               diaryId={diaryInfo!.id}
               currentStage={diaryInfo!.stage}
+              experimentId={prefill?.experimentId}
               submitting={submitting}
               onSubmit={handleSubmit}
             />
+          ) : type === "experiment" ? (
+            <ExperimentForm diaryId={diaryInfo!.id} onDone={onClose} />
           ) : type === "harvest" ? (
             <HarvestForm
               diaryTitle={diaryInfo!.title}
@@ -642,15 +650,34 @@ function ThreadForm({ categories, variant, strainName, canCreatePoll, submitting
   )
 }
 
-function GrowUpdateForm({ diaryId, currentStage, submitting, onSubmit }: FormProps & {
+function GrowUpdateForm({ diaryId, currentStage, experimentId, submitting, onSubmit }: FormProps & {
   diaryId?: string
   currentStage?: string
+  /** preselect a linked experiment (follow-up evidence) */
+  experimentId?: string
 }) {
   const selectedDiary = diaryId ?? ""
   const [title, setTitle] = useState("")
   const [content, setContent] = useState("")
   const [stage, setStage] = useState(currentStage ?? "VEGETATIVE")
   const [photos, setPhotos] = useState<string[]>([])
+  const [linkedExperiment, setLinkedExperiment] = useState(experimentId ?? "")
+  const [experiments, setExperiments] = useState<{ id: string; title: string; status: string }[]>([])
+
+  // Open experiments on this diary — a linked update becomes follow-up
+  // evidence for the change it documents.
+  useEffect(() => {
+    if (!selectedDiary) return
+    fetch(`/api/diaries/${selectedDiary}/experiments`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        const list = (d?.experiments ?? []).filter(
+          (e: { status: string }) => e.status === "PLANNED" || e.status === "ACTIVE" || e.status === "OBSERVING"
+        )
+        setExperiments(list)
+      })
+      .catch(() => {})
+  }, [selectedDiary])
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -661,6 +688,7 @@ function GrowUpdateForm({ diaryId, currentStage, submitting, onSubmit }: FormPro
       content: content.trim(),
       stage,
       images: photos,
+      ...(linkedExperiment ? { experimentId: linkedExperiment } : {}),
     })
   }
 
@@ -702,6 +730,24 @@ function GrowUpdateForm({ diaryId, currentStage, submitting, onSubmit }: FormPro
           ))}
         </select>
       </div>
+      {experiments.length > 0 && (
+        <div>
+          <label className="block text-sm font-medium mb-1">Linked experiment (optional)</label>
+          <select
+            value={linkedExperiment}
+            onChange={(e) => setLinkedExperiment(e.target.value)}
+            className={INPUT}
+          >
+            <option value="">None — regular update</option>
+            {experiments.map((e) => (
+              <option key={e.id} value={e.id}>{e.title}</option>
+            ))}
+          </select>
+          <p className="text-[11px] text-muted-foreground mt-1">
+            Linked updates become recorded evidence for that change.
+          </p>
+        </div>
+      )}
       <div>
         <label className="block text-sm font-medium mb-1">Photos</label>
         <ImageUploader value={photos} onChange={setPhotos} max={4} disabled={submitting} />

@@ -2,7 +2,7 @@ import Link from "next/link"
 import type { ReactNode } from "react"
 import {
   Zap, Sprout, Bell, ArrowRight, Leaf, Users, Radio, TrendingUp, CheckCircle2, Circle,
-  MessageCircle, Eye, AlertTriangle, Gauge, Bug, Wrench, Clock, Wheat,
+  MessageCircle, Eye, AlertTriangle, Gauge, Bug, Wrench, Clock, Wheat, FlaskConical, BookOpen,
 } from "lucide-react"
 import MemberGreeting from "@/components/member-greeting"
 import OpenChatButton from "@/components/open-chat-button"
@@ -153,6 +153,8 @@ export default function MemberHome({ data }: { data: MemberHomeData }) {
                       <Gauge className="h-3.5 w-3.5 shrink-0 text-primary" aria-label="Measurement due" />
                     ) : a.kind === "intervention" ? (
                       <Wrench className="h-3.5 w-3.5 shrink-0 text-spectrum" aria-label="Adjustment awaiting follow-up" />
+                    ) : a.kind === "experiment" ? (
+                      <FlaskConical className="h-3.5 w-3.5 shrink-0 text-primary" aria-label="Experiment awaiting observation" />
                     ) : (
                       <Clock className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-label="Diary going stale" />
                     )}
@@ -264,6 +266,9 @@ export default function MemberHome({ data }: { data: MemberHomeData }) {
                             g.day != null ? `day ${g.day}` : null,
                             g.week != null && g.week > 0 ? `wk ${g.week}` : null,
                             g.latestReading,
+                            g.activeExperiments > 0
+                              ? `${g.activeExperiments} experiment${g.activeExperiments === 1 ? "" : "s"}`
+                              : null,
                             timeAgo(g.updatedAt),
                           ]
                             .filter(Boolean)
@@ -396,6 +401,73 @@ export default function MemberHome({ data }: { data: MemberHomeData }) {
             )}
           </Card>
         </div>
+
+        {/* Grow knowledge — the member's own documented history:
+            experiments, techniques, strains. Real rows only; hidden when
+            there's nothing recorded yet. */}
+        {data.knowledge && (
+          <section className="mt-4 bg-card/80 rounded-2xl border border-border/70 p-4 sm:p-5">
+            <div className="mb-3 flex items-center justify-between gap-2">
+              <h2 className="flex items-center gap-2 font-display text-sm font-semibold">
+                <BookOpen className="h-4 w-4 text-primary" />
+                Your grow knowledge
+                <InfoTip content="Aggregated from your own diaries — experiments you've documented, techniques you've logged, strains you've run. Your records, not generated advice." />
+              </h2>
+            </div>
+            <div className="grid gap-x-6 gap-y-3 sm:grid-cols-3 text-sm">
+              {data.knowledge.experimentsTotal > 0 && (
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">Experiments</p>
+                  <p className="mb-1.5">
+                    {data.knowledge.experimentsTotal} recorded
+                    {data.knowledge.experimentsOpen > 0 && (
+                      <span className="text-muted-foreground"> · {data.knowledge.experimentsOpen} open</span>
+                    )}
+                  </p>
+                  <ul className="space-y-1">
+                    {data.knowledge.experimentCategories.map((c) => (
+                      <li key={c.label} className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <FlaskConical className="h-3 w-3 shrink-0" />
+                        {c.label} <span className="tabular-nums">×{c.count}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {data.knowledge.techniques.length > 0 && (
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">Techniques used</p>
+                  <ul className="space-y-1">
+                    {data.knowledge.techniques.map((t) => (
+                      <li key={t.label}>
+                        <Link
+                          href={diaryPath({ id: t.diaryId, slug: t.diarySlug })}
+                          className="flex items-center gap-2 text-xs text-muted-foreground hover:text-primary transition-colors"
+                        >
+                          <Sprout className="h-3 w-3 shrink-0" />
+                          {t.label} <span className="tabular-nums">×{t.count}</span>
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {data.knowledge.strains.length > 0 && (
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">Strains grown</p>
+                  <ul className="space-y-1">
+                    {data.knowledge.strains.map((s) => (
+                      <li key={s.name} className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <Leaf className="h-3 w-3 shrink-0" />
+                        <span className="truncate">{s.name}</span> <span className="tabular-nums">×{s.count}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          </section>
+        )}
 
         {/* Around your grows — community activity tied to what you're growing */}
         {(data.aroundGrows.threads.length > 0 || data.aroundGrows.harvests.length > 0) && (

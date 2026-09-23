@@ -27,6 +27,13 @@ import {
 import { activeChecklist } from "@/lib/terpbot-intel-checklist"
 import { fmt, metricLabel } from "@/lib/terpbot-intel-status"
 import { SYMPTOM_LABELS } from "@/lib/terpbot-nl-vocab"
+import { prisma } from "@/lib/prisma"
+import {
+  experimentFollowUp,
+  EXPERIMENT_FOLLOW_UP_LABELS,
+  type ExperimentFollowUp,
+  type ExperimentStatus,
+} from "@/lib/experiments"
 
 // ── Shapes ──────────────────────────────────────────────────────────
 
@@ -66,13 +73,21 @@ export interface GrowIntel {
   readings: IntelReading[]
   /** main watch — top non-insufficient diagnosis candidate, if any */
   watch: { name: string; state: string } | null
+  /** documented experiments on this grow — grower-recorded changes */
+  experiments: {
+    id: string
+    title: string
+    status: ExperimentStatus
+    followUp: ExperimentFollowUp | null
+    observationCount: number
+  }[]
 }
 
 export interface AttentionItem {
   diaryId: string
   diaryTitle: string
   href: string
-  kind: "concern" | "due" | "episode" | "intervention" | "stale" | "transition"
+  kind: "concern" | "due" | "episode" | "intervention" | "stale" | "transition" | "experiment"
   text: string
   /** 0 = most important — deterministic ordering, not manufactured urgency */
   rank: number
@@ -87,10 +102,22 @@ export interface GrowIntelBundle {
 
 // ── Projection ──────────────────────────────────────────────────────
 
+interface ExperimentRow {
+  id: string
+  title: string
+  status: string
+  startedAt: Date
+  /** latest linked observation only (bounded) */
+  updates: { createdAt: Date }[]
+  /** true linked-update count (from _count) */
+  observationCount: number
+}
+
 function projectIntel(
   ctx: GrowContextView,
   snap: GrowIntelligenceSnapshot,
-  decisions: CultivationDecisionSet
+  decisions: CultivationDecisionSet,
+  experiments: ExperimentRow[] = []
 ): GrowIntel {
   const checklist = activeChecklist(snap)
   const concerns = checklist
@@ -147,6 +174,17 @@ function projectIntel(
     pendingInterventions,
     readings,
     watch: top ? { name: top.name, state: top.state } : null,
+    experiments: experiments.map((e) => ({
+      id: e.id,
+      title: e.title,
+      status: e.status as ExperimentStatus,
+      followUp: experimentFollowUp({
+        status: e.status,
+        observationCount: e.observationCount,
+        lastObservationAt: e.updates[0]?.createdAt ?? null,
+      }),
+      observationCount: e.observationCount,
+    })),
   }
 }
 
@@ -166,7 +204,31 @@ export async function getGrowIntel(
   if (!ctx) return null
   const snap = buildSnapshot(ctx)
   const decisions = buildCultivationDecisions(snap)
-  return { ctx, snap, decisions, intel: projectIntel(ctx, snap, decisions) }
+  // Documented experiments — owner-scope (getGrowIntel already enforced
+  // ownership through buildGrowContext). One bounded query; the linked
+  // update window only needs counts + latest timestamp for follow-up.
+  const experiments = await prisma.growExperiment.findMany({
+    where: { diaryId },
+    orderBy: [{ status: "asc" }, { startedAt: "desc" }],
+    take: 20,
+    select: {
+      id: true,
+      title: true,
+      status: true,
+      startedAt: true,
+      updates: { orderBy: { createdAt: "desc" }, take: 1, select: { createdAt: true } },
+      _count: { select: { updates: true } },
+    },
+  })
+  const experimentRows: ExperimentRow[] = experiments.map((e) => ({
+    id: e.id,
+    title: e.title,
+    status: e.status,
+    startedAt: e.startedAt,
+    updates: e.updates,
+    observationCount: e._count.updates,
+  }))
+  return { ctx, snap, decisions, intel: projectIntel(ctx, snap, decisions, experimentRows) }
 }
 
 // ── Attention derivation ────────────────────────────────────────────
@@ -187,8 +249,20 @@ export function attentionFor(intel: GrowIntel, diaryTitle: string, href: string)
   for (const f of intel.due) {
     items.push({ ...base, kind: "due", rank: 2, text: f.text })
   }
+  // Experiments awaiting evidence — explicit deterministic rule
+  // (awaiting first observation / quiet follow-up window), not a
+  // reminder manufactured because the record exists.
+  for (const e of intel.experiments) {
+    if (!e.followUp) continue
+    items.push({
+      ...base,
+      kind: "experiment",
+      rank: 3,
+      text: `experiment "${e.title}" — ${EXPERIMENT_FOLLOW_UP_LABELS[e.followUp]}`,
+    })
+  }
   for (const f of intel.pendingInterventions) {
-    items.push({ ...base, kind: "intervention", rank: 3, text: f.text })
+    items.push({ ...base, kind: "intervention", rank: 4, text: f.text })
   }
   // Staleness uses the product's existing 3-day signal (same threshold
   // as next-action's staleDiary rule) — not a manufactured alarm.
@@ -196,7 +270,7 @@ export function attentionFor(intel: GrowIntel, diaryTitle: string, href: string)
     items.push({
       ...base,
       kind: "stale",
-      rank: 4,
+      rank: 5,
       text: `no update in ${intel.daysSinceUpdate} days`,
     })
   }

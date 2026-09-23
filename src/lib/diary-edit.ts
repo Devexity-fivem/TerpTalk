@@ -17,6 +17,7 @@ import {
   parseTechniques,
 } from "@/lib/grow-fields"
 import { isDiaryVisibility } from "@/lib/diary-visibility"
+import { parseLessons } from "@/lib/experiments"
 
 /** Keys a diary owner may PATCH — everything else is rejected. */
 export const DIARY_EDITABLE_FIELDS = new Set([
@@ -37,6 +38,7 @@ export const DIARY_EDITABLE_FIELDS = new Set([
   "spaceDimensions",
   "setupId",
   "visibility",
+  "lessons",
 ])
 
 const METADATA_MAX = 500 // matches the creation route's string-field cap
@@ -128,6 +130,13 @@ export function parseDiaryPatch(body: unknown): DiaryPatchResult {
   if ("visibility" in b) {
     if (!isDiaryVisibility(b.visibility)) return bad("Invalid visibility")
     data.visibility = b.visibility
+  }
+  // Structured grower-recorded lessons — fixed key set, owner-authored.
+  // null clears the whole block; the stored Json column holds the map.
+  if ("lessons" in b) {
+    const v = parseLessons(b.lessons)
+    if (!v.ok) return bad(v.error)
+    data.lessons = v.lessons
   }
 
   return { ok: true, data }

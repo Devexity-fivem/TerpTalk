@@ -35,6 +35,14 @@ import { activeChecklist } from "@/lib/terpbot-intel-checklist"
 import { buildWhyTrail, renderWhy } from "@/lib/terpbot-intel-why"
 import { loadSession, saveSession, pendingAskCarries } from "@/lib/terpbot-session"
 import { parseGrowText } from "@/lib/terpbot-nl-parse"
+import {
+  EXPERIMENT_CATEGORY_LABELS,
+  EXPERIMENT_OUTCOME_LABELS,
+  EXPERIMENT_STATUS_LABELS,
+  type ExperimentCategory,
+  type ExperimentOutcome,
+  type ExperimentStatus,
+} from "@/lib/experiments"
 import { SYMPTOM_LABELS, LOCATION_LABELS, VOCAB } from "@/lib/terpbot-nl-vocab"
 import { rateLimit } from "@/lib/rate-limit"
 import type { GrowContextView, SessionState, SessionObservation, ReportedPoint, MetricId, InterventionRecord } from "@/lib/terpbot-intel-types"
@@ -1220,6 +1228,58 @@ async function handle(name: string, ctx: BotCommandCtx): Promise<BotCommandResul
       const now = Date.now()
       const { merged } = await intelContextFor(ctx.userId, now)
       return ok(...toMessages(renderMeasurements(merged)))
+    }
+
+    // Documented experiments — the member's own recorded changes across
+    // their PUBLIC diaries (room output, so private/unlisted experiments
+    // stay invisible; owners see those in the diary intel panel instead).
+    // Ordering is deterministic — /experiment <n> resolves the same list.
+    case "experiments":
+    case "experiment": {
+      const cap = await rateLimit(`bot-status:${ctx.userId}`, 6, 60_000)
+      if (!cap.allowed) return ok(`🤖 Give me a minute — try again shortly.`)
+      const rows = await prisma.growExperiment.findMany({
+        where: { authorId: ctx.userId, diary: { deleted: false, ...publicDiaryWhere } },
+        orderBy: [{ status: "asc" }, { startedAt: "desc" }, { id: "asc" }],
+        take: 8,
+        select: {
+          id: true, title: true, change: true, reason: true, expected: true,
+          category: true, status: true, outcome: true, conclusion: true,
+          startedAt: true, endedAt: true,
+          diary: { select: { title: true } },
+          _count: { select: { updates: true } },
+        },
+      })
+      if (rows.length === 0) {
+        return ok(`🧪 No experiments recorded on your public grows yet — open your diary and log a change you're watching.`)
+      }
+      if (name === "experiments" && !ctx.rest.trim()) {
+        const lines = rows.map((e, i) => {
+          const state = EXPERIMENT_STATUS_LABELS[e.status as ExperimentStatus] ?? e.status.toLowerCase()
+          const obs = e._count.updates
+          return `[${i + 1}] ${e.title} — ${state}${obs ? ` · ${obs} observation${obs === 1 ? "" : "s"}` : ""} (${e.diary.title.slice(0, 30)})`
+        })
+        return ok(`🧪 Your documented experiments:\n${lines.join("\n")}\n/experiment <number> for detail`)
+      }
+      // /experiment <n> — or /experiments <n>
+      const n = parseInt(ctx.rest.trim(), 10)
+      const e = Number.isFinite(n) && n >= 1 && n <= rows.length ? rows[n - 1] : null
+      if (!e) {
+        return ok(`🤖 Give me a number from the list — /experiments first, then /experiment 1`)
+      }
+      const state = EXPERIMENT_STATUS_LABELS[e.status as ExperimentStatus] ?? e.status.toLowerCase()
+      const cat = EXPERIMENT_CATEGORY_LABELS[e.category as ExperimentCategory] ?? e.category.toLowerCase()
+      const detail = [
+        `🧪 "${e.title}" — ${state} · ${cat}`,
+        `Changed: ${e.change}`,
+        e.reason ? `Reason recorded: ${e.reason}` : null,
+        e.expected ? `Watching for: ${e.expected}` : null,
+        `Started ${relAge(e.startedAt)} on "${e.diary.title.slice(0, 40)}" — ${e._count.updates} linked observation${e._count.updates === 1 ? "" : "s"}`,
+        e.outcome
+          ? `Your stated outcome: ${EXPERIMENT_OUTCOME_LABELS[e.outcome as ExperimentOutcome] ?? e.outcome}${e.conclusion ? ` — "${e.conclusion.slice(0, 140)}"` : ""}`
+          : null,
+      ].filter((l): l is string => !!l)
+      return ok(detail.join("\n"))
     }
 
     case "growhelp": {

@@ -35,6 +35,7 @@ model User {
   threadCreator Thread[] @relation("ThreadAuthor")
   diaryCreator  GrowDiary[]
   diaryUpdates  DiaryUpdate[]
+  experiments   GrowExperiment[]
   setupCreator  GrowSetup[]
   setupComments SetupComment[]
   contestEntries ContestEntry[]
@@ -397,6 +398,7 @@ model GrowDiary {
   harvestRating     Int?    // optional 1-10 strain verdict from the harvest review
   harvestDifficulty String? // EASY | NORMAL | HARD
   harvestNotes      String? // "what I learned" — shown on the strain page
+  lessons         Json?    // grower-recorded structured lessons — {worked?,change?,repeat?,avoid?,surprised?,learned?}
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
@@ -405,6 +407,7 @@ model GrowDiary {
   setup         GrowSetup?  @relation("SetupDiaries", fields: [setupId], references: [id], onDelete: SetNull)
   discussion    Thread?     @relation("DiaryDiscussion", fields: [threadId], references: [id], onDelete: SetNull)
   updates       DiaryUpdate[]
+  experiments   GrowExperiment[]
   reactions     Reaction[]
   followers     DiaryFollow[]
   diaryContestEntries DiaryContestEntry[]
@@ -440,14 +443,49 @@ model DiaryUpdate {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
+  experimentId String?
+
   diary        GrowDiary   @relation(fields: [diaryId], references: [id], onDelete: Cascade)
   author       User        @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  experiment   GrowExperiment? @relation(fields: [experimentId], references: [id], onDelete: SetNull)
   images       DiaryImage[]
 
   @@index([diaryId])
   @@index([diaryId, createdAt])
   @@index([authorId])
   @@index([createdAt])
+  @@index([experimentId])
+}
+
+// GrowExperiment — a deliberate grow change with a recorded reason. NOT a
+// lab tool: it captures "I changed X because I observed Y" and accumulates
+// follow-up evidence as linked DiaryUpdates. The grower alone declares the
+// outcome — the platform never decides whether a change "worked".
+model GrowExperiment {
+  id         String   @id @default(cuid())
+  diaryId    String
+  authorId   String
+  title      String   // short label, e.g. "Raised light intensity"
+  change     String   // what changed
+  reason     String?  // why — what was observed
+  expected   String?  // what the grower is watching for
+  category   String   // ENVIRONMENT|FEEDING|TRAINING|WATERING|LIGHTING|TECHNIQUE|ISSUE_RESPONSE|SETUP|OTHER
+  status     String   @default("ACTIVE") // PLANNED|ACTIVE|OBSERVING|COMPLETED|ABANDONED
+  outcome    String?  // WORKED|DID_NOT_WORK|INCONCLUSIVE — grower-stated only
+  conclusion String?  // grower's own words at completion
+  baseline   String?  // context/reading at the time of the change
+  startedAt  DateTime @default(now()) // when the change actually happened
+  endedAt    DateTime? // completed/abandoned at
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  diary      GrowDiary     @relation(fields: [diaryId], references: [id], onDelete: Cascade)
+  author     User          @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  updates    DiaryUpdate[] // follow-up observations/measurements
+
+  @@index([diaryId])
+  @@index([authorId])
+  @@index([diaryId, status])
 }
 
 model DiaryImage {

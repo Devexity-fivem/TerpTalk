@@ -18,6 +18,8 @@ import {
   type AttentionItem,
 } from "@/lib/grow-intel"
 import { diaryPath } from "@/lib/slugs"
+import { EXPERIMENT_CATEGORY_LABELS, type ExperimentCategory } from "@/lib/experiments"
+import { TECHNIQUE_LABELS } from "@/lib/grow-fields"
 
 export interface MemberHomeData {
   displayName: string
@@ -59,7 +61,21 @@ export interface MemberHomeData {
     nextStep: string | null
     /** number of open deterministic flags (concern/due/episode/intervention) */
     flagCount: number
+    /** open documented experiments on this grow */
+    activeExperiments: number
   }[]
+  /** Personal grow knowledge — the member's own documented history.
+   *  null when there is nothing real to show yet. */
+  knowledge: {
+    experimentsTotal: number
+    experimentsOpen: number
+    /** most-used documented experiment categories */
+    experimentCategories: { label: string; count: number }[]
+    /** techniques across all the member's diaries (fixed vocab) */
+    techniques: { label: string; count: number; diaryId: string; diarySlug: string | null }[]
+    /** strains grown across all diaries */
+    strains: { name: string; count: number }[]
+  } | null
   /** "What deserves my attention" — deterministic signals only, owner scope */
   attention: AttentionItem[]
   /** Community content around the strains the member is actively growing */
@@ -210,7 +226,7 @@ export async function getMemberHomeData(userId: string): Promise<MemberHomeData 
 
   // Journey states + deterministic intel for the member's active grows —
   // bounded at 3 diaries (each getGrowIntel is 3 indexed queries).
-  const [journeyStates, intelStates, latestPhotos] = await Promise.all([
+  const [journeyStates, intelStates, latestPhotos, allDiaries, allExperiments] = await Promise.all([
     Promise.all(diaries.map((d) => getGrowJourney(d.id))),
     Promise.all(diaries.map((d) => getGrowIntel(d.id, userId).catch(() => null))),
     diaries.length
@@ -221,12 +237,73 @@ export async function getMemberHomeData(userId: string): Promise<MemberHomeData 
           select: { url: true, update: { select: { diaryId: true } } },
         })
       : Promise.resolve([]),
+    // Grow-knowledge surface — the member's whole documented history,
+    // bounded. Only the fields the knowledge card aggregates.
+    prisma.growDiary.findMany({
+      where: { authorId: userId, deleted: false },
+      orderBy: { createdAt: "desc" },
+      take: 100,
+      select: { id: true, slug: true, strain: true, strainId: true, strainRef: { select: { name: true } }, techniques: true, harvested: true },
+    }),
+    prisma.growExperiment.findMany({
+      where: { authorId: userId, diary: { deleted: false } },
+      orderBy: { startedAt: "desc" },
+      take: 50,
+      select: { status: true, category: true, diaryId: true },
+    }),
   ])
 
   const photoByDiary = new Map<string, string>()
   for (const img of latestPhotos) {
     if (!photoByDiary.has(img.update.diaryId)) photoByDiary.set(img.update.diaryId, img.url)
   }
+
+  // Grow knowledge — aggregated from the member's own records only.
+  // Counts are over real rows; nothing is inferred.
+  const openExperimentByDiary = new Map<string, number>()
+  const expCatCounts = new Map<string, number>()
+  let openExperiments = 0
+  for (const e of allExperiments) {
+    const open = e.status === "PLANNED" || e.status === "ACTIVE" || e.status === "OBSERVING"
+    if (open) {
+      openExperiments++
+      openExperimentByDiary.set(e.diaryId, (openExperimentByDiary.get(e.diaryId) ?? 0) + 1)
+    }
+    expCatCounts.set(e.category, (expCatCounts.get(e.category) ?? 0) + 1)
+  }
+  const techCounts = new Map<string, { count: number; diaryId: string; diarySlug: string | null }>()
+  const strainCounts = new Map<string, number>()
+  for (const d of allDiaries) {
+    const sName = d.strainRef?.name ?? d.strain
+    if (sName) strainCounts.set(sName, (strainCounts.get(sName) ?? 0) + 1)
+    for (const t of d.techniques) {
+      const cur = techCounts.get(t)
+      if (cur) cur.count++
+      else techCounts.set(t, { count: 1, diaryId: d.id, diarySlug: d.slug })
+    }
+  }
+  const knowledge =
+    allExperiments.length || techCounts.size || strainCounts.size
+      ? {
+          experimentsTotal: allExperiments.length,
+          experimentsOpen: openExperiments,
+          experimentCategories: [...expCatCounts.entries()]
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 4)
+            .map(([c, count]) => ({
+              label: EXPERIMENT_CATEGORY_LABELS[c as ExperimentCategory] ?? c.toLowerCase(),
+              count,
+            })),
+          techniques: [...techCounts.entries()]
+            .sort((a, b) => b[1].count - a[1].count)
+            .slice(0, 5)
+            .map(([t, v]) => ({ label: (TECHNIQUE_LABELS as Record<string, string>)[t] ?? t.toLowerCase(), count: v.count, diaryId: v.diaryId, diarySlug: v.diarySlug })),
+          strains: [...strainCounts.entries()]
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 5)
+            .map(([name, count]) => ({ name, count })),
+        }
+      : null
 
   // Community content around the strains the member is actively growing —
   // public-scope only, capped, excludes the member's own threads (their
@@ -353,8 +430,10 @@ export async function getMemberHomeData(userId: string): Promise<MemberHomeData 
             intel.episodes.length +
             intel.pendingInterventions.length
           : 0,
+        activeExperiments: openExperimentByDiary.get(d.id) ?? 0,
       }
     }),
+    knowledge,
     attention: diaries
       .flatMap((d, i) =>
         intelStates[i]

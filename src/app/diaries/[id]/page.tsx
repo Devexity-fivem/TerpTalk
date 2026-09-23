@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma"
 import { publicUserSelect, activeAuthor, blockedUserIds } from "@/lib/security"
 import { notFound, permanentRedirect } from "next/navigation"
-import { Leaf, Calendar, Users, ClipboardCheck, Camera, TrendingUp, Pencil, Sprout, Link2, Lock, MessagesSquare } from "lucide-react"
+import { Leaf, Calendar, Users, ClipboardCheck, Camera, TrendingUp, Pencil, Sprout, Link2, Lock, MessagesSquare, FlaskConical } from "lucide-react"
 import Link from "next/link"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
@@ -30,6 +30,10 @@ import { diaryPath, strainPath, setupPath } from "@/lib/slugs"
 import Tooltip from "@/components/ui/tooltip"
 import GrowIntelPanel from "@/components/grow-intel-panel"
 import { getGrowIntel } from "@/lib/grow-intel"
+import ExperimentCard from "@/components/experiment-card"
+import ExperimentLogButton from "@/components/experiment-log-button"
+import GrowLessons from "@/components/grow-lessons"
+import { serializeExperiment, readLessons } from "@/lib/experiments"
 import { getStrainGrowStats } from "@/lib/strain-stats"
 import { buildGrowComparison } from "@/lib/grow-compare"
 import { toGrams, toOz } from "@/lib/yield"
@@ -89,6 +93,7 @@ async function getDiaryData(id: string, viewerId?: string | null) {
         include: {
           author: { select: publicUserSelect },
           images: { take: 12, orderBy: { order: "asc" } },
+          experiment: { select: { id: true, title: true } },
         },
         orderBy: { createdAt: "desc" },
         take: 100,
@@ -299,7 +304,52 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
 
   // Week-organized timeline — weeks derived from update dates vs startDate
   const weeks = groupUpdatesByWeek(updates, diary.startDate)
+
+  // Documented experiments — part of the grow's living timeline. Visible
+  // to anyone who can view the diary (they're recorded grower intent, the
+  // same class of record as the updates themselves). Bounded; linked
+  // updates only need latest timestamp + count for the evidence line.
+  const experimentRows = await prisma.growExperiment.findMany({
+    where: { diaryId: diary.id },
+    orderBy: { startedAt: "asc" },
+    take: 50,
+    include: {
+      updates: { orderBy: { createdAt: "desc" }, take: 1, select: { createdAt: true } },
+      _count: { select: { updates: true } },
+    },
+  })
+  const experiments = experimentRows.map((e) => ({
+    view: serializeExperiment({ ...e, updates: e.updates }, undefined, e._count.updates),
+    day: diaryDay(diary.startDate, e.createdAt),
+    lastObservationDay: e.updates[0] ? diaryDay(diary.startDate, e.updates[0].createdAt) : null,
+    week: diaryWeek(diary.startDate, e.createdAt),
+  }))
+
+  // Merge experiments into the week timeline as first-class nodes. A
+  // week with an experiment but no updates gets a synthetic group so the
+  // change still lands in chronological position.
+  const weeksMerged = weeks.map((w) => ({
+    ...w,
+    experiments: experiments.filter((e) => e.week === w.week),
+  }))
+  for (const e of experiments) {
+    if (weeksMerged.some((w) => w.week === e.week)) continue
+    const day = e.day
+    weeksMerged.push({
+      week: e.week,
+      stage: diary.stage,
+      dayStart: day,
+      dayEnd: day,
+      updates: [],
+      photoCount: 0,
+      hasEnv: false,
+      experiments: [e],
+    })
+  }
+  weeksMerged.sort((a, b) => a.week - b.week)
+
   const harvestReport = buildHarvestReport(diary, updates)
+  const lessons = readLessons(diary.lessons)
   const completeness = canEdit ? diaryCompleteness(diary, updates) : null
   const truncated = diary._count.updates > updates.length
 
@@ -720,21 +770,24 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
         {/* Timeline — grouped by grow week, with desktop context rail */}
         <div className="lg:grid lg:grid-cols-[1fr_240px] lg:gap-6">
         <div className="space-y-4 min-w-0">
-          <div className="flex justify-between items-center">
+          <div className="flex justify-between items-center gap-2">
             <h2 className="font-display text-lg font-semibold">Grow Timeline</h2>
             {canEdit && (
-              <UpdateForm
-                diaryId={diary.id}
-                currentStage={diary.stage}
-                currentDay={diaryDay(diary.startDate, new Date())}
-                currentWeek={diaryWeek(diary.startDate, new Date())}
-              />
+              <div className="flex items-center gap-2">
+                <ExperimentLogButton diaryId={diary.id} />
+                <UpdateForm
+                  diaryId={diary.id}
+                  currentStage={diary.stage}
+                  currentDay={diaryDay(diary.startDate, new Date())}
+                  currentWeek={diaryWeek(diary.startDate, new Date())}
+                />
+              </div>
             )}
           </div>
 
-          {weeks.length > 1 && (
+          {weeksMerged.length > 1 && (
             <nav aria-label="Jump to week" className="flex flex-wrap gap-1.5">
-              {weeks.map((w) => (
+              {weeksMerged.map((w) => (
                 <a
                   key={w.week}
                   href={`#week-${w.week}`}
@@ -838,7 +891,7 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
             </p>
           )}
 
-          {updates.length === 0 ? (
+          {weeksMerged.length === 0 ? (
             <div className="bg-card/80 rounded-2xl border border-border/70 p-8 text-center">
               <Leaf className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
               <h3 className="font-display text-base font-semibold mb-1">No updates yet</h3>
@@ -846,8 +899,8 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
             </div>
           ) : (
             <div className="space-y-6">
-              {weeks.map((week, wi) => {
-                const prevStage = wi > 0 ? weeks[wi - 1].stage : null
+              {weeksMerged.map((week, wi) => {
+                const prevStage = wi > 0 ? weeksMerged[wi - 1].stage : null
                 const stageChanged = prevStage != null && prevStage !== week.stage
                 return (
                 <section key={week.week} id={`week-${week.week}`} className="scroll-mt-20">
@@ -880,36 +933,65 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
                   </div>
 
                   <div className="space-y-4 border-l-2 border-border pl-4 sm:pl-6">
-                    {week.updates.map((update) => (
-                      <UpdateEditSection
-                        key={update.id}
-                        update={{
-                          id: update.id,
-                          authorId: update.authorId,
-                          title: update.title,
-                          content: update.content,
-                          stage: update.stage,
-                          temperature: update.temperature,
-                          humidity: update.humidity,
-                          vpd: update.vpd,
-                          ph: update.ph,
-                          ec: update.ec,
-                          heightCm: update.heightCm,
-                          feeding: update.feeding,
-                          training: update.training,
-                          images: update.images.map((img) => ({ id: img.id, url: img.url, caption: img.caption })),
-                        }}
-                        day={diaryDay(diary.startDate, update.createdAt)}
-                        dateLabel={new Date(update.createdAt).toLocaleDateString()}
-                        edited={update.updatedAt.getTime() - update.createdAt.getTime() > 60_000}
-                      />
-                    ))}
+                    {[
+                      ...week.updates.map((u) => ({ kind: "update" as const, at: new Date(u.createdAt).getTime(), u })),
+                      ...week.experiments.map((e) => ({ kind: "experiment" as const, at: new Date(e.view.createdAt).getTime(), e })),
+                    ]
+                      .sort((a, b) => a.at - b.at)
+                      .map((item) =>
+                        item.kind === "experiment" ? (
+                          <div key={`exp-${item.e.view.id}`} className="scroll-mt-20">
+                            <div className="flex items-center gap-2 mb-1.5 -ml-1">
+                              <FlaskConical className="w-3.5 h-3.5 text-primary" />
+                              <span className="text-[10px] font-semibold uppercase tracking-wider text-primary">
+                                Experiment · day {item.e.day}
+                              </span>
+                            </div>
+                            <ExperimentCard
+                              experiment={item.e.view}
+                              diaryId={diary.id}
+                              startDay={item.e.day}
+                              lastObservationDay={item.e.lastObservationDay}
+                              isOwner={canEdit}
+                              strainName={diary.strainRef?.name ?? diary.strain ?? null}
+                            />
+                          </div>
+                        ) : (
+                          <UpdateEditSection
+                            key={item.u.id}
+                            update={{
+                              id: item.u.id,
+                              authorId: item.u.authorId,
+                              title: item.u.title,
+                              content: item.u.content,
+                              stage: item.u.stage,
+                              temperature: item.u.temperature,
+                              humidity: item.u.humidity,
+                              vpd: item.u.vpd,
+                              ph: item.u.ph,
+                              ec: item.u.ec,
+                              heightCm: item.u.heightCm,
+                              feeding: item.u.feeding,
+                              training: item.u.training,
+                              images: item.u.images.map((img) => ({ id: img.id, url: img.url, caption: img.caption })),
+                              experiment: item.u.experiment ? { id: item.u.experiment.id, title: item.u.experiment.title } : null,
+                            }}
+                            day={diaryDay(diary.startDate, item.u.createdAt)}
+                            dateLabel={new Date(item.u.createdAt).toLocaleDateString()}
+                            edited={item.u.updatedAt.getTime() - item.u.createdAt.getTime() > 60_000}
+                          />
+                        )
+                      )}
                   </div>
                 </section>
                 )
               })}
             </div>
           )}
+
+          {/* Grower-recorded lessons — part of the grow's durable
+              history; visibility follows the diary itself. */}
+          <GrowLessons diaryId={diary.id} lessons={lessons} isOwner={canEdit} />
 
           {/* Cross-links: onward paths to this grower's other diaries and
               similar grows — keeps a leaf page from being a dead end. */}
@@ -1102,11 +1184,11 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
             )}
 
             {/* Week jump — mini nav */}
-            {weeks.length > 1 && (
+            {weeksMerged.length > 1 && (
               <div className="bg-card/80 rounded-2xl border border-border/70 p-4">
                 <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Jump to week</h3>
                 <div className="flex flex-wrap gap-1">
-                  {weeks.map((w) => (
+                  {weeksMerged.map((w) => (
                     <a
                       key={w.week}
                       href={`#week-${w.week}`}

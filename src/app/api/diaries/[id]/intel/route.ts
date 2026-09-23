@@ -15,6 +15,7 @@ import {
   snapshotFrom,
 } from "@/lib/terpbot-intel-status"
 import { loadSession, saveSession } from "@/lib/terpbot-session"
+import { renderExperimentLines } from "@/lib/experiments"
 
 /**
  * GET /api/diaries/[id]/intel
@@ -42,6 +43,7 @@ const ACTIONS = new Set([
   "plan",
   "measurements",
   "changes",
+  "experiments",
 ])
 
 export async function GET(
@@ -74,6 +76,11 @@ export async function GET(
 
   if (action === "summary") {
     return NextResponse.json({ intel })
+  }
+  if (action === "experiments") {
+    // Canonical lines at owner scope — private diaries get their
+    // experiment awareness here (chat /experiments stays public-scope).
+    return NextResponse.json({ lines: renderExperimentLines(intel.experiments) })
   }
 
   const now = Date.now()

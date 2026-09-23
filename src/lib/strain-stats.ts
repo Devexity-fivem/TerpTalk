@@ -5,6 +5,12 @@ import { activeAuthor, publicUserSelect } from "@/lib/security"
 import { medianStageDurations, type StageMedian } from "@/lib/diary-weeks"
 import { DIFFICULTY_LABELS, MEDIUM_LABELS, LIGHT_LABELS, TECHNIQUE_LABELS } from "@/lib/grow-fields"
 import { publicDiaryWhere } from "@/lib/diary-visibility"
+import {
+  EXPERIMENT_CATEGORY_LABELS,
+  LESSON_LABELS,
+  readLessons,
+  type ExperimentCategory,
+} from "@/lib/experiments"
 
 const DAY_MS = 86400000
 
@@ -303,6 +309,117 @@ const getStats = unstable_cache(
 
 export function getStrainGrowStats(strainName: string, strainId: string) {
   return getStats(strainName, strainId)
+}
+
+// ── Community evidence: experiments + recorded lessons ─────────────
+// Aggregates over PUBLIC diaries only — the same visibility scope as
+// every other strain aggregate. Thresholds: category counts need ≥3
+// contributing diaries; outcome counts need ≥3 stated outcomes. Below
+// that, the shape reports the sample and the UI stays quiet rather than
+// dressing up anecdotes as findings.
+
+export interface StrainEvidenceSummary {
+  /** diaries (public) carrying at least one experiment */
+  growCount: number
+  experimentCount: number
+  /** null when fewer than 3 diaries contributed experiments */
+  topCategories: { label: string; count: number }[] | null
+  /** grower-stated outcomes on completed experiments — never derived */
+  outcomes: { worked: number; didNotWork: number; inconclusive: number } | null
+  /** grower-recorded lessons on public diaries — attributed, like reviews */
+  lessons: { key: string; label: string; text: string; authorName: string; diarySlug: string | null }[]
+}
+
+const getEvidence = unstable_cache(
+  async (strainName: string, strainId: string): Promise<StrainEvidenceSummary> => {
+    const diaries = await prisma.growDiary.findMany({
+      where: {
+        deleted: false,
+        author: activeAuthor(),
+        ...publicDiaryWhere,
+        OR: [
+          { strainId },
+          { strain: { contains: escapeLike(strainName), mode: "insensitive" } },
+        ],
+      },
+      select: {
+        id: true,
+        slug: true,
+        strain: true,
+        strainId: true,
+        lessons: true,
+        author: { select: publicUserSelect },
+      },
+      orderBy: [{ createdAt: "desc" }, { id: "asc" }],
+      take: 500,
+    })
+    const matched = diaries.filter(
+      (d) => d.strainId === strainId || strainFieldMatches(d.strain, strainName)
+    )
+    const diaryIds = matched.map((d) => d.id)
+
+    const experiments = diaryIds.length
+      ? await prisma.growExperiment.findMany({
+          where: { diaryId: { in: diaryIds } },
+          select: { diaryId: true, category: true, status: true, outcome: true },
+          take: 1000,
+        })
+      : []
+
+    const catCounts = new Map<string, number>()
+    const outcomes = { worked: 0, didNotWork: 0, inconclusive: 0 }
+    for (const e of experiments) {
+      catCounts.set(e.category, (catCounts.get(e.category) ?? 0) + 1)
+      if (e.outcome === "WORKED") outcomes.worked++
+      else if (e.outcome === "DID_NOT_WORK") outcomes.didNotWork++
+      else if (e.outcome === "INCONCLUSIVE") outcomes.inconclusive++
+    }
+    const experimentDiaryCount = new Set(experiments.map((e) => e.diaryId)).size
+    const outcomeTotal = outcomes.worked + outcomes.didNotWork + outcomes.inconclusive
+
+    // Grower lessons — attributed excerpts from public diaries, capped.
+    // These are the grower's own public conclusions, same disclosure
+    // class as harvestNotes reviews.
+    const lessons: StrainEvidenceSummary["lessons"] = []
+    for (const d of matched) {
+      if (lessons.length >= 6) break
+      const l = readLessons(d.lessons)
+      // One excerpt per diary — the "learned" key first, then any other.
+      const key = (["learned", "worked", "repeat", "surprised", "change", "avoid"] as const).find((k) => l[k])
+      if (key) {
+        lessons.push({
+          key,
+          label: LESSON_LABELS[key],
+          text: l[key]!.slice(0, 280),
+          authorName: d.author.profile?.username || d.author.name || "Member",
+          diarySlug: d.slug,
+        })
+      }
+    }
+
+    return {
+      growCount: experimentDiaryCount,
+      experimentCount: experiments.length,
+      topCategories:
+        experimentDiaryCount >= 3
+          ? [...catCounts.entries()]
+              .sort((a, b) => b[1] - a[1])
+              .slice(0, 5)
+              .map(([c, count]) => ({
+                label: EXPERIMENT_CATEGORY_LABELS[c as ExperimentCategory] ?? c.toLowerCase(),
+                count,
+              }))
+          : null,
+      outcomes: outcomeTotal >= 3 ? outcomes : null,
+      lessons,
+    }
+  },
+  ["strain-evidence"],
+  { revalidate: 300, tags: ["strains", "diaries"] }
+)
+
+export function getStrainEvidence(strainName: string, strainId: string) {
+  return getEvidence(strainName, strainId)
 }
 
 /**

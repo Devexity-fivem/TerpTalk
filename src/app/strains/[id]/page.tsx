@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma"
 import { notFound, permanentRedirect } from "next/navigation"
-import { Leaf, Dna, Sprout, ImageIcon, BookOpen, Wrench, MessageSquare, CheckCircle2, BarChart3, Star, Bot } from "lucide-react"
+import { Leaf, Dna, Sprout, ImageIcon, BookOpen, Wrench, MessageSquare, CheckCircle2, BarChart3, Star, Bot, FlaskConical } from "lucide-react"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import StrainPhotoUpload from "@/components/strain-photo-upload"
@@ -12,7 +12,8 @@ import { Breadcrumbs } from "@/components/breadcrumbs"
 import { publicUserSelect, activeAuthor, isActiveAuthorRow } from "@/lib/security"
 import TierChip from "@/components/tier-chip"
 import Tooltip from "@/components/ui/tooltip"
-import { getStrainGrowStats, escapeLike, strainFieldMatches, strainTypeLabel } from "@/lib/strain-stats"
+import { getStrainGrowStats, getStrainEvidence, escapeLike, strainFieldMatches, strainTypeLabel } from "@/lib/strain-stats"
+import { readLessons } from "@/lib/experiments"
 import Link from "next/link"
 import { publicDiaryWhere } from "@/lib/diary-visibility"
 import { blockedUserIds, notBlockedAuthor } from "@/lib/security"
@@ -69,7 +70,7 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
     strain.photos = strain.photos.filter((p) => !blockedIds.includes(p.user.id))
   }
 
-  const [relatedDiariesRaw, relatedSetupsRaw, relatedThreads, growStats, myDiaries] = await Promise.all([
+  const [relatedDiariesRaw, relatedSetupsRaw, relatedThreads, growStats, myDiaries, evidence] = await Promise.all([
     prisma.growDiary.findMany({
       where: {
         deleted: false,
@@ -137,9 +138,17 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
           },
           orderBy: { updatedAt: "desc" },
           take: 3,
-          select: { id: true, slug: true, title: true, stage: true, harvested: true },
+          select: {
+            id: true, slug: true, title: true, stage: true, harvested: true,
+            startDate: true, harvestedAt: true, harvestRating: true,
+            yieldAmount: true, yieldUnit: true, lessons: true,
+            _count: { select: { experiments: true } },
+          },
         })
       : Promise.resolve([]),
+    // Community evidence — experiment categories, grower-stated outcomes
+    // and recorded lessons across public grows of this strain.
+    getStrainEvidence(strain.name, strain.id),
   ])
 
   // `contains` is a recall pre-filter — apply the same precision post-filter
@@ -209,17 +218,23 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
           </div>
         </div>
 
-        {/* Personal context — you're growing this */}
+        {/* Personal context — your history with this strain */}
         {myDiaries.length > 0 && (
           <div className="bg-primary/5 rounded-2xl border border-primary/25 p-4 sm:p-5 mb-6">
             <div className="flex items-center gap-2 mb-3">
               <Sprout className="w-4 h-4 text-primary" />
               <h2 className="font-display text-sm font-semibold">
-                {myDiaries.some((d) => !d.harvested) ? "You're growing this" : "You grew this"}
+                Your history with {strain.name}
               </h2>
+              <span className="text-[10px] text-muted-foreground ml-auto">your records</span>
             </div>
             <ul className="space-y-1.5">
-              {myDiaries.map((d) => (
+              {myDiaries.map((d) => {
+                const days = d.harvested && d.harvestedAt
+                  ? Math.max(1, Math.round((new Date(d.harvestedAt).getTime() - new Date(d.startDate).getTime()) / 86400000))
+                  : null
+                const hasLessons = !!(d.lessons && Object.keys(readLessons(d.lessons)).length)
+                return (
                 <li key={d.id}>
                   <Link
                     href={diaryPath(d)}
@@ -229,8 +244,20 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
                     <span className="min-w-0 flex-1 truncate text-sm font-medium group-hover:text-primary">
                       {d.title}
                     </span>
+                    {d._count.experiments > 0 && (
+                      <span className="shrink-0 inline-flex items-center gap-1 text-xs text-muted-foreground">
+                        <FlaskConical className="h-3 w-3" />{d._count.experiments}
+                      </span>
+                    )}
+                    {hasLessons && (
+                      <span className="shrink-0 text-[10px] text-muted-foreground">lessons</span>
+                    )}
                     <span className="shrink-0 text-xs text-muted-foreground">
-                      {d.harvested ? "harvested" : d.stage.toLowerCase()}
+                      {d.harvested
+                        ? [days != null ? `${days}d` : null, d.harvestRating != null ? `rated ${d.harvestRating}/10` : null]
+                            .filter(Boolean)
+                            .join(" · ") || "harvested"
+                        : d.stage.toLowerCase()}
                     </span>
                     {!d.harvested && (
                       <span className="hidden sm:inline-flex shrink-0 items-center gap-1 text-xs text-muted-foreground">
@@ -239,7 +266,8 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
                     )}
                   </Link>
                 </li>
-              ))}
+                )
+              })}
             </ul>
           </div>
         )}
@@ -374,6 +402,61 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
                   ))}
               </div>
             )}
+          </div>
+        )}
+
+        {/* Documented community evidence — experiments and grower-recorded
+            lessons across public grows. Counts surface only above the
+            minimum sample thresholds set in getStrainEvidence. */}
+        {(evidence.experimentCount > 0 || evidence.lessons.length > 0) && (
+          <div className="bg-card/80 rounded-2xl border border-border/70 p-5 mb-6">
+            <div className="flex items-center gap-2 mb-4">
+              <FlaskConical className="w-4 h-4 text-primary" />
+              <h2 className="font-display font-semibold">Documented approaches</h2>
+              <span className="text-xs text-muted-foreground ml-auto">community records</span>
+            </div>
+            {evidence.experimentCount > 0 && (
+              <p className="text-sm text-muted-foreground mb-3">
+                Community growers have documented {evidence.experimentCount} experiment
+                {evidence.experimentCount === 1 ? "" : "s"} across {evidence.growCount} public grow
+                {evidence.growCount === 1 ? "" : "s"} of this strain.
+              </p>
+            )}
+            {evidence.topCategories && (
+              <div className="flex flex-wrap gap-2 mb-3">
+                {evidence.topCategories.map((c) => (
+                  <span key={c.label} className="text-xs px-2.5 py-1 rounded-full bg-secondary text-muted-foreground">
+                    {c.label} · {c.count}
+                  </span>
+                ))}
+              </div>
+            )}
+            {evidence.outcomes && (
+              <p className="text-xs text-muted-foreground mb-3">
+                Grower-stated outcomes: {evidence.outcomes.worked} worked for them ·{" "}
+                {evidence.outcomes.didNotWork} did not work ·{" "}
+                {evidence.outcomes.inconclusive} inconclusive
+              </p>
+            )}
+            {evidence.lessons.length > 0 && (
+              <ul className="space-y-3 pt-3 border-t border-border">
+                {evidence.lessons.map((l, i) => (
+                  <li key={`${l.diarySlug}-${i}`} className="text-sm">
+                    <p className="text-muted-foreground">
+                      <span className="text-foreground/80 font-medium">{l.label}:</span> {l.text}
+                    </p>
+                    {l.diarySlug && (
+                      <Link href={`/diaries/${l.diarySlug}`} className="text-xs text-primary hover:underline">
+                        {l.authorName}&apos;s grow →
+                      </Link>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+            <p className="mt-3 text-[11px] text-muted-foreground">
+              Aggregated from public grows only — reported experience, not proven results.
+            </p>
           </div>
         )}
 

@@ -8,7 +8,7 @@
 import { useState } from "react"
 import { useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
-import { Pencil, Loader2, X, Camera, ImagePlus } from "lucide-react"
+import { Pencil, Loader2, X, Camera, ImagePlus, FlaskConical } from "lucide-react"
 import { useToast } from "@/components/ui/toast"
 import { STAGE_TIPS } from "@/lib/stage-tips"
 import { resizeImage } from "@/components/update-form"
@@ -31,6 +31,8 @@ export interface EditableUpdate {
   feeding: string | null
   training: string | null
   images: { id: string; url: string; caption: string | null }[]
+  /** linked experiment — this update is follow-up evidence for it */
+  experiment?: { id: string; title: string } | null
 }
 
 interface UpdateEditSectionProps {
@@ -149,6 +151,15 @@ export default function UpdateEditSection({ update, day, dateLabel, edited }: Up
             ))}
           </div>
           {!editing && <h4 className="font-display font-semibold text-sm">{update.title}</h4>}
+          {!editing && update.experiment && (
+            <a
+              href={`#experiment-${update.experiment.id}`}
+              className="inline-flex items-center gap-1 mt-1 text-[11px] text-primary/90 hover:text-primary transition-colors"
+            >
+              <FlaskConical className="w-3 h-3" />
+              follow-up to experiment: {update.experiment.title}
+            </a>
+          )}
         </div>
         <span className="text-xs text-muted-foreground flex items-center gap-2">
           {dateLabel}

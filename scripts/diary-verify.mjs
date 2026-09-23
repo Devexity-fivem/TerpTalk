@@ -642,6 +642,180 @@ const main = async () => {
     page.status === 404 ? pass("missing setup slug 404s") : fail("missing setup", page.status)
 
     // ── Deleted diary 404s ──────────────────────────────────────────
+    // ── Grow experiments — lifecycle, authz, evidence, privacy ─────
+    r = await callApi(`/api/diaries/${diaryId}/experiments`, { method: "POST", body: { title: M("exp"), change: "dimmer 60 to 80" } })
+    r.status === 401 ? pass("experiment create requires auth") : fail("experiment anon", r.status)
+
+    r = await callApi(`/api/diaries/${diaryId}/experiments`, { method: "POST", body: { title: M("exp"), change: "x" }, cookie: viewerCookie })
+    r.status === 403 ? pass("experiment create requires ownership") : fail("experiment non-owner", r.status)
+
+    r = await callApi(`/api/diaries/${diaryId}/experiments`, { method: "POST", body: { title: M("exp") }, cookie: ownerCookie })
+    r.status === 400 ? pass("experiment create requires a change description") : fail("experiment missing change", r.status)
+
+    r = await callApi(`/api/diaries/${diaryId}/experiments`, { method: "POST", body: { title: M("exp"), change: "x", category: "MAGIC" }, cookie: ownerCookie })
+    r.status === 400 ? pass("experiment rejects unknown category") : fail("experiment category", r.status)
+
+    r = await callApi(`/api/diaries/${diaryId}/experiments`, { method: "POST", body: { title: M("exp"), change: "x", status: "COMPLETED" }, cookie: ownerCookie })
+    r.status === 400 ? pass("experiment cannot be created already-completed") : fail("experiment create status", r.status)
+
+    r = await callApi(`/api/diaries/${diaryId}/experiments`, {
+      method: "POST",
+      body: { title: `Light bump ${TS}`, change: "raised light intensity", reason: "leaf posture changed", expected: "posture recovers", category: "LIGHTING" },
+      cookie: ownerCookie,
+    })
+    const expId = r.data?.experiment?.id
+    r.status === 201 && expId && r.data.experiment.status === "ACTIVE" && r.data.experiment.followUp === "awaiting_first_observation"
+      ? pass("experiment created ACTIVE with first-observation follow-up")
+      : fail("experiment create", { s: r.status, d: r.data })
+
+    r = await callApi(`/api/diaries/${diaryId}/experiments`, { method: "POST", body: { title: M("exp"), change: "x" }, cookie: bannedCookie })
+    ;(r.status === 401 || r.status === 403) ? pass("banned member cannot create experiment") : fail("experiment banned", r.status)
+
+    if (expId) {
+      // Lifecycle — non-owner first (403 via forbidden path, not 404: the
+      // experiment exists on a public diary so no oracle concern)
+      r = await callApi(`/api/diaries/${diaryId}/experiments/${expId}`, { method: "PATCH", body: { status: "OBSERVING" }, cookie: viewerCookie })
+      r.status === 403 ? pass("experiment PATCH rejects non-owner") : fail("experiment PATCH non-owner", r.status)
+
+      r = await callApi(`/api/diaries/${diaryId}/experiments/${expId}`, { method: "PATCH", body: { status: "BOGUS" }, cookie: ownerCookie })
+      r.status === 400 ? pass("experiment rejects invalid status") : fail("experiment bogus status", r.status)
+
+      r = await callApi(`/api/diaries/${diaryId}/experiments/${expId}`, { method: "PATCH", body: { outcome: "SORTA" }, cookie: ownerCookie })
+      r.status === 400 ? pass("experiment rejects non-vocabulary outcome") : fail("experiment bogus outcome", r.status)
+
+      // Cross-diary link guard — an experiment id from another grow must
+      // not be attachable to this diary's updates.
+      const foreignExp = await prisma.growExperiment.create({
+        data: { diaryId: sd1.id, authorId: voter.id, title: M("foreign"), change: "x", category: "OTHER" },
+      })
+      r = await callApi("/api/diaries/updates", {
+        method: "POST",
+        body: { diaryId, title: M("fx"), content: "cross-link attempt", experimentId: foreignExp.id },
+        cookie: ownerCookie,
+      })
+      r.status === 400 ? pass("update rejects experiment from another diary") : fail("cross-diary experiment link", r.status)
+
+      // Linked observation deterministically advances ACTIVE → OBSERVING
+      r = await callApi("/api/diaries/updates", {
+        method: "POST",
+        body: { diaryId, title: M("obs"), content: "posture improved overnight", experimentId: expId },
+        cookie: ownerCookie,
+      })
+      const expAfterObs = await prisma.growExperiment.findUnique({ where: { id: expId }, select: { status: true } })
+      r.status === 201 && expAfterObs?.status === "OBSERVING"
+        ? pass("linked observation advances ACTIVE → OBSERVING")
+        : fail("observing transition", { s: r.status, st: expAfterObs?.status })
+
+      // Grower-stated completion — outcome is explicit input, never derived
+      r = await callApi(`/api/diaries/${diaryId}/experiments/${expId}`, {
+        method: "PATCH",
+        body: { status: "COMPLETED", outcome: "WORKED", conclusion: "posture recovered in two days" },
+        cookie: ownerCookie,
+      })
+      const expDone = await prisma.growExperiment.findUnique({ where: { id: expId }, select: { status: true, outcome: true, endedAt: true } })
+      r.status === 200 && expDone?.status === "COMPLETED" && expDone?.outcome === "WORKED" && expDone.endedAt
+        ? pass("completion stamps endedAt + grower-stated outcome")
+        : fail("experiment completion", { s: r.status, expDone })
+
+      r = await callApi(`/api/diaries/${diaryId}/experiments/${expId}`, { method: "PATCH", body: { status: "ACTIVE" }, cookie: ownerCookie })
+      const expReopen = await prisma.growExperiment.findUnique({ where: { id: expId }, select: { endedAt: true } })
+      r.status === 200 && expReopen?.endedAt === null
+        ? pass("reopen clears endedAt")
+        : fail("experiment reopen", { s: r.status, endedAt: expReopen?.endedAt })
+
+      // List: public diary exposes experiments to guests; owner sees all
+      r = await callApi(`/api/diaries/${diaryId}/experiments`)
+      r.status === 200 && (r.data?.experiments || []).some((e) => e.id === expId)
+        ? pass("guest lists experiments on PUBLIC diary")
+        : fail("guest experiment list", { s: r.status, d: r.data })
+
+      // Timeline integration — the experiment card renders on the page
+      // (status label reflects the reopen above; the card anchor proves
+      // the node rendered)
+      page = await getHtml(diaryHref, ownerCookie)
+      page.status === 200 && page.html.includes(`Light bump ${TS}`) && page.html.includes(`experiment-${expId}`)
+        ? pass("experiment renders in diary timeline")
+        : fail("timeline experiment node", { s: page.status, has: page.html.includes(`Light bump ${TS}`) })
+
+      // Owner intel endpoint exposes the experiment lines; non-owner 404s
+      r = await callApi(`/api/diaries/${diaryId}/intel?action=experiments`, { cookie: ownerCookie })
+      r.status === 200 && (r.data?.lines || []).some((l) => l.includes(`Light bump ${TS}`))
+        ? pass("owner intel action=experiments returns canonical lines")
+        : fail("intel experiments owner", { s: r.status, d: r.data })
+      r = await callApi(`/api/diaries/${diaryId}/intel?action=experiments`, { cookie: viewerCookie })
+      r.status === 404 ? pass("non-owner intel action=experiments 404s") : fail("intel experiments non-owner", r.status)
+
+      // DELETE — non-owner forbidden; owner delete unlinks updates
+      r = await callApi(`/api/diaries/${diaryId}/experiments/${expId}`, { method: "DELETE", cookie: viewerCookie })
+      r.status === 403 ? pass("experiment DELETE rejects non-owner") : fail("experiment DELETE non-owner", r.status)
+      const linkedUpd = await prisma.diaryUpdate.findFirst({ where: { experimentId: expId }, select: { id: true } })
+      r = await callApi(`/api/diaries/${diaryId}/experiments/${expId}`, { method: "DELETE", cookie: ownerCookie })
+      const unlinked = linkedUpd && await prisma.diaryUpdate.findUnique({ where: { id: linkedUpd.id }, select: { experimentId: true, title: true } })
+      r.status === 200 && unlinked && unlinked.experimentId === null
+        ? pass("delete unlinks updates, keeps their content")
+        : fail("experiment delete unlink", { s: r.status, unlinked })
+    }
+
+    // Private diary — experiments follow diary visibility
+    const prvExpD = await prisma.growDiary.create({
+      data: { title: `${tok} expprivate`, description: "s", growType: "INDOOR", startDate: new Date(), authorId: owner.id, visibility: "PRIVATE" },
+    })
+    diaryIds.push(prvExpD.id)
+    await prisma.growExperiment.create({
+      data: { diaryId: prvExpD.id, authorId: owner.id, title: `Secret change ${TS}`, change: "x", category: "OTHER" },
+    })
+    r = await callApi(`/api/diaries/${prvExpD.id}/experiments`, { cookie: ownerCookie })
+    r.status === 200 && (r.data?.experiments || []).length === 1
+      ? pass("owner lists experiments on PRIVATE diary")
+      : fail("owner private experiments", { s: r.status, d: r.data })
+    for (const [who, ck] of [["viewer", viewerCookie], ["guest", undefined]]) {
+      r = await callApi(`/api/diaries/${prvExpD.id}/experiments`, { cookie: ck })
+      r.status === 404 ? pass(`PRIVATE diary experiments invisible to ${who}`) : fail(`private experiments ${who}`, r.status)
+    }
+
+    // Lessons — structured JSON on the diary, owner-authored
+    r = await callApi(`/api/diaries/${diaryId}`, { method: "PATCH", body: { lessons: { learned: "less is more", bogus: "x" } }, cookie: ownerCookie })
+    r.status === 400 ? pass("lessons reject unknown keys") : fail("lessons bogus key", r.status)
+    r = await callApi(`/api/diaries/${diaryId}`, { method: "PATCH", body: { lessons: { learned: "less is more" } }, cookie: viewerCookie })
+    r.status === 403 ? pass("lessons PATCH requires ownership") : fail("lessons non-owner", r.status)
+    r = await callApi(`/api/diaries/${diaryId}`, { method: "PATCH", body: { lessons: { learned: "less is more", worked: "steady environment" } }, cookie: ownerCookie })
+    const lessonsRow = await prisma.growDiary.findUnique({ where: { id: diaryId }, select: { lessons: true } })
+    r.status === 200 && lessonsRow?.lessons?.learned === "less is more"
+      ? pass("lessons persist as structured JSON")
+      : fail("lessons persist", { s: r.status, lessons: lessonsRow?.lessons })
+
+    // Strain evidence aggregation — public experiments only, thresholds
+    // gate category counts; private experiments must not leak.
+    const evStrain = await prisma.strain.create({ data: { name: M("evstrain"), createdById: owner.id } })
+    strainIds.push(evStrain.id)
+    const evMk = async (authorId, extra = {}) => {
+      const d = await prisma.growDiary.create({
+        data: { title: M("ev"), description: "s", strain: evStrain.name, strainId: evStrain.id, growType: "INDOOR", startDate: new Date(), authorId, ...extra },
+      })
+      diaryIds.push(d.id)
+      return d
+    }
+    for (const authorId of [owner.id, voter.id, viewer.id]) {
+      const d = await evMk(authorId)
+      await prisma.growExperiment.create({
+        data: { diaryId: d.id, authorId, title: M("evexp"), change: "x", category: "TRAINING", status: "COMPLETED", outcome: "WORKED" },
+      })
+    }
+    // A private grow's experiment on the same strain — must not count.
+    const prvEv = await evMk(owner.id, { visibility: "PRIVATE" })
+    await prisma.growExperiment.create({
+      data: { diaryId: prvEv.id, authorId: owner.id, title: M("evprv"), change: "x", category: "SETUP" },
+    })
+    page = await getHtml(`/strains/${evStrain.id}`)
+    // JSX text expressions render with <!-- --> separators — strip them
+    // before substring checks.
+    const evHtml = page.html.replace(/<!--.*?-->/g, "")
+    const evOk = evHtml.includes("Documented approaches") && evHtml.includes("3 experiments") && evHtml.includes("3 public grow")
+    const noLeak = !evHtml.includes("Setup change") && !evHtml.includes("4 experiment")
+    page.status === 200 && evOk && noLeak
+      ? pass("strain evidence aggregates public experiments, excludes private")
+      : fail("strain evidence", { s: page.status, evOk, noLeak })
+
     await prisma.growDiary.update({ where: { id: sd2.id }, data: { deleted: true } })
     page = await getHtml(`/diaries/${sd2.id}`)
     page.status === 404 ? pass("deleted diary 404s") : fail("deleted diary", page.status)
