@@ -8,9 +8,13 @@ import DealsBrowser from "@/components/deals-browser"
 export const revalidate = 300
 
 export const metadata = {
-  title: "TerpTalk Deals — Grow Equipment",
-  description: "Recommended grow lights, tents, fans, controllers and equipment from TerpTalk's affiliate partners. Community-tested gear with promo codes.",
+  title: "TerpTalk Deals — Grow Equipment & Clones",
+  description: "Recommended grow lights, tents, fans and equipment plus Farm Bill compliant clones shipped to all 50 states — from TerpTalk's affiliate partners. Community-tested gear with promo codes.",
 }
+
+// Products land in the "Clones & Genetics" section when their category reads
+// as genetics rather than hardware — everything else is grow equipment.
+const CLONE_SECTION_RE = /clone|seed|genetic/i
 
 const getDealsData = unstable_cache(
   async () => {
@@ -47,7 +51,7 @@ export default async function DealsPage() {
           <h1 className="font-display text-3xl sm:text-4xl font-bold mt-1.5 mb-2 flex items-center gap-3 tracking-tight">
             <Percent className="w-8 h-8 text-primary" /> TerpTalk Deals
           </h1>
-          <p className="text-muted-foreground">Community-recommended grow gear — partner links support the site at no extra cost to you.</p>
+          <p className="text-muted-foreground">Community-recommended grow gear and genetics — partner links support the site at no extra cost to you.</p>
         </div>
 
         {/* Featured partners */}
@@ -97,6 +101,7 @@ export default async function DealsPage() {
             name: p.name,
             description: p.description,
             category: p.category,
+            section: (CLONE_SECTION_RE.test(p.category) ? "clones" : "equipment") as "clones" | "equipment",
             imageUrl: p.imageUrl,
             price: p.price,
             recommendedFor: p.recommendedFor,
