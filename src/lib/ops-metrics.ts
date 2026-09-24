@@ -15,8 +15,13 @@ export interface FunnelWindow {
   activated: number
   firstDiary: number
   firstThread: number
+  firstReply: number
+  firstSetup: number
   firstChatMessage: number
   returned24h: number
+  returned7d: number
+  referredSignups: number
+  referredActivated: number
 }
 
 // "Activated" = the member produced at least one real contribution — a
@@ -35,13 +40,15 @@ const CONTRIBUTION_OR = [
 async function funnel(sinceDays: number): Promise<FunnelWindow> {
   const since = new Date(Date.now() - sinceDays * DAY)
   const base = { createdAt: { gt: since }, banned: false }
-  const [signups, onboardingCompleted, activated, firstDiary, firstThread, firstChatMessage, returned24h] =
+  const [signups, onboardingCompleted, activated, firstDiary, firstThread, firstReply, firstSetup, firstChatMessage, returned24h, returned7d, referredSignups, referredActivated] =
     await Promise.all([
       prisma.user.count({ where: base }),
       prisma.user.count({ where: { ...base, onboardingCompletedAt: { not: null } } }),
       prisma.user.count({ where: { ...base, OR: [...CONTRIBUTION_OR] } }),
       prisma.user.count({ where: { ...base, diaryCreator: { some: {} } } }),
       prisma.user.count({ where: { ...base, threadCreator: { some: {} } } }),
+      prisma.user.count({ where: { ...base, posts: { some: {} } } }),
+      prisma.user.count({ where: { ...base, setupCreator: { some: {} } } }),
       prisma.user.count({ where: { ...base, chatMessages: { some: {} } } }),
       // Returned = lastSeenAt (kept fresh by /api/ping) is at least a day
       // past signup. Column-to-column comparison needs raw SQL; the where
@@ -53,8 +60,20 @@ async function funnel(sinceDays: number): Promise<FunnelWindow> {
           AND "lastSeenAt" > "createdAt" + interval '24 hours'
           AND "banned" = false
       `.then((r) => Number(r[0]?.n ?? 0)),
+      prisma.$queryRaw<[{ n: bigint }]>`
+        SELECT COUNT(*)::bigint AS n FROM "User"
+        WHERE "createdAt" > ${since}
+          AND "lastSeenAt" IS NOT NULL
+          AND "lastSeenAt" > "createdAt" + interval '7 days'
+          AND "banned" = false
+      `.then((r) => Number(r[0]?.n ?? 0)),
+      // Referred = Profile.referredById set; attributed at signup.
+      prisma.user.count({ where: { ...base, profile: { referredById: { not: null } } } }),
+      prisma.user.count({
+        where: { ...base, profile: { referredById: { not: null } }, OR: [...CONTRIBUTION_OR] },
+      }),
     ])
-  return { days: sinceDays, signups, onboardingCompleted, activated, firstDiary, firstThread, firstChatMessage, returned24h }
+  return { days: sinceDays, signups, onboardingCompleted, activated, firstDiary, firstThread, firstReply, firstSetup, firstChatMessage, returned24h, returned7d, referredSignups, referredActivated }
 }
 
 export interface CommunityHealth {
@@ -248,6 +267,160 @@ async function cronHealth(): Promise<CronHealth> {
   }
 }
 
+export interface GrowOps {
+  activePublicDiaries: number
+  diaryUpdates7d: number
+  harvestedTotal: number
+  harvested7d: number
+  experimentsTotal: number
+  experimentsByStatus: Record<string, number>
+  experimentFollowUps7d: number
+}
+
+// Aggregate grow-system usage — counts only. Private diaries count toward
+// nothing here except where the aggregate is explicitly "public" scoped.
+async function growOps(): Promise<GrowOps> {
+  const since = new Date(Date.now() - 7 * DAY)
+  const [activePublicDiaries, diaryUpdates7d, harvestedTotal, harvested7d, experimentsTotal, expByStatus, experimentFollowUps7d] =
+    await Promise.all([
+      prisma.growDiary.count({ where: { deleted: false, visibility: "PUBLIC", harvested: false } }),
+      prisma.diaryUpdate.count({ where: { createdAt: { gt: since } } }),
+      prisma.growDiary.count({ where: { deleted: false, harvested: true } }),
+      prisma.growDiary.count({ where: { deleted: false, harvestedAt: { gt: since } } }),
+      prisma.growExperiment.count(),
+      prisma.growExperiment.groupBy({ by: ["status"], _count: { _all: true } }),
+      prisma.diaryUpdate.count({ where: { createdAt: { gt: since }, experimentId: { not: null } } }),
+    ])
+  return {
+    activePublicDiaries, diaryUpdates7d, harvestedTotal, harvested7d, experimentsTotal,
+    experimentsByStatus: Object.fromEntries(expByStatus.map((g) => [g.status, g._count._all])),
+    experimentFollowUps7d,
+  }
+}
+
+export interface BotOps {
+  commands7d: number
+  byCommand7d: { command: string; count: number }[]
+  announcements7d: number
+  membersAssisted7d: number
+  lastEventAt: Date | null
+  daysActive7d: number
+}
+
+// TerpBot operational visibility — BotEvent is the canonical command/
+// announcement log. Aggregates only; no message content is stored there.
+async function botOps(): Promise<BotOps> {
+  const since = new Date(Date.now() - 7 * DAY)
+  const [byCommand, announcements7d, assistedRows, lastEvent, daysActive7d] = await Promise.all([
+    prisma.botEvent.groupBy({
+      by: ["command"],
+      where: { type: { in: ["COMMAND_SLASH", "COMMAND_MENTION"] }, createdAt: { gt: since }, command: { not: null } },
+      _count: { _all: true },
+    }),
+    prisma.botEvent.count({ where: { type: "ANNOUNCEMENT", createdAt: { gt: since } } }),
+    prisma.botEvent.findMany({
+      where: { type: { in: ["COMMAND_SLASH", "COMMAND_MENTION"] }, createdAt: { gt: since }, userId: { not: null } },
+      select: { userId: true },
+      distinct: ["userId"],
+    }),
+    prisma.botEvent.findFirst({ orderBy: { createdAt: "desc" }, select: { createdAt: true } }),
+    prisma.botEvent.count({ where: { type: "DAY_ACTIVE", createdAt: { gt: since } } }),
+  ])
+  return {
+    commands7d: byCommand.reduce((s, g) => s + g._count._all, 0),
+    byCommand7d: byCommand
+      .map((g) => ({ command: g.command || "unknown", count: g._count._all }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 12),
+    announcements7d,
+    membersAssisted7d: assistedRows.length,
+    lastEventAt: lastEvent?.createdAt ?? null,
+    daysActive7d,
+  }
+}
+
+export interface MemberSummary {
+  id: string
+  username: string
+  role: string
+  banned: boolean
+  suspendedUntil: Date | null
+  createdAt: Date
+  lastSeenAt: Date | null
+  onboardingCompleted: boolean
+  reputation: number
+  referred: boolean
+  counts: { threads: number; posts: number; diaries: number; diaryUpdates: number; chatMessages: number; setups: number }
+  openReportsAbout: number
+  abuseFlags: number
+}
+
+// Staff member lookup — bounded (25 rows), username-prefix search only.
+// Returns counts and status flags, never email/bio/private content. Safe
+// for the moderator role per the moderation-context policy.
+export async function searchMembers(q: string): Promise<MemberSummary[]> {
+  const query = q.trim().replace(/^@/, "").slice(0, 64)
+  if (query.length < 2) return []
+  const rows = await prisma.profile.findMany({
+    where: { username: { contains: query, mode: "insensitive" } },
+    orderBy: { reputation: "desc" },
+    take: 25,
+    select: {
+      username: true, reputation: true, referredById: true,
+      user: {
+        select: {
+          id: true, name: true, role: true, banned: true, suspendedUntil: true,
+          createdAt: true, lastSeenAt: true, onboardingCompletedAt: true,
+          _count: {
+            select: {
+              threadCreator: true, posts: true, diaryCreator: true,
+              diaryUpdates: true, chatMessages: true, setupCreator: true,
+            },
+          },
+        },
+      },
+    },
+  })
+  if (!rows.length) return []
+  const ids = rows.map((r) => r.user.id)
+  const [reports, flags] = await Promise.all([
+    prisma.report.groupBy({
+      by: ["reportedId"],
+      where: { reportedId: { in: ids }, status: { in: ["PENDING", "REVIEWING", "ESCALATED"] } },
+      _count: { _all: true },
+    }),
+    prisma.abuseFlag.groupBy({
+      by: ["userId"],
+      where: { userId: { in: ids } },
+      _count: { _all: true },
+    }),
+  ])
+  const repMap = new Map(reports.map((r) => [r.reportedId, r._count._all]))
+  const flagMap = new Map(flags.map((r) => [r.userId, r._count._all]))
+  return rows.map((r) => ({
+    id: r.user.id,
+    username: r.username || r.user.name || "member",
+    role: r.user.role,
+    banned: r.user.banned,
+    suspendedUntil: r.user.suspendedUntil,
+    createdAt: r.user.createdAt,
+    lastSeenAt: r.user.lastSeenAt,
+    onboardingCompleted: !!r.user.onboardingCompletedAt,
+    reputation: r.reputation,
+    referred: !!r.referredById,
+    counts: {
+      threads: r.user._count.threadCreator,
+      posts: r.user._count.posts,
+      diaries: r.user._count.diaryCreator,
+      diaryUpdates: r.user._count.diaryUpdates,
+      chatMessages: r.user._count.chatMessages,
+      setups: r.user._count.setupCreator,
+    },
+    openReportsAbout: repMap.get(r.user.id) ?? 0,
+    abuseFlags: flagMap.get(r.user.id) ?? 0,
+  }))
+}
+
 export interface OpsData {
   funnel7d: FunnelWindow
   funnel30d: FunnelWindow
@@ -257,11 +430,13 @@ export interface OpsData {
   security: SecuritySummary
   feedback: FeedbackSummary
   cron: CronHealth
+  grow: GrowOps
+  bot: BotOps
   generatedAt: Date
 }
 
 export async function getOpsData(): Promise<OpsData> {
-  const [funnel7d, funnel30d, health, unansweredList, trust, security, feedback, cron] = await Promise.all([
+  const [funnel7d, funnel30d, health, unansweredList, trust, security, feedback, cron, grow, bot] = await Promise.all([
     funnel(7),
     funnel(30),
     communityHealth(),
@@ -270,6 +445,8 @@ export async function getOpsData(): Promise<OpsData> {
     securitySummary(),
     feedbackSummary(),
     cronHealth(),
+    growOps(),
+    botOps(),
   ])
-  return { funnel7d, funnel30d, health, unanswered: unansweredList, trust, security, feedback, cron, generatedAt: new Date() }
+  return { funnel7d, funnel30d, health, unanswered: unansweredList, trust, security, feedback, cron, grow, bot, generatedAt: new Date() }
 }

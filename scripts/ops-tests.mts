@@ -31,7 +31,7 @@ const main = async () => {
     const { cookie: modCookie } = await login(mod.username, mod.password)
     const { cookie: adminCookie } = await login(admin.username, admin.password)
 
-    // ── /ops page gate ──────────────────────────────────────────────
+    // ── /ops consolidation + /admin command-center gates ────────────
     {
       const guest = await fetch(`${BASE}/ops`, { redirect: "manual" })
       // Unauthenticated → redirect to sign-in (307/308) — never the page.
@@ -45,11 +45,79 @@ const main = async () => {
         ? pass("member /ops is 404 (no existence oracle)")
         : fail("member /ops is 404", { s: mem.status })
 
-      const staff = await fetch(`${BASE}/ops`, { headers: { cookie: modCookie } })
-      const html = await staff.text()
-      staff.status === 200 && html.includes("Activation funnel") && html.includes("Unanswered discussions")
-        ? pass("moderator /ops renders sections")
-        : fail("moderator /ops renders sections", { s: staff.status })
+      // Staff /ops redirects into /admin (consolidated destination).
+      const staff = await fetch(`${BASE}/ops`, { redirect: "manual", headers: { cookie: modCookie } })
+      const staffLoc = staff.headers.get("location") || ""
+      ;[301, 302, 303, 307, 308].includes(staff.status) && staffLoc.includes("/admin")
+        ? pass("staff /ops redirects to /admin")
+        : fail("staff /ops redirects to /admin", { s: staff.status, loc: staffLoc })
+    }
+
+    // ── Command-center role matrix ──────────────────────────────────
+    {
+      // Guests: every section sends them to sign-in.
+      const guestAdmin = await fetch(`${BASE}/admin`, { redirect: "manual" })
+      const gLoc = guestAdmin.headers.get("location") || ""
+      ;[301, 302, 303, 307, 308].includes(guestAdmin.status) && gLoc.includes("signin")
+        ? pass("guest /admin redirects to sign-in")
+        : fail("guest /admin redirects to sign-in", { s: guestAdmin.status, loc: gLoc })
+
+      // Members: 404 — no existence oracle, even on subsections.
+      const memberPaths = ["/admin", "/admin/community", "/admin/members", "/admin/growth", "/admin/system", "/admin/manage"]
+      let memberBlocked = true
+      for (const p of memberPaths) {
+        const r = await fetch(`${BASE}${p}`, { redirect: "manual", headers: { cookie: memberCookie } })
+        if (r.status !== 404) memberBlocked = false
+      }
+      memberBlocked
+        ? pass("member gets 404 on all admin sections")
+        : fail("member gets 404 on all admin sections")
+
+      // Moderator: overview + community + members render.
+      for (const [p, marker] of [["/admin", "Overview"], ["/admin/community", "Unanswered discussions"], ["/admin/members", "Members"]] as const) {
+        const r = await fetch(`${BASE}${p}`, { headers: { cookie: modCookie } })
+        const html = await r.text()
+        r.status === 200 && html.includes(marker)
+          ? pass(`moderator ${p} renders`)
+          : fail(`moderator ${p} renders`, { s: r.status })
+      }
+
+      // Moderator: admin-only sections deny (not just hidden nav).
+      for (const p of ["/admin/growth", "/admin/system", "/admin/manage"]) {
+        const r = await fetch(`${BASE}${p}`, { redirect: "manual", headers: { cookie: modCookie } })
+        ;[403, 404].includes(r.status)
+          ? pass(`moderator denied ${p}`)
+          : fail(`moderator denied ${p}`, { s: r.status })
+      }
+
+      // Admin initial page access is exercised via browser QA (the manage
+      // page is client-gated; HTTP-level gate lives in its APIs).
+      const adminSys = await fetch(`${BASE}/admin/system`, { headers: { cookie: adminCookie } })
+      const sysHtml = await adminSys.text()
+      adminSys.status === 200 && sysHtml.includes("Rate limits")
+        ? pass("admin /admin/system renders")
+        : fail("admin /admin/system renders", { s: adminSys.status })
+      const adminGrowth = await fetch(`${BASE}/admin/growth`, { headers: { cookie: adminCookie } })
+      const growthHtml = await adminGrowth.text()
+      adminGrowth.status === 200 && growthHtml.includes("Activation")
+        ? pass("admin /admin/growth renders")
+        : fail("admin /admin/growth renders", { s: adminGrowth.status })
+    }
+
+    // ── Member search bounds + privacy ──────────────────────────────
+    {
+      const { searchMembers } = await import("@/lib/ops-metrics")
+      const tooShort = await searchMembers("x")
+      tooShort.length === 0
+        ? pass("member search rejects <2 chars")
+        : fail("member search rejects <2 chars", { n: tooShort.length })
+      const hits = await searchMembers("__ops_member")
+      const hit = hits.find((m) => m.username.toLowerCase().includes("__ops_member"))
+      const keys = hit ? Object.keys(hit) : []
+      const safe = hit && !("email" in hit) && !("password" in hit) && !("bio" in hit)
+      hit && safe
+        ? pass("member search returns bounded safe fields")
+        : fail("member search returns bounded safe fields", { keys })
     }
 
     // ── getOpsData shape + bounds ───────────────────────────────────

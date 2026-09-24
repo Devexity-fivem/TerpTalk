@@ -149,15 +149,15 @@ export default function UserMenu() {
                 </div>
               </Link>
               <Link
-                href="/ops"
+                href="/admin"
                 onClick={() => setOpen(false)}
                 className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm hover:bg-secondary transition-colors"
                 role="menuitem"
               >
                 <Activity className="h-4 w-4 text-primary shrink-0" />
                 <div>
-                  <div className="font-medium">Operations</div>
-                  <div className="text-[11px] text-muted-foreground">Funnel, health, unanswered questions</div>
+                  <div className="font-medium">Command Center</div>
+                  <div className="text-[11px] text-muted-foreground">Funnel, health, moderation, system</div>
                 </div>
               </Link>
               {isAdmin && (
