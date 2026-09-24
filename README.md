@@ -113,8 +113,8 @@ Then verify the deploy:
 2. `curl -s -o /dev/null -w "%{http_code}" https://terp-talk.vercel.app` → 200.
 3. Migrations: `npx prisma migrate status` against the prod endpoint → up to date.
 4. Smoke: `/auth/signin`, `/forum`, `/chat`, `/notifications` render; TerpBot `/help` answers in chat.
-5. Referral sanity: admin → Overview → "Referral Pipeline" — `eligible unpaid` should only list genuinely qualifying referrals.
-6. Cron: admin → Overview → "Cron Health" — today's tasks done, `lastRunDate` fresh. If cron dies, the daily digest/tip/sweep silently stop — this card is the tripwire.
+5. Referral sanity: Command Center → Manage (`/admin/manage`) → "Referral Pipeline" — `eligible unpaid` should only list genuinely qualifying referrals.
+6. Cron: Command Center → System (`/admin/system`) → cron health — today's tasks done, `lastRunDate` fresh. If cron dies, the daily digest/tip/sweep silently stop — this card is the tripwire.
 7. Rollback: promote the previous READY deployment in the Vercel dashboard (`vercel promote` or Aliases). DB migrations are additive — a code rollback is safe; never `migrate reset` prod.
 
 ## Operations notes

@@ -1,40 +1,55 @@
 # 100-User Operating Checklist
 
 How to run TerpTalk through its first ~100 real members. Everything here
-uses existing surfaces — no new infrastructure.
+uses existing surfaces — no new infrastructure. The operational home is
+the **Command Center** at `/admin` (user menu → Command Center; `/ops`
+still redirects there).
 
 ## Daily
 
-- **`/ops`** — staff-only overview (user menu → Operations). Read top to bottom:
-  - **Activation funnel (7d)** — signups vs onboarding vs first contribution.
-    A healthy early ratio: most signups finish onboarding; a third or more
-    contribute something.
+- **`/admin` (Overview)** — staff-only. Read top to bottom:
+  - **Alert strip** — open reports, abuse flags, new feedback. Anything
+    nonzero gets looked at.
+  - **Activation snapshot (7d)** — signups vs onboarding vs first
+    contribution. A healthy early ratio: most signups finish onboarding;
+    a third or more contribute something.
   - **Unanswered discussions** — anything older than ~24h needs a reply.
-    Answer as yourself, or move it where a member can see it.
-  - **Open reports / abuse flags** — should be near zero.
-  - **Cron tasks pending** — should be 0 after 14:00 UTC (daily TerpBot cron).
+    Answer as yourself, or move it where a member can see it. An
+    `AUTHOR BACK` badge means the asker returned — prioritize those.
 - **`/moderation`** — reports queue and abuse flags. Clear anything pending.
-- **`/admin` → Feedback** — triage NEW items: set status, add repro notes.
+- **`/admin/manage?tab=feedback`** — triage NEW items: set status, add
+  repro notes.
 - **Vercel → terp-talk → Logs** — scan for red. `vercel logs terp-talk --since 24h`.
 
 ## Weekly
 
-- **`/ops` funnel (30d)** — are signups turning into contributors? Where is
-  the drop: signup→onboarding, onboarding→first contribution, or first
-  contribution→returning?
-- **Community stats** — unique contributors vs new members. If everyone
-  posts once and vanishes, the product isn't earning a second visit.
-- **`/admin` → Feedback (RESOLVED audit)** — did reported issues actually ship?
-- **Rate-limit table on `/ops`** — an endpoint with a climbing count means
-  either abuse or a real user hitting a limit during normal use. Check which.
-- **Referral diagnostic on `/admin` stats** — `eligibleUnpaid` should stay
-  empty; if it fills, referral payout reconciliation needs a look.
+- **`/admin/growth` (30d funnel)** — are signups turning into
+  contributors? Where is the drop: signup→onboarding,
+  onboarding→first contribution, or first contribution→returning?
+  Read the first-contribution table and common next steps — but only
+  trust rows where the sample is shown (n≥5).
+- **`/admin/retention`** — weekly cohorts, diary continuation,
+  participation overlap. If everyone posts once and vanishes, the
+  product isn't earning a second visit.
+- **`/admin/community`** — unique contributors vs new members, grow
+  documentation, full unanswered queue.
+- **`/admin/manage?tab=feedback` (RESOLVED audit)** — did reported
+  issues actually ship?
+- **`/admin/system`** — rate-limit hits by endpoint; a climbing count
+  means either abuse or a real user hitting a limit during normal use.
+  Check which. Also cron health and TerpBot usage.
+- **Referral diagnostic** — Growth → referrals (aggregate funnel) and
+  Manage → overview referral pipeline. `eligibleUnpaid` should stay
+  empty; if it fills, payout reconciliation needs a look.
+- **`/admin/experiments`** — when you ship a product change, record it
+  here (surface, hypothesis if it's an experiment). When a metric moves,
+  this log is how you answer "what changed?"
 
 ## When something breaks
 
 1. Vercel → terp-talk → **Logs** (or `vercel logs <url> --since 1h`) —
    which route, what status, when.
-2. `/ops` → **Reliability** — is today's cron still pending? Pending after
+2. `/admin/system` — is today's cron still pending? Pending after
    14:00 UTC means the daily job failed or is still running.
 3. Reproduce in a browser; file it via the on-site feedback modal so the
    route/device are captured automatically, or as an admin observation.
@@ -48,7 +63,7 @@ Existing controls — use them, don't build new ones:
 - **Abuse flags** — automated reputation-velocity and reciprocal-pair
   detectors write to `/moderation`; review, don't auto-punish.
 - **Rate limits** already cover posting, reactions, follows, chat,
-  registration, login. `/ops` shows which endpoints are being hit.
+  registration, login. `/admin/system` shows which endpoints are being hit.
 - **Link trust** — new accounts can't post external links until trusted.
 - **Turnstile** on registration; login throttles per username + IP.
 
@@ -62,17 +77,18 @@ Existing controls — use them, don't build new ones:
 
 ## When signups fall
 
-- `/ops` funnel: if signups drop but traffic holds, check `/auth/signup`
-  loads and Turnstile renders (browser test, not just curl).
+- `/admin/growth` funnel: if signups drop but traffic holds, check
+  `/auth/signup` loads and Turnstile renders (browser test, not just curl).
 - Registration failures appear as `RATE_LIMIT_EXCEEDED` /
-  `AUTHORIZATION_FAILURE` security events — `/ops` aggregates them.
+  `AUTHORIZATION_FAILURE` security events — `/admin/system` aggregates them.
 - If onboarding completion collapses, test `/welcome` → stepper → finish
   in a real browser.
 
 ## When users disappear after signup
 
-- `/ops` funnel gap between "Completed onboarding" and "First contribution"
-  is the activation leak. Before changing the product, reproduce the
+- `/admin/growth` funnel gap between "Completed onboarding" and "First
+  contribution" is the activation leak. `/admin/retention` cohorts show
+  whether they come back. Before changing the product, reproduce the
   first-session path yourself: signup → welcome → home → Share something.
 - Check unanswered-question age — a new member whose first question sits
   for days won't return.
@@ -90,5 +106,8 @@ Existing controls — use them, don't build new ones:
 
 - Never seed fake members, posts, or activity to make metrics look better.
 - Never show personal message bodies or private diary content in ops tools.
-- `/ops` shows aggregates only — no IPs, no raw user agents, no raw emails.
+- The Command Center shows aggregates only — no IPs, no raw user agents,
+  no raw emails, no first-action rows with member identity.
 - If a metric won't change a decision, don't add it.
+- Analytics tell you what happened; they never declare causation. Treat
+  n<5 as noise, not signal.
