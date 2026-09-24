@@ -988,7 +988,9 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
                       <span className="text-muted-foreground font-normal"> — {week.stage.toLowerCase()}</span>
                     </h3>
                     <span className="text-xs text-muted-foreground">
-                      days {week.dayStart}–{week.dayEnd}
+                      {week.dayStart === week.dayEnd
+                        ? `day ${week.dayStart}`
+                        : `days ${week.dayStart}–${week.dayEnd}`}
                     </span>
                     <span className="text-xs text-muted-foreground flex items-center gap-2 ml-auto">
                       {week.photoCount > 0 && (

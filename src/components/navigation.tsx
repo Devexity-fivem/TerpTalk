@@ -312,13 +312,13 @@ export function Navigation() {
                   <CreateMenu />
                   <Link
                     href={signInHref(pathname)}
-                    className="px-3 py-2 text-sm font-medium transition-colors hover:text-foreground"
+                    className="whitespace-nowrap px-2 py-2 text-sm font-medium transition-colors hover:text-foreground sm:px-3"
                   >
                     Sign In
                   </Link>
                   <Link
                     href="/auth/signup"
-                    className="tt-cta rounded-full px-4 py-2 text-sm font-semibold text-primary-foreground transition-all"
+                    className="tt-cta whitespace-nowrap rounded-full px-3 py-2 text-sm font-semibold text-primary-foreground transition-all sm:px-4"
                   >
                     Sign Up
                   </Link>
