@@ -186,7 +186,7 @@ const PRODUCTS = [
     where: { slug: "clone-to-home" },
     update: {
       affiliateUrl: "https://clonetohome.com/collections/clones",
-      promoCode: "TCK",
+      promoCode: "TCK10",
       active: true,
       featured: true,
       promoText: "Free shipping on every order · volume pricing down to $57.50/clone · return your clone box for 10% off",
@@ -196,7 +196,7 @@ const PRODUCTS = [
       slug: "clone-to-home",
       websiteUrl: "https://clonetohome.com",
       affiliateUrl: "https://clonetohome.com/collections/clones",
-      promoCode: "TCK",
+      promoCode: "TCK10",
       description: "Rooted, cultivation-ready cannabis clones shipped to your door — Farm Bill compliant live plants for adults 21+, free shipping to all 50 states.",
       promoText: "Free shipping on every order · volume pricing down to $57.50/clone · return your clone box for 10% off",
       active: true,
