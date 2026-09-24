@@ -448,12 +448,16 @@ export interface FirstActionAnalysis {
 
 const SURFACES: { key: string; label: string }[] = [
   { key: "thread", label: "discussion" },
+  { key: "question", label: "question" },
   { key: "post", label: "reply" },
   { key: "diary", label: "diary" },
   { key: "diaryUpdate", label: "diary update" },
   { key: "setup", label: "setup" },
   { key: "chat", label: "chat" },
 ]
+
+// Same definition the community page uses to flag question threads.
+const QUESTION_RE = /question|help|problem|doctor/i
 
 async function firstActionAnalysis(sinceDays: number): Promise<FirstActionAnalysis> {
   const since = new Date(Date.now() - sinceDays * DAY)
@@ -467,9 +471,16 @@ async function firstActionAnalysis(sinceDays: number): Promise<FirstActionAnalys
   if (!ids.length) {
     return { windowDays: sinceDays, sampleSize: 0, signupsInWindow: 0, byFirstAction: [], paths: [], multiSurfaceMembers: 0, diaryAndCommunity: 0, diaryOnly: 0, communityOnly: 0 }
   }
-  // Earliest contribution per surface per user — indexed groupBy scans only.
-  const [threads, posts, diaries, updates, setups, chats] = await Promise.all([
-    prisma.thread.groupBy({ by: ["authorId"], where: { authorId: { in: ids }, deleted: false }, _min: { createdAt: true } }),
+  // Earliest contribution per surface per user — indexed scans only. Threads
+  // are fetched (bounded, asc) instead of groupBy so the earliest thread can
+  // be classified question vs discussion from its category.
+  const [threadRows, posts, diaries, updates, setups, chats] = await Promise.all([
+    prisma.thread.findMany({
+      where: { authorId: { in: ids }, deleted: false },
+      orderBy: { createdAt: "asc" },
+      take: 2000,
+      select: { authorId: true, createdAt: true, category: { select: { slug: true, name: true } } },
+    }),
     prisma.post.groupBy({ by: ["authorId"], where: { authorId: { in: ids }, deleted: false }, _min: { createdAt: true } }),
     prisma.growDiary.groupBy({ by: ["authorId"], where: { authorId: { in: ids }, deleted: false }, _min: { createdAt: true } }),
     prisma.diaryUpdate.groupBy({ by: ["authorId"], where: { authorId: { in: ids } }, _min: { createdAt: true } }),
@@ -485,11 +496,14 @@ async function firstActionAnalysis(sinceDays: number): Promise<FirstActionAnalys
       earliest.set(r.authorId, list)
     }
   }
-  add(threads, "discussion"); add(posts, "reply"); add(diaries, "diary")
+  for (const t of threadRows) {
+    if (earliest.has(t.authorId)) continue // asc order — first seen is earliest
+    earliest.set(t.authorId, [{ type: QUESTION_RE.test(t.category.slug + " " + t.category.name) ? "question" : "discussion", at: t.createdAt }])
+  }
+  add(posts, "reply"); add(diaries, "diary")
   add(updates, "diary update"); add(setups, "setup"); add(chats, "chat")
 
   const DAY_MS = DAY
-  const firstCount = new Map<string, number>()
   const firstReturned = new Map<string, number>()
   const firstTotal = new Map<string, number>()
   const pairCount = new Map<string, number>()
@@ -502,7 +516,6 @@ async function firstActionAnalysis(sinceDays: number): Promise<FirstActionAnalys
     const returned = !!u.lastSeenAt && u.lastSeenAt.getTime() > u.createdAt.getTime() + DAY_MS
     firstTotal.set(first, (firstTotal.get(first) ?? 0) + 1)
     if (returned) firstReturned.set(first, (firstReturned.get(first) ?? 0) + 1)
-    firstCount.set(first, (firstCount.get(first) ?? 0) + 1)
     if (list.length > 1) {
       const key = `${first}→${list[1].type}`
       pairCount.set(key, (pairCount.get(key) ?? 0) + 1)
@@ -510,7 +523,7 @@ async function firstActionAnalysis(sinceDays: number): Promise<FirstActionAnalys
     }
     const types = new Set(list.map((l) => l.type))
     const hasDiary = types.has("diary") || types.has("diary update")
-    const hasCommunity = types.has("discussion") || types.has("reply") || types.has("chat")
+    const hasCommunity = types.has("discussion") || types.has("question") || types.has("reply") || types.has("chat")
     if (hasDiary && hasCommunity) diaryAndCommunity++
     else if (hasDiary) diaryOnly++
     else if (hasCommunity) communityOnly++
@@ -623,7 +636,7 @@ async function chatValue(): Promise<ChatValue> {
     byUser.set(m.authorId, days)
   }
   const chatters = [...byUser.keys()]
-  const nonChat = await prisma.$queryRaw<[{ authorId: string }]>`
+  const nonChat = chatters.length === 0 ? [] : await prisma.$queryRaw<[{ authorId: string }]>`
     SELECT DISTINCT "authorId" FROM (
       SELECT "authorId" FROM "Thread" WHERE "createdAt" > ${since} AND "deleted" = false
       UNION ALL SELECT "authorId" FROM "Post" WHERE "createdAt" > ${since} AND "deleted" = false

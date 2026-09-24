@@ -147,8 +147,10 @@ export default function AdminExperiments() {
                   placeholder="Conclusion" rows={2} maxLength={2000}
                   className="w-full px-3 py-2 rounded-lg border border-border bg-background text-xs" />
                 <div className="flex gap-2">
-                  <button onClick={() => update(it.id, editFields)} disabled={busy}
-                    className="px-3 py-1.5 text-xs bg-primary text-primary-foreground rounded-lg disabled:opacity-50">Save</button>
+                  <button onClick={() => update(it.id, it.status === "ACTIVE" ? { ...editFields, status: "CONCLUDED" } : editFields)} disabled={busy}
+                    className="px-3 py-1.5 text-xs bg-primary text-primary-foreground rounded-lg disabled:opacity-50">
+                    {it.status === "ACTIVE" ? "Save & conclude" : "Save"}
+                  </button>
                   <button onClick={() => setEditing(null)} className="px-3 py-1.5 text-xs bg-secondary rounded-lg">Cancel</button>
                 </div>
               </div>
