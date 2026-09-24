@@ -10,6 +10,8 @@ import TierChip from "@/components/tier-chip"
 import { ForumLiveRefresh } from "@/components/forum-live-refresh"
 import FollowedThreads from "@/components/followed-threads"
 import Tooltip from "@/components/ui/tooltip"
+import Surface from "@/components/ui/surface"
+import TimeAgo from "@/components/ui/time-ago"
 
 // Dynamic: the client polls for new threads and calls router.refresh(),
 // so this page must not serve stale ISR when refreshed.
@@ -151,7 +153,7 @@ export default async function ForumPage() {
           {/* Main Forum Categories */}
           <div className="min-w-0 lg:col-span-2 space-y-6">
             {/* Categories */}
-            <div className="bg-card/80 rounded-2xl border border-border/70 overflow-hidden">
+            <Surface padding="none" className="overflow-hidden">
               <div className="p-4 border-b border-border/60">
                 <h2 className="font-display text-lg font-semibold">Categories</h2>
               </div>
@@ -160,7 +162,7 @@ export default async function ForumPage() {
                   <Link
                     key={category.id}
                     href={`/forum/category/${category.slug}`}
-                    className="tt-edge-card block p-4 hover:bg-secondary/50 transition-colors"
+                    className="tt-edge-card tt-spotlight block p-4 hover:bg-secondary/50 transition-colors"
                   >
                     <div className="flex items-start gap-4">
                       <div className="tt-brand-tile p-3 rounded-xl shrink-0">
@@ -177,7 +179,7 @@ export default async function ForumPage() {
                           {category.threads[0] && (
                             <span className="flex items-center gap-1">
                               <Clock className="w-4 h-4" />
-                              Latest: {new Date(category.threads[0].createdAt).toLocaleDateString()}
+                              Latest: <TimeAgo value={category.threads[0].createdAt} />
                             </span>
                           )}
                         </div>
@@ -186,10 +188,10 @@ export default async function ForumPage() {
                   </Link>
                 ))}
               </div>
-            </div>
+            </Surface>
 
             {/* Recent Threads */}
-            <div className="bg-card/80 rounded-2xl border border-border/70 overflow-hidden">
+            <Surface padding="none" className="overflow-hidden">
               <div className="p-4 border-b border-border/60">
                 <h2 className="font-display text-lg font-semibold">Recent Discussions</h2>
               </div>
@@ -198,7 +200,7 @@ export default async function ForumPage() {
                   <Link
                     key={thread.id}
                     href={`/forum/thread/${thread.slug}`}
-                    className="tt-edge-card block p-4 hover:bg-secondary/50 transition-colors"
+                    className="tt-edge-card tt-spotlight block p-4 hover:bg-secondary/50 transition-colors"
                   >
                     <div className="flex items-start gap-4">
                       <div className="flex-1 min-w-0">
@@ -223,7 +225,7 @@ export default async function ForumPage() {
                           </span>
                           <span className="flex items-center gap-1">
                             <Clock className="w-4 h-4" />
-                            {new Date(thread.createdAt).toLocaleDateString()}
+                            <TimeAgo value={thread.createdAt} />
                           </span>
                         </div>
                       </div>
@@ -234,7 +236,7 @@ export default async function ForumPage() {
                   </Link>
                 ))}
               </div>
-            </div>
+            </Surface>
           </div>
 
           {/* Sidebar */}
@@ -243,7 +245,7 @@ export default async function ForumPage() {
             <FollowedThreads items={followedItems} />
 
             {/* Forum Stats */}
-            <div className="bg-card/80 rounded-2xl border border-border/70 p-4">
+            <Surface padding="sm">
               <h3 className="font-display text-base font-semibold mb-3">Forum Statistics</h3>
               <div className="space-y-3">
                 <div className="flex justify-between">
@@ -259,10 +261,10 @@ export default async function ForumPage() {
                   <span className="font-semibold">{memberCount.toLocaleString()}</span>
                 </div>
               </div>
-            </div>
+            </Surface>
 
             {/* Trending Topics */}
-            <div className="bg-card/80 rounded-2xl border border-border/70 p-4">
+            <Surface padding="sm">
               <h3 className="font-display text-base font-semibold mb-3 flex items-center gap-2">
                 <TrendingUp className="w-4 h-4 text-spectrum" />
                 Trending Topics
@@ -278,10 +280,10 @@ export default async function ForumPage() {
                   ))}
                 </div>
               )}
-            </div>
+            </Surface>
 
             {/* Quick Actions */}
-            <div className="bg-card/80 rounded-2xl border border-border/70 p-4">
+            <Surface padding="sm">
               <h3 className="font-display text-base font-semibold mb-3">Quick Actions</h3>
               <div className="space-y-2">
                 <Link
@@ -303,7 +305,7 @@ export default async function ForumPage() {
                   Browse Tags
                 </Link>
               </div>
-            </div>
+            </Surface>
           </div>
         </div>
       </div>

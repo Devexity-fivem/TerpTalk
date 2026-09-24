@@ -3,10 +3,11 @@
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { useSession } from "next-auth/react"
-import { Home, MessageCircle, Leaf, Bell, User, MessagesSquare } from "lucide-react"
+import { Home, MessageCircle, Leaf, Bell, User, MessagesSquare, Search } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { signInHref } from "@/lib/callback-url"
 import { useChatPanel } from "@/components/chat-panel"
+import { useCommandPalette } from "@/components/command-palette"
 
 interface MobileNavProps {
   unread: number
@@ -31,6 +32,7 @@ export default function MobileNav({ unread, chatUnread }: MobileNavProps) {
   // Chat opens the persistent sheet in place — tapping the bottom-nav item
   // never navigates away. href stays so it remains a real link.
   const { togglePanel, open: chatOpen } = useChatPanel()
+  const { openPalette } = useCommandPalette()
 
   const isActive = (href: string, exact?: boolean) =>
     exact ? pathname === href : pathname === href || pathname.startsWith(`${href}/`)
@@ -81,6 +83,18 @@ export default function MobileNav({ unread, chatUnread }: MobileNavProps) {
             </li>
           )
         })}
+        {/* Search — opens the command palette. On a forum this is the
+            highest-frequency mobile action, so it earns a bar slot. */}
+        <li className="min-w-0 flex-1">
+          <button
+            onClick={openPalette}
+            className="flex h-14 min-w-0 w-full flex-col items-center justify-center gap-0.5 px-0.5 text-[11px] font-medium text-muted-foreground transition-colors hover:text-foreground"
+            aria-label="Search TerpTalk"
+          >
+            <Search className="h-5 w-5" aria-hidden="true" />
+            <span className="max-w-full truncate">Search</span>
+          </button>
+        </li>
         {session && (
           <li className="min-w-0 flex-1">
             <Link

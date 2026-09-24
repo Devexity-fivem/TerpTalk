@@ -524,7 +524,7 @@ export default function ProfileClient() {
 
         {/* Overview tab — rep + recent discussions + featured grow */}
         {(profile.isBot || activeTab === "overview") && !profile.isBot && recentRep.length > 0 && (
-          <div className="bg-card/80 rounded-2xl border border-border/70 p-4 mb-4">
+          <div className="tt-spotlight bg-card/80 rounded-2xl border border-border/70 p-4 mb-4">
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
                 <TrendingUp className="w-4 h-4 text-primary" />
@@ -548,7 +548,7 @@ export default function ProfileClient() {
 
         {profile.isBot ? (
           <>
-            <div className="bg-card/80 rounded-2xl border border-border/70 p-4 mb-4">
+            <div className="tt-spotlight bg-card/80 rounded-2xl border border-border/70 p-4 mb-4">
               <div className="flex items-center gap-2 mb-3">
                 <Bot className="w-4 h-4 text-primary" />
                 <h2 className="font-display text-lg font-semibold">What I do</h2>
@@ -593,7 +593,7 @@ export default function ProfileClient() {
                 </div>
               )}
             </div>
-            <div className="bg-card/80 rounded-2xl border border-border/70 p-4 mb-4">
+            <div className="tt-spotlight bg-card/80 rounded-2xl border border-border/70 p-4 mb-4">
               <div className="flex items-center gap-2 mb-3">
                 <MessageSquare className="w-4 h-4 text-primary" />
                 <h2 className="font-display text-lg font-semibold">How to use me</h2>
@@ -621,7 +621,7 @@ export default function ProfileClient() {
         ) : (
           <>
           {(activeTab === "overview" || activeTab === "discussions") && (
-          <div className="bg-card/80 rounded-2xl border border-border/70 p-4 mb-4">
+          <div className="tt-spotlight bg-card/80 rounded-2xl border border-border/70 p-4 mb-4">
           <div className="flex items-center gap-2 mb-3">
             <MessageSquare className="w-4 h-4 text-primary" />
             <h2 className="font-display text-lg font-semibold">Recent Discussions</h2>
@@ -693,7 +693,7 @@ export default function ProfileClient() {
         )}
 
         {!profile.isBot && (activeTab === "overview" || activeTab === "grows") && growSetups.length > 0 && (
-        <div className="bg-card/80 rounded-2xl border border-border/70 p-4 mb-4">
+        <div className="tt-spotlight bg-card/80 rounded-2xl border border-border/70 p-4 mb-4">
           <div className="flex items-center gap-2 mb-3">
             <Wrench className="w-4 h-4 text-primary" />
             <h2 className="font-display text-lg font-semibold">Grow Setups</h2>
@@ -727,7 +727,7 @@ export default function ProfileClient() {
         )}
 
         {!profile.isBot && (activeTab === "overview" || activeTab === "grows") && (
-        <div className="bg-card/80 rounded-2xl border border-border/70 p-4 mb-4">
+        <div className="tt-spotlight bg-card/80 rounded-2xl border border-border/70 p-4 mb-4">
           <div className="flex items-center gap-2 mb-3">
             <Sprout className="w-4 h-4 text-primary" />
             <h2 className="font-display text-lg font-semibold">{activeTab === "grows" ? "All Grows" : "Recent Grows"}</h2>
@@ -755,7 +755,7 @@ export default function ProfileClient() {
 
         {/* Achievements tab — full badge display */}
         {!profile.isBot && activeTab === "achievements" && (
-          <div className="bg-card/80 rounded-2xl border border-border/70 p-4 mb-4">
+          <div className="tt-spotlight bg-card/80 rounded-2xl border border-border/70 p-4 mb-4">
             <div className="flex items-center gap-2 mb-3">
               <Award className="w-4 h-4 text-spectrum" />
               <h2 className="font-display text-lg font-semibold">Achievements</h2>
@@ -787,7 +787,7 @@ export default function ProfileClient() {
 
         {/* Achievements tab — reputation history */}
         {!profile.isBot && activeTab === "achievements" && recentRep.length > 0 && (
-          <div className="bg-card/80 rounded-2xl border border-border/70 p-4 mb-4">
+          <div className="tt-spotlight bg-card/80 rounded-2xl border border-border/70 p-4 mb-4">
             <div className="flex items-center gap-2 mb-3">
               <TrendingUp className="w-4 h-4 text-primary" />
               <h2 className="font-display text-lg font-semibold">Reputation history</h2>

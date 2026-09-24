@@ -6,6 +6,7 @@ import { notFound, redirect } from "next/navigation"
 import { MessageSquare, MessagesSquare, Users, Clock, CheckCircle2, Eye, BookOpen } from "lucide-react"
 import Link from "next/link"
 import ReplyForm from "@/components/reply-form"
+import ThreadScrollBar from "@/components/thread-scroll-bar"
 import PostActions from "@/components/post-actions"
 import RoleBadge from "@/components/role-badge"
 import TierChip from "@/components/tier-chip"
@@ -347,6 +348,7 @@ export default async function ThreadPage({
       <div className="mx-auto max-w-7xl px-4 py-8">
         <JsonLd data={discussionSchema} />
         <ViewTracker threadId={thread.id} />
+        <ThreadScrollBar replyAnchor={thread.locked ? undefined : "#reply-composer"} />
 
         <div className="lg:grid lg:grid-cols-[1fr_280px] lg:gap-6 xl:grid-cols-[1fr_300px]">
         {/* ── Main column ────────────────────────────────────────── */}
@@ -698,7 +700,9 @@ export default async function ThreadPage({
 
         {/* Reply Form */}
         {!thread.locked && (
-          <ReplyForm threadId={thread.id} wasFollowing={following} />
+          <div id="reply-composer" className="scroll-mt-24">
+            <ReplyForm threadId={thread.id} wasFollowing={following} />
+          </div>
         )}
         {thread.locked && (
           <div className="mt-6 p-4 bg-secondary/50 rounded-2xl text-sm text-muted-foreground text-center">

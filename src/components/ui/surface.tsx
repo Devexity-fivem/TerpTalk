@@ -12,6 +12,8 @@ interface SurfaceProps {
   edge?: boolean
   /** Add the tt-lift hover animation */
   lift?: boolean
+  /** Add the cursor-tracking tt-spotlight glow (pointer devices only) */
+  spotlight?: boolean
   as?: "div" | "section" | "article" | "aside"
 }
 
@@ -41,6 +43,7 @@ export default function Surface({
   padding = "md",
   edge = false,
   lift = false,
+  spotlight = false,
   as: Component = "div",
 }: SurfaceProps) {
   return (
@@ -50,6 +53,7 @@ export default function Surface({
         paddingStyles[padding],
         edge && "tt-edge-card",
         lift && "tt-lift",
+        spotlight && "tt-spotlight",
         className
       )}
     >

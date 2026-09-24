@@ -409,7 +409,7 @@ export default function NotificationsPage() {
               <li
                 key={n.id}
                 className={cn(
-                  "group relative flex items-start gap-2 transition-colors",
+                  "group relative flex items-start gap-1 transition-colors",
                   !n.read && "bg-primary/[0.04]"
                 )}
               >
@@ -417,33 +417,37 @@ export default function NotificationsPage() {
                   <Link
                     href={n.link}
                     onClick={() => { if (!n.read) markRead([n.id]) }}
-                    className="min-w-0 flex-1 p-4 hover:bg-secondary/50 rounded-l-lg"
+                    className="tt-spotlight min-w-0 flex-1 p-4 hover:bg-secondary/50 rounded-l-lg"
                   >
                     {row}
                   </Link>
                 ) : (
                   <div className="min-w-0 flex-1 p-4">{row}</div>
                 )}
-                {!n.read && (
-                  <Tooltip content="Mark as read" className="sm:opacity-0 sm:group-hover:opacity-100 focus-within:opacity-100">
+                {/* Actions — stack vertically on touch so two 44px targets
+                    don't crowd the row; side-by-side on desktop. */}
+                <div className="flex shrink-0 flex-col items-center sm:flex-row">
+                  {!n.read && (
+                    <Tooltip content="Mark as read" className="sm:opacity-0 sm:group-hover:opacity-100 focus-within:opacity-100">
+                      <button
+                        onClick={() => markRead([n.id])}
+                        className="mr-1 mt-1.5 flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground sm:mt-3"
+                        aria-label="Mark as read"
+                      >
+                        <Check className="h-4 w-4" />
+                      </button>
+                    </Tooltip>
+                  )}
+                  <Tooltip content="Delete notification" className="sm:opacity-0 sm:group-hover:opacity-100 focus-within:opacity-100">
                     <button
-                      onClick={() => markRead([n.id])}
-                      className="mr-1 mt-3 flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
-                      aria-label="Mark as read"
+                      onClick={() => deleteNotification(n.id)}
+                      className="mr-1 mt-1.5 flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-secondary hover:text-destructive sm:mt-3"
+                      aria-label="Delete notification"
                     >
-                      <Check className="h-4 w-4" />
+                      <Trash2 className="h-4 w-4" />
                     </button>
                   </Tooltip>
-                )}
-                <Tooltip content="Delete notification" className="sm:opacity-0 sm:group-hover:opacity-100 focus-within:opacity-100">
-                  <button
-                    onClick={() => deleteNotification(n.id)}
-                    className="mr-1 mt-3 flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-secondary hover:text-destructive"
-                    aria-label="Delete notification"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
-                </Tooltip>
+                </div>
               </li>
             )
           })}

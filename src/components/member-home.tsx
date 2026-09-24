@@ -7,6 +7,8 @@ import {
 import MemberGreeting from "@/components/member-greeting"
 import OpenChatButton from "@/components/open-chat-button"
 import Tooltip, { InfoTip } from "@/components/ui/tooltip"
+import EmptyState from "@/components/ui/empty-state"
+import StageProgress from "@/components/stage-progress"
 import type { MemberHomeData } from "@/lib/member-home"
 import { diaryPath } from "@/lib/slugs"
 import { cn } from "@/lib/utils"
@@ -61,18 +63,13 @@ function Card({
 
 function MiniEmpty({ text, cta, children }: { text: string; cta?: { href: string; label: string }; children?: ReactNode }) {
   return (
-    <div className="rounded-xl bg-secondary/40 px-4 py-5 text-center">
-      <p className="text-sm text-muted-foreground">{text}</p>
+    <EmptyState
+      compact
+      title={text}
+      action={cta ? { href: cta.href, label: cta.label } : undefined}
+    >
       {children}
-      {cta && (
-        <Link
-          href={cta.href}
-          className="mt-2 inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
-        >
-          {cta.label} <ArrowRight className="h-3.5 w-3.5" />
-        </Link>
-      )}
-    </div>
+    </EmptyState>
   )
 }
 
@@ -274,6 +271,7 @@ export default function MemberHome({ data }: { data: MemberHomeData }) {
                             .filter(Boolean)
                             .join(" · ")}
                         </p>
+                        <StageProgress stage={g.stage} className="mt-1.5" />
                         {g.nextStep && (
                           <p className={cn(
                             "mt-1 truncate text-xs",

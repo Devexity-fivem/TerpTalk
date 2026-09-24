@@ -165,6 +165,8 @@ const apiFiles = () => {
     path.join("src", "components", "chat-room.tsx"),
     // Per-session dismissal flag for the recovery-phrase banner.
     path.join("src", "components", "recovery-warning-banner.tsx"),
+    // ⌘K discoverability hint — one-time "palette seen" flag.
+    path.join("src", "components", "navigation.tsx"),
   ]);
   check("no client-side storage (localStorage/sessionStorage)", !allSrc.some((f) => {
     if (storageAllowlist.has(f)) return false;

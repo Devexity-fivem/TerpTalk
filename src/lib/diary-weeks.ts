@@ -14,6 +14,19 @@ export const STAGE_ORDER = [
   "COMPLETED",
 ] as const
 
+/** Display labels for the lifecycle stages — single source for cards,
+ *  chips, and the segmented StageProgress track. */
+export const STAGE_LABELS: Record<string, string> = {
+  GERMINATION: "Germination",
+  SEEDLING: "Seedling",
+  VEGETATIVE: "Veg",
+  FLOWER: "Flower",
+  HARVEST: "Harvest",
+  DRYING: "Drying",
+  CURING: "Curing",
+  COMPLETED: "Done",
+}
+
 /** YYYY-MM-DD in LOCAL time for <input type="date"> defaults — never
  * toISOString (UTC shifts the day near midnight). */
 export function localDateInputValue(d: Date = new Date()): string {

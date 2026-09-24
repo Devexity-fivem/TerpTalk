@@ -8,7 +8,8 @@ import { MessageSquare, TrendingUp, Clock, Users, Flame, Eye } from "lucide-reac
 import RoleBadge from "@/components/role-badge"
 import TierChip from "@/components/tier-chip"
 import { Avatar } from "@/components/ui/avatar"
-import EmptyState from "@/components/empty-state"
+import EmptyState from "@/components/ui/empty-state"
+import TimeAgo from "@/components/ui/time-ago"
 
 export const dynamic = "force-dynamic"
 
@@ -142,7 +143,7 @@ export default async function DiscoverPage({
                 <Link
                   key={thread.id}
                   href={`/forum/thread/${thread.slug}`}
-                  className="group flex flex-col p-5 bg-secondary/30 rounded-2xl border border-border/70 hover:border-primary/40 hover:bg-secondary/50 transition-all tt-edge-card"
+                  className="tt-spotlight group flex flex-col p-5 bg-secondary/30 rounded-2xl border border-border/70 hover:border-primary/40 hover:bg-secondary/50 transition-all tt-edge-card"
                 >
                   <div className="flex items-start gap-3 mb-3">
                     <Avatar src={thread.author.image ?? undefined} size="sm" alt={thread.author.profile?.username ?? thread.author.name ?? undefined} />
@@ -158,7 +159,7 @@ export default async function DiscoverPage({
                   </div>
                   <h3 className="font-display font-semibold mb-2 break-words group-hover:text-primary transition-colors">{thread.title}</h3>
                   <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground mt-auto">
-                    <span className="flex items-center gap-1"><Clock className="w-3.5 h-3.5" /> {new Date(thread.createdAt).toLocaleDateString()}</span>
+                    <span className="flex items-center gap-1"><Clock className="w-3.5 h-3.5" /> <TimeAgo value={thread.createdAt} /></span>
                     <span className="flex items-center gap-1"><Eye className="w-3.5 h-3.5" /> {thread.views}</span>
                     <span className="flex items-center gap-1"><MessageSquare className="w-3.5 h-3.5" /> {thread._count.posts}</span>
                   </div>

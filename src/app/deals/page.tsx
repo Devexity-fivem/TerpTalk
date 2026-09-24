@@ -73,7 +73,7 @@ export default async function DealsPage() {
               <a
                 href={`/go/${p.slug}?from=/deals`}
                 rel="sponsored nofollow"
-                className="inline-flex items-center gap-2 px-6 py-3 bg-primary text-primary-foreground rounded-xl font-bold hover:bg-primary/90 shrink-0"
+                className="tt-cta inline-flex items-center gap-2 px-6 py-3 rounded-full font-bold text-primary-foreground shrink-0 transition-all"
               >
                 Shop {p.name} <ExternalLink className="w-4 h-4" />
               </a>

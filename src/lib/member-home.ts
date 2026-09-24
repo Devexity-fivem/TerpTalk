@@ -42,6 +42,8 @@ export interface MemberHomeData {
     id: string
     slug: string | null
     title: string
+    /** raw diary stage enum — feeds the segmented StageProgress track */
+    stage: string
     stageLabel: string
     journey: GrowJourneyState | null
     updatedAt: string
@@ -403,6 +405,7 @@ export async function getMemberHomeData(userId: string): Promise<MemberHomeData 
         id: d.id,
         slug: d.slug,
         title: d.title,
+        stage: d.stage,
         stageLabel:
           journeyStates[i] != null
             ? GROW_STAGE_LABELS[journeyStates[i]!.stage] ?? d.stage

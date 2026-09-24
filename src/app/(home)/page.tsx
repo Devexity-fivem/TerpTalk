@@ -16,6 +16,7 @@ import LiveStats from "@/components/live-stats"
 import HeroCta from "@/components/hero-cta"
 import { Avatar } from "@/components/ui/avatar"
 import TierChip from "@/components/tier-chip"
+import CountUp from "@/components/count-up"
 
 // Public landing page for guests; signed-in members get the "Today"
 // dashboard instead (see components/member-home). getServerSession makes
@@ -247,15 +248,15 @@ export default async function Home() {
                 </div>
                 <div className="grid grid-cols-3 gap-3">
                   <div className="rounded-xl bg-secondary/70 px-3 py-4 text-center">
-                    <div className="font-display text-2xl font-bold tabular-nums text-foreground">{stats.members.toLocaleString()}</div>
+                    <div className="font-display text-2xl font-bold tabular-nums text-foreground"><CountUp value={stats.members} /></div>
                     <div className="mt-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Members</div>
                   </div>
                   <div className="rounded-xl bg-secondary/70 px-3 py-4 text-center">
-                    <div className="font-display text-2xl font-bold tabular-nums text-foreground">{stats.diaries.toLocaleString()}</div>
+                    <div className="font-display text-2xl font-bold tabular-nums text-foreground"><CountUp value={stats.diaries} /></div>
                     <div className="mt-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Diaries</div>
                   </div>
                   <div className="rounded-xl bg-secondary/70 px-3 py-4 text-center">
-                    <div className="font-display text-2xl font-bold tabular-nums text-foreground">{stats.discussions.toLocaleString()}</div>
+                    <div className="font-display text-2xl font-bold tabular-nums text-foreground"><CountUp value={stats.discussions} /></div>
                     <div className="mt-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Posts</div>
                   </div>
                 </div>
@@ -554,7 +555,7 @@ export default async function Home() {
                 </div>
                 <Link
                   href={`/u/${growerOfWeek.username}`}
-                  className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-full bg-primary text-primary-foreground hover:bg-primary/90 transition-colors shrink-0"
+                  className="tt-cta inline-flex items-center gap-1.5 px-4 py-2 text-sm font-semibold rounded-full text-primary-foreground transition-all shrink-0"
                 >
                   View profile <ArrowRight className="w-4 h-4" />
                 </Link>

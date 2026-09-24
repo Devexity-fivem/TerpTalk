@@ -8,6 +8,7 @@ import Link from "next/link"
 import RoleBadge from "@/components/role-badge"
 import TierChip from "@/components/tier-chip"
 import Tooltip from "@/components/ui/tooltip"
+import TimeAgo from "@/components/ui/time-ago"
 import { diaryPath } from "@/lib/slugs"
 
 export const dynamic = "force-dynamic"
@@ -360,7 +361,7 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
                                 <span>•</span>
                                 <span>{t.replyCount} repl{t.replyCount === 1 ? "y" : "ies"}</span>
                                 <span>•</span>
-                                <span>{new Date(t.createdAt).toLocaleDateString()}</span>
+                                <span><TimeAgo value={t.createdAt} /></span>
                               </div>
                             </div>
                           </div>
@@ -426,7 +427,7 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
                               <div className="text-xs text-muted-foreground flex items-center gap-2 flex-wrap">
                                 <span className="truncate">{u.diary.title}</span>
                                 <span>•</span>
-                                <span>{new Date(u.createdAt).toLocaleDateString()}</span>
+                                <span><TimeAgo value={u.createdAt} /></span>
                               </div>
                             </div>
                           </div>
@@ -477,7 +478,7 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
                             <span>•</span>
                             <span>{thread.replyCount} repl{thread.replyCount === 1 ? "y" : "ies"}</span>
                             <span>•</span>
-                            <span>{new Date(thread.createdAt).toLocaleDateString()}</span>
+                            <span><TimeAgo value={thread.createdAt} /></span>
                           </div>
                         </div>
                       </div>
@@ -517,7 +518,7 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
                               <TierChip reputation={update.author.profile?.reputation ?? 0} publicMilestoneOptOut={update.author.profile?.publicMilestoneOptOut} />
                             </span>
                             <span className="text-xs text-muted-foreground ml-auto shrink-0">
-                              {new Date(update.createdAt).toLocaleDateString()}
+                              <TimeAgo value={update.createdAt} />
                             </span>
                           </div>
                           <h3 className="font-medium text-sm mb-0.5">{update.title}</h3>
@@ -632,7 +633,7 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
                               {update.diary.title}
                             </span>
                             <span>•</span>
-                            <span>{new Date(update.createdAt).toLocaleDateString()}</span>
+                            <span><TimeAgo value={update.createdAt} /></span>
                           </div>
                         </div>
                       </div>
@@ -687,7 +688,7 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
                             <span>•</span>
                             <span>{thread.replyCount} repl{thread.replyCount === 1 ? "y" : "ies"}</span>
                             <span>•</span>
-                            <span>{new Date(thread.createdAt).toLocaleDateString()}</span>
+                            <span><TimeAgo value={thread.createdAt} /></span>
                           </div>
                         </div>
                       </div>
@@ -710,7 +711,7 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
                     <p className="text-muted-foreground mb-4">
                       Follow growers, diaries and topics — their activity shows up here.
                     </p>
-                    <Link href="/auth/signin" className="bg-primary text-primary-foreground px-6 py-2 rounded-full hover:bg-primary/90 transition-colors inline-block">
+                    <Link href="/auth/signin" className="tt-cta text-primary-foreground px-6 py-2 rounded-full font-semibold transition-all inline-block">
                       Sign in
                     </Link>
                   </>

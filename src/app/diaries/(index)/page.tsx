@@ -11,6 +11,8 @@ import Link from "next/link"
 import RoleBadge from "@/components/role-badge"
 import TierChip from "@/components/tier-chip"
 import EmptyState from "@/components/ui/empty-state"
+import StageProgress from "@/components/stage-progress"
+import { STAGE_LABELS } from "@/lib/diary-weeks"
 import { diaryPath } from "@/lib/slugs"
 
 export const revalidate = 300
@@ -101,22 +103,14 @@ function DistLine({ label, dist }: { label: string; dist: Distribution }) {
 
 type DiaryCardData = Awaited<ReturnType<typeof getDiaries>>["diaries"][number]
 
-// Lifecycle order — the segmented progress track renders the diary's
-// position seed → cure. Current segment glows violet (the LED spectrum),
-// completed segments stay emerald.
-const STAGE_ORDER = ["GERMINATION", "SEEDLING", "VEGETATIVE", "FLOWER", "HARVEST", "DRYING", "CURING", "COMPLETED"] as const
-const STAGE_LABEL: Record<string, string> = {
-  GERMINATION: "Germination", SEEDLING: "Seedling", VEGETATIVE: "Veg",
-  FLOWER: "Flower", HARVEST: "Harvest", DRYING: "Drying", CURING: "Curing", COMPLETED: "Done",
-}
-
+// Lifecycle order lives in lib/diary-weeks; StageProgress renders the
+// segmented track (current = violet, done = emerald).
 function DiaryCard({ diary, showFeatured = false }: { diary: DiaryCardData; showFeatured?: boolean }) {
   const authorName = diary.author.profile?.username || diary.author.name
   const week = diary.updates[0]?.weekNumber
-  const stageIdx = Math.max(0, STAGE_ORDER.indexOf(diary.stage as (typeof STAGE_ORDER)[number]))
   const strainName = diary.strainRef?.name || diary.strain
   return (
-    <div className="group bg-card rounded-2xl border border-border/70 overflow-hidden tt-lift hover:border-primary/50">
+    <div className="tt-spotlight group bg-card rounded-2xl border border-border/70 overflow-hidden tt-lift hover:border-primary/50">
       <Link href={diaryPath(diary)} className="block relative">
         <div className="aspect-[16/10] bg-gradient-to-br from-primary/15 via-secondary to-spectrum/10 flex items-center justify-center overflow-hidden">
           {diary.updates[0]?.images[0]?.url ? (
@@ -136,7 +130,7 @@ function DiaryCard({ diary, showFeatured = false }: { diary: DiaryCardData; show
         {/* Overlay chips — stage + week badge, grow type, featured */}
         <div className="absolute left-3 top-3 flex gap-1.5">
           <span className="rounded-full bg-black/55 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-white backdrop-blur-sm">
-            {STAGE_LABEL[diary.stage] ?? diary.stage}{week != null && ` · Wk ${week}`}
+            {STAGE_LABELS[diary.stage] ?? diary.stage}{week != null && ` · Wk ${week}`}
           </span>
           {(showFeatured || diary.featured) && (
             <span className="rounded-full bg-amber-500/85 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-black backdrop-blur-sm">
@@ -173,26 +167,11 @@ function DiaryCard({ diary, showFeatured = false }: { diary: DiaryCardData; show
           </div>
         )}
         {/* Lifecycle progress — where this grow sits seed → cure */}
-        <div className="mb-3">
-          <div className="flex gap-0.5" aria-label={`Stage: ${STAGE_LABEL[diary.stage] ?? diary.stage}`}>
-            {STAGE_ORDER.map((s, i) => (
-              <span
-                key={s}
-                className={
-                  i < stageIdx
-                    ? "h-1 flex-1 rounded-full bg-primary/70"
-                    : i === stageIdx
-                      ? "h-1 flex-1 rounded-full bg-spectrum"
-                      : "h-1 flex-1 rounded-full bg-secondary"
-                }
-              />
-            ))}
-          </div>
-          <div className="mt-1.5 flex items-center justify-between text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-            <span>{STAGE_LABEL[diary.stage] ?? diary.stage}</span>
-            <span>{diary._count.updates} update{diary._count.updates === 1 ? "" : "s"}</span>
-          </div>
-        </div>
+        <StageProgress
+          stage={diary.stage}
+          caption={`${diary._count.updates} update${diary._count.updates === 1 ? "" : "s"}`}
+          className="mb-3"
+        />
         <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground flex-wrap border-t border-border/50 pt-3">
           <span className="flex items-center gap-1 min-w-0">
             <Users className="w-3 h-3 shrink-0" />

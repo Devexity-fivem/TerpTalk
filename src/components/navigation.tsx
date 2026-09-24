@@ -58,6 +58,25 @@ export function Navigation() {
   const { chatUnread, openPanel } = useChatPanel()
   const { openPalette } = useCommandPalette()
   const [menuOpen, setMenuOpen] = useState(false)
+  // One-time ⌘K discoverability hint on the icon search buttons — cleared
+  // permanently the first time the palette is opened.
+  const [paletteHint, setPaletteHint] = useState(false)
+  useEffect(() => {
+    // Deferred one frame — reading localStorage in the effect body is an
+    // external-system sync; rAF avoids a synchronous cascading render and
+    // keeps server/client markup identical through hydration.
+    const id = requestAnimationFrame(() => {
+      setPaletteHint(localStorage.getItem("tt-palette-seen") !== "1")
+    })
+    return () => cancelAnimationFrame(id)
+  }, [])
+  const handleOpenPalette = () => {
+    if (paletteHint) {
+      localStorage.setItem("tt-palette-seen", "1")
+      setPaletteHint(false)
+    }
+    openPalette()
+  }
   const role = (session?.user as { role?: string } | undefined)?.role
   const isAdmin = role === "ADMINISTRATOR"
 
@@ -226,7 +245,7 @@ export function Navigation() {
                   plain search form. Shows as a fake input on md-xl, as an
                   icon on sm and xl+. */}
               <button
-                onClick={openPalette}
+                onClick={handleOpenPalette}
                 className="hidden md:flex xl:hidden items-center gap-2 w-40 lg:w-52 rounded-xl border border-border/70 bg-background py-1.5 pl-3 pr-2 text-sm text-muted-foreground hover:border-primary/40 transition-colors"
                 aria-label="Search TerpTalk"
               >
@@ -302,11 +321,16 @@ export function Navigation() {
               {/* Mobile search entry — opens the command palette */}
               <Tooltip content="Search TerpTalk" side="bottom" className="hidden sm:inline-flex md:hidden">
                 <button
-                  onClick={openPalette}
-                  className="rounded-lg p-2 transition-colors hover:bg-secondary"
+                  onClick={handleOpenPalette}
+                  className="relative rounded-lg p-2 transition-colors hover:bg-secondary"
                   aria-label="Search"
                 >
                   <Search className="h-5 w-5" />
+                  {paletteHint && (
+                    <kbd className="absolute -right-1.5 -top-1.5 animate-pulse rounded border border-primary/40 bg-card px-1 text-[9px] font-semibold text-primary shadow-sm">
+                      ⌘K
+                    </kbd>
+                  )}
                 </button>
               </Tooltip>
 
@@ -314,11 +338,16 @@ export function Navigation() {
                   inline desktop links are shown so the bar stays uncrowded. */}
               <Tooltip content="Search TerpTalk" side="bottom" className="hidden xl:inline-flex">
                 <button
-                  onClick={openPalette}
-                  className="rounded-lg p-2 transition-colors hover:bg-secondary"
+                  onClick={handleOpenPalette}
+                  className="relative rounded-lg p-2 transition-colors hover:bg-secondary"
                   aria-label="Search"
                 >
                   <Search className="h-5 w-5" />
+                  {paletteHint && (
+                    <kbd className="absolute -right-1.5 -top-1.5 animate-pulse rounded border border-primary/40 bg-card px-1 text-[9px] font-semibold text-primary shadow-sm">
+                      ⌘K
+                    </kbd>
+                  )}
                 </button>
               </Tooltip>
 
@@ -345,7 +374,7 @@ export function Navigation() {
           <div id="tt-nav-drawer" className="tt-glass animate-in mx-auto mt-2 max-h-[calc(100vh-6.5rem)] max-w-7xl overflow-y-auto rounded-2xl border border-border/60 shadow-xl">
             <div className="grid auto-rows-min grid-cols-1 gap-6 px-4 py-4 md:grid-cols-2 lg:grid-cols-3">
               <button
-                onClick={() => { setMenuOpen(false); openPalette() }}
+                onClick={() => { setMenuOpen(false); handleOpenPalette() }}
                 className="flex w-full items-center gap-2 rounded-xl border border-border/70 bg-background py-2.5 pl-3 pr-3 text-sm text-muted-foreground hover:border-primary/40 transition-colors lg:hidden"
                 aria-label="Search TerpTalk"
               >
