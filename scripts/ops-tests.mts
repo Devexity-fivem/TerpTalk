@@ -3,7 +3,7 @@
 // Temp users/feedback fully cleaned up.
 import "./db-guard.mjs"
 import { makeHarness } from "./lib/http-harness.mjs"
-import { getOpsData } from "@/lib/ops-metrics"
+import { getOpsData, getGrowthDetail } from "@/lib/ops-metrics"
 
 const harnessOpts = {
   username: (tag: string, ts: string) => `__ops_${tag}_${ts}`,
@@ -102,6 +102,70 @@ const main = async () => {
       adminGrowth.status === 200 && growthHtml.includes("Activation")
         ? pass("admin /admin/growth renders")
         : fail("admin /admin/growth renders", { s: adminGrowth.status })
+
+      // New admin-only sections deny moderators at the page level.
+      for (const p of ["/admin/retention", "/admin/experiments"]) {
+        const r = await fetch(`${BASE}${p}`, { redirect: "manual", headers: { cookie: modCookie } })
+        ;[403, 404].includes(r.status)
+          ? pass(`moderator denied ${p}`)
+          : fail(`moderator denied ${p}`, { s: r.status })
+        const a = await fetch(`${BASE}${p}`, { headers: { cookie: adminCookie } })
+        a.status === 200
+          ? pass(`admin ${p} renders`)
+          : fail(`admin ${p} renders`, { s: a.status })
+      }
+    }
+
+    // ── Growth detail shape + bounds ────────────────────────────────
+    {
+      const g = await getGrowthDetail()
+      const ok =
+        typeof g.firstAction30d.sampleSize === "number" &&
+        Array.isArray(g.firstAction30d.byFirstAction) &&
+        g.cohorts.length === 4 &&
+        g.cohorts.every((c) => typeof c.signups === "number" && typeof c.returned24h === "number") &&
+        typeof g.diary.diaries === "number" &&
+        g.diary.noUpdates + g.diary.oneUpdate + g.diary.fewUpdates + g.diary.manyUpdates === g.diary.diaries &&
+        typeof g.chat.uniqueChatters7d === "number" &&
+        typeof g.bot.uniqueUsers7d === "number" &&
+        typeof g.feedback.total === "number"
+      ok ? pass("getGrowthDetail returns bounded sections") : fail("getGrowthDetail returns bounded sections", Object.keys(g))
+      // First-action rows never leak member identity.
+      const leak = JSON.stringify(g.firstAction30d.byFirstAction).match(/@|email|userId|authorId/i)
+      !leak ? pass("first-action rows carry no member identity") : fail("first-action rows carry no member identity", leak)
+    }
+
+    // ── Experiments/change-log API ──────────────────────────────────
+    {
+      const denied = await fetch(`${BASE}/api/admin/experiments`, { headers: { cookie: modCookie } })
+      denied.status === 403
+        ? pass("moderator denied experiments API")
+        : fail("moderator denied experiments API", { s: denied.status })
+
+      const created = await fetch(`${BASE}/api/admin/experiments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", cookie: adminCookie },
+        body: JSON.stringify({ kind: "EXPERIMENT", title: "__ops_test change", description: "verify workflow", surface: "composer", hypothesis: "none", primaryMetric: "n/a" }),
+      })
+      const cd = await created.json().catch(() => ({}))
+      if (created.status === 200 && cd.id) {
+        pass("admin creates experiment record")
+        const patch = await fetch(`${BASE}/api/admin/experiments/${cd.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json", cookie: adminCookie },
+          body: JSON.stringify({ status: "CONCLUDED", result: "verified in test", conclusion: "ok" }),
+        })
+        patch.status === 200 ? pass("admin concludes experiment") : fail("admin concludes experiment", { s: patch.status })
+        await prisma.productChange.delete({ where: { id: cd.id } }).catch(() => {})
+      } else {
+        fail("admin creates experiment record", { s: created.status, d: cd })
+      }
+
+      // Members get nothing — not even the list.
+      const memberList = await fetch(`${BASE}/api/admin/experiments`, { headers: { cookie: memberCookie } })
+      memberList.status === 403
+        ? pass("member denied experiments API")
+        : fail("member denied experiments API", { s: memberList.status })
     }
 
     // ── Member search bounds + privacy ──────────────────────────────

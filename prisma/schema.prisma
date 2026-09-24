@@ -71,6 +71,7 @@ model User {
   diaryFollows  DiaryFollow[]
   feedback      Feedback[]
   botSession    BotSession?
+  productChanges ProductChange[]
 
   @@index([role])
   @@index([status])
@@ -1215,4 +1216,27 @@ model BotSession {
   user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([expiresAt])
+}
+
+// Product changes & experiments — the operator's record of meaningful
+// product modifications so behavior shifts can be correlated with changes.
+// Not an A/B platform: a written record (hypothesis, change, result).
+model ProductChange {
+  id            String    @id @default(cuid())
+  kind          String    @default("CHANGE") // CHANGE | EXPERIMENT
+  title         String
+  surface       String?   // e.g. "composer", "onboarding", "homepage"
+  hypothesis    String?   // experiments only — what we expect to move
+  description   String
+  primaryMetric String?   // experiments only — the number we watch
+  status        String    @default("ACTIVE") // PLANNED | ACTIVE | CONCLUDED | REVERTED
+  result        String?   // observed outcome, filled at conclusion
+  conclusion    String?
+  createdById   String?
+  createdBy     User?     @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt     DateTime  @default(now())
+  endedAt       DateTime?
+
+  @@index([createdAt])
+  @@index([status])
 }

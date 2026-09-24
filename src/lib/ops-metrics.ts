@@ -125,6 +125,7 @@ export interface UnansweredThread {
   author: string
   ageHours: number
   isQuestionCategory: boolean
+  authorReturned: boolean // author seen ≥24h after posting — question may need outreach
 }
 
 // Unanswered = visible thread with zero replies. Oldest first — these are
@@ -137,7 +138,7 @@ async function unanswered(): Promise<UnansweredThread[]> {
     select: {
       id: true, title: true, slug: true, createdAt: true,
       category: { select: { name: true, slug: true } },
-      author: { select: { name: true, profile: { select: { username: true } } } },
+      author: { select: { name: true, lastSeenAt: true, profile: { select: { username: true } } } },
     },
   })
   const now = Date.now()
@@ -149,6 +150,7 @@ async function unanswered(): Promise<UnansweredThread[]> {
     author: t.author.profile?.username || t.author.name || "member",
     ageHours: Math.floor((now - t.createdAt.getTime()) / 3_600_000),
     isQuestionCategory: /question|help|problem|doctor/i.test(t.category.slug + " " + t.category.name),
+    authorReturned: !!t.author.lastSeenAt && t.author.lastSeenAt.getTime() > t.createdAt.getTime() + DAY,
   }))
 }
 
@@ -419,6 +421,330 @@ export async function searchMembers(q: string): Promise<MemberSummary[]> {
     openReportsAbout: repMap.get(r.user.id) ?? 0,
     abuseFlags: flagMap.get(r.user.id) ?? 0,
   }))
+}
+
+// ── Growth detail (admin only) ─────────────────────────────────────────
+// Deeper activation/retention analysis. Everything below is bounded by the
+// sign-up window (cap 500 users) or a capped event fetch — no full scans.
+
+export interface FirstActionRow {
+  type: string
+  count: number
+  returnedPct: number | null // null when sample < 5 — never imply a trend
+}
+
+export interface FirstActionAnalysis {
+  windowDays: number
+  sampleSize: number // members who contributed at all
+  signupsInWindow: number
+  byFirstAction: FirstActionRow[]
+  // first type → second type ordered pairs, top entries only
+  paths: { first: string; then: string; count: number }[]
+  multiSurfaceMembers: number // contributed on ≥2 distinct surfaces
+  diaryAndCommunity: number // diary activity AND community activity
+  diaryOnly: number
+  communityOnly: number
+}
+
+const SURFACES: { key: string; label: string }[] = [
+  { key: "thread", label: "discussion" },
+  { key: "post", label: "reply" },
+  { key: "diary", label: "diary" },
+  { key: "diaryUpdate", label: "diary update" },
+  { key: "setup", label: "setup" },
+  { key: "chat", label: "chat" },
+]
+
+async function firstActionAnalysis(sinceDays: number): Promise<FirstActionAnalysis> {
+  const since = new Date(Date.now() - sinceDays * DAY)
+  const users = await prisma.user.findMany({
+    where: { createdAt: { gt: since }, banned: false },
+    orderBy: { createdAt: "desc" },
+    take: 500,
+    select: { id: true, createdAt: true, lastSeenAt: true },
+  })
+  const ids = users.map((u) => u.id)
+  if (!ids.length) {
+    return { windowDays: sinceDays, sampleSize: 0, signupsInWindow: 0, byFirstAction: [], paths: [], multiSurfaceMembers: 0, diaryAndCommunity: 0, diaryOnly: 0, communityOnly: 0 }
+  }
+  // Earliest contribution per surface per user — indexed groupBy scans only.
+  const [threads, posts, diaries, updates, setups, chats] = await Promise.all([
+    prisma.thread.groupBy({ by: ["authorId"], where: { authorId: { in: ids }, deleted: false }, _min: { createdAt: true } }),
+    prisma.post.groupBy({ by: ["authorId"], where: { authorId: { in: ids }, deleted: false }, _min: { createdAt: true } }),
+    prisma.growDiary.groupBy({ by: ["authorId"], where: { authorId: { in: ids }, deleted: false }, _min: { createdAt: true } }),
+    prisma.diaryUpdate.groupBy({ by: ["authorId"], where: { authorId: { in: ids } }, _min: { createdAt: true } }),
+    prisma.growSetup.groupBy({ by: ["authorId"], where: { authorId: { in: ids }, deleted: false }, _min: { createdAt: true } }),
+    prisma.chatMessage.groupBy({ by: ["authorId"], where: { authorId: { in: ids }, deleted: false }, _min: { createdAt: true } }),
+  ])
+  const earliest = new Map<string, { type: string; at: Date }[]>()
+  const add = (rows: { authorId: string; _min: { createdAt: Date | null } }[], type: string) => {
+    for (const r of rows) {
+      if (!r._min.createdAt) continue
+      const list = earliest.get(r.authorId) ?? []
+      list.push({ type, at: r._min.createdAt })
+      earliest.set(r.authorId, list)
+    }
+  }
+  add(threads, "discussion"); add(posts, "reply"); add(diaries, "diary")
+  add(updates, "diary update"); add(setups, "setup"); add(chats, "chat")
+
+  const DAY_MS = DAY
+  const firstCount = new Map<string, number>()
+  const firstReturned = new Map<string, number>()
+  const firstTotal = new Map<string, number>()
+  const pairCount = new Map<string, number>()
+  let multi = 0, diaryAndCommunity = 0, diaryOnly = 0, communityOnly = 0
+  const uById = new Map(users.map((u) => [u.id, u]))
+  for (const [uid, list] of earliest) {
+    list.sort((a, b) => a.at.getTime() - b.at.getTime())
+    const first = list[0].type
+    const u = uById.get(uid)!
+    const returned = !!u.lastSeenAt && u.lastSeenAt.getTime() > u.createdAt.getTime() + DAY_MS
+    firstTotal.set(first, (firstTotal.get(first) ?? 0) + 1)
+    if (returned) firstReturned.set(first, (firstReturned.get(first) ?? 0) + 1)
+    firstCount.set(first, (firstCount.get(first) ?? 0) + 1)
+    if (list.length > 1) {
+      const key = `${first}→${list[1].type}`
+      pairCount.set(key, (pairCount.get(key) ?? 0) + 1)
+      multi++
+    }
+    const types = new Set(list.map((l) => l.type))
+    const hasDiary = types.has("diary") || types.has("diary update")
+    const hasCommunity = types.has("discussion") || types.has("reply") || types.has("chat")
+    if (hasDiary && hasCommunity) diaryAndCommunity++
+    else if (hasDiary) diaryOnly++
+    else if (hasCommunity) communityOnly++
+  }
+  return {
+    windowDays: sinceDays,
+    sampleSize: earliest.size,
+    signupsInWindow: users.length,
+    byFirstAction: SURFACES.map((s) => {
+      const n = firstTotal.get(s.label) ?? 0
+      return { type: s.label, count: n, returnedPct: n >= 5 ? Math.round(((firstReturned.get(s.label) ?? 0) / n) * 100) : null }
+    }).filter((r) => r.count > 0),
+    paths: [...pairCount.entries()]
+      .map(([k, c]) => { const [first, then] = k.split("→"); return { first, then, count: c } })
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 10),
+    multiSurfaceMembers: multi,
+    diaryAndCommunity, diaryOnly, communityOnly,
+  }
+}
+
+export interface RetentionCohort {
+  label: string
+  signups: number
+  onboarded: number
+  activated: number
+  returned24h: number
+}
+
+async function retentionCohorts(): Promise<RetentionCohort[]> {
+  const buckets: [string, number, number][] = [
+    ["Joined last 7d", 0, 7],
+    ["Joined 7–14d ago", 7, 14],
+    ["Joined 14–21d ago", 14, 21],
+    ["Joined 21–30d ago", 21, 30],
+  ]
+  return Promise.all(buckets.map(async ([label, fromD, toD]) => {
+    const lo = new Date(Date.now() - toD * DAY)
+    const hi = new Date(Date.now() - fromD * DAY)
+    const base = { createdAt: { gt: lo, lte: hi }, banned: false }
+    const [signups, onboarded, activated, returned24h] = await Promise.all([
+      prisma.user.count({ where: base }),
+      prisma.user.count({ where: { ...base, onboardingCompletedAt: { not: null } } }),
+      prisma.user.count({ where: { ...base, OR: [...CONTRIBUTION_OR] } }),
+      prisma.$queryRaw<[{ n: bigint }]>`
+        SELECT COUNT(*)::bigint AS n FROM "User"
+        WHERE "createdAt" > ${lo} AND "createdAt" <= ${hi}
+          AND "lastSeenAt" IS NOT NULL
+          AND "lastSeenAt" > "createdAt" + interval '24 hours'
+          AND "banned" = false
+      `.then((r) => Number(r[0]?.n ?? 0)),
+    ])
+    return { label, signups, onboarded, activated, returned24h }
+  }))
+}
+
+export interface DiaryRetention {
+  diaries: number
+  noUpdates: number
+  oneUpdate: number
+  fewUpdates: number // 2–4
+  manyUpdates: number // 5+
+  harvested: number
+}
+
+// Continuation of documentation. "No updates" is a neutral fact, not an
+// abandonment verdict — the product has no auto-abandon rule.
+async function diaryRetention(): Promise<DiaryRetention> {
+  const diaries = await prisma.growDiary.findMany({
+    where: { deleted: false },
+    orderBy: { createdAt: "desc" },
+    take: 500,
+    select: { harvested: true, _count: { select: { updates: true } } },
+  })
+  const r: DiaryRetention = { diaries: diaries.length, noUpdates: 0, oneUpdate: 0, fewUpdates: 0, manyUpdates: 0, harvested: 0 }
+  for (const d of diaries) {
+    const n = d._count.updates
+    if (d.harvested) r.harvested++
+    if (n === 0) r.noUpdates++
+    else if (n === 1) r.oneUpdate++
+    else if (n <= 4) r.fewUpdates++
+    else r.manyUpdates++
+  }
+  return r
+}
+
+export interface ChatValue {
+  uniqueChatters7d: number
+  multiDayChatters7d: number // distinct user-days ≥2
+  activeRooms7d: number
+  chattersWhoContributeElsewhere7d: number
+}
+
+async function chatValue(): Promise<ChatValue> {
+  const since = new Date(Date.now() - 7 * DAY)
+  // Bounded fetch for distinct user-days; message bodies never selected.
+  const [msgs, rooms] = await Promise.all([
+    prisma.chatMessage.findMany({
+      where: { createdAt: { gt: since }, deleted: false },
+      select: { authorId: true, createdAt: true, roomId: true },
+      take: 5000,
+      orderBy: { createdAt: "desc" },
+    }),
+    prisma.chatMessage.groupBy({ by: ["roomId"], where: { createdAt: { gt: since }, deleted: false } }),
+  ])
+  const byUser = new Map<string, Set<string>>()
+  for (const m of msgs) {
+    const days = byUser.get(m.authorId) ?? new Set<string>()
+    days.add(m.createdAt.toISOString().slice(0, 10))
+    byUser.set(m.authorId, days)
+  }
+  const chatters = [...byUser.keys()]
+  const nonChat = await prisma.$queryRaw<[{ authorId: string }]>`
+    SELECT DISTINCT "authorId" FROM (
+      SELECT "authorId" FROM "Thread" WHERE "createdAt" > ${since} AND "deleted" = false
+      UNION ALL SELECT "authorId" FROM "Post" WHERE "createdAt" > ${since} AND "deleted" = false
+      UNION ALL SELECT "authorId" FROM "GrowDiary" WHERE "createdAt" > ${since} AND "deleted" = false
+      UNION ALL SELECT "authorId" FROM "DiaryUpdate" WHERE "createdAt" > ${since}
+      UNION ALL SELECT "authorId" FROM "GrowSetup" WHERE "createdAt" > ${since} AND "deleted" = false
+    ) c WHERE "authorId" IN (SELECT UNNEST(${chatters}::text[]))
+  `
+  const elsewhere = new Set(nonChat.map((r) => r.authorId))
+  return {
+    uniqueChatters7d: chatters.length,
+    multiDayChatters7d: [...byUser.values()].filter((d) => d.size >= 2).length,
+    activeRooms7d: rooms.length,
+    chattersWhoContributeElsewhere7d: chatters.filter((id) => elsewhere.has(id)).length,
+  }
+}
+
+export interface BotValue {
+  uniqueUsers7d: number
+  multiDayUsers7d: number
+  usersWhoAlsoContribute7d: number
+}
+
+async function botValue(): Promise<BotValue> {
+  const since = new Date(Date.now() - 7 * DAY)
+  const events = await prisma.botEvent.findMany({
+    where: { type: { in: ["COMMAND_SLASH", "COMMAND_MENTION"] }, createdAt: { gt: since }, userId: { not: null } },
+    select: { userId: true, createdAt: true },
+    take: 5000,
+    orderBy: { createdAt: "desc" },
+  })
+  const byUser = new Map<string, Set<string>>()
+  for (const e of events) {
+    const days = byUser.get(e.userId!) ?? new Set<string>()
+    days.add(e.createdAt.toISOString().slice(0, 10))
+    byUser.set(e.userId!, days)
+  }
+  const users = [...byUser.keys()]
+  let contributors = 0
+  if (users.length) {
+    const rows = await prisma.$queryRaw<[{ authorId: string }]>`
+      SELECT DISTINCT "authorId" FROM (
+        SELECT "authorId" FROM "Thread" WHERE "createdAt" > ${since} AND "deleted" = false
+        UNION ALL SELECT "authorId" FROM "Post" WHERE "createdAt" > ${since} AND "deleted" = false
+        UNION ALL SELECT "authorId" FROM "GrowDiary" WHERE "createdAt" > ${since} AND "deleted" = false
+        UNION ALL SELECT "authorId" FROM "DiaryUpdate" WHERE "createdAt" > ${since}
+        UNION ALL SELECT "authorId" FROM "GrowSetup" WHERE "createdAt" > ${since} AND "deleted" = false
+        UNION ALL SELECT "authorId" FROM "ChatMessage" WHERE "createdAt" > ${since} AND "deleted" = false
+      ) c WHERE "authorId" IN (SELECT UNNEST(${users}::text[]))
+    `
+    contributors = rows.length
+  }
+  return {
+    uniqueUsers7d: users.length,
+    multiDayUsers7d: [...byUser.values()].filter((d) => d.size >= 2).length,
+    usersWhoAlsoContribute7d: contributors,
+  }
+}
+
+export interface FeedbackSignals {
+  total: number
+  open: number
+  oldestOpenDays: number | null
+  topRoutes: { route: string; count: number }[]
+  byType: { type: string; count: number }[]
+  byDevice: { device: string; count: number }[]
+}
+
+// Aggregate feedback patterns — most-reported routes, device mix, open age.
+// Bounded to the 500 most recent items; bodies never selected.
+async function feedbackSignals(): Promise<FeedbackSignals> {
+  const rows = await prisma.feedback.findMany({
+    orderBy: { createdAt: "desc" },
+    take: 500,
+    select: { type: true, status: true, pagePath: true, deviceType: true, createdAt: true },
+  })
+  const routes = new Map<string, number>()
+  const types = new Map<string, number>()
+  const devices = new Map<string, number>()
+  let open = 0, oldestOpen: Date | null = null
+  for (const f of rows) {
+    if (f.pagePath) routes.set(f.pagePath, (routes.get(f.pagePath) ?? 0) + 1)
+    types.set(f.type, (types.get(f.type) ?? 0) + 1)
+    devices.set(f.deviceType || "unknown", (devices.get(f.deviceType || "unknown") ?? 0) + 1)
+    if (f.status === "NEW" || f.status === "REVIEWING") {
+      open++
+      if (!oldestOpen || f.createdAt < oldestOpen) oldestOpen = f.createdAt
+    }
+  }
+  const top = (m: Map<string, number>, key: string) =>
+    [...m.entries()].map(([k, c]) => ({ [key]: k, count: c })).sort((a, b) => b.count - a.count).slice(0, 10)
+  return {
+    total: rows.length,
+    open,
+    oldestOpenDays: oldestOpen ? Math.floor((Date.now() - oldestOpen.getTime()) / DAY) : null,
+    topRoutes: top(routes, "route") as { route: string; count: number }[],
+    byType: top(types, "type") as { type: string; count: number }[],
+    byDevice: top(devices, "device") as { device: string; count: number }[],
+  }
+}
+
+export interface GrowthDetail {
+  firstAction30d: FirstActionAnalysis
+  cohorts: RetentionCohort[]
+  diary: DiaryRetention
+  chat: ChatValue
+  bot: BotValue
+  feedback: FeedbackSignals
+  generatedAt: Date
+}
+
+export async function getGrowthDetail(): Promise<GrowthDetail> {
+  const [firstAction30d, cohorts, diary, chat, bot, feedback] = await Promise.all([
+    firstActionAnalysis(30),
+    retentionCohorts(),
+    diaryRetention(),
+    chatValue(),
+    botValue(),
+    feedbackSignals(),
+  ])
+  return { firstAction30d, cohorts, diary, chat, bot, feedback, generatedAt: new Date() }
 }
 
 export interface OpsData {

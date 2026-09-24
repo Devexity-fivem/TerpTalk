@@ -76,9 +76,14 @@ export default async function AdminCommunityPage() {
                   <Link href={`/forum/thread/${t.slug}`} className="font-medium hover:text-primary">{t.title}</Link>
                   <span className="text-xs text-muted-foreground ml-2">{t.category} · {t.author}</span>
                 </div>
-                {t.isQuestionCategory && (
-                  <span className="ml-auto text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary font-semibold shrink-0">QUESTION</span>
-                )}
+                <span className="ml-auto flex gap-1 shrink-0">
+                  {t.authorReturned && (
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-warning/15 text-warning font-semibold" title="Author has returned since posting — the question may need a visible reply">AUTHOR BACK</span>
+                  )}
+                  {t.isQuestionCategory && (
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary font-semibold">QUESTION</span>
+                  )}
+                </span>
               </li>
             ))}
           </ul>

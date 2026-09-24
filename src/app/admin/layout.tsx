@@ -9,7 +9,7 @@ import { isAdmin } from "@/lib/security"
 import { buildMetadata } from "@/lib/seo"
 import {
   LayoutDashboard, Users, Sprout, ShieldAlert, TrendingUp,
-  MessageSquarePlus, Bot, Activity, Wrench, ShieldCheck, Flag,
+  MessageSquarePlus, Bot, Activity, Wrench, ShieldCheck, Flag, Repeat2, FlaskConical,
 } from "lucide-react"
 
 export const metadata: Metadata = buildMetadata({
@@ -35,6 +35,8 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     { href: "/admin/members", label: "Members", icon: Users },
     { href: "/moderation", label: "Moderation", icon: Flag },
     { href: "/admin/growth", label: "Growth", icon: TrendingUp, adminOnly: true },
+    { href: "/admin/retention", label: "Retention", icon: Repeat2, adminOnly: true },
+    { href: "/admin/experiments", label: "Changes", icon: FlaskConical, adminOnly: true },
     { href: "/admin/manage?tab=feedback", label: "Feedback", icon: MessageSquarePlus, adminOnly: true },
     { href: "/admin/manage?tab=terpbot", label: "TerpBot", icon: Bot, adminOnly: true },
     { href: "/admin/system", label: "System", icon: Activity, adminOnly: true },
