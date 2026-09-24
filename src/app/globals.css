@@ -579,6 +579,162 @@ h1, h2, h3 {
   }
 }
 
+/* ─── Futuristic interaction layer ────────────────────────────────────
+   All pointer-driven effects resolve through CSS custom properties set
+   by one delegated listener (components/spotlight-fx.tsx) — elements opt
+   in with .tt-spotlight and never need their own JS. */
+
+/* Cursor spotlight — a soft emerald/violet glow that tracks the pointer
+   across an opted-in card. Invisible until hovered. */
+.tt-spotlight {
+  position: relative;
+}
+.tt-spotlight::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: radial-gradient(
+    16rem 16rem at var(--mx, 50%) var(--my, 50%),
+    rgb(var(--glow-primary) / 0.12),
+    rgb(var(--glow-spectrum) / 0.06) 55%,
+    transparent 75%
+  );
+  opacity: 0;
+  transition: opacity 200ms ease;
+  pointer-events: none;
+}
+.tt-spotlight:hover::after {
+  opacity: 1;
+}
+
+/* Holographic energy border — a slowly-rotating conic gradient ring that
+   lives inside the element's border box (masked, so content stays clean).
+   The signature surface treatment: hero canopy, CTA banner, featured
+   partner cards. */
+@property --holo-angle {
+  syntax: "<angle>";
+  initial-value: 0deg;
+  inherits: false;
+}
+@keyframes tt-holo-spin {
+  to {
+    --holo-angle: 360deg;
+  }
+}
+.tt-holo-border {
+  position: relative;
+}
+.tt-holo-border::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: conic-gradient(
+    from var(--holo-angle, 0deg),
+    rgb(var(--glow-primary) / 0.55),
+    rgb(var(--glow-spectrum) / 0.55) 30%,
+    transparent 48%,
+    rgb(var(--glow-accent) / 0.45) 68%,
+    rgb(var(--glow-primary) / 0.55)
+  );
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  animation: tt-holo-spin 7s linear infinite;
+  pointer-events: none;
+}
+
+/* Sheen sweep — a light pass across primary CTAs on hover. */
+.tt-cta {
+  position: relative;
+  overflow: hidden;
+}
+.tt-cta::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    105deg,
+    transparent 40%,
+    rgb(255 255 255 / 0.22) 50%,
+    transparent 60%
+  );
+  transform: translateX(-120%);
+  transition: transform 550ms ease;
+  pointer-events: none;
+}
+.tt-cta:hover::after {
+  transform: translateX(120%);
+}
+
+/* Shimmer skeleton — a sheen sweep instead of a flat pulse. Layers over
+   the same secondary fill so it degrades to a static block without motion. */
+.tt-shimmer {
+  position: relative;
+  overflow: hidden;
+}
+.tt-shimmer::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    100deg,
+    transparent 30%,
+    rgb(var(--glow-primary) / 0.14) 50%,
+    transparent 70%
+  );
+  transform: translateX(-100%);
+  animation: tt-shimmer-sweep 1.6s ease-in-out infinite;
+}
+@keyframes tt-shimmer-sweep {
+  to {
+    transform: translateX(100%);
+  }
+}
+
+/* Film grain — a whisper of fractal noise across the whole page. Removes
+   the flat-digital look; invisible in practice, premium in aggregate. */
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 2147483647;
+  pointer-events: none;
+  opacity: var(--grain-opacity, 0.028);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+:root[data-theme="dark"] {
+  --grain-opacity: 0.04;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --grain-opacity: 0.04;
+  }
+}
+
+/* Scroll reveal — sections rise gently as they enter the viewport.
+   Progressive enhancement: only where animation-timeline is supported
+   (Chromium); other browsers render content normally with no FOUC risk
+   because the `from` state never applies without the timeline. */
+@media (prefers-reduced-motion: no-preference) {
+  @supports (animation-timeline: view()) {
+    .tt-reveal {
+      animation: tt-reveal-in linear both;
+      animation-timeline: view();
+      animation-range: entry 0% entry 35%;
+    }
+  }
+}
+@keyframes tt-reveal-in {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+}
+
 /* ─── Animated avatar frames ──────────────────────────────────────────
    tt-frame-pulse: breathing grow-light glow (Photon Pulse, 2,500 rep).
    tt-frame-aurora: hue-drifting aurora (Northern Lights, 50,000 rep).

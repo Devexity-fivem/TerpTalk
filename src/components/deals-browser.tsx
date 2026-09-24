@@ -25,7 +25,7 @@ const SECTIONS = [
 
 function DealCard({ p }: { p: Deal }) {
   return (
-    <div className="bg-card/80 border border-border/70 rounded-2xl p-4 flex flex-col">
+    <div className="tt-spotlight bg-card/80 border border-border/70 rounded-2xl p-4 flex flex-col transition-colors hover:border-primary/40">
       {p.imageUrl && (
         // eslint-disable-next-line @next/next/no-img-element
         <img src={p.imageUrl} alt={p.name} loading="lazy" decoding="async" className="w-full aspect-video object-cover rounded-lg mb-3" />

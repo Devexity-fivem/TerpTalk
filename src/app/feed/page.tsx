@@ -320,7 +320,7 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
           <div className="min-w-0 lg:col-span-2 space-y-6">
             {/* Mixed feed — Latest and For You use the unified stream */}
             {(activeTab === "for-you" || activeTab === "latest" || activeTab === "following") && feedItems.length > 0 && (
-              <div className="bg-card/80 rounded-2xl border border-border/70">
+              <div className="tt-spotlight bg-card/80 rounded-2xl border border-border/70">
                 <div className="p-4 border-b border-border flex items-center gap-2">
                   <TrendingUp className="w-5 h-5 text-primary" />
                   <h2 className="font-display font-semibold">
@@ -440,7 +440,7 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
 
             {/* Discussions-only mode */}
             {activeTab === "discussions" && recentThreads.length > 0 && (
-              <div className="bg-card/80 rounded-2xl border border-border/70">
+              <div className="tt-spotlight bg-card/80 rounded-2xl border border-border/70">
                 <div className="p-4 border-b border-border flex items-center gap-2">
                   <MessageSquare className="w-5 h-5 text-primary" />
                   <h2 className="font-display font-semibold">Discussions</h2>
@@ -489,7 +489,7 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
 
             {/* Grows-only mode */}
             {activeTab === "grows" && recentDiaryUpdates.length > 0 && (
-              <div className="bg-card/80 rounded-2xl border border-border/70">
+              <div className="tt-spotlight bg-card/80 rounded-2xl border border-border/70">
                 <div className="p-4 border-b border-border flex items-center gap-2">
                   <Sprout className="w-5 h-5 text-primary" />
                   <h2 className="font-display font-semibold">Grow Updates</h2>
@@ -536,7 +536,7 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
 
             {/* Harvests mode — completed grows */}
             {activeTab === "harvests" && recentHarvests.length > 0 && (
-              <div className="bg-card/80 rounded-2xl border border-border/70">
+              <div className="tt-spotlight bg-card/80 rounded-2xl border border-border/70">
                 <div className="p-4 border-b border-border flex items-center gap-2">
                   <Award className="w-5 h-5 text-success" />
                   <h2 className="font-display font-semibold">Recent Harvests</h2>
@@ -595,7 +595,7 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
 
             {/* Recent Diary Updates — only when no mixed feed items exist */}
             {activeTab !== "discussions" && activeTab !== "harvests" && activeTab !== "grows" && feedItems.length === 0 && recentDiaryUpdates.length > 0 && (
-              <div className="bg-card/80 rounded-2xl border border-border/70">
+              <div className="tt-spotlight bg-card/80 rounded-2xl border border-border/70">
                 <div className="p-4 border-b border-border flex items-center gap-2">
                   <Leaf className="w-5 h-5 text-primary" />
                   <h2 className="font-display font-semibold">Recent Grow Updates</h2>
@@ -644,7 +644,7 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
 
             {/* Recent Forum Threads — fallback when mixed feed is empty */}
             {activeTab !== "grows" && activeTab !== "harvests" && activeTab !== "discussions" && feedItems.length === 0 && recentThreads.length > 0 && (
-              <div className="bg-card/80 rounded-2xl border border-border/70">
+              <div className="tt-spotlight bg-card/80 rounded-2xl border border-border/70">
                 <div className="p-4 border-b border-border flex items-center gap-2">
                   <MessageSquare className="w-5 h-5 text-primary" />
                   <h2 className="font-display font-semibold">New Discussions</h2>
@@ -702,7 +702,7 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
               (activeTab === "grows" && recentDiaryUpdates.length === 0) ||
               (activeTab === "harvests" && recentHarvests.length === 0) ||
               (!["discussions", "grows", "harvests"].includes(activeTab) && recentDiaryUpdates.length === 0 && recentThreads.length === 0)) && (
-              <div className="bg-card/80 rounded-2xl border border-border/70 p-12 text-center">
+              <div className="tt-spotlight bg-card/80 rounded-2xl border border-border/70 p-12 text-center">
                 {!session?.user?.id && (activeTab === "following" || activeTab === "for-you") ? (
                   <>
                     <UserPlus className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
@@ -782,7 +782,7 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
           {/* Sidebar */}
           <div className="min-w-0 space-y-6">
             {/* Trending Diaries */}
-            <div className="bg-card/80 rounded-2xl border border-border/70">
+            <div className="tt-spotlight bg-card/80 rounded-2xl border border-border/70">
               <div className="p-4 border-b border-border flex items-center gap-2">
                 <TrendingUp className="w-5 h-5 text-primary" />
                 <h2 className="font-display font-semibold">Trending Diaries</h2>
@@ -818,7 +818,7 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
             </div>
 
             {/* Quick Stats */}
-            <div className="bg-card/80 rounded-2xl border border-border/70 p-6">
+            <div className="tt-spotlight bg-card/80 rounded-2xl border border-border/70 p-6">
               <h3 className="font-display font-semibold mb-4">Community Stats</h3>
               <div className="space-y-3">
                 <div className="flex justify-between">
@@ -837,7 +837,7 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
             </div>
 
             {/* Popular Categories */}
-            <div className="bg-card/80 rounded-2xl border border-border/70 p-6">
+            <div className="tt-spotlight bg-card/80 rounded-2xl border border-border/70 p-6">
               <h3 className="font-display font-semibold mb-4">Popular Categories</h3>
               <div className="space-y-2">
                 {popularCategories.map((c) => (

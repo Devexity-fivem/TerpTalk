@@ -18,6 +18,7 @@ import RecoveryWarningBanner from "@/components/recovery-warning-banner";
 import { ChatPanelProvider, ChatPanelInset, ChatDock } from "@/components/chat-panel";
 import { CommandPaletteProvider } from "@/components/command-palette";
 import { ShareComposerProvider } from "@/components/share-composer";
+import SpotlightFX from "@/components/spotlight-fx";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -124,6 +125,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                 </CommandPaletteProvider>
               </ChatPanelProvider>
               <ServiceWorkerRegister />
+              <SpotlightFX />
             </Providers>
             <Analytics />
             <SpeedInsights />

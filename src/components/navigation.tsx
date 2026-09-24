@@ -168,7 +168,7 @@ export function Navigation() {
   return (
     <>
       <nav id="tt-top-nav" className="sticky top-2 z-50 px-2 sm:top-3 sm:px-3 lg:px-4">
-        <div className="tt-glass relative mx-auto max-w-7xl rounded-2xl border border-border/60 shadow-lg shadow-black/5">
+        <div className="tt-glass tt-spotlight relative mx-auto max-w-7xl rounded-2xl border border-border/60 shadow-lg shadow-black/5">
           <div className="tt-spectrum-bar absolute inset-x-8 bottom-0 h-[2px] rounded-full opacity-50" />
           <div className="flex h-14 items-center justify-between gap-2 px-3 sm:h-16 sm:px-4">
             {/* Logo — compact below sm so the header fits 320px devices. */}

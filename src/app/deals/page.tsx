@@ -56,7 +56,7 @@ export default async function DealsPage() {
 
         {/* Featured partners */}
         {featured.map((p) => (
-          <div key={p.id} className="bg-gradient-to-br from-primary/15 to-card border border-primary/30 rounded-xl p-6 mb-8">
+          <div key={p.id} className="tt-holo-border tt-spotlight bg-gradient-to-br from-primary/15 to-card border border-primary/30 rounded-xl p-6 mb-8">
             <div className="flex flex-col sm:flex-row sm:items-center gap-4">
               <div className="flex-1">
                 <h2 className="font-display text-2xl font-bold tracking-tight">{p.name}</h2>

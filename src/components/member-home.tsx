@@ -38,7 +38,7 @@ function Card({
   children: React.ReactNode
 }) {
   return (
-    <section className="min-w-0 bg-card/80 rounded-2xl border border-border/70 p-4 sm:p-5">
+    <section className="min-w-0 tt-spotlight bg-card/80 rounded-2xl border border-border/70 p-4 sm:p-5">
       <div className="mb-3 flex items-center justify-between gap-2">
         <h2 className="flex items-center gap-2 font-display text-sm font-semibold">
           {icon}
@@ -406,7 +406,7 @@ export default function MemberHome({ data }: { data: MemberHomeData }) {
             experiments, techniques, strains. Real rows only; hidden when
             there's nothing recorded yet. */}
         {data.knowledge && (
-          <section className="mt-4 bg-card/80 rounded-2xl border border-border/70 p-4 sm:p-5">
+          <section className="mt-4 tt-spotlight bg-card/80 rounded-2xl border border-border/70 p-4 sm:p-5">
             <div className="mb-3 flex items-center justify-between gap-2">
               <h2 className="flex items-center gap-2 font-display text-sm font-semibold">
                 <BookOpen className="h-4 w-4 text-primary" />
@@ -471,7 +471,7 @@ export default function MemberHome({ data }: { data: MemberHomeData }) {
 
         {/* Around your grows — community activity tied to what you're growing */}
         {(data.aroundGrows.threads.length > 0 || data.aroundGrows.harvests.length > 0) && (
-          <section className="mt-4 bg-card/80 rounded-2xl border border-border/70 p-4 sm:p-5">
+          <section className="mt-4 tt-spotlight bg-card/80 rounded-2xl border border-border/70 p-4 sm:p-5">
             <div className="mb-3 flex items-center justify-between gap-2">
               <h2 className="flex items-center gap-2 font-display text-sm font-semibold">
                 <Leaf className="h-4 w-4 text-primary" />
@@ -521,7 +521,7 @@ export default function MemberHome({ data }: { data: MemberHomeData }) {
 
         {/* Community pulse — trending threads make the cockpit feel alive */}
         {data.trending.length > 0 && (
-          <section className="mt-6 bg-card/80 rounded-2xl border border-border/70 p-4 sm:p-5">
+          <section className="mt-6 tt-spotlight bg-card/80 rounded-2xl border border-border/70 p-4 sm:p-5">
             <div className="mb-3 flex items-center justify-between gap-2">
               <h2 className="flex items-center gap-2 font-display text-sm font-semibold">
                 <TrendingUp className="h-4 w-4 text-spectrum" />

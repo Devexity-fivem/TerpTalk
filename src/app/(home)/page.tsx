@@ -230,7 +230,7 @@ export default async function Home() {
           <div className="relative hidden lg:block">
             <div className="absolute -inset-6 -z-10 rounded-[2.5rem] bg-primary/10 blur-2xl" />
             <div className="absolute -right-8 -top-8 -z-10 h-44 w-44 rounded-full bg-spectrum/25 blur-3xl" />
-            <div className="overflow-hidden rounded-3xl border border-border/70 bg-card/80 shadow-2xl backdrop-blur-xl">
+            <div className="tt-holo-border overflow-hidden rounded-3xl border border-border/70 bg-card/80 shadow-2xl backdrop-blur-xl">
               <div className="tt-spectrum-animated h-1.5" />
               <div className="p-6 sm:p-7">
                 <div className="mb-5 flex items-center justify-between">
@@ -297,14 +297,14 @@ export default async function Home() {
       </section>
 
       {/* Community Stats */}
-      <section className="tt-hairline-t py-14 px-4 sm:px-6 lg:px-8 border-y border-border/60 bg-secondary/40">
+      <section className="tt-reveal tt-hairline-t py-14 px-4 sm:px-6 lg:px-8 border-y border-border/60 bg-secondary/40">
         <div className="max-w-7xl mx-auto">
           <LiveStats initial={stats} />
         </div>
       </section>
 
       {/* Community Stream */}
-      <section className="py-14 px-4 sm:px-6 lg:px-8 border-b border-border/60 bg-secondary/20">
+      <section className="tt-reveal py-14 px-4 sm:px-6 lg:px-8 border-b border-border/60 bg-secondary/20">
         <div className="max-w-7xl mx-auto">
           <div className="mb-6 flex items-end justify-between gap-4 flex-wrap">
             <div>
@@ -331,7 +331,7 @@ export default async function Home() {
                   <Link
                     key={cat.slug}
                     href={`/forum/category/${cat.slug}`}
-                    className="flex items-center justify-between p-3 bg-card/80 rounded-xl border border-border/70 hover:border-primary/50 tt-lift tt-edge-card"
+                    className="flex items-center justify-between p-3 bg-card/80 rounded-xl border border-border/70 hover:border-primary/50 tt-lift tt-edge-card tt-spotlight"
                   >
                     <div>
                       <div className="font-medium text-sm">{cat.name}</div>
@@ -361,7 +361,7 @@ export default async function Home() {
                   <Link
                     key={thread.id}
                     href={`/forum/thread/${thread.slug}`}
-                    className="flex items-start gap-3 p-3 bg-card/80 rounded-xl border border-border/70 hover:border-primary/50 tt-lift tt-edge-card"
+                    className="flex items-start gap-3 p-3 bg-card/80 rounded-xl border border-border/70 hover:border-primary/50 tt-lift tt-edge-card tt-spotlight"
                   >
                     <Avatar src={thread.author.image ?? undefined} size="sm" alt={thread.author.profile?.username ?? thread.author.name ?? undefined} />
                     <div className="flex-1 min-w-0">
@@ -391,7 +391,7 @@ export default async function Home() {
                   <Link
                     key={update.id}
                     href={diaryPath(update.diary)}
-                    className="flex items-start gap-3 p-3 bg-card/80 rounded-xl border border-border/70 hover:border-primary/50 tt-lift tt-edge-card"
+                    className="flex items-start gap-3 p-3 bg-card/80 rounded-xl border border-border/70 hover:border-primary/50 tt-lift tt-edge-card tt-spotlight"
                   >
                     {update.images[0]?.url ? (
                       // eslint-disable-next-line @next/next/no-img-element
@@ -424,7 +424,7 @@ export default async function Home() {
       </section>
 
       {/* Explore Section */}
-      <section className="py-20 px-4 sm:px-6 lg:px-8">
+      <section className="tt-reveal py-20 px-4 sm:px-6 lg:px-8">
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-10">
             <span className="tt-eyebrow">Find your corner</span>
@@ -436,7 +436,7 @@ export default async function Home() {
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {EXPLORE_CARDS.map(({ icon: Icon, title, desc, href }, i) => (
               <Link key={title} href={href} className="block group">
-                <div className="relative bg-card/80 p-5 rounded-2xl border border-border/70 h-full tt-lift hover:border-primary/50 flex flex-col overflow-hidden">
+                <div className="tt-spotlight relative bg-card/80 p-5 rounded-2xl border border-border/70 h-full tt-lift hover:border-primary/50 flex flex-col overflow-hidden">
                   <span className="absolute right-4 top-4 font-display text-xs font-bold text-muted-foreground/40 tabular-nums">
                     {String(i + 1).padStart(2, "0")}
                   </span>
@@ -456,7 +456,7 @@ export default async function Home() {
       </section>
 
       {/* Community Pulse */}
-      <section className="tt-hairline-t py-14 px-4 sm:px-6 lg:px-8 border-y border-border/60 bg-secondary/20">
+      <section className="tt-reveal tt-hairline-t py-14 px-4 sm:px-6 lg:px-8 border-y border-border/60 bg-secondary/20">
         <div className="max-w-7xl mx-auto">
           <div className="grid lg:grid-cols-2 gap-8">
             {/* Trending */}
@@ -471,7 +471,7 @@ export default async function Home() {
                   <Link
                     key={thread.id}
                     href={`/forum/thread/${thread.slug}`}
-                    className="flex items-start gap-3 p-4 bg-card/80 rounded-xl border border-border/70 hover:border-primary/50 tt-lift tt-edge-card"
+                    className="flex items-start gap-3 p-4 bg-card/80 rounded-xl border border-border/70 hover:border-primary/50 tt-lift tt-edge-card tt-spotlight"
                   >
                     <Avatar src={thread.author.image ?? undefined} size="sm" alt={thread.author.profile?.username ?? thread.author.name ?? undefined} />
                     <div className="flex-1 min-w-0">
@@ -522,7 +522,7 @@ export default async function Home() {
 
       {/* Grower of the Week */}
       {growerOfWeek && (
-        <section className="py-14 px-4 sm:px-6 lg:px-8 border-y border-border bg-secondary/20">
+        <section className="tt-reveal py-14 px-4 sm:px-6 lg:px-8 border-y border-border bg-secondary/20">
           <div className="max-w-7xl mx-auto">
             <div className="bg-card rounded-2xl border border-border p-6 sm:p-8 overflow-hidden relative">
               <div className="tt-spectrum-bar absolute inset-x-0 top-0 h-1" />
@@ -565,8 +565,8 @@ export default async function Home() {
       )}
 
       {/* CTA — a contained grow-light banner rather than a bare strip */}
-      <section className="px-4 pb-20 pt-4 sm:px-6 lg:px-8">
-        <div className="relative mx-auto max-w-5xl overflow-hidden rounded-3xl border border-border/70 bg-card/70 px-6 py-14 text-center shadow-xl backdrop-blur-sm sm:px-10">
+      <section className="tt-reveal px-4 pb-20 pt-4 sm:px-6 lg:px-8">
+        <div className="tt-holo-border relative mx-auto max-w-5xl overflow-hidden rounded-3xl border border-border/70 bg-card/70 px-6 py-14 text-center shadow-xl backdrop-blur-sm sm:px-10">
           <div className="tt-spectrum-bar absolute inset-x-0 top-0 h-1" />
           <div className="pointer-events-none absolute inset-0">
             <div className="absolute left-1/2 top-0 h-[220px] w-[480px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary/15 blur-[90px]" />
