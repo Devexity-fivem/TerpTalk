@@ -18,7 +18,7 @@ const PRODUCTS = [
   },
   {
     name: "Super Berry Clone", slug: "cth-super-berry",
-    category: "Clones", price: "$125", featured: true,
+    category: "Clones", price: "$89", featured: true,
     productUrl: "https://clonetohome.com/products/super-berry-cultivation-ready-clone",
     description: "Black Cherry Punch x Super Boof — resin-rich clone with candy-coated blueberry and floral notes. Dense flowers, exceptional trichome coverage.",
     recommendedFor: "Growers chasing terpene expression and bag appeal",
@@ -144,7 +144,7 @@ const PRODUCTS = [
   },
   {
     name: "Le Pew Clone", slug: "cth-le-pew",
-    category: "Clones", price: "$125",
+    category: "Clones", price: "$89",
     productUrl: "https://clonetohome.com/products/le-pew-cultivation-ready-clone",
     description: "Skunk #1 x Skunk #1 — classic structure and dependable high yields. Compact, bushy plants with musky pine and citrus; responds well to training.",
     recommendedFor: "Old-school skunk fans, high-yield runs",
