@@ -405,5 +405,67 @@ check("grow intel + cockpit: experiments are first-class deterministic signals",
   assert.ok(home.includes("activeExperiments"), "grow cards carry experiment counts")
 })
 
+// ── Grower-first sprint contracts ────────────────────────────────────
+
+check("navigation: Grow section leads, Questions + Growers linked, diary CTA", () => {
+  const growIdx = nav.indexOf("Grow")
+  const communityIdx = nav.indexOf("Community")
+  assert.ok(growIdx !== -1 && communityIdx !== -1 && growIdx < communityIdx, "Grow section must precede Community")
+  for (const href of ['"/questions"', '"/growers"', '"/diaries"', '"/strains"']) {
+    assert.ok(nav.includes(`href: ${href}`) || nav.includes(`href=${href}`), `nav missing ${href}`)
+  }
+  assert.ok(nav.includes("/diaries/new"), "persistent Start-a-Diary CTA")
+  assert.ok(nav.includes('"/discover"') && nav.includes('"/feed"'), "Feed + Discover preserved")
+})
+
+check("week navigator: sticky jump rail bound to existing week anchors", () => {
+  const wn = src("components/week-navigator.tsx")
+  assert.ok(wn.includes('aria-label="Jump to week"'), "a11y label")
+  assert.ok(wn.includes('href={`#week-'), "anchors into existing week ids")
+  assert.ok(wn.includes("sticky"), "sticky positioning")
+  assert.ok(/IntersectionObserver|scroll/.test(wn), "active-week tracking")
+  const page = src("app/diaries/[id]/page.tsx")
+  assert.ok(page.includes("<WeekNavigator"), "diary page mounts it")
+  assert.ok(page.includes("groupUpdatesByWeek"), "reuses shared grouping")
+})
+
+check("update form: draft scoped by diary+user, cleared on submit, discardable", () => {
+  const form = src("components/update-form.tsx")
+  assert.ok(form.includes("draftKey"), "draft key builder")
+  assert.ok(/draftKey[\s\S]{0,200}diaryId[\s\S]{0,200}userId|userId[\s\S]{0,200}diaryId/.test(form), "key scoped by diary AND user")
+  assert.ok(form.includes("removeItem"), "draft cleared (submit/discard)")
+  assert.ok(form.includes("Draft restored") || form.includes("draft"), "restore affordance")
+  assert.ok(form.includes("localStorage"), "uses the allowlisted storage")
+})
+
+check("update form: feeding-note reuse is explicit, never silent", () => {
+  const form = src("components/update-form.tsx")
+  assert.ok(form.includes("lastFeeding"), "receives previous note")
+  assert.ok(form.includes("previous feeding") || form.includes("Previous feeding"), "reuse affordance labelled")
+  // The previous note may only fill the field via the explicit button —
+  // never inside the useState initializer or a silent effect.
+  assert.ok(/useState\(\{[\s\S]*?feeding: ""[\s\S]*?\}\)/.test(form), "initial state leaves feeding empty")
+  assert.ok(/onClick=\{\(\) => setFormData\(\{ \.\.\.formData, feeding: lastFeeding \}\)\}/.test(form), "reuse is click-only")
+  const page = src("app/diaries/[id]/page.tsx")
+  assert.ok(page.includes("latestFeedingNote"), "page derives the note via shared lib")
+  assert.ok(page.includes("lastFeeding={"), "prop wired")
+})
+
+check("strains index delegates filtering to the shared lib (no route-local mirror)", () => {
+  const page = src("app/strains/(index)/page.tsx")
+  assert.ok(page.includes('from "@/lib/strain-filters"'), "imports shared filter lib")
+  assert.ok(!page.includes("function strainWhere"), "no duplicated filter logic")
+  const lib = src("lib/strain-filters.ts")
+  assert.ok(lib.includes("strainWhere"), "where-builder exported")
+  assert.ok(lib.includes("thc") && lib.includes("flowering"), "THC + flowering facets")
+})
+
+check("breeder pages group by normalized name, never a Breeder model", () => {
+  const page = src("app/strains/breeder/[name]/page.tsx")
+  assert.ok(page.includes("breeder") && page.includes("mode: \"insensitive\""), "case-insensitive grouping")
+  const schema = src("../prisma/schema.prisma")
+  assert.ok(!/model Breeder\b/.test(schema), "no Breeder model introduced")
+})
+
 console.log(`\n${passed} passed, ${failed} failed`)
 if (failed > 0) process.exit(1)

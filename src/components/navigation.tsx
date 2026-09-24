@@ -7,7 +7,7 @@ import { usePathname } from "next/navigation"
 import {
   Leaf, MessageCircle, MessagesSquare, Home, Calendar,
   Settings, Dna, Bell, Menu, X, Mail, Search, Trophy, BookOpen, Stethoscope, Tag, TrendingUp, Info, Shield,
-  ScrollText, Image as ImageIcon, Video, Tent, HelpCircle, Medal,
+  ScrollText, Image as ImageIcon, Video, Tent, HelpCircle, Medal, Users, Sprout,
 } from "lucide-react"
 import CannabisLeaf from "@/components/cannabis-leaf"
 import MobileNav from "@/components/mobile-nav"
@@ -21,30 +21,37 @@ import { getSharedPusher, peekSharedPusher } from "@/lib/pusher-client"
 import { useChatPanel } from "@/components/chat-panel"
 import { useCommandPalette } from "@/components/command-palette"
 
+// Information architecture: Grow first — the diary/strain/doctor loop is
+// what TerpTalk is — then Community, then the browse/discovery surfaces,
+// then reference material. Feed and Discover stay reachable from Explore.
 const NAV_LINKS = [
+  { href: "/diaries", label: "Grow Diaries", icon: Leaf, section: "Grow" },
+  { href: "/setups", label: "Setups", icon: Tent, section: "Grow" },
+  { href: "/plant-doctor", label: "Plant Doctor", icon: Stethoscope, section: "Grow" },
+  { href: "/strains", label: "Strains", icon: Dna, section: "Grow" },
+  { href: "/forum", label: "Discussions", icon: MessageCircle, section: "Community" },
+  { href: "/questions", label: "Questions", icon: HelpCircle, section: "Community" },
+  { href: "/chat", label: "Chat", icon: MessagesSquare, section: "Community" },
+  { href: "/contest", label: "Contest", icon: Trophy, section: "Community" },
   { href: "/", label: "Home", icon: Home, section: "Explore" },
   { href: "/discover", label: "Discover", icon: TrendingUp, section: "Explore" },
   { href: "/feed", label: "Feed", icon: Calendar, section: "Explore" },
-  { href: "/forum", label: "Discussions", icon: MessageCircle, section: "Community" },
-  { href: "/diaries", label: "Grow Diaries", icon: Leaf, section: "Community" },
-  { href: "/setups", label: "Setups", icon: Tent, section: "Community" },
-  { href: "/guides", label: "Guides", icon: BookOpen, section: "Community" },
-  { href: "/plant-doctor", label: "Plant Doctor", icon: Stethoscope, section: "Community" },
-  { href: "/chat", label: "Chat", icon: MessagesSquare, section: "Community" },
-  { href: "/strains", label: "Strains", icon: Dna, section: "Library" },
-  { href: "/contest", label: "Contest", icon: Trophy, section: "Library" },
+  { href: "/guides", label: "Guides", icon: BookOpen, section: "Library" },
+  { href: "/growers", label: "Growers", icon: Users, section: "Library" },
   { href: "/leaderboard", label: "Leaderboard", icon: Medal, section: "Library" },
   { href: "/deals", label: "Deals", icon: Tag, section: "Library" },
 ]
 
-const NAV_SECTIONS = ["Explore", "Community", "Library"]
+const NAV_SECTIONS = ["Grow", "Community", "Explore", "Library"]
 
 // Shown inline on large screens; the full list stays in the drawer.
+// Grower-first ordering — diaries and strains lead, chat stays last so
+// its unread dot never jumps position mid-list.
 const DESKTOP_LINKS = [
-  { href: "/discover", label: "Discover", icon: TrendingUp },
-  { href: "/forum", label: "Discussions", icon: MessageCircle },
   { href: "/diaries", label: "Diaries", icon: Leaf },
   { href: "/strains", label: "Strains", icon: Dna },
+  { href: "/questions", label: "Questions", icon: HelpCircle },
+  { href: "/forum", label: "Discussions", icon: MessageCircle },
   { href: "/chat", label: "Chat", icon: MessagesSquare },
 ]
 
@@ -502,7 +509,16 @@ export function Navigation() {
                 <span className="text-sm text-muted-foreground">Theme</span>
                 <ThemeToggle />
               </div>
-
+              {/* Persistent grow CTA — the full-field diary form routes
+                  cleanly rather than duplicating creation logic. */}
+              <Link
+                href="/diaries/new"
+                onClick={() => setMenuOpen(false)}
+                className="tt-cta inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-semibold text-primary-foreground transition-all"
+              >
+                <Sprout className="h-4 w-4" />
+                Start a Diary
+              </Link>
             </div>
           </div>
         )}

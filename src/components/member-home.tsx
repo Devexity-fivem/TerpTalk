@@ -272,6 +272,19 @@ export default function MemberHome({ data }: { data: MemberHomeData }) {
                             .join(" · ")}
                         </p>
                         <StageProgress stage={g.stage} className="mt-1.5" />
+                        {/* Log completeness — the owner-facing documentation
+                            signal, same metric as the diary hero. */}
+                        <div className="mt-1.5 flex items-center gap-1.5" title="Log completeness">
+                          <span className="h-1 w-16 overflow-hidden rounded-full bg-secondary">
+                            <span
+                              className={cn("block h-full rounded-full", g.completeness >= 80 ? "bg-success" : "bg-primary/70")}
+                              style={{ width: `${g.completeness}%` }}
+                            />
+                          </span>
+                          <span className="text-[10px] text-muted-foreground">
+                            {g.completeness >= 80 ? "Well documented" : `${g.completeness}% logged`}
+                          </span>
+                        </div>
                         {g.nextStep && (
                           <p className={cn(
                             "mt-1 truncate text-xs",

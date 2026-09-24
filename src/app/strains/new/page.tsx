@@ -8,6 +8,14 @@ import { useRouter } from "next/navigation"
 import { Leaf, Loader2 } from "lucide-react"
 import Link from "next/link"
 import { strainPath } from "@/lib/slugs"
+import {
+  STRAIN_EFFECTS,
+  STRAIN_EFFECT_LABELS,
+  STRAIN_FLAVORS,
+  STRAIN_FLAVOR_LABELS,
+  STRAIN_DIFFICULTIES,
+  STRAIN_DIFFICULTY_LABELS,
+} from "@/lib/strain-fields"
 
 export default function NewStrainPage() {
   const { data: session, status } = useSession()
@@ -22,7 +30,16 @@ export default function NewStrainPage() {
     type: "",
     description: "",
     growingInfo: "",
+    difficulty: "",
+    thcMin: "",
+    thcMax: "",
+    floweringWeeks: "",
   })
+  const [effects, setEffects] = useState<string[]>([])
+  const [flavors, setFlavors] = useState<string[]>([])
+
+  const toggle = (list: string[], setList: (v: string[]) => void, v: string) =>
+    setList(list.includes(v) ? list.filter((x) => x !== v) : [...list, v])
 
   if (status === "loading") {
     return (
@@ -52,7 +69,15 @@ export default function NewStrainPage() {
       const response = await fetch("/api/strains", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formData),
+        body: JSON.stringify({
+          ...formData,
+          difficulty: formData.difficulty || undefined,
+          thcMin: formData.thcMin === "" ? undefined : Number(formData.thcMin),
+          thcMax: formData.thcMax === "" ? undefined : Number(formData.thcMax),
+          floweringWeeks: formData.floweringWeeks === "" ? undefined : Number(formData.floweringWeeks),
+          effects,
+          flavors,
+        }),
       })
 
       if (!response.ok) {
@@ -150,6 +175,114 @@ export default function NewStrainPage() {
                 <option value="CBD">CBD</option>
                 <option value="Other">Other</option>
               </select>
+            </div>
+
+            {/* Catalog facets — optional, controlled vocab so the index
+                can filter on real values instead of free text. */}
+            <div className="grid sm:grid-cols-3 gap-4">
+              <div>
+                <label htmlFor="difficulty" className="block text-sm font-medium mb-2">
+                  Grow difficulty
+                </label>
+                <select
+                  id="difficulty"
+                  value={formData.difficulty}
+                  onChange={(e) => setFormData({ ...formData, difficulty: e.target.value })}
+                  className="w-full px-4 py-2 rounded-xl border border-border/70 bg-background focus:outline-none focus:ring-2 focus:ring-primary"
+                >
+                  <option value="">Not reported</option>
+                  {STRAIN_DIFFICULTIES.map((d) => (
+                    <option key={d} value={d}>{STRAIN_DIFFICULTY_LABELS[d]}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label htmlFor="floweringWeeks" className="block text-sm font-medium mb-2">
+                  Flowering (weeks, est.)
+                </label>
+                <input
+                  id="floweringWeeks"
+                  type="number"
+                  min={4}
+                  max={20}
+                  value={formData.floweringWeeks}
+                  onChange={(e) => setFormData({ ...formData, floweringWeeks: e.target.value })}
+                  className="w-full px-4 py-2 rounded-xl border border-border/70 bg-background focus:outline-none focus:ring-2 focus:ring-primary"
+                  placeholder="e.g. 9"
+                />
+              </div>
+              <div>
+                <span className="block text-sm font-medium mb-2">THC % (optional)</span>
+                <div className="flex items-center gap-2">
+                  <input
+                    aria-label="THC minimum percent"
+                    type="number"
+                    min={0}
+                    max={45}
+                    step={0.1}
+                    value={formData.thcMin}
+                    onChange={(e) => setFormData({ ...formData, thcMin: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl border border-border/70 bg-background focus:outline-none focus:ring-2 focus:ring-primary"
+                    placeholder="min"
+                  />
+                  <span className="text-muted-foreground text-xs">–</span>
+                  <input
+                    aria-label="THC maximum percent"
+                    type="number"
+                    min={0}
+                    max={45}
+                    step={0.1}
+                    value={formData.thcMax}
+                    onChange={(e) => setFormData({ ...formData, thcMax: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl border border-border/70 bg-background focus:outline-none focus:ring-2 focus:ring-primary"
+                    placeholder="max"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <span className="block text-sm font-medium mb-2">Reported effects (optional)</span>
+              <div className="flex flex-wrap gap-2">
+                {STRAIN_EFFECTS.map((e) => {
+                  const active = effects.includes(e)
+                  return (
+                    <button
+                      key={e}
+                      type="button"
+                      aria-pressed={active}
+                      onClick={() => toggle(effects, setEffects, e)}
+                      className={`px-3 py-1.5 rounded-full text-xs border transition-colors ${
+                        active ? "bg-primary text-primary-foreground border-primary" : "border-border hover:bg-secondary"
+                      }`}
+                    >
+                      {STRAIN_EFFECT_LABELS[e]}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+
+            <div>
+              <span className="block text-sm font-medium mb-2">Flavor profile (optional)</span>
+              <div className="flex flex-wrap gap-2">
+                {STRAIN_FLAVORS.map((f) => {
+                  const active = flavors.includes(f)
+                  return (
+                    <button
+                      key={f}
+                      type="button"
+                      aria-pressed={active}
+                      onClick={() => toggle(flavors, setFlavors, f)}
+                      className={`px-3 py-1.5 rounded-full text-xs border transition-colors ${
+                        active ? "bg-primary text-primary-foreground border-primary" : "border-border hover:bg-secondary"
+                      }`}
+                    >
+                      {STRAIN_FLAVOR_LABELS[f]}
+                    </button>
+                  )
+                })}
+              </div>
             </div>
 
             <div>

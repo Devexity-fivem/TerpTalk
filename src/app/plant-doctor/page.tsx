@@ -1,5 +1,5 @@
 import ProblemWizard from "@/components/problem-wizard"
-import { Stethoscope, MessageSquare } from "lucide-react"
+import { Stethoscope, MessageSquare, HelpCircle, Sprout } from "lucide-react"
 import Link from "next/link"
 import { getSymptomStats } from "@/lib/community-stats"
 
@@ -25,6 +25,25 @@ export default async function PlantDoctorPage() {
           </p>
         </div>
         <ProblemWizard />
+
+        {/* Grower context — a diagnosis is more useful attached to a
+            documented grow, and the community can weigh in either way. */}
+        <div className="mt-6 flex flex-col sm:flex-row gap-3">
+          <Link
+            href="/questions"
+            className="flex-1 inline-flex items-center justify-center gap-2 rounded-2xl border border-border/70 bg-card/80 px-4 py-3 text-sm font-medium hover:border-primary/40 transition-colors"
+          >
+            <HelpCircle className="w-4 h-4 text-primary" />
+            Browse grow questions
+          </Link>
+          <Link
+            href="/diaries/new"
+            className="flex-1 inline-flex items-center justify-center gap-2 rounded-2xl border border-border/70 bg-card/80 px-4 py-3 text-sm font-medium hover:border-primary/40 transition-colors"
+          >
+            <Sprout className="w-4 h-4 text-primary" />
+            Document your grow
+          </Link>
+        </div>
 
         {/* Community outcomes — aggregate-only stats from Plant Doctor threads */}
         <div className="mt-8 bg-card/80 rounded-2xl border border-border/70 p-5">

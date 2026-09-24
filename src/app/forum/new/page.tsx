@@ -66,10 +66,16 @@ function NewThreadForm() {
 
   const [similarThreads, setSimilarThreads] = useState<SimilarThread[]>([])
   const [images, setImages] = useState<string[]>([])
-  // Plant Doctor handoff pre-applies the matching symptom tag.
+  // Plant Doctor handoff pre-applies the matching symptom tag; a ?strain=
+  // context pre-adds the strain name as a plain tag (editable/removable —
+  // nothing about the grow or diary is pulled in automatically).
   const [tags, setTags] = useState<string[]>(() => {
+    const out: string[] = []
     const t = wizardResultToTag(searchParams?.get("result"))
-    return t ? [t.name] : []
+    if (t) out.push(t.name)
+    const strain = searchParams?.get("strain")?.trim().slice(0, 80)
+    if (strain) out.push(strain)
+    return out
   })
   const [poll, setPoll] = useState<{ question: string; options: string[] } | null>(null)
   // null = still loading; reputation decides whether the poll perk shows.

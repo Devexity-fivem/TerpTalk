@@ -14,10 +14,11 @@ interface MobileNavProps {
   chatUnread?: boolean
 }
 
+// Grower-first ordering — diaries get the prime second slot.
 const ITEMS = [
   { href: "/", label: "Home", icon: Home, exact: true },
-  { href: "/forum", label: "Forums", icon: MessageCircle },
   { href: "/diaries", label: "Diaries", icon: Leaf },
+  { href: "/forum", label: "Forums", icon: MessageCircle },
   { href: "/chat", label: "Chat", icon: MessagesSquare },
 ]
 

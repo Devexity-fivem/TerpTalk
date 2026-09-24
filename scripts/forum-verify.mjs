@@ -474,6 +474,80 @@ const main = async () => {
       ? pass("moderation: ban purges actor's unread notifications")
       : fail("ban purge", { s: r.status, preBan, postBan })
 
+    // ── 5c. /questions destination — real thread model, question-category
+    // convention, unanswered/solved states. Fixture rows go in via prisma,
+    // then one real API thread POST busts the cached "forum" tag so the
+    // next page fetch recomputes with the fixtures present.
+    const allCats = await prisma.category.findMany({ where: { hidden: false }, select: { id: true, slug: true, name: true } })
+    const QUESTION_RE = /question|help|problem|doctor/i
+    const qCat = allCats.find((c) => QUESTION_RE.test(`${c.slug} ${c.name}`))
+    const nonQCat = allCats.find((c) => !QUESTION_RE.test(`${c.slug} ${c.name}`))
+    if (!qCat) throw new Error("no question-like category seeded")
+    const qTag = `__vq_${Date.now().toString(36)}`
+    const qUnanswered = await prisma.thread.create({
+      data: { title: `${qTag} unanswered`, slug: `${qTag}-u`, content: "verify unanswered question body", categoryId: qCat.id, authorId: author.id },
+    })
+    const qAnswered = await prisma.thread.create({
+      data: { title: `${qTag} answered`, slug: `${qTag}-a`, content: "verify answered question body", categoryId: qCat.id, authorId: author.id, replyCount: 1 },
+    })
+    const qSolvedPost = await prisma.post.create({
+      data: { content: "verify accepted answer body", threadId: (await prisma.thread.create({
+        data: { title: `${qTag} solved`, slug: `${qTag}-s`, content: "verify solved question body", categoryId: qCat.id, authorId: author.id, replyCount: 1 },
+        select: { id: true },
+      })).id, authorId: replier.id },
+      select: { id: true, threadId: true },
+    })
+    const qSolved = await prisma.thread.update({ where: { id: qSolvedPost.threadId }, data: { acceptedAnswerId: qSolvedPost.id }, select: { id: true, slug: true } })
+    let nqThread = null
+    if (nonQCat) {
+      nqThread = await prisma.thread.create({
+        data: { title: `${qTag} notquestion`, slug: `${qTag}-nq`, content: "verify non-question thread body", categoryId: nonQCat.id, authorId: author.id },
+      })
+      threads.push(nqThread)
+    }
+    threads.push(qUnanswered, qAnswered, { id: qSolvedPost.threadId, slug: qSolved.slug })
+    // Cache bust — a real API thread create revalidates the shared "forum" tag.
+    const bustRes = await callApi("/api/forum/threads", {
+      method: "POST",
+      body: { title: `__verify cache bust ${Date.now()}`, content: "verification cache bust content — enough chars", categoryId: category.id },
+      cookie: authorCookie,
+    })
+    if (bustRes.data?.thread?.id) threads.push(bustRes.data.thread)
+
+    let qHtml = await (await fetch(`${BASE}/questions`)).text()
+    ;(qHtml.includes(`${qTag} unanswered`) && !qHtml.includes(`${qTag} answered`) && !qHtml.includes(`${qTag} solved`))
+      ? pass("questions: default tab is unanswered-only")
+      : fail("questions default", "unanswered tab leaked answered/solved threads")
+
+    qHtml = await (await fetch(`${BASE}/questions?filter=solved`)).text()
+    ;(qHtml.includes(`${qTag} solved`) && qHtml.includes("Solved") && !qHtml.includes(`${qTag} unanswered`))
+      ? pass("questions: solved filter shows accepted-answer threads with Solved marker")
+      : fail("questions solved", "solved filter wrong")
+
+    qHtml = await (await fetch(`${BASE}/questions?filter=all`)).text()
+    const allOk = qHtml.includes(`${qTag} unanswered`) && qHtml.includes(`${qTag} answered`) && qHtml.includes(`${qTag} solved`)
+    const unansweredFirst = qHtml.indexOf(`${qTag} unanswered`) < qHtml.indexOf(`${qTag} answered`)
+    ;(allOk && unansweredFirst)
+      ? pass("questions: all tab shows everything, unanswered first")
+      : fail("questions all", { allOk, unansweredFirst })
+
+    if (nqThread) {
+      !qHtml.includes(`${qTag} notquestion`)
+        ? pass("questions: non-question-category threads excluded")
+        : fail("questions scope", "non-question thread leaked into /questions")
+    }
+
+    qHtml = await (await fetch(`${BASE}/questions?category=${encodeURIComponent(qCat.slug)}`)).text()
+    qHtml.includes(`${qTag} unanswered`)
+      ? pass("questions: category chip filters to the question category")
+      : fail("questions category", "category filter dropped question threads")
+
+    // A bogus category slug broadens to all topics rather than 404ing.
+    qHtml = await (await fetch(`${BASE}/questions?category=__bogus-cat__`)).text()
+    qHtml.includes(`${qTag} unanswered`)
+      ? pass("questions: unknown category falls back to all topics")
+      : fail("questions bogus category", "bogus slug lost questions")
+
     // ── 6. Anon page smoke ──
     // authorThread, not thread — replier was permanently banned above, and
     // banned-author thread pages correctly 404 for everyone.

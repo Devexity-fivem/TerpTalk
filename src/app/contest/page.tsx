@@ -102,6 +102,29 @@ export default async function ContestPage() {
         )}
 
         <DiaryContestBoard />
+
+        {/* Contextual loop — contests feed back into the grow surfaces
+            they celebrate. No new contest machinery, just signposting. */}
+        <div className="mt-10 grid sm:grid-cols-2 gap-3">
+          <Link
+            href="/diaries"
+            className="tt-edge-card tt-spotlight rounded-2xl border border-border/70 bg-card/80 px-4 py-3 text-sm hover:border-primary/40 transition-colors"
+          >
+            <span className="font-medium">Browse grow diaries</span>
+            <span className="block text-xs text-muted-foreground mt-0.5">
+              Well-documented public grows are what Diary of the Month rewards.
+            </span>
+          </Link>
+          <Link
+            href="/diaries/new"
+            className="tt-edge-card tt-spotlight rounded-2xl border border-border/70 bg-card/80 px-4 py-3 text-sm hover:border-primary/40 transition-colors"
+          >
+            <span className="font-medium">Start a diary</span>
+            <span className="block text-xs text-muted-foreground mt-0.5">
+              Document seed to harvest — your grow could be next month&apos;s winner.
+            </span>
+          </Link>
+        </div>
       </div>
     </div>
   )

@@ -12,7 +12,7 @@ import RoleBadge from "@/components/role-badge"
 import TierChip from "@/components/tier-chip"
 import EmptyState from "@/components/ui/empty-state"
 import StageProgress from "@/components/stage-progress"
-import { STAGE_LABELS } from "@/lib/diary-weeks"
+import { STAGE_LABELS, diaryCompleteness, diaryWeek } from "@/lib/diary-weeks"
 import { diaryPath } from "@/lib/slugs"
 
 export const revalidate = 300
@@ -43,11 +43,20 @@ const getDiaries = unstable_cache(
         include: {
           author: { select: publicUserSelect },
           strainRef: { select: { name: true } },
-          // Latest update's first photo becomes the card cover.
+          // Light update window — feeds the card cover (latest photo) and
+          // the completeness badge. Only evidence fields load, never content.
           updates: {
-            take: 1,
+            take: 40,
             orderBy: { createdAt: "desc" },
-            include: { images: { take: 1, orderBy: { order: "asc" } } },
+            select: {
+              id: true,
+              createdAt: true,
+              stage: true,
+              temperature: true,
+              humidity: true,
+              vpd: true,
+              images: { take: 1, orderBy: { order: "asc" }, select: { id: true, url: true } },
+            },
           },
           _count: {
             select: { updates: true, followers: true },
@@ -66,9 +75,17 @@ const getDiaries = unstable_cache(
               author: { select: publicUserSelect },
               strainRef: { select: { name: true } },
               updates: {
-                take: 1,
+                take: 40,
                 orderBy: { createdAt: "desc" },
-                include: { images: { take: 1, orderBy: { order: "asc" } } },
+                select: {
+                  id: true,
+                  createdAt: true,
+                  stage: true,
+                  temperature: true,
+                  humidity: true,
+                  vpd: true,
+                  images: { take: 1, orderBy: { order: "asc" }, select: { id: true, url: true } },
+                },
               },
               _count: {
                 select: { updates: true, followers: true },
@@ -107,8 +124,13 @@ type DiaryCardData = Awaited<ReturnType<typeof getDiaries>>["diaries"][number]
 // segmented track (current = violet, done = emerald).
 function DiaryCard({ diary, showFeatured = false }: { diary: DiaryCardData; showFeatured?: boolean }) {
   const authorName = diary.author.profile?.username || diary.author.name
-  const week = diary.updates[0]?.weekNumber
+  // Card week derives from startDate — the same rule the diary page uses —
+  // never from a member-typed annotation.
+  const week = diaryWeek(diary.startDate, new Date())
   const strainName = diary.strainRef?.name || diary.strain
+  // "Well documented" is the public face of the completeness metric — a
+  // positive badge only (≥80%), never a score or a ranking signal.
+  const wellDocumented = diaryCompleteness(diary, diary.updates).percent >= 80
   return (
     <div className="tt-spotlight group bg-card rounded-2xl border border-border/70 overflow-hidden tt-lift hover:border-primary/50">
       <Link href={diaryPath(diary)} className="block relative">
@@ -130,8 +152,13 @@ function DiaryCard({ diary, showFeatured = false }: { diary: DiaryCardData; show
         {/* Overlay chips — stage + week badge, grow type, featured */}
         <div className="absolute left-3 top-3 flex gap-1.5">
           <span className="rounded-full bg-black/55 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-white backdrop-blur-sm">
-            {STAGE_LABELS[diary.stage] ?? diary.stage}{week != null && ` · Wk ${week}`}
+            {STAGE_LABELS[diary.stage] ?? diary.stage}{` · Wk ${week}`}
           </span>
+          {wellDocumented && (
+            <span className="rounded-full bg-success/85 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-black backdrop-blur-sm">
+              Well documented
+            </span>
+          )}
           {(showFeatured || diary.featured) && (
             <span className="rounded-full bg-amber-500/85 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-black backdrop-blur-sm">
               Featured

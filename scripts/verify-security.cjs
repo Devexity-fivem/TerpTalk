@@ -167,6 +167,9 @@ const apiFiles = () => {
     path.join("src", "components", "recovery-warning-banner.tsx"),
     // ⌘K discoverability hint — one-time "palette seen" flag.
     path.join("src", "components", "navigation.tsx"),
+    // Diary update drafts — text-only unsaved form fields, scoped by
+    // user+diary id in the key so drafts never cross accounts or grows.
+    path.join("src", "components", "update-form.tsx"),
   ]);
   check("no client-side storage (localStorage/sessionStorage)", !allSrc.some((f) => {
     if (storageAllowlist.has(f)) return false;

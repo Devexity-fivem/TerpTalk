@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma"
 import { activeAuthor, rankableProfile, REPUTATION_ORDER } from "@/lib/security"
 import { publicDiaryWhere } from "@/lib/diary-visibility"
 import { diaryPath, strainPath, setupPath } from "@/lib/slugs"
+import { breederPath, normalizeBreederName } from "@/lib/breeders"
 
 const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://terp-talk.vercel.app"
 
@@ -19,6 +20,8 @@ const STATIC = [
   { url: "/diaries", priority: 0.8, changeFrequency: "daily" as const },
   { url: "/setups", priority: 0.7, changeFrequency: "daily" as const },
   { url: "/strains", priority: 0.8, changeFrequency: "weekly" as const },
+  { url: "/questions", priority: 0.8, changeFrequency: "daily" as const },
+  { url: "/growers", priority: 0.7, changeFrequency: "daily" as const },
   { url: "/contest", priority: 0.6, changeFrequency: "weekly" as const },
   { url: "/leaderboard", priority: 0.6, changeFrequency: "daily" as const },
   { url: "/reputation", priority: 0.5, changeFrequency: "monthly" as const },
@@ -53,7 +56,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     prisma.strain.findMany({
       take: 500,
       orderBy: { createdAt: "desc" },
-      select: { id: true, slug: true, updatedAt: true },
+      select: { id: true, slug: true, breeder: true, updatedAt: true },
     }),
     prisma.profile.findMany({
       // TerpBot excluded — its profile is a bot page, not member content.
@@ -112,6 +115,18 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       lastModified: s.updatedAt,
       changeFrequency: "weekly" as const,
       priority: 0.6,
+    })),
+    // Breeder grouping pages — one URL per distinct breeder name
+    // (case-insensitive, canonical spelling from the first occurrence).
+    ...[...new Map(
+      strains
+        .filter((s) => s.breeder?.trim())
+        .map((s) => [normalizeBreederName(s.breeder!), s.breeder!.trim()])
+    ).values()].map((breeder) => ({
+      url: `${baseUrl}${breederPath(breeder)}`,
+      lastModified: new Date(),
+      changeFrequency: "weekly" as const,
+      priority: 0.4,
     })),
     ...profiles.map((p) => ({
       url: `${baseUrl}/u/${p.username}`,

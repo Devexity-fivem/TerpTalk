@@ -410,3 +410,20 @@ export function diaryCompleteness(
 
   return { percent: Math.round((score / total) * 100), missing: missing.slice(0, 4) }
 }
+
+/** The most recent non-empty feeding note across a diary's updates — the
+ *  value the update composer offers as an explicit "reuse" action.
+ *  Chronology follows createdAt (same rule as week grouping), never a
+ *  member-typed annotation. */
+export function latestFeedingNote(
+  updates: { createdAt: Date; feeding?: string | null }[]
+): string | null {
+  const sorted = [...updates].sort(
+    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+  )
+  for (const u of sorted) {
+    const note = u.feeding?.trim()
+    if (note) return note
+  }
+  return null
+}

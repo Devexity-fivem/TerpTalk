@@ -1,9 +1,9 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useSession } from "next-auth/react"
 import { usePathname, useRouter } from "next/navigation"
-import { Plus, Loader2, X, Camera, ImagePlus } from "lucide-react"
+import { Plus, Loader2, X, Camera, ImagePlus, History } from "lucide-react"
 import { signInHref } from "@/lib/callback-url"
 import { STAGE_TIPS } from "@/lib/stage-tips"
 
@@ -34,12 +34,22 @@ export function resizeImage(file: File, max = 800): Promise<string> {
 
 interface UpdateFormProps {
   diaryId: string
+  /** Drafts are scoped by user + diary — the storage key contains both so a
+   *  draft can never leak into another account or another grow. */
+  userId: string
   currentStage: string
   currentDay: number
   currentWeek: number
+  /** Most recent non-empty feeding note — offered as an explicit reuse
+   *  action, never silently injected. */
+  lastFeeding?: string | null
 }
 
-export default function UpdateForm({ diaryId, currentStage, currentDay, currentWeek }: UpdateFormProps) {
+/** Serialized draft ceiling — text fields only; photos stay out of storage
+ *  so a draft can't balloon into a multi-MB base64 blob. */
+const DRAFT_LIMIT = 32_000
+
+export default function UpdateForm({ diaryId, userId, currentStage, currentDay, currentWeek, lastFeeding }: UpdateFormProps) {
   const { data: session } = useSession()
   const pathname = usePathname()
   const router = useRouter()
@@ -62,6 +72,67 @@ export default function UpdateForm({ diaryId, currentStage, currentDay, currentW
     feeding: "",
     training: "",
   })
+
+  // ── Draft autosave (localStorage, user+diary scoped) ──────────────────
+  const draftKey = userId ? `tt:update-draft:${userId}:${diaryId}` : null
+  const [draftNotice, setDraftNotice] = useState(false)
+  const mounted = useRef(false)
+
+  // Restore happens on the first open rather than on mount — a stale draft
+  // is never applied to a form the member didn't intend to use, and no
+  // state write runs inside an effect. The scoped key guarantees the draft
+  // belongs to this member and this diary — no cross-account/grow bleed.
+  const draftApplied = useRef(false)
+  const openForm = () => {
+    if (draftKey && !draftApplied.current) {
+      draftApplied.current = true
+      try {
+        const raw = localStorage.getItem(draftKey)
+        if (raw) {
+          const draft = JSON.parse(raw)
+          if (draft && typeof draft === "object" && draft.fields && typeof draft.fields === "object") {
+            setFormData((f) => ({ ...f, ...draft.fields }))
+            setDraftNotice(true)
+          }
+        }
+      } catch { /* corrupt draft — ignore and let autosave overwrite */ }
+    }
+    setIsOpen(true)
+  }
+
+  // Autosave on change (debounced). First commit is skipped so the restore
+  // above lands before anything writes; an all-empty form removes the key.
+  useEffect(() => {
+    if (!mounted.current) { mounted.current = true; return }
+    if (!draftKey) return
+    const t = setTimeout(() => {
+      try {
+        const untouched =
+          !formData.title && !formData.content && !formData.feeding && !formData.training &&
+          !formData.temperature && !formData.humidity && !formData.vpd &&
+          !formData.ph && !formData.ec && !formData.heightCm &&
+          formData.stage === currentStage
+        if (untouched) { localStorage.removeItem(draftKey); return }
+        const payload = JSON.stringify({ savedAt: Date.now(), fields: formData })
+        if (payload.length <= DRAFT_LIMIT) localStorage.setItem(draftKey, payload)
+      } catch { /* quota/privacy mode — drafting is best-effort */ }
+    }, 400)
+    return () => clearTimeout(t)
+  }, [draftKey, formData, currentStage])
+
+  const clearDraft = () => {
+    if (draftKey) try { localStorage.removeItem(draftKey) } catch { /* noop */ }
+    setDraftNotice(false)
+  }
+
+  const discardDraft = () => {
+    clearDraft()
+    setFormData({
+      title: "", content: "", stage: currentStage,
+      temperature: "", humidity: "", vpd: "", ph: "", ec: "", heightCm: "",
+      feeding: "", training: "",
+    })
+  }
 
   const addPhotoFiles = async (files: FileList | null) => {
     if (!files) return
@@ -116,6 +187,7 @@ export default function UpdateForm({ diaryId, currentStage, currentDay, currentW
       router.refresh()
       setIsOpen(false)
       setPhotos([])
+      clearDraft()
       setFormData((f) => ({ ...f, title: "", content: "", feeding: "", training: "" }))
     } catch (error: unknown) {
       setError((error as Error).message)
@@ -129,7 +201,7 @@ export default function UpdateForm({ diaryId, currentStage, currentDay, currentW
   if (!isOpen) {
     return (
       <button
-        onClick={() => setIsOpen(true)}
+        onClick={openForm}
         className="bg-primary text-primary-foreground px-4 py-2 rounded-full hover:bg-primary/90 transition-colors text-sm flex items-center gap-2 min-h-11"
       >
         <Plus className="w-4 h-4" />
@@ -157,6 +229,21 @@ export default function UpdateForm({ diaryId, currentStage, currentDay, currentW
         </p>
       ) : (
         <form onSubmit={handleSubmit} className="space-y-4">
+          {draftNotice && (
+            <div className="flex items-center justify-between gap-3 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2">
+              <span className="flex items-center gap-2 text-xs text-muted-foreground">
+                <History className="w-3.5 h-3.5 text-primary shrink-0" />
+                Draft restored — your unsaved update was recovered.
+              </span>
+              <button
+                type="button"
+                onClick={discardDraft}
+                className="shrink-0 text-xs font-medium text-primary hover:underline"
+              >
+                Discard draft
+              </button>
+            </div>
+          )}
           <div>
             <label className="block text-sm font-medium mb-1">Title *</label>
             <input
@@ -361,6 +448,18 @@ export default function UpdateForm({ diaryId, currentStage, currentDay, currentW
                     placeholder="Nutrients, feeding schedule..."
                     rows={2}
                   />
+                  {/* Continuity, not automation — the previous note is offered
+                      explicitly and only fills the field on click. */}
+                  {lastFeeding && formData.feeding.trim() !== lastFeeding && (
+                    <button
+                      type="button"
+                      onClick={() => setFormData({ ...formData, feeding: lastFeeding })}
+                      title={lastFeeding}
+                      className="mt-1 text-xs text-primary hover:underline text-left"
+                    >
+                      Use previous feeding note{lastFeeding.length > 60 ? `: “${lastFeeding.slice(0, 60)}…”` : `: “${lastFeeding}”`}
+                    </button>
+                  )}
                 </div>
                 <div>
                   <label className="block text-sm font-medium mb-1">Training Notes</label>

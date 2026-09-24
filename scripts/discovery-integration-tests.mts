@@ -2,9 +2,19 @@ import "./db-guard.mjs"
 import { strict as assert } from "node:assert"
 
 import { prisma } from "@/lib/prisma"
-import { activeAuthor, blockExistsBetween } from "@/lib/security"
+import { activeAuthor, blockExistsBetween, rankableProfile } from "@/lib/security"
 
 import { escapeLike, strainTypeLabel } from "@/lib/strain-stats"
+import {
+  parseStrainEffects,
+  parseStrainFlavors,
+  parseStrainDifficulty,
+  parseThc,
+  parseFloweringWeeks,
+} from "@/lib/strain-fields"
+import { strainWhere, type StrainFilters } from "@/lib/strain-filters"
+import { normalizeBreederName, breederPath, breederKeyFromSlug } from "@/lib/breeders"
+import { latestFeedingNote } from "@/lib/diary-weeks"
 
 // Discovery filters + sitemap: live-DB behavior for activeAuthor()
 // filtering, escapeLike wildcard safety, block detection, pagination
@@ -194,10 +204,206 @@ async function run() {
       assert.ok(urls3.includes(`/diaries/${visDiaries[0].id}`), "sitemap includes PUBLIC diary")
       assert.ok(!urls3.includes(`/diaries/${visDiaries[1].id}`), "sitemap excludes UNLISTED diary")
       assert.ok(!urls3.includes(`/diaries/${visDiaries[2].id}`), "sitemap excludes PRIVATE diary")
+
+      // New public destinations from the grower-first sprint.
+      assert.ok(urls3.includes("/questions"), "sitemap includes /questions")
+      assert.ok(urls3.includes("/growers"), "sitemap includes /growers")
+
+      // Breeder grouping pages get sitemap entries from the real
+      // free-text breeder field — no Breeder model involved.
+      const sBreeder = await prisma.strain.create({
+        data: { name: `__smap-breed-${Date.now().toString(36)}`, breeder: "Sitemap Breeder Co" },
+        select: { id: true },
+      })
+      strainIds.push(sBreeder.id)
+      const urlsB = (await buildSitemap()).map((e) => new URL(e.url).pathname)
+      assert.ok(
+        urlsB.includes("/strains/breeder/sitemap-breeder-co"),
+        "sitemap includes the breeder grouping page"
+      )
     } finally {
       await prisma.thread.delete({ where: { id: deletedThread.id } }).catch(() => {})
       await prisma.category.delete({ where: { id: hiddenCat.id } }).catch(() => {})
     }
+
+    // ─────────────────────────────────────────────────────────────
+    // Strain catalog facets — real parse functions (API validation path)
+    // ─────────────────────────────────────────────────────────────
+    assert.deepEqual(
+      parseStrainEffects(["RELAXED", "HAPPY", "BOGUS", "RELAXED"]),
+      ["RELAXED", "HAPPY"],
+      "effects: vocab kept, unknown dropped, deduped"
+    )
+    assert.equal(parseStrainEffects("RELAXED"), null, "non-array effects means 'not sent'")
+    assert.deepEqual(parseStrainEffects([]), [], "empty array is a valid explicit clear")
+    assert.deepEqual(parseStrainFlavors(["EARTHY", "NOPE"]), ["EARTHY"], "flavors: vocab kept")
+    assert.equal(parseStrainFlavors(null), null)
+    assert.equal(parseStrainDifficulty("EASY"), "EASY")
+    assert.equal(parseStrainDifficulty("MEDIUM"), null, "difficulty rejects non-vocab")
+    assert.equal(parseThc(21.5), 21.5)
+    assert.equal(parseThc("19"), 19, "numeric strings parse")
+    assert.equal(parseThc(50), null, "THC above bound rejected")
+    assert.equal(parseThc(-1), null, "negative THC rejected")
+    assert.equal(parseThc("high"), null, "non-numeric THC rejected")
+    assert.equal(parseFloweringWeeks(8), 8)
+    assert.equal(parseFloweringWeeks(3), null, "flowering below bound rejected")
+    assert.equal(parseFloweringWeeks(21), null, "flowering above bound rejected")
+
+    // ─────────────────────────────────────────────────────────────
+    // strainWhere — the real /strains filter builder against real rows
+    // ─────────────────────────────────────────────────────────────
+    const sTag = `__sf_${STAMP}`
+    const sIndica = await prisma.strain.create({
+      data: {
+        name: `${sTag}_indica`,
+        type: "INDICA",
+        breeder: "Test Breeder",
+        genetics: "A x B",
+        effects: ["RELAXED", "SLEEPY"],
+        flavors: ["EARTHY"],
+        thcMin: 18,
+        thcMax: 24,
+        floweringWeeks: 9,
+        difficulty: "EASY",
+      },
+      select: { id: true },
+    })
+    const sSativa = await prisma.strain.create({
+      data: {
+        name: `${sTag}_sativa`,
+        type: "SATIVA",
+        breeder: "Other Co",
+        effects: ["ENERGETIC"],
+        thcMin: 12,
+        thcMax: 14,
+        floweringWeeks: 12,
+        difficulty: "HARD",
+      },
+      select: { id: true },
+    })
+    const sBare = await prisma.strain.create({ data: { name: `${sTag}_bare` }, select: { id: true } })
+    strainIds.push(sIndica.id, sSativa.id, sBare.id)
+
+    const base: StrainFilters = { q: "", type: "", effect: "", flavor: "", difficulty: null, thc: "", flower: "", breeder: "", page: 1 }
+    const idsOf = async (f: StrainFilters) =>
+      (await prisma.strain.findMany({
+        where: { AND: [strainWhere(f), { name: { contains: sTag } }] },
+        select: { id: true },
+      })).map((s) => s.id).sort()
+    const all3 = [sIndica.id, sSativa.id, sBare.id].sort()
+
+    assert.deepEqual(await idsOf(base), all3, "no filters → every strain")
+    assert.deepEqual(await idsOf({ ...base, type: "INDICA" }), [sIndica.id], "type filter")
+    assert.deepEqual(await idsOf({ ...base, effect: "RELAXED" }), [sIndica.id], "effect has-filter")
+    assert.deepEqual(await idsOf({ ...base, effect: "ENERGETIC" }), [sSativa.id])
+    assert.deepEqual(await idsOf({ ...base, effect: "NOT_AN_EFFECT" }), all3, "unknown effect ignored, not fatal")
+    assert.deepEqual(await idsOf({ ...base, flavor: "EARTHY" }), [sIndica.id], "flavor has-filter")
+    assert.deepEqual(await idsOf({ ...base, difficulty: "EASY" }), [sIndica.id])
+    assert.deepEqual(await idsOf({ ...base, difficulty: "HARD" }), [sSativa.id])
+
+    // THC band overlap — [18,24] overlaps mid(15–20); [12,14] only in low.
+    assert.deepEqual(await idsOf({ ...base, thc: "mid" }), [sIndica.id], "THC mid band overlaps 18–24")
+    assert.deepEqual(await idsOf({ ...base, thc: "low" }), [sSativa.id], "THC low band catches 12–14")
+    assert.deepEqual(await idsOf({ ...base, thc: "ultra" }), [], "no reported 25%+ strain → honest empty")
+    // Strain with no THC data never matches a band (not a "zero").
+    assert.deepEqual(await idsOf({ ...base, thc: "low", type: "SATIVA" }), [sSativa.id], "facets compose")
+
+    // Flowering bands.
+    assert.deepEqual(await idsOf({ ...base, flower: "fast" }), [], "no ≤8wk strain reported")
+    assert.deepEqual(await idsOf({ ...base, flower: "mid" }), [sIndica.id], "9wk in mid band")
+    assert.deepEqual(await idsOf({ ...base, flower: "long" }), [sSativa.id], "12wk in long band")
+
+    // Breeder filter is case-insensitive; search spans name/genetics/breeder.
+    assert.deepEqual(await idsOf({ ...base, breeder: "test breeder" }), [sIndica.id], "breeder filter insensitive")
+    assert.deepEqual(await idsOf({ ...base, q: "test breeder" }), [sIndica.id], "q hits breeder text")
+    assert.deepEqual(await idsOf({ ...base, q: "a x b" }), [sIndica.id], "q hits genetics")
+    assert.deepEqual(await idsOf({ ...base, q: sTag }), all3, "q hits names")
+    assert.deepEqual(await idsOf({ ...base, q: "100%" }), [], "wildcard chars in q can't broaden results")
+
+    // ─────────────────────────────────────────────────────────────
+    // Breeder grouping lib — normalization, canonical URL, slug resolve
+    // ─────────────────────────────────────────────────────────────
+    assert.equal(normalizeBreederName("Fast Buds!"), "fastbuds")
+    assert.equal(normalizeBreederName("  FAST  BUDS "), "fastbuds", "case + space + punctuation insensitive")
+    assert.equal(breederPath("Fast Buds"), "/strains/breeder/fast-buds")
+    assert.equal(breederKeyFromSlug("fast-buds"), "fastbuds")
+    assert.equal(breederKeyFromSlug("Fast%20Buds"), "fastbuds", "encoded slug resolves")
+    // Round-trip: a strain's breeder text resolves to its own page slug.
+    assert.equal(breederKeyFromSlug(breederPath("Test Breeder").split("/").pop()!), "testbreeder")
+
+    // ─────────────────────────────────────────────────────────────
+    // latestFeedingNote — newest non-empty note wins, by createdAt
+    // ─────────────────────────────────────────────────────────────
+    const fd1 = new Date("2026-01-01"), fd2 = new Date("2026-01-08"), fd3 = new Date("2026-01-15")
+    assert.equal(latestFeedingNote([]), null)
+    assert.equal(latestFeedingNote([{ createdAt: fd1, feeding: null }]), null, "empty notes ignored")
+    assert.equal(
+      latestFeedingNote([
+        { createdAt: fd1, feeding: "first feed" },
+        { createdAt: fd3, feeding: "   " },
+        { createdAt: fd2, feeding: "  second feed  " },
+      ]),
+      "second feed",
+      "skips blank latest, trims the newest real note"
+    )
+
+    // ─────────────────────────────────────────────────────────────
+    // Growers directory privacy — the real rankableProfile() filter
+    // ─────────────────────────────────────────────────────────────
+    const optOut = await mkUser(`__t_do_${STAMP}`)
+    ids.push(optOut.id)
+    await prisma.profile.update({ where: { userId: optOut.id }, data: { publicMilestoneOptOut: true } })
+    const rankable = await prisma.profile.findMany({
+      where: { ...rankableProfile(), userId: { in: ids } },
+      select: { userId: true },
+    })
+    assert.deepEqual(
+      rankable.map((r) => r.userId).sort(),
+      [active.id, follower.id].sort(),
+      "directory excludes banned, suspended, and milestone opt-outs"
+    )
+
+    // Live-grow resolution — the directory's "growing now" card picks one
+    // latest PUBLIC unharvested grow per member via distinct on authorId.
+    const newerPublic = await prisma.growDiary.create({
+      data: {
+        authorId: active.id,
+        title: "newer live grow",
+        strain: "Test",
+        growType: "INDOOR",
+        description: "",
+        startDate: new Date(),
+        visibility: "PUBLIC",
+        updatedAt: new Date(Date.now() + 60_000),
+      },
+      select: { id: true },
+    })
+    diaryIds.push(newerPublic.id)
+    const unlisted = await prisma.growDiary.create({
+      data: {
+        authorId: active.id,
+        title: "unlisted grow",
+        strain: "Test",
+        growType: "INDOOR",
+        description: "",
+        startDate: new Date(),
+        visibility: "UNLISTED",
+        updatedAt: new Date(Date.now() + 120_000),
+      },
+      select: { id: true },
+    })
+    diaryIds.push(unlisted.id)
+    const liveGrows = await prisma.growDiary.findMany({
+      where: { authorId: { in: ids }, deleted: false, harvested: false, author: activeAuthor(), visibility: "PUBLIC" },
+      orderBy: { updatedAt: "desc" },
+      distinct: ["authorId"],
+      select: { authorId: true, id: true },
+    })
+    const activeLive = liveGrows.filter((g) => g.authorId === active.id)
+    assert.equal(activeLive.length, 1, "exactly one live grow per member")
+    assert.equal(activeLive[0].id, newerPublic.id, "most recently updated PUBLIC grow wins")
+    assert.ok(!liveGrows.some((g) => g.id === unlisted.id), "unlisted diary never becomes a live-grow card")
+    assert.ok(!liveGrows.some((g) => g.authorId === banned.id || g.authorId === suspended.id), "inactive authors excluded")
 
     console.log("All Discovery filters + sitemap tests passed.")
   } finally {

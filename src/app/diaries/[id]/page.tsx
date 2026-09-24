@@ -17,7 +17,7 @@ import StageTimeline from "@/components/stage-timeline"
 import TierChip from "@/components/tier-chip"
 import { getGrowJourney, GROW_STAGES } from "@/lib/grow-journey"
 import UpdateEditSection from "@/components/update-edit-form"
-import { groupUpdatesByWeek, buildHarvestReport, diaryCompleteness, diaryDay, diaryWeek, growthSummary, stageDurations } from "@/lib/diary-weeks"
+import { groupUpdatesByWeek, buildHarvestReport, diaryCompleteness, diaryDay, diaryWeek, growthSummary, stageDurations, latestFeedingNote } from "@/lib/diary-weeks"
 import ReportButton from "@/components/report-button"
 import DiaryReactions from "@/components/diary-reactions"
 import OwnerDeleteButton from "@/components/owner-delete-button"
@@ -37,6 +37,7 @@ import { serializeExperiment, readLessons } from "@/lib/experiments"
 import { getStrainGrowStats } from "@/lib/strain-stats"
 import { buildGrowComparison } from "@/lib/grow-compare"
 import { toGrams, toOz } from "@/lib/yield"
+import WeekNavigator from "@/components/week-navigator"
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -353,6 +354,11 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
   const completeness = canEdit ? diaryCompleteness(diary, updates) : null
   const truncated = diary._count.updates > updates.length
 
+  // Hero facts — latest photo + latest feeding note (continuity affordance
+  // for the update form), both derived from the updates already loaded.
+  const latestPhoto = [...updates].reverse().find((u) => u.images.length > 0)?.images[0]?.url ?? null
+  const lastFeeding = latestFeedingNote(updates)
+
   const diaryBase = process.env.NEXT_PUBLIC_SITE_URL || "https://terp-talk.vercel.app"
   const diaryUrl = `${diaryBase}${diaryPath(diary)}`
   const authorName = diary.author.profile?.username || diary.author.name || "Member"
@@ -417,6 +423,29 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
               </div>
               <h1 className="font-display text-3xl sm:text-4xl font-bold mb-2 tracking-tight">{diary.title}</h1>
               <p className="text-sm text-muted-foreground mb-3">{diary.description}</p>
+              {/* Grow identity — strain/setup links answer "what grow is
+                  this?" before the member scrolls into the details. */}
+              {(strainLink || diary.setup) && (
+                <div className="flex items-center flex-wrap gap-1.5 mb-3">
+                  {strainLink && (
+                    <Link
+                      href={strainPath(strainLink)}
+                      className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary hover:bg-primary/15 transition-colors"
+                    >
+                      <Leaf className="w-3 h-3" />
+                      {diary.strain || strainLink.name}
+                    </Link>
+                  )}
+                  {diary.setup && !diary.setup.deleted && (
+                    <Link
+                      href={setupPath(diary.setup)}
+                      className="inline-flex items-center gap-1.5 rounded-full bg-secondary px-3 py-1 text-xs font-medium text-muted-foreground hover:bg-secondary/80 hover:text-foreground transition-colors"
+                    >
+                      {diary.setup.title}
+                    </Link>
+                  )}
+                </div>
+              )}
               <div className="flex items-center flex-wrap gap-x-3 gap-y-1 text-sm text-muted-foreground">
                 <span className="flex items-center gap-1">
                   <Users className="w-3.5 h-3.5" />
@@ -448,6 +477,17 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
                     Day {dayCount}
                   </span>
                 </Tooltip>
+                <Tooltip content="Grow week derived from update dates">
+                  <span className="flex items-center gap-1 font-medium">
+                    Week {diaryWeek(diary.startDate, now)}
+                  </span>
+                </Tooltip>
+                {experiments.length > 0 && (
+                  <span className="flex items-center gap-1">
+                    <FlaskConical className="w-3.5 h-3.5" />
+                    {experiments.length} experiment{experiments.length === 1 ? "" : "s"}
+                  </span>
+                )}
                 {streak >= 2 && (
                   <Tooltip content="Consecutive days with a diary update">
                     <span className="flex items-center gap-1 text-warning font-medium">
@@ -456,6 +496,26 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
                   </Tooltip>
                 )}
               </div>
+              {/* Documentation signal — the existing completeness metric
+                  surfaced at hero level for the grower (never a quality
+                  score, so it stays owner-facing). */}
+              {completeness && (
+                <div className="mt-3 flex items-center gap-2">
+                  <Tooltip content={completeness.missing.length > 0 ? `Log completeness — next: ${completeness.missing[0]}` : "Log completeness — fully documented"}>
+                    <span className="flex items-center gap-2">
+                      <span className="h-1.5 w-24 overflow-hidden rounded-full bg-secondary">
+                        <span
+                          className={`block h-full rounded-full ${completeness.percent >= 80 ? "bg-success" : "bg-primary"}`}
+                          style={{ width: `${completeness.percent}%` }}
+                        />
+                      </span>
+                      <span className="text-xs font-medium text-muted-foreground">
+                        {completeness.percent >= 80 ? "Well documented" : `Log completeness ${completeness.percent}%`}
+                      </span>
+                    </span>
+                  </Tooltip>
+                </div>
+              )}
               <StageTimeline current={diary.stage} runs={stageRuns} />
 
               {/* Grow Journey — derived milestones with rep rewards */}
@@ -508,7 +568,19 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
 
 
             </div>
-            <div className="flex flex-col sm:items-end gap-1">
+            <div className="flex flex-col sm:items-end gap-2">
+              {/* Latest logged photo — "what does it look like now" at a
+                  glance; jumps to the timeline on click. */}
+              {latestPhoto && (
+                <a
+                  href="#grow-timeline"
+                  aria-label="Latest update photo — jump to timeline"
+                  className="hidden sm:block w-40 overflow-hidden rounded-xl border border-border/70 tt-lift"
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={latestPhoto} alt="" className="aspect-[16/10] w-full object-cover" />
+                </a>
+              )}
               <div className="flex flex-wrap gap-2 items-center sm:justify-end">
                 <DiaryReactions diaryId={diary.id} initialCounts={reactionCounts} initialMine={myReaction} />
                 {diary.visibility !== "PRIVATE" && (
@@ -770,34 +842,30 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
         {/* Timeline — grouped by grow week, with desktop context rail */}
         <div className="lg:grid lg:grid-cols-[1fr_240px] lg:gap-6">
         <div className="space-y-4 min-w-0">
-          <div className="flex justify-between items-center gap-2">
+          <div id="grow-timeline" className="flex justify-between items-center gap-2 scroll-mt-24">
             <h2 className="font-display text-lg font-semibold">Grow Timeline</h2>
             {canEdit && (
               <div className="flex items-center gap-2">
                 <ExperimentLogButton diaryId={diary.id} />
                 <UpdateForm
                   diaryId={diary.id}
+                  userId={session?.user?.id ?? ""}
                   currentStage={diary.stage}
                   currentDay={diaryDay(diary.startDate, new Date())}
                   currentWeek={diaryWeek(diary.startDate, new Date())}
+                  lastFeeding={lastFeeding}
                 />
               </div>
             )}
           </div>
 
-          {weeksMerged.length > 1 && (
-            <nav aria-label="Jump to week" className="flex flex-wrap gap-1.5">
-              {weeksMerged.map((w) => (
-                <a
-                  key={w.week}
-                  href={`#week-${w.week}`}
-                  className="text-xs px-2.5 py-1 rounded-full bg-secondary text-muted-foreground hover:bg-secondary/80 hover:text-foreground transition-colors"
-                >
-                  W{w.week}
-                </a>
-              ))}
-            </nav>
-          )}
+          {/* Sticky week rail — tracks scroll position and jumps to the
+              server-rendered week anchors below. Weeks come straight from
+              groupUpdatesByWeek; experiments ride the same groups. */}
+          <WeekNavigator
+            weeks={weeksMerged.map((w) => ({ week: w.week, stage: w.stage }))}
+            currentWeek={diaryWeek(diary.startDate, now)}
+          />
 
           <section className="bg-card/80 rounded-2xl border border-border/70 p-4 mb-4" aria-label="Grow progress">
               <div className="flex items-center gap-2 mb-2">
@@ -903,7 +971,7 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
                 const prevStage = wi > 0 ? weeksMerged[wi - 1].stage : null
                 const stageChanged = prevStage != null && prevStage !== week.stage
                 return (
-                <section key={week.week} id={`week-${week.week}`} className="scroll-mt-20">
+                <section key={week.week} id={`week-${week.week}`} className="scroll-mt-[9.5rem]">
                   {/* Stage transition marker */}
                   {stageChanged && (
                     <div className="flex items-center gap-2 mb-3 -mt-1">

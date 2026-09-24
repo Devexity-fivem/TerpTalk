@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma"
 import { notFound, permanentRedirect } from "next/navigation"
-import { Leaf, Dna, Sprout, ImageIcon, BookOpen, Wrench, MessageSquare, CheckCircle2, BarChart3, Star, Bot, FlaskConical } from "lucide-react"
+import { Leaf, Dna, Sprout, ImageIcon, BookOpen, Wrench, MessageSquare, CheckCircle2, BarChart3, Star, Bot, FlaskConical, HelpCircle } from "lucide-react"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import StrainPhotoUpload from "@/components/strain-photo-upload"
@@ -18,6 +18,8 @@ import Link from "next/link"
 import { publicDiaryWhere } from "@/lib/diary-visibility"
 import { blockedUserIds, notBlockedAuthor } from "@/lib/security"
 import { diaryPath, strainPath, setupPath } from "@/lib/slugs"
+import { breederPath } from "@/lib/breeders"
+import { STRAIN_EFFECT_LABELS, STRAIN_FLAVOR_LABELS, STRAIN_DIFFICULTY_LABELS, type StrainDifficulty } from "@/lib/strain-fields"
 
 export const dynamic = "force-dynamic"
 
@@ -192,7 +194,14 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
               <h1 className="font-display text-3xl font-bold tracking-tight break-words">{strain.name}</h1>
               <div className="flex gap-3 text-sm text-muted-foreground mt-1 flex-wrap">
                 {strain.type && <span className="px-2 py-0.5 bg-primary/10 text-primary rounded">{strainTypeLabel(strain.type)}</span>}
-                {strain.breeder && <span>Breeder: {strain.breeder}</span>}
+                {strain.breeder && (
+                  <span>
+                    Breeder:{" "}
+                    <Link href={breederPath(strain.breeder)} className="text-primary hover:underline">
+                      {strain.breeder}
+                    </Link>
+                  </span>
+                )}
                 {creator && creatorName && (
                   <span className="inline-flex items-center gap-1.5">
                     Added by{" "}
@@ -217,6 +226,67 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
             </div>
           </div>
         </div>
+
+        {/* Characteristics — member-reported catalog facets. Renders only
+            when at least one facet exists; values are reported, not
+            lab-verified, so the wording stays honest. */}
+        {(strain.effects.length > 0 || strain.flavors.length > 0 || strain.thcMin != null || strain.thcMax != null || strain.floweringWeeks != null || strain.difficulty) && (
+          <div className="bg-card/80 rounded-2xl border border-border/70 p-5 mb-6">
+            <div className="flex items-center gap-2 mb-4">
+              <Dna className="w-4 h-4 text-spectrum" />
+              <h2 className="font-display font-semibold">Characteristics</h2>
+              <span className="text-xs text-muted-foreground ml-auto">member-reported</span>
+            </div>
+            <div className="grid sm:grid-cols-2 gap-x-6 gap-y-4 text-sm">
+              {(strain.thcMin != null || strain.thcMax != null) && (
+                <div>
+                  <p className="text-xs text-muted-foreground mb-1">THC</p>
+                  <p className="font-medium">
+                    {strain.thcMin != null && strain.thcMax != null
+                      ? `${strain.thcMin}–${strain.thcMax}%`
+                      : `~${strain.thcMin ?? strain.thcMax}%`}
+                  </p>
+                </div>
+              )}
+              {strain.floweringWeeks != null && (
+                <div>
+                  <p className="text-xs text-muted-foreground mb-1">Flowering time (estimate)</p>
+                  <p className="font-medium">~{strain.floweringWeeks} weeks</p>
+                </div>
+              )}
+              {strain.difficulty && (
+                <div>
+                  <p className="text-xs text-muted-foreground mb-1">Grow difficulty</p>
+                  <p className="font-medium">{STRAIN_DIFFICULTY_LABELS[strain.difficulty as StrainDifficulty] ?? strain.difficulty}</p>
+                </div>
+              )}
+              {strain.effects.length > 0 && (
+                <div>
+                  <p className="text-xs text-muted-foreground mb-1.5">Reported effects</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {strain.effects.map((e) => (
+                      <span key={e} className="rounded-full bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary">
+                        {STRAIN_EFFECT_LABELS[e as keyof typeof STRAIN_EFFECT_LABELS] ?? e}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {strain.flavors.length > 0 && (
+                <div>
+                  <p className="text-xs text-muted-foreground mb-1.5">Flavor profile</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {strain.flavors.map((f) => (
+                      <span key={f} className="rounded-full bg-secondary px-2.5 py-1 text-xs font-medium text-muted-foreground">
+                        {STRAIN_FLAVOR_LABELS[f as keyof typeof STRAIN_FLAVOR_LABELS] ?? f}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Personal context — your history with this strain */}
         {myDiaries.length > 0 && (
@@ -587,7 +657,7 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
             <p className="text-xs text-muted-foreground mb-3">Be the first to start a conversation about {strain.name}.</p>
             {session && (
               <Link
-                href={`/forum/new`}
+                href={`/forum/new?strain=${encodeURIComponent(strain.name)}`}
                 className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
               >
                 <MessageSquare className="w-3.5 h-3.5" /> Start a discussion
@@ -728,10 +798,16 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
                 <Sprout className="w-4 h-4" /> Start a grow
               </Link>
               <Link
-                href="/forum/new"
+                href={`/forum/new?strain=${encodeURIComponent(strain.name)}`}
                 className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-secondary/60 hover:text-foreground transition-colors w-full"
               >
                 <MessageSquare className="w-4 h-4" /> Start a discussion
+              </Link>
+              <Link
+                href={`/questions`}
+                className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-secondary/60 hover:text-foreground transition-colors w-full"
+              >
+                <HelpCircle className="w-4 h-4" /> Browse grow questions
               </Link>
             </div>
 

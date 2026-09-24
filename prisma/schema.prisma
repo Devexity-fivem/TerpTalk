@@ -675,6 +675,14 @@ model Strain {
   genetics    String?
   breeder     String?
   type        String?
+  // Catalog facets — controlled vocabularies in lib/strain-fields.ts.
+  // All optional: absent means "not reported", never guessed.
+  effects       String[]
+  flavors       String[]
+  thcMin        Float?   // reported THC % lower bound (0–45)
+  thcMax        Float?   // reported THC % upper bound (>= thcMin)
+  floweringWeeks Int?    // estimated flowering time in weeks (4–20)
+  difficulty    String?  // EASY | NORMAL | HARD — cultivation ease
   description String?
   growingInfo String?
   createdById String?

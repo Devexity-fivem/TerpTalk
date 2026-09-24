@@ -124,6 +124,27 @@ const main = async () => {
     page.html.includes("Add Update") ? pass("owner sees update form") : fail("owner update form", "missing")
     page.html.includes("Grow setup") ? pass("setup details render") : fail("setup details", "missing")
 
+    // ── Week navigator — needs 2+ week groups, so backdate one update
+    // into week 1 (createdAt drives grouping, never the annotation). ──
+    await prisma.diaryUpdate.create({
+      data: { diaryId, authorId: owner.id, title: M("u0"), content: "backdated week-1 update", stage: "SEEDLING", dayNumber: 2, weekNumber: 1, createdAt: new Date(Date.now() - 19 * 86400000) },
+    })
+    page = await getHtml(diaryHref, ownerCookie)
+    ;(page.status === 200 &&
+      page.html.includes('id="week-1"') &&
+      page.html.includes('id="week-3"') &&
+      page.html.includes('aria-label="Jump to week"') &&
+      page.html.includes('href="#week-1"'))
+      ? pass("week navigator renders jump links + week anchors")
+      : fail("week navigator", page.status)
+
+    // Completeness signal in the hero — owner sees the real metric.
+    // This fixture has strain/medium/lighting, 3+ updates, a photo, env
+    // readings, and FLOWER stage → ≥80% → "Well documented".
+    page.html.includes("Well documented") || page.html.includes("Log completeness")
+      ? pass("hero surfaces the log-completeness signal for the owner")
+      : fail("hero completeness", "signal missing")
+
     page = await getHtml(diaryHref, viewerCookie)
     page.status === 200 && !page.html.includes("Add Update") && !page.html.includes("Log harvest")
       ? pass("viewer does not see owner controls")

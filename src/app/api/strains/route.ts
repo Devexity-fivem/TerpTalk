@@ -8,6 +8,14 @@ import { awardReputation, REP_POINTS } from "@/lib/reputation"
 import { STRAIN_MIN_PAID_DESCRIPTION } from "@/lib/reputation-config"
 import { checkMaintenance } from "@/lib/maintenance"
 import { escapeLike } from "@/lib/strain-stats"
+import {
+  STRAIN_TYPES,
+  parseStrainEffects,
+  parseStrainFlavors,
+  parseStrainDifficulty,
+  parseThc,
+  parseFloweringWeeks,
+} from "@/lib/strain-fields"
 import { entitySlug } from "@/lib/slugs"
 import { revalidateTag } from "next/cache"
 
@@ -54,6 +62,12 @@ export async function POST(request: Request) {
       type,
       description,
       growingInfo,
+      effects,
+      flavors,
+      thcMin,
+      thcMax,
+      floweringWeeks,
+      difficulty,
     } = body
 
     if (typeof name !== "string" || !name.trim()) {
@@ -65,9 +79,39 @@ export async function POST(request: Request) {
 
     const cleanName = name.trim().slice(0, LIMITS.STRAIN_NAME_MAX)
 
-    const VALID_TYPES = new Set(["SATIVA", "INDICA", "HYBRID", "RUDERALIS", "AUTO_FLOWER", "CBD", "OTHER"])
-    if (typeof type !== "string" || !VALID_TYPES.has(type.toUpperCase())) {
+    if (typeof type !== "string" || !(STRAIN_TYPES as readonly string[]).includes(type.toUpperCase())) {
       return NextResponse.json({ error: "Invalid strain type" }, { status: 400 })
+    }
+
+    // Catalog facets — every field optional and strictly bounded. A raw
+    // number that fails bounds is rejected (not clamped) so the client
+    // learns the value was dropped rather than silently mutated.
+    const cleanEffects = parseStrainEffects(effects) ?? []
+    const cleanFlavors = parseStrainFlavors(flavors) ?? []
+    const cleanDifficulty = parseStrainDifficulty(typeof difficulty === "string" ? difficulty.toUpperCase() : difficulty)
+    const cleanThcMin = parseThc(thcMin)
+    const cleanThcMax = parseThc(thcMax)
+    const cleanFlowering = parseFloweringWeeks(floweringWeeks)
+    if (effects != null && cleanEffects.length === 0 && Array.isArray(effects) && effects.length > 0) {
+      return NextResponse.json({ error: "Unknown effect value" }, { status: 400 })
+    }
+    if (flavors != null && cleanFlavors.length === 0 && Array.isArray(flavors) && flavors.length > 0) {
+      return NextResponse.json({ error: "Unknown flavor value" }, { status: 400 })
+    }
+    if (difficulty != null && difficulty !== "" && cleanDifficulty == null) {
+      return NextResponse.json({ error: "Invalid difficulty" }, { status: 400 })
+    }
+    if (thcMin != null && cleanThcMin == null) {
+      return NextResponse.json({ error: `Invalid thcMin` }, { status: 400 })
+    }
+    if (thcMax != null && cleanThcMax == null) {
+      return NextResponse.json({ error: `Invalid thcMax` }, { status: 400 })
+    }
+    if (cleanThcMin != null && cleanThcMax != null && cleanThcMin > cleanThcMax) {
+      return NextResponse.json({ error: "thcMin cannot exceed thcMax" }, { status: 400 })
+    }
+    if (floweringWeeks != null && cleanFlowering == null) {
+      return NextResponse.json({ error: "Invalid flowering weeks" }, { status: 400 })
     }
 
     if (
@@ -128,6 +172,12 @@ export async function POST(request: Request) {
         type: type.toUpperCase(),
         description: typeof description === "string" ? description.trim().slice(0, LIMITS.DESCRIPTION_MAX) : null,
         growingInfo: typeof growingInfo === "string" ? growingInfo.trim().slice(0, LIMITS.DESCRIPTION_MAX) : null,
+        effects: cleanEffects,
+        flavors: cleanFlavors,
+        thcMin: cleanThcMin,
+        thcMax: cleanThcMax,
+        floweringWeeks: cleanFlowering,
+        difficulty: cleanDifficulty,
         createdById: session.user.id,
       },
     })

@@ -18,6 +18,7 @@ import {
   type AttentionItem,
 } from "@/lib/grow-intel"
 import { diaryPath } from "@/lib/slugs"
+import { diaryCompleteness } from "@/lib/diary-weeks"
 import { EXPERIMENT_CATEGORY_LABELS, type ExperimentCategory } from "@/lib/experiments"
 import { TECHNIQUE_LABELS } from "@/lib/grow-fields"
 
@@ -65,6 +66,8 @@ export interface MemberHomeData {
     flagCount: number
     /** open documented experiments on this grow */
     activeExperiments: number
+    /** log completeness % — the owner-facing documentation signal */
+    completeness: number
   }[]
   /** Personal grow knowledge — the member's own documented history.
    *  null when there is nothing real to show yet. */
@@ -144,6 +147,24 @@ export async function getMemberHomeData(userId: string): Promise<MemberHomeData 
           strain: true,
           strainId: true,
           strainRef: { select: { id: true, slug: true, name: true } },
+          // Completeness inputs — the metric the cockpit card surfaces.
+          medium: true,
+          lighting: true,
+          harvested: true,
+          startDate: true,
+          updates: {
+            take: 40,
+            orderBy: { createdAt: "desc" },
+            select: {
+              id: true,
+              createdAt: true,
+              stage: true,
+              temperature: true,
+              humidity: true,
+              vpd: true,
+              images: { take: 1, select: { id: true } },
+            },
+          },
           _count: { select: { updates: true, followers: true } },
         },
       }),
@@ -434,6 +455,7 @@ export async function getMemberHomeData(userId: string): Promise<MemberHomeData 
             intel.pendingInterventions.length
           : 0,
         activeExperiments: openExperimentByDiary.get(d.id) ?? 0,
+        completeness: diaryCompleteness(d, d.updates).percent,
       }
     }),
     knowledge,
