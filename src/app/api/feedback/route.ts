@@ -60,6 +60,17 @@ export async function POST(request: Request) {
       path = pagePath
     }
 
+    // Coarse device class from the UA header — enough to reproduce
+    // mobile-only layout bugs without storing the raw user agent.
+    const ua = request.headers.get("user-agent") || ""
+    const deviceType = /iPad|Tablet/i.test(ua)
+      ? "tablet"
+      : /Mobi|Android|iPhone/i.test(ua)
+        ? "mobile"
+        : ua
+          ? "desktop"
+          : null
+
     const feedback = await prisma.feedback.create({
       data: {
         authorId: session.user.id,
@@ -67,6 +78,7 @@ export async function POST(request: Request) {
         title: title.trim(),
         message: message.trim(),
         pagePath: path,
+        deviceType,
         source: "USER",
       },
       select: { id: true },

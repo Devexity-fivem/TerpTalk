@@ -19,7 +19,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     where: { id },
     select: {
       id: true, type: true, status: true, priority: true, source: true,
-      title: true, message: true, pagePath: true, adminNotes: true,
+      title: true, message: true, pagePath: true, deviceType: true, adminNotes: true,
       createdAt: true, updatedAt: true, resolvedAt: true, resolvedById: true,
       author: { select: { id: true, name: true, profile: { select: { username: true } } } },
     },

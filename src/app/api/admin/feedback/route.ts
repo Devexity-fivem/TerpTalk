@@ -15,7 +15,7 @@ const MESSAGE_MAX = 5000
 
 const ITEM_SELECT = {
   id: true, type: true, status: true, priority: true, source: true,
-  title: true, message: true, pagePath: true,
+  title: true, message: true, pagePath: true, deviceType: true,
   createdAt: true, updatedAt: true, resolvedAt: true,
   author: { select: { id: true, name: true, profile: { select: { username: true } } } },
 } as const

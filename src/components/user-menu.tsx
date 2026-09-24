@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react"
 import Link from "next/link"
 import { useSession, signOut } from "next-auth/react"
 import {
-  User, Award, TrendingUp, Leaf, Mail, Bell, Settings, Shield, LogOut, ChevronDown, HelpCircle, MessagesSquare, MessageSquarePlus,
+  User, Award, TrendingUp, Leaf, Mail, Bell, Settings, Shield, LogOut, ChevronDown, HelpCircle, MessagesSquare, MessageSquarePlus, Activity,
 } from "lucide-react"
 import { Avatar } from "@/components/ui/avatar"
 import { useChatPanel } from "@/components/chat-panel"
@@ -146,6 +146,18 @@ export default function UserMenu() {
                 <div>
                   <div className="font-medium">Moderation</div>
                   <div className="text-[11px] text-muted-foreground">Reports and queue</div>
+                </div>
+              </Link>
+              <Link
+                href="/ops"
+                onClick={() => setOpen(false)}
+                className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm hover:bg-secondary transition-colors"
+                role="menuitem"
+              >
+                <Activity className="h-4 w-4 text-primary shrink-0" />
+                <div>
+                  <div className="font-medium">Operations</div>
+                  <div className="text-[11px] text-muted-foreground">Funnel, health, unanswered questions</div>
                 </div>
               </Link>
               {isAdmin && (

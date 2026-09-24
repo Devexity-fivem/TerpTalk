@@ -810,6 +810,7 @@ model Feedback {
   title       String
   message     String
   pagePath    String?   // route the member was on — captured automatically, never typed by hand
+  deviceType  String?   // mobile | tablet | desktop — coarse UA class, parsed server-side
   adminNotes  String?   // internal only — reproduction notes, fix commits, etc.
   resolvedAt  DateTime?
   resolvedById String?  // bare string — survives staff account deletion

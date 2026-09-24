@@ -86,6 +86,9 @@ const apiFiles = () => {
     path.join("src", "app", "api", "admin", "reputation", "flags", "route.ts"),
     // DISTINCT ON (partner) inbox query — reviewed raw SQL.
     path.join("src", "app", "api", "messages", "route.ts"),
+    // Ops dashboard: unique-contributor UNION + rate-limit GROUP BY —
+    // parameterized tagged template, no user input.
+    path.join("src", "lib", "ops-metrics.ts"),
   ]);
   check("no raw SQL outside allowlist", !allSrc.some((f) => {
     if (rawSqlAllowlist.has(f)) return false;

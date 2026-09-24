@@ -79,6 +79,7 @@ const HTTP_PHASE: Suite[] = [
   { id: "bot", file: "scripts/bot-verify.mjs", runner: "node", cls: "A", label: "TerpBot HTTP end-to-end", tier: "full", timeoutMs: 12 * 60_000 },
   { id: "trust-safety", file: "scripts/trust-safety-verify.mjs", runner: "node", cls: "A", label: "Trust & safety HTTP behavior", tier: "full" },
   { id: "feedback", file: "scripts/feedback-tests.mjs", runner: "node", cls: "A", label: "Feedback auth/privacy/rate-limit", tier: "full" },
+  { id: "ops", file: "scripts/ops-tests.mts", runner: "tsx", cls: "A", label: "Ops surface gate + metrics shape + feedback deviceType", tier: "full" },
 ]
 
 // STRICTLY SERIAL — all create DB fixtures; several mutate shared global

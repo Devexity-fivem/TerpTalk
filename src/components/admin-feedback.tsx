@@ -13,6 +13,7 @@ interface FeedbackItem {
   title: string
   message: string
   pagePath: string | null
+  deviceType: string | null
   createdAt: string
   updatedAt: string
   resolvedAt: string | null
@@ -279,6 +280,7 @@ export default function AdminFeedback() {
                 <div className="font-medium text-sm break-words">{f.title}</div>
                 <div className="text-xs text-muted-foreground mt-0.5 flex flex-wrap gap-x-3">
                   <span>@{f.author?.profile?.username || f.author?.name || "deleted"}</span>
+                  {f.deviceType && <span className="px-1.5 py-px rounded bg-secondary">{f.deviceType}</span>}
                   {f.pagePath && <span className="font-mono">{f.pagePath}</span>}
                   <span>{new Date(f.createdAt).toLocaleDateString()}</span>
                 </div>
@@ -327,6 +329,7 @@ export default function AdminFeedback() {
                 <h2 id="fb-detail-title" className="font-display text-lg font-semibold break-words">{detail.title}</h2>
                 <div className="text-xs text-muted-foreground mt-1 flex flex-wrap gap-x-3">
                   <span>by @{detail.author?.profile?.username || detail.author?.name || "deleted"}</span>
+                  {detail.deviceType && <span className="px-1.5 py-px rounded bg-secondary">{detail.deviceType}</span>}
                   {detail.pagePath && (
                     <a href={detail.pagePath} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 font-mono text-primary hover:underline">
                       {detail.pagePath} <ExternalLink className="w-3 h-3" />
