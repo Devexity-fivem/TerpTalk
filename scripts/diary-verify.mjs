@@ -154,6 +154,102 @@ const main = async () => {
       ? pass("PATCH edits and clears env fields")
       : fail("env PATCH", { s: r.status, row: envRow })
 
+    // ── Structured nutrient rows (Slice B) ──────────────────────────
+    r = await callApi("/api/diaries/updates", {
+      method: "POST",
+      body: {
+        diaryId, title: M("nutes"), content: "fed at half strength", stage: "FLOWER",
+        nutrients: [
+          { productName: M("Grow"), doseMlPerL: 2.5 },
+          { productName: M("Bloom") },
+        ],
+      },
+      cookie: ownerCookie,
+    })
+    const nutUpd = r.data?.update
+    const nutRows = r.status === 201
+      ? await prisma.diaryUpdateNutrient.findMany({ where: { updateId: nutUpd.id } })
+      : []
+    r.status === 201 && nutRows.length === 2 &&
+    nutRows.some((n) => n.productName === M("Bloom") && n.doseMlPerL === null) &&
+    nutUpd?.nutrients?.length === 2
+      ? pass("nutrients persist on create (dose optional)")
+      : fail("nutrient create", { s: r.status, rows: nutRows })
+
+    // PATCH replaces the whole collection when supplied.
+    r = await callApi("/api/diaries/updates", {
+      method: "PATCH",
+      body: { id: nutUpd.id, nutrients: [{ productName: M("Micro"), doseMlPerL: 1 }] },
+      cookie: ownerCookie,
+    })
+    const afterReplace = r.status === 200
+      ? await prisma.diaryUpdateNutrient.findMany({ where: { updateId: nutUpd.id } })
+      : []
+    afterReplace.length === 1 && afterReplace[0].productName === M("Micro") && afterReplace[0].doseMlPerL === 1
+      ? pass("PATCH replaces nutrient collection")
+      : fail("nutrient replace", { s: r.status, rows: afterReplace })
+
+    // Data export carries the structured rows on the owner's own export.
+    r = await callApi("/api/profile/export", { cookie: ownerCookie })
+    const exported = r.status === 200 && JSON.stringify(r.data).includes(`"productName":"${M("Micro")}"`)
+    exported
+      ? pass("profile export includes nutrient rows")
+      : fail("nutrient export", r.status)
+
+    // An edit that omits the key must not touch the rows.
+    r = await callApi("/api/diaries/updates", { method: "PATCH", body: { id: nutUpd.id, title: M("nutes2") }, cookie: ownerCookie })
+    const afterOmit = await prisma.diaryUpdateNutrient.count({ where: { updateId: nutUpd.id } })
+    r.status === 200 && afterOmit === 1
+      ? pass("PATCH without nutrients preserves rows")
+      : fail("nutrient preserve", { s: r.status, count: afterOmit })
+
+    // [] clears the collection explicitly.
+    r = await callApi("/api/diaries/updates", { method: "PATCH", body: { id: nutUpd.id, nutrients: [] }, cookie: ownerCookie })
+    const afterClear = await prisma.diaryUpdateNutrient.count({ where: { updateId: nutUpd.id } })
+    r.status === 200 && afterClear === 0
+      ? pass("PATCH [] clears nutrients")
+      : fail("nutrient clear", { s: r.status, count: afterClear })
+
+    // PATCH null is the one rejection that must hit the edit route — the
+    // collection has no scalar-style null semantics there.
+    r = await callApi("/api/diaries/updates", { method: "PATCH", body: { id: nutUpd.id, nutrients: null }, cookie: ownerCookie })
+    r.status === 400 ? pass("PATCH nutrients null → 400") : fail("nutrients null", r.status)
+
+    // Remaining rejection contract — exercised through POST (same shared
+    // parseNutrientRows) to stay under the edit route's per-minute cap.
+    for (const [payload, name] of [
+      ["x", "nutrients non-array → 400"],
+      [[{ productName: M("Dup") }, { productName: ` ${M("Dup").toLowerCase()}  ` }], "normalized duplicate → 400"],
+      [Array.from({ length: 21 }, (_, i) => ({ productName: `F${i}` })), "21 nutrient rows → 400"],
+      [[{ productName: "F", doseMlPerL: 101 }], "dose >100 → 400"],
+      [[{ productName: "F", doseMlPerL: -1 }], "dose <0 → 400"],
+      [[{ productName: "F", doseMlPerL: "2" }], "string dose → 400"],
+      [[{ doseMlPerL: 2 }], "missing productName → 400"],
+      [[{ productName: "F", brand: "x" }], "unknown row key → 400"],
+    ]) {
+      r = await callApi("/api/diaries/updates", {
+        method: "POST",
+        body: { diaryId, title: "x", content: "x", nutrients: payload },
+        cookie: ownerCookie,
+      })
+      r.status === 400 ? pass(name) : fail(name, r.status)
+    }
+
+    // Ownership check is authoritative before any nutrient write.
+    r = await callApi("/api/diaries/updates", {
+      method: "PATCH",
+      body: { id: nutUpd.id, nutrients: [{ productName: "Hijack" }] },
+      cookie: viewerCookie,
+    })
+    r.status === 403 ? pass("non-owner nutrient PATCH forbidden") : fail("nutrient ownership", r.status)
+
+    // Hard delete removes child rows via the FK cascade.
+    r = await callApi("/api/diaries/updates", { method: "DELETE", body: { id: nutUpd.id }, cookie: ownerCookie })
+    const afterDelete = await prisma.diaryUpdateNutrient.count({ where: { updateId: nutUpd.id } })
+    r.status === 200 && afterDelete === 0
+      ? pass("update DELETE cascades nutrient rows")
+      : fail("nutrient cascade", { s: r.status, count: afterDelete })
+
     // Stage propagation: the FLOWER update should have moved the diary stage
     const diaryRow = await prisma.growDiary.findUnique({ where: { id: diaryId }, select: { stage: true } })
     diaryRow?.stage === "FLOWER" ? pass("explicit stage propagates to diary") : fail("stage propagation", diaryRow?.stage)

@@ -11,6 +11,7 @@ import { prisma } from "@/lib/prisma"
 import { parseDiaryPatch, patchTouchesStrainStats, DIARY_EDITABLE_FIELDS } from "@/lib/diary-edit"
 import {
   parseUpdatePatch,
+  parseNutrientRows,
   diffUpdateImages,
   updatePatchTouchesStrainStats,
 } from "@/lib/diary-update-edit"
@@ -315,6 +316,67 @@ await check("update parser: images — shape, count, and data-URI validation", (
   assert.ok(!parseUpdatePatch({ images: Array(5).fill("data:image/png;base64,AAAA") }).ok, ">4 rejects")
   const ok = parseUpdatePatch({ images: ["data:image/png;base64,iVBORw0KGgo="] })
   assert.ok(ok.ok && ok.newImages?.length === 1)
+})
+
+await check("update parser: nutrients — collection semantics, names, doses, duplicates", () => {
+  // Omitted vs supplied-empty is the whole PATCH contract: undefined keeps
+  // the rows, [] clears them, null is not a valid collection value.
+  const omitted = parseUpdatePatch({ title: "x" })
+  assert.ok(omitted.ok && omitted.nutrients === undefined, "omitted → untouched")
+  const cleared = parseUpdatePatch({ nutrients: [] })
+  assert.ok(cleared.ok && cleared.nutrients?.length === 0, "[] → clear all")
+  assert.ok(!parseUpdatePatch({ nutrients: null }).ok, "null rejects — collections have no null semantics")
+  assert.ok(!parseUpdatePatch({ nutrients: "x" }).ok, "non-array rejects")
+  assert.ok(!parseUpdatePatch({ nutrients: {} }).ok, "non-array object rejects")
+  assert.ok(!parseUpdatePatch({ nutrients: ["x"] }).ok, "non-object row rejects")
+
+  // Row cap — 20 is the ceiling.
+  assert.ok(parseUpdatePatch({ nutrients: Array.from({ length: 20 }, (_, i) => ({ productName: `F${i}` })) }).ok, "20 rows accepted")
+  assert.ok(!parseUpdatePatch({ nutrients: Array.from({ length: 21 }, (_, i) => ({ productName: `F${i}` })) }).ok, "21 rows reject")
+
+  // Product name — normalize-then-validate.
+  assert.ok(!parseUpdatePatch({ nutrients: [{}] }).ok, "missing productName rejects")
+  assert.ok(!parseUpdatePatch({ nutrients: [{ productName: "   " }] }).ok, "whitespace-only rejects")
+  assert.ok(!parseUpdatePatch({ nutrients: [{ productName: 5 }] }).ok, "non-string name rejects")
+  assert.ok(!parseUpdatePatch({ nutrients: [{ productName: "x".repeat(101) }] }).ok, "101 chars rejects")
+  assert.ok(parseUpdatePatch({ nutrients: [{ productName: "x".repeat(100) }] }).ok, "100 chars accepted")
+  const trimmed = parseUpdatePatch({ nutrients: [{ productName: "  Bloom   XL  " }] })
+  assert.ok(trimmed.ok && trimmed.nutrients?.[0].productName === "Bloom XL", "trim + internal collapse preserved for storage")
+
+  // Duplicates collide after trim/collapse/lowercase — always a 400, never
+  // a silent merge.
+  for (const dup of [
+    [{ productName: "Bloom" }, { productName: " bloom " }],
+    [{ productName: "BLOOM" }, { productName: "Bloom   " }],
+    [{ productName: "a  b" }, { productName: "a b" }],
+  ]) {
+    assert.ok(!parseUpdatePatch({ nutrients: dup }).ok, `normalized dup ${JSON.stringify(dup)} rejects`)
+  }
+
+  // Dose — optional, null-able, finite 0–100.
+  const doseCases: [unknown, boolean][] = [
+    [0, true], [100, true], [2.5, true],
+    [-0.01, false], [100.01, false],
+    [NaN, false], [Infinity, false], [-Infinity, false],
+    [null, true], [undefined, true], ["2", false],
+  ]
+  for (const [d, ok] of doseCases) {
+    assert.equal(
+      parseUpdatePatch({ nutrients: [{ productName: "F", doseMlPerL: d }] }).ok,
+      ok,
+      `dose ${String(d)} should ${ok ? "accept" : "reject"}`
+    )
+  }
+  const noDose = parseUpdatePatch({ nutrients: [{ productName: "F" }] })
+  assert.ok(noDose.ok && noDose.nutrients?.[0].doseMlPerL === null, "omitted dose stores null")
+
+  // Unknown row keys reject — same mass-assignment contract as the parent.
+  assert.ok(!parseUpdatePatch({ nutrients: [{ productName: "F", brand: "x" }] }).ok, "unknown row key rejects")
+
+  // Direct helper — POST and PATCH share this path.
+  assert.ok(!parseNutrientRows(null).ok)
+  const multi = parseNutrientRows([{ productName: "Grow", doseMlPerL: 2.5 }, { productName: "Bloom" }])
+  assert.ok(multi.ok && multi.rows.length === 2 && multi.rows[1].doseMlPerL === null, "multi-row + null dose")
 })
 
 await check("diffUpdateImages: default keeps all; keep-list removes the rest", () => {
@@ -680,6 +742,7 @@ await check("db: journey reconciliation — edit can drop a meaningful day", asy
       select: {
         createdAt: true, stage: true, content: true, temperature: true, humidity: true,
         vpd: true, ph: true, ec: true, feeding: true, training: true, images: { select: { id: true } },
+        nutrients: { select: { id: true } },
       },
     })
     return computeGrowJourney(dr, updates, d(80))

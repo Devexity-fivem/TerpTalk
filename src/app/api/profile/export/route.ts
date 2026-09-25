@@ -47,7 +47,7 @@ export async function GET(request: Request) {
         prisma.thread.findMany({ where: { authorId: userId }, take: 10_000, orderBy: { createdAt: "desc" } }),
         prisma.post.findMany({ where: { authorId: userId }, take: 10_000, orderBy: { createdAt: "desc" } }),
         prisma.growDiary.findMany({ where: { authorId: userId }, take: 10_000, orderBy: { createdAt: "desc" } }),
-        prisma.diaryUpdate.findMany({ where: { authorId: userId }, take: 10_000, orderBy: { createdAt: "desc" } }),
+        prisma.diaryUpdate.findMany({ where: { authorId: userId }, include: { nutrients: true }, take: 10_000, orderBy: { createdAt: "desc" } }),
         prisma.growSetup.findMany({ where: { authorId: userId }, take: 10_000, orderBy: { createdAt: "desc" } }),
         prisma.setupComment.findMany({ where: { authorId: userId }, take: 10_000, orderBy: { createdAt: "desc" } }),
         prisma.chatMessage.findMany({ where: { authorId: userId }, take: 10_000, orderBy: { createdAt: "desc" } }),

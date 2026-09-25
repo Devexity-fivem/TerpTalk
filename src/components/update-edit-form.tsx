@@ -8,7 +8,7 @@
 import { useState } from "react"
 import { useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
-import { Pencil, Loader2, X, Camera, ImagePlus, FlaskConical } from "lucide-react"
+import { Pencil, Loader2, X, Plus, Camera, ImagePlus, FlaskConical } from "lucide-react"
 import { useToast } from "@/components/ui/toast"
 import { STAGE_TIPS } from "@/lib/stage-tips"
 import { resizeImage } from "@/components/update-form"
@@ -39,6 +39,10 @@ export interface EditableUpdate {
   lampDistanceCm: number | null
   feeding: string | null
   training: string | null
+  /** Structured nutrient rows. Undefined = the query didn't load them —
+   *  the edit form then omits `nutrients` from PATCH rather than sending
+   *  an empty array that would wipe rows it never saw. */
+  nutrients?: { id: string; productName: string; doseMlPerL: number | null }[]
   images: { id: string; url: string; caption: string | null }[]
   /** linked experiment — this update is follow-up evidence for it */
   experiment?: { id: string; title: string } | null
@@ -86,6 +90,12 @@ export default function UpdateEditSection({ update, day, dateLabel, edited }: Up
     feeding: update.feeding ?? "",
     training: update.training ?? "",
   })
+  const [nutrientRows, setNutrientRows] = useState<{ productName: string; doseMlPerL: string }[]>(
+    () => (update.nutrients ?? []).map((n) => ({
+      productName: n.productName,
+      doseMlPerL: n.doseMlPerL != null ? String(n.doseMlPerL) : "",
+    }))
+  )
 
   const isOwner = session?.user?.id === update.authorId
 
@@ -131,6 +141,16 @@ export default function UpdateEditSection({ update, day, dateLabel, edited }: Up
           runoffPh: formData.runoffPh ? parseFloat(formData.runoffPh) : null,
           runoffEc: formData.runoffEc ? parseFloat(formData.runoffEc) : null,
           lampDistanceCm: formData.lampDistanceCm ? parseFloat(formData.lampDistanceCm) : null,
+          // Full-replacement semantics — only sent when rows were loaded,
+          // so a form that never saw nutrients can't wipe them.
+          ...(update.nutrients !== undefined && {
+            nutrients: nutrientRows
+              .filter((r) => r.productName.trim() || r.doseMlPerL !== "")
+              .map((r) => ({
+                productName: r.productName,
+                doseMlPerL: r.doseMlPerL !== "" ? parseFloat(r.doseMlPerL) : null,
+              })),
+          }),
           keepImageIds: kept.map((i) => i.id),
           images: newPhotos,
         }),
@@ -162,6 +182,7 @@ export default function UpdateEditSection({ update, day, dateLabel, edited }: Up
     eventChips.push({ label: "Measurement", color: "text-foreground bg-secondary" })
   if (update.training) eventChips.push({ label: "Training", color: "text-warning bg-warning/10" })
   if (update.feeding) eventChips.push({ label: "Feeding", color: "text-success bg-success/10" })
+  if (update.nutrients?.length) eventChips.push({ label: "Nutrients", color: "text-success bg-success/10" })
 
   return (
     <div className="bg-card/80 rounded-2xl border border-border/70 p-4">
@@ -402,6 +423,37 @@ export default function UpdateEditSection({ update, day, dateLabel, edited }: Up
                       onChange={(e) => setFormData({ ...formData, wateringLiters: e.target.value })} className={envInput} placeholder="2" />
                   </div>
                 </div>
+
+                {/* Structured nutrient rows — additive to Feeding Notes. */}
+                <div className="mt-3">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-xs font-medium">Nutrients</span>
+                    {nutrientRows.length < 20 && (
+                      <button type="button"
+                        onClick={() => setNutrientRows((r) => [...r, { productName: "", doseMlPerL: "" }])}
+                        className="text-xs text-primary hover:underline flex items-center gap-1 min-h-8">
+                        <Plus className="w-3 h-3" /> Add nutrient
+                      </button>
+                    )}
+                  </div>
+                  {nutrientRows.map((row, i) => (
+                    <div key={i} className="flex items-center gap-2 mb-1.5">
+                      <input type="text" value={row.productName}
+                        onChange={(e) => setNutrientRows((r) => r.map((x, j) => (j === i ? { ...x, productName: e.target.value } : x)))}
+                        className={`${envInput} flex-1 min-w-0`} placeholder="Product name" maxLength={100} />
+                      <input type="number" inputMode="decimal" step="0.1" min="0" max="100" value={row.doseMlPerL}
+                        onChange={(e) => setNutrientRows((r) => r.map((x, j) => (j === i ? { ...x, doseMlPerL: e.target.value } : x)))}
+                        className={`${envInput} w-20 shrink-0`} placeholder="Dose" />
+                      <span className="text-xs text-muted-foreground shrink-0">mL/L</span>
+                      <button type="button"
+                        onClick={() => setNutrientRows((r) => r.filter((_, j) => j !== i))}
+                        className="text-muted-foreground hover:text-destructive shrink-0 min-h-8 min-w-8 flex items-center justify-center"
+                        aria-label="Remove nutrient">
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
               </div>
 
               <div>
@@ -460,6 +512,10 @@ export default function UpdateEditSection({ update, day, dateLabel, edited }: Up
                 setError("")
                 setNewPhotos([])
                 setKept(update.images)
+                setNutrientRows((update.nutrients ?? []).map((n) => ({
+                  productName: n.productName,
+                  doseMlPerL: n.doseMlPerL != null ? String(n.doseMlPerL) : "",
+                })))
               }}
               className="px-4 py-2 border border-border rounded-lg hover:bg-secondary transition-colors text-sm min-h-11"
             >
@@ -600,6 +656,19 @@ export default function UpdateEditSection({ update, day, dateLabel, edited }: Up
                   <p className="text-sm">{update.training}</p>
                 </div>
               )}
+            </div>
+          )}
+
+          {update.nutrients && update.nutrients.length > 0 && (
+            <div className="mb-4">
+              <span className="text-sm text-muted-foreground">Nutrients:</span>
+              <ul className="text-sm space-y-0.5">
+                {update.nutrients.map((n) => (
+                  <li key={n.id}>
+                    {n.productName}{n.doseMlPerL != null ? ` — ${n.doseMlPerL} mL/L` : ""}
+                  </li>
+                ))}
+              </ul>
             </div>
           )}
         </>

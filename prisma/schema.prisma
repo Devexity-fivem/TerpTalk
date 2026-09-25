@@ -459,6 +459,7 @@ model DiaryUpdate {
   author       User        @relation(fields: [authorId], references: [id], onDelete: Cascade)
   experiment   GrowExperiment? @relation(fields: [experimentId], references: [id], onDelete: SetNull)
   images       DiaryImage[]
+  nutrients    DiaryUpdateNutrient[]
 
   @@index([diaryId])
   @@index([diaryId, createdAt])
@@ -509,6 +510,22 @@ model DiaryImage {
   update    DiaryUpdate @relation(fields: [updateId], references: [id], onDelete: Cascade)
 
   @@index([updateId])
+}
+
+// Structured nutrient rows — one product application per row. Option B:
+// free-text productName (no catalog yet), optional dose. `feeding` stays the
+// legacy notes field and the only text TerpBot parses.
+model DiaryUpdateNutrient {
+  id          String      @id @default(cuid())
+  updateId    String
+  productName String
+  doseMlPerL  Float?
+
+  update      DiaryUpdate @relation(fields: [updateId], references: [id], onDelete: Cascade)
+
+  @@unique([updateId, productName])
+  @@index([updateId])
+  @@index([productName])
 }
 
 model DiaryFollow {

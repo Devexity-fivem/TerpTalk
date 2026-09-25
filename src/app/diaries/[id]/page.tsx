@@ -95,6 +95,7 @@ async function getDiaryData(id: string, viewerId?: string | null) {
           author: { select: publicUserSelect },
           images: { take: 12, orderBy: { order: "asc" } },
           experiment: { select: { id: true, title: true } },
+          nutrients: { orderBy: { productName: "asc" } },
         },
         orderBy: { createdAt: "desc" },
         take: 100,
@@ -1052,6 +1053,7 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
                               lampDistanceCm: item.u.lampDistanceCm,
                               feeding: item.u.feeding,
                               training: item.u.training,
+                              nutrients: item.u.nutrients.map((n) => ({ id: n.id, productName: n.productName, doseMlPerL: n.doseMlPerL })),
                               images: item.u.images.map((img) => ({ id: img.id, url: img.url, caption: img.caption })),
                               experiment: item.u.experiment ? { id: item.u.experiment.id, title: item.u.experiment.title } : null,
                             }}

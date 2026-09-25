@@ -40,6 +40,7 @@ export const UPDATE_EDITABLE_FIELDS = new Set([
   "lampDistanceCm",
   "feeding",
   "training",
+  "nutrients",
   "keepImageIds",
   "images",
 ])
@@ -83,6 +84,69 @@ export const UPDATE_NUMERIC_RANGES = [
 
 export const UPDATE_MAX_IMAGES = 4
 
+/** Structured nutrient rows — Slice B. Bounds on the child collection, not
+ *  on DiaryUpdate scalars. */
+export const UPDATE_MAX_NUTRIENTS = 20
+export const NUTRIENT_NAME_MAX = 100
+export const NUTRIENT_DOSE_RANGE = [0, 100] as const // mL/L
+
+export interface NutrientRow {
+  productName: string
+  doseMlPerL: number | null
+}
+
+/** Display form: trim + collapse internal whitespace. The comparison key
+ *  lowercases on top so "Bloom" / " bloom " / "BLOOM" collide — duplicates
+ *  are rejected, never silently merged. */
+const normalizeNutrientName = (v: string) => v.trim().replace(/\s+/g, " ")
+const nutrientKey = (v: string) => normalizeNutrientName(v).toLowerCase()
+
+/**
+ * Validates a supplied `nutrients` collection into rows for a nested
+ * create / replace write. Omission is handled by the caller (`undefined` =
+ * untouched) — this helper only sees supplied values, so `null`, non-arrays,
+ * malformed rows and normalized duplicates are all hard rejections.
+ */
+export function parseNutrientRows(input: unknown): { ok: true; rows: NutrientRow[] } | { ok: false; error: string } {
+  if (input === null) return { ok: false, error: "Invalid nutrients" }
+  if (!Array.isArray(input)) return { ok: false, error: "Invalid nutrients" }
+  if (input.length > UPDATE_MAX_NUTRIENTS) return { ok: false, error: "Too many nutrients" }
+  const rows: NutrientRow[] = []
+  const seen = new Set<string>()
+  for (const item of input) {
+    if (!item || typeof item !== "object" || Array.isArray(item)) {
+      return { ok: false, error: "Invalid nutrient row" }
+    }
+    for (const key of Object.keys(item)) {
+      if (key !== "productName" && key !== "doseMlPerL") {
+        return { ok: false, error: `Unknown nutrient field: ${key}` }
+      }
+    }
+    const raw = (item as Record<string, unknown>).productName
+    if (typeof raw !== "string") return { ok: false, error: "Invalid nutrient name" }
+    const productName = normalizeNutrientName(raw)
+    if (!productName || productName.length > NUTRIENT_NAME_MAX) {
+      return { ok: false, error: "Invalid nutrient name" }
+    }
+    const dose = (item as Record<string, unknown>).doseMlPerL
+    let doseMlPerL: number | null = null
+    if (dose !== undefined && dose !== null) {
+      if (typeof dose !== "number" || !Number.isFinite(dose)) {
+        return { ok: false, error: "Invalid nutrient dose" }
+      }
+      if (dose < NUTRIENT_DOSE_RANGE[0] || dose > NUTRIENT_DOSE_RANGE[1]) {
+        return { ok: false, error: "Nutrient dose out of range" }
+      }
+      doseMlPerL = dose
+    }
+    const key = nutrientKey(raw)
+    if (seen.has(key)) return { ok: false, error: "Duplicate nutrient name" }
+    seen.add(key)
+    rows.push({ productName, doseMlPerL })
+  }
+  return { ok: true, rows }
+}
+
 const DATA_URI_PREFIX = /^data:image\/(png|jpe?g|webp);base64,/
 
 export const cleanUpdateString = (v: unknown, max: number) =>
@@ -98,6 +162,9 @@ export type UpdatePatchResult =
       keepImageIds: string[] | undefined
       /** New data-URI images to append, or undefined = none. */
       newImages: string[] | undefined
+      /** Validated nutrient rows — undefined = key omitted, leave rows
+       *  untouched; [] = clear all; [...] = replace the collection. */
+      nutrients: NutrientRow[] | undefined
     }
   | { ok: false; error: string }
 
@@ -179,7 +246,14 @@ export function parseUpdatePatch(body: unknown): UpdatePatchResult {
     newImages = b.images as string[]
   }
 
-  return { ok: true, id, data, keepImageIds, newImages }
+  let nutrients: NutrientRow[] | undefined
+  if ("nutrients" in b) {
+    const parsed = parseNutrientRows(b.nutrients)
+    if (!parsed.ok) return bad(parsed.error)
+    nutrients = parsed.rows
+  }
+
+  return { ok: true, id, data, keepImageIds, newImages, nutrients }
 }
 
 /**

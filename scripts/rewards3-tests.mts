@@ -49,6 +49,7 @@ function fakeUpdate(over: Partial<Parameters<typeof computeGrowJourney>[1][numbe
     feeding: null,
     training: null,
     images: [] as { id: string }[],
+    nutrients: [] as { id: string }[],
     ...over,
   }
 }
@@ -186,7 +187,7 @@ async function main() {
   // ─── Meaningful update predicate + grow streak ─────────────────────
   {
     const blank = {
-      content: "", images: [] as { id: string }[],
+      content: "", images: [] as { id: string }[], nutrients: [] as { id: string }[],
       temperature: null, humidity: null, vpd: null, ph: null, ec: null,
       feeding: null, training: null,
     }
@@ -198,6 +199,11 @@ async function main() {
     for (const f of ["temperature", "humidity", "vpd", "ph", "ec", "feeding", "training"] as const) {
       assert.ok(isMeaningfulUpdate({ ...blank, [f]: f === "feeding" || f === "training" ? "x" : 1 }), f)
     }
+    // Structured nutrients count as meaningful evidence — same weight as a
+    // feeding note or an env reading.
+    assert.ok(isMeaningfulUpdate({ ...blank, nutrients: [{ id: "n1" }] }), "nutrient row alone is meaningful")
+    assert.ok(isMeaningfulUpdate({ ...blank, content: "x".repeat(MIN_UPDATE_LENGTH), nutrients: [{ id: "n1" }] }), "nutrients + content still meaningful")
+    assert.equal(isMeaningfulUpdate({ ...blank, nutrients: [] }), false, "zero nutrient rows are not meaningful alone")
 
     // A junk-update day must not extend the streak.
     const streaker = await makeUser("streak", 0)
@@ -219,6 +225,19 @@ async function main() {
       const s = await getGrowStreak(streaker.id)
       assert.equal(s.streak, 1, `junk day must not extend streak (got ${s.streak})`)
       assert.equal(s.totalUpdates, 2, "raw update count unchanged — predicate only gates streaks")
+
+      // SQL parity: a nutrients-only update must count as a meaningful day
+      // through MEANINGFUL_UPDATE_SQL, matching the TS predicate.
+      await prisma.diaryUpdate.create({
+        data: {
+          diaryId: dr.id, authorId: streaker.id, title: "n", content: "x", stage: "VEGETATIVE",
+          createdAt: new Date(today.getTime() - 2 * DAY), dayNumber: 1, weekNumber: 1,
+          nutrients: { create: [{ productName: `${T} Feed`, doseMlPerL: 2 }] },
+        },
+      })
+      const s2 = await getGrowStreak(streaker.id)
+      assert.equal(s2.streak, 2, `nutrient-only day must count as meaningful via SQL (got ${s2.streak})`)
+      assert.equal(s2.totalUpdates, 3, "raw update count includes the nutrient row update")
     } finally {
       if (streakDiaryId) await prisma.growDiary.delete({ where: { id: streakDiaryId } }).catch(() => {})
       await prisma.user.delete({ where: { id: streaker.id } }).catch(() => {})

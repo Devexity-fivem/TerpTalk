@@ -81,6 +81,9 @@ export default function UpdateForm({ diaryId, userId, currentStage, currentDay, 
     feeding: "",
     training: "",
   })
+  // Structured nutrient rows — separate from formData's flat string map;
+  // drafts remain text-only by design.
+  const [nutrientRows, setNutrientRows] = useState<{ productName: string; doseMlPerL: string }[]>([])
 
   // ── Draft autosave (localStorage, user+diary scoped) ──────────────────
   const draftKey = userId ? `tt:update-draft:${userId}:${diaryId}` : null
@@ -199,6 +202,14 @@ export default function UpdateForm({ diaryId, userId, currentStage, currentDay, 
           runoffPh: formData.runoffPh ? parseFloat(formData.runoffPh) : null,
           runoffEc: formData.runoffEc ? parseFloat(formData.runoffEc) : null,
           lampDistanceCm: formData.lampDistanceCm ? parseFloat(formData.lampDistanceCm) : null,
+          // Rows that were never touched drop client-side; a row with a dose
+          // but no name goes to the server for its authoritative 400.
+          nutrients: nutrientRows
+            .filter((r) => r.productName.trim() || r.doseMlPerL !== "")
+            .map((r) => ({
+              productName: r.productName,
+              doseMlPerL: r.doseMlPerL !== "" ? parseFloat(r.doseMlPerL) : null,
+            })),
           images: photos,
         }),
       })
@@ -211,6 +222,7 @@ export default function UpdateForm({ diaryId, userId, currentStage, currentDay, 
       router.refresh()
       setIsOpen(false)
       setPhotos([])
+      setNutrientRows([])
       clearDraft()
       setFormData((f) => ({ ...f, title: "", content: "", feeding: "", training: "" }))
     } catch (error: unknown) {
@@ -543,6 +555,54 @@ export default function UpdateForm({ diaryId, userId, currentStage, currentDay, 
                   </div>
                 </div>
 
+                {/* Structured nutrient rows — optional, additive to the
+                    free-text Feeding Notes below. */}
+                <div className="mt-3">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-xs font-medium">Nutrients</span>
+                    {nutrientRows.length < 20 && (
+                      <button
+                        type="button"
+                        onClick={() => setNutrientRows((r) => [...r, { productName: "", doseMlPerL: "" }])}
+                        className="text-xs text-primary hover:underline flex items-center gap-1 min-h-8"
+                      >
+                        <Plus className="w-3 h-3" /> Add nutrient
+                      </button>
+                    )}
+                  </div>
+                  {nutrientRows.map((row, i) => (
+                    <div key={i} className="flex items-center gap-2 mb-1.5">
+                      <input
+                        type="text"
+                        value={row.productName}
+                        onChange={(e) => setNutrientRows((r) => r.map((x, j) => (j === i ? { ...x, productName: e.target.value } : x)))}
+                        className={`${envInput} flex-1 min-w-0`}
+                        placeholder="Product name"
+                        maxLength={100}
+                      />
+                      <input
+                        type="number"
+                        inputMode="decimal"
+                        step="0.1"
+                        min="0"
+                        max="100"
+                        value={row.doseMlPerL}
+                        onChange={(e) => setNutrientRows((r) => r.map((x, j) => (j === i ? { ...x, doseMlPerL: e.target.value } : x)))}
+                        className={`${envInput} w-20 shrink-0`}
+                        placeholder="Dose"
+                      />
+                      <span className="text-xs text-muted-foreground shrink-0">mL/L</span>
+                      <button
+                        type="button"
+                        onClick={() => setNutrientRows((r) => r.filter((_, j) => j !== i))}
+                        className="text-muted-foreground hover:text-destructive shrink-0 min-h-8 min-w-8 flex items-center justify-center"
+                        aria-label="Remove nutrient"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
               </div>
 
               <div>

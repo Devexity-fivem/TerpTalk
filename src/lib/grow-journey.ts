@@ -102,6 +102,7 @@ async function loadJourneyInputs(diaryId: string) {
       feeding: true,
       training: true,
       images: { select: { id: true } },
+      nutrients: { select: { id: true }, take: 1 },
     },
   })
   return { diary, updates }
@@ -122,6 +123,7 @@ export function computeGrowJourney(
     feeding: string | null
     training: string | null
     images: { id: string }[]
+    nutrients: { id: string }[]
   }[],
   now = new Date()
 ): GrowJourneyState {

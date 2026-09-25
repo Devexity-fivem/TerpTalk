@@ -19,6 +19,7 @@ import {
   UPDATE_NUMERIC_RANGES,
   cleanUpdateString,
   parseUpdatePatch,
+  parseNutrientRows,
   diffUpdateImages,
   updatePatchTouchesStrainStats,
 } from "@/lib/diary-update-edit"
@@ -61,6 +62,7 @@ export async function POST(request: Request) {
       lampDistanceCm,
       feeding,
       training,
+      nutrients,
       images,
       experimentId,
     } = body
@@ -108,6 +110,17 @@ export async function POST(request: Request) {
     const validImages = Array.isArray(images)
       ? images.filter((i: unknown) => typeof i === "string" && /^data:image\/(png|jpe?g|webp);base64,/.test(i) && i.length <= 400_000).slice(0, 4)
       : []
+
+    // Structured nutrient rows — same shared validation as PATCH. Omitted
+    // means "no nutrients on this update", not "reject".
+    let nutrientRows: { productName: string; doseMlPerL: number | null }[] = []
+    if (nutrients !== undefined) {
+      const parsedNutrients = parseNutrientRows(nutrients)
+      if (!parsedNutrients.ok) {
+        return NextResponse.json({ error: parsedNutrients.error }, { status: 400 })
+      }
+      nutrientRows = parsedNutrients.rows
+    }
 
     // Rate limit + ban check before any expensive work
     const rl = await repRateLimit(session.user.id, `diary-update:${session.user.id}`, 30, 60 * 60 * 1000)
@@ -212,10 +225,14 @@ export async function POST(request: Request) {
               })),
             },
           }),
+          ...(nutrientRows.length > 0 && {
+            nutrients: { create: nutrientRows },
+          }),
         },
         include: {
           author: { select: publicUserSelect },
           images: true,
+          nutrients: true,
         },
       })
       // Update diary stage only on an explicit change. The form defaults to the
@@ -315,7 +332,7 @@ export async function POST(request: Request) {
 }
 // DELETE — delete own diary update: { id }
 // DiaryUpdate has no `deleted` flag; nothing references it except its own
-// images (cascade), so a hard delete is safe. Derived state (streaks,
+// images and nutrient rows (both cascade), so a hard delete is safe. Derived state (streaks,
 // stage runs, harvest report, counts) recomputes from remaining updates.
 // Per-day diary rep is keyed to the diary+day — deleting the LAST update
 // of that diary+day claws the day's points back, so post-then-delete can't
@@ -422,7 +439,7 @@ export async function PATCH(request: Request) {
     if (!parsed.id) {
       return NextResponse.json({ error: "Missing update id" }, { status: 400 })
     }
-    const { id, data, keepImageIds, newImages } = parsed
+    const { id, data, keepImageIds, newImages, nutrients } = parsed
 
     const update = await prisma.diaryUpdate.findUnique({
       where: { id },
@@ -467,7 +484,7 @@ export async function PATCH(request: Request) {
     }
 
     const touchesStrainStats = updatePatchTouchesStrainStats(update, data)
-    const changed = Object.keys(data).length > 0 || removed.length > 0 || storedImages.length > 0
+    const changed = Object.keys(data).length > 0 || removed.length > 0 || storedImages.length > 0 || nutrients !== undefined
 
     if (changed) {
       // New images append after the highest kept order — kept photos never
@@ -484,6 +501,16 @@ export async function PATCH(request: Request) {
           await tx.diaryImage.createMany({
             data: storedImages.map((url, i) => ({ updateId: id, url, order: nextOrder + i })),
           })
+        }
+        // Supplied nutrient collection replaces wholesale — same
+        // deleteMany+createMany contract as images. Omitted = untouched.
+        if (nutrients !== undefined) {
+          await tx.diaryUpdateNutrient.deleteMany({ where: { updateId: id } })
+          if (nutrients.length > 0) {
+            await tx.diaryUpdateNutrient.createMany({
+              data: nutrients.map((n) => ({ updateId: id, productName: n.productName, doseMlPerL: n.doseMlPerL })),
+            })
+          }
         }
         // Guarded write — a concurrent delete between load and write yields
         // count 0 → 404, no resurrection. `updatedAt` is always written so
@@ -508,7 +535,7 @@ export async function PATCH(request: Request) {
 
     const result = await prisma.diaryUpdate.findUnique({
       where: { id },
-      include: { images: { orderBy: { order: "asc" } } },
+      include: { images: { orderBy: { order: "asc" } }, nutrients: true },
     })
     return NextResponse.json({ update: result })
   } catch (error) {
