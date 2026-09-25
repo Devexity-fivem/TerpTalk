@@ -42,6 +42,9 @@ const SERIES_TO_METRIC: [keyof GrowContextView["series"], MetricId][] = [
   ["vpdComputed", "vpd"],
   ["runoffPh", "runoffPh"],
   ["runoffEc", "runoffEc"],
+  ["watering", "watering"],
+  ["ppfd", "ppfd"],
+  ["photoperiod", "photoperiod"],
 ]
 
 /** age in days of each series' newest point — only series with data.
@@ -61,10 +64,31 @@ export function freshnessOf(
   return out
 }
 
-/** Metrics with a real backing series — exported for the capability
- *  model (terpbot-intel-capability.ts); same content as intel.ts's
- *  SCHEMA_SERIES, kept in sync by construction (both derive reportable
- *  answers from the same series map). */
+/** All metrics backed by a DiaryUpdate schema column — the context
+ *  builder fills these series from logged data regardless of whether a
+ *  chat answer can normalize onto them. intel.ts's SCHEMA_SERIES
+ *  re-exports this map so both layers share one source of truth. */
+export const LOGGED_SERIES: Partial<Record<MetricId, keyof GrowContextView["series"]>> = {
+  temperature: "temperature",
+  humidity: "humidity",
+  ph: "ph",
+  ec: "ec",
+  height: "height",
+  vpd: "vpdEntered",
+  runoffPh: "runoffPh",
+  runoffEc: "runoffEc",
+  watering: "watering",
+  ppfd: "ppfd",
+  photoperiod: "photoperiod",
+}
+
+/** Metrics a chat-reported value can actually land on — the subset of
+ *  LOGGED_SERIES whose units `accept()` can normalize unambiguously.
+ *  A pendingAsk outside this set (leafTemp, substrateMoisture, and the
+ *  logged-only watering/ppfd/photoperiod — the parser emits no units
+ *  for them) has no safe landing, so it must never persist: answers
+ *  would drop to `unresolved` forever and the bot would re-ask
+ *  endlessly. Logged diary data reaches the same series anyway. */
 export const SERIES_KEY: Partial<Record<MetricId, keyof GrowContextView["series"]>> = {
   temperature: "temperature",
   humidity: "humidity",
@@ -76,11 +100,6 @@ export const SERIES_KEY: Partial<Record<MetricId, keyof GrowContextView["series"
   runoffEc: "runoffEc",
 }
 
-/** Metrics a chat-reported value can actually land on — the SERIES_KEY
- *  set. A pendingAsk outside this set (leafTemp, ppfd, watering,
- *  substrateMoisture, photoperiod, …) has no series to receive an
- *  answer, so it must never be persisted: its answers would drop to
- *  `unresolved` forever and the bot would re-ask endlessly. */
 export const REPORTABLE_METRICS = new Set<MetricId>(Object.keys(SERIES_KEY) as MetricId[])
 
 const round1 = (v: number) => Math.round(v * 10) / 10

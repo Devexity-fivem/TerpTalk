@@ -25,7 +25,7 @@
 // ctx.setup.capabilities (canonical ids minted in intel-context.ts);
 // diary enums are declared facts. Neither ever becomes a diagnosis.
 
-import { REPORTABLE_METRICS, SERIES_KEY } from "@/lib/terpbot-intel-merge"
+import { LOGGED_SERIES, REPORTABLE_METRICS, SERIES_KEY } from "@/lib/terpbot-intel-merge"
 import type { GrowContextView, MetricId, NextStepId } from "@/lib/terpbot-intel-types"
 
 export type StepFeasibility =
@@ -76,11 +76,17 @@ export function stepCapability(ctx: GrowContextView, stepId: NextStepId): StepCa
     return { stepId, feasibility: "proven", basis: "intrinsic" }
   }
   const m = stepId as MetricId
-  if (!REPORTABLE_METRICS.has(m)) {
-    return { stepId, feasibility: "unreportable", basis: "none" }
-  }
   if (DWC_EXCLUDED.has(m) && isDwc(ctx.diary.mediumType)) {
     return { stepId, feasibility: "excluded", basis: "structural" }
+  }
+  // Logged diary data proves the metric even when chat answers can't
+  // normalize onto it (watering/ppfd/photoperiod are diary-form only).
+  const loggedKey = LOGGED_SERIES[m]
+  if (loggedKey && ctx.series[loggedKey].n > 0) {
+    return { stepId, feasibility: "proven", basis: "series" }
+  }
+  if (!REPORTABLE_METRICS.has(m)) {
+    return { stepId, feasibility: "unreportable", basis: "none" }
   }
   const key = SERIES_KEY[m]
   if (key && ctx.series[key].n > 0) {

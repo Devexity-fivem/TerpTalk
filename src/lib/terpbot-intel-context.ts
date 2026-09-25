@@ -48,13 +48,23 @@ type UpdateRow = {
   ph: number | null
   ec: number | null
   heightCm: number | null
+  wateringLiters: number | null
+  ppfd: number | null
+  photoperiodHours: number | null
+  runoffPh: number | null
+  runoffEc: number | null
+  nightTemperature: number | null
+  substrateTemperature: number | null
+  co2Ppm: number | null
 }
 
 // Symptoms reported in update text count as evidence only while recent
 // — a yellowing report from 40 days ago is history, not a live signal.
 export const OBSERVATION_MAX_AGE_DAYS = 21
 
-type SeriesField = "temperature" | "humidity" | "vpd" | "ph" | "ec" | "heightCm"
+type SeriesField =
+  | "temperature" | "humidity" | "vpd" | "ph" | "ec" | "heightCm"
+  | "wateringLiters" | "ppfd" | "photoperiodHours" | "runoffPh" | "runoffEc"
 
 function buildSeries(rows: UpdateRow[], field: SeriesField, epsKey: string, now: number): IntelSeries {
   const points: MetricPoint[] = []
@@ -121,6 +131,9 @@ export function emptyContext(now: number, stage = "UNKNOWN"): GrowContextView {
       vpdComputed: emptySeries(),
       runoffPh: emptySeries(),
       runoffEc: emptySeries(),
+      watering: emptySeries(),
+      ppfd: emptySeries(),
+      photoperiod: emptySeries(),
     },
     vpdDivergence: null,
     missing: ["temperature", "humidity", "ph", "ec", "height", "vpd"],
@@ -223,7 +236,9 @@ export async function buildGrowContext(
       select: {
         id: true, createdAt: true, stage: true, content: true, feeding: true,
         temperature: true, humidity: true, vpd: true, ph: true, ec: true,
-        heightCm: true,
+        heightCm: true, wateringLiters: true, ppfd: true, photoperiodHours: true,
+        runoffPh: true, runoffEc: true,
+        nightTemperature: true, substrateTemperature: true, co2Ppm: true,
       },
     }),
     // True start of the current stage: the newest update at a different
@@ -272,27 +287,33 @@ export async function buildGrowContext(
       }
       return mkSeries(points, METRIC_EPSILON.vpd)
     })(),
-    // Runoff metrics have no schema columns — they come out of `feeding`
-    // (and `content`) free text via the grow parser. Convention: runoff
-    // EC only counts when the unit is mS/cm or unstated with a plausible
-    // mS/cm value (≤6) — ppm is rejected, never converted. When one row
-    // yields several values for a metric, the first by span wins.
+    // Structured runoff columns win when present; the free-text parse of
+    // `feeding`/`content` remains the fallback for updates written before
+    // the columns existed (and for growers who still log it in prose).
+    // Convention for the fallback: runoff EC only counts when the unit is
+    // mS/cm or unstated with a plausible mS/cm value (≤6) — ppm is
+    // rejected, never converted. First value by span wins per row.
     runoffPh: (() => {
       const points: MetricPoint[] = []
       rows.forEach((u, i) => {
-        const m = runoffMeasurement([parsedRows[i].feeding, parsedRows[i].content], "runoffPh")
-        if (m != null) points.push({ t: u.createdAt.getTime(), v: m })
+        const v = u.runoffPh ?? runoffMeasurement([parsedRows[i].feeding, parsedRows[i].content], "runoffPh")
+        if (v != null) points.push({ t: u.createdAt.getTime(), v })
       })
       return mkSeries(points, METRIC_EPSILON.ph)
     })(),
     runoffEc: (() => {
       const points: MetricPoint[] = []
       rows.forEach((u, i) => {
-        const m = runoffMeasurement([parsedRows[i].feeding, parsedRows[i].content], "runoffEc")
-        if (m != null) points.push({ t: u.createdAt.getTime(), v: m })
+        const v = u.runoffEc ?? runoffMeasurement([parsedRows[i].feeding, parsedRows[i].content], "runoffEc")
+        if (v != null) points.push({ t: u.createdAt.getTime(), v })
       })
       return mkSeries(points, METRIC_EPSILON.ec)
     })(),
+    // Schema-backed metrics TerpBot could already ask about but never
+    // store — now logged data flows into the same series machinery.
+    watering: buildSeries(rows, "wateringLiters", "watering", now),
+    ppfd: buildSeries(rows, "ppfd", "ppfd", now),
+    photoperiod: buildSeries(rows, "photoperiodHours", "photoperiod", now),
   }
 
   // Personal baselines — logged points only (session reports never
@@ -303,6 +324,7 @@ export async function buildGrowContext(
     ["temperature", "temperature"], ["humidity", "humidity"], ["ph", "ph"],
     ["ec", "ec"], ["height", "height"], ["vpdComputed", "vpd"],
     ["runoffPh", "runoffPh"], ["runoffEc", "runoffEc"],
+    ["watering", "watering"], ["ppfd", "ppfd"], ["photoperiod", "photoperiod"],
   ] as [keyof typeof series, MetricId][]) {
     const b = buildMetricBaseline(series[key].points, now)
     if (b.tier !== "insufficient") baselines[metric] = b
@@ -320,7 +342,11 @@ export async function buildGrowContext(
 
   const envCoverage = rows.length
     ? rows.filter(
-        (u) => u.temperature != null || u.humidity != null || u.vpd != null || u.ph != null || u.ec != null
+        (u) =>
+          u.temperature != null || u.humidity != null || u.vpd != null || u.ph != null || u.ec != null ||
+          u.nightTemperature != null || u.substrateTemperature != null || u.co2Ppm != null ||
+          u.wateringLiters != null || u.ppfd != null || u.photoperiodHours != null ||
+          u.runoffPh != null || u.runoffEc != null
       ).length / rows.length
     : 0
 

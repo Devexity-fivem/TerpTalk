@@ -348,6 +348,9 @@ const GROW_DIARY_SELECT = {
     select: {
       title: true, stage: true, createdAt: true,
       temperature: true, humidity: true, vpd: true, ph: true, ec: true,
+      nightTemperature: true, substrateTemperature: true, co2Ppm: true,
+      wateringLiters: true, ppfd: true, photoperiodHours: true,
+      runoffPh: true, runoffEc: true,
       _count: { select: { images: true } },
     },
   },
@@ -378,6 +381,14 @@ type GrowDiaryRow = {
     vpd: number | null
     ph: number | null
     ec: number | null
+    nightTemperature: number | null
+    substrateTemperature: number | null
+    co2Ppm: number | null
+    wateringLiters: number | null
+    ppfd: number | null
+    photoperiodHours: number | null
+    runoffPh: number | null
+    runoffEc: number | null
     _count: { images: number }
   }[]
 }
@@ -414,10 +425,18 @@ function relAge(d: Date): string {
 function envReadingsLine(u: GrowDiaryRow["updates"][number]): string | null {
   const parts: string[] = []
   if (u.temperature != null) parts.push(`${u.temperature}°`)
+  if (u.nightTemperature != null) parts.push(`${u.nightTemperature}°F night`)
   if (u.humidity != null) parts.push(`${u.humidity}% RH`)
   if (u.vpd != null) parts.push(`VPD ${u.vpd}`)
+  if (u.co2Ppm != null) parts.push(`CO₂ ${u.co2Ppm}ppm`)
+  if (u.substrateTemperature != null) parts.push(`substrate ${u.substrateTemperature}°F`)
   if (u.ph != null) parts.push(`pH ${u.ph}`)
   if (u.ec != null) parts.push(`EC ${u.ec}`)
+  if (u.runoffPh != null) parts.push(`runoff pH ${u.runoffPh}`)
+  if (u.runoffEc != null) parts.push(`runoff EC ${u.runoffEc}`)
+  if (u.wateringLiters != null) parts.push(`${u.wateringLiters}L water`)
+  if (u.ppfd != null) parts.push(`PPFD ${u.ppfd}`)
+  if (u.photoperiodHours != null) parts.push(`${u.photoperiodHours}h photoperiod`)
   return parts.length ? parts.join(" · ") : null
 }
 
@@ -789,6 +808,14 @@ async function handle(name: string, ctx: BotCommandCtx): Promise<BotCommandResul
                 { vpd: { not: null } },
                 { ph: { not: null } },
                 { ec: { not: null } },
+                { nightTemperature: { not: null } },
+                { substrateTemperature: { not: null } },
+                { co2Ppm: { not: null } },
+                { wateringLiters: { not: null } },
+                { ppfd: { not: null } },
+                { photoperiodHours: { not: null } },
+                { runoffPh: { not: null } },
+                { runoffEc: { not: null } },
               ],
             },
           }),

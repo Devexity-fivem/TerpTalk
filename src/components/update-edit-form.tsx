@@ -28,6 +28,15 @@ export interface EditableUpdate {
   ph: number | null
   ec: number | null
   heightCm: number | null
+  nightTemperature: number | null
+  substrateTemperature: number | null
+  co2Ppm: number | null
+  wateringLiters: number | null
+  ppfd: number | null
+  photoperiodHours: number | null
+  runoffPh: number | null
+  runoffEc: number | null
+  lampDistanceCm: number | null
   feeding: string | null
   training: string | null
   images: { id: string; url: string; caption: string | null }[]
@@ -65,6 +74,15 @@ export default function UpdateEditSection({ update, day, dateLabel, edited }: Up
     ph: num(update.ph),
     ec: num(update.ec),
     heightCm: num(update.heightCm),
+    nightTemperature: num(update.nightTemperature),
+    substrateTemperature: num(update.substrateTemperature),
+    co2Ppm: num(update.co2Ppm),
+    wateringLiters: num(update.wateringLiters),
+    ppfd: num(update.ppfd),
+    photoperiodHours: num(update.photoperiodHours),
+    runoffPh: num(update.runoffPh),
+    runoffEc: num(update.runoffEc),
+    lampDistanceCm: num(update.lampDistanceCm),
     feeding: update.feeding ?? "",
     training: update.training ?? "",
   })
@@ -104,6 +122,15 @@ export default function UpdateEditSection({ update, day, dateLabel, edited }: Up
           ph: formData.ph ? parseFloat(formData.ph) : null,
           ec: formData.ec ? parseFloat(formData.ec) : null,
           heightCm: formData.heightCm ? parseFloat(formData.heightCm) : null,
+          nightTemperature: formData.nightTemperature ? parseFloat(formData.nightTemperature) : null,
+          substrateTemperature: formData.substrateTemperature ? parseFloat(formData.substrateTemperature) : null,
+          co2Ppm: formData.co2Ppm ? parseFloat(formData.co2Ppm) : null,
+          wateringLiters: formData.wateringLiters ? parseFloat(formData.wateringLiters) : null,
+          ppfd: formData.ppfd ? parseFloat(formData.ppfd) : null,
+          photoperiodHours: formData.photoperiodHours ? parseFloat(formData.photoperiodHours) : null,
+          runoffPh: formData.runoffPh ? parseFloat(formData.runoffPh) : null,
+          runoffEc: formData.runoffEc ? parseFloat(formData.runoffEc) : null,
+          lampDistanceCm: formData.lampDistanceCm ? parseFloat(formData.lampDistanceCm) : null,
           keepImageIds: kept.map((i) => i.id),
           images: newPhotos,
         }),
@@ -128,7 +155,10 @@ export default function UpdateEditSection({ update, day, dateLabel, edited }: Up
   // Derive visual event type chips from the update data
   const eventChips: { label: string; color: string }[] = []
   if (update.images.length > 0) eventChips.push({ label: "Photo", color: "text-primary bg-primary/10" })
-  if (update.heightCm != null || update.temperature != null || update.humidity != null || update.ph != null || update.ec != null)
+  if (update.heightCm != null || update.temperature != null || update.humidity != null || update.ph != null || update.ec != null ||
+      update.nightTemperature != null || update.substrateTemperature != null || update.co2Ppm != null ||
+      update.wateringLiters != null || update.ppfd != null || update.photoperiodHours != null ||
+      update.runoffPh != null || update.runoffEc != null || update.lampDistanceCm != null)
     eventChips.push({ label: "Measurement", color: "text-foreground bg-secondary" })
   if (update.training) eventChips.push({ label: "Training", color: "text-warning bg-warning/10" })
   if (update.feeding) eventChips.push({ label: "Feeding", color: "text-success bg-success/10" })
@@ -307,36 +337,96 @@ export default function UpdateEditSection({ update, day, dateLabel, edited }: Up
               Environment &amp; notes (optional)
             </summary>
             <div className="px-4 pb-4 space-y-4">
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2">
-                <div>
-                  <label className="block text-xs font-medium mb-1">Temp (°F)</label>
-                  <input type="number" inputMode="decimal" step="0.1" value={formData.temperature}
-                    onChange={(e) => setFormData({ ...formData, temperature: e.target.value })} className={envInput} placeholder="75" />
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">Environment</p>
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2">
+                  <div>
+                    <label className="block text-xs font-medium mb-1">Day temp (°F)</label>
+                    <input type="number" inputMode="decimal" step="0.1" value={formData.temperature}
+                      onChange={(e) => setFormData({ ...formData, temperature: e.target.value })} className={envInput} placeholder="75" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium mb-1">Night temp (°F)</label>
+                    <input type="number" inputMode="decimal" step="0.1" min="32" max="122" value={formData.nightTemperature}
+                      onChange={(e) => setFormData({ ...formData, nightTemperature: e.target.value })} className={envInput} placeholder="65" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium mb-1">Humidity (%)</label>
+                    <input type="number" inputMode="decimal" step="0.1" value={formData.humidity}
+                      onChange={(e) => setFormData({ ...formData, humidity: e.target.value })} className={envInput} placeholder="50" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium mb-1">VPD (kPa)</label>
+                    <input type="number" inputMode="decimal" step="0.01" value={formData.vpd}
+                      onChange={(e) => setFormData({ ...formData, vpd: e.target.value })} className={envInput} placeholder="1.2" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium mb-1">CO₂ (ppm)</label>
+                    <input type="number" inputMode="decimal" step="10" min="300" max="2500" value={formData.co2Ppm}
+                      onChange={(e) => setFormData({ ...formData, co2Ppm: e.target.value })} className={envInput} placeholder="420" />
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-xs font-medium mb-1">Humidity (%)</label>
-                  <input type="number" inputMode="decimal" step="0.1" value={formData.humidity}
-                    onChange={(e) => setFormData({ ...formData, humidity: e.target.value })} className={envInput} placeholder="50" />
+              </div>
+
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">Root zone &amp; feeding</p>
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2">
+                  <div>
+                    <label className="block text-xs font-medium mb-1">Substrate temp (°F)</label>
+                    <input type="number" inputMode="decimal" step="0.1" min="32" max="122" value={formData.substrateTemperature}
+                      onChange={(e) => setFormData({ ...formData, substrateTemperature: e.target.value })} className={envInput} placeholder="70" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium mb-1">pH</label>
+                    <input type="number" inputMode="decimal" step="0.1" value={formData.ph}
+                      onChange={(e) => setFormData({ ...formData, ph: e.target.value })} className={envInput} placeholder="6.5" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium mb-1">EC (mS/cm)</label>
+                    <input type="number" inputMode="decimal" step="0.1" value={formData.ec}
+                      onChange={(e) => setFormData({ ...formData, ec: e.target.value })} className={envInput} placeholder="1.5" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium mb-1">Runoff pH</label>
+                    <input type="number" inputMode="decimal" step="0.1" min="3" max="10" value={formData.runoffPh}
+                      onChange={(e) => setFormData({ ...formData, runoffPh: e.target.value })} className={envInput} placeholder="6.2" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium mb-1">Runoff EC (mS/cm)</label>
+                    <input type="number" inputMode="decimal" step="0.1" min="0" max="10" value={formData.runoffEc}
+                      onChange={(e) => setFormData({ ...formData, runoffEc: e.target.value })} className={envInput} placeholder="2.1" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium mb-1">Water (L)</label>
+                    <input type="number" inputMode="decimal" step="0.1" min="0" max="50" value={formData.wateringLiters}
+                      onChange={(e) => setFormData({ ...formData, wateringLiters: e.target.value })} className={envInput} placeholder="2" />
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-xs font-medium mb-1">VPD</label>
-                  <input type="number" inputMode="decimal" step="0.01" value={formData.vpd}
-                    onChange={(e) => setFormData({ ...formData, vpd: e.target.value })} className={envInput} placeholder="1.2" />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium mb-1">pH</label>
-                  <input type="number" inputMode="decimal" step="0.1" value={formData.ph}
-                    onChange={(e) => setFormData({ ...formData, ph: e.target.value })} className={envInput} placeholder="6.5" />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium mb-1">EC</label>
-                  <input type="number" inputMode="decimal" step="0.1" value={formData.ec}
-                    onChange={(e) => setFormData({ ...formData, ec: e.target.value })} className={envInput} placeholder="1.5" />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium mb-1">Height (cm)</label>
-                  <input type="number" inputMode="decimal" step="0.5" min="0" value={formData.heightCm}
-                    onChange={(e) => setFormData({ ...formData, heightCm: e.target.value })} className={envInput} placeholder="45" />
+              </div>
+
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">Lighting &amp; plant</p>
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+                  <div>
+                    <label className="block text-xs font-medium mb-1">PPFD (µmol/m²/s)</label>
+                    <input type="number" inputMode="decimal" step="10" min="0" max="2500" value={formData.ppfd}
+                      onChange={(e) => setFormData({ ...formData, ppfd: e.target.value })} className={envInput} placeholder="600" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium mb-1">Photoperiod (h)</label>
+                    <input type="number" inputMode="decimal" step="0.5" min="0" max="24" value={formData.photoperiodHours}
+                      onChange={(e) => setFormData({ ...formData, photoperiodHours: e.target.value })} className={envInput} placeholder="18" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium mb-1">Lamp distance (cm)</label>
+                    <input type="number" inputMode="decimal" step="1" min="5" max="300" value={formData.lampDistanceCm}
+                      onChange={(e) => setFormData({ ...formData, lampDistanceCm: e.target.value })} className={envInput} placeholder="45" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium mb-1">Height (cm)</label>
+                    <input type="number" inputMode="decimal" step="0.5" min="0" value={formData.heightCm}
+                      onChange={(e) => setFormData({ ...formData, heightCm: e.target.value })} className={envInput} placeholder="45" />
+                  </div>
                 </div>
               </div>
               <div className="grid md:grid-cols-2 gap-4">
@@ -365,7 +455,12 @@ export default function UpdateEditSection({ update, day, dateLabel, edited }: Up
           <div className="flex justify-end gap-2">
             <button
               type="button"
-              onClick={() => { setEditing(false); setError(""); setNewPhotos([]); setKept(update.images) }}
+              onClick={() => {
+                setEditing(false)
+                setError("")
+                setNewPhotos([])
+                setKept(update.images)
+              }}
               className="px-4 py-2 border border-border rounded-lg hover:bg-secondary transition-colors text-sm min-h-11"
             >
               Cancel
@@ -394,12 +489,20 @@ export default function UpdateEditSection({ update, day, dateLabel, edited }: Up
 
           <p className="text-muted-foreground my-4 whitespace-pre-wrap break-words">{update.content}</p>
 
-          {(update.temperature != null || update.humidity != null || update.vpd != null || update.ph != null || update.ec != null || update.heightCm != null) && (
+          {(update.temperature != null || update.humidity != null || update.vpd != null || update.ph != null || update.ec != null || update.heightCm != null ||
+            update.nightTemperature != null || update.substrateTemperature != null || update.co2Ppm != null || update.wateringLiters != null ||
+            update.ppfd != null || update.photoperiodHours != null || update.runoffPh != null || update.runoffEc != null || update.lampDistanceCm != null) && (
             <div className="grid grid-cols-3 sm:grid-cols-6 gap-3 sm:gap-4 mb-4 p-4 bg-secondary/50 rounded-xl">
               {update.temperature != null && (
                 <div className="text-center">
-                  <div className="text-xs text-muted-foreground">Temp</div>
+                  <div className="text-xs text-muted-foreground">Day temp</div>
                   <div className="font-semibold">{update.temperature}°F</div>
+                </div>
+              )}
+              {update.nightTemperature != null && (
+                <div className="text-center">
+                  <div className="text-xs text-muted-foreground">Night temp</div>
+                  <div className="font-semibold">{update.nightTemperature}°F</div>
                 </div>
               )}
               {update.humidity != null && (
@@ -414,6 +517,18 @@ export default function UpdateEditSection({ update, day, dateLabel, edited }: Up
                   <div className="font-semibold">{update.vpd}</div>
                 </div>
               )}
+              {update.co2Ppm != null && (
+                <div className="text-center">
+                  <div className="text-xs text-muted-foreground">CO₂</div>
+                  <div className="font-semibold">{update.co2Ppm}ppm</div>
+                </div>
+              )}
+              {update.substrateTemperature != null && (
+                <div className="text-center">
+                  <div className="text-xs text-muted-foreground">Substrate</div>
+                  <div className="font-semibold">{update.substrateTemperature}°F</div>
+                </div>
+              )}
               {update.ph != null && (
                 <div className="text-center">
                   <div className="text-xs text-muted-foreground">pH</div>
@@ -424,6 +539,42 @@ export default function UpdateEditSection({ update, day, dateLabel, edited }: Up
                 <div className="text-center">
                   <div className="text-xs text-muted-foreground">EC</div>
                   <div className="font-semibold">{update.ec}</div>
+                </div>
+              )}
+              {update.runoffPh != null && (
+                <div className="text-center">
+                  <div className="text-xs text-muted-foreground">Runoff pH</div>
+                  <div className="font-semibold">{update.runoffPh}</div>
+                </div>
+              )}
+              {update.runoffEc != null && (
+                <div className="text-center">
+                  <div className="text-xs text-muted-foreground">Runoff EC</div>
+                  <div className="font-semibold">{update.runoffEc}</div>
+                </div>
+              )}
+              {update.wateringLiters != null && (
+                <div className="text-center">
+                  <div className="text-xs text-muted-foreground">Water</div>
+                  <div className="font-semibold">{update.wateringLiters}L</div>
+                </div>
+              )}
+              {update.ppfd != null && (
+                <div className="text-center">
+                  <div className="text-xs text-muted-foreground">PPFD</div>
+                  <div className="font-semibold">{update.ppfd}</div>
+                </div>
+              )}
+              {update.photoperiodHours != null && (
+                <div className="text-center">
+                  <div className="text-xs text-muted-foreground">Photoperiod</div>
+                  <div className="font-semibold">{update.photoperiodHours}h</div>
+                </div>
+              )}
+              {update.lampDistanceCm != null && (
+                <div className="text-center">
+                  <div className="text-xs text-muted-foreground">Lamp dist.</div>
+                  <div className="font-semibold">{update.lampDistanceCm}cm</div>
                 </div>
               )}
               {update.heightCm != null && (

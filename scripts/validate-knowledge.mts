@@ -42,6 +42,9 @@ const seriesFor = (stale: boolean): GrowContextView["series"] => ({
   vpdComputed: ser([1.0, 1.8, 0.8], 0.1, stale),
   runoffPh: ser([6.4, 5.2], 0.15, stale),
   runoffEc: ser([2.9, 3.4], 0.2, stale),
+  watering: ser([0.5, 2.5, 1.0], 0.5, stale),
+  ppfd: ser([200, 900, 450], 50, stale),
+  photoperiod: ser([24, 12, 18], 0.5, stale),
 })
 
 // Broad symptom coverage at varied locations — every observation-gated

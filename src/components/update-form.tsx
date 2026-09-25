@@ -69,6 +69,15 @@ export default function UpdateForm({ diaryId, userId, currentStage, currentDay, 
     ph: "",
     ec: "",
     heightCm: "",
+    nightTemperature: "",
+    substrateTemperature: "",
+    co2Ppm: "",
+    wateringLiters: "",
+    ppfd: "",
+    photoperiodHours: "",
+    runoffPh: "",
+    runoffEc: "",
+    lampDistanceCm: "",
     feeding: "",
     training: "",
   })
@@ -111,6 +120,9 @@ export default function UpdateForm({ diaryId, userId, currentStage, currentDay, 
           !formData.title && !formData.content && !formData.feeding && !formData.training &&
           !formData.temperature && !formData.humidity && !formData.vpd &&
           !formData.ph && !formData.ec && !formData.heightCm &&
+          !formData.nightTemperature && !formData.substrateTemperature && !formData.co2Ppm &&
+          !formData.wateringLiters && !formData.ppfd && !formData.photoperiodHours &&
+          !formData.runoffPh && !formData.runoffEc && !formData.lampDistanceCm &&
           formData.stage === currentStage
         if (untouched) { localStorage.removeItem(draftKey); return }
         const payload = JSON.stringify({ savedAt: Date.now(), fields: formData })
@@ -130,6 +142,9 @@ export default function UpdateForm({ diaryId, userId, currentStage, currentDay, 
     setFormData({
       title: "", content: "", stage: currentStage,
       temperature: "", humidity: "", vpd: "", ph: "", ec: "", heightCm: "",
+      nightTemperature: "", substrateTemperature: "", co2Ppm: "",
+      wateringLiters: "", ppfd: "", photoperiodHours: "",
+      runoffPh: "", runoffEc: "", lampDistanceCm: "",
       feeding: "", training: "",
     })
   }
@@ -175,6 +190,15 @@ export default function UpdateForm({ diaryId, userId, currentStage, currentDay, 
           ph: formData.ph ? parseFloat(formData.ph) : null,
           ec: formData.ec ? parseFloat(formData.ec) : null,
           heightCm: formData.heightCm ? parseFloat(formData.heightCm) : null,
+          nightTemperature: formData.nightTemperature ? parseFloat(formData.nightTemperature) : null,
+          substrateTemperature: formData.substrateTemperature ? parseFloat(formData.substrateTemperature) : null,
+          co2Ppm: formData.co2Ppm ? parseFloat(formData.co2Ppm) : null,
+          wateringLiters: formData.wateringLiters ? parseFloat(formData.wateringLiters) : null,
+          ppfd: formData.ppfd ? parseFloat(formData.ppfd) : null,
+          photoperiodHours: formData.photoperiodHours ? parseFloat(formData.photoperiodHours) : null,
+          runoffPh: formData.runoffPh ? parseFloat(formData.runoffPh) : null,
+          runoffEc: formData.runoffEc ? parseFloat(formData.runoffEc) : null,
+          lampDistanceCm: formData.lampDistanceCm ? parseFloat(formData.lampDistanceCm) : null,
           images: photos,
         }),
       })
@@ -362,79 +386,223 @@ export default function UpdateForm({ diaryId, userId, currentStage, currentDay, 
               Environment &amp; notes (optional)
             </summary>
             <div className="px-4 pb-4 space-y-4">
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2">
-                <div>
-                  <label className="block text-xs font-medium mb-1">Temp (°F)</label>
-                  <input
-                    type="number"
-                    inputMode="decimal"
-                    step="0.1"
-                    value={formData.temperature}
-                    onChange={(e) => setFormData({ ...formData, temperature: e.target.value })}
-                    className={envInput}
-                    placeholder="75"
-                  />
+              {/* Grouped so a grower can log just the readings they took —
+                  every field stays optional. Units match storage: °F, cm. */}
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">Environment</p>
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2">
+                  <div>
+                    <label className="block text-xs font-medium mb-1">Day temp (°F)</label>
+                    <input
+                      type="number"
+                      inputMode="decimal"
+                      step="0.1"
+                      value={formData.temperature}
+                      onChange={(e) => setFormData({ ...formData, temperature: e.target.value })}
+                      className={envInput}
+                      placeholder="75"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium mb-1">Night temp (°F)</label>
+                    <input
+                      type="number"
+                      inputMode="decimal"
+                      step="0.1"
+                      min="32"
+                      max="122"
+                      value={formData.nightTemperature}
+                      onChange={(e) => setFormData({ ...formData, nightTemperature: e.target.value })}
+                      className={envInput}
+                      placeholder="65"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium mb-1">Humidity (%)</label>
+                    <input
+                      type="number"
+                      inputMode="decimal"
+                      step="0.1"
+                      value={formData.humidity}
+                      onChange={(e) => setFormData({ ...formData, humidity: e.target.value })}
+                      className={envInput}
+                      placeholder="50"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium mb-1">VPD (kPa)</label>
+                    <input
+                      type="number"
+                      inputMode="decimal"
+                      step="0.01"
+                      value={formData.vpd}
+                      onChange={(e) => setFormData({ ...formData, vpd: e.target.value })}
+                      className={envInput}
+                      placeholder="1.2"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium mb-1">CO₂ (ppm)</label>
+                    <input
+                      type="number"
+                      inputMode="decimal"
+                      step="10"
+                      min="300"
+                      max="2500"
+                      value={formData.co2Ppm}
+                      onChange={(e) => setFormData({ ...formData, co2Ppm: e.target.value })}
+                      className={envInput}
+                      placeholder="420"
+                    />
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-xs font-medium mb-1">Humidity (%)</label>
-                  <input
-                    type="number"
-                    inputMode="decimal"
-                    step="0.1"
-                    value={formData.humidity}
-                    onChange={(e) => setFormData({ ...formData, humidity: e.target.value })}
-                    className={envInput}
-                    placeholder="50"
-                  />
+              </div>
+
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">Root zone &amp; feeding</p>
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2">
+                  <div>
+                    <label className="block text-xs font-medium mb-1">Substrate temp (°F)</label>
+                    <input
+                      type="number"
+                      inputMode="decimal"
+                      step="0.1"
+                      min="32"
+                      max="122"
+                      value={formData.substrateTemperature}
+                      onChange={(e) => setFormData({ ...formData, substrateTemperature: e.target.value })}
+                      className={envInput}
+                      placeholder="70"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium mb-1">pH</label>
+                    <input
+                      type="number"
+                      inputMode="decimal"
+                      step="0.1"
+                      value={formData.ph}
+                      onChange={(e) => setFormData({ ...formData, ph: e.target.value })}
+                      className={envInput}
+                      placeholder="6.5"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium mb-1">EC (mS/cm)</label>
+                    <input
+                      type="number"
+                      inputMode="decimal"
+                      step="0.1"
+                      value={formData.ec}
+                      onChange={(e) => setFormData({ ...formData, ec: e.target.value })}
+                      className={envInput}
+                      placeholder="1.5"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium mb-1">Runoff pH</label>
+                    <input
+                      type="number"
+                      inputMode="decimal"
+                      step="0.1"
+                      min="3"
+                      max="10"
+                      value={formData.runoffPh}
+                      onChange={(e) => setFormData({ ...formData, runoffPh: e.target.value })}
+                      className={envInput}
+                      placeholder="6.2"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium mb-1">Runoff EC (mS/cm)</label>
+                    <input
+                      type="number"
+                      inputMode="decimal"
+                      step="0.1"
+                      min="0"
+                      max="10"
+                      value={formData.runoffEc}
+                      onChange={(e) => setFormData({ ...formData, runoffEc: e.target.value })}
+                      className={envInput}
+                      placeholder="2.1"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium mb-1">Water (L)</label>
+                    <input
+                      type="number"
+                      inputMode="decimal"
+                      step="0.1"
+                      min="0"
+                      max="50"
+                      value={formData.wateringLiters}
+                      onChange={(e) => setFormData({ ...formData, wateringLiters: e.target.value })}
+                      className={envInput}
+                      placeholder="2"
+                    />
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-xs font-medium mb-1">VPD</label>
-                  <input
-                    type="number"
-                    inputMode="decimal"
-                    step="0.01"
-                    value={formData.vpd}
-                    onChange={(e) => setFormData({ ...formData, vpd: e.target.value })}
-                    className={envInput}
-                    placeholder="1.2"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium mb-1">pH</label>
-                  <input
-                    type="number"
-                    inputMode="decimal"
-                    step="0.1"
-                    value={formData.ph}
-                    onChange={(e) => setFormData({ ...formData, ph: e.target.value })}
-                    className={envInput}
-                    placeholder="6.5"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium mb-1">EC</label>
-                  <input
-                    type="number"
-                    inputMode="decimal"
-                    step="0.1"
-                    value={formData.ec}
-                    onChange={(e) => setFormData({ ...formData, ec: e.target.value })}
-                    className={envInput}
-                    placeholder="1.5"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium mb-1">Height (cm)</label>
-                  <input
-                    type="number"
-                    inputMode="decimal"
-                    step="0.5"
-                    min="0"
-                    value={formData.heightCm}
-                    onChange={(e) => setFormData({ ...formData, heightCm: e.target.value })}
-                    className={envInput}
-                    placeholder="45"
-                  />
+
+              </div>
+
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">Lighting &amp; plant</p>
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+                  <div>
+                    <label className="block text-xs font-medium mb-1">PPFD (µmol/m²/s)</label>
+                    <input
+                      type="number"
+                      inputMode="decimal"
+                      step="10"
+                      min="0"
+                      max="2500"
+                      value={formData.ppfd}
+                      onChange={(e) => setFormData({ ...formData, ppfd: e.target.value })}
+                      className={envInput}
+                      placeholder="600"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium mb-1">Photoperiod (h)</label>
+                    <input
+                      type="number"
+                      inputMode="decimal"
+                      step="0.5"
+                      min="0"
+                      max="24"
+                      value={formData.photoperiodHours}
+                      onChange={(e) => setFormData({ ...formData, photoperiodHours: e.target.value })}
+                      className={envInput}
+                      placeholder="18"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium mb-1">Lamp distance (cm)</label>
+                    <input
+                      type="number"
+                      inputMode="decimal"
+                      step="1"
+                      min="5"
+                      max="300"
+                      value={formData.lampDistanceCm}
+                      onChange={(e) => setFormData({ ...formData, lampDistanceCm: e.target.value })}
+                      className={envInput}
+                      placeholder="45"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium mb-1">Height (cm)</label>
+                    <input
+                      type="number"
+                      inputMode="decimal"
+                      step="0.5"
+                      min="0"
+                      value={formData.heightCm}
+                      onChange={(e) => setFormData({ ...formData, heightCm: e.target.value })}
+                      className={envInput}
+                      placeholder="45"
+                    />
+                  </div>
                 </div>
               </div>
 

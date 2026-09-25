@@ -29,6 +29,15 @@ export const UPDATE_EDITABLE_FIELDS = new Set([
   "ph",
   "ec",
   "heightCm",
+  "nightTemperature",
+  "substrateTemperature",
+  "co2Ppm",
+  "wateringLiters",
+  "ppfd",
+  "photoperiodHours",
+  "runoffPh",
+  "runoffEc",
+  "lampDistanceCm",
   "feeding",
   "training",
   "keepImageIds",
@@ -48,7 +57,9 @@ export const UPDATE_STAGES = new Set([
   "COMPLETED",
 ])
 
-/** [field, min, max] sanity bounds — identical to creation. */
+/** [field, min, max] sanity bounds — identical to creation.
+ *  Temperatures are °F (the product's stored unit), distances cm,
+ *  EC mS/cm, VPD kPa, watering liters, photoperiod hours. */
 export const UPDATE_NUMERIC_RANGES = [
   ["temperature", -40, 140],
   ["humidity", 0, 100],
@@ -56,6 +67,16 @@ export const UPDATE_NUMERIC_RANGES = [
   ["ph", 0, 14],
   ["ec", 0, 15],
   ["heightCm", 0.1, 500],
+  // Approved band 0–50°C expressed in the stored unit (°F): 32–122°F.
+  ["nightTemperature", 32, 122],
+  ["substrateTemperature", 32, 122],
+  ["co2Ppm", 300, 2500],
+  ["wateringLiters", 0, 50],
+  ["ppfd", 0, 2500],
+  ["photoperiodHours", 0, 24],
+  ["runoffPh", 3, 10],
+  ["runoffEc", 0, 10],
+  ["lampDistanceCm", 5, 300],
   ["dayNumber", 0, 1000],
   ["weekNumber", 0, 150],
 ] as const
@@ -120,8 +141,8 @@ export function parseUpdatePatch(body: unknown): UpdatePatchResult {
     if (field === "dayNumber" || field === "weekNumber") continue // derived, never editable
     if (!(field in b)) continue
     const v = b[field]
-    if (v !== null && typeof v !== "number") return bad(`${field} must be a number`)
-    if (typeof v === "number" && (v < lo || v > hi)) return bad(`${field} is out of range`)
+    if (v !== null && (typeof v !== "number" || !Number.isFinite(v))) return bad(`${field} must be a number`)
+    if (typeof v === "number" && Number.isFinite(v) && (v < lo || v > hi)) return bad(`${field} is out of range`)
     data[field] = v
   }
   // Nullable free-text notes — same ≤300 cleanup as creation.

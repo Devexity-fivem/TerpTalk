@@ -111,6 +111,49 @@ const main = async () => {
     })
     r.status === 400 ? pass("invalid stage rejected") : fail("stage validation", r.status)
 
+    // Structured environmental observations — the full Slice A set persists on create
+    r = await callApi("/api/diaries/updates", {
+      method: "POST",
+      body: {
+        diaryId, title: M("env"), content: "structured env update", stage: "FLOWER",
+        nightTemperature: 64, substrateTemperature: 71, co2Ppm: 900,
+        wateringLiters: 1.5, ppfd: 720, photoperiodHours: 12,
+        runoffPh: 6.1, runoffEc: 2.4, lampDistanceCm: 38,
+      },
+      cookie: ownerCookie,
+    })
+    const envUpd = r.data?.update
+    r.status === 201 && envUpd?.ppfd === 720 && envUpd?.runoffPh === 6.1 && envUpd?.photoperiodHours === 12
+      ? pass("structured env observations persist on create")
+      : fail("env obs create", { s: r.status, d: r.data })
+
+    r = await callApi("/api/diaries/updates", {
+      method: "POST",
+      body: { diaryId, title: "x", content: "x", photoperiodHours: 25 },
+      cookie: ownerCookie,
+    })
+    r.status === 400 ? pass("photoperiod >24h rejected") : fail("photoperiod bound", r.status)
+
+    r = await callApi("/api/diaries/updates", {
+      method: "POST",
+      body: { diaryId, title: "x", content: "x", ppfd: "bright" },
+      cookie: ownerCookie,
+    })
+    r.status === 400 ? pass("non-numeric env value rejected") : fail("env type check", r.status)
+
+    // PATCH — owner can add a metric and clear another
+    r = await callApi("/api/diaries/updates", {
+      method: "PATCH",
+      body: { id: envUpd.id, ppfd: 800, runoffEc: null },
+      cookie: ownerCookie,
+    })
+    const envRow = r.status === 200
+      ? await prisma.diaryUpdate.findUnique({ where: { id: envUpd.id }, select: { ppfd: true, runoffEc: true } })
+      : null
+    envRow?.ppfd === 800 && envRow?.runoffEc === null
+      ? pass("PATCH edits and clears env fields")
+      : fail("env PATCH", { s: r.status, row: envRow })
+
     // Stage propagation: the FLOWER update should have moved the diary stage
     const diaryRow = await prisma.growDiary.findUnique({ where: { id: diaryId }, select: { stage: true } })
     diaryRow?.stage === "FLOWER" ? pass("explicit stage propagates to diary") : fail("stage propagation", diaryRow?.stage)

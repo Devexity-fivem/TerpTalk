@@ -36,6 +36,7 @@
 import { countExcursions, dewPointFromTempRh, excursionEpisodes } from "@/lib/terpbot-intel-calc"
 import { episodesFromObservations } from "@/lib/terpbot-intel-episodes"
 import { feasibilityBonus, stepCapability } from "@/lib/terpbot-intel-capability"
+import { LOGGED_SERIES } from "@/lib/terpbot-intel-merge"
 import { feedsForSymptom } from "@/lib/terpbot-nl-parse"
 import { CANDIDATES, SOURCES } from "@/lib/terpbot-intel-knowledge"
 import {
@@ -3055,16 +3056,10 @@ export function evaluateContext(ctx: GrowContextView): Diagnosis {
 // re-measuring, so it scores through a separate bypass pass.
 // Tie-break: MEASUREMENT_PRIORITY order, then id — a total order.
 
-export const SCHEMA_SERIES: Partial<Record<MetricId, keyof GrowContextView["series"]>> = {
-  temperature: "temperature",
-  humidity: "humidity",
-  ph: "ph",
-  ec: "ec",
-  height: "height",
-  vpd: "vpdEntered",
-  runoffPh: "runoffPh",
-  runoffEc: "runoffEc",
-}
+/** MetricId → the context series its logged data lands on. Single
+ *  source of truth lives in terpbot-intel-merge (LOGGED_SERIES); this
+ *  alias keeps the long-standing public name. */
+export const SCHEMA_SERIES = LOGGED_SERIES
 
 export function measurementAvailable(ctx: GrowContextView, m: MetricId): boolean {
   const key = SCHEMA_SERIES[m]

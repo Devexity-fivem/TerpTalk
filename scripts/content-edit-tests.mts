@@ -195,11 +195,14 @@ await check("update parser: every editable field + image controls accepted", () 
   const r = parseUpdatePatch({
     id: "u1", title: "T", content: "c", stage: "FLOWER",
     temperature: 72, humidity: 55, vpd: 1.1, ph: 6.2, ec: 1.8, heightCm: 40,
+    nightTemperature: 64, substrateTemperature: 70, co2Ppm: 800,
+    wateringLiters: 1.5, ppfd: 650, photoperiodHours: 18,
+    runoffPh: 6.1, runoffEc: 2.2, lampDistanceCm: 40,
     feeding: "f", training: "t", keepImageIds: ["i1"], images: [],
   })
   assert.ok(r.ok, "all fields should parse")
   assert.equal(r.id, "u1")
-  assert.equal(Object.keys(r.data).length, 11, "id/keepImageIds/images never reach data")
+  assert.equal(Object.keys(r.data).length, 20, "id/keepImageIds/images never reach data")
   assert.deepEqual(r.keepImageIds, ["i1"])
   assert.deepEqual(r.newImages, [])
 })
@@ -247,15 +250,50 @@ await check("update parser: numeric fields — ranges enforced, null clears", ()
   const ranges: [string, number, number][] = [
     ["temperature", -40, 140], ["humidity", 0, 100], ["vpd", 0, 6],
     ["ph", 0, 14], ["ec", 0, 15], ["heightCm", 0.1, 500],
+    ["nightTemperature", 32, 122], ["substrateTemperature", 32, 122],
+    ["co2Ppm", 300, 2500], ["wateringLiters", 0, 50],
+    ["ppfd", 0, 2500], ["photoperiodHours", 0, 24],
+    ["runoffPh", 3, 10], ["runoffEc", 0, 10], ["lampDistanceCm", 5, 300],
   ]
   for (const [f, lo, hi] of ranges) {
     assert.ok(!parseUpdatePatch({ [f]: "x" }).ok, `${f}: string rejects`)
     assert.ok(!parseUpdatePatch({ [f]: lo - 1 }).ok, `${f}: below range rejects`)
     assert.ok(!parseUpdatePatch({ [f]: hi + 1 }).ok, `${f}: above range rejects`)
+    assert.ok(!parseUpdatePatch({ [f]: NaN }).ok, `${f}: NaN rejects`)
+    assert.ok(!parseUpdatePatch({ [f]: Infinity }).ok, `${f}: Infinity rejects`)
+    assert.ok(!parseUpdatePatch({ [f]: -Infinity }).ok, `${f}: -Infinity rejects`)
     const r = parseUpdatePatch({ [f]: null })
     assert.ok(r.ok && r.data[f] === null, `${f}: null clears`)
     const ok = parseUpdatePatch({ [f]: (lo + hi) / 2 })
     assert.ok(ok.ok, `${f}: in-range accepted`)
+  }
+  // Boundary values land exactly on the limits — accepted, not clamped.
+  for (const [f, lo, hi] of ranges) {
+    assert.ok(parseUpdatePatch({ [f]: lo }).ok, `${f}: min bound accepted`)
+    assert.ok(parseUpdatePatch({ [f]: hi }).ok, `${f}: max bound accepted`)
+  }
+  // Approved Slice A bounds — explicit edge cases just inside/outside.
+  const edges: [string, number, boolean][] = [
+    ["wateringLiters", 0, true], ["wateringLiters", 50, true],
+    ["wateringLiters", -0.01, false], ["wateringLiters", 50.01, false],
+    ["ppfd", 0, true], ["ppfd", 2500, true],
+    ["ppfd", -1, false], ["ppfd", 2501, false],
+    ["runoffPh", 3, true], ["runoffPh", 10, true],
+    ["runoffPh", 2.99, false], ["runoffPh", 10.01, false],
+    ["runoffEc", 0, true], ["runoffEc", 10, true],
+    ["runoffEc", -0.01, false], ["runoffEc", 10.01, false],
+    ["lampDistanceCm", 5, true], ["lampDistanceCm", 300, true],
+    ["lampDistanceCm", 4.99, false], ["lampDistanceCm", 300.01, false],
+    ["nightTemperature", 32, true], ["nightTemperature", 122, true],
+    ["nightTemperature", 31.9, false], ["nightTemperature", 122.1, false],
+    ["co2Ppm", 300, true], ["co2Ppm", 2500, true],
+    ["co2Ppm", 299, false], ["co2Ppm", 2501, false],
+    ["photoperiodHours", 0, true], ["photoperiodHours", 24, true],
+    ["photoperiodHours", -0.5, false], ["photoperiodHours", 24.5, false],
+  ]
+  for (const [f, v, ok] of edges) {
+    const r = parseUpdatePatch({ [f]: v })
+    assert.equal(r.ok, ok, `${f}: ${v} should ${ok ? "accept" : "reject"}`)
   }
 })
 

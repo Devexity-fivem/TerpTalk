@@ -50,6 +50,15 @@ export async function POST(request: Request) {
       ph,
       ec,
       heightCm,
+      nightTemperature,
+      substrateTemperature,
+      co2Ppm,
+      wateringLiters,
+      ppfd,
+      photoperiodHours,
+      runoffPh,
+      runoffEc,
+      lampDistanceCm,
       feeding,
       training,
       images,
@@ -78,9 +87,9 @@ export async function POST(request: Request) {
     if (stage !== undefined && stage !== null && !UPDATE_STAGES.has(stage)) {
       return NextResponse.json({ error: "Invalid stage" }, { status: 400 })
     }
-    const numericValues: Record<string, unknown> = { dayNumber, weekNumber, temperature, humidity, vpd, ph, ec, heightCm }
+    const numericValues: Record<string, unknown> = { dayNumber, weekNumber, temperature, humidity, vpd, ph, ec, heightCm, nightTemperature, substrateTemperature, co2Ppm, wateringLiters, ppfd, photoperiodHours, runoffPh, runoffEc, lampDistanceCm }
     for (const n of Object.values(numericValues)) {
-      if (n !== undefined && n !== null && typeof n !== "number") {
+      if (n !== undefined && n !== null && (typeof n !== "number" || !Number.isFinite(n))) {
         return NextResponse.json({ error: "Numeric fields must be numbers" }, { status: 400 })
       }
     }
@@ -182,6 +191,15 @@ export async function POST(request: Request) {
           ph: typeof ph === "number" ? ph : null,
           ec: typeof ec === "number" ? ec : null,
           heightCm: typeof heightCm === "number" ? heightCm : null,
+          nightTemperature: typeof nightTemperature === "number" ? nightTemperature : null,
+          substrateTemperature: typeof substrateTemperature === "number" ? substrateTemperature : null,
+          co2Ppm: typeof co2Ppm === "number" ? co2Ppm : null,
+          wateringLiters: typeof wateringLiters === "number" ? wateringLiters : null,
+          ppfd: typeof ppfd === "number" ? ppfd : null,
+          photoperiodHours: typeof photoperiodHours === "number" ? photoperiodHours : null,
+          runoffPh: typeof runoffPh === "number" ? runoffPh : null,
+          runoffEc: typeof runoffEc === "number" ? runoffEc : null,
+          lampDistanceCm: typeof lampDistanceCm === "number" ? lampDistanceCm : null,
           feeding: cleanUpdateString(feeding, 300),
           training: cleanUpdateString(training, 300),
           ...(typeof experimentId === "string" && experimentId ? { experimentId } : {}),

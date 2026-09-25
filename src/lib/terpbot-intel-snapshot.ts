@@ -70,6 +70,9 @@ const READING_ORDER: { metric: MetricId; series: keyof GrowContextView["series"]
   { metric: "ec", series: "ec" },
   { metric: "runoffPh", series: "runoffPh" },
   { metric: "runoffEc", series: "runoffEc" },
+  { metric: "watering", series: "watering" },
+  { metric: "ppfd", series: "ppfd" },
+  { metric: "photoperiod", series: "photoperiod" },
   { metric: "height", series: "height" },
 ]
 

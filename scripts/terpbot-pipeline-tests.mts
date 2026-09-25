@@ -20,7 +20,7 @@ import { scanGrowAssists } from "@/lib/terpbot-assist-grow"
 import { getBotUserId, sanitizeEcho, announceStageTransition, purgeDiaryAnnouncements } from "@/lib/terpbot"
 import { runBotCommand } from "@/lib/terpbot-data"
 import { buildGrowContext } from "@/lib/terpbot-intel-context"
-import { evaluateContext } from "@/lib/terpbot-intel"
+import { evaluateContext, measurementAvailable } from "@/lib/terpbot-intel"
 import { parseTerpbotIntent } from "@/lib/terpbot-intents"
 import { loadSession, saveSession, sweepExpiredSessions } from "@/lib/terpbot-session"
 import { REPORTABLE_METRICS } from "@/lib/terpbot-intel-merge"
@@ -900,6 +900,47 @@ async function run() {
       assert.match(out, /Reported:.*yellowing/i, "reported symptoms surface as canonical labels")
       assert.ok(!out.includes("lower leaves yellowing a bit"), "raw diary text never echoes")
       assert.ok(out.length <= 1000, `checkin stays inside the chat cap (${out.length})`)
+
+      // Structured env columns: watering/ppfd/photoperiod land on real
+      // series that satisfy requiredInputs; structured runoff columns win
+      // over the legacy free-text parse, which still fills older rows.
+      const sdiary = await prisma.growDiary.create({
+        data: { title: `__tbp structured ${SUFFIX}`, description: "t", growType: "INDOOR", startDate: daysAgo(20), authorId: intel.id, stage: "VEGETATIVE" },
+      })
+      diaryIds.push(sdiary.id)
+      await prisma.diaryUpdate.create({
+        data: {
+          title: "e1", content: "x", stage: "VEGETATIVE", diaryId: sdiary.id, authorId: intel.id,
+          createdAt: daysAgo(8), ppfd: 620, photoperiodHours: 18, wateringLiters: 1.5,
+          runoffPh: 6.2, runoffEc: 2.3,
+          feeding: "runoff ph 5.5", // column (6.2) must win over the parsed text value
+        },
+      })
+      await prisma.diaryUpdate.create({
+        data: {
+          title: "e2", content: "x", stage: "VEGETATIVE", diaryId: sdiary.id, authorId: intel.id,
+          createdAt: daysAgo(3), feeding: "runoff ph 6.0", // text fallback still feeds the series
+        },
+      })
+      const sctx = await buildGrowContext(sdiary.id, { ownerId: intel.id, scope: "public" })
+      assert.ok(sctx, "context builds for structured-field diary")
+      assert.equal(sctx.series.ppfd.latest, 620, "ppfd column reaches the ppfd series")
+      assert.equal(sctx.series.photoperiod.latest, 18, "photoperiodHours reaches the photoperiod series")
+      assert.equal(sctx.series.watering.latest, 1.5, "wateringLiters reaches the watering series")
+      assert.equal(sctx.series.runoffPh.n, 2, "column + text fallback both feed the runoff series")
+      assert.equal(sctx.series.runoffPh.latest, 6.0, "text parse fills rows without a column value")
+      assert.equal(sctx.series.runoffPh.points[0].v, 6.2, "structured runoff column wins over text")
+      assert.equal(sctx.series.runoffEc.n, 1, "runoff EC comes only from the column")
+      assert.equal(sctx.series.runoffEc.latest, 2.3, "structured runoff EC value")
+      assert.ok(
+        measurementAvailable(sctx, "ppfd") && measurementAvailable(sctx, "watering") && measurementAvailable(sctx, "photoperiod"),
+        "new columns satisfy rule requiredInputs"
+      )
+      // Logged-only contract: the NL parser emits no units for these, so
+      // they stay non-reportable via chat — no re-ask loop, no dead ends.
+      for (const m of ["watering", "ppfd", "photoperiod"] as const) {
+        assert.ok(!REPORTABLE_METRICS.has(m), `${m} stays chat-unreportable`)
+      }
 
       // Privacy: a PRIVATE diary is invisible to the public-scope context
       // and to room output — but readable in owner scope for private paths.

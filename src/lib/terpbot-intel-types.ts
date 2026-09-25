@@ -55,6 +55,9 @@ export const METRIC_EPSILON: Record<string, number> = {
   ph: 0.15,
   ec: 0.2, // mS/cm
   height: 2, // cm
+  watering: 0.5, // L
+  ppfd: 50, // µmol/m²/s — canopy readings vary by tens
+  photoperiod: 0.5, // hours
 }
 
 // ── Sources / provenance ────────────────────────────────────────────
@@ -229,11 +232,17 @@ export interface GrowContextView {
     vpdEntered: IntelSeries
     /** VPD computed from temp+RH pairs — distinct from user-entered */
     vpdComputed: IntelSeries
-    /** runoff measurements — not schema columns; populated by the
-     *  context builder from parsed diary feeding/content text and by
-     *  session-reported points merged at query time */
+    /** runoff measurements — structured DiaryUpdate columns preferred,
+     *  falling back to parsed diary feeding/content text; session-reported
+     *  points still merge at query time */
     runoffPh: IntelSeries
     runoffEc: IntelSeries
+    /** liters applied per update — schema-backed (wateringLiters) */
+    watering: IntelSeries
+    /** µmol/m²/s at canopy — schema-backed (ppfd) */
+    ppfd: IntelSeries
+    /** lights-on hours per day — schema-backed (photoperiodHours) */
+    photoperiod: IntelSeries
   }
   /** latest entered−computed VPD difference, or null */
   vpdDivergence: number | null

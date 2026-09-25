@@ -47,6 +47,9 @@ const METRIC_ORDER: [MetricId, keyof GrowContextView["series"], string][] = [
   ["ec", "ec", ""],
   ["runoffPh", "runoffPh", ""],
   ["runoffEc", "runoffEc", ""],
+  ["watering", "watering", " L"],
+  ["ppfd", "ppfd", " µmol/m²/s"],
+  ["photoperiod", "photoperiod", "h"],
   ["height", "height", " cm"],
 ]
 
@@ -57,6 +60,9 @@ export const fmt = (metric: MetricId, v: number) =>
   : metric === "ph" || metric === "runoffPh" ? `pH ${v}`
   : metric === "ec" || metric === "runoffEc" ? `EC ${v}`
   : metric === "height" ? `${v} cm`
+  : metric === "watering" ? `${v} L`
+  : metric === "ppfd" ? `${v} µmol/m²/s`
+  : metric === "photoperiod" ? `${v}h`
   : `${v}`
 
 export const metricLabel = (m: MetricId) => MEASUREMENT_INFO[m]?.label ?? m

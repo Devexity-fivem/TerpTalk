@@ -431,12 +431,21 @@ model DiaryUpdate {
   dayNumber    Int?
   weekNumber   Int?
   stage        String   // GERMINATION, SEEDLING, VEGETATIVE, FLOWER, HARVEST, DRYING, CURING, COMPLETED
-  temperature  Float?
+  temperature  Float?   // day air temp, °F
   humidity     Float?
-  vpd          Float?
+  vpd          Float?   // entered kPa — vpdComputed series derives the same metric from temp+RH
   ph           Float?
-  ec           Float?
+  ec           Float?   // mS/cm
   heightCm     Float?
+  nightTemperature    Float? // °F — day/night swing evidence
+  substrateTemperature Float? // °F — root-zone temp
+  co2Ppm              Float? // ambient CO₂ ppm
+  wateringLiters      Float? // liters applied — feeds the "watering" MetricId series
+  ppfd                Float? // µmol/m²/s at canopy
+  photoperiodHours    Float? // lights-on hours per day
+  runoffPh            Float? // structured runoff pH — preferred over text-parsed values
+  runoffEc            Float? // structured runoff EC mS/cm — preferred over text-parsed values
+  lampDistanceCm      Float? // fixture-to-canopy distance
   feeding      String?
   training     String?
   diaryId      String
