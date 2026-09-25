@@ -1,107 +1,125 @@
 /* eslint-disable @typescript-eslint/no-require-imports */
-// Seed popular strains into the database (idempotent via upsert on name)
+// Seed the curated strain catalog — hardened Slice C runner.
+//
+//   node scripts/seed-strains.cjs           apply to DATABASE_URL (dev only)
+//   node scripts/seed-strains.cjs --dry-run validate + report, zero writes
+//
+// Safety contract:
+//   - db-guard refuses production endpoints (same as every DB script)
+//   - identity match is case-insensitive on name (the DB unique is
+//     case-sensitive; the app's own create path checks insensitively)
+//   - rows with a createdById are community-owned — NEVER modified
+//   - createdById-null rows are catalog-managed: seed fields update in
+//     place, but a null seed field never erases existing data
+//   - slugs are written once via the same entitySlug algorithm as the API
+//   - all rows are created with createdById: null — no fake attribution,
+//     no reputation events
 const { PrismaClient } = require("@prisma/client");
-const p = new PrismaClient();
+const { STRAINS } = require("./seed-strains-data.cjs");
 
-const strains = [
-  ["Blue Dream","Hybrid","Blueberry x Haze","DJ Short","Sativa-dominant classic. Sweet berry aroma, balanced cerebral lift with gentle body relaxation. Easy to grow, high yields, ~9-10 week flower."],
-  ["Girl Scout Cookies","Hybrid","OG Kush x Durban Poison","Cookie Fam","Dessert strain — sweet, earthy, minty. Strong euphoria. ~9-10 week flower."],
-  ["Wedding Cake","Indica","Triangle Kush x Animal Mints","Seed Junky","Vanilla frosting aroma, relaxing and calming. Dense frosty buds, ~8-9 weeks."],
-  ["Gelato","Hybrid","Sunset Sherbet x Thin Mint GSC","Sherbinski","Sweet creamy citrus, potent euphoria. Likes it warm, ~8-9 weeks."],
-  ["Purple Punch","Indica","Larry OG x Granddaddy Purple","Supernova Gardens","Grape candy and blueberry, sedating and sweet. Short, colorful, ~8-9 weeks."],
-  ["Northern Lights","Indica","Afghani x Thai","Sensi Seeds","Legendary easy indica. Resinous, fast ~7-8 week flower, great for beginners."],
-  ["White Widow","Hybrid","Brazilian Sativa x South Indian Indica","Green House Seeds","90s classic. Heavy resin, energetic buzz. Very beginner-friendly, ~8-9 weeks."],
-  ["Jack Herer","Sativa","Haze x Northern Lights #5 x Shiva Skunk","Sensi Seeds","Spicy pine, clear-headed creative high. ~9-10 weeks."],
-  ["Gorilla Glue #4","Hybrid","Chem's Sister x Sour Dubb x Chocolate Diesel","GG Strains","Extremely sticky, heavy relaxation. ~8-9 weeks, huge resin production."],
-  ["Granddaddy Purple","Indica","Purple Urkle x Big Bud","Ken Estes","Deep purple buds, grape and berry, sleepy and relaxing. ~8-9 weeks."],
-  ["Pineapple Express","Hybrid","Trainwreck x Hawaiian","G13 Labs","Tropical pineapple, uplifting and social. Easy, ~8-9 weeks."],
-  ["Zkittlez","Indica","Grape Ape x Grapefruit","3rd Gen Family","Candy-sweet tropical fruit, relaxing and happy. ~8-9 weeks."],
-  ["Mimosa","Hybrid","Clementine x Purple Punch","Symbiotic Genetics","Orange citrus, brunch strain. Uplifting, ~9 weeks."],
-  ["Runtz","Hybrid","Gelato x Zkittlez","Runtz/Cookies","Candy-sweet, colorful buds, euphoric. Moderate difficulty, ~8-9 weeks."],
-  ["Bruce Banner","Hybrid","OG Kush x Strawberry Diesel","Delta9 Labs","Very high THC, diesel and sweet berry. ~9-10 weeks."],
-  ["GMO Cookies","Indica","GSC x Chemdawg","Mamiko Seeds","Garlic mushroom onion funk. Very potent, heavy resin, ~10 weeks."],
-  ["Apple Fritter","Hybrid","Sour Apple x Animal Cookies","Lumpy's Flowers","Sweet pastry apple, balanced high. ~8-9 weeks."],
-  ["Strawberry Cough","Sativa","Strawberry Fields x Haze","Kyle Kushman","Fresh strawberry, smooth uplifting. ~9 weeks."],
-  ["Amnesia Haze","Sativa","South Asian x Jamaican x Afghani","Soma Seeds","Citrus haze, long flowering ~10-12 weeks, big yields."],
-  ["Blue Cheese","Indica","Blueberry x UK Cheese","Big Buddha","Cheese and berry funk, relaxing. ~8 weeks."],
-  ["AK-47","Hybrid","Colombian x Mexican x Thai x Afghani","Serious Seeds","Long-time favorite, mellow long-lasting. ~8-9 weeks."],
-  ["White Rhino","Indica","White Widow x North American Indica","Green House","Heavy resin, sedating. ~9 weeks."],
-  ["Critical Mass","Indica","Afghani x Skunk #1","Mr. Nice","Huge dense yields — watch for mold. ~7-8 weeks."],
-  ["Forbidden Fruit","Indica","Cherry Pie x Tangie","Chameleon Extracts","Tropical cherry citrus, beautiful purple buds. ~9 weeks."],
-  ["Slurricane","Indica","Do-Si-Dos x Purple Punch","In House Genetics","Sweet grape berry, heavy frost, sedating. ~9 weeks."],
-  ["Ice Cream Cake","Indica","Wedding Cake x Gelato #33","Seed Junky","Creamy vanilla dough, sleepy. ~8-9 weeks."],
-  ["Mac 1","Hybrid","Alien Cookies x Colombian x Starfighter","Capulator","Creamy citrus, frosty, clone-only elite. ~9-10 weeks."],
-  ["Gary Payton","Hybrid","The Y x Snowman","Cookies/Powerzzz","Balanced potent hybrid, spicy herbal. ~9 weeks."],
-  ["Tropicana Cookies","Hybrid","GSC x Tangie","Oni Seed Co","Orange citrus, purple buds, uplifting. ~9-10 weeks."],
-  ["Do-Si-Dos","Indica","OGKB x Face Off OG","Archive","Lime mint cookie funk, powerful body high. ~8-9 weeks."],
-  ["Cereal Milk","Hybrid","The Y x Snowman","Cookies","Sweet creamy, balanced. ~9-10 weeks."],
-  ["Jet Fuel","Sativa","Aspen OG x High Country Diesel","303 Seeds","Diesel rocket fuel, energetic. ~9-10 weeks."],
-  ["Super Lemon Haze","Sativa","Lemon Skunk x Super Silver Haze","Green House","Zesty lemon candy, energetic award winner. ~10 weeks."],
-  ["Super Silver Haze","Sativa","Skunk x Northern Lights x Haze","Green House","Long-lasting energetic haze classic. ~10-11 weeks."],
-  ["Chocolope","Sativa","Chocolate Thai x Cannalope Haze","DNA Genetics","Chocolate coffee, energetic. ~9-10 weeks."],
-  ["Green Crack","Sativa","Skunk #1","Cecil C.","Sharp mango energy, daytime favorite. ~7-8 weeks, easy."],
-  ["Lemon Skunk","Hybrid","Two Skunk phenotypes","DNA Genetics","Strong lemon, happy and relaxing. ~8-9 weeks."],
-  ["LA Confidential","Indica","OG LA Affie x Afghani","DNA Genetics","Smooth pine skunk, calming. ~7-8 weeks."],
-  ["Sunset Sherbet","Indica","GSC x Pink Panties","Sherbinski","Fruity dessert, relaxing. ~8-9 weeks."],
-  ["Death Star","Indica","Sensi Star x Sour Diesel","Team Death Star","Diesel skunk, sedating. ~8-9 weeks."],
-  ["Strawberry Banana","Indica","Banana Kush x Bubble Gum","DNA Genetics/Serious","Sweet tropical, resin-rich. ~9 weeks."],
-  ["Clementine","Sativa","Tangie x Lemon Skunk","Crockett Family","Bright orange citrus, energetic. ~8-9 weeks."],
-  ["Cheese","Hybrid","Skunk #1 phenotype","Big Buddha","Sharp cheese funk, mellow body high. ~8-9 weeks."],
-  ["Skunk #1","Hybrid","Afghani x Acapulco Gold x Colombian","Sensi Seeds","The original skunk, pungent and reliable. ~8-9 weeks."],
-  ["Big Bud","Indica","Afghani x Skunk #1","Sensi Seeds","Massive yields and heavy sedation. ~8-9 weeks."],
-  ["Hindu Kush","Indica","Hindu Kush landrace","Sensi Seeds","Pure hashy indica, compact and hardy. ~7-8 weeks."],
-  ["Mazar","Indica","Afghan x Skunk","Dutch Passion","Hash plant, heavy and resinous. ~8-9 weeks."],
-  ["Orange Bud","Hybrid","Skunk selections","Dutch Passion","Sweet orange, uplifting and easy. ~8-9 weeks."],
-  ["Blueberry","Indica","Purple Thai x Afghan","DJ Short","Berry sweet, relaxing, often colorful. ~8-9 weeks."],
-  ["Critical Kush","Indica","Critical Mass x OG Kush","Barney's Farm","Heavy indica, big yields, earthy. ~8-9 weeks."],
-  ["Liberty Haze","Hybrid","G13 x Chemdawg 91","Barney's Farm","Lime haze, fast flowering, potent. ~8-9 weeks."],
-  ["Pineapple Chunk","Indica","Pineapple x Cheese/Skunk","Barney's Farm","Tropical cheese, knockout body high. ~8-9 weeks."],
-  ["LSD","Indica","Afghan Skunk x Mazar","Barney's Farm","Potent cerebral indica, ~8 weeks."],
-  ["Royal Gorilla","Hybrid","Unknown","Royal Queen Seeds","Sticky, powerful, balanced hybrid. ~8-9 weeks."],
-  ["Royal AK","Hybrid","AK-47 lineage","Royal Queen Seeds","Pungent sativa-leaning, strong. ~8-9 weeks."],
-  ["Northern Light Automatic","Hybrid","Northern Lights x Ruderalis","Royal Queen Seeds","Easy autoflower, relaxing. ~9-10 weeks from seed."],
-  ["Power Plant","Sativa","South African","Dutch Passion","Energetic, big yields, reliable. ~8 weeks."],
-  ["Original Amnesia","Sativa","Haze x Northern Lights","Amnesia Seeds","Cerebral, huge yield, ~10-11 weeks."],
-  ["Neville's Haze","Sativa","Haze x Northern Lights","Green House","Citrus pine, very potent. ~11-12 weeks."],
-  ["Super Skunk","Indica","Skunk #1 x Afghani","Sensi Seeds","Super pungent, relaxing. ~8 weeks."],
-  ["Shiva Skunk","Indica","Skunk #1 x Northern Lights","Sensi Seeds","Musky, narcotic, resinous. ~8-9 weeks."],
-  ["Maple Leaf Indica","Indica","Afghan","Sensi Seeds","Hashy sweet, short and sturdy. ~7-8 weeks."],
-  ["Black Domina","Indica","Afghani x Ortega x NL x Hash Plant","Sensi Seeds","Fast, sedating, spicy. ~7-8 weeks."],
-  ["Lavender","Indica","Super Skunk x Big Skunk Korean x Afghani x Hawaiian","Soma Seeds","Floral, relaxing, colorful. ~9 weeks."],
-  ["Sage N Sour","Sativa","Sour Diesel x SAGE","THSeeds","Diesel sage, energetic. ~9 weeks."],
-  ["Great White Shark","Indica","Super Skunk x Brazilian x South Indian","Green House","Fruity, relaxing, resinous. ~9 weeks."],
-  ["Holland's Hope","Indica","Afghani x Skunk","White Label","Outdoor hardy, mellow. ~8 weeks."],
-  ["Chronic","Hybrid","Northern Lights x AK-47 x Skunk","Serious Seeds","Sweet, balanced, productive. ~8-9 weeks."],
-  ["Motavation","Indica","Warlock x Sensi Star","Serious Seeds","Musky, sedating. ~8-9 weeks."],
-  ["Bubblelicious","Hybrid","Unknown","Nirvana","Pink bubblegum, relaxing. ~8-9 weeks."],
-  ["Aurora Indica","Indica","Afghani x Northern Lights","Nirvana","Hashy, heavy, short. ~8-9 weeks."],
-  ["White Russian","Hybrid","White Widow x AK-47","Serious Seeds","Potent, resinous, balanced. ~9 weeks."],
-  ["Arjan's Haze #1","Sativa","G-13 Haze x Neville's Haze","Green House","Citrus, very strong. ~11 weeks."],
-  ["Arjan's Strawberry Haze","Sativa","Arjan's Haze x Swiss Sativa","Green House","Strawberry, cerebral. ~10-11 weeks."],
-  ["The Church","Hybrid","Swiss Sativa x Super Skunk x Erdbeer","Green House","Balanced, sweet, easy. ~8-9 weeks."],
-  ["Moby Dick","Sativa","White Widow x Haze","Dinafem","Huge yields, strong. ~9-10 weeks."],
-  ["Critical + 2.0","Hybrid","Critical+","Dinafem","Critical improved, bigger yields. ~7-8 weeks."],
-  ["Amnesia Haze Auto","Hybrid","Amnesia x Ruderalis","Various","Autoflower haze, easy. ~10-12 weeks seed to harvest."],
-  ["Sour Diesel Auto","Hybrid","Sour Diesel x Ruderalis","Various","Autoflower diesel, easy. ~10-12 weeks."],
-  ["Blue Dream Auto","Hybrid","Blue Dream x Ruderalis","Various","Autoflower Blue Dream. ~10-11 weeks."],
-  ["Gorilla Cookies Auto","Hybrid","Gorilla Glue x Cookies","FastBuds","Potent, resin-heavy autoflower. ~9-10 weeks."],
-  ["Zkittlez Auto","Indica","Zkittlez x Ruderalis","FastBuds","Candy autoflower, relaxing. ~9-10 weeks."],
-  ["Pineapple Express Auto","Hybrid","Pineapple x Ruderalis","FastBuds","Tropical, easy auto. ~9-10 weeks."],
-  ["Bruce Banner Auto","Hybrid","Bruce Banner x Ruderalis","FastBuds","Strong, fruity auto. ~10-11 weeks."],
-  ["Mandarin Cookies","Hybrid","Cookies x Mandarin","Ethos Genetics","Citrus cookie, balanced. ~9-10 weeks."],
-  ["Planet of the Grapes","Hybrid","Unknown","Ethos Genetics","Grape candy, potent. ~9 weeks."],
-  ["Grease Monkey","Indica","Gorilla Glue #4 x Cookies and Cream","Exotic Genetix","Sweet diesel, heavy. ~9-10 weeks."],
-];
+// Mirrors of src/lib/strain-fields.ts — a seed script can't import TS, so
+// the vocab is duplicated here and cross-checked against the real module
+// in scripts/discovery-integration-tests.mts.
+const STRAIN_TYPES = ["SATIVA", "INDICA", "HYBRID", "RUDERALIS", "AUTO_FLOWER", "CBD", "OTHER"];
+const STRAIN_EFFECTS = ["RELAXED", "HAPPY", "EUPHORIC", "UPLIFTED", "ENERGETIC", "CREATIVE", "FOCUSED", "GIGGLY", "TALKATIVE", "HUNGRY", "SLEEPY", "CALM"];
+const STRAIN_FLAVORS = ["EARTHY", "SWEET", "CITRUS", "BERRY", "TROPICAL", "SOUR", "DIESEL", "PINE", "SKUNK", "SPICY", "HERBAL", "FLORAL", "WOODY", "CHEESE", "MINT", "NUTTY"];
+const STRAIN_DIFFICULTIES = ["EASY", "NORMAL", "HARD"];
+const THC_MIN = 0, THC_MAX = 45, FLOWER_MIN = 4, FLOWER_MAX = 20;
+const NAME_MAX = 100, TEXT_MAX = 200, DESC_MAX = 2000;
+
+// Same algorithm as src/lib/slugs.ts entitySlug() + affiliate.slugify().
+const slugify = (s) => s.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60);
+const entitySlug = (name, id) => `${slugify(name).replace(/^-+|-+$/g, "") || "strain"}-${id.slice(-6).toLowerCase()}`;
+
+function validate(strains) {
+  const errors = [];
+  const seen = new Map(); // normalized name → display name (duplicate check)
+  strains.forEach((s, i) => {
+    const at = `row ${i} (${JSON.stringify(s.name)})`;
+    const err = (m) => errors.push(`${at}: ${m}`);
+    if (typeof s.name !== "string" || !s.name.trim() || s.name.trim().length > NAME_MAX) err("bad name");
+    if (!STRAIN_TYPES.includes(s.type)) err(`bad type ${s.type}`);
+    for (const e of s.effects ?? []) if (!STRAIN_EFFECTS.includes(e)) err(`bad effect ${e}`);
+    for (const f of s.flavors ?? []) if (!STRAIN_FLAVORS.includes(f)) err(`bad flavor ${f}`);
+    if (s.difficulty != null && !STRAIN_DIFFICULTIES.includes(s.difficulty)) err(`bad difficulty ${s.difficulty}`);
+    for (const [k, v] of [["thcMin", s.thcMin], ["thcMax", s.thcMax]]) {
+      if (v != null && (!Number.isFinite(v) || v < THC_MIN || v > THC_MAX)) err(`bad ${k} ${v}`);
+    }
+    if (s.thcMin != null && s.thcMax != null && s.thcMin > s.thcMax) err("thcMin > thcMax");
+    if (s.floweringWeeks != null && (!Number.isInteger(s.floweringWeeks) || s.floweringWeeks < FLOWER_MIN || s.floweringWeeks > FLOWER_MAX)) err(`bad floweringWeeks ${s.floweringWeeks}`);
+    for (const [k, v, max] of [["genetics", s.genetics, TEXT_MAX], ["breeder", s.breeder, TEXT_MAX], ["description", s.description, DESC_MAX], ["growingInfo", s.growingInfo, DESC_MAX]]) {
+      if (v != null && (typeof v !== "string" || v.length > max)) err(`bad ${k}`);
+    }
+    const key = s.name.trim().toLowerCase().replace(/\s+/g, " ");
+    if (seen.has(key)) err(`duplicate of ${seen.get(key)}`);
+    seen.set(key, s.name);
+  });
+  return errors;
+}
 
 (async () => {
-  for (const [name, type, genetics, breeder, description] of strains) {
-    await p.strain.upsert({
-      where: { name },
-      update: {},
-      create: { name, type, genetics, breeder, description },
-    });
+  const dryRun = process.argv.includes("--dry-run");
+  const errors = validate(STRAINS);
+  if (errors.length) {
+    console.error(`Validation failed (${errors.length}):`);
+    for (const e of errors.slice(0, 25)) console.error(`  ✗ ${e}`);
+    process.exit(1);
   }
-  const total = await p.strain.count();
-  console.log(`Seeded/updated ${strains.length} strains — total in DB: ${total}`);
+
+  await import("./db-guard.mjs"); // refuse production endpoints before any query
+  const p = new PrismaClient();
+
+  const report = { created: 0, updated: 0, skippedOwned: 0, unchanged: 0, errors: 0 };
+  for (const s of STRAINS) {
+    try {
+      const existing = await p.strain.findFirst({
+        where: { name: { equals: s.name.trim(), mode: "insensitive" } },
+      });
+      if (existing?.createdById) { report.skippedOwned++; continue; }
+
+      const fields = {
+        name: s.name.trim(),
+        type: s.type,
+        genetics: s.genetics ?? null,
+        breeder: s.breeder ?? null,
+        description: s.description ?? null,
+        growingInfo: s.growingInfo ?? null,
+        effects: s.effects ?? [],
+        flavors: s.flavors ?? [],
+        thcMin: s.thcMin ?? null,
+        thcMax: s.thcMax ?? null,
+        floweringWeeks: s.floweringWeeks ?? null,
+        difficulty: s.difficulty ?? null,
+      };
+
+      if (!existing) {
+        if (dryRun) { report.created++; continue; }
+        const row = await p.strain.create({ data: { ...fields, createdById: null } });
+        await p.strain.update({ where: { id: row.id }, data: { slug: entitySlug(row.name, row.id) } });
+        report.created++;
+        continue;
+      }
+
+      // Catalog-managed row — apply seed fields, but a null seed field never
+      // erases data, and a missing slug gets written.
+      const patch = {};
+      for (const [k, v] of Object.entries(fields)) {
+        // A null/absent/empty seed field never erases existing data.
+        if (v == null || (Array.isArray(v) && v.length === 0)) continue;
+        if (JSON.stringify(existing[k]) !== JSON.stringify(v)) patch[k] = v;
+      }
+      if (!existing.slug) patch.slug = entitySlug(existing.name, existing.id);
+      if (Object.keys(patch).length === 0) { report.unchanged++; continue; }
+      if (!dryRun) await p.strain.update({ where: { id: existing.id }, data: patch });
+      report.updated++;
+    } catch (e) {
+      report.errors++;
+      console.error(`  ✗ ${s.name}: ${e.message}`);
+    }
+  }
+
+  const total = dryRun ? null : await p.strain.count();
+  console.log(`${dryRun ? "[dry-run] " : ""}catalog=${STRAINS.length} created=${report.created} updated=${report.updated} unchanged=${report.unchanged} skippedOwned=${report.skippedOwned} errors=${report.errors}${total != null ? ` totalInDb=${total}` : ""}`);
   await p.$disconnect();
+  if (report.errors) process.exit(1);
 })();
