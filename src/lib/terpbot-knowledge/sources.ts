@@ -228,14 +228,25 @@ export const SOURCES: Record<string, KnowledgeSource> = {
     tier: "EXTENSION",
     cannabisSpecific: false, // leachate EC/pH interpretation — substrate science, not cannabis
   },
+  "terptalk-strain-catalog": {
+    id: "terptalk-strain-catalog",
+    title: "TerpTalk strain catalog — curated cultivar metadata",
+    author: "TerpTalk",
+    publication: "docs/data/strain-research.md (per-strain provenance)",
+    url: "",
+    year: 2026,
+    tier: "INTERNAL_DATA",
+    cannabisSpecific: true,
+    // breeder/database/community-reported catalog facts — expectations,
+    // never horticultural verdicts; lowest evidence tier by design
+  },
 }
 
 // ── Candidate registry ──────────────────────────────────────────────
 // The hypotheses the engine can reason about. Versioned TypeScript data
-// — code-reviewed, diffable, no DB table (see TERPBOT-2.0-ARCHITECTURE
-// §5). Wizard-migrated candidates keep the bare wizard result id so
-// Thread.wizardResultId / SYMPTOM_TAGS / solve-rate stats never see a
-// namespace change (arch §17.1).
+// — code-reviewed, diffable, no DB table. Wizard-migrated candidates keep
+// the bare wizard result id so Thread.wizardResultId / SYMPTOM_TAGS /
+// solve-rate stats never see a namespace change.
 //
 // MIGRATED entries carry name/mechanism/recommendedActions/severity
 // verbatim from the legacy WIZARD_RESULTS literal — the wizard result

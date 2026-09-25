@@ -101,6 +101,27 @@ async function main() {
       updatesOnDays([22, 20, 18, 16, 14, 12, 10, 8, 6, 2])
     )
     assert.equal(veg.stage, "VEGGING")
+    assert.match(veg.next!.summary, /Flip to flower/, "photoperiod wording: flip to flower")
+
+    // A linked autoflower never gets light-cycle wording — autos flower
+    // on age, not a flip. Null/absent links keep the classic phrasing.
+    const vegAuto = computeGrowJourney(
+      fakeDiary({ createdAt: daysAgo(22), strainRef: { type: "AUTO_FLOWER" } }),
+      updatesOnDays([22, 20, 18, 16, 14, 12, 10, 8, 6, 2])
+    )
+    assert.equal(vegAuto.stage, "VEGGING")
+    assert.match(vegAuto.next!.summary, /Autos flower on their own/, "auto wording: no flip")
+    assert.ok(!/flip/i.test(vegAuto.next!.summary), "no flip verb for autos")
+    const vegPhoto = computeGrowJourney(
+      fakeDiary({ createdAt: daysAgo(22), strainRef: { type: "INDICA" } }),
+      updatesOnDays([22, 20, 18, 16, 14, 12, 10, 8, 6, 2])
+    )
+    assert.match(vegPhoto.next!.summary, /Flip to flower/, "photoperiod keeps flip wording")
+    const vegUnknown = computeGrowJourney(
+      fakeDiary({ createdAt: daysAgo(22), strainRef: { type: null } }),
+      updatesOnDays([22, 20, 18, 16, 14, 12, 10, 8, 6, 2])
+    )
+    assert.match(vegUnknown.next!.summary, /Flip to flower/, "unknown type never assumes auto")
 
     // Filler content doesn't count as meaningful.
     const filler = computeGrowJourney(

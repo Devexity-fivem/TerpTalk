@@ -136,6 +136,20 @@ const PH_EDGE = 0.3 // distance to band edge that makes drift actionable
 const LATE_FLOWER_TAPER_DAYS = 42 // ~week 6+ — senescence/flush territory
 const GROWTH_STAGES = new Set(["GERMINATION", "SEEDLING", "VEGETATIVE", "FLOWER"])
 
+// Strain type → render text. Local copy of the catalog vocab labels:
+// strain-stats.ts (where the page label map lives) imports Prisma, and
+// the rule engine must stay Prisma-free — the vocab itself comes from
+// STRAIN_TYPES in strain-fields.ts.
+const STRAIN_TYPE_TEXT: Record<string, string> = {
+  SATIVA: "sativa",
+  INDICA: "indica",
+  HYBRID: "hybrid",
+  RUDERALIS: "ruderalis",
+  AUTO_FLOWER: "autoflower",
+  CBD: "CBD",
+  OTHER: "other",
+}
+
 /** Deficiency candidates a reported symptom can feed — the lockout
  *  confounder rule emits against/for into this set. */
 export const DEFICIENCY_CANDIDATES = new Set([
@@ -2328,13 +2342,63 @@ export const INTEL_RULES: IntelRule[] = [
     sourceIds: ["rodriguez-morrison-2021-light", "chandra-2008-photosynthesis"],
   },
   {
+    // Linked-cultivar context — catalog facts echoed once, plainly
+    // labeled as catalog data. Info direction only: it never pools into
+    // a candidate and never claims a horticultural verdict.
+    id: "stage.strain-context",
+    domain: "stage",
+    signal: "stage",
+    kind: "observation",
+    title: "Linked cultivar",
+    applies: (ctx) => ctx.strain != null,
+    evaluate: (ctx) => {
+      const s = ctx.strain!
+      const parts = [`${s.name}`]
+      if (s.type) parts.push(STRAIN_TYPE_TEXT[s.type] ?? s.type.toLowerCase().replace(/_/g, " "))
+      if (s.floweringWeeks != null)
+        parts.push(`~${s.floweringWeeks}wk flowering listed`)
+      if (s.difficulty) parts.push(`difficulty ${s.difficulty.toLowerCase()}`)
+      const ev: IntelEvidence[] = [
+        {
+          // the link itself is a stored fact — the diary IS tied to this
+          // catalog row; the fields quoted are catalog-reported values
+          direction: "info",
+          strength: "weak",
+          confirmed: true,
+          text: `Linked cultivar: ${parts.join(" · ")} — catalog data, an expectation not a verdict.`,
+        },
+      ]
+      // Reframe for autos: stage logic elsewhere assumes the grower
+      // controls the transition; an autoflower gets there on age alone,
+      // so "flip" guidance is wrong for it.
+      if (s.type === "AUTO_FLOWER") {
+        ev.push({
+          direction: "info",
+          strength: "weak",
+          confirmed: true,
+          text: `${s.name} is an autoflower — it transitions on its own schedule; no light-cycle change is needed.`,
+        })
+      }
+      return ev
+    },
+    sourceIds: ["terptalk-strain-catalog"],
+  },
+  {
     id: "stage.harvest-window",
     signal: "stage",
     domain: "stage",
     kind: "assessment",
     title: "Typical harvest window",
     applies: (ctx) =>
-      ctx.diary.stage === "FLOWER" && !ctx.stageStartCensored && ctx.stageDays >= 49,
+      ctx.diary.stage === "FLOWER" &&
+      !ctx.stageStartCensored &&
+      // The cultivar's listed window moves the trigger to ~2 weeks
+      // before the expectation (bounded below by the late-flower
+      // threshold); without it, the generic 7-week floor stands.
+      ctx.stageDays >=
+        (ctx.strain?.floweringWeeks != null
+          ? Math.max(LATE_FLOWER_DAYS, (ctx.strain.floweringWeeks - 2) * 7)
+          : 49),
     evaluate: (ctx) => [
       {
         direction: "info",
@@ -2342,11 +2406,14 @@ export const INTEL_RULES: IntelRule[] = [
         // a context fact (days in flower) rendered as a finding — not a
         // readiness verdict; week count alone never proves harvest
         confirmed: true,
-        text: `Day ${ctx.stageDays} of flower — many cultivars finish somewhere in the 8–10+ week range, but week count alone never proves readiness; trichome colour is the indicator to check.`,
+        text:
+          ctx.strain?.floweringWeeks != null
+            ? `Day ${ctx.stageDays} of flower — ${ctx.strain.name} is listed around ~${ctx.strain.floweringWeeks} week${ctx.strain.floweringWeeks === 1 ? "" : "s"} of flowering; that's a catalog estimate, not a finish date — trichome colour is the indicator to check.`
+            : `Day ${ctx.stageDays} of flower — many cultivars finish somewhere in the 8–10+ week range, but week count alone never proves readiness; trichome colour is the indicator to check.`,
         measurement: hint("inspect:trichomes"),
       },
     ],
-    sourceIds: ["cornell-cannabis-guidebook", "postharvest-review-2022"],
+    sourceIds: ["cornell-cannabis-guidebook", "postharvest-review-2022", "terptalk-strain-catalog"],
   },
   {
     id: "post.dry-env",

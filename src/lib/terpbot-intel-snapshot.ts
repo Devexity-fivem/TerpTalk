@@ -185,6 +185,9 @@ export interface GrowIntelligenceSnapshot {
   episodes: SnapshotEpisode[]
   interventions: SnapshotIntervention[]
   diagnosis: Diagnosis
+  /** normalized catalog strain from the context — public catalog fields
+   *  only; null when the diary has no structured strain link */
+  strain: GrowContextView["strain"]
   /** ranked action list from the action engine (≤4) */
   actions: ActionRequest[]
   nextStep: ActionRequest | null
@@ -376,6 +379,7 @@ export function buildSnapshot(ctx: GrowContextView): GrowIntelligenceSnapshot {
         }
       }),
     diagnosis,
+    strain: ctx.strain,
     actions,
     nextStep: actions[0] ?? null,
     capabilities,

@@ -72,6 +72,7 @@ const fixtureCtx = (stage: string, medium: string | null, stale: boolean): GrowC
     startDate: new Date(now - 60 * 86400000), harvested: stage === "DRYING" || stage === "CURING",
     mediumType: medium, lightType: "LED", growType: "INDOOR", techniques: [],
   },
+  strain: null,
   setup: { present: true, medium, capabilities: ["exhaust", "oscillating fan"] },
   now,
   day: 60,

@@ -40,6 +40,7 @@ const threadIds: string[] = []
 const postIds: string[] = []
 const diaryIds: string[] = []
 const setupIds: string[] = []
+const strainIds: string[] = []
 const chatMessageIds: string[] = []
 const rateLimitKeys: string[] = []
 
@@ -982,6 +983,87 @@ async function run() {
       assert.equal(dctx!.setup.present, false, "soft-deleted setup treated as absent")
       assert.ok(!dctx!.setup.capabilities.length, "deleted setup contributes no capabilities")
 
+      // Strain-aware context (Slice D): the structured strainRef link
+      // flows into the normalized context as public catalog fields only.
+      // Owner scope reads it; public scope never sees a PRIVATE diary's
+      // strain link because the link exists.
+      const sRow = await prisma.strain.create({
+        data: {
+          name: `__tbp strain ${SUFFIX}`,
+          genetics: "fixture x fixture",
+          type: "AUTO_FLOWER",
+          difficulty: "HARD",
+          // floweringWeeks intentionally null — catalog honesty
+        },
+      })
+      strainIds.push(sRow.id)
+
+      const sd = await prisma.growDiary.create({
+        data: {
+          title: `__tbp strpriv ${SUFFIX}`, description: "t", growType: "INDOOR",
+          startDate: daysAgo(15), authorId: priv.id, stage: "VEGETATIVE",
+          visibility: "PRIVATE", strainId: sRow.id,
+        },
+      })
+      diaryIds.push(sd.id)
+
+      // Public scope refuses the diary entirely — strain context included.
+      assert.equal(
+        await buildGrowContext(sd.id, { ownerId: priv.id, scope: "public" }),
+        null,
+        "public scope refuses a PRIVATE diary even with a linked strain"
+      )
+      // …and a different caller can't reach it through owner scope either.
+      assert.equal(
+        await buildGrowContext(sd.id, { ownerId: intel.id, scope: "owner" }),
+        null,
+        "owner scope is owner-only — another user's private diary stays null"
+      )
+
+      // Owner scope gets the normalized catalog context, nulls preserved.
+      const octx = await buildGrowContext(sd.id, { ownerId: priv.id, scope: "owner" })
+      assert.ok(octx?.strain, "owner scope receives the strain context")
+      assert.equal(octx!.strain!.strainId, sRow.id)
+      assert.equal(octx!.strain!.type, "AUTO_FLOWER")
+      assert.equal(octx!.strain!.difficulty, "HARD")
+      assert.equal(octx!.strain!.floweringWeeks, null, "null catalog field preserved as null")
+      // The deterministic engine consumes it: autoflower context note,
+      // no photoperiod-flip instruction anywhere in the owner output.
+      const odiag = evaluateContext(octx!)
+      const sfind = odiag.findings.find((f) => f.ruleId === "stage.strain-context")
+      assert.ok(sfind, "linked-cultivar finding fires on owner context")
+      assert.ok(
+        sfind!.evidence.some((e) => /autoflower.*own schedule/i.test(e.text)),
+        "autoflower reframing emitted"
+      )
+      assert.ok(
+        !odiag.findings.some((f) =>
+          f.evidence.some((e) => /flip to|to 12\/12/.test(e.text))
+        ),
+        "no photoperiod-flip guidance for an autoflower"
+      )
+      // Room checkin for the private-diary owner still resolves no public
+      // grow — the strain name can never echo through a public path.
+      const pci3 = await runBotCommand("checkin", {
+        userId: priv.id, role: "MEMBER", displayName: `__tbp_prv_${SUFFIX}`, args: [], rest: "",
+      })
+      assert.ok(pci3.ok && /No active grows/.test(pci3.messages[0]), "private+strain diary stays out of room checkin")
+      assert.ok(!pci3.messages[0].includes(`__tbp strain ${SUFFIX}`), "private strain link never echoes")
+
+      // Public diary twin: the public catalog row reaches public scope —
+      // that's existing public-scope behavior, the link is already public.
+      const spd = await prisma.growDiary.create({
+        data: {
+          title: `__tbp strpub ${SUFFIX}`, description: "t", growType: "INDOOR",
+          startDate: daysAgo(15), authorId: intel.id, stage: "VEGETATIVE",
+          visibility: "PUBLIC", strainId: sRow.id,
+        },
+      })
+      diaryIds.push(spd.id)
+      const pctx = await buildGrowContext(spd.id, { ownerId: intel.id, scope: "public" })
+      assert.ok(pctx?.strain, "public diary exposes its linked catalog row")
+      assert.equal(pctx!.strain!.name, `__tbp strain ${SUFFIX}`)
+
       console.log("✓ intelligence engine: context → rules → /checkin")
     }
 
@@ -1371,6 +1453,7 @@ async function run() {
     await prisma.thread.deleteMany({ where: { id: { in: threadIds } } }).catch(() => {})
     await prisma.growDiary.deleteMany({ where: { id: { in: diaryIds } } }).catch(() => {})
     await prisma.growSetup.deleteMany({ where: { id: { in: setupIds } } }).catch(() => {})
+    await prisma.strain.deleteMany({ where: { id: { in: strainIds } } }).catch(() => {})
     await prisma.chatMessage.deleteMany({ where: { id: { in: chatMessageIds } } }).catch(() => {})
     await prisma.botEvent.deleteMany({ where: { key: { in: botEventKeys } } }).catch(() => {})
     await prisma.botEvent.deleteMany({ where: { key: { startsWith: "assist:" }, userId: { in: ids } } }).catch(() => {})

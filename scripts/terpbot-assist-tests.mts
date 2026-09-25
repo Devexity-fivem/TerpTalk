@@ -36,6 +36,7 @@ const mkCtx = (over: Partial<GrowContextView> = {}): GrowContextView => ({
     visibility: "PRIVATE", startDate: new Date(NOW - 30 * DAY), harvested: false,
     mediumType: "COCO", lightType: "LED", growType: "INDOOR", techniques: [],
   },
+  strain: null,
   setup: { present: false, medium: null, capabilities: [] },
   now: NOW,
   day: 31, week: 5,

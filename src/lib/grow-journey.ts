@@ -65,6 +65,9 @@ interface JourneyDiary {
   harvestedAt: Date | null
   yieldAmount: number | null
   deleted: boolean
+  /** catalog strain type — only the transition wording reads this
+   *  (autoflowers never get "flip to flower" phrasing) */
+  strainRef?: { type: string | null } | null
 }
 
 // isMeaningfulUpdate now lives in @/lib/meaningful-update — one canonical
@@ -85,6 +88,7 @@ async function loadJourneyInputs(diaryId: string) {
       harvestedAt: true,
       yieldAmount: true,
       deleted: true,
+      strainRef: { select: { type: true } },
     },
   })
   if (!diary) return null
@@ -168,7 +172,7 @@ export function computeGrowJourney(
     stage = "ESTABLISHED"
   }
 
-  const next = nextRequirement(stage, mDays, fDays, elapsedDays)
+  const next = nextRequirement(stage, mDays, fDays, elapsedDays, diary.strainRef?.type)
   return {
     stage,
     stageIndex: GROW_STAGES.findIndex((s) => s.key === stage),
@@ -183,7 +187,8 @@ function nextRequirement(
   stage: GrowStageKey,
   mDays: number,
   fDays: number,
-  elapsedDays: number
+  elapsedDays: number,
+  strainType?: string | null
 ): GrowJourneyState["next"] {
   const meta = (key: GrowStageKey) => GROW_STAGES.find((s) => s.key === key)!
   switch (stage) {
@@ -206,7 +211,13 @@ function nextRequirement(
         stage: "FLOWERING",
         name: meta("FLOWERING").name,
         icon: meta("FLOWERING").icon,
-        summary: `Flip to flower and log ${Math.max(0, REQUIREMENTS.FLOWERING.flowerDays - fDays)} more flower update${REQUIREMENTS.FLOWERING.flowerDays - fDays === 1 ? "" : "s"}`,
+        // Autoflowers flower on their own schedule — telling the grower
+        // to "flip" assumes a photoperiod cultivar, so the wording drops
+        // the light-cycle verb entirely.
+        summary:
+          strainType === "AUTO_FLOWER"
+            ? `Autos flower on their own — mark the stage and log ${Math.max(0, REQUIREMENTS.FLOWERING.flowerDays - fDays)} more flower update${REQUIREMENTS.FLOWERING.flowerDays - fDays === 1 ? "" : "s"}`
+            : `Flip to flower and log ${Math.max(0, REQUIREMENTS.FLOWERING.flowerDays - fDays)} more flower update${REQUIREMENTS.FLOWERING.flowerDays - fDays === 1 ? "" : "s"}`,
       }
     case "FLOWERING":
       return {

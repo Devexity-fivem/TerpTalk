@@ -36,6 +36,9 @@ import { CANDIDATES, SOURCES } from "@/lib/terpbot-intel-knowledge"
 import { validateKnowledge } from "@/lib/terpbot-intel-validate"
 import { wizardResultFromCandidate } from "@/lib/terpbot-intel-wizard"
 import { mergeObservations, mergeReported } from "@/lib/terpbot-intel-merge"
+import { buildSnapshot } from "@/lib/terpbot-intel-snapshot"
+import { buildChecklist } from "@/lib/terpbot-intel-checklist"
+import { renderPlan } from "@/lib/terpbot-intel-status"
 import { buildWhyTrail, renderWhy } from "@/lib/terpbot-intel-why"
 import { parseGrowText } from "@/lib/terpbot-nl-parse"
 import { WIZARD_NODES, WIZARD_RESULTS, WIZARD_START } from "@/lib/problem-wizard"
@@ -48,6 +51,7 @@ import type {
   IntelEvidence,
   IntelSeries,
   MetricId,
+  StrainGrowContext,
   StructuredObservation,
   WhyTrail,
 } from "@/lib/terpbot-intel-types"
@@ -60,6 +64,7 @@ const mkCtx = (over: Partial<GrowContextView> = {}): GrowContextView => ({
     startDate: new Date(t0), harvested: false,
     mediumType: "COCO", lightType: "LED", growType: "INDOOR", techniques: [],
   },
+  strain: null,
   setup: { present: false, medium: null, capabilities: [] },
   now: t0 + 40 * 86400000,
   day: 41, week: 6,
@@ -1875,6 +1880,150 @@ function run() {
     // observed/calculated lines may be fabricated
     assert.ok(!lines.some((l) => l.startsWith("Observed:")), "no fabricated observations")
     assert.ok(!lines.some((l) => l.startsWith("Calculated:")), "no fabricated calculations")
+  }
+
+  // ── 23. Strain-aware context (catalog → normalized strain) ──────
+  {
+    const mkStrain = (over: Partial<StrainGrowContext> = {}): StrainGrowContext =>
+      Object.assign(
+        {
+          strainId: "strain1", name: "Test Culti", genetics: "A x B",
+          type: "HYBRID", floweringWeeks: 9, difficulty: "NORMAL",
+        } satisfies StrainGrowContext,
+        over
+      )
+
+    // No linked strain — behavior is byte-for-byte what it was
+    {
+      const ctx = mkCtx({ stageDays: 56 })
+      const d = evaluateContext(ctx)
+      assert.ok(
+        !d.findings.some((f) => f.ruleId === "stage.strain-context"),
+        "no linked strain → no linked-cultivar finding"
+      )
+      const hw = d.findings.find((f) => f.ruleId === "stage.harvest-window")!
+      assert.ok(hw, "generic harvest window intact at day 56")
+      assert.match(hw.evidence[0].text, /many cultivars finish/, "generic wording preserved")
+      assert.ok(!hw.evidence[0].text.includes("Test Culti"), "no cultivar named without a link")
+    }
+
+    // Photoperiod strain — catalog facts surface as a context finding
+    {
+      const ctx = mkCtx({ stageDays: 56, strain: mkStrain() })
+      const d = evaluateContext(ctx)
+      const sc = d.findings.find((f) => f.ruleId === "stage.strain-context")!
+      assert.ok(sc, "linked-cultivar finding fires")
+      assert.equal(sc.state, "confirmed", "context fact renders as a confirmed finding")
+      assert.ok(sc.evidence[0].text.includes("Test Culti"), "cultivar named")
+      assert.match(sc.evidence[0].text, /hybrid/, "type labelled")
+      assert.match(sc.evidence[0].text, /~9wk flowering listed/, "flowering expectation echoed")
+      assert.match(sc.evidence[0].text, /difficulty normal/, "difficulty echoed")
+      assert.match(sc.evidence[0].text, /expectation not a verdict/, "catalog framing kept")
+      assert.deepEqual(sc.sourceIds, ["terptalk-strain-catalog"], "catalog provenance, not a research tier")
+      assert.ok(
+        !sc.evidence.some((e) => /autoflower/i.test(e.text)),
+        "photoperiod strain gets no auto note"
+      )
+      const hw = d.findings.find((f) => f.ruleId === "stage.harvest-window")!
+      assert.match(hw.evidence[0].text, /Test Culti is listed around ~9 weeks/, "cultivar window used")
+      assert.match(hw.evidence[0].text, /not a finish date/, "expectation, not a schedule")
+      assert.match(hw.evidence[0].text, /trichome colour/, "trichomes remain the readiness check")
+      assert.ok(
+        !/day 63|harvest exactly|exact harvest/i.test(hw.evidence[0].text),
+        "weeks never become an exact harvest date"
+      )
+    }
+
+    // Autoflower — same grow state, no photoperiod-flip guidance
+    {
+      const vegAuto = mkCtx({
+        diary: { ...mkCtx().diary, stage: "VEGETATIVE" },
+        strain: mkStrain({ type: "AUTO_FLOWER", floweringWeeks: null }),
+      })
+      const d = evaluateContext(vegAuto)
+      const sc = d.findings.find((f) => f.ruleId === "stage.strain-context")!
+      assert.ok(
+        sc.evidence.some((e) => /autoflower.*own schedule/i.test(e.text)),
+        "auto note emitted"
+      )
+      const rendered = renderIntelLines(vegAuto, d).join("\n")
+      assert.doesNotMatch(rendered, /flip|12\/12/, "no light-cycle flip guidance rendered")
+      // /plan's Upcoming line drops the transition framing for autos
+      const autoPlan = renderPlan(buildSnapshot(vegAuto), []).join("\n")
+      assert.match(autoPlan, /autos transition on their own schedule/, "plan reframes for autos")
+      assert.doesNotMatch(autoPlan, /flower transition —/, "no photoperiod-transition phrasing")
+      const photoPlan = renderPlan(buildSnapshot(
+        mkCtx({ diary: { ...mkCtx().diary, stage: "VEGETATIVE" }, strain: mkStrain() })
+      ), []).join("\n")
+      assert.match(photoPlan, /flower transition —/, "photoperiod keeps the transition framing")
+    }
+
+    // Flowering window — catalog weeks move the trigger, never the verdict
+    {
+      // 9-week cultivar fires at day 49 (window−2wk), same as generic
+      const d9 = evaluateContext(mkCtx({ stageDays: 49, strain: mkStrain({ floweringWeeks: 9 }) }))
+      const hw9 = d9.findings.find((f) => f.ruleId === "stage.harvest-window")!
+      assert.ok(hw9, "9-week cultivar window opens at day 49")
+      assert.match(hw9.evidence[0].text, /~9 weeks/, "the stored value is the expectation")
+      // 7-week fast cultivar opens at day 35 — earlier than the generic floor
+      const d7 = evaluateContext(mkCtx({ stageDays: 40, strain: mkStrain({ floweringWeeks: 7 }) }))
+      assert.ok(
+        d7.findings.some((f) => f.ruleId === "stage.harvest-window"),
+        "fast cultivar window opens before the generic floor"
+      )
+      // 14-week haze does NOT fire at the generic day-49 mark
+      const d14 = evaluateContext(mkCtx({ stageDays: 49, strain: mkStrain({ floweringWeeks: 14 }) }))
+      assert.ok(
+        !d14.findings.some((f) => f.ruleId === "stage.harvest-window"),
+        "14-week cultivar stays quiet at day 49"
+      )
+    }
+
+    // Null flowering window — safe fallback to generic logic
+    {
+      const ctx = mkCtx({ stageDays: 56, strain: mkStrain({ floweringWeeks: null }) })
+      const hw = evaluateContext(ctx).findings.find((f) => f.ruleId === "stage.harvest-window")!
+      assert.ok(hw, "null window still fires on the generic floor")
+      assert.match(hw.evidence[0].text, /many cultivars finish/, "generic wording on null")
+      assert.ok(!/~\d+ week/.test(hw.evidence[0].text), "no fabricated week figure")
+      const sc = evaluateContext(ctx).findings.find((f) => f.ruleId === "stage.strain-context")!
+      assert.ok(!/flowering listed/.test(sc.evidence[0].text), "null window not echoed")
+    }
+
+    // Difficulty — HARD is context metadata, never a diagnosis
+    {
+      const base = evaluateContext(mkCtx({ stageDays: 30 }))
+      const hard = evaluateContext(
+        mkCtx({ stageDays: 30, strain: mkStrain({ difficulty: "HARD" }) })
+      )
+      const sc = hard.findings.find((f) => f.ruleId === "stage.strain-context")!
+      assert.match(sc.evidence[0].text, /difficulty hard/, "HARD surfaces as catalog metadata")
+      // no candidate gains evidence and nothing claims a strain-caused symptom
+      assert.deepEqual(
+        hard.candidates.map((c) => c.id),
+        base.candidates.map((c) => c.id),
+        "difficulty never alters the candidate set"
+      )
+      for (const c of hard.candidates) {
+        for (const e of [...c.supporting, ...c.opposing, ...c.info]) {
+          assert.ok(!e.text.includes("Test Culti"), `no cultivar claim in ${c.id} evidence`)
+        }
+      }
+    }
+
+    // Determinism — identical inputs → identical outputs, snapshot included
+    {
+      const ctx = mkCtx({ stageDays: 56, strain: mkStrain() })
+      assert.deepEqual(evaluateContext(ctx), evaluateContext(ctx), "strain context is deterministic")
+      const snap = buildSnapshot(ctx)
+      assert.deepEqual(snap.strain, ctx.strain, "snapshot carries the normalized strain")
+      assert.deepEqual(buildSnapshot(ctx), buildSnapshot(ctx), "snapshot deterministic")
+      assert.equal(
+        JSON.stringify(renderPlan(snap, buildChecklist(snap))),
+        JSON.stringify(renderPlan(snap, buildChecklist(snap))),
+        "render path deterministic"
+      )
+    }
   }
 
   console.log("All TerpBot intelligence tests passed.")

@@ -87,6 +87,27 @@ export interface KnowledgeSource {
 export type EvidenceDirection = "for" | "against" | "risk" | "info"
 export type EvidenceStrength = "weak" | "moderate" | "strong"
 
+// ── Strain context ──────────────────────────────────────────────────
+// Normalized catalog facts for a diary's linked strain. Loaded once in
+// buildGrowContext via the structured strainRef relation — rules read
+// this object, never Prisma. Every field is a stored catalog value
+// (breeder/database/community-derived, docs/data/strain-research.md) —
+// an expectation, never a verdict; null means "not reliably reported".
+
+export interface StrainGrowContext {
+  strainId: string
+  name: string
+  genetics: string | null
+  /** STRAIN_TYPES vocab — AUTO_FLOWER suppresses photoperiod-flip
+   *  guidance: the plant transitions on age, not a light-cycle change */
+  type: string | null
+  /** catalog-reported flowering estimate — bounds stage-duration
+   *  expectations; never becomes an exact harvest date */
+  floweringWeeks: number | null
+  /** EASY | NORMAL | HARD — catalog cultivation difficulty */
+  difficulty: string | null
+}
+
 /** A measurement the engine can recommend to reduce uncertainty. */
 export interface MeasurementHint {
   id: NextStepId
@@ -199,6 +220,11 @@ export interface GrowContextView {
     growType: string
     techniques: string[]
   }
+  /** normalized catalog strain linked via diary.strainId — null when no
+   *  structured link exists (free-text strain names are never matched).
+   *  Visibility: it only enters a context the diary's own scope already
+   *  permitted — public catalog fields, owner-scoped association. */
+  strain: StrainGrowContext | null
   setup: {
     present: boolean
     medium: string | null

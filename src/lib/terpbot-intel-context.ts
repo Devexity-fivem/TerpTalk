@@ -111,6 +111,7 @@ export function emptyContext(now: number, stage = "UNKNOWN"): GrowContextView {
       growType: "INDOOR",
       techniques: [],
     },
+    strain: null,
     setup: { present: false, medium: null, capabilities: [] },
     now,
     day: 1,
@@ -219,6 +220,13 @@ export async function buildGrowContext(
       id: true, slug: true, title: true, stage: true, visibility: true,
       startDate: true, harvested: true,
       mediumType: true, lightType: true, growType: true, techniques: true,
+      // Authoritative structured strain link — a public catalog row
+      // joined on the same bounded diary fetch (no extra query). The
+      // free-text `strain` field is intentionally NOT consulted here:
+      // no fuzzy matching inside the intelligence layer.
+      strainRef: {
+        select: { id: true, name: true, genetics: true, type: true, floweringWeeks: true, difficulty: true },
+      },
       // deleted included so a soft-deleted setup is treated as absent —
       // soft-delete is a flag, setupId is not cleared on the diary.
       setup: {
@@ -417,6 +425,18 @@ export async function buildGrowContext(
       growType: diary.growType,
       techniques: diary.techniques,
     },
+    // Nulls preserved as stored — a missing catalog field means "not
+    // reliably reported", never inferred.
+    strain: diary.strainRef
+      ? {
+          strainId: diary.strainRef.id,
+          name: diary.strainRef.name,
+          genetics: diary.strainRef.genetics,
+          type: diary.strainRef.type,
+          floweringWeeks: diary.strainRef.floweringWeeks,
+          difficulty: diary.strainRef.difficulty,
+        }
+      : null,
     setup: {
       present: !!diary.setup && !diary.setup.deleted,
       // normalized enum only — the raw GrowSetup.medium free text is

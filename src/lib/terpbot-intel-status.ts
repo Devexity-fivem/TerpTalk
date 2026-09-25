@@ -426,7 +426,12 @@ const CONTROL_LABELS: Record<string, string> = {
 const UPCOMING: Record<string, (s: GrowIntelligenceSnapshot) => string | null> = {
   GERMINATION: () => "seedling — once the first true leaves show",
   SEEDLING: () => "vegetative — growth accelerates; the training window opens",
-  VEGETATIVE: () => "flower transition — RH targets tighten and stretch begins",
+  // Autoflowers transition on age, not a light flip — the upcoming stage
+  // is the same, the framing just can't imply a schedule change.
+  VEGETATIVE: (s) =>
+    s.strain?.type === "AUTO_FLOWER"
+      ? "flower — autos transition on their own schedule; RH targets tighten and stretch begins"
+      : "flower transition — RH targets tighten and stretch begins",
   FLOWER: (s) =>
     s.stageDays >= 35
       ? "harvest — judge maturity on trichomes, not the calendar"
