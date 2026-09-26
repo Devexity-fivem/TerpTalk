@@ -142,9 +142,13 @@ function projectIntel(
     .filter((i) => i.state === "pending" || i.state === "untracked")
     .slice(0, 2)
     .map((i) => ({
-      text: i.targetMetric
-        ? `${metricLabel(i.targetMetric)} — reported ${i.ageDays}d ago, not logged since`
-        : `adjustment reported ${i.ageDays}d ago — no follow-up reading`,
+      text: i.type.startsWith("experiment:")
+        ? i.targetMetric
+          ? `experiment "${i.label ?? "documented change"}" — started ${i.ageDays}d ago, ${metricLabel(i.targetMetric)} not logged since`
+          : `experiment "${i.label ?? "documented change"}" — started ${i.ageDays}d ago, awaiting observation`
+        : i.targetMetric
+          ? `${metricLabel(i.targetMetric)} — reported ${i.ageDays}d ago, not logged since`
+          : `adjustment reported ${i.ageDays}d ago — no follow-up reading`,
       kind: "intervention" as const,
     }))
 

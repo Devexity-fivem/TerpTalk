@@ -159,7 +159,16 @@ const IV_LABELS: Record<string, string> = {
   PEST_ACTION: "pest response",
 }
 const ivLabel = (iv: SnapshotIntervention) =>
-  IV_LABELS[iv.type] ?? iv.type.toLowerCase().replace(/_/g, " ")
+  IV_LABELS[iv.type] ??
+  // Documented experiments render by their sanitized title — never the
+  // `experiment:<id>` type, which would leak the record id into output.
+  (iv.type.startsWith("experiment:") ? `experiment "${iv.label ?? "documented change"}"` : null) ??
+  iv.type.toLowerCase().replace(/_/g, " ")
+
+/** Documented experiments are declared, not chat-reported — the reason
+ *  text has to say "documented" or the trail misattributes provenance. */
+const ivVerb = (iv: SnapshotIntervention) =>
+  iv.type.startsWith("experiment:") ? "documented" : "reported"
 
 const ageText = (d: number) => (d <= 0 ? "today" : `${d}d ago`)
 
@@ -554,7 +563,7 @@ export function buildCultivationDecisions(
       class: "WAIT",
       title: `Wait — evaluate the ${ivLabel(iv)} first`,
       reason:
-        `You reported an adjustment ${ageText(iv.ageDays)} — ${label} hasn't been logged since. ` +
+        `You ${ivVerb(iv)} an adjustment ${ageText(iv.ageDays)} — ${label} hasn't been logged since. ` +
         `A second change now would make the result unreadable.`,
       waitingOn: askable ? `${label} reading` : "a follow-up update",
       strength: "moderate",
@@ -570,8 +579,8 @@ export function buildCultivationDecisions(
         title: `Re-measure ${metricLabel(iv.targetMetric)}`,
         reason:
           iv.beforeValue != null
-            ? `evaluate your reported ${ivLabel(iv)} — ${metricLabel(iv.targetMetric)} was ${iv.beforeValue} when you adjusted`
-            : `evaluate your reported ${ivLabel(iv)} — no ${metricLabel(iv.targetMetric)} reading since`,
+            ? `evaluate your ${ivVerb(iv)} ${ivLabel(iv)} — ${metricLabel(iv.targetMetric)} was ${iv.beforeValue} when you adjusted`
+            : `evaluate your ${ivVerb(iv)} ${ivLabel(iv)} — no ${metricLabel(iv.targetMetric)} reading since`,
         strength: "moderate",
         signals: 1,
         feasibility: stepFeasibility(snap, iv.targetMetric),
@@ -607,7 +616,7 @@ export function buildCultivationDecisions(
       class: "MONITOR",
       title: `Recent ${ivLabel(iv)} still settling`,
       reason:
-        `You reported an adjustment ${ageText(iv.ageDays)} — no logged series can verify it, so observation ` +
+        `You ${ivVerb(iv)} an adjustment ${ageText(iv.ageDays)} — no logged series can verify it, so observation ` +
         `is the follow-up. Hold off on another change until the response is clear.`,
       strength: "weak",
       signals: 1,

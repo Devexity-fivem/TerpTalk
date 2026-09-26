@@ -69,6 +69,7 @@ const mkCtx = (over: Partial<GrowContextView> = {}): GrowContextView => ({
     mediumType: "COCO", lightType: "LED", growType: "INDOOR", techniques: [],
   },
   strain: null,
+  experiments: [],
   setup: { present: false, medium: null, capabilities: [] },
   now: t0 + 40 * DAY,
   day: 41, week: 6,

@@ -18,7 +18,7 @@
 import { prisma } from "@/lib/prisma"
 import { KNOWLEDGE_VERSION } from "@/lib/terpbot-intel-knowledge"
 import { pendingInterventions } from "@/lib/terpbot-intel"
-import { SERIES_KEY } from "@/lib/terpbot-intel-merge"
+import { SERIES_KEY, interventionKey } from "@/lib/terpbot-intel-merge"
 import type {
   GrowContextView,
   InterventionRecord,
@@ -231,10 +231,11 @@ const obsKey = (o: SessionObservation) =>
 const DAY = 86400000
 
 /** one adjustment of a kind per target per diary per day — CAS-retry
- *  safe. Exported: BOT_ASSIST dedupe keys reuse the same intervention
- *  identity so a follow-up assist fires at most once per adjustment. */
-export const interventionKey = (i: InterventionRecord) =>
-  `${i.diaryId ?? ""}|${i.type}|${i.targetMetric ?? ""}|${i.direction ?? ""}|${Math.floor((i.eventT ?? i.at) / DAY)}`
+ *  safe. BOT_ASSIST dedupe keys reuse the same intervention identity so
+ *  a follow-up assist fires at most once per adjustment. Defined in
+ *  terpbot-intel-merge (pure layer) so mergeInterventions can dedupe;
+ *  re-exported here so existing imports keep working. */
+export { interventionKey } from "@/lib/terpbot-intel-merge"
 
 const resolutionKey = (r: Omit<ResolutionClaim, "source">) =>
   `${r.diaryId ?? ""}|${r.symptom ?? ""}|${r.location ?? ""}|${r.kind}|${Math.floor(r.t / DAY)}`

@@ -149,6 +149,10 @@ export interface SnapshotIntervention {
   answered: boolean
   /** newest real value at capture time — the honest "before" */
   beforeValue?: number
+  /** pre-sanitized display name — documented experiments carry their
+   *  title so decision text can name the record instead of the raw
+   *  `experiment:<id>` type */
+  label?: string
 }
 
 export interface GrowIntelligenceSnapshot {
@@ -376,6 +380,7 @@ export function buildSnapshot(ctx: GrowContextView): GrowIntelligenceSnapshot {
           pending: state === "pending",
           answered: state === "answered",
           beforeValue: iv.beforeReading?.v,
+          label: iv.label,
         }
       }),
     diagnosis,

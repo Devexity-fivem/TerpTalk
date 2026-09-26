@@ -20,7 +20,8 @@ import { scanGrowAssists } from "@/lib/terpbot-assist-grow"
 import { getBotUserId, sanitizeEcho, announceStageTransition, purgeDiaryAnnouncements } from "@/lib/terpbot"
 import { runBotCommand } from "@/lib/terpbot-data"
 import { buildGrowContext } from "@/lib/terpbot-intel-context"
-import { evaluateContext, measurementAvailable } from "@/lib/terpbot-intel"
+import { evaluateContext, measurementAvailable, interventionState } from "@/lib/terpbot-intel"
+import { mergeSessionState } from "@/lib/terpbot-intel-merge"
 import { parseTerpbotIntent } from "@/lib/terpbot-intents"
 import { loadSession, saveSession, sweepExpiredSessions } from "@/lib/terpbot-session"
 import { REPORTABLE_METRICS } from "@/lib/terpbot-intel-merge"
@@ -1063,6 +1064,204 @@ async function run() {
       const pctx = await buildGrowContext(spd.id, { ownerId: intel.id, scope: "public" })
       assert.ok(pctx?.strain, "public diary exposes its linked catalog row")
       assert.equal(pctx!.strain!.name, `__tbp strain ${SUFFIX}`)
+
+      // Experiment-aware context (Slice E): documented GrowExperiment
+      // rows enter the normalized context and synthesize one
+      // `experiment:<id>` intervention per live record — same diary
+      // scope, same pending/answered/lapsed state machine.
+      const exd = await prisma.growDiary.create({
+        data: {
+          title: `__tbp exppriv ${SUFFIX}`, description: "t", growType: "INDOOR",
+          startDate: daysAgo(15), authorId: priv.id, stage: "FLOWER",
+          visibility: "PRIVATE",
+        },
+      })
+      diaryIds.push(exd.id)
+      // real ppfd points bracketing the experiment start — the honest
+      // before/after the intervention record evaluates against
+      await prisma.diaryUpdate.create({
+        data: { diaryId: exd.id, authorId: priv.id, stage: "FLOWER", title: "u1", content: "pre", ppfd: 600, createdAt: daysAgo(6) },
+      })
+      await prisma.diaryUpdate.create({
+        data: { diaryId: exd.id, authorId: priv.id, stage: "FLOWER", title: "u2", content: "post", ppfd: 780, createdAt: daysAgo(1) },
+      })
+      const exp1 = await prisma.growExperiment.create({
+        data: {
+          diaryId: exd.id, authorId: priv.id,
+          title: `Raise light intensity [link](https://evil.example)`,
+          change: "raised ppfd", category: "LIGHTING", status: "OBSERVING",
+          expected: "tighter spacing", startedAt: daysAgo(4),
+        },
+      })
+      // one linked update → OBSERVING with fresh evidence
+      const exUpd = await prisma.diaryUpdate.create({
+        data: {
+          diaryId: exd.id, authorId: priv.id, stage: "FLOWER",
+          title: "u3", content: "checking response", createdAt: daysAgo(1),
+          experimentId: exp1.id,
+        },
+      })
+      const expDone = await prisma.growExperiment.create({
+        data: {
+          diaryId: exd.id, authorId: priv.id, title: "Old flush test",
+          change: "flushed", category: "WATERING", status: "COMPLETED",
+          outcome: "INCONCLUSIVE", startedAt: daysAgo(10), endedAt: daysAgo(8),
+        },
+      })
+
+      // Scope: private diary's experiments exist for no one else.
+      assert.equal(
+        await buildGrowContext(exd.id, { ownerId: priv.id, scope: "public" }),
+        null,
+        "public scope refuses a PRIVATE diary even with experiments"
+      )
+      assert.equal(
+        await buildGrowContext(exd.id, { ownerId: intel.id, scope: "owner" }),
+        null,
+        "owner scope is owner-only — another user's experiment stays null"
+      )
+
+      const ectx = await buildGrowContext(exd.id, { ownerId: priv.id, scope: "owner" })
+      assert.ok(ectx, "owner scope builds experiment context")
+      assert.equal(ectx!.experiments.length, 2, "both documented experiments load")
+      // Deterministic order: newest startedAt first, id breaks ties.
+      assert.equal(ectx!.experiments[0].id, exp1.id, "newest experiment sorts first")
+      assert.equal(ectx!.experiments[1].id, expDone.id, "older experiment sorts after")
+      const e1 = ectx!.experiments[0]
+      assert.equal(e1.category, "LIGHTING")
+      assert.equal(e1.status, "OBSERVING")
+      assert.equal(e1.expected, "tighter spacing", "expected preserved verbatim — never parsed")
+      assert.equal(e1.updateCount, 1, "_count reflects linked updates")
+      assert.equal(e1.latestUpdateAt, exUpd.createdAt.getTime(), "latest linked-update timestamp")
+      assert.equal(ectx!.experiments[1].endedAt != null, true, "endedAt preserved")
+
+      // Exactly one intervention record per live experiment — the
+      // deterministic `experiment:<id>` identity, never duplicated.
+      const expIv = ectx!.interventions!.filter((i) => i.type.startsWith("experiment:"))
+      assert.equal(expIv.length, 1, "ended experiment synthesizes no intervention")
+      assert.equal(expIv[0].type, `experiment:${exp1.id}`, "deterministic identity")
+      assert.equal(expIv[0].targetMetric, "ppfd", "LIGHTING maps to ppfd")
+      assert.equal(expIv[0].diaryId, exd.id, "diary attribution preserved")
+      assert.equal(expIv[0].beforeReading?.v, 600, "honest before-reading: newest real point ≤ start")
+      assert.ok(!expIv[0].label!.includes("evil.example"), "title sanitized — no link smuggled into label")
+      // answered: a real ppfd point landed after the declared start.
+      assert.equal(interventionState(ectx!, expIv[0]), "answered")
+
+      // The documented record surfaces in owner findings — descriptive
+      // wording only, never a causation claim.
+      const ediag = evaluateContext(ectx!)
+      const expFind = ediag.findings.find((f) => f.ruleId === "longitudinal.experiment")
+      assert.ok(expFind, "experiment status finding fires on owner context")
+      const evText = expFind!.evidence.map((e) => e.text).join(" ")
+      assert.ok(/being observed/.test(evText), "OBSERVING renders as 'being observed'")
+      assert.ok(!/caused|worked|proved|will increase/i.test(evText), "no causal or outcome language")
+      const ivFind = ediag.findings.find((f) => f.ruleId === "longitudinal.intervention")
+      const ivText = ivFind!.evidence.map((e) => e.text).join(" ")
+      assert.ok(/600 → 780/.test(ivText), "descriptive before/after from real points")
+      assert.ok(/not proof/i.test(ivText), "correlation wording, never causation")
+      // Experiment existence adds zero diagnostic candidates.
+      const bare = await prisma.growDiary.create({
+        data: { title: `__tbp expbare ${SUFFIX}`, description: "t", growType: "INDOOR",
+          startDate: daysAgo(15), authorId: priv.id, stage: "FLOWER", visibility: "PRIVATE" },
+      })
+      diaryIds.push(bare.id)
+      for (const u of [
+        { title: "b1", content: "pre", ppfd: 600, createdAt: daysAgo(6) },
+        { title: "b2", content: "post", ppfd: 780, createdAt: daysAgo(1) },
+      ]) await prisma.diaryUpdate.create({ data: { diaryId: bare.id, authorId: priv.id, stage: "FLOWER", ...u } })
+      const bctx = await buildGrowContext(bare.id, { ownerId: priv.id, scope: "owner" })
+      assert.deepEqual(bctx!.experiments, [], "no experiments → empty array, unchanged behavior")
+      assert.equal(bctx!.interventions!.length, 0, "no experiments → no interventions")
+      const bdiag = evaluateContext(bctx!)
+      assert.deepEqual(
+        bdiag.candidates.map((c) => c.id).sort(),
+        ediag.candidates.map((c) => c.id).sort(),
+        "experiment presence never adds diagnostic candidates"
+      )
+
+      // Session merge: experiment records coexist with chat-reported
+      // interventions — the merge is additive, never replacing.
+      const merged = mergeSessionState(ectx!, {
+        reported: [], observations: [], resolutions: [],
+        interventions: [{
+          type: "TEMP_DOWN", at: daysAgo(2).getTime(), targetMetric: "temperature",
+          direction: "down", diaryId: exd.id,
+        }],
+      }, Date.now())
+      const types = merged.interventions!.map((i) => i.type).sort()
+      assert.deepEqual(types, [`experiment:${exp1.id}`, "TEMP_DOWN"].sort(), "experiment + chat interventions coexist")
+      // Repeated evaluation never duplicates the experiment record.
+      const merged2 = mergeSessionState(merged, {
+        reported: [], observations: [], resolutions: [],
+        interventions: [{
+          type: "TEMP_DOWN", at: daysAgo(2).getTime(), targetMetric: "temperature",
+          direction: "down", diaryId: exd.id,
+        }],
+      }, Date.now())
+      assert.equal(
+        merged2.interventions!.filter((i) => i.type === `experiment:${exp1.id}`).length, 1,
+        "experiment record stays single under repeated merges"
+      )
+      assert.equal(
+        merged2.interventions!.filter((i) => i.type === "TEMP_DOWN").length, 1,
+        "session record dedupes by interventionKey"
+      )
+
+      // Unmapped category: documented, but no metric evidence —
+      // targetMetric absent, intervention untracked, no before/after.
+      const exd2 = await prisma.growDiary.create({
+        data: { title: `__tbp expenv ${SUFFIX}`, description: "t", growType: "INDOOR",
+          startDate: daysAgo(15), authorId: priv.id, stage: "FLOWER", visibility: "PRIVATE" },
+      })
+      diaryIds.push(exd2.id)
+      const expEnv = await prisma.growExperiment.create({
+        data: {
+          diaryId: exd2.id, authorId: priv.id, title: "Fans on high",
+          change: "turned fans up", category: "ENVIRONMENT", status: "ACTIVE",
+          expected: "lower temps and lower humidity and better vpd", // multi-metric prose — never parsed
+          startedAt: daysAgo(3),
+        },
+      })
+      const ectx2 = await buildGrowContext(exd2.id, { ownerId: priv.id, scope: "owner" })
+      const envIv = ectx2!.interventions!.find((i) => i.type === `experiment:${expEnv.id}`)
+      assert.ok(envIv, "unmapped live experiment still synthesizes a record")
+      assert.equal(envIv!.targetMetric, undefined, "ENVIRONMENT maps to no single metric")
+      assert.equal(interventionState(ectx2!, envIv!), "untracked", "no safe target → untracked")
+      const ediag2 = evaluateContext(ectx2!)
+      assert.ok(
+        ediag2.findings.find((f) => f.ruleId === "longitudinal.experiment")!
+          .evidence.some((e) => /no linked update/.test(e.text)),
+        "ACTIVE + zero observations → awaiting-first-observation finding"
+      )
+
+      // Public diary twin: experiments are public-with-diary content —
+      // public scope sees exactly the public record, nothing more.
+      const expd = await prisma.growDiary.create({
+        data: { title: `__tbp exppub ${SUFFIX}`, description: "t", growType: "INDOOR",
+          startDate: daysAgo(15), authorId: intel.id, stage: "VEGETATIVE", visibility: "PUBLIC" },
+      })
+      diaryIds.push(expd.id)
+      const expP = await prisma.growExperiment.create({
+        data: {
+          diaryId: expd.id, authorId: intel.id, title: `__tbp pubexp ${SUFFIX}`,
+          change: "lowered feed", category: "FEEDING", status: "ACTIVE",
+          startedAt: daysAgo(3),
+        },
+      })
+      const pectx = await buildGrowContext(expd.id, { ownerId: intel.id, scope: "public" })
+      assert.ok(pectx, "public diary context builds")
+      assert.equal(pectx!.experiments[0]?.id, expP.id, "public diary exposes its experiment record")
+      assert.equal(pectx!.interventions![0].targetMetric, "ec", "FEEDING maps to ec")
+
+      // Room checkin for the private-diary owner: the experiment title
+      // can never echo through a public path.
+      const pci4 = await runBotCommand("checkin", {
+        userId: priv.id, role: "MEMBER", displayName: `__tbp_prv_${SUFFIX}`, args: [], rest: "",
+      })
+      assert.ok(
+        pci4.ok && !pci4.messages.join("\n").includes("Raise light intensity"),
+        "private experiment never echoes publicly"
+      )
 
       console.log("✓ intelligence engine: context → rules → /checkin")
     }

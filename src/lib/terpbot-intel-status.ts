@@ -209,13 +209,17 @@ export function renderStatus(
   }
 
   // pending interventions — honest before/after, evaluated through the
-  // canonical interventionState contract (Phase J)
+  // canonical interventionState contract (Phase J). Documented
+  // experiments render as "Change" with their sanitized title; chat-
+  // reported ones keep "Adjustment".
   for (const iv of (ctx.interventions ?? []).slice(-1)) {
     const at = iv.eventT ?? iv.at
     const st = interventionState(ctx, iv)
     const label = iv.targetMetric ? metricLabel(iv.targetMetric) : null
+    const isExp = iv.type.startsWith("experiment:")
+    const head = isExp ? `Change "${iv.label ?? "documented"}"` : "Adjustment"
     if (st !== "answered") {
-      lines.push(`Adjustment: reported ${ageText(ctx, at)}${label ? ` — ${label} not logged since` : ""}`)
+      lines.push(`${head}: ${isExp ? "started" : "reported"} ${ageText(ctx, at)}${label ? ` — ${label} not logged since` : ""}`)
     } else if (iv.beforeReading) {
       const key = iv.targetMetric
         ? (METRIC_ORDER.find(([m]) => m === iv.targetMetric)?.[1] ??
@@ -223,7 +227,7 @@ export function renderStatus(
         : undefined
       const after = key ? ctx.series[key].points.filter((p) => !p.tApproximate && p.t > at) : []
       if (after.length) {
-        lines.push(`Adjustment: ${label} ${iv.beforeReading.v} → ${after[after.length - 1].v} since your change — consistent timing, not proof of cause`)
+        lines.push(`${head}: ${label} ${iv.beforeReading.v} → ${after[after.length - 1].v} ${isExp ? "since it started" : "since your change"} — consistent timing, not proof of cause`)
       }
     }
   }

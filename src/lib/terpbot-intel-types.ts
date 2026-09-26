@@ -108,6 +108,52 @@ export interface StrainGrowContext {
   difficulty: string | null
 }
 
+// ── Experiment context ──────────────────────────────────────────────
+// A documented GrowExperiment row normalized for the intelligence
+// layer. Grower-declared records — "I changed X, watching Y" — internal
+// data, never horticultural truth: `expected` is the grower's own words
+// and is never parsed into metrics or treated as a verified outcome.
+// Visibility follows the diary row itself: an experiment enters a
+// context only when buildGrowContext already resolved that diary under
+// the caller's scope (same boundary as the updates it links to).
+
+export interface ExperimentRef {
+  id: string
+  /** grower-authored title — sanitize before rendering in bot output */
+  title: string
+  /** EXPERIMENT_CATEGORIES vocab (src/lib/experiments.ts) */
+  category: string
+  /** EXPERIMENT_STATUSES vocab: PLANNED|ACTIVE|OBSERVING|COMPLETED|ABANDONED */
+  status: string
+  /** grower-stated expectation — display only, never metric-inferred */
+  expected: string | null
+  /** epoch ms of the declared change (schema: non-null) */
+  startedAt: number
+  /** epoch ms — set for COMPLETED/ABANDONED */
+  endedAt: number | null
+  /** diary updates explicitly tagged to this experiment */
+  updateCount: number
+  /** epoch ms of the newest tagged update — drives follow-up logic */
+  latestUpdateAt: number | null
+}
+
+/** Grower-authored text is untrusted output — same stripping contract
+ *  as terpbot.ts's sanitizeEcho, kept in this pure module so context
+ *  builders and rules can sanitize without importing the Prisma-coupled
+ *  bot layer: no line breaks, no URLs/domains, no markdown or mention
+ *  syntax. Bot output bypasses enforceLinkTrust, so echoed text must
+ *  never smuggle a link. */
+export function safeGrowerText(text: string, max = 60): string {
+  const t = text
+    .replace(/[\r\n]+/g, " ")
+    .replace(/(?:https?:\/\/|www\.)\S*/gi, "")
+    .replace(/\b[a-z0-9-]+\.[a-z]{2,}\b/gi, "")
+    .replace(/[[\]()*`<>@\\]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+  return t.length > max ? t.slice(0, max) : t
+}
+
 /** A measurement the engine can recommend to reduce uncertainty. */
 export interface MeasurementHint {
   id: NextStepId
@@ -290,9 +336,13 @@ export interface GrowContextView {
   /** grower resolution/progression claims (diary text + session),
    *  canonical ids only — feeds episode derivation */
   resolutions?: ResolutionClaim[]
-  /** grower-reported adjustments from the session — evaluated against
-   *  the series, never fed as measurements */
+  /** grower-reported adjustments from the session AND documented
+   *  experiments (ACTIVE/OBSERVING → `experiment:<id>` records) —
+   *  evaluated against the series, never fed as measurements */
   interventions?: InterventionRecord[]
+  /** documented experiments on this diary — grower-declared change
+   *  records. [] when none exist. Same diary scope as the row itself. */
+  experiments: ExperimentRef[]
   /** derived per (symptom, location) episode status — computed at
    *  evaluateContext time, never persisted */
   episodes?: SymptomEpisode[]
@@ -354,6 +404,10 @@ export interface InterventionRecord {
   beforeReading?: { v: number; t: number }
   /** diary attribution — same contract as ReportedPoint.diaryId */
   diaryId?: string
+  /** display name for non-chat interventions — documented experiments
+   *  carry their pre-sanitized title so renderers can name the record
+   *  instead of printing the raw `type` id */
+  label?: string
 }
 
 export interface IntelSeries extends SeriesStats {
@@ -743,7 +797,7 @@ export interface WhyTrail {
     /** non-active episode states (bounded: 3) — resolved/improving/recurred */
     episodes: { symptom: SymptomId; status: EpisodeStatus; lastSeenDaysAgo: number }[]
     /** interventions awaiting an after-reading (bounded: 2) */
-    pendingInterventions: { type: string; targetMetric?: MetricId; daysAgo: number }[]
+    pendingInterventions: { type: string; targetMetric?: MetricId; daysAgo: number; label?: string }[]
     /** the chosen next action — the canonical decision class + target,
      *  matching /next and /check (MONITOR is a decision-layer class) */
     action?: { class: ActionClass | "MONITOR"; stepId?: NextStepId; reason: string }

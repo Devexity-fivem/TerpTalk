@@ -73,6 +73,7 @@ const fixtureCtx = (stage: string, medium: string | null, stale: boolean): GrowC
     mediumType: medium, lightType: "LED", growType: "INDOOR", techniques: [],
   },
   strain: null,
+  experiments: [],
   setup: { present: true, medium, capabilities: ["exhaust", "oscillating fan"] },
   now,
   day: 60,

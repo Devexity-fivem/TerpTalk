@@ -51,6 +51,7 @@ import type {
   IntelEvidence,
   IntelSeries,
   MetricId,
+  ExperimentRef,
   StrainGrowContext,
   StructuredObservation,
   WhyTrail,
@@ -65,6 +66,7 @@ const mkCtx = (over: Partial<GrowContextView> = {}): GrowContextView => ({
     mediumType: "COCO", lightType: "LED", growType: "INDOOR", techniques: [],
   },
   strain: null,
+  experiments: [],
   setup: { present: false, medium: null, capabilities: [] },
   now: t0 + 40 * 86400000,
   day: 41, week: 6,
@@ -2023,6 +2025,139 @@ function run() {
         JSON.stringify(renderPlan(snap, buildChecklist(snap))),
         "render path deterministic"
       )
+    }
+  }
+
+  // ── 24. Experiment-aware longitudinal intelligence (Slice E) ──────
+  {
+    const mkExperiment = (over: Partial<ExperimentRef> = {}): ExperimentRef =>
+      Object.assign(
+        {
+          id: "exp1", title: "Raise light intensity", category: "LIGHTING",
+          status: "OBSERVING", expected: null,
+          startedAt: t0 + 30 * 86400000, endedAt: null,
+          updateCount: 1, latestUpdateAt: t0 + 31 * 86400000,
+        } satisfies ExperimentRef,
+        over
+      )
+
+    // No experiments — byte-for-byte the old behavior
+    {
+      const d = evaluateContext(mkCtx())
+      assert.ok(
+        !d.findings.some((f) => f.ruleId === "longitudinal.experiment"),
+        "no experiments → no experiment finding"
+      )
+    }
+
+    // Lifecycle wording — every status stays descriptive
+    {
+      const cases: { status: string; expect: RegExp }[] = [
+        { status: "PLANNED", expect: /still planned/ },
+        { status: "ACTIVE", expect: /no linked update yet/ },
+        { status: "OBSERVING", expect: /being observed/ },
+        { status: "COMPLETED", expect: /marked completed/ },
+        { status: "ABANDONED", expect: /marked abandoned/ },
+      ]
+      for (const c of cases) {
+        const f = findFinding(
+          mkCtx({ experiments: [mkExperiment({
+            status: c.status,
+            updateCount: c.status === "ACTIVE" ? 0 : 2,
+            // fresh linked update — the stale branch is covered below
+            latestUpdateAt: t0 + 39 * 86400000,
+          })] }),
+          "longitudinal.experiment"
+        )
+        assert.ok(f, `finding fires for ${c.status}`)
+        assert.ok(f!.evidence.some((e) => c.expect.test(e.text)), `${c.status} wording`)
+        assert.ok(
+          !f!.evidence.some((e) => /caused|worked|failed|proved|will increase/i.test(e.text)),
+          `${c.status}: no causal or outcome language`
+        )
+      }
+      // OBSERVING gone quiet ≥3d → follow-up finding
+      const stale = findFinding(
+        mkCtx({
+          experiments: [mkExperiment({ status: "OBSERVING", updateCount: 2, latestUpdateAt: t0 + 26 * 86400000 })],
+        }),
+        "longitudinal.experiment"
+      )
+      assert.ok(stale!.evidence.some((e) => /fresh tagged update|last linked update/.test(e.text)), "stale observation → follow-up finding")
+    }
+
+    // Response evidence through longitudinal.intervention — descriptive
+    // before/after, "not proof", never a verdict
+    {
+      const start = t0 + 30 * 86400000
+      const ctx = withSeries(
+        { ppfd: mkSeries([600, 780], 50, 31 * 86400000) },
+        {
+          experiments: [mkExperiment({ startedAt: start })],
+          interventions: [{
+            type: "experiment:exp1", at: start, eventT: start,
+            targetMetric: "ppfd", diaryId: "d1",
+            beforeReading: { v: 600, t: start - 86400000 },
+            label: "Raise light intensity",
+          }],
+        }
+      )
+      const f = findFinding(ctx, "longitudinal.intervention")
+      const text = f!.evidence.map((e) => e.text).join(" ")
+      assert.ok(/after "Raise light intensity" started/.test(text), "experiment named in response evidence")
+      assert.ok(/600 → 780/.test(text), "descriptive before/after rendered")
+      assert.ok(/not proof/i.test(text), "correlation wording kept")
+      assert.ok(!/the experiment caused|worked|succeeded|proved|shows it/i.test(text), "no causal verdict")
+    }
+
+    // Unmapped category — documented context only, no invented target
+    {
+      const ctx = mkCtx({
+        experiments: [mkExperiment({ category: "ENVIRONMENT", status: "ACTIVE", updateCount: 1, expected: "cooler temps at night" })],
+        interventions: [{
+          type: "experiment:exp1", at: t0 + 30 * 86400000, eventT: t0 + 30 * 86400000,
+          diaryId: "d1", label: "Fans on high",
+        }],
+      })
+      const f = findFinding(ctx, "longitudinal.intervention")
+      assert.ok(
+        f!.evidence.some((e) => /no single measurable target/.test(e.text)),
+        "unmapped category admits no before/after claim"
+      )
+      // `expected` prose is never parsed into a metric
+      const expRule = findFinding(ctx, "longitudinal.experiment")
+      assert.ok(expRule, "experiment finding fires for unmapped category")
+      assert.ok(!expRule!.evidence.some((e) => /temperature|ppfd|ec\b/i.test(e.text)), "expected prose never infers a metric")
+    }
+
+    // Grower-authored titles are sanitized in every emitted line
+    {
+      const dirty = mkExperiment({
+        title: "Boost [click](https://evil.example) @admin\nnow www.bad.com",
+      })
+      const f = findFinding(mkCtx({ experiments: [dirty] }), "longitudinal.experiment")
+      const text = f!.evidence.map((e) => e.text).join(" ")
+      assert.ok(!/evil\.example|bad\.com|@admin|\[click\]/.test(text), "links/mentions/markdown stripped")
+    }
+
+    // Experiment existence never strengthens a diagnosis — candidates
+    // identical with and without the experiment record.
+    {
+      const bare = evaluateContext(withSeries({ ec: mkSeries([2.4, 2.6, 2.7], 0.2) }))
+      const withExp = evaluateContext(withSeries({ ec: mkSeries([2.4, 2.6, 2.7], 0.2) }, {
+        experiments: [mkExperiment({ category: "FEEDING" })],
+      }))
+      assert.deepEqual(
+        withExp.candidates.map((c) => ({ id: c.id, state: c.state })),
+        bare.candidates.map((c) => ({ id: c.id, state: c.state })),
+        "experiment presence changes no candidate or state"
+      )
+    }
+
+    // Determinism — identical inputs → identical findings/decisions
+    {
+      const ctx = mkCtx({ experiments: [mkExperiment()] })
+      assert.deepEqual(evaluateContext(ctx), evaluateContext(ctx), "experiment context deterministic")
     }
   }
 

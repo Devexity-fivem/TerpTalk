@@ -38,12 +38,13 @@ import { episodesFromObservations } from "@/lib/terpbot-intel-episodes"
 import { feasibilityBonus, stepCapability } from "@/lib/terpbot-intel-capability"
 import { LOGGED_SERIES } from "@/lib/terpbot-intel-merge"
 import { feedsForSymptom } from "@/lib/terpbot-nl-parse"
+import { experimentFollowUp } from "@/lib/experiments"
 import { CANDIDATES, SOURCES } from "@/lib/terpbot-intel-knowledge"
 import {
   LOCATION_LABELS,
   SYMPTOM_LABELS,
 } from "@/lib/terpbot-nl-vocab"
-import { METRIC_EPSILON, SIGNAL_METRICS, STALE_DAYS } from "@/lib/terpbot-intel-types"
+import { METRIC_EPSILON, SIGNAL_METRICS, STALE_DAYS, safeGrowerText } from "@/lib/terpbot-intel-types"
 import type {
   ActionClass,
   ActionRequest,
@@ -2663,13 +2664,23 @@ export const INTEL_RULES: IntelRule[] = [
         const signal = iv.targetMetric ? METRIC_SIGNAL[iv.targetMetric] : "data"
         const at = iv.eventT ?? iv.at
         const daysAgo = Math.max(0, Math.floor((ctx.now - at) / 86400000))
+        // Documented experiments are grower-declared records — "documented
+        // on your diary", never "reported in chat", and named via the
+        // pre-sanitized label rather than the raw type id.
+        const experiment = iv.type.startsWith("experiment:")
+        const name = iv.label ?? "documented change"
+        const since = experiment ? `since "${name}" started` : "since your reported change"
+        const after_ = experiment ? `after "${name}" started` : "after your reported change"
+        const when = daysAgo === 0 ? "today" : `${daysAgo}d ago`
 
         if (!key || !iv.targetMetric) {
           ev.push({
             direction: "info",
             strength: "weak",
             signal,
-            text: `You reported an adjustment (${daysAgo === 0 ? "today" : `${daysAgo}d ago`}) — I'll watch the next readings for movement.`,
+            text: experiment
+              ? `Experiment "${name}" (${when}) has no single measurable target — I'm tracking it as context only, no before/after claim.`
+              : `You reported an adjustment (${when}) — I'll watch the next readings for movement.`,
           })
           continue
         }
@@ -2683,7 +2694,9 @@ export const INTEL_RULES: IntelRule[] = [
             direction: "info",
             strength: "weak",
             signal,
-            text: `No ${metricLabel} reading before your reported change — nothing to compare against.`,
+            text: experiment
+              ? `No ${metricLabel} reading before "${name}" started — nothing to compare against.`
+              : `No ${metricLabel} reading before your reported change — nothing to compare against.`,
             measurement: hint(iv.targetMetric),
           })
           continue
@@ -2693,7 +2706,7 @@ export const INTEL_RULES: IntelRule[] = [
             direction: "info",
             strength: "weak",
             signal,
-            text: `${metricLabel} hasn't been logged since the reported change (${daysAgo === 0 ? "today" : `${daysAgo}d ago`}) — a new reading shows whether it moved.`,
+            text: `${metricLabel} hasn't been logged ${since} (${when}) — a new reading shows whether it moved.`,
             measurement: hint(iv.targetMetric),
           })
           continue
@@ -2711,9 +2724,85 @@ export const INTEL_RULES: IntelRule[] = [
           signal,
           text: moved
             ? intended
-              ? `${metricLabel} moved ${before.v} → ${latest.v} after your reported change — timing is consistent, not proof it caused it.`
+              ? `${metricLabel} moved ${before.v} → ${latest.v} ${after_} — timing is consistent, not proof it caused it.`
               : `${metricLabel} moved ${before.v} → ${latest.v} — opposite the intended direction of your reported change.`
-            : `${metricLabel} hasn't measurably moved since your reported change (${before.v} → ${latest.v}).`,
+            : `${metricLabel} hasn't measurably moved ${since} (${before.v} → ${latest.v}).`,
+        })
+      }
+      return ev
+    },
+    sourceIds: [],
+  },
+  {
+    // Documented experiments — grower-declared change records. Internal
+    // data only: lifecycle status and follow-up gaps from the record
+    // itself. Never predicts the outcome, never feeds diagnostic
+    // candidates, and the metric before/after evidence stays in
+    // longitudinal.intervention where the "consistent, not proof"
+    // wording already lives.
+    id: "longitudinal.experiment",
+    domain: "data",
+    kind: "observation",
+    title: "Documented experiment status",
+    applies: (ctx) => ctx.experiments.length > 0,
+    evaluate: (ctx) => {
+      const ev: IntelEvidence[] = []
+      for (const e of ctx.experiments) {
+        const title = safeGrowerText(e.title)
+        const daysAgo = Math.max(0, Math.floor((ctx.now - e.startedAt) / 86400000))
+        const when = daysAgo === 0 ? "today" : `${daysAgo}d ago`
+        if (e.status === "PLANNED") {
+          ev.push({
+            direction: "info",
+            strength: "weak",
+            signal: "data",
+            text: `Experiment "${title}" is still planned — nothing to evaluate until it starts.`,
+          })
+          continue
+        }
+        if (e.status === "COMPLETED" || e.status === "ABANDONED") {
+          // Ended — lifecycle context only; the recorded outcome is the
+          // grower's own call and is never re-derived here.
+          ev.push({
+            direction: "info",
+            strength: "weak",
+            signal: "data",
+            text: `Experiment "${title}" is marked ${e.status === "COMPLETED" ? "completed" : "abandoned"} — its outcome is your call, not something I derive.`,
+          })
+          continue
+        }
+        const followUp = experimentFollowUp({
+          status: e.status,
+          observationCount: e.updateCount,
+          lastObservationAt: e.latestUpdateAt != null ? new Date(e.latestUpdateAt) : null,
+          now: new Date(ctx.now),
+        })
+        if (followUp === "awaiting_first_observation") {
+          ev.push({
+            direction: "info",
+            strength: "moderate",
+            signal: "data",
+            text: `Experiment "${title}" (${when}) has no linked update yet — tag a diary update to it so observations land on the record.`,
+          })
+          continue
+        }
+        if (followUp === "awaiting_follow_up") {
+          const quiet = Math.floor((ctx.now - (e.latestUpdateAt ?? e.startedAt)) / 86400000)
+          ev.push({
+            direction: "info",
+            strength: "moderate",
+            signal: "data",
+            text: `Experiment "${title}" is in observation but its last linked update is ${quiet}d old — a fresh tagged update keeps the comparison honest.`,
+          })
+          continue
+        }
+        ev.push({
+          direction: "info",
+          strength: "weak",
+          signal: "data",
+          text: e.status === "OBSERVING"
+            ? `Experiment "${title}" is being observed (started ${when}, ${e.updateCount} linked update${e.updateCount === 1 ? "" : "s"}) — watching, not concluding.`
+            : `Experiment "${title}" is underway (started ${when}) — a documented change; I'm tracking it, not predicting it.`,
         })
       }
       return ev

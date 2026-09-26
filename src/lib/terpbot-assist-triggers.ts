@@ -20,11 +20,12 @@
 //   the data doesn't contain, never a causation claim.
 
 import { CANDIDATES } from "@/lib/terpbot-intel-knowledge"
+import { experimentFollowUp } from "@/lib/experiments"
 import { SCHEMA_SERIES, MEASUREMENT_INFO, interventionState } from "@/lib/terpbot-intel"
 import { topAskableMetric, type CultivationDecisionSet } from "@/lib/terpbot-intel-decisions"
 import { interventionKey } from "@/lib/terpbot-session"
 import { SYMPTOM_LABELS, LOCATION_LABELS } from "@/lib/terpbot-nl-vocab"
-import { STALE_DAYS } from "@/lib/terpbot-intel-types"
+import { STALE_DAYS, safeGrowerText } from "@/lib/terpbot-intel-types"
 import type {
   ActionClass,
   Diagnosis,
@@ -244,6 +245,10 @@ function baselineShift({ ctx }: AssistInput): AssistFire[] {
 function interventionFollowup({ ctx }: AssistInput): AssistFire[] {
   const fires: AssistFire[] = []
   for (const iv of ctx.interventions ?? []) {
+    // Documented experiments are owned by the experiment-followup
+    // trigger below — skipping them here prevents the same change from
+    // double-firing under two assist keys.
+    if (iv.type.startsWith("experiment:")) continue
     const m = iv.targetMetric
     if (!m) continue
     // Canonical contract — "pending" already means measurable target,
@@ -263,6 +268,87 @@ function interventionFollowup({ ctx }: AssistInput): AssistFire[] {
         `environment moved the way you intended — type it in chat or log it on your diary.`,
       stepId: m,
       reason: `intervention ${interventionKey(iv)} pending follow-up at ${days}d`,
+    })
+  }
+  return fires
+}
+
+// ── T4b · experiment follow-up ─────────────────────────────────────
+// Documented experiments are the grower's declared change records —
+// grower-provided internal data, never a horticultural claim. The
+// trigger reuses experiments.ts's deterministic follow-up contract
+// (ACTIVE with zero linked updates → awaiting first observation;
+// OBSERVING quiet ≥3d → awaiting follow-up) and adds one more lane:
+// a mapped live experiment whose target metric still has no real
+// after-reading ≥2d. One fire per experiment per kind — the key embeds
+// the evidence kind so a first-observation nudge can't re-fire as a
+// stale-observation one, and ended experiments never fire at all.
+// Never claims the change worked or didn't — it asks for an
+// observation, not a verdict.
+
+function experimentFollowup({ ctx }: AssistInput): AssistFire[] {
+  const fires: AssistFire[] = []
+  for (const e of ctx.experiments) {
+    if (e.status !== "ACTIVE" && e.status !== "OBSERVING") continue
+    const title = safeGrowerText(e.title)
+    const iv = ctx.interventions?.find((i) => i.type === `experiment:${e.id}`)
+    const followUp = experimentFollowUp({
+      status: e.status,
+      observationCount: e.updateCount,
+      lastObservationAt: e.latestUpdateAt != null ? new Date(e.latestUpdateAt) : null,
+      now: new Date(ctx.now),
+    })
+    if (followUp === "awaiting_first_observation") {
+      const days = Math.floor((ctx.now - e.startedAt) / DAY)
+      if (days < 2) continue // same quiet window as T4 — no day-zero nag
+      fires.push({
+        triggerId: "experiment-followup",
+        severity: "INFO",
+        actionClass: "OBSERVE",
+        key: `assist:expfup:${ctx.diary.id}:${e.id}:first`,
+        title: `How did "${title}" go?`,
+        content:
+          `Your experiment "${title}" has no linked diary update yet (~${days}d). Log an observation tagged ` +
+          `to it — the diary page links updates to the experiment, and the before/after comparison ` +
+          `needs something to work with.`,
+        reason: `experiment ${e.id} awaiting first observation at ${days}d`,
+      })
+      continue
+    }
+    if (followUp === "awaiting_follow_up") {
+      const quiet = Math.floor((ctx.now - (e.latestUpdateAt ?? e.startedAt)) / DAY)
+      fires.push({
+        triggerId: "experiment-followup",
+        severity: "INFO",
+        actionClass: "OBSERVE",
+        key: `assist:expfup:${ctx.diary.id}:${e.id}:stale`,
+        title: `"${title}" needs a fresh look`,
+        content:
+          `"${title}" is in observation but the last linked update is ~${quiet}d old — a new tagged update ` +
+          `keeps the before/after comparison meaningful.`,
+        reason: `experiment ${e.id} observing, last update ${quiet}d old`,
+      })
+      continue
+    }
+    // Mapped live experiment, observations present, but the target
+    // series still has no real point after the start — the same
+    // pending-window semantics as T4 (2–7d), just keyed to the
+    // experiment record so it can't double-fire with that trigger.
+    if (!iv?.targetMetric) continue
+    if (interventionState(ctx, iv) !== "pending") continue
+    const days = Math.floor((ctx.now - (iv.eventT ?? iv.at)) / DAY)
+    if (days < 2) continue
+    fires.push({
+      triggerId: "experiment-followup",
+      severity: "INFO",
+      actionClass: "MEASURE",
+      key: `assist:expfup:${ctx.diary.id}:${e.id}:metric`,
+      title: `Follow-up on "${title}"`,
+      content:
+        `Your experiment "${title}" is ~${days}d in and ${metricLabel(iv.targetMetric)} hasn't been logged since — ` +
+        `a current reading shows whether it moved. That's an observation, not a verdict on the change.`,
+      stepId: iv.targetMetric,
+      reason: `experiment ${e.id} target ${iv.targetMetric} pending follow-up at ${days}d`,
     })
   }
   return fires
@@ -340,6 +426,7 @@ export const ASSIST_TRIGGERS: Trigger[] = [
   recurrence,
   staleMeasurement,
   interventionFollowup,
+  experimentFollowup,
   baselineShift,
   gapFilled,
 ]

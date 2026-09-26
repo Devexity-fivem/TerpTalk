@@ -87,6 +87,7 @@ const mkCtx = (over: Partial<GrowContextView> = {}): GrowContextView => ({
     mediumType: "COCO", lightType: "LED", growType: "INDOOR", techniques: [],
   },
   strain: null,
+  experiments: [],
   setup: { present: false, medium: null, capabilities: [] },
   now: NOW,
   day: 41, week: 6,
@@ -1253,6 +1254,72 @@ function run() {
     })))
     assert.equal(new Map(harvAir.map((i) => [i.id, i])).get("harv-airflow")!.state, "watch")
     ok("audit pins — honest states under weak/absent evidence")
+  }
+
+  // ── P20. Documented experiments ride the canonical machinery ─────
+  {
+    // pending experiment record (mapped reportable target, no
+    // after-reading) → WAIT + VERIFY with documented provenance,
+    // never the raw id
+    const ctx = mkCtx({
+      interventions: [{
+        type: "experiment:expX", at: NOW - 2 * DAY, eventT: NOW - 2 * DAY,
+        targetMetric: "ec", diaryId: "d1", label: "Lower feed strength",
+      }],
+    })
+    const snap = buildSnapshot(ctx)
+    assert.equal(snap.interventions[0].state, "pending", "experiment record → pending")
+    assert.equal(snap.interventions[0].label, "Lower feed strength", "label survives the snapshot")
+    const set = buildCultivationDecisions(snap)
+    const wait = set.decisions.find((d) => d.class === "WAIT")!
+    assert.ok(wait, "pending experiment → WAIT")
+    assert.match(wait.reason, /documented/, "experiment provenance, not 'reported'")
+    assert.match(wait.title, /experiment "Lower feed strength"/, "named by label, not the raw id")
+    assert.ok(!/expX/.test(wait.title + wait.reason), "record id never renders")
+    const verify = set.decisions.find((d) => d.class === "VERIFY" && d.stepId === "ec")!
+    assert.ok(verify, "pending experiment → VERIFY on the mapped target")
+    assert.match(verify.reason, /documented/, "VERIFY names the documented change")
+    assert.equal(set.posture, "wait", "pending experiment → wait posture")
+
+    // logged-only target (ppfd can't be typed in chat) → WAIT holds but
+    // no unanswerable VERIFY is emitted
+    const ppfdSet = buildCultivationDecisions(buildSnapshot(mkCtx({
+      interventions: [{
+        type: "experiment:expW", at: NOW - 2 * DAY, eventT: NOW - 2 * DAY,
+        targetMetric: "ppfd", diaryId: "d1", label: "Raise light intensity",
+      }],
+    })))
+    assert.ok(ppfdSet.decisions.some((d) => d.class === "WAIT"), "ppfd experiment → WAIT still holds")
+    assert.ok(
+      !ppfdSet.decisions.some((d) => d.class === "VERIFY" && d.stepId === "ppfd"),
+      "unreportable target → no VERIFY ask"
+    )
+
+    // unmapped category → untracked → MONITOR settling, no WAIT ask
+    const untracked = buildCultivationDecisions(buildSnapshot(mkCtx({
+      interventions: [{
+        type: "experiment:expY", at: NOW - DAY, eventT: NOW - DAY,
+        diaryId: "d1", label: "Fans on high",
+      }],
+    })))
+    const mon = untracked.decisions.find((d) => d.class === "MONITOR")!
+    assert.ok(mon, "untracked experiment → MONITOR")
+    assert.match(mon.title + mon.reason, /Fans on high|documented/, "named, provenance honest")
+    assert.ok(!untracked.decisions.some((d) => d.class === "WAIT"), "no measurable target → no WAIT")
+
+    // answered → the record leaves the live gate entirely
+    const answered = buildCultivationDecisions(buildSnapshot(withSeries(
+      { ppfd: freshSeries([600, 780], 50) },
+      {
+        interventions: [{
+          type: "experiment:expZ", at: NOW - 3 * DAY, eventT: NOW - 3 * DAY,
+          targetMetric: "ppfd", diaryId: "d1", label: "Raise light intensity",
+          beforeReading: { v: 600, t: NOW - 4 * DAY },
+        }],
+      }
+    )))
+    assert.ok(!answered.decisions.some((d) => d.class === "WAIT"), "answered experiment → no cooldown")
+    ok("documented experiments → WAIT/VERIFY/MONITOR via canonical machinery")
   }
 }
 

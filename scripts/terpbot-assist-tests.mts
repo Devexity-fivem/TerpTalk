@@ -15,6 +15,7 @@ import { emptySeries as EMPTY_SERIES } from "./lib/terpbot-fixtures"
 import type {
   CandidateResult,
   Diagnosis,
+  ExperimentRef,
   GrowContextView,
   IntelSeries,
   InterventionRecord,
@@ -37,6 +38,7 @@ const mkCtx = (over: Partial<GrowContextView> = {}): GrowContextView => ({
     mediumType: "COCO", lightType: "LED", growType: "INDOOR", techniques: [],
   },
   strain: null,
+  experiments: [],
   setup: { present: false, medium: null, capabilities: [] },
   now: NOW,
   day: 31, week: 5,
@@ -351,6 +353,129 @@ const humidityWith = (pts: { t: number; v: number }[]): IntelSeries => ({
     interventions: [iv()],
     series: { ...mkCtx().series, humidity: approxSeries },
   }), "intervention-followup"), "approximate after-point doesn't close")
+}
+
+// ── T4b · experiment follow-up ─────────────────────────────────────
+section("experiment-followup")
+
+const exp = (over: Partial<ExperimentRef> = {}): ExperimentRef => ({
+  id: "exp1",
+  title: "Raise light intensity",
+  category: "LIGHTING",
+  status: "ACTIVE",
+  expected: null,
+  startedAt: NOW - 4 * DAY,
+  endedAt: null,
+  updateCount: 0,
+  latestUpdateAt: null,
+  ...over,
+})
+
+const expIv = (over: Partial<InterventionRecord> = {}): InterventionRecord => ({
+  type: "experiment:exp1",
+  at: NOW - 4 * DAY,
+  eventT: NOW - 4 * DAY,
+  targetMetric: "ppfd",
+  diaryId: "d1",
+  label: "Raise light intensity",
+  ...over,
+})
+
+{
+  // ACTIVE + zero linked updates ≥2d → first-observation fire
+  const f = fire(mkCtx({ experiments: [exp()], interventions: [expIv()] }), "experiment-followup")!
+  assert.ok(f, "active experiment with no observations fires")
+  assert.equal(f.actionClass, "OBSERVE")
+  assert.equal(f.severity, "INFO")
+  assert.equal(f.key, `assist:expfup:d1:exp1:first`, "deterministic once-per-kind key")
+  assert.match(f.content, /no linked diary update/, "asks for an observation, not a verdict")
+  assert.ok(!/worked|caused|increase yield/i.test(f.title + f.content), "no causation or outcome claim")
+  assert.ok(!/\/status|\/why|\/check/.test(f.content), "private diary: no public chat-command reference")
+
+  // dedupe — identical evidence re-keys identically (claim absorbs it)
+  const again = fire(mkCtx({ experiments: [exp()], interventions: [expIv()] }), "experiment-followup")!
+  assert.equal(again.key, f.key, "same evidence → same key")
+
+  // near misses
+  assert.ok(
+    !fire(mkCtx({ experiments: [exp({ startedAt: NOW - DAY })] }), "experiment-followup"),
+    "<2d old: too soon — same quiet window as T4"
+  )
+  assert.ok(
+    !fire(mkCtx({ experiments: [exp({ status: "COMPLETED", endedAt: NOW - DAY })] }), "experiment-followup"),
+    "completed experiment never fires"
+  )
+  assert.ok(
+    !fire(mkCtx({ experiments: [exp({ status: "ABANDONED", endedAt: NOW - DAY })] }), "experiment-followup"),
+    "abandoned experiment never fires"
+  )
+  assert.ok(
+    !fire(mkCtx({ experiments: [exp({ status: "PLANNED" })] }), "experiment-followup"),
+    "planned experiment isn't live — no fire"
+  )
+
+  // OBSERVING + stale linked update ≥3d → stale-observation fire
+  const staleFire = fire(mkCtx({
+    experiments: [exp({ status: "OBSERVING", updateCount: 2, latestUpdateAt: NOW - 5 * DAY })],
+    interventions: [expIv()],
+  }), "experiment-followup")!
+  assert.ok(staleFire, "quiet observation window fires")
+  assert.equal(staleFire.key, `assist:expfup:d1:exp1:stale`, "distinct kind → distinct key")
+  assert.match(staleFire.content, /last linked update/, "stale wording asks for a fresh tagged update")
+
+  // OBSERVING fresh + the mapped metric already answered → silent
+  assert.ok(
+    !fire(mkCtx({
+      experiments: [exp({ status: "OBSERVING", updateCount: 2, latestUpdateAt: NOW - DAY })],
+      interventions: [expIv()],
+      series: { ...mkCtx().series, ppfd: humidityWith([{ t: NOW - 2 * DAY, v: 780 }]) },
+    }), "experiment-followup"),
+    "fresh linked update + answered metric: no fire"
+  )
+  // …but a fresh tagged update alone doesn't close the mapped-metric
+  // lane — the ppfd series still owes a real after-reading.
+  const metricGap = fire(mkCtx({
+    experiments: [exp({ status: "OBSERVING", updateCount: 2, latestUpdateAt: NOW - DAY })],
+    interventions: [expIv()],
+  }), "experiment-followup")!
+  assert.equal(metricGap?.key, `assist:expfup:d1:exp1:metric`, "fresh update doesn't close the metric lane")
+
+  // Observations present but the mapped metric still has no real
+  // after-reading ≥2d → metric lane fires on the target step.
+  const mf = fire(mkCtx({
+    experiments: [exp({ status: "OBSERVING", updateCount: 1, latestUpdateAt: NOW - 2 * DAY })],
+    interventions: [expIv()],
+  }), "experiment-followup")!
+  assert.ok(mf, "mapped metric pending ≥2d fires")
+  assert.equal(mf.key, `assist:expfup:d1:exp1:metric`, "metric lane keyed separately")
+  assert.equal(mf.stepId, "ppfd", "asks for the experiment's mapped target")
+  assert.equal(mf.actionClass, "MEASURE")
+  assert.match(mf.content, /not a verdict/, "observation framing kept")
+
+  // …and a real ppfd point after the start closes it (answered).
+  assert.ok(
+    !fire(mkCtx({
+      experiments: [exp({ status: "OBSERVING", updateCount: 1, latestUpdateAt: NOW - 2 * DAY })],
+      interventions: [expIv()],
+      series: { ...mkCtx().series, ppfd: humidityWith([{ t: NOW - 2 * DAY, v: 780 }]) },
+    }), "experiment-followup"),
+    "after-reading exists: no fire"
+  )
+
+  // No double-fire: the same record is excluded from T4's lane.
+  const ctxBoth = mkCtx({
+    experiments: [exp({ status: "OBSERVING", updateCount: 1, latestUpdateAt: NOW - 2 * DAY })],
+    interventions: [expIv()],
+  })
+  const all = evaluate(ctxBoth)
+  assert.equal(
+    all.filter((x) => x.triggerId === "intervention-followup").length, 0,
+    "experiment record never fires the generic intervention trigger"
+  )
+  assert.equal(
+    all.filter((x) => x.triggerId === "experiment-followup").length, 1,
+    "exactly one experiment follow-up"
+  )
 }
 
 // ── T5 · recurring issue ───────────────────────────────────────────

@@ -207,6 +207,7 @@ function buildLongitudinal(
       type: iv.type,
       targetMetric: iv.targetMetric,
       daysAgo: Math.max(0, Math.floor((ctx.now - (iv.eventT ?? iv.at)) / 86400000)),
+      label: iv.label,
     }))
 
   // The trail's action is the canonical decision top — same answer
@@ -324,8 +325,11 @@ export function renderWhy(trail: WhyTrail, question?: string): string[] {
     }
     for (const iv of lon.pendingInterventions) {
       const label = iv.targetMetric ? (MEASUREMENT_INFO[iv.targetMetric]?.label ?? iv.targetMetric) : null
+      const isExp = iv.type.startsWith("experiment:")
       lines.push(
-        `Intervention: you reported an adjustment ${iv.daysAgo}d ago${label ? ` — no ${label} reading logged since, so before/after can't be checked yet` : " — watching the next readings"}.`
+        isExp
+          ? `Experiment: "${iv.label ?? "documented change"}" started ${iv.daysAgo}d ago${label ? ` — no ${label} reading logged since, so before/after can't be checked yet` : " — watching for linked updates"}.`
+          : `Intervention: you reported an adjustment ${iv.daysAgo}d ago${label ? ` — no ${label} reading logged since, so before/after can't be checked yet` : " — watching the next readings"}.`
       )
     }
     if (lon.action) {

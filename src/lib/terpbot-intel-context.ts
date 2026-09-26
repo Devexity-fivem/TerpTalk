@@ -29,13 +29,33 @@ import type {
   StructuredObservation,
 } from "@/lib/terpbot-intel-types"
 import { parseGrowText } from "@/lib/terpbot-nl-parse"
-import { freshnessOf } from "@/lib/terpbot-intel-merge"
+import { freshnessOf, LOGGED_SERIES } from "@/lib/terpbot-intel-merge"
 import { stageTransitions } from "@/lib/terpbot-intel-timeline"
+import { safeGrowerText } from "@/lib/terpbot-intel-types"
+import type { ExperimentRef, InterventionRecord } from "@/lib/terpbot-intel-types"
 
 // Last-12-updates window: enough for trend detection (min 3 points) and
 // recent-vs-baseline comparisons at typical weekly-ish cadence, while
 // staying a single indexed, bounded fetch.
 export const INTEL_WINDOW = 12
+
+/** Deterministic experiment category → measured target. Only categories
+ *  where the schema leaves no ambiguity get a metric: LIGHTING acts on
+ *  canopy PPFD, FEEDING on input EC, WATERING on applied liters.
+ *  ENVIRONMENT (temp vs RH vs VPD), TRAINING, ISSUE_RESPONSE, SETUP,
+ *  TECHNIQUE and OTHER have no single measurable target — they stay
+ *  unmapped and produce context only, never metric evidence. `expected`
+ *  prose is never parsed for a target. */
+export const EXPERIMENT_TARGET_METRIC: Partial<Record<string, MetricId>> = {
+  LIGHTING: "ppfd",
+  FEEDING: "ec",
+  WATERING: "watering",
+}
+
+/** Live statuses that synthesize an intervention record — the change is
+ *  underway and its follow-up window is open. PLANNED hasn't happened
+ *  (nothing to evaluate); COMPLETED/ABANDONED leave active reasoning. */
+const LIVE_EXPERIMENT_STATUSES = new Set(["ACTIVE", "OBSERVING"])
 
 type UpdateRow = {
   id: string
@@ -112,6 +132,7 @@ export function emptyContext(now: number, stage = "UNKNOWN"): GrowContextView {
       techniques: [],
     },
     strain: null,
+    experiments: [],
     setup: { present: false, medium: null, capabilities: [] },
     now,
     day: 1,
@@ -226,6 +247,19 @@ export async function buildGrowContext(
       // no fuzzy matching inside the intelligence layer.
       strainRef: {
         select: { id: true, name: true, genetics: true, type: true, floweringWeeks: true, difficulty: true },
+      },
+      // Documented experiments — same diary row, same scope. Bounded;
+      // the linked-update include carries only the newest timestamp for
+      // the follow-up check (_count gives the true total).
+      experiments: {
+        orderBy: [{ startedAt: "desc" }, { id: "asc" }],
+        take: 8,
+        select: {
+          id: true, title: true, category: true, status: true,
+          expected: true, startedAt: true, endedAt: true,
+          updates: { orderBy: { createdAt: "desc" }, take: 1, select: { createdAt: true } },
+          _count: { select: { updates: true } },
+        },
       },
       // deleted included so a soft-deleted setup is treated as absent —
       // soft-delete is a flag, setupId is not cleared on the diary.
@@ -368,6 +402,46 @@ export async function buildGrowContext(
 
   const latest = rows[rows.length - 1]
 
+  // Documented experiments — normalized as grower-declared records.
+  // Live ones (ACTIVE/OBSERVING) also synthesize an InterventionRecord
+  // keyed `experiment:<id>` so the existing pending/answered/lapsed
+  // state machine, adjust cooldown and follow-up surfaces see them
+  // exactly like a chat-reported change. Ended experiments produce no
+  // intervention. beforeReading is the honest "before": newest real
+  // series point at/before the declared start.
+  const experiments: ExperimentRef[] = diary.experiments.map((e) => ({
+    id: e.id,
+    title: e.title,
+    category: e.category,
+    status: e.status,
+    expected: e.expected,
+    startedAt: e.startedAt.getTime(),
+    endedAt: e.endedAt?.getTime() ?? null,
+    updateCount: e._count.updates,
+    latestUpdateAt: e.updates[0]?.createdAt.getTime() ?? null,
+  }))
+  const interventions: InterventionRecord[] = []
+  for (const e of experiments) {
+    if (!LIVE_EXPERIMENT_STATUSES.has(e.status)) continue
+    const targetMetric = EXPERIMENT_TARGET_METRIC[e.category]
+    const key = targetMetric ? LOGGED_SERIES[targetMetric] : undefined
+    const pts = key ? series[key].points : []
+    let beforeReading: { v: number; t: number } | undefined
+    for (const p of pts) {
+      if (p.tApproximate || p.t > e.startedAt) continue
+      if (!beforeReading || p.t > beforeReading.t) beforeReading = { v: p.v, t: p.t }
+    }
+    interventions.push({
+      type: `experiment:${e.id}`,
+      at: e.startedAt,
+      eventT: e.startedAt,
+      targetMetric,
+      diaryId: diary.id,
+      beforeReading,
+      label: safeGrowerText(e.title),
+    })
+  }
+
   // Reported-symptom channel: recent update text → structured
   // observations. Parse only what's still evidence-relevant; store
   // normalized ids + refIds, never the raw text.
@@ -460,5 +534,7 @@ export async function buildGrowContext(
     observations,
     baselines,
     resolutions,
+    experiments,
+    interventions,
   }
 }

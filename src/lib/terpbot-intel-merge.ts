@@ -30,6 +30,14 @@ import {
   type StructuredObservation,
 } from "@/lib/terpbot-intel-types"
 const DAY_MS = 86400000
+
+/** one adjustment of a kind per target per diary per day — CAS-retry
+ *  safe. BOT_ASSIST dedupe keys reuse the same intervention identity so
+ *  a follow-up assist fires at most once per adjustment. Defined here
+ *  (pure layer) so mergeInterventions can dedupe context-built records
+ *  against session ones; terpbot-session re-exports it. */
+export const interventionKey = (i: InterventionRecord) =>
+  `${i.diaryId ?? ""}|${i.type}|${i.targetMetric ?? ""}|${i.direction ?? ""}|${Math.floor((i.eventT ?? i.at) / DAY_MS)}`
 const PAIR_MS = 60 * 60 * 1000
 
 const SERIES_TO_METRIC: [keyof GrowContextView["series"], MetricId][] = [
@@ -315,20 +323,36 @@ export function mergeInterventions(
   ctx: GrowContextView,
   interventions: InterventionRecord[]
 ): GrowContextView {
-  interventions = interventions.filter((iv) => forThisDiary(ctx, iv.diaryId))
-  if (!interventions.length) return ctx
-  const out = interventions.map((iv) => {
-    if (iv.beforeReading || !iv.targetMetric) return iv
-    const key = SERIES_KEY[iv.targetMetric]
-    if (!key) return iv
+  // Context-built records — documented experiments keyed
+  // `experiment:<id>` — are preserved: session interventions ADD to the
+  // list, never replace it. Session rows are deduped against existing
+  // records by identity (a chat record can never share the
+  // `experiment:` prefix, so distinct sources never merge).
+  const existing = ctx.interventions ?? []
+  const out = [...existing]
+  const seen = new Set(existing.map(interventionKey))
+  for (const iv of interventions) {
+    if (!forThisDiary(ctx, iv.diaryId)) continue
+    const key = interventionKey(iv)
+    if (seen.has(key)) continue
+    seen.add(key)
+    if (iv.beforeReading || !iv.targetMetric) {
+      out.push(iv)
+      continue
+    }
+    const seriesKey = SERIES_KEY[iv.targetMetric]
+    if (!seriesKey) {
+      out.push(iv)
+      continue
+    }
     const at = iv.eventT ?? iv.at
     let before: { v: number; t: number } | undefined
-    for (const p of ctx.series[key].points) {
+    for (const p of ctx.series[seriesKey].points) {
       if (p.tApproximate || p.t > at) continue
       if (!before || p.t > before.t) before = { v: p.v, t: p.t }
     }
-    return before ? { ...iv, beforeReading: before } : iv
-  })
+    out.push(before ? { ...iv, beforeReading: before } : iv)
+  }
   return { ...ctx, interventions: out }
 }
 
