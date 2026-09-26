@@ -730,3 +730,48 @@ Mango Cherry Runtz, Banana Cherry Cookies, Frostbanger) publish no
 Effects section -> `effects` left empty. `difficulty` is null — Fast
 Buds does not publish a difficulty rating. `floweringWeeks` stays
 null on every autoflower — the published cycle is seed-to-harvest.
+
+## Pass 3 — Multi-breeder full-catalog expansion
+
+Method: per-site crawlers fetch each breeder's public seed catalog and
+extract product-page facts. 639 product records collected; 563 new
+entries added after excluding bundles, mix packs, category pages, and
+merch. Catalog is now 744 strains across 12+ breeders.
+
+Per-site extraction:
+- Fast Buds photoperiods (+11): same param-icon table; "Feminized"/
+  "F1 hybrid" seed types; floweringWeeks from breeder Flowering param.
+- Dutch Passion (+36): product-featureitem spec rows (Flowertime,
+  Effect). Genetics not published as a spec field — prose extraction
+  only when a clean "A x B" cross appears; else null.
+- Barney's Farm (+83): JSON-LD PropertyValue specs (Genetics, THC %,
+  Sativa/Indica %, Taste, Effect, Flowering Time days->weeks).
+  Merchandise pages sharing the slug pattern excluded via spec check.
+- Royal Queen Seeds (+155): full data sheet (th/td pairs) — Genetic
+  Background, Type %, THC, Flowering time, Effect, Flavour. Most
+  complete source after Fast Buds.
+- Nirvana (+86): Shopify product JSON (.js endpoint); genetics/timing
+  from description prose where present.
+- Dinafem (+28): spec table via cell parsing — Cross, Indoor
+  flowering, THC, Morphology.
+- Sensi Seeds (+32): product-attribute-name/value pairs; flowering is
+  qualitative ("Short flowering period") so timing stays null.
+- Green House Seeds (+32): slug-derived names (h1 catches spec labels);
+  genetics from grid-list__genetics_mod; collection/family/bundle
+  pages excluded by URL.
+- DNA Genetics (+22): WooCommerce product prose for genetics/flowering.
+- Serious Seeds (+22): prose genetics/flowering; product images stay
+  null (site markup doesn't expose a per-strain product image).
+- G13 Labs (+56): product images at /Content/images/Products/;
+  genetics/timing from prose.
+
+Rules applied:
+- Same-breeder name match -> enrich existing row (fill nulls, refresh
+  breeder image/source links); never duplicate.
+- Cross-breeder name collision -> disambiguated "Name (Breeder)".
+- Auto vs photoperiod: autos get seedToHarvestWeeks only; fem get
+  floweringWeeks only. Day counts converted to weeks (>bound values
+  treated as days). Out-of-range values -> null.
+- Genetics strings containing nav/junk text -> null (never guess).
+- CSP img-src += cdn.shopify.com (Nirvana product CDN); all other
+  hosts were already enumerated.
