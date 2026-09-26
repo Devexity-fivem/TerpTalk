@@ -267,6 +267,23 @@ const main = async () => {
       ? pass("suggest: short query → empty")
       : fail("suggest short", r.status)
 
+    // L-1 regression — block semantics reach the typeahead: a member
+    // blocked in either direction never autocompletes for the other side.
+    await prisma.block.create({ data: { blockerId: author.id, blockedId: answerer.id } })
+    r = await callApi(`/api/search/suggest?q=${encodeURIComponent(answerer.username)}`, { cookie: authorCookie })
+    !(r.data?.suggestions || []).some((s) => s.type === "user" && s.slug === answerer.username)
+      ? pass("suggest: blocked member hidden from blocker's typeahead")
+      : fail("suggest block leak", r.data?.suggestions)
+    r = await callApi(`/api/search/suggest?q=${encodeURIComponent(author.username)}`, { cookie: answererCookie })
+    !(r.data?.suggestions || []).some((s) => s.type === "user" && s.slug === author.username)
+      ? pass("suggest: block is mutual — blocker hidden from blocked member")
+      : fail("suggest mutual", r.data?.suggestions)
+    // Guest sees the same member — the shared cache stays public-safe.
+    r = await suggest(answerer.username)
+    ;(r.data?.suggestions || []).some((s) => s.type === "user" && s.slug === answerer.username)
+      ? pass("suggest: blocked member still visible to guests")
+      : fail("suggest guest visibility", r.data?.suggestions)
+
     console.log(`\n${results.filter(([s]) => s === "PASS").length} passed, ${results.filter(([s]) => s === "FAIL").length} failed`)
   } finally {
     for (const u of users) await prisma.user.delete({ where: { id: u.id } }).catch(() => {})

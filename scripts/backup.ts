@@ -6,7 +6,7 @@
  */
 import { existsSync, mkdirSync, copyFileSync, readdirSync, statSync, unlinkSync, readFileSync } from "fs"
 import { join, resolve } from "path"
-import { execSync } from "child_process"
+import { execFileSync } from "child_process"
 
 // Load .env manually (no dotenv dependency)
 const envPath = resolve(__dirname, "..", ".env")
@@ -41,7 +41,9 @@ if (dbUrl.startsWith("file:")) {
   // PostgreSQL backup via pg_dump
   const dest = join(BACKUP_DIR, `pg-${stamp}.dump`)
   try {
-    execSync(`pg_dump "${dbUrl}" -F c -f "${dest}"`, { stdio: "inherit" })
+    // execFileSync: arg array, no shell — the connection string (which
+    // contains credentials) is never interpolated into a command line.
+    execFileSync("pg_dump", ["--dbname", dbUrl, "-F", "c", "-f", dest], { stdio: "inherit" })
     console.log(`Backup created: ${dest}`)
   } catch {
     console.error("pg_dump failed. Ensure pg_dump is installed and on PATH.")

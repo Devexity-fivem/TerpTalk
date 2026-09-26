@@ -26,6 +26,10 @@ const MAGIC: Record<string, (b: Buffer) => boolean> = {
 
 export const MAX_POST_IMAGES = 4
 
+export function isBlobConfigured(): boolean {
+  return Boolean(process.env.BLOB_READ_WRITE_TOKEN) || process.env.NODE_ENV === "development"
+}
+
 /**
  * Validate and store a batch of client-resized data URIs.
  * Enforces the count and format limits server-side — the client uploader's

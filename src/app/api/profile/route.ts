@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { unauthorized, forbidden, getClientIp, logSecurityEvent, LIMITS, isBanned, enforceLinkTrust } from "@/lib/security"
-import { storeImage, deleteImagesIfUnreferenced } from "@/lib/blob"
+import { storeImage, deleteImagesIfUnreferenced, isBlobConfigured } from "@/lib/blob"
 import { getReputationTier, getTierProgress, getRepStage, getStageProgress } from "@/lib/reputation"
 import { enqueueReversal, drainOne } from "@/lib/reputation-outbox"
 import { canEquip } from "@/lib/cosmetics"
@@ -48,9 +48,10 @@ export async function GET() {
       )
     }
 
-    // Get recent activity
+    // Get recent activity — exclude soft-deleted items; the _count selects
+    // above already filter them, so the lists must match.
     const recentThreads = await prisma.thread.findMany({
-      where: { authorId: user.id },
+      where: { authorId: user.id, deleted: false },
       take: 5,
       orderBy: { createdAt: "desc" },
       select: {
@@ -64,7 +65,7 @@ export async function GET() {
     })
 
     const recentDiaries = await prisma.growDiary.findMany({
-      where: { authorId: user.id },
+      where: { authorId: user.id, deleted: false },
       take: 5,
       orderBy: { createdAt: "desc" },
       include: {
@@ -222,7 +223,14 @@ export async function PATCH(request: Request) {
           )
         }
         if (isDataUri) {
-          avatarUrl = await storeImage(avatarUrl, "avatars")
+          try {
+            avatarUrl = await storeImage(avatarUrl, "avatars")
+          } catch (e) {
+            return NextResponse.json(
+              { error: e instanceof Error ? e.message : "Invalid image" },
+              { status: isBlobConfigured() ? 400 : 503 }
+            )
+          }
           newAvatarBlobUrl = avatarUrl
         } else if (isHttps) {
           return NextResponse.json(

@@ -80,6 +80,7 @@ const HTTP_PHASE: Suite[] = [
   { id: "trust-safety", file: "scripts/trust-safety-verify.mjs", runner: "node", cls: "A", label: "Trust & safety HTTP behavior", tier: "full" },
   { id: "feedback", file: "scripts/feedback-tests.mjs", runner: "node", cls: "A", label: "Feedback auth/privacy/rate-limit", tier: "full" },
   { id: "ops", file: "scripts/ops-tests.mts", runner: "tsx", cls: "A", label: "Ops surface gate + metrics shape + feedback deviceType", tier: "full" },
+  { id: "runtime-verify", file: "scripts/runtime-verify.mjs", runner: "node", cls: "A", label: "Runtime security black-box (sessions, authz, privacy, Pusher, uploads, rate limits, staff, TerpBot)", tier: "full", timeoutMs: 12 * 60_000 },
 ]
 
 // STRICTLY SERIAL — all create DB fixtures; several mutate shared global
@@ -113,6 +114,10 @@ const DRIFT_PHASE: Suite[] = [
 // idempotent seeder runs as a setup step first.
 const FINAL_PHASE: Suite[] = [
   { id: "verify-affiliates", file: "scripts/verify-affiliates.cjs", runner: "node", cls: "B", label: "Affiliate integrity (seeded data)", tier: "full" },
+  // Prod-mode verification builds .next — must run after the HTTP phase has
+  // stopped a master-spawned dev server (an adopted external dev server on
+  // the same .next dir may be disrupted by the build).
+  { id: "runtime-prod", file: "scripts/runtime-prod-verify.mjs", runner: "node", cls: "A", label: "Production-mode verification (build, headers, CSP, cookies, fail-closed)", tier: "full", timeoutMs: 20 * 60_000 },
 ]
 
 const ALL_SUITES = [...STATIC_PHASE, ...PURE_PHASE, ...HTTP_PHASE, ...DB_PHASE, ...DRIFT_PHASE, ...FINAL_PHASE]
@@ -152,7 +157,7 @@ const needsDb = TIER !== "fast" // fast tier runs no DB prerequisites
 const MANUAL_COVERAGE = [
   "Chat Panel desktop behavior (open/close, resize, unread dot)",
   "Mobile chat sheet behavior + touch interactions",
-  "Real two-client Pusher messaging in a browser",
+  "Pusher messaging inside the browser chat UI (transport-level two-client delivery is covered by runtime-verify)",
   "Keyboard navigation / browser-level accessibility",
   "Visual layout, overlap, responsive breakpoints",
   "Actual React mount/unmount + live subscription counts",

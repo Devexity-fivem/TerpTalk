@@ -54,6 +54,7 @@ export async function POST(
         strain: true,
         strainRef: { select: { name: true } },
         threadId: true,
+        authorId: true,
         discussion: { select: { id: true, slug: true, deleted: true } },
       },
     })
@@ -97,10 +98,12 @@ export async function POST(
         slug,
         content,
         categoryId: category.id,
-        authorId: session.user.id,
+        // Canonical discussion belongs to the diary's grower — whoever
+        // triggered lazy-creation must not silently own (and edit) it.
+        authorId: diary.authorId,
         // The thread page renders posts, not thread.content — the opening
         // post is what makes the body (and the diary link) visible.
-        posts: { create: { content, authorId: session.user.id } },
+        posts: { create: { content, authorId: diary.authorId } },
       },
       select: { id: true, slug: true },
     })
@@ -111,14 +114,18 @@ export async function POST(
       where: { id: diary.id, OR: [{ threadId: null }, { discussion: { deleted: true } }] },
       data: { threadId: thread.id },
     })
-    // The creator follows the canonical thread so replies notify them —
-    // same convention as normal thread creation.
+    // Both the diary owner (author convention) and the member who opened
+    // the discussion follow it so replies notify them.
     const followThread = (threadId: string) =>
-      prisma.threadFollow.upsert({
-        where: { userId_threadId: { userId: session.user.id, threadId } },
-        create: { userId: session.user.id, threadId, lastSeenAt: new Date() },
-        update: { lastSeenAt: new Date() },
-      }).catch(() => {})
+      Promise.all(
+        [...new Set([diary.authorId, session.user.id])].map((userId) =>
+          prisma.threadFollow.upsert({
+            where: { userId_threadId: { userId, threadId } },
+            create: { userId, threadId, lastSeenAt: new Date() },
+            update: { lastSeenAt: new Date() },
+          }).catch(() => {})
+        )
+      )
 
     if (claimed.count === 0) {
       // Lost the race — retire our duplicate and return the winner.

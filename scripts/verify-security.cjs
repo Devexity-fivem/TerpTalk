@@ -180,6 +180,20 @@ const apiFiles = () => {
   check("admin/security: ipHash/userAgent not in response", !sec.includes("e.ipHash") && !sec.includes("e.userAgent"));
   check("security events: retention enforced", sec.includes("RETENTION_DAYS"));
   check("service worker: never caches api/auth", fs.existsSync("public/sw.js") && fs.readFileSync("public/sw.js", "utf8").includes('startsWith("/api/")'));
+  {
+    const sw = fs.readFileSync("public/sw.js", "utf8");
+    // Every precached STATIC entry must be servable by the fetch handler's
+    // isStatic extension allowlist — a dead precache entry is wasted work.
+    const isStaticExt = /\.(png|jpg|jpeg|webp|svg|ico|js|css|woff2?)$/;
+    const statics = (sw.match(/const\s+STATIC\s*=\s*\[([^\]]*)\]/)?.[1].match(/"[^"]+"/g) || []).map((s) => s.slice(1, -1));
+    check("service worker: precache list only servable extensions", statics.every((s) => isStaticExt.test(s)));
+  }
+  {
+    // Operator backup script must never interpolate the DB URL (credentials)
+    // into a shell command line — arg array only.
+    const backup = fs.readFileSync("scripts/backup.ts", "utf8");
+    check("backup: pg_dump invoked without shell interpolation", !/execSync\s*\(`/.test(backup) && backup.includes("execFileSync"));
+  }
   // Public-facing queries must not return sensitive user fields
   for (const r of ["users/[username]", "search", "messages", "notifications"]) {
     const c = read(`app/api/${r}/route.ts`);

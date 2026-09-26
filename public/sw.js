@@ -1,6 +1,8 @@
 // Service worker: static assets only. Never caches API, auth, or user-specific HTML.
 const CACHE = "terptalk-v3"
-const STATIC = ["/logo.png", "/manifest.webmanifest"]
+// Entries here must match the isStatic extension list in the fetch handler —
+// /manifest.webmanifest was pre-cached but never servable (dead cache entry).
+const STATIC = ["/logo.png"]
 
 self.addEventListener("install", (e) => {
   e.waitUntil(

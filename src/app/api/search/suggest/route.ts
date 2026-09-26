@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server"
+import { getServerSession } from "next-auth"
+import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { unstable_cache } from "next/cache"
-import { getClientIp, hashIp, REPUTATION_ORDER, activeAuthor } from "@/lib/security"
+import { getClientIp, hashIp, REPUTATION_ORDER, activeAuthor, blockedUserIds } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
 
 function escapeLike(str: string): string {
@@ -80,7 +82,28 @@ export async function GET(request: Request) {
 
   const { suggestions } = await getSearchSuggestions(q)
 
-  return NextResponse.json({ suggestions }, {
-    headers: { "Cache-Control": "public, max-age=60, s-maxage=60" },
+  // The shared suggestion cache is viewer-agnostic — block semantics are
+  // applied after it, matching main search: members blocked in either
+  // direction never appear in the blocker's (or blocked member's) typeahead.
+  const session = await getServerSession(authOptions)
+  let out = suggestions
+  if (session?.user?.id) {
+    const blocked = await blockedUserIds(session.user.id)
+    if (blocked.length) {
+      const names = new Set(
+        (await prisma.profile.findMany({
+          where: { userId: { in: blocked } },
+          select: { username: true },
+        })).map((p) => p.username.toLowerCase())
+      )
+      out = suggestions.filter((s) => s.type !== "user" || !names.has(s.slug.toLowerCase()))
+    }
+  }
+
+  return NextResponse.json({ suggestions: out }, {
+    headers: {
+      // Viewer-filtered responses can't sit in a shared cache.
+      "Cache-Control": session?.user?.id ? "private, max-age=30" : "public, max-age=60, s-maxage=60",
+    },
   })
 }

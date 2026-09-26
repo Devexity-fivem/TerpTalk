@@ -37,6 +37,7 @@ const main = async () => {
   const diaryIds = []
   const strainIds = []
   const setupIds = []
+  const threadIds = []
   let strainId = null
   let contestEntryId = null
 
@@ -581,6 +582,65 @@ const main = async () => {
     r = await callApi(`/api/diaries/${unlD.id}/discuss`, { method: "POST", cookie: voterCookie })
     r.status === 404 ? pass("discuss on UNLISTED diary 404s") : fail("discuss unlisted", r.status)
 
+    // ── Canonical discussion authorship (F-1 regression) ────────────
+    // The lazy-created discussion thread belongs to the diary's grower —
+    // the member who invokes discuss must not silently own it.
+    const discD = await prisma.growDiary.create({
+      data: { title: `${tok} discuss`, description: "s", growType: "INDOOR", startDate: new Date(), authorId: owner.id, visibility: "PUBLIC" },
+    })
+    diaryIds.push(discD.id)
+
+    r = await callApi(`/api/diaries/${discD.id}/discuss`, { method: "POST" })
+    r.status === 401 ? pass("discuss requires auth") : fail("discuss anon", r.status)
+
+    // Unrelated member may trigger lazy creation — but the owner authors it.
+    r = await callApi(`/api/diaries/${discD.id}/discuss`, { method: "POST", cookie: voterCookie })
+    const discThread = r.data?.threadId && await prisma.thread.findUnique({
+      where: { id: r.data.threadId },
+      select: { id: true, authorId: true, posts: { select: { authorId: true, deleted: true } } },
+    })
+    if (discThread) threadIds.push(discThread.id)
+    r.status === 201 && discThread?.authorId === owner.id
+      ? pass("canonical discussion authored by diary owner, not invoker")
+      : fail("discuss authorship", { s: r.status, author: discThread?.authorId, owner: owner.id })
+    discThread?.posts?.[0]?.authorId === owner.id
+      ? pass("discussion opening post authored by diary owner")
+      : fail("opening post author", discThread?.posts?.[0]?.authorId)
+    const discRow = await prisma.growDiary.findUnique({ where: { id: discD.id }, select: { threadId: true } })
+    discRow?.threadId === discThread?.id
+      ? pass("diary links the canonical discussion thread")
+      : fail("diary discussion link", discRow?.threadId)
+
+    // Owner clicking later reopens the same thread — never a second one.
+    r = await callApi(`/api/diaries/${discD.id}/discuss`, { method: "POST", cookie: ownerCookie })
+    r.status === 200 && r.data?.threadId === discThread?.id
+      ? pass("owner discuss reopens the canonical thread")
+      : fail("discuss reopen", { s: r.status, d: r.data })
+
+    r = await callApi(`/api/diaries/${prvD.id}/discuss`, { method: "POST", cookie: voterCookie })
+    r.status === 404 ? pass("discuss on PRIVATE diary 404s without leaking") : fail("discuss private", r.status)
+
+    // Concurrent invocations — exactly one canonical thread, owner-authored.
+    const raceD = await prisma.growDiary.create({
+      data: { title: `${tok} race`, description: "s", growType: "INDOOR", startDate: new Date(), authorId: owner.id, visibility: "PUBLIC" },
+    })
+    diaryIds.push(raceD.id)
+    const [ra, rb] = await Promise.all([
+      callApi(`/api/diaries/${raceD.id}/discuss`, { method: "POST", cookie: ownerCookie }),
+      callApi(`/api/diaries/${raceD.id}/discuss`, { method: "POST", cookie: voterCookie }),
+    ])
+    const raceRow = await prisma.growDiary.findUnique({ where: { id: raceD.id }, select: { threadId: true } })
+    const raceThreads = await prisma.thread.findMany({
+      where: { id: { in: [ra.data?.threadId, rb.data?.threadId].filter(Boolean) } },
+      select: { id: true, authorId: true, deleted: true },
+    })
+    raceThreads.forEach((t) => threadIds.push(t.id))
+    const liveThreads = raceThreads.filter((t) => !t.deleted)
+    ra.data?.threadId === rb.data?.threadId && raceRow?.threadId === ra.data?.threadId &&
+      liveThreads.length === 1 && liveThreads[0].authorId === owner.id
+      ? pass("concurrent discuss yields one canonical owner-authored thread")
+      : fail("discuss race", { ra: ra.status, rb: rb.status, tid: raceRow?.threadId, threads: raceThreads })
+
     // Visibility mutations
     r = await callApi(`/api/diaries/${pubD.id}`, { method: "PATCH", body: { visibility: "PRIVATE" }, cookie: voterCookie })
     r.status === 403 ? pass("non-owner visibility PATCH rejected") : fail("non-owner patch", r.status)
@@ -986,6 +1046,7 @@ const main = async () => {
     for (const id of strainIds) await prisma.strain.delete({ where: { id } }).catch(() => {})
     for (const id of setupIds) await prisma.growSetup.delete({ where: { id } }).catch(() => {})
     for (const id of diaryIds) await prisma.growDiary.delete({ where: { id } }).catch(() => {})
+    for (const id of threadIds) await prisma.thread.delete({ where: { id } }).catch(() => {})
     for (const u of users) await prisma.user.delete({ where: { id: u.id } }).catch(() => {})
     await prisma.rateLimit.deleteMany({ where: { key: { startsWith: "login" } } }).catch(() => {})
     await prisma.$disconnect()

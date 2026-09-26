@@ -256,6 +256,26 @@ const main = async () => {
       ? pass("dm inbox: old + new conversations both listed")
       : fail("dm inbox", { status: r.status, partners: partnerIds.length })
 
+    // ══ Profile recents exclude soft-deleted (N-1) ═══════════════════
+    const n1Thread = await prisma.thread.create({
+      data: { title: "__av n1 thread", slug: `__av-n1-${Date.now().toString(36)}`, content: "0123456789", authorId: userA.id, categoryId: validCat.id },
+      select: { id: true },
+    })
+    const n1Diary = await prisma.growDiary.create({
+      data: { title: "__av n1 diary", description: "x", growType: "INDOOR", startDate: new Date(), authorId: userA.id, visibility: "PUBLIC" },
+      select: { id: true },
+    })
+    r = await callApi("/api/profile", { cookie })
+    const present = (r.data?.recentThreads ?? []).some((t) => t.id === n1Thread.id) && (r.data?.recentDiaries ?? []).some((d) => d.id === n1Diary.id)
+    r.status === 200 && present ? pass("profile: own live thread/diary appear in recents") : fail("profile recents present", { status: r.status })
+    await prisma.thread.update({ where: { id: n1Thread.id }, data: { deleted: true } })
+    await prisma.growDiary.update({ where: { id: n1Diary.id }, data: { deleted: true } })
+    r = await callApi("/api/profile", { cookie })
+    const stillThere = (r.data?.recentThreads ?? []).some((t) => t.id === n1Thread.id) || (r.data?.recentDiaries ?? []).some((d) => d.id === n1Diary.id)
+    r.status === 200 && !stillThere
+      ? pass("profile: soft-deleted items excluded from own recents")
+      : fail("profile recents deleted", { status: r.status, stillThere })
+
     // ══ Account deletion (HTTP) ══════════════════════════════════════
     r = await callApi("/api/profile", { method: "DELETE", body: {} })
     r.status === 401 ? pass("delete: anonymous → 401") : fail("delete: anonymous → 401", r.status)
