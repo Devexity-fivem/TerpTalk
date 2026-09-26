@@ -34,6 +34,7 @@ export default function NewStrainPage() {
     thcMin: "",
     thcMax: "",
     floweringWeeks: "",
+    seedToHarvestWeeks: "",
   })
   const [effects, setEffects] = useState<string[]>([])
   const [flavors, setFlavors] = useState<string[]>([])
@@ -74,7 +75,14 @@ export default function NewStrainPage() {
           difficulty: formData.difficulty || undefined,
           thcMin: formData.thcMin === "" ? undefined : Number(formData.thcMin),
           thcMax: formData.thcMax === "" ? undefined : Number(formData.thcMax),
-          floweringWeeks: formData.floweringWeeks === "" ? undefined : Number(formData.floweringWeeks),
+          floweringWeeks:
+            formData.type.toUpperCase() === "AUTO_FLOWER" || formData.floweringWeeks === ""
+              ? undefined
+              : Number(formData.floweringWeeks),
+          seedToHarvestWeeks:
+            formData.type.toUpperCase() !== "AUTO_FLOWER" || formData.seedToHarvestWeeks === ""
+              ? undefined
+              : Number(formData.seedToHarvestWeeks),
           effects,
           flavors,
         }),
@@ -170,7 +178,6 @@ export default function NewStrainPage() {
                 <option value="Sativa">Sativa</option>
                 <option value="Indica">Indica</option>
                 <option value="Hybrid">Hybrid</option>
-                <option value="Ruderalis">Ruderalis</option>
                 <option value="Auto_Flower">Auto-flower</option>
                 <option value="CBD">CBD</option>
                 <option value="Other">Other</option>
@@ -196,21 +203,39 @@ export default function NewStrainPage() {
                   ))}
                 </select>
               </div>
-              <div>
-                <label htmlFor="floweringWeeks" className="block text-sm font-medium mb-2">
-                  Flowering (weeks, est.)
-                </label>
-                <input
-                  id="floweringWeeks"
-                  type="number"
-                  min={4}
-                  max={20}
-                  value={formData.floweringWeeks}
-                  onChange={(e) => setFormData({ ...formData, floweringWeeks: e.target.value })}
-                  className="w-full px-4 py-2 rounded-xl border border-border/70 bg-background focus:outline-none focus:ring-2 focus:ring-primary"
-                  placeholder="e.g. 9"
-                />
-              </div>
+              {formData.type.toUpperCase() === "AUTO_FLOWER" ? (
+                <div>
+                  <label htmlFor="seedToHarvestWeeks" className="block text-sm font-medium mb-2">
+                    Seed to harvest (weeks)
+                  </label>
+                  <input
+                    id="seedToHarvestWeeks"
+                    type="number"
+                    min={6}
+                    max={24}
+                    value={formData.seedToHarvestWeeks}
+                    onChange={(e) => setFormData({ ...formData, seedToHarvestWeeks: e.target.value })}
+                    className="w-full px-4 py-2 rounded-xl border border-border/70 bg-background focus:outline-none focus:ring-2 focus:ring-primary"
+                    placeholder="e.g. 10"
+                  />
+                </div>
+              ) : (
+                <div>
+                  <label htmlFor="floweringWeeks" className="block text-sm font-medium mb-2">
+                    Flowering (weeks, est.)
+                  </label>
+                  <input
+                    id="floweringWeeks"
+                    type="number"
+                    min={4}
+                    max={20}
+                    value={formData.floweringWeeks}
+                    onChange={(e) => setFormData({ ...formData, floweringWeeks: e.target.value })}
+                    className="w-full px-4 py-2 rounded-xl border border-border/70 bg-background focus:outline-none focus:ring-2 focus:ring-primary"
+                    placeholder="e.g. 9"
+                  />
+                </div>
+              )}
               <div>
                 <span className="block text-sm font-medium mb-2">THC % (optional)</span>
                 <div className="flex items-center gap-2">

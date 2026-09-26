@@ -1890,7 +1890,7 @@ function run() {
       Object.assign(
         {
           strainId: "strain1", name: "Test Culti", genetics: "A x B",
-          type: "HYBRID", floweringWeeks: 9, difficulty: "NORMAL",
+          type: "HYBRID", floweringWeeks: 9, seedToHarvestWeeks: null, difficulty: "NORMAL",
         } satisfies StrainGrowContext,
         over
       )

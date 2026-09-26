@@ -246,7 +246,7 @@ export async function buildGrowContext(
       // free-text `strain` field is intentionally NOT consulted here:
       // no fuzzy matching inside the intelligence layer.
       strainRef: {
-        select: { id: true, name: true, genetics: true, type: true, floweringWeeks: true, difficulty: true },
+        select: { id: true, name: true, genetics: true, type: true, floweringWeeks: true, seedToHarvestWeeks: true, difficulty: true },
       },
       // Documented experiments — same diary row, same scope. Bounded;
       // the linked-update include carries only the newest timestamp for
@@ -508,6 +508,7 @@ export async function buildGrowContext(
           genetics: diary.strainRef.genetics,
           type: diary.strainRef.type,
           floweringWeeks: diary.strainRef.floweringWeeks,
+          seedToHarvestWeeks: diary.strainRef.seedToHarvestWeeks,
           difficulty: diary.strainRef.difficulty,
         }
       : null,

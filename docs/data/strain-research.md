@@ -286,9 +286,12 @@ Sources: DNA Genetics, PhenoDB.
 Supported: Banana Kush x Bubble Gum, ~9wk, very high resin.
 
 ### Pineapple Express
-Sources: G13 Labs, Leafly, Seedsman.
-Supported: Trainwreck x Hawaiian, ~8-9wk → 9.
-Conflicts: film-era name; some sources associate alternate lines.
+Sources: G13 Labs product page, Leafly, Seedsman.
+Supported: Big Bud x Hawaiian Skunk (G13 Labs' own published genetics
+for their seed line), 50-55d → 8.
+Conflicts: film-era name; the Trainwreck x Hawaiian lineage belongs to
+the clone-only original, not G13's seed version — breeder product page
+wins for the attributed breeder.
 Nulls: thcMin.
 
 ### Clementine
@@ -524,8 +527,10 @@ Supported: Swiss Sativa x NL5 Haze Mist, ~10-11wk → 11, ~19.7% breeder.
 Nulls: thcMin.
 
 ### Arjan's Haze #1
-Sources: Green House Seeds, Mr Hanf.
-Supported: G13 x Haze, ~11wk, ~21% breeder. Nulls: thcMin.
+Sources: Green House Seeds product page ("Arjan's Ultra Haze 1").
+Supported: Neville's Haze x Cambodian x Laos (breeder-published genetics
+card on the Ultra Haze 1 product page — corrects the earlier G13 x Haze
+attribution), ~11wk, ~21% breeder. Nulls: thcMin.
 
 ### The Church
 Sources: Green House Seeds, Azarius, PhenoDB.
@@ -650,3 +655,78 @@ Supported: GG4 Auto x Cookies Auto, ~10wk, ~28%. Nulls: floweringWeeks.
 ### Zkittlez Auto
 Sources: Fast Buds.
 Supported: Zkittlez x Ruderalis, ~9-10wk, ~23%. Nulls: floweringWeeks.
+
+## Breeder-page enrichment pass (2026-09)
+
+Schema added `seedToHarvestWeeks` (AUTO_FLOWER full-cycle estimate),
+`breederImageUrl` + `breederSourceUrl` (linked breeder product photo with
+source attribution — never re-hosted). `RUDERALIS` was removed from the
+active type vocabulary; `AUTO_FLOWER` covers that segment and legacy rows
+still render their label.
+
+All 9 autoflowers carry breeder-published seed-to-harvest windows
+(7 Fast Buds, 2 Royal Queen Seeds). 50 strains carry verified breeder
+product images + source URLs across 12 breeder webshops: Fast Buds
+(2fast4buds.com), Royal Queen Seeds, Sensi Seeds, Dutch Passion, Serious
+Seeds, Green House Seeds, Barney's Farm, DNA Genetics, Nirvana (Shopify
+CDN), Dinafem, Brothers Grimm, G13 Labs. Every image URL was verified
+with a live fetch returning 200 + an image content-type without a
+Referer, so the linked photo loads with attribution.
+
+Flowering corrections applied where the breeder's own product page
+publishes a different figure than the catalog stored: White Widow 9→8
+(GHS "8 weeks"), Durban Poison 9→8, Orange Bud 8→9 (DP "7-9 weeks"),
+Mazar 9→8, Holland's Hope 8→9 (DP "7-9 weeks"), LSD 8→9 (Barney's
+"60-65 days"), Critical Kush 8→9 (Barney's "55-60 days"), Aurora Indica
+9→11 (Nirvana "9-11 weeks"), Pineapple Express 9→8 (G13 "50-55 days").
+
+Genetics corrections from breeder-published lineage: Pineapple Express
+(G13) Trainwreck x Hawaiian → Big Bud x Hawaiian Skunk; Arjan's Haze #1
+(GHS Ultra Haze 1) G13 x Haze → Neville's Haze x Cambodian x Laos;
+Blue Dream Auto → Blue Dream cut x Blueberry Auto F4; Bruce Banner Auto
+→ Bruce Banner BX 2.0 x Strawberry Pie Auto F5; Gelato Auto → Gelato
+California Cut x Cookies Auto (all Fast Buds genetic-tree pages).
+
+Cross-verification: 67 strains checked against Seedfinder per-breeder
+lineage trees — catalog genetics matched the direct parents in every
+case (the trees add deeper grandparents, which the catalog's direct-cross
+format intentionally omits).
+
+Intentional nulls: boutique US breeders with no public seed webshop
+(Cookies, Seed Junky, Sherbinski, Capulator, Lumpy's, Oni, Mamiko,
+Symbiotic, Supernova, In House, 3rd Gen Family, NorCal IC Mag, Crockett,
+Ken Estes, Dark Horse, Chameleon, 303, Connected, House of David,
+Stanley Brothers, ThugPug, Ethos — retailer-only), breeders with dead
+sites (Big Buddha 503, BC Bud Depot, T.H.Seeds product gone), and
+breeder-less clone-era cultivars keep `breederImageUrl`/`breederSourceUrl`
+null — attribution is only stored when a live breeder product page was
+verified.
+
+## Pass 2 — Fast Buds full-catalog expansion (September 2026, cont.)
+
+Source: 2fast4buds.com catalog crawl — every `/seeds/` product page.
+
+- 72 individual Fast Buds cultivars extracted from the catalog page
+  (89 product paths discovered; mix packs and trial packs excluded
+  because they are bundles, not single cultivars).
+- 67 new catalog entries added; 5 existing Fast Buds entries
+  (Gorilla Cookies, Gelato, Blue Dream, Sour Diesel, Pineapple
+  Express Auto) enriched in place.
+- One name collision handled: Fast Buds' "Amnesia Haze Auto" page
+  (slug `original-auto-amnesia-haze`) is stored as
+  "Original Auto Amnesia Haze" — the RQS "Amnesia Haze Automatic"
+  already holds the plain name.
+
+Per-strain fields taken from the breeder's own parameter table
+(`th.param-icon` rows): Genetics (genetic tree as published), Flowering
+(= total seed-to-harvest cycle for autos -> `seedToHarvestWeeks`),
+THC ("Up to X%" -> `thcMax`), Taste tags -> `flavors` (controlled
+vocab), and the gauged Effects section (bars >= 30% intensity ->
+`effects`). `og:image` -> `breederImageUrl`; product URL ->
+`breederSourceUrl`. All 72 image URLs verified live (200 + image/*).
+
+Known gaps per policy: 8 newer products (RF3 line, Sundae Frost,
+Mango Cherry Runtz, Banana Cherry Cookies, Frostbanger) publish no
+Effects section -> `effects` left empty. `difficulty` is null — Fast
+Buds does not publish a difficulty rating. `floweringWeeks` stays
+null on every autoflower — the published cycle is seed-to-harvest.

@@ -20,8 +20,12 @@ export interface StrainCardData {
   effects: string[]
   difficulty: string | null
   floweringWeeks: number | null
+  seedToHarvestWeeks: number | null
   thcMin: number | null
   thcMax: number | null
+  /** Breeder-hosted product photo (linked + attributed on the detail
+   *  page) — card fallback when no community photo exists yet. */
+  breederImageUrl: string | null
   photos: { imageUrl: string }[]
   _count: { photos: number; diaries: number }
 }
@@ -38,6 +42,9 @@ export default function StrainCard({ strain }: { strain: StrainCardData }) {
         {strain.photos[0] ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={strain.photos[0].imageUrl} alt={strain.name} loading="lazy" decoding="async" className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" />
+        ) : strain.breederImageUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={strain.breederImageUrl} alt={`${strain.name} — breeder photo`} loading="lazy" decoding="async" className="w-full h-full object-contain p-3 transition-transform duration-500 group-hover:scale-105" />
         ) : (
           <Leaf className="w-8 h-8 text-primary/30" />
         )}
@@ -57,7 +64,7 @@ export default function StrainCard({ strain }: { strain: StrainCardData }) {
         {strain.breeder && (
           <p className="text-xs text-muted-foreground mt-0.5">by {strain.breeder}</p>
         )}
-        {(strain.difficulty || strain.floweringWeeks != null) && (
+        {(strain.difficulty || strain.floweringWeeks != null || strain.seedToHarvestWeeks != null) && (
           <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
             {strain.difficulty && (
               <span className="inline-flex items-center gap-1">
@@ -67,6 +74,11 @@ export default function StrainCard({ strain }: { strain: StrainCardData }) {
             {strain.floweringWeeks != null && (
               <span className="inline-flex items-center gap-1">
                 <Clock className="w-3 h-3" />~{strain.floweringWeeks} wk flower
+              </span>
+            )}
+            {strain.seedToHarvestWeeks != null && (
+              <span className="inline-flex items-center gap-1">
+                <Clock className="w-3 h-3" />~{strain.seedToHarvestWeeks} wk seed→harvest
               </span>
             )}
           </div>

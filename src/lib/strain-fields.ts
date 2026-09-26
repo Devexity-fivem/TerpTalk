@@ -4,7 +4,7 @@
 // Everything here is optional on the model: a strain with no metadata
 // simply doesn't appear under that facet, it is never guessed.
 
-export const STRAIN_TYPES = ["SATIVA", "INDICA", "HYBRID", "RUDERALIS", "AUTO_FLOWER", "CBD", "OTHER"] as const
+export const STRAIN_TYPES = ["SATIVA", "INDICA", "HYBRID", "AUTO_FLOWER", "CBD", "OTHER"] as const
 
 // Reported effects — the standard dispensary taxonomy, kept to values a
 // grower would actually filter by.
@@ -97,6 +97,10 @@ export const THC_MIN = 0
 export const THC_MAX = 45
 export const FLOWERING_MIN_WEEKS = 4
 export const FLOWERING_MAX_WEEKS = 20
+// AUTO_FLOWER seed-to-harvest — a wider window than flowering because it
+// covers the full lifecycle (real breeder range is roughly 7–16 weeks).
+export const SEED_TO_HARVEST_MIN_WEEKS = 6
+export const SEED_TO_HARVEST_MAX_WEEKS = 24
 
 const inVocab = <T extends string>(vocab: readonly T[], v: unknown): v is T =>
   typeof v === "string" && (vocab as readonly string[]).includes(v)
@@ -128,4 +132,10 @@ export function parseThc(v: unknown): number | null {
 export function parseFloweringWeeks(v: unknown): number | null {
   const n = typeof v === "number" ? v : typeof v === "string" && v.trim() !== "" ? Number(v) : NaN
   return Number.isFinite(n) && n >= FLOWERING_MIN_WEEKS && n <= FLOWERING_MAX_WEEKS ? Math.round(n) : null
+}
+
+/** AUTO_FLOWER whole-week seed-to-harvest estimate within bounds, else null. */
+export function parseSeedToHarvestWeeks(v: unknown): number | null {
+  const n = typeof v === "number" ? v : typeof v === "string" && v.trim() !== "" ? Number(v) : NaN
+  return Number.isFinite(n) && n >= SEED_TO_HARVEST_MIN_WEEKS && n <= SEED_TO_HARVEST_MAX_WEEKS ? Math.round(n) : null
 }

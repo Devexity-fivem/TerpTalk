@@ -7,6 +7,8 @@ import "./db-guard.mjs"
 import { strict as assert } from "node:assert"
 import { readFileSync } from "node:fs"
 import { prisma } from "@/lib/prisma"
+import { STRAIN_TYPES, parseSeedToHarvestWeeks } from "@/lib/strain-fields"
+import { strainTypeLabel } from "@/lib/strain-stats"
 
 
 const tag = Date.now().toString(36)
@@ -208,6 +210,53 @@ await check("route contract: strain page wires ReportButton + owner photo delete
   assert.ok(page.includes('type="STRAIN"') && page.includes("ReportButton"), "report button present")
   assert.ok(page.includes("OwnerDeleteButton") && page.includes('endpoint="/api/strains/photos"'), "owner photo delete")
   assert.ok(btn.includes('"STRAIN"'), "report button type union")
+})
+
+// ─── Catalog fields: type vocab + autoflower timing + breeder links ──
+await check("vocab: RUDERALIS removed from STRAIN_TYPES; AUTO_FLOWER remains", () => {
+  assert.equal(STRAIN_TYPES.includes("RUDERALIS" as never), false)
+  assert.ok(STRAIN_TYPES.includes("AUTO_FLOWER"))
+  // A legacy DB row typed RUDERALIS must still render a label, not raw enum text.
+  assert.equal(strainTypeLabel("RUDERALIS"), "Ruderalis")
+})
+
+await check("parseSeedToHarvestWeeks: bounds 6–24, non-numeric → null", () => {
+  assert.equal(parseSeedToHarvestWeeks(6), 6)
+  assert.equal(parseSeedToHarvestWeeks(24), 24)
+  assert.equal(parseSeedToHarvestWeeks("10"), 10)
+  assert.equal(parseSeedToHarvestWeeks(5), null)
+  assert.equal(parseSeedToHarvestWeeks(25), null)
+  assert.equal(parseSeedToHarvestWeeks("abc"), null)
+  assert.equal(parseSeedToHarvestWeeks(null), null)
+})
+
+await check("strain: seedToHarvestWeeks + breeder image/source fields persist", async () => {
+  const s = await mkStrain(creator.id, {
+    type: "AUTO_FLOWER",
+    seedToHarvestWeeks: 10,
+    breederImageUrl: "https://breeder.test/img.webp",
+    breederSourceUrl: "https://breeder.test/strain",
+  })
+  const back = await prisma.strain.findUniqueOrThrow({
+    where: { id: s.id },
+    select: { type: true, seedToHarvestWeeks: true, breederImageUrl: true, breederSourceUrl: true },
+  })
+  assert.equal(back.seedToHarvestWeeks, 10)
+  assert.equal(back.breederImageUrl, "https://breeder.test/img.webp")
+  assert.equal(back.breederSourceUrl, "https://breeder.test/strain")
+})
+
+await check("route contract: POST /api/strains validates type + seed-to-harvest, keeps breeder links catalog-managed", () => {
+  const route = readFileSync("src/app/api/strains/route.ts", "utf8")
+  assert.ok(route.includes("STRAIN_TYPES as readonly string[]"), "type validated against vocab")
+  assert.ok(!route.includes('"RUDERALIS"'), "no RUDERALIS literal in route")
+  assert.ok(route.includes("parseSeedToHarvestWeeks(seedToHarvestWeeks)"), "parser wired")
+  assert.ok(route.includes('error: "Invalid seed-to-harvest weeks"'), "invalid timing rejected 400")
+  assert.ok(route.includes("seedToHarvestWeeks: cleanSeedToHarvest"), "persisted")
+  // Breeder attribution is curated data — member POSTs must not set it.
+  const create = route.slice(route.indexOf("prisma.strain.create"), route.indexOf("revalidateTag"))
+  assert.ok(!create.includes("breederImageUrl"), "breederImageUrl not member-settable")
+  assert.ok(!create.includes("breederSourceUrl"), "breederSourceUrl not member-settable")
 })
 
 // ─── Summary + cleanup ───────────────────────────────────────────────

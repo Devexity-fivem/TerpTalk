@@ -15,6 +15,7 @@ import {
   parseStrainDifficulty,
   parseThc,
   parseFloweringWeeks,
+  parseSeedToHarvestWeeks,
 } from "@/lib/strain-fields"
 import { entitySlug } from "@/lib/slugs"
 import { revalidateTag } from "next/cache"
@@ -67,6 +68,7 @@ export async function POST(request: Request) {
       thcMin,
       thcMax,
       floweringWeeks,
+      seedToHarvestWeeks,
       difficulty,
     } = body
 
@@ -92,6 +94,7 @@ export async function POST(request: Request) {
     const cleanThcMin = parseThc(thcMin)
     const cleanThcMax = parseThc(thcMax)
     const cleanFlowering = parseFloweringWeeks(floweringWeeks)
+    const cleanSeedToHarvest = parseSeedToHarvestWeeks(seedToHarvestWeeks)
     if (effects != null && cleanEffects.length === 0 && Array.isArray(effects) && effects.length > 0) {
       return NextResponse.json({ error: "Unknown effect value" }, { status: 400 })
     }
@@ -112,6 +115,9 @@ export async function POST(request: Request) {
     }
     if (floweringWeeks != null && cleanFlowering == null) {
       return NextResponse.json({ error: "Invalid flowering weeks" }, { status: 400 })
+    }
+    if (seedToHarvestWeeks != null && cleanSeedToHarvest == null) {
+      return NextResponse.json({ error: "Invalid seed-to-harvest weeks" }, { status: 400 })
     }
 
     if (
@@ -177,6 +183,7 @@ export async function POST(request: Request) {
         thcMin: cleanThcMin,
         thcMax: cleanThcMax,
         floweringWeeks: cleanFlowering,
+        seedToHarvestWeeks: cleanSeedToHarvest,
         difficulty: cleanDifficulty,
         createdById: session.user.id,
       },

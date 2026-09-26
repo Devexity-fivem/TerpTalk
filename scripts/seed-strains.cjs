@@ -20,11 +20,12 @@ const { STRAINS } = require("./seed-strains-data.cjs");
 // Mirrors of src/lib/strain-fields.ts — a seed script can't import TS, so
 // the vocab is duplicated here and cross-checked against the real module
 // in scripts/discovery-integration-tests.mts.
-const STRAIN_TYPES = ["SATIVA", "INDICA", "HYBRID", "RUDERALIS", "AUTO_FLOWER", "CBD", "OTHER"];
+const STRAIN_TYPES = ["SATIVA", "INDICA", "HYBRID", "AUTO_FLOWER", "CBD", "OTHER"];
 const STRAIN_EFFECTS = ["RELAXED", "HAPPY", "EUPHORIC", "UPLIFTED", "ENERGETIC", "CREATIVE", "FOCUSED", "GIGGLY", "TALKATIVE", "HUNGRY", "SLEEPY", "CALM"];
 const STRAIN_FLAVORS = ["EARTHY", "SWEET", "CITRUS", "BERRY", "TROPICAL", "SOUR", "DIESEL", "PINE", "SKUNK", "SPICY", "HERBAL", "FLORAL", "WOODY", "CHEESE", "MINT", "NUTTY"];
 const STRAIN_DIFFICULTIES = ["EASY", "NORMAL", "HARD"];
 const THC_MIN = 0, THC_MAX = 45, FLOWER_MIN = 4, FLOWER_MAX = 20;
+const SEED_HARVEST_MIN = 6, SEED_HARVEST_MAX = 24, URL_MAX = 500;
 const NAME_MAX = 100, TEXT_MAX = 200, DESC_MAX = 2000;
 
 // Same algorithm as src/lib/slugs.ts entitySlug() + affiliate.slugify().
@@ -47,6 +48,12 @@ function validate(strains) {
     }
     if (s.thcMin != null && s.thcMax != null && s.thcMin > s.thcMax) err("thcMin > thcMax");
     if (s.floweringWeeks != null && (!Number.isInteger(s.floweringWeeks) || s.floweringWeeks < FLOWER_MIN || s.floweringWeeks > FLOWER_MAX)) err(`bad floweringWeeks ${s.floweringWeeks}`);
+    if (s.seedToHarvestWeeks != null && (!Number.isInteger(s.seedToHarvestWeeks) || s.seedToHarvestWeeks < SEED_HARVEST_MIN || s.seedToHarvestWeeks > SEED_HARVEST_MAX)) err(`bad seedToHarvestWeeks ${s.seedToHarvestWeeks}`);
+    for (const [k, v] of [["breederImageUrl", s.breederImageUrl], ["breederSourceUrl", s.breederSourceUrl]]) {
+      if (v != null && (typeof v !== "string" || v.length > URL_MAX || !/^https:\/\//.test(v))) err(`bad ${k}`);
+    }
+    // An unattributed breeder image is worse than none — the source link is the attribution.
+    if (s.breederImageUrl != null && s.breederSourceUrl == null) err("breederImageUrl without breederSourceUrl");
     for (const [k, v, max] of [["genetics", s.genetics, TEXT_MAX], ["breeder", s.breeder, TEXT_MAX], ["description", s.description, DESC_MAX], ["growingInfo", s.growingInfo, DESC_MAX]]) {
       if (v != null && (typeof v !== "string" || v.length > max)) err(`bad ${k}`);
     }
@@ -89,6 +96,9 @@ function validate(strains) {
         thcMin: s.thcMin ?? null,
         thcMax: s.thcMax ?? null,
         floweringWeeks: s.floweringWeeks ?? null,
+        seedToHarvestWeeks: s.seedToHarvestWeeks ?? null,
+        breederImageUrl: s.breederImageUrl ?? null,
+        breederSourceUrl: s.breederSourceUrl ?? null,
         difficulty: s.difficulty ?? null,
       };
 

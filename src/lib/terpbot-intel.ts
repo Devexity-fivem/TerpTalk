@@ -2358,6 +2358,8 @@ export const INTEL_RULES: IntelRule[] = [
       if (s.type) parts.push(STRAIN_TYPE_TEXT[s.type] ?? s.type.toLowerCase().replace(/_/g, " "))
       if (s.floweringWeeks != null)
         parts.push(`~${s.floweringWeeks}wk flowering listed`)
+      if (s.seedToHarvestWeeks != null)
+        parts.push(`~${s.seedToHarvestWeeks}wk seed-to-harvest listed`)
       if (s.difficulty) parts.push(`difficulty ${s.difficulty.toLowerCase()}`)
       const ev: IntelEvidence[] = [
         {
@@ -2396,10 +2398,16 @@ export const INTEL_RULES: IntelRule[] = [
       // The cultivar's listed window moves the trigger to ~2 weeks
       // before the expectation (bounded below by the late-flower
       // threshold); without it, the generic 7-week floor stands.
+      // Autos carry seedToHarvestWeeks instead of floweringWeeks —
+      // subtract ~3 weeks of pre-flower stretch to get a flower-days
+      // estimate, floored at 3 weeks so the generic threshold stands
+      // when the catalog estimate is unusually short.
       ctx.stageDays >=
         (ctx.strain?.floweringWeeks != null
           ? Math.max(LATE_FLOWER_DAYS, (ctx.strain.floweringWeeks - 2) * 7)
-          : 49),
+          : ctx.strain?.seedToHarvestWeeks != null
+            ? Math.max(21, (ctx.strain.seedToHarvestWeeks - 3 - 2) * 7)
+            : 49),
     evaluate: (ctx) => [
       {
         direction: "info",
@@ -2410,7 +2418,9 @@ export const INTEL_RULES: IntelRule[] = [
         text:
           ctx.strain?.floweringWeeks != null
             ? `Day ${ctx.stageDays} of flower — ${ctx.strain.name} is listed around ~${ctx.strain.floweringWeeks} week${ctx.strain.floweringWeeks === 1 ? "" : "s"} of flowering; that's a catalog estimate, not a finish date — trichome colour is the indicator to check.`
-            : `Day ${ctx.stageDays} of flower — many cultivars finish somewhere in the 8–10+ week range, but week count alone never proves readiness; trichome colour is the indicator to check.`,
+            : ctx.strain?.seedToHarvestWeeks != null
+              ? `Day ${ctx.stageDays} of flower — ${ctx.strain.name} is listed around ~${ctx.strain.seedToHarvestWeeks} weeks from seed; that's a catalog estimate, not a finish date — trichome colour is the indicator to check.`
+              : `Day ${ctx.stageDays} of flower — many cultivars finish somewhere in the 8–10+ week range, but week count alone never proves readiness; trichome colour is the indicator to check.`,
         measurement: hint("inspect:trichomes"),
       },
     ],

@@ -104,6 +104,9 @@ export interface StrainGrowContext {
   /** catalog-reported flowering estimate — bounds stage-duration
    *  expectations; never becomes an exact harvest date */
   floweringWeeks: number | null
+  /** AUTO_FLOWER seed-to-harvest estimate — the whole lifecycle clock for
+   *  autos, where floweringWeeks deliberately stays null */
+  seedToHarvestWeeks: number | null
   /** EASY | NORMAL | HARD — catalog cultivation difficulty */
   difficulty: string | null
 }

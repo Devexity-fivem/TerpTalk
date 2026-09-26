@@ -187,9 +187,32 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
         {/* Header */}
         <div className="bg-card/80 rounded-2xl border border-border/70 p-6 mb-6">
           <div className="flex items-start gap-4">
-            <div className="w-16 h-16 bg-primary/10 rounded-xl flex items-center justify-center shrink-0 ring-1 ring-primary/20">
-              <Leaf className="w-8 h-8 text-primary" />
-            </div>
+            {strain.breederImageUrl ? (
+              <div className="shrink-0">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={strain.breederImageUrl}
+                  alt={`${strain.name} — breeder photo`}
+                  loading="lazy"
+                  decoding="async"
+                  className="w-16 h-16 rounded-xl object-cover ring-1 ring-primary/20"
+                />
+                {strain.breederSourceUrl && (
+                  <a
+                    href={strain.breederSourceUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="block w-16 mt-1 text-[10px] leading-tight text-muted-foreground hover:text-primary text-center"
+                  >
+                    Photo: {strain.breeder ?? "breeder"}
+                  </a>
+                )}
+              </div>
+            ) : (
+              <div className="w-16 h-16 bg-primary/10 rounded-xl flex items-center justify-center shrink-0 ring-1 ring-primary/20">
+                <Leaf className="w-8 h-8 text-primary" />
+              </div>
+            )}
             <div>
               <h1 className="font-display text-3xl font-bold tracking-tight break-words">{strain.name}</h1>
               <div className="flex gap-3 text-sm text-muted-foreground mt-1 flex-wrap">
@@ -230,7 +253,7 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
         {/* Characteristics — member-reported catalog facets. Renders only
             when at least one facet exists; values are reported, not
             lab-verified, so the wording stays honest. */}
-        {(strain.effects.length > 0 || strain.flavors.length > 0 || strain.thcMin != null || strain.thcMax != null || strain.floweringWeeks != null || strain.difficulty) && (
+        {(strain.effects.length > 0 || strain.flavors.length > 0 || strain.thcMin != null || strain.thcMax != null || strain.floweringWeeks != null || strain.seedToHarvestWeeks != null || strain.difficulty) && (
           <div className="bg-card/80 rounded-2xl border border-border/70 p-5 mb-6">
             <div className="flex items-center gap-2 mb-4">
               <Dna className="w-4 h-4 text-spectrum" />
@@ -252,6 +275,12 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
                 <div>
                   <p className="text-xs text-muted-foreground mb-1">Flowering time (estimate)</p>
                   <p className="font-medium">~{strain.floweringWeeks} weeks</p>
+                </div>
+              )}
+              {strain.seedToHarvestWeeks != null && (
+                <div>
+                  <p className="text-xs text-muted-foreground mb-1">Seed to harvest (estimate)</p>
+                  <p className="font-medium">~{strain.seedToHarvestWeeks} weeks</p>
                 </div>
               )}
               {strain.difficulty && (

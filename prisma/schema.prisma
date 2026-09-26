@@ -707,7 +707,10 @@ model Strain {
   flavors       String[]
   thcMin        Float?   // reported THC % lower bound (0–45)
   thcMax        Float?   // reported THC % upper bound (>= thcMin)
-  floweringWeeks Int?    // estimated flowering time in weeks (4–20)
+  floweringWeeks Int?    // photoperiod flowering estimate in weeks (4–20); null for autos
+  seedToHarvestWeeks Int? // AUTO_FLOWER only: breeder-reported seed-to-harvest in weeks
+  breederImageUrl  String? // breeder product photo URL — linked, shown with attribution
+  breederSourceUrl String? // breeder product page — attribution target + evidence link
   difficulty    String?  // EASY | NORMAL | HARD — cultivation ease
   description String?
   growingInfo String?
