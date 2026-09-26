@@ -15,7 +15,7 @@
 //   - all rows are created with createdById: null — no fake attribution,
 //     no reputation events
 const { PrismaClient } = require("@prisma/client");
-const { STRAINS } = require("./seed-strains-data.cjs");
+const { STRAINS, REMOVED_STRAIN_NAMES = [], FORCE_NULL_GENETICS = [] } = require("./seed-strains-data.cjs");
 
 // Mirrors of src/lib/strain-fields.ts — a seed script can't import TS, so
 // the vocab is duplicated here and cross-checked against the real module
@@ -128,8 +128,39 @@ function validate(strains) {
     }
   }
 
+  // Retired catalog rows: delete by name ONLY when the row is catalog-owned
+  // (createdById null). Member-created strains sharing a removed name survive.
+  const forceNull = new Set(FORCE_NULL_GENETICS.map((n) => n.trim().toLowerCase()));
+  report.removed = 0;
+  report.geneticsCleared = 0;
+  for (const name of REMOVED_STRAIN_NAMES) {
+    try {
+      const existing = await p.strain.findFirst({ where: { name: { equals: name, mode: "insensitive" } } });
+      if (!existing) continue;
+      if (existing.createdById) { report.skippedOwned++; continue; }
+      if (!dryRun) await p.strain.delete({ where: { id: existing.id } });
+      report.removed++;
+    } catch (e) {
+      report.errors++;
+      console.error(`  ✗ remove ${name}: ${e.message}`);
+    }
+  }
+  // Names where a null seed field is authoritative (earlier runs seeded prose
+  // junk into genetics; file null must overwrite rather than preserve).
+  for (const name of forceNull) {
+    try {
+      const existing = await p.strain.findFirst({ where: { name: { equals: name, mode: "insensitive" } } });
+      if (!existing || existing.createdById || existing.genetics == null) continue;
+      if (!dryRun) await p.strain.update({ where: { id: existing.id }, data: { genetics: null } });
+      report.geneticsCleared++;
+    } catch (e) {
+      report.errors++;
+      console.error(`  ✗ clear ${name}: ${e.message}`);
+    }
+  }
+
   const total = dryRun ? null : await p.strain.count();
-  console.log(`${dryRun ? "[dry-run] " : ""}catalog=${STRAINS.length} created=${report.created} updated=${report.updated} unchanged=${report.unchanged} skippedOwned=${report.skippedOwned} errors=${report.errors}${total != null ? ` totalInDb=${total}` : ""}`);
+  console.log(`${dryRun ? "[dry-run] " : ""}catalog=${STRAINS.length} created=${report.created} updated=${report.updated} unchanged=${report.unchanged} removed=${report.removed} geneticsCleared=${report.geneticsCleared} skippedOwned=${report.skippedOwned} errors=${report.errors}${total != null ? ` totalInDb=${total}` : ""}`);
   await p.$disconnect();
   if (report.errors) process.exit(1);
 })();

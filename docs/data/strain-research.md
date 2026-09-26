@@ -775,3 +775,62 @@ Rules applied:
 - Genetics strings containing nav/junk text -> null (never guess).
 - CSP img-src += cdn.shopify.com (Nirvana product CDN); all other
   hosts were already enumerated.
+
+## Pass 4 — Quality hardening: dedupe, image recovery, prune, genetics fill
+
+Goal (user direction): catalog = reputable seed-bank products with photos,
+accurate genetics, and descriptions only. Catalog now 658 strains.
+
+Additions:
+- Fast Buds "FastFlowering" photoperiod line (+6): GG4 Sherbet FF,
+  Gorilla Cookies FF, Orange Sherbet FF, Purple Lemonade FF,
+  Tropicana Cookies FF, Wedding Cheesecake FF — same param-icon spec
+  table; genetics documented as "(photoperiod parent) x (auto parent)".
+- Fast Buds /feminized-seeds coverage re-verified: 11 photoperiod
+  products is the complete current catalog (the /us/ locale path lists
+  the identical set).
+
+Dedupe (same-breeder collisions created by pass-3 suffixing):
+- 30 rows merged into their base row and deleted, e.g.
+  "Durban Poison (Dutch Passion)" -> "Durban Poison" when both rows
+  were the same breeder's same product. Cross-breeder suffixed rows
+  (e.g. "White Widow (Royal Queen Seeds)" vs GHS "White Widow") kept —
+  they are distinct products.
+- Breeder alias normalized: "Nirvana Seeds" == "Nirvana".
+
+Serious Seeds recovery:
+- Pass-3 strict filename matching dropped real images. Re-extracted:
+  all 22 Serious rows now carry the /sites/default/files/styles/306_535/
+  public/strains/[NAME] [VRIJSTAAND].png product shot.
+- Genetics from breeder prose: Seriotica (Serious Mimosa x Cookies),
+  Seriosa (AK-47 x Serious Mimosa), CBD-Chronic (Chronic x Remedy),
+  CBD-Warlock (Warlock x Cannatonic), Serious Happiness (Warlock x
+  AK-47), Serious Kush (White Russian x OG Kush), Double Dutch (Warlock
+  x pre-2000 Chronic), Fruity Durban (Durban Poison x Mimosa), autos
+  documented as parent-cross x Ruderalis.
+
+Image rescues:
+- Green Crack -> Humboldt Seed Org product page; Cannatonic -> Resin
+  Seeds shop page. CSP img-src += www.humboldtseeds.net, resinseeds.net.
+
+Prune (REMOVED_STRAIN_NAMES, deleted where createdById is null):
+- 62 rows removed: every entry with no verifiable breeder photo/source —
+  breeder-less clone-era legends (OG Kush, Blue Dream, Sour Diesel, ...)
+  and boutique breeders without public seed shops (Cookies, Seed Junky,
+  Capulator, Sherbinski, etc.). Famous names survive through the
+  seed-bank versions (e.g. "OG Kush (Barney's Farm)").
+- 1 orphan row "Jack Herer&#xAE;" (entity-named RQS product, renamed to
+  "Jack Herer (Royal Queen Seeds)") removed.
+
+Genetics:
+- Seedfinder lineage-tree pass over remaining null-genetics rows:
+  114/155 resolved to documented parents (strain-info lineage <ul>).
+  Pseudo-parent classifiers stripped ("x Indica", "x Mostly Sativa",
+  "Africa - Sativa"); sentence fragments truncated. 41 rows remain null
+  where no source reliably documents a cross.
+- Prose-junk genetics cleared (16 rows: sentence fragments, boilerplate)
+  via FORCE_NULL_GENETICS — the seed runner overwrites these names'
+  genetics to null since null fields normally never erase.
+- Seed runner now processes REMOVED_STRAIN_NAMES (deletes unowned
+  catalog rows only) and FORCE_NULL_GENETICS (null-authoritative
+  genetics overwrite).
