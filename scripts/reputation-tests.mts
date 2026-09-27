@@ -1,6 +1,16 @@
-// Reputation 2.0 regression tests — pure unit tests for the config/tier/badge
-// rules, plus ledger behaviour exercised against the real database with a
-// disposable __test_rep_ user (cascade-deleted at the end).
+// Reputation & progression regression tests — consolidated suite covering:
+//   • pure config math: tier ladder, stage rungs, crossedRungs, cosmetics,
+//     economy caps, daily-quest determinism, trust standings, badge registry
+//   • DB ledger behaviour: keyed awards, duplicates, self/bot/suspended
+//     skips, reversals/reinstatement, caps, milestone markers, streaks
+//   • DB progression: keyed QUEST_DAILY payouts, trust-score filtering,
+//     quest progress/evaluation, payout-reconciliation clawback sweeps
+//   • DB velocity detector: member-driven-only abuse detection (T1–T13)
+//   • global drift check: Profile.reputation == SUM(ReputationEvent.amount)
+//     across ALL profiles (absorbed from check-drift.mts)
+// Disposable __test_rep_ / __test_prog_ / __test_vel_ fixtures are all
+// cascade-deleted before exit. (Absorbs progression-tests.mts,
+// velocity-detector-tests.mts and check-drift.mts.)
 // Run: npm run test:reputation
 import "./db-guard.mjs"
 import { strict as assert } from "node:assert"
@@ -15,17 +25,22 @@ import {
   EARLY_SUPPORTER_LIMIT,
   LIKE_MIN_ACTOR_AGE_HOURS,
   VERIFIED_MIN_REPUTATION,
+  BADGE_BONUS,
+  TRUST_EVENT_TYPES,
+  TRUST_STANDINGS,
   getReputationTier,
   getNextTier,
   getTierProgress,
   getRepStage,
   getRepLevel,
   getStageProgress,
+  getTrustStanding,
+  getNextTrustStanding,
   publicRepLabel,
   crossedRungs,
 } from "@/lib/reputation-config"
 import { AVATAR_FRAMES, PROFILE_TITLES, PROFILE_THEMES, canEquip, unlockedCosmetics, nextLockedCosmetic, cosmeticsUnlockedBetween } from "@/lib/cosmetics"
-import { WEEKLY_CHALLENGES } from "@/lib/challenges"
+import { WEEKLY_CHALLENGES, reconcileChallengePayouts, currentWeekKey } from "@/lib/challenges"
 import {
   applyReputationAward,
   awardReputation,
@@ -33,13 +48,24 @@ import {
   reverseReputationByKey,
   reverseReputationBySource,
   findReputationDrift,
+  getTrustScore,
   BADGE_RULES,
 } from "@/lib/reputation"
-import { BADGE_REGISTRY, BOT_BADGE_REGISTRY, isBotBadge, STAFF_AWARDED_BADGES } from "@/lib/badge-registry"
+import { BADGE_REGISTRY, BOT_BADGE_REGISTRY, isBotBadge, getBadgeByName, STAFF_AWARDED_BADGES } from "@/lib/badge-registry"
 import { getCheckinStreak, evaluateStreaks } from "@/lib/streaks"
+import { DAILY_QUESTS, DAILY_QUEST_COUNT, PERFECT_DAY_BONUS, dailyQuestsFor, currentDayKey, getQuestProgress, evaluateQuests, reconcileQuestPayouts } from "@/lib/quests"
+import {
+  detectReputationSignals,
+  materializeReputationFlags,
+  isMemberDrivenReputationEvent,
+  MEMBER_DRIVEN_REP_TYPES,
+} from "@/lib/trust-signals"
 import { TERPBOT_USERNAME } from "@/lib/terpbot-constants"
 
-const TEST_USERNAME = `__test_rep_${Date.now()}`
+const RUN_TAG = Date.now().toString(36)
+const TEST_USERNAME = `__test_rep_${RUN_TAG}`
+const PROG_USERNAME = `__test_prog_${RUN_TAG}`
+const VEL_PREFIX = `__test_vel_${RUN_TAG}`
 
 // Badges granted outside checkBadges() — each must have a real code path:
 //   Settled In         — onboarding-complete award
@@ -81,6 +107,55 @@ async function ledgerSum(userId: string) {
     _sum: { amount: true },
   })
   return agg._sum.amount ?? 0
+}
+
+// ── Shared fixture helpers ─────────────────────────────────────────
+// One helper set for every DB section; callers pass a fully-prefixed
+// username so fixtures stay distinguishable per section (__test_rep_,
+// __test_prog_, __test_vel_) and never cross-contaminate.
+async function mkTestUser(username: string) {
+  return prisma.user.create({
+    data: {
+      name: username,
+      ageVerified: true,
+      sessionVersion: 1,
+      profile: { create: { username } },
+    },
+    select: { id: true },
+  })
+}
+
+// Ledger row + profile credit in one tx — mirrors applyReputationAward's
+// invariant so a fixture never produces ledger-vs-balance drift.
+async function mkEvent(userId: string, over: Record<string, unknown>) {
+  const amount = (over.amount as number | undefined) ?? 5
+  return prisma.$transaction(async (tx) => {
+    const ev = await tx.reputationEvent.create({
+      data: { userId, type: "POST_CREATED", amount, reason: "test fixture", ...over } as never,
+    })
+    await tx.profile.update({ where: { userId }, data: { reputation: { increment: amount } } })
+    return ev
+  })
+}
+
+// Bare ledger-row fixture for the velocity detector — the detector reads
+// ReputationEvent rows only, so no Profile.reputation write is needed.
+// These rows (and their users) are deleted before the global drift check.
+async function mkLedgerEvent(
+  userId: string,
+  type: string,
+  amount: number,
+  opts: { actorId?: string; reversedAt?: Date; key?: string } = {},
+) {
+  return prisma.reputationEvent.create({
+    data: {
+      userId, type, amount,
+      reason: `__test_vel_${type}`,
+      key: opts.key ?? `__test_vel:${type}:${userId}:${RUN_TAG}:${Math.random().toString(36).slice(2)}`,
+      actorId: opts.actorId ?? null,
+      reversedAt: opts.reversedAt ?? null,
+    },
+  })
 }
 
 async function run() {
@@ -276,18 +351,95 @@ async function run() {
   assert.ok(REP_EVENT_TYPES.MILESTONE === "MILESTONE")
   assert.ok(!PUBLIC_REP_TYPES.has(REP_EVENT_TYPES.MILESTONE), "MILESTONE stays off public history")
 
+  // ── Pure: daily quest selection ──────────────────────────────────
+  // Deterministic: same user + day → same selection, every call.
+  const u1a = dailyQuestsFor("user-1", "2026-04-20")
+  const u1b = dailyQuestsFor("user-1", "2026-04-20")
+  assert.deepEqual(u1a.map((q) => q.slug), u1b.map((q) => q.slug))
+  assert.equal(u1a.length, DAILY_QUEST_COUNT)
+
+  // Different users typically see different mixes — and every pick is a
+  // real quest. (Not asserting full coverage across all users — the hash
+  // only needs to vary, not be uniform.)
+  const u2 = dailyQuestsFor("user-2", "2026-04-20")
+  assert.equal(u2.length, DAILY_QUEST_COUNT)
+  for (const q of [...u1a, ...u2]) {
+    assert.ok(DAILY_QUESTS.some((d) => d.slug === q.slug), `unknown quest ${q.slug}`)
+  }
+  // Different day → different hash order (selection MAY coincide, but at
+  // least across a few days the set should change for most users).
+  const allSame = ["user-1", "user-2", "user-3", "user-4", "user-5"].every((u) => {
+    const a = dailyQuestsFor(u, "2026-04-20").map((q) => q.slug).join(",")
+    const b = dailyQuestsFor(u, "2026-04-21").map((q) => q.slug).join(",")
+    return a === b
+  })
+  assert.equal(allSame, false, "quest selection never rotates")
+
+  // Every quest definition is sane: positive reward, achievable target,
+  // unique slugs, no raw-volume quests ("post N replies" is banned by design).
+  const questSlugs = new Set(DAILY_QUESTS.map((q) => q.slug))
+  assert.equal(questSlugs.size, DAILY_QUESTS.length, "duplicate quest slugs")
+  for (const q of DAILY_QUESTS) {
+    assert.ok(q.reward > 0 && q.reward <= 15, `quest ${q.slug} reward out of band`)
+    assert.ok(q.target >= 1 && q.target <= 3, `quest ${q.slug} target too grindy`)
+    assert.ok(!/posts?$/i.test(q.description), `quest ${q.slug} looks like volume farming`)
+  }
+  // Daily income ceiling stays far under the velocity flag.
+  const maxDaily = DAILY_QUEST_COUNT * Math.max(...DAILY_QUESTS.map((q) => q.reward)) + PERFECT_DAY_BONUS
+  assert.ok(maxDaily <= 50, `daily quest ceiling ${maxDaily} too high`)
+
+  // ── Pure: trust standing ─────────────────────────────────────────
+  assert.equal(getTrustStanding(0).name, "Unrooted")
+  assert.equal(getTrustStanding(24).name, "Unrooted")
+  assert.equal(getTrustStanding(25).name, "Known")
+  assert.equal(getTrustStanding(100).name, "Trusted")
+  assert.equal(getTrustStanding(300).name, "Respected")
+  assert.equal(getTrustStanding(800).name, "Pillar")
+  assert.equal(getTrustStanding(2000).name, "Legend")
+  assert.equal(getTrustStanding(99999).name, "Legend")
+  assert.equal(getNextTrustStanding(0)?.name, "Known")
+  assert.equal(getNextTrustStanding(2000), null)
+
+  // Standings strictly ascend.
+  for (let i = 1; i < TRUST_STANDINGS.length; i++) {
+    assert.ok(TRUST_STANDINGS[i].min > TRUST_STANDINGS[i - 1].min)
+  }
+
+  // Trust events are exactly the peer-validated types — no self-driven
+  // source (posts, diaries, quests, check-ins) may appear.
+  for (const selfDriven of ["THREAD_CREATED", "POST_CREATED", "DIARY_CREATED", "DIARY_UPDATE", "SETUP_CREATED", "STRAIN_CREATED", "QUEST_DAILY", "CHALLENGE_WEEKLY", "DAILY_LOGIN", "ONBOARDING_COMPLETE", "HARVEST_LOGGED"]) {
+    assert.ok(!TRUST_EVENT_TYPES.has(selfDriven), `${selfDriven} must not count toward standing`)
+  }
+  for (const t of TRUST_EVENT_TYPES) {
+    assert.notEqual(publicRepLabel(t), "Reputation change", `${t} needs a public label`)
+  }
+
   // ── Pure: badge registry ↔ rules consistency ─────────────────────
   const registryNames = new Set(BADGE_REGISTRY.map((b) => b.name))
   for (const ruleName of Object.keys(BADGE_RULES)) {
     assert.ok(registryNames.has(ruleName), `rule "${ruleName}" has a registry entry`)
     assert.ok(!isBotBadge(ruleName), `rule "${ruleName}" is not a bot badge`)
   }
+  const seenBadgeNames = new Set<string>()
   for (const b of BADGE_REGISTRY) {
+    assert.ok(!seenBadgeNames.has(b.name), `duplicate badge ${b.name}`)
+    seenBadgeNames.add(b.name)
     assert.ok(
       BADGE_RULES[b.name] || NON_RULE_BADGES.has(b.name),
       `badge "${b.name}" has an earning path (rule or documented external grant)`
     )
     assert.ok(b.description && b.requirement && b.icon, `badge "${b.name}" fully described`)
+    assert.ok(BADGE_BONUS[b.rarity] != null, `badge ${b.name} has unknown rarity ${b.rarity}`)
+    // Progress-bars only on badges with a rule or a deliberately hidden path.
+    if (b.progress) assert.ok(BADGE_RULES[b.name] || b.hidden, `progress badge ${b.name} has no rule`)
+    // getBadgeByName resolves every registry entry.
+    assert.equal(getBadgeByName(b.name)?.name, b.name)
+  }
+  // Hidden badges exist and stay secret-shaped.
+  const hidden = BADGE_REGISTRY.filter((b) => b.hidden)
+  assert.ok(hidden.length >= 3, "expected a small set of hidden discovery badges")
+  for (const b of hidden) {
+    assert.equal(b.requirement, "???", `hidden badge ${b.name} leaks its requirement`)
   }
   for (const s of STAFF_AWARDED_BADGES) {
     assert.ok(registryNames.has(s), `staff-awarded badge "${s}" exists in registry`)
@@ -461,16 +613,40 @@ async function run() {
       await prisma.user.delete({ where: { id: clean.id } }).catch(() => {})
     }
 
-    // TerpBot can never earn rep.
-    const bot = await prisma.profile.findUnique({ where: { username: TERPBOT_USERNAME }, select: { userId: true } })
-    if (bot) {
-      const r = await applyReputationAward(bot.userId, "POST_CREATED", 2, "bot award", { key: "test:bot:1" })
+    // TerpBot can never earn rep. The lib gates on
+    // `profile.username === TERPBOT_USERNAME`, so the fixture is
+    // deterministic: use the real bot account when it exists in this
+    // database, otherwise stand up a throwaway user carrying that
+    // username (deleted in the finally). The assertion always runs.
+    const existingBot = await prisma.profile.findUnique({
+      where: { username: TERPBOT_USERNAME },
+      select: { userId: true },
+    })
+    let botUserId = existingBot?.userId
+    let createdBot = false
+    if (!botUserId) {
+      const botFixture = await prisma.user.create({
+        data: {
+          name: `${TEST_USERNAME}_bot`,
+          ageVerified: true,
+          sessionVersion: 1,
+          // Username must literally be the bot name — that's the signal
+          // applyReputationAward checks before writing any ledger row.
+          profile: { create: { username: TERPBOT_USERNAME } },
+        },
+        select: { id: true },
+      })
+      botUserId = botFixture.id
+      createdBot = true
+    }
+    try {
+      const r = await applyReputationAward(botUserId!, "POST_CREATED", 2, "bot award", { key: "test:bot:1" })
       assert.equal(r.awarded, false)
       assert.equal(r.skippedReason, "bot")
       const botEvents = await prisma.reputationEvent.count({ where: { key: "test:bot:1" } })
       assert.equal(botEvents, 0, "no ledger row written for bot")
-    } else {
-      console.log("  (terpbot user not present in this database — bot-exclusion test skipped)")
+    } finally {
+      if (createdBot) await prisma.user.delete({ where: { id: botUserId! } }).catch(() => {})
     }
 
     // ── DB: milestone markers (2.2 once-ever celebrations) ─────────
@@ -683,10 +859,260 @@ async function run() {
     await prisma.user.delete({ where: { id: uid } }).catch(() => {})
   }
 
-  console.log("All Reputation 2.0 tests passed.")
+  // ── DB: keyed quest payouts + trust filtering ────────────────────
+  const progUser = await mkTestUser(PROG_USERNAME)
+  try {
+    const dayKey = currentDayKey()
+
+    // Keyed quest payout: award once, second call is a no-op. (Other
+    // awards may fire as side-effects — e.g. the Early Supporter badge
+    // bonus — so we assert on the specific event, not the total.)
+    const key = `quest:${dayKey}:lend-a-hand:${progUser.id}`
+    const a1 = await awardReputation(progUser.id, "QUEST_DAILY", 8, "Daily quest: Lend a Hand", { key })
+    const a2 = await awardReputation(progUser.id, "QUEST_DAILY", 8, "Daily quest: Lend a Hand", { key })
+    assert.equal(a1.awarded, true)
+    assert.equal(a2.awarded, false)
+    const questEvents = await prisma.reputationEvent.count({ where: { userId: progUser.id, key } })
+    assert.equal(questEvents, 1, "duplicate keyed quest payout")
+
+    // Self-driven events advance progression but NOT trust standing.
+    assert.equal(await getTrustScore(progUser.id), 0)
+
+    // Peer-validated events DO count.
+    await awardReputation(progUser.id, "LIKE_RECEIVED", 2, "test like", {
+      key: `test:like:${progUser.id}`,
+      actorId: "someone-else",
+    })
+    assert.equal(await getTrustScore(progUser.id), 2)
+    assert.equal(getTrustStanding(2).name, "Unrooted")
+
+    // Quest progress is server-derived — a fresh user has zero progress and
+    // nothing paid. evaluateQuests on zero progress pays nothing.
+    const progress = await getQuestProgress(progUser.id)
+    assert.equal(progress.length, DAILY_QUEST_COUNT)
+    for (const q of progress) {
+      // green-thumb legitimately ticks from the LIKE_RECEIVED awarded above —
+      // every other quest's inputs are still untouched.
+      assert.equal(q.progress, q.slug === "green-thumb" ? 1 : 0)
+      assert.equal(q.done, false)
+      // lend-a-hand may or may not be selected; paid only when selected+paid.
+      if (q.slug === "lend-a-hand") assert.equal(q.paid, true)
+    }
+    const paid = await evaluateQuests(progUser.id)
+    assert.deepEqual(paid, [], "no quests should pay with zero qualifying activity")
+
+    // PUBLIC_REP_TYPES covers quest payouts so they show on the public
+    // history with a safe label (not the raw reason string).
+    assert.ok(PUBLIC_REP_TYPES.has("QUEST_DAILY"))
+    assert.equal(publicRepLabel("QUEST_DAILY"), "Daily quest completed")
+
+    // ── Sticky payout reconciliation ──────────────────────────────
+    // Payouts whose qualifying content disappears must be clawed back by
+    // the sweep; payouts still backed by real activity must survive.
+    {
+      const stickyUser = await mkTestUser(`${PROG_USERNAME}_sticky`)
+      const earnedUser = await mkTestUser(`${PROG_USERNAME}_earned`)
+      const chalUser = await mkTestUser(`${PROG_USERNAME}_chal`)
+      let stickyDiaryId = ""
+      try {
+        const dayKey = new Date().toISOString().slice(0, 10)
+        const ev = await mkEvent(stickyUser.id, {
+          type: "QUEST_DAILY", key: `quest:${dayKey}:tend-the-garden:${stickyUser.id}`, amount: 15,
+        })
+        const res = await reconcileQuestPayouts()
+        const after = await prisma.reputationEvent.findUnique({ where: { id: ev.id }, select: { reversedAt: true } })
+        assert.ok(after?.reversedAt, `unearned quest payout must be reversed (checked=${res.checked} reversed=${res.reversed})`)
+
+        // tend-the-garden counts live DIARY_UPDATE reputation events today.
+        const dr = await prisma.growDiary.create({
+          data: { title: `${PROG_USERNAME}_qd`, description: "", growType: "INDOOR", startDate: new Date(), authorId: earnedUser.id },
+          select: { id: true },
+        })
+        stickyDiaryId = dr.id
+        await mkEvent(earnedUser.id, { type: "DIARY_UPDATE", sourceType: "DIARY", sourceId: dr.id })
+        const ev2 = await mkEvent(earnedUser.id, {
+          type: "QUEST_DAILY", key: `quest:${dayKey}:tend-the-garden:${earnedUser.id}`, amount: 15,
+        })
+        await reconcileQuestPayouts()
+        const after2 = await prisma.reputationEvent.findUnique({ where: { id: ev2.id }, select: { reversedAt: true } })
+        assert.equal(after2?.reversedAt, null, "earned payout must not be reversed")
+
+        const ev3 = await mkEvent(chalUser.id, {
+          type: "CHALLENGE_WEEKLY", key: `challenge:${currentWeekKey()}:tend-the-diary:${chalUser.id}`, amount: 50,
+        })
+        await reconcileChallengePayouts()
+        const after3 = await prisma.reputationEvent.findUnique({ where: { id: ev3.id }, select: { reversedAt: true } })
+        assert.ok(after3?.reversedAt, "unearned challenge payout must be reversed")
+      } finally {
+        if (stickyDiaryId) {
+          await prisma.diaryUpdate.deleteMany({ where: { diaryId: stickyDiaryId } }).catch(() => {})
+          await prisma.growDiary.delete({ where: { id: stickyDiaryId } }).catch(() => {})
+        }
+        for (const u of [stickyUser, earnedUser, chalUser]) {
+          await prisma.user.delete({ where: { id: u.id } }).catch(() => {})
+        }
+      }
+    }
+  } finally {
+    await prisma.user.delete({ where: { id: progUser.id } }).catch(() => {})
+  }
+
+  // ── DB: velocity detector — member-driven events only ────────────
+  // The abuse detector must count member-driven reputation only and ignore
+  // system-generated payouts (BADGE_BONUS, WEEKLY_AWARD, MILESTONE,
+  // ONBOARDING_COMPLETE, quests, journeys, staff/migration bookkeeping).
+  // Fixtures are bare ledger rows — the detector reads events, not
+  // balances — and are all deleted in the finally, before the drift check.
+  {
+    const velUsers: { id: string }[] = []
+    const velEventIds: string[] = []
+    const flagKeysBefore = new Set(
+      (await prisma.abuseFlag.findMany({ select: { key: true } })).map((f) => f.key)
+    )
+    const flaggedIds = async () =>
+      new Set((await detectReputationSignals(7)).velocity.map((v) => v.userId))
+    const expectFlagged = async (id: string, msg: string) =>
+      assert.ok((await flaggedIds()).has(id), msg)
+    const expectClean = async (id: string, msg: string) =>
+      assert.ok(!(await flaggedIds()).has(id), msg)
+
+    try {
+      // T1 — BADGE_BONUS alone must not flag
+      {
+        const u = await mkTestUser(`${VEL_PREFIX}_badge`); velUsers.push(u)
+        velEventIds.push((await mkLedgerEvent(u.id, "BADGE_BONUS", 200)).id)
+        await expectClean(u.id, "T1: +200 BADGE_BONUS in 24h → no velocity flag")
+      }
+
+      // T2 — WEEKLY_AWARD alone must not flag
+      {
+        const u = await mkTestUser(`${VEL_PREFIX}_weekly`); velUsers.push(u)
+        velEventIds.push((await mkLedgerEvent(u.id, "WEEKLY_AWARD", 200)).id)
+        await expectClean(u.id, "T2: +200 WEEKLY_AWARD in 24h → no velocity flag")
+      }
+
+      // T3 — MILESTONE / system rewards must not flag
+      {
+        const u = await mkTestUser(`${VEL_PREFIX}_sys`); velUsers.push(u)
+        velEventIds.push((await mkLedgerEvent(u.id, "MILESTONE", 100)).id)
+        velEventIds.push((await mkLedgerEvent(u.id, "GROW_MILESTONE", 60)).id)
+        velEventIds.push((await mkLedgerEvent(u.id, "JOURNEY_COMPLETE", 40)).id)
+        await expectClean(u.id, "T3: +200 MILESTONE/GROW_MILESTONE/JOURNEY_COMPLETE → no flag")
+      }
+
+      // T4 — ONBOARDING_COMPLETE must not flag
+      {
+        const u = await mkTestUser(`${VEL_PREFIX}_onb`); velUsers.push(u)
+        velEventIds.push((await mkLedgerEvent(u.id, "ONBOARDING_COMPLETE", 200)).id)
+        await expectClean(u.id, "T4: +200 ONBOARDING_COMPLETE → no flag")
+      }
+
+      // T5 — genuine member-driven velocity flags HIGH
+      {
+        const u = await mkTestUser(`${VEL_PREFIX}_grind`); velUsers.push(u)
+        const actor = await mkTestUser(`${VEL_PREFIX}_actor`); velUsers.push(actor)
+        for (let i = 0; i < 6; i++) {
+          velEventIds.push((await mkLedgerEvent(u.id, "HELPFUL_ANSWER", 30, { actorId: actor.id })).id)
+        }
+        velEventIds.push((await mkLedgerEvent(u.id, "DAILY_LOGIN", 1)).id) // 181 member-driven
+        await expectFlagged(u.id, "T5: +181 member-driven in 24h → flagged")
+        const { created } = await materializeReputationFlags(7)
+        const flag = await prisma.abuseFlag.findFirst({
+          where: { userId: u.id, signal: "REP_VELOCITY", key: { notIn: [...flagKeysBefore] } },
+        })
+        assert.ok(flag && flag.priority === "HIGH", `T5b: materialized flag is HIGH (created=${created})`)
+      }
+
+      // T6 — exactly +150 does not flag (boundary preserved)
+      {
+        const u = await mkTestUser(`${VEL_PREFIX}_edge`); velUsers.push(u)
+        for (let i = 0; i < 15; i++) {
+          velEventIds.push((await mkLedgerEvent(u.id, "THREAD_CREATED", 10)).id)
+        }
+        await expectClean(u.id, "T6: exactly +150 member-driven → no flag (>150 required)")
+      }
+
+      // T7 — system + member-driven mix below threshold → no flag
+      {
+        const u = await mkTestUser(`${VEL_PREFIX}_mix`); velUsers.push(u)
+        velEventIds.push((await mkLedgerEvent(u.id, "BADGE_BONUS", 250)).id)
+        velEventIds.push((await mkLedgerEvent(u.id, "WEEKLY_AWARD", 50)).id)
+        velEventIds.push((await mkLedgerEvent(u.id, "THREAD_CREATED", 10)).id)
+        velEventIds.push((await mkLedgerEvent(u.id, "LIKE_RECEIVED", 2)).id)
+        await expectClean(u.id, "T7: +300 system + +12 member-driven → no flag")
+      }
+
+      // T8 — reversed events don't contribute
+      {
+        const u = await mkTestUser(`${VEL_PREFIX}_rev`); velUsers.push(u)
+        velEventIds.push((await mkLedgerEvent(u.id, "HELPFUL_ANSWER", 200, { reversedAt: new Date() })).id)
+        await expectClean(u.id, "T8: +200 member-driven but reversed → no flag")
+      }
+
+      // T9 — legacy exclusions still excluded
+      {
+        const u = await mkTestUser(`${VEL_PREFIX}_excl`); velUsers.push(u)
+        for (const t of ["STAFF_ADJUSTMENT", "REFERRAL", "CHALLENGE_WEEKLY", "LEGACY_MIGRATION", "REINSTATE", "CONTEST_WEEKLY_WIN", "CONTEST_MONTHLY_WIN"]) {
+          velEventIds.push((await mkLedgerEvent(u.id, t, 50)).id) // 350 total excluded
+        }
+        await expectClean(u.id, "T9: +350 across legacy-excluded types → no flag")
+      }
+
+      // T10 — badge cascade burst doesn't flag
+      {
+        const u = await mkTestUser(`${VEL_PREFIX}_cascade`); velUsers.push(u)
+        for (let i = 0; i < 10; i++) {
+          velEventIds.push((await mkLedgerEvent(u.id, "BADGE_BONUS", 40)).id) // 400 burst
+        }
+        await expectClean(u.id, "T10: 10× BADGE_BONUS cascade (+400) → no flag")
+      }
+
+      // T11 — cron self-award (WEEKLY_AWARD + BADGE_BONUS same run) doesn't flag
+      {
+        const u = await mkTestUser(`${VEL_PREFIX}_gotw`); velUsers.push(u)
+        velEventIds.push((await mkLedgerEvent(u.id, "BADGE_BONUS", 100, { key: `badgebonus:Grower of the Week:${u.id}` })).id)
+        velEventIds.push((await mkLedgerEvent(u.id, "WEEKLY_AWARD", 50, { key: `weekly:gotw:2099-W01:${u.id}` })).id)
+        const { created } = await materializeReputationFlags(7)
+        const flag = await prisma.abuseFlag.findFirst({
+          where: { userId: u.id, key: { notIn: [...flagKeysBefore] } },
+        })
+        assert.ok(!flag, `T11: GOTW award + detection same run → no self-generated flag (created=${created})`)
+      }
+
+      // T13 — sanity: the allowlist classifies every known event type
+      {
+        const memberTypes = ["THREAD_CREATED", "POST_CREATED", "DIARY_CREATED", "DIARY_UPDATE", "STRAIN_CREATED", "STRAIN_PHOTO", "SETUP_CREATED", "LIKE_RECEIVED", "HELPFUL_ANSWER", "ACCEPT_MARKED", "HARVEST_LOGGED", "DAILY_LOGIN"]
+        const systemTypes = ["BADGE_BONUS", "WEEKLY_AWARD", "MILESTONE", "ONBOARDING_COMPLETE", "QUEST_DAILY", "GROW_MILESTONE", "JOURNEY_COMPLETE", "CHALLENGE_WEEKLY", "STAFF_ADJUSTMENT", "REFERRAL", "LEGACY_MIGRATION", "REINSTATE", "CONTEST_WEEKLY_WIN", "CONTEST_MONTHLY_WIN", "REVERSAL", "BOT_MESSAGE"]
+        const badMember = memberTypes.filter((t) => !isMemberDrivenReputationEvent(t))
+        const badSystem = systemTypes.filter((t) => isMemberDrivenReputationEvent(t))
+        assert.deepEqual([...MEMBER_DRIVEN_REP_TYPES].sort(), [...memberTypes].sort())
+        assert.deepEqual(badMember, [], "T13: every member-driven type classified")
+        assert.deepEqual(badSystem, [], "T13: every system type excluded")
+      }
+    } finally {
+      // Cleanup — flags are bare-keyed (no cascade), events cascade with users
+      await prisma.abuseFlag.deleteMany({ where: { key: { notIn: [...flagKeysBefore] } } }).catch(() => {})
+      await prisma.reputationEvent.deleteMany({ where: { id: { in: velEventIds } } }).catch(() => {})
+      await prisma.user.deleteMany({ where: { id: { in: velUsers.map((u) => u.id) } } }).catch(() => {})
+    }
+  }
+
+  // ── DB: global ledger drift check ────────────────────────────────
+  // Profile.reputation == SUM(ReputationEvent.amount) for EVERY profile,
+  // not just test fixtures — all fixtures above are deleted by now.
+  const drift = await findReputationDrift()
+  for (const d of drift) {
+    console.error(`  drift ${d.userId}: balance=${d.reputation} ledger=${d.ledger} (${d.reputation - d.ledger > 0 ? "+" : ""}${d.reputation - d.ledger})`)
+  }
+  assert.equal(drift.length, 0, `${drift.length} profile(s) out of sync — deltas above`)
+  console.log("No drift — every profile balance matches its ledger.")
+
+  await prisma.$disconnect()
+  console.log("All Reputation & progression tests passed.")
 }
 
-run().catch((e) => {
+run().catch(async (e) => {
   console.error(e)
+  await prisma.$disconnect().catch(() => {})
   process.exit(1)
 })

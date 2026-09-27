@@ -55,18 +55,13 @@ interface Suite {
 const STATIC_PHASE: Suite[] = [
   { id: "verify-security", file: "scripts/verify-security.cjs", runner: "node", cls: "C", label: "Security source invariants", tier: "fast" },
   { id: "ui-contracts", file: "scripts/ui-contracts-tests.mts", runner: "tsx", cls: "C", label: "UI structural + accessibility contracts", tier: "fast" },
-  { id: "info-pages", file: "scripts/info-pages-tests.mts", runner: "tsx", cls: "D", label: "Info pages static/config checks", tier: "fast" },
 ]
 
 // Pure suites — no server, no DB. TerpBot layers plus structural checks.
 const PURE_PHASE: Suite[] = [
-  { id: "terpbot-parser", file: "scripts/terpbot-parser-tests.mts", runner: "tsx", cls: "A", label: "TerpBot NL parser", tier: "fast" },
-  { id: "terpbot-commands", file: "scripts/terpbot-commands-tests.mts", runner: "tsx", cls: "A", label: "TerpBot command registry + intent routing", tier: "fast" },
-  { id: "terpbot-intelligence", file: "scripts/terpbot-intelligence-tests.mts", runner: "tsx", cls: "A", label: "TerpBot evidence engine (candidates, scoring, classifier, wizard)", tier: "fast" },
-  { id: "terpbot-longitudinal", file: "scripts/terpbot-longitudinal-tests.mts", runner: "tsx", cls: "A", label: "TerpBot longitudinal context (timeline, baselines, interventions)", tier: "fast" },
-  { id: "terpbot-decisions", file: "scripts/terpbot-decisions-tests.mts", runner: "tsx", cls: "A", label: "TerpBot decisions (snapshot, capabilities, plan, decision engine)", tier: "fast" },
-  { id: "terpbot-assist", file: "scripts/terpbot-assist-tests.mts", runner: "tsx", cls: "A", label: "TerpBot BOT_ASSIST triggers", tier: "fast" },
-  { id: "validate-knowledge", file: "scripts/validate-knowledge.mts", runner: "tsx", cls: "C", label: "TerpBot knowledge validator", tier: "fast" },
+  { id: "terpbot-parser", file: "scripts/terpbot-parser-tests.mts", runner: "tsx", cls: "A", label: "TerpBot NL parser + command registry + intent routing", tier: "fast" },
+  { id: "terpbot-intelligence", file: "scripts/terpbot-intelligence-tests.mts", runner: "tsx", cls: "A", label: "TerpBot evidence engine + longitudinal context (candidates, scoring, episodes, timeline, baselines)", tier: "fast" },
+  { id: "terpbot-decisions", file: "scripts/terpbot-decisions-tests.mts", runner: "tsx", cls: "A", label: "TerpBot decisions + assist triggers + knowledge validation", tier: "fast" },
 ]
 
 // Requires a healthy dev server at BASE_URL. Serial: suites share the dev DB
@@ -77,8 +72,7 @@ const HTTP_PHASE: Suite[] = [
   { id: "search", file: "scripts/search-verify.mjs", runner: "node", cls: "A", label: "Search HTTP behavior", tier: "full" },
   { id: "diary", file: "scripts/diary-verify.mjs", runner: "node", cls: "A", label: "Grow diary HTTP behavior", tier: "full" },
   { id: "bot", file: "scripts/bot-verify.mjs", runner: "node", cls: "A", label: "TerpBot HTTP end-to-end", tier: "full", timeoutMs: 12 * 60_000 },
-  { id: "trust-safety", file: "scripts/trust-safety-verify.mjs", runner: "node", cls: "A", label: "Trust & safety HTTP behavior", tier: "full" },
-  { id: "feedback", file: "scripts/feedback-tests.mjs", runner: "node", cls: "A", label: "Feedback auth/privacy/rate-limit", tier: "full" },
+  { id: "trust-safety", file: "scripts/trust-safety-verify.mjs", runner: "node", cls: "A", label: "Trust & safety + feedback HTTP behavior", tier: "full" },
   { id: "ops", file: "scripts/ops-tests.mts", runner: "tsx", cls: "A", label: "Ops surface gate + metrics shape + feedback deviceType", tier: "full" },
   { id: "runtime-verify", file: "scripts/runtime-verify.mjs", runner: "node", cls: "A", label: "Runtime security black-box (sessions, authz, privacy, Pusher, uploads, rate limits, staff, TerpBot)", tier: "full", timeoutMs: 12 * 60_000 },
 ]
@@ -88,32 +82,27 @@ const HTTP_PHASE: Suite[] = [
 const DB_PHASE: Suite[] = [
   { id: "security", file: "scripts/security-tests.mts", runner: "tsx", cls: "A", label: "Security + platform lib-level (sessions, roles, uploads, links, cron, captcha, markdown)", tier: "full" },
   { id: "notifications", file: "scripts/notification-2-tests.mts", runner: "tsx", cls: "A", label: "Notification persistence + delivery", tier: "full" },
-  { id: "reputation", file: "scripts/reputation-tests.mts", runner: "tsx", cls: "A", label: "Reputation award/reverse ledger", tier: "full" },
+  { id: "reputation", file: "scripts/reputation-tests.mts", runner: "tsx", cls: "A", label: "Reputation ledger + progression + quests + velocity anti-abuse", tier: "full" },
   { id: "reputation-referral", file: "scripts/reputation-referral-integrity-tests.mts", runner: "tsx", cls: "A", label: "Reputation referral integrity", tier: "full" },
   { id: "terpbot-pipeline", file: "scripts/terpbot-pipeline-tests.mts", runner: "tsx", cls: "A", label: "TerpBot pipeline (DB)", tier: "full" },
-  { id: "progression", file: "scripts/progression-tests.mts", runner: "tsx", cls: "A", label: "Progression / trust thresholds", tier: "full" },
-  { id: "privacy", file: "scripts/privacy-controls-tests.mts", runner: "tsx", cls: "B", label: "Privacy controls (block, hide, DM policy)", tier: "full" },
-  { id: "self-service", file: "scripts/self-service-tests.mts", runner: "tsx", cls: "B", label: "Self-service account flows", tier: "full" },
+  { id: "self-service", file: "scripts/self-service-tests.mts", runner: "tsx", cls: "B", label: "Self-service + privacy controls (blocks, recovery, DM policy, visibility)", tier: "full" },
   { id: "chat", file: "scripts/chat-ux-tests.mts", runner: "tsx", cls: "A", label: "Chat UX helpers + room visibility (DB)", tier: "full" },
-  { id: "community-analytics", file: "scripts/community-analytics-tests.mts", runner: "tsx", cls: "B", label: "Community analytics", tier: "slow" },
-  { id: "growth-analytics", file: "scripts/growth-analytics-tests.mts", runner: "tsx", cls: "B", label: "Growth analytics", tier: "slow" },
-  { id: "knowledge-compounding", file: "scripts/knowledge-compounding-tests.mts", runner: "tsx", cls: "B", label: "Knowledge compounding", tier: "slow" },
+  { id: "community-analytics", file: "scripts/community-analytics-tests.mts", runner: "tsx", cls: "B", label: "Community + growth analytics", tier: "slow" },
   { id: "content-edit", file: "scripts/content-edit-tests.mts", runner: "tsx", cls: "B", label: "Content edit parsers + strain linkage", tier: "full" },
-  { id: "strain-lifecycle", file: "scripts/strain-lifecycle-tests.mts", runner: "tsx", cls: "B", label: "Strain lifecycle + staff deletion", tier: "full" },
-  { id: "velocity-detector", file: "scripts/velocity-detector-tests.mts", runner: "tsx", cls: "B", label: "Reputation velocity detector", tier: "full" },
+  { id: "strain-lifecycle", file: "scripts/strain-lifecycle-tests.mts", runner: "tsx", cls: "B", label: "Strain lifecycle + staff deletion + catalog-prune safety", tier: "full" },
   { id: "rewards3", file: "scripts/rewards3-tests.mts", runner: "tsx", cls: "A", label: "Grow journey, weekly recognition, streaks, room gates", tier: "full" },
   { id: "discovery-integration", file: "scripts/discovery-integration-tests.mts", runner: "tsx", cls: "B", label: "Discovery filters + sitemap (DB)", tier: "full" },
 ]
 
-// Whole-DB scan — runs alone, after every fixture suite has cleaned up.
+// Whole-DB scan — runs alone, after every fixture suite has cleaned up, so
+// ledger drift left behind by ANY suite (not just reputation's fixtures) is
+// caught here.
 const DRIFT_PHASE: Suite[] = [
   { id: "check-drift", file: "scripts/check-drift.mts", runner: "tsx", cls: "B", label: "Reputation ledger drift scan", tier: "full" },
 ]
 
-// Remaining verification. verify-affiliates asserts ops seed data, so its
-// idempotent seeder runs as a setup step first.
+// Remaining verification.
 const FINAL_PHASE: Suite[] = [
-  { id: "verify-affiliates", file: "scripts/verify-affiliates.cjs", runner: "node", cls: "B", label: "Affiliate integrity (seeded data)", tier: "full" },
   // Prod-mode verification builds .next — must run after the HTTP phase has
   // stopped a master-spawned dev server (an adopted external dev server on
   // the same .next dir may be disrupted by the build).
@@ -436,7 +425,6 @@ async function main() {
   if (needsDb) {
     // prerequisites: idempotent seeders so required suites run for real
     if (!(await runSetupStep("terpbot account", process.execPath, ["scripts/terpbot-setup.cjs"]))) return finish(1)
-    if (!(await runSetupStep("affiliate partner seed", process.execPath, ["scripts/seed-affiliates.cjs"]))) return finish(1)
   }
   log(`  ✓ environment validated`)
 

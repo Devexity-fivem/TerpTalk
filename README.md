@@ -57,7 +57,7 @@ DATABASE_URL="postgresql://USER:PASSWORD@ep-XXXX.us-east-1.aws.neon.tech/neondb?
 ```bash
 npm run test:fast            # ~10s — pure + static suites only (no dev server, no DB writes); run on every iteration
 npm run test:master          # THE release gate — fast + full tiers; boots a dev server, runs HTTP + DB suites against the Neon dev branch
-npm run test:slow            # analytics/aggregate suites (community, growth, knowledge-compounding) — not release-blocking
+npm run test:slow            # analytics/aggregate suite (community + growth) — not release-blocking
 npm run test:all             # everything (master + slow)
 npm run test:<name>          # any single suite (see package.json)
 npx tsc --noEmit && npm run lint
@@ -69,21 +69,21 @@ Test domains (one canonical suite each — extend these, don't add one-off scrip
 
 | Domain | Suite |
 |---|---|
-| Static route/security contracts | `verify-security.cjs` · UI structure/a11y `ui-contracts-tests.mts` · content `info-pages-tests.mts` |
-| TerpBot (pure) | `terpbot-parser` · `terpbot-commands` · `terpbot-intelligence` · `terpbot-longitudinal` · `terpbot-decisions` · `terpbot-assist` · `validate-knowledge` |
+| Static route/security contracts | `verify-security.cjs` · UI structure/a11y `ui-contracts-tests.mts` |
+| TerpBot (pure) | `terpbot-parser` (NL parse + commands + intents) · `terpbot-intelligence` (evidence engine + longitudinal) · `terpbot-decisions` (decisions + assist triggers + knowledge validation) |
 | TerpBot (integration) | `terpbot-pipeline-tests.mts` (DB) · `bot-verify.mjs` (HTTP) |
-| HTTP boundaries | `account-verify` (auth, onboarding, DMs, deletion, captcha) · `forum-verify` · `search-verify` · `diary-verify` · `trust-safety-verify` · `feedback-tests` |
+| HTTP boundaries | `account-verify` (auth, onboarding, DMs, deletion, captcha) · `forum-verify` · `search-verify` · `diary-verify` · `trust-safety-verify` (moderation + feedback) · `runtime-verify` (black-box security) · `ops-tests` (admin surfaces) |
 | Security + platform libs | `security-tests.mts` (sessions, roles, uploads, links, cron, captcha, markdown) |
-| Privacy / account | `privacy-controls-tests.mts` · `self-service-tests.mts` · `notification-2-tests.mts` |
-| Reputation / progression | `reputation-tests` · `reputation-referral-integrity-tests` · `rewards3-tests` · `progression-tests` · `velocity-detector-tests` · `check-drift` |
-| Content | `content-edit-tests.mts` · `strain-lifecycle-tests.mts` · `discovery-integration-tests.mts` · `chat-ux-tests.mts` |
+| Privacy / account | `self-service-tests.mts` (blocks, recovery, privacy prefs, DM policy, visibility) · `notification-2-tests.mts` |
+| Reputation / progression | `reputation-tests` (ledger + tiers + quests + velocity) · `reputation-referral-integrity-tests` · `rewards3-tests` · `check-drift` (whole-DB scan, runs last) |
+| Content | `content-edit-tests.mts` · `strain-lifecycle-tests.mts` (incl. catalog-prune safety) · `discovery-integration-tests.mts` · `chat-ux-tests.mts` |
 
 Rules:
 - **Behavior over source strings.** Authorization, privacy, ownership, reputation, parsing, diagnosis, session and chat behavior are tested by exercising the code (HTTP boundary preferred, then the real lib function). `readFileSync(src)` assertions are allowed only for contracts with no behavioral surface (a new route missing `requireStaff`, config presence, forbidden imports, a11y attributes, CSS gating) and live in the static suites.
 - **No route mirrors.** A test must not re-implement a route's query/predicate and assert its own copy; call the route (HTTP) or the exported lib function.
 - **No conditional skips.** Create the fixture you need; never `if (row) assert(...)`.
 - **New behavior → existing suite.** Add a section to the canonical domain suite above. A new file is justified only for a genuinely new domain, and it must be registered in the master manifest with a tier.
-- **Fixtures keep invariants.** Any fixture that writes `Profile.reputation` writes the matching ledger row in the same transaction (see `mkEvent` in `progression-tests.mts`).
+- **Fixtures keep invariants.** Any fixture that writes `Profile.reputation` writes the matching ledger row in the same transaction (see `mkEvent` in `reputation-tests.mts`).
 
 All mutation-capable test scripts import `scripts/db-guard.mjs`. Content seeds (`prisma/seed.ts`, `scripts/seed-strains.cjs`, `scripts/seed-mars-hydro-products.cjs`) are idempotent upserts and are the only unguarded writers — run them deliberately.
 

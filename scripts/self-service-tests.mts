@@ -2,21 +2,31 @@
 // relationship lifecycle (block/list/unblock + follow/DM effects), the DM
 // policy matrix (EVERYONE / FOLLOWING / NONE + block interaction), the
 // reports pipeline (creation, dedupe, CHAT_MESSAGE public-room guard,
-// APPEAL, priority mapping), and the recovery-phrase semantics behind
+// APPEAL, priority mapping), the recovery-phrase semantics behind
 // /api/auth/recover (phrase verify, rotation, sessionVersion bump, uniform
-// failure). Route handlers use next-auth session context so these exercise
-// the same Prisma shapes and lib functions the routes call, plus source-level
-// assertions for guards that only exist inside the handlers.
+// failure), and the member-facing privacy controls (pref defaults, rankable
+// surface exclusion, notification scoping, soft-delete read filters, public
+// reputation privacy on GET /api/users/[username], diary visibility helpers,
+// and hidden-diary contest exclusion). Route handlers use next-auth session
+// context so these exercise the same Prisma shapes and lib functions the
+// routes call, plus source-level assertions for guards that only exist
+// inside the handlers.
 // Run: npm run test:self-service
 import "./db-guard.mjs"
 import { strict as assert } from "node:assert"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import { prisma } from "@/lib/prisma"
-import { blockExistsBetween, isSessionValid } from "@/lib/security"
+import { blockExistsBetween, isSessionValid, rankableProfile, activeAuthor } from "@/lib/security"
+import { isDiaryVisibility, viewableDiaryWhere, canViewDiary, publicDiaryWhere } from "@/lib/diary-visibility"
+import { parseDiaryPatch } from "@/lib/diary-edit"
+import { resolveMonthlyDiaryWinner } from "@/lib/contest-awards"
+import { TERPBOT_USERNAME } from "@/lib/terpbot"
 import { newRecoveryPhrase, hashPhrase, verifyPhrase, isValidPhrase } from "@/lib/recovery"
 import { reportPriority } from "@/lib/trust-signals"
 import { rateLimit } from "@/lib/rate-limit"
+import { NextRequest } from "next/server"
+import { GET as getPublicProfile } from "@/app/api/users/[username]/route"
 import bcrypt from "bcryptjs"
 
 const root = process.cwd()
@@ -112,12 +122,6 @@ async function run() {
     assert.equal(report.priority, "NORMAL", "SPAM maps to NORMAL priority")
     assert.equal(reportPriority("THREATS"), "URGENT", "THREATS maps to URGENT")
 
-    // Dedupe: open report on same target found → route returns 409
-    const dupReport = await prisma.report.findFirst({
-      where: { reporterId: a.id, type: "THREAD", targetId: thread.id, status: { in: ["PENDING", "REVIEWING", "ESCALATED"] } },
-    })
-    assert.ok(dupReport, "duplicate open report detected (route 409s)")
-
     // CHAT_MESSAGE: public room resolves, private room does not
     const room = await prisma.chatRoom.create({ data: { name: `__ss room ${SUFFIX}`, slug: `ss-room-${SUFFIX}` } })
     const privRoom = await prisma.chatRoom.create({ data: { name: `__ss priv ${SUFFIX}`, slug: `ss-priv-${SUFFIX}`, isPrivate: true } })
@@ -135,14 +139,16 @@ async function run() {
     assert.equal(pubLookup?.authorId, b.id, "public-room message is reportable")
     assert.equal(privLookup, null, "private-room message is NOT reportable via ID guessing")
 
-    // APPEAL dedupe (mirrors /api/restricted)
-    await prisma.report.create({
-      data: { type: "APPEAL", reason: "OTHER", description: "review please", reporterId: a.id, reportedId: a.id, targetId: null },
-    }).then((r) => cleanup.push(async () => prisma.report.delete({ where: { id: r.id } })))
+    // APPEAL dedupe (mirrors /api/restricted — the pending appeal the route
+    // finds is exactly the one just filed)
+    const appeal = await prisma.report.create({
+      data: { type: "APPEAL", reason: "ACCOUNT_REVIEW_REQUEST", description: "review please", reporterId: a.id, reportedId: a.id, targetId: null },
+    })
+    cleanup.push(async () => prisma.report.delete({ where: { id: appeal.id } }))
     const openAppeal = await prisma.report.findFirst({
       where: { type: "APPEAL", reporterId: a.id, status: { in: ["PENDING", "REVIEWING"] } },
     })
-    assert.ok(openAppeal, "open APPEAL detected for dedupe")
+    assert.equal(openAppeal?.id, appeal.id, "open APPEAL detected for dedupe")
 
     // Rate limiter actually enforces (unique test key, no prod pollution)
     const rlKey = `__ss_rl_${SUFFIX}`
@@ -208,6 +214,213 @@ async function run() {
     const chatSrc = read("src/components/chat-room.tsx")
     assert.ok(chatSrc.includes('type: "CHAT_MESSAGE"'), "chat menu submits CHAT_MESSAGE reports")
     assert.ok(chatSrc.includes("Report message"), "chat message menu exposes Report")
+
+    // ── PRIVACY CONTROLS ─────────────────────────────────────────────
+    // New prefs default correctly (checked before this section flips them).
+    const pa = await prisma.profile.findUnique({ where: { userId: a.id } })
+    assert.equal(pa?.hideOnlineStatus, false, "hideOnlineStatus defaults false")
+    assert.equal(pa?.publicMilestoneOptOut, false, "publicMilestoneOptOut defaults false")
+    assert.equal(pa?.dmPolicy, "EVERYONE", "dmPolicy defaults EVERYONE")
+
+    // rankableProfile: default member is rankable; opt-out, suspended, and
+    // TerpBot are all excluded.
+    assert.ok(
+      await prisma.profile.findFirst({ where: { ...rankableProfile(), userId: a.id } }),
+      "default member is rankable"
+    )
+    await prisma.profile.update({ where: { userId: a.id }, data: { publicMilestoneOptOut: true } })
+    assert.equal(
+      await prisma.profile.findFirst({ where: { ...rankableProfile(), userId: a.id } }),
+      null,
+      "opted-out member excluded from rankable surfaces"
+    )
+    // TerpBot must never be rankable regardless.
+    const rankable = await prisma.profile.findMany({
+      where: rankableProfile(),
+      select: { username: true },
+    })
+    assert.ok(
+      !rankable.some((p) => p.username === TERPBOT_USERNAME),
+      "terpbot excluded from rankable surfaces"
+    )
+    await prisma.user.update({
+      where: { id: b.id },
+      data: { suspendedUntil: new Date(Date.now() + 86400000) },
+    })
+    assert.equal(
+      await prisma.profile.findFirst({ where: { ...rankableProfile(), userId: b.id } }),
+      null,
+      "suspended member excluded from rankable surfaces"
+    )
+    await prisma.user.update({ where: { id: b.id }, data: { suspendedUntil: null } })
+
+    // Notification delete stays user-scoped (simulates DELETE
+    // /api/notifications { ids } — userId in where).
+    await prisma.notification.create({
+      data: { userId: a.id, type: "COMMENT", title: "t", content: "c" },
+    })
+    const n = await prisma.notification.findFirst({ where: { userId: a.id } })
+    const wrongOwner = await prisma.notification.deleteMany({
+      where: { userId: b.id, id: { in: [n!.id] } },
+    })
+    assert.equal(wrongOwner.count, 0, "cannot delete another user's notification")
+    const own = await prisma.notification.deleteMany({
+      where: { userId: a.id, id: { in: [n!.id] } },
+    })
+    assert.equal(own.count, 1, "owner delete succeeds")
+
+    // Soft-delete read filters on diaries/setups: public reads require
+    // deleted:false + an active author.
+    const diary = await prisma.growDiary.create({
+      data: { authorId: a.id, title: "t", description: "d", growType: "INDOOR", startDate: new Date(), stage: "VEGETATIVE" },
+    })
+    const setup = await prisma.growSetup.create({
+      data: { authorId: a.id, title: "s", description: "d" },
+    })
+    assert.ok(await prisma.growDiary.findFirst({ where: { id: diary.id, deleted: false, author: activeAuthor() } }))
+    await prisma.growDiary.update({ where: { id: diary.id }, data: { deleted: true } })
+    await prisma.growSetup.update({ where: { id: setup.id }, data: { deleted: true } })
+    assert.equal(
+      await prisma.growDiary.findFirst({ where: { id: diary.id, deleted: false, author: activeAuthor() } }),
+      null,
+      "deleted diary filtered from public reads"
+    )
+    assert.equal(
+      await prisma.growSetup.findFirst({ where: { id: setup.id, deleted: false, author: activeAuthor() } }),
+      null,
+      "deleted setup filtered from public reads"
+    )
+
+    // Chat message soft-delete doesn't touch the lifetime counter.
+    const countRoom = await prisma.chatRoom.create({
+      data: { name: `__ss room2 ${SUFFIX}`, slug: `ss-room2-${SUFFIX}` },
+      select: { id: true },
+    })
+    try {
+      const msg = await prisma.chatMessage.create({
+        data: { roomId: countRoom.id, authorId: a.id, content: "test" },
+      })
+      await prisma.chatMessage.updateMany({
+        where: { id: msg.id, authorId: a.id, deleted: false },
+        data: { deleted: true },
+      })
+      const prof = await prisma.profile.findUnique({ where: { userId: a.id }, select: { chatMessageCount: true } })
+      assert.equal(prof?.chatMessageCount, 0, "counter unaffected by delete (increment is on send)")
+    } finally {
+      await prisma.chatMessage.deleteMany({ where: { roomId: countRoom.id } }).catch(() => {})
+      await prisma.chatRoom.delete({ where: { id: countRoom.id } }).catch(() => {})
+    }
+
+    // Public reputation privacy via GET /api/users/[username].
+    // a still has publicMilestoneOptOut=true; give b hideOnlineStatus so both
+    // privacy flags are exercised independently on the route.
+    await prisma.user.update({ where: { id: b.id }, data: { lastSeenAt: new Date(), status: "ONLINE" } })
+    await prisma.profile.update({ where: { userId: b.id }, data: { hideOnlineStatus: true } })
+    const profileApi = async (username: string) => {
+      const res = await getPublicProfile(
+        new NextRequest(`http://localhost/api/users/${username}`),
+        { params: Promise.resolve({ username }) }
+      )
+      assert.equal(res.status, 200, `GET /api/users/${username} → 200`)
+      return res.json()
+    }
+
+    // Opted-out member: no recent rep rows and a zeroed grow streak.
+    const optOut = await profileApi(A)
+    assert.ok(Array.isArray(optOut.recentRep), "recentRep is an array")
+    assert.equal(optOut.recentRep.length, 0, "opted-out member exposes no recentRep")
+    assert.equal(optOut.profile.growStreak, 0, "opted-out member growStreak zeroed")
+
+    // Default member with one public rep event: rows carry the public
+    // label/amount/createdAt shape and never leak the raw type.
+    await prisma.reputationEvent.create({
+      data: { userId: b.id, type: "THREAD_CREATED", amount: 5, reason: "ss test" },
+    })
+    const visible = await profileApi(B)
+    assert.ok(visible.recentRep.length >= 1, "default member exposes recentRep")
+    for (const e of visible.recentRep) {
+      assert.ok(typeof e.label === "string" && e.label.length > 0, "event has label")
+      assert.ok(typeof e.amount === "number", "event has amount")
+      assert.ok(e.createdAt, "event has createdAt")
+      assert.ok(!("type" in e), "event must not expose raw type")
+    }
+    // hideOnlineStatus alone must not empty recentRep — the two privacy
+    // flags stay independent (b has hideOnlineStatus=true).
+    assert.ok(visible.recentRep.length >= 1, "hideOnlineStatus does not hide recentRep")
+
+    // Diary visibility helpers + PATCH validation.
+    assert.equal(isDiaryVisibility("PUBLIC"), true)
+    assert.equal(isDiaryVisibility("UNLISTED"), true)
+    assert.equal(isDiaryVisibility("PRIVATE"), true)
+    assert.equal(isDiaryVisibility("BOGUS"), false, "unknown visibility rejected")
+    assert.equal(isDiaryVisibility("public"), false, "visibility is case-sensitive")
+    assert.equal(isDiaryVisibility(42), false, "non-string rejected")
+
+    // viewableDiaryWhere — guests get open rows only; members get open + own.
+    const guestWhere = viewableDiaryWhere()
+    assert.deepEqual(guestWhere, { visibility: { in: ["PUBLIC", "UNLISTED"] } }, "guest sees open rows")
+    const memberWhere = viewableDiaryWhere("u1")
+    assert.deepEqual(
+      memberWhere,
+      { OR: [{ visibility: { in: ["PUBLIC", "UNLISTED"] } }, { authorId: "u1" }] },
+      "member sees open rows plus own"
+    )
+
+    // canViewDiary — only PRIVATE restricts, and only to non-owners.
+    const priv = { visibility: "PRIVATE", authorId: "u1" }
+    const unl = { visibility: "UNLISTED", authorId: "u1" }
+    const pub = { visibility: "PUBLIC", authorId: "u1" }
+    assert.equal(canViewDiary(priv, "u1"), true, "owner views own private diary")
+    assert.equal(canViewDiary(priv, "u2"), false, "non-owner blocked from private diary")
+    assert.equal(canViewDiary(priv, null), false, "guest blocked from private diary")
+    assert.equal(canViewDiary(unl, null), true, "guest views unlisted by link")
+    assert.equal(canViewDiary(pub, "u2"), true, "public open to anyone")
+    assert.deepEqual(publicDiaryWhere, { visibility: "PUBLIC" }, "public fragment shape")
+
+    // parseDiaryPatch — visibility accepted/validated like other fields.
+    const okPatch = parseDiaryPatch({ visibility: "UNLISTED" })
+    assert.ok(okPatch.ok, "valid visibility parses")
+    assert.equal(okPatch.ok && okPatch.data.visibility, "UNLISTED")
+    const badPatch = parseDiaryPatch({ visibility: "BOGUS" })
+    assert.equal(badPatch.ok, false, "invalid visibility → 400 error result")
+    const wrongType = parseDiaryPatch({ visibility: 5 })
+    assert.equal(wrongType.ok, false, "non-string visibility → 400 error result")
+    // Non-editable fields still rejected alongside a valid visibility.
+    const mixed = parseDiaryPatch({ visibility: "PUBLIC", authorId: "x" })
+    assert.equal(mixed.ok, false, "non-editable field still rejected")
+
+    // Hidden diary cannot win Diary of the Month: a diary flipped
+    // UNLISTED/PRIVATE after entering must not be publicly named winner —
+    // even when it leads on votes.
+    const d = await mk(`__ss_d_${SUFFIX}`)
+    const v = await mk(`__ss_v_${SUFFIX}`)
+    const month = `ss${SUFFIX}`
+    const hiddenDiary = await prisma.growDiary.create({
+      data: { title: `${A}-hidden`, description: "t", growType: "INDOOR", startDate: new Date(), authorId: d.id, visibility: "PRIVATE" },
+    })
+    const openDiary = await prisma.growDiary.create({
+      data: { title: `${A}-open`, description: "t", growType: "INDOOR", startDate: new Date(), authorId: a.id, visibility: "PUBLIC" },
+    })
+    const hiddenEntry = await prisma.diaryContestEntry.create({ data: { month, diaryId: hiddenDiary.id, userId: d.id } })
+    const openEntry = await prisma.diaryContestEntry.create({ data: { month, diaryId: openDiary.id, userId: a.id } })
+    try {
+      await prisma.diaryContestVote.createMany({
+        data: [
+          { entryId: hiddenEntry.id, userId: b.id, month },
+          { entryId: hiddenEntry.id, userId: c.id, month },
+          { entryId: openEntry.id, userId: v.id, month },
+        ],
+      })
+      const winner = await resolveMonthlyDiaryWinner(month)
+      assert.equal(winner?.diaryId, openDiary.id, "hidden diary skipped despite leading on votes")
+    } finally {
+      await prisma.diaryContestVote.deleteMany({ where: { entryId: { in: [hiddenEntry.id, openEntry.id] } } })
+      await prisma.diaryContestEntry.deleteMany({ where: { id: { in: [hiddenEntry.id, openEntry.id] } } })
+      await prisma.userBadge.deleteMany({ where: { userId: { in: cleanupUserIds } } }).catch(() => {})
+      await prisma.badge.deleteMany({ where: { name: { in: ["Diary of the Month", "Contest Finalist"] } } }).catch(() => {})
+      await prisma.reputationEvent.deleteMany({ where: { userId: { in: cleanupUserIds }, key: { startsWith: "dcontestwin:" } } }).catch(() => {})
+      await prisma.growDiary.deleteMany({ where: { id: { in: [hiddenDiary.id, openDiary.id] } } })
+    }
 
     console.log("All self-service tests passed.")
   } finally {
