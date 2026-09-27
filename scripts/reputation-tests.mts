@@ -6,6 +6,11 @@
 //   • DB progression: keyed QUEST_DAILY payouts, trust-score filtering,
 //     quest progress/evaluation, payout-reconciliation clawback sweeps
 //   • DB velocity detector: member-driven-only abuse detection (T1–T13)
+//   • Progression V2 engine: rank/mastery thresholds, quality bands,
+//     simhash duplicate tiers, keyed idempotency, reinstate/final-lock
+//     reversals, mastery soft caps, standing controls (grantor age/floor,
+//     reciprocal, per-grantor lifetime, cluster flag, weekly cap),
+//     unlock layers A/B/C, diversity-floor banking, outbox drain, drift
 //   • global drift check: Profile.reputation == SUM(ReputationEvent.amount)
 //     across ALL profiles (absorbed from check-drift.mts)
 // Disposable __test_rep_ / __test_prog_ / __test_vel_ fixtures are all
@@ -61,11 +66,40 @@ import {
   MEMBER_DRIVEN_REP_TYPES,
 } from "@/lib/trust-signals"
 import { TERPBOT_USERNAME } from "@/lib/terpbot-constants"
+import {
+  awardProgression,
+  reverseProgressionByKey,
+  reverseProgressionEvent,
+  checkDuplicateContent,
+  updateBand,
+  getMasteryMap,
+  effectiveRank,
+  hasUnlock,
+  masteryLevelFromXp,
+  rankFromXp,
+  REP_RANKS,
+  DIVERSITY_FLOORS,
+  MASTERY_LEVELS,
+  XP_TABLE,
+  UNLOCKS,
+  STANDING_WEEKLY_CAP,
+  QUALITY_BANDS,
+} from "@/lib/progression"
+import {
+  MASTER_EXTRA_FLOOR,
+  STANDING_PER_GRANTOR_LIFETIME,
+  DUP_WITHHOLD_PCT,
+  DUP_REDUCE_PCT,
+  MASTERY_WEEKLY_FULL,
+  MASTERY_WEEKLY_MID,
+} from "@/lib/progression-config"
+import { drainPendingXpReversals, reverseXpSourceDurable } from "@/lib/progression-outbox"
 
 const RUN_TAG = Date.now().toString(36)
 const TEST_USERNAME = `__test_rep_${RUN_TAG}`
 const PROG_USERNAME = `__test_prog_${RUN_TAG}`
 const VEL_PREFIX = `__test_vel_${RUN_TAG}`
+const PV2_PREFIX = `__test_pv2_${RUN_TAG}`
 
 // Badges granted outside checkBadges() — each must have a real code path:
 //   Settled In         — onboarding-complete award
@@ -1095,6 +1129,388 @@ async function run() {
       await prisma.reputationEvent.deleteMany({ where: { id: { in: velEventIds } } }).catch(() => {})
       await prisma.user.deleteMany({ where: { id: { in: velUsers.map((u) => u.id) } } }).catch(() => {})
     }
+  }
+
+  // ── Progression V2: pure config invariants ─────────────────────
+  // Locked rank thresholds (design rev 3) — Harvested 7,500 / MC 23,000.
+  const rankBounds: [number, string][] = [
+    [0, "Seed"], [59, "Seed"], [60, "Germinated"], [179, "Germinated"],
+    [180, "Seedling"], [419, "Seedling"], [420, "Rooted"], [899, "Rooted"],
+    [900, "Vegged"], [1599, "Vegged"], [1600, "Trained"], [2599, "Trained"],
+    [2600, "Preflower"], [3999, "Preflower"], [4000, "Flowering"],
+    [5799, "Flowering"], [5800, "Ripening"], [7499, "Ripening"],
+    [7500, "Harvested"], [11999, "Harvested"], [12000, "Cured"],
+    [16999, "Cured"], [17000, "Cultivator"], [22999, "Cultivator"],
+    [23000, "Master Cultivator"], [99999999, "Master Cultivator"],
+  ]
+  for (const [xp, name] of rankBounds) {
+    assert.equal(rankFromXp(xp).name, name, `xp ${xp} → ${name}`)
+  }
+  for (let i = 1; i < REP_RANKS.length; i++) {
+    assert.ok(REP_RANKS[i].threshold > REP_RANKS[i - 1].threshold, `rank ${i} threshold increases`)
+  }
+  // Mastery levels + diversity floors present for the gated ranks.
+  assert.equal(masteryLevelFromXp(0), 0)
+  assert.equal(masteryLevelFromXp(49), 0)
+  assert.equal(masteryLevelFromXp(50), 1)
+  assert.equal(masteryLevelFromXp(24000), 10)
+  assert.equal(masteryLevelFromXp(999999), 10)
+  for (const r of ["Flowering", "Ripening", "Harvested", "Cultivator", "Master Cultivator"]) {
+    assert.ok(DIVERSITY_FLOORS[r], `${r} has a diversity floor`)
+  }
+  assert.equal(MASTER_EXTRA_FLOOR.level, 6)
+  // Unlock registry: unique ids, valid rank names, valid mastery paths.
+  const seenUnlock = new Set<string>()
+  for (const u of UNLOCKS) {
+    assert.ok(!seenUnlock.has(u.id), `duplicate unlock id ${u.id}`)
+    seenUnlock.add(u.id)
+    if (u.rank) assert.ok(REP_RANKS.some((r) => r.name === u.rank), `${u.id} rank ${u.rank} exists`)
+    if (u.mastery) {
+      assert.ok(u.mastery.level >= 1 && u.mastery.level <= MASTERY_LEVELS.length, `${u.id} mastery level valid`)
+    }
+    if (u.layer === "C") assert.ok(u.standing, `layer C unlock ${u.id} requires standing`)
+  }
+  // Locked economy: no XP source can be a like or a login.
+  for (const t of ["LIKE_RECEIVED", "DAILY_LOGIN", "REACTION", "LOGIN_STREAK"]) {
+    assert.ok(!XP_TABLE[t], `${t} must not be an XP type`)
+  }
+  assert.equal(XP_TABLE.FAILURE_DOCUMENTED.xp, 8, "documented failure = +8 XP")
+  assert.equal(STANDING_WEEKLY_CAP, 40)
+  assert.equal(MASTERY_WEEKLY_FULL, 250)
+  assert.equal(MASTERY_WEEKLY_MID, 500)
+  assert.equal(DUP_WITHHOLD_PCT, 95)
+  assert.equal(DUP_REDUCE_PCT, 85)
+  // Quality bands.
+  assert.equal(updateBand({ chars: 0, structuredCategories: 0, hasNumericMetric: false, hasPhoto: false }), 0)
+  assert.equal(updateBand({ chars: 20, structuredCategories: 0, hasNumericMetric: false, hasPhoto: false }), 1)
+  assert.equal(updateBand({ chars: QUALITY_BANDS.RICH_MIN_CHARS, structuredCategories: 1, hasNumericMetric: false, hasPhoto: false }), 2)
+  assert.equal(updateBand({ chars: 10, structuredCategories: QUALITY_BANDS.RICH_MIN_CATEGORIES, hasNumericMetric: false, hasPhoto: false }), 2)
+  assert.equal(updateBand({
+    chars: QUALITY_BANDS.EXCEPTIONAL_MIN_CHARS,
+    structuredCategories: QUALITY_BANDS.EXCEPTIONAL_MIN_CATEGORIES,
+    hasNumericMetric: true,
+    hasPhoto: true,
+  }), 3)
+  // Band 3 must fail without the photo.
+  assert.equal(updateBand({
+    chars: QUALITY_BANDS.EXCEPTIONAL_MIN_CHARS,
+    structuredCategories: QUALITY_BANDS.EXCEPTIONAL_MIN_CATEGORIES,
+    hasNumericMetric: true,
+    hasPhoto: false,
+  }), 2)
+
+  // Simhash tiers (deterministic, prose-only).
+  const prose1 = "Week 4 of the grow and the canopy is finally even. Raised the light to 45cm, PPFD sitting around 650, leaf temps steady at 76°F through the afternoon stretch."
+  const prose2 = "Totally different topic — harvested the tomatoes this weekend and started planning the outdoor beds for spring."
+  const dup = await checkDuplicateContent("n/a", prose1, { priorTexts: [prose1] })
+  assert.equal(dup.verdict, "withheld", "identical prose → withheld")
+  assert.ok(dup.similarity >= 95, `identical prose similarity ${dup.similarity}`)
+  const near = await checkDuplicateContent("n/a", prose1.slice(0, -20) + " through the late stretch.", { priorTexts: [prose1] })
+  assert.ok(["reduced", "withheld"].includes(near.verdict), `near-identical prose → reduced/withheld (got ${near.verdict} @ ${near.similarity}%)`)
+  const clean = await checkDuplicateContent("n/a", prose2, { priorTexts: [prose1] })
+  assert.equal(clean.verdict, "clean", "different prose → clean")
+  // Structured-data exception: reduced verdict clears when metrics changed.
+  if (near.verdict === "reduced") {
+    const rescued = await checkDuplicateContent("n/a", prose1.slice(0, -20) + " through the late stretch.", { priorTexts: [prose1], structuredChanged: true })
+    assert.equal(rescued.verdict, "clean", "structured change rescues the 85–94% band")
+  }
+
+  // ── Progression V2: DB engine behavior ───────────────────────
+  const pv2: string[] = []
+  const mkPv2 = async (tag: string, createdDaysAgo = 0) => {
+    const u = await mkTestUser(`${PV2_PREFIX}_${tag}`)
+    pv2.push(u.id)
+    if (createdDaysAgo > 0) {
+      await prisma.user.update({
+        where: { id: u.id },
+        data: { createdAt: new Date(Date.now() - createdDaysAgo * 86400000) },
+      })
+    }
+    return u.id
+  }
+  const pv2Profile = async (userId: string) =>
+    prisma.profile.findUnique({ where: { userId }, select: { xp: true, standing: true } })
+  // Fixture seed that keeps Profile.xp/standing == Σ(ProgressionEvent) —
+  // direct profile.update writes would create ledger-vs-balance drift.
+  const seedProgression = async (userId: string, xpDelta: number, standingDelta = 0) => {
+    if (!xpDelta && !standingDelta) return
+    await prisma.$transaction(async (tx) => {
+      await tx.progressionEvent.create({
+        data: {
+          userId, type: "LEGACY_STANDING", xp: xpDelta, standing: standingDelta,
+          reason: "pv2 fixture seed", key: `pv2:seed:${RUN_TAG}:${userId}:${xpDelta}:${standingDelta}:${Math.random().toString(36).slice(2)}`,
+        },
+      })
+      await tx.profile.update({
+        where: { userId },
+        data: { xp: { increment: xpDelta }, standing: { increment: standingDelta } },
+      })
+    })
+  }
+
+  try {
+    // XP award + keyed idempotency + mastery crediting.
+    const u1 = await mkPv2("award")
+    const a1 = await awardProgression(u1, "THREAD_STARTED", "first thread", { key: `pv2:thread:${RUN_TAG}:1` })
+    assert.ok(a1.awarded && a1.xp === XP_TABLE.THREAD_STARTED.xp, "thread XP awarded")
+    const a1dup = await awardProgression(u1, "THREAD_STARTED", "first thread", { key: `pv2:thread:${RUN_TAG}:1` })
+    assert.ok(!a1dup.awarded && a1dup.skippedReason === "duplicate", "same key is idempotent")
+    assert.equal((await pv2Profile(u1))!.xp, XP_TABLE.THREAD_STARTED.xp, "no double credit")
+    const m1 = await getMasteryMap(u1)
+    assert.equal(m1.COMMUNITY, XP_TABLE.THREAD_STARTED.xp, "mastery credited")
+    assert.equal(m1.CULTIVATION, 0, "no cross-path bleed")
+
+    // Self-award rejected.
+    const self = await awardProgression(u1, "ACCEPTED_ANSWER", "self", { actorId: u1 })
+    assert.ok(!self.awarded && self.skippedReason === "self", "self-grant rejected")
+
+    // Mastery soft cap: 6× HARVEST_LOGGED (50 XP) → 250 full + 50@50% = 275.
+    const u2 = await mkPv2("softcap")
+    for (let i = 0; i < 6; i++) {
+      await awardProgression(u2, "HARVEST_LOGGED", `h${i}`, { key: `pv2:h:${RUN_TAG}:${i}` })
+    }
+    const m2 = await getMasteryMap(u2)
+    assert.equal(m2.CULTIVATION, 275, `soft cap: 6×50 → 275 (got ${m2.CULTIVATION})`)
+    assert.equal((await pv2Profile(u2))!.xp, 275, "global XP matches mastery sum")
+
+    // Keyed reversal → clawback, reinstate on re-award, final locks.
+    const u3 = await mkPv2("rev")
+    await awardProgression(u3, "GUIDE_PUBLISHED", "guide", { key: `pv2:guide:${RUN_TAG}` })
+    const rev = await reverseProgressionByKey(`pv2:guide:${RUN_TAG}`, "mod retract")
+    assert.ok(rev.reversed, "keyed reversal succeeds")
+    assert.equal((await pv2Profile(u3))!.xp, 0, "XP clawed back")
+    const re = await awardProgression(u3, "GUIDE_PUBLISHED", "guide", { key: `pv2:guide:${RUN_TAG}` })
+    assert.ok(re.awarded && re.reinstated, "re-award reinstates")
+    assert.equal((await pv2Profile(u3))!.xp, XP_TABLE.GUIDE_PUBLISHED.xp, "reinstated XP restored")
+    await reverseProgressionByKey(`pv2:guide:${RUN_TAG}`, "retract again")
+    const re2 = await awardProgression(u3, "GUIDE_PUBLISHED", "guide", { key: `pv2:guide:${RUN_TAG}` })
+    assert.ok(re2.awarded && re2.reinstated, "non-final reversal still reinstates")
+    // Final (staff-permanent) reversal locks the key against re-grant.
+    const guideEvent = await prisma.progressionEvent.findUnique({
+      where: { key: `pv2:guide:${RUN_TAG}` }, select: { id: true },
+    })
+    await reverseProgressionEvent(guideEvent!.id, "final retract", undefined, { final: true })
+    const lockedRes = await awardProgression(u3, "GUIDE_PUBLISHED", "guide", { key: `pv2:guide:${RUN_TAG}` })
+    assert.ok(!lockedRes.awarded && lockedRes.skippedReason === "locked", "final reversal locks the key")
+
+    // Standing: young grantor → 0 standing, XP still lands.
+    const grantee = await mkPv2("grantee")
+    const youngGrantor = await mkPv2("young", 0)
+    const gYoung = await awardProgression(grantee, "ACCEPTED_ANSWER", "ans", {
+      key: `pv2:acc:${RUN_TAG}:young`, actorId: youngGrantor,
+    })
+    assert.ok(gYoung.awarded, "young grantor award lands")
+    assert.equal(gYoung.standing, 0, "young grantor pays 0 standing")
+    assert.equal(gYoung.xp, XP_TABLE.ACCEPTED_ANSWER.xp, "XP unaffected by grantor age")
+
+    // Aged grantor with sub-Trusted standing → floor halves the grant.
+    const floorGrantor = await mkPv2("floor", 30)
+    const gFloor = await awardProgression(grantee, "ACCEPTED_ANSWER", "ans2", {
+      key: `pv2:acc:${RUN_TAG}:floor`, actorId: floorGrantor,
+    })
+    assert.equal(gFloor.standing, 5, `sub-Trusted grantor pays half (got ${gFloor.standing})`)
+
+    // Reciprocal: grantee grants grantor first → grantor's award pays 0 standing.
+    const recipA = await mkPv2("ra", 30)
+    const recipB = await mkPv2("rb", 30)
+    await seedProgression(recipB, 0, 150)
+    await awardProgression(recipB, "ACCEPTED_ANSWER", "back", {
+      key: `pv2:rec:${RUN_TAG}:1`, actorId: recipA,
+    }) // A grants B (B is now Trusted→ pays full... wait actorId is grantor)
+    const gRecip = await awardProgression(recipA, "ACCEPTED_ANSWER", "fwd", {
+      key: `pv2:rec:${RUN_TAG}:2`, actorId: recipB,
+    })
+    assert.equal(gRecip.standing, 0, "reciprocal grant pays 0 standing")
+    assert.equal(gRecip.xp, XP_TABLE.ACCEPTED_ANSWER.xp, "reciprocal XP still lands")
+
+    // Second grantor diversifies grantee's standing so floorGrantor's share
+    // stays under the 60% cluster threshold for the diminishing test.
+    const otherGrantor = await mkPv2("other", 30)
+    await seedProgression(otherGrantor, 0, 150)
+    const gOther = await awardProgression(grantee, "GUIDE_PUBLISHED", "o1", {
+      key: `pv2:other:${RUN_TAG}:1`, actorId: otherGrantor,
+    })
+    assert.equal(gOther.standing, 10, "Trusted grantor pays full")
+
+    // Per-grantor diminishing: repeat grant from the same grantor halves.
+    // (GUIDE_PUBLISHED — no dailyCap — after ACCEPTED_ANSWER's 2/day limit.)
+    const gDim1 = await awardProgression(grantee, "GUIDE_PUBLISHED", "d1", {
+      key: `pv2:dim:${RUN_TAG}:1`, actorId: floorGrantor,
+    })
+    assert.equal(gDim1.standing, 2, `repeat grant halves again (10/2 floor→5/2→2, got ${gDim1.standing})`)
+
+    // Standing reversal mirrors XP (delete → clawback).
+    const stRev = await reverseProgressionByKey(`pv2:acc:${RUN_TAG}:floor`, "retract")
+    assert.ok(stRev.reversed, "standing reversal succeeds")
+    assert.equal(
+      (await pv2Profile(grantee))!.standing,
+      gYoung.standing! + gFloor.standing! + gOther.standing! + gDim1.standing! - gFloor.standing!,
+      "standing ledger consistent",
+    )
+
+    // Weekly cap: staff grants exempt; member income stops at 40.
+    const capped = await mkPv2("cap")
+    await awardProgression(capped, "STAFF_ADJUSTMENT", "staff grant", { xp: 0, standing: 100, force: true })
+    const grantors: string[] = []
+    for (let i = 0; i < 5; i++) {
+      const gr = await mkPv2(`gc${i}`, 30)
+      grantors.push(gr)
+      await seedProgression(gr, 0, 150)
+    }
+    for (let i = 0; i < 5; i++) {
+      const r = await awardProgression(capped, "GUIDE_PUBLISHED", `cap${i}`, {
+        key: `pv2:cap:${RUN_TAG}:${i}`, actorId: grantors[i],
+      })
+      if (i < 4) assert.equal(r.standing, 10, `grant ${i} pays full`)
+      else assert.equal(r.standing, 0, "grant 5 exceeds weekly cap → 0")
+    }
+    assert.equal((await pv2Profile(capped))!.standing, 140, "100 staff + 40 member-driven")
+
+    // Per-grantor lifetime cap: seed 30 standing from whale 8 days ago
+    // (inside the 90d window, outside this week) → a fresh grant is capped.
+    const lone = await mkPv2("lone")
+    const whale = await mkPv2("whale", 30)
+    await seedProgression(whale, 0, 150)
+    const eightDaysAgo = new Date(Date.now() - 8 * 86400000)
+    for (let i = 0; i < 3; i++) {
+      await prisma.progressionEvent.create({
+        data: {
+          userId: lone, type: "ACCEPTED_ANSWER", xp: 30, standing: 10,
+          reason: "seeded lifetime grant", actorId: whale,
+          key: `pv2:whaleseed:${RUN_TAG}:${i}`, createdAt: eightDaysAgo,
+        },
+      })
+    }
+    await prisma.profile.update({ where: { userId: lone }, data: { xp: { increment: 90 }, standing: { increment: 30 } } }) // seeded ledger rows above keep this consistent
+    const lif = await awardProgression(lone, "ACCEPTED_ANSWER", "over cap", {
+      key: `pv2:whalecap:${RUN_TAG}`, actorId: whale,
+    })
+    assert.equal(lif.standing, 0, `grantor lifetime ${STANDING_PER_GRANTOR_LIFETIME} reached → 0 (got ${lif.standing})`)
+
+    // Cluster discount: whale2 is lone2's only grantor — after the first
+    // grant lands (share hits 100% ≥ 60%), further in-cluster grants pay 0
+    // and write a STANDING_CLUSTER AbuseFlag.
+    const lone2 = await mkPv2("lone2")
+    const whale2 = await mkPv2("whale2", 30)
+    await seedProgression(whale2, 0, 150)
+    const clust1 = await awardProgression(lone2, "GUIDE_PUBLISHED", "w0", {
+      key: `pv2:whale2:${RUN_TAG}:0`, actorId: whale2,
+    })
+    assert.equal(clust1.standing, 10, "first grant pays before concentration")
+    const clust2 = await awardProgression(lone2, "GUIDE_PUBLISHED", "w1", {
+      key: `pv2:whale2:${RUN_TAG}:1`, actorId: whale2,
+    })
+    assert.equal(clust2.standing, 0, "≥60% share → in-cluster grant pays 0")
+    const flag = await prisma.abuseFlag.findFirst({
+      where: { signal: "STANDING_CLUSTER", userId: lone2, counterpartyId: whale2 },
+    })
+    assert.ok(flag, "cluster flag written for review")
+
+    // Suspended subject skipped (force bypasses — staff adjustments).
+    const susp = await mkPv2("susp")
+    await prisma.user.update({ where: { id: susp }, data: { suspendedUntil: new Date(Date.now() + 86400000) } })
+    const sRes = await awardProgression(susp, "THREAD_STARTED", "x", { key: `pv2:susp:${RUN_TAG}` })
+    assert.ok(!sRes.awarded && sRes.skippedReason === "suspended", "suspended user skipped")
+
+    // Unlock gates — Layer A (rank only).
+    const gate = await mkPv2("gate")
+    assert.equal(await hasUnlock(gate, "comparison-basic"), false, "Seed user locked out of Seedling unlock")
+    await seedProgression(gate, 200)
+    assert.equal(await hasUnlock(gate, "comparison-basic"), true, "Seedling unlock opens")
+    // Layer B (rank + mastery): env-analytics needs Vegged + Records M2 (150).
+    await seedProgression(gate, 800)
+    assert.equal(await hasUnlock(gate, "env-analytics"), false, "rank alone insufficient for layer B")
+    await prisma.masteryProgress.upsert({
+      where: { userId_mastery: { userId: gate, mastery: "RECORDS" } },
+      create: { userId: gate, mastery: "RECORDS", xp: 150 },
+      update: { xp: 150 },
+    })
+    assert.equal(await hasUnlock(gate, "env-analytics"), true, "rank + mastery opens layer B")
+    // Layer C (rank + mastery + standing): grow-room needs Cultivator + Trusted(100).
+    await seedProgression(gate, 17000, 50)
+    assert.equal(await hasUnlock(gate, "grow-room"), false, "standing insufficient for layer C")
+    await seedProgression(gate, 0, 100)
+    assert.equal(await hasUnlock(gate, "grow-room"), true, "layer C opens at Trusted")
+    // unlockFrozen blocks everything.
+    await prisma.profile.update({ where: { userId: gate }, data: { unlockFrozen: true } })
+    assert.equal(await hasUnlock(gate, "comparison-basic"), false, "unlockFrozen denies all")
+    await prisma.profile.update({ where: { userId: gate }, data: { unlockFrozen: false } })
+
+    // Diversity floor: 18k XP but zero breadth → Cultivator floor (3×M4)
+    // unmet → banked at Cured (no floor on Cured per locked §5.4).
+    const narrow = await mkPv2("narrow")
+    await seedProgression(narrow, 18000)
+    const er1 = await effectiveRank(narrow)
+    assert.equal(er1.xpRank.name, "Cultivator", "XP rank is Cultivator")
+    assert.equal(er1.rank.name, "Cured", "diversity floor banks at Cured")
+    assert.ok(er1.blockedBy && er1.blockedBy.rank === "Cultivator", "blockedBy reports the gated rank")
+    // Seed breadth → promotion unlocks.
+    for (const m of ["CULTIVATION", "RECORDS", "KNOWLEDGE"] as const) {
+      await prisma.masteryProgress.upsert({
+        where: { userId_mastery: { userId: narrow, mastery: m } },
+        create: { userId: narrow, mastery: m, xp: 800 },
+        update: { xp: 800 },
+      })
+    }
+    const er2 = await effectiveRank(narrow)
+    assert.equal(er2.rank.name, "Cultivator", "floor satisfied → promoted")
+
+    // Mid-ladder floor: Flowering XP but no paths ≥ M2 → banks at Preflower.
+    const banked = await mkPv2("banked")
+    await seedProgression(banked, 4500)
+    const er3 = await effectiveRank(banked)
+    assert.equal(er3.xpRank.name, "Flowering")
+    assert.equal(er3.rank.name, "Preflower", "Flowering floor banks at Preflower")
+    await prisma.masteryProgress.upsert({
+      where: { userId_mastery: { userId: banked, mastery: "CULTIVATION" } },
+      create: { userId: banked, mastery: "CULTIVATION", xp: 150 },
+      update: { xp: 150 },
+    })
+    await prisma.masteryProgress.upsert({
+      where: { userId_mastery: { userId: banked, mastery: "RECORDS" } },
+      create: { userId: banked, mastery: "RECORDS", xp: 150 },
+      update: { xp: 150 },
+    })
+    const er4 = await effectiveRank(banked)
+    assert.equal(er4.rank.name, "Flowering", "2×M2 clears the Flowering floor")
+
+    // Durable outbox: source reversal drains end-to-end.
+    const src = await mkPv2("src")
+    await awardProgression(src, "UPDATE_DAY", "upd", {
+      key: `pv2:src:${RUN_TAG}:1`, sourceType: "DIARY_UPDATE", sourceId: `pv2-src-${RUN_TAG}`,
+    })
+    await reverseXpSourceDurable("DIARY_UPDATE", `pv2-src-${RUN_TAG}`, "content deleted")
+    assert.equal((await pv2Profile(src))!.xp, 0, "outbox reversal clawed XP")
+    const drain = await drainPendingXpReversals()
+    assert.ok(drain.drained >= 0, "outbox drain runs clean")
+
+    // Zero-value events write nothing.
+    const zero = await mkPv2("zero")
+    const z = await awardProgression(zero, "DAILY_LOGIN", "login", { key: `pv2:login:${RUN_TAG}` })
+    assert.ok(!z.awarded, "login pays nothing")
+    const zRows = await prisma.progressionEvent.count({ where: { userId: zero } })
+    assert.equal(zRows, 0, "no ledger row for a 0-value event")
+
+    // Progression drift invariant on fixtures: xp == Σ ledger.
+    for (const uid of pv2) {
+      const p = await prisma.profile.findUnique({ where: { userId: uid }, select: { xp: true, standing: true } })
+      const agg = await prisma.progressionEvent.aggregate({
+        where: { userId: uid },
+        _sum: { xp: true, standing: true },
+      })
+      assert.equal(p!.xp, agg._sum.xp ?? 0, `xp drift on ${uid}`)
+      assert.equal(p!.standing, agg._sum.standing ?? 0, `standing drift on ${uid}`)
+      const mastery = await prisma.masteryProgress.findMany({ where: { userId: uid } })
+      const mSum = mastery.reduce((s, r) => s + r.xp, 0)
+      assert.ok(mSum <= p!.xp + XP_TABLE.GUIDE_PUBLISHED.xp + 50, `mastery sum sane on ${uid}`)
+    }
+    console.log("Progression V2 engine tests passed.")
+  } finally {
+    // AbuseFlag.userId is a bare string — no cascade, clean explicitly.
+    await prisma.abuseFlag.deleteMany({
+      where: { OR: [{ userId: { in: pv2 } }, { counterpartyId: { in: pv2 } }] },
+    }).catch(() => {})
+    await prisma.user.deleteMany({ where: { id: { in: pv2 } } }).catch(() => {})
   }
 
   // ── DB: global ledger drift check ────────────────────────────────

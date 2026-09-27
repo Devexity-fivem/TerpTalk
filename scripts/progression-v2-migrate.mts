@@ -18,7 +18,7 @@
 
 import "./db-guard.mjs"
 import { PrismaClient } from "@prisma/client"
-import { TRUST_EVENT_TYPES } from "../src/lib/reputation-config.ts"
+import { TRUST_EVENT_TYPES } from "../src/lib/reputation-config"
 
 const prisma = new PrismaClient()
 const args = new Set(process.argv.slice(2))
