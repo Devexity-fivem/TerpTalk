@@ -92,7 +92,7 @@ const SECTIONS: { title: string; items: QA[] }[] = [
     items: [
       {
         q: "How do grow diaries work?",
-        a: <>Start one at <Link href="/diaries/new" className="text-primary hover:underline">New Diary</Link>, then post updates with photos, stage, and environment stats (temp, RH, VPD, pH, EC). Diaries group updates by week, track your streak, and when you harvest, your yield can appear on the <Link href="/leaderboard/yields" className="text-primary hover:underline">yield leaderboard</Link>.</>,
+        a: <>Start one at <Link href="/diaries/new" className="text-primary hover:underline">New Diary</Link>, then post updates with photos, stage, and environment stats (temp, humidity, pH, feed strength). Diaries group updates by week, track your streak, and when you harvest, your yield can appear on the <Link href="/leaderboard/yields" className="text-primary hover:underline">yield leaderboard</Link>.</>,
       },
       {
         q: "What's the difference between deleting a diary and an update?",

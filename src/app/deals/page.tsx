@@ -1,5 +1,9 @@
 import { prisma } from "@/lib/prisma"
 import { unstable_cache } from "next/cache"
+import { getServerSession } from "next-auth"
+import { authOptions } from "@/lib/auth"
+import { canSeeDeal, type DealViewer } from "@/lib/deals-access"
+import { hasUnlock } from "@/lib/progression"
 import { DEFAULT_DISCLOSURE } from "@/lib/affiliate"
 import { Tag, ExternalLink, Percent } from "lucide-react"
 import DealsBrowser from "@/components/deals-browser"
@@ -39,9 +43,32 @@ const getDealsData = unstable_cache(
 )
 
 export default async function DealsPage() {
-  const { partners, products, setting } = await getDealsData()
+  const [{ partners, products, setting }, session] = await Promise.all([
+    getDealsData(),
+    getServerSession(authOptions).catch(() => null),
+  ])
   const disclosure = setting?.value || DEFAULT_DISCLOSURE
   const featured = partners.filter((p) => p.featured)
+
+  // Garden Perks — members-only deals gate on rank; upcoming deals stay
+  // hidden until publicAt (early-access members see them first).
+  const viewer: DealViewer | null = session?.user?.id
+    ? {
+        xp: (await prisma.profile.findUnique({ where: { userId: session.user.id }, select: { xp: true } }))?.xp ?? 0,
+        earlyAccess: await hasUnlock(session.user.id, "early-access"),
+      }
+    : null
+  const now = new Date()
+  const visibleProducts = products
+    .map((p) => {
+      // A future publicAt hides the deal entirely (no teaser) for everyone
+      // without early access.
+      const unreleased = p.publicAt && p.publicAt.getTime() > now.getTime() && !viewer?.earlyAccess
+      if (unreleased) return null
+      const rankLocked = p.minRank && !canSeeDeal(p, viewer, now)
+      return { product: p, lockedAtRank: rankLocked ? p.minRank : null }
+    })
+    .filter((p): p is NonNullable<typeof p> => p !== null)
 
   return (
     <div className="min-h-screen bg-background">
@@ -96,7 +123,7 @@ export default async function DealsPage() {
 
         {/* Product browser (search + category filter, client-side) */}
         <DealsBrowser
-          products={products.map((p) => ({
+          products={visibleProducts.map(({ product: p, lockedAtRank }) => ({
             slug: p.slug,
             name: p.name,
             description: p.description,
@@ -108,6 +135,7 @@ export default async function DealsPage() {
             featured: p.featured,
             promoCode: p.promoCode || p.partner.promoCode,
             partnerName: p.partner.name,
+            lockedAtRank,
           }))}
         />
 

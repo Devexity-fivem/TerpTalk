@@ -24,9 +24,8 @@ interface ProgressionData {
   stageProgress: { current: number; next: number; percent: number; remaining: number }
   tierProgress: { current: number; next: number; percent: number }
   nextRank: { name: string; icon: string; threshold: number; benefit: string | null } | null
-  nextUnlock: { kind: string; name: string; unlockedAt: number } | null
+  nextUnlock: { id: string; name: string; rank: string; xpNeeded: number } | null
   upcoming: { rung: number; label: string; rank: string }[]
-  cosmetics: { equipped: Record<string, string | null>; unlockedCount: number }
   challenges: {
     week: string
     endsAt: string
@@ -152,8 +151,8 @@ export default function ProgressionPanel() {
           <p className="text-xs">
             <span className="font-medium">Next unlock: {data.nextUnlock.name}</span>{" "}
             <span className="text-muted-foreground">
-              at {data.nextUnlock.unlockedAt.toLocaleString()} XP
-              ({(data.nextUnlock.unlockedAt - data.xp).toLocaleString()} to go)
+              at {data.nextUnlock.rank} rank — {data.nextUnlock.xpNeeded.toLocaleString()} XP
+              ({(data.nextUnlock.xpNeeded - data.xp).toLocaleString()} to go)
             </span>
           </p>
         </div>

@@ -4,6 +4,8 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { getClientIp, hashIp } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
+import { canSeeDeal } from "@/lib/deals-access"
+import { hasUnlock } from "@/lib/progression"
 
 // GET /go/[slug]?from=/page — records the click, then redirects to the
 // affiliate URL. Works for product slugs and partner slugs.
@@ -39,6 +41,21 @@ export async function GET(
 
   if (!dest || !partnerId || partnerActive === false || (product && !product.active)) {
     return NextResponse.redirect(new URL("/deals", request.url))
+  }
+
+  // Members-only / not-yet-public deals are server-gated — a teaser card
+  // must never hand out a working link.
+  if (product && (product.minRank || product.publicAt)) {
+    const userId = session?.user?.id
+    const xp = userId
+      ? (await prisma.profile.findUnique({ where: { userId }, select: { xp: true } }))?.xp ?? 0
+      : 0
+    const viewer = userId
+      ? { xp, earlyAccess: await hasUnlock(userId, "early-access") }
+      : null
+    if (!canSeeDeal(product, viewer)) {
+      return NextResponse.redirect(new URL("/deals", request.url))
+    }
   }
 
   if (trackClick) {

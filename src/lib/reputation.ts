@@ -28,7 +28,8 @@ import {
   getRepStage,
   getReputationTier,
 } from "@/lib/reputation-config"
-import { canEquip, cosmeticsUnlockedBetween, nextLockedCosmetic } from "@/lib/cosmetics"
+import { UNLOCKS, REP_RANKS, nextRankUnlock } from "@/lib/progression-config"
+import { hasUnlock } from "@/lib/progression"
 import { seedBadges } from "@/lib/badges"
 import { BADGE_REGISTRY, BADGE_CATEGORIES, type BadgeCategory } from "@/lib/badge-registry"
 import { announceBadges, announceTierUp } from "@/lib/terpbot"
@@ -491,25 +492,16 @@ async function demoteIfNeeded(userId: string) {
   }).catch(() => null)
 }
 
-// After a reputation drop, strip anything the member no longer qualifies
-// for: equipped cosmetics above their rep and showcase pins beyond their
-// current tier's slot count. Defense-in-depth — equip writes are already
-// gated by canEquip(), this closes the read-after-demotion gap.
-async function enforceCosmeticUnlocks(userId: string) {
+// After a reputation drop, strip showcase pins beyond the member's
+// current tier slot count. Defense-in-depth — pin writes are already
+// gated by the slot cap, this closes the read-after-demotion gap.
+async function enforceShowcaseSlots(userId: string) {
   const profile = await prisma.profile.findUnique({
     where: { userId },
-    select: { reputation: true, avatarFrame: true, profileTitle: true, profileTheme: true },
+    select: { reputation: true },
   })
   if (!profile) return
   const rep = profile.reputation
-
-  const clear: Record<string, null> = {}
-  if (profile.avatarFrame && !canEquip(rep, "frames", profile.avatarFrame)) clear.avatarFrame = null
-  if (profile.profileTitle && !canEquip(rep, "titles", profile.profileTitle)) clear.profileTitle = null
-  if (profile.profileTheme && !canEquip(rep, "themes", profile.profileTheme)) clear.profileTheme = null
-  if (Object.keys(clear).length > 0) {
-    await prisma.profile.update({ where: { userId }, data: clear })
-  }
 
   const slots = getReputationTier(rep).perks.showcaseSlots ?? 0
   const pinned = await prisma.userBadge.findMany({
@@ -526,13 +518,31 @@ async function enforceCosmeticUnlocks(userId: string) {
   }
 }
 
-// Exported for staff tooling — applies demotion + cosmetic pruning after
-// negative adjustments and reversals. Best-effort: callers swallow errors,
-// so failures are logged here rather than at every callsite.
+// Garden Perk re-validation — a member who drops below the pinned-harvest
+// gate (XP reversal below Harvested without a 60-day streak marker) loses
+// the pin. Same read-after-demotion gap as showcase slots.
+async function enforcePinnedHarvest(userId: string) {
+  const profile = await prisma.profile.findUnique({
+    where: { userId },
+    select: { pinnedDiaryId: true },
+  })
+  if (!profile?.pinnedDiaryId) return
+  if (!(await hasUnlock(userId, "pinned-harvest"))) {
+    await prisma.profile.update({
+      where: { userId },
+      data: { pinnedDiaryId: null },
+    })
+  }
+}
+
+// Exported for staff tooling — applies demotion + showcase-slot pruning
+// after negative adjustments and reversals. Best-effort: callers swallow
+// errors, so failures are logged here rather than at every callsite.
 export async function postDemotionEffects(userId: string) {
   try {
     await demoteIfNeeded(userId)
-    await enforceCosmeticUnlocks(userId)
+    await enforceShowcaseSlots(userId)
+    await enforcePinnedHarvest(userId)
   } catch (error) {
     console.error("[reputation] post-demotion effects failed:", userId, error)
   }
@@ -863,7 +873,13 @@ async function checkTierChange(userId: string, oldRep: number, newRep: number): 
   if (!(await claimMilestone(userId, `milestone:tier:${userId}:${newTier.threshold}`))) return null
 
   const stage = getRepStage(newRep)
-  const unlocks = cosmeticsUnlockedBetween(oldRep, newRep)
+  // Unlock list = registry entries whose rank threshold was crossed in
+  // (oldRep, newRep] — the celebration card renders name chips.
+  const unlocks = UNLOCKS.filter((u) => {
+    if (!u.rank) return false
+    const t = REP_RANKS.find((r) => r.name === u.rank)?.threshold
+    return t !== undefined && t > oldRep && t <= newRep
+  })
 
   await notify({
     userId,
@@ -877,7 +893,7 @@ async function checkTierChange(userId: string, oldRep: number, newRep: number): 
       stageName: stage.stageName,
       rep: newRep,
       tier: { name: newTier.name, icon: newTier.icon, color: newTier.color, bg: newTier.bg },
-      unlocks: unlocks.map((u) => ({ kind: u.kind, key: u.key, name: u.name })),
+      unlocks: unlocks.map((u) => ({ kind: u.category, key: u.id, name: u.name })),
     },
   })
 
@@ -905,13 +921,13 @@ async function checkStageChange(userId: string, oldRep: number, newRep: number) 
   for (const crossing of stages) {
     if (!(await claimMilestone(userId, `milestone:stage:${userId}:${crossing.rung}`))) continue
     const stage = getRepStage(newRep)
-    const nextUnlock = nextLockedCosmetic(newRep)
+    const nextUnlock = nextRankUnlock(newRep)
     await notify({
       userId,
       type: "REPUTATION",
       title: `Grow Level ${stage.level} — ${stage.stageName}`,
       content: nextUnlock
-        ? `Your garden reached a new stage. Next unlock: ${nextUnlock.name} at ${nextUnlock.unlockedAt.toLocaleString()} rep.`
+        ? `Your garden reached a new stage. Next unlock: ${nextUnlock.name} at ${nextUnlock.rank} rank.`
         : "Your garden reached a new stage.",
       link: "/reputation",
       metadata: {
@@ -926,7 +942,7 @@ async function checkStageChange(userId: string, oldRep: number, newRep: number) 
           bg: stage.tier.bg,
         },
         nextUnlock: nextUnlock
-          ? { kind: nextUnlock.kind, key: nextUnlock.key, name: nextUnlock.name, unlockedAt: nextUnlock.unlockedAt }
+          ? { kind: "perk", key: nextUnlock.id, name: nextUnlock.name, unlockedAt: nextUnlock.xpNeeded }
           : null,
       },
     }).catch(() => null)

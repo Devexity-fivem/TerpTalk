@@ -1,5 +1,5 @@
 // Reputation & progression regression tests — consolidated suite covering:
-//   • pure config math: tier ladder, stage rungs, crossedRungs, cosmetics,
+//   • pure config math: tier ladder, stage rungs, crossedRungs, deal gating,
 //     economy caps, daily-quest determinism, trust standings, badge registry
 //   • DB ledger behaviour: keyed awards, duplicates, self/bot/suspended
 //     skips, reversals/reinstatement, caps, milestone markers, streaks
@@ -44,7 +44,9 @@ import {
   publicRepLabel,
   crossedRungs,
 } from "@/lib/reputation-config"
-import { AVATAR_FRAMES, PROFILE_TITLES, PROFILE_THEMES, canEquip, unlockedCosmetics, nextLockedCosmetic, cosmeticsUnlockedBetween } from "@/lib/cosmetics"
+import { canSeeDeal } from "@/lib/deals-access"
+import { getGrowerSpotlight } from "@/lib/spotlight"
+import { nextRankUnlock } from "@/lib/progression-config"
 import { WEEKLY_CHALLENGES, reconcileChallengePayouts, currentWeekKey } from "@/lib/challenges"
 import {
   applyReputationAward,
@@ -330,18 +332,14 @@ async function run() {
   // Rung 0 (the start) can never be "crossed" — rep is never negative.
   assert.ok(crossedRungs(0, 1).every((c) => c.rung > 0))
 
-  // ── Pure: unlock diff helpers ────────────────────────────────────
-  assert.equal(nextLockedCosmetic(0)?.unlockedAt, 60)
-  assert.equal(nextLockedCosmetic(23000), null, "nothing locked past max XP")
-  assert.ok(
-    cosmeticsUnlockedBetween(59, 60).length > 0,
-    "crossing 60 unlocks the first cosmetics"
-  )
-  assert.deepEqual(cosmeticsUnlockedBetween(500, 600), [], "no cosmetics mid-gap")
-  for (const c of cosmeticsUnlockedBetween(0, 50000)) {
-    assert.ok(c.unlockedAt > 0 && c.unlockedAt <= 50000)
-    assert.ok(["frame", "title", "theme"].includes(c.kind))
-  }
+  // ── Pure: next-rank unlock helper ───────────────────────────────
+  // Powers every "next unlock" surface — first rank-gated UNLOCK above xp.
+  const nu0 = nextRankUnlock(0)
+  assert.ok(nu0, "a next unlock exists at 0 XP")
+  assert.equal(nu0!.xpNeeded, REP_RANKS[1].threshold, "first unlock lands at the first rank")
+  assert.equal(nextRankUnlock(23000), null, "nothing locked past max XP")
+  const nu100 = nextRankUnlock(100)
+  assert.ok(nu100 && nu100.xpNeeded > 100, "next unlock always above current xp")
 
   // ── Pure: economy config sanity ───────────────────────────────────
   for (const k of Object.keys(REP_CAPS)) {
@@ -485,25 +483,83 @@ async function run() {
     assert.ok(isBotBadge(b.name), `isBotBadge("${b.name}")`)
   }
 
-  // ── Pure: cosmetics registry ──────────────────────────────────────
-  // Every cosmetic unlocks exactly at a V2 rank threshold, keys unique.
-  const rankThresholds = new Set(REP_RANKS.map((t) => t.threshold))
-  const allCosmetics = [...AVATAR_FRAMES, ...PROFILE_TITLES, ...PROFILE_THEMES]
-  const keys = new Set(allCosmetics.map((c) => c.key))
-  assert.equal(keys.size, allCosmetics.length, "cosmetic keys unique")
-  for (const c of allCosmetics) {
-    assert.ok(rankThresholds.has(c.unlockedAt), `${c.key} unlocks at a rank threshold`)
-    assert.ok(c.name && c.description, `${c.key} fully described`)
-  }
-  // canEquip: locked above rank, equippable at/after, null always clears.
-  assert.equal(canEquip(0, "frames", "sprout-ring"), false)
-  assert.equal(canEquip(180, "frames", "sprout-ring"), true)
-  assert.equal(canEquip(179, "frames", "sprout-ring"), false)
-  assert.equal(canEquip(0, "frames", null), true)
-  assert.equal(canEquip(23000, "frames", "northern-lights"), true)
-  assert.equal(canEquip(22999, "frames", "northern-lights"), false)
-  assert.ok(unlockedCosmetics(0).frames.length === 0)
-  assert.ok(unlockedCosmetics(100000).frames.length === AVATAR_FRAMES.length)
+  // ── Pure: Garden Perks — members-only deal gating ───────────────
+  // canSeeDeal(product, viewer, now): minRank gates on viewer XP,
+  // publicAt hides unreleased deals except for early-access members.
+  const rankAt = (name: string) => REP_RANKS.find((r) => r.name === name)!.threshold
+  const rooted = rankAt("Rooted")
+  const future = new Date(Date.now() + 86400000)
+  assert.equal(canSeeDeal({ minRank: "Rooted", publicAt: null }, null), false, "guest vs minRank")
+  assert.equal(canSeeDeal({ minRank: "Rooted", publicAt: null }, { xp: rooted - 1, earlyAccess: false }), false, "xp below threshold")
+  assert.equal(canSeeDeal({ minRank: "Rooted", publicAt: null }, { xp: rooted, earlyAccess: false }), true, "xp exactly at threshold")
+  assert.equal(canSeeDeal({ minRank: null, publicAt: future }, { xp: 50000, earlyAccess: false }), false, "future publicAt hidden without early access")
+  assert.equal(canSeeDeal({ minRank: null, publicAt: future }, { xp: 0, earlyAccess: true }), true, "future publicAt visible with early access")
+  assert.equal(canSeeDeal({ minRank: null, publicAt: null }, null), true, "null/null visible to all including guests")
+  assert.equal(canSeeDeal({ minRank: null, publicAt: new Date(Date.now() - 1000) }, null), true, "past publicAt visible to all")
+
+  // ── DB: Garden Perks — spotlight + streak-gated unlocks ─────────
+  // hasUnlock's streak alternate: a streak:100:<uid> marker row grants
+  // grower-spotlight even below Cured rank. The fixture diaries are dated
+  // inside a future freshness window, so getGrowerSpotlight(futureNow)
+  // sees ONLY the fixtures — the pick is deterministic without mirroring
+  // the query.
+  const futureNow = new Date(Date.now() + 30 * 86400000)
+  const mkSpUser = async (suffix: string) =>
+    prisma.user.create({
+      data: {
+        name: `${PV2_PREFIX}${suffix}`,
+        profile: { create: { username: `${PV2_PREFIX}${suffix}`, standing: 0 } },
+      },
+    })
+  const spLow = await mkSpUser("splow")
+  const spElig = await mkSpUser("spelig")
+  const mkSpDiary = (authorId: string, suffix: string) =>
+    prisma.growDiary.create({
+      data: {
+        authorId,
+        title: `${PV2_PREFIX} ${suffix} grow`,
+        description: "fixture",
+        growType: "INDOOR",
+        startDate: new Date(),
+        visibility: "PUBLIC",
+        updatedAt: futureNow,
+      },
+    })
+  const lowDiary = await mkSpDiary(spLow.id, "splow")
+  const eligDiary = await mkSpDiary(spElig.id, "spelig")
+
+  // Below both gates → excluded: the only diaries in the window belong to
+  // ineligible fixtures, so the pick must be empty.
+  const before = await getGrowerSpotlight(futureNow)
+  assert.equal(before, null, "no eligible member → no spotlight")
+
+  // streak:100 marker (0 XP — keeps xp == SUM(ledger)) → unlock granted.
+  await prisma.progressionEvent.create({
+    data: {
+      userId: spElig.id,
+      type: "STREAK_MILESTONE",
+      key: `streak:100:${spElig.id}`,
+      xp: 0,
+      standing: 0,
+      reason: "test marker",
+    },
+  })
+  assert.equal(await hasUnlock(spElig.id, "grower-spotlight"), true, "streak:100 marker grants grower-spotlight")
+  assert.equal(await hasUnlock(spLow.id, "grower-spotlight"), false, "no marker stays locked")
+
+  // Now the eligible fixture is the only valid candidate in the window.
+  const spot = await getGrowerSpotlight(futureNow)
+  assert.equal(spot?.author.id, spElig.id, "streak-gated member wins the spotlight")
+  assert.equal(spot?.diary.id, eligDiary.id)
+  // Deterministic: same week key → same pick.
+  const spotAgain = await getGrowerSpotlight(futureNow)
+  assert.equal(spotAgain?.diary.id, spot!.diary.id, "spotlight pick is deterministic within the week")
+  assert.equal(spotAgain?.weekKey, spot!.weekKey)
+
+  await prisma.progressionEvent.deleteMany({ where: { userId: { in: [spLow.id, spElig.id] } } })
+  await prisma.growDiary.deleteMany({ where: { id: { in: [lowDiary.id, eligDiary.id] } } })
+  await prisma.profile.deleteMany({ where: { userId: { in: [spLow.id, spElig.id] } } })
+  await prisma.user.deleteMany({ where: { id: { in: [spLow.id, spElig.id] } } })
 
   // ── Pure: weekly challenges ───────────────────────────────────────
   // Fixed roster, unique slugs, sane rewards, small weekly ceiling.

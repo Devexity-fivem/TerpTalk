@@ -149,11 +149,10 @@ model Profile {
   hideOnlineStatus       Boolean @default(false)
   publicMilestoneOptOut  Boolean @default(false)
   dmPolicy               String  @default("EVERYONE") // EVERYONE | FOLLOWING | NONE
-  // Equipped cosmetics — keys into the registries in lib/cosmetics.ts.
-  // Unlock is derived from reputation; these store only the equipped choice.
-  avatarFrame  String?
-  profileTitle String?
-  profileTheme String?
+  // Garden Perk — the member's pinned harvest (Harvested rank or a 60-day
+  // check-in streak). Diary must be their own harvested, non-deleted grow.
+  pinnedDiaryId String?
+  pinnedDiary   GrowDiary? @relation("PinnedHarvest", fields: [pinnedDiaryId], references: [id], onDelete: SetNull)
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([username])
@@ -424,6 +423,7 @@ model GrowDiary {
   reactions     Reaction[]
   followers     DiaryFollow[]
   diaryContestEntries DiaryContestEntry[]
+  pinnedBy      Profile[]  @relation("PinnedHarvest")
 
   @@index([authorId])
   @@index([strain])
@@ -1094,6 +1094,11 @@ model AffiliateProduct {
   promoCode      String?  // falls back to partner.promoCode
   active         Boolean  @default(true)
   featured       Boolean  @default(false)
+  // Members-only gating (Garden Perks): minRank is a REP_RANKS name —
+  // null means visible to everyone including guests. publicAt delays
+  // general visibility until that time; early-access members see it first.
+  minRank        String?
+  publicAt       DateTime?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 

@@ -51,8 +51,7 @@ import {
 import { TERPBOT_USERNAME } from "@/lib/terpbot-constants"
 import { announceTierUp } from "@/lib/terpbot"
 import { notify } from "@/lib/notify"
-import { cosmeticsUnlockedBetween, nextLockedCosmetic } from "@/lib/cosmetics"
-import { RANK_DISPLAY, xpStage } from "@/lib/progression-config"
+import { RANK_DISPLAY, xpStage, nextRankUnlock } from "@/lib/progression-config"
 import { rateLimit } from "@/lib/rate-limit"
 
 export {
@@ -595,7 +594,10 @@ export async function awardProgression(
       if (rankCrossed.length > 0) {
         const top = rankCrossed[rankCrossed.length - 1]
         const disp = RANK_DISPLAY[top.rank]
-        const unlocks = cosmeticsUnlockedBetween(txResult.oldXp, txResult.newXp)
+        // Unlock list = registry entries gated on a rank newly crossed in
+        // (oldXp, newXp] — the celebration card renders name chips.
+        const crossedNames = new Set(rankCrossed.map((r) => r.rank))
+        const unlocks = UNLOCKS.filter((u) => u.rank && crossedNames.has(u.rank))
         const stage = xpStage(txResult.newXp)
         await notify({
           userId,
@@ -609,19 +611,19 @@ export async function awardProgression(
             stageName: stage.stageName,
             xp: txResult.newXp,
             tier: disp ? { name: top.rank, icon: disp.icon, color: disp.color, bg: disp.bg } : undefined,
-            unlocks: unlocks.map((u) => ({ kind: u.kind, key: u.key, name: u.name })),
+            unlocks: unlocks.map((u) => ({ kind: u.category, key: u.id, name: u.name })),
           },
         }).catch(() => null)
       }
       for (let i = 0; i < stageCrossed.length; i++) {
         const stage = xpStage(txResult.newXp)
-        const nextUnlock = nextLockedCosmetic(txResult.newXp)
+        const nextUnlock = nextRankUnlock(txResult.newXp)
         await notify({
           userId,
           type: "REPUTATION",
           title: `Grow Level ${stage.level} — ${stage.stageName}`,
           content: nextUnlock
-            ? `Your garden reached a new stage. Next unlock: ${nextUnlock.name} at ${nextUnlock.unlockedAt.toLocaleString()} XP.`
+            ? `Your garden reached a new stage. Next unlock: ${nextUnlock.name} at ${nextUnlock.rank} rank.`
             : "Your garden reached a new stage.",
           link: "/reputation",
           metadata: {
@@ -630,7 +632,7 @@ export async function awardProgression(
             stageName: stage.stageName,
             xp: txResult.newXp,
             nextUnlock: nextUnlock
-              ? { kind: nextUnlock.kind, key: nextUnlock.key, name: nextUnlock.name, unlockedAt: nextUnlock.unlockedAt }
+              ? { kind: "perk", key: nextUnlock.id, name: nextUnlock.name, unlockedAt: nextUnlock.xpNeeded }
               : null,
           },
         }).catch(() => null)
@@ -996,6 +998,16 @@ export async function hasUnlock(userId: string, unlockId: string): Promise<boole
     if (ach && (!spec.standing || profile.standing >= spec.standing)) return true
   }
 
+  // Streak route — a non-reversed streak:<days>:<userId> marker row grants
+  // the unlock even below the rank gate (Garden Perks D-amendment).
+  if (spec.streak) {
+    const marker = await prisma.progressionEvent.findFirst({
+      where: { userId, key: `streak:${spec.streak}:${userId}`, reversedAt: null },
+      select: { id: true },
+    })
+    if (marker) return true
+  }
+
   const rankOk = spec.rank ? profile.xp >= (REP_RANKS.find((r) => r.name === spec.rank)?.threshold ?? Infinity) : true
   let masteryOk = true
   if (spec.mastery) {
@@ -1026,6 +1038,16 @@ export async function unlockStates(userId: string): Promise<(UnlockSpec & { unlo
       })
     ).map((r) => r.achievement.key)
   )
+  // Streak alternates: one query for all of this member's non-reversed
+  // streak markers, then a set lookup per unlock.
+  const streakDays = new Set(
+    (
+      await prisma.progressionEvent.findMany({
+        where: { userId, reversedAt: null, key: { startsWith: "streak:", endsWith: `:${userId}` } },
+        select: { key: true },
+      })
+    ).map((r) => Number(r.key!.split(":")[1]))
+  )
   return UNLOCKS.map((u) => {
     if (!profile || profile.unlockFrozen) return { ...u, unlocked: false }
     const rankOk = u.rank ? profile.xp >= (REP_RANKS.find((r) => r.name === u.rank)?.threshold ?? Infinity) : true
@@ -1033,7 +1055,8 @@ export async function unlockStates(userId: string): Promise<(UnlockSpec & { unlo
     const coreOk = u.anyOf ? rankOk || mOk : rankOk && mOk
     const stOk = u.standing ? profile.standing >= u.standing : true
     const achOk = u.achievement ? earned.has(u.achievement) && stOk : false
-    return { ...u, unlocked: (coreOk && stOk) || achOk }
+    const streakOk = u.streak ? streakDays.has(u.streak) : false
+    return { ...u, unlocked: (coreOk && stOk) || achOk || streakOk }
   })
 }
 

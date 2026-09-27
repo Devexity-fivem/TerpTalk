@@ -475,7 +475,7 @@ await check("setup parser: images — shape, count, and data-URI validation", ()
 })
 
 // ─── Strain stats cache decisions ────────────────────────────────────
-await check("patchTouchesStrainStats: cosmetic edits do not bust strains", () => {
+await check("patchTouchesStrainStats: non-stat edits do not bust strains", () => {
   assert.equal(patchTouchesStrainStats(before, { title: "New" }), false)
   assert.equal(patchTouchesStrainStats(before, { description: "d" }), false)
   assert.equal(patchTouchesStrainStats(before, { genetics: "Hybrid" }), false)

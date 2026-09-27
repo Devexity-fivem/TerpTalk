@@ -23,7 +23,7 @@ const SECTIONS: { title: string; icon: typeof KeyRound; items: Item[] }[] = [
     icon: User,
     items: [
       { href: "/profile#recovery", label: "Recovery phrase", desc: "Generate or view the only way back into your account", icon: KeyRound },
-      { href: "/profile#account", label: "Download my data", desc: "Export your account and content as JSON", icon: Download },
+      { href: "/profile#account", label: "Download my data", desc: "Get a copy of your account and content", icon: Download },
       { href: "/settings/blocked", label: "Blocked members", desc: "See who you've blocked and unblock them", icon: Ban },
       { href: "/profile", label: "Edit profile", desc: "Avatar, bio, badges, and public profile details", icon: User },
       { href: "/profile#account", label: "Delete my account", desc: "Permanently remove your account and content", icon: Trash2, danger: true },

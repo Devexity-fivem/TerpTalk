@@ -798,29 +798,6 @@ body::after {
   }
 }
 
-/* ─── Animated avatar frames ──────────────────────────────────────────
-   tt-frame-pulse: breathing grow-light glow (Photon Pulse, 2,500 rep).
-   tt-frame-aurora: hue-drifting aurora (Northern Lights, 50,000 rep).
-   Both are CSS-only and neutralised by the reduced-motion block. */
-@keyframes tt-frame-pulse-glow {
-  0%, 100% { box-shadow: 0 0 6px -2px rgba(232, 121, 249, 0.4); }
-  50% { box-shadow: 0 0 16px -2px rgba(232, 121, 249, 0.8); }
-}
-.tt-frame-pulse {
-  animation: tt-frame-pulse-glow 2.4s ease-in-out infinite;
-}
-@keyframes tt-frame-aurora-glow {
-  0%, 100% {
-    box-shadow: 0 0 18px -2px rgba(125, 211, 252, 0.7), 0 0 10px -4px rgba(196, 181, 253, 0.8);
-  }
-  50% {
-    box-shadow: 0 0 18px -2px rgba(196, 181, 253, 0.8), 0 0 10px -4px rgba(110, 231, 183, 0.8);
-  }
-}
-.tt-frame-aurora {
-  animation: tt-frame-aurora-glow 4s ease-in-out infinite;
-}
-
 /* Honour users who ask for less motion */
 @media (prefers-reduced-motion: reduce) {
   *,

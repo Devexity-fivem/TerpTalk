@@ -38,7 +38,6 @@ const PROFILE_SELECT = {
   avatarUrl: true,
   xp: true,
   bio: true,
-  profileTitle: true,
   joinDate: true,
   user: {
     select: {
@@ -259,9 +258,6 @@ export default async function GrowersPage({
                             <RoleBadge role={profile.user.role} />
                             <TierChip xp={profile.xp} publicMilestoneOptOut={false} />
                           </div>
-                          {profile.profileTitle && (
-                            <p className="text-xs text-primary/90 font-medium mt-0.5 truncate">{profile.profileTitle}</p>
-                          )}
                           {profile.bio && (
                             <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{profile.bio}</p>
                           )}

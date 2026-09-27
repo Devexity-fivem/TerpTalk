@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react"
 import { Plus, Loader2, Tag, ExternalLink, Star, StarOff, Pencil, Trash2 } from "lucide-react"
 import Tooltip from "@/components/ui/tooltip"
+import { REP_RANKS } from "@/lib/progression-config"
 
 interface Partner {
   id: string; name: string; slug: string; websiteUrl: string; affiliateUrl: string; promoCode: string | null
@@ -12,6 +13,7 @@ interface Partner {
 interface Product {
   id: string; name: string; slug: string; category: string; price: string | null
   promoCode: string | null; active: boolean; featured: boolean
+  minRank: string | null; publicAt: string | null
   partner: { name: string }; _count: { clicks: number }
 }
 interface Stats {
@@ -34,7 +36,7 @@ export default function AdminAffiliates() {
   const [msg, setMsg] = useState("")
 
   const [partnerForm, setPartnerForm] = useState({ name: "", websiteUrl: "", affiliateUrl: "", promoCode: "", description: "", promoText: "", featured: false })
-  const [productForm, setProductForm] = useState({ name: "", partnerId: "", category: "Growing Equipment", description: "", affiliateUrl: "", productUrl: "", imageUrl: "", price: "", promoCode: "", recommendedFor: "", pros: "", cons: "", featured: false })
+  const [productForm, setProductForm] = useState({ name: "", partnerId: "", category: "Growing Equipment", description: "", affiliateUrl: "", productUrl: "", imageUrl: "", price: "", promoCode: "", recommendedFor: "", pros: "", cons: "", featured: false, minRank: "", publicAt: "" })
   const [editPartner, setEditPartner] = useState<string | null>(null)
   const [editProduct, setEditProduct] = useState<string | null>(null)
 
@@ -77,7 +79,7 @@ export default function AdminAffiliates() {
       body: JSON.stringify(editProduct ? { id: editProduct, ...productForm } : productForm),
     })
     if (res.ok) {
-      setProductForm({ name: "", partnerId: "", category: "Growing Equipment", description: "", affiliateUrl: "", productUrl: "", imageUrl: "", price: "", promoCode: "", recommendedFor: "", pros: "", cons: "", featured: false })
+      setProductForm({ name: "", partnerId: "", category: "Growing Equipment", description: "", affiliateUrl: "", productUrl: "", imageUrl: "", price: "", promoCode: "", recommendedFor: "", pros: "", cons: "", featured: false, minRank: "", publicAt: "" })
       setEditProduct(null)
       load(); flash(editProduct ? "Product updated" : "Product created")
     } else flash((await res.json()).error || "Failed")
@@ -198,6 +200,10 @@ export default function AdminAffiliates() {
                   <span className="text-xs text-muted-foreground">{p.partner.name}</span>
                   {p.promoCode && <span className="text-xs bg-primary/15 text-primary px-1.5 py-0.5 rounded font-bold"><Tag className="w-3 h-3 inline" /> {p.promoCode}</span>}
                   {!p.active && <span className="text-[10px] bg-destructive/15 text-destructive px-1.5 rounded">inactive</span>}
+                  {p.minRank && <span className="text-[10px] bg-amber-500/15 text-warning px-1.5 rounded">{p.minRank}+ only</span>}
+                  {p.publicAt && (
+                    <span className="text-[10px] bg-secondary text-muted-foreground px-1.5 rounded">goes public {new Date(p.publicAt).toLocaleDateString()}</span>
+                  )}
                 </div>
                 <p className="text-[10px] text-muted-foreground">{p.category} · {p._count.clicks} clicks · slug: {p.slug} · shortcode: [affiliate_product id=&quot;{p.slug}&quot;]</p>
               </div>
@@ -229,6 +235,14 @@ export default function AdminAffiliates() {
           <textarea placeholder="Description" value={productForm.description} onChange={(e) => setProductForm({ ...productForm, description: e.target.value })} rows={2} className={`${inputCls} sm:col-span-2`} />
           <input placeholder="Recommended for (e.g. 2x2 tents)" value={productForm.recommendedFor} onChange={(e) => setProductForm({ ...productForm, recommendedFor: e.target.value })} className={inputCls} />
           <input placeholder="Pros — one per line" value={productForm.pros} onChange={(e) => setProductForm({ ...productForm, pros: e.target.value })} className={inputCls} />
+          <select value={productForm.minRank} onChange={(e) => setProductForm({ ...productForm, minRank: e.target.value })} className={inputCls} aria-label="Minimum rank (members-only gate)">
+            <option value="">Everyone (public deal)</option>
+            {REP_RANKS.slice(1).map((r) => <option key={r.name} value={r.name}>{r.name}+ only</option>)}
+          </select>
+          <div>
+            <input type="datetime-local" value={productForm.publicAt} onChange={(e) => setProductForm({ ...productForm, publicAt: e.target.value })} className={inputCls} aria-label="Goes public at (optional)" />
+            <p className="text-[10px] text-muted-foreground mt-0.5">Goes public at — empty means public now</p>
+          </div>
         </div>
         <div className="flex items-center gap-3 mt-3">
           <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={productForm.featured} onChange={(e) => setProductForm({ ...productForm, featured: e.target.checked })} /> Featured</label>

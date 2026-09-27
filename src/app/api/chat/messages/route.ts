@@ -29,7 +29,7 @@ type ChatMessageWithAuthor = {
     name?: string | null
     image?: string | null
     role?: string | null
-    profile?: { username?: string | null; xp?: number | null; publicMilestoneOptOut?: boolean | null; avatarFrame?: string | null; profileTitle?: string | null } | null
+    profile?: { username?: string | null; xp?: number | null; publicMilestoneOptOut?: boolean | null } | null
   }
   replyTo: ChatMessageWithAuthor | null
 }
@@ -48,8 +48,6 @@ function messageDto(m: ChatMessageWithAuthor) {
           role: m.replyTo.author.role ?? null,
           xp: m.replyTo.author.profile?.xp ?? 0,
           publicMilestoneOptOut: m.replyTo.author.profile?.publicMilestoneOptOut ?? false,
-          avatarFrame: m.replyTo.author.profile?.avatarFrame ?? null,
-          profileTitle: m.replyTo.author.profile?.profileTitle ?? null,
         },
       }
     : null
@@ -66,8 +64,6 @@ function messageDto(m: ChatMessageWithAuthor) {
       role: m.author.role ?? null,
       xp: m.author.profile?.xp ?? 0,
       publicMilestoneOptOut: m.author.profile?.publicMilestoneOptOut ?? false,
-      avatarFrame: m.author.profile?.avatarFrame ?? null,
-      profileTitle: m.author.profile?.profileTitle ?? null,
     },
     replyTo,
   }

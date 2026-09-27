@@ -42,7 +42,7 @@ type ChatMessageWithAuthor = {
     name: string | null
     image: string | null
     role: string | null
-    profile: { username: string | null; avatarFrame?: string | null; profileTitle?: string | null } | null
+    profile: { username: string | null } | null
   }
 }
 
@@ -121,7 +121,7 @@ export async function POST(request: NextRequest) {
         name: string | null
         image: string | null
         role: string | null
-        profile: { username: string | null; avatarFrame?: string | null; profileTitle?: string | null } | null
+        profile: { username: string | null } | null
       }
       return {
         id: message.id,
@@ -134,8 +134,6 @@ export async function POST(request: NextRequest) {
           username: author.profile?.username ?? null,
           image: author.image ?? null,
           role: author.role ?? null,
-          avatarFrame: author.profile?.avatarFrame ?? null,
-          profileTitle: author.profile?.profileTitle ?? null,
         },
         replyTo: null,
       }

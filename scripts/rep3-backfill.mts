@@ -11,8 +11,8 @@
 //   3. Runs the post-award pipeline with oldRep == newRep (no rung
 //      crossings → no celebration spam): autoVerify promotions,
 //      checkBadges grants, referral payouts all evaluate for real.
-//   4. Post-demotion effects — prunes equipped cosmetics now above the
-//      member's tier and showcase pins beyond their slot count; demotes
+//   4. Post-demotion effects — clears a pinned harvest above the member's
+//      gate and showcase pins beyond their slot count; demotes
 //      VERIFIED_MEMBERs who no longer meet the threshold.
 //   5. Garden streaks — pays once-ever STREAK_BONUS milestones for the
 //      member's live check-in streak (skipped for banned members).

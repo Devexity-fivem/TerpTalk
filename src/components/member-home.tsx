@@ -125,14 +125,14 @@ export default function MemberHome({ data }: { data: MemberHomeData }) {
           </span>
         </Link>
 
-        {/* Needs attention — deterministic grow signals, not notifications */}
+        {/* Needs attention — grow signals, not notifications */}
         {data.attention.length > 0 && (
           <section className="mb-6 bg-card/80 rounded-2xl border border-warning/30 p-4 sm:p-5">
             <div className="mb-3 flex items-center justify-between gap-2">
               <h2 className="flex items-center gap-2 font-display text-sm font-semibold">
                 <AlertTriangle className="h-4 w-4 text-warning" />
                 Needs attention
-                <InfoTip content="Signals from the deterministic grow engine — out-of-band readings, open symptom reports, pending adjustments and stale logs. Not notifications; nothing here is manufactured." />
+                <InfoTip content="Flagged from your own diaries — a reading out of range, an open symptom report, a follow-up waiting, or a diary that's gone quiet. Not notifications; nothing here is manufactured." />
               </h2>
             </div>
             <ul className="space-y-1.5">
@@ -219,7 +219,7 @@ export default function MemberHome({ data }: { data: MemberHomeData }) {
           <Card
             icon={<Sprout className="h-4 w-4 text-primary" />}
             title="Your grows"
-            tip="Your active grow diaries — stage, age, latest readings and what the deterministic engine suggests next."
+            tip="Your active grow diaries — stage, age, latest readings and what to check next."
             action={data.grows.length > 0 ? { href: "/diaries", label: "All diaries" } : undefined}
           >
             {data.grows.length === 0 ? (

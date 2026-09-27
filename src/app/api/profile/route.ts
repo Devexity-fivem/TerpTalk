@@ -5,10 +5,9 @@ import { prisma } from "@/lib/prisma"
 import { unauthorized, forbidden, getClientIp, logSecurityEvent, LIMITS, isBanned, enforceLinkTrust } from "@/lib/security"
 import { storeImage, deleteImagesIfUnreferenced, isBlobConfigured } from "@/lib/blob"
 import { rankDisplay, xpRankProgress, xpStage, xpStageProgress } from "@/lib/progression-config"
-import { getProgressionPerks, progressionPerksFrom } from "@/lib/progression"
+import { getProgressionPerks, progressionPerksFrom, hasUnlock } from "@/lib/progression"
 import { enqueueReversal, drainOne } from "@/lib/reputation-outbox"
 import { enqueueXpReversal, drainXpOne } from "@/lib/progression-outbox"
-import { canEquip } from "@/lib/cosmetics"
 import { Prisma } from "@prisma/client"
 import { rateLimit } from "@/lib/rate-limit"
 import { checkMaintenance } from "@/lib/maintenance"
@@ -81,6 +80,21 @@ export async function GET() {
       ? await prisma.profile.count({ where: { referredById: user.profile.id } })
       : 0
 
+    // Harvested grows the member can pin to their profile (Garden Perk).
+    const harvestedDiaries = await prisma.growDiary.findMany({
+      where: { authorId: user.id, deleted: false, harvested: true },
+      orderBy: { harvestedAt: "desc" },
+      take: 50,
+      select: {
+        id: true,
+        slug: true,
+        title: true,
+        strain: true,
+        harvestedAt: true,
+        visibility: true,
+      },
+    })
+
     return NextResponse.json({
       user: {
         id: user.id,
@@ -91,6 +105,7 @@ export async function GET() {
         createdAt: user.createdAt,
       },
       profile: user.profile,
+      harvestedDiaries,
       stats: {
         diaries: user._count.diaryCreator,
         posts: user._count.posts,
@@ -197,9 +212,7 @@ export async function PATCH(request: Request) {
       notifyOnComment,
       notifyOnFollow,
       notifyOnReaction,
-      avatarFrame,
-      profileTitle,
-      profileTheme,
+      pinnedDiaryId,
       pinnedBadges,
     } = body as Record<string, unknown>
 
@@ -320,24 +333,32 @@ export async function PATCH(request: Request) {
       updateData.avatarUrl = avatarUrl ? String(avatarUrl).slice(0, 500) : null
     }
 
-    // ─── Cosmetics ────────────────────────────────────────────────────
-    // Registry keys only — canEquip() enforces the XP unlock so a
-    // member can never equip a cosmetic above their rank. null clears.
-    const memberXp = current?.xp ?? 0
-    const cosmeticFields: [string, unknown, "frames" | "titles" | "themes"][] = [
-      ["avatarFrame", avatarFrame, "frames"],
-      ["profileTitle", profileTitle, "titles"],
-      ["profileTheme", profileTheme, "themes"],
-    ]
-    for (const [field, value, kind] of cosmeticFields) {
-      if (value === undefined) continue
-      if (value !== null && (typeof value !== "string" || value.length > 60)) {
-        return NextResponse.json({ error: `Invalid ${field}` }, { status: 400 })
+    // ─── Pinned harvest (Garden Perk) ────────────────────────────────
+    // null clears; otherwise the member needs the pinned-harvest unlock
+    // (Harvested rank or a 60-day streak marker) and the diary must be
+    // their own harvested, non-deleted grow.
+    if (pinnedDiaryId !== undefined) {
+      if (pinnedDiaryId === null) {
+        updateData.pinnedDiaryId = null
+      } else {
+        if (typeof pinnedDiaryId !== "string" || pinnedDiaryId.length > 40) {
+          return NextResponse.json({ error: "Invalid pinnedDiaryId" }, { status: 400 })
+        }
+        if (!(await hasUnlock(userId, "pinned-harvest"))) {
+          return NextResponse.json({ error: "Pinning a harvest unlocks at Harvested rank or a 60-day streak" }, { status: 403 })
+        }
+        const diary = await prisma.growDiary.findUnique({
+          where: { id: pinnedDiaryId },
+          select: { authorId: true, harvested: true, deleted: true },
+        })
+        if (!diary || diary.authorId !== userId) {
+          return NextResponse.json({ error: "You can only pin one of your own grows" }, { status: 400 })
+        }
+        if (diary.deleted || !diary.harvested) {
+          return NextResponse.json({ error: "Only a harvested grow can be pinned" }, { status: 400 })
+        }
+        updateData.pinnedDiaryId = pinnedDiaryId
       }
-      if (!canEquip(memberXp, kind, value as string | null)) {
-        return NextResponse.json({ error: "That reward isn't unlocked yet" }, { status: 403 })
-      }
-      updateData[field] = value
     }
 
     // ─── Badge showcase ───────────────────────────────────────────────
@@ -393,9 +414,7 @@ export async function PATCH(request: Request) {
                 businessName: true,
                 businessType: true,
                 businessUrl: true,
-                avatarFrame: true,
-                profileTitle: true,
-                profileTheme: true,
+                pinnedDiaryId: true,
                 notifyOnReply: true,
                 notifyOnMention: true,
                 notifyOnCategoryFollow: true,
@@ -421,9 +440,7 @@ export async function PATCH(request: Request) {
                 businessName: true,
                 businessType: true,
                 businessUrl: true,
-                avatarFrame: true,
-                profileTitle: true,
-                profileTheme: true,
+                pinnedDiaryId: true,
                 notifyOnReply: true,
                 notifyOnMention: true,
                 notifyOnCategoryFollow: true,

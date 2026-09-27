@@ -20,8 +20,6 @@ interface ActivityItemProps {
   trailing?: ReactNode
   /** Unread indicator */
   unread?: boolean
-  /** Optional avatar frame class */
-  avatarFrameClass?: string
   className?: string
 }
 
@@ -39,7 +37,6 @@ export default function ActivityItem({
   meta,
   trailing,
   unread = false,
-  avatarFrameClass,
   className,
 }: ActivityItemProps) {
   return (
@@ -51,7 +48,7 @@ export default function ActivityItem({
         className
       )}
     >
-      <div className={cn("relative shrink-0 mt-0.5", avatarFrameClass)}>
+      <div className="relative shrink-0 mt-0.5">
         <Avatar src={avatar} size="sm" alt={avatarAlt} />
         {unread && (
           <span

@@ -289,7 +289,7 @@ const apiFiles = () => {
   check("schema: diary contest models present", schema.includes("model DiaryContestEntry") && schema.includes("model DiaryContestVote"));
   check("schema: diaryId+createdAt index", schema.includes("@@index([diaryId, createdAt])"));
 
-  // ── 13. Reputation 2.2 — milestones, celebrations, chat cosmetics ──
+  // ── 13. Progression — milestones, celebrations, Garden Perks ──
   const repLib = read("lib/reputation.ts");
   check("reputation: milestone markers are zero-amount ledger rows",
     repLib.includes("REP_EVENT_TYPES.MILESTONE") && repLib.includes("amount: 0"));
@@ -297,15 +297,16 @@ const apiFiles = () => {
     repLib.includes("claimMilestone") && repLib.includes("`milestone:tier:"));
   check("reputation: stage milestones claimed once-ever",
     repLib.includes("`milestone:stage:"));
-  check("reputation: demotion prunes stale cosmetics + pins",
-    repLib.includes("enforceCosmeticUnlocks") && repLib.includes("pinned: false"));
+  check("reputation: demotion prunes pinned harvest + pins",
+    repLib.includes("enforcePinnedHarvest") && repLib.includes("pinned: false"));
   check("reputation: rung crossings derived from REP_LADDER",
     repLib.includes("crossedRungs("));
   const repCfg2 = read("lib/reputation-config.ts");
   const pubBlock = repCfg2.slice(repCfg2.indexOf("PUBLIC_REP_TYPES"), repCfg2.indexOf("])", repCfg2.indexOf("PUBLIC_REP_TYPES")));
   check("config: MILESTONE never public", !/["']MILESTONE["']/.test(pubBlock));
   const profileRoute = read("app/api/profile/route.ts");
-  check("profile: cosmetic equip gated by canEquip", profileRoute.includes("canEquip(memberXp"));
+  check("profile: pinned-harvest write gated by the unlock",
+    profileRoute.includes('hasUnlock(userId, "pinned-harvest")'));
   const notifyLib = read("lib/notify.ts");
   check("notify: metadata reaches push DTO", notifyLib.includes("metadata: n.metadata"));
   const chatMessages = read("app/api/chat/messages/route.ts");
@@ -313,10 +314,9 @@ const apiFiles = () => {
   const terpbotLib = read("lib/terpbot.ts");
   check("chat: all three DTO sites use chatAuthorSelect",
     chatMessages.includes("chatAuthorSelect") && chatCommands.includes("chatAuthorSelect") && terpbotLib.includes("chatAuthorSelect"));
-  check("chat: cosmetics emitted as flat author fields",
-    chatMessages.includes("avatarFrame: m.author.profile?.avatarFrame"));
   const chatRoom = read("components/chat-room.tsx");
-  check("chat: cosmetics never render for the bot", chatRoom.includes("!isBot ? getAvatarFrame"));
+  check("chat: no cosmetic fields emitted or rendered",
+    !chatMessages.includes("avatarFrame") && !chatRoom.includes("avatarFrame"));
   const celebration = read("components/milestone-celebration.tsx");
   check("celebration: polite live region", celebration.includes('role="status"'));
   check("celebration: Escape dismiss", celebration.includes('e.key === "Escape"'));

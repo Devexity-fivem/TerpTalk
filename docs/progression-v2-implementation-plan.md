@@ -129,7 +129,7 @@ test suite):
 | `PendingReversal` | **Drained then frozen** — run the outbox to empty before cutover; pending items that can't complete are marked DEAD with reason `cutover` |
 | Old tiers | **Retired** — config constants deleted at cleanup phase; no DB state |
 | `Badge`/`UserBadge` | **Archived** — rows kept; registry gains `LEGACY` rarity; UI collapses them into a "Legacy collection" |
-| `Profile.avatarFrame/profileTitle/profileTheme` | **Revalidated** — cosmetics not qualified under new rank mapping are unequipped; a `LEGACY_VANITY` achievement grants a keepsake version to prior owners |
+| `Profile.avatarFrame/profileTitle/profileTheme` | **Removed** (Rev 4) — columns dropped in the `garden_perks` migration; replaced by Garden Perks (`Profile.pinnedDiaryId`, deal gating, Spotlight) |
 | Old quests/challenges/journeys | **Replaced** — new definitions (same engine); pending keyed payouts from the old epoch are not paid |
 | Streaks | **Retained** — engine survives; milestone rewards switch from XP to utility (Phase 10) |
 | Standing | **Seeded** — `LEGACY_STANDING` ProgressionEvent per user: `standing = clamp(SUM(trust-type ReputationEvent.amount), 0, N)`; keyed `standing:legacy:{userId}` so it's idempotent |
@@ -357,7 +357,7 @@ server-side.
 | the-vault | The Vault access | L | C | Master Cultivator | — | Respected | — | ★ | `chat-access.ts` + rooms API | chat |
 | research-aggregates | Deeper anonymized stats | A | B | Master Cultivator | Records M4 | — | — | ◆ | research API | research page |
 | early-access | Feature-flag channel | P | A | Master Cultivator | — | — | — | ◆ | flag resolver | settings |
-| apex-cosmetics | Northern Lights frame etc. | Cs | A | rank track | — | — | — | ★ | cosmetics equip API | profile editor |
+| top-shelf-deals | Best partner offers | D | A | Cultivator | — | — | — | ◆ | deals API + `canSeeDeal` | /deals |
 
 Achievement-granted unlocks (design §11.2) are entries with `achievement`
 as the sole prerequisite — evaluated by the same `hasUnlock`.
@@ -385,12 +385,13 @@ threshold checks.
 | Quest slots 3→4→5 | tier | Rooted/Cultivator | quest engine | rewards3 |
 | Slowmode exempt | tier | Pillar standing | chat limiter | trust-safety |
 | Showcase slots 3→14 | tier | re-map to rank | profile route | forum-verify |
-| Cosmetics equip | rep-derived | rank-derived + legacy keepsakes | `cosmetics.ts` | self-service |
+| Pinned harvest | — | `pinned-harvest` (Harvested **or** 60-day streak) | `/api/profile` PATCH | account-verify |
+| Members' / top-shelf deals | — | `members-deals` (Rooted) / `top-shelf-deals` (Cultivator) via `minRank` | `deals-access.ts`, `/deals`, `/go/[slug]` | reputation-tests |
 | Longitudinal intel | internal | `longitudinal-analysis` (Flowering+Records M2) | intel API | terpbot suite |
 | Weekly board | member-driven rep types | member-driven XP events | `weekly-recognition.ts` | rewards3 |
 
 Every `perksAt`/`REP_TIERS` consumer (`security.ts`, `chat-access.ts`,
-`cosmetics.ts`, `journeys.ts`, `rooms`/`messages`/`pusher` routes,
+`deals-access.ts`, `journeys.ts`, `rooms`/`messages`/`pusher` routes,
 `reputation-roadmap.tsx`, `progress/page.tsx`, `reputation/page.tsx`)
 moves to `hasUnlock`/`rankFromXp`/`standing` equivalents.
 
@@ -468,7 +469,7 @@ guide authoring, challenges, mentoring → evidence/research aggregates.
 
 | System | Disposition | Detail |
 |---|---|---|
-| Check-in streak | **Modified** | survives; milestone rewards → utility only (§10.4: quest slot week, bonus quest, cosmetics, Evergreen); `DAILY_LOGIN` XP removed |
+| Check-in streak | **Modified** | survives; milestone rewards → utility only (§10.4: quest slot week, bonus quest, pinned harvest / Spotlight streak gates, Evergreen); `DAILY_LOGIN` XP removed |
 | Grow streak | **Retained** | feeds Cultivation quests + Journaler chain |
 | Daily quests | **Rebuilt** | new pool (design §10.1), mastery-tagged payouts, quest-slot unlocks respected, capability-gated entries ("run a comparison" only if unlocked) |
 | Weekly challenges | **Rebuilt** | new arcs (~40 XP/wk), same keyed engine |
@@ -513,7 +514,7 @@ ledger or grant utility.
 | `/reputation` (page.tsx) | → standing/trust explainer + legacy audit view |
 | `/achievements` | Families + chains + legacy collection collapse |
 | `/leaderboard` | XP + per-path boards + standing board |
-| Profile | rank chip + mastery pips + build title + standing chip; cosmetics unchanged mechanics |
+| Profile | rank chip + mastery pips + build title + standing chip; pinned-harvest card + picker replace the cosmetics section |
 | `reputation-roadmap.tsx` | → unlock roadmap ("next unlock — what it is, how to use it") |
 | member-home | next-action resolver feeds the existing card |
 | Diary page | coverage score tease/badge-gated insight prompts |
@@ -580,7 +581,7 @@ No new suites — extend canonical ones:
 | `rewards3-tests.mts` | path attribution, dual-path events, mastery levels, diversity floors + banked promotion, build titles, unlock gates positive+negative, achievement utility unlocks, 0-XP achievements, streak utility rewards |
 | `reputation-referral-integrity-tests.mts` | referral → dual payout, deferred legitimacy, cluster/reciprocal standing controls |
 | `check-drift.mts` | xp sum, standing sum, mastery sums, frozen `reputation` invariant |
-| `self-service-tests.mts` | cosmetics re-equip rules, legacy keepsakes, rank-chip display |
+| `self-service-tests.mts` | Garden Perks — pinned-harvest gating, deals gating, rank-chip display |
 | `trust-safety-verify.mjs` | standing gates (links/polls/verified/slowmode), grantor floors, reciprocal discount, per-grantor caps, weekly 40 ceiling, recovery, legacyVerified flag, abuse-flag −50 |
 | `runtime-verify.mjs` / `forum-verify.mjs` | server-side unlock enforcement (403 + unlockId), rooms gating (rank+standing), MOVE_THREAD regression |
 | `terpbot-*` suites | new commands, watch-rule gating, progression intents |

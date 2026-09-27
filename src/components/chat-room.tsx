@@ -13,7 +13,6 @@ import RoleBadge from "@/components/role-badge"
 import TierChip from "@/components/tier-chip"
 import UserPopover from "@/components/user-popover"
 import { Avatar } from "@/components/ui/avatar"
-import { getAvatarFrame, getProfileTitle } from "@/lib/cosmetics"
 import { rankDisplay } from "@/lib/progression-config"
 import { listCommandsForRole } from "@/lib/chat-commands"
 import { getSharedPusher, peekSharedPusher } from "@/lib/pusher-client"
@@ -68,8 +67,6 @@ interface Author {
   image?: string | null
   xp?: number | null
   publicMilestoneOptOut?: boolean | null
-  avatarFrame?: string | null
-  profileTitle?: string | null
 }
 
 interface Message {
@@ -179,9 +176,6 @@ const MessageRow = memo(function MessageRow({
       setReportBusy(false)
     }
   }
-  // Cosmetics render only for humans — the bot keeps its fixed identity.
-  const frame = !isBot ? getAvatarFrame(msg.author.avatarFrame) : null
-  const title = !isBot ? getProfileTitle(msg.author.profileTitle) : null
   // Rank nameplate — the username itself shows rank. Opted-out members
   // (publicMilestoneOptOut) keep the plain style, matching TierChip.
   const nameplateClass = msg.author.publicMilestoneOptOut
@@ -411,7 +405,7 @@ const MessageRow = memo(function MessageRow({
     <div className="group relative flex gap-2.5" data-mid={msg.id}>
       <Link
         href={`/u/${encodeURIComponent(displayName)}`}
-        className={cn("mt-0.5 shrink-0 self-start rounded-full", frame?.className)}
+        className={cn("mt-0.5 shrink-0 self-start rounded-full")}
         aria-label={`${displayName}'s profile`}
         tabIndex={-1}
       >
@@ -427,13 +421,6 @@ const MessageRow = memo(function MessageRow({
               {displayName}
             </Link>
           </UserPopover>
-          {title && (
-            <Tooltip content="Profile title — cosmetic earned through progression">
-              <span className="text-[9px] font-medium uppercase tracking-wider px-1 py-px rounded truncate bg-primary/10 text-primary/80">
-                {title.name}
-              </span>
-            </Tooltip>
-          )}
           <RoleBadge role={msg.author.role} />
           <TierChip
             xp={msg.author.xp ?? 0}

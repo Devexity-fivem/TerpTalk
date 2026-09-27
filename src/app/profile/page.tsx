@@ -5,7 +5,7 @@ import { signInHref } from "@/lib/callback-url"
 import { useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react"
-import { User, Award, MessageSquare, Leaf, Loader2, Download, Trash2, Pencil, MapPin, Globe, Sprout, Dna, Store, TrendingUp, ChevronDown, ChevronUp, Bookmark, Settings, ArrowRight } from "lucide-react"
+import { User, Award, MessageSquare, Leaf, Loader2, Download, Trash2, Pencil, MapPin, Globe, Sprout, Dna, Store, TrendingUp, ChevronDown, ChevronUp, Bookmark, Settings, ArrowRight, Pin } from "lucide-react"
 import { signOut } from "next-auth/react"
 import Link from "next/link"
 import RoleBadge from "@/components/role-badge"
@@ -20,10 +20,8 @@ import SavedThreads from "@/components/saved-threads"
 import SavedSearches from "@/components/saved-searches"
 import RecoveryPhraseCard from "@/components/recovery-phrase-card"
 import WeeklyChallenges from "@/components/weekly-challenges"
-import CosmeticsPanel from "@/components/cosmetics-panel"
 import { Avatar } from "@/components/ui/avatar"
 import { InfoTip } from "@/components/ui/tooltip"
-import { getAvatarFrame, getProfileTheme, getProfileTitle } from "@/lib/cosmetics"
 import { diaryPath } from "@/lib/slugs"
 import { cn } from "@/lib/utils"
 
@@ -121,9 +119,7 @@ interface ProfileData {
     notifyOnReaction: boolean
     xp: number
     standing: number
-    avatarFrame: string | null
-    profileTitle: string | null
-    profileTheme: string | null
+    pinnedDiaryId: string | null
   } | null
   stats: {
     diaries: number
@@ -178,6 +174,77 @@ interface ProfileData {
     createdAt: string
     _count: { updates: number; followers: number }
   }>
+  harvestedDiaries: Array<{
+    id: string
+    slug: string | null
+    title: string
+    strain: string | null
+    harvestedAt: string | null
+    visibility: string
+  }>
+}
+
+// Pinned harvest — the Garden Perk picker. The server is the authority on
+// the unlock (Harvested rank or a 60-day check-in streak), so the picker
+// stays enabled and surfaces the server's message when it's still locked.
+function PinnedHarvestPicker({
+  pinnedDiaryId,
+  harvestedDiaries,
+  onSaved,
+}: {
+  pinnedDiaryId: string | null
+  harvestedDiaries: Array<{ id: string; title: string; strain: string | null; harvestedAt: string | null }>
+  onSaved: (pinned: string | null) => void
+}) {
+  const [savingPin, setSavingPin] = useState(false)
+  const savePin = async (value: string | null) => {
+    setSavingPin(true)
+    try {
+      const res = await fetch("/api/profile", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pinnedDiaryId: value }),
+      })
+      if (res.ok) {
+        onSaved(value)
+      } else {
+        const d = await res.json().catch(() => null)
+        alert(d?.error || "Couldn't update your pinned harvest")
+      }
+    } finally {
+      setSavingPin(false)
+    }
+  }
+  return (
+    <div className="bg-card/80 rounded-2xl border border-border/70 p-6">
+      <div className="flex items-center gap-2 mb-2">
+        <Pin className="w-5 h-5 text-primary" />
+        <h2 className="font-display text-lg font-semibold">Pinned harvest</h2>
+      </div>
+      <p className="text-sm text-muted-foreground mb-3">
+        Pick your proudest finished grow and it sits at the top of your profile.
+        Unlocks at Harvested rank or a 60-day check-in streak.
+      </p>
+      {harvestedDiaries.length === 0 ? (
+        <p className="text-sm text-muted-foreground">Harvest a grow first — then you can pin it here.</p>
+      ) : (
+        <select
+          value={pinnedDiaryId ?? ""}
+          disabled={savingPin}
+          onChange={(e) => savePin(e.target.value || null)}
+          className="w-full px-3 py-2 text-sm rounded-xl border border-border/70 bg-background"
+          aria-label="Pinned harvest"
+        >
+          <option value="">No pinned harvest</option>
+          {harvestedDiaries.map((d) => (
+            <option key={d.id} value={d.id}>
+              {d.title}{d.strain ? ` — ${d.strain}` : ""}
+            </option>
+          ))}
+        </select>
+      )}
+    </div>
+  )
 }
 
 const EXPERIENCE_LEVELS = ["Just starting out", "First grow", "A few grows in", "Experienced", "Veteran grower", "Commercial"]
@@ -347,14 +414,10 @@ export default function ProfilePage() {
   return (
     <div className="min-h-screen bg-background">
       <div className="max-w-4xl mx-auto px-4 py-8">
-        {/* Profile Header — equipped theme styles the card, title shows under the name */}
-        <div className={cn(
-          "bg-card rounded-lg border p-6 mb-6",
-          getProfileTheme(profileData.profile?.profileTheme)?.borderClass ?? "border-border",
-          getProfileTheme(profileData.profile?.profileTheme)?.className
-        )}>
+        {/* Profile Header */}
+        <div className="bg-card rounded-lg border border-border p-6 mb-6">
           <div className="flex items-start gap-4 sm:gap-6">
-            <div className={cn("rounded-full shrink-0", getAvatarFrame(profileData.profile?.avatarFrame)?.className)}>
+            <div className="rounded-full shrink-0">
               <Avatar
                 src={profileData.profile?.avatarUrl}
                 alt={`${profileData.profile?.username || profileData.user.name} avatar`}
@@ -367,11 +430,6 @@ export default function ProfilePage() {
                 <div className="flex items-start justify-between gap-4 flex-wrap">
                   <div>
                     <h1 className="font-display text-2xl font-bold mb-1 flex items-center gap-2 tracking-tight">{profileData.profile?.username || profileData.user.name} <RoleBadge role={profileData.user.role} /> <TierChip xp={profileData.profile?.xp ?? 0} size="md" /></h1>
-                    {getProfileTitle(profileData.profile?.profileTitle) && (
-                      <p className="text-xs font-medium uppercase tracking-wider text-primary/80 mb-1">
-                        {getProfileTitle(profileData.profile?.profileTitle)?.name}
-                      </p>
-                    )}
                     <p className="text-muted-foreground text-sm mb-2">Member since {joinDate}</p>
                     {profileData.profile?.bio && (
                       <p className="text-sm mb-3 whitespace-pre-wrap break-words">{profileData.profile.bio}</p>
@@ -863,14 +921,14 @@ export default function ProfilePage() {
 
           <WeeklyChallenges />
           <div id="rewards" className="scroll-mt-20">
-            <CosmeticsPanel
-              xp={profileData.stats.xp}
-              equipped={{
-                avatarFrame: profileData.profile?.avatarFrame ?? null,
-                profileTitle: profileData.profile?.profileTitle ?? null,
-                profileTheme: profileData.profile?.profileTheme ?? null,
-              }}
-              onSaved={(p) => setProfileData((prev) => prev ? { ...prev, profile: prev.profile ? { ...prev.profile, ...p } : prev.profile } : prev)}
+            <PinnedHarvestPicker
+              pinnedDiaryId={profileData.profile?.pinnedDiaryId ?? null}
+              harvestedDiaries={profileData.harvestedDiaries ?? []}
+              onSaved={(pinned) =>
+                setProfileData((prev) =>
+                  prev ? { ...prev, profile: prev.profile ? { ...prev.profile, pinnedDiaryId: pinned } : prev.profile } : prev
+                )
+              }
             />
           </div>
           </div>

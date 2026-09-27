@@ -13,10 +13,10 @@ import {
   xpRankProgress,
   standingDisplay,
   STANDINGS,
+  nextRankUnlock,
 } from "@/lib/progression-config"
 import { getUserStats, type UserStats } from "@/lib/reputation"
 import { BADGE_REGISTRY } from "@/lib/badge-registry"
-import { nextLockedCosmetic, unlockedCosmetics } from "@/lib/cosmetics"
 import { getChallengeProgress, currentWeekKey, weekStart } from "@/lib/challenges"
 import { getQuestProgress, currentDayKey } from "@/lib/quests"
 import { getJourneyState, evaluateJourneys } from "@/lib/journeys"
@@ -38,7 +38,7 @@ export async function GET() {
     const [profile, challenges, quests, recentBadges, earnedBadges, journey, staleDiary, streak] = await Promise.all([
       prisma.profile.findUnique({
         where: { userId },
-        select: { xp: true, standing: true, avatarFrame: true, profileTitle: true, profileTheme: true },
+        select: { xp: true, standing: true },
       }),
       getChallengeProgress(userId),
       getQuestProgress(userId),
@@ -77,7 +77,7 @@ export async function GET() {
     const nextDisplay = next ? rankDisplay(next.threshold) : null
     const rank = rankDisplay(xp)
     const tierProgress = xpRankProgress(xp)
-    const nextUnlock = nextLockedCosmetic(xp)
+    const nextUnlock = nextRankUnlock(xp)
     const start = weekStart()
     const standing = standingDisplay(profile.standing)
     const nextStanding = STANDINGS.find((s) => profile.standing < s.min) ?? null
@@ -155,24 +155,13 @@ export async function GET() {
           ? { name: next.name, icon: nextDisplay?.icon, threshold: next.threshold, benefit: nextDisplay?.benefit }
           : null,
         nextUnlock: nextUnlock
-          ? { kind: nextUnlock.kind, name: nextUnlock.name, unlockedAt: nextUnlock.unlockedAt }
+          ? { id: nextUnlock.id, name: nextUnlock.name, rank: nextUnlock.rank, xpNeeded: nextUnlock.xpNeeded }
           : null,
         upcoming,
         trust: {
           score: profile.standing,
           standing,
           next: nextStanding ? { name: nextStanding.name, min: nextStanding.min } : null,
-        },
-        cosmetics: {
-          equipped: {
-            avatarFrame: profile.avatarFrame,
-            profileTitle: profile.profileTitle,
-            profileTheme: profile.profileTheme,
-          },
-          unlockedCount:
-            unlockedCosmetics(xp).frames.length +
-            unlockedCosmetics(xp).titles.length +
-            unlockedCosmetics(xp).themes.length,
         },
         challenges: { week: currentWeekKey(), endsAt: new Date(start.getTime() + 7 * 86400000), items: challenges },
         quests: { day: currentDayKey(), items: quests },

@@ -4,7 +4,6 @@ import { sessionCookieName } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { blockExistsBetween, getClientIp, hashIp, isSessionValid } from "@/lib/security"
 import { rankDisplay, standingDisplay } from "@/lib/progression-config"
-import { getProfileTitle } from "@/lib/cosmetics"
 import { rateLimit } from "@/lib/rate-limit"
 import { TERPBOT_USERNAME } from "@/lib/terpbot-constants"
 import { publicDiaryWhere } from "@/lib/diary-visibility"
@@ -44,8 +43,6 @@ export async function GET(
         avatarUrl: true,
         xp: true,
         standing: true,
-        avatarFrame: true,
-        profileTitle: true,
         publicMilestoneOptOut: true,
         user: {
           select: {
@@ -114,8 +111,6 @@ export async function GET(
         isBot,
         role: profile.user.role,
         image: profile.user.image || profile.avatarUrl,
-        avatarFrame: profile.avatarFrame,
-        customTitle: getProfileTitle(profile.profileTitle)?.name ?? null,
         bio: profile.bio ? profile.bio.slice(0, 160) : null,
         joinDate: profile.user.createdAt,
         statusHidden: hideStatus,

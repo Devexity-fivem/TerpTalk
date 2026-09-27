@@ -9,6 +9,30 @@ formal set of economic invariants.
 
 ---
 
+## Rev 4 amendment — cosmetics removed, Garden Perks added
+
+The profile cosmetics reward layer (avatar frames, profile titles,
+profile themes) is **removed entirely** — no registries, no equip APIs,
+no rendering. In its place are **Garden Perks**: real functionality,
+server-gated:
+
+| Perk | Gate |
+|---|---|
+| Members' deals | Rooted rank |
+| Pinned harvest | Harvested rank **or** a 60-day check-in streak |
+| Grower Spotlight (home-page feature) | Cured rank **or** a 100-day check-in streak |
+| Top-shelf deals | Cultivator rank |
+
+Streak milestone rewards are remapped: **60 days → pinned harvest**,
+**100 days → Grower Spotlight**, **365 days → unchanged** (prestige
+achievement). Streaks still pay **0 XP** (D6).
+
+**Plain-language rule:** member-facing copy uses everyday grower
+language — no cosmetics, frames, or engineering terms. Technical
+vocabulary stays in code comments and staff/admin surfaces.
+
+---
+
 ## 1. Current-System Audit (read-only — unchanged, carried forward)
 
 ### 1.1 Storage
@@ -294,7 +318,7 @@ carry it.
 | **Harvested** | **Grower Cockpit** — pinned grows, alerts, comparisons, quest board in one command view | Advanced TerpBot watch (10 rules, Records M3); experiment analysis; images→8; grows→15 | — | Manage your whole grow operation from one surface |
 | **Cured** | **Historical trends** — current grow vs your own history | Advanced dashboards; watch→15; rate ×2; tags→7 | Records M4 (trend depth) | Learn across your own seasons, not just within one |
 | **Cultivator** | **Grow Room** access + community-evidence views | +1 quest slot (5); images→10 | 3 paths ≥ M4 required | Enter the trusted growers' space; see anonymized aggregate patterns |
-| **Master Cultivator** | **The Vault** + research aggregates + early-access flags | Apex identity cosmetics | 1 path ≥ M6 + 2 ≥ M4; Respected standing | Reach the apex: frontier tools and genuine scarcity |
+| **Master Cultivator** | **The Vault** + research aggregates + early-access flags | Top-shelf deals + first-look perks | 1 path ≥ M6 + 2 ≥ M4; Respected standing | Reach the apex: frontier tools and genuine scarcity |
 
 Every rank passes: each has at least one functional capability the
 member could not meaningfully exercise before. No rank leans on
@@ -523,7 +547,7 @@ it's an abuser-shaped wall, not a productivity ceiling.
 
 Categories: **F**unctional · **Cv** convenience · **Cp** capacity ·
 **A**nalytics/data · **T** TerpBot · **L** community/leadership ·
-**Cs** cosmetic · **P** prestige. ★ exists & needs gating · ◆ new build.
+**S** showcase · **D** deals · **P** prestige. ★ exists & needs gating · ◆ new build.
 
 **The three-layer gating model** (central rule — every unlock declares a
 layer):
@@ -558,6 +582,7 @@ account/safety features. Safety-critical functions are never gated.
 | Grow templates (prefilled update forms per medium/method) | F | A | Rooted | ◆ | makes logging faster |
 | +1 daily quest slot (4) | F | A | Rooted | ★ engine exists | |
 | Saved views (custom diary/feed filters) | Cv | A | Rooted | ◆ | |
+| **Members' deals** — partner discounts reserved for rooted growers | D | A | Rooted | ◆ | first Garden Perk |
 
 ### 8.2 Mid game
 
@@ -594,6 +619,8 @@ account/safety features. Safety-critical functions are never gated.
 | Historical trends — grow vs your own history | A | B | Cured + Records M4 | ◆ | |
 | Advanced dashboard widgets; watch rules → 15 | A/T | A | Cured | ◆ | |
 | Rate limits ×2; thread tags → 7 | Cp | A | Cured | ★ | |
+| **Pinned harvest** — pin your proudest harvest to the top of your profile | S | A | Harvested **or** 60-day streak | ◆ | streak-alternate gate |
+| **Grower Spotlight** — your active grow can be featured on the home page | S | A | Cured **or** 100-day streak | ◆ | streak-alternate gate |
 
 ### 8.4 Prestige
 
@@ -605,7 +632,7 @@ account/safety features. Safety-critical functions are never gated.
 | The Vault | L | C | Master Cultivator + Respected | ★ exists | |
 | Research aggregates (deeper anonymized stats) | A | B | Master Cultivator + Records M4 | ◆ | |
 | Early-access feature flag | P | A | Master Cultivator | ◆ | |
-| Apex cosmetics (Northern Lights frame, Master title) | Cs | A | rank track | ★ | |
+| **Top-shelf deals** — the best partner offers, reserved for experienced growers | D | A | Cultivator | ◆ | Garden Perk |
 
 #### 8.4a Why the Cockpit is the flagship
 
@@ -828,9 +855,9 @@ Check-in streak pays **0 XP** permanently (D6). Milestone rewards are
 | 3 days | "Tend" achievement step |
 | 7 days | Unlocks a one-off bonus quest (+15 XP on completion — the quest pays, not the streak) |
 | 30 days | **+1 quest slot for the following week** (temporary utility, expires) |
-| 60 days | Streak achievement + profile flame |
-| 100 days | Rare cosmetic frame |
-| 365 days | "Evergreen" prestige achievement + permanent cosmetic |
+| 60 days | Streak achievement + **pinned harvest** unlock (alternate to Harvested rank) |
+| 100 days | **Grower Spotlight** eligibility (alternate to Cured rank) |
+| 365 days | "Evergreen" prestige achievement (unchanged) |
 
 Grow streak (meaningful update-days) is the meaningful one — it feeds
 Cultivation quests and the Journaler chain.
@@ -1141,7 +1168,7 @@ flag flip, freeze) → 7. Cleanup + 2-week drift/velocity monitoring.
 | **D2** | **Grandfather verified → `legacyVerified`** | Revoking earned status is a promise-break; but it can't be a permanent free pass | `Profile.legacyVerified` flag; role preserved | Revocable for ordinary trust/safety reasons like any standing-gated status | "Verified (early member)" tooltip; identical privileges, honest provenance |
 | **D3** | **Hard-reset XP to 0 for everyone** | Per brief — clean economy, no legacy-inflation carryover; everyone starts the new game together | New `Profile.xp` starts at 0; no backfill | Eliminates inherited unearned progression | Communicated as "Season 2 — everyone starts as a Seed"; old badge showcase archived, not deleted |
 | **D4** | **Freeze `ReputationEvent` read-only** | It's the audit trail; destroying it buys nothing | Table retained, writes stop at flag-flip | Audit/history preserved for disputes | "Legacy collection" section on /achievements |
-| **D5** | **Cosmetics are incidental** — keep the registries, re-key unlocks to rank; no new cosmetic-driven design | The brief demands functional-first rewards; cosmetics remain seasoning | Equipped cosmetics re-validated at cutover; pre-V2 owners get "Legacy Vanity" keepsakes | Equip gates unchanged mechanically | Identity continuity without power |
+| **D5** | **Cosmetics removed** — the entire profile cosmetics layer (frames, titles, themes) is deleted and replaced by **Garden Perks**: real, server-gated functionality (pinned harvest, Grower Spotlight, members' and top-shelf deals) | The brief demands functional-first rewards; cosmetic mechanics had no functional value | Cosmetic registries, equip APIs, and `Profile` cosmetic columns dropped in the `garden_perks` migration; perks gated via the unlock registry (+ streak-alternate routes) | Members keep every functional capability; nothing cosmetic to lose | Identity comes from Garden Perks and build titles, not decoration |
 | **D6** | **`DAILY_LOGIN` = 0 XP permanently** | Login faucets reward presence, not value; streaks survive as habit mechanics with utility rewards (§10.4) | DAILY_LOGIN type removed from the new economy | Kills the cheapest farm vector | Streak UI shows utility rewards honestly — no hidden XP |
 | **D7** | **Achievements pay 0 XP** | Achievements unlock utility/identity — giving XP would make them shadow-income and re-create badge-bonus inflation | BADGE_BONUS type retired | No double-dipping between story and economy | Achievement cards show *what they unlock*, which is a stronger pull |
 

@@ -15,8 +15,6 @@ interface UserCard {
   isBot: boolean
   role: string
   image: string | null
-  avatarFrame: string | null
-  customTitle: string | null
   bio: string | null
   joinDate: string
   statusHidden: boolean
@@ -138,7 +136,6 @@ export default function UserPopover({ username, children }: { username: string |
                 <Avatar src={card.image ?? undefined} size="sm" alt={card.username} />
                 <span className="min-w-0">
                   <span className="block truncate text-sm font-semibold text-foreground">{card.username}</span>
-                  {card.customTitle && <span className="block truncate text-xs text-muted-foreground">{card.customTitle}</span>}
                 </span>
               </span>
               <span className="mb-2 flex flex-wrap items-center gap-1">

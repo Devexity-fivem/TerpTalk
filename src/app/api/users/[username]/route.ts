@@ -4,7 +4,6 @@ import { sessionCookieName } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { blockExistsBetween, getTrustLevel, getClientIp, hashIp, isSessionValid } from "@/lib/security"
 import { PUBLIC_XP_TYPES, publicXpLabel, rankDisplay, xpRankProgress, xpStage, xpStageProgress } from "@/lib/progression-config"
-import { getProfileTitle } from "@/lib/cosmetics"
 import { getGrowStreak } from "@/lib/grow-streak"
 import { rateLimit } from "@/lib/rate-limit"
 import { TERPBOT_USERNAME } from "@/lib/terpbot-constants"
@@ -42,9 +41,7 @@ async function getPublicProfileData(username: string, viewerId?: string) {
         joinDate: true,
         xp: true,
         standing: true,
-        avatarFrame: true,
-        profileTitle: true,
-        profileTheme: true,
+        pinnedDiaryId: true,
         publicMilestoneOptOut: true,
         user: {
           select: {
@@ -155,12 +152,39 @@ async function getPublicProfileData(username: string, viewerId?: string) {
         : await prisma.growDiary.count({
             where: { authorId: profile.user.id, deleted: false, ...publicDiaryWhere },
           })
+    // Pinned harvest (Garden Perk) — surfaces only while the diary is
+    // still visible to this viewer: never deleted, and PUBLIC unless the
+    // owner is looking at their own profile.
+    let pinnedHarvest: {
+      id: string
+      slug: string | null
+      title: string
+      strain: string | null
+      harvestedAt: Date | null
+      updatedAt: Date
+    } | null = null
+    if (profile.pinnedDiaryId) {
+      const d = await prisma.growDiary.findUnique({
+        where: { id: profile.pinnedDiaryId },
+        select: {
+          id: true, slug: true, title: true, strain: true,
+          harvestedAt: true, updatedAt: true, deleted: true, visibility: true,
+        },
+      })
+      if (d && !d.deleted && (viewerId === profile.user.id || d.visibility === "PUBLIC")) {
+        pinnedHarvest = {
+          id: d.id, slug: d.slug, title: d.title, strain: d.strain,
+          harvestedAt: d.harvestedAt, updatedAt: d.updatedAt,
+        }
+      }
+    }
     return {
       profile,
       recentThreads,
       growDiaries,
       growSetups,
       harvestShelf,
+      pinnedHarvest,
       growStreak: { streak, totalUpdates, harvestedDiaries },
       publicDiaryCount,
     }
@@ -196,7 +220,7 @@ export async function GET(
       return NextResponse.json({ error: "User not found" }, { status: 404 })
     }
 
-    const { profile, recentThreads, growDiaries, growSetups, harvestShelf, growStreak } = data
+    const { profile, recentThreads, growDiaries, growSetups, harvestShelf, pinnedHarvest, growStreak } = data
     const isBot = profile.username === TERPBOT_USERNAME
     // Durable bot metrics come from BotEvent rows — ChatMessage hard-deletes
     // after ~3 days so it can't power real stats.
@@ -286,10 +310,7 @@ export async function GET(
         rankProgress: xpRankProgress(profile.xp),
         xpStage: xpStage(profile.xp),
         stageProgress: xpStageProgress(profile.xp),
-        avatarFrame: profile.avatarFrame,
-        profileTitle: profile.profileTitle,
-        customTitle: getProfileTitle(profile.profileTitle)?.name ?? null,
-        profileTheme: profile.profileTheme,
+        pinnedHarvest,
         // A live streak ending today/yesterday leaks same-day activity —
         // members who opted out of public recognition don't expose it.
         growStreak: profile.publicMilestoneOptOut ? 0 : growStreak.streak,

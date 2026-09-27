@@ -9,9 +9,8 @@ import type { Prisma } from "@prisma/client"
 import { activeAuthor, blockExistsBetween, blockedUserIds, notBlockedAuthor, containsExternalLink, LIMITS, USERNAME_REGEX, rankableProfile, XP_ORDER } from "@/lib/security"
 import { extractThreadRef, type ThreadRef } from "@/lib/terpbot-context"
 import { postDeepLink } from "@/lib/notify"
-import { nextRank, rankDisplay, xpStage, xpStageProgress, xpRankProgress, standingDisplay, STANDINGS } from "@/lib/progression-config"
+import { nextRank, rankDisplay, xpStage, xpStageProgress, xpRankProgress, standingDisplay, STANDINGS, nextRankUnlock } from "@/lib/progression-config"
 import { getQuestProgress } from "@/lib/quests"
-import { nextLockedCosmetic } from "@/lib/cosmetics"
 import { getGrowStreak } from "@/lib/grow-streak"
 import { BADGE_RULES, getUserStats } from "@/lib/reputation"
 import { BADGE_REGISTRY, getBadgeByName } from "@/lib/badge-registry"
@@ -562,7 +561,7 @@ async function handle(name: string, ctx: BotCommandCtx): Promise<BotCommandResul
       if (!t) return ok(`Couldn't find that member.`)
       const stage = xpStage(t.xp)
       const stageProg = xpStageProgress(t.xp)
-      const unlock = nextLockedCosmetic(t.xp)
+      const unlock = nextRankUnlock(t.xp)
       const next = nextRank(t.xp)
       // One unified progression view — XP, rank, standing, streak and
       // today's quests composed from the same libs the /progress page uses.
@@ -590,7 +589,7 @@ async function handle(name: string, ctx: BotCommandCtx): Promise<BotCommandResul
         const prog = xpRankProgress(t.xp)
         nexts.push(`+${(next.threshold - t.xp).toLocaleString()} XP → ${next.name} (${prog.percent}%)`)
       }
-      if (unlock) nexts.push(`${unlock.name} at ${unlock.unlockedAt.toLocaleString()} XP`)
+      if (unlock) nexts.push(`${unlock.name} at ${unlock.rank} rank (${unlock.xpNeeded.toLocaleString()} XP)`)
       if (nexts.length) lines.push(`Next: ${nexts.join(" · ")}`)
       lines.push(`/progress`)
       return ok(lines.join("\n"))
@@ -1355,7 +1354,7 @@ async function handle(name: string, ctx: BotCommandCtx): Promise<BotCommandResul
       const xp = profile?.xp ?? 0
       const next = nextRank(xp)
       const nextDisplay = next ? rankDisplay(next.threshold) : null
-      const unlock = nextLockedCosmetic(xp)
+      const unlock = nextRankUnlock(xp)
       const earned = new Set(earnedRows.map((r) => r.badge.name))
       const nextBadge = BADGE_REGISTRY
         .filter((d) => !d.hidden && !earned.has(d.name) && BADGE_RULES[d.name] && !BADGE_RULES[d.name](stats))
@@ -1368,7 +1367,7 @@ async function handle(name: string, ctx: BotCommandCtx): Promise<BotCommandResul
       else lines.push(`${rankDisplay(xp).icon} ${rankDisplay(xp).name} — top rank reached`)
       if (journey?.next) lines.push(`${journey.next.icon} ${journey.next.name} (grow) — ${journey.next.summary}`)
       if (nextBadge) lines.push(`🏅 "${nextBadge.name}" badge — ${nextBadge.requirement}`)
-      if (unlock) lines.push(`🎨 ${unlock.name} — unlocks at ${unlock.unlockedAt.toLocaleString()} XP`)
+      if (unlock) lines.push(`🔓 ${unlock.name} — unlocks at ${unlock.rank} rank (${unlock.xpNeeded.toLocaleString()} XP)`)
       if (questLeft.length) lines.push(`⚡ ${questLeft.length} quest${questLeft.length === 1 ? "" : "s"} left today (+${questLeft.reduce((n, q) => n + q.reward, 0)} XP)`)
       if (streak.streak > 0) lines.push(`🔥 ${streak.streak}-day update streak — keep it alive`)
       if (lines.length === 1) lines.push(`Post a reply or update your diary to start earning.`)

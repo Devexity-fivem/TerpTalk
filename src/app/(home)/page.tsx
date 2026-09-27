@@ -11,6 +11,7 @@ import { getChatTeaser } from "@/lib/chat-activity"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { getMemberHomeData } from "@/lib/member-home"
+import { getGrowerSpotlight } from "@/lib/spotlight"
 import MemberHome from "@/components/member-home"
 import LiveStats from "@/components/live-stats"
 import HeroCta from "@/components/hero-cta"
@@ -154,6 +155,14 @@ const getGrowerOfWeek = unstable_cache(
   { revalidate: 300 }
 )
 
+// Grower Spotlight — the Garden Perk: one eligible member's active public
+// grow featured per ISO week (deterministic pick, cached 1h).
+const getSpotlight = unstable_cache(
+  () => getGrowerSpotlight(),
+  ["home-grower-spotlight"],
+  { revalidate: 3600, tags: ["diaries"] }
+)
+
 // Live-chat teaser for the hero — public-room metadata only, so it is safe
 // to render for guests (no content, no gated/private room data).
 const getChatTeaserData = unstable_cache(
@@ -183,12 +192,13 @@ export default async function Home() {
     // Missing user row (deleted mid-session) — fall through to landing.
   }
 
-  const [stats, { categories, latest, diaryUpdates }, trending, active, growerOfWeek, chatTeaser] = await Promise.all([
+  const [stats, { categories, latest, diaryUpdates }, trending, active, growerOfWeek, spotlight, chatTeaser] = await Promise.all([
     getStats(),
     getLatestDiscussions(),
     getTrendingDiscussions(),
     getActiveMembers(),
     getGrowerOfWeek(),
+    getSpotlight(),
     getChatTeaserData(),
   ])
   return (
@@ -560,6 +570,39 @@ export default async function Home() {
                   className="tt-cta inline-flex items-center gap-1.5 px-4 py-2 text-sm font-semibold rounded-full text-primary-foreground transition-all shrink-0"
                 >
                   View profile <ArrowRight className="w-4 h-4" />
+                </Link>
+              </div>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* Grower Spotlight — a member's live grow featured this week */}
+      {spotlight && (
+        <section className="tt-reveal px-4 sm:px-6 lg:px-8 pb-4">
+          <div className="max-w-7xl mx-auto">
+            <div className="bg-card rounded-2xl border border-border p-6 sm:p-8 overflow-hidden relative">
+              <div className="absolute top-0 right-0 p-3">
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-primary/10 text-primary text-xs font-semibold uppercase tracking-wide">
+                  <Sprout className="w-3.5 h-3.5" />
+                  Grower Spotlight
+                </span>
+              </div>
+              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-5">
+                <Avatar src={spotlight.author.avatarUrl ?? undefined} size="xl" alt={spotlight.author.username} />
+                <div className="flex-1 min-w-0">
+                  <h3 className="font-display text-2xl font-bold mb-1 tracking-tight">{spotlight.diary.title}</h3>
+                  <p className="text-muted-foreground text-sm mb-3 max-w-xl">
+                    by <Link href={`/u/${spotlight.author.username}`} className="text-primary hover:underline inline-flex items-center gap-1">@{spotlight.author.username}<TierChip xp={spotlight.author.xp} publicMilestoneOptOut={false} /></Link>
+                    {spotlight.diary.strain && <> · {spotlight.diary.strain}</>}
+                    {" "}· {spotlight.diary.stage.toLowerCase().replace(/_/g, " ")} stage
+                  </p>
+                </div>
+                <Link
+                  href={diaryPath(spotlight.diary)}
+                  className="tt-cta inline-flex items-center gap-1.5 px-4 py-2 text-sm font-semibold rounded-full text-primary-foreground transition-all shrink-0"
+                >
+                  Follow this grow <ArrowRight className="w-4 h-4" />
                 </Link>
               </div>
             </div>

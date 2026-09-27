@@ -3,6 +3,23 @@ import { prisma } from "@/lib/prisma"
 import { unauthorized, forbidden } from "@/lib/security"
 import { requireAdmin } from "@/lib/require-staff"
 import { isValidUrl, slugify, cleanText } from "@/lib/affiliate"
+import { REP_RANKS } from "@/lib/progression-config"
+
+// Members-only gate fields (Garden Perks). minRank must be a real rank
+// name or empty; publicAt parses to a Date or null.
+function dealGateFields(body: Record<string, unknown>): { ok: true; minRank: string | null; publicAt: Date | null } | { ok: false; error: string } {
+  const minRank = typeof body.minRank === "string" && body.minRank ? body.minRank : null
+  if (minRank && !REP_RANKS.some((r) => r.name === minRank)) {
+    return { ok: false, error: "minRank must be a rank name (or empty for public)" }
+  }
+  let publicAt: Date | null = null
+  if (body.publicAt) {
+    const d = new Date(String(body.publicAt))
+    if (Number.isNaN(d.getTime())) return { ok: false, error: "publicAt must be a valid date" }
+    publicAt = d
+  }
+  return { ok: true, minRank, publicAt }
+}
 import { rateLimit } from "@/lib/rate-limit"
 import { revalidateTag } from "next/cache"
 
@@ -53,6 +70,9 @@ export async function POST(request: Request) {
     }
   }
 
+  const gate = dealGateFields(body)
+  if (!gate.ok) return NextResponse.json({ error: gate.error }, { status: 400 })
+
   const base = slugify(String(name))
   let slug = base
   while (await prisma.affiliateProduct.findUnique({ where: { slug } })) {
@@ -76,6 +96,8 @@ export async function POST(request: Request) {
       promoCode: cleanText(body.promoCode, 40),
       active: body.active !== false,
       featured: !!body.featured,
+      minRank: gate.minRank,
+      publicAt: gate.publicAt,
     },
   })
   revalidateTag("deals", { expire: 0 })
@@ -95,6 +117,11 @@ export async function PATCH(request: Request) {
     }
   }
 
+  const gate = fields.minRank !== undefined || fields.publicAt !== undefined
+    ? dealGateFields(fields)
+    : null
+  if (gate && !gate.ok) return NextResponse.json({ error: gate.error }, { status: 400 })
+
   const product = await prisma.affiliateProduct.update({
     where: { id },
     data: {
@@ -111,6 +138,8 @@ export async function PATCH(request: Request) {
       ...(fields.promoCode !== undefined && { promoCode: cleanText(fields.promoCode, 40) }),
       ...(fields.active !== undefined && { active: !!fields.active }),
       ...(fields.featured !== undefined && { featured: !!fields.featured }),
+      ...(gate?.ok && fields.minRank !== undefined && { minRank: gate.minRank }),
+      ...(gate?.ok && fields.publicAt !== undefined && { publicAt: gate.publicAt }),
     },
   })
   revalidateTag("deals", { expire: 0 })

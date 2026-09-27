@@ -254,8 +254,8 @@ const PERKS = {
 // keep the milestone-badge spine (150/500/1500/3500/7000/15000/30000/50000)
 // so badge progress specs stay aligned, with extra rungs between them so
 // unlocks land every few weeks of normal play instead of months.
-// Cosmetic unlock keys in `benefit` text reference the registries in
-// lib/cosmetics.ts — every advertised reward must exist there.
+// NOTE: legacy `benefit` strings below still describe the retired
+// cosmetics layer — nothing renders them; V2 surfaces read RANK_DISPLAY.
 export const REP_TIERS: ReputationTier[] = [
   { threshold: 0, name: "Seed", color: "text-stone-500", bg: "bg-stone-500/10", icon: "🌰", benefit: "Every grow starts somewhere — post, grow, and share to earn rep.", perks: PERKS.BASE },
   { threshold: 50, name: "Germinated", color: "text-success", bg: "bg-lime-500/10", icon: "🌱", benefit: "Your first unlock lands fast — the Seed Shell avatar frame. Keep tending your garden.", perks: PERKS.GERM },
@@ -443,8 +443,8 @@ export function crossedRungs(oldRep: number, newRep: number): RungCrossing[] {
   }))
 }
 
-// Every cosmetic/checkpoint unlock a rep range grants — used to name the
-// rewards inside a tier-up celebration. Pure list diff over the registries.
+// Legacy tier-up reward descriptor — the cosmetics layer it described is
+// retired; kept for type compatibility with old metadata.
 export interface UnlockedReward {
   kind: "frame" | "title" | "theme"
   key: string

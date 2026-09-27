@@ -27,6 +27,8 @@ const main = async () => {
   const dmD = await createUser("dmd", active)
   const delE = await createUser("dele", active)
   const rlF = await createUser("rlf", active)
+  const phA = await createUser("pha", active) // pinned-harvest, rank-gated
+  const phB = await createUser("phb", active) // pinned-harvest, streak-gated
   const captchaIds = []
   const registeredUsernames = []
 
@@ -344,6 +346,62 @@ const main = async () => {
     r = await callApi("/api/profile", { method: "DELETE", body: { confirmUsername: rlF.username, password: "WrongPass999!" }, cookie: cookieF })
     r.status === 429 ? pass("delete: 4th attempt → 429") : fail("delete: 4th attempt → 429", r.status)
 
+    // ══ Pinned harvest (Garden Perk, HTTP) ═══════════════════════════
+    // PATCH /api/profile { pinnedDiaryId } — the pin unlocks at Harvested
+    // rank (7500 XP) or a 60-day streak marker; the diary must be the
+    // member's own harvested, non-deleted grow.
+    const phCookieA = (await login(phA.username, phA.password)).cookie
+    const phCookieB = (await login(phB.username, phB.password)).cookie
+    const phHarvested = await prisma.growDiary.create({
+      data: { title: "__av ph harvested", description: "x", growType: "INDOOR", startDate: new Date(), authorId: phA.id, harvested: true, harvestedAt: new Date(), visibility: "PUBLIC" },
+      select: { id: true },
+    })
+    const phUnharvested = await prisma.growDiary.create({
+      data: { title: "__av ph live", description: "x", growType: "INDOOR", startDate: new Date(), authorId: phA.id, visibility: "PUBLIC" },
+      select: { id: true },
+    })
+    const phForeign = await prisma.growDiary.create({
+      data: { title: "__av ph foreign", description: "x", growType: "INDOOR", startDate: new Date(), authorId: dmB.id, harvested: true, harvestedAt: new Date(), visibility: "PUBLIC" },
+      select: { id: true },
+    })
+    const pinBody = (v) => ({ pinnedDiaryId: v })
+    const pinCheck = (ok, name, info) => { if (ok) pass(name); else fail(name, info) }
+
+    r = await callApi("/api/profile", { method: "PATCH", body: pinBody(phHarvested.id), cookie: phCookieA })
+    pinCheck(r.status === 403, "pin: below rank, no streak → 403", r.status)
+
+    // Give phA the Harvested threshold on the V2 ledger (keeps xp == SUM).
+    await prisma.$transaction([
+      prisma.progressionEvent.create({ data: { userId: phA.id, type: "STAFF_ADJUSTMENT", xp: 7500, reason: "fixture rank bump" } }),
+      prisma.profile.update({ where: { userId: phA.id }, data: { xp: { increment: 7500 } } }),
+    ])
+
+    r = await callApi("/api/profile", { method: "PATCH", body: pinBody(phForeign.id), cookie: phCookieA })
+    pinCheck(r.status === 400, "pin: someone else's diary → 400", r.status)
+
+    r = await callApi("/api/profile", { method: "PATCH", body: pinBody(phUnharvested.id), cookie: phCookieA })
+    pinCheck(r.status === 400, "pin: unharvested diary → 400", r.status)
+
+    r = await callApi("/api/profile", { method: "PATCH", body: pinBody(phHarvested.id), cookie: phCookieA })
+    const pinnedNow = await prisma.profile.findUnique({ where: { userId: phA.id }, select: { pinnedDiaryId: true } })
+    pinCheck(r.status === 200 && pinnedNow?.pinnedDiaryId === phHarvested.id, "pin: at Harvested rank → 200, pinned", { status: r.status, data: r.data })
+
+    r = await callApi("/api/profile", { method: "PATCH", body: pinBody(null), cookie: phCookieA })
+    const cleared = await prisma.profile.findUnique({ where: { userId: phA.id }, select: { pinnedDiaryId: true } })
+    pinCheck(r.status === 200 && cleared?.pinnedDiaryId === null, "pin: null clears", { status: r.status, data: r.data })
+
+    // Streak route: phB has low XP but a streak:60 marker (0 XP row).
+    await prisma.progressionEvent.create({
+      data: { userId: phB.id, type: "STREAK_MILESTONE", key: `streak:60:${phB.id}`, xp: 0, standing: 0, reason: "fixture streak marker" },
+    })
+    const phBharvest = await prisma.growDiary.create({
+      data: { title: "__av phb harvested", description: "x", growType: "INDOOR", startDate: new Date(), authorId: phB.id, harvested: true, harvestedAt: new Date(), visibility: "PUBLIC" },
+      select: { id: true },
+    })
+    r = await callApi("/api/profile", { method: "PATCH", body: pinBody(phBharvest.id), cookie: phCookieB })
+    const bPinned = await prisma.profile.findUnique({ where: { userId: phB.id }, select: { pinnedDiaryId: true } })
+    pinCheck(r.status === 200 && bPinned?.pinnedDiaryId === phBharvest.id, "pin: 60-day streak, low XP → 200, pinned", { status: r.status, data: r.data })
+
     // ══ Registration CAPTCHA (HTTP) ══════════════════════════════════
     // Headroom: 5 attempts/15min per IP — clear fixture-stale buckets.
     await prisma.rateLimit.deleteMany({ where: { key: { startsWith: "register:" } } }).catch(() => {})
@@ -385,7 +443,7 @@ const main = async () => {
 
     console.log(`\n${results.filter(([s]) => s === "PASS").length} passed, ${results.filter(([s]) => s === "FAIL").length} failed`)
   } finally {
-    for (const u of [userA, userB, userC, userD, dmA, dmB, dmC, dmD, delE, rlF]) {
+    for (const u of [userA, userB, userC, userD, dmA, dmB, dmC, dmD, delE, rlF, phA, phB]) {
       await prisma.user.delete({ where: { id: u.id } }).catch(() => {})
     }
     for (const username of registeredUsernames) {

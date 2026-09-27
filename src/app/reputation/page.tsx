@@ -1,8 +1,6 @@
 import { XP_TABLE, REP_RANKS, RANK_DISPLAY, PROGRESSION_RUNGS, STANDINGS, STANDING_DISPLAY, REFERRAL_MIN_XP, REFERRAL_MIN_AGE_HOURS } from "@/lib/progression-config"
-import { AVATAR_FRAMES, PROFILE_TITLES, PROFILE_THEMES } from "@/lib/cosmetics"
 import { WEEKLY_CHALLENGES } from "@/lib/challenges"
 import { TrendingUp, ShieldCheck, RotateCcw, Sprout, Target } from "lucide-react"
-import Tooltip from "@/components/ui/tooltip"
 import ProgressionPanel from "@/components/progression-panel"
 import type { Metadata } from "next"
 
@@ -133,7 +131,7 @@ export default function ProgressionPage() {
           <h2 className="font-display text-lg font-semibold mb-1">The Path to Master Cultivator</h2>
           <p className="text-xs text-muted-foreground mb-3">
             {REP_RANKS.length} ranks, {PROGRESSION_RUNGS.length} rungs total — every rank unlocks something
-            real: chat rooms, quest slots, polls, nameplates, frames. Grow stages in between keep you
+            real: chat rooms, quest slots, better tools, and Garden Perks. Grow stages in between keep you
             moving. Check in daily to build your garden streak — milestones land at 3, 7, 14,
             30, 60, 100, and 365 days.
           </p>
@@ -154,47 +152,14 @@ export default function ProgressionPage() {
         </div>
 
         <div className="bg-card/80 rounded-2xl border border-border/70 p-4 mb-4">
-          <h2 className="font-display text-lg font-semibold mb-3">Unlockable rewards</h2>
-          <div className="space-y-4">
-            <div>
-              <h3 className="font-display text-sm font-semibold mb-2">Avatar frames</h3>
-              <div className="flex flex-wrap gap-2">
-                {AVATAR_FRAMES.map((f) => (
-                  <Tooltip key={f.key} content={`${f.description} — unlocks at ${f.unlockedAt.toLocaleString()} XP`}>
-                    <span className="inline-flex items-center gap-1.5 text-xs bg-secondary/50 rounded-full px-2.5 py-1">
-                      <span className={`inline-block w-3.5 h-3.5 rounded-full ${f.className.split(" ").filter((c) => c.startsWith("ring")).join(" ")}`} />
-                      {f.name}
-                      <span className="text-muted-foreground">{f.unlockedAt.toLocaleString()}</span>
-                    </span>
-                  </Tooltip>
-                ))}
-              </div>
-            </div>
-            <div>
-              <h3 className="font-display text-sm font-semibold mb-2">Profile titles</h3>
-              <div className="flex flex-wrap gap-2">
-                {PROFILE_TITLES.map((t) => (
-                  <Tooltip key={t.key} content={`${t.description} — unlocks at ${t.unlockedAt.toLocaleString()} XP`}>
-                    <span className="text-xs bg-secondary/50 rounded-full px-2.5 py-1">
-                      {t.name} <span className="text-muted-foreground">{t.unlockedAt.toLocaleString()}</span>
-                    </span>
-                  </Tooltip>
-                ))}
-              </div>
-            </div>
-            <div>
-              <h3 className="font-display text-sm font-semibold mb-2">Profile themes</h3>
-              <div className="flex flex-wrap gap-2">
-                {PROFILE_THEMES.map((t) => (
-                  <Tooltip key={t.key} content={`${t.description} — unlocks at ${t.unlockedAt.toLocaleString()} XP`}>
-                    <span className="text-xs bg-secondary/50 rounded-full px-2.5 py-1">
-                      {t.name} <span className="text-muted-foreground">{t.unlockedAt.toLocaleString()}</span>
-                    </span>
-                  </Tooltip>
-                ))}
-              </div>
-            </div>
-          </div>
+          <h2 className="font-display text-lg font-semibold mb-1">Garden Perks</h2>
+          <p className="text-xs text-muted-foreground">
+            Ranks and streaks unlock real things, not decorations. Reach Harvested rank — or keep a
+            60-day check-in streak — and you can pin your proudest harvest to the top of your profile.
+            At Cured rank or a 100-day streak your active grow can be featured in the Grower Spotlight
+            on the home page. And from Rooted rank up, partner deals on the deals page open to members —
+            the best offers wait for the most experienced growers.
+          </p>
         </div>
 
         <div className="bg-card/80 rounded-2xl border border-border/70 p-4">

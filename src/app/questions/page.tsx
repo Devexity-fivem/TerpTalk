@@ -361,7 +361,7 @@ export default async function QuestionsPage({
                 Plant Doctor
               </h3>
               <p className="text-xs text-muted-foreground mb-3">
-                Not sure what&apos;s wrong? Walk the deterministic symptom checker first — it can hand your diagnosis to the community with context attached.
+                Not sure what&apos;s wrong? Walk the symptom checker first — it can hand your diagnosis to the community with context attached.
               </p>
               <Link
                 href="/plant-doctor"

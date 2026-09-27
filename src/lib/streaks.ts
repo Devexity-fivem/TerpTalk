@@ -12,7 +12,7 @@ import { notify } from "@/lib/notify"
 // V2 (design §10.4 / D6): check-ins pay 0 XP permanently. Milestone
 // crossings write a once-ever STREAK_MILESTONE marker row (keyed
 // streak:<days>:<uid>) — an auditable anchor the utility-reward grants
-// (achievement steps, temp quest slots, cosmetics) attach to — plus a
+// (Garden Perks like pinned harvest and the Spotlight) attach to — plus a
 // notification. No currency moves.
 //
 // Check-in days are read from BOTH ledgers (UNION): legacy DAILY_LOGIN
@@ -86,7 +86,7 @@ export async function evaluateStreaks(userId: string): Promise<number[]> {
     userId,
     type: "REPUTATION",
     title: `${top}-day streak`,
-    content: `Your garden streak hit ${top} days. Keep showing up — streak milestones unlock utility, not XP.`,
+    content: `Your garden streak hit ${top} days. Streaks unlock perks, not XP.`,
     link: "/progress",
     metadata: { kind: "streak", days: top },
   }).catch(() => null)

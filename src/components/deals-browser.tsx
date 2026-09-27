@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { Search, Tag, ExternalLink, Sprout, Wrench } from "lucide-react"
+import { Search, Tag, ExternalLink, Sprout, Wrench, Lock } from "lucide-react"
 
 interface Deal {
   slug: string
@@ -15,6 +15,8 @@ interface Deal {
   featured: boolean
   promoCode: string | null
   partnerName: string
+  /** Rank name when this deal is a members-only teaser for the viewer. */
+  lockedAtRank?: string | null
 }
 
 const SECTIONS = [
@@ -24,6 +26,20 @@ const SECTIONS = [
 ] as const
 
 function DealCard({ p }: { p: Deal }) {
+  // Members-only teaser — name and gate only; no price, code, or link.
+  if (p.lockedAtRank) {
+    return (
+      <div className="bg-card/60 border border-dashed border-border/70 rounded-2xl p-4 flex flex-col">
+        <div className="flex items-center gap-2 flex-wrap">
+          <Lock className="w-3.5 h-3.5 text-muted-foreground" />
+          <h3 className="font-display font-semibold text-sm">{p.name}</h3>
+        </div>
+        <p className="text-xs text-muted-foreground mt-1 flex-1">
+          A members-only deal — unlocks at {p.lockedAtRank} rank.
+        </p>
+      </div>
+    )
+  }
   return (
     <div className={`tt-spotlight bg-card/80 border rounded-2xl p-4 flex flex-col transition-colors hover:border-primary/40 ${p.featured ? "tt-holo-border border-primary/40" : "border-border/70"}`}>
       {p.imageUrl && (

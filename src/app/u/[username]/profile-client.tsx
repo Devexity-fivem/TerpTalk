@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import { useSession } from "next-auth/react"
 import { useParams } from "next/navigation"
-import { User, MessageSquare, MapPin, Globe, Sprout, Dna, Leaf, Store, Flame, ChevronDown, ChevronUp, Bot, Zap, Users, Link2, HandMetal, CalendarClock, TrendingUp, Search, BookOpen, Trophy, BarChart3, AlertTriangle, Megaphone, Wrench, Award } from "lucide-react"
+import { User, MessageSquare, MapPin, Globe, Sprout, Dna, Leaf, Store, Flame, ChevronDown, ChevronUp, Bot, Zap, Users, Link2, HandMetal, CalendarClock, TrendingUp, Search, BookOpen, Trophy, BarChart3, AlertTriangle, Megaphone, Wrench, Award, Pin } from "lucide-react"
 import Link from "next/link"
 import UserActions from "@/components/user-actions"
 import RoleBadge from "@/components/role-badge"
@@ -11,7 +11,6 @@ import AchievementBadge from "@/components/achievement-badge"
 import { Avatar } from "@/components/ui/avatar"
 import Tooltip from "@/components/ui/tooltip"
 import { Skeleton } from "@/components/ui/skeleton"
-import { getAvatarFrame, getProfileTheme } from "@/lib/cosmetics"
 import { diaryPath, setupPath } from "@/lib/slugs"
 import { cn } from "@/lib/utils"
 
@@ -61,10 +60,14 @@ interface PublicProfile {
     percent: number
     remaining: number
   }
-  avatarFrame: string | null
-  profileTitle: string | null
-  customTitle: string | null
-  profileTheme: string | null
+  pinnedHarvest: {
+    id: string
+    slug: string | null
+    title: string
+    strain: string | null
+    harvestedAt: string | null
+    updatedAt: string
+  } | null
   badges: Array<{ name: string; description: string; icon: string | null; pinned: boolean }>
   stats: {
     threadCreator: number
@@ -212,18 +215,16 @@ export default function ProfileClient() {
 
   const { profile, viewerBlocked, viewerFollowing, recentThreads, growDiaries, growSetups, harvestShelf, recentProgression } = data
   const joinDate = new Date(profile.joinDate).toLocaleDateString("en-US", { year: "numeric", month: "long" })
-  const frame = getAvatarFrame(profile.avatarFrame)
-  const theme = getProfileTheme(profile.profileTheme)
   const pinnedBadges = profile.badges.filter((b) => b.pinned)
   const restBadges = profile.badges.filter((b) => !b.pinned)
 
   return (
     <div className="min-h-screen bg-background">
       <div className="max-w-4xl mx-auto px-4 py-8">
-        <div className={cn("bg-card/80 rounded-2xl border p-4 mb-5 overflow-hidden", theme ? theme.borderClass : "border-border/70", theme?.className)}>
+        <div className="bg-card/80 rounded-2xl border border-border/70 p-4 mb-5 overflow-hidden">
           <div className="tt-spectrum-bar -mx-4 -mt-4 mb-4 h-1" />
           <div className="flex items-start gap-4 flex-wrap">
-            <div className={cn("rounded-full shrink-0", frame?.className)}>
+            <div className="rounded-full shrink-0">
               <Avatar
                 src={profile.avatarUrl}
                 alt={`${profile.username} avatar`}
@@ -243,9 +244,6 @@ export default function ProfileClient() {
                           </span>
                         </Tooltip>
                       )}</h1>
-                  {profile.customTitle && (
-                    <p className="text-xs font-semibold uppercase tracking-wider text-warning mb-1">{profile.customTitle}</p>
-                  )}
                   <p className="text-muted-foreground text-sm mb-2 flex items-center gap-2 flex-wrap">
                     <span>{profile.isBot ? "Active since" : "Member since"} {joinDate}</span>
                     {profile.isBot ? (
@@ -411,6 +409,26 @@ export default function ProfileClient() {
                     <Flame className="w-3.5 h-3.5" /> {profile.growStreak}-day grow streak
                   </div>
                 </Tooltip>
+              )}
+              {/* Pinned harvest — the member's chosen finished grow
+                  (Garden Perk). Emitted only while the diary is visible
+                  to this viewer: never deleted, public or own-profile. */}
+              {profile.pinnedHarvest && (
+                <Link
+                  href={diaryPath(profile.pinnedHarvest)}
+                  className="mt-4 block p-3 rounded-xl border border-amber-500/30 bg-amber-500/5 hover:bg-amber-500/10 transition-colors"
+                >
+                  <p className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-warning mb-1">
+                    <Pin className="w-3 h-3" /> Pinned harvest
+                  </p>
+                  <p className="text-sm font-semibold truncate">{profile.pinnedHarvest.title}</p>
+                  <p className="text-xs text-muted-foreground truncate">
+                    {profile.pinnedHarvest.strain ?? "Harvest"}
+                    {profile.pinnedHarvest.harvestedAt && (
+                      <> · {new Date(profile.pinnedHarvest.harvestedAt).toLocaleDateString("en-US", { year: "numeric", month: "short" })}</>
+                    )}
+                  </p>
+                </Link>
               )}
               {/* Most-grown strains — derived from the diaries already on
                   this profile (visibility-scoped upstream), so it only ever
