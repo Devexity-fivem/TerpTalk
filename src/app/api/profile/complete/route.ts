@@ -5,7 +5,8 @@ import { prisma } from "@/lib/prisma"
 import { unauthorized, LIMITS, USERNAME_REGEX, isReservedUsername, getClientIp, logSecurityEvent, isBanned, forbidden, enforceLinkTrust } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
 import { storeImage, deleteImagesIfUnreferenced } from "@/lib/blob"
-import { awardReputation, grantBadge, REP_POINTS } from "@/lib/reputation"
+import { grantBadge } from "@/lib/reputation"
+import { awardProgression } from "@/lib/progression"
 
 export async function POST(request: Request) {
   let newAvatarBlobUrl: string | undefined
@@ -145,7 +146,7 @@ export async function POST(request: Request) {
           bio: true,
           location: true,
           website: true,
-          reputation: true,
+          xp: true,
         },
       })
     } catch (e) {
@@ -167,10 +168,9 @@ export async function POST(request: Request) {
         data: { onboardingCompletedAt: new Date() },
       })
       if (marked.count === 1) {
-        await awardReputation(
+        await awardProgression(
           session.user.id,
           "ONBOARDING_COMPLETE",
-          REP_POINTS.ONBOARDING_COMPLETE,
           "Finished setting up your account",
           { key: `onboard:${session.user.id}` }
         ).catch(() => {})

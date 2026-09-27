@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma"
 import { createHash } from "crypto"
 import { NextResponse } from "next/server"
-import { TRUSTED_LINKS_REP } from "@/lib/reputation-config"
+import { STANDING_LINKS } from "@/lib/progression-config"
 import { TERPBOT_USERNAME } from "@/lib/terpbot-constants"
 
 // ─── Role & status helpers ──────────────────────────────────────────
@@ -84,19 +84,19 @@ export async function enforceLinkTrust(
     ip: getClientIp(request),
     metadata: { endpoint },
   })
-  return forbidden(`New users need 24 hours and ${TRUSTED_LINKS_REP} reputation (Sprout tier) before posting links. Share plain text in the meantime.`)
+  return forbidden(`New users need 24 hours and Known standing (${STANDING_LINKS}) before posting links. Share plain text in the meantime.`)
 }
 
-/** Moderators and users older than 24h who have reached the Sprout tier can post links. */
+/** Moderators and members at "Known" standing (≥25) older than 24h can post links. V2: standing, not the frozen rep balance. */
 export async function isTrustedForLinks(userId: string): Promise<boolean> {
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { role: true, createdAt: true, profile: { select: { reputation: true } } },
+    select: { role: true, createdAt: true, profile: { select: { standing: true } } },
   })
   if (!user) return false
   if (isModerator(user.role)) return true
   const ageHours = (Date.now() - new Date(user.createdAt).getTime()) / (1000 * 60 * 60)
-  return ageHours >= 24 && (user.profile?.reputation ?? 0) >= TRUSTED_LINKS_REP
+  return ageHours >= 24 && (user.profile?.standing ?? 0) >= STANDING_LINKS
 }
 
 /**
@@ -135,21 +135,24 @@ export function rankableProfile() {
   }
 }
 
-// Deterministic leaderboard ordering — reputation desc, then userId asc so
+// Deterministic leaderboard ordering — XP desc, then userId asc so
 // ties never reshuffle between page loads or cache misses.
-export const REPUTATION_ORDER = [
-  { reputation: "desc" as const },
+// V2: reputation is frozen history — live surfaces order by XP.
+export const XP_ORDER = [
+  { xp: "desc" as const },
   { userId: "asc" as const },
 ]
 
 export type TrustLevel = "New Grower" | "Member" | "Established" | "Veteran" | "Expert"
 
-export function getTrustLevel(createdAt: Date | string, reputation: number): TrustLevel {
+// Coarse member-seniority label — age floor + XP thresholds (V2 balance,
+// not the frozen legacy reputation).
+export function getTrustLevel(createdAt: Date | string, xp: number): TrustLevel {
   const ageDays = (Date.now() - new Date(createdAt).getTime()) / (1000 * 60 * 60 * 24)
-  if (ageDays >= 90 && reputation >= 1000) return "Expert"
-  if (ageDays >= 30 && reputation >= 500) return "Veteran"
-  if (ageDays >= 7 && reputation >= 100) return "Established"
-  if (ageDays >= 1 && reputation >= 10) return "Member"
+  if (ageDays >= 90 && xp >= 1000) return "Expert"
+  if (ageDays >= 30 && xp >= 500) return "Veteran"
+  if (ageDays >= 7 && xp >= 100) return "Established"
+  if (ageDays >= 1 && xp >= 10) return "Member"
   return "New Grower"
 }
 
@@ -194,8 +197,10 @@ export function notBlockedAuthor(ids: string[], field = "authorId"): Record<stri
 // password hash, status, lastSeenAt, and role internals.
 // Always use this select for public-facing author/user references.
 
-// `reputation` + `publicMilestoneOptOut` feed the public TierChip — the
-// only two profile fields public identity surfaces need beyond username.
+// `xp` + `publicMilestoneOptOut` feed the public TierChip — the only two
+// profile fields public identity surfaces need beyond username.
+// `reputation` stays selected: it is frozen V1 history read by legacy
+// admin views and trust-signal code, not live progression.
 export const publicUserSelect = {
   id: true,
   name: true,
@@ -205,6 +210,8 @@ export const publicUserSelect = {
     select: {
       username: true,
       reputation: true,
+      xp: true,
+      standing: true,
       publicMilestoneOptOut: true,
     },
   },
@@ -222,7 +229,7 @@ export const chatAuthorSelect = {
   profile: {
     select: {
       username: true,
-      reputation: true,
+      xp: true,
       publicMilestoneOptOut: true,
       avatarFrame: true,
       profileTitle: true,

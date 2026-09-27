@@ -179,7 +179,41 @@ export const XP_TABLE: Record<string, XpSpec> = {
   MENTOR_SESSION: { xp: 5, mastery: "COMMUNITY", label: "Mentored a grower" },
   WEEKLY_AWARD: { xp: 50, mastery: "COMMUNITY", peerGated: true, label: "Grower of the Week" },
   STAFF_ADJUSTMENT: { xp: 0, mastery: null, label: "Staff adjustment" }, // amount passed directly
+
+  // System/sub-engine payouts — amounts passed via opts.xp.
+  DAILY_LOGIN: { xp: 0, mastery: null, label: "Daily check-in" }, // 0 XP permanently (D6) — streak signal only
+  STREAK_MILESTONE: { xp: 0, mastery: null, label: "Check-in streak milestone" }, // marker row — utility rewards only
+  QUEST_DAILY: { xp: 0, mastery: null, label: "Daily quest" },
+  CHALLENGE_WEEKLY: { xp: 0, mastery: "COMMUNITY", label: "Weekly challenge" },
+  ARC_STEP: { xp: 0, mastery: null, label: "Journey step" },
+  ONBOARDING_COMPLETE: { xp: 15, mastery: "CULTIVATION", label: "Completed onboarding" },
 }
+
+// Referral qualification — a referee pays out only once they prove
+// legitimate: this much XP earned on the V2 ledger plus this much age.
+export const REFERRAL_MIN_XP = 25
+export const REFERRAL_MIN_AGE_HOURS = 24
+
+// Member-driven XP types — the weekly-board allowlist. Excludes system
+// payouts (quests, challenges, journeys, contests, referrals, weekly
+// award, milestones, staff) so a machine award can never compound into
+// the following week's ranking.
+export const MEMBER_DRIVEN_XP_TYPES = new Set([
+  "THREAD_STARTED", "REPLY", "SUBSTANTIVE_ANSWER", "NEWCOMER_REPLY", "OP_CURATION",
+  "ACCEPTED_ANSWER", "NEWCOMER_ACCEPT_BONUS",
+  "DIARY_CREATED", "UPDATE_DAY", "UPDATE_RICH", "UPDATE_EXCEPTIONAL",
+  "STAGE_ESTABLISHED", "STAGE_VEGGING", "STAGE_FLOWERING",
+  "HARVEST_LOGGED", "GROW_COMPLETE", "SEASON_FINISHER",
+  "STRUCTURED_CATEGORY", "METRIC_FIRST", "SETUP_SHOWCASE",
+  "STRAIN_PHOTO", "STRAIN_SOURCED", "COVERAGE_MILESTONE", "HARVEST_REPORT",
+  "GUIDE_PUBLISHED", "GUIDE_IMPROVEMENT", "PROBLEM_RESOLVED",
+  "EXPERIMENT_CREATED", "HYPOTHESIS_DOC", "EXPERIMENT_COMPLETED",
+  "FAILURE_DOCUMENTED", "FOLLOWUPS_3", "REPLICATION",
+])
+
+// REVERSAL/REINSTATE are included so the weekly sum is *net* — clawed-back
+// XP stops counting; a reinstated award counts again.
+export const WEEKLY_BOARD_XP_TYPES: string[] = [...MEMBER_DRIVEN_XP_TYPES, "REVERSAL", "REINSTATE"]
 
 // Zero-XP types kept as marker/system rows.
 export const SYSTEM_EVENT_TYPES = new Set([
@@ -233,6 +267,21 @@ export function standingName(standing: number): string {
     else break
   }
   return s
+}
+
+// Presentation metadata for the standing ladder — public trust chips.
+export const STANDING_DISPLAY: Record<string, { icon: string; color: string; bg: string }> = {
+  Unknown: { icon: "🌰", color: "text-stone-500", bg: "bg-stone-500/10" },
+  Known: { icon: "🌱", color: "text-success", bg: "bg-green-500/10" },
+  Trusted: { icon: "🌿", color: "text-success", bg: "bg-emerald-500/10" },
+  Respected: { icon: "🪴", color: "text-cyan-500", bg: "bg-cyan-500/10" },
+  Pillar: { icon: "🏛️", color: "text-purple-500", bg: "bg-purple-500/10" },
+  Elder: { icon: "🌟", color: "text-warning", bg: "bg-amber-500/10" },
+}
+
+export function standingDisplay(standing: number): { name: string; icon: string; color: string; bg: string } {
+  const name = standingName(standing)
+  return { name, ...STANDING_DISPLAY[name] }
 }
 
 export const STANDING_LINKS = 25 // post external links (Known + 24h age)
@@ -316,11 +365,12 @@ export const UNLOCKS: UnlockSpec[] = [
   { id: "historical-trends", name: "Historical trends", category: "analytics", layer: "B", rank: "Cured", mastery: { path: "RECORDS", level: 4 }, blurb: "This grow vs your own seasons — longitudinal self-comparison." },
   { id: "dashboard-advanced", name: "Advanced dashboards + watch → 15", category: "analytics", layer: "A", rank: "Cured", blurb: "Deeper cockpit widgets and more watch rules." },
   { id: "rate-2", name: "Rate ×2, thread tags → 7", category: "capacity", layer: "A", rank: "Cured", blurb: "Top-tier rate limits and richer tagging." },
+  { id: "quest-slot-5", name: "5th daily quest slot", category: "functional", layer: "A", rank: "Cultivator", blurb: "A fifth quest on your board each day." },
 
   // Prestige — C
   { id: "grow-room", name: "The Grow Room", category: "leadership", layer: "C", rank: "Cultivator", standing: 100, blurb: "The trusted growers' room — rank + standing required." },
   { id: "community-evidence", name: "Community evidence views", category: "analytics", layer: "C", rank: "Cultivator", standing: 100, blurb: "Anonymized aggregate patterns across public diaries." },
-  { id: "quest-slot-5", name: "5th quest slot, images → 10", category: "capacity", layer: "A", rank: "Cultivator", blurb: "The full quest board." },
+  { id: "images-10", name: "Images per post → 10", category: "capacity", layer: "A", rank: "Cultivator", blurb: "The full quest board and the richest documentation." },
   { id: "the-vault", name: "The Vault", category: "leadership", layer: "C", rank: "Master Cultivator", standing: 300, blurb: "The apex room — scarce by design." },
   { id: "research-aggregates", name: "Research aggregates", category: "analytics", layer: "B", rank: "Master Cultivator", mastery: { path: "RECORDS", level: 4 }, blurb: "Deeper anonymized community statistics." },
   { id: "early-access", name: "Early access", category: "prestige", layer: "A", rank: "Master Cultivator", blurb: "First look at new features." },
@@ -358,4 +408,112 @@ export function buildTitle(paths: Record<Mastery, number>): { title: string; dom
     "COMMUNITY+EXPERIMENTATION": "Community Experimenter",
   }
   return { title: hybrids[pairKey] ?? `${MASTERY_META[top.m].name} Specialist`, dominant: top.m }
+}
+
+// ─── Public history surface ──────────────────────────────────────────
+// Which event types are shown on a member's public progression history.
+// Everything not listed is staff/owner-only (adjustments, check-in
+// cadence, standing bookkeeping, abuse internals).
+export const PUBLIC_XP_TYPES = new Set<string>([
+  ...Object.keys(XP_TABLE).filter((t) => t !== "DAILY_LOGIN" && t !== "STAFF_ADJUSTMENT"),
+  "MILESTONE",
+  "REVERSAL",
+  "REINSTATE",
+])
+
+// Public-safe label per type — raw `reason` strings can embed titles and
+// usernames, so public surfaces always render these labels instead.
+export function publicXpLabel(type: string): string {
+  switch (type) {
+    case "MILESTONE": return "Reached a grow level"
+    case "REVERSAL": return "XP adjustment"
+    case "REINSTATE": return "XP restored"
+    default: return XP_TABLE[type]?.label ?? "Progression event"
+  }
+}
+
+// ─── Rank presentation ───────────────────────────────────────────────
+// Display metadata per rank — public surfaces (profile tier chip,
+// leaderboard) render these. `benefit` names the headline unlock(s) so
+// "what am I working toward" is always answerable.
+export const RANK_DISPLAY: Record<string, { icon: string; color: string; bg: string; benefit: string; nameplate?: string }> = {
+  Seed: { icon: "🌰", color: "text-stone-500", bg: "bg-stone-500/10", benefit: "Every grow starts somewhere — post, grow, and share to earn XP." },
+  Germinated: { icon: "🌱", color: "text-success", bg: "bg-lime-500/10", benefit: "Streak dashboard and saved searches unlocked." },
+  Seedling: { icon: "🌿", color: "text-success", bg: "bg-green-500/10", benefit: "Grow comparison unlocked — benchmark against community medians.", nameplate: "tt-nameplate-leaf" },
+  Rooted: { icon: "🪴", color: "text-success", bg: "bg-green-600/10", benefit: "Grow templates, saved views, and a 4th daily quest slot.", nameplate: "tt-nameplate-leaf" },
+  Vegged: { icon: "🌲", color: "text-success", bg: "bg-emerald-500/10", benefit: "Environmental and harvest analytics unlocked — grows expand to 6.", nameplate: "tt-nameplate-leaf" },
+  Trained: { icon: "✂️", color: "text-success", bg: "bg-emerald-600/10", benefit: "Export tools, advanced filters, and custom reminders.", nameplate: "tt-nameplate-leaf" },
+  Preflower: { icon: "🌸", color: "text-fuchsia-500", bg: "bg-fuchsia-500/10", benefit: "TerpBot watch rules unlocked — 3 deterministic alert rules.", nameplate: "tt-nameplate-bloom" },
+  Flowering: { icon: "🌺", color: "text-fuchsia-500", bg: "bg-fuchsia-600/10", benefit: "Longitudinal analysis and multi-grow comparison; 6 images per post.", nameplate: "tt-nameplate-bloom" },
+  Ripening: { icon: "🍯", color: "text-amber-500", bg: "bg-amber-500/10", benefit: "Guide authoring and challenge creation open up.", nameplate: "tt-nameplate-bloom" },
+  Harvested: { icon: "🌾", color: "text-warning", bg: "bg-amber-600/10", benefit: "The Grower Cockpit — one command surface for grows, alerts, and quests. Rate ×1.5, 8 images.", nameplate: "tt-nameplate-master" },
+  Cured: { icon: "🏺", color: "text-cyan-500", bg: "bg-cyan-500/10", benefit: "Historical trends, advanced dashboards, and rate ×2.", nameplate: "tt-nameplate-master" },
+  Cultivator: { icon: "🏆", color: "text-purple-500", bg: "bg-purple-500/10", benefit: "The Grow Room unlocks at 100 standing — the trusted growers' room.", nameplate: "tt-nameplate-grand" },
+  "Master Cultivator": { icon: "👑", color: "text-warning", bg: "bg-amber-400/10", benefit: "The Vault at 300 standing, research aggregates, early access, apex cosmetics.", nameplate: "tt-nameplate-gold" },
+}
+
+export function rankDisplay(xp: number): Rank & { icon: string; color: string; bg: string; benefit: string; nameplate?: string } {
+  const rank = rankFromXp(xp)
+  return { ...rank, ...(RANK_DISPLAY[rank.name] ?? RANK_DISPLAY.Seed) }
+}
+
+// Shape-compatible with the legacy getTierProgress — progress toward the
+// next rank as { current: rank threshold, next: next threshold, percent }.
+export function xpRankProgress(xp: number): { current: number; next: number; percent: number } {
+  const { rank, next, pct } = rankProgress(xp)
+  if (!next) return { current: rank.threshold, next: rank.threshold, percent: 100 }
+  return { current: rank.threshold, next: next.threshold, percent: Math.round(pct * 100) }
+}
+
+// Grow Level — 1-based position on the combined rung ladder (rank
+// thresholds + named sub-levels), the frequent feedback layer inside
+// each rank gap. Pure presentation, derived from XP.
+export interface XpStage {
+  level: number
+  rank: Rank
+  stageName: string
+  stageIndex: number
+  stageCount: number
+  stageStart: number
+  stageEnd: number
+}
+
+export function xpStage(xp: number): XpStage {
+  const rank = rankFromXp(xp)
+  const rungs = [
+    { xp: rank.threshold, label: rank.name },
+    ...(REP_SUBLEVELS[rank.name] ?? []).map(([r, label]) => ({ xp: r, label })),
+  ]
+  let stageIndex = 0
+  for (let i = 0; i < rungs.length; i++) {
+    if (xp >= rungs[i].xp) stageIndex = i
+    else break
+  }
+  const stageStart = rungs[stageIndex].xp
+  const stageEnd = rungs[stageIndex + 1]?.xp ?? nextRank(xp)?.threshold ?? stageStart
+  const level = PROGRESSION_RUNGS.findIndex((r) => r.xp === stageStart) + 1
+  return {
+    level,
+    rank,
+    stageName: rungs[stageIndex].label,
+    stageIndex,
+    stageCount: rungs.length,
+    stageStart,
+    stageEnd,
+  }
+}
+
+export function xpStageProgress(xp: number): { current: number; next: number; percent: number; remaining: number } {
+  const stage = xpStage(xp)
+  if (stage.stageEnd <= stage.stageStart) {
+    return { current: xp, next: xp, percent: 100, remaining: 0 }
+  }
+  const range = stage.stageEnd - stage.stageStart
+  const gained = xp - stage.stageStart
+  return {
+    current: gained,
+    next: range,
+    percent: Math.min(100, Math.max(0, Math.round((gained / range) * 100))),
+    remaining: range - gained,
+  }
 }

@@ -94,13 +94,13 @@ export default function MemberHome({ data }: { data: MemberHomeData }) {
               href="/progress"
               className={cn(
                 "tap-target inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold",
-                data.tier.bg,
-                data.tier.color
+                data.rank.bg,
+                data.rank.color
               )}
             >
-              <span aria-hidden="true">{data.tier.icon}</span>
-              Level {data.level} · {data.tier.name}
-              <span className="font-normal opacity-80">· {data.rep} rep</span>
+              <span aria-hidden="true">{data.rank.icon}</span>
+              Level {data.level} · {data.rank.name}
+              <span className="font-normal opacity-80">· {data.xp.toLocaleString()} XP</span>
             </Link>
           </Tooltip>
         </div>
@@ -172,7 +172,7 @@ export default function MemberHome({ data }: { data: MemberHomeData }) {
           <Card
             icon={<Zap className="h-4 w-4 text-warning" />}
             title="Today's quests"
-            tip="Small optional tasks that refresh daily — each pays the listed reputation. Hover a quest to see how to complete it."
+            tip="Small optional tasks that refresh daily — each pays the listed XP. Hover a quest to see how to complete it."
             action={{ href: "/progress", label: "All progress" }}
           >
             {data.quests.length === 0 ? (
@@ -204,7 +204,7 @@ export default function MemberHome({ data }: { data: MemberHomeData }) {
                       {q.done ? (
                         <CheckCircle2 className="h-4 w-4 text-primary" aria-label="Done" />
                       ) : (
-                        <Tooltip content={`+${q.reward} reputation on completion`}>
+                        <Tooltip content={`+${q.reward} XP on completion`}>
                           {`${q.progress}/${q.target} · +${q.reward}`}
                         </Tooltip>
                       )}
@@ -224,7 +224,7 @@ export default function MemberHome({ data }: { data: MemberHomeData }) {
           >
             {data.grows.length === 0 ? (
               <MiniEmpty
-                text="No active grow diary — documenting your grow unlocks journey milestones and rep."
+                text="No active grow diary — documenting your grow unlocks journey milestones and XP."
                 cta={{ href: "/diaries/new", label: "Start your first grow diary" }}
               />
             ) : (

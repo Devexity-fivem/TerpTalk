@@ -33,7 +33,10 @@ import {
   STANDING_GRANTOR_WINDOW_DAYS,
   STANDING_PER_GRANTOR_LIFETIME,
   STANDING_PER_SOURCE_WEEK_CAP,
+  STANDING_POLL_CREATE,
+  STANDING_POLL_VOTE,
   STANDING_RECIPROCAL_WINDOW_DAYS,
+  STANDING_SLOWMODE_EXEMPT,
   STANDING_WEEKLY_CAP,
   STANDINGS,
   UNLOCKS,
@@ -46,6 +49,11 @@ import {
   type UnlockSpec,
 } from "@/lib/progression-config"
 import { TERPBOT_USERNAME } from "@/lib/terpbot-constants"
+import { announceTierUp } from "@/lib/terpbot"
+import { notify } from "@/lib/notify"
+import { cosmeticsUnlockedBetween, nextLockedCosmetic } from "@/lib/cosmetics"
+import { RANK_DISPLAY, xpStage } from "@/lib/progression-config"
+import { rateLimit } from "@/lib/rate-limit"
 
 export {
   MASTERIES,
@@ -85,6 +93,7 @@ export interface ProgressionAwardOptions {
   mastery?: Mastery | null
   meta?: Record<string, unknown> // audit detail — band, dup, standingSource
   force?: boolean // staff adjustments bypass inactive-recipient skip
+  marker?: boolean // write a 0-value audit row even when nothing pays (§6.7)
 }
 
 export interface ProgressionAwardResult {
@@ -168,14 +177,15 @@ function similarity(a: number, b: number): number {
 export async function checkDuplicateContent(
   authorId: string,
   prose: string,
-  opts: { structuredChanged?: boolean; priorTexts?: string[] } = {}
+  opts: { structuredChanged?: boolean; priorTexts?: string[]; excludeId?: string } = {}
 ): Promise<{ verdict: "clean" | "reduced" | "withheld"; similarity: number; matchedSourceId?: string }> {
   if (!prose || prose.trim().length < 40)
     return { verdict: "clean", similarity: 0 }
 
   // Caller may supply texts directly (tests); otherwise scan the author's
-  // recent authored prose.
-  const priorTexts = opts.priorTexts ?? (await loadAuthorProse(authorId))
+  // recent authored prose. excludeId keeps the row being judged from
+  // self-matching at 100%.
+  const priorTexts = opts.priorTexts ?? (await loadAuthorProse(authorId, opts.excludeId))
   if (priorTexts.length === 0) return { verdict: "clean", similarity: 0 }
 
   const h = simhash32(prose)
@@ -189,17 +199,18 @@ export async function checkDuplicateContent(
   return { verdict: "clean", similarity: best }
 }
 
-async function loadAuthorProse(authorId: string): Promise<string[]> {
+async function loadAuthorProse(authorId: string, excludeId?: string): Promise<string[]> {
   const since = new Date(Date.now() - 30 * 86400000)
+  const excl = excludeId ? { id: { not: excludeId } } : {}
   const [posts, updates] = await Promise.all([
     prisma.post.findMany({
-      where: { authorId, createdAt: { gte: since } },
+      where: { authorId, createdAt: { gte: since }, ...excl },
       select: { content: true },
       orderBy: { createdAt: "desc" },
       take: 50,
     }),
     prisma.diaryUpdate.findMany({
-      where: { authorId, createdAt: { gte: since } },
+      where: { authorId, createdAt: { gte: since }, ...excl },
       select: { content: true },
       orderBy: { createdAt: "desc" },
       take: 50,
@@ -478,7 +489,9 @@ export async function awardProgression(
             meta = { ...meta, ...evaluated.meta }
           }
 
-          if (xp === 0 && standing === 0) return "withheld" as const
+          // §6.7: withheld/reduced decisions stay auditable — marker calls
+          // write the 0-value row instead of skipping the write entirely.
+          if (xp === 0 && standing === 0 && !opts.marker) return "withheld" as const
 
           const oldXp = subject.profile!.xp
           const appliedXp = xp < 0 ? -Math.min(-xp, oldXp) : xp
@@ -524,12 +537,14 @@ export async function awardProgression(
 
           // Once-ever milestone markers for crossed rungs.
           const newXp = oldXp + appliedXp
+          const newRungs: { xp: number; label: string; rank: string }[] = []
           if (appliedXp > 0) {
             const rungs = crossedRungs(oldXp, newXp)
             for (const r of rungs) {
               const mkey = `milestone:${userId}:${r.xp}`
               const seen = await tx.progressionEvent.findUnique({ where: { key: mkey }, select: { id: true } })
               if (!seen) {
+                newRungs.push(r)
                 await tx.progressionEvent.create({
                   data: {
                     userId,
@@ -543,12 +558,12 @@ export async function awardProgression(
               }
             }
           }
-          return { oldXp, newXp }
+          return { oldXp, newXp, newRungs }
         },
         needsSerialize ? { isolationLevel: "Serializable" } : undefined
       )
 
-    let txResult: { oldXp: number; newXp: number } | "capped" | "withheld"
+    let txResult: { oldXp: number; newXp: number; newRungs: { xp: number; label: string; rank: string }[] } | "capped" | "withheld"
     try {
       txResult = await runTx()
     } catch (error) {
@@ -561,6 +576,76 @@ export async function awardProgression(
     if (txResult === "capped") return { awarded: false, skippedReason: "capped" }
     if (txResult === "withheld") return { awarded: false, skippedReason: "withheld" }
     const rungsCrossed = xp > 0 ? crossedRungs(txResult.oldXp, txResult.newXp) : []
+
+    // Member-facing milestone notifications — the celebration card reads
+    // the kind/tier/unlocks metadata. Only rungs whose marker row was newly
+    // written this award notify (a re-earn after reversal stays quiet).
+    // Private: opt-out suppresses only the public chat announcement below.
+    if (txResult.newRungs.length > 0) {
+      const rankCrossed = txResult.newRungs.filter((r) => r.label === r.rank)
+      const stageCrossed = txResult.newRungs.filter((r) => r.label !== r.rank)
+      if (rankCrossed.length > 0) {
+        const top = rankCrossed[rankCrossed.length - 1]
+        const disp = RANK_DISPLAY[top.rank]
+        const unlocks = cosmeticsUnlockedBetween(txResult.oldXp, txResult.newXp)
+        const stage = xpStage(txResult.newXp)
+        await notify({
+          userId,
+          type: "REPUTATION",
+          title: `Rank up: ${top.rank}`,
+          content: `You reached ${txResult.newXp.toLocaleString()} XP and became ${top.rank}. ${disp?.benefit ?? ""}`,
+          link: "/reputation",
+          metadata: {
+            kind: "tier",
+            level: stage.level,
+            stageName: stage.stageName,
+            xp: txResult.newXp,
+            tier: disp ? { name: top.rank, icon: disp.icon, color: disp.color, bg: disp.bg } : undefined,
+            unlocks: unlocks.map((u) => ({ kind: u.kind, key: u.key, name: u.name })),
+          },
+        }).catch(() => null)
+      }
+      for (let i = 0; i < stageCrossed.length; i++) {
+        const stage = xpStage(txResult.newXp)
+        const nextUnlock = nextLockedCosmetic(txResult.newXp)
+        await notify({
+          userId,
+          type: "REPUTATION",
+          title: `Grow Level ${stage.level} — ${stage.stageName}`,
+          content: nextUnlock
+            ? `Your garden reached a new stage. Next unlock: ${nextUnlock.name} at ${nextUnlock.unlockedAt.toLocaleString()} XP.`
+            : "Your garden reached a new stage.",
+          link: "/reputation",
+          metadata: {
+            kind: "stage",
+            level: stage.level,
+            stageName: stage.stageName,
+            xp: txResult.newXp,
+            nextUnlock: nextUnlock
+              ? { kind: nextUnlock.kind, key: nextUnlock.key, name: nextUnlock.name, unlockedAt: nextUnlock.unlockedAt }
+              : null,
+          },
+        }).catch(() => null)
+      }
+    }
+
+    // Rank-up announcement — a crossed rung whose label IS the rank name is
+    // a rank threshold (sub-level rungs carry their own labels). Announce
+    // the highest rank reached; opt-out members stay private. Post-tx and
+    // fire-and-forget so a chat failure can never roll back an award.
+    const rankUp = [...rungsCrossed].reverse().find((r) => r.label === r.rank)
+    if (rankUp && subject.profile.username) {
+      void (async () => {
+        const p = await prisma.profile.findUnique({
+          where: { userId },
+          select: { publicMilestoneOptOut: true },
+        })
+        if (!p?.publicMilestoneOptOut) {
+          await announceTierUp(subject.profile!.username, rankUp.rank, txResult.newXp).catch(() => null)
+        }
+      })().catch(() => null)
+    }
+
     return {
       awarded: true,
       xp,
@@ -940,4 +1025,73 @@ export async function unlockStates(userId: string): Promise<(UnlockSpec & { unlo
     const achOk = u.achievement ? earned.has(u.achievement) && stOk : false
     return { ...u, unlocked: (coreOk && stOk) || achOk }
   })
+}
+
+// ─── Enforced perks (locked §8/§9.6) ─────────────────────────────────
+// The V2 replacement for the legacy tier-perk table — one profile read
+// computes every capacity/permission flag the route layer needs. All of
+// these are Layer-A rank gates or standing gates, identical to what
+// hasUnlock evaluates for the matching registry entries.
+export interface ProgressionPerks {
+  pollVoting: boolean // Known (25 standing)
+  pollCreation: boolean // Trusted (100 standing)
+  rateLimitBoost: number // ×1.5 Harvested, ×2 Cured+
+  slowmodeExempt: boolean // Pillar (800 standing)
+  imagesPerPost: number | undefined // 6 Flowering, 8 Harvested, 10 Cultivator
+  maxThreadTags: number | undefined // 7 at Cured (rate-2 bundle)
+  showcaseSlots: number // badge showcase capacity — scales with rank
+  rank: string
+  standing: number
+}
+
+// Pure form — for callers that already loaded xp/standing/unlockFrozen.
+export function progressionPerksFrom(xp: number, standing: number, frozen: boolean): ProgressionPerks {
+  const at = (rankName: string) => !frozen && xp >= (REP_RANKS.find((r) => r.name === rankName)?.threshold ?? Infinity)
+  return {
+    pollVoting: !frozen && standing >= STANDING_POLL_VOTE,
+    pollCreation: !frozen && standing >= STANDING_POLL_CREATE,
+    rateLimitBoost: at("Cured") ? 2 : at("Harvested") ? 1.5 : 1,
+    slowmodeExempt: !frozen && standing >= STANDING_SLOWMODE_EXEMPT,
+    imagesPerPost: at("Cultivator") ? 10 : at("Harvested") ? 8 : at("Flowering") ? 6 : undefined,
+    maxThreadTags: at("Cured") ? 7 : undefined,
+    // Positional mapping from the legacy showcase ladder (3→14).
+    showcaseSlots: at("Master Cultivator") ? 14 : at("Cultivator") ? 12 : at("Cured") ? 10
+      : at("Harvested") ? 8 : at("Ripening") ? 6 : at("Flowering") ? 5 : at("Trained") ? 4 : 3,
+    rank: rankFromXp(xp).name,
+    standing,
+  }
+}
+
+export async function getProgressionPerks(userId: string): Promise<ProgressionPerks> {
+  const profile = await prisma.profile.findUnique({
+    where: { userId },
+    select: { xp: true, standing: true, unlockFrozen: true },
+  })
+  return progressionPerksFrom(profile?.xp ?? 0, profile?.standing ?? 0, profile?.unlockFrozen ?? true)
+}
+
+// rateLimit() scaled by the caller's V2 rank — Harvested+ get a boost.
+export async function progressionRateLimit(userId: string, key: string, baseLimit: number, windowMs: number) {
+  const perks = await getProgressionPerks(userId)
+  const limit = Math.floor(baseLimit * perks.rateLimitBoost)
+  return rateLimit(key, limit, windowMs)
+}
+
+// ─── Reconciliation ──────────────────────────────────────────────────
+
+// Balance/ledger drift check — used by tests and the daily cron. Every
+// row's xp/standing counts (reversedAt is status metadata, the signed
+// REVERSAL counter-row already nets the math), so this is a plain SUM.
+export async function findProgressionDrift(): Promise<{ userId: string; xp: number; standing: number; ledgerXp: number; ledgerStanding: number }[]> {
+  return prisma.$queryRaw<{ userId: string; xp: number; standing: number; ledgerXp: number; ledgerStanding: number }[]>`
+    SELECT p."userId", p.xp, p.standing,
+           COALESCE(s.xp_total, 0)::int AS "ledgerXp",
+           COALESCE(s.st_total, 0)::int AS "ledgerStanding"
+    FROM "Profile" p
+    LEFT JOIN (
+      SELECT "userId", SUM("xp") AS xp_total, SUM("standing") AS st_total
+      FROM "ProgressionEvent"
+      GROUP BY "userId"
+    ) s ON s."userId" = p."userId"
+    WHERE p.xp <> COALESCE(s.xp_total, 0) OR p.standing <> COALESCE(s.st_total, 0)`
 }

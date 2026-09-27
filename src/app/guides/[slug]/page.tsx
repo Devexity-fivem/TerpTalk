@@ -33,7 +33,7 @@ export default async function GuidePage({ params }: { params: Promise<{ slug: st
   const [guide, session] = await Promise.all([
     prisma.guide.findUnique({
       where: { slug },
-      include: { author: { select: { name: true, role: true, banned: true, suspendedUntil: true, profile: { select: { username: true, reputation: true, publicMilestoneOptOut: true } } } } },
+      include: { author: { select: { name: true, role: true, banned: true, suspendedUntil: true, profile: { select: { username: true, xp: true, publicMilestoneOptOut: true } } } } },
     }),
     getServerSession(authOptions),
   ])
@@ -112,7 +112,7 @@ export default async function GuidePage({ params }: { params: Promise<{ slug: st
             <span className="uppercase tracking-wide">{guide.topic}</span>
             <span>·</span>
             {isActiveAuthorRow(guide.author) ? (
-              <span className="inline-flex items-center gap-1">by <Link href={`/u/${guide.author.profile?.username || guide.author.name}`} className="text-primary hover:underline">{guide.author.profile?.username || guide.author.name}</Link> <TierChip reputation={guide.author.profile?.reputation ?? 0} publicMilestoneOptOut={guide.author.profile?.publicMilestoneOptOut} /></span>
+              <span className="inline-flex items-center gap-1">by <Link href={`/u/${guide.author.profile?.username || guide.author.name}`} className="text-primary hover:underline">{guide.author.profile?.username || guide.author.name}</Link> <TierChip xp={guide.author.profile?.xp ?? 0} publicMilestoneOptOut={guide.author.profile?.publicMilestoneOptOut} /></span>
             ) : (
               <span>TerpTalk staff</span>
             )}

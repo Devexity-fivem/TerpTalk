@@ -14,7 +14,7 @@ import TierChip from "@/components/tier-chip"
 import UserPopover from "@/components/user-popover"
 import { Avatar } from "@/components/ui/avatar"
 import { getAvatarFrame, getProfileTitle } from "@/lib/cosmetics"
-import { getReputationTier } from "@/lib/reputation-config"
+import { rankDisplay } from "@/lib/progression-config"
 import { listCommandsForRole } from "@/lib/chat-commands"
 import { getSharedPusher, peekSharedPusher } from "@/lib/pusher-client"
 import {
@@ -51,7 +51,8 @@ interface Room {
   name: string
   slug: string
   description: string
-  requiredRep: number | null
+  requiredXp: number | null
+  unlockText?: string | null
   accessible: boolean
   slowModeSeconds: number
   locked: boolean
@@ -65,7 +66,7 @@ interface Author {
   username?: string | null
   role?: string | null
   image?: string | null
-  reputation?: number | null
+  xp?: number | null
   publicMilestoneOptOut?: boolean | null
   avatarFrame?: string | null
   profileTitle?: string | null
@@ -181,11 +182,11 @@ const MessageRow = memo(function MessageRow({
   // Cosmetics render only for humans — the bot keeps its fixed identity.
   const frame = !isBot ? getAvatarFrame(msg.author.avatarFrame) : null
   const title = !isBot ? getProfileTitle(msg.author.profileTitle) : null
-  // Tier nameplate — the username itself shows rank. Opted-out members
+  // Rank nameplate — the username itself shows rank. Opted-out members
   // (publicMilestoneOptOut) keep the plain style, matching TierChip.
   const nameplateClass = msg.author.publicMilestoneOptOut
     ? null
-    : getReputationTier(msg.author.reputation ?? 0).perks.nameplate ?? null
+    : rankDisplay(msg.author.xp ?? 0).nameplate ?? null
 
   const menuButton = (
     <Tooltip content="Message options">
@@ -435,7 +436,7 @@ const MessageRow = memo(function MessageRow({
           )}
           <RoleBadge role={msg.author.role} />
           <TierChip
-            reputation={msg.author.reputation ?? 0}
+            xp={msg.author.xp ?? 0}
             publicMilestoneOptOut={msg.author.publicMilestoneOptOut}
           />
           {timeEl}
@@ -1185,7 +1186,7 @@ export default function ChatRoom({ embedded = false, headerActions }: ChatRoomPr
                             <span className="text-[10px] text-muted-foreground">{r._count.messages.toLocaleString()} msgs</span>
                           )}
                           {r.accessible === false && (
-                            <span className="text-[10px] text-muted-foreground">{r.requiredRep?.toLocaleString()} rep</span>
+                            <span className="text-[10px] text-muted-foreground">{r.unlockText ?? `${r.requiredXp?.toLocaleString()} XP`}</span>
                           )}
                         </div>
                       </div>
@@ -1237,7 +1238,7 @@ export default function ChatRoom({ embedded = false, headerActions }: ChatRoomPr
                 <Lock className="w-8 h-8 text-warning mx-auto mb-2" />
                 <p className="font-medium text-sm">{room.name} is a members-only room</p>
                 <p className="text-xs text-muted-foreground mt-1">
-                  Unlocks at <span className="text-warning font-medium">{room.requiredRep?.toLocaleString()} reputation</span>
+                  Unlocks at <span className="text-warning font-medium">{room.unlockText ?? `${room.requiredXp?.toLocaleString()} XP`}</span>
                   {room.description ? ` — ${room.description}` : ""}
                 </p>
               </div>

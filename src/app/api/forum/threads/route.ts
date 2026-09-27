@@ -5,8 +5,10 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { unauthorized, publicUserSelect, LIMITS, getClientIp, logSecurityEvent, forbidden, containsExternalLink, isTrustedForLinks, isModerator, isAdmin, isBanned, isStaff } from "@/lib/security"
 import { requireModerator } from "@/lib/require-staff"
-import { awardReputation, repRateLimit, getTierPerks, REP_POINTS, TRUSTED_LINKS_REP, POLL_CREATION_REP } from "@/lib/reputation"
-import { enqueueReversal, drainOne } from "@/lib/reputation-outbox"
+import { progressionRateLimit, getProgressionPerks } from "@/lib/progression"
+import { STANDING_LINKS, STANDING_POLL_CREATE } from "@/lib/progression-config"
+import { awardProgression } from "@/lib/progression"
+import { enqueueXpReversal, drainXpOne } from "@/lib/progression-outbox"
 import { THREAD_MIN_PAID_LENGTH } from "@/lib/reputation-config"
 import { notifyMentions } from "@/lib/mentions"
 import { notifyMany, invalidateNotificationsForLink, postDeepLink } from "@/lib/notify"
@@ -91,10 +93,10 @@ export async function POST(request: Request) {
       )
     }
 
-    // One profile read serves every tier-perk check on this route.
-    const tierPerks = await getTierPerks(session.user.id)
+    // One profile read serves every progression-perk check on this route.
+    const tierPerks = await getProgressionPerks(session.user.id)
 
-    // Head Grower+ can attach up to 7 tags instead of 5.
+    // Cured+ can attach up to 7 tags instead of 5.
     const tagCap = tierPerks.maxThreadTags ?? MAX_TAGS
     if (tagInputs.length > tagCap) {
       return NextResponse.json({ error: `Maximum ${tagCap} tags per thread` }, { status: 400 })
@@ -107,10 +109,10 @@ export async function POST(request: Request) {
 
     let pollData: { question: string; options: { text: string; order: number }[] } | undefined
     if (body.poll && typeof body.poll === "object" && !Array.isArray(body.poll)) {
-      // Poll creation is a Rooted-tier perk (poll *voting* is enforced
-      // separately on the vote route). Staff always can.
+      // Poll creation is a Trusted-standing gate (poll *voting* is
+      // enforced separately on the vote route). Staff always can.
       if (!isStaff(currentUser.role) && !tierPerks.pollCreation) {
-        return forbidden(`Creating polls unlocks at ${POLL_CREATION_REP} reputation (Rooted)`)
+        return forbidden(`Creating polls unlocks at Trusted standing (${STANDING_POLL_CREATE})`)
       }
       const pollInput = body.poll as { question?: unknown; options?: unknown }
       if (typeof pollInput.question !== "string" || !pollInput.question.trim() || pollInput.question.length > 200) {
@@ -132,7 +134,7 @@ export async function POST(request: Request) {
     }
 
     // Rate limit: 10 threads per hour per user (Cultivator+ scale it up)
-    const rl = await repRateLimit(session.user.id, `thread:${session.user.id}`, 10, 60 * 60 * 1000)
+    const rl = await progressionRateLimit(session.user.id, `thread:${session.user.id}`, 10, 60 * 60 * 1000)
     if (!rl.allowed) {
       await logSecurityEvent("RATE_LIMIT_EXCEEDED", {
         userId: session.user.id,
@@ -178,7 +180,7 @@ export async function POST(request: Request) {
         metadata: { endpoint: "forum/threads", title: title.slice(0, 120) },
       })
       return NextResponse.json(
-        { error: `New users need 24 hours and ${TRUSTED_LINKS_REP} reputation (Sprout tier) before posting links. Share plain text in the meantime.` },
+        { error: `New users need 24 hours and Known standing (${STANDING_LINKS}) before posting links. Share plain text in the meantime.` },
         { status: 403 }
       )
     }
@@ -268,12 +270,11 @@ export async function POST(request: Request) {
     })
 
     // Paying floor: threads under ~40 chars still post — they just don't
-    // earn rep. One-word thread spam can't farm the 3/day payout.
+    // earn XP. One-word thread spam can't farm the 3/day payout.
     if (content.trim().length >= THREAD_MIN_PAID_LENGTH) {
-      await awardReputation(
+      await awardProgression(
         session.user.id,
-        "THREAD_CREATED",
-        REP_POINTS.THREAD_CREATED,
+        "THREAD_STARTED",
         `Created thread "${title.slice(0, 60)}"`,
         { key: `thread:${thread.id}`, sourceType: "THREAD", sourceId: thread.id }
       ).catch(() => {})
@@ -430,12 +431,12 @@ export async function DELETE(request: Request) {
       await tx.postImage.deleteMany({
         where: { OR: [{ threadId: id }, { post: { threadId: id } }] },
       })
-      reversalIds.push(await enqueueReversal(tx, {
+      reversalIds.push(await enqueueXpReversal(tx, {
         kind: "SOURCE", sourceType: "THREAD", sourceId: id,
         reason: "Thread removed", requestedBy: session.user.id,
       }))
       for (const p of postIds) {
-        reversalIds.push(await enqueueReversal(tx, {
+        reversalIds.push(await enqueueXpReversal(tx, {
           kind: "SOURCE", sourceType: "POST", sourceId: p.id,
           reason: "Thread removed", requestedBy: session.user.id,
         }))
@@ -461,7 +462,7 @@ export async function DELETE(request: Request) {
 
     // Best-effort immediate drain — preserves the instant-reversal UX while
     // the outbox rows make any failure retryable via ping/cron.
-    for (const rid of reversalIds) await drainOne(rid).catch(() => false)
+    for (const rid of reversalIds) await drainXpOne(rid).catch(() => false)
 
     // Soft-deleted content must not leave live public blobs behind.
     deleteImagesIfUnreferenced([

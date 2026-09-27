@@ -3,7 +3,7 @@ import ChatTeaser from "@/components/chat-teaser"
 import Link from "next/link"
 import { prisma } from "@/lib/prisma"
 import { unstable_cache } from "next/cache"
-import { publicUserSelect, activeAuthor, rankableProfile, REPUTATION_ORDER } from "@/lib/security"
+import { publicUserSelect, activeAuthor, rankableProfile, XP_ORDER } from "@/lib/security"
 import { publicDiaryWhere } from "@/lib/diary-visibility"
 import { diaryPath } from "@/lib/slugs"
 import CannabisLeaf from "@/components/cannabis-leaf"
@@ -132,7 +132,7 @@ const getGrowerOfWeek = unstable_cache(
     // Show the actual weekly-recognition winner — recorded as a keyed
     // WEEKLY_AWARD event — not merely the all-time rep leader. Falls back
     // to the top grower until the first award has been resolved.
-    const award = await prisma.reputationEvent.findFirst({
+    const award = await prisma.progressionEvent.findFirst({
       where: { type: "WEEKLY_AWARD", key: { startsWith: "weekly:gotw:" }, reversedAt: null },
       orderBy: { createdAt: "desc" },
       select: { userId: true },
@@ -146,7 +146,7 @@ const getGrowerOfWeek = unstable_cache(
     }
     return await prisma.profile.findFirst({
       where: { ...rankableProfile(), user: { ...activeAuthor(), role: { not: "ADMINISTRATOR" } } },
-      orderBy: REPUTATION_ORDER,
+      orderBy: XP_ORDER,
       include: { user: { select: { id: true, image: true, createdAt: true } } },
     })
   },
@@ -371,7 +371,7 @@ export default async function Home() {
                       <div className="font-medium text-sm mb-0.5 line-clamp-1">{thread.title}</div>
                       <div className="text-xs text-muted-foreground flex items-center flex-wrap gap-x-2 gap-y-0.5">
                         <span className="text-primary">{thread.category.name}</span>
-                        <span className="inline-flex items-center gap-1">{thread.author.profile?.username || thread.author.name}<TierChip reputation={thread.author.profile?.reputation ?? 0} publicMilestoneOptOut={thread.author.profile?.publicMilestoneOptOut} /></span>
+                        <span className="inline-flex items-center gap-1">{thread.author.profile?.username || thread.author.name}<TierChip xp={thread.author.profile?.xp ?? 0} publicMilestoneOptOut={thread.author.profile?.publicMilestoneOptOut} /></span>
                         <span>{thread.replyCount} repl{thread.replyCount === 1 ? "y" : "ies"}</span>
                       </div>
                     </div>
@@ -412,7 +412,7 @@ export default async function Home() {
                       <div className="font-medium text-sm mb-0.5 line-clamp-1">{update.title}</div>
                       <div className="text-xs text-muted-foreground flex items-center flex-wrap gap-x-2 gap-y-0.5">
                         <span className="text-success">{update.diary.title}</span>
-                        <span className="inline-flex items-center gap-1">{update.author.profile?.username || update.author.name}<TierChip reputation={update.author.profile?.reputation ?? 0} publicMilestoneOptOut={update.author.profile?.publicMilestoneOptOut} /></span>
+                        <span className="inline-flex items-center gap-1">{update.author.profile?.username || update.author.name}<TierChip xp={update.author.profile?.xp ?? 0} publicMilestoneOptOut={update.author.profile?.publicMilestoneOptOut} /></span>
                       </div>
                     </div>
                   </Link>
@@ -545,7 +545,7 @@ export default async function Home() {
                   <div className="flex flex-wrap items-center gap-3 text-sm">
                     <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-primary/10 text-primary font-medium">
                       <Trophy className="w-4 h-4" />
-                      {growerOfWeek.reputation} rep
+                      {growerOfWeek.xp.toLocaleString()} XP
                     </span>
                     {growerOfWeek.favoriteStrain && (
                       <span className="text-muted-foreground">Favorite strain: <span className="text-foreground font-medium">{growerOfWeek.favoriteStrain}</span></span>

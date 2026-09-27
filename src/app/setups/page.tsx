@@ -127,7 +127,7 @@ export default async function SetupsPage({
                           {setup.author.profile?.username || setup.author.name}
                         </Link>
                         <RoleBadge role={setup.author.role} />
-                        <TierChip reputation={setup.author.profile?.reputation ?? 0} publicMilestoneOptOut={setup.author.profile?.publicMilestoneOptOut} />
+                        <TierChip xp={setup.author.profile?.xp ?? 0} publicMilestoneOptOut={setup.author.profile?.publicMilestoneOptOut} />
                       </span>
                       <span className="shrink-0">{setup._count.comments} comments</span>
                     </div>

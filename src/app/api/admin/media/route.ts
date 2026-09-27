@@ -5,6 +5,7 @@ import { forbidden, getClientIp, logSecurityEvent } from "@/lib/security"
 import { deleteImagesIfUnreferenced } from "@/lib/blob"
 import { rateLimit } from "@/lib/rate-limit"
 import { enqueueReversal, drainOne } from "@/lib/reputation-outbox"
+import { enqueueXpReversal, drainXpOne } from "@/lib/progression-outbox"
 
 type MediaType = "post" | "diary" | "setup" | "strain" | "contest" | "avatar"
 
@@ -106,6 +107,7 @@ export async function POST(request: Request) {
 
   let url: string | null = null
   let reversalId: string | null = null
+  let xpReversalId: string | null = null
 
   await prisma.$transaction(async (tx) => {
     switch (type) {
@@ -132,6 +134,10 @@ export async function POST(request: Request) {
           kind: "SOURCE", sourceType: "STRAIN_PHOTO", sourceId: id,
           reason: "Photo removed by staff", requestedBy: admin.id,
         })
+        xpReversalId = await enqueueXpReversal(tx, {
+          kind: "SOURCE", sourceType: "STRAIN_PHOTO", sourceId: id,
+          reason: "Photo removed by staff", requestedBy: admin.id,
+        })
         break
       }
       // Note: only strain photos carry rep (STRAIN_PHOTO awards keyed to the
@@ -155,6 +161,7 @@ export async function POST(request: Request) {
   })
 
   if (reversalId) await drainOne(reversalId).catch(() => false)
+  if (xpReversalId) await drainXpOne(xpReversalId).catch(() => false)
 
   if (url) {
     try {

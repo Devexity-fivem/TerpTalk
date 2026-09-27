@@ -28,7 +28,7 @@ import { JsonLd } from "@/components/json-ld"
 import { AcceptAnswerButton } from "@/components/accept-answer-button"
 import ViewTracker from "@/components/view-tracker"
 import ThreadFollowButton from "@/components/thread-follow-button"
-import { getReputationTier } from "@/lib/reputation-config"
+import { rankDisplay } from "@/lib/progression-config"
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params
@@ -401,14 +401,14 @@ export default async function ThreadPage({
                     className={`font-semibold text-sm hover:text-primary ${
                       thread.author.profile?.publicMilestoneOptOut
                         ? ""
-                        : getReputationTier(thread.author.profile?.reputation ?? 0).perks.nameplate ?? ""
+                        : rankDisplay(thread.author.profile?.xp ?? 0).nameplate ?? ""
                     }`}
                   >
                     {thread.author.profile?.username || thread.author.name}
                   </Link>
                 </UserPopover>
                 <RoleBadge role={thread.author.role} />
-                <TierChip reputation={thread.author.profile?.reputation ?? 0} publicMilestoneOptOut={thread.author.profile?.publicMilestoneOptOut} />
+                <TierChip xp={thread.author.profile?.xp ?? 0} publicMilestoneOptOut={thread.author.profile?.publicMilestoneOptOut} />
               </div>
               <div className="flex items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground flex-wrap mt-0.5">
                 <span className="flex items-center gap-1">
@@ -508,13 +508,13 @@ export default async function ThreadPage({
                       className={`font-semibold hover:text-primary truncate text-sm ${
                         acceptedPost.author.profile?.publicMilestoneOptOut
                           ? ""
-                          : getReputationTier(acceptedPost.author.profile?.reputation ?? 0).perks.nameplate ?? ""
+                          : rankDisplay(acceptedPost.author.profile?.xp ?? 0).nameplate ?? ""
                       }`}
                     >
                       {acceptedPost.author.profile?.username || acceptedPost.author.name}
                     </Link>
                     <RoleBadge role={acceptedPost.author.role} />
-                    <TierChip reputation={acceptedPost.author.profile?.reputation ?? 0} publicMilestoneOptOut={acceptedPost.author.profile?.publicMilestoneOptOut} />
+                    <TierChip xp={acceptedPost.author.profile?.xp ?? 0} publicMilestoneOptOut={acceptedPost.author.profile?.publicMilestoneOptOut} />
                   </div>
                   <span className="text-xs text-muted-foreground shrink-0">
                     {new Date(acceptedPost.createdAt).toLocaleString()}
@@ -607,14 +607,14 @@ export default async function ThreadPage({
                             className={`font-semibold hover:text-primary truncate text-sm ${
                               post.author.profile?.publicMilestoneOptOut
                                 ? ""
-                                : getReputationTier(post.author.profile?.reputation ?? 0).perks.nameplate ?? ""
+                                : rankDisplay(post.author.profile?.xp ?? 0).nameplate ?? ""
                             }`}
                           >
                             {post.author.profile?.username || post.author.name}
                           </Link>
                         </UserPopover>
                         <RoleBadge role={post.author.role} />
-                        <TierChip reputation={post.author.profile?.reputation ?? 0} publicMilestoneOptOut={post.author.profile?.publicMilestoneOptOut} />
+                        <TierChip xp={post.author.profile?.xp ?? 0} publicMilestoneOptOut={post.author.profile?.publicMilestoneOptOut} />
                         {isOp && (
                           <span className="ml-2 text-xs text-muted-foreground">(Original Poster)</span>
                         )}

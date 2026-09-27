@@ -30,6 +30,7 @@ import { applyAccountActionInTx } from "@/lib/moderation"
 import { logSecurityEvent } from "@/lib/security"
 import { recordChatMessage } from "@/lib/reputation"
 import { enqueueReversal, drainOne } from "@/lib/reputation-outbox"
+import { enqueueXpReversal, drainXpOne } from "@/lib/progression-outbox"
 
 type ChatMessageWithAuthor = {
   id: string
@@ -167,6 +168,7 @@ export async function POST(request: NextRequest) {
       durationDays?: number
     ) => {
       const reversalIds: string[] = []
+      const xpReversalIds: string[] = []
       const createdNotification = await prisma.$transaction(async (tx) => {
         const n = await applyAccountActionInTx(tx, {
           actionType,
@@ -178,9 +180,14 @@ export async function POST(request: NextRequest) {
           staffName: displayName,
         })
         // A permanent ban voids reputation the banned account granted
-        // others — durable intent committed atomically with the ban.
+        // others — durable intent committed atomically with the ban, on
+        // both the frozen legacy ledger and the live V2 progression ledger.
         if (actionType === "PERMANENT_BAN") {
           reversalIds.push(await enqueueReversal(tx, {
+            kind: "ACTOR", actorId: targetUserId,
+            reason: "Granting account permanently banned", requestedBy: userId,
+          }))
+          xpReversalIds.push(await enqueueXpReversal(tx, {
             kind: "ACTOR", actorId: targetUserId,
             reason: "Granting account permanently banned", requestedBy: userId,
           }))
@@ -193,6 +200,7 @@ export async function POST(request: NextRequest) {
       }
 
       for (const rid of reversalIds) await drainOne(rid).catch(() => false)
+      for (const rid of xpReversalIds) await drainXpOne(rid).catch(() => false)
 
       await logSecurityEvent("SUSPICIOUS_ACTIVITY", {
         userId,

@@ -6,8 +6,8 @@ import "./db-guard.mjs"
 import { strict as assert } from "node:assert"
 import { prisma } from "@/lib/prisma"
 import { computeGrowJourney, GROW_STAGES, evaluateGrowJourney } from "@/lib/grow-journey"
-import { weekRange, resolveWeeklyRecognition, weeklyBoard, GROWER_OF_THE_WEEK_REP, WEEKLY_BOARD_TYPES } from "@/lib/weekly-recognition"
-import { canAccessRoom, roomAccessInfo, GROW_ROOM_REP, GROW_ROOM_SLUG } from "@/lib/chat-access"
+import { weekRange, resolveWeeklyRecognition, weeklyBoard, GROWER_OF_THE_WEEK_XP, WEEKLY_BOARD_TYPES } from "@/lib/weekly-recognition"
+import { canAccessRoom, roomAccessInfo, GROW_ROOM_XP, GROW_ROOM_SLUG } from "@/lib/chat-access"
 import { getJourneyState, evaluateJourneys } from "@/lib/journeys"
 import { DAILY_QUEST_COUNT } from "@/lib/quests"
 import { isMeaningfulUpdate, MIN_UPDATE_LENGTH } from "@/lib/meaningful-update"
@@ -58,13 +58,13 @@ function updatesOnDays(days: number[], over = {}) {
   return days.map((d) => fakeUpdate({ createdAt: daysAgo(d), ...over }))
 }
 
-async function makeUser(suffix: string, rep = 0) {
+async function makeUser(suffix: string, rep = 0, v2?: { xp: number; standing?: number }) {
   const user = await prisma.user.create({
     data: {
       name: `${T}_${suffix}`,
       ageVerified: true,
       sessionVersion: 1,
-      profile: { create: { username: `${T}_${suffix}`, reputation: rep } },
+      profile: { create: { username: `${T}_${suffix}`, reputation: rep, xp: v2?.xp ?? 0, standing: v2?.standing ?? 0 } },
     },
     select: { id: true },
   })
@@ -72,6 +72,18 @@ async function makeUser(suffix: string, rep = 0) {
     // Ledger-matching seed row — a leaked fixture stays drift-free.
     await prisma.reputationEvent.create({
       data: { userId: user.id, type: REP_EVENT_TYPES.STAFF_ADJUSTMENT, amount: rep, reason: "test seed" },
+    })
+  }
+  if (v2 && (v2.xp !== 0 || v2.standing)) {
+    await prisma.progressionEvent.create({
+      data: {
+        userId: user.id,
+        type: "SEED",
+        xp: v2.xp,
+        standing: v2.standing ?? 0,
+        reason: "test seed",
+        key: `${T}_${suffix}_seed`,
+      },
     })
   }
   return user
@@ -191,17 +203,21 @@ async function main() {
 
   // ─── Config invariants ──────────────────────────────────────────────
   {
-    assert.equal(DAILY_QUEST_COUNT, 2, "two daily quests")
-    assert.equal(GROW_ROOM_REP, 3500, "grow room at Cultivator")
+    assert.equal(DAILY_QUEST_COUNT, 3, "three daily quests")
+    assert.equal(GROW_ROOM_XP, 17000, "grow room at Cultivator")
     assert.equal(getReputationTier(3500).name, "Cultivator")
     assert.equal(GROW_ROOM_SLUG, "grow-room")
     assert.ok(GROW_STAGES[GROW_STAGES.length - 1].key === "COMPLETE")
-    // Weekly board allowlist — member-driven types + REVERSAL only.
+    // Weekly board allowlist — V2 member-driven XP types + net-out rows.
     assert.ok(WEEKLY_BOARD_TYPES.includes("REVERSAL"))
-    assert.ok(WEEKLY_BOARD_TYPES.includes("THREAD_CREATED"))
+    assert.ok(WEEKLY_BOARD_TYPES.includes("REINSTATE"))
+    assert.ok(WEEKLY_BOARD_TYPES.includes("THREAD_STARTED"))
     assert.ok(!WEEKLY_BOARD_TYPES.includes("WEEKLY_AWARD"))
-    assert.ok(!WEEKLY_BOARD_TYPES.includes("BADGE_BONUS"))
-    assert.ok(!WEEKLY_BOARD_TYPES.includes("LEGACY_MIGRATION"))
+    assert.ok(!WEEKLY_BOARD_TYPES.includes("QUEST_DAILY"))
+    assert.ok(!WEEKLY_BOARD_TYPES.includes("CHALLENGE_WEEKLY"))
+    assert.ok(!WEEKLY_BOARD_TYPES.includes("STAFF_ADJUSTMENT"))
+    assert.ok(!WEEKLY_BOARD_TYPES.includes("MILESTONE"))
+    assert.ok(!WEEKLY_BOARD_TYPES.includes("LEGACY_STANDING"))
     console.log("config invariants ok")
   }
 
@@ -268,7 +284,7 @@ async function main() {
 
   // ─── DB: chat room access ───────────────────────────────────────────
   const member = await makeUser("member", 0)
-  const cultivator = await makeUser("cultivator", GROW_ROOM_REP)
+  const cultivator = await makeUser("cultivator", 0, { xp: GROW_ROOM_XP, standing: 100 })
   const staff = await prisma.user.create({
     data: {
       name: `${T}_staff`,
@@ -282,9 +298,9 @@ async function main() {
   const flagRow = await prisma.setting.findUnique({ where: { key: SITE_SETTINGS.GROW_ROOM_ENABLED } })
 
   try {
-    const open = { isPrivate: false, requiredRep: null }
-    const priv = { isPrivate: true, requiredRep: null }
-    const gated = { isPrivate: false, requiredRep: GROW_ROOM_REP }
+    const open = { isPrivate: false, requiredXp: null }
+    const priv = { isPrivate: true, requiredXp: null }
+    const gated = { isPrivate: false, requiredXp: GROW_ROOM_XP, slug: GROW_ROOM_SLUG }
 
     // Open room: everyone.
     assert.equal(await canAccessRoom(member.id, open), true)
@@ -301,12 +317,12 @@ async function main() {
     assert.equal(await canAccessRoom(cultivator.id, gated), false, "flag off locks the room")
     assert.equal(await canAccessRoom(staff.id, gated), true, "staff always pass for moderation")
 
-    // Flag ON: rep gate applies.
+    // Flag ON: xp + standing gate applies.
     await prisma.setting.update({ where: { key: SITE_SETTINGS.GROW_ROOM_ENABLED }, data: { value: "true" } })
     assert.equal(await canAccessRoom(member.id, gated), false, "under threshold denied")
     assert.equal(await canAccessRoom(cultivator.id, gated), true, "at threshold allowed")
-    assert.equal((await roomAccessInfo(member.id, gated)).reason, "rep")
-    assert.equal((await roomAccessInfo(cultivator.id, gated)).reason, "rep")
+    assert.equal((await roomAccessInfo(member.id, gated)).reason, "gated")
+    assert.equal((await roomAccessInfo(cultivator.id, gated)).reason, "gated")
 
     console.log("chat room access ok")
   } finally {
@@ -336,28 +352,28 @@ async function main() {
     net: await makeUser("wnet", 0),
   }
   try {
-    const ev = (userId: string, type: string, amount: number, key: string, day = 1) =>
-      prisma.reputationEvent.create({
-        data: { userId, type, amount, reason: "test", key: `${T}:${key}`, createdAt: netAt(day) },
+    const ev = (userId: string, type: string, xp: number, key: string, day = 1) =>
+      prisma.progressionEvent.create({
+        data: { userId, type, xp, reason: "test", key: `${T}:${key}`, createdAt: netAt(day) },
       })
     // +100 then -100 reversal → net 0 (dropped from board entirely)
-    await ev(wUsers.full.id, "POST_CREATED", 100, "f1")
+    await ev(wUsers.full.id, "REPLY", 100, "f1")
     await ev(wUsers.full.id, "REVERSAL", -100, "f2", 2)
     // +100 then -40 reversal → net 60
-    await ev(wUsers.partial.id, "POST_CREATED", 100, "p1")
+    await ev(wUsers.partial.id, "REPLY", 100, "p1")
     await ev(wUsers.partial.id, "REVERSAL", -40, "p2", 2)
     // +100 +50 -25 → net 125
-    await ev(wUsers.multi.id, "POST_CREATED", 100, "m1")
-    await ev(wUsers.multi.id, "POST_CREATED", 50, "m2")
+    await ev(wUsers.multi.id, "REPLY", 100, "m1")
+    await ev(wUsers.multi.id, "REPLY", 50, "m2")
     await ev(wUsers.multi.id, "REVERSAL", -25, "m3", 2)
     // Excluded types must not count: +100 earned + 1000 staff adj + milestone
-    await ev(wUsers.excl.id, "POST_CREATED", 100, "e1")
+    await ev(wUsers.excl.id, "REPLY", 100, "e1")
     await ev(wUsers.excl.id, "STAFF_ADJUSTMENT", 1000, "e2")
     await ev(wUsers.excl.id, "MILESTONE", 0, "e3")
     // Winner check: gross 1000 reversed down to 300 loses to a clean 500
-    await ev(wUsers.gross.id, "POST_CREATED", 1000, "g1")
+    await ev(wUsers.gross.id, "REPLY", 1000, "g1")
     await ev(wUsers.gross.id, "REVERSAL", -700, "g2", 2)
-    await ev(wUsers.net.id, "POST_CREATED", 500, "n1")
+    await ev(wUsers.net.id, "REPLY", 500, "n1")
 
     const board = await weeklyBoard(netRange.start, netRange.end)
     const earned = (id: string) => board.find((r) => r.userId === id)?.earned
@@ -381,11 +397,11 @@ async function main() {
     // Pick a deep-past week so no real member competes.
     const wk = "2020-W10"
     const range = weekRange(wk)!
-    await prisma.reputationEvent.create({
+    await prisma.progressionEvent.create({
       data: {
         userId: weeklyUser.id,
-        type: "POST_CREATED",
-        amount: 500,
+        type: "REPLY",
+        xp: 500,
         reason: "test weekly win",
         key: `${T}:weekly-seed`,
         createdAt: new Date(range.start.getTime() + DAY),
@@ -393,10 +409,10 @@ async function main() {
     })
     const w1 = await resolveWeeklyRecognition(wk)
     assert.equal(w1?.userId, weeklyUser.id, "weekly winner resolved")
-    const award = await prisma.reputationEvent.findUnique({
+    const award = await prisma.progressionEvent.findUnique({
       where: { key: `weekly:gotw:${wk}:${weeklyUser.id}` },
     })
-    assert.ok(award && award.amount === GROWER_OF_THE_WEEK_REP && !award.reversedAt, "weekly award paid")
+    assert.ok(award && award.xp === GROWER_OF_THE_WEEK_XP && !award.reversedAt, "weekly award paid")
     const badge = await prisma.userBadge.findFirst({
       where: { userId: weeklyUser.id, badge: { name: "Grower of the Week" } },
     })
@@ -405,7 +421,7 @@ async function main() {
     const w2 = await resolveWeeklyRecognition(wk)
     assert.equal(w2?.userId, weeklyUser.id)
     assert.equal(
-      await prisma.reputationEvent.count({ where: { key: `weekly:gotw:${wk}:${weeklyUser.id}` } }),
+      await prisma.progressionEvent.count({ where: { key: `weekly:gotw:${wk}:${weeklyUser.id}` } }),
       1,
       "weekly award idempotent"
     )
@@ -450,13 +466,13 @@ async function main() {
       })
     }
     await evaluateGrowJourney(diaryId)
-    const ev1 = await prisma.reputationEvent.findUnique({
+    const ev1 = await prisma.progressionEvent.findUnique({
       where: { key: `growstage:${diaryId}:ESTABLISHED:${grower.id}` },
     })
-    assert.ok(ev1 && ev1.amount === 10 && !ev1.reversedAt, "ESTABLISHED milestone paid")
+    assert.ok(ev1 && ev1.xp === 15 && !ev1.reversedAt, "ESTABLISHED milestone paid")
     // Idempotent: second evaluation doesn't double-pay.
     await evaluateGrowJourney(diaryId)
-    const count = await prisma.reputationEvent.count({
+    const count = await prisma.progressionEvent.count({
       where: { key: `growstage:${diaryId}:ESTABLISHED:${grower.id}` },
     })
     assert.equal(count, 1, "milestone keyed/idempotent")
@@ -464,7 +480,7 @@ async function main() {
     // Delete the updates → stage regresses → milestone clawed back.
     await prisma.diaryUpdate.deleteMany({ where: { diaryId } })
     await evaluateGrowJourney(diaryId)
-    const ev2 = await prisma.reputationEvent.findUnique({
+    const ev2 = await prisma.progressionEvent.findUnique({
       where: { key: `growstage:${diaryId}:ESTABLISHED:${grower.id}` },
     })
     assert.ok(ev2!.reversedAt, "regressed milestone reversed")
@@ -482,7 +498,7 @@ async function main() {
     const s0 = await getJourneyState(rookie.id)
     assert.ok(s0 && !s0.complete && s0.doneCount === 0, "fresh member at step 0")
     await evaluateJourneys(rookie.id, s0)
-    assert.equal((await prisma.profile.findUnique({ where: { userId: rookie.id } }))!.reputation, 0, "no award before completion")
+    assert.equal((await prisma.profile.findUnique({ where: { userId: rookie.id } }))!.xp, 0, "no award before completion")
 
     // Walk every step: onboarding, thread, like, diary, update, Sprout rep.
     // Dedicated category fixture — the thread step and the completion
@@ -516,26 +532,25 @@ async function main() {
       data: { title: "u", content: "first real update body", stage: "GERMINATION", diaryId: diary.id, authorId: rookie.id },
     })
     await prisma.reaction.create({ data: { userId: rookie.id, type: "LIKE", diaryId: diary.id } })
-    // Seed Sprout-level rep through a real ledger row.
-    const sprout = getTierByName("Sprout")!.threshold
-    await prisma.reputationEvent.create({
-      data: { userId: rookie.id, type: "STAFF_ADJUSTMENT", amount: sprout, reason: "test seed", key: `${T}:seed` },
+    // Seed Seedling-level XP through a real V2 ledger row.
+    await prisma.progressionEvent.create({
+      data: { userId: rookie.id, type: "STAFF_ADJUSTMENT", xp: 180, reason: "test seed", key: `${T}:seed` },
     })
-    await prisma.profile.update({ where: { userId: rookie.id }, data: { reputation: sprout } })
+    await prisma.profile.update({ where: { userId: rookie.id }, data: { xp: 180 } })
 
     const s1 = await getJourneyState(rookie.id)
     assert.ok(s1, "journey state derived")
     assert.equal(s1!.complete, true, `all steps done (got ${s1!.doneCount}/${s1!.steps.length})`)
     await evaluateJourneys(rookie.id, s1)
     await evaluateJourneys(rookie.id, s1) // idempotent
-    const journeyEvents = await prisma.reputationEvent.count({
+    const journeyEvents = await prisma.progressionEvent.count({
       where: { key: `journey:getting-rooted:${rookie.id}` },
     })
     assert.equal(journeyEvents, 1, "journey completion keyed/idempotent")
-    const journeyAward = await prisma.reputationEvent.findUnique({
+    const journeyAward = await prisma.progressionEvent.findUnique({
       where: { key: `journey:getting-rooted:${rookie.id}` },
     })
-    assert.equal(journeyAward!.amount, 25, "journey bundle paid once")
+    assert.equal(journeyAward!.xp, 25, "journey bundle paid once")
 
     console.log("getting rooted journey ok")
   } finally {

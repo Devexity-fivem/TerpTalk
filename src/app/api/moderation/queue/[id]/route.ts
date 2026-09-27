@@ -169,14 +169,15 @@ async function caseActivity(where: { reportId?: string; flagId?: string }) {
 }
 
 // Staff-only subject context. SUPPORT gets the summary card; MODERATOR+ also
-// get suspension state, presence, recent rep events, and moderation history.
+// get suspension state, presence, recent progression events, and moderation history.
 // ipHash/userAgent/security metadata never leave the database.
 async function subjectContext(userId: string, supportOnly: boolean) {
   const profile = await prisma.profile.findUnique({
     where: { userId },
     select: {
       username: true,
-      reputation: true,
+      xp: true,
+      standing: true,
       user: {
         select: {
           id: true, role: true, banned: true, bannedReason: true,
@@ -197,17 +198,18 @@ async function subjectContext(userId: string, supportOnly: boolean) {
     role: profile.user.role,
     banned: profile.user.banned,
     joined: profile.user.createdAt,
-    reputation: profile.reputation,
+    xp: profile.xp,
+    standing: profile.standing,
     openReports,
   }
   if (supportOnly) return base
 
   const [repEvents, modHistory, openFlags] = await Promise.all([
-    prisma.reputationEvent.findMany({
+    prisma.progressionEvent.findMany({
       where: { userId },
       orderBy: { createdAt: "desc" },
       take: 5,
-      select: { id: true, type: true, amount: true, reason: true, reversedAt: true, createdAt: true },
+      select: { id: true, type: true, xp: true, standing: true, reason: true, reversedAt: true, createdAt: true },
     }),
     prisma.moderationAction.findMany({
       where: { targetUserId: userId },
@@ -226,7 +228,7 @@ async function subjectContext(userId: string, supportOnly: boolean) {
     suspendedUntil: profile.user.suspendedUntil,
     lastSeen: profile.user.lastSeenAt,
     openFlags,
-    recentReputation: repEvents,
+    recentProgression: repEvents,
     recentActions: modHistory.map((a) => ({
       id: a.id, type: a.type, reason: a.reason,
       moderator: a.moderator?.profile?.username ?? a.moderatorName ?? "unknown",

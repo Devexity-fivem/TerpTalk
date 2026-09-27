@@ -4,7 +4,8 @@
 import { prisma } from "@/lib/prisma"
 import { publicUserSelect, activeAuthor } from "@/lib/security"
 import { publicDiaryWhere } from "@/lib/diary-visibility"
-import { awardReputation, grantBadge, REP_POINTS } from "@/lib/reputation"
+import { grantBadge } from "@/lib/reputation"
+import { awardProgression } from "@/lib/progression"
 import { revalidateTag } from "next/cache"
 
 // Banned/suspended winners are skipped; ties break to the earliest entry
@@ -21,13 +22,11 @@ export async function resolveWeeklyWinner(week: string) {
     link: "/contest",
   })
   await awardFinalists("weekly", week, top.userId)
-  // Winner reputation — keyed per period so re-resolution can never
-  // double-pay. awardReputation (not apply) so tier/stage/badge side
-  // effects fire for contest wins too.
-  await awardReputation(
+  // Winner award — keyed per period so re-resolution can never
+  // double-pay. V2 event: 50 XP + 10 standing (peer-gated, spec table).
+  await awardProgression(
     top.userId,
     "CONTEST_WEEKLY_WIN",
-    REP_POINTS.CONTEST_WEEKLY_WIN,
     "Won Budshot of the Week",
     { key: `contestwin:${week}:${top.userId}`, sourceType: "CONTEST", sourceId: week }
   ).catch(() => null)
@@ -52,10 +51,9 @@ export async function resolveMonthlyDiaryWinner(month: string) {
     link: "/contest",
   })
   await awardFinalists("monthly", month, top.userId)
-  await awardReputation(
+  await awardProgression(
     top.userId,
     "CONTEST_MONTHLY_WIN",
-    REP_POINTS.CONTEST_MONTHLY_WIN,
     "Won Diary of the Month",
     { key: `dcontestwin:${month}:${top.userId}`, sourceType: "CONTEST", sourceId: month }
   ).catch(() => null)

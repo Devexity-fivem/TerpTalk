@@ -5,7 +5,7 @@
 // room activity). No new models, no new realtime, no polling.
 import { prisma } from "@/lib/prisma"
 import { activeAuthor, publicUserSelect } from "@/lib/security"
-import { REP_LADDER, getRepStage, getNextTier } from "@/lib/reputation-config"
+import { PROGRESSION_RUNGS, xpStage, nextRank, rankDisplay } from "@/lib/progression-config"
 import { getQuestProgress } from "@/lib/quests"
 import { getJourneyState } from "@/lib/journeys"
 import { getGrowJourney, GROW_STAGES, type GrowJourneyState } from "@/lib/grow-journey"
@@ -26,8 +26,9 @@ export interface MemberHomeData {
   displayName: string
   level: number
   maxLevel: number
-  rep: number
-  tier: { name: string; icon: string; color: string; bg: string }
+  xp: number
+  standing: number
+  rank: { name: string; icon: string; color: string; bg: string }
   nextAction: NextAction
   quests: {
     slug: string
@@ -117,7 +118,7 @@ export async function getMemberHomeData(userId: string): Promise<MemberHomeData 
         where: { id: userId },
         select: {
           name: true,
-          profile: { select: { username: true, reputation: true } },
+          profile: { select: { username: true, xp: true, standing: true } },
         },
       }),
       getQuestProgress(userId),
@@ -243,9 +244,10 @@ export async function getMemberHomeData(userId: string): Promise<MemberHomeData 
     (f) => f.thread.lastActivityAt > (f.lastSeenAt ?? new Date(0))
   )
 
-  const rep = user.profile?.reputation ?? 0
-  const stage = getRepStage(rep)
-  const nextTier = getNextTier(rep)
+  const xp = user.profile?.xp ?? 0
+  const stage = xpStage(xp)
+  const next = nextRank(xp)
+  const rank = rankDisplay(xp)
 
   // Journey states + deterministic intel for the member's active grows —
   // bounded at 3 diaries (each getGrowIntel is 3 indexed queries).
@@ -401,15 +403,16 @@ export async function getMemberHomeData(userId: string): Promise<MemberHomeData 
   return {
     displayName: user.profile?.username || user.name || "grower",
     level: stage.level,
-    maxLevel: REP_LADDER.length,
-    rep,
-    tier: {
-      name: stage.tier.name,
-      icon: stage.tier.icon,
-      color: stage.tier.color,
-      bg: stage.tier.bg,
+    maxLevel: PROGRESSION_RUNGS.length,
+    xp,
+    standing: user.profile?.standing ?? 0,
+    rank: {
+      name: rank.name,
+      icon: rank.icon,
+      color: rank.color,
+      bg: rank.bg,
     },
-    nextAction: pickNextAction({ journey, rep, nextTier, staleDiary, quests }),
+    nextAction: pickNextAction({ journey, xp, nextRank: next, staleDiary, quests }),
     quests: quests.slice(0, 3).map((q) => ({
       slug: q.slug,
       title: q.title,

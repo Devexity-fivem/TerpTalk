@@ -10,7 +10,7 @@ import Tooltip, { InfoTip } from "@/components/ui/tooltip"
 type Field = "avatarFrame" | "profileTitle" | "profileTheme"
 
 interface CosmeticsPanelProps {
-  reputation: number
+  xp: number
   equipped: Record<Field, string | null>
   onSaved: (p: Record<Field, string | null>) => void
 }
@@ -18,14 +18,14 @@ interface CosmeticsPanelProps {
 interface RowProps {
   items: { key: string; name: string; unlockedAt: number }[]
   field: Field
-  reputation: number
+  xp: number
   equipped: string | null
   saving: boolean
   onEquip: (field: Field, key: string | null) => void
   render?: (item: { key: string; name: string; unlockedAt: number }) => React.ReactNode
 }
 
-function Row({ items, field, reputation, equipped, saving, onEquip, render }: RowProps) {
+function Row({ items, field, xp, equipped, saving, onEquip, render }: RowProps) {
   return (
     <div className="flex flex-wrap gap-1.5">
       <button
@@ -39,7 +39,7 @@ function Row({ items, field, reputation, equipped, saving, onEquip, render }: Ro
         None
       </button>
       {items.map((item) => {
-        const locked = reputation < item.unlockedAt
+        const locked = xp < item.unlockedAt
         const active = equipped === item.key
         const button = (
           <button
@@ -62,7 +62,7 @@ function Row({ items, field, reputation, equipped, saving, onEquip, render }: Ro
         // requirement. The disabled button can't fire hover itself, so the
         // tooltip wraps it (spans still receive pointer events).
         return locked ? (
-          <Tooltip key={item.key} content={`Unlocks at ${item.unlockedAt.toLocaleString()} rep (${unlockTierName(item.unlockedAt)})`}>
+          <Tooltip key={item.key} content={`Unlocks at ${item.unlockedAt.toLocaleString()} XP (${unlockTierName(item.unlockedAt)})`}>
             {button}
           </Tooltip>
         ) : (
@@ -74,7 +74,7 @@ function Row({ items, field, reputation, equipped, saving, onEquip, render }: Ro
 }
 
 // Cosmetic equip panel — registry keys only, server re-validates unlocks.
-export default function CosmeticsPanel({ reputation, equipped, onSaved }: CosmeticsPanelProps) {
+export default function CosmeticsPanel({ xp, equipped, onSaved }: CosmeticsPanelProps) {
   const { toast } = useToast()
   const [saving, setSaving] = useState<string | null>(null)
 
@@ -101,9 +101,9 @@ export default function CosmeticsPanel({ reputation, equipped, onSaved }: Cosmet
       <div className="flex items-center gap-2 mb-1">
         <Palette className="w-5 h-5 text-primary" />
         <h2 className="font-display text-lg font-semibold">Your Rewards</h2>
-        <InfoTip content="Cosmetic rewards unlock automatically as your reputation grows — no claiming needed. Equip them here and they show up on your profile and posts." />
+        <InfoTip content="Cosmetic rewards unlock automatically as your XP grows — no claiming needed. Equip them here and they show up on your profile and posts." />
       </div>
-      <p className="text-xs text-muted-foreground mb-4">Unlocked by reputation. Higher tiers unlock rarer looks.</p>
+      <p className="text-xs text-muted-foreground mb-4">Unlocked by XP. Higher ranks unlock rarer looks.</p>
       <div className="space-y-4">
         <div>
           <h3 className="flex items-center gap-1.5 text-sm font-medium mb-2">
@@ -113,7 +113,7 @@ export default function CosmeticsPanel({ reputation, equipped, onSaved }: Cosmet
           <Row
             items={AVATAR_FRAMES}
             field="avatarFrame"
-            reputation={reputation}
+            xp={xp}
             equipped={equipped.avatarFrame}
             saving={saving !== null}
             onEquip={equip}
@@ -133,7 +133,7 @@ export default function CosmeticsPanel({ reputation, equipped, onSaved }: Cosmet
           <Row
             items={PROFILE_TITLES}
             field="profileTitle"
-            reputation={reputation}
+            xp={xp}
             equipped={equipped.profileTitle}
             saving={saving !== null}
             onEquip={equip}
@@ -147,7 +147,7 @@ export default function CosmeticsPanel({ reputation, equipped, onSaved }: Cosmet
           <Row
             items={PROFILE_THEMES}
             field="profileTheme"
-            reputation={reputation}
+            xp={xp}
             equipped={equipped.profileTheme}
             saving={saving !== null}
             onEquip={equip}

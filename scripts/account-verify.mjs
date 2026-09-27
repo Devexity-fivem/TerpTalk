@@ -32,9 +32,9 @@ const main = async () => {
 
   try {
     // give B an avatar+bio so it's eligible for the suggestion pool
-    await prisma.profile.update({ where: { userId: userB.id }, data: { bio: "verification target", reputation: 5 } })
-    await prisma.reputationEvent.create({
-      data: { userId: userB.id, type: "STAFF_ADJUSTMENT", amount: 5, reason: "test seed" },
+    await prisma.profile.update({ where: { userId: userB.id }, data: { bio: "verification target", xp: 5 } })
+    await prisma.progressionEvent.create({
+      data: { userId: userB.id, type: "STAFF_ADJUSTMENT", xp: 5, reason: "test seed" },
     })
 
     const { cookie, session } = await login(userA.username, userA.password)
@@ -293,7 +293,8 @@ const main = async () => {
     r = await callApi("/api/profile", { method: "DELETE", body: { confirmUsername: `${delE.username}_nope`, password: delE.password }, cookie: cookieE })
     r.status === 400 ? pass("delete: mismatched confirmUsername → 400") : fail("delete: mismatched confirmUsername → 400", r.status)
 
-    // Ledger fixture: a post E made + matching reputation event/award.
+    // Ledger fixture: a post E made + matching events on both ledgers —
+    // legacy reputation row and a live V2 progression award.
     const cat = await prisma.category.findFirst({ where: { hidden: false }, select: { id: true } })
     const eThread = await prisma.thread.create({
       data: { title: `__av del thread`, slug: `__av-del-${Date.now().toString(36)}`, content: "x", authorId: delE.id, categoryId: cat.id },
@@ -308,6 +309,10 @@ const main = async () => {
         data: { userId: delE.id, type: "POST_CREATED", amount: 5, reason: "fixture", sourceType: "POST", sourceId: ePost.id },
       }),
       prisma.profile.update({ where: { userId: delE.id }, data: { reputation: { increment: 5 } } }),
+      prisma.progressionEvent.create({
+        data: { userId: delE.id, type: "POST_CREATED", xp: 2, reason: "fixture", sourceType: "POST", sourceId: ePost.id },
+      }),
+      prisma.profile.update({ where: { userId: delE.id }, data: { xp: { increment: 2 } } }),
     ])
 
     // Correct deletion — confirmUsername in different case proves insensitive match
@@ -321,6 +326,8 @@ const main = async () => {
     eGone === null ? pass("delete: user row gone (hard delete)") : fail("delete: user row gone", eGone)
     const pending = await prisma.pendingReversal.count({ where: { sourceId: ePost.id } })
     pending === 0 ? pass("delete: pending reversal drained for owned post") : fail("delete: pending reversal drained", pending)
+    const xpPending = await prisma.pendingXpReversal.count({ where: { sourceId: ePost.id } })
+    xpPending === 0 ? pass("delete: V2 pending reversal drained for owned post") : fail("delete: V2 pending reversal drained", xpPending)
 
     // Old cookie must no longer resolve a session
     r = await callApi("/api/messages?unread=1", { cookie: cookieE })

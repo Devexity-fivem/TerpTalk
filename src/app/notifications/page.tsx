@@ -73,7 +73,7 @@ const TYPE_LABELS: Record<string, string> = {
   DIRECT_MESSAGE: "Message",
   ACCEPTED_ANSWER: "Accepted answer",
   BADGE: "Badge",
-  REPUTATION: "Reputation",
+  REPUTATION: "Progression",
   REFERRAL: "Referral",
   MODERATOR_ANNOUNCEMENT: "Announcement",
   BOT_ASSIST: "Bot assist",
@@ -353,7 +353,7 @@ export default function NotificationsPage() {
                       : activeGroup === "grows"
                         ? "Updates from followed diaries and TerpBot insights will appear here."
                         : activeGroup === "progress"
-                          ? "Badge unlocks, reputation changes, and quest progress will appear here."
+                          ? "Badge unlocks, XP changes, and quest progress will appear here."
                           : "System and moderation notices will appear here."
                 }
               />

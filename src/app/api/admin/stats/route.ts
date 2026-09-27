@@ -3,7 +3,7 @@ import { requireAdmin } from "@/lib/require-staff"
 import { prisma } from "@/lib/prisma"
 import { forbidden } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
-import { REFERRAL_MIN_AGE_HOURS, REFERRAL_MIN_REP } from "@/lib/reputation-config"
+import { REFERRAL_MIN_AGE_HOURS, REFERRAL_MIN_XP } from "@/lib/referrals"
 
 const ALLOWED_RANGES = new Set(["today", "7", "30", "all"])
 
@@ -99,30 +99,35 @@ export async function GET(request: Request) {
   ])
 
   // ── Referral diagnostic ─────────────────────────────────────────
-  // Mirrors reconcileReferralPayouts eligibility exactly so the dashboard
-  // can distinguish: new referral vs paid (keyed) vs legacy (unkeyed) vs
-  // reversed vs eligible-but-unpaid. Same constants, same active-event test.
+  // Mirrors the V2 reconcileReferralPayouts eligibility exactly so the
+  // dashboard can distinguish: new referral vs paid (keyed) vs legacy
+  // (unkeyed) vs reversed vs eligible-but-unpaid. Same constants, same
+  // active-event test.
   const referralCutoff = new Date(now.getTime() - REFERRAL_MIN_AGE_HOURS * 60 * 60 * 1000)
-  const [referredProfiles, referralEvents, eligibleCandidates] = await Promise.all([
+  const [referredProfiles, referralEvents, legacyReferralEvents, eligibleCandidates] = await Promise.all([
     prisma.profile.count({ where: { referredById: { not: null } } }),
-    prisma.reputationEvent.findMany({
+    prisma.progressionEvent.findMany({
       where: { type: "REFERRAL" },
-      select: { key: true, userId: true, amount: true, reversedAt: true, createdAt: true },
+      select: { key: true, userId: true, xp: true, reversedAt: true, createdAt: true },
+    }),
+    prisma.reputationEvent.findMany({
+      where: { type: "REFERRAL", key: null, reversedAt: null },
+      select: { userId: true, createdAt: true },
     }),
     prisma.profile.findMany({
       where: {
         referredById: { not: null },
-        reputation: { gte: REFERRAL_MIN_REP },
+        xp: { gte: REFERRAL_MIN_XP },
         user: { createdAt: { lte: referralCutoff } },
       },
       select: {
-        userId: true, username: true, reputation: true, referredById: true,
+        userId: true, username: true, xp: true, referredById: true,
         user: { select: { createdAt: true } },
       },
       take: 50,
     }),
   ])
-  // Same gates as payReferralBonus: keyed payout, legacy unkeyed payout
+  // Same gates as payReferralBonus: keyed V2 payout, legacy unkeyed payout
   // (unkeyed REFERRAL on the referrer stamped at referee signup time), and
   // self-referrals all count as settled.
   const referrerIds = [...new Set(eligibleCandidates.map((c) => c.referredById).filter((x): x is string => !!x))]
@@ -133,7 +138,7 @@ export async function GET(request: Request) {
   const paidKeys = new Set(
     referralEvents.filter((e) => e.key && !e.reversedAt).map((e) => e.key)
   )
-  const legacyEvents = referralEvents.filter((e) => !e.key && !e.reversedAt)
+  const legacyEvents = legacyReferralEvents
   const eligibleUnpaid = eligibleCandidates.filter((c) => {
     if (paidKeys.has(`referral:${c.userId}`)) return false
     const referrerUserId = c.referredById ? refUserByProfileId.get(c.referredById) : undefined
@@ -182,9 +187,9 @@ export async function GET(request: Request) {
       referrals: {
         referredProfiles,
         paidKeyed: referralEvents.filter((e) => e.key && !e.reversedAt).length,
-        legacyUnkeyed: referralEvents.filter((e) => !e.key && !e.reversedAt).length,
+        legacyUnkeyed: legacyReferralEvents.length,
         reversed: referralEvents.filter((e) => e.reversedAt).length,
-        eligibleUnpaid: eligibleUnpaid.map((c) => ({ username: c.username, reputation: c.reputation })),
+        eligibleUnpaid: eligibleUnpaid.map((c) => ({ username: c.username, xp: c.xp })),
       },
       cron: {
         date: dayKeys[0],

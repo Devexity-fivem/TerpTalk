@@ -4,13 +4,14 @@ import { sessionCookieName } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { blockExistsBetween, getClientIp, hashIp, isSessionValid } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
-import { PUBLIC_REP_TYPES, publicRepLabel, getReputationTier, getTierProgress } from "@/lib/reputation-config"
+import { PUBLIC_XP_TYPES, publicXpLabel, rankDisplay, xpRankProgress, standingName } from "@/lib/progression-config"
 import { TERPBOT_USERNAME } from "@/lib/terpbot-constants"
 
-// GET — public, sanitized reputation history for a member. Only shows event
-// types in PUBLIC_REP_TYPES, uses safe labels instead of raw reasons (which
-// can embed titles/usernames), and never exposes actor or staff details.
-// Reversed events still appear (marked) — transparency about the record.
+// GET — public, sanitized progression history for a member. Only shows
+// event types in PUBLIC_XP_TYPES, uses safe labels instead of raw
+// reasons (which can embed titles/usernames), and never exposes actor or
+// staff details. Reversed events still appear (marked) — transparency
+// about the record.
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ username: string }> }
@@ -35,7 +36,7 @@ export async function GET(
         // hidden, and milestone opt-out covers this recognition surface too.
         user: { banned: false, OR: [{ suspendedUntil: null }, { suspendedUntil: { lte: new Date() } }] },
       },
-      select: { userId: true, reputation: true, publicMilestoneOptOut: true },
+      select: { userId: true, xp: true, standing: true, publicMilestoneOptOut: true },
     })
     if (!profile || username.toLowerCase() === TERPBOT_USERNAME) {
       return NextResponse.json({ error: "User not found" }, { status: 404 })
@@ -47,7 +48,7 @@ export async function GET(
     }
 
     // Same block policy as the public profile endpoint — a member who
-    // blocked the viewer doesn't expose their rep history to them.
+    // blocked the viewer doesn't expose their history to them.
     const token = await getToken({ req: request, secret: process.env.NEXTAUTH_SECRET, cookieName: sessionCookieName })
     let viewerId = token?.id as string | undefined
     if (viewerId && !(await isSessionValid(viewerId, token?.sessionVersion as number | undefined))) {
@@ -60,10 +61,10 @@ export async function GET(
     const { searchParams } = new URL(request.url)
     const cursor = searchParams.get("cursor") || undefined
 
-    const events = await prisma.reputationEvent.findMany({
+    const events = await prisma.progressionEvent.findMany({
       where: {
         userId: profile.userId,
-        type: { in: [...PUBLIC_REP_TYPES] },
+        type: { in: [...PUBLIC_XP_TYPES] },
         // A reversal's counter-entry shows; the reversed original is stamped
         // with reversedAt and still listed so the record reads honestly.
       },
@@ -74,22 +75,24 @@ export async function GET(
     const hasMore = events.length > 25
     const page = hasMore ? events.slice(0, 25) : events
 
-    const tier = getReputationTier(profile.reputation)
+    const rank = rankDisplay(profile.xp)
     return NextResponse.json({
-      reputation: profile.reputation,
-      tier: { name: tier.name, icon: tier.icon, color: tier.color },
-      progress: getTierProgress(profile.reputation),
+      xp: profile.xp,
+      standing: profile.standing,
+      rank: { name: rank.name, icon: rank.icon, color: rank.color },
+      standingTier: standingName(profile.standing),
+      progress: xpRankProgress(profile.xp),
       events: page.map((e) => ({
         id: e.id,
-        label: publicRepLabel(e.type),
-        amount: e.amount,
+        label: publicXpLabel(e.type),
+        amount: e.xp !== 0 ? e.xp : e.standing,
         reversed: !!e.reversedAt,
         createdAt: e.createdAt,
       })),
       nextCursor: hasMore ? page[page.length - 1].id : null,
     })
   } catch (error) {
-    console.error("Reputation history error:", error)
+    console.error("Progression history error:", error)
     return NextResponse.json({ error: "Failed" }, { status: 500 })
   }
 }

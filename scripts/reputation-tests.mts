@@ -92,6 +92,8 @@ import {
   DUP_REDUCE_PCT,
   MASTERY_WEEKLY_FULL,
   MASTERY_WEEKLY_MID,
+  PUBLIC_XP_TYPES,
+  publicXpLabel,
 } from "@/lib/progression-config"
 import { drainPendingXpReversals, reverseXpSourceDurable } from "@/lib/progression-outbox"
 
@@ -172,9 +174,41 @@ async function mkEvent(userId: string, over: Record<string, unknown>) {
   })
 }
 
+// V2 equivalent of mkEvent — ProgressionEvent row + profile.xp credit in
+// one tx so fixtures never produce xp-vs-ledger drift.
+async function mkXpEvent(userId: string, over: Record<string, unknown>) {
+  const xp = (over.xp as number | undefined) ?? 5
+  return prisma.$transaction(async (tx) => {
+    const ev = await tx.progressionEvent.create({
+      data: { userId, type: "POST_CREATED", xp, reason: "test fixture", ...over } as never,
+    })
+    await tx.profile.update({ where: { userId }, data: { xp: { increment: xp } } })
+    return ev
+  })
+}
+
 // Bare ledger-row fixture for the velocity detector — the detector reads
 // ReputationEvent rows only, so no Profile.reputation write is needed.
 // These rows (and their users) are deleted before the global drift check.
+// V2 variant — bare ProgressionEvent rows for the velocity detector,
+// which scans member-driven XP rows only.
+async function mkXpLedgerEvent(
+  userId: string,
+  type: string,
+  xp: number,
+  opts: { actorId?: string; reversedAt?: Date; key?: string } = {},
+) {
+  return prisma.progressionEvent.create({
+    data: {
+      userId, type, xp,
+      reason: `__test_vel_${type}`,
+      key: opts.key ?? `__test_vel:${type}:${userId}:${RUN_TAG}:${Math.random().toString(36).slice(2)}`,
+      actorId: opts.actorId ?? null,
+      reversedAt: opts.reversedAt ?? null,
+    },
+  })
+}
+
 async function mkLedgerEvent(
   userId: string,
   type: string,
@@ -330,11 +364,11 @@ async function run() {
   assert.ok(crossedRungs(0, 1).every((c) => c.rung > 0))
 
   // ── Pure: unlock diff helpers ────────────────────────────────────
-  assert.equal(nextLockedCosmetic(0)?.unlockedAt, 50)
-  assert.equal(nextLockedCosmetic(50000), null, "nothing locked past max rep")
+  assert.equal(nextLockedCosmetic(0)?.unlockedAt, 60)
+  assert.equal(nextLockedCosmetic(23000), null, "nothing locked past max XP")
   assert.ok(
-    cosmeticsUnlockedBetween(149, 150).length > 0,
-    "crossing 150 unlocks the first cosmetics"
+    cosmeticsUnlockedBetween(59, 60).length > 0,
+    "crossing 60 unlocks the first cosmetics"
   )
   assert.deepEqual(cosmeticsUnlockedBetween(500, 600), [], "no cosmetics mid-gap")
   for (const c of cosmeticsUnlockedBetween(0, 50000)) {
@@ -485,22 +519,22 @@ async function run() {
   }
 
   // ── Pure: cosmetics registry ──────────────────────────────────────
-  // Every cosmetic unlocks exactly at a tier threshold, and keys are unique.
-  const tierThresholds = new Set(REP_TIERS.map((t) => t.threshold))
+  // Every cosmetic unlocks exactly at a V2 rank threshold, keys unique.
+  const rankThresholds = new Set(REP_RANKS.map((t) => t.threshold))
   const allCosmetics = [...AVATAR_FRAMES, ...PROFILE_TITLES, ...PROFILE_THEMES]
   const keys = new Set(allCosmetics.map((c) => c.key))
   assert.equal(keys.size, allCosmetics.length, "cosmetic keys unique")
   for (const c of allCosmetics) {
-    assert.ok(tierThresholds.has(c.unlockedAt), `${c.key} unlocks at a tier threshold`)
+    assert.ok(rankThresholds.has(c.unlockedAt), `${c.key} unlocks at a rank threshold`)
     assert.ok(c.name && c.description, `${c.key} fully described`)
   }
-  // canEquip: locked above tier, equippable at/after, null always clears.
+  // canEquip: locked above rank, equippable at/after, null always clears.
   assert.equal(canEquip(0, "frames", "sprout-ring"), false)
-  assert.equal(canEquip(150, "frames", "sprout-ring"), true)
-  assert.equal(canEquip(149, "frames", "sprout-ring"), false)
+  assert.equal(canEquip(180, "frames", "sprout-ring"), true)
+  assert.equal(canEquip(179, "frames", "sprout-ring"), false)
   assert.equal(canEquip(0, "frames", null), true)
-  assert.equal(canEquip(50000, "frames", "northern-lights"), true)
-  assert.equal(canEquip(49999, "frames", "northern-lights"), false)
+  assert.equal(canEquip(23000, "frames", "northern-lights"), true)
+  assert.equal(canEquip(22999, "frames", "northern-lights"), false)
   assert.ok(unlockedCosmetics(0).frames.length === 0)
   assert.ok(unlockedCosmetics(100000).frames.length === AVATAR_FRAMES.length)
 
@@ -763,7 +797,8 @@ async function run() {
       "no duplicate stage celebration after re-earning"
     )
     // ── DB: garden streaks ─────────────────────────────────────────
-    // Streak derives from DAILY_LOGIN ledger days; milestones pay once.
+    // Streak derives from DAILY_LOGIN marker days; milestones are once-ever
+    // 0-XP marker rows (utility anchors, not currency).
     const streakUser = await prisma.user.create({
       data: { name: `${TEST_USERNAME}_streak`, ageVerified: true, sessionVersion: 1, profile: { create: { username: `${TEST_USERNAME}_streak` } } },
       select: { id: true },
@@ -774,24 +809,24 @@ async function run() {
       // Four consecutive check-in days ending today → 4-day streak.
       for (let i = 0; i < 4; i++) {
         const d = new Date(today.getTime() - i * dayMs)
-        await prisma.reputationEvent.create({
+        await prisma.progressionEvent.create({
           data: {
-            userId: streakUser.id, type: "DAILY_LOGIN", amount: 1,
+            userId: streakUser.id, type: "DAILY_LOGIN", xp: 0,
             reason: "Daily check-in", key: `daily:${streakUser.id}:${d.toISOString().slice(0, 10)}`,
             createdAt: d,
           },
         })
-        await prisma.profile.update({ where: { userId: streakUser.id }, data: { reputation: { increment: 1 } } })
       }
       assert.equal(await getCheckinStreak(streakUser.id), 4, "4-day streak")
-      // 3-day milestone pays (+10); 7-day doesn't yet.
+      // 3-day milestone records a marker; 7-day doesn't yet.
       const paid = await evaluateStreaks(streakUser.id)
-      assert.deepEqual(paid, [3], "only the 3-day milestone paid")
-      const streakRow = await prisma.reputationEvent.findUnique({ where: { key: `streak:3:${streakUser.id}` } })
-      assert.ok(streakRow && streakRow.amount === 10, "streak bonus row exists")
-      // Idempotent — second evaluation pays nothing.
-      assert.deepEqual(await evaluateStreaks(streakUser.id), [], "no double-pay")
-      assert.equal(await repOf(streakUser.id), await ledgerSum(streakUser.id), "streak balance == ledger")
+      assert.deepEqual(paid, [3], "only the 3-day milestone recorded")
+      const streakRow = await prisma.progressionEvent.findUnique({ where: { key: `streak:3:${streakUser.id}` } })
+      assert.ok(streakRow && streakRow.xp === 0 && streakRow.type === "STREAK_MILESTONE", "streak marker row exists")
+      // Idempotent — second evaluation records nothing.
+      assert.deepEqual(await evaluateStreaks(streakUser.id), [], "no double-record")
+      const streakProf = await prisma.profile.findUnique({ where: { userId: streakUser.id }, select: { xp: true } })
+      assert.equal(streakProf?.xp ?? -1, 0, "streak markers pay no XP")
       // A missed day breaks the run: a user whose last check-in was 2 days
       // ago has no live streak.
       const gapUser = await prisma.user.create({
@@ -800,9 +835,9 @@ async function run() {
       })
       try {
         const d = new Date(today.getTime() - 2 * dayMs)
-        await prisma.reputationEvent.create({
+        await prisma.progressionEvent.create({
           data: {
-            userId: gapUser.id, type: "DAILY_LOGIN", amount: 1,
+            userId: gapUser.id, type: "DAILY_LOGIN", xp: 0,
             reason: "Daily check-in", key: `daily:${gapUser.id}:${d.toISOString().slice(0, 10)}`,
             createdAt: d,
           },
@@ -898,36 +933,35 @@ async function run() {
   try {
     const dayKey = currentDayKey()
 
-    // Keyed quest payout: award once, second call is a no-op. (Other
-    // awards may fire as side-effects — e.g. the Early Supporter badge
-    // bonus — so we assert on the specific event, not the total.)
+    // Keyed quest payout: award once via the V2 engine, second call is a
+    // no-op. Assert on the specific keyed event, not the total.
     const key = `quest:${dayKey}:lend-a-hand:${progUser.id}`
-    const a1 = await awardReputation(progUser.id, "QUEST_DAILY", 8, "Daily quest: Lend a Hand", { key })
-    const a2 = await awardReputation(progUser.id, "QUEST_DAILY", 8, "Daily quest: Lend a Hand", { key })
+    const a1 = await awardProgression(progUser.id, "QUEST_DAILY", "Daily quest: Lend a Hand", { key, xp: 8, mastery: "COMMUNITY" })
+    const a2 = await awardProgression(progUser.id, "QUEST_DAILY", "Daily quest: Lend a Hand", { key, xp: 8, mastery: "COMMUNITY" })
     assert.equal(a1.awarded, true)
     assert.equal(a2.awarded, false)
-    const questEvents = await prisma.reputationEvent.count({ where: { userId: progUser.id, key } })
+    const questEvents = await prisma.progressionEvent.count({ where: { userId: progUser.id, key } })
     assert.equal(questEvents, 1, "duplicate keyed quest payout")
 
-    // Self-driven events advance progression but NOT trust standing.
-    assert.equal(await getTrustScore(progUser.id), 0)
+    // Self-driven events advance XP but NOT standing.
+    const standingOf = async (uid: string) =>
+      (await prisma.profile.findUnique({ where: { userId: uid }, select: { standing: true } }))?.standing ?? -1
+    assert.equal(await standingOf(progUser.id), 0)
 
-    // Peer-validated events DO count.
-    await awardReputation(progUser.id, "LIKE_RECEIVED", 2, "test like", {
-      key: `test:like:${progUser.id}`,
+    // Peer-validated events DO count — a standing-bearing award from a
+    // different actor lands on the standing axis.
+    await awardProgression(progUser.id, "ACCEPTED_ANSWER", "test accept", {
+      key: `test:accept:${progUser.id}`,
       actorId: "someone-else",
     })
-    assert.equal(await getTrustScore(progUser.id), 2)
-    assert.equal(getTrustStanding(2).name, "Unrooted")
+    assert.equal(await standingOf(progUser.id), 10)
 
     // Quest progress is server-derived — a fresh user has zero progress and
     // nothing paid. evaluateQuests on zero progress pays nothing.
     const progress = await getQuestProgress(progUser.id)
     assert.equal(progress.length, DAILY_QUEST_COUNT)
     for (const q of progress) {
-      // green-thumb legitimately ticks from the LIKE_RECEIVED awarded above —
-      // every other quest's inputs are still untouched.
-      assert.equal(q.progress, q.slug === "green-thumb" ? 1 : 0)
+      assert.equal(q.progress, 0)
       assert.equal(q.done, false)
       // lend-a-hand may or may not be selected; paid only when selected+paid.
       if (q.slug === "lend-a-hand") assert.equal(q.paid, true)
@@ -935,10 +969,10 @@ async function run() {
     const paid = await evaluateQuests(progUser.id)
     assert.deepEqual(paid, [], "no quests should pay with zero qualifying activity")
 
-    // PUBLIC_REP_TYPES covers quest payouts so they show on the public
+    // PUBLIC_XP_TYPES covers quest payouts so they show on the public
     // history with a safe label (not the raw reason string).
-    assert.ok(PUBLIC_REP_TYPES.has("QUEST_DAILY"))
-    assert.equal(publicRepLabel("QUEST_DAILY"), "Daily quest completed")
+    assert.ok(PUBLIC_XP_TYPES.has("QUEST_DAILY"))
+    assert.equal(publicXpLabel("QUEST_DAILY"), "Daily quest")
 
     // ── Sticky payout reconciliation ──────────────────────────────
     // Payouts whose qualifying content disappears must be clawed back by
@@ -950,32 +984,34 @@ async function run() {
       let stickyDiaryId = ""
       try {
         const dayKey = new Date().toISOString().slice(0, 10)
-        const ev = await mkEvent(stickyUser.id, {
-          type: "QUEST_DAILY", key: `quest:${dayKey}:tend-the-garden:${stickyUser.id}`, amount: 15,
+        const ev = await mkXpEvent(stickyUser.id, {
+          type: "QUEST_DAILY", key: `quest:${dayKey}:tend-the-garden:${stickyUser.id}`, xp: 15,
         })
         const res = await reconcileQuestPayouts()
-        const after = await prisma.reputationEvent.findUnique({ where: { id: ev.id }, select: { reversedAt: true } })
+        const after = await prisma.progressionEvent.findUnique({ where: { id: ev.id }, select: { reversedAt: true } })
         assert.ok(after?.reversedAt, `unearned quest payout must be reversed (checked=${res.checked} reversed=${res.reversed})`)
 
-        // tend-the-garden counts live DIARY_UPDATE reputation events today.
+        // tend-the-garden counts live DiaryUpdate rows today.
         const dr = await prisma.growDiary.create({
           data: { title: `${PROG_USERNAME}_qd`, description: "", growType: "INDOOR", startDate: new Date(), authorId: earnedUser.id },
           select: { id: true },
         })
         stickyDiaryId = dr.id
-        await mkEvent(earnedUser.id, { type: "DIARY_UPDATE", sourceType: "DIARY", sourceId: dr.id })
-        const ev2 = await mkEvent(earnedUser.id, {
-          type: "QUEST_DAILY", key: `quest:${dayKey}:tend-the-garden:${earnedUser.id}`, amount: 15,
+        await prisma.diaryUpdate.create({
+          data: { title: "u", content: "x", stage: "VEGETATIVE", diaryId: dr.id, authorId: earnedUser.id },
+        })
+        const ev2 = await mkXpEvent(earnedUser.id, {
+          type: "QUEST_DAILY", key: `quest:${dayKey}:tend-the-garden:${earnedUser.id}`, xp: 15,
         })
         await reconcileQuestPayouts()
-        const after2 = await prisma.reputationEvent.findUnique({ where: { id: ev2.id }, select: { reversedAt: true } })
+        const after2 = await prisma.progressionEvent.findUnique({ where: { id: ev2.id }, select: { reversedAt: true } })
         assert.equal(after2?.reversedAt, null, "earned payout must not be reversed")
 
-        const ev3 = await mkEvent(chalUser.id, {
-          type: "CHALLENGE_WEEKLY", key: `challenge:${currentWeekKey()}:tend-the-diary:${chalUser.id}`, amount: 50,
+        const ev3 = await mkXpEvent(chalUser.id, {
+          type: "CHALLENGE_WEEKLY", key: `challenge:${currentWeekKey()}:tend-the-diary:${chalUser.id}`, xp: 50,
         })
         await reconcileChallengePayouts()
-        const after3 = await prisma.reputationEvent.findUnique({ where: { id: ev3.id }, select: { reversedAt: true } })
+        const after3 = await prisma.progressionEvent.findUnique({ where: { id: ev3.id }, select: { reversedAt: true } })
         assert.ok(after3?.reversedAt, "unearned challenge payout must be reversed")
       } finally {
         if (stickyDiaryId) {
@@ -992,7 +1028,7 @@ async function run() {
   }
 
   // ── DB: velocity detector — member-driven events only ────────────
-  // The abuse detector must count member-driven reputation only and ignore
+  // The abuse detector must count member-driven XP only and ignore
   // system-generated payouts (BADGE_BONUS, WEEKLY_AWARD, MILESTONE,
   // ONBOARDING_COMPLETE, quests, journeys, staff/migration bookkeeping).
   // Fixtures are bare ledger rows — the detector reads events, not
@@ -1014,30 +1050,30 @@ async function run() {
       // T1 — BADGE_BONUS alone must not flag
       {
         const u = await mkTestUser(`${VEL_PREFIX}_badge`); velUsers.push(u)
-        velEventIds.push((await mkLedgerEvent(u.id, "BADGE_BONUS", 200)).id)
+        velEventIds.push((await mkXpLedgerEvent(u.id, "BADGE_BONUS", 200)).id)
         await expectClean(u.id, "T1: +200 BADGE_BONUS in 24h → no velocity flag")
       }
 
       // T2 — WEEKLY_AWARD alone must not flag
       {
         const u = await mkTestUser(`${VEL_PREFIX}_weekly`); velUsers.push(u)
-        velEventIds.push((await mkLedgerEvent(u.id, "WEEKLY_AWARD", 200)).id)
+        velEventIds.push((await mkXpLedgerEvent(u.id, "WEEKLY_AWARD", 200)).id)
         await expectClean(u.id, "T2: +200 WEEKLY_AWARD in 24h → no velocity flag")
       }
 
       // T3 — MILESTONE / system rewards must not flag
       {
         const u = await mkTestUser(`${VEL_PREFIX}_sys`); velUsers.push(u)
-        velEventIds.push((await mkLedgerEvent(u.id, "MILESTONE", 100)).id)
-        velEventIds.push((await mkLedgerEvent(u.id, "GROW_MILESTONE", 60)).id)
-        velEventIds.push((await mkLedgerEvent(u.id, "JOURNEY_COMPLETE", 40)).id)
+        velEventIds.push((await mkXpLedgerEvent(u.id, "MILESTONE", 100)).id)
+        velEventIds.push((await mkXpLedgerEvent(u.id, "GROW_MILESTONE", 60)).id)
+        velEventIds.push((await mkXpLedgerEvent(u.id, "JOURNEY_COMPLETE", 40)).id)
         await expectClean(u.id, "T3: +200 MILESTONE/GROW_MILESTONE/JOURNEY_COMPLETE → no flag")
       }
 
       // T4 — ONBOARDING_COMPLETE must not flag
       {
         const u = await mkTestUser(`${VEL_PREFIX}_onb`); velUsers.push(u)
-        velEventIds.push((await mkLedgerEvent(u.id, "ONBOARDING_COMPLETE", 200)).id)
+        velEventIds.push((await mkXpLedgerEvent(u.id, "ONBOARDING_COMPLETE", 200)).id)
         await expectClean(u.id, "T4: +200 ONBOARDING_COMPLETE → no flag")
       }
 
@@ -1046,10 +1082,10 @@ async function run() {
         const u = await mkTestUser(`${VEL_PREFIX}_grind`); velUsers.push(u)
         const actor = await mkTestUser(`${VEL_PREFIX}_actor`); velUsers.push(actor)
         for (let i = 0; i < 6; i++) {
-          velEventIds.push((await mkLedgerEvent(u.id, "HELPFUL_ANSWER", 30, { actorId: actor.id })).id)
+          velEventIds.push((await mkXpLedgerEvent(u.id, "ACCEPTED_ANSWER", 30, { actorId: actor.id })).id)
         }
-        velEventIds.push((await mkLedgerEvent(u.id, "DAILY_LOGIN", 1)).id) // 181 member-driven
-        await expectFlagged(u.id, "T5: +181 member-driven in 24h → flagged")
+        velEventIds.push((await mkXpLedgerEvent(u.id, "THREAD_STARTED", 5)).id) // 185 member-driven
+        await expectFlagged(u.id, "T5: +185 member-driven in 24h → flagged")
         const { created } = await materializeReputationFlags(7)
         const flag = await prisma.abuseFlag.findFirst({
           where: { userId: u.id, signal: "REP_VELOCITY", key: { notIn: [...flagKeysBefore] } },
@@ -1061,7 +1097,7 @@ async function run() {
       {
         const u = await mkTestUser(`${VEL_PREFIX}_edge`); velUsers.push(u)
         for (let i = 0; i < 15; i++) {
-          velEventIds.push((await mkLedgerEvent(u.id, "THREAD_CREATED", 10)).id)
+          velEventIds.push((await mkXpLedgerEvent(u.id, "THREAD_STARTED", 10)).id)
         }
         await expectClean(u.id, "T6: exactly +150 member-driven → no flag (>150 required)")
       }
@@ -1069,17 +1105,17 @@ async function run() {
       // T7 — system + member-driven mix below threshold → no flag
       {
         const u = await mkTestUser(`${VEL_PREFIX}_mix`); velUsers.push(u)
-        velEventIds.push((await mkLedgerEvent(u.id, "BADGE_BONUS", 250)).id)
-        velEventIds.push((await mkLedgerEvent(u.id, "WEEKLY_AWARD", 50)).id)
-        velEventIds.push((await mkLedgerEvent(u.id, "THREAD_CREATED", 10)).id)
-        velEventIds.push((await mkLedgerEvent(u.id, "LIKE_RECEIVED", 2)).id)
+        velEventIds.push((await mkXpLedgerEvent(u.id, "BADGE_BONUS", 250)).id)
+        velEventIds.push((await mkXpLedgerEvent(u.id, "WEEKLY_AWARD", 50)).id)
+        velEventIds.push((await mkXpLedgerEvent(u.id, "THREAD_STARTED", 10)).id)
+        velEventIds.push((await mkXpLedgerEvent(u.id, "REPLY", 2)).id)
         await expectClean(u.id, "T7: +300 system + +12 member-driven → no flag")
       }
 
       // T8 — reversed events don't contribute
       {
         const u = await mkTestUser(`${VEL_PREFIX}_rev`); velUsers.push(u)
-        velEventIds.push((await mkLedgerEvent(u.id, "HELPFUL_ANSWER", 200, { reversedAt: new Date() })).id)
+        velEventIds.push((await mkXpLedgerEvent(u.id, "ACCEPTED_ANSWER", 200, { reversedAt: new Date() })).id)
         await expectClean(u.id, "T8: +200 member-driven but reversed → no flag")
       }
 
@@ -1087,7 +1123,7 @@ async function run() {
       {
         const u = await mkTestUser(`${VEL_PREFIX}_excl`); velUsers.push(u)
         for (const t of ["STAFF_ADJUSTMENT", "REFERRAL", "CHALLENGE_WEEKLY", "LEGACY_MIGRATION", "REINSTATE", "CONTEST_WEEKLY_WIN", "CONTEST_MONTHLY_WIN"]) {
-          velEventIds.push((await mkLedgerEvent(u.id, t, 50)).id) // 350 total excluded
+          velEventIds.push((await mkXpLedgerEvent(u.id, t, 50)).id) // 350 total excluded
         }
         await expectClean(u.id, "T9: +350 across legacy-excluded types → no flag")
       }
@@ -1096,7 +1132,7 @@ async function run() {
       {
         const u = await mkTestUser(`${VEL_PREFIX}_cascade`); velUsers.push(u)
         for (let i = 0; i < 10; i++) {
-          velEventIds.push((await mkLedgerEvent(u.id, "BADGE_BONUS", 40)).id) // 400 burst
+          velEventIds.push((await mkXpLedgerEvent(u.id, "BADGE_BONUS", 40)).id) // 400 burst
         }
         await expectClean(u.id, "T10: 10× BADGE_BONUS cascade (+400) → no flag")
       }
@@ -1104,8 +1140,8 @@ async function run() {
       // T11 — cron self-award (WEEKLY_AWARD + BADGE_BONUS same run) doesn't flag
       {
         const u = await mkTestUser(`${VEL_PREFIX}_gotw`); velUsers.push(u)
-        velEventIds.push((await mkLedgerEvent(u.id, "BADGE_BONUS", 100, { key: `badgebonus:Grower of the Week:${u.id}` })).id)
-        velEventIds.push((await mkLedgerEvent(u.id, "WEEKLY_AWARD", 50, { key: `weekly:gotw:2099-W01:${u.id}` })).id)
+        velEventIds.push((await mkXpLedgerEvent(u.id, "BADGE_BONUS", 100, { key: `badgebonus:Grower of the Week:${u.id}` })).id)
+        velEventIds.push((await mkXpLedgerEvent(u.id, "WEEKLY_AWARD", 50, { key: `weekly:gotw:2099-W01:${u.id}` })).id)
         const { created } = await materializeReputationFlags(7)
         const flag = await prisma.abuseFlag.findFirst({
           where: { userId: u.id, key: { notIn: [...flagKeysBefore] } },
@@ -1126,7 +1162,7 @@ async function run() {
     } finally {
       // Cleanup — flags are bare-keyed (no cascade), events cascade with users
       await prisma.abuseFlag.deleteMany({ where: { key: { notIn: [...flagKeysBefore] } } }).catch(() => {})
-      await prisma.reputationEvent.deleteMany({ where: { id: { in: velEventIds } } }).catch(() => {})
+      await prisma.progressionEvent.deleteMany({ where: { id: { in: velEventIds } } }).catch(() => {})
       await prisma.user.deleteMany({ where: { id: { in: velUsers.map((u) => u.id) } } }).catch(() => {})
     }
   }
@@ -1170,10 +1206,14 @@ async function run() {
     }
     if (u.layer === "C") assert.ok(u.standing, `layer C unlock ${u.id} requires standing`)
   }
-  // Locked economy: no XP source can be a like or a login.
-  for (const t of ["LIKE_RECEIVED", "DAILY_LOGIN", "REACTION", "LOGIN_STREAK"]) {
+  // Locked economy: no XP source can be a like or a login. DAILY_LOGIN
+  // exists only as a 0-XP day marker feeding streaks/quests.
+  for (const t of ["LIKE_RECEIVED", "REACTION", "LOGIN_STREAK"]) {
     assert.ok(!XP_TABLE[t], `${t} must not be an XP type`)
   }
+  assert.equal(XP_TABLE.DAILY_LOGIN?.xp ?? 0, 0, "DAILY_LOGIN pays no XP")
+  assert.equal(XP_TABLE.DAILY_LOGIN?.standing ?? 0, 0, "DAILY_LOGIN pays no standing")
+  assert.equal(XP_TABLE.STREAK_MILESTONE?.xp ?? 0, 0, "STREAK_MILESTONE is a marker, not a payout")
   assert.equal(XP_TABLE.FAILURE_DOCUMENTED.xp, 8, "documented failure = +8 XP")
   assert.equal(STANDING_WEEKLY_CAP, 40)
   assert.equal(MASTERY_WEEKLY_FULL, 250)

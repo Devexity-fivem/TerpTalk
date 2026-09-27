@@ -112,14 +112,14 @@ const main = async () => {
       memberCase.status === 403 ? pass("member → case detail 403") : fail("member case", memberCase.status)
 
       const supportCase = await api(`/api/moderation/queue/${reportId}?kind=REPORT`, { cookie: supportC })
-      supportCase.status === 200 && supportCase.data.item?.reporter === null && !supportCase.data.subject?.recentReputation
+      supportCase.status === 200 && supportCase.data.item?.reporter === null && !supportCase.data.subject?.recentProgression
         ? pass("SUPPORT case: masked reporter, summary-only context")
         : fail("support case", { s: supportCase.status, rep: supportCase.data?.item?.reporter })
 
       const modCase = await api(`/api/moderation/queue/${reportId}?kind=REPORT`, { cookie: modC })
       modCase.status === 200 && modCase.data.item?.reporter === reporter.username &&
-        Array.isArray(modCase.data.subject?.recentReputation) && modCase.data.subject?.suspendedUntil !== undefined
-        ? pass("MOD case: reporter + full context (suspendedUntil, rep events)")
+        Array.isArray(modCase.data.subject?.recentProgression) && modCase.data.subject?.suspendedUntil !== undefined
+        ? pass("MOD case: reporter + full context (suspendedUntil, progression events)")
         : fail("mod case", { s: modCase.status, keys: Object.keys(modCase.data?.subject ?? {}) })
     }
 

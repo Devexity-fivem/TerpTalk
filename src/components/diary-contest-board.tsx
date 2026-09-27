@@ -13,7 +13,7 @@ interface ContestUser {
   username: string | null
   image: string | null
   role: string | null
-  reputation: number
+  xp: number
   publicMilestoneOptOut: boolean
 }
 
@@ -96,7 +96,7 @@ export default function DiaryContestBoard() {
   return (
     <div className="bg-card/80 rounded-2xl border border-border/70 p-5">
       <p className="text-xs text-muted-foreground mb-4">
-        Eligibility: 4+ updates this month and at least one photo. Voting requires a 7-day-old account with 10+ reputation.
+        Eligibility: 4+ updates this month and at least one photo. Voting requires a 7-day-old account with 10+ XP.
       </p>
 
       {session && !data.alreadyEntered && data.eligible.length > 0 && (
@@ -151,7 +151,7 @@ export default function DiaryContestBoard() {
                   {e.diary.title}
                 </Link>
                 <div className="text-xs text-muted-foreground mt-0.5 flex items-center gap-2 flex-wrap">
-                  <span className="inline-flex items-center gap-1.5">by {e.user.username || e.user.name} <TierChip reputation={e.user.reputation ?? 0} publicMilestoneOptOut={e.user.publicMilestoneOptOut} /></span>
+                  <span className="inline-flex items-center gap-1.5">by {e.user.username || e.user.name} <TierChip xp={e.user.xp ?? 0} publicMilestoneOptOut={e.user.publicMilestoneOptOut} /></span>
                   {e.diary.strain && <span>· {e.diary.strain}</span>}
                 </div>
                 <div className="text-xs text-muted-foreground mt-0.5">
@@ -164,7 +164,7 @@ export default function DiaryContestBoard() {
                       <span className="text-xs text-primary flex items-center gap-1"><Trophy className="w-3 h-3" /> Your entry</span>
                     </Tooltip>
                   ) : (
-                    <Tooltip content="Vote for this diary — requires a 7-day-old account with 10+ rep">
+                    <Tooltip content="Vote for this diary — requires a 7-day-old account with 10+ XP">
                       <button
                         onClick={() => vote(e.id)}
                         disabled={busy}

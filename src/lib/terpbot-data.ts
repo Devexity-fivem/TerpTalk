@@ -6,14 +6,14 @@
 // credentials, or staff-only tables.
 import { prisma } from "@/lib/prisma"
 import type { Prisma } from "@prisma/client"
-import { activeAuthor, blockExistsBetween, blockedUserIds, notBlockedAuthor, containsExternalLink, LIMITS, USERNAME_REGEX, rankableProfile, REPUTATION_ORDER } from "@/lib/security"
+import { activeAuthor, blockExistsBetween, blockedUserIds, notBlockedAuthor, containsExternalLink, LIMITS, USERNAME_REGEX, rankableProfile, XP_ORDER } from "@/lib/security"
 import { extractThreadRef, type ThreadRef } from "@/lib/terpbot-context"
 import { postDeepLink } from "@/lib/notify"
-import { getNextTier, getTierProgress, getRepStage, getStageProgress, getTrustStanding, getNextTrustStanding } from "@/lib/reputation-config"
+import { nextRank, rankDisplay, xpStage, xpStageProgress, xpRankProgress, standingDisplay, STANDINGS } from "@/lib/progression-config"
 import { getQuestProgress } from "@/lib/quests"
 import { nextLockedCosmetic } from "@/lib/cosmetics"
 import { getGrowStreak } from "@/lib/grow-streak"
-import { BADGE_RULES, getUserStats, getTrustScore } from "@/lib/reputation"
+import { BADGE_RULES, getUserStats } from "@/lib/reputation"
 import { BADGE_REGISTRY, getBadgeByName } from "@/lib/badge-registry"
 import { currentWeekKey } from "@/lib/week"
 import { escapeLike, getStrainGrowStats } from "@/lib/strain-stats"
@@ -140,7 +140,7 @@ function hasLink(q: string): boolean {
 async function resolveMember(
   raw: string | undefined,
   requesterId: string
-): Promise<{ userId: string; username: string; reputation: number } | "self" | null> {
+): Promise<{ userId: string; username: string; xp: number; standing: number } | "self" | null> {
   if (!raw) return "self"
   const username = raw.replace(/^@/, "")
   if (!username || username.length < LIMITS.USERNAME_MIN || username.length > LIMITS.USERNAME_MAX || !USERNAME_REGEX.test(username)) {
@@ -149,14 +149,14 @@ async function resolveMember(
   if (username.toLowerCase() === TERPBOT_USERNAME) return null
   const target = await prisma.user.findFirst({
     where: { profile: { username: { equals: username, mode: "insensitive" } }, ...activeAuthor() },
-    select: { id: true, profile: { select: { username: true, reputation: true, publicMilestoneOptOut: true } } },
+    select: { id: true, profile: { select: { username: true, xp: true, standing: true, publicMilestoneOptOut: true } } },
   })
   if (!target?.profile?.username) return null
   // Members who opted out of public recognition resolve the same as an
   // unknown name — the bot must not re-publish suppressed signals.
   if (target.profile.publicMilestoneOptOut && target.id !== requesterId) return null
   if (target.id !== requesterId && (await blockExistsBetween(requesterId, target.id))) return null
-  return { userId: target.id, username: target.profile.username, reputation: target.profile.reputation }
+  return { userId: target.id, username: target.profile.username, xp: target.profile.xp, standing: target.profile.standing }
 }
 
 async function memberFor(ctx: BotCommandCtx, raw?: string) {
@@ -164,10 +164,10 @@ async function memberFor(ctx: BotCommandCtx, raw?: string) {
   if (t === "self") {
     const me = await prisma.user.findUnique({
       where: { id: ctx.userId },
-      select: { id: true, profile: { select: { username: true, reputation: true } } },
+      select: { id: true, profile: { select: { username: true, xp: true, standing: true } } },
     })
     if (!me?.profile?.username) return null
-    return { userId: me.id, username: me.profile.username, reputation: me.profile.reputation }
+    return { userId: me.id, username: me.profile.username, xp: me.profile.xp, standing: me.profile.standing }
   }
   return t
 }
@@ -523,27 +523,26 @@ async function handle(name: string, ctx: BotCommandCtx): Promise<BotCommandResul
     case "top": {
       const top = await prisma.profile.findMany({
         where: rankableProfile(),
-        orderBy: REPUTATION_ORDER,
+        orderBy: XP_ORDER,
         take: 5,
-        select: { username: true, reputation: true },
+        select: { username: true, xp: true },
       })
-      const lines = top.map((p, i) => `${i + 1}. @${p.username} — ${p.reputation} rep`)
+      const lines = top.map((p, i) => `${i + 1}. @${p.username} — ${p.xp.toLocaleString()} XP`)
       return ok(`🏆 Top growers:\n${lines.join("\n")}\nFull board: /leaderboard`)
     }
 
     case "rep": {
       const t = await memberFor(ctx, ctx.args[0])
       if (!t) return ok(`Couldn't find that member.`)
-      const stage = getRepStage(t.reputation)
-      const next = getNextTier(t.reputation)
-      const nextText = next ? ` Next: ${next.name} at ${next.threshold.toLocaleString()} rep (${(next.threshold - t.reputation).toLocaleString()} to go).` : " Top tier reached!"
-      const trust = await getTrustScore(t.userId)
-      const standing = getTrustStanding(trust)
-      const nextStanding = getNextTrustStanding(trust)
+      const stage = xpStage(t.xp)
+      const next = nextRank(t.xp)
+      const nextText = next ? ` Next: ${next.name} at ${next.threshold.toLocaleString()} XP (${(next.threshold - t.xp).toLocaleString()} to go).` : " Top rank reached!"
+      const standing = standingDisplay(t.standing)
+      const nextStanding = STANDINGS.find((s) => t.standing < s.min) ?? null
       const standingText = nextStanding
-        ? ` Standing: ${standing.icon} ${standing.name} (${nextStanding.name} at ${nextStanding.min.toLocaleString()} trust).`
+        ? ` Standing: ${standing.icon} ${standing.name} (${nextStanding.name} at ${nextStanding.min.toLocaleString()} standing).`
         : ` Standing: ${standing.icon} ${standing.name} — the highest.`
-      return ok(`📈 @${t.username} — ${t.reputation.toLocaleString()} rep · Grow Level ${stage.level} (${stage.stageName}) · ${stage.tier.name} tier.${nextText}${standingText} /u/${t.username}`)
+      return ok(`📈 @${t.username} — ${t.xp.toLocaleString()} XP · Grow Level ${stage.level} (${stage.stageName}) · ${rankDisplay(t.xp).name} rank.${nextText}${standingText} /u/${t.username}`)
     }
 
     case "quests": {
@@ -551,7 +550,7 @@ async function handle(name: string, ctx: BotCommandCtx): Promise<BotCommandResul
       if (!quests.length) return ok(`⚡ No quests today — check back tomorrow. /progress`)
       const lines = quests.map((q) => {
         const state = q.paid ? "✓ paid" : q.done ? "✓ done" : `${q.progress}/${q.target}`
-        return `${q.icon} ${q.title} — ${q.description} (${state}, +${q.reward} rep)`
+        return `${q.icon} ${q.title} — ${q.description} (${state}, +${q.reward} XP)`
       })
       const done = quests.filter((q) => q.done || q.paid).length
       const perfect = done === quests.length ? "\nAll done today — perfect-day bonus earned!" : ""
@@ -561,23 +560,22 @@ async function handle(name: string, ctx: BotCommandCtx): Promise<BotCommandResul
     case "progress": {
       const t = await memberFor(ctx, ctx.args[0])
       if (!t) return ok(`Couldn't find that member.`)
-      const stage = getRepStage(t.reputation)
-      const stageProg = getStageProgress(t.reputation)
-      const unlock = nextLockedCosmetic(t.reputation)
-      const next = getNextTier(t.reputation)
-      // One unified progression view — rep, tier, trust, streak and today's
-      // quests composed from the same libs the /progress page uses.
-      const [trust, quests, streak] = await Promise.all([
-        getTrustScore(t.userId),
+      const stage = xpStage(t.xp)
+      const stageProg = xpStageProgress(t.xp)
+      const unlock = nextLockedCosmetic(t.xp)
+      const next = nextRank(t.xp)
+      // One unified progression view — XP, rank, standing, streak and
+      // today's quests composed from the same libs the /progress page uses.
+      const [quests, streak] = await Promise.all([
         t.userId === ctx.userId ? getQuestProgress(ctx.userId) : Promise.resolve([]),
         getGrowStreak(t.userId, { publicOnly: true }),
       ])
-      const standing = getTrustStanding(trust)
+      const standing = standingDisplay(t.standing)
       const lines = [
-        `📈 @${t.username} — ${t.reputation.toLocaleString()} rep · Grow Level ${stage.level} (${stage.stageName}) · ${stage.tier.name} tier`,
-        `Trust: ${standing.icon} ${standing.name}${streak.streak > 0 ? ` · Streak: 🔥 ${streak.streak} days` : ""}`,
+        `📈 @${t.username} — ${t.xp.toLocaleString()} XP · Grow Level ${stage.level} (${stage.stageName}) · ${rankDisplay(t.xp).name} rank`,
+        `Standing: ${standing.icon} ${standing.name}${streak.streak > 0 ? ` · Streak: 🔥 ${streak.streak} days` : ""}`,
         stageProg.remaining > 0
-          ? `Stage: ${stageProg.remaining.toLocaleString()} rep to level ${stage.level + 1} (${stageProg.percent}% through)`
+          ? `Stage: ${stageProg.remaining.toLocaleString()} XP to level ${stage.level + 1} (${stageProg.percent}% through)`
           : `Stage: ${stage.stageName} — highest level reached`,
       ]
       if (quests.length) {
@@ -589,10 +587,10 @@ async function handle(name: string, ctx: BotCommandCtx): Promise<BotCommandResul
       }
       const nexts: string[] = []
       if (next) {
-        const prog = getTierProgress(t.reputation)
-        nexts.push(`+${(next.threshold - t.reputation).toLocaleString()} rep → ${next.name} (${prog.percent}%)`)
+        const prog = xpRankProgress(t.xp)
+        nexts.push(`+${(next.threshold - t.xp).toLocaleString()} XP → ${next.name} (${prog.percent}%)`)
       }
-      if (unlock) nexts.push(`${unlock.name} at ${unlock.unlockedAt.toLocaleString()} rep`)
+      if (unlock) nexts.push(`${unlock.name} at ${unlock.unlockedAt.toLocaleString()} XP`)
       if (nexts.length) lines.push(`Next: ${nexts.join(" · ")}`)
       lines.push(`/progress`)
       return ok(lines.join("\n"))
@@ -603,11 +601,11 @@ async function handle(name: string, ctx: BotCommandCtx): Promise<BotCommandResul
       if (!t) return ok(`Couldn't find that member.`)
       const [above, total] = await Promise.all([
         prisma.profile.count({
-          where: { reputation: { gt: t.reputation }, ...rankableProfile() },
+          where: { xp: { gt: t.xp }, ...rankableProfile() },
         }),
         prisma.profile.count({ where: rankableProfile() }),
       ])
-      return ok(`🏆 @${t.username} is #${above + 1} of ${total} members by reputation. Board: /leaderboard`)
+      return ok(`🏆 @${t.username} is #${above + 1} of ${total} members by XP. Board: /leaderboard`)
     }
 
     case "streak": {
@@ -1347,17 +1345,18 @@ async function handle(name: string, ctx: BotCommandCtx): Promise<BotCommandResul
 
     case "milestones": {
       const [profile, quests, streak, earnedRows, stats, diary] = await Promise.all([
-        prisma.profile.findUnique({ where: { userId: ctx.userId }, select: { reputation: true } }),
+        prisma.profile.findUnique({ where: { userId: ctx.userId }, select: { xp: true } }),
         getQuestProgress(ctx.userId),
         getGrowStreak(ctx.userId, { publicOnly: true }),
         prisma.userBadge.findMany({ where: { userId: ctx.userId }, select: { badge: { select: { name: true } } } }),
         getUserStats(ctx.userId),
         primaryGrow(ctx.userId, { publicOnly: true }),
       ])
-      const rep = profile?.reputation ?? 0
-      const stage = getRepStage(rep)
-      const nextTier = getNextTier(rep)
-      const unlock = nextLockedCosmetic(rep)
+      const xp = profile?.xp ?? 0
+      const stage = xpStage(xp)
+      const next = nextRank(xp)
+      const nextDisplay = next ? rankDisplay(next.threshold) : null
+      const unlock = nextLockedCosmetic(xp)
       const earned = new Set(earnedRows.map((r) => r.badge.name))
       const nextBadge = BADGE_REGISTRY
         .filter((d) => !d.hidden && !earned.has(d.name) && BADGE_RULES[d.name] && !BADGE_RULES[d.name](stats))
@@ -1366,12 +1365,12 @@ async function handle(name: string, ctx: BotCommandCtx): Promise<BotCommandResul
       const questLeft = quests.filter((q) => !q.done && !q.paid)
 
       const lines = [`🎯 What's next for @${ctx.displayName}:`]
-      if (nextTier) lines.push(`${nextTier.icon} ${nextTier.name} tier — ${(nextTier.threshold - rep).toLocaleString()} rep to go`)
-      else lines.push(`${stage.tier.icon} ${stage.tier.name} — top tier reached`)
+      if (next) lines.push(`${nextDisplay?.icon ?? "🌱"} ${next.name} rank — ${(next.threshold - xp).toLocaleString()} XP to go`)
+      else lines.push(`${rankDisplay(xp).icon} ${rankDisplay(xp).name} — top rank reached`)
       if (journey?.next) lines.push(`${journey.next.icon} ${journey.next.name} (grow) — ${journey.next.summary}`)
       if (nextBadge) lines.push(`🏅 "${nextBadge.name}" badge — ${nextBadge.requirement}`)
-      if (unlock) lines.push(`🎨 ${unlock.name} — unlocks at ${unlock.unlockedAt.toLocaleString()} rep`)
-      if (questLeft.length) lines.push(`⚡ ${questLeft.length} quest${questLeft.length === 1 ? "" : "s"} left today (+${questLeft.reduce((n, q) => n + q.reward, 0)} rep)`)
+      if (unlock) lines.push(`🎨 ${unlock.name} — unlocks at ${unlock.unlockedAt.toLocaleString()} XP`)
+      if (questLeft.length) lines.push(`⚡ ${questLeft.length} quest${questLeft.length === 1 ? "" : "s"} left today (+${questLeft.reduce((n, q) => n + q.reward, 0)} XP)`)
       if (streak.streak > 0) lines.push(`🔥 ${streak.streak}-day update streak — keep it alive`)
       if (lines.length === 1) lines.push(`Post a reply or update your diary to start earning.`)
       lines.push(`/progress`)
@@ -1808,7 +1807,7 @@ async function handle(name: string, ctx: BotCommandCtx): Promise<BotCommandResul
       const parts: string[] = []
       const questLeft = quests.filter((q) => !q.done && !q.paid)
       if (unreadNotifs) parts.push(`${unreadNotifs} unread notification${unreadNotifs === 1 ? "" : "s"}`)
-      if (questLeft.length) parts.push(`${questLeft.length} quest${questLeft.length === 1 ? "" : "s"} left today (+${questLeft.reduce((n, q) => n + q.reward, 0)} rep)`)
+      if (questLeft.length) parts.push(`${questLeft.length} quest${questLeft.length === 1 ? "" : "s"} left today (+${questLeft.reduce((n, q) => n + q.reward, 0)} XP)`)
       if (streak.streak > 0) parts.push(`🔥 ${streak.streak}-day update streak`)
       if (diary && !diary.harvested) {
         const age = Math.floor((Date.now() - diary.updatedAt.getTime()) / 86400000)

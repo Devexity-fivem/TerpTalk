@@ -5,15 +5,16 @@ import { prisma } from "@/lib/prisma"
 import { unauthorized } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
 import {
-  REP_LADDER,
-  getRepStage,
-  getStageProgress,
-  getNextTier,
-  getTierProgress,
-  getTrustStanding,
-  getNextTrustStanding,
-} from "@/lib/reputation-config"
-import { getTrustScore, getUserStats, type UserStats } from "@/lib/reputation"
+  PROGRESSION_RUNGS,
+  xpStage,
+  xpStageProgress,
+  nextRank,
+  rankDisplay,
+  xpRankProgress,
+  standingDisplay,
+  STANDINGS,
+} from "@/lib/progression-config"
+import { getUserStats, type UserStats } from "@/lib/reputation"
 import { BADGE_REGISTRY } from "@/lib/badge-registry"
 import { nextLockedCosmetic, unlockedCosmetics } from "@/lib/cosmetics"
 import { getChallengeProgress, currentWeekKey, weekStart } from "@/lib/challenges"
@@ -34,10 +35,10 @@ export async function GET() {
     const rl = await rateLimit(`progression:${userId}`, 30, 60 * 1000)
     if (!rl.allowed) return NextResponse.json({ error: "Too many requests" }, { status: 429 })
 
-    const [profile, challenges, quests, recentBadges, trustScore, earnedBadges, journey, staleDiary, streak] = await Promise.all([
+    const [profile, challenges, quests, recentBadges, earnedBadges, journey, staleDiary, streak] = await Promise.all([
       prisma.profile.findUnique({
         where: { userId },
-        select: { reputation: true, avatarFrame: true, profileTitle: true, profileTheme: true },
+        select: { xp: true, standing: true, avatarFrame: true, profileTitle: true, profileTheme: true },
       }),
       getChallengeProgress(userId),
       getQuestProgress(userId),
@@ -47,7 +48,6 @@ export async function GET() {
         take: 4,
         select: { earnedAt: true, badge: { select: { name: true, icon: true } } },
       }),
-      getTrustScore(userId),
       prisma.userBadge.findMany({ where: { userId }, select: { badge: { select: { name: true } } } }),
       getJourneyState(userId),
       // Cheapest signal for "your grow needs attention": the member's most
@@ -70,21 +70,23 @@ export async function GET() {
     // on every load, the keyed award dedupes.
     if (journey?.complete) await evaluateJourneys(userId, journey).catch(() => {})
 
-    const rep = profile.reputation
-    const stage = getRepStage(rep)
-    const stageProgress = getStageProgress(rep)
-    const nextTier = getNextTier(rep)
-    const tierProgress = getTierProgress(rep)
-    const nextUnlock = nextLockedCosmetic(rep)
+    const xp = profile.xp
+    const stage = xpStage(xp)
+    const stageProgress = xpStageProgress(xp)
+    const next = nextRank(xp)
+    const nextDisplay = next ? rankDisplay(next.threshold) : null
+    const rank = rankDisplay(xp)
+    const tierProgress = xpRankProgress(xp)
+    const nextUnlock = nextLockedCosmetic(xp)
     const start = weekStart()
-    const standing = getTrustStanding(trustScore)
-    const nextStanding = getNextTrustStanding(trustScore)
+    const standing = standingDisplay(profile.standing)
+    const nextStanding = STANDINGS.find((s) => profile.standing < s.min) ?? null
 
     // Upcoming rungs — the next three milestones on the ladder.
-    const upcoming = REP_LADDER.filter((r) => r > rep).slice(0, 3).map((r) => ({
-      rung: r,
-      level: REP_LADDER.indexOf(r) + 1,
-      tier: r === nextTier?.threshold ? nextTier.name : stage.tier.name,
+    const upcoming = PROGRESSION_RUNGS.filter((r) => r.xp > xp).slice(0, 3).map((r) => ({
+      rung: r.xp,
+      label: r.label,
+      rank: r.rank,
     }))
 
     // "Almost earned" — the top 3 unearned progress badges by completion
@@ -127,38 +129,38 @@ export async function GET() {
     // spam or raw volume.
     const nextAction = pickNextAction({
       journey,
-      rep,
-      nextTier,
+      xp,
+      nextRank: next,
       staleDiary,
       quests,
     })
 
     return NextResponse.json(
       {
-        reputation: rep,
+        xp,
         nextAction,
         level: stage.level,
-        maxLevel: REP_LADDER.length,
+        maxLevel: PROGRESSION_RUNGS.length,
         stage: { name: stage.stageName, index: stage.stageIndex, count: stage.stageCount },
-        tier: {
-          name: stage.tier.name,
-          icon: stage.tier.icon,
-          color: stage.tier.color,
-          bg: stage.tier.bg,
-          benefit: stage.tier.benefit,
+        rank: {
+          name: rank.name,
+          icon: rank.icon,
+          color: rank.color,
+          bg: rank.bg,
+          benefit: rank.benefit,
         },
         stageProgress,
         tierProgress,
-        nextTier: nextTier
-          ? { name: nextTier.name, icon: nextTier.icon, threshold: nextTier.threshold, benefit: nextTier.benefit }
+        nextRank: next
+          ? { name: next.name, icon: nextDisplay?.icon, threshold: next.threshold, benefit: nextDisplay?.benefit }
           : null,
         nextUnlock: nextUnlock
           ? { kind: nextUnlock.kind, name: nextUnlock.name, unlockedAt: nextUnlock.unlockedAt }
           : null,
         upcoming,
         trust: {
-          score: trustScore,
-          standing: { name: standing.name, icon: standing.icon, color: standing.color, bg: standing.bg },
+          score: profile.standing,
+          standing,
           next: nextStanding ? { name: nextStanding.name, min: nextStanding.min } : null,
         },
         cosmetics: {
@@ -168,9 +170,9 @@ export async function GET() {
             profileTheme: profile.profileTheme,
           },
           unlockedCount:
-            unlockedCosmetics(rep).frames.length +
-            unlockedCosmetics(rep).titles.length +
-            unlockedCosmetics(rep).themes.length,
+            unlockedCosmetics(xp).frames.length +
+            unlockedCosmetics(xp).titles.length +
+            unlockedCosmetics(xp).themes.length,
         },
         challenges: { week: currentWeekKey(), endsAt: new Date(start.getTime() + 7 * 86400000), items: challenges },
         quests: { day: currentDayKey(), items: quests },

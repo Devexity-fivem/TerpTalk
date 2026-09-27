@@ -5,7 +5,8 @@ import { prisma } from "@/lib/prisma"
 import { unauthorized, isBanned, forbidden } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
 import { checkMaintenance } from "@/lib/maintenance"
-import { awardReputation, grantBadge, REP_POINTS } from "@/lib/reputation"
+import { grantBadge } from "@/lib/reputation"
+import { awardProgression } from "@/lib/progression"
 
 // POST — mark onboarding as completed/dismissed. The timestamp is set
 // server-side; the client only signals intent.
@@ -31,10 +32,9 @@ export async function POST() {
       data: { onboardingCompletedAt: new Date() },
     })
     if (marked.count === 1) {
-      await awardReputation(
+      await awardProgression(
         session.user.id,
         "ONBOARDING_COMPLETE",
-        REP_POINTS.ONBOARDING_COMPLETE,
         "Finished setting up your account",
         { key: `onboard:${session.user.id}` }
       ).catch(() => {})

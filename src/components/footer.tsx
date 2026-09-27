@@ -52,7 +52,7 @@ export default function Footer() {
             <h4 className={HEADING_CLASS}>Progress</h4>
             <ul className="space-y-2">
               <li><Link href="/leaderboard" className={LINK_CLASS}>Leaderboard</Link></li>
-              <li><Link href="/reputation" className={LINK_CLASS}>Reputation</Link></li>
+              <li><Link href="/reputation" className={LINK_CLASS}>Progression</Link></li>
               <li><Link href="/achievements" className={LINK_CLASS}>Achievements</Link></li>
               <li><Link href="/staff/apply" className={LINK_CLASS}>Join the team</Link></li>
             </ul>

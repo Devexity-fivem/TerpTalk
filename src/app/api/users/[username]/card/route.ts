@@ -3,8 +3,7 @@ import { getToken } from "next-auth/jwt"
 import { sessionCookieName } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { blockExistsBetween, getClientIp, hashIp, isSessionValid } from "@/lib/security"
-import { getReputationTier, getTrustStanding } from "@/lib/reputation-config"
-import { getTrustScore } from "@/lib/reputation"
+import { rankDisplay, standingDisplay } from "@/lib/progression-config"
 import { getProfileTitle } from "@/lib/cosmetics"
 import { rateLimit } from "@/lib/rate-limit"
 import { TERPBOT_USERNAME } from "@/lib/terpbot-constants"
@@ -43,7 +42,8 @@ export async function GET(
         username: true,
         bio: true,
         avatarUrl: true,
-        reputation: true,
+        xp: true,
+        standing: true,
         avatarFrame: true,
         profileTitle: true,
         publicMilestoneOptOut: true,
@@ -101,12 +101,11 @@ export async function GET(
           },
         })
 
-    // Trust standing is a peer-validation signal — like tier it hides when
+    // Standing is the peer-validation axis — like rank it hides when
     // the member opts out of public status display.
     const hideStatus = profile.publicMilestoneOptOut
-    const trustScore = hideStatus || isBot ? 0 : await getTrustScore(profile.user.id)
-    const standing = hideStatus || isBot ? null : getTrustStanding(trustScore)
-    const tier = hideStatus ? null : getReputationTier(profile.reputation)
+    const standing = hideStatus || isBot ? null : standingDisplay(profile.standing)
+    const rank = hideStatus ? null : rankDisplay(profile.xp)
 
     return NextResponse.json(
       {
@@ -120,9 +119,9 @@ export async function GET(
         bio: profile.bio ? profile.bio.slice(0, 160) : null,
         joinDate: profile.user.createdAt,
         statusHidden: hideStatus,
-        reputation: hideStatus ? null : profile.reputation,
-        tier: tier ? { name: tier.name, icon: tier.icon, color: tier.color, bg: tier.bg } : null,
-        trustStanding: standing ? { name: standing.name, icon: standing.icon, color: standing.color, bg: standing.bg } : null,
+        xp: hideStatus ? null : profile.xp,
+        rank: rank ? { name: rank.name, icon: rank.icon, color: rank.color, bg: rank.bg } : null,
+        trustStanding: standing,
         badges: profile.user.badges.map((b) => ({ name: b.badge.name, icon: b.badge.icon })),
         harvestedGrows,
         totalGrows: profile.user._count.diaryCreator,

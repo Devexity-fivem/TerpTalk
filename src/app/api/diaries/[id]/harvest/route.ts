@@ -7,7 +7,8 @@ import { rateLimit } from "@/lib/rate-limit"
 import { checkMaintenance } from "@/lib/maintenance"
 import { announceHarvest } from "@/lib/terpbot"
 import { notifyMany } from "@/lib/notify"
-import { awardReputation, grantBadge, REP_POINTS } from "@/lib/reputation"
+import { grantBadge } from "@/lib/reputation"
+import { awardProgression } from "@/lib/progression"
 import { evaluateGrowJourney } from "@/lib/grow-journey"
 import { revalidateTag } from "next/cache"
 import { VALID_YIELD_UNITS } from "@/lib/yield"
@@ -167,14 +168,37 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   // payout is to the diary's AUTHOR even when an admin flips the flag.
   if (harvested && !diary.harvested) {
     const updateCount = await prisma.diaryUpdate.count({ where: { diaryId: id } })
+    const diaryReason = `Logged harvest for "${updated.title.slice(0, 60)}"`
+    const src = { sourceType: "DIARY", sourceId: id } as const
     if (updateCount >= 4) {
-      await awardReputation(
-        diary.authorId,
-        "HARVEST_LOGGED",
-        REP_POINTS.HARVEST_LOGGED,
-        `Logged harvest for "${updated.title.slice(0, 60)}"`,
-        { key: `harvest:${id}`, sourceType: "DIARY", sourceId: id }
-      ).catch(() => {})
+      await awardProgression(diary.authorId, "HARVEST_LOGGED", diaryReason, {
+        key: `harvest:${id}`, ...src,
+      }).catch(() => {})
+      // Grow completed — harvest + yield + rating + notes (design §6.1).
+      if (updated.yieldAmount != null && updated.harvestRating != null && updated.harvestNotes?.trim()) {
+        await awardProgression(diary.authorId, "GROW_COMPLETE", diaryReason, {
+          key: `growcomplete:${id}`, ...src,
+        }).catch(() => {})
+      }
+      // Complete harvest report — yield + rating + difficulty + notes +
+      // ≥1 photo anywhere in the diary (design §6.2).
+      const hasPhoto =
+        (await prisma.diaryImage.count({ where: { update: { diaryId: id } } }).catch(() => 0)) > 0
+      if (
+        updated.yieldAmount != null && updated.harvestRating != null &&
+        updated.harvestDifficulty && updated.harvestNotes?.trim() && hasPhoto
+      ) {
+        await awardProgression(diary.authorId, "HARVEST_REPORT", diaryReason, {
+          key: `harvestreport:${id}`, ...src,
+        }).catch(() => {})
+      }
+      // Season finisher — ≥10 update-days across ≥60 elapsed days (§6.1).
+      const elapsedDays = (Date.now() - diary.createdAt.getTime()) / 86400000
+      if (updateCount >= 10 && elapsedDays >= 60) {
+        await awardProgression(diary.authorId, "SEASON_FINISHER", diaryReason, {
+          key: `seasonfin:${id}`, ...src,
+        }).catch(() => {})
+      }
     }
 
     // Photoperiod — a single diary spanning a whole season to harvest.

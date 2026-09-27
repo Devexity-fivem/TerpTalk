@@ -32,21 +32,22 @@ interface PublicProfile {
   businessUrl: string | null
   image: string | null
   joinDate: string
-  reputation: number
+  xp: number
+  standing: number
   trustLevel: string
-  reputationTier: {
+  rank: {
     name: string
     color: string
     bg: string
     icon: string
     benefit: string
   }
-  tierProgress: {
+  rankProgress: {
     current: number
     next: number
     percent: number
   }
-  repStage?: {
+  xpStage?: {
     level: number
     stageName: string
     stageIndex: number
@@ -128,7 +129,7 @@ interface HarvestEntry {
   _count: { updates: number }
 }
 
-interface RepEvent {
+interface ProgressionItem {
   id: string
   label: string
   amount: number
@@ -140,7 +141,7 @@ export default function ProfileClient() {
   const params = useParams()
   const { data: session } = useSession()
   const username = decodeURIComponent(String(params.username))
-  const [data, setData] = useState<{ profile: PublicProfile; viewerBlocked: boolean; viewerFollowing: boolean; recentThreads: Thread[]; growDiaries: GrowDiary[]; growSetups: GrowSetup[]; harvestShelf: HarvestEntry[]; recentRep: RepEvent[] } | null>(null)
+  const [data, setData] = useState<{ profile: PublicProfile; viewerBlocked: boolean; viewerFollowing: boolean; recentThreads: Thread[]; growDiaries: GrowDiary[]; growSetups: GrowSetup[]; harvestShelf: HarvestEntry[]; recentProgression: ProgressionItem[] } | null>(null)
   const [loading, setLoading] = useState(true)
   const [notFound, setNotFound] = useState(false)
   const [showAllBadges, setShowAllBadges] = useState(false)
@@ -209,7 +210,7 @@ export default function ProfileClient() {
     )
   }
 
-  const { profile, viewerBlocked, viewerFollowing, recentThreads, growDiaries, growSetups, harvestShelf, recentRep } = data
+  const { profile, viewerBlocked, viewerFollowing, recentThreads, growDiaries, growSetups, harvestShelf, recentProgression } = data
   const joinDate = new Date(profile.joinDate).toLocaleDateString("en-US", { year: "numeric", month: "long" })
   const frame = getAvatarFrame(profile.avatarFrame)
   const theme = getProfileTheme(profile.profileTheme)
@@ -252,10 +253,10 @@ export default function ProfileClient() {
                         <Zap className="w-3 h-3" /> Automated community helper
                       </span>
                     ) : (
-                      <Tooltip content={`${profile.reputationTier.name} reputation tier — earned from community contributions`}>
-                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full ${profile.reputationTier.bg} ${profile.reputationTier.color} text-xs font-medium`}>
-                          <span className="text-sm">{profile.reputationTier.icon}</span>
-                          {profile.reputationTier.name}
+                      <Tooltip content={`${profile.rank.name} rank — earned from community contributions`}>
+                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full ${profile.rank.bg} ${profile.rank.color} text-xs font-medium`}>
+                          <span className="text-sm">{profile.rank.icon}</span>
+                          {profile.rank.name}
                         </span>
                       </Tooltip>
                     )}
@@ -266,31 +267,31 @@ export default function ProfileClient() {
                     </p>
                   ) : (
                     <div className="mb-3">
-                      {profile.repStage && (
+                      {profile.xpStage && (
                         <p className="text-xs text-muted-foreground mb-1">
-                          Grow Level {profile.repStage.level}
+                          Grow Level {profile.xpStage.level}
                           <span className="mx-1">·</span>
-                          {profile.repStage.stageName} stage
+                          {profile.xpStage.stageName} stage
                           <span className="mx-1">·</span>
-                          stage {profile.repStage.stageIndex + 1} of {profile.repStage.stageCount} as {profile.reputationTier.name}
+                          stage {profile.xpStage.stageIndex + 1} of {profile.xpStage.stageCount} as {profile.rank.name}
                         </p>
                       )}
                       <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
                         <span>
                           {profile.stageProgress && profile.stageProgress.next > 0
-                            ? <>{profile.stageProgress.current} / {profile.stageProgress.next} rep to next stage</>
-                            : <>{profile.reputation} rep — top of the ladder</>}
+                            ? <>{profile.stageProgress.current} / {profile.stageProgress.next} XP to next stage</>
+                            : <>{profile.xp} XP — top of the ladder</>}
                         </span>
-                        <span>{profile.stageProgress?.percent ?? profile.tierProgress.percent}%</span>
+                        <span>{profile.stageProgress?.percent ?? profile.rankProgress.percent}%</span>
                       </div>
                       <div className="h-2 w-full bg-secondary rounded-full overflow-hidden">
                         <div
                           className="h-full bg-gradient-to-r from-primary to-spectrum transition-all"
-                          style={{ width: `${profile.stageProgress?.percent ?? profile.tierProgress.percent}%` }}
+                          style={{ width: `${profile.stageProgress?.percent ?? profile.rankProgress.percent}%` }}
                         />
                       </div>
                       <p className="text-xs text-muted-foreground mt-1">
-                        {profile.reputation} rep total · {profile.reputationTier.benefit}
+                        {profile.xp} XP total · {profile.rank.benefit}
                       </p>
                     </div>
                   )}
@@ -371,8 +372,8 @@ export default function ProfileClient() {
               ) : (
                 <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-8 gap-x-3 gap-y-4 mt-4">
                   <div className="text-center">
-                    <div className="text-lg font-bold text-primary">{profile.reputation}</div>
-                    <div className="text-xs text-muted-foreground">Reputation</div>
+                    <div className="text-lg font-bold text-primary">{profile.xp}</div>
+                    <div className="text-xs text-muted-foreground">XP</div>
                   </div>
                   <div className="text-center">
                     <div className="text-lg font-bold text-primary">{profile.stats.threadCreator}</div>
@@ -556,18 +557,18 @@ export default function ProfileClient() {
           )
         })()}
 
-        {/* Overview tab — rep + recent discussions + featured grow */}
-        {(profile.isBot || activeTab === "overview") && !profile.isBot && recentRep.length > 0 && (
+        {/* Overview tab — progression + recent discussions + featured grow */}
+        {(profile.isBot || activeTab === "overview") && !profile.isBot && recentProgression.length > 0 && (
           <div className="tt-spotlight bg-card/80 rounded-2xl border border-border/70 p-4 mb-4">
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
                 <TrendingUp className="w-4 h-4 text-primary" />
-                <h2 className="font-display text-lg font-semibold">Reputation</h2>
+                <h2 className="font-display text-lg font-semibold">Progression</h2>
               </div>
               <Link href="/reputation" className="text-xs text-primary hover:underline">How it works</Link>
             </div>
             <div className="space-y-1">
-              {recentRep.map((e) => (
+              {recentProgression.map((e) => (
                 <div key={e.id} className={`flex items-center justify-between text-sm py-1 ${e.reversed ? "opacity-50" : ""}`}>
                   <span className={`truncate ${e.reversed ? "line-through" : ""}`}>{e.label}{e.reversed ? " (reversed)" : ""}</span>
                   <span className="flex items-center gap-3 shrink-0 ml-3">
@@ -606,7 +607,7 @@ export default function ProfileClient() {
               </div>
               <ul className="space-y-2 text-sm text-muted-foreground">
                 <li className="flex gap-2"><HandMetal className="w-4 h-4 text-primary shrink-0 mt-0.5" /> Welcome new members and post the daily digest in <Link href="/chat" className="text-primary hover:underline">Chat</Link>.</li>
-                <li className="flex gap-2"><MessageSquare className="w-4 h-4 text-primary shrink-0 mt-0.5" /> Answer questions when you mention <span className="text-primary font-medium">@terpbot</span> — rep, streaks, diaries, strains, guides, and more.</li>
+                <li className="flex gap-2"><MessageSquare className="w-4 h-4 text-primary shrink-0 mt-0.5" /> Answer questions when you mention <span className="text-primary font-medium">@terpbot</span> — XP, streaks, diaries, strains, guides, and more.</li>
                 <li className="flex gap-2"><Zap className="w-4 h-4 text-primary shrink-0 mt-0.5" /> Summarize linked threads and check whether a question got answered — try <span className="text-primary font-medium">@terpbot summarize this</span>.</li>
                 <li className="flex gap-2"><Sprout className="w-4 h-4 text-primary shrink-0 mt-0.5" /> Send you a private heads-up when it&apos;s useful — a welcome note, first-diary tips, or a nudge when one of your threads goes quiet.</li>
               </ul>
@@ -634,7 +635,7 @@ export default function ProfileClient() {
               </div>
               <div className="space-y-1.5">
                 {[
-                  "@terpbot what's my reputation?",
+                  "@terpbot what's my rank?",
                   "@terpbot summarize this thread",
                   "@terpbot find cloning guides",
                   "@terpbot next badges",
@@ -819,15 +820,15 @@ export default function ProfileClient() {
           </div>
         )}
 
-        {/* Achievements tab — reputation history */}
-        {!profile.isBot && activeTab === "achievements" && recentRep.length > 0 && (
+        {/* Achievements tab — progression history */}
+        {!profile.isBot && activeTab === "achievements" && recentProgression.length > 0 && (
           <div className="tt-spotlight bg-card/80 rounded-2xl border border-border/70 p-4 mb-4">
             <div className="flex items-center gap-2 mb-3">
               <TrendingUp className="w-4 h-4 text-primary" />
-              <h2 className="font-display text-lg font-semibold">Reputation history</h2>
+              <h2 className="font-display text-lg font-semibold">Progression history</h2>
             </div>
             <div className="space-y-1">
-              {recentRep.map((e) => (
+              {recentProgression.map((e) => (
                 <div key={e.id} className={`flex items-center justify-between text-sm py-1 ${e.reversed ? "opacity-50" : ""}`}>
                   <span className={`truncate ${e.reversed ? "line-through" : ""}`}>{e.label}{e.reversed ? " (reversed)" : ""}</span>
                   <span className="flex items-center gap-3 shrink-0 ml-3">

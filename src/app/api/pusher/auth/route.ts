@@ -44,7 +44,7 @@ export async function POST(request: Request) {
     if (!match) return forbidden()
     const roomId = match[1]
 
-    const room = await prisma.chatRoom.findUnique({ where: { id: roomId }, select: { isPrivate: true, requiredRep: true } })
+    const room = await prisma.chatRoom.findUnique({ where: { id: roomId }, select: { isPrivate: true, requiredXp: true, slug: true } })
     if (!room) return forbidden()
 
     // Same central gate as message reads — realtime subscribers never

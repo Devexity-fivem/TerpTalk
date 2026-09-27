@@ -27,7 +27,8 @@ export async function GET(request: Request) {
     where: { username: { equals: username, mode: "insensitive" } },
     select: {
       username: true,
-      reputation: true,
+      xp: true,
+      standing: true,
       user: {
         select: {
           id: true,
@@ -58,11 +59,11 @@ export async function GET(request: Request) {
       take: 10,
       include: { moderator: { select: { profile: { select: { username: true } } } } },
     }),
-    prisma.reputationEvent.findMany({
+    prisma.progressionEvent.findMany({
       where: { userId: profile.user.id },
       orderBy: { createdAt: "desc" },
       take: 10,
-      select: { id: true, type: true, amount: true, reason: true, reversedAt: true, createdAt: true },
+      select: { id: true, type: true, xp: true, standing: true, reason: true, reversedAt: true, createdAt: true },
     }),
   ])
 
@@ -76,7 +77,8 @@ export async function GET(request: Request) {
       suspendedUntil: profile.user.suspendedUntil,
       joined: profile.user.createdAt,
       lastSeen: profile.user.lastSeenAt,
-      reputation: profile.reputation,
+      xp: profile.xp,
+      standing: profile.standing,
       stats: profile.user._count,
       openReports,
     },
@@ -88,6 +90,14 @@ export async function GET(request: Request) {
       moderator: a.moderator?.profile?.username ?? a.moderatorName ?? "unknown",
       createdAt: a.createdAt,
     })),
-    reputation: recentRep,
+    progression: recentRep.map((e) => ({
+      id: e.id,
+      type: e.type,
+      xp: e.xp,
+      standing: e.standing,
+      reason: e.reason,
+      reversedAt: e.reversedAt,
+      createdAt: e.createdAt,
+    })),
   })
 }

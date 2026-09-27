@@ -9,7 +9,7 @@ export interface SuggestedUser {
   image: string | null
   role: string
   bio: string | null
-  reputation: number
+  xp: number
   followers: number
 }
 

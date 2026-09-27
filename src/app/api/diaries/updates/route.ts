@@ -3,8 +3,10 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { unauthorized, publicUserSelect, LIMITS, getClientIp, logSecurityEvent, isBanned, forbidden, enforceLinkTrust } from "@/lib/security"
-import { awardReputation, checkBadges, repRateLimit, REP_POINTS } from "@/lib/reputation"
-import { enqueueReversal, drainOne } from "@/lib/reputation-outbox"
+import { checkBadges } from "@/lib/reputation"
+import { progressionRateLimit } from "@/lib/progression"
+import { awardProgression, checkDuplicateContent, updateBand } from "@/lib/progression"
+import { enqueueXpReversal, drainXpOne } from "@/lib/progression-outbox"
 import { storeImages, deleteImagesIfUnreferenced, MAX_POST_IMAGES } from "@/lib/blob"
 import { checkMaintenance } from "@/lib/maintenance"
 import { notifyMany } from "@/lib/notify"
@@ -123,7 +125,7 @@ export async function POST(request: Request) {
     }
 
     // Rate limit + ban check before any expensive work
-    const rl = await repRateLimit(session.user.id, `diary-update:${session.user.id}`, 30, 60 * 60 * 1000)
+    const rl = await progressionRateLimit(session.user.id, `diary-update:${session.user.id}`, 30, 60 * 60 * 1000)
     if (!rl.allowed) {
       await logSecurityEvent("RATE_LIMIT_EXCEEDED", {
         userId: session.user.id,
@@ -255,18 +257,101 @@ export async function POST(request: Request) {
       return created
     })
 
-    // One paying update per diary per UTC day — keyed so extra updates and
-    // retries don't farm. A 10-character floor keeps trivial "bump" updates
-    // from paying; the update itself is still posted either way.
-    if (content.trim().length >= 10) {
-      const updateDay = new Date().toISOString().slice(0, 10)
-      await awardReputation(
-        session.user.id,
-        "DIARY_UPDATE",
-        REP_POINTS.DIARY_UPDATE,
-        `Updated diary "${diary.title.slice(0, 60)}"`,
-        { key: `diaryupd:${diaryId}:${updateDay}`, sourceType: "DIARY", sourceId: diaryId }
-      ).catch(() => {})
+    // V2 update economy (design §6.7): one paying update per diary per UTC
+    // day (base 5), band bonus for rich/exceptional updates, +2 per
+    // structured category — all gated by the simhash duplicate tiers.
+    // Marker rows keep withheld/reduced decisions auditable.
+    {
+      const envNum = [
+        temperature, humidity, vpd, nightTemperature, substrateTemperature,
+        co2Ppm, ppfd, photoperiodHours, lampDistanceCm,
+      ].filter((v) => typeof v === "number").length
+      const chemNum = [ph, ec, runoffPh, runoffEc].filter((v) => typeof v === "number").length
+      const measNum = [heightCm, wateringLiters].filter((v) => typeof v === "number").length
+      const structuredCategories =
+        (envNum > 0 ? 1 : 0) + (chemNum > 0 ? 1 : 0) + (measNum > 0 ? 1 : 0) +
+        (nutrientRows.length > 0 ? 1 : 0) +
+        (typeof feeding === "string" && feeding.trim() ? 1 : 0) +
+        (typeof training === "string" && training.trim() ? 1 : 0)
+      const band = updateBand({
+        chars: (content ?? "").trim().length,
+        structuredCategories,
+        hasNumericMetric: envNum + chemNum + measNum > 0,
+        hasPhoto: storedImages.length > 0,
+      })
+
+      if (band > 0) {
+        const updateDay = new Date().toISOString().slice(0, 10)
+        const reason = `Updated diary "${diary.title.slice(0, 60)}"`
+
+        // Structured-data exception: this update counts as new data when any
+        // structured field differs from the diary's previous update (or is
+        // present where none existed) — recurring prose doesn't strip bonuses.
+        const prev = await prisma.diaryUpdate.findFirst({
+          where: { diaryId, id: { not: update.id } },
+          orderBy: { createdAt: "desc" },
+          include: { images: true, nutrients: true },
+        }).catch(() => null)
+        const NUM_FIELDS = [
+          "temperature", "humidity", "vpd", "ph", "ec", "heightCm",
+          "nightTemperature", "substrateTemperature", "co2Ppm",
+          "wateringLiters", "ppfd", "photoperiodHours",
+          "runoffPh", "runoffEc", "lampDistanceCm",
+        ] as const
+        const structuredChanged = !prev ||
+          NUM_FIELDS.some((f) => update[f] !== prev[f]) ||
+          update.feeding !== prev.feeding ||
+          update.training !== prev.training ||
+          update.images.length !== prev.images.length ||
+          update.nutrients.length !== prev.nutrients.length
+
+        const dup = await checkDuplicateContent(session.user.id, content ?? "", {
+          structuredChanged, excludeId: update.id,
+        }).catch(() => ({ verdict: "clean" as const, similarity: 0 }))
+
+        const dayKey = `diaryupd:${diaryId}:${updateDay}`
+        if (dup.verdict === "withheld") {
+          await awardProgression(session.user.id, "UPDATE_DAY", reason, {
+            key: dayKey, sourceType: "DIARY", sourceId: diaryId,
+            xp: 0, marker: true,
+            meta: { dup: "withheld", similarity: dup.similarity, updateId: update.id },
+          }).catch(() => {})
+        } else {
+          // Base always survives once per diary-day (design exception);
+          // bonuses are withheld at 85–94% unless structured data changed.
+          const bonusesBlocked = dup.verdict === "reduced" && !structuredChanged
+          await awardProgression(session.user.id, "UPDATE_DAY", reason, {
+            key: dayKey, sourceType: "DIARY", sourceId: diaryId,
+            meta: {
+              band,
+              ...(dup.verdict === "reduced" ? { dup: "reduced", similarity: dup.similarity } : {}),
+              updateId: update.id,
+            },
+          }).catch(() => {})
+          if (!bonusesBlocked) {
+            if (band === 3) {
+              await awardProgression(session.user.id, "UPDATE_EXCEPTIONAL", reason, {
+                key: `diaryband:${update.id}`, sourceType: "DIARY_UPDATE", sourceId: update.id,
+              }).catch(() => {})
+            } else if (band === 2) {
+              await awardProgression(session.user.id, "UPDATE_RICH", reason, {
+                key: `diaryband:${update.id}`, sourceType: "DIARY_UPDATE", sourceId: update.id,
+              }).catch(() => {})
+            }
+            for (let c = 0; c < structuredCategories; c++) {
+              await awardProgression(session.user.id, "STRUCTURED_CATEGORY", reason, {
+                key: `diarycat:${update.id}:${c}`, sourceType: "DIARY_UPDATE", sourceId: update.id,
+              }).catch(() => {})
+            }
+          } else {
+            await awardProgression(session.user.id, "UPDATE_RICH", reason, {
+              key: `diaryband:${update.id}`, sourceType: "DIARY_UPDATE", sourceId: update.id,
+              xp: 0, marker: true,
+              meta: { dup: "reduced", similarity: dup.similarity, updateId: update.id },
+            }).catch(() => {})
+          }
+        }
+      }
     }
 
     revalidateTag("diaries", { expire: 0 })
@@ -374,20 +459,26 @@ export async function DELETE(request: Request) {
     ))
     const dayEnd = new Date(dayStart.getTime() + 86400000)
     const dayKey = update.createdAt.toISOString().slice(0, 10)
-    let reversalId: string | null = null
+    const reversalIds: string[] = []
     await prisma.$transaction(async (tx) => {
       await tx.diaryUpdate.delete({ where: { id } })
+      // Per-update bonuses (band/structured) are sourced to the update id —
+      // one source reversal unwinds them regardless of how many fired.
+      reversalIds.push(await enqueueXpReversal(tx, {
+        kind: "SOURCE", sourceType: "DIARY_UPDATE", sourceId: id,
+        reason: "Diary update deleted",
+      }))
       const remaining = await tx.diaryUpdate.count({
         where: { diaryId: update.diaryId, createdAt: { gte: dayStart, lt: dayEnd } },
       })
       if (remaining === 0) {
-        reversalId = await enqueueReversal(tx, {
+        reversalIds.push(await enqueueXpReversal(tx, {
           kind: "KEY", eventKey: `diaryupd:${update.diaryId}:${dayKey}`,
           reason: "Diary update deleted",
-        })
+        }))
       }
     })
-    if (reversalId) await drainOne(reversalId).catch(() => false)
+    for (const rid of reversalIds) await drainXpOne(rid).catch(() => false)
     // Losing a meaningful update day can regress a grow-journey stage —
     // reconciliation claws the milestone award back if it no longer holds.
     await evaluateGrowJourney(update.diaryId).catch(() => {})

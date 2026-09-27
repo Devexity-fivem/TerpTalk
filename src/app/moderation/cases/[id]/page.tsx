@@ -21,10 +21,11 @@ interface SubjectContext {
   suspendedUntil?: string | null
   joined?: string
   lastSeen?: string | null
-  reputation?: number
+  xp?: number
+  standing?: number
   openReports?: number
   openFlags?: number
-  recentReputation?: { id: string; type: string; amount: number; reason: string; reversedAt: string | null; createdAt: string }[]
+  recentProgression?: { id: string; type: string; xp: number; standing: number; reason: string; reversedAt: string | null; createdAt: string }[]
   recentActions?: { id: string; type: string; reason: string; duration: number | null; moderator: string; createdAt: string }[]
 }
 
@@ -338,7 +339,7 @@ export default function CasePage() {
                     )}
                   </div>
                   <p className="text-xs text-muted-foreground mt-1">
-                    rep {subject.reputation} · joined {subject.joined ? new Date(subject.joined).toLocaleDateString() : "?"}
+                    {subject.xp?.toLocaleString() ?? 0} XP · {subject.standing ?? 0} standing · joined {subject.joined ? new Date(subject.joined).toLocaleDateString() : "?"}
                     {subject.lastSeen && ` · seen ${new Date(subject.lastSeen).toLocaleDateString()}`}
                   </p>
                   <p className="text-xs text-muted-foreground">
@@ -348,12 +349,12 @@ export default function CasePage() {
                   {subject.bannedReason && <p className="text-xs text-destructive mt-1">Ban reason: {subject.bannedReason}</p>}
                 </div>
 
-                {subject.recentReputation && subject.recentReputation.length > 0 && (
+                {subject.recentProgression && subject.recentProgression.length > 0 && (
                   <div className="border-t border-border pt-3">
-                    <p className="text-xs font-medium text-muted-foreground mb-1.5">Recent reputation</p>
-                    {subject.recentReputation.map((e) => (
+                    <p className="text-xs font-medium text-muted-foreground mb-1.5">Recent progression</p>
+                    {subject.recentProgression.map((e) => (
                       <p key={e.id} className={`text-xs ${e.reversedAt ? "line-through opacity-60" : ""}`}>
-                        <span className={`font-medium ${e.amount >= 0 ? "text-primary" : "text-destructive"}`}>{e.amount >= 0 ? "+" : ""}{e.amount}</span>
+                        <span className={`font-medium ${(e.xp + e.standing) >= 0 ? "text-primary" : "text-destructive"}`}>{e.xp !== 0 ? `${e.xp >= 0 ? "+" : ""}${e.xp} XP` : `${e.standing >= 0 ? "+" : ""}${e.standing} st`}</span>
                         {" "}{e.type.replace(/_/g, " ")}
                       </p>
                     ))}

@@ -235,15 +235,15 @@ export async function announceBadges(username: string, badgeNames: string[]) {
 
 export async function announceTierUp(
   username: string,
-  tierName: string,
-  reputation: number,
+  rankName: string,
+  xp: number,
   unlockNames: string[] = []
 ) {
   const unlockText = unlockNames.length
     ? ` — unlocked ${unlockNames.map((n) => sanitizeEcho(n, 40)).join(", ")}`
     : ""
   const dto = await postToGeneral(
-    `⬆️ @${username} just reached the ${sanitizeEcho(tierName, 40)} tier with ${reputation.toLocaleString()} rep${unlockText}. Keep growing!`
+    `⬆️ @${username} just reached the ${sanitizeEcho(rankName, 40)} rank with ${xp.toLocaleString()} XP${unlockText}. Keep growing!`
   )
   if (dto) {
     await recordBotEvent({

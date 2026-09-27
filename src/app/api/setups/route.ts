@@ -6,8 +6,8 @@ import { unauthorized, publicUserSelect, LIMITS, getClientIp, logSecurityEvent, 
 import { rateLimit } from "@/lib/rate-limit"
 import { storeImages, deleteImagesIfUnreferenced } from "@/lib/blob"
 import { checkMaintenance } from "@/lib/maintenance"
-import { awardReputation, REP_POINTS } from "@/lib/reputation"
-import { enqueueReversal, drainOne } from "@/lib/reputation-outbox"
+import { awardProgression } from "@/lib/progression"
+import { enqueueXpReversal, drainXpOne } from "@/lib/progression-outbox"
 import { notificationLinkWhere } from "@/lib/notify"
 import { revalidateTag } from "next/cache"
 import { parseSetupPatch, setupPatchTouchesStrainStats, SETUP_MAX_IMAGES } from "@/lib/setup-edit"
@@ -157,10 +157,9 @@ export async function POST(request: Request) {
     setup.slug = entitySlug(setup.title, setup.id, "setup")
     await prisma.growSetup.update({ where: { id: setup.id }, data: { slug: setup.slug } })
 
-    await awardReputation(
+    await awardProgression(
       session.user.id,
-      "SETUP_CREATED",
-      REP_POINTS.SETUP_CREATED,
+      "SETUP_SHOWCASE",
       `Shared grow setup "${setup.title.slice(0, 60)}"`,
       { key: `setup:${setup.id}`, sourceType: "SETUP", sourceId: setup.id }
     ).catch(() => {})
@@ -213,7 +212,7 @@ export async function DELETE(request: Request) {
           setup.slug ? [`/setups/${id}`, `/setups/${setup.slug}`] : `/setups/${id}`
         ),
       })
-      reversalId = await enqueueReversal(tx, {
+      reversalId = await enqueueXpReversal(tx, {
         kind: "SOURCE", sourceType: "SETUP", sourceId: id,
         reason: "Setup removed", requestedBy: session.user.id,
       })
@@ -221,7 +220,7 @@ export async function DELETE(request: Request) {
     })
 
     // Durable drain — the intent row was committed with the delete.
-    if (reversalId) await drainOne(reversalId).catch(() => false)
+    if (reversalId) await drainXpOne(reversalId).catch(() => false)
     deleteImagesIfUnreferenced(imageUrls).catch(() => {})
     revalidateTag("setups", { expire: 0 })
 

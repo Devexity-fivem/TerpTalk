@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { unstable_cache } from "next/cache"
-import { getClientIp, hashIp, REPUTATION_ORDER, activeAuthor, blockedUserIds } from "@/lib/security"
+import { getClientIp, hashIp, XP_ORDER, activeAuthor, blockedUserIds } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
 
 function escapeLike(str: string): string {
@@ -34,7 +34,7 @@ const getSearchSuggestions = unstable_cache(
           user: { banned: false, OR: [{ suspendedUntil: null }, { suspendedUntil: { lt: new Date() } }] },
         },
         take: 3,
-        orderBy: REPUTATION_ORDER,
+        orderBy: XP_ORDER,
         select: { username: true },
       }),
       prisma.tag.findMany({

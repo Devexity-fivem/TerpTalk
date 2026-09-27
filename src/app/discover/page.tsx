@@ -151,7 +151,7 @@ export default async function DiscoverPage({
                       <div className="flex items-center gap-1.5 text-xs text-muted-foreground flex-wrap">
                         <span className="font-medium text-foreground">{thread.author.profile?.username || thread.author.name}</span>
                         <RoleBadge role={thread.author.role} />
-                        <TierChip reputation={thread.author.profile?.reputation ?? 0} publicMilestoneOptOut={thread.author.profile?.publicMilestoneOptOut} />
+                        <TierChip xp={thread.author.profile?.xp ?? 0} publicMilestoneOptOut={thread.author.profile?.publicMilestoneOptOut} />
                         <span>•</span>
                         <span className="text-primary">{thread.category.name}</span>
                       </div>

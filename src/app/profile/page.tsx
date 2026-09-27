@@ -15,7 +15,7 @@ import ReputationRoadmap from "@/components/reputation-roadmap"
 import ReputationEarn from "@/components/reputation-earn"
 import { useToast } from "@/components/ui/toast"
 import { getBadgeByName, BADGE_RARITIES } from "@/lib/badge-registry"
-import { REP_POINTS, REFERRAL_MIN_REP } from "@/lib/reputation-config"
+import { XP_TABLE, REFERRAL_MIN_XP, REFERRAL_MIN_AGE_HOURS } from "@/lib/progression-config"
 import SavedThreads from "@/components/saved-threads"
 import SavedSearches from "@/components/saved-searches"
 import RecoveryPhraseCard from "@/components/recovery-phrase-card"
@@ -119,7 +119,8 @@ interface ProfileData {
     notifyOnComment: boolean
     notifyOnFollow: boolean
     notifyOnReaction: boolean
-    reputation: number
+    xp: number
+    standing: number
     avatarFrame: string | null
     profileTitle: string | null
     profileTheme: string | null
@@ -130,20 +131,22 @@ interface ProfileData {
     followers: number
     following: number
     badges: number
-    reputation: number
-    reputationTier: {
+    xp: number
+    standing: number
+    pollCreation: boolean
+    rank: {
       name: string
       color: string
       bg: string
       icon: string
       benefit: string
     }
-    tierProgress: {
+    rankProgress: {
       current: number
       next: number
       percent: number
     }
-    repStage: {
+    xpStage: {
       level: number
       stageName: string
       stageIndex: number
@@ -363,7 +366,7 @@ export default function ProfilePage() {
               <div className="flex-1">
                 <div className="flex items-start justify-between gap-4 flex-wrap">
                   <div>
-                    <h1 className="font-display text-2xl font-bold mb-1 flex items-center gap-2 tracking-tight">{profileData.profile?.username || profileData.user.name} <RoleBadge role={profileData.user.role} /> <TierChip reputation={profileData.profile?.reputation ?? 0} size="md" /></h1>
+                    <h1 className="font-display text-2xl font-bold mb-1 flex items-center gap-2 tracking-tight">{profileData.profile?.username || profileData.user.name} <RoleBadge role={profileData.user.role} /> <TierChip xp={profileData.profile?.xp ?? 0} size="md" /></h1>
                     {getProfileTitle(profileData.profile?.profileTitle) && (
                       <p className="text-xs font-medium uppercase tracking-wider text-primary/80 mb-1">
                         {getProfileTitle(profileData.profile?.profileTitle)?.name}
@@ -424,9 +427,9 @@ export default function ProfilePage() {
                 </div>
                 <div className="flex flex-wrap gap-4 sm:gap-6 mt-4">
                   <div className="text-center">
-                    <div className="text-2xl font-bold text-primary">{profileData.stats.reputation}</div>
+                    <div className="text-2xl font-bold text-primary">{profileData.stats.xp.toLocaleString()}</div>
                     <div className="text-sm text-muted-foreground">
-                      Reputation <InfoTip content="Points earned from posting, journaling, and helping other growers — raises your grow level and unlocks tiers and rewards." />
+                      XP <InfoTip content="Experience earned from posting, journaling, and helping other growers — raises your grow level and unlocks ranks and rewards." />
                     </div>
                   </div>
                   <div className="text-center">
@@ -810,32 +813,32 @@ export default function ProfilePage() {
           <div className="md:col-span-2 space-y-4 md:space-y-6">
           <div className="flex items-center gap-2">
             <p className="text-sm text-muted-foreground">
-              Everything here compounds — reputation raises your grow level, unlocks tiers, and earns rewards.
+              Everything here compounds — XP raises your grow level, unlocks ranks, and earns rewards.
             </p>
-            <InfoTip content="Post, journal, and help other growers to earn reputation. Levels and tiers unlock rewards automatically — challenges and quests are optional bonuses." />
+            <InfoTip content="Post, journal, and help other growers to earn XP. Grow levels and ranks unlock rewards automatically — challenges and quests are optional bonuses." />
           </div>
           <div className="grid gap-4 md:gap-6 md:grid-cols-2 items-start">
           <div className="space-y-4 md:space-y-6">
-          {/* Reputation Tier */}
+          {/* Rank */}
           <div className="bg-card/80 rounded-2xl border border-border/70 p-6">
             <div className="flex items-center gap-2 mb-4">
               <TrendingUp className="w-5 h-5 text-primary" />
               <h2 className="font-display text-lg font-semibold">Your Growth</h2>
-              <InfoTip content="Your grow level rises with reputation. Levels are grouped into stages — finish a stage to level up. Reputation tiers are the long arc and unlock community perks." />
+              <InfoTip content="Your grow level rises with XP. Levels are grouped into stages — finish a stage to level up. Ranks are the long arc and unlock community perks." />
             </div>
-            <div className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full ${profileData.stats.reputationTier.bg} ${profileData.stats.reputationTier.color} text-sm font-medium mb-1`}>
-              <span>{profileData.stats.reputationTier.icon}</span>
-              {profileData.stats.reputationTier.name}
+            <div className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full ${profileData.stats.rank.bg} ${profileData.stats.rank.color} text-sm font-medium mb-1`}>
+              <span>{profileData.stats.rank.icon}</span>
+              {profileData.stats.rank.name}
             </div>
             <p className="text-xs text-muted-foreground mb-3">
-              Grow Level {profileData.stats.repStage.level} · {profileData.stats.repStage.stageName} stage ({profileData.stats.repStage.stageIndex + 1}/{profileData.stats.repStage.stageCount})
+              Grow Level {profileData.stats.xpStage.level} · {profileData.stats.xpStage.stageName} stage ({profileData.stats.xpStage.stageIndex + 1}/{profileData.stats.xpStage.stageCount})
             </p>
-            <p className="text-sm text-muted-foreground mb-4">{profileData.stats.reputationTier.benefit}</p>
+            <p className="text-sm text-muted-foreground mb-4">{profileData.stats.rank.benefit}</p>
             <div className="mb-2">
               <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
                 <span>
                   {profileData.stats.stageProgress.next > 0
-                    ? `${profileData.stats.stageProgress.current} / ${profileData.stats.stageProgress.next} rep to next stage`
+                    ? `${profileData.stats.stageProgress.current} / ${profileData.stats.stageProgress.next} XP to next stage`
                     : "Top of the ladder"}
                 </span>
                 <span>{profileData.stats.stageProgress.percent}%</span>
@@ -847,21 +850,21 @@ export default function ProfilePage() {
                 />
               </div>
               <div className="flex items-center justify-between text-[10px] text-muted-foreground mt-1">
-                <span>{profileData.stats.reputation} rep total</span>
-                {profileData.stats.tierProgress.next > profileData.stats.reputation && (
-                  <span>{profileData.stats.tierProgress.next - profileData.stats.reputation} to {profileData.stats.reputationTier.name === "Master Gardener" ? "max" : "next rank"}</span>
+                <span>{profileData.stats.xp.toLocaleString()} XP total</span>
+                {profileData.stats.rankProgress.next > profileData.stats.xp && (
+                  <span>{profileData.stats.rankProgress.next - profileData.stats.xp} to {profileData.stats.rank.name === "Master Cultivator" ? "max" : "next rank"}</span>
                 )}
               </div>
             </div>
             <p className="text-xs text-muted-foreground">
-              Earn rep by posting, journaling, adding strains, and getting likes. Verified members earn 1.5x rep.
+              Earn XP by posting, journaling, documenting grows, and helping growers. Standing — from peer-validated work — unlocks community privileges.
             </p>
           </div>
 
           <WeeklyChallenges />
           <div id="rewards" className="scroll-mt-20">
             <CosmeticsPanel
-              reputation={profileData.stats.reputation}
+              xp={profileData.stats.xp}
               equipped={{
                 avatarFrame: profileData.profile?.avatarFrame ?? null,
                 profileTitle: profileData.profile?.profileTitle ?? null,
@@ -884,7 +887,7 @@ export default function ProfilePage() {
             </div>
             <ArrowRight className="w-5 h-5 text-primary shrink-0" />
           </Link>
-          <ReputationRoadmap reputation={profileData.stats.reputation} />
+          <ReputationRoadmap xp={profileData.stats.xp} />
           <ReputationEarn />
           </div>
           </div>
@@ -905,7 +908,7 @@ export default function ProfilePage() {
               <h2 className="font-display text-lg font-semibold">Referrals</h2>
             </div>
             <p className="text-sm text-muted-foreground mb-3">
-              Invite growers — earn <span className="font-semibold text-warning">+{REP_POINTS.REFERRAL} reputation</span> once your invitee reaches {REFERRAL_MIN_REP} rep and has been a member for 24+ hours, and unlock the <span className="font-semibold text-warning">🤝 Recruiter</span> badge at 3 referrals. You&apos;ve referred <span className="font-semibold text-foreground">{profileData.stats.referrals}</span> member{profileData.stats.referrals !== 1 ? "s" : ""}.
+              Invite growers — earn <span className="font-semibold text-warning">+{XP_TABLE.REFERRAL.xp} XP and +{XP_TABLE.REFERRAL.standing} standing</span> once your invitee reaches {REFERRAL_MIN_XP} XP and has been a member for {REFERRAL_MIN_AGE_HOURS}+ hours, and unlock the <span className="font-semibold text-warning">🤝 Recruiter</span> badge at 3 referrals. You&apos;ve referred <span className="font-semibold text-foreground">{profileData.stats.referrals}</span> member{profileData.stats.referrals !== 1 ? "s" : ""}.
             </p>
             <div className="flex gap-2">
               <input

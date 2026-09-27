@@ -458,7 +458,7 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
                       {diary.author.profile?.username || diary.author.name}
                     </Link>
                   </UserPopover>
-                  <TierChip reputation={diary.author.profile?.reputation ?? 0} publicMilestoneOptOut={diary.author.profile?.publicMilestoneOptOut} />
+                  <TierChip xp={diary.author.profile?.xp ?? 0} publicMilestoneOptOut={diary.author.profile?.publicMilestoneOptOut} />
                 </span>
                 <span className="flex items-center gap-1">
                   <Calendar className="w-3.5 h-3.5" />
@@ -519,7 +519,7 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
               )}
               <StageTimeline current={diary.stage} runs={stageRuns} />
 
-              {/* Grow Journey — derived milestones with rep rewards */}
+              {/* Grow Journey — derived milestones with XP rewards */}
               {journey && (
                 <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs">
                   <div className="flex items-center gap-1.5">
@@ -528,7 +528,7 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
                         key={s.key}
                         content={
                           i <= journey.stageIndex
-                            ? `${s.name} — reached${s.rep > 0 ? ` · +${s.rep} rep` : ""}`
+                            ? `${s.name} — reached${s.xp > 0 ? ` · +${s.xp} XP` : ""}`
                             : `${s.name} — not reached yet`
                         }
                       >
@@ -1211,7 +1211,7 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
                 className="flex items-center gap-2 rounded-lg p-1 -mx-1 hover:bg-secondary/60 transition-colors"
               >
                 <span className="font-medium text-sm hover:text-primary">{authorName}</span>
-                <TierChip reputation={diary.author.profile?.reputation ?? 0} publicMilestoneOptOut={diary.author.profile?.publicMilestoneOptOut} />
+                <TierChip xp={diary.author.profile?.xp ?? 0} publicMilestoneOptOut={diary.author.profile?.publicMilestoneOptOut} />
               </Link>
             </div>
 

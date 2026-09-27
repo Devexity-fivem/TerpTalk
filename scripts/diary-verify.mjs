@@ -18,21 +18,21 @@ async function getHtml(path, cookie) {
 }
 
 const main = async () => {
-  // Owner is backdated + repped so the self-vote test reaches the self-vote
-  // check rather than being stopped at the voter trust gate.
-  const seedRep = async (userId, amount) => {
-    await prisma.profile.update({ where: { userId }, data: { reputation: { increment: amount } } })
-    await prisma.reputationEvent.create({
-      data: { userId, type: "STAFF_ADJUSTMENT", amount, reason: "test seed" },
+  // Owner is backdated + XP-seeded so the self-vote test reaches the
+  // self-vote check rather than being stopped at the voter trust gate.
+  const seedXp = async (userId, amount) => {
+    await prisma.profile.update({ where: { userId }, data: { xp: { increment: amount } } })
+    await prisma.progressionEvent.create({
+      data: { userId, type: "STAFF_ADJUSTMENT", xp: amount, reason: "test seed" },
     })
   }
   const owner = await createUser("owner", { createdAt: new Date(Date.now() - 30 * 86400000) })
-  await seedRep(owner.id, 50)
+  await seedXp(owner.id, 50)
   const viewer = await createUser("viewer")
   const banned = await createUser("banned")
-  // Contest voter needs 7d age + 10 rep — backdate + grant reputation.
+  // Contest voter needs 7d age + 10 XP — backdate + grant XP.
   const voter = await createUser("voter", { createdAt: new Date(Date.now() - 9 * 86400000) })
-  await seedRep(voter.id, 50)
+  await seedXp(voter.id, 50)
   const users = [owner, viewer, banned, voter]
   const diaryIds = []
   const strainIds = []

@@ -14,12 +14,12 @@ export interface NextAction {
 // another grower. Shared by /api/progression and the member homepage.
 export function pickNextAction(input: {
   journey: JourneyState | null
-  rep: number
-  nextTier: { name: string; threshold: number } | null
+  xp: number
+  nextRank: { name: string; threshold: number } | null
   staleDiary: { id: string; slug: string | null; title: string } | null
   quests: { title: string; done: boolean; paid: boolean }[]
 }): NextAction {
-  const { journey, rep, nextTier, staleDiary, quests } = input
+  const { journey, xp, nextRank, staleDiary, quests } = input
 
   if (journey && !journey.complete) {
     const step = journey.steps.find((s) => !s.done)
@@ -40,12 +40,12 @@ export function pickNextAction(input: {
       cta: "Add an update",
     }
   }
-  if (nextTier) {
-    const remaining = nextTier.threshold - rep
-    if (remaining <= Math.max(50, Math.round(nextTier.threshold * 0.1))) {
+  if (nextRank) {
+    const remaining = nextRank.threshold - xp
+    if (remaining <= Math.max(50, Math.round(nextRank.threshold * 0.1))) {
       return {
         icon: "🌿",
-        text: `You're only ${remaining} rep from ${nextTier.name} — one good contribution can get you there`,
+        text: `You're only ${remaining} XP from ${nextRank.name} — one good contribution can get you there`,
         href: "/forum",
         cta: "Help a grower",
       }

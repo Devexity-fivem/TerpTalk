@@ -3,7 +3,8 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { unauthorized } from "@/lib/security"
 import { prisma } from "@/lib/prisma"
-import { getUserStats, getReputationTier } from "@/lib/reputation"
+import { getUserStats } from "@/lib/reputation"
+import { getProgressionPerks } from "@/lib/progression"
 import { BADGE_REGISTRY, BADGE_CATEGORY_LABELS } from "@/lib/badge-registry"
 import { rateLimit } from "@/lib/rate-limit"
 
@@ -17,16 +18,13 @@ export async function GET() {
     const rl = await rateLimit(`achievements:${session.user.id}`, 30, 60 * 1000)
     if (!rl.allowed) return NextResponse.json({ error: "Too many requests" }, { status: 429 })
 
-    const [stats, earned, profile] = await Promise.all([
+    const [stats, earned, perks] = await Promise.all([
       getUserStats(session.user.id),
       prisma.userBadge.findMany({
         where: { userId: session.user.id },
         select: { badgeId: true, badge: { select: { name: true } }, earnedAt: true, pinned: true },
       }),
-      prisma.profile.findUnique({
-        where: { userId: session.user.id },
-        select: { reputation: true },
-      }),
+      getProgressionPerks(session.user.id),
     ])
     const earnedMap = new Map(earned.map((e) => [e.badge.name, e]))
 
@@ -79,8 +77,8 @@ export async function GET() {
       }
     })
 
-    // Showcase quota — pin slots come from the member's current tier.
-    const showcaseSlots = getReputationTier(profile?.reputation ?? 0).perks.showcaseSlots ?? 3
+    // Showcase quota — pin slots come from the member's current rank.
+    const showcaseSlots = perks.showcaseSlots
 
     return NextResponse.json(
       {

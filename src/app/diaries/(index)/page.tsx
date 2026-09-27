@@ -206,7 +206,7 @@ function DiaryCard({ diary, showFeatured = false }: { diary: DiaryCardData; show
               {authorName}
             </Link>
             <RoleBadge role={diary.author.role} />
-            <TierChip reputation={diary.author.profile?.reputation ?? 0} publicMilestoneOptOut={diary.author.profile?.publicMilestoneOptOut} />
+            <TierChip xp={diary.author.profile?.xp ?? 0} publicMilestoneOptOut={diary.author.profile?.publicMilestoneOptOut} />
           </span>
           {diary._count.followers > 0 && (
             <span className="flex items-center gap-1 shrink-0">

@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
 import { notifyMany } from "@/lib/notify"
+import { MEMBER_DRIVEN_XP_TYPES } from "@/lib/progression-config"
 
 // Trust & Safety signal detection + persistence.
 //
@@ -42,15 +43,9 @@ const SIGNAL_PRIORITY: Record<string, string> = {
   REP_NEW_ACCOUNT_LIKES: "NORMAL",
 }
 
-// Member-driven reputation event types — the only events the velocity
-// detector counts. These reflect what a member actually did: authored
-// content, peer reactions, peer-gated acceptances, harvest logs, daily
-// check-ins. Everything else (BADGE_BONUS, WEEKLY_AWARD, MILESTONE,
-// ONBOARDING_COMPLETE, QUEST_DAILY, GROW_MILESTONE, JOURNEY_COMPLETE,
-// contest wins, referrals, challenges, staff adjustments, migration and
-// reversal bookkeeping) is system-generated and must not read as grinding.
-// An allowlist — not a blocklist — so any future automated award type is
-// excluded by default.
+// Member-driven reputation event types — the only events the legacy
+// velocity detector counts. Kept for the frozen legacy ledger; the live
+// V2 velocity scan uses MEMBER_DRIVEN_XP_TYPES from progression-config.
 export const MEMBER_DRIVEN_REP_TYPES = [
   "THREAD_CREATED",
   "POST_CREATED",
@@ -86,17 +81,20 @@ export async function detectReputationSignals(days: number): Promise<DetectedSig
   const window = Math.min(30, Math.max(1, days))
 
   const [velocity, reciprocal, reciprocalAnswers, newAccounts] = await Promise.all([
+    // Live V2 scan — the frozen legacy ledger can't report new grinding.
     prisma.$queryRaw<{ userId: string; gained: bigint }[]>`
-      SELECT "userId", SUM("amount") AS gained
-      FROM "ReputationEvent"
-      WHERE "reversedAt" IS NULL AND "amount" > 0
-        AND "type" IN (${Prisma.join(MEMBER_DRIVEN_REP_TYPES)})
+      SELECT "userId", SUM("xp") AS gained
+      FROM "ProgressionEvent"
+      WHERE "reversedAt" IS NULL AND "reversalOfId" IS NULL AND "xp" > 0
+        AND "type" IN (${Prisma.join([...MEMBER_DRIVEN_XP_TYPES])})
         AND "createdAt" > NOW() - INTERVAL '24 hours'
       GROUP BY "userId"
-      HAVING SUM("amount") > 150
+      HAVING SUM("xp") > 150
       ORDER BY gained DESC
       LIMIT 20`,
 
+    // Likes emit no V2 events — the reciprocal-like detector stays on the
+    // frozen legacy ledger (standing reciprocity is gated in the engine).
     prisma.$queryRaw<{ actorId: string; userId: string; mutual: bigint }[]>`
       SELECT a."actorId", a."userId", COUNT(*) AS mutual
       FROM "ReputationEvent" a
@@ -112,15 +110,15 @@ export async function detectReputationSignals(days: number): Promise<DetectedSig
       ORDER BY mutual DESC
       LIMIT 20`,
 
-    // Mutual accepted answers — the highest-value reciprocal farm (+30 each
-    // way). Two members repeatedly accepting each other's replies.
+    // Mutual accepted answers — the highest-value reciprocal farm. V2:
+    // ACCEPTED_ANSWER carries actorId = the acceptor.
     prisma.$queryRaw<{ actorId: string; userId: string; mutual: bigint }[]>`
       SELECT a."actorId", a."userId", COUNT(*) AS mutual
-      FROM "ReputationEvent" a
-      JOIN "ReputationEvent" b
+      FROM "ProgressionEvent" a
+      JOIN "ProgressionEvent" b
         ON b."actorId" = a."userId" AND b."userId" = a."actorId"
-       AND b."type" = 'HELPFUL_ANSWER' AND b."reversedAt" IS NULL
-      WHERE a."type" = 'HELPFUL_ANSWER' AND a."reversedAt" IS NULL
+       AND b."type" = 'ACCEPTED_ANSWER' AND b."reversedAt" IS NULL AND b."reversalOfId" IS NULL
+      WHERE a."type" = 'ACCEPTED_ANSWER' AND a."reversedAt" IS NULL AND a."reversalOfId" IS NULL
         AND a."actorId" IS NOT NULL
         AND a."actorId" < a."userId"
         AND a."createdAt" > NOW() - make_interval(days => ${window}::int)

@@ -3,7 +3,7 @@
  *
  * No persistence model: the journey is recomputed from GrowDiary +
  * DiaryUpdate rows, and milestone payouts are keyed rows in the existing
- * reputation ledger (`growstage:<diaryId>:<stage>:<userId>`). Diary deletion
+ * progression ledger (`growstage:<diaryId>:<stage>:<userId>`). Diary deletion
  * claws every milestone back automatically because awards carry
  * sourceType=DIARY / sourceId=diaryId, which `reverseReputationBySource`
  * already unwinds in the DELETE route.
@@ -14,24 +14,26 @@
  * of same-day filler can never unlock a stage.
  */
 import { prisma } from "@/lib/prisma"
-import { awardReputation } from "@/lib/reputation"
-import { reverseKeyDurable } from "@/lib/reputation-outbox"
+import { awardProgression } from "@/lib/progression"
+import { reverseXpKeyDurable } from "@/lib/progression-outbox"
 import { getBooleanSetting, SITE_SETTINGS } from "@/lib/settings"
 import { isMeaningfulUpdate } from "@/lib/meaningful-update"
 
 export const GROW_STAGES = [
-  { key: "PLANTED", name: "Planted", icon: "🌱", rep: 0 },
-  { key: "ESTABLISHED", name: "Established", icon: "🌿", rep: 10 },
-  { key: "VEGGING", name: "Vegging", icon: "🪴", rep: 20 },
-  { key: "FLOWERING", name: "Flowering", icon: "🌸", rep: 25 },
-  // Harvested keeps the existing HARVEST_LOGGED payout (≥4 updates).
-  { key: "HARVESTED", name: "Harvested", icon: "🌾", rep: 0 },
-  { key: "COMPLETE", name: "Complete", icon: "🏆", rep: 50 },
+  { key: "PLANTED", name: "Planted", icon: "🌱", xp: 0, event: null },
+  { key: "ESTABLISHED", name: "Established", icon: "🌿", xp: 15, event: "STAGE_ESTABLISHED" },
+  { key: "VEGGING", name: "Vegging", icon: "🪴", xp: 25, event: "STAGE_VEGGING" },
+  { key: "FLOWERING", name: "Flowering", icon: "🌸", xp: 40, event: "STAGE_FLOWERING" },
+  // Harvested keeps the HARVEST_LOGGED payout (≥4 updates).
+  { key: "HARVESTED", name: "Harvested", icon: "🌾", xp: 0, event: null },
+  // COMPLETE is display-only — the +50 GROW_COMPLETE award is owned by the
+  // harvest route (harvest + yield + rating + notes), once per diary.
+  { key: "COMPLETE", name: "Complete", icon: "🏆", xp: 0, event: null },
 ] as const
 
 export type GrowStageKey = (typeof GROW_STAGES)[number]["key"]
 
-// Ordered requirements. `rep: 0` stages pay through their own existing
+// Ordered requirements. `xp: 0` stages pay through their own existing
 // awards (DIARY_CREATED for PLANTED, HARVEST_LOGGED for HARVESTED).
 const REQUIREMENTS = {
   ESTABLISHED: { meaningfulDays: 3, elapsedDays: 7 },
@@ -289,21 +291,20 @@ export async function evaluateGrowJourney(diaryId: string): Promise<void> {
   }
 
   for (const s of GROW_STAGES) {
-    if (s.rep === 0) continue // PLANTED/HARVESTED pay via their own awards
+    if (!s.event) continue // PLANTED/HARVESTED/COMPLETE pay via their own awards
     const key = milestoneKey(diary.id, s.key, diary.authorId)
     if (met.has(s.key)) {
-      await awardReputation(
+      await awardProgression(
         diary.authorId,
-        "GROW_MILESTONE",
-        s.rep,
+        s.event,
         `Grow milestone: ${s.name}`,
         { key, sourceType: "DIARY", sourceId: diary.id }
       ).catch(() => {})
     } else {
       // Regressed (updates deleted, harvest undone) — claw the milestone
       // back. Durable intent: a failed reversal retries via ping/cron
-      // instead of leaving phantom milestone rep. No-op when no award exists.
-      await reverseKeyDurable(key, "Grow milestone no longer met").catch(() => null)
+      // instead of leaving phantom milestone XP. No-op when no award exists.
+      await reverseXpKeyDurable(key, "Grow milestone no longer met").catch(() => null)
     }
   }
 }

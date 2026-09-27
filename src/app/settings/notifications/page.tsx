@@ -16,13 +16,13 @@ const TOGGLES = [
   { key: "notifyOnComment", label: "Comments on my setups", desc: "When someone comments on my grow setup." },
   { key: "notifyOnFollow", label: "New followers", desc: "When someone follows my profile." },
   { key: "notifyOnReaction", label: "Reactions", desc: "When someone reacts to my posts or grow diaries." },
-  { key: "notifyOnMilestone", label: "Milestones", desc: "Tier-ups, badges, and reputation milestones." },
+  { key: "notifyOnMilestone", label: "Milestones", desc: "Rank-ups, badges, and progression milestones." },
   { key: "notifyOnBotAssist", label: "TerpBot tips", desc: "Occasional pointers from TerpBot (our automated helper) about my threads, diaries, and account. Doesn't affect reply or accepted-answer notices." },
 ] as const
 
 const PRIVACY_TOGGLES = [
   { key: "hideOnlineStatus", label: "Hide my online status", desc: "Don't show me in 'who's online' lists or mark me as active. Members may still see your public posts and comments." },
-  { key: "publicMilestoneOptOut", label: "Opt out of public recognition", desc: "Skip me in TerpBot's public shout-outs (tier-ups, badges, harvests, contest winners) and leaderboard-style spotlights. You still earn the badges, reputation, and private notifications." },
+  { key: "publicMilestoneOptOut", label: "Opt out of public recognition", desc: "Skip me in TerpBot's public shout-outs (rank-ups, badges, harvests, contest winners) and leaderboard-style spotlights. You still earn the badges, XP, and private notifications." },
 ] as const
 
 const DM_OPTIONS = [

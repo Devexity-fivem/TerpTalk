@@ -358,11 +358,11 @@ async function run() {
     select: { id: true },
   })
   const highRep = await prisma.user.create({
-    data: { name: `${TAG}_highrep`, ageVerified: true, sessionVersion: 1, profile: { create: { username: `${TAG}_highrep`, reputation: 99999 } } },
+    data: { name: `${TAG}_highrep`, ageVerified: true, sessionVersion: 1, profile: { create: { username: `${TAG}_highrep`, xp: 99999 } } },
     select: { id: true },
   })
-  await prisma.reputationEvent.create({
-    data: { userId: highRep.id, type: "STAFF_ADJUSTMENT", amount: 99999, reason: "test seed" },
+  await prisma.progressionEvent.create({
+    data: { userId: highRep.id, type: "STAFF_ADJUSTMENT", xp: 99999, reason: "test seed" },
   })
 
   const publicRoom = await prisma.chatRoom.create({
@@ -372,7 +372,7 @@ async function run() {
     data: { name: `${TAG} Private`, slug: `${TAG}-priv`, isPrivate: true, order: 901 },
   })
   const gatedRoom = await prisma.chatRoom.create({
-    data: { name: `${TAG} Gated`, slug: `${TAG}-gated`, requiredRep: 3500, order: 902 },
+    data: { name: `${TAG} Gated`, slug: `${TAG}-gated`, requiredXp: 3500, order: 902 },
   })
 
   const prevGrowFlag = await getSetting(SITE_SETTINGS.GROW_ROOM_ENABLED)
@@ -429,7 +429,7 @@ async function run() {
     const teaser = await getChatTeaser()
     assert.ok(teaser, "teaser resolves")
     const teaserRoom = await prisma.chatRoom.findFirst({ where: { slug: teaser!.roomSlug } })
-    assert.ok(teaserRoom && !teaserRoom.isPrivate && teaserRoom.requiredRep == null,
+    assert.ok(teaserRoom && !teaserRoom.isPrivate && teaserRoom.requiredXp == null,
       "teaser room must be fully public — never gated or private")
     assert.ok(!("content" in teaser!), "teaser exposes no message content")
     console.log("PASS homepage teaser is public-room metadata only")

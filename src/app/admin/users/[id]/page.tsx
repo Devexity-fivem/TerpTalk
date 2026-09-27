@@ -21,7 +21,8 @@ interface UserDetail {
     bio: string | null
     location: string | null
     avatarUrl: string | null
-    reputation: number
+    xp: number
+    standing: number
   } | null
   _count: {
     posts: number
@@ -49,7 +50,7 @@ export default function AdminUserDetailPage() {
   const [error, setError] = useState("")
   const [notice, setNotice] = useState("")
   const [duration, setDuration] = useState(7)
-  const [ledger, setLedger] = useState<{ ledgerSum: number; drift: number; events: { id: string; type: string; amount: number; reason: string; actor: string | null; reversedAt: string | null; createdAt: string }[] } | null>(null)
+  const [ledger, setLedger] = useState<{ ledgerSum: number; drift: number; standingSum: number; standingDrift: number; events: { id: string; type: string; xp: number; standing: number; reason: string; actor: string | null; reversedAt: string | null; createdAt: string }[] } | null>(null)
   const [repDelta, setRepDelta] = useState("")
   const [repReason, setRepReason] = useState("")
 
@@ -116,7 +117,7 @@ export default function AdminUserDetailPage() {
     const delta = parseInt(repDelta, 10)
     if (!Number.isInteger(delta) || delta === 0 || Math.abs(delta) > 500) { setError("Delta must be a non-zero integer within ±500"); return }
     if (!repReason.trim()) { setError("Reason required"); return }
-    if (!confirm(`Adjust reputation by ${delta > 0 ? "+" : ""}${delta} for @${user?.profile?.username}?`)) return
+    if (!confirm(`Adjust XP by ${delta > 0 ? "+" : ""}${delta} for @${user?.profile?.username}?`)) return
     setBusy(true)
     setError("")
     setNotice("")
@@ -127,7 +128,7 @@ export default function AdminUserDetailPage() {
         body: JSON.stringify({ username: user?.profile?.username, delta, reason: repReason.trim() }),
       })
       const d = await res.json()
-      if (res.ok) { setNotice(`Reputation adjusted → ${d.newRep}`); setRepDelta(""); setRepReason(""); load() }
+      if (res.ok) { setNotice(`XP adjusted → ${d.newXp}`); setRepDelta(""); setRepReason(""); load() }
       else { setError(d.error || "Adjustment failed") }
     } finally { setBusy(false) }
   }
@@ -156,7 +157,7 @@ export default function AdminUserDetailPage() {
           <User className="w-8 h-8 text-primary" />
           <div>
             <h1 className="text-2xl font-bold">@{user.profile?.username ?? user.name}</h1>
-            <p className="text-muted-foreground text-sm">{user._count.posts} posts · {user._count.threadCreator} threads · rep {user.profile?.reputation ?? 0}</p>
+            <p className="text-muted-foreground text-sm">{user._count.posts} posts · {user._count.threadCreator} threads · {user.profile?.xp?.toLocaleString() ?? 0} XP · {user.profile?.standing ?? 0} standing</p>
           </div>
         </div>
 
@@ -213,10 +214,10 @@ export default function AdminUserDetailPage() {
           <div className="bg-card rounded-xl border border-border p-4 mb-6">
             <div className="flex items-center gap-2 mb-3">
               <TrendingUp className="w-4 h-4 text-primary" />
-              <h2 className="font-semibold">Reputation</h2>
+              <h2 className="font-semibold">Progression</h2>
               {ledger && (
                 <span className={`text-xs ml-auto ${ledger.drift !== 0 ? "text-destructive font-semibold" : "text-muted-foreground"}`}>
-                  ledger {ledger.ledgerSum}{ledger.drift !== 0 ? ` · drift ${ledger.drift > 0 ? "+" : ""}${ledger.drift}` : ""}
+                  ledger {ledger.ledgerSum} XP{ledger.drift !== 0 ? ` · drift ${ledger.drift > 0 ? "+" : ""}${ledger.drift}` : ""}
                 </span>
               )}
             </div>
@@ -241,7 +242,7 @@ export default function AdminUserDetailPage() {
                 {ledger.events.slice(0, 12).map((e) => (
                   <div key={e.id} className={`py-1.5 text-xs flex items-center justify-between gap-2 ${e.reversedAt ? "opacity-50" : ""}`}>
                     <span className={`min-w-0 truncate ${e.reversedAt ? "line-through" : ""}`}>
-                      <span className={`font-medium ${e.amount >= 0 ? "text-primary" : "text-destructive"}`}>{e.amount >= 0 ? "+" : ""}{e.amount}</span>
+                      <span className={`font-medium ${(e.xp + e.standing) >= 0 ? "text-primary" : "text-destructive"}`}>{e.xp !== 0 ? `${e.xp >= 0 ? "+" : ""}${e.xp} XP` : `${e.standing >= 0 ? "+" : ""}${e.standing} st`}</span>
                       {" "}{e.type.replace(/_/g, " ")}
                       {e.actor && <span className="text-muted-foreground"> by @{e.actor}</span>}
                       <span className="text-muted-foreground"> — {e.reason}</span>
@@ -249,7 +250,7 @@ export default function AdminUserDetailPage() {
                     <span className="text-muted-foreground shrink-0">{new Date(e.createdAt).toLocaleDateString()}</span>
                   </div>
                 ))}
-                {ledger.events.length === 0 && <p className="py-2 text-sm text-muted-foreground">No reputation events.</p>}
+                {ledger.events.length === 0 && <p className="py-2 text-sm text-muted-foreground">No progression events.</p>}
               </div>
             )}
           </div>

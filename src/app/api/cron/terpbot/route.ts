@@ -9,8 +9,11 @@ import { currentWeekKey, previousWeekKey, currentMonthKey, previousMonthKey } fr
 import { resolveWeeklyWinner, resolveMonthlyDiaryWinner } from "@/lib/contest-awards"
 import { resolveWeeklyRecognition } from "@/lib/weekly-recognition"
 import { materializeReputationFlags } from "@/lib/trust-signals"
-import { reconcileReferralPayouts, findReputationDrift } from "@/lib/reputation"
+import { findReputationDrift } from "@/lib/reputation"
+import { reconcileReferralPayouts } from "@/lib/referrals"
 import { drainPendingReversals } from "@/lib/reputation-outbox"
+import { drainPendingXpReversals } from "@/lib/progression-outbox"
+import { findProgressionDrift } from "@/lib/progression"
 import { logSecurityEvent } from "@/lib/security"
 import { reconcileQuestPayouts } from "@/lib/quests"
 import { reconcileChallengePayouts } from "@/lib/challenges"
@@ -247,7 +250,8 @@ export async function GET(request: NextRequest) {
   // fixpoint. /api/ping runs a throttled drain for faster convergence.
   await runCronTask(`reputation:reversal-drain:${today}`, async () => {
     const { drained, failed: drainFailed } = await drainPendingReversals(50)
-    return `reversal-drain:${drained}d/${drainFailed}f`
+    const xp = await drainPendingXpReversals(50).catch(() => ({ drained: 0, failed: 0 }))
+    return `reversal-drain:${drained}d/${drainFailed}f xp:${xp.drained}d/${xp.failed}f`
   }, posted, failed, "reversal-drain")
 
   // ── Quest/challenge payout reconciliation (once per UTC day) ──────
@@ -269,17 +273,22 @@ export async function GET(request: NextRequest) {
   // tampering — auto-"fixing" balances would mask it. Unresolved outbox
   // rows are surfaced in the same signal.
   await runCronTask(`reputation:drift-check:${today}`, async () => {
-    const [drift, pending] = await Promise.all([
+    const [drift, xpDrift, pending, pendingXp] = await Promise.all([
       findReputationDrift(),
+      findProgressionDrift(),
       prisma.pendingReversal.count({ where: { status: { in: ["PENDING", "RUNNING"] } } }),
+      prisma.pendingXpReversal.count({ where: { status: { in: ["PENDING", "RUNNING"] } } }),
     ])
-    if (drift.length > 0 || pending > 0) {
-      console.error("[cron] reputation inconsistency:", { driftUsers: drift.length, pendingReversals: pending })
+    if (drift.length > 0 || xpDrift.length > 0 || pending > 0 || pendingXp > 0) {
+      console.error("[cron] progression inconsistency:", {
+        legacyDriftUsers: drift.length, driftUsers: xpDrift.length,
+        pendingReversals: pending, pendingXpReversals: pendingXp,
+      })
       await logSecurityEvent("SUSPICIOUS_ACTIVITY", {
-        metadata: { reputationDrift: drift.length, pendingReversals: pending, sample: drift.slice(0, 10) },
+        metadata: { reputationDrift: drift.length, xpDrift: xpDrift.length, pendingReversals: pending, pendingXpReversals: pendingXp, sample: xpDrift.slice(0, 10) },
       }).catch(() => {})
     }
-    return `drift:${drift.length}u/${pending}p`
+    return `drift:${drift.length}u/${pending}p xp:${xpDrift.length}u/${pendingXp}p`
   }, posted, failed, "drift-check")
 
   // ── Trust & safety signal scan (once per UTC day) ──────────────────

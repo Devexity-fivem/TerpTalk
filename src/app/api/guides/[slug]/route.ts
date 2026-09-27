@@ -55,7 +55,7 @@ export async function PATCH(
     // Permission: guide author or moderator (fresh DB role check)
     const user = await prisma.user.findUnique({
       where: { id: session.user.id },
-      select: { createdAt: true, banned: true, role: true, profile: { select: { reputation: true, username: true } } },
+      select: { createdAt: true, banned: true, role: true, profile: { select: { username: true } } },
     })
     if (!user || user.banned) return forbidden()
 

@@ -1,11 +1,11 @@
 import { unstable_cache } from "next/cache"
 import { prisma } from "@/lib/prisma"
 import { TERPBOT_USERNAME } from "@/lib/terpbot-constants"
-import { REPUTATION_ORDER } from "@/lib/security"
+import { XP_ORDER } from "@/lib/security"
 
 // ─── Suggested growers ─────────────────────────────────────────────
 // Deterministic, inexpensive suggestions for cold-start onboarding.
-// The candidate pool is bounded (top 100 by reputation among users with
+// The candidate pool is bounded (top 100 by XP among users with
 // a completed-ish profile) and cached; per-viewer exclusions (self,
 // already followed, blocks either way, TerpBot) are applied after.
 //
@@ -25,13 +25,13 @@ async function fetchCandidatePool() {
         },
         OR: [{ avatarUrl: { not: null } }, { bio: { not: null } }],
       },
-      orderBy: REPUTATION_ORDER,
+      orderBy: XP_ORDER,
       take: 100,
       select: {
         username: true,
         bio: true,
         avatarUrl: true,
-        reputation: true,
+        xp: true,
         user: {
           select: {
             id: true,
@@ -102,7 +102,7 @@ export async function getSuggestedUsers(viewerId: string, limit = 10): Promise<S
       const contributions = u._count.posts + u._count.threadCreator
       const daysSinceSeen = u.lastSeenAtMs != null ? (now - u.lastSeenAtMs) / 86_400_000 : 30
       const score =
-        2 * Math.log(1 + p.reputation) +
+        2 * Math.log(1 + p.xp) +
         3 * Math.log(1 + followers) +
         2 * Math.log(1 + diaries) +
         Math.log(1 + contributions) +
@@ -112,7 +112,7 @@ export async function getSuggestedUsers(viewerId: string, limit = 10): Promise<S
         10 * Math.max(0, 1 - daysSinceSeen / 14)
       return { p, score }
     })
-    .sort((a, b) => b.score - a.score || b.p.reputation - a.p.reputation || a.p.user.id.localeCompare(b.p.user.id))
+    .sort((a, b) => b.score - a.score || b.p.xp - a.p.xp || a.p.user.id.localeCompare(b.p.user.id))
 
   return scored.slice(0, limit).map(({ p }) => ({
     id: p.user.id,
@@ -121,7 +121,7 @@ export async function getSuggestedUsers(viewerId: string, limit = 10): Promise<S
     image: p.avatarUrl ?? p.user.image,
     role: p.user.role,
     bio: p.bio,
-    reputation: p.reputation,
+    xp: p.xp,
     followers: p.user._count.following,
   }))
 }

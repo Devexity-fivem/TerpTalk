@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma"
-import { rankableProfile, REPUTATION_ORDER } from "@/lib/security"
+import { rankableProfile } from "@/lib/security"
 import { unstable_cache } from "next/cache"
 import { Trophy, Medal, Award, Sprout, Leaf, CheckCircle2 } from "lucide-react"
 import Link from "next/link"
@@ -29,16 +29,16 @@ const TABS: { key: Tab; label: string; icon: typeof Trophy; blurb: string; metri
     key: "week",
     label: "This Week",
     icon: Sprout,
-    blurb: "Reputation earned this week — resets Monday. Anyone can win it.",
-    metricLabel: "rep this week",
-    tip: "Rep earned this week — resets Monday",
+    blurb: "XP earned this week — resets Monday. Anyone can win it.",
+    metricLabel: "XP this week",
+    tip: "XP earned this week — resets Monday",
   },
   {
     key: "rep",
-    label: "Reputation",
+    label: "All-Time XP",
     icon: Trophy,
-    blurb: "All-time reputation — the full ledger of meaningful contributions.",
-    metricLabel: "rep",
+    blurb: "All-time XP — the full ledger of meaningful contributions.",
+    metricLabel: "XP",
   },
   {
     key: "helpful",
@@ -67,7 +67,7 @@ const TABS: { key: Tab; label: string; icon: typeof Trophy; blurb: string; metri
 const PROFILE_SELECT = {
   username: true,
   avatarUrl: true,
-  reputation: true,
+  xp: true,
   publicMilestoneOptOut: true,
   user: {
     select: {
@@ -87,7 +87,7 @@ const PROFILE_SELECT = {
 type LeaderboardProfile = {
   username: string
   avatarUrl: string | null
-  reputation: number
+  xp: number
   publicMilestoneOptOut: boolean
   user: {
     id: string
@@ -103,18 +103,18 @@ interface BoardRow {
   metric: number
 }
 
-// The rep tab orders straight off Profile.reputation; the others groupBy
+// The rep tab orders straight off Profile.xp; the others groupBy
 // the source table (Prisma can't order by a filtered relation count), then
 // join profiles through the same rankable/visibility filter.
 const getTopByRep = unstable_cache(
   async (): Promise<BoardRow[]> => {
     const profiles = await prisma.profile.findMany({
       where: rankableProfile(),
-      orderBy: REPUTATION_ORDER,
+      orderBy: [{ xp: "desc" }, { userId: "asc" }],
       take: 25,
       select: PROFILE_SELECT,
     })
-    return profiles.map((profile) => ({ profile, metric: profile.reputation }))
+    return profiles.map((profile) => ({ profile, metric: profile.xp }))
   },
   ["leaderboard-rep"],
   { revalidate: 300, tags: ["leaderboard"] }
@@ -233,28 +233,28 @@ export default async function LeaderboardPage({
   // Viewer's own metric for the active tab — one count per non-rep tab,
   // only computed when the member isn't already on the board.
   const viewerOnBoard = viewerProfile ? rows.some((r) => r.profile.user.id === viewerProfile.user.id) : false
-  let viewerMetric = viewerProfile?.reputation ?? 0
+  let viewerMetric = viewerProfile?.xp ?? 0
   let viewerRank: number | null = null
   if (viewerProfile && !viewerOnBoard) {
     if (tab === "week") {
       const range = weekRange(week)
       if (range) {
-        const agg = await prisma.reputationEvent.aggregate({
+        const agg = await prisma.progressionEvent.aggregate({
           where: {
             userId: viewerProfile.user.id,
             createdAt: { gte: range.start, lt: range.end },
             type: { in: WEEKLY_BOARD_TYPES },
           },
-          _sum: { amount: true },
+          _sum: { xp: true },
         })
-        viewerMetric = Math.max(0, agg._sum.amount ?? 0)
+        viewerMetric = Math.max(0, agg._sum.xp ?? 0)
       }
     } else if (tab === "rep") {
       viewerRank =
         (await prisma.profile.count({
-          where: { ...rankableProfile(), reputation: { gt: viewerProfile.reputation } },
+          where: { ...rankableProfile(), xp: { gt: viewerProfile.xp } },
         })) + 1
-      viewerMetric = viewerProfile.reputation
+      viewerMetric = viewerProfile.xp
     } else if (tab === "helpful") {
       viewerMetric = await prisma.post.count({
         where: { authorId: viewerProfile.user.id, deleted: false, acceptedAnswerFor: { isNot: null } },
@@ -284,7 +284,7 @@ export default async function LeaderboardPage({
           <span className="tt-eyebrow">The ladder</span>
           <h1 className="font-display text-3xl sm:text-4xl font-bold mt-1.5 mb-2 tracking-tight">Top Growers</h1>
           <p className="text-muted-foreground">
-            Earn reputation by posting, journaling, adding strains, and helping the community.
+            Earn XP by posting, journaling, adding strains, and helping the community.
           </p>
         </div>
 
@@ -326,7 +326,7 @@ export default async function LeaderboardPage({
               <EmptyState
                 icon={Trophy}
                 title="No members on the board yet"
-                description="Reputation is earned by posting, journaling, and helping other growers."
+                description="XP is earned by posting, journaling, and helping other growers."
               />
             )}
             {rows.map(({ profile: p, metric }, i) => (
@@ -354,7 +354,7 @@ export default async function LeaderboardPage({
                   <div className="font-semibold flex items-center gap-1.5">
                     <span className="truncate">{p.username || p.user.name}</span>
                     <RoleBadge role={p.user.role} />
-                    <TierChip reputation={p.reputation} publicMilestoneOptOut={p.publicMilestoneOptOut} className="hidden sm:inline-flex" />
+                    <TierChip xp={p.xp} publicMilestoneOptOut={p.publicMilestoneOptOut} className="hidden sm:inline-flex" />
                   </div>
                   <div className="text-xs text-muted-foreground">
                     {p.user._count.threadCreator} threads · {p.user._count.posts} posts · {p.user._count.diaryCreator} diaries · {p.user._count.following} followers
@@ -414,7 +414,7 @@ export default async function LeaderboardPage({
               <h2 className="font-display text-sm font-semibold flex items-center gap-2">
                 <Sprout className="w-4 h-4 text-primary" /> Best New Growers
               </h2>
-              <p className="text-xs text-muted-foreground">Members under 30 days old, ranked by rep earned this week.</p>
+              <p className="text-xs text-muted-foreground">Members under 30 days old, ranked by XP earned this week.</p>
             </div>
             <div className="divide-y divide-border">
               {weekly.newRows.map(({ profile: p, metric }, i) => (
@@ -427,7 +427,7 @@ export default async function LeaderboardPage({
                   <div className="flex-1 min-w-0">
                     <span className="text-sm font-medium flex items-center gap-1.5">
                       <span className="truncate">{p.username || p.user.name}</span>
-                      <TierChip reputation={p.reputation} publicMilestoneOptOut={p.publicMilestoneOptOut} className="hidden sm:inline-flex" />
+                      <TierChip xp={p.xp} publicMilestoneOptOut={p.publicMilestoneOptOut} className="hidden sm:inline-flex" />
                     </span>
                   </div>
                   <span className="text-sm font-semibold text-primary shrink-0">{metric.toLocaleString()}</span>

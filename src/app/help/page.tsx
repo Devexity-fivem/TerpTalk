@@ -3,7 +3,7 @@ import { HelpCircle, Stethoscope } from "lucide-react"
 
 export const metadata = {
   title: "Help Center",
-  description: "TerpTalk Help Center — how accounts, forums, grow diaries, chat, reputation, privacy controls, and moderation work.",
+  description: "TerpTalk Help Center — how accounts, forums, grow diaries, chat, progression, privacy controls, and moderation work.",
 }
 
 type QA = { q: string; a: React.ReactNode }
@@ -75,11 +75,11 @@ const SECTIONS: { title: string; items: QA[] }[] = [
       },
       {
         q: "Why can't I post links?",
-        a: <>New accounts can&apos;t post external links until the account is 24 hours old and has 150 reputation — it keeps spam out. Keep posting and it unlocks quickly.</>,
+        a: <>New accounts can&apos;t post external links until the account is 24 hours old and reaches Known standing (25+) — it keeps spam out. Accepted answers, guides, and referrals build standing quickly.</>,
       },
       {
         q: "What are accepted answers?",
-        a: <>The thread author or a moderator can mark a reply as the accepted answer — it&apos;s worth +30 rep and shows up highlighted. You can&apos;t mark your own reply.</>,
+        a: <>The thread author or a moderator can mark a reply as the accepted answer — it&apos;s worth +30 XP and +10 standing, and shows up highlighted. You can&apos;t mark your own reply.</>,
       },
       {
         q: "How do follows and bookmarks work?",
@@ -113,11 +113,11 @@ const SECTIONS: { title: string; items: QA[] }[] = [
       },
       {
         q: "What is TerpBot?",
-        a: <>TerpBot is TerpTalk&apos;s automated assistant — a bot, not a person and not a moderator. In chat, mention <strong className="text-foreground">@terpbot</strong> in plain language or use slash commands (type /help in chat for the list) — it can look up your rep, badges, streaks, diaries, strains, guides, who&apos;s online, and more.</>,
+        a: <>TerpBot is TerpTalk&apos;s automated assistant — a bot, not a person and not a moderator. In chat, mention <strong className="text-foreground">@terpbot</strong> in plain language or use slash commands (type /help in chat for the list) — it can look up your XP, badges, streaks, diaries, strains, guides, who&apos;s online, and more.</>,
       },
       {
         q: "What does TerpBot do on its own?",
-        a: <>It welcomes new members, posts a daily digest and grow tip, celebrates milestones publicly (tier-ups, badges, harvests, contest winners), and relays staff moderation messages. It may also send you occasional private tips — a welcome note, a first-diary pointer, or a nudge when your thread goes quiet. See its profile at <Link href="/u/terpbot" className="text-primary hover:underline">/u/terpbot</Link>.</>,
+        a: <>It welcomes new members, posts a daily digest and grow tip, celebrates milestones publicly (rank-ups, badges, harvests, contest winners), and relays staff moderation messages. It may also send you occasional private tips — a welcome note, a first-diary pointer, or a nudge when your thread goes quiet. See its profile at <Link href="/u/terpbot" className="text-primary hover:underline">/u/terpbot</Link>.</>,
       },
       {
         q: "Can I turn TerpBot off?",
@@ -135,15 +135,15 @@ const SECTIONS: { title: string; items: QA[] }[] = [
     ],
   },
   {
-    title: "Reputation, tiers & badges",
+    title: "XP, ranks & badges",
     items: [
       {
         q: "How does reputation work?",
-        a: <>You earn rep for threads, replies, diaries, setups, accepted answers (+30), likes received, referrals, and daily check-ins — with daily caps to keep it fair. The full breakdown and tier perks (more images, poll voting, verified status) are on the <Link href="/reputation" className="text-primary hover:underline">Reputation</Link> page.</>,
+        a: <>You earn XP for threads, replies, diaries, setups, accepted answers, guides, referrals, and contests — with caps to keep it fair. Peer-validated work also earns standing, which gates community privileges. The full breakdown and rank perks are on the <Link href="/reputation" className="text-primary hover:underline">Progression</Link> page.</>,
       },
       {
-        q: "Why did my reputation drop?",
-        a: <>Reputation reverses automatically when the content it came from is deleted — by you or by moderation. Verified members who fall below the threshold can lose the badge. Nothing was taken away arbitrarily.</>,
+        q: "Why did my XP drop?",
+        a: <>XP reverses automatically when the content it came from is deleted — by you or by moderation. Standing falls the same way, and members whose standing drops below a threshold lose the privileges it gated. Nothing was taken away arbitrarily.</>,
       },
       {
         q: "What are badges?",
@@ -164,7 +164,7 @@ const SECTIONS: { title: string; items: QA[] }[] = [
       },
       {
         q: "Can I opt out of public shout-outs?",
-        a: <>Settings → Privacy → &quot;Opt out of public recognition&quot; keeps your username out of TerpBot&apos;s public celebrations and leaderboard spotlights. You still earn everything — badges, rep, and private notifications — just without the public name-drop.</>,
+        a: <>Settings → Privacy → &quot;Opt out of public recognition&quot; keeps your username out of TerpBot&apos;s public celebrations and leaderboard spotlights. You still earn everything — badges, XP, and private notifications — just without the public name-drop.</>,
       },
       {
         q: "Are my photos private?",
@@ -221,7 +221,7 @@ export default function HelpPage() {
           <h1 className="font-display text-3xl font-bold tracking-tight">Help Center</h1>
         </div>
         <p className="text-muted-foreground mb-8">
-          How TerpTalk works — accounts, posting, diaries, chat, reputation, privacy, and moderation.
+          How TerpTalk works — accounts, posting, diaries, chat, progression, privacy, and moderation.
           New here? Start with <Link href="/about" className="text-primary hover:underline">About</Link> and the{" "}
           <Link href="/rules" className="text-primary hover:underline">Community Rules</Link>.
         </p>

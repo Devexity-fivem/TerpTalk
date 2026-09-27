@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { unstable_cache } from "next/cache"
-import { getClientIp, hashIp, REPUTATION_ORDER, blockedUserIds } from "@/lib/security"
+import { getClientIp, hashIp, XP_ORDER, blockedUserIds } from "@/lib/security"
 import { getToken } from "next-auth/jwt"
 import { sessionCookieName } from "@/lib/auth"
 import { rateLimit } from "@/lib/rate-limit"
@@ -147,11 +147,11 @@ const getSearchResults = unstable_cache(
           username: true,
           userId: true,
           avatarUrl: true,
-          reputation: true,
+          xp: true,
           publicMilestoneOptOut: true,
           bio: true,
         },
-        orderBy: REPUTATION_ORDER,
+        orderBy: XP_ORDER,
       }) : [],
       (t === "all" || t === "diaries") ? prisma.growDiary.findMany({
         where: {
@@ -205,7 +205,7 @@ const getSearchResults = unstable_cache(
           authorId: true,
           title: true,
           strain: true,
-          author: { select: { profile: { select: { username: true, reputation: true, publicMilestoneOptOut: true } }, name: true } },
+          author: { select: { profile: { select: { username: true, xp: true, publicMilestoneOptOut: true } }, name: true } },
         },
       }) : [],
       (t === "all" || t === "tags") ? prisma.tag.findMany({

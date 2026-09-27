@@ -47,13 +47,13 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
     prisma.strain.findFirst({
       where: { OR: [{ slug: id }, { id }] },
       include: {
-        createdBy: { select: { profile: { select: { username: true, reputation: true, publicMilestoneOptOut: true } }, name: true, banned: true, suspendedUntil: true } },
+        createdBy: { select: { profile: { select: { username: true, xp: true, publicMilestoneOptOut: true } }, name: true, banned: true, suspendedUntil: true } },
         photos: {
           where: { user: activeAuthor() },
           orderBy: { createdAt: "desc" },
           take: 100,
           include: {
-            user: { select: { id: true, profile: { select: { username: true, reputation: true, publicMilestoneOptOut: true } }, name: true } },
+            user: { select: { id: true, profile: { select: { username: true, xp: true, publicMilestoneOptOut: true } }, name: true } },
           },
         },
       },
@@ -231,7 +231,7 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
                     <Link href={`/u/${creator.profile?.username || creator.name}`} className="text-primary hover:underline">
                       {creatorName}
                     </Link>
-                    <TierChip reputation={creator.profile?.reputation ?? 0} publicMilestoneOptOut={creator.profile?.publicMilestoneOptOut} />
+                    <TierChip xp={creator.profile?.xp ?? 0} publicMilestoneOptOut={creator.profile?.publicMilestoneOptOut} />
                   </span>
                 )}
               </div>
@@ -609,7 +609,7 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
                   </div>
                   <div className="min-w-0">
                     <p className="font-medium text-sm truncate">{d.title}</p>
-                    <p className="text-xs text-muted-foreground truncate flex items-center gap-1">by {d.author.profile?.username || d.author.name} <TierChip reputation={d.author.profile?.reputation ?? 0} publicMilestoneOptOut={d.author.profile?.publicMilestoneOptOut} /></p>
+                    <p className="text-xs text-muted-foreground truncate flex items-center gap-1">by {d.author.profile?.username || d.author.name} <TierChip xp={d.author.profile?.xp ?? 0} publicMilestoneOptOut={d.author.profile?.publicMilestoneOptOut} /></p>
                   </div>
                 </Link>
               ))}
@@ -643,7 +643,7 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
                   </div>
                   <div className="min-w-0">
                     <p className="font-medium text-sm truncate">{s.title}</p>
-                    <p className="text-xs text-muted-foreground truncate flex items-center gap-1">by {s.author.profile?.username || s.author.name} <TierChip reputation={s.author.profile?.reputation ?? 0} publicMilestoneOptOut={s.author.profile?.publicMilestoneOptOut} /></p>
+                    <p className="text-xs text-muted-foreground truncate flex items-center gap-1">by {s.author.profile?.username || s.author.name} <TierChip xp={s.author.profile?.xp ?? 0} publicMilestoneOptOut={s.author.profile?.publicMilestoneOptOut} /></p>
                   </div>
                 </Link>
               ))}

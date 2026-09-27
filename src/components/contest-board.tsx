@@ -16,7 +16,7 @@ interface Entry {
   votes: number
   votedByMe: boolean
   mine: boolean
-  user: { name: string | null; username: string | null; role: string; reputation: number; publicMilestoneOptOut: boolean }
+  user: { name: string | null; username: string | null; role: string; xp: number; publicMilestoneOptOut: boolean }
 }
 
 export default function ContestBoard() {
@@ -143,7 +143,7 @@ export default function ContestBoard() {
                     href={`/u/${nameOf(e.user)}`}
                     className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1"
                   >
-                    {nameOf(e.user)} <RoleBadge role={e.user.role} /> <TierChip reputation={e.user.reputation ?? 0} publicMilestoneOptOut={e.user.publicMilestoneOptOut} />
+                    {nameOf(e.user)} <RoleBadge role={e.user.role} /> <TierChip xp={e.user.xp ?? 0} publicMilestoneOptOut={e.user.publicMilestoneOptOut} />
                   </Link>
                   <Tooltip content={e.mine ? "You can't vote on your own entry" : "Vote for this budshot — most votes wins the week"}>
                     <button

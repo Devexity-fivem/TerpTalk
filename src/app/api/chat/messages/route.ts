@@ -3,9 +3,10 @@ import { getToken } from "next-auth/jwt"
 import { sessionCookieName } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { unauthorized, chatAuthorSelect, LIMITS, getClientIp, logSecurityEvent, isSessionValid, forbidden, isStaff, enforceLinkTrust, blockedUserIds, notBlockedAuthor } from "@/lib/security"
-import { roomAccessInfo } from "@/lib/chat-access"
+import { roomAccessInfo, roomRequirementText } from "@/lib/chat-access"
 import { rateLimit } from "@/lib/rate-limit"
-import { repRateLimit, getTierPerks, recordChatMessage } from "@/lib/reputation"
+import { recordChatMessage } from "@/lib/reputation"
+import { progressionRateLimit, getProgressionPerks } from "@/lib/progression"
 import { notifyMentions } from "@/lib/mentions"
 import { getPusher } from "@/lib/pusher"
 import { postBotMessage, getBotUserId } from "@/lib/terpbot"
@@ -28,7 +29,7 @@ type ChatMessageWithAuthor = {
     name?: string | null
     image?: string | null
     role?: string | null
-    profile?: { username?: string | null; reputation?: number | null; publicMilestoneOptOut?: boolean | null; avatarFrame?: string | null; profileTitle?: string | null } | null
+    profile?: { username?: string | null; xp?: number | null; publicMilestoneOptOut?: boolean | null; avatarFrame?: string | null; profileTitle?: string | null } | null
   }
   replyTo: ChatMessageWithAuthor | null
 }
@@ -45,7 +46,7 @@ function messageDto(m: ChatMessageWithAuthor) {
           username: m.replyTo.author.profile?.username ?? null,
           image: m.replyTo.author.image ?? null,
           role: m.replyTo.author.role ?? null,
-          reputation: m.replyTo.author.profile?.reputation ?? 0,
+          xp: m.replyTo.author.profile?.xp ?? 0,
           publicMilestoneOptOut: m.replyTo.author.profile?.publicMilestoneOptOut ?? false,
           avatarFrame: m.replyTo.author.profile?.avatarFrame ?? null,
           profileTitle: m.replyTo.author.profile?.profileTitle ?? null,
@@ -63,7 +64,7 @@ function messageDto(m: ChatMessageWithAuthor) {
       username: m.author.profile?.username ?? null,
       image: m.author.image ?? null,
       role: m.author.role ?? null,
-      reputation: m.author.profile?.reputation ?? 0,
+      xp: m.author.profile?.xp ?? 0,
       publicMilestoneOptOut: m.author.profile?.publicMilestoneOptOut ?? false,
       avatarFrame: m.author.profile?.avatarFrame ?? null,
       profileTitle: m.author.profile?.profileTitle ?? null,
@@ -108,8 +109,8 @@ export async function GET(request: NextRequest) {
     const access = await roomAccessInfo(userId, room)
     if (!access.allowed) {
       return forbidden(
-        access.reason === "rep" && room.requiredRep
-          ? `This room unlocks at ${room.requiredRep.toLocaleString()} reputation`
+        access.reason === "gated" && room.requiredXp
+          ? `This room unlocks at ${roomRequirementText(room)}`
           : "Private room"
       )
     }
@@ -223,7 +224,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Rate limit: 30 messages per minute per user (Cultivator+ scale it up)
-    const rl = await repRateLimit(userId, `chat:${userId}`, 30, 60 * 1000)
+    const rl = await progressionRateLimit(userId, `chat:${userId}`, 30, 60 * 1000)
     if (!rl.allowed) {
       await logSecurityEvent("RATE_LIMIT_EXCEEDED", {
         userId,
@@ -252,8 +253,8 @@ export async function POST(request: NextRequest) {
     // posts — preserved); rep-gated rooms accept member posts past the gate.
     const access = await roomAccessInfo(userId, room)
     if (!access.allowed || room.isPrivate) {
-      return access.reason === "rep" && room.requiredRep
-        ? forbidden(`This room unlocks at ${room.requiredRep.toLocaleString()} reputation`)
+      return access.reason === "gated" && room.requiredXp
+        ? forbidden(`This room unlocks at ${roomRequirementText(room)}`)
         : NextResponse.json({ error: "Room not found" }, { status: 404 })
     }
 
@@ -284,8 +285,8 @@ export async function POST(request: NextRequest) {
       return forbidden("Chat is locked")
     }
 
-    // Master Grower+ (and staff) are exempt from room slowmode.
-    const slowmodeExempt = staff || (await getTierPerks(userId)).slowmodeExempt === true
+    // Pillar standing (and staff) are exempt from room slowmode.
+    const slowmodeExempt = staff || (await getProgressionPerks(userId)).slowmodeExempt
     if (
       room.slowModeSeconds > 0 &&
       !slowmodeExempt &&

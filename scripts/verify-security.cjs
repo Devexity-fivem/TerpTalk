@@ -81,8 +81,13 @@ const apiFiles = () => {
     // Rep 3.0: ledger aggregates (streak days, mutual-like detection,
     // milestone/badge checks) — all parameterized tagged templates.
     path.join("src", "lib", "streaks.ts"),
+    path.join("src", "lib", "grow-streak.ts"),
     path.join("src", "lib", "trust-signals.ts"),
     path.join("src", "lib", "reputation.ts"),
+    // Progression V2: drift reconciliation + long-content quest counters —
+    // parameterized tagged templates, no user input concatenated.
+    path.join("src", "lib", "progression.ts"),
+    path.join("src", "lib", "challenges.ts"),
     path.join("src", "app", "api", "admin", "reputation", "flags", "route.ts"),
     // DISTINCT ON (partner) inbox query — reviewed raw SQL.
     path.join("src", "app", "api", "messages", "route.ts"),
@@ -104,8 +109,9 @@ const apiFiles = () => {
     "moderation/reports", "moderation/queue", "moderation/queue/[id]",
     "moderation/queue/bulk", "moderation/queue/staff", "moderation/reputation"];
   for (const r of needsRl) {
-    // repRateLimit is the tier-scaled limiter; rateLimit is the plain one.
-    check(`${r}: rate limited`, /repRateLimit|rateLimit/.test(fs.readFileSync(`src/app/api/${r}/route.ts`, "utf8")));
+    // repRateLimit was the tier-scaled limiter; progressionRateLimit is its
+    // V2 rank-scaled successor; rateLimit is the plain one.
+    check(`${r}: rate limited`, /progressionRateLimit|repRateLimit|rateLimit/.test(fs.readFileSync(`src/app/api/${r}/route.ts`, "utf8")));
   }
 
   // ── 5. Upload security ──
@@ -299,7 +305,7 @@ const apiFiles = () => {
   const pubBlock = repCfg2.slice(repCfg2.indexOf("PUBLIC_REP_TYPES"), repCfg2.indexOf("])", repCfg2.indexOf("PUBLIC_REP_TYPES")));
   check("config: MILESTONE never public", !/["']MILESTONE["']/.test(pubBlock));
   const profileRoute = read("app/api/profile/route.ts");
-  check("profile: cosmetic equip gated by canEquip", profileRoute.includes("canEquip(reputation"));
+  check("profile: cosmetic equip gated by canEquip", profileRoute.includes("canEquip(memberXp"));
   const notifyLib = read("lib/notify.ts");
   check("notify: metadata reaches push DTO", notifyLib.includes("metadata: n.metadata"));
   const chatMessages = read("app/api/chat/messages/route.ts");

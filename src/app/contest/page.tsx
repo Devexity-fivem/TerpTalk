@@ -62,7 +62,7 @@ export default async function ContestPage() {
                 className="font-medium hover:text-primary inline-flex items-center gap-1.5"
               >
                 {lastWinner.user.profile?.username || lastWinner.user.name}
-                <TierChip reputation={lastWinner.user.profile?.reputation ?? 0} publicMilestoneOptOut={lastWinner.user.profile?.publicMilestoneOptOut} />
+                <TierChip xp={lastWinner.user.profile?.xp ?? 0} publicMilestoneOptOut={lastWinner.user.profile?.publicMilestoneOptOut} />
               </Link>
               <p className="text-xs text-muted-foreground">{lastWinner._count.votes} votes</p>
             </div>
@@ -94,7 +94,7 @@ export default async function ContestPage() {
                 {lastDiaryWinner.diary.title}
               </Link>
               <p className="text-xs text-muted-foreground">
-                <span className="inline-flex items-center gap-1">by {lastDiaryWinner.user.profile?.username || lastDiaryWinner.user.name} <TierChip reputation={lastDiaryWinner.user.profile?.reputation ?? 0} publicMilestoneOptOut={lastDiaryWinner.user.profile?.publicMilestoneOptOut} /></span> · {lastDiaryWinner._count.votes} votes
+                <span className="inline-flex items-center gap-1">by {lastDiaryWinner.user.profile?.username || lastDiaryWinner.user.name} <TierChip xp={lastDiaryWinner.user.profile?.xp ?? 0} publicMilestoneOptOut={lastDiaryWinner.user.profile?.publicMilestoneOptOut} /></span> · {lastDiaryWinner._count.votes} votes
               </p>
             </div>
             <Trophy className="w-6 h-6 text-warning ml-auto" />

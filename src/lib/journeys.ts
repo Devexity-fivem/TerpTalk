@@ -8,8 +8,7 @@
  * to encourage, not busywork.
  */
 import { prisma } from "@/lib/prisma"
-import { awardReputation } from "@/lib/reputation"
-import { TRUSTED_LINKS_REP } from "@/lib/reputation-config"
+import { awardProgression } from "@/lib/progression"
 import { getBooleanSetting, SITE_SETTINGS } from "@/lib/settings"
 
 export interface JourneyStep {
@@ -36,13 +35,15 @@ export interface JourneyState {
   paid: boolean
 }
 
-const SPROUT_THRESHOLD = TRUSTED_LINKS_REP
+// "Reach Seedling" — the V2 ladder's third rung (180 XP), matching the
+// position the legacy "Reach Sprout" step occupied (Sprout was tier 3).
+const SEEDLING_THRESHOLD = 180
 const JOURNEY_REWARD = 25
 const JOURNEY_SLUG = "getting-rooted"
 
 interface JourneyInputs {
   onboardingDone: boolean
-  reputation: number
+  xp: number
   threads: number
   posts: number
   likesGiven: number
@@ -74,7 +75,7 @@ function buildSteps(i: JourneyInputs): JourneyStep[] {
     {
       key: "first-like",
       title: "Show some love",
-      description: "Like a post or update that helped you — it pays the author reputation.",
+      description: "Like a post or update that helped you — it tells the author their grow helped.",
       icon: "💚",
       done: i.likesGiven > 0,
       href: "/feed",
@@ -100,10 +101,10 @@ function buildSteps(i: JourneyInputs): JourneyStep[] {
     },
     {
       key: "sprout",
-      title: "Reach Sprout",
-      description: `Earn ${SPROUT_THRESHOLD} reputation through real participation.`,
+      title: "Reach Seedling",
+      description: `Earn ${SEEDLING_THRESHOLD} XP through real participation.`,
       icon: "🌿",
-      done: i.reputation >= SPROUT_THRESHOLD,
+      done: i.xp >= SEEDLING_THRESHOLD,
       href: "/progress",
       cta: "Track progress",
     },
@@ -119,14 +120,14 @@ export async function getJourneyState(userId: string): Promise<JourneyState | nu
       where: { id: userId },
       select: {
         onboardingCompletedAt: true,
-        profile: { select: { reputation: true } },
+        profile: { select: { xp: true } },
         _count: { select: { threadCreator: true, posts: true, diaryCreator: true } },
       },
     }),
     // Positive reactions only — a downvote shouldn't tick "show some love".
     prisma.reaction.count({ where: { userId, type: { in: ["LIKE", "LOVE", "FIRE", "THUMBS_UP"] } } }),
     prisma.diaryUpdate.count({ where: { authorId: userId } }),
-    prisma.reputationEvent.findUnique({
+    prisma.progressionEvent.findUnique({
       where: { key: `journey:${JOURNEY_SLUG}:${userId}` },
       select: { id: true },
     }),
@@ -135,7 +136,7 @@ export async function getJourneyState(userId: string): Promise<JourneyState | nu
 
   const steps = buildSteps({
     onboardingDone: !!user.onboardingCompletedAt,
-    reputation: user.profile.reputation,
+    xp: user.profile.xp,
     threads: user._count.threadCreator,
     posts: user._count.posts,
     likesGiven,
@@ -164,11 +165,17 @@ export async function getJourneyState(userId: string): Promise<JourneyState | nu
 export async function evaluateJourneys(userId: string, state?: JourneyState | null): Promise<void> {
   const s = state ?? (await getJourneyState(userId))
   if (!s || !s.complete) return
-  await awardReputation(
+  await awardProgression(
     userId,
-    "JOURNEY_COMPLETE",
-    JOURNEY_REWARD,
+    "ARC_STEP",
     "Completed the Getting Rooted journey",
-    { key: `journey:${JOURNEY_SLUG}:${userId}`, sourceType: "JOURNEY", sourceId: JOURNEY_SLUG }
+    {
+      key: `journey:${JOURNEY_SLUG}:${userId}`,
+      sourceType: "JOURNEY",
+      sourceId: JOURNEY_SLUG,
+      xp: JOURNEY_REWARD,
+      mastery: null,
+      meta: { journey: JOURNEY_SLUG },
+    }
   ).catch(() => {})
 }

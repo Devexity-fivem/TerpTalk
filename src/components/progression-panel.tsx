@@ -16,16 +16,16 @@ import { signInHref } from "@/lib/callback-url"
 import Tooltip from "@/components/ui/tooltip"
 
 interface ProgressionData {
-  reputation: number
+  xp: number
   level: number
   maxLevel: number
   stage: { name: string; index: number; count: number }
-  tier: { name: string; icon: string; color: string; bg: string; benefit: string | null }
+  rank: { name: string; icon: string; color: string; bg: string; benefit: string | null }
   stageProgress: { current: number; next: number; percent: number; remaining: number }
   tierProgress: { current: number; next: number; percent: number }
-  nextTier: { name: string; icon: string; threshold: number; benefit: string | null } | null
+  nextRank: { name: string; icon: string; threshold: number; benefit: string | null } | null
   nextUnlock: { kind: string; name: string; unlockedAt: number } | null
-  upcoming: { rung: number; level: number; tier: string }[]
+  upcoming: { rung: number; label: string; rank: string }[]
   cosmetics: { equipped: Record<string, string | null>; unlockedCount: number }
   challenges: {
     week: string
@@ -95,13 +95,13 @@ export default function ProgressionPanel() {
       <div className="flex items-center gap-2 mb-3">
         <Sprout className="w-4 h-4 text-primary" />
         <h2 className="font-display text-lg font-semibold">Your garden</h2>
-        <Tooltip content={data.tier.benefit ? `${data.tier.name} tier — ${data.tier.benefit}` : `${data.tier.name} reputation tier`} align="end" className="ml-auto">
-          <span className={cn("inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium", data.tier.bg, data.tier.color)}>
-            <span aria-hidden="true">{data.tier.icon}</span> {data.tier.name}
+        <Tooltip content={data.rank.benefit ? `${data.rank.name} rank — ${data.rank.benefit}` : `${data.rank.name} rank`} align="end" className="ml-auto">
+          <span className={cn("inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium", data.rank.bg, data.rank.color)}>
+            <span aria-hidden="true">{data.rank.icon}</span> {data.rank.name}
           </span>
         </Tooltip>
         {data.trust && (
-          <Tooltip content={`Community standing — earned through helpful, peer-validated contributions (${data.trust.score.toLocaleString()} trust)`} align="end">
+          <Tooltip content={`Community standing — earned through helpful, peer-validated contributions (${data.trust.score.toLocaleString()} standing)`} align="end">
             <span
               className={cn("inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium", data.trust.standing.bg, data.trust.standing.color)}
             >
@@ -114,7 +114,7 @@ export default function ProgressionPanel() {
       <div className="flex items-baseline gap-2 mb-1">
         <span className="text-2xl font-bold">Grow Level {data.level}</span>
         <span className="text-sm text-muted-foreground">of {data.maxLevel} · {data.stage.name} stage</span>
-        <span className="ml-auto text-sm font-medium text-primary">{data.reputation.toLocaleString()} rep</span>
+        <span className="ml-auto text-sm font-medium text-primary">{data.xp.toLocaleString()} XP</span>
       </div>
 
       {/* Stage progress — the bar that moves weekly */}
@@ -122,7 +122,7 @@ export default function ProgressionPanel() {
         <div className="flex justify-between text-xs text-muted-foreground mb-1">
           <span>{data.stage.name} stage</span>
           {data.stageProgress.remaining > 0 ? (
-            <span>{data.stageProgress.remaining.toLocaleString()} rep to level {data.level + 1}</span>
+            <span>{data.stageProgress.remaining.toLocaleString()} XP to level {data.level + 1}</span>
           ) : (
             <span>Max level</span>
           )}
@@ -133,13 +133,13 @@ export default function ProgressionPanel() {
       </div>
 
       {/* Tier progress — the long arc */}
-      {data.nextTier && (
+      {data.nextRank && (
         <div className="mt-3">
           <div className="flex justify-between text-xs text-muted-foreground mb-1">
-            <span>Next tier: {data.nextTier.icon} {data.nextTier.name}</span>
+            <span>Next tier: {data.nextRank.icon} {data.nextRank.name}</span>
             <span>{data.tierProgress.percent}%</span>
           </div>
-          <div className="h-1.5 rounded-full bg-secondary overflow-hidden" role="progressbar" aria-valuenow={data.tierProgress.percent} aria-valuemin={0} aria-valuemax={100} aria-label={`Progress to ${data.nextTier.name}`}>
+          <div className="h-1.5 rounded-full bg-secondary overflow-hidden" role="progressbar" aria-valuenow={data.tierProgress.percent} aria-valuemin={0} aria-valuemax={100} aria-label={`Progress to ${data.nextRank.name}`}>
             <div className="h-full bg-primary/60 rounded-full transition-[width] duration-500" style={{ width: `${data.tierProgress.percent}%` }} />
           </div>
         </div>
@@ -152,8 +152,8 @@ export default function ProgressionPanel() {
           <p className="text-xs">
             <span className="font-medium">Next unlock: {data.nextUnlock.name}</span>{" "}
             <span className="text-muted-foreground">
-              at {data.nextUnlock.unlockedAt.toLocaleString()} rep
-              ({(data.nextUnlock.unlockedAt - data.reputation).toLocaleString()} to go)
+              at {data.nextUnlock.unlockedAt.toLocaleString()} XP
+              ({(data.nextUnlock.unlockedAt - data.xp).toLocaleString()} to go)
             </span>
           </p>
         </div>
@@ -163,9 +163,9 @@ export default function ProgressionPanel() {
       {data.upcoming.length > 0 && (
         <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
           {data.upcoming.map((u) => (
-            <Tooltip key={u.rung} content={`Grow Level ${u.level} unlocks at ${u.rung.toLocaleString()} reputation`}>
+            <Tooltip key={u.rung} content={`${u.label} (${u.rank}) unlocks at ${u.rung.toLocaleString()} XP`}>
               <span>
-                Lv {u.level} <span className="text-foreground/70">@ {u.rung.toLocaleString()}</span>
+                {u.label} <span className="text-foreground/70">@ {u.rung.toLocaleString()}</span>
               </span>
             </Tooltip>
           ))}
@@ -192,7 +192,7 @@ export default function ProgressionPanel() {
                       style={{ width: `${Math.min(100, (q.progress / q.target) * 100)}%` }}
                     />
                   </div>
-                  <Tooltip content={q.paid ? "Reputation paid" : `Pays +${q.reward} rep when complete`} align="end">
+                  <Tooltip content={q.paid ? "XP paid" : `Pays +${q.reward} XP when complete`} align="end">
                     <span className={cn("font-medium w-10 text-right", q.done || q.paid ? "text-primary" : "text-muted-foreground")}>
                       {q.paid ? `+${q.reward} ✓` : `+${q.reward}`}
                     </span>
@@ -223,7 +223,7 @@ export default function ProgressionPanel() {
                     style={{ width: `${Math.min(100, (c.progress / c.target) * 100)}%` }}
                   />
                 </div>
-                <Tooltip content={c.done ? "Reputation paid" : `Pays +${c.reward} rep when complete`} align="end">
+                <Tooltip content={c.done ? "XP paid" : `Pays +${c.reward} XP when complete`} align="end">
                   <span className={cn("font-medium w-10 text-right", c.done ? "text-primary" : "text-muted-foreground")}>
                     {c.done ? `+${c.reward} ✓` : `+${c.reward}`}
                   </span>

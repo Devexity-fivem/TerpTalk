@@ -9,13 +9,13 @@ import { currentWeekKey } from "@/lib/week"
 import { getBooleanSetting, SITE_SETTINGS } from "@/lib/settings"
 import { checkMaintenance } from "@/lib/maintenance"
 
-function userDto(u: { id?: string; name?: string | null; image?: string | null; profile?: { username?: string | null; reputation?: number | null; publicMilestoneOptOut?: boolean | null } | null; role?: string | null }) {
+function userDto(u: { id?: string; name?: string | null; image?: string | null; profile?: { username?: string | null; xp?: number | null; publicMilestoneOptOut?: boolean | null } | null; role?: string | null }) {
   return {
     name: u.name,
     username: u.profile?.username ?? null,
     image: u.image ?? null,
     role: u.role ?? null,
-    reputation: u.profile?.reputation ?? 0,
+    xp: u.profile?.xp ?? 0,
     publicMilestoneOptOut: u.profile?.publicMilestoneOptOut ?? false,
   }
 }
@@ -132,16 +132,16 @@ export async function POST(request: Request) {
       }
 
       // Voter trust gate — same bar as the monthly diary contest so
-      // sockpuppet voting costs real account age + reputation.
+      // sockpuppet voting costs real account age + progression.
       const voter = await prisma.user.findUnique({
         where: { id: session.user.id },
-        select: { createdAt: true, role: true, profile: { select: { reputation: true } } },
+        select: { createdAt: true, role: true, profile: { select: { xp: true } } },
       })
       const voterAgeDays = voter ? (Date.now() - voter.createdAt.getTime()) / 86400000 : 0
-      const voterRep = voter?.profile?.reputation ?? 0
+      const voterXp = voter?.profile?.xp ?? 0
       const voterStaff = voter?.role === "ADMINISTRATOR" || voter?.role === "MODERATOR"
-      if (!voterStaff && (voterAgeDays < 7 || voterRep < 10)) {
-        return forbidden("Voting requires an account at least 7 days old with 10+ reputation")
+      if (!voterStaff && (voterAgeDays < 7 || voterXp < 10)) {
+        return forbidden("Voting requires an account at least 7 days old with 10+ XP")
       }
 
       const rl = await rateLimit(`contest-vote:${session.user.id}`, 20, 60 * 1000)

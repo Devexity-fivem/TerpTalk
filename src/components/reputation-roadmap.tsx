@@ -2,32 +2,33 @@
 
 import { Check } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { REP_TIERS, getReputationTier, getNextTier } from "@/lib/reputation-config"
+import { REP_RANKS, RANK_DISPLAY, rankFromXp, nextRank } from "@/lib/progression-config"
 import { InfoTip } from "@/components/ui/tooltip"
 
 interface ReputationRoadmapProps {
-  reputation: number
+  xp: number
   compact?: boolean
 }
 
-export default function ReputationRoadmap({ reputation, compact }: ReputationRoadmapProps) {
-  const current = getReputationTier(reputation)
-  const next = getNextTier(reputation)
+export default function ReputationRoadmap({ xp, compact }: ReputationRoadmapProps) {
+  const current = rankFromXp(xp)
+  const next = nextRank(xp)
 
   return (
     <div className={cn("bg-card/80 rounded-2xl border border-border/70 p-6", compact && "p-4")}>
       <h3 className={cn("font-semibold mb-4 flex items-center gap-1.5", compact ? "text-base" : "text-lg")}>
-        Reputation Roadmap
-        <InfoTip content="Tiers unlock automatically at each reputation threshold. Filled markers are earned, the amber marker is next, and each tier lists the perk it grants." />
+        Rank Roadmap
+        <InfoTip content="Ranks unlock automatically at each XP threshold. Filled markers are earned, the amber marker is next, and each rank lists what it opens up." />
       </h3>
       <div className="relative space-y-4 before:absolute before:left-3.5 before:top-2 before:bottom-2 before:w-px before:bg-border">
-        {REP_TIERS.map((tier, i) => {
-          const earned = reputation >= tier.threshold
-          const isNext = next?.threshold === tier.threshold
-          const isCurrent = current.threshold === tier.threshold
+        {REP_RANKS.map((rank, i) => {
+          const display = RANK_DISPLAY[rank.name] ?? RANK_DISPLAY.Seed
+          const earned = xp >= rank.threshold
+          const isNext = next?.threshold === rank.threshold
+          const isCurrent = current.threshold === rank.threshold
 
           return (
-            <div key={tier.threshold} className="relative flex items-start gap-3 pl-1">
+            <div key={rank.threshold} className="relative flex items-start gap-3 pl-1">
               <div
                 className={cn(
                   "relative z-10 flex h-7 w-7 shrink-0 items-center justify-center rounded-full border text-[10px] font-bold",
@@ -42,22 +43,22 @@ export default function ReputationRoadmap({ reputation, compact }: ReputationRoa
               </div>
               <div className={cn("flex-1", compact && "text-sm")}>
                 <div className="flex items-center gap-2">
-                  <span className={cn("text-base", earned ? "text-foreground" : "text-muted-foreground")}>{tier.icon}</span>
+                  <span className={cn("text-base", earned ? "text-foreground" : "text-muted-foreground")}>{display.icon}</span>
                   <span
                     className={cn(
                       "font-semibold",
-                      isCurrent ? tier.color : earned ? "text-foreground" : "text-muted-foreground"
+                      isCurrent ? display.color : earned ? "text-foreground" : "text-muted-foreground"
                     )}
                   >
-                    {tier.name}
+                    {rank.name}
                   </span>
                   {isCurrent && (
                     <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-primary/10 text-primary">Current</span>
                   )}
                 </div>
-                <p className="text-xs text-muted-foreground mt-0.5">{tier.benefit}</p>
+                <p className="text-xs text-muted-foreground mt-0.5">{display.benefit}</p>
                 <p className={cn("text-[10px] mt-1", earned ? "text-primary/80" : "text-muted-foreground")}>
-                  {earned ? `Unlocked at ${tier.threshold} rep` : `Requires ${tier.threshold} rep`}
+                  {earned ? `Unlocked at ${rank.threshold.toLocaleString()} XP` : `Requires ${rank.threshold.toLocaleString()} XP`}
                 </p>
               </div>
             </div>
@@ -66,7 +67,7 @@ export default function ReputationRoadmap({ reputation, compact }: ReputationRoa
       </div>
       {!compact && (
         <p className="text-xs text-muted-foreground mt-4">
-          Keep growing to climb tiers. Higher tiers unlock more community features and serious bragging rights.
+          Keep growing to climb ranks. Higher ranks unlock more community features and serious bragging rights.
         </p>
       )}
     </div>

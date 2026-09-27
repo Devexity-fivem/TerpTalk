@@ -6,9 +6,23 @@ import { unauthorized, forbidden, getClientIp, logSecurityEvent, isAdmin } from 
 import { requireModerator } from "@/lib/require-staff"
 import { rateLimit } from "@/lib/rate-limit"
 import { reverseReputationEvent, REP_EVENT_TYPES, publicRepLabel } from "@/lib/reputation"
+import { reverseProgressionEvent } from "@/lib/progression"
+import { publicXpLabel } from "@/lib/progression-config"
 import { logModAction } from "@/lib/moderation"
 
-// GET ?username=&cursor= — staff view of a member's full reputation ledger.
+// Non-reversible V2 event types — markers, system bookkeeping, and the
+// reversal chain itself carry no clawbackable award.
+const NON_REVERSIBLE_V2 = new Set([
+  "REVERSAL",
+  "REINSTATE",
+  "MILESTONE",
+  "LEGACY_STANDING",
+  "STANDING_RECOVERY",
+  "UNLOCK_FREEZE",
+  "STANDING_ONLY",
+])
+
+// GET ?username=&cursor= — staff view of a member's full progression ledger.
 // Sees everything the public view hides (staff adjustments, raw reasons,
 // actor attribution, reversal linkage).
 export async function GET(request: Request) {
@@ -29,13 +43,13 @@ export async function GET(request: Request) {
 
   const profile = await prisma.profile.findFirst({
     where: { username: { equals: username, mode: "insensitive" } },
-    select: { userId: true, username: true, reputation: true },
+    select: { userId: true, username: true, xp: true, standing: true },
   })
   if (!profile) {
     return NextResponse.json({ error: "User not found" }, { status: 404 })
   }
 
-  const events = await prisma.reputationEvent.findMany({
+  const events = await prisma.progressionEvent.findMany({
     where: { userId: profile.userId },
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     take: 51,
@@ -55,21 +69,25 @@ export async function GET(request: Request) {
   const actorName = new Map(actors.map((a) => [a.id, a.profile?.username ?? null]))
 
   // Drift: balance vs ledger sum — every row counts (reversedAt is status).
-  const sum = await prisma.reputationEvent.aggregate({
+  const sum = await prisma.progressionEvent.aggregate({
     where: { userId: profile.userId },
-    _sum: { amount: true },
+    _sum: { xp: true, standing: true },
   })
-  const ledgerSum = sum._sum.amount ?? 0
+  const ledgerSum = sum._sum.xp ?? 0
+  const standingSum = sum._sum.standing ?? 0
 
   return NextResponse.json({
-    user: { id: profile.userId, username: profile.username, reputation: profile.reputation },
+    user: { id: profile.userId, username: profile.username, xp: profile.xp, standing: profile.standing },
     ledgerSum,
-    drift: profile.reputation - ledgerSum,
+    standingSum,
+    drift: profile.xp - ledgerSum,
+    standingDrift: profile.standing - standingSum,
     events: page.map((e) => ({
       id: e.id,
       type: e.type,
-      label: publicRepLabel(e.type),
-      amount: e.amount,
+      label: publicXpLabel(e.type),
+      xp: e.xp,
+      standing: e.standing,
       reason: e.reason,
       key: e.key,
       sourceType: e.sourceType,
@@ -112,28 +130,73 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Invalid request" }, { status: 400 })
     }
 
-    const event = await prisma.reputationEvent.findUnique({
+    // V2 progression ledger first — the live economy. Legacy
+    // ReputationEvent ids fall through to the frozen-ledger reversal so
+    // historical rows remain auditable.
+    const event = await prisma.progressionEvent.findUnique({
+      where: { id: eventId },
+      select: { id: true, userId: true, type: true, reversedAt: true, reversalFinal: true, user: { select: { role: true } } },
+    })
+
+    if (event) {
+      if (event.reversedAt || event.reversalFinal) {
+        return NextResponse.json({ error: "Already reversed" }, { status: 409 })
+      }
+      if (NON_REVERSIBLE_V2.has(event.type)) {
+        return NextResponse.json({ error: "This event type cannot be reversed" }, { status: 400 })
+      }
+      if (event.type === "STAFF_ADJUSTMENT" && !isAdmin(staff.role)) {
+        return forbidden()
+      }
+      if (event.user.role === "ADMINISTRATOR" || event.userId === staff.id) {
+        return forbidden()
+      }
+      // Moderators can't strip progression from fellow staff.
+      if ((event.user.role === "MODERATOR" || event.user.role === "SUPPORT") && !isAdmin(staff.role)) {
+        return forbidden()
+      }
+
+      // final: staff reversals must not silently reinstate via keyed
+      // re-triggers (re-like, re-accept, challenge re-evaluation).
+      const result = await reverseProgressionEvent(eventId, `Staff reversal: ${reason.trim()}`, staff.id, { final: true })
+      if (!result.reversed) {
+        return NextResponse.json({ error: "Already reversed" }, { status: 409 })
+      }
+
+      await logModAction(prisma, {
+        type: "REPUTATION_REVERSAL",
+        reason: `${reason.trim()} (event ${eventId}, ${event.type})`,
+        targetUserId: event.userId,
+        moderatorId: staff.id,
+      })
+      await logSecurityEvent("SUSPICIOUS_ACTIVITY", {
+        userId: staff.id,
+        ip: getClientIp(request),
+        metadata: { reputationAction: "reversal", eventId, targetUserId: event.userId },
+      })
+
+      return NextResponse.json({ ok: true, newXp: result.newXp })
+    }
+
+    const legacy = await prisma.reputationEvent.findUnique({
       where: { id: eventId },
       select: { id: true, userId: true, type: true, reversedAt: true, user: { select: { role: true } } },
     })
-    if (!event) return NextResponse.json({ error: "Event not found" }, { status: 404 })
-    if (event.reversedAt) return NextResponse.json({ error: "Already reversed" }, { status: 409 })
-    if (event.type === REP_EVENT_TYPES.REVERSAL || event.type === REP_EVENT_TYPES.REINSTATE || event.type === REP_EVENT_TYPES.LEGACY_MIGRATION || event.type === REP_EVENT_TYPES.MILESTONE) {
+    if (!legacy) return NextResponse.json({ error: "Event not found" }, { status: 404 })
+    if (legacy.reversedAt) return NextResponse.json({ error: "Already reversed" }, { status: 409 })
+    if (legacy.type === REP_EVENT_TYPES.REVERSAL || legacy.type === REP_EVENT_TYPES.REINSTATE || legacy.type === REP_EVENT_TYPES.LEGACY_MIGRATION || legacy.type === REP_EVENT_TYPES.MILESTONE) {
       return NextResponse.json({ error: "This event type cannot be reversed" }, { status: 400 })
     }
-    if (event.type === REP_EVENT_TYPES.STAFF_ADJUSTMENT && !isAdmin(staff.role)) {
+    if (legacy.type === REP_EVENT_TYPES.STAFF_ADJUSTMENT && !isAdmin(staff.role)) {
       return forbidden()
     }
-    if (event.user.role === "ADMINISTRATOR" || event.userId === staff.id) {
+    if (legacy.user.role === "ADMINISTRATOR" || legacy.userId === staff.id) {
       return forbidden()
     }
-    // Moderators can't strip reputation from fellow staff.
-    if ((event.user.role === "MODERATOR" || event.user.role === "SUPPORT") && !isAdmin(staff.role)) {
+    if ((legacy.user.role === "MODERATOR" || legacy.user.role === "SUPPORT") && !isAdmin(staff.role)) {
       return forbidden()
     }
 
-    // final: staff reversals must not silently reinstate via keyed
-    // re-triggers (re-like, re-accept, challenge re-evaluation).
     const result = await reverseReputationEvent(eventId, `Staff reversal: ${reason.trim()}`, staff.id, { final: true })
     if (!result.reversed) {
       return NextResponse.json({ error: "Already reversed" }, { status: 409 })
@@ -141,14 +204,14 @@ export async function POST(request: Request) {
 
     await logModAction(prisma, {
       type: "REPUTATION_REVERSAL",
-      reason: `${reason.trim()} (event ${eventId}, ${event.type})`,
-      targetUserId: event.userId,
+      reason: `${reason.trim()} (legacy event ${eventId}, ${legacy.type})`,
+      targetUserId: legacy.userId,
       moderatorId: staff.id,
     })
     await logSecurityEvent("SUSPICIOUS_ACTIVITY", {
       userId: staff.id,
       ip: getClientIp(request),
-      metadata: { reputationAction: "reversal", eventId, targetUserId: event.userId },
+      metadata: { reputationAction: "reversal", eventId, targetUserId: legacy.userId, ledger: "legacy" },
     })
 
     return NextResponse.json({ ok: true, newRep: result.newRep })

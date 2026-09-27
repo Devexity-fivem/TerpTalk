@@ -21,10 +21,26 @@ export async function GET(request: Request) {
 
   // Read-only: detection runs here for display, but persisting flags is the
   // daily cron's job — viewing this page must not create moderation cases.
-  const [signals, staffActions] = await Promise.all([
+  const [signals, staffActionsV2, staffActionsV1] = await Promise.all([
     detectReputationSignals(days),
 
-    // Recent staff rep actions for the audit feed.
+    // Recent staff actions for the audit feed — V2 ledger is live; legacy
+    // rows remain for history.
+    prisma.progressionEvent.findMany({
+      where: {
+        OR: [
+          { type: "STAFF_ADJUSTMENT" },
+          { type: "STAFF_GRANT" },
+          { type: "REVERSAL", actorId: { not: null } },
+        ],
+      },
+      orderBy: { createdAt: "desc" },
+      take: 25,
+      select: {
+        id: true, type: true, userId: true, actorId: true, xp: true,
+        standing: true, reason: true, createdAt: true,
+      },
+    }),
     prisma.reputationEvent.findMany({
       where: {
         OR: [
@@ -40,6 +56,12 @@ export async function GET(request: Request) {
       },
     }),
   ])
+  const staffActions = [
+    ...staffActionsV2.map((s) => ({ ...s, amount: s.xp || s.standing })),
+    ...staffActionsV1.map((s) => ({ ...s, xp: s.amount, standing: 0 })),
+  ]
+    .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+    .slice(0, 25)
   const { velocity, reciprocal, newAccounts } = signals
 
   // Resolve usernames for every flagged id in one query.

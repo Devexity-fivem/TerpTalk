@@ -401,9 +401,9 @@ const main = async () => {
     const anonPusher = await pusherAuth(undefined, "1.1", `private-user-${a.id}`)
     anonPusher.status === 401 ? pass("pusher: anonymous auth denied") : fail("pusher anon", anonPusher.status)
 
-    // requiredRep must be null, not 0 — a non-null rep gate requires the
+    // requiredXp must be null, not 0 — a non-null XP gate requires the
     // grow_room_enabled rollout flag, which is off by default.
-    const room = await prisma.chatRoom.create({ data: { name: `__rv-room-${TS}`, slug: `rv-room-${TS}`, isPrivate: false, requiredRep: null }, select: { id: true } })
+    const room = await prisma.chatRoom.create({ data: { name: `__rv-room-${TS}`, slug: `rv-room-${TS}`, isPrivate: false, requiredXp: null }, select: { id: true } })
     roomIds.push(room.id)
     {
       const rok = await pusherAuth(aC, "1.1", `private-chat-${room.id}`)

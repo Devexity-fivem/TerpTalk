@@ -4,9 +4,11 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { unauthorized, publicUserSelect, LIMITS, getClientIp, logSecurityEvent, isBanned, forbidden, enforceLinkTrust, isModerator, isAdmin, blockExistsBetween } from "@/lib/security"
 import { requireModerator } from "@/lib/require-staff"
-import { awardReputation, repRateLimit, getTierPerks, REP_POINTS } from "@/lib/reputation"
+import { progressionRateLimit, getProgressionPerks } from "@/lib/progression"
 import { POST_MIN_PAID_LENGTH } from "@/lib/reputation-config"
-import { enqueueReversal, drainOne } from "@/lib/reputation-outbox"
+import { awardProgression, checkDuplicateContent } from "@/lib/progression"
+import { QUALITY_BANDS } from "@/lib/progression-config"
+import { enqueueXpReversal, drainXpOne } from "@/lib/progression-outbox"
 import { storeImages, deleteImagesIfUnreferenced, MAX_POST_IMAGES } from "@/lib/blob"
 import { notifyMentions } from "@/lib/mentions"
 import { notify, notifyMany, postDeepLink, postLinkWhere } from "@/lib/notify"
@@ -56,7 +58,7 @@ export async function POST(request: Request) {
     }
 
     // Rate limit: 30 posts per 10 minutes per user (Cultivator+ scale it up)
-    const rl = await repRateLimit(session.user.id, `post:${session.user.id}`, 30, 10 * 60 * 1000)
+    const rl = await progressionRateLimit(session.user.id, `post:${session.user.id}`, 30, 10 * 60 * 1000)
     if (!rl.allowed) {
       await logSecurityEvent("RATE_LIMIT_EXCEEDED", {
         userId: session.user.id,
@@ -74,6 +76,7 @@ export async function POST(request: Request) {
       where: { id: threadId },
       include: {
         category: { select: { hidden: true } },
+        author: { select: { createdAt: true } },
       },
     })
 
@@ -103,8 +106,8 @@ export async function POST(request: Request) {
     // Upload attachments first so a storage failure cannot leave a reply
     // with only some of its images.
     try {
-      // Master Grower+ can attach more images per post.
-      const perks = await getTierPerks(session.user.id)
+      // Flowering+ ranks can attach more images per post.
+      const perks = await getProgressionPerks(session.user.id)
       imageUrls = await storeImages(images, "forum", perks.imagesPerPost ?? MAX_POST_IMAGES)
     } catch (err) {
       console.error("Forum post image upload error:", err)
@@ -145,16 +148,41 @@ export async function POST(request: Request) {
       return created
     })
 
-    // Paying floor: short replies still post — they just don't earn rep or
+    // Paying floor: short replies still post — they just don't earn XP or
     // feed post-count quests. Same policy as THREAD_MIN_PAID_LENGTH.
+    // V2: REPLY (Community) + SUBSTANTIVE_ANSWER (Knowledge, dual-path,
+    // ≥200 chars in others' threads) + NEWCOMER_REPLY (<30d thread author).
+    // Simhash tiers gate the award — posts carry no structured data, so a
+    // "reduced" verdict pays nothing (design §6.7).
     if (content.trim().length >= POST_MIN_PAID_LENGTH) {
-      await awardReputation(
-        session.user.id,
-        "POST_CREATED",
-        REP_POINTS.POST_CREATED,
-        `Replied in "${thread.title.slice(0, 60)}"`,
-        { key: `post:${post.id}`, sourceType: "POST", sourceId: post.id }
-      ).catch(() => {})
+      const dup = await checkDuplicateContent(session.user.id, content, { excludeId: post.id }).catch(
+        () => ({ verdict: "clean" as const, similarity: 0 })
+      )
+      const baseReason = `Replied in "${thread.title.slice(0, 60)}"`
+      const src = { sourceType: "POST", sourceId: post.id } as const
+      if (dup.verdict !== "clean") {
+        await awardProgression(session.user.id, "REPLY", baseReason, {
+          key: `post:${post.id}`, ...src, xp: 0, marker: true,
+          meta: { dup: dup.verdict, similarity: dup.similarity },
+        }).catch(() => {})
+      } else {
+        await awardProgression(session.user.id, "REPLY", baseReason, {
+          key: `post:${post.id}`, ...src,
+        }).catch(() => {})
+        const othersThread = thread.authorId !== session.user.id
+        if (othersThread && content.trim().length >= QUALITY_BANDS.SUBSTANTIVE_MIN_CHARS) {
+          await awardProgression(session.user.id, "SUBSTANTIVE_ANSWER", baseReason, {
+            key: `post:${post.id}:sub`, ...src,
+          }).catch(() => {})
+        }
+        // Newcomer bonus: replying in a <30d member's thread.
+        const newcomerWindow = Date.now() - 30 * 86400000
+        if (othersThread && thread.author.createdAt.getTime() > newcomerWindow) {
+          await awardProgression(session.user.id, "NEWCOMER_REPLY", baseReason, {
+            key: `post:${post.id}:newcomer`, ...src,
+          }).catch(() => {})
+        }
+      }
     }
 
     // Notify the thread author (if not self-reply; pref/block/ban handled by notify).
@@ -422,7 +450,7 @@ export async function DELETE(request: Request) {
       await tx.notification.deleteMany({ where: postLinkWhere(post.id) })
       // Durable reversal intent — same transaction as the delete, so a
       // crash can't strand reputation on removed content.
-      reversalId = await enqueueReversal(tx, {
+      reversalId = await enqueueXpReversal(tx, {
         kind: "SOURCE", sourceType: "POST", sourceId: post.id,
         reason: "Post removed", requestedBy: session.user.id,
       })
@@ -446,7 +474,7 @@ export async function DELETE(request: Request) {
 
     // Best-effort immediate drain — the outbox row makes any failure
     // retryable via ping/cron instead of silently losing the reversal.
-    if (reversalId) await drainOne(reversalId).catch(() => false)
+    if (reversalId) await drainXpOne(reversalId).catch(() => false)
 
     // Soft-deleted content must not leave live public blobs behind.
     deleteImagesIfUnreferenced(post.images.map((i) => i.url)).catch(() => {})

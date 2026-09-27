@@ -325,28 +325,28 @@ async function run() {
       return res.json()
     }
 
-    // Opted-out member: no recent rep rows and a zeroed grow streak.
+    // Opted-out member: no recent progression rows and a zeroed grow streak.
     const optOut = await profileApi(A)
-    assert.ok(Array.isArray(optOut.recentRep), "recentRep is an array")
-    assert.equal(optOut.recentRep.length, 0, "opted-out member exposes no recentRep")
+    assert.ok(Array.isArray(optOut.recentProgression), "recentProgression is an array")
+    assert.equal(optOut.recentProgression.length, 0, "opted-out member exposes no recentProgression")
     assert.equal(optOut.profile.growStreak, 0, "opted-out member growStreak zeroed")
 
-    // Default member with one public rep event: rows carry the public
+    // Default member with one public XP event: rows carry the public
     // label/amount/createdAt shape and never leak the raw type.
-    await prisma.reputationEvent.create({
-      data: { userId: b.id, type: "THREAD_CREATED", amount: 5, reason: "ss test" },
+    await prisma.progressionEvent.create({
+      data: { userId: b.id, type: "THREAD_STARTED", xp: 5, reason: "ss test" },
     })
     const visible = await profileApi(B)
-    assert.ok(visible.recentRep.length >= 1, "default member exposes recentRep")
-    for (const e of visible.recentRep) {
+    assert.ok(visible.recentProgression.length >= 1, "default member exposes recentProgression")
+    for (const e of visible.recentProgression) {
       assert.ok(typeof e.label === "string" && e.label.length > 0, "event has label")
       assert.ok(typeof e.amount === "number", "event has amount")
       assert.ok(e.createdAt, "event has createdAt")
       assert.ok(!("type" in e), "event must not expose raw type")
     }
-    // hideOnlineStatus alone must not empty recentRep — the two privacy
-    // flags stay independent (b has hideOnlineStatus=true).
-    assert.ok(visible.recentRep.length >= 1, "hideOnlineStatus does not hide recentRep")
+    // hideOnlineStatus alone must not empty recentProgression — the two
+    // privacy flags stay independent (b has hideOnlineStatus=true).
+    assert.ok(visible.recentProgression.length >= 1, "hideOnlineStatus does not hide recentProgression")
 
     // Diary visibility helpers + PATCH validation.
     assert.equal(isDiaryVisibility("PUBLIC"), true)

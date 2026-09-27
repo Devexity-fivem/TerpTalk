@@ -3,8 +3,7 @@ import { getToken } from "next-auth/jwt"
 import { sessionCookieName } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { blockExistsBetween, getTrustLevel, getClientIp, hashIp, isSessionValid } from "@/lib/security"
-import { getReputationTier, getTierProgress, getRepStage, getStageProgress } from "@/lib/reputation"
-import { PUBLIC_REP_TYPES, publicRepLabel } from "@/lib/reputation-config"
+import { PUBLIC_XP_TYPES, publicXpLabel, rankDisplay, xpRankProgress, xpStage, xpStageProgress } from "@/lib/progression-config"
 import { getProfileTitle } from "@/lib/cosmetics"
 import { getGrowStreak } from "@/lib/grow-streak"
 import { rateLimit } from "@/lib/rate-limit"
@@ -41,7 +40,8 @@ async function getPublicProfileData(username: string, viewerId?: string) {
         businessType: true,
         businessUrl: true,
         joinDate: true,
-        reputation: true,
+        xp: true,
+        standing: true,
         avatarFrame: true,
         profileTitle: true,
         profileTheme: true,
@@ -215,17 +215,17 @@ export async function GET(
       hasFallbacks: fullStats.fallbacks > 0,
     }
 
-    // Recent public reputation events — powers the profile's Reputation
+    // Recent public progression events — powers the profile's activity
     // card. Per-event timestamps disclose activity cadence, so members who
     // opt out of public recognition don't expose them.
-    const recentRep =
+    const recentProgression =
       isBot || profile.publicMilestoneOptOut
         ? []
-        : await prisma.reputationEvent.findMany({
-            where: { userId: profile.user.id, type: { in: [...PUBLIC_REP_TYPES] } },
+        : await prisma.progressionEvent.findMany({
+            where: { userId: profile.user.id, type: { in: [...PUBLIC_XP_TYPES] } },
             orderBy: { createdAt: "desc" },
             take: 6,
-            select: { id: true, type: true, amount: true, reversedAt: true, createdAt: true },
+            select: { id: true, type: true, xp: true, standing: true, reversedAt: true, createdAt: true },
           })
 
     let viewerBlocked = false
@@ -279,12 +279,13 @@ export async function GET(
         businessUrl: safeUrl(profile.businessUrl),
         image: profile.user.image || profile.avatarUrl,
         joinDate: profile.joinDate,
-        reputation: profile.reputation,
-        trustLevel: getTrustLevel(profile.user.createdAt, profile.reputation),
-        reputationTier: getReputationTier(profile.reputation),
-        tierProgress: getTierProgress(profile.reputation),
-        repStage: getRepStage(profile.reputation),
-        stageProgress: getStageProgress(profile.reputation),
+        xp: profile.xp,
+        standing: profile.standing,
+        trustLevel: getTrustLevel(profile.user.createdAt, profile.xp),
+        rank: rankDisplay(profile.xp),
+        rankProgress: xpRankProgress(profile.xp),
+        xpStage: xpStage(profile.xp),
+        stageProgress: xpStageProgress(profile.xp),
         avatarFrame: profile.avatarFrame,
         profileTitle: profile.profileTitle,
         customTitle: getProfileTitle(profile.profileTitle)?.name ?? null,
@@ -315,10 +316,10 @@ export async function GET(
         botStats,
       },
       viewerBlocked,
-      recentRep: recentRep.map((e) => ({
+      recentProgression: recentProgression.map((e) => ({
         id: e.id,
-        label: publicRepLabel(e.type),
-        amount: e.amount,
+        label: publicXpLabel(e.type),
+        amount: e.xp !== 0 ? e.xp : e.standing,
         reversed: !!e.reversedAt,
         createdAt: e.createdAt,
       })),

@@ -16,15 +16,11 @@ import { after } from "next/server"
 import { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
 import {
-  BADGE_BONUS,
   CHAT_DAILY_BADGE_CAP,
   LIKE_MIN_ACTOR_AGE_HOURS,
   REP_CAPS,
   REP_EVENT_TYPES,
   REP_POINTS,
-  REFERRAL_MAX_PER_WEEK,
-  REFERRAL_MIN_AGE_HOURS,
-  REFERRAL_MIN_REP,
   TRUST_EVENT_TYPES,
   VERIFIED_MIN_AGE_DAYS,
   VERIFIED_MIN_REPUTATION,
@@ -588,7 +584,10 @@ async function postAwardEffects(
   await runEffectStage(userId, "stage", () => checkStageChange(userId, oldRep, newRep))
   await runEffectStage(userId, "verify", () => autoVerify(userId, newRep, user))
   await runEffectStage(userId, "badges", () => checkBadges(userId, { announcedTierName: announcedTier }))
-  await runEffectStage(userId, "referral", () => maybePayReferral(userId, user, newRep))
+  // The referral stage is retired under Progression V2 — referee
+  // qualification now keys on xp via lib/referrals.ts, and the daily cron
+  // sweep is the single canonical payout path. A legacy-ledger award must
+  // never trigger an old-economy referral payout.
   if (type && CONTRIBUTION_TYPES.has(type)) {
     await runEffectStage(userId, "discovery-badges", () => checkDiscoveryBadges(userId))
   }
@@ -645,170 +644,6 @@ async function claimMilestone(userId: string, key: string): Promise<boolean> {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") return false
     throw error
   }
-}
-
-// Referral rep pays only once the referred member proves legitimate:
-// REFERRAL_MIN_REP earned + REFERRAL_MIN_AGE_HOURS old. Keyed per referee.
-//
-// This is the single canonical eligibility/payout path — both the deferred
-// post-award trigger and the daily reconciliation sweep call it, so the
-// business rules can never diverge between entry points.
-async function payReferralBonus(refereeUserId: string, refereeCreatedAt: Date, refereeRep: number) {
-  if (refereeRep < REFERRAL_MIN_REP) return
-  const ageHours = (Date.now() - refereeCreatedAt.getTime()) / (1000 * 60 * 60)
-  if (ageHours < REFERRAL_MIN_AGE_HOURS) return
-
-  const profile = await prisma.profile.findUnique({
-    where: { userId: refereeUserId },
-    select: { referredById: true, username: true },
-  })
-  if (!profile?.referredById) return
-  const referrer = await prisma.profile.findUnique({
-    where: { id: profile.referredById },
-    select: { userId: true },
-  })
-  if (!referrer || referrer.userId === refereeUserId) return
-
-  // Pre-ledger signups (before the deferred-payout system shipped) paid the
-  // instant referral bonus as an UNKEYED event inside the registration
-  // request — stamped at the same time as the referee's account. The keyed
-  // idempotency can't see those rows, so without this check the sweep and
-  // deferred trigger re-pay every referral that predates the ledger. The
-  // window is tight and the only historical producer of unkeyed REFERRAL
-  // events was that signup path, so a match is unambiguous.
-  const legacyPayout = await prisma.reputationEvent.findFirst({
-    where: {
-      userId: referrer.userId,
-      type: "REFERRAL",
-      key: null,
-      reversedAt: null,
-      createdAt: {
-        gte: new Date(refereeCreatedAt.getTime() - 60_000),
-        lte: new Date(refereeCreatedAt.getTime() + 10 * 60_000),
-      },
-    },
-    select: { id: true },
-  })
-  if (legacyPayout) return
-
-  // Weekly payout cap — a sock farm grinding 25 rep per fake signup can't
-  // earn unbounded referral rep. Organic referrals (a few a week at most)
-  // never notice the limit.
-  const weekAgo = new Date(Date.now() - 7 * 86400000)
-  const recentPayouts = await prisma.reputationEvent.count({
-    where: {
-      userId: referrer.userId,
-      type: "REFERRAL",
-      reversedAt: null,
-      createdAt: { gte: weekAgo },
-    },
-  })
-  if (recentPayouts >= REFERRAL_MAX_PER_WEEK) return
-
-  const res = await applyReputationAward(
-    referrer.userId,
-    "REFERRAL",
-    REP_POINTS.REFERRAL,
-    "A member you invited became an established grower",
-    { key: `referral:${refereeUserId}`, actorId: refereeUserId }
-  )
-  if (!res.awarded) return
-
-  // The award is already committed — notification delivery stays
-  // non-blocking, but a failure must be observable (never re-award).
-  // Name the invitee — an unnamed "a member you invited" payout is
-  // indistinguishable from a brand-new signup in the inbox (and bursts of
-  // deferred payouts read as a wave of new registrations).
-  const refereeName = profile.username ?? "a member you invited"
-  await notify({
-    userId: referrer.userId,
-    type: "REPUTATION",
-    title: "Referral bonus",
-    content: `@${refereeName} became an established grower — +${res.amount ?? REP_POINTS.REFERRAL} reputation for the invite.`,
-    link: "/profile",
-  }).catch((error) => {
-    console.error(`[reputation] referral payout notification failed for referrer ${referrer.userId} (referee ${refereeUserId}):`, error)
-  })
-
-  // Referrer's own side effects (tier/badge checks) for the new points.
-  const referrerUser = await prisma.user.findUnique({
-    where: { id: referrer.userId },
-    select: { role: true, createdAt: true, banned: true, suspendedUntil: true },
-  })
-  if (referrerUser && res.newRep !== undefined) {
-    await postAwardEffects(referrer.userId, referrerUser, res.oldRep ?? res.newRep, res.newRep, "REFERRAL")
-  }
-}
-
-// Deferred trigger inside the award pipeline — delegates to the canonical
-// payout so award-time and sweep-time eligibility can never diverge.
-async function maybePayReferral(userId: string, user: AwardUser, newRep: number) {
-  await payReferralBonus(userId, user.createdAt, newRep)
-}
-
-/**
- * Referral reconciliation sweep — the safety net for qualifying referrals
- * whose payout trigger was lost (deferred side effect dropped, earlier stage
- * failed, referrer was suspended at the moment of qualification, or the
- * referee simply went dormant after crossing the threshold).
- *
- * Bounded: reads at most `limit` candidate profiles (referredById set,
- * rep >= threshold, account old enough), skips referees whose
- * `referral:<userId>` key already has an active event, and hands each
- * remaining candidate to the canonical payReferralBonus — the unique key
- * makes a concurrent normal-path payout safe (P2002 -> duplicate no-op).
- * Reversed-but-not-final keys flow through the canonical path and reinstate
- * exactly as an organic re-trigger would.
- *
- * Throws after processing all candidates if any payout attempt errored, so
- * callers (cron claims) can release the task and retry on the next run.
- */
-export async function reconcileReferralPayouts(
-  limit = 200
-): Promise<{ candidates: number; attempted: number; failed: number }> {
-  const cutoff = new Date(Date.now() - REFERRAL_MIN_AGE_HOURS * 60 * 60 * 1000)
-  const candidates = await prisma.profile.findMany({
-    where: {
-      referredById: { not: null },
-      reputation: { gte: REFERRAL_MIN_REP },
-      user: { createdAt: { lte: cutoff } },
-    },
-    select: {
-      userId: true,
-      reputation: true,
-      user: { select: { createdAt: true } },
-    },
-    orderBy: { userId: "asc" },
-    take: limit,
-  })
-  if (candidates.length === 0) return { candidates: 0, attempted: 0, failed: 0 }
-
-  // One indexed read filters out referees whose payout is already live —
-  // reversed/final keys deliberately stay eligible so the canonical path
-  // applies its own reinstate/locked semantics.
-  const keys = candidates.map((c) => `referral:${c.userId}`)
-  const active = await prisma.reputationEvent.findMany({
-    where: { key: { in: keys }, reversedAt: null },
-    select: { key: true },
-  })
-  const alreadyPaid = new Set(active.map((e) => e.key))
-
-  let attempted = 0
-  let failed = 0
-  for (const c of candidates) {
-    if (alreadyPaid.has(`referral:${c.userId}`)) continue
-    attempted++
-    try {
-      await payReferralBonus(c.userId, c.user.createdAt, c.reputation)
-    } catch (error) {
-      failed++
-      console.error("[reputation] referral reconciliation failed for referee", c.userId, error)
-    }
-  }
-  if (failed > 0) {
-    throw new Error(`referral reconciliation: ${failed}/${attempted} payouts failed`)
-  }
-  return { candidates: candidates.length, attempted, failed }
 }
 
 /**
@@ -1167,16 +1002,7 @@ export async function grantBadge(
     }
   }
 
-  // One-time rep bonus by rarity — a finite pool that can't scale with
-  // spam. Keyed per badge so re-grants/reinstates can never double-pay.
-  // Bot-only badges aren't in BADGE_REGISTRY and get no bonus.
-  const def = BADGE_REGISTRY.find((b) => b.name === badge.name)
-  if (def) {
-    await awardReputation(userId, REP_EVENT_TYPES.BADGE_BONUS, BADGE_BONUS[def.rarity] ?? 15, `Badge earned: ${badge.name}`, {
-      key: `badgebonus:${badge.name}:${userId}`,
-    }).catch(() => null)
-  }
-
+  // V2: badges are the reward — no currency bonus (design: achievements = 0 XP).
   return true
 }
 
@@ -1277,26 +1103,6 @@ export async function checkBadges(userId: string, opts: { announcedTierName?: st
     if (BADGE_CATEGORIES.every((c) => c === "staff" || covered.has(c))) {
       if (await grantBadge(userId, "Secret Stash", { notifyUser: false })) newlyEarned.push("Secret Stash")
     }
-  }
-
-  // Lazy backfill: badges granted before BADGE_BONUS existed still owe
-  // their one-time bonus. Self-healing — runs once per member, then the
-  // NOT EXISTS check returns empty forever after.
-  const missingBonus = await prisma.$queryRaw<{ name: string }[]>`
-    SELECT b."name" FROM "UserBadge" ub
-    JOIN "Badge" b ON b."id" = ub."badgeId"
-    WHERE ub."userId" = ${userId}
-      AND NOT EXISTS (
-        SELECT 1 FROM "ReputationEvent" e
-        WHERE e."userId" = ${userId}
-          AND e."key" = 'badgebonus:' || b."name" || ':' || ${userId}
-      )`
-  for (const row of missingBonus) {
-    const def = BADGE_REGISTRY.find((b) => b.name === row.name)
-    if (!def) continue // bot badges and stale rows get no bonus
-    await awardReputation(userId, REP_EVENT_TYPES.BADGE_BONUS, BADGE_BONUS[def.rarity] ?? 15, `Badge earned: ${row.name}`, {
-      key: `badgebonus:${row.name}:${userId}`,
-    }).catch(() => null)
   }
 
   if (newlyEarned.length > 0) {

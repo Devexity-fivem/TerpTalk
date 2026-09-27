@@ -54,7 +54,7 @@ export default function WeeklyChallenges() {
       <div className="flex items-center gap-2 mb-1">
         <Target className="w-5 h-5 text-primary" />
         <h2 className="font-display text-lg font-semibold">Weekly Challenges</h2>
-        <InfoTip content="Optional tasks that reset every Monday. Hover a challenge to see how to complete it — finishing one pays the listed reputation automatically." />
+        <InfoTip content="Optional tasks that reset every Monday. Hover a challenge to see how to complete it — finishing one pays the listed XP automatically." />
       </div>
       <p className="text-xs text-muted-foreground mb-4">Resets every Monday. Optional — ignore them freely.</p>
       <div className="space-y-3">
@@ -66,7 +66,7 @@ export default function WeeklyChallenges() {
                 <Tooltip content={c.description} align="start" className="min-w-0">
                   <span className={cn("font-medium truncate", c.done && "line-through decoration-muted-foreground/50")}>{c.title}</span>
                 </Tooltip>
-                <Tooltip content={c.done ? "Complete — reputation paid" : `Pays +${c.reward} rep when complete`} align="end">
+                <Tooltip content={c.done ? "Complete — XP paid" : `Pays +${c.reward} XP when complete`} align="end">
                   <span className="text-xs text-primary font-semibold shrink-0">+{c.reward}</span>
                 </Tooltip>
               </div>

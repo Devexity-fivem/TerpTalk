@@ -1,22 +1,23 @@
-// Reputation & Referral integrity tests — deferred referral payout,
-// reconciliation sweep, side-effect isolation, reversalFinal protection,
-// and failure observability. Runs against the dev database with disposable
-// __test_rr_ users; everything is cascade-cleaned at the end.
+// Reputation & Referral integrity tests — V2 referral payout sweep,
+// reconciliation, side-effect isolation, reversalFinal protection, and
+// failure observability. Referral eligibility/payouts run on the V2
+// ProgressionEvent ledger (xp); reversal/outbox sections still exercise
+// the frozen legacy ledger, which stays live for historical rows.
 // Run: npx tsx scripts/reputation-referral-integrity-tests.mts
 import "./db-guard.mjs"
 import { readFileSync } from "node:fs"
 import { prisma } from "@/lib/prisma"
 import {
   applyReputationAward,
-  awardReputation,
-  reconcileReferralPayouts,
   reverseReputationByActor,
   reverseReputationBySource,
   reverseReputationEvent,
   runEffectStage,
 } from "@/lib/reputation"
+import { reconcileReferralPayouts, REFERRAL_MIN_XP } from "@/lib/referrals"
 import { enqueueReversal, drainOne, drainPendingReversals } from "@/lib/reputation-outbox"
-import { REP_POINTS, REFERRAL_MIN_REP } from "@/lib/reputation-config"
+import { REP_POINTS } from "@/lib/reputation-config"
+import { XP_TABLE } from "@/lib/progression-config"
 
 const TS = Date.now()
 const P = `__test_rr_${TS}`
@@ -50,19 +51,24 @@ async function makeUser(suffix: string, opts: { ageHours?: number; referredById?
         },
       },
     },
-    include: { profile: { select: { id: true, reputation: true, referredById: true } } },
+    include: { profile: { select: { id: true, reputation: true, xp: true, referredById: true } } },
   })
 }
 
 const referralKey = (refereeUserId: string) => `referral:${refereeUserId}`
 
 async function referralEvent(refereeUserId: string) {
-  return prisma.reputationEvent.findUnique({ where: { key: referralKey(refereeUserId) } })
+  return prisma.progressionEvent.findUnique({ where: { key: referralKey(refereeUserId) } })
 }
 
 async function repOf(userId: string) {
   const p = await prisma.profile.findUnique({ where: { userId }, select: { reputation: true } })
   return p?.reputation ?? -1
+}
+
+async function xpOf(userId: string) {
+  const p = await prisma.profile.findUnique({ where: { userId }, select: { xp: true } })
+  return p?.xp ?? -1
 }
 
 // Push a referee to an exact balance via a single uncapped ledger write.
@@ -78,6 +84,27 @@ async function pushRep(userId: string, target: number, tag: string) {
     })
   }
   return repOf(userId)
+}
+
+// V2 twin of pushRep — direct ledger write + balance increment in one tx
+// keeps the fixture invariant (xp == SUM(xp)) without engine side effects.
+async function mkXpEvent(userId: string, over: Record<string, unknown>) {
+  const xp = (over.xp as number | undefined) ?? 5
+  return prisma.$transaction(async (tx) => {
+    const ev = await tx.progressionEvent.create({
+      data: { userId, type: "STAFF_ADJUSTMENT", xp, reason: "test fixture", ...over } as never,
+    })
+    await tx.profile.update({ where: { userId }, data: { xp: { increment: xp } } })
+    return ev
+  })
+}
+
+async function pushXp(userId: string, target: number, tag: string) {
+  const current = await xpOf(userId)
+  if (current < target) {
+    await mkXpEvent(userId, { xp: target - current, key: `${P}:xppush:${tag}` })
+  }
+  return xpOf(userId)
 }
 
 // Ledger row + profile credit in one tx — mirrors applyReputationAward's
@@ -98,13 +125,15 @@ async function run() {
 
   // ── Source assertions (wiring, not behavior) ─────────────────────
   const repSrc = readFileSync("src/lib/reputation.ts", "utf8")
+  const refSrc = readFileSync("src/lib/referrals.ts", "utf8")
   const cronSrc = readFileSync("src/app/api/cron/terpbot/route.ts", "utf8")
   const regSrc = readFileSync("src/app/api/auth/register/route.ts", "utf8")
 
   ok(!regSrc.includes("awardReputation") && !regSrc.includes("applyReputationAward"), "register route does not award referral rep at signup")
   ok(regSrc.includes('type: "REFERRAL"'), "register still sends the New referral notification")
   ok(regSrc.includes("referredById"), "register still writes referredById")
-  ok(repSrc.includes('runEffectStage(userId, "referral"'), "referral payout runs inside an isolated stage")
+  ok(refSrc.includes("payReferralBonus") && refSrc.includes("awardProgression"), "referral payout runs through the V2 engine")
+  ok(!repSrc.includes('"referral"'), "legacy postAwardEffects has no referral stage (no double-pay)")
   ok(repSrc.includes('runEffectStage(userId, "badges"'), "badge check runs inside an isolated stage")
   ok(repSrc.includes("reversalFinal: false"), "reinstate CAS guards reversalFinal")
   ok(cronSrc.includes("reconcileReferralPayouts"), "cron route invokes the reconciliation sweep")
@@ -131,36 +160,32 @@ async function run() {
 
   // ── Signup does NOT award immediately ────────────────────────────
   ok((await referralEvent(refereeNew.id)) === null, "no REFERRAL event right after attributed signup")
-  ok((await repOf(referrerSignup.id)) === 0, "referrer balance unchanged by signup alone")
+  ok((await xpOf(referrerSignup.id)) === 0, "referrer XP unchanged by signup alone")
 
-  // ── Referee under REFERRAL_MIN_REP does not trigger ─────────────
-  // Old enough, but rep below the threshold → not a sweep candidate, and
-  // the canonical rep gate blocks the deferred path too (source-asserted).
-  // Note: awardReputation can't be used to exercise the rep gate here —
-  // badge bonuses from its effects stage could legitimately push the
-  // referee over 25 in a small dev database.
-  ok(repSrc.includes("refereeRep < REFERRAL_MIN_REP"), "canonical rep gate is in the shared payout path")
-  await pushRep(refereeLowRep.id, REFERRAL_MIN_REP - 5, "lowrep")
+  // ── Referee under REFERRAL_MIN_XP does not trigger ──────────────
+  // Old enough, but XP below the threshold → not a sweep candidate, and
+  // the canonical xp gate blocks the payout path too (source-asserted).
+  ok(refSrc.includes("refereeXp < REFERRAL_MIN_XP"), "canonical XP gate is in the shared payout path")
+  await pushXp(refereeLowRep.id, REFERRAL_MIN_XP - 5, "lowrep")
   await reconcileReferralPayouts()
-  ok((await referralEvent(refereeLowRep.id)) === null, "referee below 25 rep does not trigger payout")
+  ok((await referralEvent(refereeLowRep.id)) === null, "referee below 25 XP does not trigger payout")
 
   // ── Referee under 24h does not trigger ──────────────────────────
-  await pushRep(refereeYoung.id, REFERRAL_MIN_REP, "young")
-  // Crossing award through the full pipeline (postAwardEffects runs inline
-  // outside a request scope). Badge bonuses may inflate rep further — the
-  // age gate still blocks.
-  await awardReputation(refereeYoung.id, "POST_CREATED", 2, "test", { key: `${P}:young:cross` })
-  ok((await repOf(refereeYoung.id)) >= REFERRAL_MIN_REP, "young referee crossed 25 rep")
+  await pushXp(refereeYoung.id, REFERRAL_MIN_XP, "young")
+  ok((await xpOf(refereeYoung.id)) >= REFERRAL_MIN_XP, "young referee crossed 25 XP")
   ok((await referralEvent(refereeYoung.id)) === null, "referee under 24h does not trigger payout")
   await reconcileReferralPayouts()
   ok((await referralEvent(refereeYoung.id)) === null, "referee under 24h is not a sweep candidate")
 
-  // ── Qualified referee triggers +25 via the normal award path ────
-  await pushRep(refereeQual.id, REFERRAL_MIN_REP, "qual")
-  await awardReputation(refereeQual.id, "POST_CREATED", 2, "test", { key: `${P}:qual:cross` })
+  // ── Qualified referee pays via the canonical sweep ──────────────
+  // V2 has no deferred post-award trigger — the sweep is the single
+  // payout path. An award alone must NOT pay before the sweep runs.
+  await pushXp(refereeQual.id, REFERRAL_MIN_XP, "qual")
+  ok((await referralEvent(refereeQual.id)) === null, "XP crossing alone does not pay (sweep is canonical)")
+  await reconcileReferralPayouts()
   const qualEvent = await referralEvent(refereeQual.id)
-  ok(!!qualEvent, "qualified referee triggers referral payout")
-  ok(qualEvent?.amount === REP_POINTS.REFERRAL, `payout amount is +${REP_POINTS.REFERRAL}`, qualEvent?.amount)
+  ok(!!qualEvent, "qualified referee triggers referral payout on sweep")
+  ok(qualEvent?.xp === XP_TABLE.REFERRAL.xp, `payout amount is +${XP_TABLE.REFERRAL.xp} XP`, qualEvent?.xp)
   ok(qualEvent?.userId === referrerMain.id, "payout credited to the referrer")
   ok(qualEvent?.actorId === refereeQual.id, "payout actorId is the referee")
   const qualNotif = await prisma.notification.findFirst({
@@ -170,27 +195,26 @@ async function run() {
   })
   ok(!!qualNotif, "payout notification is delivered")
   ok(!!qualNotif?.content?.includes(`@${P}_qual`), "payout notification names the actual invitee", qualNotif?.content)
-  const mainPayouts = await prisma.reputationEvent.count({
+  const mainPayouts = await prisma.progressionEvent.count({
     where: { userId: referrerMain.id, type: "REFERRAL", reversedAt: null },
   })
-  ok(mainPayouts === 1, "referrer ledger shows exactly one +25", mainPayouts)
+  ok(mainPayouts === 1, "referrer V2 ledger shows exactly one referral payout", mainPayouts)
 
   // ── Dormant qualifying referral discovered by reconciliation ────
-  // refereeDormant already has referredById + age; give them rep via direct
-  // ledger writes (applyReputationAward does NOT run postAwardEffects, so
-  // the organic trigger never fires — simulating a dormant/lost trigger).
-  await pushRep(refereeDormant.id, REFERRAL_MIN_REP, "dorm")
+  // refereeDormant already has referredById + age; XP arrived via direct
+  // ledger writes (no trigger exists in V2 — dormancy IS the norm).
+  await pushXp(refereeDormant.id, REFERRAL_MIN_XP, "dorm")
   ok((await referralEvent(refereeDormant.id)) === null, "dormant referee has no payout before sweep")
 
   const sweep1 = await reconcileReferralPayouts()
   ok(sweep1.failed === 0, "first sweep completes", sweep1)
   const dormEvent = await referralEvent(refereeDormant.id)
   ok(!!dormEvent, "reconciliation pays the dormant qualifying referral")
-  ok(dormEvent?.userId === referrerMain.id && dormEvent.amount === REP_POINTS.REFERRAL, "sweep payout matches canonical shape")
+  ok(dormEvent?.userId === referrerMain.id && dormEvent.xp === XP_TABLE.REFERRAL.xp, "sweep payout matches canonical shape")
 
   // ── Reconciliation is idempotent ─────────────────────────────────
   const sweep2 = await reconcileReferralPayouts()
-  const dormEvents = await prisma.reputationEvent.count({ where: { key: referralKey(refereeDormant.id), reversedAt: null } })
+  const dormEvents = await prisma.progressionEvent.count({ where: { key: referralKey(refereeDormant.id), reversedAt: null } })
   ok(dormEvents === 1, "second sweep does not duplicate the payout", { sweep2, dormEvents })
 
   // ── Legacy unkeyed payout blocks double-pay ──────────────────────
@@ -200,7 +224,7 @@ async function run() {
   // legacy check the sweep re-pays every referral that predates the ledger.
   const referrerLegacy = await makeUser("refleg")
   const refereeLegacy = await makeUser("leg", { referredById: referrerLegacy.profile!.id, ageHours: 48 })
-  await pushRep(refereeLegacy.id, REFERRAL_MIN_REP, "leg")
+  await pushXp(refereeLegacy.id, REFERRAL_MIN_XP, "leg")
   await prisma.reputationEvent.create({
     data: {
       userId: referrerLegacy.id,
@@ -212,16 +236,16 @@ async function run() {
   })
   await reconcileReferralPayouts()
   ok((await referralEvent(refereeLegacy.id)) === null, "legacy unkeyed payout blocks sweep double-pay")
-  const legCount = await prisma.reputationEvent.count({
+  const legCount = await prisma.progressionEvent.count({
     where: { userId: referrerLegacy.id, type: "REFERRAL", reversedAt: null },
   })
-  ok(legCount === 1, "legacy referrer keeps exactly one referral event", legCount)
+  ok(legCount === 0, "legacy referrer keeps only the historical payout", legCount)
 
   // Negative: an unrelated unkeyed event in the same window must NOT satisfy
   // legacy detection — only type REFERRAL counts.
   const referrerNoise = await makeUser("refnoise")
   const refereeNoise = await makeUser("noise", { referredById: referrerNoise.profile!.id, ageHours: 48 })
-  await pushRep(refereeNoise.id, REFERRAL_MIN_REP, "noise")
+  await pushXp(refereeNoise.id, REFERRAL_MIN_XP, "noise")
   await prisma.reputationEvent.create({
     data: {
       userId: referrerNoise.id,
@@ -234,22 +258,21 @@ async function run() {
   await reconcileReferralPayouts()
   ok((await referralEvent(refereeNoise.id)) !== null, "unrelated unkeyed event does not block payout")
 
-  // ── Normal award + reconciliation concurrency → one payout ──────
+  // ── Concurrent reconciliation sweeps → one payout ───────────────
   const referrerRace = await makeUser("refrace")
   const refereeRace = await makeUser("race", { referredById: referrerRace.profile!.id, ageHours: 48 })
-  await pushRep(refereeRace.id, REFERRAL_MIN_REP - 2, "race") // sit just under the line
+  await pushXp(refereeRace.id, REFERRAL_MIN_XP, "race")
   await Promise.all([
-    awardReputation(refereeRace.id, "POST_CREATED", 2, "crossing", { key: `${P}:race:cross` }),
     reconcileReferralPayouts(),
     reconcileReferralPayouts(),
   ])
-  const raceEvents = await prisma.reputationEvent.count({ where: { key: referralKey(refereeRace.id), reversedAt: null } })
-  ok(raceEvents === 1, "concurrent award+sweep produce exactly one payout", raceEvents)
+  const raceEvents = await prisma.progressionEvent.count({ where: { key: referralKey(refereeRace.id), reversedAt: null } })
+  ok(raceEvents === 1, "concurrent sweeps produce exactly one payout", raceEvents)
 
   // ── Deleted referrer: attribution cleared, no crash, no pay ──────
   const doomedReferrer = await makeUser("doomed")
   const refereeOrphan = await makeUser("orph", { referredById: doomedReferrer.profile!.id, ageHours: 48 })
-  await pushRep(refereeOrphan.id, REFERRAL_MIN_REP, "orph")
+  await pushXp(refereeOrphan.id, REFERRAL_MIN_XP, "orph")
   await prisma.user.delete({ where: { id: doomedReferrer.id } }) // FK SET NULL wipes referredById
   await reconcileReferralPayouts()
   const orphProfile = await prisma.profile.findUnique({ where: { userId: refereeOrphan.id }, select: { referredById: true } })
@@ -260,7 +283,7 @@ async function run() {
   const bannedReferrer = await makeUser("banned")
   await prisma.user.update({ where: { id: bannedReferrer.id }, data: { banned: true } })
   const refereeToBanned = await makeUser("toban", { referredById: bannedReferrer.profile!.id, ageHours: 48 })
-  await pushRep(refereeToBanned.id, REFERRAL_MIN_REP, "toban")
+  await pushXp(refereeToBanned.id, REFERRAL_MIN_XP, "toban")
   await reconcileReferralPayouts()
   ok((await referralEvent(refereeToBanned.id)) === null, "banned referrer is not paid")
   // Event key unconsumed — referee can still pay later if referrer is reinstated.
@@ -268,18 +291,16 @@ async function run() {
   await reconcileReferralPayouts()
   ok((await referralEvent(refereeToBanned.id)) !== null, "unbanned referrer is paid on next sweep")
 
-  // ── Weekly cap (3 per rolling 7 days) still enforced ─────────────
+  // ── Weekly cap (3 per ISO week) still enforced ───────────────────
   const cappedReferrer = await makeUser("capped")
   for (let i = 0; i < 3; i++) {
-    await applyReputationAward(cappedReferrer.id, "REFERRAL", REP_POINTS.REFERRAL, "prior payout", {
-      key: `${P}:capped:${i}`,
-    })
+    await mkXpEvent(cappedReferrer.id, { type: "REFERRAL", xp: XP_TABLE.REFERRAL.xp, key: `${P}:capped:${i}` })
   }
   const refereeToCapped = await makeUser("tocap", { referredById: cappedReferrer.profile!.id, ageHours: 48 })
-  await pushRep(refereeToCapped.id, REFERRAL_MIN_REP, "tocap")
+  await pushXp(refereeToCapped.id, REFERRAL_MIN_XP, "tocap")
   await reconcileReferralPayouts()
   ok((await referralEvent(refereeToCapped.id)) === null, "referrer at 3/week cap is not paid")
-  const cappedCount = await prisma.reputationEvent.count({
+  const cappedCount = await prisma.progressionEvent.count({
     where: { userId: cappedReferrer.id, type: "REFERRAL", reversedAt: null },
   })
   ok(cappedCount === 3, "cap leaves exactly 3 payouts", cappedCount)
@@ -290,7 +311,7 @@ async function run() {
     where: { userId: selfish.id },
     data: { referredById: selfish.profile!.id },
   })
-  await pushRep(selfish.id, REFERRAL_MIN_REP, "selfish")
+  await pushXp(selfish.id, REFERRAL_MIN_XP, "selfish")
   await reconcileReferralPayouts()
   ok((await referralEvent(selfish.id)) === null, "self-referral never pays")
 
@@ -309,13 +330,12 @@ async function run() {
   }
   ok(errors.length === 1, "throwing stage failure is logged", errors.length)
 
-  // End-to-end: a referee crossing while badges pipeline is healthy still
-  // pays through the isolated "referral" stage (wiring asserted above).
+  // End-to-end: a qualifying referee pays through the canonical sweep.
   const referrerIso = await makeUser("refiso")
   const refereeIso = await makeUser("iso", { referredById: referrerIso.profile!.id, ageHours: 48 })
-  await pushRep(refereeIso.id, REFERRAL_MIN_REP, "iso")
-  await awardReputation(refereeIso.id, "POST_CREATED", 2, "cross", { key: `${P}:iso:cross` })
-  ok((await referralEvent(refereeIso.id)) !== null, "isolated referral stage pays end-to-end")
+  await pushXp(refereeIso.id, REFERRAL_MIN_XP, "iso")
+  await reconcileReferralPayouts()
+  ok((await referralEvent(refereeIso.id)) !== null, "sweep pays the qualifying referral end-to-end")
 
   // ── reversalFinal protection ──────────────────────────────────────
   // Award → final reversal → re-trigger must NOT reinstate.

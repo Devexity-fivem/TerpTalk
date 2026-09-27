@@ -43,7 +43,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
           bio: true,
           location: true,
           avatarUrl: true,
-          reputation: true,
+          xp: true,
+          standing: true,
         },
       },
       _count: {

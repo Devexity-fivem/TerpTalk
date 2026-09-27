@@ -17,7 +17,8 @@ interface LookupUser {
   bannedReason: string | null
   joined: string
   lastSeen: string | null
-  reputation: number
+  xp: number
+  standing: number
   stats: { posts: number; threadCreator: number; chatMessages: number }
   openReports: number
 }
@@ -25,7 +26,7 @@ interface LookupHistory {
   id: string; type: string; reason: string; moderator: string; createdAt: string
 }
 interface LookupRep {
-  id: string; type: string; amount: number; reason: string; reversedAt: string | null; createdAt: string
+  id: string; type: string; xp: number; standing: number; reason: string; reversedAt: string | null; createdAt: string
 }
 
 interface QueueItem {
@@ -195,7 +196,7 @@ export default function ModerationPage() {
       const res = await fetch(`/api/moderation/user?username=${encodeURIComponent(lookupName.trim())}`)
       const d = await res.json()
       if (!res.ok) setError(d.error || "Not found")
-      else { setLookupUser(d.user); setLookupHistory(d.history || []); setLookupRep(d.reputation || []) }
+      else { setLookupUser(d.user); setLookupHistory(d.history || []); setLookupRep(d.progression || []) }
     } finally { setLookupLoading(false) }
   }
 
@@ -216,7 +217,7 @@ export default function ModerationPage() {
     } finally { setBusy(null) }
   }
 
-  // Reverse a single reputation award from the lookup card.
+  // Reverse a single progression award from the lookup card.
   const reverseRep = async (eventId: string) => {
     const reason = prompt("Reason for reversing this award:")?.trim()
     if (!reason) return
@@ -412,7 +413,7 @@ export default function ModerationPage() {
                       )}
                     </div>
                     <div className="text-sm text-muted-foreground">
-                      {lookupUser.stats.posts} posts · {lookupUser.stats.threadCreator} threads · {lookupUser.stats.chatMessages} chat msgs · rep {lookupUser.reputation} · joined {new Date(lookupUser.joined).toLocaleDateString()}
+                      {lookupUser.stats.posts} posts · {lookupUser.stats.threadCreator} threads · {lookupUser.stats.chatMessages} chat msgs · {lookupUser.xp?.toLocaleString() ?? 0} XP · {lookupUser.standing ?? 0} st · joined {new Date(lookupUser.joined).toLocaleDateString()}
                     </div>
                     {lookupUser.bannedReason && (
                       <div className="text-xs text-destructive mt-1">Ban reason: {lookupUser.bannedReason}</div>
@@ -454,17 +455,17 @@ export default function ModerationPage() {
                 )}
                 {lookupRep.length > 0 && (
                   <div className="mt-4 pt-4 border-t border-border">
-                    <div className="text-xs font-medium text-muted-foreground mb-2">Recent reputation</div>
+                    <div className="text-xs font-medium text-muted-foreground mb-2">Recent progression</div>
                     <div className="space-y-1">
                       {lookupRep.map((e) => (
                         <div key={e.id} className="text-xs flex items-center justify-between gap-2">
                           <span className={e.reversedAt ? "line-through opacity-60" : ""}>
-                            <span className={`font-medium ${e.amount >= 0 ? "text-primary" : "text-destructive"}`}>{e.amount >= 0 ? "+" : ""}{e.amount}</span>
+                            <span className={`font-medium ${(e.xp + e.standing) >= 0 ? "text-primary" : "text-destructive"}`}>{e.xp !== 0 ? `${e.xp >= 0 ? "+" : ""}${e.xp} XP` : `${e.standing >= 0 ? "+" : ""}${e.standing} st`}</span>
                             {" "}{e.type.replace(/_/g, " ")} — {e.reason}
                           </span>
                           <span className="flex items-center gap-2 shrink-0">
                             <span className="text-muted-foreground">{new Date(e.createdAt).toLocaleDateString()}</span>
-                            {!e.reversedAt && e.type !== "REVERSAL" && e.type !== "REINSTATE" && e.type !== "LEGACY_MIGRATION" && canAct && lookupUser.role !== "ADMINISTRATOR" && (
+                            {!e.reversedAt && !["REVERSAL","REINSTATE","MILESTONE","LEGACY_STANDING","STANDING_RECOVERY","UNLOCK_FREEZE","STANDING_ONLY"].includes(e.type) && canAct && lookupUser.role !== "ADMINISTRATOR" && (
                               <button onClick={() => reverseRep(e.id)} disabled={busy === e.id}
                                 className="px-1.5 py-0.5 text-[10px] bg-destructive/10 text-destructive rounded hover:bg-destructive/20 disabled:opacity-50">
                                 Reverse

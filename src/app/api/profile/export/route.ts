@@ -27,7 +27,7 @@ export async function GET(request: Request) {
 
     // Note: `blocksReceived` is deliberately excluded — who blocked you is
     // the other user's private moderation choice, not your data.
-    const [user, profile, threads, posts, diaries, diaryUpdates, setups, setupComments, chatMessages, sentMessages, receivedMessages, reactions, badges, reputationEvents, notifications, followsGiven, followsReceived, blocksMade, bookmarks, savedSearches, contestEntries, contestVotes, diaryContestEntries, diaryContestVotes, strains, guideEdits, staffApplications, reportsFiled, categoryFollows, threadFollows, diaryFollows] =
+    const [user, profile, threads, posts, diaries, diaryUpdates, setups, setupComments, chatMessages, sentMessages, receivedMessages, reactions, badges, reputationEvents, progressionEvents, notifications, followsGiven, followsReceived, blocksMade, bookmarks, savedSearches, contestEntries, contestVotes, diaryContestEntries, diaryContestVotes, strains, guideEdits, staffApplications, reportsFiled, categoryFollows, threadFollows, diaryFollows] =
       await Promise.all([
         prisma.user.findUnique({
           where: { id: userId },
@@ -56,6 +56,7 @@ export async function GET(request: Request) {
         prisma.reaction.findMany({ where: { userId }, take: 10_000, orderBy: { createdAt: "desc" } }),
         prisma.userBadge.findMany({ where: { userId }, include: { badge: true }, take: 1_000 }),
         prisma.reputationEvent.findMany({ where: { userId }, take: 10_000, orderBy: { createdAt: "desc" } }),
+        prisma.progressionEvent.findMany({ where: { userId }, take: 10_000, orderBy: { createdAt: "desc" } }),
         prisma.notification.findMany({ where: { userId }, take: 10_000, orderBy: { createdAt: "desc" } }),
         prisma.follow.findMany({ where: { followerId: userId }, take: 10_000 }),
         prisma.follow.findMany({ where: { followingId: userId }, take: 10_000 }),
@@ -131,6 +132,11 @@ export async function GET(request: Request) {
       reputationEvents: reputationEvents.map(
         ({ type, amount, reason, sourceType, sourceId, reversedAt, reversalFinal, createdAt }) => ({
           type, amount, reason, sourceType, sourceId, reversedAt, reversalFinal, createdAt,
+        })
+      ),
+      progressionEvents: progressionEvents.map(
+        ({ type, xp, standing, mastery, reason, sourceType, sourceId, reversedAt, reversalFinal, createdAt }) => ({
+          type, xp, standing, mastery, reason, sourceType, sourceId, reversedAt, reversalFinal, createdAt,
         })
       ),
     }

@@ -1,6 +1,6 @@
 import type { MetadataRoute } from "next"
 import { prisma } from "@/lib/prisma"
-import { activeAuthor, rankableProfile, REPUTATION_ORDER } from "@/lib/security"
+import { activeAuthor, rankableProfile, XP_ORDER } from "@/lib/security"
 import { publicDiaryWhere } from "@/lib/diary-visibility"
 import { diaryPath, strainPath, setupPath } from "@/lib/slugs"
 import { breederPath, normalizeBreederName } from "@/lib/breeders"
@@ -62,7 +62,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       // TerpBot excluded — its profile is a bot page, not member content.
       where: rankableProfile(),
       take: 500,
-      orderBy: REPUTATION_ORDER,
+      orderBy: XP_ORDER,
       select: { username: true, joinDate: true },
     }),
     prisma.guide.findMany({

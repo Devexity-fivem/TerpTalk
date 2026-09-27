@@ -4,12 +4,13 @@ import { getToken } from "next-auth/jwt"
 import { prisma } from "@/lib/prisma"
 import { sessionCookieName } from "@/lib/auth"
 import { forbidden, unauthorized } from "@/lib/security"
-import { awardReputation } from "@/lib/reputation"
+import { awardProgression } from "@/lib/progression"
 import { evaluateChallenges } from "@/lib/challenges"
 import { evaluateQuests } from "@/lib/quests"
 import { evaluateStreaks } from "@/lib/streaks"
 import { pruneChatMessagesIfDue } from "@/lib/chat-cleanup"
 import { drainPendingReversals } from "@/lib/reputation-outbox"
+import { drainPendingXpReversals } from "@/lib/progression-outbox"
 import { rateLimit } from "@/lib/rate-limit"
 
 // POST — lightweight presence ping; updates lastSeenAt + ONLINE status.
@@ -47,11 +48,15 @@ export async function POST(request: NextRequest) {
         data: { lastSeenAt: new Date(), status: user.profile?.hideOnlineStatus ? "OFFLINE" : "ONLINE" },
       })
 
-      // Daily check-in rep — keyed per UTC day so concurrent pings and
-      // retries can never double-award (the find-then-award race is gone).
+      // Daily check-in marker — 0 XP permanently (design D6): the keyed
+      // row per UTC day is the streak/show-up signal only. Idempotent, so
+      // concurrent pings and retries can't double-write it.
       const dayKey = new Date().toISOString().slice(0, 10)
-      await awardReputation(userId, "DAILY_LOGIN", 1, "Daily check-in", {
+      await awardProgression(userId, "DAILY_LOGIN", "Daily check-in", {
         key: `daily:${userId}:${dayKey}`,
+        xp: 0,
+        mastery: null,
+        marker: true,
       }).catch(() => {})
     }
 
@@ -64,7 +69,10 @@ export async function POST(request: NextRequest) {
       // Throttled reputation-outbox drain — bounds a failed reversal's
       // phantom-rep lifetime to ~5 minutes instead of waiting for cron.
       const drainOk = await rateLimit("reversal-drain", 1, 5 * 60 * 1000).then((r) => r.allowed).catch(() => false)
-      if (drainOk) await drainPendingReversals(10).catch(() => {})
+      if (drainOk) {
+        await drainPendingReversals(10).catch(() => {})
+        await drainPendingXpReversals(10).catch(() => {})
+      }
       if (stale) {
         await evaluateChallenges(userId).catch(() => [])
         await evaluateQuests(userId).catch(() => [])

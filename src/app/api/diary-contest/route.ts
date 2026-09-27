@@ -17,13 +17,13 @@ const MIN_MONTH_UPDATES = 4 // documentation-frequency gate for eligibility
 const VOTER_MIN_AGE_DAYS = 7
 const VOTER_MIN_REPUTATION = 10
 
-function userDto(u: { name?: string | null; image?: string | null; profile?: { username?: string | null; reputation?: number | null; publicMilestoneOptOut?: boolean | null } | null; role?: string | null }) {
+function userDto(u: { name?: string | null; image?: string | null; profile?: { username?: string | null; xp?: number | null; publicMilestoneOptOut?: boolean | null } | null; role?: string | null }) {
   return {
     name: u.name,
     username: u.profile?.username ?? null,
     image: u.image ?? null,
     role: u.role ?? null,
-    reputation: u.profile?.reputation ?? 0,
+    xp: u.profile?.xp ?? 0,
     publicMilestoneOptOut: u.profile?.publicMilestoneOptOut ?? false,
   }
 }
@@ -203,13 +203,13 @@ export async function POST(request: Request) {
       // so sockpuppet voting costs real account age + reputation.
       const voter = await prisma.user.findUnique({
         where: { id: session.user.id },
-        select: { createdAt: true, role: true, profile: { select: { reputation: true } } },
+        select: { createdAt: true, role: true, profile: { select: { xp: true } } },
       })
       const ageDays = voter ? (Date.now() - new Date(voter.createdAt).getTime()) / 86400000 : 0
-      const rep = voter?.profile?.reputation ?? 0
+      const voterXp = voter?.profile?.xp ?? 0
       const staff = voter?.role === "ADMINISTRATOR" || voter?.role === "MODERATOR"
-      if (!staff && (ageDays < VOTER_MIN_AGE_DAYS || rep < VOTER_MIN_REPUTATION)) {
-        return forbidden("Voting requires an account at least 7 days old with 10+ reputation")
+      if (!staff && (ageDays < VOTER_MIN_AGE_DAYS || voterXp < VOTER_MIN_REPUTATION)) {
+        return forbidden("Voting requires an account at least 7 days old with 10+ XP")
       }
 
       const rl = await rateLimit(`diary-contest-vote:${session.user.id}`, 20, 60 * 1000)

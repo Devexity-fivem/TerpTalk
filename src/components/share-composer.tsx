@@ -11,7 +11,7 @@ import {
 import ImageUploader from "@/components/image-uploader"
 import PollComposer from "@/components/poll-composer"
 import ExperimentForm from "@/components/experiment-form"
-import { getReputationTier, POLL_CREATION_REP } from "@/lib/reputation-config"
+import { STANDING_POLL_CREATE } from "@/lib/progression-config"
 import { signInHref } from "@/lib/callback-url"
 import { cn } from "@/lib/utils"
 import type { LucideIcon } from "lucide-react"
@@ -188,7 +188,7 @@ function ShareComposerDialog({ prefill, onClose }: { prefill?: ComposerPrefill; 
     if (!session || isStaff) return
     fetch("/api/profile")
       .then((r) => (r.ok ? r.json() : null))
-      .then((d) => setPollPerk(getReputationTier(d?.reputation ?? 0).perks.pollCreation === true))
+      .then((d) => setPollPerk(d?.stats?.pollCreation === true))
       .catch(() => setPollPerk(false))
   }, [session, isStaff])
 
@@ -596,7 +596,7 @@ function ThreadForm({ categories, variant, strainName, canCreatePoll, submitting
               disabled={submitting}
               lockedReason={
                 canCreatePoll === false
-                  ? `Polls unlock at ${POLL_CREATION_REP.toLocaleString()} reputation (Rooted).`
+                  ? `Polls unlock at ${STANDING_POLL_CREATE.toLocaleString()} standing (Trusted).`
                   : null
               }
             />

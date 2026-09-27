@@ -36,7 +36,7 @@ type Sort = (typeof SORTS)[number]["key"]
 const PROFILE_SELECT = {
   username: true,
   avatarUrl: true,
-  reputation: true,
+  xp: true,
   bio: true,
   profileTitle: true,
   joinDate: true,
@@ -257,7 +257,7 @@ export default async function GrowersPage({
                           <div className="flex items-center gap-1.5 flex-wrap">
                             <span className="font-semibold truncate">{name}</span>
                             <RoleBadge role={profile.user.role} />
-                            <TierChip reputation={profile.reputation} publicMilestoneOptOut={false} />
+                            <TierChip xp={profile.xp} publicMilestoneOptOut={false} />
                           </div>
                           {profile.profileTitle && (
                             <p className="text-xs text-primary/90 font-medium mt-0.5 truncate">{profile.profileTitle}</p>

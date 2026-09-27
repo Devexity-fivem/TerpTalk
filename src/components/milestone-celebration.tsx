@@ -9,7 +9,7 @@
 // compact card), "badge" (achievement unlock), "challenge" (weekly reward),
 // "quest" (daily reward — quietest dwell).
 // Plain reputation notifications carry no metadata and stay silent, so
-// ordinary +2 rep events never produce a popup.
+// ordinary +2 XP events never produce a popup.
 //
 // Accessibility: role="status" announces via a polite live region, Escape
 // and the dismiss button close a card, no focus is stolen, and all motion
@@ -24,7 +24,7 @@ interface MilestoneMeta {
   kind?: string
   level?: number
   stageName?: string
-  rep?: number
+  xp?: number
   tier?: { name: string; icon: string; color: string; bg: string }
   unlocks?: { kind: string; key: string; name: string }[]
   nextUnlock?: { kind: string; key: string; name: string; unlockedAt: number } | null

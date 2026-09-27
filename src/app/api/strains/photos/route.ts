@@ -4,8 +4,8 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { unauthorized, getClientIp, logSecurityEvent, isBanned, forbidden, isModerator, isStaff, isAdmin } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
-import { awardReputation, REP_POINTS } from "@/lib/reputation"
-import { enqueueReversal, drainOne } from "@/lib/reputation-outbox"
+import { awardProgression } from "@/lib/progression"
+import { enqueueXpReversal, drainXpOne } from "@/lib/progression-outbox"
 import { storeImage, deleteImagesIfUnreferenced } from "@/lib/blob"
 import { checkMaintenance } from "@/lib/maintenance"
 import { revalidateTag } from "next/cache"
@@ -86,10 +86,9 @@ export async function POST(request: Request) {
     // the same strain while still rewarding coverage across the library.
     // Photos on a strain you created yourself don't pay (self-farm vector:
     // create strain + upload photo = free rep). The photo still posts.
-    if (strain.createdById !== session.user.id) await awardReputation(
+    if (strain.createdById !== session.user.id) await awardProgression(
       session.user.id,
       "STRAIN_PHOTO",
-      REP_POINTS.STRAIN_PHOTO,
       "Uploaded a strain photo",
       { key: `strainphoto:${session.user.id}:${strainId}`, sourceType: "STRAIN_PHOTO", sourceId: photo.id }
     ).catch(() => {})
@@ -141,12 +140,12 @@ export async function DELETE(request: Request) {
     // Delete + reversal intent in one tx — the award can't outlive the row.
     const reversalId = await prisma.$transaction(async (tx) => {
       await tx.strainPhoto.delete({ where: { id } })
-      return enqueueReversal(tx, {
+      return enqueueXpReversal(tx, {
         kind: "SOURCE", sourceType: "STRAIN_PHOTO", sourceId: photo.id,
         reason: "Photo removed", requestedBy: session.user.id,
       })
     })
-    await drainOne(reversalId).catch(() => false)
+    await drainXpOne(reversalId).catch(() => false)
     revalidateTag("strains", { expire: 0 })
     deleteImagesIfUnreferenced([photo.imageUrl]).catch(() => {})
     return NextResponse.json({ deleted: true })

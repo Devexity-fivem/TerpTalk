@@ -4,9 +4,9 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { isBanned, isModerator, forbidden, unauthorized, getClientIp, logSecurityEvent } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
-import { awardReputation, REP_POINTS } from "@/lib/reputation"
-import { enqueueReversal, drainOne } from "@/lib/reputation-outbox"
-import { ACCEPT_MIN_ACTOR_AGE_HOURS, ACCEPT_MIN_ACTOR_REP } from "@/lib/reputation-config"
+import { awardProgression } from "@/lib/progression"
+import { enqueueXpReversal, drainXpOne } from "@/lib/progression-outbox"
+import { ACCEPT_MIN_ACTOR_AGE_HOURS } from "@/lib/reputation-config"
 import { checkMaintenance } from "@/lib/maintenance"
 import { notify, postDeepLink } from "@/lib/notify"
 import { revalidateTag } from "next/cache"
@@ -20,7 +20,7 @@ export async function POST(request: Request) {
 
     const user = await prisma.user.findUnique({
       where: { id: session.user.id },
-      select: { id: true, role: true, banned: true, createdAt: true, profile: { select: { reputation: true } } },
+      select: { id: true, role: true, banned: true, createdAt: true, profile: { select: { xp: true } } },
     })
     if (!user) return unauthorized()
 
@@ -83,13 +83,18 @@ export async function POST(request: Request) {
           data: { acceptedAnswerId: null },
         })
         if (res.count === 1 && thread.acceptedAnswerId) {
-          reversalIds.push(await enqueueReversal(tx, {
+          reversalIds.push(await enqueueXpReversal(tx, {
             kind: "KEY", eventKey: `accept:${thread.acceptedAnswerId}`,
+            reason: "Answer unaccepted", requestedBy: user.id,
+          }))
+          // The newcomer bonus rides the same post key scope.
+          reversalIds.push(await enqueueXpReversal(tx, {
+            kind: "KEY", eventKey: `accept-newcomer:${thread.acceptedAnswerId}`,
             reason: "Answer unaccepted", requestedBy: user.id,
           }))
           // The OP's curation bonus must unwind too — otherwise unaccept
           // leaves a sticky +rep for an answer that no longer exists.
-          reversalIds.push(await enqueueReversal(tx, {
+          reversalIds.push(await enqueueXpReversal(tx, {
             kind: "KEY", eventKey: `accept-op:${threadId}`,
             reason: "Answer unaccepted", requestedBy: user.id,
           }))
@@ -99,7 +104,7 @@ export async function POST(request: Request) {
       if (cleared.count === 0) {
         return NextResponse.json({ error: "Accepted answer changed concurrently — retry" }, { status: 409 })
       }
-      for (const rid of reversalIds) await drainOne(rid).catch(() => false)
+      for (const rid of reversalIds) await drainXpOne(rid).catch(() => false)
       // Plant Doctor outcome stats track accepted answers.
       if (thread.wizardResultId) revalidateTag("analytics", { expire: 0 })
       return NextResponse.json({ success: true })
@@ -127,8 +132,12 @@ export async function POST(request: Request) {
         data: { acceptedAnswerId: postId },
       })
       if (res.count === 1 && thread.acceptedAnswerId && thread.acceptedAnswerId !== postId) {
-        swapReversalIds.push(await enqueueReversal(tx, {
+        swapReversalIds.push(await enqueueXpReversal(tx, {
           kind: "KEY", eventKey: `accept:${thread.acceptedAnswerId}`,
+          reason: "Accepted answer changed", requestedBy: user.id,
+        }))
+        swapReversalIds.push(await enqueueXpReversal(tx, {
+          kind: "KEY", eventKey: `accept-newcomer:${thread.acceptedAnswerId}`,
           reason: "Accepted answer changed", requestedBy: user.id,
         }))
       }
@@ -137,23 +146,36 @@ export async function POST(request: Request) {
     if (swapped.count === 0) {
       return NextResponse.json({ error: "Accepted answer changed concurrently — retry" }, { status: 409 })
     }
-    for (const rid of swapReversalIds) await drainOne(rid).catch(() => false)
+    for (const rid of swapReversalIds) await drainXpOne(rid).catch(() => false)
 
-    // Award reputation for helpful answer — keyed per post so
-    // unaccept/re-accept cycles can't farm it. The accept itself works for
-    // anyone, but the payout is trust-gated: a brand-new or zero-rep
-    // acceptor doesn't pay — a fresh sockpuppet can't farm +30s for a main.
+    // Accepted-answer award — keyed per post so unaccept/re-accept cycles
+    // can't farm it. The accept itself works for anyone, but the payout is
+    // trust-gated: acceptor needs ≥24h age + ≥10 XP (the V2 mirror of the
+    // legacy rep gate — a fresh sockpuppet can't farm +30s for a main).
+    // The engine stacks the standing controls (grantor floor, reciprocal,
+    // cluster, caps) on top.
     const acceptorTrusted =
       Date.now() - user.createdAt.getTime() >= ACCEPT_MIN_ACTOR_AGE_HOURS * 3600 * 1000 &&
-      (user.profile?.reputation ?? 0) >= ACCEPT_MIN_ACTOR_REP
+      (user.profile?.xp ?? 0) >= 10
     if (thread.acceptedAnswerId !== postId && acceptorTrusted) {
-      await awardReputation(
+      await awardProgression(
         post.authorId,
-        "HELPFUL_ANSWER",
-        REP_POINTS.HELPFUL_ANSWER,
+        "ACCEPTED_ANSWER",
         `Accepted answer in "${thread.title.slice(0, 50)}"`,
         { key: `accept:${postId}`, actorId: user.id, sourceType: "POST", sourceId: postId }
       ).catch(() => {})
+      // Newcomer bonus: the OP is <30d old → the answerer helped a new grower.
+      const threadAuthor = await prisma.user.findUnique({
+        where: { id: thread.authorId }, select: { createdAt: true },
+      })
+      if (threadAuthor && Date.now() - threadAuthor.createdAt.getTime() < 30 * 86400000) {
+        await awardProgression(
+          post.authorId,
+          "NEWCOMER_ACCEPT_BONUS",
+          `Accepted answer for a new grower in "${thread.title.slice(0, 50)}"`,
+          { key: `accept-newcomer:${postId}`, actorId: user.id, sourceType: "POST", sourceId: postId }
+        ).catch(() => {})
+      }
     }
 
     // Small peer-gated bonus for the OP who curates their own thread —
@@ -165,10 +187,9 @@ export async function POST(request: Request) {
       user.id === thread.authorId &&
       post.authorId !== thread.authorId
     ) {
-      await awardReputation(
+      await awardProgression(
         thread.authorId,
-        "ACCEPT_MARKED",
-        REP_POINTS.ACCEPT_MARKED,
+        "OP_CURATION",
         `Marked an accepted answer on "${thread.title.slice(0, 50)}"`,
         { key: `accept-op:${threadId}`, actorId: post.authorId, sourceType: "THREAD", sourceId: threadId }
       ).catch(() => {})

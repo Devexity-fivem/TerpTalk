@@ -4,9 +4,7 @@ import { authOptions } from "@/lib/auth"
 import { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
 import { unauthorized, forbidden, getClientIp, logSecurityEvent, isBanned, blockExistsBetween } from "@/lib/security"
-import { awardReputation, repRateLimit, REP_POINTS } from "@/lib/reputation"
-import { enqueueReversal, drainOne } from "@/lib/reputation-outbox"
-import { LIKE_MIN_ACTOR_AGE_HOURS } from "@/lib/reputation-config"
+import { progressionRateLimit } from "@/lib/progression"
 import { checkMaintenance } from "@/lib/maintenance"
 import { notify, postDeepLink } from "@/lib/notify"
 import { canViewDiary } from "@/lib/diary-visibility"
@@ -53,7 +51,7 @@ export async function POST(request: Request) {
     }
 
     // Rate limit: 120 reactions per 10 minutes per user (tier-scaled)
-    const rl = await repRateLimit(session.user.id, `reaction:${session.user.id}`, 120, 10 * 60 * 1000)
+    const rl = await progressionRateLimit(session.user.id, `reaction:${session.user.id}`, 120, 10 * 60 * 1000)
     if (!rl.allowed) {
       await logSecurityEvent("RATE_LIMIT_EXCEEDED", {
         userId: session.user.id,
@@ -114,73 +112,21 @@ export async function POST(request: Request) {
       },
     })
 
-    // Idempotency key for the reputation this reaction grants — one award per
-    // liker per target for life. Removing or switching away from LIKE reverses
-    // it; re-liking reinstates the original event instead of double-paying.
-    const likeKey = `like:${session.user.id}:${hasPostId ? `post:${postId}` : `diary:${diaryId}`}`
-
-    // Award the content author for a LIKE (not for self-likes). Likes from
-    // accounts younger than LIKE_MIN_ACTOR_AGE_HOURS still display but don't
-    // pay reputation — blunts sockpuppet farms. Keyed: re-liking reinstates
-    // the original event instead of double-paying.
-    const payLike = async () => {
-      if (!targetAuthorId || targetAuthorId === session.user.id) return
-      const actor = await prisma.user.findUnique({
-        where: { id: session.user.id },
-        select: { createdAt: true },
-      })
-      const actorAgeHours = actor ? (Date.now() - actor.createdAt.getTime()) / (1000 * 60 * 60) : 0
-      if (actorAgeHours < LIKE_MIN_ACTOR_AGE_HOURS) return
-      await awardReputation(
-        targetAuthorId,
-        "LIKE_RECEIVED",
-        REP_POINTS.LIKE_RECEIVED,
-        "Someone liked your content",
-        {
-          key: likeKey,
-          actorId: session.user.id,
-          sourceType: hasPostId ? "POST" : "DIARY",
-          sourceId: hasPostId ? postId : diaryId,
-        }
-      )
-    }
-
+    // Progression V2: reactions pay 0 XP and 0 standing — the entire
+    // award/reversal plumbing from the legacy economy is gone by design
+    // (§9.3 "no like/comment volume input at all"). Reactions remain a
+    // display + notification surface only.
     if (existingReaction) {
-      // Mutation + reversal intent in one transaction — an un-like can
-      // never strand the award it granted.
-      let reversalId: string | null = null
       if (existingReaction.type === type) {
         // Same type — toggle off
-        await prisma.$transaction(async (tx) => {
-          await tx.reaction.delete({ where: { id: existingReaction.id } })
-          if (existingReaction.type === "LIKE") {
-            reversalId = await enqueueReversal(tx, {
-              kind: "KEY", eventKey: likeKey, reason: "Like removed",
-              requestedBy: session.user.id,
-            })
-          }
-        })
-        if (reversalId) await drainOne(reversalId).catch(() => false)
+        await prisma.reaction.delete({ where: { id: existingReaction.id } })
         return NextResponse.json({ reaction: null, action: "removed" })
       }
       // Different type — switch reaction
-      const updated = await prisma.$transaction(async (tx) => {
-        const u = await tx.reaction.update({
-          where: { id: existingReaction.id },
-          data: { type },
-        })
-        if (existingReaction.type === "LIKE") {
-          reversalId = await enqueueReversal(tx, {
-            kind: "KEY", eventKey: likeKey, reason: "Like switched to another reaction",
-            requestedBy: session.user.id,
-          })
-        }
-        return u
+      const updated = await prisma.reaction.update({
+        where: { id: existingReaction.id },
+        data: { type },
       })
-      if (reversalId) await drainOne(reversalId).catch(() => false)
-      if (existingReaction.type !== "LIKE" && type === "LIKE") {
-        await payLike().catch(() => null)
-      }
       return NextResponse.json({ reaction: updated, action: "switched" })
     }
 
@@ -210,8 +156,6 @@ export async function POST(request: Request) {
         throw e
       }
     }
-
-    if (type === "LIKE") await payLike().catch(() => null)
 
     // Notify the content author — once per actor per target per day so
     // reaction toggling can't flood the inbox. notify() also enforces

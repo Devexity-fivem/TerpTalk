@@ -36,8 +36,8 @@ const FAQ = [
     a: "Anyone 21 or older (or of legal cannabis age in your jurisdiction).",
   },
   {
-    q: "How do badges and reputation work?",
-    a: "You earn reputation for contributing — threads, replies, diaries, strains, photos, referrals, and likes from other members. Badges unlock automatically at milestones.",
+    q: "How do badges and XP work?",
+    a: "You earn XP for contributing — threads, replies, diaries, strains, photos, referrals, and peer-accepted answers. Badges unlock automatically at milestones.",
   },
   {
     q: "How do I report something or get help?",

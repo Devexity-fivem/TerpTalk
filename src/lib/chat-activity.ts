@@ -5,12 +5,13 @@
 import { prisma } from "@/lib/prisma"
 import { isStaff, blockedUserIds, notBlockedAuthor } from "@/lib/security"
 import { getBooleanSetting, SITE_SETTINGS } from "@/lib/settings"
+import { UNLOCK_BY_ID } from "@/lib/progression-config"
 
 export interface ChatActivityRoom {
   id: string
   slug: string
   name: string
-  requiredRep: number | null
+  requiredXp: number | null
   latestAt: string | null
 }
 
@@ -20,22 +21,26 @@ async function visibleRooms(userId: string) {
   const [user, growRoomEnabled] = await Promise.all([
     prisma.user.findUnique({
       where: { id: userId },
-      select: { role: true, profile: { select: { reputation: true } } },
+      select: { role: true, profile: { select: { xp: true, standing: true, unlockFrozen: true } } },
     }),
     getBooleanSetting(SITE_SETTINGS.GROW_ROOM_ENABLED, false),
   ])
   if (!user) return []
   const staff = isStaff(user.role)
-  const rep = user.profile?.reputation ?? 0
+  const xp = user.profile?.xp ?? 0
+  const standing = user.profile?.standing ?? 0
+  const frozen = user.profile?.unlockFrozen ?? true
   const rooms = await prisma.chatRoom.findMany({
     where: { isPrivate: false },
     orderBy: { order: "asc" },
-    select: { id: true, slug: true, name: true, requiredRep: true },
+    select: { id: true, slug: true, name: true, requiredXp: true },
   })
   return rooms.filter(
     (r) =>
-      (r.requiredRep == null || growRoomEnabled) &&
-      (r.requiredRep == null || staff || rep >= r.requiredRep)
+      (r.requiredXp == null || growRoomEnabled) &&
+      (r.requiredXp == null ||
+        staff ||
+        (!frozen && xp >= r.requiredXp && standing >= (UNLOCK_BY_ID.get(r.slug)?.standing ?? 0)))
   )
 }
 
@@ -77,7 +82,7 @@ export async function getChatActivity(userId: string) {
         id: r.id,
         slug: r.slug,
         name: r.name,
-        requiredRep: r.requiredRep,
+        requiredXp: r.requiredXp,
         latestAt: latest.get(r.id)?.toISOString() ?? null,
       })
     ),
@@ -104,11 +109,11 @@ export interface ChatTeaser {
 export async function getChatTeaser(): Promise<ChatTeaser | null> {
   const room =
     (await prisma.chatRoom.findFirst({
-      where: { slug: "general", isPrivate: false, requiredRep: null },
+      where: { slug: "general", isPrivate: false, requiredXp: null },
       select: { id: true, name: true, slug: true },
     })) ??
     (await prisma.chatRoom.findFirst({
-      where: { isPrivate: false, requiredRep: null },
+      where: { isPrivate: false, requiredXp: null },
       orderBy: { order: "asc" },
       select: { id: true, name: true, slug: true },
     }))

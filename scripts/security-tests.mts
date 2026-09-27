@@ -132,21 +132,21 @@ async function run() {
     assert.equal(containsExternalLink("visit example.com"), true, "should detect domain link")
     assert.equal(containsExternalLink("plain text no links"), false, "plain text should not be flagged")
 
-    // Trusted for links requires 24h age + Sprout reputation
+    // Trusted for links requires 24h age + Known standing (V2)
     const now = new Date()
     const oldEnough = new Date(now.getTime() - 25 * 60 * 60 * 1000)
     await prisma.user.update({ where: { id: userId }, data: { createdAt: oldEnough } })
     const seedRep = async (delta: number) => {
-      await prisma.profile.update({ where: { id: profileId }, data: { reputation: { increment: delta } } })
-      await prisma.reputationEvent.create({
-        data: { userId, type: "STAFF_ADJUSTMENT", amount: delta, reason: "test seed" },
+      await prisma.profile.update({ where: { id: profileId }, data: { standing: { increment: delta } } })
+      await prisma.progressionEvent.create({
+        data: { userId, type: "STAFF_ADJUSTMENT", standing: delta, reason: "test seed" },
       })
     }
     await seedRep(250)
-    assert.equal(await isTrustedForLinks(userId), true, "aged Sprout user should be trusted for links")
+    assert.equal(await isTrustedForLinks(userId), true, "aged Known-standing user should be trusted for links")
 
     await seedRep(-250)
-    assert.equal(await isTrustedForLinks(userId), false, "same user with 0 rep should not be trusted")
+    assert.equal(await isTrustedForLinks(userId), false, "same user with 0 standing should not be trusted")
 
     // enforceLinkTrust — the shared policy used by posts, edits, chat, DMs,
     // comments, diaries, setups, strains, contests, and profile fields.
@@ -256,11 +256,11 @@ async function run() {
           ageVerified: true,
           banned: extra.banned ?? false,
           suspendedUntil: extra.suspended ? new Date(Date.now() + 60_000) : null,
-          profile: { create: { username: `__tsug${tag}${stamp.toString(36)}`, bio: "test grower", reputation: 5000 } },
+          profile: { create: { username: `__tsug${tag}${stamp.toString(36)}`, bio: "test grower", xp: 5000 } },
         },
       })
-      await prisma.reputationEvent.create({
-        data: { userId: u.id, type: "STAFF_ADJUSTMENT", amount: 5000, reason: "test seed" },
+      await prisma.progressionEvent.create({
+        data: { userId: u.id, type: "STAFF_ADJUSTMENT", xp: 5000, reason: "test seed" },
       })
       return u
     }

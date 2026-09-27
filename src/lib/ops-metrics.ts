@@ -350,7 +350,8 @@ export interface MemberSummary {
   createdAt: Date
   lastSeenAt: Date | null
   onboardingCompleted: boolean
-  reputation: number
+  xp: number
+  standing: number
   referred: boolean
   counts: { threads: number; posts: number; diaries: number; diaryUpdates: number; chatMessages: number; setups: number }
   openReportsAbout: number
@@ -365,10 +366,10 @@ export async function searchMembers(q: string): Promise<MemberSummary[]> {
   if (query.length < 2) return []
   const rows = await prisma.profile.findMany({
     where: { username: { contains: query, mode: "insensitive" } },
-    orderBy: { reputation: "desc" },
+    orderBy: { xp: "desc" },
     take: 25,
     select: {
-      username: true, reputation: true, referredById: true,
+      username: true, xp: true, standing: true, referredById: true,
       user: {
         select: {
           id: true, name: true, role: true, banned: true, suspendedUntil: true,
@@ -408,7 +409,8 @@ export async function searchMembers(q: string): Promise<MemberSummary[]> {
     createdAt: r.user.createdAt,
     lastSeenAt: r.user.lastSeenAt,
     onboardingCompleted: !!r.user.onboardingCompletedAt,
-    reputation: r.reputation,
+    xp: r.xp,
+    standing: r.standing,
     referred: !!r.referredById,
     counts: {
       threads: r.user._count.threadCreator,

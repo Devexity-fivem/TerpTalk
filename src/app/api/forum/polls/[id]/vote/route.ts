@@ -4,8 +4,8 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { unauthorized, forbidden, isBanned, isModerator, isStaff } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
-import { getTierPerks } from "@/lib/reputation"
-import { POLL_VOTING_REP } from "@/lib/reputation-config"
+import { getProgressionPerks } from "@/lib/progression"
+import { STANDING_POLL_VOTE } from "@/lib/progression-config"
 import { checkMaintenance } from "@/lib/maintenance"
 
 export async function POST(
@@ -24,12 +24,12 @@ export async function POST(
     const maintenance = await checkMaintenance()
     if (maintenance) return maintenance
 
-    // Poll voting is a Rooted-tier perk — keeps poll brigading
+    // Poll voting is a Known-standing gate — keeps poll brigading
     // expensive. Staff always can.
     if (!isStaff(session.user.role)) {
-      const perks = await getTierPerks(session.user.id)
+      const perks = await getProgressionPerks(session.user.id)
       if (!perks.pollVoting) {
-        return forbidden(`Poll voting unlocks at ${POLL_VOTING_REP} reputation (Rooted)`)
+        return forbidden(`Poll voting unlocks at Known standing (${STANDING_POLL_VOTE})`)
       }
     }
 

@@ -3,12 +3,12 @@ import { prisma } from "@/lib/prisma"
 import { forbidden, getClientIp, logSecurityEvent } from "@/lib/security"
 import { requireAdmin } from "@/lib/require-staff"
 import { rateLimit } from "@/lib/rate-limit"
-import { applyReputationAward, postDemotionEffects, runPostAwardEffects, REP_EVENT_TYPES } from "@/lib/reputation"
+import { awardProgression } from "@/lib/progression"
 import { STAFF_ADJUST_MAX } from "@/lib/reputation-config"
 import { notify } from "@/lib/notify"
 import { logModAction } from "@/lib/moderation"
 
-// POST { username, delta, reason } — admin-only manual reputation adjustment.
+// POST { username, delta, reason } — admin-only manual XP adjustment.
 // Bounded to ±500 per action, writes a STAFF_ADJUSTMENT ledger entry plus a
 // ModerationAction and security audit row — balances are never silently set.
 export async function POST(request: Request) {
@@ -46,24 +46,14 @@ export async function POST(request: Request) {
       return forbidden()
     }
 
-    const res = await applyReputationAward(
+    const res = await awardProgression(
       profile.userId,
-      REP_EVENT_TYPES.STAFF_ADJUSTMENT,
-      delta,
+      "STAFF_ADJUSTMENT",
       `Staff adjustment: ${reason.trim()}`,
-      { actorId: admin.id, force: true }
+      { xp: delta, actorId: admin.id, force: true }
     )
     if (!res.awarded) {
       return NextResponse.json({ error: "Adjustment not applied" }, { status: 409 })
-    }
-
-    // Positive adjustments run the full milestone pipeline (tier/stage
-    // crossings, badges, referrals); negative ones run demotion + cosmetic
-    // pruning so stale unlocks never render.
-    if (delta < 0) {
-      await postDemotionEffects(profile.userId).catch(() => null)
-    } else if (res.oldRep !== undefined && res.newRep !== undefined) {
-      await runPostAwardEffects(profile.userId, res.oldRep, res.newRep).catch(() => null)
     }
 
     await logModAction(prisma, {
@@ -80,12 +70,12 @@ export async function POST(request: Request) {
     await notify({
       userId: profile.userId,
       type: "REPUTATION",
-      title: "Reputation adjusted",
-      content: `Staff adjusted your reputation by ${delta > 0 ? "+" : ""}${delta}.`,
+      title: "Progression adjusted",
+      content: `Staff adjusted your XP by ${delta > 0 ? "+" : ""}${delta}.`,
       link: "/profile",
     }).catch(() => null)
 
-    return NextResponse.json({ ok: true, newRep: res.newRep })
+    return NextResponse.json({ ok: true, newXp: res.newXp })
   } catch (error) {
     console.error("Reputation adjustment error:", error)
     return NextResponse.json({ error: "Failed" }, { status: 500 })

@@ -15,7 +15,7 @@ const getProfileForMetadata = unstable_cache(
         username: true,
         bio: true,
         avatarUrl: true,
-        reputation: true,
+
         user: { select: { image: true, banned: true, suspendedUntil: true } },
       },
     })

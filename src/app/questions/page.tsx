@@ -274,7 +274,7 @@ export default async function QuestionsPage({
                                 <span className="truncate">{thread.author.profile?.username || thread.author.name}</span>
                                 <RoleBadge role={thread.author.role} />
                                 <TierChip
-                                  reputation={thread.author.profile?.reputation ?? 0}
+                                  xp={thread.author.profile?.xp ?? 0}
                                   publicMilestoneOptOut={thread.author.profile?.publicMilestoneOptOut}
                                 />
                               </span>

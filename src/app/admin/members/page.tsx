@@ -68,7 +68,7 @@ export default async function AdminMembersPage({ searchParams }: { searchParams:
                       )}
                     </div>
                     <div className="text-xs text-muted-foreground mt-1">
-                      joined {m.createdAt.toLocaleDateString()} · last seen {fmtAge(m.lastSeenAt)} · rep {m.reputation}
+                      joined {m.createdAt.toLocaleDateString()} · last seen {fmtAge(m.lastSeenAt)} · {m.xp.toLocaleString()} XP · {m.standing} standing
                       {m.referred ? " · referred" : ""}
                     </div>
                     <div className="text-xs text-muted-foreground mt-0.5">

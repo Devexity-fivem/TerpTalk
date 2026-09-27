@@ -217,7 +217,7 @@ export default async function ForumPage() {
                             <Users className="w-4 h-4 shrink-0" />
                             <span className="truncate">{thread.author.profile?.username || thread.author.name}</span>
                             <RoleBadge role={thread.author.role} />
-                        <TierChip reputation={thread.author.profile?.reputation ?? 0} publicMilestoneOptOut={thread.author.profile?.publicMilestoneOptOut} />
+                        <TierChip xp={thread.author.profile?.xp ?? 0} publicMilestoneOptOut={thread.author.profile?.publicMilestoneOptOut} />
                           </span>
                           <span className="flex items-center gap-1">
                             <MessageSquare className="w-4 h-4" />

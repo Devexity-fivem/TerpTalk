@@ -6,6 +6,7 @@ import { rateLimit } from "@/lib/rate-limit"
 import { notificationLinkWhere } from "@/lib/notify"
 import { staffDisplayName } from "@/lib/moderation"
 import { enqueueReversal, drainOne } from "@/lib/reputation-outbox"
+import { enqueueXpReversal, drainXpOne } from "@/lib/progression-outbox"
 import { deleteImagesIfUnreferenced } from "@/lib/blob"
 import { revalidateTag } from "next/cache"
 
@@ -123,7 +124,12 @@ export async function POST(request: Request) {
       for (const t of threads) {
         const postIds = await prisma.post.findMany({ where: { threadId: t.id }, select: { id: true } })
         const batch: string[] = []
+        const xpBatch: string[] = []
         batch.push(await enqueueReversal(prisma, {
+          kind: "SOURCE", sourceType: "THREAD", sourceId: t.id,
+          reason: "Content removed by staff", requestedBy: staff.id,
+        }))
+        xpBatch.push(await enqueueXpReversal(prisma, {
           kind: "SOURCE", sourceType: "THREAD", sourceId: t.id,
           reason: "Content removed by staff", requestedBy: staff.id,
         }))
@@ -132,8 +138,13 @@ export async function POST(request: Request) {
             kind: "SOURCE", sourceType: "POST", sourceId: p.id,
             reason: "Content removed by staff", requestedBy: staff.id,
           }))
+          xpBatch.push(await enqueueXpReversal(prisma, {
+            kind: "SOURCE", sourceType: "POST", sourceId: p.id,
+            reason: "Content removed by staff", requestedBy: staff.id,
+          }))
         }
         for (const rid of batch) await drainOne(rid).catch(() => false)
+        for (const rid of xpBatch) await drainXpOne(rid).catch(() => false)
       }
     }
 

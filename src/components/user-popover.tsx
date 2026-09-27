@@ -20,8 +20,8 @@ interface UserCard {
   bio: string | null
   joinDate: string
   statusHidden: boolean
-  reputation: number | null
-  tier: { name: string; icon: string; color: string; bg: string } | null
+  xp: number | null
+  rank: { name: string; icon: string; color: string; bg: string } | null
   trustStanding: { name: string; icon: string; color: string; bg: string } | null
   badges: { name: string; icon: string }[]
   harvestedGrows: number
@@ -143,15 +143,15 @@ export default function UserPopover({ username, children }: { username: string |
               </span>
               <span className="mb-2 flex flex-wrap items-center gap-1">
                 <RoleBadge role={card.role} />
-                {!card.statusHidden && card.tier && (
-                  <TierChip reputation={card.reputation ?? 0} />
+                {!card.statusHidden && card.rank && (
+                  <TierChip xp={card.xp ?? 0} />
                 )}
               </span>
               {!card.statusHidden && (
                 <span className="mb-2 block text-xs text-muted-foreground">
-                  {card.reputation} rep
+                  {card.xp} XP
                   {card.trustStanding && (
-                    <Tooltip content="Community trust standing — grows with positive contributions">
+                    <Tooltip content="Community standing — grows with peer-validated contributions">
                       <> · {card.trustStanding.icon} {card.trustStanding.name}</>
                     </Tooltip>
                   )}

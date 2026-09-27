@@ -28,14 +28,14 @@ interface Stats {
   securityEvents24h: number; newSecurityEvents: number
   referrals: {
     referredProfiles: number; paidKeyed: number; legacyUnkeyed: number
-    reversed: number; eligibleUnpaid: { username: string; reputation: number }[]
+    reversed: number; eligibleUnpaid: { username: string; xp: number }[]
   }
   cron: { date: string; tasksDone: number; tasksPending: string[]; lastRunDate: string | null }
 }
 interface AdminUser {
   id: string; username: string; role: string; banned: boolean
   bannedReason: string | null; joined: string; lastSeen: string | null
-  reputation: number; referrals: number
+  xp: number; standing: number; referrals: number
   stats: { posts: number; threadCreator: number; diaryCreator: number; reports: number }
   isBeta: boolean
 }
@@ -48,7 +48,7 @@ const TABS = [
   { id: "users", label: "Users", icon: UsersIcon },
   { id: "announce", label: "Announce", icon: Megaphone },
   { id: "security", label: "Security", icon: ShieldAlert },
-  { id: "reputation", label: "Reputation", icon: TrendingUp },
+  { id: "reputation", label: "Progression", icon: TrendingUp },
   { id: "affiliates", label: "Affiliates", icon: Percent },
   { id: "feedback", label: "Feedback", icon: MessageSquarePlus },
   { id: "terpbot", label: "TerpBot", icon: Bot },
@@ -308,7 +308,7 @@ export default function AdminPage({ searchParams }: { searchParams: Promise<{ ta
                   <div>{stats.referrals.referredProfiles} referred · {stats.referrals.paidKeyed} paid · {stats.referrals.legacyUnkeyed} legacy · {stats.referrals.reversed} reversed</div>
                   {stats.referrals.eligibleUnpaid.length > 0 ? (
                     <div className="text-warning">
-                      Eligible, unpaid: {stats.referrals.eligibleUnpaid.map((e) => `${e.username} (${e.reputation})`).join(", ")}
+                      Eligible, unpaid: {stats.referrals.eligibleUnpaid.map((e) => `${e.username} (${e.xp} XP)`).join(", ")}
                     </div>
                   ) : (
                     <div className="text-muted-foreground">No eligible unpaid referrals</div>
@@ -366,7 +366,7 @@ export default function AdminPage({ searchParams }: { searchParams: Promise<{ ta
                       {u.banned && <span className="text-[10px] px-1.5 py-0.5 bg-destructive/15 text-destructive rounded font-semibold">BANNED</span>}
                     </div>
                     <div className="text-xs text-muted-foreground mt-1">
-                      {u.stats.posts} posts · {u.stats.threadCreator} threads · {u.stats.diaryCreator} diaries · rep {u.reputation} · {u.referrals} referrals · joined {new Date(u.joined).toLocaleDateString()}
+                      {u.stats.posts} posts · {u.stats.threadCreator} threads · {u.stats.diaryCreator} diaries · {u.xp.toLocaleString()} XP · {u.standing} st · {u.referrals} referrals · joined {new Date(u.joined).toLocaleDateString()}
                     </div>
                     {u.bannedReason && <div className="text-xs text-destructive mt-0.5">Reason: {u.bannedReason}</div>}
                   </div>
@@ -437,10 +437,10 @@ export default function AdminPage({ searchParams }: { searchParams: Promise<{ ta
               <>
                 <div className="bg-card rounded-xl border border-border overflow-hidden">
                   <div className="p-4 border-b border-border font-semibold flex items-center gap-2">
-                    <TrendingUp className="w-4 h-4 text-warning" /> Unusual rep velocity (24h)
+                    <TrendingUp className="w-4 h-4 text-warning" /> Unusual XP velocity (24h)
                   </div>
                   <div className="divide-y divide-border">
-                    {repFlags.velocity.length === 0 && <p className="p-4 text-sm text-muted-foreground">No members gained over 150 rep in the last 24 hours.</p>}
+                    {repFlags.velocity.length === 0 && <p className="p-4 text-sm text-muted-foreground">No members gained over 150 XP in the last 24 hours.</p>}
                     {repFlags.velocity.map((v) => (
                       <div key={v.userId} className="p-3 text-sm flex items-center justify-between gap-3">
                         <span><Link href={`/admin/users/${v.userId}`} className="font-medium hover:text-primary">@{v.username}</Link> gained <span className="font-semibold text-warning">+{v.gained}</span> in 24h</span>
@@ -482,7 +482,7 @@ export default function AdminPage({ searchParams }: { searchParams: Promise<{ ta
 
                 <div className="bg-card rounded-xl border border-border overflow-hidden">
                   <div className="p-4 border-b border-border font-semibold flex items-center gap-2">
-                    <ShieldCheck className="w-4 h-4 text-primary" /> Staff reputation actions
+                    <ShieldCheck className="w-4 h-4 text-primary" /> Staff progression actions
                   </div>
                   <div className="divide-y divide-border">
                     {repFlags.staffActions.length === 0 && <p className="p-4 text-sm text-muted-foreground">No staff adjustments or reversals recorded.</p>}

@@ -71,7 +71,8 @@ export async function GET(request: Request) {
         profile: {
           select: {
             username: true,
-            reputation: true,
+            xp: true,
+            standing: true,
             _count: { select: { referrals: true } },
           },
         },
@@ -103,7 +104,8 @@ export async function GET(request: Request) {
         bannedReason: u.bannedReason,
         joined: u.createdAt,
         lastSeen: u.lastSeenAt,
-        reputation: u.profile?.reputation ?? 0,
+        xp: u.profile?.xp ?? 0,
+        standing: u.profile?.standing ?? 0,
         referrals: u.profile?._count.referrals ?? 0,
         stats: u._count,
         isBeta: betaUserIds.has(u.id),

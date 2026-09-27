@@ -15,10 +15,10 @@ import {
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { signInHref } from "@/lib/callback-url"
-import { REP_TIERS } from "@/lib/reputation-config"
+import { REP_RANKS, RANK_DISPLAY } from "@/lib/progression-config"
 
 interface ProgressionData {
-  reputation: number
+  xp: number
   nextAction: { icon: string; text: string; href: string; cta: string } | null
   journey: {
     slug: string
@@ -33,12 +33,12 @@ interface ProgressionData {
   level: number
   maxLevel: number
   stage: { name: string; index: number; count: number }
-  tier: { name: string; icon: string; color: string; bg: string; benefit: string | null }
+  rank: { name: string; icon: string; color: string; bg: string; benefit: string | null }
   stageProgress: { current: number; next: number; percent: number; remaining: number }
   tierProgress: { current: number; next: number; percent: number }
-  nextTier: { name: string; icon: string; threshold: number; benefit: string | null } | null
+  nextRank: { name: string; icon: string; threshold: number; benefit: string | null } | null
   nextUnlock: { kind: string; name: string; unlockedAt: number } | null
-  upcoming: { rung: number; level: number; tier: string }[]
+  upcoming: { rung: number; label: string; rank: string }[]
   trust: {
     score: number
     standing: { name: string; icon: string; color: string; bg: string }
@@ -54,7 +54,7 @@ interface ProgressionData {
     day: string
     items: { slug: string; title: string; description: string; icon: string; reward: number; target: number; progress: number; done: boolean; paid: boolean }[]
   } | null
-  streak: { days: number; next: { days: number; reward: number } | null } | null
+  streak: { days: number; next: { days: number } | null } | null
   nearBadges: { name: string; icon: string; rarity: string; current: number; target: number; percent: number }[]
   badgeCount: number
   recentBadges: { name: string; icon: string | null; earnedAt: string }[]
@@ -138,12 +138,12 @@ export default function ProgressPage() {
             <span className="text-sm text-muted-foreground">
               of {data.maxLevel} · {data.stage.name} stage
             </span>
-            <span className={cn("ml-auto inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium", data.tier.bg, data.tier.color)}>
-              <span aria-hidden="true">{data.tier.icon}</span> {data.tier.name}
+            <span className={cn("ml-auto inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium", data.rank.bg, data.rank.color)}>
+              <span aria-hidden="true">{data.rank.icon}</span> {data.rank.name}
             </span>
           </div>
           <div className="flex justify-between text-xs text-muted-foreground mb-1">
-            <span>{data.reputation.toLocaleString()} rep</span>
+            <span>{data.xp.toLocaleString()} XP</span>
             {data.stageProgress.remaining > 0 ? (
               <span>{data.stageProgress.remaining.toLocaleString()} to level {data.level + 1}</span>
             ) : (
@@ -163,11 +163,11 @@ export default function ProgressPage() {
               style={{ width: `${data.stageProgress.percent}%` }}
             />
           </div>
-          {data.nextTier && (
+          {data.nextRank && (
             <div className="mt-3">
               <div className="flex justify-between text-xs text-muted-foreground mb-1">
                 <span>
-                  Next tier: {data.nextTier.icon} {data.nextTier.name}
+                  Next tier: {data.nextRank.icon} {data.nextRank.name}
                 </span>
                 <span>{data.tierProgress.percent}%</span>
               </div>
@@ -177,7 +177,7 @@ export default function ProgressPage() {
                 aria-valuenow={data.tierProgress.percent}
                 aria-valuemin={0}
                 aria-valuemax={100}
-                aria-label={`Progress to ${data.nextTier.name}`}
+                aria-label={`Progress to ${data.nextRank.name}`}
               >
                 <div
                   className="h-full bg-primary/60 rounded-full transition-[width] duration-500"
@@ -192,8 +192,8 @@ export default function ProgressPage() {
               <p className="text-xs">
                 <span className="font-medium">Next unlock: {data.nextUnlock.name}</span>{" "}
                 <span className="text-muted-foreground">
-                  at {data.nextUnlock.unlockedAt.toLocaleString()} rep (
-                  {(data.nextUnlock.unlockedAt - data.reputation).toLocaleString()} to go)
+                  at {data.nextUnlock.unlockedAt.toLocaleString()} XP (
+                  {(data.nextUnlock.unlockedAt - data.xp).toLocaleString()} to go)
                 </span>
               </p>
             </div>
@@ -202,7 +202,7 @@ export default function ProgressPage() {
             <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
               {data.upcoming.map((u) => (
                 <span key={u.rung}>
-                  Lv {u.level} <span className="text-foreground/70">@ {u.rung.toLocaleString()}</span>
+                  {u.label} <span className="text-foreground/70">@ {u.rung.toLocaleString()}</span>
                 </span>
               ))}
             </div>
@@ -223,8 +223,8 @@ export default function ProgressPage() {
             <p className="text-xs text-muted-foreground">
               {data.streak.next ? (
                 <>
-                  <span className="text-foreground font-medium">{data.streak.next.days - data.streak.days} day{data.streak.next.days - data.streak.days === 1 ? "" : "s"}</span> to the {data.streak.next.days}-day milestone
-                  (+{data.streak.next.reward} rep). Check in daily to keep it alive.
+                  <span className="text-foreground font-medium">{data.streak.next.days - data.streak.days} day{data.streak.next.days - data.streak.days === 1 ? "" : "s"}</span> to the {data.streak.next.days}-day milestone.
+                  Check in daily to keep it alive.
                 </>
               ) : (
                 "Every streak milestone claimed — a year of showing up. Legendary."
@@ -232,22 +232,23 @@ export default function ProgressPage() {
             </p>
           ) : (
             <p className="text-xs text-muted-foreground">
-              Check in daily to grow your streak — milestone bonuses start at 3 days (+10 rep).
+              Check in daily to grow your streak — milestones unlock utility rewards starting at 3 days.
             </p>
           )}
         </section>
 
         {/* The Path — every rank on the road to Master Gardener */}
-        <section aria-label="The Path to Master Gardener" className="bg-card/80 rounded-2xl border border-border/70 p-4 mb-4">
+        <section aria-label="The Path to Master Cultivator" className="bg-card/80 rounded-2xl border border-border/70 p-4 mb-4">
           <div className="flex items-center gap-2 mb-3">
             <Trophy className="w-4 h-4 text-primary" />
-            <h2 className="font-display text-sm font-semibold">The Path to Master Gardener</h2>
-            <span className="ml-auto text-xs text-muted-foreground">{data.tier.name} · rank {REP_TIERS.findIndex((t) => t.name === data.tier.name) + 1} of {REP_TIERS.length}</span>
+            <h2 className="font-display text-sm font-semibold">The Path to Master Cultivator</h2>
+            <span className="ml-auto text-xs text-muted-foreground">{data.rank.name} · rank {REP_RANKS.findIndex((t) => t.name === data.rank.name) + 1} of {REP_RANKS.length}</span>
           </div>
           <ol className="space-y-1">
-            {REP_TIERS.map((t, i) => {
-              const reached = data.reputation >= t.threshold
-              const current = data.tier.name === t.name
+            {REP_RANKS.map((t, i) => {
+              const display = RANK_DISPLAY[t.name] ?? RANK_DISPLAY.Seed
+              const reached = data.xp >= t.threshold
+              const current = data.rank.name === t.name
               return (
                 <li key={t.name} className="flex items-start gap-3">
                   {/* Rail node + connector line */}
@@ -265,18 +266,18 @@ export default function ProgressPage() {
                     >
                       {reached ? <Check className="w-3 h-3" /> : <Lock className="w-2.5 h-2.5" />}
                     </span>
-                    {i < REP_TIERS.length - 1 && (
+                    {i < REP_RANKS.length - 1 && (
                       <span className={cn("w-px flex-1 min-h-3", reached ? "bg-primary/40" : "bg-border")} aria-hidden="true" />
                     )}
                   </div>
                   <div className={cn("pb-2 min-w-0", !reached && "opacity-60")}>
                     <div className="flex items-center gap-2 text-sm flex-wrap">
-                      <span aria-hidden="true">{t.icon}</span>
+                      <span aria-hidden="true">{display.icon}</span>
                       <span className={cn("font-semibold", current && "text-primary")}>{t.name}</span>
-                      <span className="text-[11px] text-muted-foreground">{t.threshold.toLocaleString()} rep</span>
+                      <span className="text-[11px] text-muted-foreground">{t.threshold.toLocaleString()} XP</span>
                       {current && <span className="text-[10px] font-semibold uppercase tracking-wider text-primary">you are here</span>}
                     </div>
-                    <p className="text-[11px] text-muted-foreground mt-0.5">{t.benefit}</p>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">{display.benefit}</p>
                   </div>
                 </li>
               )
@@ -310,7 +311,7 @@ export default function ProgressPage() {
               <Sprout className="w-4 h-4 text-primary" />
               <h2 className="font-display text-sm font-semibold">{data.journey.name}</h2>
               <span className="ml-auto text-xs text-muted-foreground">
-                {data.journey.doneCount}/{data.journey.steps.length} · +{data.journey.reward} rep
+                {data.journey.doneCount}/{data.journey.steps.length} · +{data.journey.reward} XP
               </span>
             </div>
             <p className="text-xs text-muted-foreground mb-3">{data.journey.description}</p>
@@ -490,7 +491,7 @@ export default function ProgressPage() {
           )}
           <div className="mt-3 pt-3 border-t border-border flex flex-wrap gap-x-4 gap-y-1 text-xs">
             <Link href="/achievements" className="text-primary hover:underline">Achievements</Link>
-            <Link href="/reputation" className="text-primary hover:underline">How reputation works</Link>
+            <Link href="/reputation" className="text-primary hover:underline">How progression works</Link>
             <Link href="/leaderboard" className="text-primary hover:underline">Leaderboard</Link>
             <Link href="/profile#rewards" className="text-primary hover:underline">Rewards</Link>
           </div>

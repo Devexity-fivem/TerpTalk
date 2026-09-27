@@ -4,8 +4,10 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { unauthorized, forbidden, getClientIp, logSecurityEvent, LIMITS, isBanned, enforceLinkTrust } from "@/lib/security"
 import { storeImage, deleteImagesIfUnreferenced, isBlobConfigured } from "@/lib/blob"
-import { getReputationTier, getTierProgress, getRepStage, getStageProgress } from "@/lib/reputation"
+import { rankDisplay, xpRankProgress, xpStage, xpStageProgress } from "@/lib/progression-config"
+import { getProgressionPerks, progressionPerksFrom } from "@/lib/progression"
 import { enqueueReversal, drainOne } from "@/lib/reputation-outbox"
+import { enqueueXpReversal, drainXpOne } from "@/lib/progression-outbox"
 import { canEquip } from "@/lib/cosmetics"
 import { Prisma } from "@prisma/client"
 import { rateLimit } from "@/lib/rate-limit"
@@ -98,11 +100,17 @@ export async function GET() {
         followers: user._count.following,
         following: user._count.followers,
         badges: user.badges.length,
-        reputation: user.profile?.reputation || 0,
-        reputationTier: getReputationTier(user.profile?.reputation || 0),
-        tierProgress: getTierProgress(user.profile?.reputation || 0),
-        repStage: getRepStage(user.profile?.reputation || 0),
-        stageProgress: getStageProgress(user.profile?.reputation || 0),
+        xp: user.profile?.xp || 0,
+        standing: user.profile?.standing || 0,
+        pollCreation: progressionPerksFrom(
+          user.profile?.xp ?? 0,
+          user.profile?.standing ?? 0,
+          user.profile?.unlockFrozen ?? true
+        ).pollCreation,
+        rank: rankDisplay(user.profile?.xp || 0),
+        rankProgress: xpRankProgress(user.profile?.xp || 0),
+        xpStage: xpStage(user.profile?.xp || 0),
+        stageProgress: xpStageProgress(user.profile?.xp || 0),
         referrals: referralCount,
       },
       recentThreads,
@@ -145,7 +153,7 @@ export async function PATCH(request: Request) {
 
     const current = await prisma.profile.findUnique({
       where: { userId },
-      select: { avatarUrl: true, reputation: true },
+      select: { avatarUrl: true, xp: true },
     })
 
     if (await isBanned(userId)) {
@@ -313,9 +321,9 @@ export async function PATCH(request: Request) {
     }
 
     // ─── Cosmetics ────────────────────────────────────────────────────
-    // Registry keys only — canEquip() enforces the reputation unlock so a
-    // member can never equip a cosmetic above their tier. null clears.
-    const reputation = current?.reputation ?? 0
+    // Registry keys only — canEquip() enforces the XP unlock so a
+    // member can never equip a cosmetic above their rank. null clears.
+    const memberXp = current?.xp ?? 0
     const cosmeticFields: [string, unknown, "frames" | "titles" | "themes"][] = [
       ["avatarFrame", avatarFrame, "frames"],
       ["profileTitle", profileTitle, "titles"],
@@ -326,7 +334,7 @@ export async function PATCH(request: Request) {
       if (value !== null && (typeof value !== "string" || value.length > 60)) {
         return NextResponse.json({ error: `Invalid ${field}` }, { status: 400 })
       }
-      if (!canEquip(reputation, kind, value as string | null)) {
+      if (!canEquip(memberXp, kind, value as string | null)) {
         return NextResponse.json({ error: "That reward isn't unlocked yet" }, { status: 403 })
       }
       updateData[field] = value
@@ -334,17 +342,17 @@ export async function PATCH(request: Request) {
 
     // ─── Badge showcase ───────────────────────────────────────────────
     // pinnedBadges: badge IDs the member wants pinned. Must all be earned
-    // by this member; count is capped by the tier's showcaseSlots perk.
+    // by this member; count is capped by the rank's showcaseSlots perk.
     let pinOps: { unpin: Prisma.PrismaPromise<unknown>; pin: Prisma.PrismaPromise<unknown> } | null = null
     if (pinnedBadges !== undefined) {
       if (!Array.isArray(pinnedBadges) || pinnedBadges.length > 20 ||
           !pinnedBadges.every((b) => typeof b === "string" && b.length <= 40)) {
         return NextResponse.json({ error: "Invalid pinned badges" }, { status: 400 })
       }
-      const slots = getReputationTier(reputation).perks.showcaseSlots ?? 3
+      const slots = (await getProgressionPerks(userId)).showcaseSlots
       if (pinnedBadges.length > slots) {
         return NextResponse.json(
-          { error: `Your tier lets you showcase up to ${slots} badges` },
+          { error: `Your rank lets you showcase up to ${slots} badges` },
           { status: 400 }
         )
       }
@@ -597,10 +605,16 @@ export async function DELETE(request: Request) {
     // Durable reversal intents are written in the SAME transaction as the
     // account cascade — voiding the reputation this account granted others
     // (likes, accepted answers) plus sweeps of its deleted threads/posts can
-    // never be stranded between the delete and a post-commit reversal.
+    // never be stranded between the delete and a post-commit reversal. Both
+    // ledgers: legacy rep rows plus live V2 progression awards.
     const reversalIds: string[] = []
+    const xpReversalIds: string[] = []
     await prisma.$transaction(async (tx) => {
       reversalIds.push(await enqueueReversal(tx, {
+        kind: "ACTOR", actorId: user.id,
+        reason: "Granting account deleted", requestedBy: user.id,
+      }))
+      xpReversalIds.push(await enqueueXpReversal(tx, {
         kind: "ACTOR", actorId: user.id,
         reason: "Granting account deleted", requestedBy: user.id,
       }))
@@ -609,9 +623,17 @@ export async function DELETE(request: Request) {
           kind: "SOURCE", sourceType: "THREAD", sourceId: t.id,
           reason: "Thread removed", requestedBy: user.id,
         }))
+        xpReversalIds.push(await enqueueXpReversal(tx, {
+          kind: "SOURCE", sourceType: "THREAD", sourceId: t.id,
+          reason: "Thread removed", requestedBy: user.id,
+        }))
       }
       for (const p of threadPosts) {
         reversalIds.push(await enqueueReversal(tx, {
+          kind: "SOURCE", sourceType: "POST", sourceId: p.id,
+          reason: "Thread removed", requestedBy: user.id,
+        }))
+        xpReversalIds.push(await enqueueXpReversal(tx, {
           kind: "SOURCE", sourceType: "POST", sourceId: p.id,
           reason: "Thread removed", requestedBy: user.id,
         }))
@@ -622,6 +644,7 @@ export async function DELETE(request: Request) {
       await tx.user.delete({ where: { id: user.id } })
     })
     for (const rid of reversalIds) await drainOne(rid).catch(() => false)
+    for (const rid of xpReversalIds) await drainXpOne(rid).catch(() => false)
 
     // Best-effort cleanup of owned Blob objects after the DB records are gone.
     try {

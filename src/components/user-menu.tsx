@@ -16,7 +16,7 @@ const LINKS = [
   { href: "/progress", label: "My Progress", icon: TrendingUp, desc: "Level, quests, and unlocks" },
   { href: "/diaries", label: "Grow Diaries", icon: Leaf, desc: "Track and share your grows" },
   { href: "/achievements", label: "Achievements", icon: Award, desc: "Badges and progress" },
-  { href: "/reputation", label: "Reputation", icon: TrendingUp, desc: "Tiers and unlocks" },
+  { href: "/reputation", label: "Progression", icon: TrendingUp, desc: "Ranks and unlocks" },
   { href: "/messages", label: "Messages", icon: Mail, desc: "Private conversations" },
   { href: "/chat", label: "Chat", icon: MessagesSquare, desc: "Live community rooms" },
   { href: "/notifications", label: "Notifications", icon: Bell, desc: "Replies, mentions, milestones" },

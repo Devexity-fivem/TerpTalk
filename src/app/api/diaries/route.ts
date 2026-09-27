@@ -4,8 +4,8 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { unauthorized, publicUserSelect, LIMITS, getClientIp, logSecurityEvent, isBanned, forbidden, enforceLinkTrust } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
-import { awardReputation, REP_POINTS } from "@/lib/reputation"
-import { enqueueReversal, drainOne } from "@/lib/reputation-outbox"
+import { awardProgression } from "@/lib/progression"
+import { enqueueXpReversal, drainXpOne } from "@/lib/progression-outbox"
 import { notificationLinkWhere, notifyMany } from "@/lib/notify"
 import { deleteImagesIfUnreferenced } from "@/lib/blob"
 import { checkMaintenance } from "@/lib/maintenance"
@@ -210,10 +210,9 @@ export async function POST(request: Request) {
     diary.slug = entitySlug(diary.title, diary.id, "diary")
     await prisma.growDiary.update({ where: { id: diary.id }, data: { slug: diary.slug } })
 
-    await awardReputation(
+    await awardProgression(
       session.user.id,
       "DIARY_CREATED",
-      REP_POINTS.DIARY_CREATED,
       `Started grow diary "${diary.title.slice(0, 60)}"`,
       { key: `diary:${diary.id}`, sourceType: "DIARY", sourceId: diary.id }
     ).catch(() => {})
@@ -289,7 +288,7 @@ export async function DELETE(request: Request) {
     }
     if (diary.authorId !== session.user.id) return forbidden()
 
-    let reversalId: string | null = null
+    const reversalIds: string[] = []
     const imageUrls = await prisma.$transaction(async (tx) => {
       // threadId goes null with the diary: the discussion thread survives as
       // a normal thread, and no diary context can leak through it.
@@ -306,13 +305,24 @@ export async function DELETE(request: Request) {
           diary.slug ? [`/diaries/${id}`, `/diaries/${diary.slug}`] : `/diaries/${id}`
         ),
       })
-      // Diary rep (DIARY_CREATED, per-day update awards, reactions) is all
-      // keyed sourceType=DIARY/sourceId=diaryId — one durable intent unwinds
-      // it, atomically committed with the delete itself.
-      reversalId = await enqueueReversal(tx, {
+      // Diary XP (DIARY_CREATED, per-day update awards) is keyed
+      // sourceType=DIARY/sourceId=diaryId; per-update band/structured
+      // bonuses are sourced to each update id — unwind both, atomically
+      // committed with the delete itself.
+      reversalIds.push(await enqueueXpReversal(tx, {
         kind: "SOURCE", sourceType: "DIARY", sourceId: id,
         reason: "Diary removed", requestedBy: session.user.id,
+      }))
+      const diaryUpdateIds = await tx.diaryUpdate.findMany({
+        where: { diaryId: id },
+        select: { id: true },
       })
+      for (const u of diaryUpdateIds) {
+        reversalIds.push(await enqueueXpReversal(tx, {
+          kind: "SOURCE", sourceType: "DIARY_UPDATE", sourceId: u.id,
+          reason: "Diary removed", requestedBy: session.user.id,
+        }))
+      }
       return imgs.map((i) => i.url)
     })
 
@@ -320,8 +330,8 @@ export async function DELETE(request: Request) {
     // must not outlive the diary. Post-commit, best-effort.
     await purgeDiaryAnnouncements(diary).catch(() => {})
 
-    // Best-effort immediate drain — durable row retries via ping/cron.
-    if (reversalId) await drainOne(reversalId).catch(() => false)
+    // Best-effort immediate drain — durable rows retry via ping/cron.
+    for (const rid of reversalIds) await drainXpOne(rid).catch(() => false)
     deleteImagesIfUnreferenced(imageUrls).catch(() => {})
     revalidateTag("diaries", { expire: 0 })
     // Strain stats aggregate this diary — bust the cache so deleted grows

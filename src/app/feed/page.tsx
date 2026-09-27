@@ -355,7 +355,7 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
                               <div className="text-xs text-muted-foreground flex items-center gap-2 flex-wrap">
                                 <span className="flex items-center gap-1">
                                   <span className="truncate">{t.author.profile?.username || t.author.name}</span>
-                                  <TierChip reputation={t.author.profile?.reputation ?? 0} publicMilestoneOptOut={t.author.profile?.publicMilestoneOptOut} />
+                                  <TierChip xp={t.author.profile?.xp ?? 0} publicMilestoneOptOut={t.author.profile?.publicMilestoneOptOut} />
                                 </span>
                                 <span>•</span>
                                 <span>{t.category.name}</span>
@@ -463,7 +463,7 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
                             <span className="flex min-w-0 items-center gap-1 font-semibold text-sm">
                               <span className="truncate">{thread.author.profile?.username || thread.author.name}</span>
                               <RoleBadge role={thread.author.role} />
-                              <TierChip reputation={thread.author.profile?.reputation ?? 0} publicMilestoneOptOut={thread.author.profile?.publicMilestoneOptOut} />
+                              <TierChip xp={thread.author.profile?.xp ?? 0} publicMilestoneOptOut={thread.author.profile?.publicMilestoneOptOut} />
                             </span>
                           </div>
                           <h3 className="font-medium mb-1 flex items-center gap-2">
@@ -516,7 +516,7 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
                           <div className="flex items-center gap-2 mb-1">
                             <span className="flex min-w-0 items-center gap-1 text-sm">
                               <span className="font-semibold truncate">{update.author.profile?.username || update.author.name}</span>
-                              <TierChip reputation={update.author.profile?.reputation ?? 0} publicMilestoneOptOut={update.author.profile?.publicMilestoneOptOut} />
+                              <TierChip xp={update.author.profile?.xp ?? 0} publicMilestoneOptOut={update.author.profile?.publicMilestoneOptOut} />
                             </span>
                             <span className="text-xs text-muted-foreground ml-auto shrink-0">
                               <TimeAgo value={update.createdAt} />
@@ -574,7 +574,7 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
                           <h3 className="font-medium text-sm mb-1 line-clamp-1 group-hover:text-primary transition-colors">{diary.title}</h3>
                           <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
                             <span className="truncate">{diary.author.profile?.username || diary.author.name}</span>
-                            <TierChip reputation={diary.author.profile?.reputation ?? 0} publicMilestoneOptOut={diary.author.profile?.publicMilestoneOptOut} />
+                            <TierChip xp={diary.author.profile?.xp ?? 0} publicMilestoneOptOut={diary.author.profile?.publicMilestoneOptOut} />
                           </div>
                           <div className="flex items-center gap-3 text-xs">
                             {dayCount != null && (
@@ -618,7 +618,7 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
                             <span className="flex min-w-0 items-center gap-1 font-semibold text-sm">
                               <span className="truncate">{update.author.profile?.username || update.author.name}</span>
                               <RoleBadge role={update.author.role} />
-                              <TierChip reputation={update.author.profile?.reputation ?? 0} publicMilestoneOptOut={update.author.profile?.publicMilestoneOptOut} />
+                              <TierChip xp={update.author.profile?.xp ?? 0} publicMilestoneOptOut={update.author.profile?.publicMilestoneOptOut} />
                             </span>
                             <span className="text-xs text-muted-foreground">
                               updated their diary
@@ -667,7 +667,7 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
                             <span className="flex min-w-0 items-center gap-1 font-semibold text-sm">
                               <span className="truncate">{thread.author.profile?.username || thread.author.name}</span>
                               <RoleBadge role={thread.author.role} />
-                              <TierChip reputation={thread.author.profile?.reputation ?? 0} publicMilestoneOptOut={thread.author.profile?.publicMilestoneOptOut} />
+                              <TierChip xp={thread.author.profile?.xp ?? 0} publicMilestoneOptOut={thread.author.profile?.publicMilestoneOptOut} />
                             </span>
                             <span className="text-xs text-muted-foreground">
                               started a discussion
@@ -807,7 +807,7 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
                             <Users className="w-3 h-3 shrink-0" />
                             <span className="truncate">{diary.author.profile?.username || diary.author.name}</span>
                               <RoleBadge role={diary.author.role} />
-                              <TierChip reputation={diary.author.profile?.reputation ?? 0} publicMilestoneOptOut={diary.author.profile?.publicMilestoneOptOut} />
+                              <TierChip xp={diary.author.profile?.xp ?? 0} publicMilestoneOptOut={diary.author.profile?.publicMilestoneOptOut} />
                           </span>
                           <span>•</span>
                           <span>{diary._count.updates} updates</span>

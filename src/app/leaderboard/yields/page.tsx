@@ -109,7 +109,7 @@ export default async function YieldLeaderboardPage() {
           </h1>
           <p className="text-muted-foreground mt-2 max-w-2xl">
             Real harvest outcomes reported by the TerpTalk community. Average yields are converted to ounces for comparison.
-            {" "}<Link href="/leaderboard" className="text-primary hover:underline">See the reputation leaderboard</Link>.
+            {" "}<Link href="/leaderboard" className="text-primary hover:underline">See the XP leaderboard</Link>.
           </p>
         </div>
 
@@ -184,7 +184,7 @@ export default async function YieldLeaderboardPage() {
                       >
                         {row.topEntry.author.profile?.username || row.topEntry.author.name}
                       </Link>
-                      <TierChip reputation={row.topEntry.author.profile?.reputation ?? 0} publicMilestoneOptOut={row.topEntry.author.profile?.publicMilestoneOptOut} />
+                      <TierChip xp={row.topEntry.author.profile?.xp ?? 0} publicMilestoneOptOut={row.topEntry.author.profile?.publicMilestoneOptOut} />
                     </span>
                   </div>
                 </div>

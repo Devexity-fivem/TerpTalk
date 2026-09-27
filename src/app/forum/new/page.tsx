@@ -13,7 +13,7 @@ import PollComposer from "@/components/poll-composer"
 import Link from "next/link"
 import { WIZARD_RESULTS } from "@/lib/problem-wizard"
 import { SYMPTOM_TAGS, wizardResultToTag } from "@/lib/symptom-tags"
-import { getReputationTier, POLL_CREATION_REP } from "@/lib/reputation-config"
+import { STANDING_POLL_CREATE } from "@/lib/progression-config"
 
 // Client-side mirror of the server gate in POST /api/forum/threads —
 // isStaff() lives in a Prisma-importing module, so the role set is inlined.
@@ -94,7 +94,7 @@ function NewThreadForm() {
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => setCanCreatePoll(
         STAFF.has((session?.user as { role?: string } | undefined)?.role ?? "") ||
-        getReputationTier(d?.reputation ?? 0).perks.pollCreation === true
+        d?.stats?.pollCreation === true
       ))
       .catch(() => setCanCreatePoll(false))
   }, [status, session])
@@ -298,7 +298,7 @@ function NewThreadForm() {
                   disabled={loading}
                   lockedReason={
                     canCreatePoll === false
-                      ? `Polls unlock at ${POLL_CREATION_REP.toLocaleString()} reputation (Rooted).`
+                      ? `Polls unlock at ${STANDING_POLL_CREATE.toLocaleString()} standing (Trusted).`
                       : null
                   }
                 />

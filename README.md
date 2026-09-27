@@ -83,7 +83,7 @@ Rules:
 - **No route mirrors.** A test must not re-implement a route's query/predicate and assert its own copy; call the route (HTTP) or the exported lib function.
 - **No conditional skips.** Create the fixture you need; never `if (row) assert(...)`.
 - **New behavior → existing suite.** Add a section to the canonical domain suite above. A new file is justified only for a genuinely new domain, and it must be registered in the master manifest with a tier.
-- **Fixtures keep invariants.** Any fixture that writes `Profile.reputation` writes the matching ledger row in the same transaction (see `mkEvent` in `reputation-tests.mts`).
+- **Fixtures keep invariants.** Any fixture that writes `Profile.reputation`/`Profile.xp`/`Profile.standing` writes the matching ledger row in the same transaction (see `mkEvent`/`mkXpEvent` in `reputation-tests.mts`).
 
 All mutation-capable test scripts import `scripts/db-guard.mjs`. Content seeds (`prisma/seed.ts`, `scripts/seed-strains.cjs`, `scripts/seed-mars-hydro-products.cjs`) are idempotent upserts and are the only unguarded writers — run them deliberately.
 
@@ -120,7 +120,7 @@ Then verify the deploy:
 ## Operations notes
 
 - **Cron:** one daily job — `GET /api/cron/terpbot` at 14:00 UTC (`vercel.json`, secured by `CRON_SECRET`). Per-task claims land as `Setting` rows (`<task>:<UTC-date>`); a failed task releases its claim and retries next run. Tasks: digest, grow tip, notification cleanup, dormant-member scan, stale-diary nudges, referral sweep, safety signal scan.
-- **Referrals:** signup writes `referredById` + a "joined using your referral link" notification (no instant award). The bonus pays later — once the referee reaches 25 rep and is 24h old — via `payReferralBonus` (keyed `referral:<refereeId>`, weekly cap, legacy unkeyed-payout detection). Both the post-award trigger and the daily `reputation:referral-sweep` cron call the same canonical path.
+- **Referrals:** signup writes `referredById` + a "joined using your referral link" notification (no instant award). The bonus pays later — once the referee reaches 25 XP and is 24h old — via `reconcileReferralPayouts` (keyed `referral:<refereeId>`, weekly cap, legacy unkeyed-payout detection; paid on the V2 progression ledger). Both the post-award trigger and the daily `reputation:referral-sweep` cron call the same canonical path.
 - **Where to look when prod hurts:** `SecurityEvent` (auth failures, rate limits, registrations, deletions — `metadata.reason` distinguishes causes, `userFound` separates lookup misses from bad passwords), `BotEvent` (TerpBot command/announcement telemetry), `RateLimit` (live throttle keys), `Setting` rows (cron claims), Vercel function logs (everything else — short retention).
 - **Key env vars (prod):** `DATABASE_URL` + `DATABASE_URL_UNPOOLED` (Neon main), `NEXTAUTH_SECRET`, `NEXTAUTH_URL`, `IP_HASH_SALT`, Pusher set (`PUSHER_*` + `NEXT_PUBLIC_PUSHER_*`), `CRON_SECRET`, `TURNSTILE_SECRET_KEY` + `NEXT_PUBLIC_TURNSTILE_SITE_KEY` (signup protection), `BLOB_READ_WRITE_TOKEN` (uploads).
 

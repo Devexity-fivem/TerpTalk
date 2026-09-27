@@ -12,8 +12,9 @@
  */
 import { prisma } from "@/lib/prisma"
 import { rankableProfile } from "@/lib/security"
-import { MEMBER_DRIVEN_REP_TYPES } from "@/lib/trust-signals"
-import { awardReputation, grantBadge } from "@/lib/reputation"
+import { WEEKLY_BOARD_XP_TYPES } from "@/lib/progression-config"
+import { awardProgression } from "@/lib/progression"
+import { grantBadge } from "@/lib/reputation"
 import { getBooleanSetting, SITE_SETTINGS } from "@/lib/settings"
 
 // [start, end) UTC range for an ISO week key "YYYY-Www".
@@ -34,7 +35,7 @@ export function weekRange(key: string): { start: Date; end: Date } | null {
 const WEEKLY_SELECT = {
   username: true,
   avatarUrl: true,
-  reputation: true,
+  xp: true,
   publicMilestoneOptOut: true,
   user: {
     select: {
@@ -55,7 +56,7 @@ export interface WeeklyRow {
   profile: {
     username: string
     avatarUrl: string | null
-    reputation: number
+    xp: number
     publicMilestoneOptOut: boolean
     user: {
       id: string
@@ -68,20 +69,21 @@ export interface WeeklyRow {
 }
 
 // What counts on the weekly board — the authoritative definition of
-// member-earned weekly reputation. Uses the same member-driven allowlist
-// as the velocity detector so every system-generated payout (WEEKLY_AWARD,
-// BADGE_BONUS, quests, milestones, journey rewards, challenges, contest
-// wins, referrals, staff adjustments, migrations, onboarding) is excluded
-// by default — a winner's own automated payout can never compound into the
-// following week's ranking, and no future automated award type can leak
-// in without being explicitly classified member-driven.
+// member-earned weekly XP. MEMBER_DRIVEN_XP_TYPES excludes every
+// system-generated payout (WEEKLY_AWARD, quests, milestones, journey
+// rewards, challenges, contest wins, referrals, staff adjustments,
+// migrations, onboarding) by default — a winner's own automated payout
+// can never compound into the following week's ranking, and no future
+// automated award type can leak in without being explicitly classified
+// member-driven.
 //
-// REVERSAL is deliberately INCLUDED alongside the allowlist: reversal rows
-// are signed negative counter-entries, so summing them is what makes the
-// weekly total *net* — clawed-back reputation stops counting. (A reversal
-// of an excluded system payout nets slightly conservatively — rare and
-// harmless versus counting reversed member activity.)
-export const WEEKLY_BOARD_TYPES: string[] = [...MEMBER_DRIVEN_REP_TYPES, "REVERSAL"]
+// REVERSAL/REINSTATE are deliberately INCLUDED alongside the allowlist:
+// reversal rows are signed negative counter-entries, so summing them is
+// what makes the weekly total *net* — clawed-back XP stops counting, and
+// reinstated XP counts again. (A reversal of an excluded system payout
+// nets slightly conservatively — rare and harmless versus counting
+// reversed member activity.)
+export const WEEKLY_BOARD_TYPES: string[] = WEEKLY_BOARD_XP_TYPES
 
 async function weeklyEarned(
   start: Date,
@@ -89,18 +91,18 @@ async function weeklyEarned(
   extraUserWhere: Record<string, unknown> = {},
   take = 25
 ): Promise<WeeklyRow[]> {
-  const groups = await prisma.reputationEvent.groupBy({
+  const groups = await prisma.progressionEvent.groupBy({
     by: ["userId"],
     where: {
       createdAt: { gte: start, lt: end },
       type: { in: WEEKLY_BOARD_TYPES },
       user: extraUserWhere,
     },
-    _sum: { amount: true },
-    orderBy: { _sum: { amount: "desc" } },
+    _sum: { xp: true },
+    orderBy: { _sum: { xp: "desc" } },
     take: take * 4, // over-fetch: visibility filter can drop rows
   })
-  const groupsFiltered = groups.filter((g) => (g._sum.amount ?? 0) > 0)
+  const groupsFiltered = groups.filter((g) => (g._sum.xp ?? 0) > 0)
   if (groupsFiltered.length === 0) return []
 
   const profiles = await prisma.profile.findMany({
@@ -111,13 +113,13 @@ async function weeklyEarned(
   const rows: WeeklyRow[] = []
   for (const g of groupsFiltered) {
     const profile = byUser.get(g.userId)
-    if (profile) rows.push({ userId: g.userId, earned: g._sum.amount ?? 0, profile })
+    if (profile) rows.push({ userId: g.userId, earned: g._sum.xp ?? 0, profile })
     if (rows.length >= take) break
   }
   return rows
 }
 
-/** Everyone's board — net rep earned this ISO week. */
+/** Everyone's board — net XP earned this ISO week. */
 export function weeklyBoard(start: Date, end: Date) {
   return weeklyEarned(start, end)
 }
@@ -130,11 +132,11 @@ export function weeklyNewGrowers(start: Date, end: Date, now = new Date()) {
   return weeklyEarned(start, end, { createdAt: { gte: new Date(now.getTime() - 30 * 86400000) } }, 10)
 }
 
-export const GROWER_OF_THE_WEEK_REP = 50
+export const GROWER_OF_THE_WEEK_XP = 50
 
 /**
  * Resolve last week's winner: top weekly earner among rankable members.
- * Badge + keyed rep are idempotent — safe to run repeatedly. Returns the
+ * Badge + keyed XP are idempotent — safe to run repeatedly. Returns the
  * winner's username for the TerpBot announcement (null when opted out of
  * public status).
  */
@@ -148,17 +150,16 @@ export async function resolveWeeklyRecognition(week: string): Promise<{ username
   if (!winner) return null
 
   await grantBadge(winner.userId, "Grower of the Week", {
-    content: `You earned the most reputation in ${week} — Grower of the Week.`,
+    content: `You earned the most XP in ${week} — Grower of the Week.`,
     link: "/leaderboard?tab=week",
     announce: true,
   }).catch(() => false)
 
-  await awardReputation(
+  await awardProgression(
     winner.userId,
     "WEEKLY_AWARD",
-    GROWER_OF_THE_WEEK_REP,
     `Grower of the Week — ${week}`,
-    { key: `weekly:gotw:${week}:${winner.userId}`, sourceType: "WEEK", sourceId: week }
+    { key: `weekly:gotw:${week}:${winner.userId}`, sourceType: "WEEK", sourceId: week, xp: GROWER_OF_THE_WEEK_XP }
   ).catch(() => {})
 
   return {

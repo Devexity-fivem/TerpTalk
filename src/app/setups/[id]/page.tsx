@@ -125,7 +125,7 @@ export default async function SetupPage({ params }: { params: Promise<{ id: stri
               <Users className="w-4 h-4" />
               {setup.author.profile?.username || setup.author.name}
               <RoleBadge role={setup.author.role} />
-              <TierChip reputation={setup.author.profile?.reputation ?? 0} publicMilestoneOptOut={setup.author.profile?.publicMilestoneOptOut} />
+              <TierChip xp={setup.author.profile?.xp ?? 0} publicMilestoneOptOut={setup.author.profile?.publicMilestoneOptOut} />
             </Link>
             <span>{new Date(setup.createdAt).toLocaleDateString()}</span>
             {edited && (
@@ -237,7 +237,7 @@ export default async function SetupPage({ params }: { params: Promise<{ id: stri
                       {c.author.profile?.username || c.author.name}
                     </Link>
                     <RoleBadge role={c.author.role} />
-              <TierChip reputation={c.author.profile?.reputation ?? 0} publicMilestoneOptOut={c.author.profile?.publicMilestoneOptOut} />
+              <TierChip xp={c.author.profile?.xp ?? 0} publicMilestoneOptOut={c.author.profile?.publicMilestoneOptOut} />
                     <span className="text-xs text-muted-foreground">{new Date(c.createdAt).toLocaleDateString()}</span>
                     <OwnerDeleteButton
                       endpoint="/api/setups/comments"

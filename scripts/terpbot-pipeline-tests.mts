@@ -563,7 +563,7 @@ async function run() {
       assert.match(await r("growhelp"), /FLOWER|Flower/, "growhelp → stage context")
       assert.match(await r("growhelp"), /fungus gnats|No related discussions/, "growhelp → deterministic routing")
       assert.match(await r("milestones"), /What's next/, "milestones → unified next-step view")
-      assert.match(await r("progress"), /rep · Grow Level/, "progress → unified view")
+      assert.match(await r("progress"), /XP · Grow Level/, "progress → unified view")
       assert.match(await r("related", "fungus gnats", ["fungus", "gnats"]), /fungus gnats/, "related → finds thread")
       assert.match(await r("ask", "fungus gnats", ["fungus", "gnats"]), /fungus gnats|couldn't find|Try:/i, "ask → result or honest miss")
       assert.match(await r("hot"), /🔥|No /, "hot → bounded engagement list")
