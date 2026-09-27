@@ -255,7 +255,8 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
       <div className="max-w-6xl mx-auto px-4 py-8">
         {/* Header */}
         <div className="mb-8">
-          <h1 className="font-display text-3xl font-bold mb-2 tracking-tight">TerpTalk Feed</h1>
+          <span className="tt-eyebrow">What&apos;s new</span>
+          <h1 className="font-display text-3xl font-bold mt-1.5 mb-2 tracking-tight">Your Feed</h1>
           <p className="text-muted-foreground">Stay updated with the latest activity from across the community</p>
         </div>
 

@@ -4,7 +4,8 @@ import { useState, useEffect, useCallback, useRef } from "react"
 import { signIn } from "next-auth/react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
-import { Leaf, Loader2, RefreshCw } from "lucide-react"
+import { Loader2, RefreshCw } from "lucide-react"
+import CannabisLeaf from "@/components/cannabis-leaf"
 import { safeCallbackUrl } from "@/lib/callback-url"
 
 interface Captcha {
@@ -191,12 +192,16 @@ export default function SignUpPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background px-4">
-      <div className="max-w-md w-full">
+    <div className="relative min-h-screen flex items-center justify-center overflow-hidden bg-background px-4 py-10">
+      <div className="pointer-events-none absolute inset-0" aria-hidden="true">
+        <div className="tt-grid-bg absolute inset-0" />
+        <div className="absolute left-1/2 top-0 h-[300px] w-[560px] -translate-x-1/2 -translate-y-1/3 rounded-full bg-primary/10 blur-[110px]" />
+      </div>
+      <div className="relative max-w-md w-full">
         <div className="text-center mb-8">
           <div className="flex justify-center mb-4">
-            <div className="bg-primary/10 ring-1 ring-primary/20 p-3 rounded-full shadow-md">
-              <Leaf className="w-8 h-8 text-primary" />
+            <div className="tt-brand-tile p-3 rounded-2xl">
+              <CannabisLeaf className="w-8 h-8 text-primary" />
             </div>
           </div>
           <h1 className="font-display text-3xl font-bold tracking-tight">Join TerpTalk</h1>

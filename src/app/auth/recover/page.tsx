@@ -36,8 +36,12 @@ export default function RecoverPage() {
 
   if (newPhrase) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center px-4">
-        <div className="tt-glass border border-border/70 rounded-2xl p-8 max-w-md w-full">
+      <div className="relative min-h-screen bg-background flex items-center justify-center overflow-hidden px-4 py-10">
+        <div className="pointer-events-none absolute inset-0" aria-hidden="true">
+          <div className="tt-grid-bg absolute inset-0" />
+          <div className="absolute left-1/2 top-0 h-[300px] w-[560px] -translate-x-1/2 -translate-y-1/3 rounded-full bg-primary/10 blur-[110px]" />
+        </div>
+        <div className="relative tt-glass border border-border/70 rounded-2xl p-8 max-w-md w-full">
           <div className="text-center mb-5">
             <Check className="w-12 h-12 text-primary mx-auto mb-4" />
             <h1 className="font-display text-xl font-bold mb-2">Password reset</h1>
@@ -85,10 +89,18 @@ export default function RecoverPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center px-4">
-      <div className="tt-glass border border-border/70 rounded-2xl p-8 max-w-md w-full">
+    <div className="relative min-h-screen bg-background flex items-center justify-center overflow-hidden px-4 py-10">
+      <div className="pointer-events-none absolute inset-0" aria-hidden="true">
+        <div className="tt-grid-bg absolute inset-0" />
+        <div className="absolute left-1/2 top-0 h-[300px] w-[560px] -translate-x-1/2 -translate-y-1/3 rounded-full bg-primary/10 blur-[110px]" />
+      </div>
+      <div className="relative tt-glass border border-border/70 rounded-2xl p-8 max-w-md w-full">
         <div className="text-center mb-6">
-          <KeyRound className="w-10 h-10 text-primary mx-auto mb-3" />
+          <div className="flex justify-center mb-4">
+            <div className="tt-brand-tile p-2.5 rounded-2xl">
+              <KeyRound className="w-6 h-6 text-primary" />
+            </div>
+          </div>
           <h1 className="font-display text-2xl font-bold tracking-tight">Recover your account</h1>
           <p className="text-sm text-muted-foreground mt-1">
             Enter your username and the 12-word recovery phrase you saved.

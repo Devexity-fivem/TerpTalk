@@ -195,14 +195,16 @@ export default async function Home() {
     <div className="flex flex-col min-h-screen bg-background">
       {/* Hero — asymmetric split: pitch left, live canopy panel right */}
       <section className="relative overflow-hidden px-4 pb-16 pt-14 sm:px-6 lg:px-8 lg:pb-24 lg:pt-20">
-        {/* Grow-light backdrop — blueprint grid + emerald/violet/amber wash */}
-        <div className="pointer-events-none absolute inset-0 -z-10">
+        {/* Grow-light backdrop — blueprint grid + pine/iris/copper wash.
+            No negative z: it would sink under the page's bg-background.
+            The content grid is `relative` so it still paints on top. */}
+        <div className="pointer-events-none absolute inset-0">
           <div className="tt-grid-bg absolute inset-0" />
-          <div className="absolute left-1/2 top-0 h-[440px] w-[780px] -translate-x-1/2 -translate-y-1/3 rounded-full bg-primary/20 blur-[130px]" />
-          <div className="absolute right-[4%] top-24 h-[280px] w-[280px] rounded-full bg-spectrum/20 blur-[110px]" />
-          <div className="absolute left-[6%] top-44 h-[200px] w-[200px] rounded-full bg-accent/15 blur-[100px]" />
+          <div className="absolute left-1/2 top-0 h-[440px] w-[780px] -translate-x-1/2 -translate-y-1/3 rounded-full bg-primary/12 blur-[130px]" />
+          <div className="absolute right-[4%] top-24 h-[280px] w-[280px] rounded-full bg-spectrum/14 blur-[110px]" />
+          <div className="absolute left-[6%] top-44 h-[200px] w-[200px] rounded-full bg-accent/10 blur-[100px]" />
         </div>
-        <div className="mx-auto grid max-w-7xl items-center gap-12 lg:grid-cols-[1.05fr_0.95fr] lg:gap-16">
+        <div className="relative mx-auto grid max-w-7xl items-center gap-12 lg:grid-cols-[1.05fr_0.95fr] lg:gap-16">
           <div className="text-center lg:text-left">
             <div className="mb-7 inline-flex items-center gap-2 rounded-full border border-primary/25 bg-primary/10 px-4 py-1.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-primary">
               <CannabisLeaf className="h-3.5 w-3.5" />
@@ -210,11 +212,11 @@ export default async function Home() {
             </div>
             <h1 className="font-display text-5xl sm:text-6xl md:text-7xl font-bold tracking-tight text-foreground mb-6">
               Grow better,{" "}
-              <span className="tt-gradient-text bg-gradient-to-r from-primary via-emerald-500 to-spectrum">
+              <span className="tt-gradient-text bg-gradient-to-r from-primary via-success to-spectrum">
                 together.
               </span>
             </h1>
-            <p className="text-lg sm:text-xl text-muted-foreground max-w-2xl mx-auto lg:mx-0 mb-4 leading-relaxed">
+            <p className="text-lg sm:text-xl text-muted-foreground max-w-2xl mx-auto lg:mx-0 mb-4 leading-relaxed text-pretty">
               TerpTalk is a 21+ community built around cannabis cultivation. Ask questions, share your grow, compare genetics, troubleshoot problems, and learn from other growers.
             </p>
             {/* Primary and secondary actions (session-aware, client-side) */}
@@ -229,8 +231,8 @@ export default async function Home() {
           {/* Community canopy — a live panel rendered from real site data.
               Desktop only; the stats strip below covers mobile. */}
           <div className="relative hidden lg:block">
-            <div className="absolute -inset-6 -z-10 rounded-[2.5rem] bg-primary/10 blur-2xl" />
-            <div className="absolute -right-8 -top-8 -z-10 h-44 w-44 rounded-full bg-spectrum/25 blur-3xl" />
+            <div className="absolute -inset-6 rounded-[2.5rem] bg-primary/10 blur-2xl" />
+            <div className="absolute -right-8 -top-8 h-44 w-44 rounded-full bg-spectrum/25 blur-3xl" />
             <div className="tt-holo-border overflow-hidden rounded-3xl border border-border/70 bg-card/80 shadow-2xl backdrop-blur-xl">
               <div className="tt-spectrum-animated h-1.5" />
               <div className="p-6 sm:p-7">
