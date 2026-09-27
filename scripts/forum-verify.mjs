@@ -506,6 +506,59 @@ const main = async () => {
       threads.push(nqThread)
     }
     threads.push(qUnanswered, qAnswered, { id: qSolvedPost.threadId, slug: qSolved.slug })
+
+    // ── 5d. MOVE_THREAD — staff re-file a thread into another visible
+    // category; members can't, mods can't move staff threads, and hidden
+    // categories are rejected as destinations.
+    const destCat = allCats.find((c) => c.id !== category.id)
+    if (!destCat) throw new Error("MOVE_THREAD coverage needs a second visible category")
+    const moveThread = await prisma.thread.create({
+      data: { title: `${qTag} moveable`, slug: `${qTag}-mv`, content: "verify move target", categoryId: category.id, authorId: author.id },
+    })
+    threads.push(moveThread)
+    r = await callApi("/api/moderation/actions", {
+      method: "POST",
+      body: { actionType: "MOVE_THREAD", targetId: moveThread.id, targetUserId: author.id, targetCategoryId: destCat.id, reason: "verification move" },
+      cookie: modCookie,
+    })
+    const movedThread = await prisma.thread.findUnique({ where: { id: moveThread.id }, select: { categoryId: true } })
+    const moveAudit = await prisma.moderationAction.count({ where: { type: "MOVE_THREAD", targetUserId: author.id } })
+    r.status === 200 && movedThread?.categoryId === destCat.id && moveAudit > 0
+      ? pass("moderation: MOVE_THREAD re-files category + audits")
+      : fail("MOVE_THREAD", { s: r.status, cat: movedThread?.categoryId, want: destCat.id, moveAudit })
+
+    r = await callApi("/api/moderation/actions", {
+      method: "POST",
+      body: { actionType: "MOVE_THREAD", targetId: moveThread.id, targetUserId: author.id, targetCategoryId: category.id, reason: "member attempt" },
+      cookie: authorCookie,
+    })
+    ;(r.status === 401 || r.status === 403)
+      ? pass("moderation: member cannot MOVE_THREAD")
+      : fail("member MOVE_THREAD", r.status)
+
+    const adminThread = await prisma.thread.create({
+      data: { title: `${qTag} adminthread`, slug: `${qTag}-at`, content: "staff-authored thread", categoryId: destCat.id, authorId: admin.id },
+    })
+    threads.push(adminThread)
+    r = await callApi("/api/moderation/actions", {
+      method: "POST",
+      body: { actionType: "MOVE_THREAD", targetId: adminThread.id, targetUserId: admin.id, targetCategoryId: category.id, reason: "mod on admin thread" },
+      cookie: modCookie,
+    })
+    r.status === 403
+      ? pass("moderation: mod cannot move an admin's thread")
+      : fail("mod→admin MOVE_THREAD", r.status)
+
+    r = await callApi("/api/moderation/actions", {
+      method: "POST",
+      body: { actionType: "MOVE_THREAD", targetId: moveThread.id, targetUserId: author.id, targetCategoryId: hiddenCat.id, reason: "into hidden" },
+      cookie: modCookie,
+    })
+    const stillDest = await prisma.thread.findUnique({ where: { id: moveThread.id }, select: { categoryId: true } })
+    r.status === 403 && stillDest?.categoryId === destCat.id
+      ? pass("moderation: hidden category rejected as move destination")
+      : fail("hidden-cat MOVE_THREAD", { s: r.status, cat: stillDest?.categoryId })
+
     // Cache bust — a real API thread create revalidates the shared "forum" tag.
     const bustRes = await callApi("/api/forum/threads", {
       method: "POST",

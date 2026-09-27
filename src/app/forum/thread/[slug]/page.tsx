@@ -373,7 +373,7 @@ export default async function ThreadPage({
             {thread.locked && (
               <span className="rounded-full bg-secondary px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Locked</span>
             )}
-            <ThreadModActions threadId={thread.id} authorId={thread.authorId} pinned={thread.pinned} locked={thread.locked} />
+            <ThreadModActions threadId={thread.id} authorId={thread.authorId} categoryId={thread.categoryId} pinned={thread.pinned} locked={thread.locked} />
           </div>
           <h1 className="font-display text-3xl sm:text-4xl font-bold mb-3 break-words tracking-tight">{thread.title}</h1>
           {thread.tags.length > 0 && (

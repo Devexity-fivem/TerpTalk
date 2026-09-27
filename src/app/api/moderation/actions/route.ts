@@ -15,7 +15,7 @@ import { revalidateTag } from "next/cache"
 const CONTENT_TYPES = new Set(["THREAD", "POST", "CHAT_MESSAGE", "DIARY", "SETUP", "STRAIN"])
 const ACTION_TYPES = new Set([
   "WARNING", "CONTENT_DELETION", "TEMPORARY_BAN", "PERMANENT_BAN", "UNBAN", "REMOVE_SUSPENSION",
-  "PIN_THREAD", "LOCK_THREAD",
+  "PIN_THREAD", "LOCK_THREAD", "MOVE_THREAD",
 ])
 
 // POST — take a moderation action (moderators/admins only)
@@ -37,7 +37,7 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json().catch(() => ({}))
-    const { actionType, targetType, targetId, targetUserId, reason, durationDays } = body
+    const { actionType, targetType, targetId, targetUserId, targetCategoryId, reason, durationDays } = body
 
     // STRAIN is the one content type whose creator may no longer exist —
     // createdById is SetNull'd on account deletion, so "" is accepted only
@@ -78,6 +78,7 @@ export async function POST(request: Request) {
     let strainDeleted = false
     let strainPhotoIds: string[] = []
     let deletedChatRoomId: string | null = null
+    let threadMoved = false
     // Durable reversal intents — committed atomically with the deletion so
     // staff rep reconciliation can never be silently lost.
     const reversalIds: string[] = []
@@ -316,6 +317,36 @@ export async function POST(request: Request) {
         effectiveTargetUserId = thread.authorId
       }
 
+      if (actionType === "MOVE_THREAD") {
+        if (typeof targetId !== "string" || !targetId || typeof targetCategoryId !== "string" || !targetCategoryId) {
+          throw new Error("INVALID_REQUEST")
+        }
+        const thread = await tx.thread.findUnique({
+          where: { id: targetId },
+          select: { authorId: true, categoryId: true, author: { select: { role: true } } },
+        })
+        if (!thread) {
+          throw new Error("CONTENT_NOT_FOUND")
+        }
+        if (!isAdmin(staff.role) && !["MEMBER", "VERIFIED_MEMBER"].includes(thread.author.role)) {
+          throw new Error("FORBIDDEN")
+        }
+        // Only public categories are valid destinations — a hidden
+        // category would silently vanish the thread from all listings.
+        const category = await tx.category.findFirst({
+          where: { id: targetCategoryId, hidden: false },
+          select: { id: true },
+        })
+        if (!category) {
+          throw new Error("INVALID_REQUEST")
+        }
+        if (category.id !== thread.categoryId) {
+          await tx.thread.update({ where: { id: targetId }, data: { categoryId: category.id } })
+          threadMoved = true
+        }
+        effectiveTargetUserId = thread.authorId
+      }
+
       if (!isAccountAction) {
         await tx.moderationAction.create({
           data: {
@@ -373,6 +404,12 @@ export async function POST(request: Request) {
     // feed those aggregates — a catalog deletion skips this bust.
     if (isAccountAction || (actionType === "CONTENT_DELETION" && targetType !== "STRAIN")) {
       revalidateTag("analytics", { expire: 0 })
+    }
+    // Category listings and the home stream cache on the "forum" tag —
+    // a move or a staff thread deletion must bust it or the stale row
+    // lingers in the wrong category for up to a minute.
+    if (threadMoved || (actionType === "CONTENT_DELETION" && targetType === "THREAD")) {
+      revalidateTag("forum", { expire: 0 })
     }
 
 
