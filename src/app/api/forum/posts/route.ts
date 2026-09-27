@@ -8,6 +8,7 @@ import { progressionRateLimit, getProgressionPerks } from "@/lib/progression"
 import { POST_MIN_PAID_LENGTH } from "@/lib/reputation-config"
 import { awardProgression, checkDuplicateContent } from "@/lib/progression"
 import { QUALITY_BANDS } from "@/lib/progression-config"
+import { enqueueReversal, drainOne } from "@/lib/reputation-outbox"
 import { enqueueXpReversal, drainXpOne } from "@/lib/progression-outbox"
 import { storeImages, deleteImagesIfUnreferenced, MAX_POST_IMAGES } from "@/lib/blob"
 import { notifyMentions } from "@/lib/mentions"
@@ -415,6 +416,7 @@ export async function DELETE(request: Request) {
 
     let acceptedCleared = 0
     let reversalId: string | null = null
+    let xpReversalId: string | null = null
     await prisma.$transaction(async (tx) => {
       await tx.post.update({ where: { id }, data: { deleted: true } })
       // Detach image rows so the blob cleanup's reference check sees the
@@ -450,7 +452,11 @@ export async function DELETE(request: Request) {
       await tx.notification.deleteMany({ where: postLinkWhere(post.id) })
       // Durable reversal intent — same transaction as the delete, so a
       // crash can't strand reputation on removed content.
-      reversalId = await enqueueXpReversal(tx, {
+      reversalId = await enqueueReversal(tx, {
+        kind: "SOURCE", sourceType: "POST", sourceId: post.id,
+        reason: "Post removed", requestedBy: session.user.id,
+      })
+      xpReversalId = await enqueueXpReversal(tx, {
         kind: "SOURCE", sourceType: "POST", sourceId: post.id,
         reason: "Post removed", requestedBy: session.user.id,
       })
@@ -474,7 +480,8 @@ export async function DELETE(request: Request) {
 
     // Best-effort immediate drain — the outbox row makes any failure
     // retryable via ping/cron instead of silently losing the reversal.
-    if (reversalId) await drainXpOne(reversalId).catch(() => false)
+    if (reversalId) await drainOne(reversalId).catch(() => false)
+    if (xpReversalId) await drainXpOne(xpReversalId).catch(() => false)
 
     // Soft-deleted content must not leave live public blobs behind.
     deleteImagesIfUnreferenced(post.images.map((i) => i.url)).catch(() => {})

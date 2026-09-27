@@ -7,6 +7,7 @@ import { rateLimit } from "@/lib/rate-limit"
 import { storeImages, deleteImagesIfUnreferenced } from "@/lib/blob"
 import { checkMaintenance } from "@/lib/maintenance"
 import { awardProgression } from "@/lib/progression"
+import { enqueueReversal, drainOne } from "@/lib/reputation-outbox"
 import { enqueueXpReversal, drainXpOne } from "@/lib/progression-outbox"
 import { notificationLinkWhere } from "@/lib/notify"
 import { revalidateTag } from "next/cache"
@@ -202,6 +203,7 @@ export async function DELETE(request: Request) {
     if (setup.authorId !== session.user.id) return forbidden()
 
     let reversalId: string | null = null
+    let xpReversalId: string | null = null
     const imageUrls = await prisma.$transaction(async (tx) => {
       await tx.growSetup.update({ where: { id }, data: { deleted: true } })
       const imgs = await tx.setupImage.findMany({ where: { setupId: id }, select: { url: true } })
@@ -212,15 +214,20 @@ export async function DELETE(request: Request) {
           setup.slug ? [`/setups/${id}`, `/setups/${setup.slug}`] : `/setups/${id}`
         ),
       })
-      reversalId = await enqueueXpReversal(tx, {
+      reversalId = await enqueueReversal(tx, {
+        kind: "SOURCE", sourceType: "SETUP", sourceId: id,
+        reason: "Setup removed", requestedBy: session.user.id,
+      })
+      xpReversalId = await enqueueXpReversal(tx, {
         kind: "SOURCE", sourceType: "SETUP", sourceId: id,
         reason: "Setup removed", requestedBy: session.user.id,
       })
       return imgs.map((i) => i.url)
     })
 
-    // Durable drain — the intent row was committed with the delete.
-    if (reversalId) await drainXpOne(reversalId).catch(() => false)
+    // Durable drain — the intent rows were committed with the delete.
+    if (reversalId) await drainOne(reversalId).catch(() => false)
+    if (xpReversalId) await drainXpOne(xpReversalId).catch(() => false)
     deleteImagesIfUnreferenced(imageUrls).catch(() => {})
     revalidateTag("setups", { expire: 0 })
 

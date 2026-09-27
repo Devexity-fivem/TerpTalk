@@ -6,6 +6,7 @@ import { unauthorized, publicUserSelect, LIMITS, getClientIp, logSecurityEvent, 
 import { checkBadges } from "@/lib/reputation"
 import { progressionRateLimit } from "@/lib/progression"
 import { awardProgression, checkDuplicateContent, updateBand } from "@/lib/progression"
+import { enqueueReversal, drainOne } from "@/lib/reputation-outbox"
 import { enqueueXpReversal, drainXpOne } from "@/lib/progression-outbox"
 import { storeImages, deleteImagesIfUnreferenced, MAX_POST_IMAGES } from "@/lib/blob"
 import { checkMaintenance } from "@/lib/maintenance"
@@ -311,8 +312,11 @@ export async function POST(request: Request) {
 
         const dayKey = `diaryupd:${diaryId}:${updateDay}`
         if (dup.verdict === "withheld") {
+          // Per-update audit key, NOT the day key — a withheld marker must
+          // not consume the day's base slot; genuine content later the same
+          // day still pays once (§6.7).
           await awardProgression(session.user.id, "UPDATE_DAY", reason, {
-            key: dayKey, sourceType: "DIARY", sourceId: diaryId,
+            key: `${dayKey}:w:${update.id}`, sourceType: "DIARY", sourceId: diaryId,
             xp: 0, marker: true,
             meta: { dup: "withheld", similarity: dup.similarity, updateId: update.id },
           }).catch(() => {})
@@ -460,11 +464,12 @@ export async function DELETE(request: Request) {
     const dayEnd = new Date(dayStart.getTime() + 86400000)
     const dayKey = update.createdAt.toISOString().slice(0, 10)
     const reversalIds: string[] = []
+    const xpReversalIds: string[] = []
     await prisma.$transaction(async (tx) => {
       await tx.diaryUpdate.delete({ where: { id } })
       // Per-update bonuses (band/structured) are sourced to the update id —
       // one source reversal unwinds them regardless of how many fired.
-      reversalIds.push(await enqueueXpReversal(tx, {
+      xpReversalIds.push(await enqueueXpReversal(tx, {
         kind: "SOURCE", sourceType: "DIARY_UPDATE", sourceId: id,
         reason: "Diary update deleted",
       }))
@@ -472,13 +477,19 @@ export async function DELETE(request: Request) {
         where: { diaryId: update.diaryId, createdAt: { gte: dayStart, lt: dayEnd } },
       })
       if (remaining === 0) {
-        reversalIds.push(await enqueueXpReversal(tx, {
+        // Both ledgers share the diaryupd:<diary>:<day> key convention.
+        reversalIds.push(await enqueueReversal(tx, {
+          kind: "KEY", eventKey: `diaryupd:${update.diaryId}:${dayKey}`,
+          reason: "Diary update deleted",
+        }))
+        xpReversalIds.push(await enqueueXpReversal(tx, {
           kind: "KEY", eventKey: `diaryupd:${update.diaryId}:${dayKey}`,
           reason: "Diary update deleted",
         }))
       }
     })
-    for (const rid of reversalIds) await drainXpOne(rid).catch(() => false)
+    for (const rid of reversalIds) await drainOne(rid).catch(() => false)
+    for (const rid of xpReversalIds) await drainXpOne(rid).catch(() => false)
     // Losing a meaningful update day can regress a grow-journey stage —
     // reconciliation claws the milestone award back if it no longer holds.
     await evaluateGrowJourney(update.diaryId).catch(() => {})

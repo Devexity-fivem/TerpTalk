@@ -8,6 +8,7 @@ import { requireModerator } from "@/lib/require-staff"
 import { progressionRateLimit, getProgressionPerks } from "@/lib/progression"
 import { STANDING_LINKS, STANDING_POLL_CREATE } from "@/lib/progression-config"
 import { awardProgression } from "@/lib/progression"
+import { enqueueReversal, drainOne } from "@/lib/reputation-outbox"
 import { enqueueXpReversal, drainXpOne } from "@/lib/progression-outbox"
 import { THREAD_MIN_PAID_LENGTH } from "@/lib/reputation-config"
 import { notifyMentions } from "@/lib/mentions"
@@ -422,6 +423,7 @@ export async function DELETE(request: Request) {
     // Durable reversal intents ride inside the delete transaction — a crash
     // after commit can never strand reputation on deleted content.
     const reversalIds: string[] = []
+    const xpReversalIds: string[] = []
     await prisma.$transaction(async (tx) => {
       await tx.thread.update({ where: { id }, data: { deleted: true } })
       // A deleted discussion thread frees the diary's canonical link.
@@ -431,12 +433,20 @@ export async function DELETE(request: Request) {
       await tx.postImage.deleteMany({
         where: { OR: [{ threadId: id }, { post: { threadId: id } }] },
       })
-      reversalIds.push(await enqueueXpReversal(tx, {
+      reversalIds.push(await enqueueReversal(tx, {
+        kind: "SOURCE", sourceType: "THREAD", sourceId: id,
+        reason: "Thread removed", requestedBy: session.user.id,
+      }))
+      xpReversalIds.push(await enqueueXpReversal(tx, {
         kind: "SOURCE", sourceType: "THREAD", sourceId: id,
         reason: "Thread removed", requestedBy: session.user.id,
       }))
       for (const p of postIds) {
-        reversalIds.push(await enqueueXpReversal(tx, {
+        reversalIds.push(await enqueueReversal(tx, {
+          kind: "SOURCE", sourceType: "POST", sourceId: p.id,
+          reason: "Thread removed", requestedBy: session.user.id,
+        }))
+        xpReversalIds.push(await enqueueXpReversal(tx, {
           kind: "SOURCE", sourceType: "POST", sourceId: p.id,
           reason: "Thread removed", requestedBy: session.user.id,
         }))
@@ -462,7 +472,8 @@ export async function DELETE(request: Request) {
 
     // Best-effort immediate drain — preserves the instant-reversal UX while
     // the outbox rows make any failure retryable via ping/cron.
-    for (const rid of reversalIds) await drainXpOne(rid).catch(() => false)
+    for (const rid of reversalIds) await drainOne(rid).catch(() => false)
+    for (const rid of xpReversalIds) await drainXpOne(rid).catch(() => false)
 
     // Soft-deleted content must not leave live public blobs behind.
     deleteImagesIfUnreferenced([

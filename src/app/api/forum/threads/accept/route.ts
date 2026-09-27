@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma"
 import { isBanned, isModerator, forbidden, unauthorized, getClientIp, logSecurityEvent } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
 import { awardProgression } from "@/lib/progression"
+import { enqueueReversal, drainOne } from "@/lib/reputation-outbox"
 import { enqueueXpReversal, drainXpOne } from "@/lib/progression-outbox"
 import { ACCEPT_MIN_ACTOR_AGE_HOURS } from "@/lib/reputation-config"
 import { checkMaintenance } from "@/lib/maintenance"
@@ -75,36 +76,33 @@ export async function POST(request: Request) {
 
     if (postId === null) {
       // Compare-and-set: bail if a concurrent request changed the pointer.
-      // Reversal intents ride inside the CAS transaction.
+      // Reversal intents ride inside the CAS transaction — both ledgers.
       const reversalIds: string[] = []
+      const xpReversalIds: string[] = []
       const cleared = await prisma.$transaction(async (tx) => {
         const res = await tx.thread.updateMany({
           where: { id: threadId, acceptedAnswerId: thread.acceptedAnswerId },
           data: { acceptedAnswerId: null },
         })
         if (res.count === 1 && thread.acceptedAnswerId) {
-          reversalIds.push(await enqueueXpReversal(tx, {
-            kind: "KEY", eventKey: `accept:${thread.acceptedAnswerId}`,
-            reason: "Answer unaccepted", requestedBy: user.id,
-          }))
-          // The newcomer bonus rides the same post key scope.
-          reversalIds.push(await enqueueXpReversal(tx, {
-            kind: "KEY", eventKey: `accept-newcomer:${thread.acceptedAnswerId}`,
-            reason: "Answer unaccepted", requestedBy: user.id,
-          }))
-          // The OP's curation bonus must unwind too — otherwise unaccept
-          // leaves a sticky +rep for an answer that no longer exists.
-          reversalIds.push(await enqueueXpReversal(tx, {
-            kind: "KEY", eventKey: `accept-op:${threadId}`,
-            reason: "Answer unaccepted", requestedBy: user.id,
-          }))
+          for (const eventKey of [`accept:${thread.acceptedAnswerId}`, `accept-newcomer:${thread.acceptedAnswerId}`, `accept-op:${threadId}`]) {
+            reversalIds.push(await enqueueReversal(tx, {
+              kind: "KEY", eventKey,
+              reason: "Answer unaccepted", requestedBy: user.id,
+            }))
+            xpReversalIds.push(await enqueueXpReversal(tx, {
+              kind: "KEY", eventKey,
+              reason: "Answer unaccepted", requestedBy: user.id,
+            }))
+          }
         }
         return res
       })
       if (cleared.count === 0) {
         return NextResponse.json({ error: "Accepted answer changed concurrently — retry" }, { status: 409 })
       }
-      for (const rid of reversalIds) await drainXpOne(rid).catch(() => false)
+      for (const rid of reversalIds) await drainOne(rid).catch(() => false)
+      for (const rid of xpReversalIds) await drainXpOne(rid).catch(() => false)
       // Plant Doctor outcome stats track accepted answers.
       if (thread.wizardResultId) revalidateTag("analytics", { expire: 0 })
       return NextResponse.json({ success: true })
@@ -126,27 +124,31 @@ export async function POST(request: Request) {
     // both pay out. Loser gets a 409 and retries against fresh state. The
     // old answer's reversal intent is written inside the CAS transaction.
     const swapReversalIds: string[] = []
+    const swapXpReversalIds: string[] = []
     const swapped = await prisma.$transaction(async (tx) => {
       const res = await tx.thread.updateMany({
         where: { id: threadId, acceptedAnswerId: thread.acceptedAnswerId },
         data: { acceptedAnswerId: postId },
       })
       if (res.count === 1 && thread.acceptedAnswerId && thread.acceptedAnswerId !== postId) {
-        swapReversalIds.push(await enqueueXpReversal(tx, {
-          kind: "KEY", eventKey: `accept:${thread.acceptedAnswerId}`,
-          reason: "Accepted answer changed", requestedBy: user.id,
-        }))
-        swapReversalIds.push(await enqueueXpReversal(tx, {
-          kind: "KEY", eventKey: `accept-newcomer:${thread.acceptedAnswerId}`,
-          reason: "Accepted answer changed", requestedBy: user.id,
-        }))
+        for (const eventKey of [`accept:${thread.acceptedAnswerId}`, `accept-newcomer:${thread.acceptedAnswerId}`]) {
+          swapReversalIds.push(await enqueueReversal(tx, {
+            kind: "KEY", eventKey,
+            reason: "Accepted answer changed", requestedBy: user.id,
+          }))
+          swapXpReversalIds.push(await enqueueXpReversal(tx, {
+            kind: "KEY", eventKey,
+            reason: "Accepted answer changed", requestedBy: user.id,
+          }))
+        }
       }
       return res
     })
     if (swapped.count === 0) {
       return NextResponse.json({ error: "Accepted answer changed concurrently — retry" }, { status: 409 })
     }
-    for (const rid of swapReversalIds) await drainXpOne(rid).catch(() => false)
+    for (const rid of swapReversalIds) await drainOne(rid).catch(() => false)
+    for (const rid of swapXpReversalIds) await drainXpOne(rid).catch(() => false)
 
     // Accepted-answer award — keyed per post so unaccept/re-accept cycles
     // can't farm it. The accept itself works for anyone, but the payout is

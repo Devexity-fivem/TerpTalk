@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma"
 import { unauthorized, getClientIp, logSecurityEvent, isBanned, forbidden, isModerator, isStaff, isAdmin } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
 import { awardProgression } from "@/lib/progression"
+import { enqueueReversal, drainOne } from "@/lib/reputation-outbox"
 import { enqueueXpReversal, drainXpOne } from "@/lib/progression-outbox"
 import { storeImage, deleteImagesIfUnreferenced } from "@/lib/blob"
 import { checkMaintenance } from "@/lib/maintenance"
@@ -137,15 +138,22 @@ export async function DELETE(request: Request) {
       if (isStaff(photo.user?.role) && !isAdmin(user.role)) return forbidden()
     }
 
-    // Delete + reversal intent in one tx — the award can't outlive the row.
-    const reversalId = await prisma.$transaction(async (tx) => {
+    // Delete + reversal intents in one tx — the award can't outlive the
+    // row. Legacy twin covers pre-cutover ReputationEvent rows.
+    const [reversalId, xpReversalId] = await prisma.$transaction(async (tx) => {
       await tx.strainPhoto.delete({ where: { id } })
-      return enqueueXpReversal(tx, {
+      const legacy = await enqueueReversal(tx, {
         kind: "SOURCE", sourceType: "STRAIN_PHOTO", sourceId: photo.id,
         reason: "Photo removed", requestedBy: session.user.id,
       })
+      const xp = await enqueueXpReversal(tx, {
+        kind: "SOURCE", sourceType: "STRAIN_PHOTO", sourceId: photo.id,
+        reason: "Photo removed", requestedBy: session.user.id,
+      })
+      return [legacy, xp]
     })
-    await drainXpOne(reversalId).catch(() => false)
+    await drainOne(reversalId).catch(() => false)
+    await drainXpOne(xpReversalId).catch(() => false)
     revalidateTag("strains", { expire: 0 })
     deleteImagesIfUnreferenced([photo.imageUrl]).catch(() => {})
     return NextResponse.json({ deleted: true })

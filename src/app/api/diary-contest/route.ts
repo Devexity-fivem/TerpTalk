@@ -200,7 +200,7 @@ export async function POST(request: Request) {
       }
 
       // Voter trust gate — a monthly badge is worth more than a weekly one,
-      // so sockpuppet voting costs real account age + reputation.
+      // so sockpuppet voting costs real account age + XP.
       const voter = await prisma.user.findUnique({
         where: { id: session.user.id },
         select: { createdAt: true, role: true, profile: { select: { xp: true } } },

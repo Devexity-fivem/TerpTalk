@@ -1353,7 +1353,6 @@ async function handle(name: string, ctx: BotCommandCtx): Promise<BotCommandResul
         primaryGrow(ctx.userId, { publicOnly: true }),
       ])
       const xp = profile?.xp ?? 0
-      const stage = xpStage(xp)
       const next = nextRank(xp)
       const nextDisplay = next ? rankDisplay(next.threshold) : null
       const unlock = nextLockedCosmetic(xp)

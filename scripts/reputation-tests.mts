@@ -53,7 +53,6 @@ import {
   reverseReputationByKey,
   reverseReputationBySource,
   findReputationDrift,
-  getTrustScore,
   BADGE_RULES,
 } from "@/lib/reputation"
 import { BADGE_REGISTRY, BOT_BADGE_REGISTRY, isBotBadge, getBadgeByName, STAFF_AWARDED_BADGES } from "@/lib/badge-registry"
@@ -161,19 +160,6 @@ async function mkTestUser(username: string) {
   })
 }
 
-// Ledger row + profile credit in one tx — mirrors applyReputationAward's
-// invariant so a fixture never produces ledger-vs-balance drift.
-async function mkEvent(userId: string, over: Record<string, unknown>) {
-  const amount = (over.amount as number | undefined) ?? 5
-  return prisma.$transaction(async (tx) => {
-    const ev = await tx.reputationEvent.create({
-      data: { userId, type: "POST_CREATED", amount, reason: "test fixture", ...over } as never,
-    })
-    await tx.profile.update({ where: { userId }, data: { reputation: { increment: amount } } })
-    return ev
-  })
-}
-
 // V2 equivalent of mkEvent — ProgressionEvent row + profile.xp credit in
 // one tx so fixtures never produce xp-vs-ledger drift.
 async function mkXpEvent(userId: string, over: Record<string, unknown>) {
@@ -187,11 +173,9 @@ async function mkXpEvent(userId: string, over: Record<string, unknown>) {
   })
 }
 
-// Bare ledger-row fixture for the velocity detector — the detector reads
-// ReputationEvent rows only, so no Profile.reputation write is needed.
-// These rows (and their users) are deleted before the global drift check.
-// V2 variant — bare ProgressionEvent rows for the velocity detector,
-// which scans member-driven XP rows only.
+// Bare ProgressionEvent fixture for the velocity detector — it reads
+// member-driven XP rows only; no profile write needed. These rows (and
+// their users) are deleted before the global drift check.
 async function mkXpLedgerEvent(
   userId: string,
   type: string,
@@ -201,23 +185,6 @@ async function mkXpLedgerEvent(
   return prisma.progressionEvent.create({
     data: {
       userId, type, xp,
-      reason: `__test_vel_${type}`,
-      key: opts.key ?? `__test_vel:${type}:${userId}:${RUN_TAG}:${Math.random().toString(36).slice(2)}`,
-      actorId: opts.actorId ?? null,
-      reversedAt: opts.reversedAt ?? null,
-    },
-  })
-}
-
-async function mkLedgerEvent(
-  userId: string,
-  type: string,
-  amount: number,
-  opts: { actorId?: string; reversedAt?: Date; key?: string } = {},
-) {
-  return prisma.reputationEvent.create({
-    data: {
-      userId, type, amount,
       reason: `__test_vel_${type}`,
       key: opts.key ?? `__test_vel:${type}:${userId}:${RUN_TAG}:${Math.random().toString(36).slice(2)}`,
       actorId: opts.actorId ?? null,
@@ -1530,6 +1497,44 @@ async function run() {
     assert.ok(!z.awarded, "login pays nothing")
     const zRows = await prisma.progressionEvent.count({ where: { userId: zero } })
     assert.equal(zRows, 0, "no ledger row for a 0-value event")
+
+    // Marker rows never pay and never consume a cap slot (withheld/
+    // reduced audit rows + check-in markers must not block real awards).
+    const mkUser = await mkPv2("marker")
+    for (let i = 0; i < XP_TABLE.THREAD_STARTED.dailyCap!; i++) {
+      const m = await awardProgression(mkUser, "THREAD_STARTED", "withheld", {
+        key: `pv2:marker:${RUN_TAG}:w${i}`, xp: 0, marker: true,
+      })
+      assert.ok(m.awarded && m.xp === 0, "marker writes a 0-XP audit row")
+    }
+    assert.equal((await pv2Profile(mkUser))!.xp, 0, "markers pay nothing")
+    const real = await awardProgression(mkUser, "THREAD_STARTED", "real", { key: `pv2:marker:${RUN_TAG}:r` })
+    assert.ok(real.awarded && real.xp === XP_TABLE.THREAD_STARTED.xp, "markers don't consume the daily cap")
+
+    // Milestone markers: first crossing notifies once (marker row is the
+    // once-ever claim); reversal + re-earn does not re-fire.
+    const ms = await mkPv2("milestone")
+    const rung = 60 // lowest progression rung (Seed → Germinated sub-level)
+    const cross = await awardProgression(ms, "STAFF_ADJUSTMENT", "seed to rung", {
+      xp: rung, force: true, key: `pv2:ms:${RUN_TAG}:1`,
+    })
+    assert.ok(cross.awarded && cross.rungsCrossed!.some((r) => r.xp === rung), "first crossing reports rung")
+    const msMarker = await prisma.progressionEvent.findUnique({ where: { key: `milestone:${ms}:${rung}` } })
+    assert.ok(msMarker && msMarker.type === "MILESTONE" && msMarker.xp === 0, "once-ever marker written")
+    const msNotifs = async () =>
+      prisma.notification.count({ where: { userId: ms, type: "REPUTATION", metadata: { path: ["kind"], equals: "tier" } } })
+    assert.equal(await msNotifs(), 1, "rank-up notification fired once")
+    // Reverse back below the rung, then re-earn — marker persists, so no
+    // second notification and no second marker row.
+    await reverseProgressionByKey(`pv2:ms:${RUN_TAG}:1`, "retract")
+    assert.equal((await pv2Profile(ms))!.xp, 0, "XP clawed below rung")
+    const cross2 = await awardProgression(ms, "STAFF_ADJUSTMENT", "re-earn", {
+      xp: rung, force: true, key: `pv2:ms:${RUN_TAG}:2`,
+    })
+    assert.ok(cross2.awarded, "re-earn pays")
+    assert.equal(await msNotifs(), 1, "re-crossing does not re-notify")
+    const msMarkerCount = await prisma.progressionEvent.count({ where: { key: `milestone:${ms}:${rung}` } })
+    assert.equal(msMarkerCount, 1, "marker row stays unique")
 
     // Progression drift invariant on fixtures: xp == Σ ledger.
     for (const uid of pv2) {

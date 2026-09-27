@@ -450,15 +450,23 @@ export async function awardProgression(
           const dayStart = new Date()
           dayStart.setUTCHours(0, 0, 0, 0)
 
+          // Caps count paying rows only — 0/0 marker rows (withheld/reduced
+          // audit records, check-in markers) must not consume cap slots.
           if (dailyCap !== undefined) {
             const today = await tx.progressionEvent.count({
-              where: { userId, type, reversedAt: null, createdAt: { gte: dayStart } },
+              where: {
+                userId, type, reversedAt: null, createdAt: { gte: dayStart },
+                NOT: { xp: 0, standing: 0 },
+              },
             })
             if (today >= dailyCap) return "capped" as const
           }
           if (weeklyCap !== undefined) {
             const wk = await tx.progressionEvent.count({
-              where: { userId, type, reversedAt: null, createdAt: { gte: isoWeekStart() } },
+              where: {
+                userId, type, reversedAt: null, createdAt: { gte: isoWeekStart() },
+                NOT: { xp: 0, standing: 0 },
+              },
             })
             if (wk >= weeklyCap) return "capped" as const
           }
@@ -631,9 +639,11 @@ export async function awardProgression(
 
     // Rank-up announcement — a crossed rung whose label IS the rank name is
     // a rank threshold (sub-level rungs carry their own labels). Announce
-    // the highest rank reached; opt-out members stay private. Post-tx and
-    // fire-and-forget so a chat failure can never roll back an award.
-    const rankUp = [...rungsCrossed].reverse().find((r) => r.label === r.rank)
+    // the highest rank reached; opt-out members stay private. Uses
+    // newRungs (markers newly written this award) — a reversal+re-earn
+    // must not re-fire the public post. Post-tx and fire-and-forget so a
+    // chat failure can never roll back an award.
+    const rankUp = [...txResult.newRungs].reverse().find((r) => r.label === r.rank)
     if (rankUp && subject.profile.username) {
       void (async () => {
         const p = await prisma.profile.findUnique({
