@@ -54,6 +54,9 @@ model User {
   following     Follow[]             @relation("Follower")
   badges        UserBadge[]
   reputation    ReputationEvent[]
+  progressionEvents ProgressionEvent[]
+  masteryProgress MasteryProgress[]
+  achievements  UserAchievement[]
   strainsCreated Strain[]
   strainPhotos  StrainPhoto[]
   reports       Report[]
@@ -116,6 +119,13 @@ model Profile {
   favoriteStrain String?
   joinDate     DateTime @default(now())
   reputation   Int      @default(0)
+  // Progression V2 — dual cached balances. Invariants: xp == SUM(ProgressionEvent.xp),
+  // standing == SUM(ProgressionEvent.standing), MasteryProgress.xp == SUM(xp by mastery).
+  // `reputation` above is the frozen legacy ledger balance (audit only after cutover).
+  xp            Int      @default(0)
+  standing      Int      @default(0)
+  legacyVerified Boolean @default(false) // pre-V2 VERIFIED_MEMBER grandfather marker
+  unlockFrozen  Boolean  @default(false) // staff kill-switch: suspends unlocks without touching XP
   // Lifetime chat messages sent — survives room clears and the 3-day prune.
   chatMessageCount Int   @default(0)
   growSpace    String?
@@ -149,6 +159,8 @@ model Profile {
   @@index([username])
   @@index([reputation(sort: Desc)])
   @@index([referredById])
+  @@index([xp(sort: Desc)])
+  @@index([standing(sort: Desc)])
 }
 
 // Forum Categories
@@ -1135,6 +1147,112 @@ model PendingReversal {
   enqueuedAt  DateTime  @default(now()) // ACTOR sweeps only touch events createdAt <= this
   status      String    @default("PENDING") // PENDING | RUNNING | DEAD
   claimedAt   DateTime? // RUNNING heartbeat; stale > 10min → reclaimable
+  attempts    Int       @default(0)
+  lastError   String?
+  createdAt   DateTime  @default(now())
+
+  @@index([status, createdAt])
+}
+
+// ─── Progression V2 ─────────────────────────────────────────────────
+// Grower Mastery ledger — append-only, mirrors ReputationEvent semantics:
+// Profile.xp / Profile.standing are cached balances; reversals are signed
+// counter-entries linked by reversalOfId; `key` is the idempotency token.
+// `mastery` routes XP into a path (null = SYSTEM); `meta` carries auditable
+// quality-band / duplicate / standing-source detail.
+model ProgressionEvent {
+  id            String    @id @default(cuid())
+  userId        String    // recipient
+  mastery       String?   // CULTIVATION | RECORDS | KNOWLEDGE | EXPERIMENTATION | COMMUNITY | null = SYSTEM
+  type          String    // XP_TABLE keys | REVERSAL | REINSTATE | STAFF_ADJUSTMENT | LEGACY_STANDING | MILESTONE | STANDING_RECOVERY | UNLOCK_FREEZE
+  xp            Int       @default(0)
+  standing      Int       @default(0)
+  reason        String
+  key           String?   @unique
+  sourceType    String?
+  sourceId      String?
+  actorId       String?   // who triggered it (grantor); null = system/self
+  meta          Json?     // { band, dup, simhash, standingSource, questSlug, ... }
+  reversedAt    DateTime?
+  reversalOfId  String?
+  reversalFinal Boolean   @default(false)
+  createdAt     DateTime  @default(now())
+
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([userId, mastery, createdAt])
+  @@index([sourceType, sourceId])
+  @@index([actorId])
+  @@index([reversalOfId])
+  @@index([type, createdAt])
+  @@index([createdAt])
+}
+
+// Cached per-path XP balance — drift-checked against ProgressionEvent.
+model MasteryProgress {
+  userId    String
+  mastery   String    // CULTIVATION | RECORDS | KNOWLEDGE | EXPERIMENTATION | COMMUNITY
+  xp        Int       @default(0)
+  updatedAt DateTime  @updatedAt
+
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, mastery])
+  @@index([mastery, xp(sort: Desc)])
+}
+
+// Progression V2 achievements — story-chain milestones (replaces the V1
+// volume-badge philosophy). `spec` is a declarative stat predicate;
+// `unlocks` optionally names an unlock-registry key the achievement grants.
+model Achievement {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  family      String   // MILESTONE | CULTIVATOR | JOURNALER | HARVESTER | PROBLEM_SOLVER | RESEARCHER | EXPERIMENTER | COMMUNITY | EXPLORER | MENTOR | SEASONAL | HIDDEN | RARE | LEGACY
+  name        String
+  description String
+  icon        String?
+  rarity      String   @default("COMMON") // COMMON | RARE | EPIC | LEGENDARY | HIDDEN | LEGACY
+  spec        Json?
+  unlocks     String?  // unlock-registry key granted on earn (utility, never XP)
+  hidden      Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  userAchievements UserAchievement[]
+
+  @@index([key])
+  @@index([family])
+}
+
+model UserAchievement {
+  id            String      @id @default(cuid())
+  userId        String
+  achievementId String
+  pinned        Boolean     @default(false)
+  earnedAt      DateTime    @default(now())
+
+  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  achievement   Achievement @relation(fields: [achievementId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, achievementId])
+  @@index([userId])
+  @@index([achievementId])
+}
+
+// Durable reversal outbox for ProgressionEvent — field-for-field port of
+// PendingReversal so the legacy outbox can drain and freeze independently.
+model PendingXpReversal {
+  id          String    @id @default(cuid())
+  kind        String    // SOURCE | KEY | ACTOR
+  eventKey    String?
+  sourceType  String?
+  sourceId    String?
+  actorId     String?
+  reason      String
+  requestedBy String?
+  enqueuedAt  DateTime  @default(now())
+  status      String    @default("PENDING") // PENDING | RUNNING | DEAD
+  claimedAt   DateTime?
   attempts    Int       @default(0)
   lastError   String?
   createdAt   DateTime  @default(now())
