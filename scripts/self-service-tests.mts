@@ -28,7 +28,8 @@ import { rateLimit } from "@/lib/rate-limit"
 import { NextRequest } from "next/server"
 import { GET as getPublicProfile } from "@/app/api/users/[username]/route"
 import { GET as getProfileCard } from "@/app/api/users/[username]/card/route"
-import { getPublicProfileData } from "@/lib/public-profile"
+import { GET as getProfileSections } from "@/app/api/users/[username]/sections/[section]/route"
+import { getPublicProfileData, getProfileSection } from "@/lib/public-profile"
 import {
   awardExperimentCreated, awardHypothesisIfMet, awardExperimentFollowups,
   evaluateExperimentAwards, reverseExperimentAwards,
@@ -552,6 +553,176 @@ async function run() {
     await prisma.growDiary.delete({ where: { id: pPublicActive.id } })
     assert.ok(!("standing" in cardJson) && !("profileSettings" in cardJson), "card stays minimal")
 
+    // ── PROFILE P1 — core experience contracts ─────────────────────
+    // activeGrow/featuredGrow visibility, standing-tier suppression,
+    // buildTitle ≥50 gate, verified chip, notableStats registry,
+    // strain portfolio, experiments + accepted answers, sections paging.
+    const p1PublicGrow = await prisma.growDiary.create({
+      data: { title: "p1 active", description: "d", growType: "INDOOR", startDate: new Date(), authorId: pUser.id, visibility: "PUBLIC" },
+    })
+    pdata = await getPublicProfileData(`__ss_p_${SUFFIX}`)
+    assert.equal(pdata?.profile.activeGrow?.id, p1PublicGrow.id, "PUBLIC non-harvested grow surfaces as activeGrow anonymously")
+
+    // Harvest it → visitors lose all active-grow signal (remaining grows
+    // are UNLISTED/PRIVATE); the owner still sees their own private grow.
+    await prisma.growDiary.update({ where: { id: p1PublicGrow.id }, data: { harvested: true, harvestedAt: new Date() } })
+    pdata = await getPublicProfileData(`__ss_p_${SUFFIX}`)
+    assert.equal(pdata?.profile.activeGrow, null, "no active-grow leak when only UNLISTED/PRIVATE remain")
+    pdata = await getPublicProfileData(`__ss_p_${SUFFIX}`, pUser.id)
+    assert.ok(pdata?.profile.activeGrow && pdata.profile.activeGrow.visibility !== "PUBLIC", "owner sees own non-public active grow")
+    await prisma.growDiary.update({ where: { id: p1PublicGrow.id }, data: { harvested: false, harvestedAt: null } })
+
+    // Standing chip — suppressed below Known (25); named tier only.
+    pdata = await getPublicProfileData(`__ss_p_${SUFFIX}`)
+    assert.equal(pdata?.profile.standingTier, null, "no standing chip below Known")
+    await prisma.profile.update({ where: { id: pProfile.id }, data: { standing: 30 } })
+    pdata = await getPublicProfileData(`__ss_p_${SUFFIX}`)
+    assert.equal(pdata?.profile.standingTier?.name, "Known", "named tier renders at ≥25 standing")
+    assert.ok(pdata?.profile && !("standing" in pdata.profile), "raw standing number never in DTO")
+
+    // Verified chip — legacy flag or earned progression gate
+    // (Respected 300 + 30d account + no open abuse flags).
+    await prisma.profile.update({ where: { id: pProfile.id }, data: { legacyVerified: true } })
+    pdata = await getPublicProfileData(`__ss_p_${SUFFIX}`)
+    assert.equal(pdata?.profile.verified, "legacy", "legacy flag emits legacy chip")
+    await prisma.profile.update({ where: { id: pProfile.id }, data: { legacyVerified: false, standing: 400 } })
+    pdata = await getPublicProfileData(`__ss_p_${SUFFIX}`)
+    assert.equal(pdata?.profile.verified, null, "new account can't be progression-verified")
+    await prisma.user.update({ where: { id: pUser.id }, data: { createdAt: new Date(Date.now() - 40 * 86400000) } })
+    pdata = await getPublicProfileData(`__ss_p_${SUFFIX}`)
+    assert.equal(pdata?.profile.verified, "progression", "Respected + 30d + clean flags = progression verified")
+    await prisma.abuseFlag.create({ data: { signal: "REP_VELOCITY", userId: pUser.id, key: `af:${SUFFIX}`, status: "PENDING" } })
+    pdata = await getPublicProfileData(`__ss_p_${SUFFIX}`)
+    assert.equal(pdata?.profile.verified, null, "open abuse flag suppresses progression verification")
+    await prisma.abuseFlag.deleteMany({ where: { userId: pUser.id } })
+    await prisma.profile.update({ where: { id: pProfile.id }, data: { standing: 30 } })
+
+    // buildTitle — ≥50 mastery-path XP gate.
+    pdata = await getPublicProfileData(`__ss_p_${SUFFIX}`)
+    assert.equal(pdata?.profile.buildTitle, null, "no build title below 50 path XP")
+    await prisma.masteryProgress.upsert({
+      where: { userId_mastery: { userId: pUser.id, mastery: "COMMUNITY" } },
+      create: { userId: pUser.id, mastery: "COMMUNITY", xp: 60 },
+      update: { xp: 60 },
+    })
+    pdata = await getPublicProfileData(`__ss_p_${SUFFIX}`)
+    assert.ok(typeof pdata?.profile.buildTitle === "string" && pdata.profile.buildTitle.length > 0, "build title renders at ≥50 path XP")
+
+    // Notable stats — deterministic defaults when nothing is configured.
+    assert.equal(pdata?.profile.notableStats.length, 4, "default hero set is 4 stats")
+    assert.deepEqual(
+      pdata?.profile.notableStats.map((s) => s.id),
+      ["grows", "harvests", "updates", "acceptedAnswers"],
+      "default notable-stat order"
+    )
+    // Member-configured order + selection is honored (≤8 cap).
+    await prisma.profile.update({
+      where: { id: pProfile.id },
+      data: { profileSettings: { shownStats: ["activeGrows", "strains", "grows"] } },
+    })
+    pdata = await getPublicProfileData(`__ss_p_${SUFFIX}`)
+    assert.deepEqual(
+      pdata?.profile.notableStats.map((s) => s.id),
+      ["activeGrows", "strains", "grows"],
+      "shownStats order + selection honored"
+    )
+    assert.equal(pdata?.profile.notableStats.find((s) => s.id === "activeGrows")?.value, "1", "viewer-scoped stat value")
+    await prisma.profile.update({ where: { id: pProfile.id }, data: { profileSettings: {} } })
+
+    // publicMilestoneOptOut — suppresses tier/title/nextUnlock, flags statusHidden.
+    await prisma.profile.update({ where: { id: pProfile.id }, data: { publicMilestoneOptOut: true } })
+    pdata = await getPublicProfileData(`__ss_p_${SUFFIX}`)
+    assert.equal(pdata?.profile.standingTier, null, "opt-out hides standing chip")
+    assert.equal(pdata?.profile.buildTitle, null, "opt-out hides build title")
+    assert.equal(pdata?.profile.nextUnlock, null, "opt-out hides next unlock")
+    assert.equal(pdata?.profile.statusHidden, true, "statusHidden flag set for nameplate parity")
+    await prisma.profile.update({ where: { id: pProfile.id }, data: { publicMilestoneOptOut: false } })
+
+    // Experiments — scoped by the host diary's visibility.
+    const p1Exp = await prisma.growExperiment.create({
+      data: { diaryId: p1PublicGrow.id, authorId: pUser.id, title: "Pub exp", change: "c", category: "LIGHTING", status: "ACTIVE" },
+    })
+    const p1ExpPriv = await prisma.growExperiment.create({
+      data: { diaryId: pPrivateDiary.id, authorId: pUser.id, title: "Priv exp", change: "c", category: "OTHER", status: "ACTIVE" },
+    })
+    pdata = await getPublicProfileData(`__ss_p_${SUFFIX}`)
+    assert.deepEqual(pdata?.profile.experiments.map((e) => e.id), [p1Exp.id], "anonymous sees only public-diary experiments")
+    pdata = await getPublicProfileData(`__ss_p_${SUFFIX}`, pUser.id)
+    assert.equal(pdata?.profile.experiments.length, 2, "owner sees experiments on private diaries too")
+    assert.equal(pdata?.profile.stats.experiments, 2, "owner count includes private-diary experiments")
+
+    // Strain portfolio — names resolved, grows counted, private excluded.
+    const p1Strain = await prisma.strain.upsert({
+      where: { name: `__ss strain ${SUFFIX}` },
+      create: { name: `__ss strain ${SUFFIX}`, slug: `ss-strain-${SUFFIX}` },
+      update: {},
+    })
+    await prisma.growDiary.update({ where: { id: p1PublicGrow.id }, data: { strainId: p1Strain.id } })
+    await prisma.growDiary.update({ where: { id: pPrivateDiary.id }, data: { strainId: p1Strain.id } })
+    pdata = await getPublicProfileData(`__ss_p_${SUFFIX}`)
+    const pf = pdata?.profile.strainPortfolio.find((s) => s.name === p1Strain.name)
+    assert.equal(pf?.grows, 1, "anonymous portfolio counts only public grows")
+    pdata = await getPublicProfileData(`__ss_p_${SUFFIX}`, pUser.id)
+    assert.equal(pdata?.profile.strainPortfolio.find((s) => s.name === p1Strain.name)?.grows, 2, "owner portfolio counts private too")
+
+    // Accepted answers — real acceptedAnswerFor posts in live threads.
+    const p1Thread = await prisma.thread.create({
+      data: { title: `__ss p1 thread ${SUFFIX}`, slug: `ss-p1-${SUFFIX}`, content: "q", authorId: a.id, categoryId: category.id },
+    })
+    const p1Post = await prisma.post.create({
+      data: { content: "the answer", authorId: pUser.id, threadId: p1Thread.id, acceptedAnswerFor: { connect: { id: p1Thread.id } } },
+    })
+    pdata = await getPublicProfileData(`__ss_p_${SUFFIX}`)
+    assert.equal(pdata?.profile.acceptedAnswersList[0]?.threadSlug, p1Thread.slug, "accepted answer links its thread")
+    assert.ok((pdata?.profile.stats.acceptedAnswers ?? 0) >= 1, "acceptedAnswers stat counts the row")
+    await prisma.thread.update({ where: { id: p1Thread.id }, data: { deleted: true } })
+    pdata = await getPublicProfileData(`__ss_p_${SUFFIX}`)
+    assert.equal(pdata?.profile.acceptedAnswersList.length, 0, "deleted-thread answers drop from the list")
+
+    // Sections API — cursor-paged, viewer-scoped.
+    for (let i = 0; i < 13; i++) {
+      await prisma.growDiary.create({
+        data: { title: `pg${i}`, description: "d", growType: "INDOOR", startDate: new Date(), authorId: pUser.id, visibility: "PUBLIC" },
+      })
+    }
+    const secPage1 = await getProfileSection(`__ss_p_${SUFFIX}`, "grows")
+    assert.equal(secPage1?.items.length, 12, "sections page is capped at 12")
+    assert.ok(secPage1?.nextCursor, "cursor returned for next page")
+    assert.ok(secPage1?.items.every((i) => i.visibility === "PUBLIC"), "anonymous page is all PUBLIC")
+    const secPage2 = await getProfileSection(`__ss_p_${SUFFIX}`, "grows", undefined, secPage1!.nextCursor!)
+    assert.ok(secPage2 && secPage2.items.length >= 1, "cursor page returns remainder")
+    const secOwner = await getProfileSection(`__ss_p_${SUFFIX}`, "grows", pUser.id)
+    const secOwner2 = secOwner?.nextCursor ? await getProfileSection(`__ss_p_${SUFFIX}`, "grows", pUser.id, secOwner.nextCursor) : null
+    assert.ok(
+      [...(secOwner?.items ?? []), ...(secOwner2?.items ?? [])].some((i) => i.visibility !== "PUBLIC"),
+      "owner pages include private/unlisted"
+    )
+    const secHarvests = await getProfileSection(`__ss_p_${SUFFIX}`, "harvests", pUser.id)
+    assert.ok(secHarvests?.items.every((i) => i.harvested), "harvests section is harvested rows only")
+    // Route-level contract: anonymous GET → 200 + PUBLIC-only page; bad
+    // section → 400; unknown user → 404.
+    const secRes = await getProfileSections(
+      new NextRequest(`http://localhost/api/users/__ss_p_${SUFFIX}/sections/grows`),
+      { params: Promise.resolve({ username: `__ss_p_${SUFFIX}`, section: "grows" }) }
+    )
+    assert.equal(secRes.status, 200, "sections route 200")
+    const secJson = await secRes.json()
+    assert.ok(Array.isArray(secJson.items) && secJson.items.every((i: { visibility: string }) => i.visibility === "PUBLIC"), "route returns scoped items")
+    const badSec = await getProfileSections(
+      new NextRequest(`http://localhost/api/users/__ss_p_${SUFFIX}/sections/nope`),
+      { params: Promise.resolve({ username: `__ss_p_${SUFFIX}`, section: "nope" }) }
+    )
+    assert.equal(badSec.status, 400, "unknown section rejected")
+    // Sections respect blocks in either direction.
+    await prisma.block.create({ data: { blockerId: pUser.id, blockedId: a.id } })
+    assert.equal(await getProfileSection(`__ss_p_${SUFFIX}`, "grows", a.id), null, "sections 404 on block")
+    await prisma.block.deleteMany({ where: { blockerId: pUser.id, blockedId: a.id } })
+
+    await prisma.post.delete({ where: { id: p1Post.id } })
+    await prisma.thread.delete({ where: { id: p1Thread.id } })
+    await prisma.growExperiment.deleteMany({ where: { id: { in: [p1Exp.id, p1ExpPriv.id] } } })
+    await prisma.strain.delete({ where: { id: p1Strain.id } }).catch(() => {})
+    await prisma.masteryProgress.deleteMany({ where: { userId: pUser.id } })
     await prisma.profileCustomSection.deleteMany({ where: { profileId: pProfile.id } })
     await prisma.growDiary.deleteMany({ where: { authorId: pUser.id } })
 

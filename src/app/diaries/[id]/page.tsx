@@ -14,7 +14,7 @@ import { JsonLd } from "@/components/json-ld"
 import { EnvChartsLazy as EnvCharts, HeightChartLazy as HeightChart, EnvInsightsLazy as EnvInsights } from "@/components/diary-charts"
 import HarvestForm from "@/components/harvest-form"
 import StageTimeline from "@/components/stage-timeline"
-import TierChip from "@/components/tier-chip"
+import ProfileCard from "@/components/ui/profile-card"
 import { getGrowJourney, GROW_STAGES } from "@/lib/grow-journey"
 import UpdateEditSection from "@/components/update-edit-form"
 import { groupUpdatesByWeek, buildHarvestReport, diaryCompleteness, diaryDay, diaryWeek, growthSummary, stageDurations, latestFeedingNote } from "@/lib/diary-weeks"
@@ -23,7 +23,6 @@ import DiaryReactions from "@/components/diary-reactions"
 import OwnerDeleteButton from "@/components/owner-delete-button"
 import DiaryDiscussButton from "@/components/diary-discuss-button"
 import { escapeLike, strainFieldMatches, suggestStrainLink } from "@/lib/strain-stats"
-import UserPopover from "@/components/user-popover"
 import { MEDIUM_LABELS, LIGHT_LABELS, TECHNIQUE_LABELS, DIFFICULTY_LABELS } from "@/lib/grow-fields"
 import { canViewDiary, publicDiaryWhere } from "@/lib/diary-visibility"
 import { diaryPath, strainPath, setupPath } from "@/lib/slugs"
@@ -455,17 +454,15 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
                 </div>
               )}
               <div className="flex items-center flex-wrap gap-x-3 gap-y-1 text-sm text-muted-foreground">
-                <span className="flex items-center gap-1">
+                <span className="flex items-center gap-1.5">
                   <Users className="w-3.5 h-3.5" />
-                  <UserPopover username={diary.author.profile?.username}>
-                    <Link
-                      href={`/u/${diary.author.profile?.username || diary.author.name}`}
-                      className="hover:text-foreground hover:underline"
-                    >
-                      {diary.author.profile?.username || diary.author.name}
-                    </Link>
-                  </UserPopover>
-                  <TierChip xp={diary.author.profile?.xp ?? 0} publicMilestoneOptOut={diary.author.profile?.publicMilestoneOptOut} />
+                  <ProfileCard
+                    username={diary.author.profile?.username}
+                    name={diary.author.profile?.username || diary.author.name}
+                    xp={diary.author.profile?.xp ?? 0}
+                    publicMilestoneOptOut={diary.author.profile?.publicMilestoneOptOut}
+                    size="sm"
+                  />
                 </span>
                 <span className="flex items-center gap-1">
                   <Calendar className="w-3.5 h-3.5" />
@@ -1246,16 +1243,16 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
               </dl>
             </div>
 
-            {/* Grower card */}
+            {/* Grower card — shared identity contract (popover + rank chip) */}
             <div className="bg-card/80 rounded-2xl border border-border/70 p-4">
               <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Grower</h3>
-              <Link
-                href={`/u/${diary.author.profile?.username || diary.author.name}`}
-                className="flex items-center gap-2 rounded-lg p-1 -mx-1 hover:bg-secondary/60 transition-colors"
-              >
-                <span className="font-medium text-sm hover:text-primary">{authorName}</span>
-                <TierChip xp={diary.author.profile?.xp ?? 0} publicMilestoneOptOut={diary.author.profile?.publicMilestoneOptOut} />
-              </Link>
+              <ProfileCard
+                username={diary.author.profile?.username}
+                name={authorName}
+                avatarUrl={diary.author.image}
+                xp={diary.author.profile?.xp ?? 0}
+                publicMilestoneOptOut={diary.author.profile?.publicMilestoneOptOut}
+              />
             </div>
 
             {/* Strain link */}

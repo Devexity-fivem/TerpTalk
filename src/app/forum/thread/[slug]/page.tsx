@@ -3,14 +3,12 @@ import { prisma } from "@/lib/prisma"
 import { publicUserSelect, isModerator, activeAuthor, blockedUserIds, notBlockedAuthor } from "@/lib/security"
 import { diaryPath } from "@/lib/slugs"
 import { notFound, redirect } from "next/navigation"
-import { MessageSquare, MessagesSquare, Users, Clock, CheckCircle2, Eye, BookOpen } from "lucide-react"
+import { MessageSquare, MessagesSquare, Clock, CheckCircle2, Eye, BookOpen } from "lucide-react"
 import Link from "next/link"
 import ReplyForm from "@/components/reply-form"
 import ThreadScrollBar from "@/components/thread-scroll-bar"
 import PostActions from "@/components/post-actions"
 import RoleBadge from "@/components/role-badge"
-import TierChip from "@/components/tier-chip"
-import UserPopover from "@/components/user-popover"
 import ThreadModActions from "@/components/thread-mod-actions"
 import ShareButtons from "@/components/share-buttons"
 import ReportButton from "@/components/report-button"
@@ -19,7 +17,6 @@ import OwnerDeleteButton from "@/components/owner-delete-button"
 import PostContent from "@/components/post-content"
 import ImageGallery from "@/components/image-gallery"
 import Poll from "@/components/poll"
-import { Avatar } from "@/components/ui/avatar"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { buildMetadata, snippet } from "@/lib/seo"
@@ -28,6 +25,7 @@ import { JsonLd } from "@/components/json-ld"
 import { AcceptAnswerButton } from "@/components/accept-answer-button"
 import ViewTracker from "@/components/view-tracker"
 import ThreadFollowButton from "@/components/thread-follow-button"
+import ProfileCard from "@/components/ui/profile-card"
 import { rankDisplay } from "@/lib/progression-config"
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }) {
@@ -390,40 +388,32 @@ export default async function ThreadPage({
               ))}
             </div>
           )}
-          {/* Author + metadata row */}
-          <div className="flex items-center gap-3 mb-3">
-            <Avatar src={thread.author.image ?? undefined} size="md" alt={thread.author.profile?.username ?? thread.author.name ?? undefined} />
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-1.5 flex-wrap">
-                <UserPopover username={thread.author.profile?.username}>
-                  <Link
-                    href={`/u/${thread.author.profile?.username || thread.author.name}`}
-                    className={`font-semibold text-sm hover:text-primary ${
-                      thread.author.profile?.publicMilestoneOptOut
-                        ? ""
-                        : rankDisplay(thread.author.profile?.xp ?? 0).nameplate ?? ""
-                    }`}
-                  >
-                    {thread.author.profile?.username || thread.author.name}
-                  </Link>
-                </UserPopover>
-                <RoleBadge role={thread.author.role} />
-                <TierChip xp={thread.author.profile?.xp ?? 0} publicMilestoneOptOut={thread.author.profile?.publicMilestoneOptOut} />
-              </div>
-              <div className="flex items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground flex-wrap mt-0.5">
-                <span className="flex items-center gap-1">
-                  <Clock className="w-3 h-3" />
-                  {new Date(thread.createdAt).toLocaleDateString()}
-                </span>
-                <span className="flex items-center gap-1">
-                  <MessageSquare className="w-3 h-3" />
-                  {thread.replyCount} repl{thread.replyCount === 1 ? "y" : "ies"}
-                </span>
-                <span className="flex items-center gap-1">
-                  <Eye className="w-3 h-3" />
-                  {thread.views} views
-                </span>
-              </div>
+          {/* Author + metadata row — shared identity card contract */}
+          <div className="mb-3">
+            <div className="flex items-center gap-2 flex-wrap">
+              <ProfileCard
+                username={thread.author.profile?.username}
+                name={thread.author.profile?.username || thread.author.name}
+                avatarUrl={thread.author.image}
+                xp={thread.author.profile?.xp ?? 0}
+                publicMilestoneOptOut={thread.author.profile?.publicMilestoneOptOut}
+                nameplate={thread.author.profile?.publicMilestoneOptOut ? undefined : rankDisplay(thread.author.profile?.xp ?? 0).nameplate ?? undefined}
+              />
+              <RoleBadge role={thread.author.role} />
+            </div>
+            <div className="flex items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground flex-wrap mt-1">
+              <span className="flex items-center gap-1">
+                <Clock className="w-3 h-3" />
+                {new Date(thread.createdAt).toLocaleDateString()}
+              </span>
+              <span className="flex items-center gap-1">
+                <MessageSquare className="w-3 h-3" />
+                {thread.replyCount} repl{thread.replyCount === 1 ? "y" : "ies"}
+              </span>
+              <span className="flex items-center gap-1">
+                <Eye className="w-3 h-3" />
+                {thread.views} views
+              </span>
             </div>
           </div>
           {/* Action bar */}
@@ -493,28 +483,18 @@ export default async function ThreadPage({
               <span>Accepted answer</span>
             </div>
             <div className="flex items-start gap-3">
-              <div className="flex-shrink-0">
-                <Avatar
-                  src={acceptedPost.author.image ?? undefined}
-                  alt={acceptedPost.author.profile?.username || acceptedPost.author.name || undefined}
-                  className="w-10 h-10"
-                />
-              </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center justify-between mb-2 gap-2">
-                  <div className="min-w-0">
-                    <Link
-                      href={`/u/${acceptedPost.author.profile?.username || acceptedPost.author.name}`}
-                      className={`font-semibold hover:text-primary truncate text-sm ${
-                        acceptedPost.author.profile?.publicMilestoneOptOut
-                          ? ""
-                          : rankDisplay(acceptedPost.author.profile?.xp ?? 0).nameplate ?? ""
-                      }`}
-                    >
-                      {acceptedPost.author.profile?.username || acceptedPost.author.name}
-                    </Link>
+                  <div className="min-w-0 flex items-center gap-2 flex-wrap">
+                    <ProfileCard
+                      username={acceptedPost.author.profile?.username}
+                      name={acceptedPost.author.profile?.username || acceptedPost.author.name}
+                      avatarUrl={acceptedPost.author.image}
+                      xp={acceptedPost.author.profile?.xp ?? 0}
+                      publicMilestoneOptOut={acceptedPost.author.profile?.publicMilestoneOptOut}
+                      nameplate={acceptedPost.author.profile?.publicMilestoneOptOut ? undefined : rankDisplay(acceptedPost.author.profile?.xp ?? 0).nameplate ?? undefined}
+                    />
                     <RoleBadge role={acceptedPost.author.role} />
-                    <TierChip xp={acceptedPost.author.profile?.xp ?? 0} publicMilestoneOptOut={acceptedPost.author.profile?.publicMilestoneOptOut} />
                   </div>
                   <span className="text-xs text-muted-foreground shrink-0">
                     {new Date(acceptedPost.createdAt).toLocaleString()}
@@ -590,36 +570,23 @@ export default async function ThreadPage({
                   isOp ? "ring-1 ring-primary/25 shadow-md" : ""
                 }`}
               >
-                <div className="flex items-start gap-3">
-                  <div className="flex-shrink-0">
-                    <Avatar
-                      src={post.author.image ?? undefined}
-                      alt={post.author.profile?.username || post.author.name || undefined}
-                      className="w-10 h-10"
-                    />
-                  </div>
-                  <div className="flex-1 min-w-0">
+                <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between mb-2 gap-2">
-                      <div className="min-w-0">
-                        <UserPopover username={post.author.profile?.username}>
-                          <Link
-                            href={`/u/${post.author.profile?.username || post.author.name}`}
-                            className={`font-semibold hover:text-primary truncate text-sm ${
-                              post.author.profile?.publicMilestoneOptOut
-                                ? ""
-                                : rankDisplay(post.author.profile?.xp ?? 0).nameplate ?? ""
-                            }`}
-                          >
-                            {post.author.profile?.username || post.author.name}
-                          </Link>
-                        </UserPopover>
+                      <div className="min-w-0 flex items-center gap-2 flex-wrap">
+                        <ProfileCard
+                          username={post.author.profile?.username}
+                          name={post.author.profile?.username || post.author.name}
+                          avatarUrl={post.author.image}
+                          xp={post.author.profile?.xp ?? 0}
+                          publicMilestoneOptOut={post.author.profile?.publicMilestoneOptOut}
+                          nameplate={post.author.profile?.publicMilestoneOptOut ? undefined : rankDisplay(post.author.profile?.xp ?? 0).nameplate ?? undefined}
+                        />
                         <RoleBadge role={post.author.role} />
-                        <TierChip xp={post.author.profile?.xp ?? 0} publicMilestoneOptOut={post.author.profile?.publicMilestoneOptOut} />
                         {isOp && (
-                          <span className="ml-2 text-xs text-muted-foreground">(Original Poster)</span>
+                          <span className="text-xs text-muted-foreground">(Original Poster)</span>
                         )}
                         {post.edited && (
-                          <span className="ml-2 text-xs text-muted-foreground">(edited)</span>
+                          <span className="text-xs text-muted-foreground">(edited)</span>
                         )}
                       </div>
                       <span className="text-xs text-muted-foreground shrink-0">
@@ -648,7 +615,6 @@ export default async function ThreadPage({
                       )}
                     </div>
                   </div>
-                </div>
               </div>
               </Fragment>
             )

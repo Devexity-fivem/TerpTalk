@@ -651,5 +651,63 @@ check("sitemap: chunked via generateSitemaps, index handler present", () => {
   assert.ok(robots.includes("sitemap-index.xml"), "robots.txt points at the sitemap index")
 })
 
+// ── Profile P1 — locked information architecture ───────────────────────
+// The five-tab deep-linked profile uses the shared Tabs primitive and the
+// bounded DTO: no bespoke tabbar, no second identity card, no raw standing.
+
+check("profile P1: five locked tabs via shared Tabs primitive with URL sync", () => {
+  const c = src("app/u/[username]/profile-client.tsx")
+  assert.ok(c.includes("<Tabs"), "shared Tabs primitive in use")
+  assert.ok(c.includes("syncWithUrl"), "deep-linkable ?tab= sync enabled")
+  assert.ok(c.includes('ariaLabel="Profile sections"'), "labelled tablist")
+  for (const id of ['"overview"', '"grows"', '"harvests"', '"contributions"', '"about"']) {
+    assert.ok(c.includes(`id: ${id}`), `locked tab ${id}`)
+  }
+  assert.ok(!c.includes('role="tablist"'), "no bespoke tablist — U0 primitive only")
+})
+
+check("profile P1: hero bounded — ≤4 notable stats, named tier, no raw standing", () => {
+  const c = src("app/u/[username]/profile-client.tsx")
+  assert.ok(c.includes("slice(0, 4)"), "hero stat strip capped at 4")
+  assert.ok(c.includes("standingTier"), "named standing chip renders")
+  assert.ok(!/profile\.standing[^T]/.test(c), "raw standing never rendered")
+  assert.ok(c.includes("buildTitle"), "build title in the identity row")
+  assert.ok(c.includes("heroGrow"), "featured/active grow entry in hero")
+})
+
+check("profile P1: mastery map renders all five paths as relative share", () => {
+  const c = src("app/u/[username]/profile-client.tsx")
+  assert.ok(c.includes("profile.mastery.map"), "mastery rows from DTO")
+  assert.ok(c.includes("maxMasteryXp"), "relative-share bars (not raw XP race)")
+  const dto = src("lib/public-profile.ts")
+  assert.ok(dto.includes("LIVE_MASTERIES"), "live/dead path flag sourced from DTO")
+})
+
+check("profile P1: tab lists are cursor-paged, never in initial payload", () => {
+  const route = src("app/api/users/[username]/sections/[section]/route.ts")
+  assert.ok(route.includes("getProfileSection"), "sections route delegates to scoped lib")
+  assert.ok(route.includes("cursor"), "cursor param")
+  const lib = src("lib/public-profile.ts")
+  assert.ok(lib.includes("PROFILE_TAB_PAGE_SIZE"), "bounded page size")
+  assert.ok(lib.includes("blockExistsBetween"), "sections honor blocks both ways")
+  const c = src("app/u/[username]/profile-client.tsx")
+  assert.ok(c.includes("/sections/"), "client pages through the sections API")
+})
+
+check("profile P1: single identity contract — ProfileCard on migrated surfaces", () => {
+  const thread = src("app/forum/thread/[slug]/page.tsx")
+  const diary = src("app/diaries/[id]/page.tsx")
+  assert.ok(thread.includes("<ProfileCard"), "thread page uses shared card")
+  assert.ok(diary.includes("<ProfileCard"), "diary page uses shared card")
+  assert.ok(!thread.includes("<UserPopover"), "no bespoke popover rows left on thread page")
+})
+
+check("profile P1: SEO — JSON-LD via safe component, public fields only", () => {
+  const p = src("app/u/[username]/page.tsx")
+  assert.ok(p.includes("<JsonLd"), "ProfilePage JSON-LD via audited component")
+  assert.ok(p.includes('"@type": "ProfilePage"'), "ProfilePage type")
+  assert.ok(!/"standing"/.test(p), "no standing internals in JSON-LD")
+})
+
 console.log(`\n${passed} passed, ${failed} failed`)
 if (failed > 0) process.exit(1)

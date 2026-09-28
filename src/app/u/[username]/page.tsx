@@ -6,6 +6,7 @@ import { authOptions } from "@/lib/auth"
 import { getPublicProfileData } from "@/lib/public-profile"
 import { buildMetadata, snippet } from "@/lib/seo"
 import { TERPBOT_USERNAME } from "@/lib/terpbot-constants"
+import { JsonLd } from "@/components/json-ld"
 import ProfileClient from "./profile-client"
 
 const getProfileForMetadata = unstable_cache(
@@ -105,5 +106,30 @@ export default async function PublicProfilePage({
   // exactly (the client keeps its JSON-shape types either way).
   const initial = JSON.parse(JSON.stringify(data))
 
-  return <ProfileClient initial={initial} />
+  // ProfilePage JSON-LD — public identity fields only (username, bio, avatar,
+  // join date). Never stats, standing, or anything visibility-scoped; a row
+  // that reached this render already passed the same rules a crawler sees.
+  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://terp-talk.vercel.app"
+  const p = data.profile
+  const jsonLd = p.isBot
+    ? null
+    : {
+        "@context": "https://schema.org",
+        "@type": "ProfilePage",
+        mainEntity: {
+          "@type": "Person",
+          alternateName: p.username,
+          ...(p.bio ? { description: snippet(p.bio, 200) } : {}),
+          ...(p.image ? { image: p.image } : {}),
+          ...(p.joinDate ? { memberSince: new Date(p.joinDate).toISOString().slice(0, 10) } : {}),
+          url: `${baseUrl}/u/${encodeURIComponent(p.username)}`,
+        },
+      }
+
+  return (
+    <>
+      {jsonLd && <JsonLd data={jsonLd} />}
+      <ProfileClient initial={initial} />
+    </>
+  )
 }
