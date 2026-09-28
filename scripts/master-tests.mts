@@ -75,6 +75,7 @@ const HTTP_PHASE: Suite[] = [
   { id: "trust-safety", file: "scripts/trust-safety-verify.mjs", runner: "node", cls: "A", label: "Trust & safety + feedback HTTP behavior", tier: "full" },
   { id: "ops", file: "scripts/ops-tests.mts", runner: "tsx", cls: "A", label: "Ops surface gate + metrics shape + feedback deviceType", tier: "full" },
   { id: "runtime-verify", file: "scripts/runtime-verify.mjs", runner: "node", cls: "A", label: "Runtime security black-box (sessions, authz, privacy, Pusher, uploads, rate limits, staff, TerpBot)", tier: "full", timeoutMs: 12 * 60_000 },
+  { id: "browser", file: "scripts/browser-tests.mts", runner: "tsx", cls: "A", label: "Browser regression (headless Chromium): auth, profile V2, privacy oracles, progression UI, mobile", tier: "full", timeoutMs: 5 * 60_000 },
 ]
 
 // STRICTLY SERIAL — all create DB fixtures; several mutate shared global
