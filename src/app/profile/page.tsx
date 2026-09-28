@@ -5,7 +5,7 @@ import { signInHref } from "@/lib/callback-url"
 import { useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react"
-import { User, Award, MessageSquare, Leaf, Loader2, Download, Trash2, Pencil, MapPin, Globe, Sprout, Dna, Store, TrendingUp, ChevronDown, ChevronUp, Bookmark, Settings, ArrowRight, Pin } from "lucide-react"
+import { User, Award, MessageSquare, Leaf, Loader2, Download, Trash2, Pencil, MapPin, Globe, Sprout, Dna, Store, TrendingUp, ChevronDown, ChevronUp, Bookmark, Settings, ArrowRight, Pin, Eye, Palette, Target } from "lucide-react"
 import { signOut } from "next-auth/react"
 import Link from "next/link"
 import RoleBadge from "@/components/role-badge"
@@ -22,17 +22,24 @@ import RecoveryPhraseCard from "@/components/recovery-phrase-card"
 import WeeklyChallenges from "@/components/weekly-challenges"
 import { Avatar } from "@/components/ui/avatar"
 import { InfoTip } from "@/components/ui/tooltip"
+import SectionCard from "@/components/ui/section-card"
+import EmptyState from "@/components/ui/empty-state"
+import StatStrip from "@/components/ui/stat-strip"
+import Tag from "@/components/ui/tag"
 import { diaryPath } from "@/lib/slugs"
+import { parseProfileSettings } from "@/lib/profile-settings"
 import { cn } from "@/lib/utils"
 
 function ProfileBadges({
   badges,
   showAll,
   setShowAll,
+  compact,
 }: {
   badges: Array<{ name: string; description: string; icon: string | null; earnedAt?: string }>
   showAll: boolean
   setShowAll: (v: boolean) => void
+  compact: boolean
 }) {
   const sortedBadges = useMemo(
     () =>
@@ -46,46 +53,43 @@ function ProfileBadges({
   const visible = showAll ? sortedBadges : sortedBadges.slice(0, 6)
   const hasMore = sortedBadges.length > 6
 
-  if (badges.length === 0) {
-    return (
-      <div className="bg-card/80 rounded-2xl border border-border/70 p-6">
-        <div className="flex items-center gap-2 mb-4">
-          <Award className="w-5 h-5 text-primary" />
-          <h2 className="font-display text-lg font-semibold">Badges</h2>
-        </div>
-        <p className="text-sm text-muted-foreground mb-2">No badges earned yet — post, grow, and share to earn them</p>
-        <Link href="/achievements" className="text-xs text-primary hover:underline">View achievement progress →</Link>
-      </div>
-    )
-  }
-
   return (
-    <div className="bg-card/80 rounded-2xl border border-border/70 p-6">
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-2">
-          <Award className="w-5 h-5 text-primary" />
-          <h2 className="font-display text-lg font-semibold">Badges</h2>
-        </div>
-        <Link href="/achievements" className="text-xs text-primary hover:underline">Progress</Link>
-      </div>
-      <div className="flex flex-wrap gap-2">
-        {visible.map((b) => (
-          <AchievementBadge key={b.name} name={b.name} mode="profile" />
-        ))}
-      </div>
-      {hasMore && (
-        <button
-          onClick={() => setShowAll(!showAll)}
-          className="mt-3 inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded px-1"
-        >
-          {showAll ? (
-            <>Show less <ChevronUp className="w-3 h-3" /></>
-          ) : (
-            <>View all {sortedBadges.length} badges <ChevronDown className="w-3 h-3" /></>
+    <SectionCard
+      id="hub-badges"
+      compact={compact}
+      title={<span className="flex items-center gap-2"><Award className="w-5 h-5 text-primary" />Badges</span>}
+      actions={<Link href="/achievements" className="text-xs text-primary hover:underline">Progress</Link>}
+    >
+      {badges.length === 0 ? (
+        <EmptyState
+          compact
+          icon={Award}
+          title="No badges earned yet"
+          description="Post, grow, and share to earn them."
+          action={{ label: "View achievement progress", href: "/achievements" }}
+        />
+      ) : (
+        <>
+          <div className="flex flex-wrap gap-2">
+            {visible.map((b) => (
+              <AchievementBadge key={b.name} name={b.name} mode="profile" />
+            ))}
+          </div>
+          {hasMore && (
+            <button
+              onClick={() => setShowAll(!showAll)}
+              className="mt-3 inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded px-1"
+            >
+              {showAll ? (
+                <>Show less <ChevronUp className="w-3 h-3" /></>
+              ) : (
+                <>View all {sortedBadges.length} badges <ChevronDown className="w-3 h-3" /></>
+              )}
+            </button>
           )}
-        </button>
+        </>
       )}
-    </div>
+    </SectionCard>
   )
 }
 
@@ -120,6 +124,7 @@ interface ProfileData {
     xp: number
     standing: number
     pinnedDiaryId: string | null
+    profileSettings: unknown
   } | null
   stats: {
     diaries: number
@@ -156,6 +161,8 @@ interface ProfileData {
       percent: number
       remaining: number
     }
+    buildTitle: string | null
+    standingTier: { name: string; icon: string; color: string; bg: string } | null
     referrals: number
   }
   badges: Array<{ name: string; description: string; icon: string | null; earnedAt: string }>
@@ -190,10 +197,12 @@ interface ProfileData {
 function PinnedHarvestPicker({
   pinnedDiaryId,
   harvestedDiaries,
+  compact,
   onSaved,
 }: {
   pinnedDiaryId: string | null
   harvestedDiaries: Array<{ id: string; title: string; strain: string | null; harvestedAt: string | null }>
+  compact: boolean
   onSaved: (pinned: string | null) => void
 }) {
   const [savingPin, setSavingPin] = useState(false)
@@ -216,17 +225,14 @@ function PinnedHarvestPicker({
     }
   }
   return (
-    <div className="bg-card/80 rounded-2xl border border-border/70 p-6">
-      <div className="flex items-center gap-2 mb-2">
-        <Pin className="w-5 h-5 text-primary" />
-        <h2 className="font-display text-lg font-semibold">Pinned harvest</h2>
-      </div>
-      <p className="text-sm text-muted-foreground mb-3">
-        Pick your proudest finished grow and it sits at the top of your profile.
-        Unlocks at Harvested rank or a 60-day check-in streak.
-      </p>
+    <SectionCard
+      id="hub-pinned-harvest"
+      compact={compact}
+      title={<span className="flex items-center gap-2"><Pin className="w-5 h-5 text-primary" />Pinned harvest</span>}
+      description="Pick your proudest finished grow and it sits at the top of your profile. Unlocks at Harvested rank or a 60-day check-in streak."
+    >
       {harvestedDiaries.length === 0 ? (
-        <p className="text-sm text-muted-foreground">Harvest a grow first — then you can pin it here.</p>
+        <EmptyState compact icon={Pin} title="Harvest a grow first" description="Then you can pin it here." />
       ) : (
         <select
           value={pinnedDiaryId ?? ""}
@@ -243,7 +249,7 @@ function PinnedHarvestPicker({
           ))}
         </select>
       )}
-    </div>
+    </SectionCard>
   )
 }
 
@@ -411,30 +417,53 @@ export default function ProfilePage() {
     month: 'long'
   })
 
+  // The hub shares the member's saved appearance presets — same scoped
+  // data-attribute mechanism the public profile canvas uses.
+  const psettings = parseProfileSettings(profileData.profile?.profileSettings)
+  const compact = psettings.density === "compact"
+  const { rank, xpStage, buildTitle, standingTier } = profileData.stats
+
   return (
-    <div className="min-h-screen bg-background">
-      <div className="max-w-4xl mx-auto px-4 py-8">
-        {/* Profile Header */}
-        <div className="bg-card rounded-lg border border-border p-6 mb-6">
-          <div className="flex items-start gap-4 sm:gap-6">
-            <div className="rounded-full shrink-0">
-              <Avatar
-                src={profileData.profile?.avatarUrl}
-                alt={`${profileData.profile?.username || profileData.user.name} avatar`}
-                size="xl"
-                className="w-24 h-24 bg-primary/10 text-primary"
-                fallback={<User className="w-12 h-12 text-primary" />}
-              />
+    <div
+      className="min-h-screen bg-background"
+      data-paccent={psettings.accent}
+      data-ptheme={psettings.theme}
+      data-pdensity={psettings.density}
+    >
+      <div className="max-w-4xl mx-auto px-4 py-6 sm:py-8">
+        {/* Profile Header — V2 hero: banner strip, progression identity,
+            cultivation tags; same visual language as the public profile. */}
+        <div className="bg-card/80 rounded-2xl border border-border/70 mb-5 overflow-hidden">
+          {psettings.bannerImage ? (
+            <div className="relative h-24 sm:h-32 w-full">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={psettings.bannerImage} alt="" aria-hidden="true" className="h-full w-full object-cover" />
+              <div className="absolute inset-0 bg-gradient-to-t from-card/90 to-transparent" />
             </div>
-              <div className="flex-1">
+          ) : (
+            <div className="tt-spectrum-bar h-1" />
+          )}
+          <div className="p-4 sm:p-5">
+            <div className="flex items-start gap-4 flex-wrap">
+              <div className={cn("rounded-full shrink-0", psettings.bannerImage && "-mt-12 sm:-mt-14 ring-4 ring-card")}>
+                <Avatar
+                  src={profileData.profile?.avatarUrl}
+                  alt={`${profileData.profile?.username || profileData.user.name} avatar`}
+                  size="xl"
+                  className="w-20 h-20 bg-primary/10 text-primary"
+                  fallback={<User className="w-10 h-10 text-primary" />}
+                />
+              </div>
+              <div className="flex-1 min-w-0">
                 <div className="flex items-start justify-between gap-4 flex-wrap">
-                  <div>
-                    <h1 className="font-display text-2xl font-bold mb-1 flex items-center gap-2 tracking-tight">{profileData.profile?.username || profileData.user.name} <RoleBadge role={profileData.user.role} /> <TierChip xp={profileData.profile?.xp ?? 0} size="md" /></h1>
-                    <p className="text-muted-foreground text-sm mb-2">Member since {joinDate}</p>
-                    {profileData.profile?.bio && (
-                      <p className="text-sm mb-3 whitespace-pre-wrap break-words">{profileData.profile.bio}</p>
-                    )}
-                    <div className="flex gap-4 text-sm text-muted-foreground flex-wrap">
+                  <div className="min-w-0">
+                    <h1 className="font-display text-2xl font-bold mb-1 break-words flex items-center gap-2 flex-wrap tracking-tight">
+                      {profileData.profile?.username || profileData.user.name}
+                      <RoleBadge role={profileData.user.role} />
+                      <TierChip xp={profileData.profile?.xp ?? 0} size="md" />
+                    </h1>
+                    <p className="text-muted-foreground text-sm mb-2 flex items-center gap-x-3 gap-y-1 flex-wrap">
+                      <span>Member since {joinDate}</span>
                       {profileData.profile?.location && (
                         <span className="flex items-center gap-1"><MapPin className="w-3.5 h-3.5" />{profileData.profile.location}</span>
                       )}
@@ -443,78 +472,108 @@ export default function ProfilePage() {
                           <Globe className="w-3.5 h-3.5" />{profileData.profile.website.replace(/^https?:\/\//, "").slice(0, 40)}
                         </a>
                       )}
+                    </p>
+                    {/* Progression identity row — same chips the public hero shows */}
+                    <div className="flex items-center gap-2 flex-wrap mb-2">
+                      <span className={cn("inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium", rank.bg, rank.color)}>
+                        <span className="text-sm" aria-hidden="true">{rank.icon}</span>
+                        {rank.name}
+                      </span>
+                      <span className="text-xs text-muted-foreground">
+                        Grow Level {xpStage.level} · {xpStage.stageName}
+                      </span>
+                      {buildTitle && (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-secondary/70 text-xs font-medium">
+                          <Target className="w-3 h-3" aria-hidden="true" />
+                          {buildTitle}
+                        </span>
+                      )}
+                      {standingTier && (
+                        <span className={cn("inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium", standingTier.bg, standingTier.color)}>
+                          <span aria-hidden="true">{standingTier.icon}</span>
+                          {standingTier.name}
+                        </span>
+                      )}
+                    </div>
+                    {profileData.profile?.bio && (
+                      <p className="text-sm mb-2 break-words whitespace-pre-wrap line-clamp-4">{profileData.profile.bio}</p>
+                    )}
+                    {/* Cultivation identity line */}
+                    <div className="flex gap-x-4 gap-y-1 text-sm text-muted-foreground flex-wrap">
                       {profileData.profile?.growExperience && (
                         <span className="flex items-center gap-1"><Sprout className="w-3.5 h-3.5" />{profileData.profile.growExperience}</span>
-                      )}
-                      {profileData.profile?.favoriteStrain && (
-                        <Link href={`/strains?q=${encodeURIComponent(profileData.profile.favoriteStrain)}`} className="flex items-center gap-1 hover:text-primary transition-colors"><Dna className="w-3.5 h-3.5" />{profileData.profile.favoriteStrain}</Link>
                       )}
                       {profileData.profile?.growSpace && (
                         <span className="flex items-center gap-1"><Leaf className="w-3.5 h-3.5" />{profileData.profile.growSpace}</span>
                       )}
+                      {profileData.profile?.favoriteStrain && (
+                        <Link href={`/strains?q=${encodeURIComponent(profileData.profile.favoriteStrain)}`} className="flex items-center gap-1 hover:text-primary transition-colors"><Dna className="w-3.5 h-3.5" />{profileData.profile.favoriteStrain}</Link>
+                      )}
+                      {psettings.identity.mediums.map((m) => (
+                        <Tag key={m} variant="muted">{m}</Tag>
+                      ))}
+                      {psettings.identity.styles.map((s) => (
+                        <Tag key={s} variant="muted">{s}</Tag>
+                      ))}
                     </div>
                   </div>
-                  <div className="flex items-center gap-2 shrink-0">
+                  <div className="flex items-center gap-2 shrink-0 flex-wrap">
                     {profileData.profile?.username && (
                       <Link
-                        href="/profile/customize"
-                        className="flex items-center gap-2 px-4 py-2 text-sm font-medium bg-secondary/70 rounded-full hover:bg-secondary transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        href={`/u/${profileData.profile.username}`}
+                        className="flex items-center gap-1.5 rounded-full bg-secondary/70 px-3.5 py-1.5 text-xs font-medium hover:bg-secondary transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                       >
-                        Customize
+                        <Eye className="w-3.5 h-3.5" /> View public
                       </Link>
                     )}
+                    <Link
+                      href="/profile/customize"
+                      className="flex items-center gap-1.5 rounded-full bg-primary/10 text-primary px-3.5 py-1.5 text-xs font-medium hover:bg-primary/15 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    >
+                      <Palette className="w-3.5 h-3.5" /> Customize
+                    </Link>
                     <button
-                    onClick={() => {
-                      const p = profileData.profile
-                      setEditForm({
-                        bio: p?.bio || "",
-                        location: p?.location || "",
-                        website: p?.website || "",
-                        avatarUrl: p?.avatarUrl || "",
-                        growExperience: p?.growExperience || "",
-                        favoriteStrain: p?.favoriteStrain || "",
-                        growSpace: p?.growSpace || "",
-                        businessName: p?.businessName || "",
-                        businessType: p?.businessType || "",
-                        businessUrl: p?.businessUrl || "",
-                        notifyOnReply: p?.notifyOnReply ?? true,
-                        notifyOnMention: p?.notifyOnMention ?? true,
-                        notifyOnCategoryFollow: p?.notifyOnCategoryFollow ?? true,
-                        notifyOnMessage: p?.notifyOnMessage ?? true,
-                        notifyOnComment: p?.notifyOnComment ?? true,
-                        notifyOnFollow: p?.notifyOnFollow ?? true,
-                        notifyOnReaction: p?.notifyOnReaction ?? true,
-                      })
-                      setEditing(true)
-                    }}
-                    className="flex items-center gap-2 px-4 py-2 text-sm font-medium bg-primary text-primary-foreground rounded-full hover:bg-primary/90 transition-colors"
-                  >
-                    <Pencil className="w-4 h-4" /> Edit Profile
-                  </button>
+                      onClick={() => {
+                        const p = profileData.profile
+                        setEditForm({
+                          bio: p?.bio || "",
+                          location: p?.location || "",
+                          website: p?.website || "",
+                          avatarUrl: p?.avatarUrl || "",
+                          growExperience: p?.growExperience || "",
+                          favoriteStrain: p?.favoriteStrain || "",
+                          growSpace: p?.growSpace || "",
+                          businessName: p?.businessName || "",
+                          businessType: p?.businessType || "",
+                          businessUrl: p?.businessUrl || "",
+                          notifyOnReply: p?.notifyOnReply ?? true,
+                          notifyOnMention: p?.notifyOnMention ?? true,
+                          notifyOnCategoryFollow: p?.notifyOnCategoryFollow ?? true,
+                          notifyOnMessage: p?.notifyOnMessage ?? true,
+                          notifyOnComment: p?.notifyOnComment ?? true,
+                          notifyOnFollow: p?.notifyOnFollow ?? true,
+                          notifyOnReaction: p?.notifyOnReaction ?? true,
+                        })
+                        setEditing(true)
+                      }}
+                      className="flex items-center gap-1.5 rounded-full bg-primary text-primary-foreground px-3.5 py-1.5 text-xs font-medium hover:bg-primary/90 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    >
+                      <Pencil className="w-3.5 h-3.5" /> Edit Profile
+                    </button>
                   </div>
                 </div>
-                <div className="flex flex-wrap gap-4 sm:gap-6 mt-4">
-                  <div className="text-center">
-                    <div className="text-2xl font-bold text-primary">{profileData.stats.xp.toLocaleString()}</div>
-                    <div className="text-sm text-muted-foreground">
-                      XP <InfoTip content="Experience earned from posting, journaling, and helping other growers — raises your grow level and unlocks ranks and rewards." />
-                    </div>
-                  </div>
-                  <div className="text-center">
-                    <div className="text-2xl font-bold text-primary">{profileData.stats.followers}</div>
-                    <div className="text-sm text-muted-foreground">Followers</div>
-                  </div>
-                  <div className="text-center">
-                    <div className="text-2xl font-bold text-primary">{profileData.stats.following}</div>
-                    <div className="text-sm text-muted-foreground">Following</div>
-                  </div>
-                  <div className="text-center">
-                    <div className="text-2xl font-bold text-primary">{profileData.stats.diaries}</div>
-                    <div className="text-sm text-muted-foreground">Diaries</div>
-                  </div>
-                </div>
+                <StatStrip
+                  className="mt-4"
+                  items={[
+                    { label: "XP", value: profileData.stats.xp.toLocaleString() },
+                    { label: "Followers", value: profileData.stats.followers },
+                    { label: "Following", value: profileData.stats.following },
+                    { label: "Diaries", value: profileData.stats.diaries },
+                  ]}
+                />
               </div>
             </div>
+          </div>
         </div>
 
         {/* Edit Profile Modal */}
@@ -796,8 +855,8 @@ export default function ProfilePage() {
               key={id}
               onClick={() => setTab(id)}
               className={cn(
-                "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-colors",
-                tab === id ? "bg-primary text-primary-foreground" : "bg-card border border-border hover:bg-secondary"
+                "flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                tab === id ? "bg-primary text-primary-foreground" : "bg-card/80 border border-border/70 hover:bg-secondary"
               )}
             >
               <Icon className="w-4 h-4" /> {label}
@@ -808,13 +867,14 @@ export default function ProfilePage() {
         <div className="grid md:grid-cols-2 gap-4 md:gap-6">
           {tab === "profile" && (<>
           {/* Grow Diaries */}
-          <div className="bg-card/80 rounded-2xl border border-border/70 p-6">
-            <div className="flex items-center gap-2 mb-4">
-              <Leaf className="w-5 h-5 text-primary" />
-              <h2 className="font-display text-lg font-semibold">Grow Diaries</h2>
-            </div>
+          <SectionCard
+            id="hub-diaries"
+            compact={compact}
+            title={<span className="flex items-center gap-2"><Leaf className="w-5 h-5 text-primary" />Grow Diaries</span>}
+            actions={<Link href="/diaries" className="text-xs text-primary hover:underline">All diaries</Link>}
+          >
             {profileData.recentDiaries.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No grow diaries yet</p>
+              <EmptyState compact icon={Sprout} title="No grow diaries yet" description="Start your first grow and document it here." action={{ label: "Browse diaries", href: "/diaries" }} />
             ) : (
               <div className="space-y-3">
                 {profileData.recentDiaries.map((diary) => (
@@ -835,16 +895,17 @@ export default function ProfilePage() {
                 ))}
               </div>
             )}
-          </div>
+          </SectionCard>
 
           {/* Discussion Posts */}
-          <div className="bg-card/80 rounded-2xl border border-border/70 p-6">
-            <div className="flex items-center gap-2 mb-4">
-              <MessageSquare className="w-5 h-5 text-primary" />
-              <h2 className="font-display text-lg font-semibold">Recent Discussions</h2>
-            </div>
+          <SectionCard
+            id="hub-discussions"
+            compact={compact}
+            title={<span className="flex items-center gap-2"><MessageSquare className="w-5 h-5 text-primary" />Recent Discussions</span>}
+            actions={<Link href="/forum" className="text-xs text-primary hover:underline">Forum</Link>}
+          >
             {profileData.recentThreads.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No discussion posts yet</p>
+              <EmptyState compact icon={MessageSquare} title="No discussion posts yet" description="Start a thread — questions and grow talk live here." action={{ label: "Open the forum", href: "/forum" }} />
             ) : (
               <div className="space-y-3">
                 {profileData.recentThreads.map((thread) => (
@@ -865,7 +926,7 @@ export default function ProfilePage() {
                 ))}
               </div>
             )}
-          </div>
+          </SectionCard>
 
           {/* Badges */}
           {profileData && (
@@ -873,6 +934,7 @@ export default function ProfilePage() {
               badges={profileData.badges}
               showAll={showAllBadges}
               setShowAll={setShowAllBadges}
+              compact={compact}
             />
           )}
           </>)}
@@ -888,12 +950,11 @@ export default function ProfilePage() {
           <div className="grid gap-4 md:gap-6 md:grid-cols-2 items-start">
           <div className="space-y-4 md:space-y-6">
           {/* Rank */}
-          <div className="bg-card/80 rounded-2xl border border-border/70 p-6">
-            <div className="flex items-center gap-2 mb-4">
-              <TrendingUp className="w-5 h-5 text-primary" />
-              <h2 className="font-display text-lg font-semibold">Your Growth</h2>
-              <InfoTip content="Your grow level rises with XP. Levels are grouped into stages — finish a stage to level up. Ranks are the long arc and unlock community perks." />
-            </div>
+          <SectionCard
+            id="hub-growth"
+            compact={compact}
+            title={<span className="flex items-center gap-2"><TrendingUp className="w-5 h-5 text-primary" />Your Growth<InfoTip content="Your grow level rises with XP. Levels are grouped into stages — finish a stage to level up. Ranks are the long arc and unlock community perks." /></span>}
+          >
             <div className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full ${profileData.stats.rank.bg} ${profileData.stats.rank.color} text-sm font-medium mb-1`}>
               <span>{profileData.stats.rank.icon}</span>
               {profileData.stats.rank.name}
@@ -927,13 +988,14 @@ export default function ProfilePage() {
             <p className="text-xs text-muted-foreground">
               Earn XP by posting, journaling, documenting grows, and helping growers. Standing — from peer-validated work — unlocks community privileges.
             </p>
-          </div>
+          </SectionCard>
 
           <WeeklyChallenges />
           <div id="rewards" className="scroll-mt-20">
             <PinnedHarvestPicker
               pinnedDiaryId={profileData.profile?.pinnedDiaryId ?? null}
               harvestedDiaries={profileData.harvestedDiaries ?? []}
+              compact={compact}
               onSaved={(pinned) =>
                 setProfileData((prev) =>
                   prev ? { ...prev, profile: prev.profile ? { ...prev.profile, pinnedDiaryId: pinned } : prev.profile } : prev
@@ -970,11 +1032,11 @@ export default function ProfilePage() {
           <SavedSearches />
 
           {/* Referrals */}
-          <div className="bg-card/80 rounded-2xl border border-border/70 p-6">
-            <div className="flex items-center gap-2 mb-4">
-              <User className="w-5 h-5 text-primary" />
-              <h2 className="font-display text-lg font-semibold">Referrals</h2>
-            </div>
+          <SectionCard
+            id="hub-referrals"
+            compact={compact}
+            title={<span className="flex items-center gap-2"><User className="w-5 h-5 text-primary" />Referrals</span>}
+          >
             <p className="text-sm text-muted-foreground mb-3">
               Invite growers — earn <span className="font-semibold text-warning">+{XP_TABLE.REFERRAL.xp} XP and +{XP_TABLE.REFERRAL.standing} standing</span> once your invitee reaches {REFERRAL_MIN_XP} XP and has been a member for {REFERRAL_MIN_AGE_HOURS}+ hours, and unlock the <span className="font-semibold text-warning">🤝 Recruiter</span> badge at 3 referrals. You&apos;ve referred <span className="font-semibold text-foreground">{profileData.stats.referrals}</span> member{profileData.stats.referrals !== 1 ? "s" : ""}.
             </p>
@@ -1001,7 +1063,7 @@ export default function ProfilePage() {
                 Copy
               </button>
             </div>
-          </div>
+          </SectionCard>
 
           </>)}
 
@@ -1011,9 +1073,10 @@ export default function ProfilePage() {
             <RecoveryPhraseCard />
           </div>
 
-          {/* Account Controls */}
-          <div id="account" className="scroll-mt-20 bg-card/80 rounded-2xl border border-border/70 p-6">
-            <h2 className="font-display text-lg font-semibold mb-4">Privacy & Account</h2>
+          {/* Account Controls — the #account anchor must stay on a real
+              element (SectionCard ids label the heading, not the section). */}
+          <div id="account" className="scroll-mt-20">
+          <SectionCard compact={compact} title="Privacy &amp; Account">
             <div className="space-y-3">
               <a
                 href="/api/profile/export"
@@ -1082,6 +1145,7 @@ export default function ProfilePage() {
                 Account deletion is permanent and removes all your content. This action cannot be undone.
               </p>
             </div>
+          </SectionCard>
           </div>
 
           </>)}

@@ -4,8 +4,8 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { unauthorized, forbidden, getClientIp, logSecurityEvent, LIMITS, isBanned, enforceLinkTrust } from "@/lib/security"
 import { storeImage, deleteImagesIfUnreferenced, isBlobConfigured } from "@/lib/blob"
-import { rankDisplay, xpRankProgress, xpStage, xpStageProgress } from "@/lib/progression-config"
-import { getProgressionPerks, progressionPerksFrom, hasUnlock, statSlotLimit, profileSectionLimit } from "@/lib/progression"
+import { rankDisplay, xpRankProgress, xpStage, xpStageProgress, buildTitle, standingDisplay, MASTERIES, masteryLevelFromXp } from "@/lib/progression-config"
+import { getProgressionPerks, progressionPerksFrom, hasUnlock, statSlotLimit, profileSectionLimit, getMasteryMap } from "@/lib/progression"
 import { enqueueReversal, drainOne } from "@/lib/reputation-outbox"
 import { enqueueXpReversal, drainXpOne } from "@/lib/progression-outbox"
 import { Prisma } from "@prisma/client"
@@ -116,13 +116,18 @@ export async function GET() {
       },
     })
 
-    // P2 — progression-derived customization caps for the editor.
-    const [sectionLimit, statSlots, recordsWidget, insightsWidget] = await Promise.all([
+    // P2 — progression-derived customization caps for the editor, plus the
+    // mastery map the hub hero needs for its build-title chip.
+    const [sectionLimit, statSlots, recordsWidget, insightsWidget, masteryMap] = await Promise.all([
       profileSectionLimit(user.id),
       statSlotLimit(user.id),
       hasUnlock(user.id, "records-widget"),
       hasUnlock(user.id, "owner-analytics"),
+      getMasteryMap(user.id),
     ])
+    const masteryLevels = Object.fromEntries(
+      MASTERIES.map((m) => [m, masteryLevelFromXp(masteryMap[m])])
+    ) as Parameters<typeof buildTitle>[0]
 
     return NextResponse.json({
       user: {
@@ -152,6 +157,8 @@ export async function GET() {
         badges: user.badges.length,
         xp: user.profile?.xp || 0,
         standing: user.profile?.standing || 0,
+        buildTitle: buildTitle(masteryLevels).title,
+        standingTier: standingDisplay(user.profile?.standing ?? 0),
         pollCreation: progressionPerksFrom(
           user.profile?.xp ?? 0,
           user.profile?.standing ?? 0,
