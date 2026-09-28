@@ -32,6 +32,8 @@ import { GET as getProfileSections } from "@/app/api/users/[username]/sections/[
 import { getPublicProfileData, getProfileSection, resolveNotableStatValue } from "@/lib/public-profile"
 import { masteryParam, masteryQualified, MASTERY_MIN_XP } from "@/lib/grower-directory"
 import { toSearchProfileDTO } from "@/lib/search-dto"
+import { buildProfileIntel } from "@/lib/terpbot-profile"
+import { GET as getProfileTerpBot } from "@/app/api/profile/terpbot/route"
 import {
   awardExperimentCreated, awardHypothesisIfMet, awardExperimentFollowups,
   evaluateExperimentAwards, reverseExperimentAwards,
@@ -618,6 +620,49 @@ async function run() {
       toSearchProfileDTO({ ...dtoBase, publicMilestoneOptOut: false, user: { masteryProgress: [{ mastery: "KNOWLEDGE", xp: 10 }] } }).buildTitle,
       null, "below 50 path XP → no identity claim"
     )
+
+    // ── PROFILE P5 — TerpBot profile intelligence ──────────────────
+    // Route is session-scoped: an anonymous caller is rejected and no
+    // username parameter exists to aim it at another member.
+    const tbAnon = await getProfileTerpBot(new NextRequest("http://localhost/api/profile/terpbot"))
+    assert.equal(tbAnon.status, 401, "terpbot insights endpoint rejects anonymous callers")
+
+    // Zero-state member → recorded zeros, null derived coverage, and a
+    // deterministic "start a diary" recommendation (coverage source).
+    const tbUser = await mk(`__ss_tb_${SUFFIX}`)
+    const tbEmpty = await buildProfileIntel(tbUser.id)
+    assert.equal(tbEmpty.recorded.growsDocumented, 0, "zero-state intel: no grows")
+    assert.equal(tbEmpty.derived.phCoverage, null, "zero-state intel: null coverage, never fabricated")
+    assert.equal(tbEmpty.recommendation?.source, "coverage", "zero-state recommendation is a coverage rule")
+    assert.ok(tbEmpty.recommendation && !tbEmpty.recommendation.growTitle, "zero-state recommendation names no grow")
+
+    // Documented activity → recorded counts + derived coverage. A
+    // PRIVATE grow counts for the owner (their own data) — this is the
+    // intended owner-scope behavior, gated by the endpoint above.
+    const tbDiary = await prisma.growDiary.create({
+      data: { title: "tb grow", description: "d", growType: "INDOOR", startDate: new Date(), authorId: tbUser.id, visibility: "PRIVATE" },
+    })
+    const tbUpd = await prisma.diaryUpdate.create({
+      data: { diaryId: tbDiary.id, authorId: tbUser.id, title: "u1", content: "c", stage: "VEGETATIVE", temperature: 75, ph: 6.1 },
+    })
+    const tbIntel = await buildProfileIntel(tbUser.id)
+    assert.equal(tbIntel.recorded.growsDocumented, 1, "owner intel counts private grows")
+    assert.equal(tbIntel.recorded.updatesLogged, 1, "owner intel counts the update")
+    assert.equal(tbIntel.derived.environmentCoverage, 1, "coverage derived from logged columns")
+    assert.equal(tbIntel.derived.ecCoverage, 0, "unlogged metric derives 0, not null")
+    assert.equal(tbIntel.derived.strongestSignal != null, true, "strongest signal derived")
+    assert.ok(tbIntel.recommendation, "live grow yields a recommendation")
+    // Deterministic: same rows → same derived output.
+    const tbIntel2 = await buildProfileIntel(tbUser.id)
+    assert.deepEqual(tbIntel2.derived, tbIntel.derived, "profile intel is deterministic")
+    assert.deepEqual(tbIntel2.recorded, tbIntel.recorded, "recorded facts deterministic")
+    await prisma.diaryUpdate.delete({ where: { id: tbUpd.id } })
+    await prisma.growDiary.delete({ where: { id: tbDiary.id } })
+
+    // The intel never enters the public profile contract — visitors and
+    // the owner get the same absence (it is a separate owner endpoint).
+    const pJsonTb = await profileApi(`__ss_tb_${SUFFIX}`)
+    assert.ok(!("terpbot" in pJsonTb) && !("profileIntel" in pJsonTb), "terpbot intel not in public DTO")
 
     // ── PROFILE P1 — core experience contracts ─────────────────────
     // activeGrow/featuredGrow visibility, standing-tier suppression,

@@ -17,6 +17,7 @@ import SectionCard from "@/components/ui/section-card"
 import EmptyState from "@/components/ui/empty-state"
 import TimeAgo from "@/components/ui/time-ago"
 import Tag from "@/components/ui/tag"
+import TerpBotInsights from "@/components/terpbot-insights"
 import { MarkdownRenderer } from "@/lib/markdown"
 import { diaryPath, setupPath } from "@/lib/slugs"
 import { STAGE_LABELS } from "@/lib/diary-weeks"
@@ -1371,7 +1372,13 @@ function AboutTab({ profile, isSelf, compact }: { profile: PublicProfile; isSelf
   const identity = profile.profileSettings.identity
   const hasIdentity = profile.growExperience || profile.growSpace || profile.favoriteStrain ||
     identity.mediums.length > 0 || identity.styles.length > 0 || identity.goals
-  const hasAnything = profile.bio || hasIdentity || profile.businessName || profile.customSections.length > 0 || profile.ownerInsights || profile.equipmentChips.length > 0
+  // The owner's private panels (30-day + TerpBot insights) can render
+  // even when every public field is empty — but a hidden panel doesn't.
+  const privatePanels = isSelf && (
+    (profile.ownerInsights && !profile.profileSettings.hiddenSections.includes("owner-insights")) ||
+    !profile.profileSettings.hiddenSections.includes("terpbot-insights")
+  )
+  const hasAnything = profile.bio || hasIdentity || profile.businessName || profile.customSections.length > 0 || profile.ownerInsights || profile.equipmentChips.length > 0 || privatePanels
 
   if (!hasAnything) {
     return <EmptyState icon={User} title="Nothing here yet" description="This member hasn't shared an about section." />
@@ -1397,6 +1404,12 @@ function AboutTab({ profile, isSelf, compact }: { profile: PublicProfile; isSelf
             ]}
           />
         </SectionCard>
+      )}
+
+      {/* TerpBot insights (P5) — owner-only, deferred fetch; the
+          endpoint only answers for the session owner. */}
+      {isSelf && !profile.profileSettings.hiddenSections.includes("terpbot-insights") && (
+        <TerpBotInsights compact={compact} />
       )}
 
       {profile.bio && (

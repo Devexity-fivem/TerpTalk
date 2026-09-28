@@ -58,6 +58,7 @@ export const PROFILE_BLOCK_IDS = [
   "history",
   "badges",
   "owner-insights",
+  "terpbot-insights",
 ] as const
 // Canonical order: overview first, then blocks in their default visual
 // order, then the remaining tabs. Each role filters its own subset, so the
