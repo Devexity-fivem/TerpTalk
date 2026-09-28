@@ -47,11 +47,15 @@ export async function GET(
   // must never hand out a working link.
   if (product && (product.minRank || product.publicAt)) {
     const userId = session?.user?.id
-    const xp = userId
-      ? (await prisma.profile.findUnique({ where: { userId }, select: { xp: true } }))?.xp ?? 0
-      : 0
+    const viewerProfile = userId
+      ? await prisma.profile.findUnique({ where: { userId }, select: { xp: true, unlockFrozen: true } })
+      : null
     const viewer = userId
-      ? { xp, earlyAccess: await hasUnlock(userId, "early-access") }
+      ? {
+          xp: viewerProfile?.xp ?? 0,
+          earlyAccess: await hasUnlock(userId, "early-access"),
+          unlockFrozen: viewerProfile?.unlockFrozen ?? true,
+        }
       : null
     if (!canSeeDeal(product, viewer)) {
       return NextResponse.redirect(new URL("/deals", request.url))

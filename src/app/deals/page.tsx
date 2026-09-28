@@ -53,10 +53,17 @@ export default async function DealsPage() {
 
   // Garden Perks — members-only deals gate on rank; upcoming deals stay
   // hidden until publicAt (early-access members see them first).
+  const viewerProfile = session?.user?.id
+    ? await prisma.profile.findUnique({
+        where: { userId: session.user.id },
+        select: { xp: true, unlockFrozen: true },
+      })
+    : null
   const viewer: DealViewer | null = session?.user?.id
     ? {
-        xp: (await prisma.profile.findUnique({ where: { userId: session.user.id }, select: { xp: true } }))?.xp ?? 0,
+        xp: viewerProfile?.xp ?? 0,
         earlyAccess: await hasUnlock(session.user.id, "early-access"),
+        unlockFrozen: viewerProfile?.unlockFrozen ?? true,
       }
     : null
   const now = new Date()

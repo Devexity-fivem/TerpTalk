@@ -26,6 +26,9 @@ export interface DealGate {
 export interface DealViewer {
   xp: number
   earlyAccess: boolean
+  // Staff kill-switch parity with hasUnlock(): a frozen member keeps fully
+  // public deals but loses every progression-gated one.
+  unlockFrozen: boolean
 }
 
 export function canSeeDeal(
@@ -35,7 +38,7 @@ export function canSeeDeal(
 ): boolean {
   if (product.minRank) {
     const threshold = REP_RANKS.find((r) => r.name === product.minRank)?.threshold ?? Infinity
-    if (!viewer || viewer.xp < threshold) return false
+    if (!viewer || viewer.unlockFrozen || viewer.xp < threshold) return false
   }
   if (product.publicAt && product.publicAt.getTime() > now.getTime() && !viewer?.earlyAccess) {
     return false

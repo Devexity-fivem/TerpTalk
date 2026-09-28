@@ -100,6 +100,17 @@ const apiFiles = () => {
     return /\$queryRaw|\$executeRaw/.test(fs.readFileSync(f, "utf8"));
   }));
 
+  // ── 3b. Reputation V1 freeze contract ──
+  // The V1 ledger is frozen: no member-facing API route may import the award
+  // path. Live writes are allowed only in the defined compatibility paths —
+  // reversal/reinstate (terpbot-events.js residue drain, update-reversals
+  // cron, moderation reinstate) — which import reputation-config, never the
+  // award engine. Guard: no route under src/app/api may import
+  // awardReputation/applyReputationAward.
+  const v1Writers = /awardReputation|applyReputationAward/
+  const violating = apiFiles().filter((f) => v1Writers.test(fs.readFileSync(f, "utf8")));
+  check("v1 freeze: no API route writes the V1 ledger", violating.length === 0);
+
   // ── 4. Rate limiting coverage on mutation endpoints ──
   const needsRl = ["auth/register", "auth/recover", "messages", "forum/posts", "forum/threads",
     "reactions", "follows", "reports", "blocks", "bookmarks", "search", "profile",
