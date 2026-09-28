@@ -126,6 +126,12 @@ export interface XpSpec {
   dailyCap?: number
   weeklyCap?: number
   peerGated?: boolean // exempt from mastery soft caps — human-limited already
+  /**
+   * Locked-design event whose awarding feature is intentionally deferred
+   * (see DEFERRED_XP_EVENTS). `awardProgression` refuses deferred types —
+   * they stay in the table as the design contract but can never pay.
+   */
+  deferred?: true
   label: string
 }
 
@@ -155,8 +161,10 @@ export const XP_TABLE: Record<string, XpSpec> = {
   ACCEPTED_ANSWER: { xp: 30, standing: 10, mastery: "KNOWLEDGE", dailyCap: 2, peerGated: true, label: "Answer accepted" },
   OP_CURATION: { xp: 5, mastery: "KNOWLEDGE", label: "Marked the answer that fixed it" },
   NEWCOMER_ACCEPT_BONUS: { xp: 10, standing: 2, mastery: "KNOWLEDGE", peerGated: true, label: "Helped a new grower" },
-  GUIDE_PUBLISHED: { xp: 50, standing: 10, mastery: "KNOWLEDGE", peerGated: true, label: "Guide published" },
-  GUIDE_IMPROVEMENT: { xp: 15, mastery: "KNOWLEDGE", peerGated: true, label: "Guide improved" },
+  // Guides are staff-authored today — member authoring + the review queue
+  // are Phase IV. Deferred: no callsite may award until that ships.
+  GUIDE_PUBLISHED: { xp: 50, standing: 10, mastery: "KNOWLEDGE", peerGated: true, deferred: true, label: "Guide published" },
+  GUIDE_IMPROVEMENT: { xp: 15, mastery: "KNOWLEDGE", peerGated: true, deferred: true, label: "Guide improved" },
   STRAIN_SOURCED: { xp: 10, mastery: "KNOWLEDGE", dailyCap: 5, label: "Added a strain with a source" },
   PROBLEM_RESOLVED: { xp: 20, mastery: "KNOWLEDGE", label: "Fixed a problem and wrote it up" },
 
@@ -166,7 +174,9 @@ export const XP_TABLE: Record<string, XpSpec> = {
   EXPERIMENT_COMPLETED: { xp: 25, mastery: "EXPERIMENTATION", label: "Experiment completed" },
   FAILURE_DOCUMENTED: { xp: 8, mastery: "EXPERIMENTATION", weeklyCap: 2, label: "Wrote up something that didn't work" },
   FOLLOWUPS_3: { xp: 10, mastery: "EXPERIMENTATION", label: "Checked back in on an experiment" },
-  REPLICATION: { xp: 20, mastery: "EXPERIMENTATION", label: "Repeated another grower's experiment" },
+  // Replication needs an explicit `replicates` link between experiments —
+  // that entity is Phase III comparisons scope. Deferred until it exists.
+  REPLICATION: { xp: 20, mastery: "EXPERIMENTATION", deferred: true, label: "Repeated another grower's experiment" },
 
   // Community
   THREAD_STARTED: { xp: 8, mastery: "COMMUNITY", dailyCap: 3, label: "Started a discussion" },
@@ -176,7 +186,9 @@ export const XP_TABLE: Record<string, XpSpec> = {
   CONTEST_WEEKLY_WIN: { xp: 50, standing: 10, mastery: "COMMUNITY", peerGated: true, label: "Won the weekly contest" },
   CONTEST_MONTHLY_WIN: { xp: 150, standing: 20, mastery: "COMMUNITY", peerGated: true, label: "Won the monthly contest" },
   REFERRAL: { xp: 25, standing: 15, mastery: "COMMUNITY", weeklyCap: 3, peerGated: true, label: "Qualified referral" },
-  MENTOR_SESSION: { xp: 5, mastery: "COMMUNITY", label: "Mentored a grower" },
+  // Mentoring routing is Phase IV (needs the achievement engine) — no
+  // member-accessible mentor workflow exists yet. Deferred.
+  MENTOR_SESSION: { xp: 5, mastery: "COMMUNITY", deferred: true, label: "Mentored a grower" },
   WEEKLY_AWARD: { xp: 50, mastery: "COMMUNITY", peerGated: true, label: "Grower of the Week" },
   STAFF_ADJUSTMENT: { xp: 0, mastery: null, label: "Staff adjustment" }, // amount passed directly
 
@@ -193,6 +205,18 @@ export const XP_TABLE: Record<string, XpSpec> = {
 // legitimate: this much XP earned on the V2 ledger plus this much age.
 export const REFERRAL_MIN_XP = 25
 export const REFERRAL_MIN_AGE_HOURS = 24
+
+/**
+ * Locked-design events whose awarding feature is intentionally deferred —
+ * member guide authoring (Phase IV), mentoring routing (Phase IV), and
+ * experiment replication links (Phase III). `awardProgression` refuses
+ * these types, and member-facing earn lists must never advertise them.
+ * Preserved in XP_TABLE because the design locks their economy; removal
+ * would falsify the roadmap, not just the code.
+ */
+export const DEFERRED_XP_EVENTS = new Set(
+  Object.entries(XP_TABLE).filter(([, s]) => s.deferred).map(([t]) => t)
+)
 
 // Member-driven XP types — the weekly-board allowlist. Excludes system
 // payouts (quests, challenges, journeys, contests, referrals, weekly
@@ -323,72 +347,86 @@ export interface UnlockSpec {
   streak?: number // check-in streak days that grant it (alt route — streak:<days>:<userId> marker)
   anyOf?: boolean // rank OR mastery is sufficient (alternate specialist routes)
   flag?: string // feature-flag Setting key
+  /**
+   * "future" = locked roadmap entry whose feature is intentionally deferred
+   * (a later phase). Never enforced, never grantable — `hasUnlock` returns
+   * false and `nextRankUnlock`/unlock roadmaps skip or label it. A registry
+   * row may only ship *live* with its enforcement callsite or a documented
+   * free-tier semantic; rows kept for roadmap visibility carry this flag.
+   */
+  status?: "future"
   blurb: string // what it unlocks + how to use it (UX copy)
 }
 
 export const UNLOCKS: UnlockSpec[] = [
   // Early — Layer A
-  { id: "streak-dashboard", name: "Grow summaries & streak tracker", category: "analytics", layer: "A", rank: "Germinated", blurb: "Each grow boiled down to a simple summary card, plus a tracker for your check-in streak." },
-  { id: "saved-searches-3", name: "Save 3 searches", category: "capacity", layer: "A", rank: "Germinated", blurb: "Keep three searches you use often one tap away." },
-  { id: "comparison-basic", name: "Compare your grow", category: "analytics", layer: "A", rank: "Seedling", blurb: "See how your numbers stack up against other growers running similar setups." },
-  { id: "comparison-slot-2", name: "Compare 2 grows at once", category: "capacity", layer: "A", rank: "Seedling", blurb: "Keep two side-by-side comparisons open." },
-  { id: "grow-templates", name: "Quick-log templates", category: "functional", layer: "A", rank: "Rooted", blurb: "Update forms prefilled for your soil or hydro setup, so logging takes seconds." },
+  // (streak-dashboard, saved-searches-3, comparison-basic removed in
+  // Phase I — the features are free for everyone, so the "unlock"
+  // promised less than reality. The ladder keeps what genuinely changes.)
+  { id: "comparison-slot-2", name: "Compare 2 grows at once", category: "capacity", layer: "A", rank: "Seedling", status: "future", blurb: "Keep two side-by-side comparisons open." },
+  { id: "grow-templates", name: "Quick-log templates", category: "functional", layer: "A", rank: "Rooted", status: "future", blurb: "Update forms prefilled for your soil or hydro setup, so logging takes seconds." },
   { id: "quest-slot-4", name: "4th daily quest", category: "functional", layer: "A", rank: "Rooted", blurb: "One more quest on your board each day." },
-  { id: "saved-views", name: "Saved filters", category: "convenience", layer: "A", rank: "Rooted", blurb: "Pin the diary and feed filters you keep coming back to." },
+  { id: "saved-views", name: "Saved filters", category: "convenience", layer: "A", rank: "Rooted", status: "future", blurb: "Pin the diary and feed filters you keep coming back to." },
   { id: "members-deals", name: "Members' deals", category: "deals", layer: "A", rank: "Rooted", blurb: "Partner discounts and codes set aside for growers who've put down roots." },
 
   // Mid — A + B
-  { id: "env-analytics", name: "Temperature & humidity charts", category: "analytics", layer: "B", rank: "Vegged", mastery: { path: "RECORDS", level: 2 }, blurb: "See how your tent's temperature and humidity have tracked over the last 30 or 90 days, day and night." },
-  { id: "comparison-env", name: "Compare your tent conditions", category: "analytics", layer: "B", rank: "Vegged", mastery: { path: "RECORDS", level: 2 }, blurb: "Lay your temperature and humidity over what other growers are running." },
+  { id: "env-analytics", name: "Advanced environment charts", category: "analytics", layer: "B", rank: "Vegged", mastery: { path: "RECORDS", level: 2 }, blurb: "On your own grows: night temps, CO₂, PPFD and the rest — plus day/night splits and 30/90-day trends beyond the basic chart." },
+  { id: "comparison-env", name: "Compare your tent conditions", category: "analytics", layer: "B", rank: "Vegged", mastery: { path: "RECORDS", level: 2 }, status: "future", blurb: "Lay your temperature and humidity over what other growers are running." },
   { id: "harvest-analytics", name: "Harvest trends", category: "analytics", layer: "A", rank: "Vegged", blurb: "How your yields and ratings have changed from harvest to harvest." },
-  { id: "grows-6", name: "6 active grows, 6 saved searches", category: "capacity", layer: "A", rank: "Vegged", blurb: "Room for a fuller garden." },
-  { id: "export-tools", name: "Download your grow records", category: "functional", layer: "A", rank: "Trained", blurb: "Take a copy of your diaries and data with you any time." },
-  { id: "advanced-filters", name: "Finer strain & gear search", category: "functional", layer: "A", rank: "Trained", blurb: "Narrow down strains and equipment by the details that matter to you." },
-  { id: "saved-searches-10", name: "Save 10 searches", category: "capacity", layer: "A", rank: "Trained", blurb: "A full shelf of saved searches." },
-  { id: "custom-reminders", name: "Grow reminders", category: "functional", layer: "A", rank: "Trained", blurb: "Set your own reminders to water, feed, or check on a grow." },
-  { id: "terpbot-watch-basic", name: "TerpBot keeps an eye out", category: "terpbot", layer: "A", rank: "Preflower", blurb: "Set up to 3 alerts — e.g. 'tell me if my tent gets too humid'." },
-  { id: "longitudinal-analysis", name: "Whole-grow review", category: "terpbot", layer: "B", rank: "Flowering", mastery: { path: "RECORDS", level: 2 }, blurb: "TerpBot looks back over a full grow and points out what changed and when." },
-  { id: "comparison-multi", name: "Compare whole grows", category: "analytics", layer: "B", rank: "Flowering", mastery: { path: "RECORDS", level: 2 }, blurb: "Put entire grows side by side — yours against yours, or against the community." },
-  { id: "images-6", name: "6 photos per post", category: "capacity", layer: "A", rank: "Flowering", blurb: "More room to show what you're seeing." },
+  // (grows-6 removed — no active-grow cap is manufactured just to gate it.)
+  { id: "export-tools", name: "Per-grow CSV export", category: "functional", layer: "A", rank: "Trained", blurb: "Download a grow's full update log as a spreadsheet-ready CSV. (The whole-account JSON export stays free for everyone.)" },
+  // (advanced-filters removed — every existing filter stays free; no
+  //  gate was manufactured on basic search.)
+  { id: "saved-searches-10", name: "Save 10 searches", category: "capacity", layer: "A", rank: "Trained", blurb: "A full shelf of saved searches — up from the 3 everyone gets." },
+  { id: "custom-reminders", name: "Grow reminders", category: "functional", layer: "A", rank: "Trained", status: "future", blurb: "Set your own reminders to water, feed, or check on a grow." },
+  { id: "terpbot-watch-basic", name: "TerpBot keeps an eye out", category: "terpbot", layer: "A", rank: "Preflower", status: "future", blurb: "Set up to 3 alerts — e.g. 'tell me if my tent gets too humid'." },
+  { id: "longitudinal-analysis", name: "Whole-grow review", category: "terpbot", layer: "B", rank: "Flowering", mastery: { path: "RECORDS", level: 2 }, status: "future", blurb: "TerpBot looks back over a full grow and points out what changed and when." },
+  { id: "comparison-multi", name: "Compare whole grows", category: "analytics", layer: "B", rank: "Flowering", mastery: { path: "RECORDS", level: 2 }, status: "future", blurb: "Put entire grows side by side — yours against yours, or against the community." },
+  { id: "images-6", name: "6 photos per post", category: "capacity", layer: "A", rank: "Flowering", status: "future", blurb: "More room to show what you're seeing." },
 
   // Late — B + C
-  { id: "guide-authoring", name: "Write grow guides", category: "leadership", layer: "B", rank: "Ripening", mastery: { path: "KNOWLEDGE", level: 3 }, anyOf: true, blurb: "Publish your own guides for the community (staff-reviewed)." },
-  { id: "challenge-creation", name: "Run a challenge", category: "leadership", layer: "B", rank: "Ripening", mastery: { path: "COMMUNITY", level: 4 }, anyOf: true, blurb: "Set a community challenge and see who joins in." },
-  { id: "mentoring-tools", name: "Mentor new growers", category: "leadership", layer: "C", rank: "Ripening", mastery: { path: "KNOWLEDGE", level: 3 }, standing: STANDING_POLL_CREATE, anyOf: true, achievement: "greenlight", blurb: "Unanswered beginner questions get routed to you, and you're listed as a mentor." },
-  { id: "nutrient-schedules", name: "Feed-chart presets", category: "functional", layer: "B", mastery: { path: "RECORDS", level: 3 }, blurb: "Pick your nutrient brand and its feeding schedule drops straight into your update form." },
-  { id: "data-quality-insights", name: "What's missing from your log", category: "analytics", layer: "B", mastery: { path: "RECORDS", level: 2 }, achievement: "full-spectrum", blurb: "A gentle checklist of readings your diary doesn't have yet." },
-  { id: "experiment-templates", name: "Copy a proven test", category: "functional", layer: "B", mastery: { path: "EXPERIMENTATION", level: 2 }, blurb: "Start a new experiment from one that already worked." },
-  { id: "rate-1.5", name: "Post & chat more often", category: "capacity", layer: "A", rank: "Harvested", blurb: "Looser limits on how often you can post and chat." },
-  { id: "images-8", name: "8 photos per post", category: "capacity", layer: "A", rank: "Harvested", blurb: "Even more room for photos." },
+  { id: "guide-authoring", name: "Write grow guides", category: "leadership", layer: "B", rank: "Ripening", mastery: { path: "KNOWLEDGE", level: 3 }, anyOf: true, status: "future", blurb: "Publish your own guides for the community (staff-reviewed)." },
+  { id: "challenge-creation", name: "Run a challenge", category: "leadership", layer: "B", rank: "Ripening", mastery: { path: "COMMUNITY", level: 4 }, anyOf: true, status: "future", blurb: "Set a community challenge and see who joins in." },
+  { id: "mentoring-tools", name: "Mentor new growers", category: "leadership", layer: "C", rank: "Ripening", mastery: { path: "KNOWLEDGE", level: 3 }, standing: STANDING_POLL_CREATE, anyOf: true, achievement: "greenlight", status: "future", blurb: "Unanswered beginner questions get routed to you, and you're listed as a mentor." },
+  { id: "nutrient-schedules", name: "Feed-chart presets", category: "functional", layer: "B", mastery: { path: "RECORDS", level: 3 }, status: "future", blurb: "Pick your nutrient brand and its feeding schedule drops straight into your update form." },
+  { id: "data-quality-insights", name: "What's missing from your log", category: "analytics", layer: "B", mastery: { path: "RECORDS", level: 2 }, achievement: "full-spectrum", status: "future", blurb: "A gentle checklist of readings your diary doesn't have yet." },
+  { id: "experiment-templates", name: "Copy a proven test", category: "functional", layer: "B", mastery: { path: "EXPERIMENTATION", level: 2 }, status: "future", blurb: "Start a new experiment from one that already worked." },
+  { id: "rate-1.5", name: "Post & chat more often", category: "capacity", layer: "A", rank: "Harvested", status: "future", blurb: "Looser limits on how often you can post and chat." },
+  { id: "images-8", name: "8 photos per post", category: "capacity", layer: "A", rank: "Harvested", status: "future", blurb: "Even more room for photos." },
   { id: "pinned-harvest", name: "Pin a harvest to your profile", category: "showcase", layer: "A", rank: "Harvested", streak: 60, blurb: "Pick your proudest harvest and it sits at the top of your profile." },
-  { id: "grower-cockpit", name: "Grower Cockpit", category: "functional", layer: "A", rank: "Harvested", blurb: "Your grows, alerts, comparisons and quests all on one screen." },
-  { id: "watch-advanced", name: "More TerpBot alerts", category: "terpbot", layer: "B", rank: "Harvested", mastery: { path: "RECORDS", level: 3 }, blurb: "Up to 10 alerts, including ones that watch over several days." },
-  { id: "watch-compound", name: "Combined alerts", category: "terpbot", layer: "B", mastery: { path: "RECORDS", level: 4 }, blurb: "Alerts that watch two things at once — say, humidity during late flower." },
-  { id: "experiment-analysis", name: "What your experiments taught you", category: "terpbot", layer: "B", rank: "Harvested", mastery: { path: "EXPERIMENTATION", level: 2 }, blurb: "TerpBot sums up what worked across all your finished experiments." },
-  { id: "historical-trends", name: "This grow vs your past grows", category: "analytics", layer: "B", rank: "Cured", mastery: { path: "RECORDS", level: 4 }, blurb: "See how your current grow compares with your own earlier seasons." },
-  { id: "dashboard-advanced", name: "Bigger cockpit, 15 alerts", category: "analytics", layer: "A", rank: "Cured", blurb: "More cockpit panels and more TerpBot alerts." },
-  { id: "rate-2", name: "Post & chat freely, 7 tags", category: "capacity", layer: "A", rank: "Cured", blurb: "The loosest posting limits and more tags per thread." },
+  { id: "grower-cockpit", name: "Grower Cockpit", category: "functional", layer: "A", rank: "Harvested", status: "future", blurb: "Your grows, alerts, comparisons and quests all on one screen." },
+  { id: "watch-advanced", name: "More TerpBot alerts", category: "terpbot", layer: "B", rank: "Harvested", mastery: { path: "RECORDS", level: 3 }, status: "future", blurb: "Up to 10 alerts, including ones that watch over several days." },
+  { id: "watch-compound", name: "Combined alerts", category: "terpbot", layer: "B", mastery: { path: "RECORDS", level: 4 }, status: "future", blurb: "Alerts that watch two things at once — say, humidity during late flower." },
+  { id: "experiment-analysis", name: "What your experiments taught you", category: "terpbot", layer: "B", rank: "Harvested", mastery: { path: "EXPERIMENTATION", level: 2 }, status: "future", blurb: "TerpBot sums up what worked across all your finished experiments." },
+  { id: "historical-trends", name: "This grow vs your past grows", category: "analytics", layer: "B", rank: "Cured", mastery: { path: "RECORDS", level: 4 }, status: "future", blurb: "See how your current grow compares with your own earlier seasons." },
+  { id: "dashboard-advanced", name: "Bigger cockpit, 15 alerts", category: "analytics", layer: "A", rank: "Cured", status: "future", blurb: "More cockpit panels and more TerpBot alerts." },
+  { id: "rate-2", name: "Post & chat freely, 7 tags", category: "capacity", layer: "A", rank: "Cured", status: "future", blurb: "The loosest posting limits and more tags per thread." },
   { id: "grower-spotlight", name: "Grower Spotlight", category: "showcase", layer: "A", rank: "Cured", streak: 100, blurb: "Your active grow can be featured on the TerpTalk home page." },
   { id: "quest-slot-5", name: "5th daily quest", category: "functional", layer: "A", rank: "Cultivator", blurb: "A fifth quest on your board each day." },
 
   // Prestige — C
   { id: "grow-room", name: "The Grow Room", category: "leadership", layer: "C", rank: "Cultivator", standing: 100, blurb: "The trusted growers' chat room — takes rank and a good standing." },
-  { id: "community-evidence", name: "What's working for other growers", category: "analytics", layer: "C", rank: "Cultivator", standing: 100, blurb: "Patterns pulled from public diaries — no names, just what tends to work." },
-  { id: "images-10", name: "10 photos per post", category: "capacity", layer: "A", rank: "Cultivator", blurb: "The most room for photos." },
+  { id: "community-evidence", name: "What's working for other growers", category: "analytics", layer: "C", rank: "Cultivator", standing: 100, status: "future", blurb: "Patterns pulled from public diaries — no names, just what tends to work." },
+  { id: "images-10", name: "10 photos per post", category: "capacity", layer: "A", rank: "Cultivator", status: "future", blurb: "The most room for photos." },
   { id: "top-shelf-deals", name: "Top-shelf deals", category: "deals", layer: "A", rank: "Cultivator", blurb: "The best partner offers, reserved for the most experienced growers." },
   { id: "the-vault", name: "The Vault", category: "leadership", layer: "C", rank: "Master Cultivator", standing: 300, blurb: "The top room. Few get in, on purpose." },
-  { id: "research-aggregates", name: "Deeper community stats", category: "analytics", layer: "B", rank: "Master Cultivator", mastery: { path: "RECORDS", level: 4 }, blurb: "More detailed community-wide numbers, still anonymous." },
-  { id: "early-access", name: "First look", category: "prestige", layer: "A", rank: "Master Cultivator", blurb: "Try new features first — and see new partner deals before they go public." },
+  { id: "research-aggregates", name: "Deeper community stats", category: "analytics", layer: "B", rank: "Master Cultivator", mastery: { path: "RECORDS", level: 4 }, status: "future", blurb: "More detailed community-wide numbers, still anonymous." },
+  // Enforced today for partner deals (`canSeeDeal` on /deals + /go/*);
+  // the "try new features" half has no feature-flag consumers yet — the
+  // blurb only promises the part that works.
+  { id: "early-access", name: "First look", category: "prestige", layer: "A", rank: "Master Cultivator", blurb: "See new partner deals before they go public." },
 ]
 
 export const UNLOCK_BY_ID = new Map(UNLOCKS.map((u) => [u.id, u]))
 
 // The first rank-gated unlock a member is still climbing toward — powers
 // every "next unlock" surface (member-facing, so rank-only entries count;
-// streak/achievement/mastery alternates are hidden routes).
+// streak/achievement/mastery alternates are hidden routes). `future`
+// roadmap entries are skipped — an unlock that's on the horizon but not
+// built must never be presented as the next thing you earn.
 export function nextRankUnlock(xp: number): { id: string; name: string; rank: string; xpNeeded: number } | null {
   const next = UNLOCKS.filter(
-    (u) => u.rank && xp < (REP_RANKS.find((r) => r.name === u.rank)?.threshold ?? Infinity)
+    (u) => u.rank && u.status !== "future" && xp < (REP_RANKS.find((r) => r.name === u.rank)?.threshold ?? Infinity)
   ).sort(
     (a, b) =>
       (REP_RANKS.find((r) => r.name === a.rank)!.threshold) - (REP_RANKS.find((r) => r.name === b.rank)!.threshold)
@@ -457,18 +495,21 @@ export function publicXpLabel(type: string): string {
 // "what am I working toward" is always answerable.
 export const RANK_DISPLAY: Record<string, { icon: string; color: string; bg: string; benefit: string; nameplate?: string }> = {
   Seed: { icon: "🌰", color: "text-stone-500", bg: "bg-stone-500/10", benefit: "Every grow starts somewhere — post, grow, and share to earn XP." },
-  Germinated: { icon: "🌱", color: "text-success", bg: "bg-lime-500/10", benefit: "Grow summaries, the streak tracker, and saved searches unlocked." },
-  Seedling: { icon: "🌿", color: "text-success", bg: "bg-green-500/10", benefit: "Compare your grow against other growers running similar setups.", nameplate: "tt-nameplate-leaf" },
-  Rooted: { icon: "🪴", color: "text-success", bg: "bg-green-600/10", benefit: "Quick-log templates, saved filters, a 4th daily quest, and members' deals.", nameplate: "tt-nameplate-leaf" },
-  Vegged: { icon: "🌲", color: "text-success", bg: "bg-emerald-500/10", benefit: "Temperature, humidity and harvest charts — grows expand to 6.", nameplate: "tt-nameplate-leaf" },
-  Trained: { icon: "✂️", color: "text-success", bg: "bg-emerald-600/10", benefit: "Download your records, finer search, and your own grow reminders.", nameplate: "tt-nameplate-leaf" },
-  Preflower: { icon: "🌸", color: "text-fuchsia-500", bg: "bg-fuchsia-500/10", benefit: "TerpBot keeps an eye out — set up to 3 grow alerts.", nameplate: "tt-nameplate-bloom" },
-  Flowering: { icon: "🌺", color: "text-fuchsia-500", bg: "bg-fuchsia-600/10", benefit: "Whole-grow review and side-by-side comparisons; 6 photos per post.", nameplate: "tt-nameplate-bloom" },
-  Ripening: { icon: "🍯", color: "text-amber-500", bg: "bg-amber-500/10", benefit: "Guide writing and community challenges open up.", nameplate: "tt-nameplate-bloom" },
-  Harvested: { icon: "🌾", color: "text-warning", bg: "bg-amber-600/10", benefit: "The Grower Cockpit, pinning a harvest to your profile, looser posting limits, 8 photos.", nameplate: "tt-nameplate-master" },
-  Cured: { icon: "🏺", color: "text-cyan-500", bg: "bg-cyan-500/10", benefit: "This-grow-vs-past-grows, a bigger cockpit, the loosest posting limits, and the Grower Spotlight.", nameplate: "tt-nameplate-master" },
-  Cultivator: { icon: "🏆", color: "text-purple-500", bg: "bg-purple-500/10", benefit: "Top-shelf deals, and the Grow Room unlocks at 100 standing — the trusted growers' room.", nameplate: "tt-nameplate-grand" },
-  "Master Cultivator": { icon: "👑", color: "text-warning", bg: "bg-amber-400/10", benefit: "The Vault at 300 standing, deeper community stats, and first look at new features and deals.", nameplate: "tt-nameplate-gold" },
+  // Benefit strings name only what the rank actually delivers today.
+  // Roadmap items the rank will eventually carry are phrased as future
+  // (or omitted) — never as if they unlock now.
+  Germinated: { icon: "🌱", color: "text-success", bg: "bg-lime-500/10", benefit: "Roots are down — check in daily to start your streak milestones." },
+  Seedling: { icon: "🌿", color: "text-success", bg: "bg-green-500/10", benefit: "One rank closer — a 4th daily quest slot and members' deals open at Rooted.", nameplate: "tt-nameplate-leaf" },
+  Rooted: { icon: "🪴", color: "text-success", bg: "bg-green-600/10", benefit: "A 4th daily quest slot and members' deals.", nameplate: "tt-nameplate-leaf" },
+  Vegged: { icon: "🌲", color: "text-success", bg: "bg-emerald-500/10", benefit: "Advanced environment charts and harvest trends for your own grows.", nameplate: "tt-nameplate-leaf" },
+  Trained: { icon: "✂️", color: "text-success", bg: "bg-emerald-600/10", benefit: "Save up to 10 searches and export any grow's full log as CSV.", nameplate: "tt-nameplate-leaf" },
+  Preflower: { icon: "🌸", color: "text-fuchsia-500", bg: "bg-fuchsia-500/10", benefit: "TerpBot grow alerts are on the roadmap at this rank.", nameplate: "tt-nameplate-bloom" },
+  Flowering: { icon: "🌺", color: "text-fuchsia-500", bg: "bg-fuchsia-600/10", benefit: "Whole-grow review and side-by-side comparisons are on the roadmap.", nameplate: "tt-nameplate-bloom" },
+  Ripening: { icon: "🍯", color: "text-amber-500", bg: "bg-amber-500/10", benefit: "Guide writing and community challenges are on the roadmap at this rank.", nameplate: "tt-nameplate-bloom" },
+  Harvested: { icon: "🌾", color: "text-warning", bg: "bg-amber-600/10", benefit: "Pin a harvest to the top of your profile — a 60-day streak counts too.", nameplate: "tt-nameplate-master" },
+  Cured: { icon: "🏺", color: "text-cyan-500", bg: "bg-cyan-500/10", benefit: "Your active grow can be featured in the Grower Spotlight on the home page.", nameplate: "tt-nameplate-master" },
+  Cultivator: { icon: "🏆", color: "text-purple-500", bg: "bg-purple-500/10", benefit: "A 5th daily quest, top-shelf deals, and the Grow Room at 100 standing.", nameplate: "tt-nameplate-grand" },
+  "Master Cultivator": { icon: "👑", color: "text-warning", bg: "bg-amber-400/10", benefit: "The Vault at 300 standing and first look at new partner deals.", nameplate: "tt-nameplate-gold" },
 }
 
 export function rankDisplay(xp: number): Rank & { icon: string; color: string; bg: string; benefit: string; nameplate?: string } {

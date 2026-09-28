@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma"
 import { publicUserSelect, activeAuthor, blockedUserIds } from "@/lib/security"
 import { notFound, permanentRedirect } from "next/navigation"
-import { Leaf, Calendar, Users, ClipboardCheck, Camera, TrendingUp, Pencil, Sprout, Link2, Lock, MessagesSquare, FlaskConical } from "lucide-react"
+import { Leaf, Calendar, Users, ClipboardCheck, Camera, TrendingUp, Pencil, Sprout, Link2, Lock, MessagesSquare, FlaskConical, FileDown } from "lucide-react"
 import Link from "next/link"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
@@ -11,7 +11,7 @@ import ShareButtons from "@/components/share-buttons"
 import { buildMetadata, snippet } from "@/lib/seo"
 import { Breadcrumbs } from "@/components/breadcrumbs"
 import { JsonLd } from "@/components/json-ld"
-import { EnvChartsLazy as EnvCharts, HeightChartLazy as HeightChart } from "@/components/diary-charts"
+import { EnvChartsLazy as EnvCharts, HeightChartLazy as HeightChart, EnvInsightsLazy as EnvInsights } from "@/components/diary-charts"
 import HarvestForm from "@/components/harvest-form"
 import StageTimeline from "@/components/stage-timeline"
 import TierChip from "@/components/tier-chip"
@@ -36,6 +36,7 @@ import GrowLessons from "@/components/grow-lessons"
 import { serializeExperiment, readLessons } from "@/lib/experiments"
 import { getStrainGrowStats } from "@/lib/strain-stats"
 import { buildGrowComparison } from "@/lib/grow-compare"
+import { hasUnlock } from "@/lib/progression"
 import { toGrams, toOz } from "@/lib/yield"
 import WeekNavigator from "@/components/week-navigator"
 
@@ -279,9 +280,15 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
   // intelligence surface here; chat commands stay public-scope). Admin
   // editors don't get another member's intel.
   const isOwner = session?.user?.id === diary.author.id
-  const growIntel = isOwner
-    ? await getGrowIntel(diary.id, session!.user!.id).catch(() => null)
-    : null
+  const [growIntel, envAnalyticsUnlocked, exportCsvUnlocked] = isOwner
+    ? await Promise.all([
+        getGrowIntel(diary.id, session!.user!.id).catch(() => null),
+        // env-analytics (Vegged + Journaling 3) and export-tools (Trained)
+        // gates — checked once here, server-side, per the locked §8 registry.
+        hasUnlock(session!.user!.id, "env-analytics").catch(() => false),
+        hasUnlock(session!.user!.id, "export-tools").catch(() => false),
+      ])
+    : [null, false, false]
 
   // Community comparison — aggregate strain stats (public/UNLISTED only,
   // min-sample gated) against facts already visible on this page.
@@ -606,6 +613,17 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
                     </Link>
                   </Tooltip>
                 )}
+                {isOwner && exportCsvUnlocked && (
+                  <Tooltip content="Download full grow log (CSV)">
+                    <a
+                      href={`/api/diaries/${diary.id}/export`}
+                      aria-label="Download grow log as CSV"
+                      className="inline-flex items-center justify-center p-2 rounded-lg hover:bg-secondary transition-colors"
+                    >
+                      <FileDown className="w-4 h-4" />
+                    </a>
+                  </Tooltip>
+                )}
                 <OwnerDeleteButton
                   endpoint="/api/diaries"
                   id={diary.id}
@@ -919,6 +937,31 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
                 vpd: u.vpd,
                 ph: u.ph,
                 ec: u.ec,
+              }))}
+            />
+          )}
+
+          {/* env-analytics unlock — the owner's advanced layer over the same
+              stored readings (extended metrics, day/night split, trends).
+              Locked state renders an honest teaser for the owner only. */}
+          {isOwner && (
+            <EnvInsights
+              unlocked={envAnalyticsUnlocked}
+              nowMs={now.getTime()}
+              updates={updates.map((u) => ({
+                createdAt: u.createdAt.toISOString(),
+                temperature: u.temperature,
+                humidity: u.humidity,
+                vpd: u.vpd,
+                nightTemperature: u.nightTemperature,
+                substrateTemperature: u.substrateTemperature,
+                co2Ppm: u.co2Ppm,
+                ppfd: u.ppfd,
+                photoperiodHours: u.photoperiodHours,
+                runoffPh: u.runoffPh,
+                runoffEc: u.runoffEc,
+                lampDistanceCm: u.lampDistanceCm,
+                wateringLiters: u.wateringLiters,
               }))}
             />
           )}

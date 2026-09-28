@@ -336,7 +336,11 @@ async function run() {
   // Powers every "next unlock" surface — first rank-gated UNLOCK above xp.
   const nu0 = nextRankUnlock(0)
   assert.ok(nu0, "a next unlock exists at 0 XP")
-  assert.equal(nu0!.xpNeeded, REP_RANKS[1].threshold, "first unlock lands at the first rank")
+  // Phase I removed the vacuous early-rank unlocks (the promised features were
+  // already free); the first *live* rank-gated unlock is quest-slot-4 @ Rooted.
+  const rootedRank = REP_RANKS.find((r) => r.name === "Rooted")!
+  assert.equal(nu0!.xpNeeded, rootedRank.threshold, "first live unlock lands at Rooted")
+  assert.equal(nu0!.id, "quest-slot-4", "first live unlock is the 4th quest slot")
   assert.equal(nextRankUnlock(23000), null, "nothing locked past max XP")
   const nu100 = nextRankUnlock(100)
   assert.ok(nu100 && nu100.xpNeeded > 100, "next unlock always above current xp")
@@ -1338,22 +1342,24 @@ async function run() {
 
     // Keyed reversal → clawback, reinstate on re-award, final locks.
     const u3 = await mkPv2("rev")
-    await awardProgression(u3, "GUIDE_PUBLISHED", "guide", { key: `pv2:guide:${RUN_TAG}` })
+    // Fixture type is HARVEST_REPORT — live, uncapped, no standing component.
+    // (Was GUIDE_PUBLISHED, which Phase I deferred: awardProgression refuses it.)
+    await awardProgression(u3, "HARVEST_REPORT", "harvest writeup", { key: `pv2:guide:${RUN_TAG}` })
     const rev = await reverseProgressionByKey(`pv2:guide:${RUN_TAG}`, "mod retract")
     assert.ok(rev.reversed, "keyed reversal succeeds")
     assert.equal((await pv2Profile(u3))!.xp, 0, "XP clawed back")
-    const re = await awardProgression(u3, "GUIDE_PUBLISHED", "guide", { key: `pv2:guide:${RUN_TAG}` })
+    const re = await awardProgression(u3, "HARVEST_REPORT", "harvest writeup", { key: `pv2:guide:${RUN_TAG}` })
     assert.ok(re.awarded && re.reinstated, "re-award reinstates")
-    assert.equal((await pv2Profile(u3))!.xp, XP_TABLE.GUIDE_PUBLISHED.xp, "reinstated XP restored")
+    assert.equal((await pv2Profile(u3))!.xp, XP_TABLE.HARVEST_REPORT.xp, "reinstated XP restored")
     await reverseProgressionByKey(`pv2:guide:${RUN_TAG}`, "retract again")
-    const re2 = await awardProgression(u3, "GUIDE_PUBLISHED", "guide", { key: `pv2:guide:${RUN_TAG}` })
+    const re2 = await awardProgression(u3, "HARVEST_REPORT", "harvest writeup", { key: `pv2:guide:${RUN_TAG}` })
     assert.ok(re2.awarded && re2.reinstated, "non-final reversal still reinstates")
     // Final (staff-permanent) reversal locks the key against re-grant.
     const guideEvent = await prisma.progressionEvent.findUnique({
       where: { key: `pv2:guide:${RUN_TAG}` }, select: { id: true },
     })
     await reverseProgressionEvent(guideEvent!.id, "final retract", undefined, { final: true })
-    const lockedRes = await awardProgression(u3, "GUIDE_PUBLISHED", "guide", { key: `pv2:guide:${RUN_TAG}` })
+    const lockedRes = await awardProgression(u3, "HARVEST_REPORT", "harvest writeup", { key: `pv2:guide:${RUN_TAG}` })
     assert.ok(!lockedRes.awarded && lockedRes.skippedReason === "locked", "final reversal locks the key")
 
     // Standing: young grantor → 0 standing, XP still lands.
@@ -1390,15 +1396,18 @@ async function run() {
     // stays under the 60% cluster threshold for the diminishing test.
     const otherGrantor = await mkPv2("other", 30)
     await seedProgression(otherGrantor, 0, 150)
-    const gOther = await awardProgression(grantee, "GUIDE_PUBLISHED", "o1", {
-      key: `pv2:other:${RUN_TAG}:1`, actorId: otherGrantor,
+    // Standing-economy fixtures use HARVEST_REPORT + explicit standing:10 —
+    // a live, uncapped source type (CONTEST_* carries a per-source weekly cap;
+    // GUIDE_PUBLISHED is deferred and refuses awards since Phase I).
+    const gOther = await awardProgression(grantee, "HARVEST_REPORT", "o1", {
+      key: `pv2:other:${RUN_TAG}:1`, actorId: otherGrantor, standing: 10,
     })
     assert.equal(gOther.standing, 10, "Trusted grantor pays full")
 
     // Per-grantor diminishing: repeat grant from the same grantor halves.
-    // (GUIDE_PUBLISHED — no dailyCap — after ACCEPTED_ANSWER's 2/day limit.)
-    const gDim1 = await awardProgression(grantee, "GUIDE_PUBLISHED", "d1", {
-      key: `pv2:dim:${RUN_TAG}:1`, actorId: floorGrantor,
+    // (HARVEST_REPORT — no caps — after ACCEPTED_ANSWER's 2/day limit.)
+    const gDim1 = await awardProgression(grantee, "HARVEST_REPORT", "d1", {
+      key: `pv2:dim:${RUN_TAG}:1`, actorId: floorGrantor, standing: 10,
     })
     assert.equal(gDim1.standing, 2, `repeat grant halves again (10/2 floor→5/2→2, got ${gDim1.standing})`)
 
@@ -1421,8 +1430,8 @@ async function run() {
       await seedProgression(gr, 0, 150)
     }
     for (let i = 0; i < 5; i++) {
-      const r = await awardProgression(capped, "GUIDE_PUBLISHED", `cap${i}`, {
-        key: `pv2:cap:${RUN_TAG}:${i}`, actorId: grantors[i],
+      const r = await awardProgression(capped, "HARVEST_REPORT", `cap${i}`, {
+        key: `pv2:cap:${RUN_TAG}:${i}`, actorId: grantors[i], standing: 10,
       })
       if (i < 4) assert.equal(r.standing, 10, `grant ${i} pays full`)
       else assert.equal(r.standing, 0, "grant 5 exceeds weekly cap → 0")
@@ -1456,12 +1465,12 @@ async function run() {
     const lone2 = await mkPv2("lone2")
     const whale2 = await mkPv2("whale2", 30)
     await seedProgression(whale2, 0, 150)
-    const clust1 = await awardProgression(lone2, "GUIDE_PUBLISHED", "w0", {
-      key: `pv2:whale2:${RUN_TAG}:0`, actorId: whale2,
+    const clust1 = await awardProgression(lone2, "HARVEST_REPORT", "w0", {
+      key: `pv2:whale2:${RUN_TAG}:0`, actorId: whale2, standing: 10,
     })
     assert.equal(clust1.standing, 10, "first grant pays before concentration")
-    const clust2 = await awardProgression(lone2, "GUIDE_PUBLISHED", "w1", {
-      key: `pv2:whale2:${RUN_TAG}:1`, actorId: whale2,
+    const clust2 = await awardProgression(lone2, "HARVEST_REPORT", "w1", {
+      key: `pv2:whale2:${RUN_TAG}:1`, actorId: whale2, standing: 10,
     })
     assert.equal(clust2.standing, 0, "≥60% share → in-cluster grant pays 0")
     const flag = await prisma.abuseFlag.findFirst({
@@ -1475,11 +1484,15 @@ async function run() {
     const sRes = await awardProgression(susp, "THREAD_STARTED", "x", { key: `pv2:susp:${RUN_TAG}` })
     assert.ok(!sRes.awarded && sRes.skippedReason === "suspended", "suspended user skipped")
 
-    // Unlock gates — Layer A (rank only).
+    // Unlock gates — Layer A (rank only). Fixture is quest-slot-4 @ Rooted
+    // (420): comparison-basic was removed in Phase I (basic comparison was
+    // already free — the unlock promised nothing real).
     const gate = await mkPv2("gate")
-    assert.equal(await hasUnlock(gate, "comparison-basic"), false, "Seed user locked out of Seedling unlock")
+    assert.equal(await hasUnlock(gate, "quest-slot-4"), false, "Seed user locked out of Rooted unlock")
     await seedProgression(gate, 200)
-    assert.equal(await hasUnlock(gate, "comparison-basic"), true, "Seedling unlock opens")
+    assert.equal(await hasUnlock(gate, "quest-slot-4"), false, "Seedling still below Rooted gate")
+    await seedProgression(gate, 300)
+    assert.equal(await hasUnlock(gate, "quest-slot-4"), true, "Rooted unlock opens")
     // Layer B (rank + mastery): env-analytics needs Vegged + Records M2 (150).
     await seedProgression(gate, 800)
     assert.equal(await hasUnlock(gate, "env-analytics"), false, "rank alone insufficient for layer B")
@@ -1496,7 +1509,7 @@ async function run() {
     assert.equal(await hasUnlock(gate, "grow-room"), true, "layer C opens at Trusted")
     // unlockFrozen blocks everything.
     await prisma.profile.update({ where: { userId: gate }, data: { unlockFrozen: true } })
-    assert.equal(await hasUnlock(gate, "comparison-basic"), false, "unlockFrozen denies all")
+    assert.equal(await hasUnlock(gate, "quest-slot-4"), false, "unlockFrozen denies all")
     await prisma.profile.update({ where: { userId: gate }, data: { unlockFrozen: false } })
 
     // Diversity floor: 18k XP but zero breadth → Cultivator floor (3×M4)
@@ -1603,7 +1616,7 @@ async function run() {
       assert.equal(p!.standing, agg._sum.standing ?? 0, `standing drift on ${uid}`)
       const mastery = await prisma.masteryProgress.findMany({ where: { userId: uid } })
       const mSum = mastery.reduce((s, r) => s + r.xp, 0)
-      assert.ok(mSum <= p!.xp + XP_TABLE.GUIDE_PUBLISHED.xp + 50, `mastery sum sane on ${uid}`)
+      assert.ok(mSum <= p!.xp + XP_TABLE.HARVEST_REPORT.xp + 50, `mastery sum sane on ${uid}`)
     }
     console.log("Progression V2 engine tests passed.")
   } finally {

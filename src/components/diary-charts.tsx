@@ -31,4 +31,8 @@ const HeightChartLazy = dynamic(() => import("./height-chart"), {
   loading: () => <Skeleton className="w-full h-[200px] mb-6" />,
 })
 
-export { EnvChartsLazy, HeightChartLazy }
+const EnvInsightsLazy = dynamic(() => import("./env-insights"), {
+  loading: () => <Skeleton className="w-full h-[140px] mb-6" />,
+})
+
+export { EnvChartsLazy, HeightChartLazy, EnvInsightsLazy }

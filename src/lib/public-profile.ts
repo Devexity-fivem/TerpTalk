@@ -39,16 +39,16 @@ export function safeUrl(url: string | null | undefined): string | null {
 }
 
 /**
- * Paths whose XP pipeline is live. Experimentation has no award callsites at
- * 8b6d609 (reconciliation Phase I wires it); the mastery map renders it as
- * "coming online" — never as an earned M-level — until this flips. Keep in
- * sync with progression Phase I; do not advertise dead paths.
+ * Paths whose XP pipeline is live — Experimentation went live in Phase I
+ * (experiment lifecycle awards are wired in src/lib/experiment-progression.ts).
+ * If a path's award callsites are ever removed, flip it back to false so the
+ * mastery map renders it as "coming online" — never as an earned M-level.
  */
 export const LIVE_MASTERIES: Record<Mastery, boolean> = {
   CULTIVATION: true,
   RECORDS: true,
   KNOWLEDGE: true,
-  EXPERIMENTATION: false,
+  EXPERIMENTATION: true,
   COMMUNITY: true,
 }
 

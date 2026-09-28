@@ -2,8 +2,9 @@ import { prisma } from "@/lib/prisma"
 import { unstable_cache } from "next/cache"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
-import { canSeeDeal, type DealViewer } from "@/lib/deals-access"
+import { canSeeDeal, DEAL_TIER_UNLOCK_ID, type DealViewer } from "@/lib/deals-access"
 import { hasUnlock } from "@/lib/progression"
+import { UNLOCK_BY_ID } from "@/lib/progression-config"
 import { DEFAULT_DISCLOSURE } from "@/lib/affiliate"
 import { Tag, ExternalLink, Percent } from "lucide-react"
 import DealsBrowser from "@/components/deals-browser"
@@ -66,7 +67,8 @@ export default async function DealsPage() {
       const unreleased = p.publicAt && p.publicAt.getTime() > now.getTime() && !viewer?.earlyAccess
       if (unreleased) return null
       const rankLocked = p.minRank && !canSeeDeal(p, viewer, now)
-      return { product: p, lockedAtRank: rankLocked ? p.minRank : null }
+      const tierUnlockId = rankLocked && p.minRank ? DEAL_TIER_UNLOCK_ID[p.minRank] : undefined
+      return { product: p, lockedAtRank: rankLocked ? p.minRank : null, tierUnlockId }
     })
     .filter((p): p is NonNullable<typeof p> => p !== null)
 
@@ -123,7 +125,7 @@ export default async function DealsPage() {
 
         {/* Product browser (search + category filter, client-side) */}
         <DealsBrowser
-          products={visibleProducts.map(({ product: p, lockedAtRank }) => ({
+          products={visibleProducts.map(({ product: p, lockedAtRank, tierUnlockId }) => ({
             slug: p.slug,
             name: p.name,
             description: p.description,
@@ -136,6 +138,7 @@ export default async function DealsPage() {
             promoCode: p.promoCode || p.partner.promoCode,
             partnerName: p.partner.name,
             lockedAtRank,
+            lockedUnlockName: tierUnlockId ? UNLOCK_BY_ID.get(tierUnlockId)?.name ?? null : null,
           }))}
         />
 

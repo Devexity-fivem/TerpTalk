@@ -17,6 +17,25 @@ async function getHtml(path, cookie) {
   return { status: res.status, html: await res.text(), location: res.headers.get("location") }
 }
 
+// Concatenated bodies of every sitemap chunk, resolved through the real
+// sitemap index (/sitemap-index.xml → /sitemap/<id>.xml). /sitemap.xml is
+// the metadata convention's reserved path — the index lives on its own URL.
+async function getSitemapBodies() {
+  const idx = await getHtml("/sitemap-index.xml")
+  if (idx.status !== 200) return { status: idx.status, html: "" }
+  const locs = [...idx.html.matchAll(/<loc>([^<]+)<\/loc>/g)].map((m) => m[1])
+  const bodies = await Promise.all(
+    locs.map(async (loc) => {
+      // <loc> entries are absolute canonical URLs — rewrite to the test
+      // base so the assertion exercises this server's chunks.
+      const path = new URL(loc).pathname
+      const res = await fetch(`${BASE}${path}`, { redirect: "manual" })
+      return res.ok ? res.text() : ""
+    })
+  )
+  return { status: 200, html: bodies.join("\n") }
+}
+
 const main = async () => {
   // Owner is backdated + XP-seeded so the self-vote test reaches the
   // self-vote check rather than being stopped at the voter trust gate.
@@ -737,7 +756,7 @@ const main = async () => {
       dIdx.html.includes(`/diaries/${sDiary.slug}`)
         ? pass("/diaries card links slug URL")
         : fail("/diaries slug link", "missing")
-      const smap = await getHtml("/sitemap.xml")
+      const smap = await getSitemapBodies()
       smap.html.includes(`/diaries/${sDiary.slug}`) && !smap.html.includes(`/diaries/${sDiary.id}<`)
         ? pass("sitemap emits slug URL only")
         : fail("sitemap", { has: smap.html.includes(`/diaries/${sDiary.slug}`), id: smap.html.includes(`/diaries/${sDiary.id}<`) })
@@ -824,7 +843,7 @@ const main = async () => {
         : fail("strain redirect", { st: red.status, loc: red.location })
       page = await getHtml(`/strains/${sStrain.slug}`)
       page.status === 200 ? pass("strain slug URL serves page") : fail("strain slug 200", page.status)
-      const smap = await getHtml("/sitemap.xml")
+      const smap = await getSitemapBodies()
       smap.html.includes(`/strains/${sStrain.slug}`) && !smap.html.includes(`/strains/${sStrain.id}<`)
         ? pass("sitemap emits strain slug URL only")
         : fail("strain sitemap", sStrain.slug)
@@ -853,7 +872,7 @@ const main = async () => {
       r.status === 200 && renamedSetup?.slug === sSetup.slug
         ? pass("setup rename preserves slug")
         : fail("setup rename", { s: r.status, slug: renamedSetup?.slug })
-      const smap = await getHtml("/sitemap.xml")
+      const smap = await getSitemapBodies()
       smap.html.includes(`/setups/${sSetup.slug}`) && !smap.html.includes(`/setups/${sSetup.id}<`)
         ? pass("sitemap emits setup slug URL only")
         : fail("setup sitemap", sSetup.slug)

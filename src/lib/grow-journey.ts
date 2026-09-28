@@ -18,6 +18,7 @@ import { awardProgression } from "@/lib/progression"
 import { reverseXpKeyDurable } from "@/lib/progression-outbox"
 import { getBooleanSetting, SITE_SETTINGS } from "@/lib/settings"
 import { isMeaningfulUpdate } from "@/lib/meaningful-update"
+import { diaryCompleteness, type DiaryUpdateLike } from "@/lib/diary-weeks"
 
 export const GROW_STAGES = [
   { key: "PLANTED", name: "Planted", icon: "🌱", xp: 0, event: null },
@@ -67,6 +68,12 @@ interface JourneyDiary {
   harvestedAt: Date | null
   yieldAmount: number | null
   deleted: boolean
+  // Coverage inputs — the documented-grow signals diaryCompleteness
+  // reads. Optional so partial fixtures keep compiling; absent fields
+  // simply don't count toward the milestone.
+  strain?: string | null
+  medium?: string | null
+  lighting?: string | null
   /** catalog strain type — only the transition wording reads this
    *  (autoflowers never get "flip to flower" phrasing) */
   strainRef?: { type: string | null } | null
@@ -90,6 +97,9 @@ async function loadJourneyInputs(diaryId: string) {
       harvestedAt: true,
       yieldAmount: true,
       deleted: true,
+      strain: true,
+      medium: true,
+      lighting: true,
       strainRef: { select: { type: true } },
     },
   })
@@ -97,6 +107,7 @@ async function loadJourneyInputs(diaryId: string) {
   const updates = await prisma.diaryUpdate.findMany({
     where: { diaryId },
     select: {
+      id: true,
       createdAt: true,
       stage: true,
       content: true,
@@ -306,5 +317,25 @@ export async function evaluateGrowJourney(diaryId: string): Promise<void> {
       // instead of leaving phantom milestone XP. No-op when no award exists.
       await reverseXpKeyDurable(key, "Grow milestone no longer met").catch(() => null)
     }
+  }
+
+  // COVERAGE_MILESTONE (+25, Records) — once per diary when the log becomes
+  // a genuinely thorough record (≥6 of 7 completeness checks). Same
+  // reconciliation pattern as stage milestones: awarded when met, durably
+  // reversed if deletions drop the diary back below the bar.
+  const coverageKey = `coverage:${diary.id}`
+  const coveragePct = diaryCompleteness(
+    diary as Parameters<typeof diaryCompleteness>[0],
+    updates.map((u) => ({ ...u, stage: u.stage ?? diary.stage })) as DiaryUpdateLike[]
+  ).percent
+  if (coveragePct >= 85) {
+    await awardProgression(diary.authorId, "COVERAGE_MILESTONE", "Kept a thorough diary", {
+      key: coverageKey,
+      sourceType: "DIARY",
+      sourceId: diary.id,
+      meta: { completeness: coveragePct },
+    }).catch(() => {})
+  } else {
+    await reverseXpKeyDurable(coverageKey, "Diary coverage fell below the milestone").catch(() => null)
   }
 }

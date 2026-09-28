@@ -29,6 +29,13 @@ import { NextRequest } from "next/server"
 import { GET as getPublicProfile } from "@/app/api/users/[username]/route"
 import { GET as getProfileCard } from "@/app/api/users/[username]/card/route"
 import { getPublicProfileData } from "@/lib/public-profile"
+import {
+  awardExperimentCreated, awardHypothesisIfMet, awardExperimentFollowups,
+  evaluateExperimentAwards, reverseExperimentAwards,
+} from "@/lib/experiment-progression"
+import { awardProgression, hasUnlock } from "@/lib/progression"
+import { evaluateGrowJourney } from "@/lib/grow-journey"
+import { DEFERRED_XP_EVENTS } from "@/lib/progression-config"
 import bcrypt from "bcryptjs"
 
 const root = process.cwd()
@@ -517,7 +524,7 @@ async function run() {
     assert.equal(pJson.profile.mastery.length, 5, "all five mastery paths in contract")
     assert.equal(
       pJson.profile.mastery.find((m: { mastery: string }) => m.mastery === "EXPERIMENTATION")?.live,
-      false, "Experimentation flagged not-live until Phase I"
+      true, "Experimentation live since Phase I wired its awards"
     )
     assert.ok(!("email" in pJson.profile) && !("password" in pJson.profile), "no account internals in DTO")
 
@@ -547,6 +554,197 @@ async function run() {
 
     await prisma.profileCustomSection.deleteMany({ where: { profileId: pProfile.id } })
     await prisma.growDiary.deleteMany({ where: { authorId: pUser.id } })
+
+    // ─────────────────────────────────────────────────────────────
+    // Phase I — progression integrity: experiment lifecycle awards,
+    // documented-failure anti-fabrication (§6.4a), weekly cap, keyed
+    // reversal, coverage milestone, deferred-event refusal, unlock gates.
+    // ─────────────────────────────────────────────────────────────
+    const piUser = await mk(`__ss_pi_${SUFFIX}`)
+    const piDiary = await prisma.growDiary.create({
+      data: {
+        title: "Phase I fixture", description: "", growType: "INDOOR",
+        startDate: new Date(Date.now() - 30 * 86400000), authorId: piUser.id,
+        visibility: "PRIVATE",
+      },
+      select: { id: true },
+    })
+    const expLedger = (uid: string) =>
+      prisma.progressionEvent.findMany({
+        where: { userId: uid, reversalOfId: null },
+        select: { type: true, xp: true, mastery: true, key: true, reversedAt: true },
+      })
+    const stateOf = (e: { id: string; diaryId: string; authorId: string; title: string; change: string; expected: string | null; category: string; status: string; outcome: string | null; conclusion: string | null; createdAt: Date }, updateCount = 0) =>
+      ({ ...e, updateCount })
+
+    // Creation + hypothesis pay immediately, mastery attributed.
+    const exp = await prisma.growExperiment.create({
+      data: {
+        diaryId: piDiary.id, authorId: piUser.id,
+        title: "Raised LED intensity",
+        change: "Raised the light from 45cm to 30cm over two days",
+        expected: "Tighter internode spacing within a week",
+        category: "LIGHTING", status: "ACTIVE",
+      },
+    })
+    await awardExperimentCreated(stateOf(exp))
+    await awardHypothesisIfMet(stateOf(exp))
+    let ledger = await expLedger(piUser.id)
+    assert.ok(ledger.some((r) => r.type === "EXPERIMENT_CREATED" && r.xp === 5 && r.mastery === "EXPERIMENTATION"), "EXPERIMENT_CREATED pays +5 Experimentation")
+    assert.ok(ledger.some((r) => r.type === "HYPOTHESIS_DOC" && r.xp === 5), "hypothesis ≥20 chars pays +5")
+    const mp = await prisma.masteryProgress.findUnique({ where: { userId_mastery: { userId: piUser.id, mastery: "EXPERIMENTATION" } } })
+    assert.equal(mp?.xp, 10, "Experimentation mastery accrues from awards")
+
+    // No/short hypothesis pays nothing.
+    const noHyp = await prisma.growExperiment.create({
+      data: { diaryId: piDiary.id, authorId: piUser.id, title: "No hypothesis", change: "Changed something", category: "OTHER", status: "ACTIVE" },
+    })
+    await awardHypothesisIfMet(stateOf(noHyp))
+    assert.equal((await expLedger(piUser.id)).filter((r) => r.type === "HYPOTHESIS_DOC").length, 1, "missing hypothesis pays nothing")
+
+    // Follow-ups — +10 once at ≥3 linked updates, idempotent.
+    await awardExperimentFollowups(stateOf(exp, 2))
+    await awardExperimentFollowups(stateOf(exp, 3))
+    await awardExperimentFollowups(stateOf(exp, 5))
+    assert.equal((await expLedger(piUser.id)).filter((r) => r.type === "FOLLOWUPS_3" && r.xp === 10).length, 1, "FOLLOWUPS_3 pays once at ≥3 linked updates")
+
+    // Completion — grower-stated outcome + real conclusion → +25.
+    await evaluateExperimentAwards("ACTIVE", { ...stateOf(exp), status: "COMPLETED", outcome: "WORKED", conclusion: "Internodes tightened noticeably by day five; keeping the height." })
+    assert.ok((await expLedger(piUser.id)).some((r) => r.type === "EXPERIMENT_COMPLETED" && r.xp === 25), "EXPERIMENT_COMPLETED pays +25")
+
+    // Thin conclusion pays nothing.
+    const thin = await prisma.growExperiment.create({
+      data: { diaryId: piDiary.id, authorId: piUser.id, title: "Thin close", change: "x", category: "OTHER", status: "COMPLETED", outcome: "WORKED", conclusion: "ok" },
+    })
+    await evaluateExperimentAwards("OBSERVING", stateOf(thin))
+    assert.equal((await expLedger(piUser.id)).filter((r) => r.type === "EXPERIMENT_COMPLETED" && r.key === `experiment:${thin.id}:completed`).length, 0, "thin conclusion pays nothing")
+
+    // PROBLEM_RESOLVED — ISSUE_RESPONSE + WORKED + conclusion → +20 Knowledge.
+    const fix = await prisma.growExperiment.create({
+      data: {
+        diaryId: piDiary.id, authorId: piUser.id, title: "Calmag fix",
+        change: "Added calmag at 1ml/L to the feed", category: "ISSUE_RESPONSE",
+        status: "ACTIVE", createdAt: new Date(Date.now() - 3 * 86400000),
+      },
+    })
+    await evaluateExperimentAwards("ACTIVE", { ...stateOf(fix, 1), status: "COMPLETED", outcome: "WORKED", conclusion: "Rust spots stopped spreading within four days of the dose." })
+    assert.ok((await expLedger(piUser.id)).some((r) => r.type === "PROBLEM_RESOLVED" && r.xp === 20 && r.mastery === "KNOWLEDGE"), "ISSUE_RESPONSE + WORKED pays PROBLEM_RESOLVED")
+
+    // §6.4a documented failure — anti-fabrication gates.
+    const fresh = await prisma.growExperiment.create({
+      data: { diaryId: piDiary.id, authorId: piUser.id, title: "Fresh failure", change: "Dropped night temp ten degrees", category: "ENVIRONMENT", status: "PLANNED", expected: "Better color by lights-on" },
+    })
+    await evaluateExperimentAwards("PLANNED", { ...stateOf(fresh, 1), status: "COMPLETED", outcome: "DID_NOT_WORK", conclusion: "Color stalled and growth slowed; reverted the night drop after a week." })
+    ledger = await expLedger(piUser.id)
+    assert.ok(!ledger.some((r) => r.type === "FAILURE_DOCUMENTED" && r.xp > 0), "never-active failure pays nothing")
+    const withheldRow = await prisma.progressionEvent.findFirst({ where: { userId: piUser.id, type: "FAILURE_DOCUMENTED", key: `experiment:${fresh.id}:failure:w` } })
+    assert.ok(withheldRow && withheldRow.xp === 0, "withheld decision recorded as a 0-XP audit marker")
+
+    const mkFailed = (n: number) => prisma.growExperiment.create({
+      data: {
+        diaryId: piDiary.id, authorId: piUser.id,
+        title: `Failure attempt ${n} — airflow and cadence variant`,
+        change: `Variant ${n}: changed airflow and watering cadence together for attempt ${n}`,
+        expected: `Expected quicker recovery within the week on attempt ${n}`,
+        category: "ENVIRONMENT", status: "ACTIVE",
+        createdAt: new Date(Date.now() - 3 * 86400000),
+      },
+    })
+    const failA = await mkFailed(1)
+    await evaluateExperimentAwards("ACTIVE", { ...stateOf(failA, 1), status: "COMPLETED", outcome: "DID_NOT_WORK", conclusion: "No recovery after eight days; rolled back the airflow change." })
+    assert.ok((await expLedger(piUser.id)).some((r) => r.type === "FAILURE_DOCUMENTED" && r.xp === 8), "documented failure pays +8")
+
+    // Weekly cap — a 3rd documented failure in the same ISO week doesn't pay.
+    const failB = await mkFailed(2)
+    const failC = await mkFailed(3)
+    await evaluateExperimentAwards("ACTIVE", { ...stateOf(failB, 1), status: "COMPLETED", outcome: "DID_NOT_WORK", conclusion: "Same verdict — slower recovery than the baseline run." })
+    await evaluateExperimentAwards("ACTIVE", { ...stateOf(failC, 1), status: "COMPLETED", outcome: "DID_NOT_WORK", conclusion: "Third writeup — still no improvement over baseline." })
+    assert.equal((await expLedger(piUser.id)).filter((r) => r.type === "FAILURE_DOCUMENTED" && r.xp === 8).length, 2, "documented-failure bonus capped at 2 per ISO week")
+
+    // ≥95% similar re-run forfeits the bonus.
+    const dupExp = await prisma.growExperiment.create({
+      data: {
+        diaryId: piDiary.id, authorId: piUser.id,
+        title: "Raised LED intensity", change: "Raised the light from 45cm to 30cm over two days",
+        expected: "Tighter internode spacing within a week",
+        category: "LIGHTING", status: "ACTIVE", createdAt: new Date(Date.now() - 4 * 86400000),
+      },
+    })
+    await evaluateExperimentAwards("ACTIVE", { ...stateOf(dupExp, 1), status: "COMPLETED", outcome: "DID_NOT_WORK", conclusion: "Carbon-copy re-run, also failed — should be withheld for duplication." })
+    assert.ok(!(await expLedger(piUser.id)).some((r) => r.type === "FAILURE_DOCUMENTED" && r.xp === 8 && r.key === `experiment:${dupExp.id}:failure`), "near-duplicate re-run forfeits the failure bonus")
+
+    // Reversal — experiment delete claws every award it produced back.
+    await reverseExperimentAwards(exp.id)
+    ledger = await expLedger(piUser.id)
+    const expRows = ledger.filter((r) => r.key?.startsWith(`experiment:${exp.id}:`) && r.xp > 0)
+    assert.ok(expRows.length >= 4, "experiment produced paying rows to reverse")
+    assert.ok(expRows.every((r) => r.reversedAt != null), "experiment delete reverses all of its awards")
+    const liveXp = ledger.reduce((s, r) => s + (r.reversedAt ? 0 : r.xp), 0)
+    const pXpNow = (await prisma.profile.findUnique({ where: { userId: piUser.id }, select: { xp: true } }))!.xp
+    assert.equal(pXpNow, liveXp, "profile xp equals live ledger after reversal")
+
+    // COVERAGE_MILESTONE — a thorough diary pays once; regression reverses.
+    const covDiary = await prisma.growDiary.create({
+      data: {
+        title: "Coverage diary", description: "", growType: "INDOOR",
+        strain: "Test Strain", medium: "SOIL", lighting: "LED",
+        stage: "HARVEST", harvested: true, harvestedAt: new Date(),
+        startDate: new Date(Date.now() - 80 * 86400000),
+        authorId: piUser.id, visibility: "PRIVATE",
+      },
+      select: { id: true },
+    })
+    for (let i = 0; i < 3; i++) {
+      await prisma.diaryUpdate.create({
+        data: {
+          diaryId: covDiary.id, authorId: piUser.id,
+          title: `Week ${i} update — enough substance to count as a real log`,
+          content: `Week ${i} observations: pistils developing, canopy even, no deficiencies visible in the room.`,
+          stage: i === 2 ? "FLOWER" : "VEGETATIVE",
+          temperature: 24, humidity: 55,
+          createdAt: new Date(Date.now() - (70 - i * 10) * 86400000),
+          ...(i === 1 ? { images: { create: { url: "https://x.test/cov.jpg" } } } : {}),
+        },
+      })
+    }
+    await evaluateGrowJourney(covDiary.id)
+    assert.ok((await expLedger(piUser.id)).some((r) => r.type === "COVERAGE_MILESTONE" && r.xp === 25 && r.key === `coverage:${covDiary.id}`), "thorough diary pays COVERAGE_MILESTONE")
+
+    await prisma.diaryUpdate.deleteMany({ where: { diaryId: covDiary.id } })
+    await evaluateGrowJourney(covDiary.id)
+    const covRow = (await expLedger(piUser.id)).find((r) => r.key === `coverage:${covDiary.id}`)
+    assert.ok(covRow && covRow.reversedAt != null, "coverage milestone reverses when the log regresses")
+
+    // Deferred events can never pay, even if a stale callsite fires.
+    for (const t of DEFERRED_XP_EVENTS) {
+      const res = await awardProgression(piUser.id, t, `deferred probe ${t}`, { key: `probe:${t}:${SUFFIX}` })
+      assert.equal(res.awarded, false, `deferred event ${t} must not pay`)
+      assert.equal(res.skippedReason, "deferred", `deferred event ${t} reports the deferred reason`)
+    }
+    assert.equal(
+      (await expLedger(piUser.id)).filter((r) => DEFERRED_XP_EVENTS.has(r.type)).length,
+      0, "no deferred-event ledger rows written"
+    )
+
+    // Unlock gates — live entries enforce server-side, future ones never do.
+    assert.equal(await hasUnlock(piUser.id, "saved-searches-10"), false, "saved-searches-10 locked below Trained")
+    assert.equal(await hasUnlock(piUser.id, "env-analytics"), false, "env-analytics needs Vegged + Journaling L2")
+    assert.equal(await hasUnlock(piUser.id, "grow-templates"), false, "future unlock never grants")
+    await prisma.profile.update({ where: { userId: piUser.id }, data: { xp: 1600 } }) // Trained threshold — fixture scope, cleaned on user delete
+    assert.equal(await hasUnlock(piUser.id, "saved-searches-10"), true, "saved-searches-10 opens at Trained")
+    assert.equal(await hasUnlock(piUser.id, "export-tools"), true, "export-tools opens at Trained")
+    assert.equal(await hasUnlock(piUser.id, "harvest-analytics"), true, "harvest-analytics opens at Vegged rank")
+    assert.equal(await hasUnlock(piUser.id, "env-analytics"), false, "env-analytics still gated without RECORDS mastery")
+    await prisma.masteryProgress.upsert({
+      where: { userId_mastery: { userId: piUser.id, mastery: "RECORDS" } },
+      update: { xp: 150 },
+      create: { userId: piUser.id, mastery: "RECORDS", xp: 150 },
+    })
+    assert.equal(await hasUnlock(piUser.id, "env-analytics"), true, "env-analytics opens at Vegged + Journaling L2")
+    assert.equal(await hasUnlock(piUser.id, "grow-templates"), false, "future unlock stays closed at any xp")
+
+    await prisma.progressionEvent.deleteMany({ where: { userId: piUser.id } })
+    await prisma.profile.update({ where: { userId: piUser.id }, data: { xp: 0, standing: 0 } })
 
     console.log("All self-service tests passed.")
   } finally {

@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { unauthorized, getClientIp, logSecurityEvent, isBanned, forbidden } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
+import { hasUnlock } from "@/lib/progression"
 
 // GET — list current user's saved searches
 export async function GET() {
@@ -50,9 +51,17 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Slow down." }, { status: 429 })
     }
 
+    // Tiered cap (locked §8): 3 for everyone — basic capability stays
+    // free — 10 once the member reaches Trained. Existing rows above the
+    // cap stay readable and deletable; only new creation is gated.
+    const expanded = await hasUnlock(session.user.id, "saved-searches-10").catch(() => false)
+    const cap = expanded ? 10 : 3
     const existing = await prisma.savedSearch.count({ where: { userId: session.user.id } })
-    if (existing >= 50) {
-      return NextResponse.json({ error: "You can only save 50 searches" }, { status: 400 })
+    if (existing >= cap) {
+      return NextResponse.json(
+        { error: `You can save ${cap} searches — reach Trained rank for 10.` },
+        { status: 400 }
+      )
     }
 
     let filtersString = "{}"

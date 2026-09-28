@@ -103,7 +103,7 @@ export interface ProgressionAwardResult {
   oldXp?: number
   newXp?: number
   rungsCrossed?: { xp: number; label: string; rank: string }[]
-  skippedReason?: "bot" | "no-user" | "suspended" | "self" | "duplicate" | "capped" | "locked" | "withheld" | "dup"
+  skippedReason?: "bot" | "no-user" | "suspended" | "self" | "duplicate" | "capped" | "locked" | "withheld" | "dup" | "deferred"
 }
 
 type SubjectUser = {
@@ -196,6 +196,31 @@ export async function checkDuplicateContent(
   if (best >= DUP_REDUCE_PCT)
     return { verdict: opts.structuredChanged ? "clean" : "reduced", similarity: best }
   return { verdict: "clean", similarity: best }
+}
+
+/**
+ * §6.4a uniqueness — simhash(title+change+expected) of an experiment vs
+ * the author's prior experiments. Returns the best similarity percent.
+ * Identical re-created "failures" score ≥95 and forfeit the bonus.
+ */
+export async function experimentSimilarity(
+  authorId: string,
+  excludeId: string,
+  text: string
+): Promise<number> {
+  const priors = await prisma.growExperiment.findMany({
+    where: { authorId, id: { not: excludeId } },
+    select: { title: true, change: true, expected: true },
+    orderBy: { createdAt: "desc" },
+    take: 100,
+  })
+  if (!priors.length || text.trim().length < 10) return 0
+  const h = simhash32(text)
+  let best = 0
+  for (const p of priors) {
+    best = Math.max(best, similarity(h, simhash32([p.title, p.change, p.expected ?? ""].join("\n"))))
+  }
+  return best
 }
 
 async function loadAuthorProse(authorId: string, excludeId?: string): Promise<string[]> {
@@ -433,6 +458,9 @@ export async function awardProgression(
     }
 
     const spec = XP_TABLE[type]
+    // Deferred locked-design events (member guides, mentoring,
+    // replication) are not awardable until their feature ships.
+    if (spec?.deferred) return { awarded: false, skippedReason: "deferred" }
     let xp = opts.xp ?? spec?.xp ?? 0
     let standing = opts.standing ?? spec?.standing ?? 0
     const mastery = opts.mastery !== undefined ? opts.mastery : (spec?.mastery ?? null)
@@ -982,7 +1010,7 @@ export async function effectiveRank(userId: string): Promise<{
 /** Server-side single choke point for every unlock gate. */
 export async function hasUnlock(userId: string, unlockId: string): Promise<boolean> {
   const spec = UNLOCK_BY_ID.get(unlockId)
-  if (!spec) return false
+  if (!spec || spec.status === "future") return false
   const profile = await prisma.profile.findUnique({
     where: { userId },
     select: { xp: true, standing: true, unlockFrozen: true },
@@ -1049,7 +1077,8 @@ export async function unlockStates(userId: string): Promise<(UnlockSpec & { unlo
     ).map((r) => Number(r.key!.split(":")[1]))
   )
   return UNLOCKS.map((u) => {
-    if (!profile || profile.unlockFrozen) return { ...u, unlocked: false }
+    // Roadmap rows are never "held" — they deliver nothing yet.
+    if (!profile || profile.unlockFrozen || u.status === "future") return { ...u, unlocked: false }
     const rankOk = u.rank ? profile.xp >= (REP_RANKS.find((r) => r.name === u.rank)?.threshold ?? Infinity) : true
     const mOk = u.mastery ? levels[u.mastery.path] >= u.mastery.level : true
     const coreOk = u.anyOf ? rankOk || mOk : rankOk && mOk

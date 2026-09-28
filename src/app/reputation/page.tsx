@@ -22,11 +22,12 @@ const SOURCES: Array<{ key: keyof typeof XP_TABLE; label: string; note: string }
   { key: "SETUP_SHOWCASE", label: "Share a grow setup", note: "Show off your tent, lights, and gear." },
   { key: "STRAIN_SOURCED", label: "Add a sourced strain", note: "Contribute to the strain knowledge base." },
   { key: "STRAIN_PHOTO", label: "Share a strain photo", note: "Real photos of real grows." },
-  { key: "GUIDE_PUBLISHED", label: "Publish a guide", note: "Write a community guide — pays XP and standing." },
+  { key: "EXPERIMENT_CREATED", label: "Document an experiment", note: "Log a real change you tested on your grow — finishing it pays more." },
   { key: "OP_CURATION", label: "Mark an accepted answer", note: "Curate your own thread — requires another member's answer." },
   { key: "HARVEST_LOGGED", label: "Log a harvest", note: "Finish a documented grow — once per diary, needs real updates." },
   { key: "ONBOARDING_COMPLETE", label: "Finish onboarding", note: "A one-time welcome to the community." },
   { key: "REFERRAL", label: "Refer a member", note: `Pays out once your invitee earns ${REFERRAL_MIN_XP} XP and has been a member for ${REFERRAL_MIN_AGE_HOURS}+ hours.` },
+  { key: "CONTEST_ENTRY", label: "Enter a contest", note: "Submit to Budshot of the Week or Diary of the Month." },
   { key: "CONTEST_WEEKLY_WIN", label: "Win Budshot of the Week", note: "Weekly community photo contest." },
   { key: "CONTEST_MONTHLY_WIN", label: "Win Diary of the Month", note: "Monthly grow diary contest." },
 ]

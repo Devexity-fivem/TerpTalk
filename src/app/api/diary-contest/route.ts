@@ -8,6 +8,7 @@ import { currentMonthKey, monthRange } from "@/lib/week"
 import { getBooleanSetting, SITE_SETTINGS } from "@/lib/settings"
 import { checkMaintenance } from "@/lib/maintenance"
 import { publicDiaryWhere } from "@/lib/diary-visibility"
+import { awardProgression } from "@/lib/progression"
 
 // Diary of the Month — parallel to the weekly Budshot contest. Entries are
 // diaries (not photos), so the models live alongside ContestEntry/ContestVote
@@ -190,6 +191,13 @@ export async function POST(request: Request) {
       if (!entry) {
         return NextResponse.json({ error: "Already entered" }, { status: 409 })
       }
+      // +5 CONTEST_ENTRY — once per entered period. sourceType=DIARY ties
+      // the award to the entered grow: deleting the diary claws it back.
+      await awardProgression(session.user.id, "CONTEST_ENTRY", "Entered Diary of the Month", {
+        key: `contest-entry:${entry.id}`,
+        sourceType: "DIARY",
+        sourceId: diaryId,
+      }).catch(() => {})
       return NextResponse.json({ entry }, { status: 201 })
     }
 

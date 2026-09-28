@@ -9,6 +9,15 @@
 
 import { REP_RANKS } from "@/lib/progression-config"
 
+// The registry ids these rank-tier product gates implement — a locked
+// product's chip names its tier's unlock so members see the same promise
+// the progression registry makes. `early-access` is enforced per-viewer
+// in canSeeDeal callers (hasUnlock) rather than via a product tier.
+export const DEAL_TIER_UNLOCK_ID: Record<string, string> = {
+  Rooted: "members-deals",
+  Cultivator: "top-shelf-deals",
+}
+
 export interface DealGate {
   minRank: string | null
   publicAt: Date | null

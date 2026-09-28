@@ -145,9 +145,24 @@ async function run() {
     // route or an ineligible record can never re-enter the sitemap
     // silently.
     // ─────────────────────────────────────────────────────────────
-    const { default: buildSitemap } = await import("@/app/sitemap")
-    const urls = (await buildSitemap()).map((e) => e.url)
+    const { default: buildSitemap, generateSitemaps } = await import("@/app/sitemap")
+    // Chunked sitemap — walk every generateSitemaps id and concat so the
+    // assertions below see the full URL set regardless of chunking.
+    const allUrls = async () => {
+      const ids = await generateSitemaps()
+      const chunks = await Promise.all(
+        ids.map((s) => buildSitemap({ id: Promise.resolve(String(s.id)) }))
+      )
+      return chunks.flat().map((e) => e.url)
+    }
+    const urls = await allUrls()
     const pathOf = (u: string) => new URL(u).pathname
+    // Chunked index: every URL unique across chunks, and the strain chunk
+    // covers the whole catalog — no artificial take cap may hide rows.
+    assert.equal(new Set(urls).size, urls.length, "no duplicate URLs across sitemap chunks")
+    const strainTotal = await prisma.strain.count()
+    const strainUrls = urls.map(pathOf).filter((p) => /^\/strains\/[^/]+$/.test(p))
+    assert.equal(strainUrls.length, strainTotal, "strain sitemap chunk covers the entire catalog")
 
     // Gated/personalized routes are never sitemap destinations.
     const gatedPaths = urls.map(pathOf)
@@ -175,7 +190,7 @@ async function run() {
       select: { id: true, slug: true },
     })
     try {
-      const urls2 = (await buildSitemap()).map((e) => new URL(e.url).pathname)
+      const urls2 = (await allUrls()).map((u) => new URL(u).pathname)
       assert.ok(!urls2.includes(`/forum/category/${hiddenSlug}`), "sitemap excludes hidden categories")
       assert.ok(!urls2.includes(`/forum/thread/${deletedThread.slug}`), "sitemap excludes deleted threads")
       assert.ok(!urls2.includes(`/u/${bannedName}`), "sitemap excludes banned-author profiles")
@@ -200,7 +215,7 @@ async function run() {
         ),
       )
       diaryIds.push(...visDiaries.map((d) => d.id))
-      const urls3 = (await buildSitemap()).map((e) => new URL(e.url).pathname)
+      const urls3 = (await allUrls()).map((u) => new URL(u).pathname)
       assert.ok(urls3.includes(`/diaries/${visDiaries[0].id}`), "sitemap includes PUBLIC diary")
       assert.ok(!urls3.includes(`/diaries/${visDiaries[1].id}`), "sitemap excludes UNLISTED diary")
       assert.ok(!urls3.includes(`/diaries/${visDiaries[2].id}`), "sitemap excludes PRIVATE diary")
@@ -216,7 +231,7 @@ async function run() {
         select: { id: true },
       })
       strainIds.push(sBreeder.id)
-      const urlsB = (await buildSitemap()).map((e) => new URL(e.url).pathname)
+      const urlsB = (await allUrls()).map((u) => new URL(u).pathname)
       assert.ok(
         urlsB.includes("/strains/breeder/sitemap-breeder-co"),
         "sitemap includes the breeder grouping page"

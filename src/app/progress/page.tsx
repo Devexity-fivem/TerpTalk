@@ -231,7 +231,7 @@ export default function ProgressPage() {
             </p>
           ) : (
             <p className="text-xs text-muted-foreground">
-              Check in daily to grow your streak — milestones unlock utility rewards starting at 3 days.
+              Check in daily to grow your streak — milestones mark your run, and long streaks open perk shortcuts (60 days pins a harvest, 100 puts your grow in the Spotlight).
             </p>
           )}
         </section>

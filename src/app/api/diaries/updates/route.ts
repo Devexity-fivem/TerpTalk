@@ -6,6 +6,7 @@ import { unauthorized, publicUserSelect, LIMITS, getClientIp, logSecurityEvent, 
 import { checkBadges } from "@/lib/reputation"
 import { progressionRateLimit } from "@/lib/progression"
 import { awardProgression, checkDuplicateContent, updateBand } from "@/lib/progression"
+import { awardExperimentFollowups } from "@/lib/experiment-progression"
 import { enqueueReversal, drainOne } from "@/lib/reputation-outbox"
 import { enqueueXpReversal, drainXpOne } from "@/lib/progression-outbox"
 import { storeImages, deleteImagesIfUnreferenced, MAX_POST_IMAGES } from "@/lib/blob"
@@ -355,6 +356,50 @@ export async function POST(request: Request) {
             }).catch(() => {})
           }
         }
+      }
+    }
+
+    // METRIC_FIRST (+5) — once ever per metric kind per member. One batched
+    // key lookup keeps this to a single read in the common case; each
+    // kind's keyed award then dedupes permanently.
+    const FIRST_METRIC_FIELDS = [
+      "temperature", "humidity", "vpd", "ph", "ec", "heightCm",
+      "nightTemperature", "substrateTemperature", "co2Ppm",
+      "wateringLiters", "ppfd", "photoperiodHours",
+      "runoffPh", "runoffEc", "lampDistanceCm",
+    ] as const
+    const presentMetrics = FIRST_METRIC_FIELDS.filter((f) => typeof numericValues[f] === "number")
+    if (presentMetrics.length > 0) {
+      const existingKeys = await prisma.progressionEvent.findMany({
+        where: { userId: session.user.id, key: { in: presentMetrics.map((f) => `metric-first:${session.user.id}:${f}`) } },
+        select: { key: true },
+      }).catch(() => [] as { key: string }[])
+      const done = new Set(existingKeys.map((e) => e.key))
+      for (const f of presentMetrics) {
+        const key = `metric-first:${session.user.id}:${f}`
+        if (done.has(key)) continue
+        await awardProgression(session.user.id, "METRIC_FIRST", `First ${f} reading logged`, {
+          key, sourceType: "DIARY_UPDATE", sourceId: update.id,
+        }).catch(() => {})
+      }
+    }
+
+    // A linked observation counts toward the experiment's +10 follow-up
+    // award once it reaches 3 linked updates (once ever per experiment).
+    if (typeof experimentId === "string" && experimentId) {
+      const linkedCount = await prisma.diaryUpdate
+        .count({ where: { experimentId } })
+        .catch(() => 0)
+      const exp = await prisma.growExperiment.findUnique({
+        where: { id: experimentId },
+        select: {
+          id: true, diaryId: true, authorId: true, title: true, change: true,
+          expected: true, category: true, status: true, outcome: true,
+          conclusion: true, createdAt: true,
+        },
+      }).catch(() => null)
+      if (exp && exp.authorId === session.user.id) {
+        await awardExperimentFollowups({ ...exp, updateCount: linkedCount })
       }
     }
 

@@ -7,6 +7,7 @@ import { rateLimit } from "@/lib/rate-limit"
 import { checkMaintenance } from "@/lib/maintenance"
 import { revalidateTag } from "next/cache"
 import { parseExperimentPatch, serializeExperiment } from "@/lib/experiments"
+import { evaluateExperimentAwards, reverseExperimentAwards } from "@/lib/experiment-progression"
 
 /**
  * /api/diaries/[id]/experiments/[experimentId]
@@ -31,7 +32,7 @@ const EXPERIMENT_INCLUDE = {
 async function loadOwned(diaryId: string, experimentId: string, userId: string) {
   const exp = await prisma.growExperiment.findUnique({
     where: { id: experimentId },
-    select: { id: true, diaryId: true, authorId: true, diary: { select: { authorId: true, deleted: true } } },
+    select: { id: true, diaryId: true, authorId: true, status: true, diary: { select: { authorId: true, deleted: true } } },
   })
   // One 404 for missing/deleted-parent/foreign — no probing.
   if (!exp || exp.diaryId !== diaryId || exp.diary.deleted) return null
@@ -93,6 +94,14 @@ export async function PATCH(
       where: { id: experimentId },
       include: EXPERIMENT_INCLUDE,
     })
+
+    // Experimentation path (design §6.4/§6.4a) — hypothesis, completion,
+    // documented-failure and problem-resolved gates evaluated on the
+    // post-patch state against the pre-patch status. Keyed once-ever.
+    if (row) {
+      await evaluateExperimentAwards(owned.status, { ...row, updateCount: row._count.updates }).catch(() => {})
+    }
+
     revalidateTag("diaries", { expire: 0 })
     return NextResponse.json({ experiment: row ? serializeExperiment(row, undefined, row._count.updates) : null })
   } catch (error) {
@@ -116,6 +125,9 @@ export async function DELETE(
     if (owned === "forbidden") return forbidden()
 
     await prisma.growExperiment.delete({ where: { id: experimentId } })
+    // Deleting the experiment claws back every award it produced —
+    // durable intents, so a crash here retries via the outbox.
+    await reverseExperimentAwards(experimentId).catch(() => {})
     revalidateTag("diaries", { expire: 0 })
     return NextResponse.json({ deleted: true })
   } catch (error) {

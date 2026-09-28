@@ -8,6 +8,7 @@ import { storeImage, deleteImagesIfUnreferenced } from "@/lib/blob"
 import { currentWeekKey } from "@/lib/week"
 import { getBooleanSetting, SITE_SETTINGS } from "@/lib/settings"
 import { checkMaintenance } from "@/lib/maintenance"
+import { awardProgression } from "@/lib/progression"
 
 function userDto(u: { id?: string; name?: string | null; image?: string | null; profile?: { username?: string | null; xp?: number | null; publicMilestoneOptOut?: boolean | null } | null; role?: string | null }) {
   return {
@@ -122,6 +123,13 @@ export async function POST(request: Request) {
       if (!entry) {
         return NextResponse.json({ error: "You have already entered this week" }, { status: 409 })
       }
+      // +5 CONTEST_ENTRY — once per entered contest period. The (userId,
+      // week) unique row makes the key unique per entry.
+      await awardProgression(session.user.id, "CONTEST_ENTRY", "Entered Budshot of the Week", {
+        key: `contest-entry:${entry.id}`,
+        sourceType: "CONTEST",
+        sourceId: entry.id,
+      }).catch(() => {})
       return NextResponse.json({ entry }, { status: 201 })
     }
 

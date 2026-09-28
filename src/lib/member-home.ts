@@ -21,6 +21,8 @@ import { diaryPath } from "@/lib/slugs"
 import { diaryCompleteness } from "@/lib/diary-weeks"
 import { EXPERIMENT_CATEGORY_LABELS, type ExperimentCategory } from "@/lib/experiments"
 import { TECHNIQUE_LABELS } from "@/lib/grow-fields"
+import { hasUnlock } from "@/lib/progression"
+import { toGrams, toOz } from "@/lib/yield"
 
 export interface MemberHomeData {
   displayName: string
@@ -82,6 +84,22 @@ export interface MemberHomeData {
     /** strains grown across all diaries */
     strains: { name: string; count: number }[]
   } | null
+  /** harvest-analytics unlock (Cultivator) — the member's own harvested
+   *  grows as a timeline. null when the unlock isn't held or there are
+   *  no harvests to chart yet. Owner scope only. */
+  harvestTrends: {
+    id: string
+    slug: string | null
+    title: string
+    strainName: string
+    harvestedAt: string
+    days: number | null
+    yieldText: string | null
+    /** normalized to oz so mixed-unit yields sit on one trendline */
+    yieldOz: number | null
+    rating: number | null
+    difficulty: string | null
+  }[] | null
   /** "What deserves my attention" — deterministic signals only, owner scope */
   attention: AttentionItem[]
   /** Community content around the strains the member is actively growing */
@@ -112,7 +130,7 @@ const GROW_STAGE_LABELS: Record<string, string> = Object.fromEntries(
 )
 
 export async function getMemberHomeData(userId: string): Promise<MemberHomeData | null> {
-  const [user, quests, journey, staleDiary, diaries, followedThreads, followedDiaries, unreadNotifications, live, trendingCandidates] =
+  const [user, quests, journey, staleDiary, diaries, followedThreads, followedDiaries, unreadNotifications, live, trendingCandidates, harvestAnalyticsUnlocked] =
     await Promise.all([
       prisma.user.findUnique({
         where: { id: userId },
@@ -219,6 +237,9 @@ export async function getMemberHomeData(userId: string): Promise<MemberHomeData 
           category: { select: { name: true } },
         },
       }),
+      // harvest-analytics gate (Cultivator) — checked up front so the
+      // owner-harvest query below costs nothing for locked members.
+      hasUnlock(userId, "harvest-analytics").catch(() => false),
     ])
 
   if (!user) return null
@@ -251,7 +272,7 @@ export async function getMemberHomeData(userId: string): Promise<MemberHomeData 
 
   // Journey states + deterministic intel for the member's active grows —
   // bounded at 3 diaries (each getGrowIntel is 3 indexed queries).
-  const [journeyStates, intelStates, latestPhotos, allDiaries, allExperiments] = await Promise.all([
+  const [journeyStates, intelStates, latestPhotos, allDiaries, allExperiments, ownHarvests] = await Promise.all([
     Promise.all(diaries.map((d) => getGrowJourney(d.id))),
     Promise.all(diaries.map((d) => getGrowIntel(d.id, userId).catch(() => null))),
     diaries.length
@@ -276,6 +297,23 @@ export async function getMemberHomeData(userId: string): Promise<MemberHomeData 
       take: 50,
       select: { status: true, category: true, diaryId: true },
     }),
+    // Harvest timeline — gated by harvest-analytics. Chronological; the
+    // card charts the sequence. Owner scope: visibility filter is
+    // intentionally absent, these are the member's own rows.
+    harvestAnalyticsUnlocked
+      ? prisma.growDiary.findMany({
+          where: { authorId: userId, deleted: false, harvested: true },
+          orderBy: { harvestedAt: "asc" },
+          take: 24,
+          select: {
+            id: true, slug: true, title: true, strain: true,
+            strainRef: { select: { name: true } },
+            startDate: true, harvestedAt: true,
+            yieldAmount: true, yieldUnit: true,
+            harvestRating: true, harvestDifficulty: true,
+          },
+        })
+      : Promise.resolve([]),
   ])
 
   const photoByDiary = new Map<string, string>()
@@ -462,6 +500,26 @@ export async function getMemberHomeData(userId: string): Promise<MemberHomeData 
       }
     }),
     knowledge,
+    harvestTrends: ownHarvests.length
+      ? ownHarvests.map((h) => ({
+          id: h.id,
+          slug: h.slug,
+          title: h.title,
+          strainName: h.strainRef?.name ?? h.strain ?? "strain",
+          harvestedAt: (h.harvestedAt ?? h.startDate).toISOString(),
+          days: h.harvestedAt
+            ? Math.max(1, Math.round((h.harvestedAt.getTime() - h.startDate.getTime()) / 86400000))
+            : null,
+          yieldText:
+            h.yieldAmount != null && h.yieldUnit ? `${h.yieldAmount}${h.yieldUnit}` : null,
+          yieldOz:
+            h.yieldAmount != null
+              ? Math.round(toOz(toGrams(h.yieldAmount, h.yieldUnit)) * 100) / 100
+              : null,
+          rating: h.harvestRating,
+          difficulty: h.harvestDifficulty,
+        }))
+      : null,
     attention: diaries
       .flatMap((d, i) =>
         intelStates[i]

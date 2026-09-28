@@ -9,6 +9,7 @@ import OpenChatButton from "@/components/open-chat-button"
 import Tooltip, { InfoTip } from "@/components/ui/tooltip"
 import EmptyState from "@/components/ui/empty-state"
 import StageProgress from "@/components/stage-progress"
+import { DIFFICULTY_LABELS } from "@/lib/grow-fields"
 import type { MemberHomeData } from "@/lib/member-home"
 import { diaryPath } from "@/lib/slugs"
 import { cn } from "@/lib/utils"
@@ -16,6 +17,23 @@ import { cn } from "@/lib/utils"
 // The signed-in "Today" homepage — a compact dashboard composing the
 // member's progression, grows, followed activity, and live chat state.
 // Guests never see this; src/app/(home)/page.tsx renders the marketing landing.
+
+// Tiny server-rendered yield sparkline — no chart lib needed for a
+// 96×24 trendline; keeps member-home free of client JS for this card.
+function HarvestSparkline({ points }: { points: number[] }) {
+  if (points.length < 2) return null
+  const max = Math.max(...points)
+  const min = Math.min(...points)
+  const span = max - min || 1
+  const coords = points
+    .map((v, i) => `${(i / Math.max(points.length - 1, 1)) * 96},${22 - ((v - min) / span) * 20}`)
+    .join(" ")
+  return (
+    <svg viewBox="0 0 96 24" className="h-6 w-24 text-warning" aria-hidden="true">
+      <polyline points={coords} fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" />
+    </svg>
+  )
+}
 
 function timeAgo(iso: string): string {
   const mins = Math.floor((Date.now() - new Date(iso).getTime()) / 60000)
@@ -477,6 +495,50 @@ export default function MemberHome({ data }: { data: MemberHomeData }) {
                 </div>
               )}
             </div>
+          </section>
+        )}
+
+        {/* Harvest trend — the harvest-analytics unlock (Cultivator).
+            Own harvested grows as a chronological trendline; null until
+            the member both holds the unlock and has logged a harvest. */}
+        {data.harvestTrends && data.harvestTrends.length > 0 && (
+          <section className="mt-4 tt-spotlight bg-card/80 rounded-2xl border border-border/70 p-4 sm:p-5">
+            <div className="mb-3 flex items-center justify-between gap-2">
+              <h2 className="flex items-center gap-2 font-display text-sm font-semibold">
+                <Wheat className="h-4 w-4 text-warning" />
+                Your harvest trend
+                <InfoTip content="Your harvested grows in order — yield, rating, and days to chop. Unlock stays at Cultivator; data is yours alone." />
+              </h2>
+              <HarvestSparkline
+                points={data.harvestTrends.map((h) => h.yieldOz).filter((v): v is number => v != null)}
+              />
+            </div>
+            <ul className="grid gap-x-6 gap-y-1.5 sm:grid-cols-2">
+              {data.harvestTrends.slice(-6).map((h) => (
+                <li key={h.id}>
+                  <Link
+                    href={diaryPath(h)}
+                    className="group flex items-center gap-2 rounded-xl px-3 py-2 hover:bg-secondary/60"
+                  >
+                    <Wheat className="h-3.5 w-3.5 shrink-0 text-warning" aria-hidden="true" />
+                    <span className="min-w-0 flex-1 truncate text-sm group-hover:text-primary">
+                      {h.title}
+                      <span className="text-muted-foreground"> — {h.strainName}</span>
+                    </span>
+                    <span className="shrink-0 text-xs text-muted-foreground tabular-nums">
+                      {h.yieldText ?? (h.days != null ? `${h.days}d` : "")}
+                      {h.rating ? ` · ★${h.rating}` : ""}
+                      {h.difficulty ? ` · ${DIFFICULTY_LABELS[h.difficulty as keyof typeof DIFFICULTY_LABELS] ?? h.difficulty.toLowerCase()}` : ""}
+                    </span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+            {data.harvestTrends.length > 6 && (
+              <p className="mt-2 text-xs text-muted-foreground">
+                …and {data.harvestTrends.length - 6} earlier harvest{data.harvestTrends.length - 6 === 1 ? "" : "s"}
+              </p>
+            )}
           </section>
         )}
 

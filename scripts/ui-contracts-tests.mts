@@ -7,6 +7,7 @@ import { strict as assert } from "node:assert"
 import { readFileSync, readdirSync, statSync } from "node:fs"
 import { join } from "node:path"
 import { fileURLToPath } from "node:url"
+import { UNLOCKS, XP_TABLE, DEFERRED_XP_EVENTS, RANK_DISPLAY } from "../src/lib/progression-config"
 
 let passed = 0
 let failed = 0
@@ -554,6 +555,100 @@ check("user-actions: block uses ConfirmDialog, not native confirm()", () => {
   assert.ok(u.includes("<ConfirmDialog"), "ConfirmDialog mounted")
   assert.ok(!/[^.]confirm\(/.test(u), "native confirm() removed")
   assert.ok(u.includes("destructive"), "block is destructive semantics")
+})
+
+// ── Phase I — progression integrity contracts ─────────────────────────
+// "build it, gate the real thing, or remove the promise — never leave a
+// lie in the registry." These checks freeze the post-Phase-I invariants:
+// every live unlock has an enforcement callsite, deferred XP events are
+// never advertised as earnable, and the removed vacuous unlocks stay gone.
+
+check("unlock registry: every live entry is enforced in src/", () => {
+  const allFiles = [...walk(SRC)].map((p) => readFileSync(p, "utf8"))
+  const nonConfig = allFiles.filter((c) => !c.includes("export const UNLOCKS"))
+  for (const u of UNLOCKS) {
+    if (u.status === "future") continue
+    // Bare-id match — enforcement sites may name the id in code or in a
+    // provenance comment (e.g. spotlight eligibility mirrors the spec
+    // without a literal hasUnlock call). Anything live must be reachable
+    // from real code/docs outside the registry itself.
+    const enforced = nonConfig.some((c) => c.includes(u.id))
+    assert.ok(enforced, `live unlock "${u.id}" has no enforcement callsite — flag it future or wire it`)
+  }
+})
+
+check("unlock registry: vacuous entries stay removed, ids unique", () => {
+  const ids = new Set<string>()
+  for (const u of UNLOCKS) {
+    assert.ok(!ids.has(u.id), `duplicate unlock id ${u.id}`)
+    ids.add(u.id)
+  }
+  // Phase I removals — these promised a gate on functionality that was
+  // already free for everyone.
+  for (const dead of ["streak-dashboard", "saved-searches-3", "comparison-basic", "grows-6", "advanced-filters"]) {
+    assert.ok(!ids.has(dead), `vacuous unlock ${dead} re-entered the registry`)
+  }
+})
+
+check("deferred XP events: flagged in XP_TABLE and absent from earn lists", () => {
+  for (const t of DEFERRED_XP_EVENTS) {
+    assert.ok(XP_TABLE[t as keyof typeof XP_TABLE]?.deferred === true, `${t} in DEFERRED set must carry deferred: true`)
+  }
+  // Member-facing earn surfaces must not advertise events that can never pay.
+  const earn1 = src("app/reputation/page.tsx")
+  const earn2 = src("components/reputation-earn.tsx")
+  for (const t of DEFERRED_XP_EVENTS) {
+    assert.ok(!earn1.includes(`"${t}"`), `/reputation advertises deferred event ${t}`)
+    assert.ok(!earn2.includes(`"${t}"`), `reputation-earn advertises deferred event ${t}`)
+  }
+  assert.ok(!earn1.includes("GUIDE_PUBLISHED") && !earn2.includes("GUIDE_PUBLISHED"), "staff-only guide publishing not listed as a member earning source")
+})
+
+check("progression UI: rank benefits never name future unlocks", () => {
+  const futureNames = new Set(UNLOCKS.filter((u) => u.status === "future").map((u) => u.name.toLowerCase()))
+  for (const [rank, d] of Object.entries(RANK_DISPLAY)) {
+    const b = d.benefit.toLowerCase()
+    for (const n of futureNames) {
+      // Benefit may mention a roadmap item only when explicitly phrased as future.
+      if (b.includes(n)) {
+        assert.ok(b.includes("roadmap") || b.includes("coming"), `${rank} benefit names future unlock "${n}" without a future marker`)
+      }
+    }
+  }
+  // The engine contract — future rows can never pass hasUnlock.
+  const eng = src("lib/progression.ts")
+  assert.ok(eng.includes('status === "future"'), "hasUnlock/unlockStates refuse future rows")
+})
+
+check("experimentation awards: lifecycle callsites wired", () => {
+  const lib = src("lib/experiment-progression.ts")
+  for (const t of ["EXPERIMENT_CREATED", "HYPOTHESIS_DOC", "EXPERIMENT_COMPLETED", "FAILURE_DOCUMENTED", "FOLLOWUPS_3", "PROBLEM_RESOLVED"]) {
+    assert.ok(lib.includes(`"${t}"`), `experiment-progression wires ${t}`)
+  }
+  const create = src("app/api/diaries/[id]/experiments/route.ts")
+  const patch = src("app/api/diaries/[id]/experiments/[experimentId]/route.ts")
+  const updates = src("app/api/diaries/updates/route.ts")
+  assert.ok(create.includes("awardExperimentCreated") && create.includes("awardHypothesisIfMet"), "create route pays created+hypothesis")
+  assert.ok(patch.includes("evaluateExperimentAwards") && patch.includes("reverseExperimentAwards"), "patch/delete reconciles and reverses")
+  assert.ok(updates.includes("awardExperimentFollowups"), "updates route pays follow-ups")
+  assert.ok(updates.includes('"METRIC_FIRST"'), "updates route pays METRIC_FIRST")
+  assert.ok(src("app/api/contest/route.ts").includes('"CONTEST_ENTRY"'), "weekly contest entry pays")
+  assert.ok(src("app/api/diary-contest/route.ts").includes('"CONTEST_ENTRY"'), "monthly contest entry pays")
+  assert.ok(src("lib/grow-journey.ts").includes('"COVERAGE_MILESTONE"'), "grow journey evaluates coverage milestone")
+})
+
+check("sitemap: chunked via generateSitemaps, index handler present", () => {
+  const sm = src("app/sitemap.ts")
+  assert.ok(sm.includes("generateSitemaps"), "generateSitemaps defined")
+  assert.ok(!/take:\s*\d+/.test(sm), "no artificial take caps in sitemap queries")
+  assert.ok(sm.includes("publicDiaryWhere"), "public-only diary scope preserved")
+  assert.ok(sm.includes("rankableProfile"), "TerpBot exclusion preserved")
+  // /sitemap.xml is reserved for the metadata convention in this Next
+  // build — the index handler lives at /sitemap-index.xml (robots points there).
+  const idx = src("app/sitemap-index.xml/route.ts")
+  assert.ok(idx.includes("sitemapindex"), "index serves sitemapindex XML")
+  const robots = src("app/robots.ts")
+  assert.ok(robots.includes("sitemap-index.xml"), "robots.txt points at the sitemap index")
 })
 
 console.log(`\n${passed} passed, ${failed} failed`)

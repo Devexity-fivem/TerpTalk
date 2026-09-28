@@ -1,6 +1,6 @@
 "use client"
 
-import { MessageSquare, MessageCircle, BookOpen, Camera, CheckCircle, UserPlus, Repeat, Trophy, FileText } from "lucide-react"
+import { MessageSquare, MessageCircle, BookOpen, Camera, CheckCircle, UserPlus, Repeat, Trophy, FlaskConical } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { XP_TABLE } from "@/lib/progression-config"
 import Tooltip, { InfoTip } from "@/components/ui/tooltip"
@@ -13,7 +13,8 @@ const ACTIONS = [
   { key: "DIARY_CREATED", label: "Start a grow diary", icon: BookOpen, hint: "Begin a new grow diary to document a run." },
   { key: "UPDATE_DAY", label: "Log a diary update", icon: Repeat, hint: "Post an update to one of your grow diaries." },
   { key: "STRAIN_PHOTO", label: "Post a bud shot", icon: Camera, hint: "Attach a photo to a strain page." },
-  { key: "GUIDE_PUBLISHED", label: "Publish a guide", icon: FileText, hint: "Write a community guide — pays XP and standing." },
+  { key: "EXPERIMENT_CREATED", label: "Log an experiment", icon: FlaskConical, hint: "Document an experiment on one of your grows — finishing it pays more." },
+  { key: "CONTEST_ENTRY", label: "Enter a contest", icon: Trophy, hint: "Submit a budshot or a diary to a community contest." },
   { key: "CONTEST_WEEKLY_WIN", label: "Win the weekly contest", icon: Trophy, hint: "Take first place in the weekly photo contest." },
   { key: "REFERRAL", label: "Invite a grower", icon: UserPlus, hint: "Share your referral link — pays out once your invitee gets established." },
 ]
@@ -57,7 +58,7 @@ export default function ReputationEarn({ compact }: { compact?: boolean }) {
       <div className="mt-4 rounded-lg bg-amber-500/10 border border-amber-500/20 p-3">
         <p className="text-sm text-warning">
           <span className="font-semibold">Standing is earned, not farmed.</span>{" "}
-          Peer-gated contributions — accepted answers, published guides, qualified referrals — build the standing that unlocks community privileges.
+          Peer-gated contributions — accepted answers, qualified referrals — build the standing that unlocks community privileges.
         </p>
       </div>
     </div>

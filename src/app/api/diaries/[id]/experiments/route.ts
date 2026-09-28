@@ -7,6 +7,7 @@ import { rateLimit } from "@/lib/rate-limit"
 import { checkMaintenance } from "@/lib/maintenance"
 import { revalidateTag } from "next/cache"
 import { parseExperimentCreate, serializeExperiment } from "@/lib/experiments"
+import { awardExperimentCreated, awardHypothesisIfMet } from "@/lib/experiment-progression"
 
 /**
  * /api/diaries/[id]/experiments
@@ -109,6 +110,12 @@ export async function POST(
       } as Parameters<typeof prisma.growExperiment.create>[0]["data"],
       include: EXPERIMENT_INCLUDE,
     })
+
+    // Experimentation path (design §6.4) — +5 creation (2/week cap),
+    // +5 hypothesis when `expected` carries a real prediction.
+    const awardState = { ...created, updateCount: created._count.updates }
+    await awardExperimentCreated(awardState)
+    await awardHypothesisIfMet(awardState)
 
     revalidateTag("diaries", { expire: 0 })
     return NextResponse.json({ experiment: serializeExperiment(created, undefined, created._count.updates) }, { status: 201 })

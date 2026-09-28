@@ -17,6 +17,8 @@ interface Deal {
   partnerName: string
   /** Rank name when this deal is a members-only teaser for the viewer. */
   lockedAtRank?: string | null
+  /** The unlock-registry name for that tier's gate, when one exists. */
+  lockedUnlockName?: string | null
 }
 
 const SECTIONS = [
@@ -35,7 +37,7 @@ function DealCard({ p }: { p: Deal }) {
           <h3 className="font-display font-semibold text-sm">{p.name}</h3>
         </div>
         <p className="text-xs text-muted-foreground mt-1 flex-1">
-          A members-only deal — unlocks at {p.lockedAtRank} rank.
+          A members-only deal — {p.lockedUnlockName ? `${p.lockedUnlockName} ` : ""}unlocks at {p.lockedAtRank} rank.
         </p>
       </div>
     )
