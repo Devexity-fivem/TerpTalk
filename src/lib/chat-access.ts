@@ -36,11 +36,43 @@ export interface RoomGate {
 
 export type RoomAccess = "open" | "staff" | "gated" | "denied"
 
+export interface RoomGateSubject {
+  role: string
+  profile: { xp: number; standing: number; unlockFrozen: boolean } | null
+}
+
 // Standing floor for a gated room — comes from the unlock registry when the
 // room slug is a registered unlock (grow-room 100, the-vault 300).
 function roomStandingReq(room: RoomGate): number {
   const spec = room.slug ? UNLOCK_BY_ID.get(room.slug) : undefined
   return spec?.standing ?? 0
+}
+
+/**
+ * THE room-access predicate. Pure evaluation of a room gate against an
+ * already-fetched subject — every caller (canAccessRoom, roomAccessInfo,
+ * the room-listing route, chat-activity visibility) evaluates through this
+ * one function so the rule can never drift between paths.
+ */
+export function roomAccessDecision(
+  subject: RoomGateSubject | null | undefined,
+  room: RoomGate,
+  growRoomEnabled: boolean
+): { allowed: boolean; reason: RoomAccess } {
+  if (!subject) return { allowed: false, reason: "denied" }
+  if (room.isPrivate) {
+    const ok = isModerator(subject.role)
+    return { allowed: ok, reason: "staff" }
+  }
+  if (room.requiredXp != null) {
+    if (isStaff(subject.role)) return { allowed: true, reason: "staff" }
+    if (!growRoomEnabled) return { allowed: false, reason: "denied" }
+    const p = subject.profile
+    const allowed =
+      !!p && !p.unlockFrozen && p.xp >= room.requiredXp && p.standing >= roomStandingReq(room)
+    return { allowed, reason: "gated" }
+  }
+  return { allowed: true, reason: "open" }
 }
 
 // Human-readable gate for deny copy — e.g. "Cultivator rank + 100 standing"
@@ -59,19 +91,14 @@ export async function canAccessRoom(
   userId: string,
   room: RoomGate
 ): Promise<boolean> {
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { role: true, profile: { select: { xp: true, standing: true, unlockFrozen: true } } },
-  })
-  if (!user) return false
-  if (room.isPrivate) return isModerator(user.role)
-  if (room.requiredXp != null) {
-    if (isStaff(user.role)) return true
-    if (!(await getBooleanSetting(SITE_SETTINGS.GROW_ROOM_ENABLED, false))) return false
-    if (!user.profile || user.profile.unlockFrozen) return false
-    return user.profile.xp >= room.requiredXp && user.profile.standing >= roomStandingReq(room)
-  }
-  return true
+  const [user, growRoomEnabled] = await Promise.all([
+    prisma.user.findUnique({
+      where: { id: userId },
+      select: { role: true, profile: { select: { xp: true, standing: true, unlockFrozen: true } } },
+    }),
+    getBooleanSetting(SITE_SETTINGS.GROW_ROOM_ENABLED, false),
+  ])
+  return roomAccessDecision(user, room, growRoomEnabled).allowed
 }
 
 /** Why access was denied — lets the API say "earn X XP" vs a flat 403. */
@@ -79,24 +106,12 @@ export async function roomAccessInfo(
   userId: string,
   room: RoomGate
 ): Promise<{ allowed: boolean; reason: RoomAccess }> {
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { role: true, profile: { select: { xp: true, standing: true, unlockFrozen: true } } },
-  })
-  if (!user) return { allowed: false, reason: "denied" }
-  if (room.isPrivate) {
-    return isModerator(user.role)
-      ? { allowed: true, reason: "staff" }
-      : { allowed: false, reason: "staff" }
-  }
-  if (room.requiredXp != null) {
-    if (isStaff(user.role)) return { allowed: true, reason: "staff" }
-    if (!(await getBooleanSetting(SITE_SETTINGS.GROW_ROOM_ENABLED, false))) {
-      return { allowed: false, reason: "denied" }
-    }
-    const p = user.profile
-    const ok = !!p && !p.unlockFrozen && p.xp >= room.requiredXp && p.standing >= roomStandingReq(room)
-    return ok ? { allowed: true, reason: "gated" } : { allowed: false, reason: "gated" }
-  }
-  return { allowed: true, reason: "open" }
+  const [user, growRoomEnabled] = await Promise.all([
+    prisma.user.findUnique({
+      where: { id: userId },
+      select: { role: true, profile: { select: { xp: true, standing: true, unlockFrozen: true } } },
+    }),
+    getBooleanSetting(SITE_SETTINGS.GROW_ROOM_ENABLED, false),
+  ])
+  return roomAccessDecision(user, room, growRoomEnabled)
 }

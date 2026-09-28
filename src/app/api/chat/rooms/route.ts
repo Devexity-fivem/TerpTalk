@@ -2,12 +2,11 @@ import { NextRequest, NextResponse } from "next/server"
 import { getToken } from "next-auth/jwt"
 import { prisma } from "@/lib/prisma"
 import { sessionCookieName } from "@/lib/auth"
-import { unauthorized, forbidden, isSessionValid, getClientIp, hashIp, isStaff } from "@/lib/security"
+import { unauthorized, forbidden, isSessionValid, getClientIp, hashIp } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
-import { GROW_ROOM_XP, GROW_ROOM_SLUG, VAULT_ROOM_XP, VAULT_ROOM_SLUG, roomRequirementText } from "@/lib/chat-access"
+import { GROW_ROOM_XP, GROW_ROOM_SLUG, VAULT_ROOM_XP, VAULT_ROOM_SLUG, roomRequirementText, roomAccessDecision } from "@/lib/chat-access"
 import { getChatActivity, countOnline, withLatestActivity } from "@/lib/chat-activity"
 import { getBooleanSetting, SITE_SETTINGS } from "@/lib/settings"
-import { UNLOCK_BY_ID } from "@/lib/progression-config"
 
 // Get chat rooms
 export async function GET(request: NextRequest) {
@@ -108,20 +107,14 @@ export async function GET(request: NextRequest) {
 
     // Gated rooms list as locked teasers (the reward advertises itself) but
     // only while the flag is on — and messages never flow to non-members.
-    const staff = isStaff(user?.role)
-    const xp = user?.profile?.xp ?? 0
-    const standing = user?.profile?.standing ?? 0
-    const frozen = user?.profile?.unlockFrozen ?? true
+    // Access itself is evaluated by the shared predicate in chat-access.
     const rooms = await withLatestActivity(
       allRooms
         .filter((r) => r.requiredXp == null || growRoomEnabled)
         .map((r) => ({
           ...r,
           unlockText: r.requiredXp != null ? roomRequirementText(r) : null,
-          accessible:
-            r.requiredXp == null ||
-            staff ||
-            (!frozen && xp >= r.requiredXp && standing >= (UNLOCK_BY_ID.get(r.slug)?.standing ?? 0)),
+          accessible: roomAccessDecision(user, r, growRoomEnabled).allowed,
         })),
       userId
     )

@@ -95,10 +95,10 @@ export async function POST(request: Request) {
     }
 
     // One profile read serves every progression-perk check on this route.
-    const tierPerks = await getProgressionPerks(session.user.id)
+    const progressionPerks = await getProgressionPerks(session.user.id)
 
     // Cured+ can attach up to 7 tags instead of 5.
-    const tagCap = tierPerks.maxThreadTags ?? MAX_TAGS
+    const tagCap = progressionPerks.maxThreadTags ?? MAX_TAGS
     if (tagInputs.length > tagCap) {
       return NextResponse.json({ error: `Maximum ${tagCap} tags per thread` }, { status: 400 })
     }
@@ -112,7 +112,7 @@ export async function POST(request: Request) {
     if (body.poll && typeof body.poll === "object" && !Array.isArray(body.poll)) {
       // Poll creation is a Trusted-standing gate (poll *voting* is
       // enforced separately on the vote route). Staff always can.
-      if (!isStaff(currentUser.role) && !tierPerks.pollCreation) {
+      if (!isStaff(currentUser.role) && !progressionPerks.pollCreation) {
         return forbidden(`Creating polls unlocks at Trusted standing (${STANDING_POLL_CREATE})`)
       }
       const pollInput = body.poll as { question?: unknown; options?: unknown }

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { unstable_cache } from "next/cache"
+import { activeAuthor } from "@/lib/security"
 
 export const dynamic = "force-dynamic"
 
@@ -11,12 +12,14 @@ const getForumUpdates = unstable_cache(
         where: {
           deleted: false,
           category: { hidden: false },
+          author: activeAuthor(),
         },
       }),
       prisma.thread.findFirst({
         where: {
           deleted: false,
           category: { hidden: false },
+          author: activeAuthor(),
         },
         orderBy: { createdAt: "desc" },
         select: { id: true, createdAt: true },

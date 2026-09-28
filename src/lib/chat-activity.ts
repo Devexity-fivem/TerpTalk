@@ -1,11 +1,11 @@
 // Server-side chat activity summaries. Feeds the nav badge endpoint and the
-// homepage teaser. Everything here reuses the canAccessRoom boundary —
+// homepage teaser. Everything here reuses the roomAccessDecision boundary —
 // staff-private rooms are never listed, and rep-gated rooms only appear for
 // members past the gate while the rollout flag is on.
 import { prisma } from "@/lib/prisma"
-import { isStaff, blockedUserIds, notBlockedAuthor } from "@/lib/security"
+import { blockedUserIds, notBlockedAuthor } from "@/lib/security"
 import { getBooleanSetting, SITE_SETTINGS } from "@/lib/settings"
-import { UNLOCK_BY_ID } from "@/lib/progression-config"
+import { roomAccessDecision } from "@/lib/chat-access"
 
 export interface ChatActivityRoom {
   id: string
@@ -26,21 +26,13 @@ async function visibleRooms(userId: string) {
     getBooleanSetting(SITE_SETTINGS.GROW_ROOM_ENABLED, false),
   ])
   if (!user) return []
-  const staff = isStaff(user.role)
-  const xp = user.profile?.xp ?? 0
-  const standing = user.profile?.standing ?? 0
-  const frozen = user.profile?.unlockFrozen ?? true
   const rooms = await prisma.chatRoom.findMany({
     where: { isPrivate: false },
     orderBy: { order: "asc" },
-    select: { id: true, slug: true, name: true, requiredXp: true },
+    select: { id: true, slug: true, name: true, requiredXp: true, isPrivate: true },
   })
   return rooms.filter(
-    (r) =>
-      (r.requiredXp == null || growRoomEnabled) &&
-      (r.requiredXp == null ||
-        staff ||
-        (!frozen && xp >= r.requiredXp && standing >= (UNLOCK_BY_ID.get(r.slug)?.standing ?? 0)))
+    (r) => (r.requiredXp == null || growRoomEnabled) && roomAccessDecision(user, r, growRoomEnabled).allowed
   )
 }
 

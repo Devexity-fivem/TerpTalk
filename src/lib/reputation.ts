@@ -20,7 +20,6 @@ import {
   LIKE_MIN_ACTOR_AGE_HOURS,
   REP_CAPS,
   REP_EVENT_TYPES,
-  TRUST_EVENT_TYPES,
   VERIFIED_MIN_AGE_DAYS,
   VERIFIED_MIN_REPUTATION,
   VERIFIED_MULTIPLIER,
@@ -1157,33 +1156,14 @@ export async function checkBadges(userId: string, opts: { announcedTierName?: st
 // ─── Tier perks (real, enforced) ─────────────────────────────────────
 
 // The perks a user's current tier grants. One indexed profile read.
-export async function getTierPerks(userId: string) {
-  const profile = await prisma.profile.findUnique({
-    where: { userId },
-    select: { reputation: true },
-  })
-  return getReputationTier(profile?.reputation ?? 0).perks
-}
-
-// rateLimit() scaled by the caller's tier — Cultivator+ get a boost.
-export async function repRateLimit(userId: string, key: string, baseLimit: number, windowMs: number) {
-  const perks = await getTierPerks(userId)
-  const limit = Math.floor(baseLimit * (perks.rateLimitBoost ?? 1))
-  return rateLimit(key, limit, windowMs)
-}
-
 // ─── Community standing (trust axis) ─────────────────────────────────
 // XP (the ledger balance) measures participation; standing measures peer
 // validation. Only event types another member or staff had to cause count
 // — volume alone can't raise it. Reversed originals are excluded (their
 // counter-entries are REVERSAL/REINSTATE type and never match the list).
-export async function getTrustScore(userId: string): Promise<number> {
-  const agg = await prisma.reputationEvent.aggregate({
-    where: { userId, type: { in: [...TRUST_EVENT_TYPES] }, reversedAt: null },
-    _sum: { amount: true },
-  })
-  return Math.max(0, agg._sum.amount ?? 0)
-}
+// Standing computation lives in progression.ts (V2); the V1-era tier-perk
+// and trust-score readers were removed in the post-P3/P5 reconciliation —
+// V2 `progressionPerksFrom`/`standing` are the canonical projections.
 
 // Badge checks normally ride the rep-award pipeline, which means purely
 // social progress (chat messages, onboarding) stalls until the next rep
