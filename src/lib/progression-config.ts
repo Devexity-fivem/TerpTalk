@@ -353,6 +353,15 @@ export interface UnlockSpec {
    * false and `nextRankUnlock`/unlock roadmaps skip or label it. A registry
    * row may only ship *live* with its enforcement callsite or a documented
    * free-tier semantic; rows kept for roadmap visibility carry this flag.
+   *
+   * Enforcement model (two projections of the same rank/standing constants):
+   *   - Discrete unlocks → `hasUnlock(userId, id)` at the callsite.
+   *   - Graduated/hot-path perks → `progressionPerksFrom` (images-per-post,
+   *     rate-limit boost, thread tags, poll rights, slowmode exemption,
+   *     showcase slots). Their registry rows describe the same thresholds —
+   *     the row is the catalog entry, the perk field is the hot-path check.
+   *   A row that is live MUST correspond to shipped behavior; a deferred
+   *   feature MUST keep `status:"future"` and have no live enforcement.
    */
   status?: "future"
   blurb: string // what it unlocks + how to use it (UX copy)
@@ -384,7 +393,9 @@ export const UNLOCKS: UnlockSpec[] = [
   { id: "terpbot-watch-basic", name: "TerpBot keeps an eye out", category: "terpbot", layer: "A", rank: "Preflower", status: "future", blurb: "Set up to 3 alerts — e.g. 'tell me if my tent gets too humid'." },
   { id: "longitudinal-analysis", name: "Whole-grow review", category: "terpbot", layer: "B", rank: "Flowering", mastery: { path: "RECORDS", level: 2 }, status: "future", blurb: "TerpBot looks back over a full grow and points out what changed and when." },
   { id: "comparison-multi", name: "Compare whole grows", category: "analytics", layer: "B", rank: "Flowering", mastery: { path: "RECORDS", level: 2 }, status: "future", blurb: "Put entire grows side by side — yours against yours, or against the community." },
-  { id: "images-6", name: "6 photos per post", category: "capacity", layer: "A", rank: "Flowering", status: "future", blurb: "More room to show what you're seeing." },
+  // Live — enforced by the perk engine (progressionPerksFrom.imagesPerPost),
+  // consumed by /api/forum/posts. Rank matches the perk threshold exactly.
+  { id: "images-6", name: "6 photos per post", category: "capacity", layer: "A", rank: "Flowering", blurb: "More room to show what you're seeing." },
 
   // Late — B + C
   { id: "guide-authoring", name: "Write grow guides", category: "leadership", layer: "B", rank: "Ripening", mastery: { path: "KNOWLEDGE", level: 3 }, anyOf: true, status: "future", blurb: "Publish your own guides for the community (staff-reviewed)." },
@@ -393,8 +404,10 @@ export const UNLOCKS: UnlockSpec[] = [
   { id: "nutrient-schedules", name: "Feed-chart presets", category: "functional", layer: "B", mastery: { path: "RECORDS", level: 3 }, status: "future", blurb: "Pick your nutrient brand and its feeding schedule drops straight into your update form." },
   { id: "data-quality-insights", name: "What's missing from your log", category: "analytics", layer: "B", mastery: { path: "RECORDS", level: 2 }, achievement: "full-spectrum", status: "future", blurb: "A gentle checklist of readings your diary doesn't have yet." },
   { id: "experiment-templates", name: "Copy a proven test", category: "functional", layer: "B", mastery: { path: "EXPERIMENTATION", level: 2 }, status: "future", blurb: "Start a new experiment from one that already worked." },
-  { id: "rate-1.5", name: "Post & chat more often", category: "capacity", layer: "A", rank: "Harvested", status: "future", blurb: "Looser limits on how often you can post and chat." },
-  { id: "images-8", name: "8 photos per post", category: "capacity", layer: "A", rank: "Harvested", status: "future", blurb: "Even more room for photos." },
+  // Live — enforced by progressionPerksFrom (rateLimitBoost 1.5 / imagesPerPost 8),
+  // consumed by progressionRateLimit and /api/forum/posts.
+  { id: "rate-1.5", name: "Post & chat more often", category: "capacity", layer: "A", rank: "Harvested", blurb: "Looser limits on how often you can post and chat." },
+  { id: "images-8", name: "8 photos per post", category: "capacity", layer: "A", rank: "Harvested", blurb: "Even more room for photos." },
   { id: "pinned-harvest", name: "Pin a harvest to your profile", category: "showcase", layer: "A", rank: "Harvested", streak: 60, blurb: "Pick your proudest harvest and it sits at the top of your profile." },
   { id: "stat-slots-8", name: "8 notable stats", category: "capacity", layer: "A", rank: "Harvested", blurb: "The full stat strip — up to 8 notable stats on your profile." },
   { id: "profile-sections-6", name: "6 profile sections", category: "capacity", layer: "A", rank: "Harvested", blurb: "Up to 6 custom sections on your profile." },
@@ -407,14 +420,17 @@ export const UNLOCKS: UnlockSpec[] = [
   { id: "dashboard-advanced", name: "Bigger cockpit, 15 alerts", category: "analytics", layer: "A", rank: "Cured", status: "future", blurb: "More cockpit panels and more TerpBot alerts." },
   { id: "profile-sections-8", name: "8 profile sections", category: "capacity", layer: "A", rank: "Cured", blurb: "The full shelf — up to 8 custom sections on your profile." },
   { id: "owner-analytics", name: "Profile insights", category: "analytics", layer: "A", rank: "Cured", blurb: "A private panel on your own profile: your last 30 days of followers, updates and new grows. Only you see it." },
-  { id: "rate-2", name: "Post & chat freely, 7 tags", category: "capacity", layer: "A", rank: "Cured", status: "future", blurb: "The loosest posting limits and more tags per thread." },
+  // Live — enforced by progressionPerksFrom (rateLimitBoost 2 / maxThreadTags 7),
+  // consumed by progressionRateLimit and /api/forum/threads.
+  { id: "rate-2", name: "Post & chat freely, 7 tags", category: "capacity", layer: "A", rank: "Cured", blurb: "The loosest posting limits and more tags per thread." },
   { id: "grower-spotlight", name: "Grower Spotlight", category: "showcase", layer: "A", rank: "Cured", streak: 100, blurb: "Your active grow can be featured on the TerpTalk home page." },
   { id: "quest-slot-5", name: "5th daily quest", category: "functional", layer: "A", rank: "Cultivator", blurb: "A fifth quest on your board each day." },
 
   // Prestige — C
   { id: "grow-room", name: "The Grow Room", category: "leadership", layer: "C", rank: "Cultivator", standing: 100, blurb: "The trusted growers' chat room — takes rank and a good standing." },
   { id: "community-evidence", name: "What's working for other growers", category: "analytics", layer: "C", rank: "Cultivator", standing: 100, status: "future", blurb: "Patterns pulled from public diaries — no names, just what tends to work." },
-  { id: "images-10", name: "10 photos per post", category: "capacity", layer: "A", rank: "Cultivator", status: "future", blurb: "The most room for photos." },
+  // Live — enforced by progressionPerksFrom.imagesPerPost, consumed by /api/forum/posts.
+  { id: "images-10", name: "10 photos per post", category: "capacity", layer: "A", rank: "Cultivator", blurb: "The most room for photos." },
   { id: "top-shelf-deals", name: "Top-shelf deals", category: "deals", layer: "A", rank: "Cultivator", blurb: "The best partner offers, reserved for the most experienced growers." },
   { id: "the-vault", name: "The Vault", category: "leadership", layer: "C", rank: "Master Cultivator", standing: 300, blurb: "The top room. Few get in, on purpose." },
   { id: "research-aggregates", name: "Deeper community stats", category: "analytics", layer: "B", rank: "Master Cultivator", mastery: { path: "RECORDS", level: 4 }, status: "future", blurb: "More detailed community-wide numbers, still anonymous." },
@@ -422,6 +438,14 @@ export const UNLOCKS: UnlockSpec[] = [
   // the "try new features" half has no feature-flag consumers yet — the
   // blurb only promises the part that works.
   { id: "early-access", name: "First look", category: "prestige", layer: "A", rank: "Master Cultivator", blurb: "See new partner deals before they go public." },
+
+  // Standing privileges — live today via the perk engine (pollVoting,
+  // pollCreation, slowmodeExempt). Standing-only rows have no rank, so
+  // nextRankUnlock never offers them as XP-ladder goals — correct, since
+  // standing is earned, not ground.
+  { id: "poll-vote", name: "Vote in polls", category: "functional", layer: "C", standing: STANDING_POLL_VOTE, blurb: "Cast votes on community polls — Known standing and up." },
+  { id: "poll-create", name: "Create polls", category: "functional", layer: "C", standing: STANDING_POLL_CREATE, blurb: "Start polls in your threads — Trusted standing and up." },
+  { id: "slowmode-exempt", name: "No slowmode", category: "capacity", layer: "C", standing: STANDING_SLOWMODE_EXEMPT, blurb: "Chat rooms skip the slowmode timer for you — Pillar standing reads as trust." },
 ]
 
 export const UNLOCK_BY_ID = new Map(UNLOCKS.map((u) => [u.id, u]))

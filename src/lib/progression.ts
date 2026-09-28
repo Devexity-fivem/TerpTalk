@@ -1012,13 +1012,27 @@ export async function effectiveRank(userId: string): Promise<{
 export async function hasUnlock(userId: string, unlockId: string): Promise<boolean> {
   const spec = UNLOCK_BY_ID.get(unlockId)
   if (!spec || spec.status === "future") return false
+  return meetsUnlockSpec(userId, spec)
+}
+
+/**
+ * Evaluates an unlock spec against a member. Exported so the grant paths
+ * (achievement, streak, rank, mastery, standing) can be exercised with any
+ * spec — including future/synthetic ones in tests — while `hasUnlock`
+ * remains the only gate production routes call.
+ */
+export async function meetsUnlockSpec(userId: string, spec: UnlockSpec): Promise<boolean> {
   const profile = await prisma.profile.findUnique({
     where: { userId },
     select: { xp: true, standing: true, unlockFrozen: true },
   })
   if (!profile || profile.unlockFrozen) return false
 
-  // Achievement route — independent of rank/mastery.
+  // Achievement route — reads UserAchievement, the unlock-capable
+  // progression-achievement store (V2 grants + LEGACY archive). Cosmetic
+  // community badges live in UserBadge and NEVER gate unlocks — the two
+  // systems are intentionally separate (Badge/BADGE_REGISTRY stays the
+  // live cosmetic engine; Achievement is the progression-linked framework).
   if (spec.achievement) {
     const ach = await prisma.userAchievement.findFirst({
       where: { userId, achievement: { key: spec.achievement } },
@@ -1067,56 +1081,17 @@ export async function statSlotLimit(userId: string): Promise<number> {
   return SHOWN_STATS_BASE
 }
 
-/** All unlocks with earned state — powers the /progress unlock roadmap. */
-export async function unlockStates(userId: string): Promise<(UnlockSpec & { unlocked: boolean })[]> {
-  const profile = await prisma.profile.findUnique({
-    where: { userId },
-    select: { xp: true, standing: true, unlockFrozen: true },
-  })
-  const mastery = await getMasteryMap(userId)
-  const levels = Object.fromEntries(MASTERIES.map((m) => [m, masteryLevelFromXp(mastery[m])]))
-  const earned = new Set(
-    (
-      await prisma.userAchievement.findMany({
-        where: { userId },
-        select: { achievement: { select: { key: true } } },
-      })
-    ).map((r) => r.achievement.key)
-  )
-  // Streak alternates: one query for all of this member's non-reversed
-  // streak markers, then a set lookup per unlock.
-  const streakDays = new Set(
-    (
-      await prisma.progressionEvent.findMany({
-        where: { userId, reversedAt: null, key: { startsWith: "streak:", endsWith: `:${userId}` } },
-        select: { key: true },
-      })
-    ).map((r) => Number(r.key!.split(":")[1]))
-  )
-  return UNLOCKS.map((u) => {
-    // Roadmap rows are never "held" — they deliver nothing yet.
-    if (!profile || profile.unlockFrozen || u.status === "future") return { ...u, unlocked: false }
-    const rankOk = u.rank ? profile.xp >= (REP_RANKS.find((r) => r.name === u.rank)?.threshold ?? Infinity) : true
-    const mOk = u.mastery ? levels[u.mastery.path] >= u.mastery.level : true
-    const coreOk = u.anyOf ? rankOk || mOk : rankOk && mOk
-    const stOk = u.standing ? profile.standing >= u.standing : true
-    const achOk = u.achievement ? earned.has(u.achievement) && stOk : false
-    const streakOk = u.streak ? streakDays.has(u.streak) : false
-    return { ...u, unlocked: (coreOk && stOk) || achOk || streakOk }
-  })
-}
-
 // ─── Enforced perks (locked §8/§9.6) ─────────────────────────────────
 // The V2 replacement for the legacy tier-perk table — one profile read
 // computes every capacity/permission flag the route layer needs. All of
 // these are Layer-A rank gates or standing gates, identical to what
 // hasUnlock evaluates for the matching registry entries.
 export interface ProgressionPerks {
-  pollVoting: boolean // Known (25 standing)
-  pollCreation: boolean // Trusted (100 standing)
-  rateLimitBoost: number // ×1.5 Harvested, ×2 Cured+
-  slowmodeExempt: boolean // Pillar (800 standing)
-  imagesPerPost: number | undefined // 6 Flowering, 8 Harvested, 10 Cultivator
+  pollVoting: boolean // "poll-vote" — Known (25 standing)
+  pollCreation: boolean // "poll-create" — Trusted (100 standing)
+  rateLimitBoost: number // "rate-1.5" / "rate-2" — ×1.5 Harvested, ×2 Cured+
+  slowmodeExempt: boolean // "slowmode-exempt" — Pillar (800 standing)
+  imagesPerPost: number | undefined // "images-6"/"images-8"/"images-10" — Flowering/Harvested/Cultivator
   maxThreadTags: number | undefined // 7 at Cured (rate-2 bundle)
   showcaseSlots: number // badge showcase capacity — scales with rank
   rank: string
@@ -1124,6 +1099,9 @@ export interface ProgressionPerks {
 }
 
 // Pure form — for callers that already loaded xp/standing/unlockFrozen.
+// This IS the enforcement for the graduated registry rows named above —
+// the registry entries document the same thresholds; `hasUnlock` evaluates
+// them identically for display/roadmap purposes.
 export function progressionPerksFrom(xp: number, standing: number, frozen: boolean): ProgressionPerks {
   const at = (rankName: string) => !frozen && xp >= (REP_RANKS.find((r) => r.name === rankName)?.threshold ?? Infinity)
   return {
