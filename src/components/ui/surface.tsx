@@ -14,6 +14,8 @@ interface SurfaceProps {
   lift?: boolean
   /** Add the cursor-tracking tt-spotlight glow (pointer devices only) */
   spotlight?: boolean
+  /** aria-labelledby — pair with a visible heading inside the surface */
+  labelledBy?: string
   as?: "div" | "section" | "article" | "aside"
 }
 
@@ -44,10 +46,12 @@ export default function Surface({
   edge = false,
   lift = false,
   spotlight = false,
+  labelledBy,
   as: Component = "div",
 }: SurfaceProps) {
   return (
     <Component
+      aria-labelledby={labelledBy}
       className={cn(
         variantStyles[variant],
         paddingStyles[padding],

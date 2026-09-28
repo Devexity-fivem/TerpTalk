@@ -153,6 +153,14 @@ model Profile {
   // check-in streak). Diary must be their own harvested, non-deleted grow.
   pinnedDiaryId String?
   pinnedDiary   GrowDiary? @relation("PinnedHarvest", fields: [pinnedDiaryId], references: [id], onDelete: SetNull)
+  // Profile V2 — member-controlled featured grow (any own diary). Distinct
+  // from GrowDiary.featured, which is staff/system-managed for home surfaces.
+  featuredDiaryId String?
+  featuredDiary   GrowDiary? @relation("ProfileFeaturedGrow", fields: [featuredDiaryId], references: [id], onDelete: SetNull)
+  // Profile V2 customization blob — normalized/validated by
+  // src/lib/profile-settings.ts (presets only; never arbitrary CSS/HTML).
+  profileSettings Json?
+  customSections  ProfileCustomSection[]
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([username])
@@ -160,6 +168,25 @@ model Profile {
   @@index([referredById])
   @@index([xp(sort: Desc)])
   @@index([standing(sort: Desc)])
+}
+
+// Profile V2 — member-authored custom profile sections. `body` is markdown
+// source (limits + rules in src/lib/profile-settings.ts) and is only ever
+// rendered through MarkdownRenderer — never raw HTML. `visibility`:
+// PUBLIC | MEMBERS | HIDDEN (enforced at the data boundary, not the UI).
+model ProfileCustomSection {
+  id         String   @id @default(cuid())
+  profileId  String
+  title      String
+  body       String
+  order      Int      @default(0)
+  visibility String   @default("PUBLIC")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  profile    Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@index([profileId, order])
 }
 
 // Forum Categories
@@ -424,6 +451,7 @@ model GrowDiary {
   followers     DiaryFollow[]
   diaryContestEntries DiaryContestEntry[]
   pinnedBy      Profile[]  @relation("PinnedHarvest")
+  featuredBy    Profile[]  @relation("ProfileFeaturedGrow")
 
   @@index([authorId])
   @@index([strain])

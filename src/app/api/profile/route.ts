@@ -9,6 +9,7 @@ import { getProgressionPerks, progressionPerksFrom, hasUnlock } from "@/lib/prog
 import { enqueueReversal, drainOne } from "@/lib/reputation-outbox"
 import { enqueueXpReversal, drainXpOne } from "@/lib/progression-outbox"
 import { Prisma } from "@prisma/client"
+import { validateProfileSettingsPatch } from "@/lib/profile-settings"
 import { rateLimit } from "@/lib/rate-limit"
 import { checkMaintenance } from "@/lib/maintenance"
 import { revalidateTag } from "next/cache"
@@ -213,6 +214,8 @@ export async function PATCH(request: Request) {
       notifyOnFollow,
       notifyOnReaction,
       pinnedDiaryId,
+      featuredDiaryId,
+      profileSettings,
       pinnedBadges,
     } = body as Record<string, unknown>
 
@@ -361,6 +364,46 @@ export async function PATCH(request: Request) {
       }
     }
 
+    // ─── Featured grow (Profile V2) ───────────────────────────────────
+    // Member-controlled hero grow. Unlike pinnedDiaryId this is NOT
+    // unlock-gated (featured grow is free identity, not a perk) and accepts
+    // any own non-deleted diary at any visibility — a PRIVATE featured grow
+    // simply doesn't render for other viewers; it never becomes public.
+    if (featuredDiaryId !== undefined) {
+      if (featuredDiaryId === null) {
+        updateData.featuredDiaryId = null
+      } else {
+        if (typeof featuredDiaryId !== "string" || featuredDiaryId.length > 40) {
+          return NextResponse.json({ error: "Invalid featuredDiaryId" }, { status: 400 })
+        }
+        const diary = await prisma.growDiary.findUnique({
+          where: { id: featuredDiaryId },
+          select: { authorId: true, deleted: true },
+        })
+        if (!diary || diary.deleted) {
+          return NextResponse.json({ error: "That grow doesn't exist" }, { status: 400 })
+        }
+        if (diary.authorId !== userId) {
+          return NextResponse.json({ error: "You can only feature one of your own grows" }, { status: 400 })
+        }
+        updateData.featuredDiaryId = featuredDiaryId
+      }
+    }
+
+    // ─── Profile settings (Profile V2) ────────────────────────────────
+    // Validated/normalized preset-only blob — no arbitrary CSS/HTML.
+    if (profileSettings !== undefined) {
+      const current = await prisma.profile.findUnique({
+        where: { userId },
+        select: { profileSettings: true },
+      })
+      const result = validateProfileSettingsPatch(profileSettings, current?.profileSettings)
+      if (result.error) {
+        return NextResponse.json({ error: result.error }, { status: 400 })
+      }
+      updateData.profileSettings = result.settings as object
+    }
+
     // ─── Badge showcase ───────────────────────────────────────────────
     // pinnedBadges: badge IDs the member wants pinned. Must all be earned
     // by this member; count is capped by the rank's showcaseSlots perk.
@@ -415,6 +458,8 @@ export async function PATCH(request: Request) {
                 businessType: true,
                 businessUrl: true,
                 pinnedDiaryId: true,
+                featuredDiaryId: true,
+                profileSettings: true,
                 notifyOnReply: true,
                 notifyOnMention: true,
                 notifyOnCategoryFollow: true,
@@ -441,6 +486,8 @@ export async function PATCH(request: Request) {
                 businessType: true,
                 businessUrl: true,
                 pinnedDiaryId: true,
+                featuredDiaryId: true,
+                profileSettings: true,
                 notifyOnReply: true,
                 notifyOnMention: true,
                 notifyOnCategoryFollow: true,

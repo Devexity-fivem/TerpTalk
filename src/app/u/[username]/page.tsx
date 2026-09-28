@@ -1,6 +1,9 @@
 import { notFound } from "next/navigation"
 import { prisma } from "@/lib/prisma"
 import { unstable_cache } from "next/cache"
+import { getServerSession } from "next-auth"
+import { authOptions } from "@/lib/auth"
+import { getPublicProfileData } from "@/lib/public-profile"
 import { buildMetadata, snippet } from "@/lib/seo"
 import { TERPBOT_USERNAME } from "@/lib/terpbot-constants"
 import ProfileClient from "./profile-client"
@@ -89,5 +92,18 @@ export default async function PublicProfilePage({
     notFound()
   }
 
-  return <ProfileClient />
+  // Server-render the profile payload — same aggregation + privacy scoping as
+  // GET /api/users/[username]. A block in either direction 404s (inside the
+  // aggregation), matching the API contract.
+  const session = await getServerSession(authOptions)
+  const data = await getPublicProfileData(decoded, session?.user?.id)
+  if (!data) {
+    notFound()
+  }
+
+  // Serialize Dates → ISO strings so the prop matches the fetch contract
+  // exactly (the client keeps its JSON-shape types either way).
+  const initial = JSON.parse(JSON.stringify(data))
+
+  return <ProfileClient initial={initial} />
 }

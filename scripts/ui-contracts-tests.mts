@@ -467,5 +467,94 @@ check("breeder pages group by normalized name, never a Breeder model", () => {
   assert.ok(!/model Breeder\b/.test(schema), "no Breeder model introduced")
 })
 
+// ── U0 shared primitives (Profile V2 foundation) ──────────────────────
+
+check("tabs: APG roles + roving tabindex + full arrow/Home/End nav", () => {
+  const t = src("components/ui/tabs.tsx")
+  assert.ok(t.includes('role="tablist"'), "tablist role")
+  assert.ok(t.includes('role="tab"'), "tab role")
+  assert.ok(t.includes('role="tabpanel"'), "tabpanel role")
+  assert.ok(t.includes("aria-selected"), "aria-selected")
+  assert.ok(t.includes("aria-controls"), "tab controls panel")
+  assert.ok(t.includes("aria-labelledby"), "panel labelled by tab")
+  assert.ok(t.includes("aria-disabled"), "disabled state communicated")
+  for (const k of ['"ArrowRight"', '"ArrowLeft"', '"ArrowDown"', '"ArrowUp"', '"Home"', '"End"']) {
+    assert.ok(t.includes(`e.key === ${k}`), `keyboard: ${k}`)
+  }
+  assert.ok(/tabIndex=\{selected \? 0 : -1\}/.test(t), "roving tabindex")
+  assert.ok(t.includes("focus-visible:ring-2"), "visible focus ring")
+  assert.ok(t.includes("syncWithUrl"), "opt-in deep-link via ?tab=")
+})
+
+check("confirm-dialog: alertdialog semantics, focus trap, Escape, restore", () => {
+  const d = src("components/ui/confirm-dialog.tsx")
+  assert.ok(d.includes('role="alertdialog"'), "alertdialog role")
+  assert.ok(d.includes('aria-modal="true"'), "modal")
+  assert.ok(d.includes("aria-labelledby"), "title wired")
+  assert.ok(d.includes("aria-describedby"), "description wired")
+  assert.ok(d.includes('"Escape"'), "Escape cancels")
+  assert.ok(d.includes('"Tab"'), "Tab trapped inside dialog")
+  assert.ok(d.includes("cancelRef.current?.focus()"), "initial focus on cancel (safe default)")
+  assert.ok(d.includes("restoreRef.current?.focus?.()"), "focus restored on close")
+  assert.ok(d.includes("destructive"), "destructive variant")
+  assert.ok(d.includes("disabled={busy}"), "loading/disabled state")
+})
+
+check("page-header: single h1, actions wrap, no truncation", () => {
+  const h = src("components/ui/page-header.tsx")
+  assert.ok(h.includes("<h1"), "renders the page h1")
+  assert.ok(h.includes("flex-wrap"), "actions wrap on mobile")
+  assert.ok(h.includes("break-words"), "long titles wrap")
+  const growers = src("app/growers/page.tsx")
+  assert.ok(growers.includes("<PageHeader"), "growers page consumes PageHeader")
+})
+
+check("section-card: composes Surface, labelled section, header actions", () => {
+  const s = src("components/ui/section-card.tsx")
+  assert.ok(s.includes("<Surface"), "composes the shared Surface")
+  assert.ok(s.includes('as="section"'), "semantic section element")
+  assert.ok(s.includes("<h2"), "section heading")
+  assert.ok(s.includes("labelledBy"), "aria-labelledby to heading")
+  const sf = src("components/ui/surface.tsx")
+  assert.ok(sf.includes("aria-labelledby={labelledBy}"), "Surface forwards labelledBy")
+})
+
+check("stat-strip: list semantics, link option, responsive wrap", () => {
+  const s = src("components/ui/stat-strip.tsx")
+  assert.ok(s.includes("<ul") && s.includes("<li"), "ul/li semantics")
+  assert.ok(!s.includes("<dl"), "no invalid dl>Link nesting")
+  assert.ok(s.includes("grid-cols-2") && s.includes("sm:grid-cols-4"), "responsive cells")
+  assert.ok(s.includes("focus-visible:ring-2"), "linked stats have focus ring")
+})
+
+check("loading-states: named compositions, sr status, shared Skeleton", () => {
+  const l = src("components/ui/loading-states.tsx")
+  for (const n of ["CardSkeleton", "ListSkeleton", "StatStripSkeleton", "ProfileHeaderSkeleton", "SectionSkeleton"]) {
+    assert.ok(l.includes(`export function ${n}`), `exports ${n}`)
+  }
+  assert.ok(l.includes('from "@/components/ui/skeleton"'), "reuses Skeleton")
+  assert.ok(l.includes("sr-only"), "screen-reader status text")
+})
+
+check("profile-card: single author-card contract over UserPopover + card DTO", () => {
+  const p = src("components/ui/profile-card.tsx")
+  assert.ok(p.includes("<UserPopover"), "wraps UserPopover — no forked card")
+  assert.ok(p.includes("TierChip"), "rank chip")
+  assert.ok(p.includes("<Avatar"), "avatar")
+})
+
+check("tag: classification chip, optional link, no decoration-only API", () => {
+  const t = src("components/ui/tag.tsx")
+  assert.ok(t.includes("<Link"), "linkable variant")
+  assert.ok(t.includes("<span"), "static variant")
+})
+
+check("user-actions: block uses ConfirmDialog, not native confirm()", () => {
+  const u = src("components/user-actions.tsx")
+  assert.ok(u.includes("<ConfirmDialog"), "ConfirmDialog mounted")
+  assert.ok(!/[^.]confirm\(/.test(u), "native confirm() removed")
+  assert.ok(u.includes("destructive"), "block is destructive semantics")
+})
+
 console.log(`\n${passed} passed, ${failed} failed`)
 if (failed > 0) process.exit(1)

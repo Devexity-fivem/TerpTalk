@@ -32,8 +32,7 @@ interface PublicProfile {
   image: string | null
   joinDate: string
   xp: number
-  standing: number
-  trustLevel: string
+  standingTier?: { name: string; icon: string; color: string; bg: string } | null
   rank: {
     name: string
     color: string
@@ -140,17 +139,31 @@ interface ProgressionItem {
   createdAt: string
 }
 
-export default function ProfileClient() {
+interface ProfileResponse {
+  profile: PublicProfile
+  viewerBlocked: boolean
+  viewerFollowing: boolean
+  recentThreads: Thread[]
+  growDiaries: GrowDiary[]
+  growSetups: GrowSetup[]
+  harvestShelf: HarvestEntry[]
+  recentProgression: ProgressionItem[]
+}
+
+export default function ProfileClient({ initial }: { initial?: ProfileResponse | null }) {
   const params = useParams()
   const { data: session } = useSession()
   const username = decodeURIComponent(String(params.username))
-  const [data, setData] = useState<{ profile: PublicProfile; viewerBlocked: boolean; viewerFollowing: boolean; recentThreads: Thread[]; growDiaries: GrowDiary[]; growSetups: GrowSetup[]; harvestShelf: HarvestEntry[]; recentProgression: ProgressionItem[] } | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [data, setData] = useState<ProfileResponse | null>(initial ?? null)
+  const [loading, setLoading] = useState(!initial)
   const [notFound, setNotFound] = useState(false)
   const [showAllBadges, setShowAllBadges] = useState(false)
   const [activeTab, setActiveTab] = useState<"overview" | "grows" | "discussions" | "achievements">("overview")
 
   useEffect(() => {
+    // The page now server-renders the payload — only fetch when no initial
+    // data was provided (direct client-side navigation fallback).
+    if (initial) return
     fetch(`/api/users/${encodeURIComponent(username)}`, { cache: "no-store" })
       .then(async (res) => {
         if (!res.ok) { setNotFound(true); setLoading(false); return }
@@ -159,7 +172,7 @@ export default function ProfileClient() {
         setLoading(false)
       })
       .catch(() => { setNotFound(true); setLoading(false) })
-  }, [username])
+  }, [username, initial])
 
   if (loading) {
     return (

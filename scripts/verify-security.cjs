@@ -128,15 +128,18 @@ const apiFiles = () => {
   const reg = read("app/api/auth/register/route.ts");
   check("register: insensitive uniqueness", reg.includes('mode: "insensitive"'));
   check("register: bcrypt 12", reg.includes("bcrypt.hash(password, 12)"));
-  // All public username surfaces resolve case-insensitively.
+  // All public username surfaces resolve case-insensitively. The public
+  // profile route delegates to lib/public-profile.ts, so the invariant
+  // checks the file that actually performs the lookup.
   for (const f of [
     "app/u/[username]/page.tsx",
-    "app/api/users/[username]/route.ts",
+    "lib/public-profile.ts",
     "app/api/users/[username]/card/route.ts",
     "app/api/auth/register/route.ts",
   ]) {
     check(`${f}: insensitive username lookup`, read(f).includes('mode: "insensitive"'));
   }
+  check("public profile route shares the aggregation lib", read("app/api/users/[username]/route.ts").includes("getPublicProfileData"));
   // Register: captcha claim is atomic; Turnstile fails closed in prod.
   check("register: captcha atomic claim", reg.includes("updateMany") && reg.includes("used: false") && reg.includes("expiresAt"));
   check("register: Turnstile fails closed in prod", /turnstile_not_configured|production/.test(reg));

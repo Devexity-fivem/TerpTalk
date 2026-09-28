@@ -27,7 +27,7 @@ export async function GET(request: Request) {
 
     // Note: `blocksReceived` is deliberately excluded — who blocked you is
     // the other user's private moderation choice, not your data.
-    const [user, profile, threads, posts, diaries, diaryUpdates, setups, setupComments, chatMessages, sentMessages, receivedMessages, reactions, badges, reputationEvents, progressionEvents, notifications, followsGiven, followsReceived, blocksMade, bookmarks, savedSearches, contestEntries, contestVotes, diaryContestEntries, diaryContestVotes, strains, guideEdits, staffApplications, reportsFiled, categoryFollows, threadFollows, diaryFollows] =
+    const [user, profile, customSections, threads, posts, diaries, diaryUpdates, setups, setupComments, chatMessages, sentMessages, receivedMessages, reactions, badges, reputationEvents, progressionEvents, notifications, followsGiven, followsReceived, blocksMade, bookmarks, savedSearches, contestEntries, contestVotes, diaryContestEntries, diaryContestVotes, strains, guideEdits, staffApplications, reportsFiled, categoryFollows, threadFollows, diaryFollows] =
       await Promise.all([
         prisma.user.findUnique({
           where: { id: userId },
@@ -42,6 +42,11 @@ export async function GET(request: Request) {
           },
         }),
         prisma.profile.findUnique({ where: { userId } }),
+        prisma.profileCustomSection.findMany({
+          where: { profile: { userId } },
+          orderBy: [{ order: "asc" }, { createdAt: "asc" }],
+          take: 1_000,
+        }),
         // Per-collection caps keep a power user's export from being a
         // multi-hundred-MB response; rate-limited to 5/hr above.
         prisma.thread.findMany({ where: { authorId: userId }, take: 10_000, orderBy: { createdAt: "desc" } }),
@@ -92,7 +97,10 @@ export async function GET(request: Request) {
     const exportData = {
       exportedAt: new Date().toISOString(),
       user,
+      // `profile` includes profileSettings + featuredDiaryId automatically;
+      // customSections is the Profile V2 member-authored content.
       profile,
+      customSections,
       content: {
         threads,
         posts,

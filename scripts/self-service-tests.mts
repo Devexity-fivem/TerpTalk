@@ -27,6 +27,8 @@ import { reportPriority } from "@/lib/trust-signals"
 import { rateLimit } from "@/lib/rate-limit"
 import { NextRequest } from "next/server"
 import { GET as getPublicProfile } from "@/app/api/users/[username]/route"
+import { GET as getProfileCard } from "@/app/api/users/[username]/card/route"
+import { getPublicProfileData } from "@/lib/public-profile"
 import bcrypt from "bcryptjs"
 
 const root = process.cwd()
@@ -421,6 +423,130 @@ async function run() {
       await prisma.reputationEvent.deleteMany({ where: { userId: { in: cleanupUserIds }, key: { startsWith: "dcontestwin:" } } }).catch(() => {})
       await prisma.growDiary.deleteMany({ where: { id: { in: [hiddenDiary.id, openDiary.id] } } })
     }
+
+    // ── PROFILE V2 FOUNDATION (P0) ──────────────────────────────────
+    // Featured grow, custom sections, visibility-scoped aggregates — all
+    // through the real aggregation lib + public route (no route mirrors).
+    const pUser = await mk(`__ss_p_${SUFFIX}`)
+    const pPublicDiary = await prisma.growDiary.create({
+      data: { title: "pub", description: "d", growType: "INDOOR", startDate: new Date(), authorId: pUser.id, visibility: "PUBLIC" },
+    })
+    const pUnlistedDiary = await prisma.growDiary.create({
+      data: { title: "unl", description: "d", growType: "INDOOR", startDate: new Date(), authorId: pUser.id, visibility: "UNLISTED" },
+    })
+    const pPrivateDiary = await prisma.growDiary.create({
+      data: { title: "priv", description: "d", growType: "INDOOR", startDate: new Date(), authorId: pUser.id, visibility: "PRIVATE" },
+    })
+
+    const pProfile = await prisma.profile.findUniqueOrThrow({ where: { userId: pUser.id } })
+
+    // Featured grow: PUBLIC diary visible to anonymous; PRIVATE/UNLISTED
+    // never exposed to visitors; owner sees their own private pick.
+    await prisma.profile.update({ where: { id: pProfile.id }, data: { featuredDiaryId: pPublicDiary.id } })
+    let pdata = await getPublicProfileData(`__ss_p_${SUFFIX}`)
+    assert.equal(pdata?.profile.featuredGrow?.id, pPublicDiary.id, "public featured grow visible anonymously")
+
+    await prisma.profile.update({ where: { id: pProfile.id }, data: { featuredDiaryId: pPrivateDiary.id } })
+    pdata = await getPublicProfileData(`__ss_p_${SUFFIX}`)
+    assert.equal(pdata?.profile.featuredGrow, null, "PRIVATE featured grow hidden from anonymous")
+    pdata = await getPublicProfileData(`__ss_p_${SUFFIX}`, pUser.id)
+    assert.equal(pdata?.profile.featuredGrow?.id, pPrivateDiary.id, "owner sees own private featured grow")
+
+    await prisma.profile.update({ where: { id: pProfile.id }, data: { featuredDiaryId: pUnlistedDiary.id } })
+    pdata = await getPublicProfileData(`__ss_p_${SUFFIX}`)
+    assert.equal(pdata?.profile.featuredGrow, null, "UNLISTED featured grow hidden from anonymous")
+
+    // Forged featured diary — pointing at another member's diary must
+    // never render, even on the owner's own view.
+    const foreignDiary = await prisma.growDiary.create({
+      data: { title: "foreign", description: "d", growType: "INDOOR", startDate: new Date(), authorId: b.id, visibility: "PUBLIC" },
+    })
+    await prisma.profile.update({ where: { id: pProfile.id }, data: { featuredDiaryId: foreignDiary.id } })
+    pdata = await getPublicProfileData(`__ss_p_${SUFFIX}`, pUser.id)
+    assert.equal(pdata?.profile.featuredGrow, null, "foreign diary never featured (authorId guard)")
+
+    // Soft-deleted featured diary is hidden; hard delete clears the FK
+    // (onDelete: SetNull) — no orphaned references.
+    await prisma.profile.update({ where: { id: pProfile.id }, data: { featuredDiaryId: pPublicDiary.id } })
+    await prisma.growDiary.update({ where: { id: pPublicDiary.id }, data: { deleted: true } })
+    pdata = await getPublicProfileData(`__ss_p_${SUFFIX}`)
+    assert.equal(pdata?.profile.featuredGrow, null, "deleted featured grow hidden")
+    await prisma.growDiary.update({ where: { id: pPublicDiary.id }, data: { deleted: false } })
+    await prisma.growDiary.delete({ where: { id: pPublicDiary.id } })
+    const pAfterDelete = await prisma.profile.findUniqueOrThrow({ where: { id: pProfile.id } })
+    assert.equal(pAfterDelete.featuredDiaryId, null, "FK SetNull clears featuredDiaryId on diary delete")
+
+    // Visibility-scoped aggregates: anonymous sees only PUBLIC rows in the
+    // diary count and diary list; owner sees all non-deleted rows.
+    await prisma.growDiary.delete({ where: { id: foreignDiary.id } })
+    pdata = await getPublicProfileData(`__ss_p_${SUFFIX}`)
+    assert.equal(pdata?.profile.stats.diaryCreator, 0, "anonymous count excludes UNLISTED + PRIVATE")
+    assert.equal(pdata?.growDiaries.length, 0, "anonymous list excludes UNLISTED + PRIVATE")
+    pdata = await getPublicProfileData(`__ss_p_${SUFFIX}`, pUser.id)
+    assert.equal(pdata?.profile.stats.diaryCreator, 2, "owner count includes own UNLISTED + PRIVATE")
+
+    // Custom sections — PUBLIC to anonymous, +MEMBERS to logged-in
+    // viewers, +HIDDEN to the owner.
+    await Promise.all([
+      prisma.profileCustomSection.create({ data: { profileId: pProfile.id, title: "Pub", body: "b", visibility: "PUBLIC", order: 0 } }),
+      prisma.profileCustomSection.create({ data: { profileId: pProfile.id, title: "Mem", body: "b", visibility: "MEMBERS", order: 1 } }),
+      prisma.profileCustomSection.create({ data: { profileId: pProfile.id, title: "Hid", body: "b", visibility: "HIDDEN", order: 2 } }),
+    ])
+    const anonData = await getPublicProfileData(`__ss_p_${SUFFIX}`)
+    assert.deepEqual(anonData?.profile.customSections.map((s) => s.title), ["Pub"], "anonymous sees PUBLIC sections only")
+    const memberData = await getPublicProfileData(`__ss_p_${SUFFIX}`, a.id)
+    assert.deepEqual(memberData?.profile.customSections.map((s) => s.title), ["Pub", "Mem"], "member sees PUBLIC + MEMBERS")
+    const ownerData = await getPublicProfileData(`__ss_p_${SUFFIX}`, pUser.id)
+    assert.equal(ownerData?.profile.customSections.length, 3, "owner sees all own sections")
+
+    // Block in either direction removes the profile (404 path).
+    await prisma.block.create({ data: { blockerId: pUser.id, blockedId: a.id } })
+    assert.equal(await getPublicProfileData(`__ss_p_${SUFFIX}`, a.id), null, "blocked viewer gets null → 404")
+    await prisma.block.deleteMany({ where: { blockerId: pUser.id, blockedId: a.id } })
+    await prisma.block.create({ data: { blockerId: a.id, blockedId: pUser.id } })
+    assert.equal(await getPublicProfileData(`__ss_p_${SUFFIX}`, a.id), null, "blocker-viewed profile also 404s")
+    await prisma.block.deleteMany({ where: { blockerId: a.id, blockedId: pUser.id } })
+
+    // Public DTO boundary — raw standing/reputation internals never ship;
+    // only the named tier. Reached through the real GET route.
+    const pJson = await profileApi(`__ss_p_${SUFFIX}`)
+    assert.ok(!("standing" in pJson.profile), "raw standing number not in public DTO")
+    assert.ok(!("reputation" in pJson.profile), "legacy reputation not in public DTO")
+    assert.ok("standingTier" in pJson.profile, "named standing tier present")
+    assert.ok("mastery" in pJson.profile && Array.isArray(pJson.profile.mastery), "mastery contract present")
+    assert.equal(pJson.profile.mastery.length, 5, "all five mastery paths in contract")
+    assert.equal(
+      pJson.profile.mastery.find((m: { mastery: string }) => m.mastery === "EXPERIMENTATION")?.live,
+      false, "Experimentation flagged not-live until Phase I"
+    )
+    assert.ok(!("email" in pJson.profile) && !("password" in pJson.profile), "no account internals in DTO")
+
+    // Card DTO stays compact: buildTitle + hasActiveGrow joined the locked
+    // fields; nothing else swells the payload.
+    const cardRes = await getProfileCard(
+      new NextRequest(`http://localhost/api/users/__ss_p_${SUFFIX}/card`),
+      { params: Promise.resolve({ username: `__ss_p_${SUFFIX}` }) }
+    )
+    assert.equal(cardRes.status, 200, "card route 200")
+    const cardJson = await cardRes.json()
+    assert.ok("buildTitle" in cardJson, "card carries buildTitle")
+    assert.ok("hasActiveGrow" in cardJson, "card carries active-grow signal")
+    // Only UNLISTED + PRIVATE grows remain → the public signal stays false;
+    // hidden grows never leak an "active" indicator to anonymous viewers.
+    assert.equal(cardJson.hasActiveGrow, false, "private/unlisted grows don't leak active-grow signal")
+    const pPublicActive = await prisma.growDiary.create({
+      data: { title: "pub2", description: "d", growType: "INDOOR", startDate: new Date(), authorId: pUser.id, visibility: "PUBLIC" },
+    })
+    const cardRes2 = await getProfileCard(
+      new NextRequest(`http://localhost/api/users/__ss_p_${SUFFIX}/card`),
+      { params: Promise.resolve({ username: `__ss_p_${SUFFIX}` }) }
+    )
+    assert.equal((await cardRes2.json()).hasActiveGrow, true, "public active grow detected")
+    await prisma.growDiary.delete({ where: { id: pPublicActive.id } })
+    assert.ok(!("standing" in cardJson) && !("profileSettings" in cardJson), "card stays minimal")
+
+    await prisma.profileCustomSection.deleteMany({ where: { profileId: pProfile.id } })
+    await prisma.growDiary.deleteMany({ where: { authorId: pUser.id } })
 
     console.log("All self-service tests passed.")
   } finally {

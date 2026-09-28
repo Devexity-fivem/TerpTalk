@@ -209,7 +209,8 @@ export const publicUserSelect = {
   profile: {
     select: {
       username: true,
-      reputation: true,
+      // `reputation` (frozen legacy ledger) intentionally not selected —
+      // no consumer reads it; XP/standing are the live balances.
       xp: true,
       standing: true,
       publicMilestoneOptOut: true,

@@ -1,196 +1,11 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getToken } from "next-auth/jwt"
 import { sessionCookieName } from "@/lib/auth"
-import { prisma } from "@/lib/prisma"
-import { blockExistsBetween, getTrustLevel, getClientIp, hashIp, isSessionValid } from "@/lib/security"
-import { PUBLIC_XP_TYPES, publicXpLabel, rankDisplay, xpRankProgress, xpStage, xpStageProgress } from "@/lib/progression-config"
-import { getGrowStreak } from "@/lib/grow-streak"
+import { getClientIp, hashIp, isSessionValid } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
-import { TERPBOT_USERNAME } from "@/lib/terpbot-constants"
-import { getBotStats } from "@/lib/terpbot-events"
-import { publicDiaryWhere } from "@/lib/diary-visibility"
+import { getPublicProfileData, PUBLIC_PROFILE_NO_STORE } from "@/lib/public-profile"
 
-const NO_STORE = { "Cache-Control": "no-store, max-age=0, must-revalidate" }
-
-function safeUrl(url: string | null | undefined): string | null {
-  if (!url) return null
-  try {
-    const u = new URL(url.startsWith("http://") || url.startsWith("https://") ? url : `https://${url}`)
-    if (u.protocol !== "https:") return null
-    return u.toString()
-  } catch {
-    return null
-  }
-}
-
-async function getPublicProfileData(username: string, viewerId?: string) {
-  const profile = await prisma.profile.findFirst({
-      where: { username: { equals: username, mode: "insensitive" } },
-      select: {
-        username: true,
-        bio: true,
-        location: true,
-        website: true,
-        avatarUrl: true,
-        growExperience: true,
-        favoriteStrain: true,
-        growSpace: true,
-        businessName: true,
-        businessType: true,
-        businessUrl: true,
-        joinDate: true,
-        xp: true,
-        standing: true,
-        pinnedDiaryId: true,
-        publicMilestoneOptOut: true,
-        user: {
-          select: {
-            id: true,
-            image: true,
-            createdAt: true,
-            banned: true,
-            suspendedUntil: true,
-            role: true,
-            badges: { include: { badge: true }, orderBy: [{ pinned: "desc" as const }, { earnedAt: "asc" as const }] },
-            _count: {
-              select: {
-                threadCreator: true,
-                posts: true,
-                diaryCreator: true,
-                followers: true,
-                following: true,
-              },
-            },
-          },
-        },
-      },
-    })
-
-    const suspended = !!profile?.user.suspendedUntil && profile.user.suspendedUntil > new Date()
-    if (!profile || profile.user.banned || suspended) return null
-
-    const recentThreads = await prisma.thread.findMany({
-      where: {
-        authorId: profile.user.id,
-        deleted: false,
-        category: { hidden: false },
-      },
-      orderBy: { createdAt: "desc" },
-      take: 10,
-      select: {
-        id: true,
-        title: true,
-        slug: true,
-        createdAt: true,
-        category: { select: { name: true } },
-        replyCount: true,
-      },
-    })
-
-    const { streak, totalUpdates, harvestedDiaries } = await getGrowStreak(
-      profile.user.id,
-      { publicOnly: viewerId !== profile.user.id },
-    )
-
-    // Diary visibility: the owner sees all their rows; anyone else only
-    // sees PUBLIC ones (UNLISTED is reachable by link, not by listing).
-    const diaryScope = viewerId === profile.user.id ? {} : publicDiaryWhere
-
-    const growDiaries = await prisma.growDiary.findMany({
-      where: { authorId: profile.user.id, deleted: false, ...diaryScope },
-      orderBy: { createdAt: "desc" },
-      take: 6,
-      select: {
-        id: true,
-        slug: true,
-        title: true,
-        strain: true,
-        stage: true,
-        featured: true,
-        _count: { select: { updates: true, followers: true } },
-      },
-    })
-
-    // Public grow setups — same visibility rule as the /setups index.
-    const growSetups = await prisma.growSetup.findMany({
-      where: { authorId: profile.user.id, deleted: false },
-      orderBy: { createdAt: "desc" },
-      take: 6,
-      select: {
-        id: true,
-        slug: true,
-        title: true,
-        strain: true,
-        images: { take: 1, orderBy: { order: "asc" }, select: { url: true } },
-        _count: { select: { comments: true } },
-      },
-    })
-
-    // Harvest Shelf — completed documented grows, newest harvest first.
-    // Derived from existing diary rows; no trophy model.
-    const harvestShelf = await prisma.growDiary.findMany({
-      where: { authorId: profile.user.id, deleted: false, harvested: true, ...diaryScope },
-      orderBy: { harvestedAt: "desc" },
-      take: 6,
-      select: {
-        id: true,
-        slug: true,
-        title: true,
-        strain: true,
-        startDate: true,
-        harvestedAt: true,
-        yieldAmount: true,
-        yieldUnit: true,
-        _count: { select: { updates: true } },
-      },
-    })
-
-    // Non-owner viewers get the PUBLIC-scoped count, matching the lists.
-    const publicDiaryCount =
-      viewerId === profile.user.id
-        ? null
-        : await prisma.growDiary.count({
-            where: { authorId: profile.user.id, deleted: false, ...publicDiaryWhere },
-          })
-    // Pinned harvest (Garden Perk) — surfaces only while the diary is
-    // still visible to this viewer: never deleted, and PUBLIC unless the
-    // owner is looking at their own profile.
-    let pinnedHarvest: {
-      id: string
-      slug: string | null
-      title: string
-      strain: string | null
-      harvestedAt: Date | null
-      updatedAt: Date
-    } | null = null
-    if (profile.pinnedDiaryId) {
-      const d = await prisma.growDiary.findUnique({
-        where: { id: profile.pinnedDiaryId },
-        select: {
-          id: true, slug: true, title: true, strain: true,
-          harvestedAt: true, updatedAt: true, deleted: true, visibility: true,
-        },
-      })
-      if (d && !d.deleted && (viewerId === profile.user.id || d.visibility === "PUBLIC")) {
-        pinnedHarvest = {
-          id: d.id, slug: d.slug, title: d.title, strain: d.strain,
-          harvestedAt: d.harvestedAt, updatedAt: d.updatedAt,
-        }
-      }
-    }
-    return {
-      profile,
-      recentThreads,
-      growDiaries,
-      growSetups,
-      harvestShelf,
-      pinnedHarvest,
-      growStreak: { streak, totalUpdates, harvestedDiaries },
-      publicDiaryCount,
-    }
-  }
-
-// GET — public profile by username (safe fields only)
+// GET — public profile by username (PublicProfileDTO; safe fields only)
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ username: string }> }
@@ -215,141 +30,25 @@ export async function GET(
       viewerId = undefined
     }
 
+    // All aggregation + privacy scoping lives in lib/public-profile — same
+    // data the /u/[username] server component renders.
     const data = await getPublicProfileData(username, viewerId)
     if (!data) {
       return NextResponse.json({ error: "User not found" }, { status: 404 })
     }
 
-    const { profile, recentThreads, growDiaries, growSetups, harvestShelf, pinnedHarvest, growStreak } = data
-    const isBot = profile.username === TERPBOT_USERNAME
-    // Durable bot metrics come from BotEvent rows — ChatMessage hard-deletes
-    // after ~3 days so it can't power real stats.
-    const fullStats = isBot ? await getBotStats() : null
-    // Only expose what the profile renders — internal counters (refusals,
-    // per-kind event breakdowns) would aid probing of bot filters.
-    const botStats = fullStats && {
-      commands: fullStats.commands,
-      membersAssisted: fullStats.membersAssisted,
-      entityLinks: fullStats.entityLinks,
-      welcomes: fullStats.welcomes,
-      announcements: fullStats.announcements,
-      daysActive: fullStats.daysActive,
-      assists: fullStats.assists,
-      byCommand: fullStats.byCommand,
-      hasFallbacks: fullStats.fallbacks > 0,
-    }
-
-    // Recent public progression events — powers the profile's activity
-    // card. Per-event timestamps disclose activity cadence, so members who
-    // opt out of public recognition don't expose them.
-    const recentProgression =
-      isBot || profile.publicMilestoneOptOut
-        ? []
-        : await prisma.progressionEvent.findMany({
-            where: { userId: profile.user.id, type: { in: [...PUBLIC_XP_TYPES] } },
-            orderBy: { createdAt: "desc" },
-            take: 6,
-            select: { id: true, type: true, xp: true, standing: true, reversedAt: true, createdAt: true },
-          })
-
-    let viewerBlocked = false
-    let blockedMe = false
-    let viewerFollowing = false
-    if (viewerId && viewerId !== profile.user.id) {
-      const [block, follow] = await Promise.all([
-        prisma.block.findUnique({
-          where: {
-            blockerId_blockedId: {
-              blockerId: viewerId,
-              blockedId: profile.user.id,
-            },
-          },
-          select: { id: true },
-        }),
-        prisma.follow.findUnique({
-          where: {
-            followerId_followingId: {
-              followerId: viewerId,
-              followingId: profile.user.id,
-            },
-          },
-          select: { id: true },
-        }),
-      ])
-      viewerBlocked = !!block
-      viewerFollowing = !!follow
-      blockedMe = await blockExistsBetween(profile.user.id, viewerId)
-    }
-
-    if (blockedMe) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 })
-    }
+    const { profile, viewerBlocked, viewerFollowing, recentProgression, recentThreads, growDiaries, growSetups, harvestShelf } = data
 
     return NextResponse.json({
-      profile: {
-        id: profile.user.id,
-        username: profile.username,
-        isBot,
-        role: profile.user.role,
-        bio: profile.bio,
-        location: profile.location,
-        website: safeUrl(profile.website),
-        avatarUrl: profile.avatarUrl,
-        growExperience: profile.growExperience,
-        favoriteStrain: profile.favoriteStrain,
-        growSpace: profile.growSpace,
-        businessName: profile.businessName,
-        businessType: profile.businessType,
-        businessUrl: safeUrl(profile.businessUrl),
-        image: profile.user.image || profile.avatarUrl,
-        joinDate: profile.joinDate,
-        xp: profile.xp,
-        standing: profile.standing,
-        trustLevel: getTrustLevel(profile.user.createdAt, profile.xp),
-        rank: rankDisplay(profile.xp),
-        rankProgress: xpRankProgress(profile.xp),
-        xpStage: xpStage(profile.xp),
-        stageProgress: xpStageProgress(profile.xp),
-        pinnedHarvest,
-        // A live streak ending today/yesterday leaks same-day activity —
-        // members who opted out of public recognition don't expose it.
-        growStreak: profile.publicMilestoneOptOut ? 0 : growStreak.streak,
-        totalUpdates: growStreak.totalUpdates,
-        harvestedDiaries: growStreak.harvestedDiaries,
-        badges: profile.user.badges.map((b) => ({
-          name: b.badge.name,
-          description: b.badge.description,
-          icon: b.badge.icon,
-          pinned: b.pinned,
-        })),
-        // NOTE: the schema's Follow relation names are counterintuitive —
-        // _count.following counts rows where this user is the *target*
-        // (their followers) and _count.followers counts rows where they are
-        // the follower (who they follow). Mapped back to the real meaning here.
-        stats: {
-          ...profile.user._count,
-          // _count.diaryCreator includes non-public rows — non-owners get
-          // the PUBLIC-scoped count instead.
-          ...(data.publicDiaryCount != null ? { diaryCreator: data.publicDiaryCount } : {}),
-          followers: profile.user._count.following,
-          following: profile.user._count.followers,
-        },
-        botStats,
-      },
+      profile,
       viewerBlocked,
-      recentProgression: recentProgression.map((e) => ({
-        id: e.id,
-        label: publicXpLabel(e.type),
-        amount: e.xp !== 0 ? e.xp : e.standing,
-        reversed: !!e.reversedAt,
-        createdAt: e.createdAt,
-      })),
+      recentProgression,
       viewerFollowing,
       recentThreads,
       growDiaries,
       growSetups,
       harvestShelf,
-    }, { headers: NO_STORE })
+    }, { headers: PUBLIC_PROFILE_NO_STORE })
   } catch (error) {
     console.error("Public profile error:", error)
     return NextResponse.json({ error: "Failed to load profile" }, { status: 500 })

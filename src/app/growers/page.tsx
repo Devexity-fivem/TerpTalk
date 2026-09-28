@@ -10,6 +10,7 @@ import RoleBadge from "@/components/role-badge"
 import TierChip from "@/components/tier-chip"
 import Surface from "@/components/ui/surface"
 import EmptyState from "@/components/ui/empty-state"
+import PageHeader from "@/components/ui/page-header"
 import { Avatar } from "@/components/ui/avatar"
 import { STAGE_LABELS } from "@/lib/diary-weeks"
 import { cn } from "@/lib/utils"
@@ -169,14 +170,11 @@ export default async function GrowersPage({
   return (
     <div className="min-h-screen bg-background">
       <div className="max-w-7xl mx-auto px-4 py-8">
-        {/* Header */}
-        <div className="mb-6">
-          <span className="tt-eyebrow">The garden</span>
-          <h1 className="font-display text-3xl sm:text-4xl font-bold mt-1.5 mb-2 tracking-tight">Growers</h1>
-          <p className="text-muted-foreground max-w-2xl">
-            Community members documenting real grows in public diaries — follow along, learn from their logs, say hi.
-          </p>
-        </div>
+        <PageHeader
+          context={<span className="tt-eyebrow">The garden</span>}
+          title="Growers"
+          description="Community members documenting real grows in public diaries — follow along, learn from their logs, say hi."
+        />
 
         {/* Sort tabs — discovery, not ranking. No order here is a status claim. */}
         <div className="flex flex-wrap gap-1.5 mb-6" role="tablist" aria-label="Browse growers">

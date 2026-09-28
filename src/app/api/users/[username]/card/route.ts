@@ -3,7 +3,7 @@ import { getToken } from "next-auth/jwt"
 import { sessionCookieName } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { blockExistsBetween, getClientIp, hashIp, isSessionValid } from "@/lib/security"
-import { rankDisplay, standingDisplay } from "@/lib/progression-config"
+import { rankDisplay, standingDisplay, buildTitle, type Mastery } from "@/lib/progression-config"
 import { rateLimit } from "@/lib/rate-limit"
 import { TERPBOT_USERNAME } from "@/lib/terpbot-constants"
 import { publicDiaryWhere } from "@/lib/diary-visibility"
@@ -58,6 +58,7 @@ export async function GET(
               take: 4,
               select: { badge: { select: { name: true, icon: true } } },
             },
+            masteryProgress: { select: { mastery: true, xp: true } },
             _count: {
               select: { diaryCreator: true },
             },
@@ -85,18 +86,19 @@ export async function GET(
       }
     }
 
-    // Completed grows = harvested, non-deleted diaries. Non-owners only see
-    // the PUBLIC count — same rule as the full profile API.
-    const harvestedGrows = isBot
-      ? 0
-      : await prisma.growDiary.count({
-          where: {
-            authorId: profile.user.id,
-            deleted: false,
-            harvested: true,
-            ...(viewerId === profile.user.id ? {} : publicDiaryWhere),
-          },
-        })
+    // Completed grows + "currently growing" indicator — scoped counts only:
+    // non-owners see PUBLIC numbers, matching the full profile API.
+    const diaryScope = viewerId === profile.user.id ? {} : publicDiaryWhere
+    const [harvestedGrows, activeGrows] = isBot
+      ? [0, 0]
+      : await Promise.all([
+          prisma.growDiary.count({
+            where: { authorId: profile.user.id, deleted: false, harvested: true, ...diaryScope },
+          }),
+          prisma.growDiary.count({
+            where: { authorId: profile.user.id, deleted: false, harvested: false, ...diaryScope },
+          }),
+        ])
 
     // Standing is the peer-validation axis — like rank it hides when
     // the member opts out of public status display.
@@ -104,9 +106,20 @@ export async function GET(
     const standing = hideStatus || isBot ? null : standingDisplay(profile.standing)
     const rank = hideStatus ? null : rankDisplay(profile.xp)
 
+    // Deterministic identity line from real path XP ("Grow Mentor",
+    // "All-Rounder"…) — shown only once the member has ≥50 path XP total,
+    // so a fresh account doesn't wear a meaningless title.
+    const pathXp = Object.fromEntries(
+      profile.user.masteryProgress.map((m) => [m.mastery, m.xp])
+    ) as Record<Mastery, number>
+    const totalPathXp = Object.values(pathXp).reduce((s, n) => s + n, 0)
+    const title = hideStatus || isBot || totalPathXp < 50 ? null : buildTitle(pathXp).title
+
     return NextResponse.json(
       {
         username: profile.username,
+        buildTitle: title,
+        hasActiveGrow: activeGrows > 0,
         name: profile.user.name,
         isBot,
         role: profile.user.role,

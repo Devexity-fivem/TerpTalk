@@ -4,6 +4,7 @@ import { useState } from "react"
 import { useSession } from "next-auth/react"
 import { Flag, Ban, Check, Loader2, UserPlus, UserCheck, Mail } from "lucide-react"
 import Link from "next/link"
+import ConfirmDialog from "@/components/ui/confirm-dialog"
 
 export default function UserActions({ userId, username, initiallyBlocked, initiallyFollowing }: { userId: string; username: string; initiallyBlocked: boolean; initiallyFollowing?: boolean }) {
   const { data: session } = useSession()
@@ -14,12 +15,17 @@ export default function UserActions({ userId, username, initiallyBlocked, initia
   const [desc, setDesc] = useState("")
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState("")
+  const [confirmBlock, setConfirmBlock] = useState(false)
 
   if (!session || session.user?.id === userId) return null
 
   const toggleBlock = async () => {
     if (busy) return
-    if (!blocked && !confirm(`Block @${username}? They won't be able to interact with you.`)) return
+    if (!blocked) {
+      // User-impacting action — styled ConfirmDialog instead of a native prompt.
+      setConfirmBlock(true)
+      return
+    }
     setBusy(true)
     try {
       const res = await fetch("/api/blocks", {
@@ -143,6 +149,35 @@ export default function UserActions({ userId, username, initiallyBlocked, initia
       )}
 
       {message && <p className="text-sm text-muted-foreground">{message}</p>}
+
+      <ConfirmDialog
+        open={confirmBlock}
+        onCancel={() => setConfirmBlock(false)}
+        title={`Block @${username}?`}
+        description="They won't be able to interact with you, and you won't see each other's profiles."
+        confirmLabel="Block"
+        destructive
+        onConfirm={async () => {
+          setConfirmBlock(false)
+          setBusy(true)
+          try {
+            const res = await fetch("/api/blocks", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ userId }),
+            })
+            if (res.ok) {
+              setBlocked(true)
+              setMessage(`@${username} blocked.`)
+            } else {
+              const d = await res.json()
+              setMessage(d.error || "Action failed")
+            }
+          } finally {
+            setBusy(false)
+          }
+        }}
+      />
     </div>
   )
 }

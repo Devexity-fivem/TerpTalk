@@ -1,5 +1,6 @@
 import "./db-guard.mjs"
 import { strict as assert } from "node:assert"
+import { readFileSync } from "node:fs"
 import { prisma } from "@/lib/prisma"
 import { isBanned, isSessionValid, isAdmin, isModerator, isStaff, isSupport, hashIp, getTrustLevel, LIMITS, blockedUserIds, notBlockedAuthor } from "@/lib/security"
 import { isValidImageDataUri, storeImage } from "@/lib/blob"
@@ -24,6 +25,11 @@ import { claimTask, markDone, releaseClaim, runCronTask } from "@/lib/cron-claim
 import React from "react"
 import { renderToString } from "react-dom/server"
 import { MarkdownRenderer, sanitizeHref } from "@/lib/markdown"
+import {
+  parseProfileSettings, validateProfileSettingsPatch, validateSectionInput,
+  PROFILE_SECTION_TITLE_MAX, PROFILE_SECTION_BODY_MAX, DEFAULT_PROFILE_SETTINGS,
+  PROFILE_ACCENTS,
+} from "@/lib/profile-settings"
 import { applyAccountActionInTx } from "@/lib/moderation"
 import { authOptions } from "@/lib/auth"
 
@@ -712,6 +718,80 @@ async function run() {
     assert.equal(text("x~y"), "x~y", "lone ~ renders literally")
     assert.equal(text("see [this"), "see [this", "unclosed [ renders literally")
     assert.ok(!md("email a@b.com").includes("/u/"), "email addresses are not mentions")
+
+    // ── Profile V2 custom sections: markdown source is stored, only
+    // MarkdownRenderer ever renders it. Payloads must degrade to text.
+    assert.ok(!md("<script>alert(1)</script>").includes("<script"), "script tag never emitted")
+    assert.ok(!md("<img src=x onerror=alert(1)>").includes("<img"), "raw img/handler markup never emitted")
+    assert.ok(!md("[x](javascript:alert(1))").includes("javascript:"), "javascript: link stripped")
+    assert.ok(!md("[x](//evil.com)").includes('href="//evil.com"'), "protocol-relative link stripped")
+    assert.ok(!md("![i](javascript:alert(1))").includes("javascript:"), "javascript: image stripped")
+    assert.ok(!md("<style>body{display:none}</style>").includes("<style"), "style injection never emitted")
+    assert.ok(md("**bold** and [ok](https://example.com)").includes("<strong"), "safe markdown still renders")
+
+    // Section write validation — server-side limits, no client trust.
+    assert.equal(
+      validateSectionInput({ title: "T".repeat(PROFILE_SECTION_TITLE_MAX + 1), body: "x" }).error !== undefined,
+      true, "oversized title rejected")
+    assert.equal(
+      validateSectionInput({ title: "ok", body: "B".repeat(PROFILE_SECTION_BODY_MAX + 1) }).error !== undefined,
+      true, "oversized body rejected")
+    assert.ok(validateSectionInput({ title: "ok", body: "b", visibility: "INTERNAL" }).error, "bad visibility rejected")
+    assert.ok(validateSectionInput({ title: "ok", body: "b", order: 101 }).error, "order > 100 rejected")
+    assert.ok(validateSectionInput({ title: "ok", body: "b", order: -1 }).error, "negative order rejected")
+    assert.ok(validateSectionInput({ title: "ok", body: "b", order: 1.5 }).error, "non-integer order rejected")
+    const okSection = validateSectionInput({ title: "  Notes  ", body: "**hi**", visibility: "MEMBERS", order: 2 })
+    assert.equal(okSection.error, undefined, "valid section input passes")
+    assert.equal(okSection.title, "Notes", "title trimmed")
+    assert.equal(validateSectionInput("junk").error !== undefined, true, "non-object rejected")
+    assert.equal(validateSectionInput(null).error !== undefined, true, "null rejected")
+
+    // profileSettings — deterministic defaults on anything malformed/stale;
+    // only preset enums survive, never arbitrary CSS/style strings.
+    assert.deepEqual(parseProfileSettings(null), DEFAULT_PROFILE_SETTINGS, "null → defaults")
+    assert.deepEqual(parseProfileSettings("junk"), DEFAULT_PROFILE_SETTINGS, "string → defaults")
+    assert.deepEqual(parseProfileSettings(42), DEFAULT_PROFILE_SETTINGS, "number → defaults")
+    const parsed = parseProfileSettings({
+      accent: "red;position:fixed", theme: "<script>", density: "dense",
+      sectionOrder: ["grows", "bogus", "stats"], hiddenSections: ["nope"],
+      shownStats: ["grows", "grows", "fake"], bannerImage: "javascript:x",
+      pinnedSection: 42, identity: { mediums: ["soil", "orbital"], goals: "g".repeat(400) },
+      evilKey: { nested: true },
+    })
+    assert.equal(parsed.accent, "pine", "invalid accent → default")
+    assert.equal(parsed.theme, "default", "invalid theme → default")
+    assert.equal(parsed.density, "cozy", "invalid density → default")
+    assert.deepEqual(parsed.sectionOrder.slice(0, 2), ["grows", "stats"], "bogus section ids dropped")
+    assert.equal(parsed.hiddenSections.length, 0, "bogus hidden ids dropped")
+    assert.deepEqual(parsed.shownStats, ["grows"], "bogus stat ids dropped")
+    assert.equal(parsed.bannerImage, null, "non-https banner rejected")
+    assert.equal(parsed.pinnedSection, null, "non-string pinnedSection rejected")
+    assert.deepEqual(parsed.identity.mediums, ["soil"], "bogus mediums dropped")
+    assert.equal(parsed.identity.goals.length, 280, "goals clamped to max")
+    assert.ok(!("evilKey" in parsed), "unknown keys never persist")
+
+    const patch = validateProfileSettingsPatch({ accent: "ember" }, { accent: "violet" })
+    assert.equal(patch.settings?.accent, "ember", "valid enum accepted")
+    assert.equal(patch.settings?.theme, "default", "untouched fields fall back to normalized existing")
+    const badPatch = validateProfileSettingsPatch({ accent: "not-a-preset" }, { accent: "violet" })
+    assert.equal(badPatch.settings?.accent, "violet", "invalid enum keeps existing value")
+    assert.equal(validateProfileSettingsPatch(null, null).settings?.accent, "pine", "null resets to defaults")
+    assert.equal(validateProfileSettingsPatch([], null).error !== undefined, true, "array rejected")
+    for (const a of PROFILE_ACCENTS) {
+      assert.equal(validateProfileSettingsPatch({ accent: a }, null).settings?.accent, a, `accent ${a} valid`)
+    }
+
+    // Owner-only mutation surfaces — the routes resolve the section/profile
+    // from the session, never a caller-supplied owner id.
+    const sectionsRoute = readFileSync(new URL("../src/app/api/profile/sections/route.ts", import.meta.url), "utf8")
+    const sectionItemRoute = readFileSync(new URL("../src/app/api/profile/sections/[id]/route.ts", import.meta.url), "utf8")
+    assert.ok(sectionsRoute.includes("getServerSession"), "sections GET requires session")
+    assert.ok(sectionsRoute.includes("where: { userId: session.user.id }"), "sections resolved via session user")
+    assert.ok(sectionItemRoute.includes("section.profileId !== profile.id"), "item route enforces section ownership")
+    assert.ok(!sectionItemRoute.includes("body.userId") && !sectionsRoute.includes("body.userId"), "no caller-supplied userId")
+    const profilePatchRoute = readFileSync(new URL("../src/app/api/profile/route.ts", import.meta.url), "utf8")
+    assert.ok(profilePatchRoute.includes("diary.authorId !== userId"), "featuredDiaryId verified against session user")
+    assert.ok(profilePatchRoute.includes("validateProfileSettingsPatch"), "profileSettings goes through the validator")
 
     // ── Moderation role guards (lib-level) ────────────────────────
     {
