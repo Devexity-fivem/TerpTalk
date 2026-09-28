@@ -5,11 +5,8 @@ import { prisma } from "@/lib/prisma"
 import { unauthorized, forbidden, isBanned } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
 import { checkMaintenance } from "@/lib/maintenance"
-import {
-  PROFILE_SECTION_BASE_LIMIT,
-  PROFILE_SECTION_HARD_MAX,
-  validateSectionInput,
-} from "@/lib/profile-settings"
+import { PROFILE_SECTION_HARD_MAX, validateSectionInput } from "@/lib/profile-settings"
+import { profileSectionLimit } from "@/lib/progression"
 
 const NO_STORE = { "Cache-Control": "no-store, max-age=0, must-revalidate" }
 
@@ -32,8 +29,8 @@ export async function GET() {
 }
 
 // POST — create a custom section. Owner-only; body is markdown SOURCE (rendered
-// through MarkdownRenderer — raw HTML/scripts are never emitted). The base
-// count cap applies now; unlock tiers raise it in Profile P2.
+// through MarkdownRenderer — raw HTML/scripts are never emitted). Count is
+// progression-tiered: Seed 2 → Rooted 4 → Harvested 6 → Cured 8.
 export async function POST(request: Request) {
   const maintenance = await checkMaintenance()
   if (maintenance) return maintenance
@@ -58,7 +55,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "title and body are required" }, { status: 400 })
   }
 
-  const limit = Math.min(PROFILE_SECTION_BASE_LIMIT, PROFILE_SECTION_HARD_MAX)
+  const limit = Math.min(await profileSectionLimit(session.user.id), PROFILE_SECTION_HARD_MAX)
   const count = await prisma.profileCustomSection.count({ where: { profileId: profile.id } })
   if (count >= limit) {
     return NextResponse.json({ error: `You can have up to ${limit} custom sections` }, { status: 403 })

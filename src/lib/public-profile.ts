@@ -23,6 +23,7 @@ import {
   type Mastery,
 } from "@/lib/progression-config"
 import { getGrowStreak } from "@/lib/grow-streak"
+import { hasUnlock } from "@/lib/progression"
 import { TERPBOT_USERNAME } from "@/lib/terpbot-constants"
 import { getBotStats } from "@/lib/terpbot-events"
 import { publicDiaryWhere } from "@/lib/diary-visibility"
@@ -188,6 +189,20 @@ export interface PublicProfileDTO {
     welcomes: number; announcements: number; daysActive: number
     assists: number; byCommand: Record<string, number>; hasFallbacks: boolean
   } | null
+  /** Records widget (Harvested) — real scoped aggregates; null when the
+      member hasn't unlocked it or has no qualifying rows. */
+  records: {
+    longestGrowDays: number
+    biggestYield: { title: string; amount: number; unit: string | null } | null
+    growingSince: Date | null
+  } | null
+  /** Owner-only insights (Cured) — private 30-day counts; never shipped to
+      other viewers. */
+  ownerInsights: {
+    newFollowers: number
+    updatesLogged: number
+    growsStarted: number
+  } | null
   profileSettings: ProfileSettings
 }
 
@@ -288,6 +303,7 @@ export async function getPublicProfileData(
   const diaryScope = isOwner ? {} : publicDiaryWhere
   const diaryOwnerScope = { authorId: ownerId, deleted: false }
   const isBot = profile.username === TERPBOT_USERNAME
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000)
 
   const [
     recentThreads,
@@ -316,6 +332,12 @@ export async function getPublicProfileData(
     growingSinceAgg,
     longestGrowRows,
     openAbuseFlags,
+    recordsEnabled,
+    insightsEnabled,
+    biggestYieldRow,
+    newFollowers30d,
+    updates30d,
+    newGrows30d,
   ] = await Promise.all([
     prisma.thread.findMany({
       where: { authorId: ownerId, deleted: false, category: { hidden: false } },
@@ -460,6 +482,24 @@ export async function getPublicProfileData(
     prisma.abuseFlag.count({
       where: { userId: ownerId, status: { in: ["PENDING", "REVIEWING", "ESCALATED"] } },
     }),
+    // P2 widgets — eligibility is the OWNER's progression, never the
+    // viewer's. Capability check, not just registry presence.
+    isBot ? Promise.resolve(false) : hasUnlock(ownerId, "records-widget"),
+    isBot || !isOwner ? Promise.resolve(false) : hasUnlock(ownerId, "owner-analytics"),
+    prisma.growDiary.findFirst({
+      where: { ...diaryOwnerScope, harvested: true, ...diaryScope, yieldAmount: { not: null } },
+      orderBy: { yieldAmount: "desc" },
+      select: { title: true, yieldAmount: true, yieldUnit: true },
+    }),
+    isOwner
+      ? prisma.follow.count({ where: { followingId: ownerId, createdAt: { gte: thirtyDaysAgo } } })
+      : Promise.resolve(0),
+    isOwner
+      ? prisma.diaryUpdate.count({ where: { authorId: ownerId, createdAt: { gte: thirtyDaysAgo } } })
+      : Promise.resolve(0),
+    isOwner
+      ? prisma.growDiary.count({ where: { ...diaryOwnerScope, createdAt: { gte: thirtyDaysAgo } } })
+      : Promise.resolve(0),
   ])
 
   // Pinned harvest — Garden Perk; only while the diary is still visible to
@@ -577,6 +617,26 @@ export async function getPublicProfileData(
     .filter((s) => s.value !== "—" && !(s.id === "streak" && streakData.streak < 2))
     .slice(0, 8)
 
+  // Records widget (Harvested) — real scoped aggregates only; null when the
+  // member hasn't unlocked it, so nothing advertises a feature that doesn't
+  // exist for them. Biggest yield is scoped to viewer-visible harvests.
+  const records: PublicProfileDTO["records"] =
+    recordsEnabled && (longestGrowDays > 0 || biggestYieldRow || growingSinceAgg._min.startDate)
+      ? {
+          longestGrowDays,
+          biggestYield: biggestYieldRow?.yieldAmount
+            ? { title: biggestYieldRow.title, amount: biggestYieldRow.yieldAmount, unit: biggestYieldRow.yieldUnit }
+            : null,
+          growingSince: growingSinceAgg._min.startDate,
+        }
+      : null
+
+  // Owner insights (Cured) — private 30-day counts, owner view only.
+  const ownerInsights: PublicProfileDTO["ownerInsights"] =
+    insightsEnabled && isOwner
+      ? { newFollowers: newFollowers30d, updatesLogged: updates30d, growsStarted: newGrows30d }
+      : null
+
   // Strain portfolio — names resolved in one batch lookup, ordered by how
   // many scoped grows run each strain (portfolio, not popularity metric).
   const strainIds = strainsGrownRows.map((r) => r.strainId).filter((s): s is string => !!s)
@@ -672,6 +732,8 @@ export async function getPublicProfileData(
       documentedWeeks: documentedWeekRows.length,
     },
     botStats,
+    records,
+    ownerInsights,
     profileSettings: settings,
   }
 

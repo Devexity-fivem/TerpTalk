@@ -15,6 +15,7 @@
 // Locked spec: docs/progression-v2-design.md (rev 3).
 import { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
+import { PROFILE_SECTION_BASE_LIMIT, SHOWN_STATS_BASE } from "@/lib/profile-settings"
 import {
   DUP_REDUCE_PCT,
   DUP_WITHHOLD_PCT,
@@ -1048,6 +1049,22 @@ export async function hasUnlock(userId: string, unlockId: string): Promise<boole
   const coreOk = spec.anyOf ? rankOk || masteryOk : rankOk && masteryOk
   const standingOk = spec.standing ? profile.standing >= spec.standing : true
   return coreOk && standingOk
+}
+
+/** Profile P2 — custom-section capacity: Seed 2 → Rooted 4 → Harvested 6 →
+ *  Cured 8 (hard-capped by PROFILE_SECTION_HARD_MAX in the caller). */
+export async function profileSectionLimit(userId: string): Promise<number> {
+  if (await hasUnlock(userId, "profile-sections-8")) return 8
+  if (await hasUnlock(userId, "profile-sections-6")) return 6
+  if (await hasUnlock(userId, "profile-sections-4")) return 4
+  return PROFILE_SECTION_BASE_LIMIT
+}
+
+/** Profile P2 — notable-stat slots: Seed 4 → Vegged 6 → Harvested 8. */
+export async function statSlotLimit(userId: string): Promise<number> {
+  if (await hasUnlock(userId, "stat-slots-8")) return 8
+  if (await hasUnlock(userId, "stat-slots-6")) return 6
+  return SHOWN_STATS_BASE
 }
 
 /** All unlocks with earned state — powers the /progress unlock roadmap. */

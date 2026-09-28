@@ -1,8 +1,13 @@
-// Profile V2 — settings + custom-section contracts (P0 foundation).
+// Profile V2 — settings + custom-section contracts (P0 foundation, P2 live).
 // Deliberately preset-based: accent/theme/density are enumerated tokens, never
 // arbitrary CSS. Custom sections store markdown SOURCE only — rendering goes
 // through MarkdownRenderer (src/lib/markdown.tsx), which emits no raw HTML.
 // See docs/audit/profile-v2-implementation-plan.md for the locked design.
+
+// Settings blob version. parseProfileSettings always emits the current
+// contract shape regardless of stored vintage — stale blobs normalize to
+// defaults rather than needing per-version migrations.
+export const PROFILE_SETTINGS_VERSION = 1
 
 export const PROFILE_SECTION_TITLE_MAX = 60
 export const PROFILE_SECTION_BODY_MAX = 2000
@@ -26,16 +31,41 @@ export type ProfileTheme = (typeof PROFILE_THEMES)[number]
 export const PROFILE_DENSITIES = ["cozy", "compact"] as const
 export type ProfileDensity = (typeof PROFILE_DENSITIES)[number]
 
-// Orderable profile sections — the hero is always first and is NOT in this
-// list. These ids map to the locked IA blocks (plan §2); widgets land in P1/P2.
-export const PROFILE_SECTION_IDS = [
-  "stats",
-  "featured",
+// Orderable profile ids — the hero is always first and is NOT in this list.
+// One ordered array carries two disjoint roles (the locked "one reorderable
+// layout"):
+//  - tab ids order the profile tab strip. "overview" is required: it always
+//    renders first and can never be hidden.
+//  - block ids order the Overview stack; the two widget ids
+//    (records / owner-insights) are also declared with metadata in
+//    src/lib/profile-widgets.ts.
+export const PROFILE_REQUIRED_ID = "overview"
+export const PROFILE_TAB_IDS = [
   "grows",
   "harvests",
   "contributions",
-  "badges",
+  "about",
+] as const
+export const PROFILE_WIDGET_IDS = ["records", "owner-insights"] as const
+// Canonical block order = the default Overview stack order (featured →
+// stats → records → pinned → history); badges/owner-insights live on other
+// tabs, so their slot here only matters to hiddenSections.
+export const PROFILE_BLOCK_IDS = [
+  "featured",
+  "stats",
+  "records",
+  "pinned",
   "history",
+  "badges",
+  "owner-insights",
+] as const
+// Canonical order: overview first, then blocks in their default visual
+// order, then the remaining tabs. Each role filters its own subset, so the
+// interleave only defines defaults.
+export const PROFILE_SECTION_IDS = [
+  PROFILE_REQUIRED_ID,
+  ...PROFILE_BLOCK_IDS,
+  ...PROFILE_TAB_IDS,
 ] as const
 export type ProfileSectionId = (typeof PROFILE_SECTION_IDS)[number]
 
@@ -58,6 +88,26 @@ export const NOTABLE_STAT_IDS = [
 ] as const
 export type NotableStatId = (typeof NOTABLE_STAT_IDS)[number]
 export const SHOWN_STATS_MAX = 8
+// Base grant at Seed — Vegged raises to 6, Harvested to 8 (statSlotLimit).
+export const SHOWN_STATS_BASE = 4
+
+// Editor-facing labels — the same ids resolve values in public-profile.ts.
+export const NOTABLE_STAT_LABELS: Record<NotableStatId, string> = {
+  grows: "Grows documented",
+  harvests: "Harvests completed",
+  updates: "Updates logged",
+  detailedUpdates: "Detailed updates",
+  documentedWeeks: "Documented weeks",
+  longestGrow: "Longest grow",
+  growingSince: "Growing since",
+  acceptedAnswers: "Accepted answers",
+  experiments: "Experiments run",
+  strains: "Strains grown",
+  activeGrows: "Active grows",
+  streak: "Check-in streak",
+  setups: "Setup showcases",
+  contestWins: "Contest wins",
+}
 
 export const PROFILE_MEDIUMS = [
   "soil",
@@ -126,8 +176,17 @@ const pickIdList = <T extends string>(v: unknown, allowed: Set<string>, max: num
 const pickString = (v: unknown, max: number): string =>
   typeof v === "string" ? v.slice(0, max) : ""
 
-const isHttpsUrl = (v: unknown): v is string =>
-  typeof v === "string" && v.length <= 500 && /^https:\/\//i.test(v)
+// Banner uploads arrive as a data URI and are pushed through the shared
+// image pipeline (storeImage) before persistence; a stored value may remain
+// a data URI only in the dev-fallback path. Either way the value is an
+// image-pipeline product — never an arbitrary remote URL from the client
+// (a linked URL would let a profile owner track every viewer's IP).
+const IMAGE_DATA_URI_RE = /^data:image\/(?:png|webp|jpe?g);base64,/i
+const BLOB_HOST_RE = /^https:\/\/[a-z0-9-]+\.public\.blob\.vercel-storage\.com\//i
+const isBannerUrl = (v: unknown): v is string =>
+  typeof v === "string" &&
+  ((v.length <= 500 && BLOB_HOST_RE.test(v)) ||
+    (v.length <= 400_000 && IMAGE_DATA_URI_RE.test(v)))
 
 /**
  * Normalize stored profileSettings JSON into the contract shape. Unknown keys
@@ -139,7 +198,7 @@ export function parseProfileSettings(raw: unknown): ProfileSettings {
   const s = raw as Record<string, unknown>
   const order = pickIdList<ProfileSectionId>(s.sectionOrder, SECTION_ID_SET, PROFILE_SECTION_IDS.length)
   return {
-    bannerImage: isHttpsUrl(s.bannerImage) ? s.bannerImage : null,
+    bannerImage: isBannerUrl(s.bannerImage) ? s.bannerImage : null,
     accent: pickEnum(s.accent, PROFILE_ACCENTS, "pine"),
     theme: pickEnum(s.theme, PROFILE_THEMES, "default"),
     density: pickEnum(s.density, PROFILE_DENSITIES, "cozy"),
@@ -149,7 +208,9 @@ export function parseProfileSettings(raw: unknown): ProfileSettings {
       ...order,
       ...PROFILE_SECTION_IDS.filter((id) => !order.includes(id)),
     ],
-    hiddenSections: pickIdList<ProfileSectionId>(s.hiddenSections, SECTION_ID_SET, PROFILE_SECTION_IDS.length),
+    // "overview" is required — it can never enter hiddenSections.
+    hiddenSections: pickIdList<ProfileSectionId>(s.hiddenSections, SECTION_ID_SET, PROFILE_SECTION_IDS.length)
+      .filter((id) => id !== PROFILE_REQUIRED_ID),
     shownStats: pickIdList<NotableStatId>(s.shownStats, STAT_ID_SET, SHOWN_STATS_MAX),
     pinnedSection: typeof s.pinnedSection === "string" && s.pinnedSection.length <= 40 ? s.pinnedSection : null,
     identity: normalizeIdentity(s.identity),
@@ -199,7 +260,7 @@ export function validateProfileSettingsPatch(
         ? current.bannerImage
         : patch.bannerImage === null
           ? null
-          : isHttpsUrl(patch.bannerImage)
+          : isBannerUrl(patch.bannerImage)
             ? patch.bannerImage
             : current.bannerImage,
     accent:
@@ -226,7 +287,8 @@ export function validateProfileSettingsPatch(
     hiddenSections:
       patch.hiddenSections === undefined
         ? current.hiddenSections
-        : pickIdList<ProfileSectionId>(patch.hiddenSections, SECTION_ID_SET, PROFILE_SECTION_IDS.length),
+        : pickIdList<ProfileSectionId>(patch.hiddenSections, SECTION_ID_SET, PROFILE_SECTION_IDS.length)
+            .filter((id) => id !== PROFILE_REQUIRED_ID),
     shownStats:
       patch.shownStats === undefined
         ? current.shownStats

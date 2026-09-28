@@ -658,6 +658,122 @@ const main = async () => {
       ? pass("terpbot: bot account pinned MEMBER + passwordless")
       : fail("bot privilege", botRow)
 
+    // ══ Profile P2 — customization HTTP surface ═══════════════════
+    {
+      const p2 = await createUser("p2")
+      users.push(p2)
+      const { cookie: p2C } = await login(p2.username, p2.password)
+      const patch = (body) => callApi("/api/profile", { method: "PATCH", body, cookie: p2C })
+      const getSettings = async () =>
+        (await prisma.profile.findUnique({ where: { userId: p2.id }, select: { profileSettings: true } }))?.profileSettings
+
+      // Appearance + layout persist; "overview" can never be hidden.
+      r = await patch({ profileSettings: { accent: "violet", theme: "journal", density: "compact", hiddenSections: ["overview", "records"] } })
+      r.status === 200 ? pass("p2: appearance PATCH accepted") : fail("p2 appearance patch", { status: r.status, d: r.data })
+      let s = await getSettings()
+      s?.accent === "violet" && s?.density === "compact" &&
+      !s?.hiddenSections?.includes("overview") && s?.hiddenSections?.includes("records")
+        ? pass("p2: settings persist; overview cannot be hidden")
+        : fail("p2 settings shape", s)
+
+      // Hostile enum values fall back to the existing value, never persist.
+      r = await patch({ profileSettings: { accent: "#ff00ff;position:fixed", theme: "not-a-theme" } })
+      s = await getSettings()
+      r.status === 200 && s?.accent === "violet" && s?.theme === "journal"
+        ? pass("p2: hostile enum values keep existing settings")
+        : fail("p2 hostile enums", { status: r.status, s })
+
+      // Stat slots — Seed cap is 4.
+      r = await patch({ profileSettings: { shownStats: ["grows", "harvests", "updates", "streak", "strains"] } })
+      r.status === 403 ? pass("p2: 5 stat picks refused at Seed") : fail("p2 stat cap", { status: r.status, d: r.data })
+      r = await patch({ profileSettings: { shownStats: ["grows", "harvests", "updates", "streak"] } })
+      r.status === 200 ? pass("p2: 4 stat picks accepted") : fail("p2 stats ok", { status: r.status, d: r.data })
+
+      // Section order — unknown ids dropped, missing appended server-side.
+      r = await patch({ profileSettings: { sectionOrder: ["harvests", "grows", "bogus"] } })
+      s = await getSettings()
+      r.status === 200 && s?.sectionOrder?.[0] === "harvests" && s?.sectionOrder?.[1] === "grows" &&
+      !s?.sectionOrder?.includes("bogus") && s?.sectionOrder?.includes("about")
+        ? pass("p2: sectionOrder normalized — unknowns dropped, missing appended")
+        : fail("p2 sectionOrder", s?.sectionOrder)
+
+      // Banner — an external URL can never persist (tracking-pixel guard).
+      r = await patch({ profileSettings: { bannerImage: "https://evil.example.com/t.png" } })
+      s = await getSettings()
+      r.status === 200 && !s?.bannerImage
+        ? pass("p2: external banner URL never persists")
+        : fail("p2 ext banner", { status: r.status, banner: s?.bannerImage })
+
+      // Featured grow — own diaries only; private is legal (owner-rendered),
+      // foreign and nonexistent ids rejected; null clears.
+      const p2Grow = await prisma.growDiary.create({
+        data: { title: M("p2grow"), description: "", growType: "INDOOR", startDate: new Date(), authorId: p2.id, visibility: "PRIVATE" },
+      })
+      diaryIds.push(p2Grow.id)
+      r = await patch({ featuredDiaryId: p2Grow.id })
+      r.status === 200 ? pass("p2: own private diary can be featured") : fail("p2 feature own", { status: r.status, d: r.data })
+      r = await patch({ featuredDiaryId: aDiary.id })
+      r.status === 400 ? pass("p2: foreign diary rejected as featured") : fail("p2 feature foreign", { status: r.status, d: r.data })
+      r = await patch({ featuredDiaryId: "not-a-diary-id" })
+      r.status === 400 ? pass("p2: nonexistent diary rejected") : fail("p2 feature missing", r.status)
+      r = await patch({ featuredDiaryId: null })
+      r.status === 200 ? pass("p2: featured grow cleared") : fail("p2 feature clear", { status: r.status, d: r.data })
+
+      // Custom sections — CRUD + progression limit + foreign-ownership guards.
+      r = await callApi("/api/profile/sections", { method: "POST", body: { title: "Notes", body: "**hi** <script>alert(1)</script>", visibility: "PUBLIC" }, cookie: p2C })
+      const sec1 = r.data?.section?.id
+      r.status === 201 && sec1 ? pass("p2: section create") : fail("p2 sec create", { status: r.status, d: r.data })
+      const stored1 = sec1 && await prisma.profileCustomSection.findUnique({ where: { id: sec1 }, select: { body: true } })
+      stored1?.body?.includes("<script>")
+        ? pass("p2: markdown stored as source — sanitization lives in the renderer")
+        : fail("p2 sec store", stored1)
+      r = await callApi("/api/profile/sections", { method: "POST", body: { title: "Second", body: "members-only body", visibility: "MEMBERS" }, cookie: p2C })
+      const sec2 = r.data?.section?.id
+      r = await callApi("/api/profile/sections", { method: "POST", body: { title: "Third", body: "b" }, cookie: p2C })
+      r.status === 403 ? pass("p2: 3rd section refused at Seed (limit 2)") : fail("p2 sec limit", { status: r.status, d: r.data })
+      r = await callApi(`/api/profile/sections/${sec1}`, { method: "PATCH", body: { title: "Renamed", visibility: "HIDDEN" }, cookie: p2C })
+      r.status === 200 ? pass("p2: section edit + visibility") : fail("p2 sec patch", { status: r.status, d: r.data })
+
+      const bSec = await prisma.profileCustomSection.create({
+        data: { profileId: b.profile.id, title: "B sec", body: "x", visibility: "PUBLIC", order: 0 }, select: { id: true },
+      })
+      r = await callApi(`/api/profile/sections/${bSec.id}`, { method: "PATCH", body: { title: "hijack" }, cookie: p2C })
+      r.status === 404 ? pass("p2: foreign section PATCH → 404") : fail("p2 foreign patch", r.status)
+      r = await callApi(`/api/profile/sections/${bSec.id}`, { method: "DELETE", cookie: p2C })
+      r.status === 404 ? pass("p2: foreign section DELETE → 404") : fail("p2 foreign delete", r.status)
+
+      // Visibility matrix over the public profile API — MEMBERS content
+      // reaches logged-in viewers only; HIDDEN is owner-only, never in the
+      // DTO for anyone else. Live sections: "Renamed" (HIDDEN), "Second" (MEMBERS).
+      const pub = await callApi(`/api/users/${p2.username}`, {})
+      const mem = await callApi(`/api/users/${p2.username}`, { cookie: bC })
+      const own = await callApi(`/api/users/${p2.username}`, { cookie: p2C })
+      const titles = (d) => (d?.profile?.customSections ?? []).map((x) => x.title).sort().join(",")
+      titles(pub.data) === ""
+        ? pass("p2: anon API sees no MEMBERS/HIDDEN sections")
+        : fail("p2 anon sections", titles(pub.data))
+      titles(mem.data) === "Second"
+        ? pass("p2: member API sees MEMBERS section, never HIDDEN")
+        : fail("p2 member sections", titles(mem.data))
+      titles(own.data) === "Renamed,Second"
+        ? pass("p2: owner API sees own HIDDEN + MEMBERS sections")
+        : fail("p2 owner sections", titles(own.data))
+
+      // Pinned section — own section only; foreign pin silently refused;
+      // deleting the pinned row clears the reference.
+      r = await patch({ profileSettings: { pinnedSection: sec1 } })
+      s = await getSettings()
+      r.status === 200 && s?.pinnedSection === sec1 ? pass("p2: own section pinned") : fail("p2 pin", { status: r.status, pinned: s?.pinnedSection })
+      r = await patch({ profileSettings: { pinnedSection: bSec.id } })
+      s = await getSettings()
+      r.status === 200 && s?.pinnedSection === sec1 ? pass("p2: foreign section pin keeps existing, never stores foreign id") : fail("p2 foreign pin", s?.pinnedSection)
+      r = await callApi(`/api/profile/sections/${sec1}`, { method: "DELETE", cookie: p2C })
+      s = await getSettings()
+      r.status === 200 && s?.pinnedSection === null ? pass("p2: deleting a pinned section clears the reference") : fail("p2 pin cleanup", { status: r.status, pinned: s?.pinnedSection })
+      await prisma.profileCustomSection.delete({ where: { id: bSec.id } }).catch(() => {})
+      if (sec2) await prisma.profileCustomSection.delete({ where: { id: sec2 } }).catch(() => {})
+    }
+
     console.log(`\n${results.filter(([s]) => s === "PASS").length} passed, ${results.filter(([s]) => s === "FAIL").length} failed`)
   } catch (e) {
     fail("suite error", String(e?.stack || e))

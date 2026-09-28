@@ -149,15 +149,27 @@ export async function deleteImagesIfUnreferenced(urls: (string | null | undefine
   const candidates = urls.filter((u): u is string => typeof u === "string" && u.startsWith("https://"))
   if (!candidates.length || !process.env.BLOB_READ_WRITE_TOKEN) return
 
-  const [postImages, diaryImages, setupImages, strainPhotos, contestImages, profiles, userImages] = await Promise.all([
+  const [postImages, diaryImages, setupImages, strainPhotos, contestImages, profiles, bannerProfiles, userImages] = await Promise.all([
     prisma.postImage.findMany({ where: { url: { in: candidates } }, select: { url: true } }),
     prisma.diaryImage.findMany({ where: { url: { in: candidates } }, select: { url: true } }),
     prisma.setupImage.findMany({ where: { url: { in: candidates } }, select: { url: true } }),
     prisma.strainPhoto.findMany({ where: { imageUrl: { in: candidates } }, select: { imageUrl: true } }),
     prisma.contestEntry.findMany({ where: { imageUrl: { in: candidates } }, select: { imageUrl: true } }),
     prisma.profile.findMany({ where: { avatarUrl: { in: candidates } }, select: { avatarUrl: true } }),
+    // Profile V2 banners live inside the profileSettings JSON blob — a
+    // substring match is enough to protect a still-referenced banner.
+    prisma.profile.findMany({
+      where: { OR: candidates.map((u) => ({ profileSettings: { string_contains: u } })) },
+      select: { profileSettings: true },
+    }),
     prisma.user.findMany({ where: { image: { in: candidates } }, select: { image: true } }),
   ])
+
+  const bannerUrlsInUse = new Set(
+    bannerProfiles
+      .map((p) => (p.profileSettings as { bannerImage?: unknown } | null)?.bannerImage)
+      .filter((u): u is string => typeof u === "string")
+  )
 
   const inUse = new Set<string>(
     [
@@ -167,6 +179,7 @@ export async function deleteImagesIfUnreferenced(urls: (string | null | undefine
       ...strainPhotos.map((i) => i.imageUrl),
       ...contestImages.map((i) => i.imageUrl),
       ...profiles.map((p) => p.avatarUrl),
+      ...bannerUrlsInUse,
       ...userImages.map((u) => u.image),
     ].filter((u): u is string => typeof u === "string")
   )

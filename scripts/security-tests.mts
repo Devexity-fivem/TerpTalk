@@ -28,8 +28,10 @@ import { MarkdownRenderer, sanitizeHref } from "@/lib/markdown"
 import {
   parseProfileSettings, validateProfileSettingsPatch, validateSectionInput,
   PROFILE_SECTION_TITLE_MAX, PROFILE_SECTION_BODY_MAX, DEFAULT_PROFILE_SETTINGS,
-  PROFILE_ACCENTS,
+  PROFILE_ACCENTS, PROFILE_SECTION_IDS, NOTABLE_STAT_IDS,
 } from "@/lib/profile-settings"
+import { PROFILE_WIDGETS, isProfileWidgetId } from "@/lib/profile-widgets"
+import { UNLOCK_BY_ID } from "@/lib/progression-config"
 import { applyAccountActionInTx } from "@/lib/moderation"
 import { authOptions } from "@/lib/auth"
 
@@ -781,6 +783,44 @@ async function run() {
       assert.equal(validateProfileSettingsPatch({ accent: a }, null).settings?.accent, a, `accent ${a} valid`)
     }
 
+    // P2 — banner URL allowlist. Only the image pipeline's own storage or an
+    // uploaded data URI may persist; an arbitrary remote URL is a tracking
+    // pixel pointed at every profile viewer, so it is rejected like avatars.
+    const blobBanner = "https://x9f2.public.blob.vercel-storage.com/banners/b.webp"
+    const tinyPng = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+    assert.equal(parseProfileSettings({ bannerImage: "https://evil.example.com/track.png" }).bannerImage, null, "external https banner rejected")
+    assert.equal(parseProfileSettings({ bannerImage: blobBanner }).bannerImage, blobBanner, "blob-hosted banner accepted")
+    assert.equal(parseProfileSettings({ bannerImage: tinyPng }).bannerImage, tinyPng, "uploaded data-URI banner accepted")
+    assert.equal(parseProfileSettings({ bannerImage: "data:text/html;base64,PHNjcmlwdA==" }).bannerImage, null, "non-image data URI rejected")
+    assert.equal(parseProfileSettings({ bannerImage: `https://x.public.blob.vercel-storage.com/${"a".repeat(500)}` }).bannerImage, null, "oversized blob URL rejected")
+    assert.equal(validateProfileSettingsPatch({ bannerImage: "https://evil.example.com/x.png" }, { bannerImage: blobBanner }).settings?.bannerImage, blobBanner, "patch keeps existing banner when the new URL is hostile")
+
+    // P2 — expanded section registry: "overview" can never be hidden; widget
+    // ids are legal order/hide targets; stat picks hard-cap at 8 even when a
+    // stale blob carries more.
+    assert.deepEqual(
+      parseProfileSettings({ hiddenSections: ["overview", "records", "stats"] }).hiddenSections,
+      ["records", "stats"], "overview stripped from hiddenSections")
+    assert.deepEqual(
+      validateProfileSettingsPatch({ hiddenSections: ["overview", "about"] }, null).settings?.hiddenSections,
+      ["about"], "patch drops overview from hiddenSections")
+    assert.ok(
+      parseProfileSettings({ sectionOrder: ["owner-insights", "grows"] }).sectionOrder[0] === "owner-insights",
+      "widget ids survive sectionOrder")
+    assert.ok(
+      validateProfileSettingsPatch({ shownStats: [...NOTABLE_STAT_IDS, "grows"] }, null).settings!.shownStats.length <= 8,
+      "stat picks hard-capped at 8")
+
+    // P2 — widget registry integrity: every registered widget is a legal
+    // section id and gates on a live unlock spec — never a client string.
+    for (const w of PROFILE_WIDGETS) {
+      assert.ok(PROFILE_SECTION_IDS.includes(w.id as never), `widget ${w.id} is a registered section id`)
+      assert.ok(UNLOCK_BY_ID.has(w.unlockId), `widget ${w.id} gates on a live unlock`)
+      assert.equal(UNLOCK_BY_ID.get(w.unlockId)!.layer, "A", `widget ${w.id} unlock is live, not deferred`)
+    }
+    assert.ok(!isProfileWidgetId("evil-widget"), "unknown widget ids rejected")
+    assert.ok(!isProfileWidgetId("../../../etc/passwd"), "path-shaped widget ids rejected")
+
     // Owner-only mutation surfaces — the routes resolve the section/profile
     // from the session, never a caller-supplied owner id.
     const sectionsRoute = readFileSync(new URL("../src/app/api/profile/sections/route.ts", import.meta.url), "utf8")
@@ -792,6 +832,17 @@ async function run() {
     const profilePatchRoute = readFileSync(new URL("../src/app/api/profile/route.ts", import.meta.url), "utf8")
     assert.ok(profilePatchRoute.includes("diary.authorId !== userId"), "featuredDiaryId verified against session user")
     assert.ok(profilePatchRoute.includes("validateProfileSettingsPatch"), "profileSettings goes through the validator")
+
+    // P2 route guards — progression caps, blob pipeline, rate limits,
+    // pinned-reference cleanup. Source asserts only where no behavioral
+    // surface exists; behavior is exercised over HTTP in runtime-verify.
+    assert.ok(profilePatchRoute.includes("statSlotLimit"), "profile PATCH enforces stat-slot unlock cap")
+    assert.ok(profilePatchRoute.includes("storeImage"), "banner uploads go through the shared image pipeline")
+    assert.ok(profilePatchRoute.includes("rateLimit"), "profile PATCH rate-limited")
+    assert.ok(profilePatchRoute.includes("findFirst"), "pinnedSection ownership checked server-side")
+    assert.ok(sectionsRoute.includes("profileSectionLimit"), "section create enforces unlock-tiered limit")
+    assert.ok(sectionsRoute.includes("rateLimit") && sectionItemRoute.includes("rateLimit"), "section mutations rate-limited")
+    assert.ok(sectionItemRoute.includes("pinnedSection === id"), "section delete clears pinnedSection reference")
 
     // ── Moderation role guards (lib-level) ────────────────────────
     {

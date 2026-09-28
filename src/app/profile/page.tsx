@@ -454,7 +454,16 @@ export default function ProfilePage() {
                       )}
                     </div>
                   </div>
-                  <button
+                  <div className="flex items-center gap-2 shrink-0">
+                    {profileData.profile?.username && (
+                      <Link
+                        href="/profile/customize"
+                        className="flex items-center gap-2 px-4 py-2 text-sm font-medium bg-secondary/70 rounded-full hover:bg-secondary transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      >
+                        Customize
+                      </Link>
+                    )}
+                    <button
                     onClick={() => {
                       const p = profileData.profile
                       setEditForm({
@@ -482,6 +491,7 @@ export default function ProfilePage() {
                   >
                     <Pencil className="w-4 h-4" /> Edit Profile
                   </button>
+                  </div>
                 </div>
                 <div className="flex flex-wrap gap-4 sm:gap-6 mt-4">
                   <div className="text-center">

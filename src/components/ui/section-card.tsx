@@ -15,6 +15,8 @@ interface SectionCardProps {
   className?: string
   /** Looser padding for media-heavy sections */
   padded?: boolean
+  /** Tighter padding — profile "compact" density preset */
+  compact?: boolean
 }
 
 /**
@@ -31,17 +33,19 @@ export default function SectionCard({
   children,
   className,
   padded = true,
+  compact = false,
 }: SectionCardProps) {
   const headingId = id ? `${id}-title` : undefined
+  const padding = !padded ? "none" : compact ? "sm" : "md"
   return (
     <Surface
       as="section"
-      padding={padded ? "md" : "none"}
+      padding={padding}
       className={className}
       labelledBy={headingId}
     >
       {(title || actions) && (
-        <div className={cn("flex items-start justify-between gap-3", padded ? "mb-4" : "p-4 sm:p-5 pb-0")}>
+        <div className={cn("flex items-start justify-between gap-3", padded ? "mb-3" : "p-4 sm:p-5 pb-0", padded && !compact && "mb-4")}>
           <div className="min-w-0">
             {title && (
               <h2 id={headingId} className="font-display text-lg font-semibold break-words">

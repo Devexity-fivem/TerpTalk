@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import { useSession } from "next-auth/react"
 import { useParams } from "next/navigation"
 import { User, MessageSquare, MapPin, Globe, Sprout, Dna, Leaf, Store, ChevronDown, ChevronUp, Bot, Zap, Users, Link2, HandMetal, CalendarClock, TrendingUp, Search, BookOpen, Trophy, BarChart3, AlertTriangle, Megaphone, Wrench, Award, Pin, FlaskConical, BadgeCheck, Target, CheckCircle2 } from "lucide-react"
@@ -20,6 +20,7 @@ import Tag from "@/components/ui/tag"
 import { MarkdownRenderer } from "@/lib/markdown"
 import { diaryPath, setupPath } from "@/lib/slugs"
 import { STAGE_LABELS } from "@/lib/diary-weeks"
+import { PROFILE_TAB_IDS } from "@/lib/profile-settings"
 import { cn } from "@/lib/utils"
 
 interface GrowCard {
@@ -131,8 +132,18 @@ interface PublicProfile {
   growStreak: number
   totalUpdates: number
   harvestedDiaries: number
+  records: {
+    longestGrowDays: number
+    biggestYield: { title: string; amount: number; unit: string | null } | null
+    growingSince: string | null
+  } | null
+  ownerInsights: { newFollowers: number; updatesLogged: number; growsStarted: number } | null
   profileSettings: {
     bannerImage: string | null
+    accent: string
+    theme: string
+    density: string
+    sectionOrder: string[]
     shownStats: string[]
     pinnedSection: string | null
     hiddenSections: string[]
@@ -366,18 +377,28 @@ function useProfileSection<T extends { id: string }>(username: string, section: 
 
 /* ── Member profile ──────────────────────────────────────────────── */
 
+const TAB_LABELS: Record<string, string> = {
+  grows: "Grows",
+  harvests: "Harvests",
+  contributions: "Contributions",
+  about: "About",
+}
+
 function MemberProfile({ data, isSelf, username }: { data: ProfileResponse; isSelf: boolean; username: string }) {
   const { profile, viewerBlocked, viewerFollowing, recentThreads, growSetups, recentProgression } = data
   const joinDate = new Date(profile.joinDate).toLocaleDateString("en-US", { year: "numeric", month: "long" })
   const [showAllBadges, setShowAllBadges] = useState(false)
   const [tab, setTab] = useState("overview")
 
+  const settings = profile.profileSettings
+  // Compact density — tighter spacing, same information architecture.
+  const compact = settings.density === "compact"
   const heroGrow = profile.featuredGrow ?? profile.activeGrow
   const heroGrowLabel = profile.featuredGrow ? "Featured grow" : "Currently growing"
-  const pinnedSection = profile.profileSettings.pinnedSection
-    ? profile.customSections.find((s) => s.id === profile.profileSettings.pinnedSection) ?? null
+  const pinnedSection = settings.pinnedSection
+    ? profile.customSections.find((s) => s.id === settings.pinnedSection) ?? null
     : null
-  const hidden = new Set(profile.profileSettings.hiddenSections)
+  const hidden = new Set(settings.hiddenSections)
   const maxMasteryXp = Math.max(1, ...profile.mastery.map((m) => m.xp))
   const focusMastery = profile.mastery.reduce((top, m) => (m.xp > (top?.xp ?? -1) ? m : top), profile.mastery[0])
   const heroStats = profile.notableStats.slice(0, 4)
@@ -387,8 +408,195 @@ function MemberProfile({ data, isSelf, username }: { data: ProfileResponse; isSe
 
   const show = (id: string) => !hidden.has(id)
 
+  // Member-reorderable tab strip — overview is required and always first;
+  // hidden tabs are removed entirely (a hidden tab can never deep-link in).
+  const orderedTabIds = [
+    "overview",
+    ...settings.sectionOrder.filter((id): id is (typeof PROFILE_TAB_IDS)[number] =>
+      (PROFILE_TAB_IDS as readonly string[]).includes(id)),
+  ].filter((id) => id === "overview" || show(id))
+  const tabItems = orderedTabIds.map((id) =>
+    id === "overview"
+      ? { id, label: "Overview" }
+      : id === "grows"
+        ? { id, label: <>Grows <span className="opacity-60 text-xs tabular-nums">{profile.stats.diaryCreator}</span></> }
+        : id === "harvests"
+          ? { id, label: <>Harvests <span className="opacity-60 text-xs tabular-nums">{profile.stats.harvestCount}</span></> }
+          : { id, label: TAB_LABELS[id] },
+  )
+
+  // ── Ordered Overview blocks ────────────────────────────────────────
+  // sectionOrder positions the fixed overview blocks; hidden blocks drop
+  // out; gated widgets render only when their data is actually shipped.
+  const featuredBlock = profile.featuredGrow && show("featured") && (
+    <SectionCard title="Featured grow" id="featured-grow" compact={compact}>
+      <GrowRow grow={profile.featuredGrow} />
+    </SectionCard>
+  )
+
+  const statsBlock = show("stats") && (
+    <>
+      {/* Mastery map — "what kind of grower am I becoming".
+          Relative share bars, not five competing currencies. */}
+      <SectionCard
+        title="Grower profile"
+        id="mastery-map"
+        compact={compact}
+        description={focusMastery && focusMastery.xp > 0 ? `Leaning ${focusMastery.name} — ${profile.mastery.filter((m) => m.live).length} live paths` : undefined}
+      >
+        <ul className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3">
+          {profile.mastery.map((m) => (
+            <li key={m.mastery} className="min-w-0">
+              <div className="flex items-center justify-between gap-2 text-sm">
+                <span className="flex items-center gap-1.5 min-w-0">
+                  <span aria-hidden="true">{m.icon}</span>
+                  <span className="truncate">{m.name}</span>
+                  {m === focusMastery && m.xp > 0 && <Tag variant="primary">Focus</Tag>}
+                  {!m.live && <Tag variant="muted">Soon</Tag>}
+                </span>
+                <span className="text-xs text-muted-foreground tabular-nums shrink-0">
+                  {m.live ? `M${m.level}` : "—"}
+                </span>
+              </div>
+              <div className="mt-1 h-1.5 rounded-full bg-secondary overflow-hidden" role="img" aria-label={`${m.name} share of profile XP`}>
+                <div
+                  className="h-full rounded-full bg-primary/70 transition-all"
+                  style={{ width: `${Math.round((m.xp / maxMasteryXp) * 100)}%` }}
+                />
+              </div>
+            </li>
+          ))}
+        </ul>
+      </SectionCard>
+
+      {/* Expanded stats — the full ≤8 registry beyond the hero 4 */}
+      {profile.notableStats.length > heroStats.length && (
+        <SectionCard title="At a glance" id="profile-stats" compact={compact}>
+          <StatStrip
+            className="sm:grid-cols-4"
+            items={profile.notableStats.map((s) => ({ label: s.label, value: s.value, hint: s.hint }))}
+          />
+        </SectionCard>
+      )}
+
+      {/* Progression — informative, never the point of the page */}
+      <SectionCard title="Progression" id="progression" compact={compact} actions={<Link href="/reputation" className="text-xs text-primary hover:underline">How it works</Link>}>
+        <div className="flex items-center gap-2 flex-wrap text-sm mb-2">
+          <span className={cn("inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium", profile.rank.bg, profile.rank.color)}>
+            <span aria-hidden="true">{profile.rank.icon}</span> {profile.rank.name}
+          </span>
+          {profile.xpStage && (
+            <span className="text-xs text-muted-foreground">
+              Grow Level {profile.xpStage.level} · {profile.xpStage.stageName} · stage {profile.xpStage.stageIndex + 1} of {profile.xpStage.stageCount}
+            </span>
+          )}
+        </div>
+        <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
+          <span>
+            {profile.stageProgress && profile.stageProgress.next > 0
+              ? <>{profile.stageProgress.current} / {profile.stageProgress.next} XP to next stage</>
+              : <>{profile.xp} XP — top of the ladder</>}
+          </span>
+          <span>{profile.stageProgress?.percent ?? profile.rankProgress.percent}%</span>
+        </div>
+        <div className="h-2 w-full bg-secondary rounded-full overflow-hidden">
+          <div
+            className="h-full bg-gradient-to-r from-primary to-spectrum transition-all motion-reduce:transition-none"
+            style={{ width: `${profile.stageProgress?.percent ?? profile.rankProgress.percent}%` }}
+          />
+        </div>
+        {profile.nextUnlock && (
+          <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1.5">
+            <Award className="w-3.5 h-3.5 text-primary" aria-hidden="true" />
+            Next unlock: <span className="font-medium text-foreground">{profile.nextUnlock.name}</span> at {profile.nextUnlock.rank}
+          </p>
+        )}
+      </SectionCard>
+    </>
+  )
+
+  const recordsBlock = profile.records && show("records") && (
+    <SectionCard title="Records" id="records" compact={compact} description="Personal records across visible grows">
+      <ul className="grid gap-3 sm:grid-cols-3 text-sm">
+        <li>
+          <p className="text-xs text-muted-foreground mb-0.5">Longest grow</p>
+          <p className="font-semibold tabular-nums">{profile.records.longestGrowDays > 0 ? `${profile.records.longestGrowDays} days` : "—"}</p>
+        </li>
+        <li className="min-w-0">
+          <p className="text-xs text-muted-foreground mb-0.5">Biggest harvest</p>
+          <p className="font-semibold truncate">
+            {profile.records.biggestYield
+              ? <>{profile.records.biggestYield.amount}{profile.records.biggestYield.unit ?? ""} <span className="font-normal text-muted-foreground">— {profile.records.biggestYield.title}</span></>
+              : "—"}
+          </p>
+        </li>
+        <li>
+          <p className="text-xs text-muted-foreground mb-0.5">Growing since</p>
+          <p className="font-semibold">
+            {profile.records.growingSince
+              ? new Date(profile.records.growingSince).toLocaleDateString("en-US", { month: "short", year: "numeric" })
+              : "—"}
+          </p>
+        </li>
+      </ul>
+    </SectionCard>
+  )
+
+  const pinnedBlock = pinnedSection && (
+    <SectionCard title={pinnedSection.title} id="pinned-section" compact={compact}>
+      <div className="prose-sm max-w-none text-sm"><MarkdownRenderer content={pinnedSection.body} /></div>
+    </SectionCard>
+  )
+
+  const historyBlock = show("history") && (
+    <SectionCard title="Recent activity" id="recent-activity" compact={compact}>
+      {recentThreads.length === 0 && recentProgression.length === 0 ? (
+        <EmptyState compact title="Nothing public yet" description="Activity appears here as it happens." />
+      ) : (
+        <ul className="space-y-2">
+          {recentThreads.slice(0, 5).map((t) => (
+            <li key={`t-${t.id}`}>
+              <Link href={`/forum/thread/${t.slug}`} className="block rounded-lg p-2 -m-2 transition-colors hover:bg-secondary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                <p className="font-medium text-sm break-words">{t.title}</p>
+                <p className="text-xs text-muted-foreground">{t.category.name} · {t.replyCount} repl{t.replyCount === 1 ? "y" : "ies"} · <TimeAgo value={t.createdAt} /></p>
+              </Link>
+            </li>
+          ))}
+          {recentProgression.slice(0, 4).map((e) => (
+            <li key={`e-${e.id}`} className={cn("flex items-center justify-between gap-3 rounded-lg p-2 -m-2 text-sm", e.reversed && "opacity-50")}>
+              <span className={cn("truncate", e.reversed && "line-through")}>
+                <TrendingUp className="inline w-3.5 h-3.5 mr-1 text-primary" aria-hidden="true" />
+                {e.label}{e.reversed ? " (reversed)" : ""}
+              </span>
+              <span className="flex items-center gap-3 shrink-0 text-xs text-muted-foreground">
+                <TimeAgo value={e.createdAt} />
+                <span className={cn("font-medium w-10 text-right tabular-nums", e.amount >= 0 ? "text-primary" : "text-destructive")}>
+                  {e.amount >= 0 ? "+" : ""}{e.amount}
+                </span>
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </SectionCard>
+  )
+
+  const overviewBlocks: Record<string, ReactNode> = {
+    featured: featuredBlock,
+    stats: statsBlock,
+    records: recordsBlock,
+    pinned: pinnedBlock,
+    history: historyBlock,
+  }
+  const overviewOrder = settings.sectionOrder.filter((id) => id in overviewBlocks)
+
   return (
-    <div className="min-h-screen bg-background">
+    <div
+      className="min-h-screen bg-background"
+      data-paccent={settings.accent}
+      data-ptheme={settings.theme}
+      data-pdensity={settings.density}
+    >
       <div className="max-w-4xl mx-auto px-4 py-6 sm:py-8">
         {/* ── Hero ─────────────────────────────────────────────────── */}
         <div className="bg-card/80 rounded-2xl border border-border/70 mb-5 overflow-hidden">
@@ -489,9 +697,14 @@ function MemberProfile({ data, isSelf, username }: { data: ProfileResponse; isSe
                     </div>
                   </div>
                   {isSelf ? (
-                    <Link href="/profile" className="shrink-0 rounded-full bg-secondary/70 px-3.5 py-1.5 text-xs font-medium hover:bg-secondary transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-                      Edit profile
-                    </Link>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <Link href="/profile/customize" className="rounded-full bg-primary/10 text-primary px-3.5 py-1.5 text-xs font-medium hover:bg-primary/15 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                        Customize
+                      </Link>
+                      <Link href="/profile" className="rounded-full bg-secondary/70 px-3.5 py-1.5 text-xs font-medium hover:bg-secondary transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                        Edit profile
+                      </Link>
+                    </div>
                   ) : (
                     <UserActions userId={profile.id} username={profile.username} initiallyBlocked={viewerBlocked} initiallyFollowing={viewerFollowing} />
                   )}
@@ -538,150 +751,22 @@ function MemberProfile({ data, isSelf, username }: { data: ProfileResponse; isSe
           defaultValue="overview"
           onChange={setTab}
           ariaLabel="Profile sections"
-          items={[
-            { id: "overview", label: "Overview" },
-            { id: "grows", label: <>Grows <span className="opacity-60 text-xs tabular-nums">{profile.stats.diaryCreator}</span></> },
-            { id: "harvests", label: <>Harvests <span className="opacity-60 text-xs tabular-nums">{profile.stats.harvestCount}</span></> },
-            { id: "contributions", label: "Contributions" },
-            { id: "about", label: "About" },
-          ]}
+          items={tabItems}
         >
           {(active) => (
             <>
               {active === "overview" && (
-                <div className="space-y-4">
-                  {/* Featured grow — the member's own pick, distinct from the
-                      automatically-derived active grow shown in the hero. */}
-                  {profile.featuredGrow && show("featured") && (
-                    <SectionCard title="Featured grow" id="featured-grow">
-                      <GrowRow grow={profile.featuredGrow} />
-                    </SectionCard>
-                  )}
-
-                  {/* Mastery map — "what kind of grower am I becoming".
-                      Relative share bars, not five competing currencies. */}
-                  {show("stats") && (
-                    <SectionCard
-                      title="Grower profile"
-                      id="mastery-map"
-                      description={focusMastery && focusMastery.xp > 0 ? `Leaning ${focusMastery.name} — ${profile.mastery.filter((m) => m.live).length} live paths` : undefined}
-                    >
-                      <ul className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3">
-                        {profile.mastery.map((m) => (
-                          <li key={m.mastery} className="min-w-0">
-                            <div className="flex items-center justify-between gap-2 text-sm">
-                              <span className="flex items-center gap-1.5 min-w-0">
-                                <span aria-hidden="true">{m.icon}</span>
-                                <span className="truncate">{m.name}</span>
-                                {m === focusMastery && m.xp > 0 && <Tag variant="primary">Focus</Tag>}
-                                {!m.live && <Tag variant="muted">Soon</Tag>}
-                              </span>
-                              <span className="text-xs text-muted-foreground tabular-nums shrink-0">
-                                {m.live ? `M${m.level}` : "—"}
-                              </span>
-                            </div>
-                            <div className="mt-1 h-1.5 rounded-full bg-secondary overflow-hidden" role="img" aria-label={`${m.name} share of profile XP`}>
-                              <div
-                                className="h-full rounded-full bg-primary/70 transition-all"
-                                style={{ width: `${Math.round((m.xp / maxMasteryXp) * 100)}%` }}
-                              />
-                            </div>
-                          </li>
-                        ))}
-                      </ul>
-                    </SectionCard>
-                  )}
-
-                  {/* Expanded stats — the full ≤8 registry beyond the hero 4 */}
-                  {profile.notableStats.length > heroStats.length && show("stats") && (
-                    <SectionCard title="At a glance" id="profile-stats">
-                      <StatStrip
-                        className="sm:grid-cols-4"
-                        items={profile.notableStats.map((s) => ({ label: s.label, value: s.value, hint: s.hint }))}
-                      />
-                    </SectionCard>
-                  )}
-
-                  {/* Progression — informative, never the point of the page */}
-                  {show("stats") && (
-                    <SectionCard title="Progression" id="progression" actions={<Link href="/reputation" className="text-xs text-primary hover:underline">How it works</Link>}>
-                      <div className="flex items-center gap-2 flex-wrap text-sm mb-2">
-                        <span className={cn("inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium", profile.rank.bg, profile.rank.color)}>
-                          <span aria-hidden="true">{profile.rank.icon}</span> {profile.rank.name}
-                        </span>
-                        {profile.xpStage && (
-                          <span className="text-xs text-muted-foreground">
-                            Grow Level {profile.xpStage.level} · {profile.xpStage.stageName} · stage {profile.xpStage.stageIndex + 1} of {profile.xpStage.stageCount}
-                          </span>
-                        )}
-                      </div>
-                      <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
-                        <span>
-                          {profile.stageProgress && profile.stageProgress.next > 0
-                            ? <>{profile.stageProgress.current} / {profile.stageProgress.next} XP to next stage</>
-                            : <>{profile.xp} XP — top of the ladder</>}
-                        </span>
-                        <span>{profile.stageProgress?.percent ?? profile.rankProgress.percent}%</span>
-                      </div>
-                      <div className="h-2 w-full bg-secondary rounded-full overflow-hidden">
-                        <div
-                          className="h-full bg-gradient-to-r from-primary to-spectrum transition-all motion-reduce:transition-none"
-                          style={{ width: `${profile.stageProgress?.percent ?? profile.rankProgress.percent}%` }}
-                        />
-                      </div>
-                      {profile.nextUnlock && (
-                        <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1.5">
-                          <Award className="w-3.5 h-3.5 text-primary" aria-hidden="true" />
-                          Next unlock: <span className="font-medium text-foreground">{profile.nextUnlock.name}</span> at {profile.nextUnlock.rank}
-                        </p>
-                      )}
-                    </SectionCard>
-                  )}
-
-                  {pinnedSection && (
-                    <SectionCard title={pinnedSection.title} id="pinned-section">
-                      <div className="prose-sm max-w-none text-sm"><MarkdownRenderer content={pinnedSection.body} /></div>
-                    </SectionCard>
-                  )}
-
-                  {/* Recent public activity */}
-                  <SectionCard title="Recent activity" id="recent-activity">
-                    {recentThreads.length === 0 && recentProgression.length === 0 ? (
-                      <EmptyState compact title="Nothing public yet" description="Activity appears here as it happens." />
-                    ) : (
-                      <ul className="space-y-2">
-                        {recentThreads.slice(0, 5).map((t) => (
-                          <li key={`t-${t.id}`}>
-                            <Link href={`/forum/thread/${t.slug}`} className="block rounded-lg p-2 -m-2 transition-colors hover:bg-secondary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-                              <p className="font-medium text-sm break-words">{t.title}</p>
-                              <p className="text-xs text-muted-foreground">{t.category.name} · {t.replyCount} repl{t.replyCount === 1 ? "y" : "ies"} · <TimeAgo value={t.createdAt} /></p>
-                            </Link>
-                          </li>
-                        ))}
-                        {recentProgression.slice(0, 4).map((e) => (
-                          <li key={`e-${e.id}`} className={cn("flex items-center justify-between gap-3 rounded-lg p-2 -m-2 text-sm", e.reversed && "opacity-50")}>
-                            <span className={cn("truncate", e.reversed && "line-through")}>
-                              <TrendingUp className="inline w-3.5 h-3.5 mr-1 text-primary" aria-hidden="true" />
-                              {e.label}{e.reversed ? " (reversed)" : ""}
-                            </span>
-                            <span className="flex items-center gap-3 shrink-0 text-xs text-muted-foreground">
-                              <TimeAgo value={e.createdAt} />
-                              <span className={cn("font-medium w-10 text-right tabular-nums", e.amount >= 0 ? "text-primary" : "text-destructive")}>
-                                {e.amount >= 0 ? "+" : ""}{e.amount}
-                              </span>
-                            </span>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </SectionCard>
+                <div className={compact ? "space-y-3" : "space-y-4"}>
+                  {overviewOrder.map((id) => (
+                    <div key={id} className="contents">{overviewBlocks[id]}</div>
+                  ))}
                 </div>
               )}
 
               {active === "grows" && show("grows") && (
                 <div className="space-y-4">
                   {profile.strainPortfolio.length > 0 && (
-                    <SectionCard title="Strain portfolio" id="strain-portfolio" description="Strains across this member's visible grows">
+                    <SectionCard title="Strain portfolio" id="strain-portfolio" compact={compact} description="Strains across this member's visible grows">
                       <div className="flex flex-wrap gap-1.5">
                         {profile.strainPortfolio.map((s) => (
                           <Tag key={s.name} href={`/strains?q=${encodeURIComponent(s.name)}`}>
@@ -693,7 +778,7 @@ function MemberProfile({ data, isSelf, username }: { data: ProfileResponse; isSe
                       </div>
                     </SectionCard>
                   )}
-                  <SectionCard title="Grow portfolio" id="grow-portfolio" description={`${profile.stats.diaryCreator} grow${profile.stats.diaryCreator === 1 ? "" : "s"} — active first`}>
+                  <SectionCard title="Grow portfolio" id="grow-portfolio" compact={compact} description={`${profile.stats.diaryCreator} grow${profile.stats.diaryCreator === 1 ? "" : "s"} — active first`}>
                     {growsSection.items.length === 0 && !growsSection.loading ? (
                       <EmptyState compact icon={Sprout} title="No grows to show" description="Documented grows appear here as the member journals them." />
                     ) : (
@@ -711,7 +796,7 @@ function MemberProfile({ data, isSelf, username }: { data: ProfileResponse; isSe
               {active === "harvests" && show("harvests") && (
                 <div className="space-y-4">
                   {profile.pinnedHarvest && (
-                    <SectionCard title={<span className="flex items-center gap-1.5"><Pin className="w-4 h-4 text-warning" />Pinned harvest</span>} id="pinned-harvest">
+                    <SectionCard title={<span className="flex items-center gap-1.5"><Pin className="w-4 h-4 text-warning" />Pinned harvest</span>} id="pinned-harvest" compact={compact}>
                       <Link
                         href={diaryPath(profile.pinnedHarvest)}
                         className="block rounded-xl border border-amber-500/30 bg-amber-500/5 p-3 transition-colors hover:bg-amber-500/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
@@ -726,7 +811,7 @@ function MemberProfile({ data, isSelf, username }: { data: ProfileResponse; isSe
                       </Link>
                     </SectionCard>
                   )}
-                  <SectionCard title="Harvest shelf" id="harvest-shelf" description={`${profile.stats.harvestCount} completed grow${profile.stats.harvestCount === 1 ? "" : "s"}`}>
+                  <SectionCard title="Harvest shelf" id="harvest-shelf" compact={compact} description={`${profile.stats.harvestCount} completed grow${profile.stats.harvestCount === 1 ? "" : "s"}`}>
                     {harvestsSection.items.length === 0 && !harvestsSection.loading ? (
                       <EmptyState compact icon={Trophy} title="No harvests yet" description="Finished grows land here once they're harvested." />
                     ) : (
@@ -776,11 +861,12 @@ function MemberProfile({ data, isSelf, username }: { data: ProfileResponse; isSe
                   growSetups={growSetups}
                   showAllBadges={showAllBadges}
                   setShowAllBadges={setShowAllBadges}
+                  compact={compact}
                 />
               )}
 
               {active === "about" && (
-                <AboutTab profile={profile} />
+                <AboutTab profile={profile} isSelf={isSelf} compact={compact} />
               )}
             </>
           )}
@@ -793,13 +879,14 @@ function MemberProfile({ data, isSelf, username }: { data: ProfileResponse; isSe
 /* ── Contributions tab ───────────────────────────────────────────── */
 
 function ContributionsTab({
-  profile, recentThreads, growSetups, showAllBadges, setShowAllBadges,
+  profile, recentThreads, growSetups, showAllBadges, setShowAllBadges, compact,
 }: {
   profile: PublicProfile
   recentThreads: Thread[]
   growSetups: GrowSetup[]
   showAllBadges: boolean
   setShowAllBadges: (v: boolean | ((p: boolean) => boolean)) => void
+  compact: boolean
 }) {
   const pinnedBadges = profile.badges.filter((b) => b.pinned)
   const restBadges = profile.badges.filter((b) => !b.pinned)
@@ -816,7 +903,7 @@ function ContributionsTab({
       {profile.stats.acceptedAnswers > 0 && (
         <SectionCard
           title="Accepted answers"
-          id="accepted-answers"
+          id="accepted-answers" compact={compact}
           description={`${profile.stats.acceptedAnswers} answer${profile.stats.acceptedAnswers === 1 ? "" : "s"} marked correct by the asker`}
         >
           <ul className="space-y-2">
@@ -839,7 +926,7 @@ function ContributionsTab({
       )}
 
       {profile.experiments.length > 0 && (
-        <SectionCard title="Experiments" id="experiments" description={`${profile.stats.experiments} documented experiment${profile.stats.experiments === 1 ? "" : "s"}`}>
+        <SectionCard title="Experiments" id="experiments" compact={compact} description={`${profile.stats.experiments} documented experiment${profile.stats.experiments === 1 ? "" : "s"}`}>
           <ul className="space-y-2">
             {profile.experiments.map((e) => (
               <li key={e.id} className="flex items-start gap-2.5 rounded-lg p-2 -m-2">
@@ -860,7 +947,7 @@ function ContributionsTab({
       )}
 
       {growSetups.length > 0 && (
-        <SectionCard title="Grow setups" id="grow-setups" description={`${profile.stats.setups} shared`}>
+        <SectionCard title="Grow setups" id="grow-setups" compact={compact} description={`${profile.stats.setups} shared`}>
           <ul className="grid gap-2 sm:grid-cols-2">
             {growSetups.map((s) => (
               <li key={s.id}>
@@ -890,7 +977,7 @@ function ContributionsTab({
       )}
 
       {profile.stats.contestWins > 0 && (
-        <SectionCard title="Contests" id="contests">
+        <SectionCard title="Contests" id="contests" compact={compact}>
           <p className="text-sm flex items-center gap-2">
             <Trophy className="w-4 h-4 text-warning" aria-hidden="true" />
             <span><span className="font-semibold tabular-nums">{profile.stats.contestWins}</span> contest win{profile.stats.contestWins === 1 ? "" : "s"}</span>
@@ -899,7 +986,7 @@ function ContributionsTab({
       )}
 
       {recentThreads.length > 0 && (
-        <SectionCard title="Discussions" id="discussions">
+        <SectionCard title="Discussions" id="discussions" compact={compact}>
           <ul className="space-y-2">
             {recentThreads.map((t) => (
               <li key={t.id}>
@@ -914,7 +1001,7 @@ function ContributionsTab({
       )}
 
       {(pinnedBadges.length > 0 || restBadges.length > 0) && (
-        <SectionCard title="Badges" id="badges">
+        <SectionCard title="Badges" id="badges" compact={compact}>
           {pinnedBadges.length > 0 && (
             <>
               <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">Showcase</p>
@@ -949,26 +1036,82 @@ function ContributionsTab({
 
 /* ── About tab ───────────────────────────────────────────────────── */
 
-function AboutTab({ profile }: { profile: PublicProfile }) {
+/** Custom sections collapse to headers on small screens — long member
+ *  sections stay scannable. Desktop always renders the full body. */
+function CollapsibleSectionCard({
+  id, title, compact, children,
+}: { id: string; title: ReactNode; compact: boolean; children: ReactNode }) {
+  const [isMobile, setIsMobile] = useState(false)
+  const [open, setOpen] = useState(false)
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 639px)")
+    const update = () => setIsMobile(mq.matches)
+    update()
+    mq.addEventListener("change", update)
+    return () => mq.removeEventListener("change", update)
+  }, [])
+
+  if (!isMobile) {
+    return <SectionCard id={id} title={title} compact={compact}>{children}</SectionCard>
+  }
+  const headingId = `${id}-title`
+  return (
+    <section aria-labelledby={headingId} className="bg-card/80 rounded-2xl border border-border/70">
+      <button
+        type="button"
+        aria-expanded={open}
+        aria-controls={`${id}-body`}
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center justify-between gap-3 p-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-2xl"
+      >
+        <h2 id={headingId} className="font-display text-base font-semibold break-words min-w-0">{title}</h2>
+        {open ? <ChevronUp className="w-4 h-4 shrink-0 text-muted-foreground" aria-hidden="true" /> : <ChevronDown className="w-4 h-4 shrink-0 text-muted-foreground" aria-hidden="true" />}
+      </button>
+      {open && <div id={`${id}-body`} className="px-3 pb-3">{children}</div>}
+    </section>
+  )
+}
+
+function AboutTab({ profile, isSelf, compact }: { profile: PublicProfile; isSelf: boolean; compact: boolean }) {
   const identity = profile.profileSettings.identity
   const hasIdentity = profile.growExperience || profile.growSpace || profile.favoriteStrain ||
     identity.mediums.length > 0 || identity.styles.length > 0 || identity.goals
-  const hasAnything = profile.bio || hasIdentity || profile.businessName || profile.customSections.length > 0
+  const hasAnything = profile.bio || hasIdentity || profile.businessName || profile.customSections.length > 0 || profile.ownerInsights
 
   if (!hasAnything) {
     return <EmptyState icon={User} title="Nothing here yet" description="This member hasn't shared an about section." />
   }
 
   return (
-    <div className="space-y-4">
+    <div className={compact ? "space-y-3" : "space-y-4"}>
+      {/* Profile insights (Cured) — the owner's private 30-day panel.
+          Server ships ownerInsights only to the owner; double-gated here. */}
+      {isSelf && profile.ownerInsights && !profile.profileSettings.hiddenSections.includes("owner-insights") && (
+        <SectionCard
+          title="Your last 30 days"
+          id="owner-insights"
+          compact={compact}
+          actions={<Tag variant="muted">Only you</Tag>}
+        >
+          <StatStrip
+            className="sm:grid-cols-3"
+            items={[
+              { label: "New followers", value: String(profile.ownerInsights.newFollowers) },
+              { label: "Updates logged", value: String(profile.ownerInsights.updatesLogged) },
+              { label: "Grows started", value: String(profile.ownerInsights.growsStarted) },
+            ]}
+          />
+        </SectionCard>
+      )}
+
       {profile.bio && (
-        <SectionCard title="Bio" id="bio">
+        <SectionCard title="Bio" id="bio" compact={compact}>
           <p className="text-sm whitespace-pre-wrap break-words">{profile.bio}</p>
         </SectionCard>
       )}
 
       {hasIdentity && (
-        <SectionCard title="Grower identity" id="grower-identity">
+        <SectionCard title="Grower identity" id="grower-identity" compact={compact}>
           <dl className="grid gap-3 text-sm sm:grid-cols-2">
             {profile.growExperience && (
               <div><dt className="text-xs text-muted-foreground mb-0.5">Experience</dt><dd>{profile.growExperience}</dd></div>
@@ -1005,7 +1148,7 @@ function AboutTab({ profile }: { profile: PublicProfile }) {
       )}
 
       {profile.businessName && (
-        <SectionCard title="Business" id="business">
+        <SectionCard title="Business" id="business" compact={compact}>
           <div className="flex items-center gap-2 text-sm font-medium">
             <Store className="w-4 h-4 text-primary" />
             <span>{profile.businessName}</span>
@@ -1020,9 +1163,10 @@ function AboutTab({ profile }: { profile: PublicProfile }) {
       )}
 
       {profile.customSections.map((s) => (
-        <SectionCard
+        <CollapsibleSectionCard
           key={s.id}
           id={`section-${s.id}`}
+          compact={compact}
           title={
             <span className="flex items-center gap-2">
               {s.title}
@@ -1033,7 +1177,7 @@ function AboutTab({ profile }: { profile: PublicProfile }) {
           }
         >
           <div className="text-sm max-w-none"><MarkdownRenderer content={s.body} /></div>
-        </SectionCard>
+        </CollapsibleSectionCard>
       ))}
     </div>
   )

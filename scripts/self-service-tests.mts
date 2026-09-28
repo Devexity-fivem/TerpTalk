@@ -34,7 +34,7 @@ import {
   awardExperimentCreated, awardHypothesisIfMet, awardExperimentFollowups,
   evaluateExperimentAwards, reverseExperimentAwards,
 } from "@/lib/experiment-progression"
-import { awardProgression, hasUnlock } from "@/lib/progression"
+import { awardProgression, hasUnlock, profileSectionLimit, statSlotLimit } from "@/lib/progression"
 import { evaluateGrowJourney } from "@/lib/grow-journey"
 import { DEFERRED_XP_EVENTS } from "@/lib/progression-config"
 import bcrypt from "bcryptjs"
@@ -916,6 +916,93 @@ async function run() {
 
     await prisma.progressionEvent.deleteMany({ where: { userId: piUser.id } })
     await prisma.profile.update({ where: { userId: piUser.id }, data: { xp: 0, standing: 0 } })
+
+    // ── PROFILE P2: customization behavior ──────────────────────────
+    // Tiered limits — xp fixtures only (cleaned on user delete).
+    assert.equal(await profileSectionLimit(c.id), 2, "Seed gets the 2-section base grant")
+    assert.equal(await statSlotLimit(c.id), 4, "Seed gets 4 stat slots")
+    await prisma.profile.update({ where: { userId: c.id }, data: { xp: 420 } })
+    assert.equal(await profileSectionLimit(c.id), 4, "Rooted raises to 4 sections")
+    await prisma.profile.update({ where: { userId: c.id }, data: { xp: 900 } })
+    assert.equal(await statSlotLimit(c.id), 6, "Vegged raises to 6 stat slots")
+    await prisma.profile.update({ where: { userId: c.id }, data: { xp: 7500 } })
+    assert.equal(await profileSectionLimit(c.id), 6, "Harvested raises to 6 sections")
+    assert.equal(await statSlotLimit(c.id), 8, "Harvested raises to 8 stat slots")
+    await prisma.profile.update({ where: { userId: c.id }, data: { xp: 0 } })
+    assert.equal(await profileSectionLimit(c.id), 2, "section limit reverts below Rooted")
+
+    // Custom-section privacy — the public-profile aggregate filters by viewer.
+    const cProfile = await prisma.profile.findUnique({
+      where: { userId: c.id }, select: { id: true, username: true },
+    })
+    assert.ok(cProfile, "fixture profile exists")
+    await prisma.profileCustomSection.createMany({
+      data: [
+        { profileId: cProfile.id, title: "Pub sec", body: "public body", visibility: "PUBLIC", order: 0 },
+        { profileId: cProfile.id, title: "Mem sec", body: "members body", visibility: "MEMBERS", order: 1 },
+        { profileId: cProfile.id, title: "Hid sec", body: "hidden body", visibility: "HIDDEN", order: 2 },
+      ],
+    })
+    const cAnon = await getPublicProfileData(cProfile.username)
+    const cMember = await getPublicProfileData(cProfile.username, b.id)
+    const cOwner = await getPublicProfileData(cProfile.username, c.id)
+    assert.ok(cAnon && cMember && cOwner, "public profile resolves for all viewer classes")
+    assert.deepEqual(cAnon.profile.customSections.map((s) => s.title), ["Pub sec"], "anon sees only PUBLIC sections")
+    assert.deepEqual(cMember.profile.customSections.map((s) => s.title), ["Pub sec", "Mem sec"], "member sees PUBLIC + MEMBERS")
+    assert.equal(cOwner.profile.customSections.length, 3, "owner sees all own sections incl. HIDDEN")
+
+    // Featured grow — a PRIVATE diary can be featured but never leaks to
+    // viewers: it drops out of their DTO entirely.
+    const privGrow = await prisma.growDiary.create({
+      data: {
+        title: "Featured private grow", description: "", growType: "INDOOR",
+        strain: "Privacy Strain", medium: "SOIL", lighting: "LED", stage: "FLOWER",
+        startDate: new Date(Date.now() - 30 * 86400000),
+        authorId: c.id, visibility: "PRIVATE",
+      },
+      select: { id: true },
+    })
+    await prisma.profile.update({ where: { userId: c.id }, data: { featuredDiaryId: privGrow.id } })
+    const fAnon = await getPublicProfileData(cProfile.username)
+    const fOwner = await getPublicProfileData(cProfile.username, c.id)
+    assert.equal(fAnon?.profile.featuredGrow, null, "PRIVATE featured grow hidden from anon")
+    assert.equal(fOwner?.profile.featuredGrow?.id, privGrow.id, "owner sees own featured grow")
+
+    // Records widget (Harvested) — scoped to viewer-visible diaries: a longer
+    // PRIVATE grow must not inflate the public record.
+    await prisma.profile.update({ where: { userId: c.id }, data: { xp: 7500 } })
+    const pubGrow = await prisma.growDiary.create({
+      data: {
+        title: "Public harvest", description: "", growType: "INDOOR",
+        strain: "Record Strain", medium: "SOIL", lighting: "LED", stage: "HARVEST",
+        harvested: true, harvestedAt: new Date(), yieldAmount: 420, yieldUnit: "g",
+        startDate: new Date(Date.now() - 60 * 86400000),
+        authorId: c.id, visibility: "PUBLIC",
+      },
+      select: { id: true },
+    })
+    // Records only measure *harvested* grows — harvest the private featured
+    // grow at a 200-day span so it out-records the 60-day public one.
+    await prisma.growDiary.update({
+      where: { id: privGrow.id },
+      data: { startDate: new Date(Date.now() - 200 * 86400000), harvested: true, harvestedAt: new Date(), stage: "HARVEST" },
+    })
+    const rAnon = await getPublicProfileData(cProfile.username)
+    const rOwner = await getPublicProfileData(cProfile.username, c.id)
+    assert.ok(rAnon?.profile.records, "records widget ships at Harvested")
+    assert.equal(rAnon?.profile.records?.longestGrowDays, 60, "anon records ignore the longer PRIVATE grow")
+    assert.equal(rAnon?.profile.records?.biggestYield?.amount, 420, "public yield reaches anon records")
+    assert.equal(rOwner?.profile.records?.longestGrowDays, 200, "owner records include own private grow")
+
+    // Owner insights (Cured) — owner-only; never shipped to other viewers.
+    assert.equal(rOwner?.profile.ownerInsights, null, "insights locked below Cured")
+    await prisma.profile.update({ where: { userId: c.id }, data: { xp: 12000 } })
+    const iOwner = await getPublicProfileData(cProfile.username, c.id)
+    const iMember = await getPublicProfileData(cProfile.username, b.id)
+    assert.ok(iOwner?.profile.ownerInsights, "Cured owner sees insights")
+    assert.equal(iMember?.profile.ownerInsights, null, "insights never shipped to other viewers")
+    assert.equal(iOwner?.profile.ownerInsights?.growsStarted, 2, "30-day grows count is real")
+    await prisma.profile.update({ where: { userId: c.id }, data: { xp: 0 } })
 
     console.log("All self-service tests passed.")
   } finally {

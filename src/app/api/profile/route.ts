@@ -5,17 +5,20 @@ import { prisma } from "@/lib/prisma"
 import { unauthorized, forbidden, getClientIp, logSecurityEvent, LIMITS, isBanned, enforceLinkTrust } from "@/lib/security"
 import { storeImage, deleteImagesIfUnreferenced, isBlobConfigured } from "@/lib/blob"
 import { rankDisplay, xpRankProgress, xpStage, xpStageProgress } from "@/lib/progression-config"
-import { getProgressionPerks, progressionPerksFrom, hasUnlock } from "@/lib/progression"
+import { getProgressionPerks, progressionPerksFrom, hasUnlock, statSlotLimit, profileSectionLimit } from "@/lib/progression"
 import { enqueueReversal, drainOne } from "@/lib/reputation-outbox"
 import { enqueueXpReversal, drainXpOne } from "@/lib/progression-outbox"
 import { Prisma } from "@prisma/client"
-import { validateProfileSettingsPatch } from "@/lib/profile-settings"
+import { validateProfileSettingsPatch, parseProfileSettings } from "@/lib/profile-settings"
 import { rateLimit } from "@/lib/rate-limit"
 import { checkMaintenance } from "@/lib/maintenance"
 import { revalidateTag } from "next/cache"
 import bcrypt from "bcryptjs"
 
 const NO_STORE = { "Cache-Control": "no-store, max-age=0, must-revalidate" }
+
+const parseOldBanner = (raw: unknown): string | null =>
+  parseProfileSettings(raw).bannerImage
 
 export async function GET() {
   try {
@@ -96,6 +99,31 @@ export async function GET() {
       },
     })
 
+    // P2 — every own non-deleted diary is eligible for the featured-grow
+    // picker (any visibility; a PRIVATE pick simply doesn't render publicly).
+    const featureableDiaries = await prisma.growDiary.findMany({
+      where: { authorId: user.id, deleted: false },
+      orderBy: { updatedAt: "desc" },
+      take: 100,
+      select: {
+        id: true,
+        slug: true,
+        title: true,
+        strain: true,
+        harvested: true,
+        stage: true,
+        visibility: true,
+      },
+    })
+
+    // P2 — progression-derived customization caps for the editor.
+    const [sectionLimit, statSlots, recordsWidget, insightsWidget] = await Promise.all([
+      profileSectionLimit(user.id),
+      statSlotLimit(user.id),
+      hasUnlock(user.id, "records-widget"),
+      hasUnlock(user.id, "owner-analytics"),
+    ])
+
     return NextResponse.json({
       user: {
         id: user.id,
@@ -107,6 +135,12 @@ export async function GET() {
       },
       profile: user.profile,
       harvestedDiaries,
+      featureableDiaries,
+      customization: {
+        sectionLimit,
+        statSlots,
+        widgets: { records: recordsWidget, ownerInsights: insightsWidget },
+      },
       stats: {
         diaries: user._count.diaryCreator,
         posts: user._count.posts,
@@ -154,6 +188,8 @@ export async function PATCH(request: Request) {
   const ip = getClientIp(request)
   const userAgent = request.headers.get("user-agent")
   let newAvatarBlobUrl: string | undefined
+  let newBannerBlobUrl: string | undefined
+  let oldBannerToDelete: string | undefined
 
   try {
     const maintenance = await checkMaintenance()
@@ -393,15 +429,58 @@ export async function PATCH(request: Request) {
     // ─── Profile settings (Profile V2) ────────────────────────────────
     // Validated/normalized preset-only blob — no arbitrary CSS/HTML.
     if (profileSettings !== undefined) {
-      const current = await prisma.profile.findUnique({
+      const currentSettingsRow = await prisma.profile.findUnique({
         where: { userId },
-        select: { profileSettings: true },
+        select: { id: true, profileSettings: true },
       })
-      const result = validateProfileSettingsPatch(profileSettings, current?.profileSettings)
+      const result = validateProfileSettingsPatch(profileSettings, currentSettingsRow?.profileSettings)
       if (result.error) {
         return NextResponse.json({ error: result.error }, { status: 400 })
       }
-      updateData.profileSettings = result.settings as object
+      const merged = result.settings!
+      // Stat slots are progression-capped (Seed 4 → Vegged 6 → Harvested 8).
+      const slots = await statSlotLimit(userId)
+      if (merged.shownStats.length > slots) {
+        return NextResponse.json(
+          { error: `Your rank lets you show up to ${slots} notable stats` },
+          { status: 403 }
+        )
+      }
+      // pinnedSection must reference a section the member actually owns —
+      // a foreign/stale id is ignored (keeps the existing pin), never stored.
+      if (merged.pinnedSection) {
+        const owned = currentSettingsRow
+          ? await prisma.profileCustomSection.findFirst({
+              where: { id: merged.pinnedSection, profileId: currentSettingsRow.id },
+              select: { id: true },
+            })
+          : null
+        if (!owned) {
+          merged.pinnedSection = parseProfileSettings(currentSettingsRow?.profileSettings).pinnedSection
+        }
+      }
+      // Banner uploads arrive as a data URI and go through the shared image
+      // pipeline (MIME + signature + re-encode) before persistence — the
+      // stored value is only ever a pipeline product. Storing happens only
+      // after every validator above has passed so a failed PATCH can't
+      // orphan a blob; the catch below still sweeps it if the DB write dies.
+      if (typeof merged.bannerImage === "string" && /^data:image\//i.test(merged.bannerImage)) {
+        try {
+          newBannerBlobUrl = await storeImage(merged.bannerImage, "banners")
+          merged.bannerImage = newBannerBlobUrl
+        } catch (e) {
+          return NextResponse.json(
+            { error: e instanceof Error ? e.message : "Invalid banner image" },
+            { status: isBlobConfigured() ? 400 : 503 }
+          )
+        }
+      }
+      // Banner replaced/removed → queue the old blob for cleanup after save.
+      const oldBanner = parseOldBanner(currentSettingsRow?.profileSettings)
+      if (oldBanner && oldBanner !== merged.bannerImage) {
+        oldBannerToDelete = oldBanner
+      }
+      updateData.profileSettings = merged as object
     }
 
     // ─── Badge showcase ───────────────────────────────────────────────
@@ -510,16 +589,17 @@ export async function PATCH(request: Request) {
         : []),
     ])
 
-    // Best-effort cleanup of the previous avatar blob when it is replaced or removed.
+    // Best-effort cleanup of the previous avatar/banner blobs when replaced or removed.
     const oldAvatar = current?.avatarUrl
     if (oldAvatar && oldAvatar !== updateData.avatarUrl) {
       deleteImagesIfUnreferenced([oldAvatar]).catch(() => {})
     }
+    deleteImagesIfUnreferenced([oldBannerToDelete]).catch(() => {})
 
     return NextResponse.json({ profile: updated }, { headers: NO_STORE })
   } catch (error) {
-    // Clean up the new avatar Blob if the profile update could not be saved.
-    deleteImagesIfUnreferenced([newAvatarBlobUrl]).catch(() => {})
+    // Clean up any new Blobs if the profile update could not be saved.
+    deleteImagesIfUnreferenced([newAvatarBlobUrl, newBannerBlobUrl]).catch(() => {})
     console.error("Profile update error:", error)
     return NextResponse.json(
       { error: "Failed to update profile" },

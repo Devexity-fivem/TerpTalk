@@ -667,13 +667,19 @@ check("sitemap: chunked via generateSitemaps, index handler present", () => {
 // The five-tab deep-linked profile uses the shared Tabs primitive and the
 // bounded DTO: no bespoke tabbar, no second identity card, no raw standing.
 
-check("profile P1: five locked tabs via shared Tabs primitive with URL sync", () => {
+check("profile P1/P2: five locked tabs via shared Tabs primitive with URL sync", () => {
   const c = src("app/u/[username]/profile-client.tsx")
   assert.ok(c.includes("<Tabs"), "shared Tabs primitive in use")
   assert.ok(c.includes("syncWithUrl"), "deep-linkable ?tab= sync enabled")
   assert.ok(c.includes('ariaLabel="Profile sections"'), "labelled tablist")
-  for (const id of ['"overview"', '"grows"', '"harvests"', '"contributions"', '"about"']) {
-    assert.ok(c.includes(`id: ${id}`), `locked tab ${id}`)
+  // P2: the tab strip is member-reorderable — built from PROFILE_TAB_IDS
+  // through sectionOrder, with "overview" fixed first and hidden tabs
+  // excluded entirely (hidden tabs can never deep-link in).
+  assert.ok(c.includes("PROFILE_TAB_IDS"), "reorderable set comes from the section registry")
+  assert.ok(c.includes('"overview",'), "overview forced first")
+  assert.ok(c.includes('id === "overview" || show(id)'), "hidden tabs excluded from the strip")
+  for (const id of ['"grows"', '"harvests"', '"contributions"', '"about"']) {
+    assert.ok(c.includes(id), `tab id ${id} present in the item map`)
   }
   assert.ok(!c.includes('role="tablist"'), "no bespoke tablist — U0 primitive only")
 })
@@ -719,6 +725,48 @@ check("profile P1: SEO — JSON-LD via safe component, public fields only", () =
   assert.ok(p.includes("<JsonLd"), "ProfilePage JSON-LD via audited component")
   assert.ok(p.includes('"@type": "ProfilePage"'), "ProfilePage type")
   assert.ok(!/"standing"/.test(p), "no standing internals in JSON-LD")
+})
+
+check("profile P2: editor is preset-only — registries, text names, no free CSS", () => {
+  const e = src("app/profile/customize/page.tsx")
+  assert.ok(e.includes("ACCENT_META") && e.includes("THEME_META") && e.includes("DENSITY_META"), "appearance choices come from the preset metadata")
+  assert.ok(e.includes("NOTABLE_STAT_IDS"), "stat picker enumerates the registry")
+  assert.ok(e.includes("PROFILE_WIDGETS"), "widget list comes from the registry")
+  assert.ok(!e.includes('type="color"'), "no arbitrary color input")
+  assert.ok(!e.includes("dangerouslySetInnerHTML"), "no raw HTML injection point")
+  assert.ok(!e.includes("<style"), "no inline style block")
+  for (const cat of ['"Appearance"', '"Layout"', '"Content"', '"Identity"']) {
+    assert.ok(e.includes(cat), `editor category ${cat}`)
+  }
+})
+
+check("profile P2: editor a11y — labelled radios, button reorder, confirm-delete", () => {
+  const e = src("app/profile/customize/page.tsx")
+  assert.ok((e.match(/role="radiogroup"/g) ?? []).length >= 3, "theme/accent/density/visibility as labelled radiogroups")
+  assert.ok(e.includes("Move \"") && e.includes("Move ${name} up"), "reorder via buttons, never drag-only")
+  assert.ok(e.includes("<ConfirmDialog"), "destructive delete uses ConfirmDialog")
+  assert.ok(e.includes("MarkdownRenderer"), "section preview uses the shared safe renderer")
+})
+
+check("profile P2: renderer consumes scoped preset attrs + ordered blocks", () => {
+  const c = src("app/u/[username]/profile-client.tsx")
+  for (const attr of ["data-paccent", "data-ptheme", "data-pdensity"]) {
+    assert.ok(c.includes(attr), `profile canvas sets ${attr}`)
+  }
+  const css = src("app/globals.css")
+  assert.ok(css.includes('[data-paccent="violet"]') && css.includes('[data-ptheme="journal"]'), "theme/accent rules scoped to data attrs")
+  assert.ok(c.includes('settings.density === "compact"') && c.includes("compact={compact}"), "density drives the compact prop across cards/lists")
+  assert.ok(!/\[data-paccent\]\s*\{[^}]*url\(/.test(css), "preset css contains no url() — no remote fetches")
+  assert.ok(c.includes("hiddenSections"), "hidden sections honored in renderer")
+  assert.ok(c.includes("profile.records") && c.includes("profile.ownerInsights"), "records + insights widgets render from DTO")
+  assert.ok(c.includes('isSelf && profile.ownerInsights'), "insights double-gated owner-side")
+})
+
+check("profile P2: owner-only edit entry point + unauthed editor gate", () => {
+  const hub = src("app/profile/page.tsx")
+  assert.ok(hub.includes("/profile/customize"), "member hub links the customization editor")
+  const e = src("app/profile/customize/page.tsx")
+  assert.ok(e.includes("/api/auth/session") || e.includes("useSession") || e.includes("getServerSession") || e.includes("api/profile"), "editor loads via the session-scoped profile API — never a client-supplied id")
 })
 
 console.log(`\n${passed} passed, ${failed} failed`)

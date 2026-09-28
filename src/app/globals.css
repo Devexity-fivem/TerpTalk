@@ -809,3 +809,47 @@ body::after {
     scroll-behavior: auto !important;
   }
 }
+
+/* ── Profile V2 appearance presets ─────────────────────────────────
+   The profile canvas sets data-paccent / data-ptheme / data-pdensity.
+   Each preset is a finite token bundle — members can never inject CSS;
+   only these scoped overrides exist. Picked colors reuse palette values
+   already verified for light/dark contrast (see the light/dark token
+   pairs above). */
+
+/* Accent presets — recolour the primary action token inside the profile
+   only. Foreground pairs are the same accessible pairings used sitewide. */
+[data-paccent="amber"]  { --primary: #b45309; --primary-foreground: #ffffff; --ring: #b45309; --glow-primary: 180 83 9; }
+[data-paccent="violet"] { --primary: #6d5dd0; --primary-foreground: #ffffff; --ring: #6d5dd0; --glow-primary: 109 93 208; }
+[data-paccent="slate"]  { --primary: #475569; --primary-foreground: #ffffff; --ring: #475569; --glow-primary: 71 85 105; }
+[data-paccent="ember"]  { --primary: #c2410c; --primary-foreground: #ffffff; --ring: #c2410c; --glow-primary: 194 65 12; }
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) [data-paccent="amber"]  { --primary: #f2b950; --primary-foreground: #1a1202; --ring: #f2b950; --glow-primary: 242 185 80; }
+  :root:not([data-theme="light"]) [data-paccent="violet"] { --primary: #a58cfa; --primary-foreground: #12081f; --ring: #a58cfa; --glow-primary: 165 140 250; }
+  :root:not([data-theme="light"]) [data-paccent="slate"]  { --primary: #94a3b8; --primary-foreground: #0b0f14; --ring: #94a3b8; --glow-primary: 148 163 184; }
+  :root:not([data-theme="light"]) [data-paccent="ember"]  { --primary: #fb923c; --primary-foreground: #1c0a02; --ring: #fb923c; --glow-primary: 251 146 60; }
+}
+:root[data-theme="dark"] [data-paccent="amber"]  { --primary: #f2b950; --primary-foreground: #1a1202; --ring: #f2b950; --glow-primary: 242 185 80; }
+:root[data-theme="dark"] [data-paccent="violet"] { --primary: #a58cfa; --primary-foreground: #12081f; --ring: #a58cfa; --glow-primary: 165 140 250; }
+:root[data-theme="dark"] [data-paccent="slate"]  { --primary: #94a3b8; --primary-foreground: #0b0f14; --ring: #94a3b8; --glow-primary: 148 163 184; }
+:root[data-theme="dark"] [data-paccent="ember"]  { --primary: #fb923c; --primary-foreground: #1c0a02; --ring: #fb923c; --glow-primary: 251 146 60; }
+
+/* Theme presets — retint the surface tokens (card/secondary/muted/
+   border/input/popover) inside the profile canvas only. Foreground ink
+   is unchanged, so text contrast is preserved by construction. */
+[data-ptheme="journal"]   { --card: #faf6ee; --popover: #faf6ee; --secondary: #f1ebdd; --muted: #f1ebdd; --border: #e8dfcc; --input: #e8dfcc; }
+[data-ptheme="botanical"] { --card: #f4f8f4; --popover: #f4f8f4; --secondary: #e4efe6; --muted: #e4efe6; --border: #d4e4d8; --input: #d4e4d8; }
+[data-ptheme="growroom"]  { --card: #eef1f2; --popover: #eef1f2; --secondary: #dfe5e6; --muted: #dfe5e6; --border: #cdd6d8; --input: #cdd6d8; }
+[data-ptheme="data"]      { --card: #f5f7f9; --popover: #f5f7f9; --secondary: #e6eaee; --muted: #e6eaee; --border: #d3dae0; --input: #d3dae0; }
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) [data-ptheme="journal"]   { --card: #18160f; --popover: #18160f; --secondary: #221e14; --muted: #221e14; --border: #322b1c; --input: #322b1c; }
+  :root:not([data-theme="light"]) [data-ptheme="botanical"] { --card: #101816; --popover: #101816; --secondary: #16241e; --muted: #16241e; --border: #203430; --input: #203430; }
+  :root:not([data-theme="light"]) [data-ptheme="growroom"]  { --card: #0e1113; --popover: #0e1113; --secondary: #151a1d; --muted: #151a1d; --border: #232b2f; --input: #232b2f; }
+  :root:not([data-theme="light"]) [data-ptheme="data"]      { --card: #101216; --popover: #101216; --secondary: #171b20; --muted: #171b20; --border: #262d34; --input: #262d34; }
+}
+:root[data-theme="dark"] [data-ptheme="journal"]   { --card: #18160f; --popover: #18160f; --secondary: #221e14; --muted: #221e14; --border: #322b1c; --input: #322b1c; }
+:root[data-theme="dark"] [data-ptheme="botanical"] { --card: #101816; --popover: #101816; --secondary: #16241e; --muted: #16241e; --border: #203430; --input: #203430; }
+:root[data-theme="dark"] [data-ptheme="growroom"]  { --card: #0e1113; --popover: #0e1113; --secondary: #151a1d; --muted: #151a1d; --border: #232b2f; --input: #232b2f; }
+:root[data-theme="dark"] [data-ptheme="data"]      { --card: #101216; --popover: #101216; --secondary: #171b20; --muted: #171b20; --border: #262d34; --input: #262d34; }

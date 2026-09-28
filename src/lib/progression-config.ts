@@ -368,11 +368,13 @@ export const UNLOCKS: UnlockSpec[] = [
   { id: "quest-slot-4", name: "4th daily quest", category: "functional", layer: "A", rank: "Rooted", blurb: "One more quest on your board each day." },
   { id: "saved-views", name: "Saved filters", category: "convenience", layer: "A", rank: "Rooted", status: "future", blurb: "Pin the diary and feed filters you keep coming back to." },
   { id: "members-deals", name: "Members' deals", category: "deals", layer: "A", rank: "Rooted", blurb: "Partner discounts and codes set aside for growers who've put down roots." },
+  { id: "profile-sections-4", name: "4 profile sections", category: "capacity", layer: "A", rank: "Rooted", blurb: "Up to 4 custom sections on your profile — up from the 2 everyone gets." },
 
   // Mid — A + B
   { id: "env-analytics", name: "Advanced environment charts", category: "analytics", layer: "B", rank: "Vegged", mastery: { path: "RECORDS", level: 2 }, blurb: "On your own grows: night temps, CO₂, PPFD and the rest — plus day/night splits and 30/90-day trends beyond the basic chart." },
   { id: "comparison-env", name: "Compare your tent conditions", category: "analytics", layer: "B", rank: "Vegged", mastery: { path: "RECORDS", level: 2 }, status: "future", blurb: "Lay your temperature and humidity over what other growers are running." },
   { id: "harvest-analytics", name: "Harvest trends", category: "analytics", layer: "A", rank: "Vegged", blurb: "How your yields and ratings have changed from harvest to harvest." },
+  { id: "stat-slots-6", name: "6 notable stats", category: "capacity", layer: "A", rank: "Vegged", blurb: "Show up to 6 notable stats on your profile — up from 4." },
   // (grows-6 removed — no active-grow cap is manufactured just to gate it.)
   { id: "export-tools", name: "Per-grow CSV export", category: "functional", layer: "A", rank: "Trained", blurb: "Download a grow's full update log as a spreadsheet-ready CSV. (The whole-account JSON export stays free for everyone.)" },
   // (advanced-filters removed — every existing filter stays free; no
@@ -394,12 +396,17 @@ export const UNLOCKS: UnlockSpec[] = [
   { id: "rate-1.5", name: "Post & chat more often", category: "capacity", layer: "A", rank: "Harvested", status: "future", blurb: "Looser limits on how often you can post and chat." },
   { id: "images-8", name: "8 photos per post", category: "capacity", layer: "A", rank: "Harvested", status: "future", blurb: "Even more room for photos." },
   { id: "pinned-harvest", name: "Pin a harvest to your profile", category: "showcase", layer: "A", rank: "Harvested", streak: 60, blurb: "Pick your proudest harvest and it sits at the top of your profile." },
+  { id: "stat-slots-8", name: "8 notable stats", category: "capacity", layer: "A", rank: "Harvested", blurb: "The full stat strip — up to 8 notable stats on your profile." },
+  { id: "profile-sections-6", name: "6 profile sections", category: "capacity", layer: "A", rank: "Harvested", blurb: "Up to 6 custom sections on your profile." },
+  { id: "records-widget", name: "Records widget", category: "showcase", layer: "A", rank: "Harvested", blurb: "A records card on your profile: longest grow, biggest harvest, earliest start." },
   { id: "grower-cockpit", name: "Grower Cockpit", category: "functional", layer: "A", rank: "Harvested", status: "future", blurb: "Your grows, alerts, comparisons and quests all on one screen." },
   { id: "watch-advanced", name: "More TerpBot alerts", category: "terpbot", layer: "B", rank: "Harvested", mastery: { path: "RECORDS", level: 3 }, status: "future", blurb: "Up to 10 alerts, including ones that watch over several days." },
   { id: "watch-compound", name: "Combined alerts", category: "terpbot", layer: "B", mastery: { path: "RECORDS", level: 4 }, status: "future", blurb: "Alerts that watch two things at once — say, humidity during late flower." },
   { id: "experiment-analysis", name: "What your experiments taught you", category: "terpbot", layer: "B", rank: "Harvested", mastery: { path: "EXPERIMENTATION", level: 2 }, status: "future", blurb: "TerpBot sums up what worked across all your finished experiments." },
   { id: "historical-trends", name: "This grow vs your past grows", category: "analytics", layer: "B", rank: "Cured", mastery: { path: "RECORDS", level: 4 }, status: "future", blurb: "See how your current grow compares with your own earlier seasons." },
   { id: "dashboard-advanced", name: "Bigger cockpit, 15 alerts", category: "analytics", layer: "A", rank: "Cured", status: "future", blurb: "More cockpit panels and more TerpBot alerts." },
+  { id: "profile-sections-8", name: "8 profile sections", category: "capacity", layer: "A", rank: "Cured", blurb: "The full shelf — up to 8 custom sections on your profile." },
+  { id: "owner-analytics", name: "Profile insights", category: "analytics", layer: "A", rank: "Cured", blurb: "A private panel on your own profile: your last 30 days of followers, updates and new grows. Only you see it." },
   { id: "rate-2", name: "Post & chat freely, 7 tags", category: "capacity", layer: "A", rank: "Cured", status: "future", blurb: "The loosest posting limits and more tags per thread." },
   { id: "grower-spotlight", name: "Grower Spotlight", category: "showcase", layer: "A", rank: "Cured", streak: 100, blurb: "Your active grow can be featured on the TerpTalk home page." },
   { id: "quest-slot-5", name: "5th daily quest", category: "functional", layer: "A", rank: "Cultivator", blurb: "A fifth quest on your board each day." },
