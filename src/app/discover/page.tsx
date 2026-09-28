@@ -6,8 +6,7 @@ import { authOptions } from "@/lib/auth"
 import Link from "next/link"
 import { MessageSquare, TrendingUp, Clock, Users, Flame, Eye } from "lucide-react"
 import RoleBadge from "@/components/role-badge"
-import TierChip from "@/components/tier-chip"
-import { Avatar } from "@/components/ui/avatar"
+import ProfileCard from "@/components/ui/profile-card"
 import EmptyState from "@/components/ui/empty-state"
 import TimeAgo from "@/components/ui/time-ago"
 
@@ -146,12 +145,18 @@ export default async function DiscoverPage({
                   className="tt-spotlight group flex flex-col p-5 bg-secondary/30 rounded-2xl border border-border/70 hover:border-primary/40 hover:bg-secondary/50 transition-all tt-edge-card"
                 >
                   <div className="flex items-start gap-3 mb-3">
-                    <Avatar src={thread.author.image ?? undefined} size="sm" alt={thread.author.profile?.username ?? thread.author.name ?? undefined} />
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-1.5 text-xs text-muted-foreground flex-wrap">
-                        <span className="font-medium text-foreground">{thread.author.profile?.username || thread.author.name}</span>
+                        <ProfileCard
+                          username={thread.author.profile?.username}
+                          name={thread.author.profile?.username || thread.author.name}
+                          avatarUrl={thread.author.image}
+                          xp={thread.author.profile?.xp}
+                          publicMilestoneOptOut={thread.author.profile?.publicMilestoneOptOut}
+                          size="sm"
+                          linked={false}
+                        />
                         <RoleBadge role={thread.author.role} />
-                        <TierChip xp={thread.author.profile?.xp ?? 0} publicMilestoneOptOut={thread.author.profile?.publicMilestoneOptOut} />
                         <span>•</span>
                         <span className="text-primary">{thread.category.name}</span>
                       </div>

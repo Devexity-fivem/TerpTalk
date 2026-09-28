@@ -7,6 +7,8 @@ import { rankDisplay, standingDisplay, buildTitle, type Mastery } from "@/lib/pr
 import { rateLimit } from "@/lib/rate-limit"
 import { TERPBOT_USERNAME } from "@/lib/terpbot-constants"
 import { publicDiaryWhere } from "@/lib/diary-visibility"
+import { parseProfileSettings } from "@/lib/profile-settings"
+import { resolveNotableStatValue } from "@/lib/public-profile"
 
 const NO_STORE = { "Cache-Control": "no-store, max-age=0, must-revalidate" }
 
@@ -44,6 +46,7 @@ export async function GET(
         xp: true,
         standing: true,
         publicMilestoneOptOut: true,
+        profileSettings: true,
         user: {
           select: {
             id: true,
@@ -115,11 +118,23 @@ export async function GET(
     const totalPathXp = Object.values(pathXp).reduce((s, n) => s + n, 0)
     const title = hideStatus || isBot || totalPathXp < 50 ? null : buildTitle(pathXp).title
 
+    // P4 §15 — "1 selected stat": the member's own shownStats pick,
+    // resolved against viewer-scoped rows (one bounded query). Honored
+    // even when the member hides status — a picked count isn't standing.
+    const pickedStat = isBot
+      ? null
+      : await resolveNotableStatValue(
+          profile.user.id,
+          parseProfileSettings(profile.profileSettings).shownStats[0],
+          { isOwner: viewerId === profile.user.id }
+        )
+
     return NextResponse.json(
       {
         username: profile.username,
         buildTitle: title,
         hasActiveGrow: activeGrows > 0,
+        selectedStat: pickedStat,
         name: profile.user.name,
         isBot,
         role: profile.user.role,

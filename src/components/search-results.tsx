@@ -7,6 +7,8 @@ import Link from "next/link"
 import { Search, MessageSquare, Leaf, Dna, User, Tag, Loader2, Bookmark, ArrowUpDown, BookOpen, Wrench, CheckCircle2, AlertCircle } from "lucide-react"
 import { Avatar } from "@/components/ui/avatar"
 import TierChip from "@/components/tier-chip"
+import ProfileCard from "@/components/ui/profile-card"
+import UserPopover from "@/components/user-popover"
 import EmptyState from "@/components/ui/empty-state"
 import { diaryPath, strainPath, setupPath } from "@/lib/slugs"
 
@@ -26,10 +28,10 @@ interface ThreadResult {
 interface Results {
   threads: ThreadResult[]
   strains: { id: string; slug: string | null; name: string; type: string | null; genetics: string | null }[]
-  users: { username: string; avatarUrl: string | null; bio: string | null; xp: number; publicMilestoneOptOut: boolean }[]
+  users: { username: string; avatarUrl: string | null; bio: string | null; xp: number; publicMilestoneOptOut: boolean; buildTitle: string | null }[]
   diaries: { id: string; slug: string | null; title: string; strain: string | null; stage: string; _count: { updates: number } }[]
   guides: { id: string; slug: string; title: string; excerpt: string; topic: string }[]
-  setups: { id: string; slug: string | null; title: string; strain: string | null; author: { name: string | null; profile: { username: string; xp: number; publicMilestoneOptOut: boolean } | null } }[]
+  setups: { id: string; slug: string | null; title: string; strain: string | null; author: { name: string | null; image: string | null; profile: { username: string; xp: number; publicMilestoneOptOut: boolean } | null } }[]
   tags: { name: string; slug: string; _count: { threads: number } }[]
   hasMore: Record<string, boolean>
 }
@@ -361,8 +363,15 @@ export default function SearchResults() {
                   <Link key={s.id} href={setupPath(s)} className="block p-3 hover:bg-secondary/50 transition-colors">
                     <div className="font-medium text-sm">{s.title} {s.strain && <span className="text-xs text-muted-foreground">— {s.strain}</span>}</div>
                     <div className="text-xs text-muted-foreground flex items-center gap-1.5">
-                      by {s.author.profile?.username || s.author.name}
-                      <TierChip xp={s.author.profile?.xp ?? 0} publicMilestoneOptOut={s.author.profile?.publicMilestoneOptOut} />
+                      by <ProfileCard
+                        username={s.author.profile?.username}
+                        name={s.author.profile?.username || s.author.name}
+                        avatarUrl={s.author.image}
+                        xp={s.author.profile?.xp}
+                        publicMilestoneOptOut={s.author.profile?.publicMilestoneOptOut}
+                        size="sm"
+                        linked={false}
+                      />
                     </div>
                   </Link>
                 ))}
@@ -404,8 +413,12 @@ export default function SearchResults() {
                       fallback={<span className="text-primary font-bold text-sm">{u.username[0].toUpperCase()}</span>}
                     />
                     <div className="min-w-0">
-                      <div className="font-medium text-sm flex items-center gap-1.5">{u.username} <TierChip xp={u.xp} publicMilestoneOptOut={u.publicMilestoneOptOut} /> <span className="text-xs text-warning">{u.xp} XP</span></div>
-                      {u.bio && <div className="text-xs text-muted-foreground truncate">{u.bio}</div>}
+                      <div className="font-medium text-sm flex items-center gap-1.5"><UserPopover username={u.username}>{u.username}</UserPopover> <TierChip xp={u.xp} publicMilestoneOptOut={u.publicMilestoneOptOut} /></div>
+                      {/* SearchProfileDTO — one-line identity (earned title),
+                          never a raw XP number on a card. */}
+                      {(u.buildTitle || u.bio) && (
+                        <div className="text-xs text-muted-foreground truncate">{u.buildTitle ?? u.bio}</div>
+                      )}
                     </div>
                   </Link>
                 ))}

@@ -6,7 +6,7 @@ import { authOptions } from "@/lib/auth"
 import { Leaf, MessageSquare, TrendingUp, Calendar, Users, UserPlus, Sprout, Award } from "lucide-react"
 import Link from "next/link"
 import RoleBadge from "@/components/role-badge"
-import TierChip from "@/components/tier-chip"
+import ProfileCard from "@/components/ui/profile-card"
 import Tooltip from "@/components/ui/tooltip"
 import TimeAgo from "@/components/ui/time-ago"
 import { diaryPath } from "@/lib/slugs"
@@ -353,10 +353,15 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
                                 {t.title}
                               </div>
                               <div className="text-xs text-muted-foreground flex items-center gap-2 flex-wrap">
-                                <span className="flex items-center gap-1">
-                                  <span className="truncate">{t.author.profile?.username || t.author.name}</span>
-                                  <TierChip xp={t.author.profile?.xp ?? 0} publicMilestoneOptOut={t.author.profile?.publicMilestoneOptOut} />
-                                </span>
+                                <ProfileCard
+                                  username={t.author.profile?.username}
+                                  name={t.author.profile?.username || t.author.name}
+                                  avatarUrl={t.author.image}
+                                  xp={t.author.profile?.xp}
+                                  publicMilestoneOptOut={t.author.profile?.publicMilestoneOptOut}
+                                  size="sm"
+                                  linked={false}
+                                />
                                 <span>•</span>
                                 <span>{t.category.name}</span>
                                 <span>•</span>
@@ -396,7 +401,15 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
                               </div>
                               <h3 className="font-medium text-sm mb-1">{h.title}</h3>
                               <div className="text-xs text-muted-foreground flex items-center gap-2 flex-wrap">
-                                <span>{h.author.profile?.username || h.author.name}</span>
+                                <ProfileCard
+                                  username={h.author.profile?.username}
+                                  name={h.author.profile?.username || h.author.name}
+                                  avatarUrl={h.author.image}
+                                  xp={h.author.profile?.xp}
+                                  publicMilestoneOptOut={h.author.profile?.publicMilestoneOptOut}
+                                  size="sm"
+                                  linked={false}
+                                />
                                 {dayCount != null && <span>• {dayCount}d</span>}
                                 {h.yieldAmount != null && (!h.yieldPrivate || h.authorId === session?.user?.id) && <span className="text-success font-medium">• {h.yieldAmount} {h.yieldUnit || "g"}</span>}
                                 {h.harvestRating != null && <span className="text-warning">• {h.harvestRating}/10</span>}
@@ -460,10 +473,17 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 mb-1">
-                            <span className="flex min-w-0 items-center gap-1 font-semibold text-sm">
-                              <span className="truncate">{thread.author.profile?.username || thread.author.name}</span>
+                            <span className="flex min-w-0 items-center gap-1.5 font-semibold text-sm">
+                              <ProfileCard
+                                username={thread.author.profile?.username}
+                                name={thread.author.profile?.username || thread.author.name}
+                                avatarUrl={thread.author.image}
+                                xp={thread.author.profile?.xp}
+                                publicMilestoneOptOut={thread.author.profile?.publicMilestoneOptOut}
+                                size="sm"
+                                linked={false}
+                              />
                               <RoleBadge role={thread.author.role} />
-                              <TierChip xp={thread.author.profile?.xp ?? 0} publicMilestoneOptOut={thread.author.profile?.publicMilestoneOptOut} />
                             </span>
                           </div>
                           <h3 className="font-medium mb-1 flex items-center gap-2">
@@ -514,9 +534,16 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
                         )}
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 mb-1">
-                            <span className="flex min-w-0 items-center gap-1 text-sm">
-                              <span className="font-semibold truncate">{update.author.profile?.username || update.author.name}</span>
-                              <TierChip xp={update.author.profile?.xp ?? 0} publicMilestoneOptOut={update.author.profile?.publicMilestoneOptOut} />
+                            <span className="flex min-w-0 items-center gap-1.5 text-sm">
+                              <ProfileCard
+                                username={update.author.profile?.username}
+                                name={update.author.profile?.username || update.author.name}
+                                avatarUrl={update.author.image}
+                                xp={update.author.profile?.xp}
+                                publicMilestoneOptOut={update.author.profile?.publicMilestoneOptOut}
+                                size="sm"
+                                linked={false}
+                              />
                             </span>
                             <span className="text-xs text-muted-foreground ml-auto shrink-0">
                               <TimeAgo value={update.createdAt} />
@@ -573,8 +600,15 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
                         <div className="p-3 flex-1">
                           <h3 className="font-medium text-sm mb-1 line-clamp-1 group-hover:text-primary transition-colors">{diary.title}</h3>
                           <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
-                            <span className="truncate">{diary.author.profile?.username || diary.author.name}</span>
-                            <TierChip xp={diary.author.profile?.xp ?? 0} publicMilestoneOptOut={diary.author.profile?.publicMilestoneOptOut} />
+                            <ProfileCard
+                              username={diary.author.profile?.username}
+                              name={diary.author.profile?.username || diary.author.name}
+                              avatarUrl={diary.author.image}
+                              xp={diary.author.profile?.xp}
+                              publicMilestoneOptOut={diary.author.profile?.publicMilestoneOptOut}
+                              size="sm"
+                              linked={false}
+                            />
                           </div>
                           <div className="flex items-center gap-3 text-xs">
                             {dayCount != null && (
@@ -615,10 +649,17 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 mb-1">
-                            <span className="flex min-w-0 items-center gap-1 font-semibold text-sm">
-                              <span className="truncate">{update.author.profile?.username || update.author.name}</span>
+                            <span className="flex min-w-0 items-center gap-1.5 font-semibold text-sm">
+                              <ProfileCard
+                                username={update.author.profile?.username}
+                                name={update.author.profile?.username || update.author.name}
+                                avatarUrl={update.author.image}
+                                xp={update.author.profile?.xp}
+                                publicMilestoneOptOut={update.author.profile?.publicMilestoneOptOut}
+                                size="sm"
+                                linked={false}
+                              />
                               <RoleBadge role={update.author.role} />
-                              <TierChip xp={update.author.profile?.xp ?? 0} publicMilestoneOptOut={update.author.profile?.publicMilestoneOptOut} />
                             </span>
                             <span className="text-xs text-muted-foreground">
                               updated their diary
@@ -664,10 +705,17 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 mb-1">
-                            <span className="flex min-w-0 items-center gap-1 font-semibold text-sm">
-                              <span className="truncate">{thread.author.profile?.username || thread.author.name}</span>
+                            <span className="flex min-w-0 items-center gap-1.5 font-semibold text-sm">
+                              <ProfileCard
+                                username={thread.author.profile?.username}
+                                name={thread.author.profile?.username || thread.author.name}
+                                avatarUrl={thread.author.image}
+                                xp={thread.author.profile?.xp}
+                                publicMilestoneOptOut={thread.author.profile?.publicMilestoneOptOut}
+                                size="sm"
+                                linked={false}
+                              />
                               <RoleBadge role={thread.author.role} />
-                              <TierChip xp={thread.author.profile?.xp ?? 0} publicMilestoneOptOut={thread.author.profile?.publicMilestoneOptOut} />
                             </span>
                             <span className="text-xs text-muted-foreground">
                               started a discussion
@@ -803,11 +851,17 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
                       <div className="flex-1 min-w-0">
                         <h3 className="font-medium text-sm mb-1 break-words">{diary.title}</h3>
                         <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
-                          <span className="flex min-w-0 items-center gap-1">
-                            <Users className="w-3 h-3 shrink-0" />
-                            <span className="truncate">{diary.author.profile?.username || diary.author.name}</span>
-                              <RoleBadge role={diary.author.role} />
-                              <TierChip xp={diary.author.profile?.xp ?? 0} publicMilestoneOptOut={diary.author.profile?.publicMilestoneOptOut} />
+                          <span className="flex min-w-0 items-center gap-1.5">
+                            <ProfileCard
+                              username={diary.author.profile?.username}
+                              name={diary.author.profile?.username || diary.author.name}
+                              avatarUrl={diary.author.image}
+                              xp={diary.author.profile?.xp}
+                              publicMilestoneOptOut={diary.author.profile?.publicMilestoneOptOut}
+                              size="sm"
+                              linked={false}
+                            />
+                            <RoleBadge role={diary.author.role} />
                           </span>
                           <span>•</span>
                           <span>{diary._count.updates} updates</span>

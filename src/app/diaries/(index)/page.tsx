@@ -9,7 +9,8 @@ import { authOptions } from "@/lib/auth"
 import { blockedUserIds } from "@/lib/security"
 import Link from "next/link"
 import RoleBadge from "@/components/role-badge"
-import TierChip from "@/components/tier-chip"
+import ProfileCard from "@/components/ui/profile-card"
+import { rankDisplay } from "@/lib/progression-config"
 import EmptyState from "@/components/ui/empty-state"
 import StageProgress from "@/components/stage-progress"
 import { STAGE_LABELS, diaryCompleteness, diaryWeek } from "@/lib/diary-weeks"
@@ -200,13 +201,18 @@ function DiaryCard({ diary, showFeatured = false }: { diary: DiaryCardData; show
           className="mb-3"
         />
         <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground flex-wrap border-t border-border/50 pt-3">
-          <span className="flex items-center gap-1 min-w-0">
+          <span className="flex items-center gap-1.5 min-w-0">
             <Users className="w-3 h-3 shrink-0" />
-            <Link href={`/u/${authorName}`} className="truncate hover:text-foreground hover:underline">
-              {authorName}
-            </Link>
+            <ProfileCard
+              username={diary.author.profile?.username}
+              name={authorName}
+              avatarUrl={diary.author.image}
+              xp={diary.author.profile?.xp}
+              publicMilestoneOptOut={diary.author.profile?.publicMilestoneOptOut}
+              nameplate={diary.author.profile?.publicMilestoneOptOut ? undefined : rankDisplay(diary.author.profile?.xp ?? 0).nameplate ?? undefined}
+              size="sm"
+            />
             <RoleBadge role={diary.author.role} />
-            <TierChip xp={diary.author.profile?.xp ?? 0} publicMilestoneOptOut={diary.author.profile?.publicMilestoneOptOut} />
           </span>
           {diary._count.followers > 0 && (
             <span className="flex items-center gap-1 shrink-0">

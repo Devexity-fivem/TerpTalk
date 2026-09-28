@@ -9,6 +9,7 @@ import { Mail, Send, Loader2, MessageCircle, User } from "lucide-react"
 import Link from "next/link"
 import EmptyState from "@/components/ui/empty-state"
 import Tooltip from "@/components/ui/tooltip"
+import UserPopover from "@/components/user-popover"
 
 interface Convo {
   partner: { id: string; name: string | null; role: string; profile: { username: string | null } | null }
@@ -216,12 +217,14 @@ function MessagesInner() {
                   >
                     <div className="flex items-center justify-between gap-2">
                       <div className="flex items-center gap-2 min-w-0">
-                        <Link
-                          href={`/messages?with=${c.partner.id}`}
-                          className="font-medium text-sm truncate hover:underline"
-                        >
-                          {nameOf(c.partner)}
-                        </Link>
+                        <UserPopover username={c.partner.profile?.username}>
+                          <Link
+                            href={`/messages?with=${c.partner.id}`}
+                            className="font-medium text-sm truncate hover:underline"
+                          >
+                            {nameOf(c.partner)}
+                          </Link>
+                        </UserPopover>
                         <Tooltip content="View profile">
                           <Link
                             href={`/u/${encodeURIComponent(nameOf(c.partner))}`}
@@ -259,9 +262,11 @@ function MessagesInner() {
               <>
                 <div className="p-3 border-b border-border font-semibold text-sm">
                   {active ? (
-                    <Link href={`/u/${encodeURIComponent(nameOf(active))}`} className="hover:text-primary hover:underline">
-                      {nameOf(active)}
-                    </Link>
+                    <UserPopover username={active.profile?.username}>
+                      <Link href={`/u/${encodeURIComponent(nameOf(active))}`} className="hover:text-primary hover:underline">
+                        {nameOf(active)}
+                      </Link>
+                    </UserPopover>
                   ) : (
                     "Conversation"
                   )}

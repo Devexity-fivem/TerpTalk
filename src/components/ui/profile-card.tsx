@@ -21,6 +21,10 @@ interface ProfileCardProps {
   meta?: React.ReactNode
   size?: "sm" | "md"
   className?: string
+  /** Default true: the name links to the profile. Set false inside
+      rows already wrapped in a content link (questions/forum index,
+      feed) — the popover still offers "View profile". */
+  linked?: boolean
 }
 
 /**
@@ -39,6 +43,7 @@ export default function ProfileCard({
   meta,
   size = "md",
   className,
+  linked = true,
 }: ProfileCardProps) {
   const displayName = name || username || "Member"
   const nameCls = cn("truncate font-medium", size === "sm" ? "text-xs" : "text-sm", nameplate)
@@ -47,7 +52,7 @@ export default function ProfileCard({
       <span className={cn("inline-flex items-center gap-2 min-w-0", className)}>
         <Avatar src={avatarUrl ?? null} size={size} />
         <span className="inline-flex min-w-0 items-center gap-1.5">
-          {username ? (
+          {username && linked ? (
             <Link href={`/u/${username}`} className={cn(nameCls, "hover:text-primary")}>
               {displayName}
             </Link>

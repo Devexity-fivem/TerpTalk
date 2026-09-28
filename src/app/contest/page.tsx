@@ -3,7 +3,7 @@ import { previousWeekKey, previousMonthKey } from "@/lib/week"
 import { Trophy, BookOpen } from "lucide-react"
 import Link from "next/link"
 import ContestBoard from "@/components/contest-board"
-import TierChip from "@/components/tier-chip"
+import ProfileCard from "@/components/ui/profile-card"
 import DiaryContestBoard from "@/components/diary-contest-board"
 import { resolveWeeklyWinner, resolveMonthlyDiaryWinner } from "@/lib/contest-awards"
 import { diaryPath } from "@/lib/slugs"
@@ -57,13 +57,14 @@ export default async function ContestPage() {
             <img src={lastWinner.imageUrl} alt="Last week's winner" loading="lazy" decoding="async" className="w-16 h-16 rounded-lg object-cover" />
             <div>
               <p className="text-xs text-warning font-semibold uppercase tracking-wide">Last week&apos;s winner</p>
-              <Link
-                href={`/u/${lastWinner.user.profile?.username || lastWinner.user.name}`}
-                className="font-medium hover:text-primary inline-flex items-center gap-1.5"
-              >
-                {lastWinner.user.profile?.username || lastWinner.user.name}
-                <TierChip xp={lastWinner.user.profile?.xp ?? 0} publicMilestoneOptOut={lastWinner.user.profile?.publicMilestoneOptOut} />
-              </Link>
+              <ProfileCard
+                username={lastWinner.user.profile?.username}
+                name={lastWinner.user.profile?.username || lastWinner.user.name}
+                avatarUrl={lastWinner.user.image}
+                xp={lastWinner.user.profile?.xp}
+                publicMilestoneOptOut={lastWinner.user.profile?.publicMilestoneOptOut}
+                size="sm"
+              />
               <p className="text-xs text-muted-foreground">{lastWinner._count.votes} votes</p>
             </div>
             <Trophy className="w-6 h-6 text-warning ml-auto" />
@@ -93,8 +94,17 @@ export default async function ContestPage() {
               >
                 {lastDiaryWinner.diary.title}
               </Link>
-              <p className="text-xs text-muted-foreground">
-                <span className="inline-flex items-center gap-1">by {lastDiaryWinner.user.profile?.username || lastDiaryWinner.user.name} <TierChip xp={lastDiaryWinner.user.profile?.xp ?? 0} publicMilestoneOptOut={lastDiaryWinner.user.profile?.publicMilestoneOptOut} /></span> · {lastDiaryWinner._count.votes} votes
+              <p className="text-xs text-muted-foreground inline-flex items-center gap-1 flex-wrap">
+                by{" "}
+                <ProfileCard
+                  username={lastDiaryWinner.user.profile?.username}
+                  name={lastDiaryWinner.user.profile?.username || lastDiaryWinner.user.name}
+                  avatarUrl={lastDiaryWinner.user.image}
+                  xp={lastDiaryWinner.user.profile?.xp}
+                  publicMilestoneOptOut={lastDiaryWinner.user.profile?.publicMilestoneOptOut}
+                  size="sm"
+                />
+                · {lastDiaryWinner._count.votes} votes
               </p>
             </div>
             <Trophy className="w-6 h-6 text-warning ml-auto" />

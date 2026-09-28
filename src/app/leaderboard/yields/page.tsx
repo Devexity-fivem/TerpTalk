@@ -8,6 +8,7 @@ import { Avatar } from "@/components/ui/avatar"
 import { buildMetadata } from "@/lib/seo"
 import EmptyState from "@/components/ui/empty-state"
 import TierChip from "@/components/tier-chip"
+import UserPopover from "@/components/user-popover"
 import { publicDiaryWhere } from "@/lib/diary-visibility"
 import { strainPath } from "@/lib/slugs"
 
@@ -180,12 +181,14 @@ export default async function YieldLeaderboardPage() {
                     />
                     <span className="text-muted-foreground text-xs inline-flex items-center gap-1">
                       Best by{" "}
-                      <Link
-                        href={`/u/${row.topEntry.author.profile?.username || row.topEntry.author.name}`}
-                        className="text-foreground hover:underline"
-                      >
-                        {row.topEntry.author.profile?.username || row.topEntry.author.name}
-                      </Link>
+                      <UserPopover username={row.topEntry.author.profile?.username}>
+                        <Link
+                          href={`/u/${row.topEntry.author.profile?.username || row.topEntry.author.name}`}
+                          className="text-foreground hover:underline"
+                        >
+                          {row.topEntry.author.profile?.username || row.topEntry.author.name}
+                        </Link>
+                      </UserPopover>
                       <TierChip xp={row.topEntry.author.profile?.xp ?? 0} publicMilestoneOptOut={row.topEntry.author.profile?.publicMilestoneOptOut} />
                     </span>
                   </div>

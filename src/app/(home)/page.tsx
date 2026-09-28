@@ -17,6 +17,8 @@ import LiveStats from "@/components/live-stats"
 import HeroCta from "@/components/hero-cta"
 import { Avatar } from "@/components/ui/avatar"
 import TierChip from "@/components/tier-chip"
+import ProfileCard from "@/components/ui/profile-card"
+import UserPopover from "@/components/user-popover"
 import CountUp from "@/components/count-up"
 
 // Public landing page for guests; signed-in members get the "Today"
@@ -376,12 +378,19 @@ export default async function Home() {
                     href={`/forum/thread/${thread.slug}`}
                     className="flex items-start gap-3 p-3 bg-card/80 rounded-xl border border-border/70 hover:border-primary/50 tt-lift tt-edge-card tt-spotlight"
                   >
-                    <Avatar src={thread.author.image ?? undefined} size="sm" alt={thread.author.profile?.username ?? thread.author.name ?? undefined} />
                     <div className="flex-1 min-w-0">
                       <div className="font-medium text-sm mb-0.5 line-clamp-1">{thread.title}</div>
                       <div className="text-xs text-muted-foreground flex items-center flex-wrap gap-x-2 gap-y-0.5">
                         <span className="text-primary">{thread.category.name}</span>
-                        <span className="inline-flex items-center gap-1">{thread.author.profile?.username || thread.author.name}<TierChip xp={thread.author.profile?.xp ?? 0} publicMilestoneOptOut={thread.author.profile?.publicMilestoneOptOut} /></span>
+                        <ProfileCard
+                          username={thread.author.profile?.username}
+                          name={thread.author.profile?.username || thread.author.name}
+                          avatarUrl={thread.author.image}
+                          xp={thread.author.profile?.xp}
+                          publicMilestoneOptOut={thread.author.profile?.publicMilestoneOptOut}
+                          size="sm"
+                          linked={false}
+                        />
                         <span>{thread.replyCount} repl{thread.replyCount === 1 ? "y" : "ies"}</span>
                       </div>
                     </div>
@@ -422,7 +431,15 @@ export default async function Home() {
                       <div className="font-medium text-sm mb-0.5 line-clamp-1">{update.title}</div>
                       <div className="text-xs text-muted-foreground flex items-center flex-wrap gap-x-2 gap-y-0.5">
                         <span className="text-success">{update.diary.title}</span>
-                        <span className="inline-flex items-center gap-1">{update.author.profile?.username || update.author.name}<TierChip xp={update.author.profile?.xp ?? 0} publicMilestoneOptOut={update.author.profile?.publicMilestoneOptOut} /></span>
+                        <ProfileCard
+                          username={update.author.profile?.username}
+                          name={update.author.profile?.username || update.author.name}
+                          avatarUrl={update.author.image}
+                          xp={update.author.profile?.xp}
+                          publicMilestoneOptOut={update.author.profile?.publicMilestoneOptOut}
+                          size="sm"
+                          linked={false}
+                        />
                       </div>
                     </div>
                   </Link>
@@ -486,13 +503,20 @@ export default async function Home() {
                     href={`/forum/thread/${thread.slug}`}
                     className="flex items-start gap-3 p-4 bg-card/80 rounded-xl border border-border/70 hover:border-primary/50 tt-lift tt-edge-card tt-spotlight"
                   >
-                    <Avatar src={thread.author.image ?? undefined} size="sm" alt={thread.author.profile?.username ?? thread.author.name ?? undefined} />
                     <div className="flex-1 min-w-0">
                       <div className="font-medium mb-1 line-clamp-1">{thread.title}</div>
                       <div className="text-sm text-muted-foreground flex items-center flex-wrap gap-2">
                         <span className="text-primary">{thread.category.name}</span>
                         <span>•</span>
-                        <span>{thread.author.profile?.username || thread.author.name}</span>
+                        <ProfileCard
+                          username={thread.author.profile?.username}
+                          name={thread.author.profile?.username || thread.author.name}
+                          avatarUrl={thread.author.image}
+                          xp={thread.author.profile?.xp}
+                          publicMilestoneOptOut={thread.author.profile?.publicMilestoneOptOut}
+                          size="sm"
+                          linked={false}
+                        />
                         <span>•</span>
                         <span>{thread.views} views</span>
                         <span>•</span>
@@ -522,7 +546,9 @@ export default async function Home() {
                       className="flex items-center gap-2 px-3 py-2 bg-card rounded-full border border-border hover:border-primary/40 transition-colors min-w-0"
                     >
                       <Avatar src={user.image ?? undefined} size="sm" alt={user.profile?.username ?? user.name ?? undefined} />
-                      <span className="text-sm font-medium truncate">{user.profile?.username || user.name}</span>
+                      <UserPopover username={user.profile?.username}>
+                        <span className="text-sm font-medium truncate">{user.profile?.username || user.name}</span>
+                      </UserPopover>
                       <span className="w-2 h-2 rounded-full bg-green-500" aria-label="Online" />
                     </Link>
                   ))}
@@ -548,7 +574,9 @@ export default async function Home() {
               <div className="flex flex-col sm:flex-row items-start sm:items-center gap-5">
                 <Avatar src={growerOfWeek.user.image ?? undefined} size="xl" alt={growerOfWeek.username ?? undefined} />
                 <div className="flex-1 min-w-0">
-                  <h3 className="font-display text-2xl font-bold mb-1 tracking-tight">{growerOfWeek.username}</h3>
+                  <h3 className="font-display text-2xl font-bold mb-1 tracking-tight">
+                    <UserPopover username={growerOfWeek.username}>{growerOfWeek.username}</UserPopover>
+                  </h3>
                   <p className="text-muted-foreground text-sm mb-3 max-w-xl">
                     {growerOfWeek.bio || `A dedicated cultivator sharing ${growerOfWeek.favoriteStrain ? `their love for ${growerOfWeek.favoriteStrain}` : "their grow journey"} with the community.`}
                   </p>
@@ -593,7 +621,7 @@ export default async function Home() {
                 <div className="flex-1 min-w-0">
                   <h3 className="font-display text-2xl font-bold mb-1 tracking-tight">{spotlight.diary.title}</h3>
                   <p className="text-muted-foreground text-sm mb-3 max-w-xl">
-                    by <Link href={`/u/${spotlight.author.username}`} className="text-primary hover:underline inline-flex items-center gap-1">@{spotlight.author.username}<TierChip xp={spotlight.author.xp} publicMilestoneOptOut={false} /></Link>
+                    by <UserPopover username={spotlight.author.username}><Link href={`/u/${spotlight.author.username}`} className="text-primary hover:underline inline-flex items-center gap-1">@{spotlight.author.username}<TierChip xp={spotlight.author.xp} publicMilestoneOptOut={false} /></Link></UserPopover>
                     {spotlight.diary.strain && <> · {spotlight.diary.strain}</>}
                     {" "}· {spotlight.diary.stage.toLowerCase().replace(/_/g, " ")} stage
                   </p>

@@ -8,6 +8,7 @@ import RoleBadge from "@/components/role-badge"
 import TierChip from "@/components/tier-chip"
 import EmptyState from "@/components/ui/empty-state"
 import Tooltip from "@/components/ui/tooltip"
+import UserPopover from "@/components/user-popover"
 
 interface Entry {
   id: string
@@ -139,12 +140,14 @@ export default function ContestBoard() {
               <div className="p-3">
                 {e.caption && <p className="text-sm mb-2">{e.caption}</p>}
                 <div className="flex items-center justify-between">
-                  <Link
-                    href={`/u/${nameOf(e.user)}`}
-                    className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1"
-                  >
-                    {nameOf(e.user)} <RoleBadge role={e.user.role} /> <TierChip xp={e.user.xp ?? 0} publicMilestoneOptOut={e.user.publicMilestoneOptOut} />
-                  </Link>
+                  <UserPopover username={e.user.username}>
+                    <Link
+                      href={`/u/${nameOf(e.user)}`}
+                      className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1"
+                    >
+                      {nameOf(e.user)} <RoleBadge role={e.user.role} /> <TierChip xp={e.user.xp ?? 0} publicMilestoneOptOut={e.user.publicMilestoneOptOut} />
+                    </Link>
+                  </UserPopover>
                   <Tooltip content={e.mine ? "You can't vote on your own entry" : "Vote for this budshot — most votes wins the week"}>
                     <button
                       onClick={() => vote(e.id)}

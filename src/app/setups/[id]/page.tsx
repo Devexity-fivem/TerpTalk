@@ -9,6 +9,7 @@ import { Settings, Users, MessageSquare, Pencil } from "lucide-react"
 import Link from "next/link"
 import RoleBadge from "@/components/role-badge"
 import TierChip from "@/components/tier-chip"
+import UserPopover from "@/components/user-popover"
 import SetupComments from "@/components/setup-comments"
 import ShareButtons from "@/components/share-buttons"
 import ReportButton from "@/components/report-button"
@@ -118,15 +119,17 @@ export default async function SetupPage({ params }: { params: Promise<{ id: stri
           <h1 className="font-display text-3xl font-bold mb-2 break-words tracking-tight">{setup.title}</h1>
           <p className="text-muted-foreground mb-4 whitespace-pre-wrap break-words">{setup.description}</p>
           <div className="flex items-center gap-4 text-sm text-muted-foreground mb-4">
-            <Link
-              href={`/u/${setup.author.profile?.username || setup.author.name}`}
-              className="flex items-center gap-1 hover:text-foreground"
-            >
-              <Users className="w-4 h-4" />
-              {setup.author.profile?.username || setup.author.name}
-              <RoleBadge role={setup.author.role} />
-              <TierChip xp={setup.author.profile?.xp ?? 0} publicMilestoneOptOut={setup.author.profile?.publicMilestoneOptOut} />
-            </Link>
+            <UserPopover username={setup.author.profile?.username}>
+              <Link
+                href={`/u/${setup.author.profile?.username || setup.author.name}`}
+                className="flex items-center gap-1 hover:text-foreground"
+              >
+                <Users className="w-4 h-4" />
+                {setup.author.profile?.username || setup.author.name}
+                <RoleBadge role={setup.author.role} />
+                <TierChip xp={setup.author.profile?.xp ?? 0} publicMilestoneOptOut={setup.author.profile?.publicMilestoneOptOut} />
+              </Link>
+            </UserPopover>
             <span>{new Date(setup.createdAt).toLocaleDateString()}</span>
             {edited && (
               <Tooltip content="Edited after posting">
@@ -233,9 +236,11 @@ export default async function SetupPage({ params }: { params: Promise<{ id: stri
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
-                    <Link href={`/u/${c.author.profile?.username || c.author.name}`} className="font-medium hover:text-primary">
-                      {c.author.profile?.username || c.author.name}
-                    </Link>
+                    <UserPopover username={c.author.profile?.username}>
+                      <Link href={`/u/${c.author.profile?.username || c.author.name}`} className="font-medium hover:text-primary">
+                        {c.author.profile?.username || c.author.name}
+                      </Link>
+                    </UserPopover>
                     <RoleBadge role={c.author.role} />
               <TierChip xp={c.author.profile?.xp ?? 0} publicMilestoneOptOut={c.author.profile?.publicMilestoneOptOut} />
                     <span className="text-xs text-muted-foreground">{new Date(c.createdAt).toLocaleDateString()}</span>

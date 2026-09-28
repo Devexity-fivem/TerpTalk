@@ -11,6 +11,7 @@ import EmptyState from "@/components/ui/empty-state"
 import { weeklyBoard, weeklyNewGrowers, weekRange, WEEKLY_BOARD_TYPES } from "@/lib/weekly-recognition"
 import { currentWeekKey } from "@/lib/week"
 import { Avatar } from "@/components/ui/avatar"
+import UserPopover from "@/components/user-popover"
 import { cn } from "@/lib/utils"
 import Tooltip from "@/components/ui/tooltip"
 import { publicDiaryWhere } from "@/lib/diary-visibility"
@@ -352,7 +353,9 @@ export default async function LeaderboardPage({
                 />
                 <div className="flex-1 min-w-0">
                   <div className="font-semibold flex items-center gap-1.5">
-                    <span className="truncate">{p.username || p.user.name}</span>
+                    <UserPopover username={p.username}>
+                      <span className="truncate">{p.username || p.user.name}</span>
+                    </UserPopover>
                     <RoleBadge role={p.user.role} />
                     <TierChip xp={p.xp} publicMilestoneOptOut={p.publicMilestoneOptOut} className="hidden sm:inline-flex" />
                   </div>
@@ -426,7 +429,9 @@ export default async function LeaderboardPage({
                   <span className="w-5 text-center text-xs text-muted-foreground shrink-0">{i + 1}</span>
                   <div className="flex-1 min-w-0">
                     <span className="text-sm font-medium flex items-center gap-1.5">
-                      <span className="truncate">{p.username || p.user.name}</span>
+                      <UserPopover username={p.username}>
+                        <span className="truncate">{p.username || p.user.name}</span>
+                      </UserPopover>
                       <TierChip xp={p.xp} publicMilestoneOptOut={p.publicMilestoneOptOut} className="hidden sm:inline-flex" />
                     </span>
                   </div>

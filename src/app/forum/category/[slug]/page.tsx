@@ -10,7 +10,7 @@ import { Breadcrumbs } from "@/components/breadcrumbs"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import CategoryFollowButton from "@/components/category-follow-button"
-import TierChip from "@/components/tier-chip"
+import ProfileCard from "@/components/ui/profile-card"
 import Tooltip from "@/components/ui/tooltip"
 
 export const dynamic = "force-dynamic"
@@ -241,10 +241,17 @@ export default async function CategoryPage({
                         <h3 className="font-display font-semibold">{thread.title}</h3>
                       </div>
                       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
-                        <span className="flex items-center gap-1">
+                        <span className="flex items-center gap-1.5">
                           <Users className="w-4 h-4" />
-                          {thread.author.profile?.username || thread.author.name}
-                          <TierChip xp={thread.author.profile?.xp ?? 0} publicMilestoneOptOut={thread.author.profile?.publicMilestoneOptOut} />
+                          <ProfileCard
+                            username={thread.author.profile?.username}
+                            name={thread.author.profile?.username || thread.author.name}
+                            avatarUrl={thread.author.image}
+                            xp={thread.author.profile?.xp}
+                            publicMilestoneOptOut={thread.author.profile?.publicMilestoneOptOut}
+                            size="sm"
+                            linked={false}
+                          />
                         </span>
                         <span className="flex items-center gap-1">
                           <MessageSquare className="w-4 h-4" />

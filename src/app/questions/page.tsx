@@ -6,7 +6,7 @@ import { unstable_cache } from "next/cache"
 import Link from "next/link"
 import { MessageSquare, Clock, CheckCircle2, HelpCircle, Stethoscope, ChevronLeft, ChevronRight } from "lucide-react"
 import RoleBadge from "@/components/role-badge"
-import TierChip from "@/components/tier-chip"
+import ProfileCard from "@/components/ui/profile-card"
 import Surface from "@/components/ui/surface"
 import TimeAgo from "@/components/ui/time-ago"
 import EmptyState from "@/components/ui/empty-state"
@@ -270,13 +270,17 @@ export default async function QuestionsPage({
                           <div className="flex-1 min-w-0">
                             <h3 className="font-display font-semibold mb-1 break-words">{thread.title}</h3>
                             <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
-                              <span className="flex min-w-0 items-center gap-1">
-                                <span className="truncate">{thread.author.profile?.username || thread.author.name}</span>
-                                <RoleBadge role={thread.author.role} />
-                                <TierChip
-                                  xp={thread.author.profile?.xp ?? 0}
+                              <span className="flex min-w-0 items-center gap-1.5">
+                                <ProfileCard
+                                  username={thread.author.profile?.username}
+                                  name={thread.author.profile?.username || thread.author.name}
+                                  avatarUrl={thread.author.image}
+                                  xp={thread.author.profile?.xp}
                                   publicMilestoneOptOut={thread.author.profile?.publicMilestoneOptOut}
+                                  size="sm"
+                                  linked={false}
                                 />
+                                <RoleBadge role={thread.author.role} />
                               </span>
                               <span className="flex items-center gap-1">
                                 <Clock className="w-4 h-4" />

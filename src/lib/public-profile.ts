@@ -1151,3 +1151,64 @@ export async function getProfileSection(
     nextCursor: rows.length > PROFILE_TAB_PAGE_SIZE ? rows[PROFILE_TAB_PAGE_SIZE - 1].id : null,
   }
 }
+
+/**
+ * P4 — single-stat resolver for the compact ProfileCardDTO (§15: "1
+ * selected stat"). The member's `shownStats[0]` pick is resolved with one
+ * bounded query against the same viewer-scoped rows the full profile uses;
+ * unknown ids fall back to "grows" (the DEFAULT_STATS head). Never leaks
+ * non-visible rows — non-owner callers count only PUBLIC diaries.
+ */
+export async function resolveNotableStatValue(
+  ownerId: string,
+  statId: string,
+  { isOwner = false }: { isOwner?: boolean } = {},
+): Promise<{ id: string; label: string; value: string; hint?: string } | null> {
+  const ownerScope = { authorId: ownerId, deleted: false }
+  const scope = isOwner ? {} : publicDiaryWhere
+  switch (statId) {
+    case "harvests":
+      return { id: statId, label: "Harvests completed", value: String(await prisma.growDiary.count({ where: { ...ownerScope, harvested: true, ...scope } })) }
+    case "updates": {
+      const n = await getGrowStreak(ownerId, { publicOnly: !isOwner })
+      return { id: statId, label: "Updates logged", value: String(n.totalUpdates) }
+    }
+    case "detailedUpdates":
+      return { id: statId, label: "Detailed updates", value: String(await prisma.progressionEvent.count({ where: { userId: ownerId, type: "UPDATE_RICH", reversedAt: null } })), hint: "updates that earned a quality band" }
+    case "documentedWeeks": {
+      const rows = await prisma.diaryUpdate.groupBy({ by: ["diaryId", "weekNumber"], where: { authorId: ownerId, weekNumber: { not: null }, diary: { deleted: false, ...scope } } })
+      return { id: statId, label: "Documented weeks", value: String(rows.length) }
+    }
+    case "longestGrow": {
+      const rows = await prisma.growDiary.findMany({ where: { ...ownerScope, harvested: true, ...scope, harvestedAt: { not: null } }, select: { startDate: true, harvestedAt: true } })
+      const days = rows.reduce((n, d) => (!d.startDate || !d.harvestedAt ? n : Math.max(n, Math.round((d.harvestedAt.getTime() - d.startDate.getTime()) / 86400000))), 0)
+      return days > 0 ? { id: statId, label: "Longest grow", value: `${days} days`, hint: "start → harvest" } : null
+    }
+    case "growingSince": {
+      const agg = await prisma.growDiary.aggregate({ where: { ...ownerScope, ...scope }, _min: { startDate: true } })
+      if (!agg._min.startDate) return null
+      return { id: statId, label: "Growing since", value: agg._min.startDate.toLocaleDateString("en-US", { month: "short", year: "numeric" }) }
+    }
+    case "acceptedAnswers":
+      return { id: statId, label: "Accepted answers", value: String(await prisma.post.count({ where: { authorId: ownerId, deleted: false, acceptedAnswerFor: { isNot: null } } })) }
+    case "experiments":
+      return { id: statId, label: "Experiments run", value: String(await prisma.growExperiment.count({ where: { authorId: ownerId, diary: { deleted: false, ...scope } } })) }
+    case "strains": {
+      const rows = await prisma.growDiary.groupBy({ by: ["strainId"], where: { ...ownerScope, strainId: { not: null }, ...scope }, _count: { _all: true } })
+      return { id: statId, label: "Strains grown", value: String(rows.length) }
+    }
+    case "activeGrows":
+      return { id: statId, label: "Active grows", value: String(await prisma.growDiary.count({ where: { ...ownerScope, harvested: false, ...scope } })) }
+    case "streak": {
+      const s = await getGrowStreak(ownerId, { publicOnly: !isOwner })
+      return s.streak >= 2 ? { id: statId, label: "Check-in streak", value: `${s.streak} days`, hint: "grow logging" } : null
+    }
+    case "setups":
+      return { id: statId, label: "Setup showcases", value: String(await prisma.growSetup.count({ where: ownerScope })) }
+    case "contestWins":
+      return { id: statId, label: "Contest wins", value: String(await prisma.progressionEvent.count({ where: { userId: ownerId, type: { in: ["CONTEST_WEEKLY_WIN", "CONTEST_MONTHLY_WIN"] }, reversedAt: null } })) }
+    case "grows":
+    default:
+      return { id: "grows", label: "Grows documented", value: String(await prisma.growDiary.count({ where: { ...ownerScope, ...scope } })) }
+  }
+}

@@ -7,6 +7,7 @@ import { sessionCookieName } from "@/lib/auth"
 import { rateLimit } from "@/lib/rate-limit"
 import { snippet } from "@/lib/seo"
 import { publicDiaryWhere } from "@/lib/diary-visibility"
+import { toSearchProfileDTO } from "@/lib/search-dto"
 
 // Escape PostgreSQL LIKE wildcards so a query cannot enumerate the whole table.
 function escapeLike(str: string): string {
@@ -150,6 +151,8 @@ const getSearchResults = unstable_cache(
           xp: true,
           publicMilestoneOptOut: true,
           bio: true,
+          // P4 SearchProfileDTO — one-line identity from real path XP.
+          user: { select: { masteryProgress: { select: { mastery: true, xp: true } } } },
         },
         orderBy: XP_ORDER,
       }) : [],
@@ -205,7 +208,7 @@ const getSearchResults = unstable_cache(
           authorId: true,
           title: true,
           strain: true,
-          author: { select: { profile: { select: { username: true, xp: true, publicMilestoneOptOut: true } }, name: true } },
+          author: { select: { profile: { select: { username: true, xp: true, publicMilestoneOptOut: true } }, name: true, image: true } },
         },
       }) : [],
       (t === "all" || t === "tags") ? prisma.tag.findMany({
@@ -247,6 +250,12 @@ const getSearchResults = unstable_cache(
     })
 
     const paginate = <T>(rows: T[]): T[] => rows.slice(0, limit)
+
+    // SearchProfileDTO (§15) — avatar, username, rank inputs, one-line
+    // identity. userId survives this map only so the viewer-scoped block
+    // strip below can filter; it is removed before the response ships.
+    const usersDto = paginate(usersRaw).map(toSearchProfileDTO)
+
     const hasMore = {
       threads: hasMoreThreads,
       strains: strainsRaw.length > limit,
@@ -260,7 +269,7 @@ const getSearchResults = unstable_cache(
     return {
       threads,
       strains: paginate(strainsRaw),
-      users: paginate(usersRaw),
+      users: usersDto,
       diaries: paginate(diariesRaw),
       guides: paginate(guidesRaw),
       setups: paginate(setupsRaw),

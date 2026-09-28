@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { BookOpen, Heart, Loader2, Trophy, Leaf } from "lucide-react"
-import TierChip from "@/components/tier-chip"
+import ProfileCard from "@/components/ui/profile-card"
 import Link from "next/link"
 import { useSession } from "next-auth/react"
 import Tooltip from "@/components/ui/tooltip"
@@ -151,7 +151,13 @@ export default function DiaryContestBoard() {
                   {e.diary.title}
                 </Link>
                 <div className="text-xs text-muted-foreground mt-0.5 flex items-center gap-2 flex-wrap">
-                  <span className="inline-flex items-center gap-1.5">by {e.user.username || e.user.name} <TierChip xp={e.user.xp ?? 0} publicMilestoneOptOut={e.user.publicMilestoneOptOut} /></span>
+                  <span className="inline-flex items-center gap-1.5">by <ProfileCard
+                    username={e.user.username}
+                    name={e.user.username || e.user.name}
+                    xp={e.user.xp}
+                    publicMilestoneOptOut={e.user.publicMilestoneOptOut}
+                    size="sm"
+                  /></span>
                   {e.diary.strain && <span>· {e.diary.strain}</span>}
                 </div>
                 <div className="text-xs text-muted-foreground mt-0.5">

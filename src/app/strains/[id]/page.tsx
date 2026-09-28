@@ -11,6 +11,8 @@ import { buildMetadata, snippet } from "@/lib/seo"
 import { Breadcrumbs } from "@/components/breadcrumbs"
 import { publicUserSelect, activeAuthor, isActiveAuthorRow } from "@/lib/security"
 import TierChip from "@/components/tier-chip"
+import ProfileCard from "@/components/ui/profile-card"
+import UserPopover from "@/components/user-popover"
 import Tooltip from "@/components/ui/tooltip"
 import { getStrainGrowStats, getStrainEvidence, escapeLike, strainFieldMatches, strainTypeLabel } from "@/lib/strain-stats"
 import { readLessons } from "@/lib/experiments"
@@ -228,9 +230,11 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
                 {creator && creatorName && (
                   <span className="inline-flex items-center gap-1.5">
                     Added by{" "}
-                    <Link href={`/u/${creator.profile?.username || creator.name}`} className="text-primary hover:underline">
-                      {creatorName}
-                    </Link>
+                    <UserPopover username={creator.profile?.username}>
+                      <Link href={`/u/${creator.profile?.username || creator.name}`} className="text-primary hover:underline">
+                        {creatorName}
+                      </Link>
+                    </UserPopover>
                     <TierChip xp={creator.profile?.xp ?? 0} publicMilestoneOptOut={creator.profile?.publicMilestoneOptOut} />
                   </span>
                 )}
@@ -609,7 +613,15 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
                   </div>
                   <div className="min-w-0">
                     <p className="font-medium text-sm truncate">{d.title}</p>
-                    <p className="text-xs text-muted-foreground truncate flex items-center gap-1">by {d.author.profile?.username || d.author.name} <TierChip xp={d.author.profile?.xp ?? 0} publicMilestoneOptOut={d.author.profile?.publicMilestoneOptOut} /></p>
+                    <p className="text-xs text-muted-foreground flex items-center gap-1.5">by <ProfileCard
+                      username={d.author.profile?.username}
+                      name={d.author.profile?.username || d.author.name}
+                      avatarUrl={d.author.image}
+                      xp={d.author.profile?.xp}
+                      publicMilestoneOptOut={d.author.profile?.publicMilestoneOptOut}
+                      size="sm"
+                      linked={false}
+                    /></p>
                   </div>
                 </Link>
               ))}
@@ -643,7 +655,15 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
                   </div>
                   <div className="min-w-0">
                     <p className="font-medium text-sm truncate">{s.title}</p>
-                    <p className="text-xs text-muted-foreground truncate flex items-center gap-1">by {s.author.profile?.username || s.author.name} <TierChip xp={s.author.profile?.xp ?? 0} publicMilestoneOptOut={s.author.profile?.publicMilestoneOptOut} /></p>
+                    <p className="text-xs text-muted-foreground flex items-center gap-1.5">by <ProfileCard
+                      username={s.author.profile?.username}
+                      name={s.author.profile?.username || s.author.name}
+                      avatarUrl={s.author.image}
+                      xp={s.author.profile?.xp}
+                      publicMilestoneOptOut={s.author.profile?.publicMilestoneOptOut}
+                      size="sm"
+                      linked={false}
+                    /></p>
                   </div>
                 </Link>
               ))}

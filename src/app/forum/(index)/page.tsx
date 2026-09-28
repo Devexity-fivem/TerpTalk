@@ -6,7 +6,7 @@ import { unstable_cache } from "next/cache"
 import { MessageSquare, Users, Clock, TrendingUp } from "lucide-react"
 import Link from "next/link"
 import RoleBadge from "@/components/role-badge"
-import TierChip from "@/components/tier-chip"
+import ProfileCard from "@/components/ui/profile-card"
 import { ForumLiveRefresh } from "@/components/forum-live-refresh"
 import FollowedThreads from "@/components/followed-threads"
 import Tooltip from "@/components/ui/tooltip"
@@ -213,11 +213,18 @@ export default async function ForumPage() {
                           <span className="min-w-0 break-words">{thread.title}</span>
                         </h3>
                         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
-                          <span className="flex min-w-0 items-center gap-1">
+                          <span className="flex min-w-0 items-center gap-1.5">
                             <Users className="w-4 h-4 shrink-0" />
-                            <span className="truncate">{thread.author.profile?.username || thread.author.name}</span>
+                            <ProfileCard
+                              username={thread.author.profile?.username}
+                              name={thread.author.profile?.username || thread.author.name}
+                              avatarUrl={thread.author.image}
+                              xp={thread.author.profile?.xp}
+                              publicMilestoneOptOut={thread.author.profile?.publicMilestoneOptOut}
+                              size="sm"
+                              linked={false}
+                            />
                             <RoleBadge role={thread.author.role} />
-                        <TierChip xp={thread.author.profile?.xp ?? 0} publicMilestoneOptOut={thread.author.profile?.publicMilestoneOptOut} />
                           </span>
                           <span className="flex items-center gap-1">
                             <MessageSquare className="w-4 h-4" />

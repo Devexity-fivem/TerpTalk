@@ -6,7 +6,7 @@ import { unstable_cache } from "next/cache"
 import { Settings, Plus, Users, ChevronLeft, ChevronRight } from "lucide-react"
 import Link from "next/link"
 import RoleBadge from "@/components/role-badge"
-import TierChip from "@/components/tier-chip"
+import ProfileCard from "@/components/ui/profile-card"
 import EmptyState from "@/components/ui/empty-state"
 import { setupPath } from "@/lib/slugs"
 
@@ -118,16 +118,17 @@ export default async function SetupsPage({
                     </Link>
                     <p className="text-sm text-muted-foreground mb-3 line-clamp-2">{setup.description}</p>
                     <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground flex-wrap">
-                      <span className="flex items-center gap-1 min-w-0">
+                      <span className="flex items-center gap-1.5 min-w-0">
                         <Users className="w-3 h-3 shrink-0" />
-                        <Link
-                          href={`/u/${setup.author.profile?.username || setup.author.name}`}
-                          className="truncate hover:text-foreground hover:underline"
-                        >
-                          {setup.author.profile?.username || setup.author.name}
-                        </Link>
+                        <ProfileCard
+                          username={setup.author.profile?.username}
+                          name={setup.author.profile?.username || setup.author.name}
+                          avatarUrl={setup.author.image}
+                          xp={setup.author.profile?.xp}
+                          publicMilestoneOptOut={setup.author.profile?.publicMilestoneOptOut}
+                          size="sm"
+                        />
                         <RoleBadge role={setup.author.role} />
-                        <TierChip xp={setup.author.profile?.xp ?? 0} publicMilestoneOptOut={setup.author.profile?.publicMilestoneOptOut} />
                       </span>
                       <span className="shrink-0">{setup._count.comments} comments</span>
                     </div>

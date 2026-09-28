@@ -3,6 +3,7 @@ import { unstable_cache } from "next/cache"
 import { BookOpen, Plus } from "lucide-react"
 import Link from "next/link"
 import EmptyState from "@/components/ui/empty-state"
+import ProfileCard from "@/components/ui/profile-card"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { blockedUserIds } from "@/lib/security"
@@ -20,7 +21,7 @@ const getGuides = unstable_cache(
       where: { published: true },
       orderBy: { createdAt: "desc" },
       take: 200,
-      include: { author: { select: { name: true, profile: { select: { username: true } } } } },
+      include: { author: { select: { name: true, image: true, profile: { select: { username: true, xp: true, publicMilestoneOptOut: true } } } } },
     })
   },
   ["guides-list"],
@@ -71,8 +72,16 @@ export default async function GuidesPage() {
                   <Link key={g.id} href={`/guides/${g.slug}`} className="bg-card/80 border border-border/70 rounded-2xl p-5 hover:border-primary/50 transition-colors">
                     <h3 className="font-display font-semibold mb-1">{g.title}</h3>
                     <p className="text-sm text-muted-foreground line-clamp-2">{g.excerpt}</p>
-                    <p className="text-xs text-muted-foreground mt-2">
-                      by {g.author.profile?.username || g.author.name} · {new Date(g.createdAt).toLocaleDateString()}
+                    <p className="text-xs text-muted-foreground mt-2 inline-flex items-center gap-1.5">
+                      by <ProfileCard
+                        username={g.author.profile?.username}
+                        name={g.author.profile?.username || g.author.name}
+                        avatarUrl={g.author.image}
+                        xp={g.author.profile?.xp}
+                        publicMilestoneOptOut={g.author.profile?.publicMilestoneOptOut}
+                        size="sm"
+                        linked={false}
+                      /> · {new Date(g.createdAt).toLocaleDateString()}
                     </p>
                   </Link>
                 ))}

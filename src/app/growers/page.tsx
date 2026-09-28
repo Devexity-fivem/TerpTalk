@@ -12,7 +12,10 @@ import Surface from "@/components/ui/surface"
 import EmptyState from "@/components/ui/empty-state"
 import PageHeader from "@/components/ui/page-header"
 import { Avatar } from "@/components/ui/avatar"
+import UserPopover from "@/components/user-popover"
 import { STAGE_LABELS } from "@/lib/diary-weeks"
+import { MASTERIES, MASTERY_META, type Mastery } from "@/lib/progression-config"
+import { masteryParam, masteryQualified } from "@/lib/grower-directory"
 import { cn } from "@/lib/utils"
 
 export const metadata = {
@@ -69,13 +72,21 @@ const LIVE_GROW_SELECT = {
 } as const
 
 const getGrowers = unstable_cache(
-  async (sort: Sort, page: number) => {
+  async (sort: Sort, page: number, mastery: Mastery | null) => {
+    // When a mastery filter is set, both directory queries restrict to
+    // members at M3+ in that path — deterministic, explainable, indexed
+    // by MasteryProgress(mastery, xp).
+    const masteryFilter = mastery ? masteryQualified(mastery) : null
     if (sort === "active") {
       // Members with a live (unharvested) public grow, most recent diary
       // activity first. groupBy gives the ordering + the paging window.
       const grouped = await prisma.growDiary.groupBy({
         by: ["authorId"],
-        where: { deleted: false, harvested: false, author: activeAuthor(), ...publicDiaryWhere },
+        where: {
+          deleted: false, harvested: false,
+          author: { ...activeAuthor(), ...(masteryFilter ?? {}) },
+          ...publicDiaryWhere,
+        },
         _max: { updatedAt: true },
         orderBy: { _max: { updatedAt: "desc" } },
         take: PAGE_SIZE,
@@ -88,12 +99,23 @@ const getGrowers = unstable_cache(
         prisma.profile.findMany({ where: { userId: { in: ids }, ...rankableProfile() }, select: PROFILE_SELECT }),
         // One latest live grow per member — distinct on authorId.
         prisma.growDiary.findMany({
-          where: { authorId: { in: ids }, deleted: false, harvested: false, author: activeAuthor(), ...publicDiaryWhere },
+          where: {
+            authorId: { in: ids }, deleted: false, harvested: false,
+            author: { ...activeAuthor(), ...(masteryFilter ?? {}) },
+            ...publicDiaryWhere,
+          },
           orderBy: { updatedAt: "desc" },
           distinct: ["authorId"],
           select: LIVE_GROW_SELECT,
         }),
-        prisma.growDiary.groupBy({ by: ["authorId"], where: { deleted: false, harvested: false, author: activeAuthor(), ...publicDiaryWhere } }),
+        prisma.growDiary.groupBy({
+          by: ["authorId"],
+          where: {
+            deleted: false, harvested: false,
+            author: { ...activeAuthor(), ...(masteryFilter ?? {}) },
+            ...publicDiaryWhere,
+          },
+        }),
       ])
       const byUser = new Map(profiles.map((p) => [p.user.id, p]))
       const growByUser = new Map(liveGrows.map((g) => [g.authorId, g]))
@@ -107,15 +129,18 @@ const getGrowers = unstable_cache(
     }
 
     // "new" and "all" — profile-ordered browsing with the same card shape.
+    const profileWhere = masteryFilter
+      ? { ...rankableProfile(), user: { ...activeAuthor(), ...masteryFilter } }
+      : rankableProfile()
     const [profiles, total] = await Promise.all([
       prisma.profile.findMany({
-        where: rankableProfile(),
+        where: profileWhere,
         orderBy: sort === "new" ? { joinDate: "desc" } : { username: "asc" },
         take: PAGE_SIZE,
         skip: (page - 1) * PAGE_SIZE,
         select: PROFILE_SELECT,
       }),
-      prisma.profile.count({ where: rankableProfile() }),
+      prisma.profile.count({ where: profileWhere }),
     ])
     if (profiles.length === 0) return { rows: [], total }
 
@@ -148,20 +173,22 @@ export default async function GrowersPage({
 }) {
   const sp = await searchParams
   const sort: Sort = SORTS.some((s) => s.key === sp?.sort) ? (sp!.sort as Sort) : "active"
+  const mastery = masteryParam(sp?.mastery)
   const rawPage = Number.parseInt(sp?.page ?? "1", 10)
   const page = Number.isFinite(rawPage) && rawPage >= 1 ? Math.min(rawPage, MAX_PAGE) : 1
 
   const [data, session] = await Promise.all([
-    getGrowers(sort, page),
+    getGrowers(sort, page, mastery),
     getServerSession(authOptions),
   ])
   // Cached payload is global — apply the viewer's block graph after read.
   const blockedIds = await blockedUserIds(session?.user?.id)
   const rows = data.rows.filter((r) => !blockedIds.includes(r.profile.user.id))
   const totalPages = Math.max(1, Math.ceil(data.total / PAGE_SIZE))
-  const href = (s: Sort, p: number) => {
+  const href = (s: Sort, p: number, m: Mastery | null = mastery) => {
     const q = new URLSearchParams()
     if (s !== "active") q.set("sort", s)
+    if (m) q.set("mastery", m.toLowerCase())
     if (p > 1) q.set("page", String(p))
     const str = q.toString()
     return `/growers${str ? `?${str}` : ""}`
@@ -202,23 +229,55 @@ export default async function GrowersPage({
           </Link>
         </div>
 
+        {/* Mastery filter — deterministic specialization discovery:
+            members who actually reached M3+ in a path, not a ranking. */}
+        <div className="flex flex-wrap items-center gap-1.5 mb-6" role="group" aria-label="Filter by mastery path">
+          <span className="text-xs text-muted-foreground mr-1">Mastery:</span>
+          <Link
+            href={href(sort, 1, null)}
+            className={cn(
+              "rounded-full px-3 py-1 text-xs font-medium transition-colors min-h-8 inline-flex items-center",
+              !mastery ? "bg-primary text-primary-foreground" : "bg-secondary text-muted-foreground hover:text-foreground"
+            )}
+          >
+            Any path
+          </Link>
+          {MASTERIES.map((m) => (
+            <Link
+              key={m}
+              href={href(sort, 1, m)}
+              aria-pressed={mastery === m}
+              className={cn(
+                "rounded-full px-3 py-1 text-xs font-medium transition-colors min-h-8 inline-flex items-center gap-1",
+                mastery === m ? "bg-primary text-primary-foreground" : "bg-secondary text-muted-foreground hover:text-foreground"
+              )}
+            >
+              <span aria-hidden="true">{MASTERY_META[m].icon}</span> {MASTERY_META[m].name} M3+
+            </Link>
+          ))}
+        </div>
+
         {rows.length === 0 ? (
           <Surface padding="none">
             <EmptyState
               icon={Users}
               title={
-                sort === "active"
-                  ? "No live public grows right now"
-                  : data.total === 0
-                    ? "No growers to show yet"
-                    : "No growers on this page"
+                mastery
+                  ? `No growers with ${MASTERY_META[mastery].name} M3+ yet`
+                  : sort === "active"
+                    ? "No live public grows right now"
+                    : data.total === 0
+                      ? "No growers to show yet"
+                      : "No growers on this page"
               }
               description={
-                sort === "active"
-                  ? "When members document public diaries they'll appear here. Start yours to be first."
-                  : data.total === 0
-                    ? "Members with public profiles will appear here as the community grows."
-                    : "Try an earlier page."
+                mastery
+                  ? "Members appear here once they reach mastery level 3 in this path — earned through documented activity."
+                  : sort === "active"
+                    ? "When members document public diaries they'll appear here. Start yours to be first."
+                    : data.total === 0
+                      ? "Members with public profiles will appear here as the community grows."
+                      : "Try an earlier page."
               }
               action={
                 sort === "active"
@@ -252,7 +311,9 @@ export default async function GrowersPage({
                         />
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-1.5 flex-wrap">
-                            <span className="font-semibold truncate">{name}</span>
+                            <UserPopover username={profile.username}>
+                              <span className="font-semibold truncate">{name}</span>
+                            </UserPopover>
                             <RoleBadge role={profile.user.role} />
                             <TierChip xp={profile.xp} publicMilestoneOptOut={false} />
                           </div>

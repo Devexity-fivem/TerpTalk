@@ -29,7 +29,9 @@ import { NextRequest } from "next/server"
 import { GET as getPublicProfile } from "@/app/api/users/[username]/route"
 import { GET as getProfileCard } from "@/app/api/users/[username]/card/route"
 import { GET as getProfileSections } from "@/app/api/users/[username]/sections/[section]/route"
-import { getPublicProfileData, getProfileSection } from "@/lib/public-profile"
+import { getPublicProfileData, getProfileSection, resolveNotableStatValue } from "@/lib/public-profile"
+import { masteryParam, masteryQualified, MASTERY_MIN_XP } from "@/lib/grower-directory"
+import { toSearchProfileDTO } from "@/lib/search-dto"
 import {
   awardExperimentCreated, awardHypothesisIfMet, awardExperimentFollowups,
   evaluateExperimentAwards, reverseExperimentAwards,
@@ -538,6 +540,7 @@ async function run() {
     assert.equal(cardRes.status, 200, "card route 200")
     const cardJson = await cardRes.json()
     assert.ok("buildTitle" in cardJson, "card carries buildTitle")
+    assert.equal(cardJson.buildTitle, null, "no card build title below 50 path XP")
     assert.ok("hasActiveGrow" in cardJson, "card carries active-grow signal")
     // Only UNLISTED + PRIVATE grows remain → the public signal stays false;
     // hidden grows never leak an "active" indicator to anonymous viewers.
@@ -552,6 +555,69 @@ async function run() {
     assert.equal((await cardRes2.json()).hasActiveGrow, true, "public active grow detected")
     await prisma.growDiary.delete({ where: { id: pPublicActive.id } })
     assert.ok(!("standing" in cardJson) && !("profileSettings" in cardJson), "card stays minimal")
+
+    // ── PROFILE P4 — card identity + discovery contracts ───────────
+    // selectedStat — the member's own shownStats pick, resolved
+    // viewer-scoped. A PRIVATE harvested grow counts for the owner's
+    // card but never for an anonymous viewer's.
+    await prisma.profile.update({
+      where: { id: pProfile.id },
+      data: { profileSettings: { shownStats: ["harvests"] } },
+    })
+    const p4PrivHarvest = await prisma.growDiary.create({
+      data: { title: "p4 priv harvest", description: "d", growType: "INDOOR", startDate: new Date(), authorId: pUser.id, visibility: "PRIVATE", harvested: true, harvestedAt: new Date() },
+    })
+    const anonStat = await resolveNotableStatValue(pUser.id, "harvests")
+    const ownerStat = await resolveNotableStatValue(pUser.id, "harvests", { isOwner: true })
+    assert.ok(
+      anonStat && ownerStat && Number(ownerStat.value) === Number(anonStat.value) + 1,
+      "owner stat counts private harvests; the visitor's does not"
+    )
+    const cardStatRes = await getProfileCard(
+      new NextRequest(`http://localhost/api/users/__ss_p_${SUFFIX}/card`),
+      { params: Promise.resolve({ username: `__ss_p_${SUFFIX}` }) }
+    )
+    const cardStatJson = await cardStatRes.json()
+    assert.equal(cardStatJson.selectedStat?.id, "harvests", "card ships the member's shownStats pick")
+    assert.equal(cardStatJson.selectedStat?.value, anonStat?.value, "anonymous card stat is viewer-scoped")
+    await prisma.growDiary.delete({ where: { id: p4PrivHarvest.id } })
+    const fallbackStat = await resolveNotableStatValue(pUser.id, "bogus-stat")
+    assert.equal(fallbackStat?.id, "grows", "unknown stat id falls back to grows")
+    await prisma.profile.update({ where: { id: pProfile.id }, data: { profileSettings: {} } })
+
+    // /growers mastery filter — deterministic M3+ threshold on real
+    // MasteryProgress rows. 400 qualifies, 100 doesn't; bogus params drop.
+    assert.equal(MASTERY_MIN_XP, 350, "mastery filter threshold is M3 = 350 path XP")
+    assert.equal(masteryParam("knowledge"), "KNOWLEDGE", "mastery param maps to a real path")
+    assert.equal(masteryParam("bogus"), null, "bogus mastery param ignored")
+    assert.equal(masteryParam(undefined), null, "missing mastery param → no filter")
+    const mHi = await mk(`__ss_m_${SUFFIX}`)
+    await prisma.masteryProgress.create({ data: { userId: mHi.id, mastery: "KNOWLEDGE", xp: 400 } })
+    const mLo = await mk(`__ss_mlo_${SUFFIX}`)
+    await prisma.masteryProgress.create({ data: { userId: mLo.id, mastery: "KNOWLEDGE", xp: 100 } })
+    const qualified = await prisma.profile.findMany({
+      where: {
+        ...rankableProfile(),
+        user: { ...activeAuthor(), ...masteryQualified("KNOWLEDGE"), id: { in: [mHi.id, mLo.id] } },
+      },
+      select: { username: true },
+    })
+    assert.deepEqual(qualified.map((q) => q.username), [`__ss_m_${SUFFIX}`], "M3+ filter keeps 400 XP, drops 100 XP")
+
+    // SearchProfileDTO — identity derived from real path XP, internals
+    // dropped, opt-out honored.
+    const dtoBase = {
+      username: "u", userId: "id", avatarUrl: null, xp: 10, bio: null,
+      user: { masteryProgress: [{ mastery: "KNOWLEDGE" as const, xp: 60 }] },
+    }
+    const dto = toSearchProfileDTO({ ...dtoBase, publicMilestoneOptOut: false })
+    assert.ok(typeof dto.buildTitle === "string" && dto.buildTitle.length > 0, "search DTO derives identity from path XP")
+    assert.ok(!("masteryProgress" in dto) && !("user" in dto), "search DTO drops internals")
+    assert.equal(toSearchProfileDTO({ ...dtoBase, publicMilestoneOptOut: true }).buildTitle, null, "opt-out hides search identity")
+    assert.equal(
+      toSearchProfileDTO({ ...dtoBase, publicMilestoneOptOut: false, user: { masteryProgress: [{ mastery: "KNOWLEDGE", xp: 10 }] } }).buildTitle,
+      null, "below 50 path XP → no identity claim"
+    )
 
     // ── PROFILE P1 — core experience contracts ─────────────────────
     // activeGrow/featuredGrow visibility, standing-tier suppression,
@@ -607,6 +673,12 @@ async function run() {
     })
     pdata = await getPublicProfileData(`__ss_p_${SUFFIX}`)
     assert.ok(typeof pdata?.profile.buildTitle === "string" && pdata.profile.buildTitle.length > 0, "build title renders at ≥50 path XP")
+    // Card carries the same identity — the ≥50-path-XP gate is shared.
+    const cardWithTitle = await (await getProfileCard(
+      new NextRequest(`http://localhost/api/users/__ss_p_${SUFFIX}/card`),
+      { params: Promise.resolve({ username: `__ss_p_${SUFFIX}` }) }
+    )).json()
+    assert.equal(cardWithTitle.buildTitle, pdata?.profile.buildTitle, "card build title matches the hero identity")
 
     // Notable stats — deterministic defaults when nothing is configured.
     assert.equal(pdata?.profile.notableStats.length, 4, "default hero set is 4 stats")

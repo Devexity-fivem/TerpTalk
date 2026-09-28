@@ -6,7 +6,7 @@ import ShareButtons from "@/components/share-buttons"
 import { buildMetadata, snippet } from "@/lib/seo"
 import { JsonLd } from "@/components/json-ld"
 import { Breadcrumbs } from "@/components/breadcrumbs"
-import TierChip from "@/components/tier-chip"
+import ProfileCard from "@/components/ui/profile-card"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { isModerator, activeAuthor, publicUserSelect, isActiveAuthorRow } from "@/lib/security"
@@ -33,7 +33,7 @@ export default async function GuidePage({ params }: { params: Promise<{ slug: st
   const [guide, session] = await Promise.all([
     prisma.guide.findUnique({
       where: { slug },
-      include: { author: { select: { name: true, role: true, banned: true, suspendedUntil: true, profile: { select: { username: true, xp: true, publicMilestoneOptOut: true } } } } },
+      include: { author: { select: { name: true, image: true, role: true, banned: true, suspendedUntil: true, profile: { select: { username: true, xp: true, publicMilestoneOptOut: true } } } } },
     }),
     getServerSession(authOptions),
   ])
@@ -112,7 +112,15 @@ export default async function GuidePage({ params }: { params: Promise<{ slug: st
             <span className="uppercase tracking-wide">{guide.topic}</span>
             <span>·</span>
             {isActiveAuthorRow(guide.author) ? (
-              <span className="inline-flex items-center gap-1">by <Link href={`/u/${guide.author.profile?.username || guide.author.name}`} className="text-primary hover:underline">{guide.author.profile?.username || guide.author.name}</Link> <TierChip xp={guide.author.profile?.xp ?? 0} publicMilestoneOptOut={guide.author.profile?.publicMilestoneOptOut} /></span>
+              <span className="inline-flex items-center gap-1">by <ProfileCard
+                username={guide.author.profile?.username}
+                name={guide.author.profile?.username || guide.author.name}
+                avatarUrl={guide.author.image}
+                xp={guide.author.profile?.xp}
+                publicMilestoneOptOut={guide.author.profile?.publicMilestoneOptOut}
+                size="sm"
+                className="inline-flex"
+              /></span>
             ) : (
               <span>TerpTalk staff</span>
             )}
@@ -168,8 +176,15 @@ export default async function GuidePage({ params }: { params: Promise<{ slug: st
                       <Link href={`/forum/thread/${t.slug}`} className="text-sm font-medium text-primary hover:underline">
                         {t.title}
                       </Link>
-                      <p className="text-xs text-muted-foreground mt-0.5">
-                        {t.category.name} · {t.replyCount} repl{t.replyCount === 1 ? "y" : "ies"} · by {t.author.profile?.username || t.author.name}
+                      <p className="text-xs text-muted-foreground mt-0.5 inline-flex items-center gap-1.5 flex-wrap">
+                        {t.category.name} · {t.replyCount} repl{t.replyCount === 1 ? "y" : "ies"} · by <ProfileCard
+                          username={t.author.profile?.username}
+                          name={t.author.profile?.username || t.author.name}
+                          avatarUrl={t.author.image}
+                          xp={t.author.profile?.xp}
+                          publicMilestoneOptOut={t.author.profile?.publicMilestoneOptOut}
+                          size="sm"
+                        />
                       </p>
                     </li>
                   ))}
