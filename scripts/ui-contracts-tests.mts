@@ -485,6 +485,18 @@ check("tabs: APG roles + roving tabindex + full arrow/Home/End nav", () => {
   assert.ok(/tabIndex=\{selected \? 0 : -1\}/.test(t), "roving tabindex")
   assert.ok(t.includes("focus-visible:ring-2"), "visible focus ring")
   assert.ok(t.includes("syncWithUrl"), "opt-in deep-link via ?tab=")
+  // P1 manual-QA regressions: the mount effect must notify onChange for ANY
+  // valid ?tab= (activeId derives from urlValue, so `urlValue !== activeId`
+  // can never fire — deep-linked lazy sections never loaded). aria-controls
+  // may only point at a panel that exists (the selected one).
+  assert.ok(
+    t.includes("urlValue && items.some((t) => t.id === urlValue)"),
+    "deep-link mount effect notifies parent for valid ?tab=",
+  )
+  assert.ok(
+    !t.includes('aria-controls={`${uid}-panel-${t.id}`}'),
+    "no dangling aria-controls on unselected tabs",
+  )
 })
 
 check("confirm-dialog: alertdialog semantics, focus trap, Escape, restore", () => {

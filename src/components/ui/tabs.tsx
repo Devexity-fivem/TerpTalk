@@ -75,9 +75,10 @@ export default function Tabs({
     [items, value, syncWithUrl, searchParams, router, pathname, onChange]
   )
 
-  // Honor ?tab= on first paint for deep links.
+  // Honor ?tab= on first paint for deep links — notify the parent so
+  // consumers that lazy-load tab content activate the right section.
   useEffect(() => {
-    if (syncWithUrl && urlValue && urlValue !== activeId) onChange?.(urlValue)
+    if (syncWithUrl && urlValue && items.some((t) => t.id === urlValue)) onChange?.(urlValue)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -114,7 +115,7 @@ export default function Tabs({
               data-tab-id={t.id}
               id={`${uid}-tab-${t.id}`}
               aria-selected={selected}
-              aria-controls={`${uid}-panel-${t.id}`}
+              aria-controls={selected ? `${uid}-panel-${t.id}` : undefined}
               aria-disabled={t.disabled || undefined}
               tabIndex={selected ? 0 : -1}
               onClick={() => select(t.id, false)}
