@@ -10,6 +10,16 @@ import { rateLimit } from "@/lib/rate-limit"
 
 // GET — the signed-in member's achievement progress. Owner-only: progress
 // stats (e.g. hidden-category-adjacent counts) are not public.
+//
+// CANONICAL MODEL (post-P3/P5 reconciliation): the product-facing
+// "Achievements" surface reads Badge/UserBadge/BADGE_REGISTRY — the live,
+// fully-shipped grant+display engine. The separate Achievement/
+// UserAchievement tables are the progression-linked framework: dormant by
+// design (no live grant path), consumed only by `hasUnlock`'s achievement
+// route, which today serves exclusively `status:"future"` unlock rows.
+// A V2 grant writer is a prerequisite for those rows leaving "future" —
+// until then this route's V1 store is the single source of truth for what
+// a member has earned.
 export async function GET() {
   try {
     const session = await getServerSession(authOptions)

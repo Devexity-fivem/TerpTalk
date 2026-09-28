@@ -771,7 +771,7 @@ model Strain {
 model StrainPhoto {
   id        String   @id @default(cuid())
   kind      String   // PLANT | FLOWER
-  imageUrl  String   // data URI (client-resized)
+  imageUrl  String   // blob-storage URL (client-resized data URI → storeImage)
   caption   String?
   strainId  String
   userId    String
@@ -1237,9 +1237,12 @@ model MasteryProgress {
   @@index([mastery, xp(sort: Desc)])
 }
 
-// Progression V2 achievements — story-chain milestones (replaces the V1
-// volume-badge philosophy). `spec` is a declarative stat predicate;
-// `unlocks` optionally names an unlock-registry key the achievement grants.
+// Progression V2 achievement framework — story-chain milestones with an
+// unlock-registry hook (`unlocks`). DORMANT BY DESIGN: no live grant path
+// writes UserAchievement today; its only consumer is `hasUnlock`'s
+// achievement route serving status:"future" rows (mentoring-tools,
+// data-quality-insights). The live badge/achievement product surface is
+// Badge + UserBadge + BADGE_REGISTRY — do not read this table for display.
 model Achievement {
   id          String   @id @default(cuid())
   key         String   @unique
