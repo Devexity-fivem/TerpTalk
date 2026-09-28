@@ -46,7 +46,13 @@ import {
 } from "@/lib/reputation-config"
 import { canSeeDeal } from "@/lib/deals-access"
 import { getGrowerSpotlight } from "@/lib/spotlight"
-import { nextRankUnlock } from "@/lib/progression-config"
+import {
+  nextRankUnlock,
+  UNLOCK_BY_ID,
+  STANDING_POLL_VOTE,
+  STANDING_POLL_CREATE,
+  STANDING_SLOWMODE_EXEMPT,
+} from "@/lib/progression-config"
 import { WEEKLY_CHALLENGES, reconcileChallengePayouts, currentWeekKey } from "@/lib/challenges"
 import {
   applyReputationAward,
@@ -76,6 +82,7 @@ import {
   getMasteryMap,
   effectiveRank,
   hasUnlock,
+  meetsUnlockSpec,
   masteryLevelFromXp,
   rankFromXp,
   REP_RANKS,
@@ -489,15 +496,19 @@ async function run() {
 
   // ── Pure: Garden Perks — members-only deal gating ───────────────
   // canSeeDeal(product, viewer, now): minRank gates on viewer XP,
-  // publicAt hides unreleased deals except for early-access members.
+  // publicAt hides unreleased deals except for early-access members,
+  // and unlockFrozen suspends every progression-gated deal (public
+  // deals stay open — the kill-switch only pulls the perks).
   const rankAt = (name: string) => REP_RANKS.find((r) => r.name === name)!.threshold
   const rooted = rankAt("Rooted")
   const future = new Date(Date.now() + 86400000)
   assert.equal(canSeeDeal({ minRank: "Rooted", publicAt: null }, null), false, "guest vs minRank")
-  assert.equal(canSeeDeal({ minRank: "Rooted", publicAt: null }, { xp: rooted - 1, earlyAccess: false }), false, "xp below threshold")
-  assert.equal(canSeeDeal({ minRank: "Rooted", publicAt: null }, { xp: rooted, earlyAccess: false }), true, "xp exactly at threshold")
-  assert.equal(canSeeDeal({ minRank: null, publicAt: future }, { xp: 50000, earlyAccess: false }), false, "future publicAt hidden without early access")
-  assert.equal(canSeeDeal({ minRank: null, publicAt: future }, { xp: 0, earlyAccess: true }), true, "future publicAt visible with early access")
+  assert.equal(canSeeDeal({ minRank: "Rooted", publicAt: null }, { xp: rooted - 1, earlyAccess: false, unlockFrozen: false }), false, "xp below threshold")
+  assert.equal(canSeeDeal({ minRank: "Rooted", publicAt: null }, { xp: rooted, earlyAccess: false, unlockFrozen: false }), true, "xp exactly at threshold")
+  assert.equal(canSeeDeal({ minRank: "Rooted", publicAt: null }, { xp: rooted, earlyAccess: false, unlockFrozen: true }), false, "unlockFrozen denies rank-gated deals (M-03)")
+  assert.equal(canSeeDeal({ minRank: null, publicAt: null }, { xp: rooted, earlyAccess: true, unlockFrozen: true }), true, "frozen member keeps fully public deals")
+  assert.equal(canSeeDeal({ minRank: null, publicAt: future }, { xp: 50000, earlyAccess: false, unlockFrozen: false }), false, "future publicAt hidden without early access")
+  assert.equal(canSeeDeal({ minRank: null, publicAt: future }, { xp: 0, earlyAccess: true, unlockFrozen: false }), true, "future publicAt visible with early access")
   assert.equal(canSeeDeal({ minRank: null, publicAt: null }, null), true, "null/null visible to all including guests")
   assert.equal(canSeeDeal({ minRank: null, publicAt: new Date(Date.now() - 1000) }, null), true, "past publicAt visible to all")
 
@@ -1284,6 +1295,7 @@ async function run() {
 
   // ── Progression V2: DB engine behavior ───────────────────────
   const pv2: string[] = []
+  let achFixtureExisted = true
   const mkPv2 = async (tag: string, createdDaysAgo = 0) => {
     const u = await mkTestUser(`${PV2_PREFIX}_${tag}`)
     pv2.push(u.id)
@@ -1512,6 +1524,47 @@ async function run() {
     assert.equal(await hasUnlock(gate, "quest-slot-4"), false, "unlockFrozen denies all")
     await prisma.profile.update({ where: { userId: gate }, data: { unlockFrozen: false } })
 
+    // Standing-only registry rows (M-01): these perks ship live through
+    // progressionPerksFrom — the catalog rows must evaluate identically
+    // through hasUnlock so display and enforcement share one truth.
+    const st = await mkPv2("standing")
+    assert.equal(await hasUnlock(st, "poll-vote"), false, "standing 0 locked out of polls")
+    await seedProgression(st, 0, STANDING_POLL_VOTE)
+    assert.equal(await hasUnlock(st, "poll-vote"), true, "Known standing opens poll voting")
+    assert.equal(await hasUnlock(st, "poll-create"), false, "Known cannot create polls yet")
+    await seedProgression(st, 0, STANDING_POLL_CREATE - STANDING_POLL_VOTE)
+    assert.equal(await hasUnlock(st, "poll-create"), true, "Trusted opens poll creation")
+    assert.equal(await hasUnlock(st, "slowmode-exempt"), false, "Trusted still slowmoded")
+    await seedProgression(st, 0, STANDING_SLOWMODE_EXEMPT - STANDING_POLL_CREATE)
+    assert.equal(await hasUnlock(st, "slowmode-exempt"), true, "Pillar exempt from slowmode")
+    // Frozen member loses standing-gated perks too (kill-switch parity).
+    await prisma.profile.update({ where: { userId: st }, data: { unlockFrozen: true } })
+    assert.equal(await hasUnlock(st, "slowmode-exempt"), false, "frozen member loses standing perks")
+    await prisma.profile.update({ where: { userId: st }, data: { unlockFrozen: false } })
+
+    // Achievement route (M-02): the unlock gate reads UserAchievement — the
+    // V2 grant table — and status:"future" rows can never activate even when
+    // the member holds the achievement. mentoring-tools is the future spec:
+    // anyOf Ripening+Knowledge M3+Trusted OR achievement greenlight.
+    const achSpec = UNLOCK_BY_ID.get("mentoring-tools")!
+    assert.equal(achSpec.status, "future", "fixture spec stays a future row")
+    const achUser = await mkPv2("ach")
+    // Standing at Trusted satisfies the standing clause so ONLY the
+    // achievement-vs-core branch decides the result.
+    await seedProgression(achUser, 0, STANDING_POLL_CREATE)
+    assert.equal(await meetsUnlockSpec(achUser, achSpec), false, "no achievement, no rank → spec unmet")
+    achFixtureExisted = !!(await prisma.achievement.findUnique({ where: { key: "greenlight" } }))
+    const achRow = await prisma.achievement.upsert({
+      where: { key: "greenlight" },
+      create: { key: "greenlight", family: "helping", name: "Greenlight", description: "Reputational trust marker" },
+      update: {},
+    })
+    await prisma.userAchievement.create({
+      data: { userId: achUser, achievementId: achRow.id },
+    })
+    assert.equal(await meetsUnlockSpec(achUser, achSpec), true, "V2 achievement grant satisfies the route")
+    assert.equal(await hasUnlock(achUser, "mentoring-tools"), false, "status:future can never activate (M-02 boundary)")
+
     // Diversity floor: 18k XP but zero breadth → Cultivator floor (3×M4)
     // unmet → banked at Cured (no floor on Cured per locked §5.4).
     const narrow = await mkPv2("narrow")
@@ -1624,7 +1677,10 @@ async function run() {
     await prisma.abuseFlag.deleteMany({
       where: { OR: [{ userId: { in: pv2 } }, { counterpartyId: { in: pv2 } }] },
     }).catch(() => {})
+    await prisma.userAchievement.deleteMany({ where: { userId: { in: pv2 } } }).catch(() => {})
     await prisma.user.deleteMany({ where: { id: { in: pv2 } } }).catch(() => {})
+    // Fixture achievement row — only remove if the test created it.
+    if (!achFixtureExisted) await prisma.achievement.deleteMany({ where: { key: "greenlight" } }).catch(() => {})
   }
 
   // ── DB: global ledger drift check ────────────────────────────────
