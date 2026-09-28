@@ -29,6 +29,7 @@ const main = async () => {
   const rlF = await createUser("rlf", active)
   const phA = await createUser("pha", active) // pinned-harvest, rank-gated
   const phB = await createUser("phb", active) // pinned-harvest, streak-gated
+  const expU = await createUser("exp", active) // data-export fixtures
   const captchaIds = []
   const registeredUsernames = []
 
@@ -402,6 +403,81 @@ const main = async () => {
     const bPinned = await prisma.profile.findUnique({ where: { userId: phB.id }, select: { pinnedDiaryId: true } })
     pinCheck(r.status === 200 && bPinned?.pinnedDiaryId === phBharvest.id, "pin: 60-day streak, low XP → 200, pinned", { status: r.status, data: r.data })
 
+    // ══ Data export completeness (M-04) ══════════════════════════════
+    // One fixture row per previously-missing model family; the export must
+    // include all user-owned rows and strip staff-internal fields.
+    const { cookie: expCookie } = await login(expU.username, expU.password)
+    const expThread = await prisma.thread.create({
+      data: { title: "__av exp thread", slug: `__av-exp-${Date.now().toString(36)}`, content: "0123456789", authorId: expU.id, categoryId: validCat.id },
+    })
+    const expPost = await prisma.post.create({
+      data: { content: "0123456789", threadId: expThread.id, authorId: expU.id },
+    })
+    await prisma.postImage.create({ data: { url: "https://blob.test/post.png", threadId: expThread.id, postId: expPost.id } })
+    const expPoll = await prisma.poll.create({
+      data: { threadId: expThread.id, question: "exp poll?", options: { create: [{ text: "opt-a", order: 0 }] } },
+      include: { options: true },
+    })
+    await prisma.pollVote.create({ data: { pollId: expPoll.id, optionId: expPoll.options[0].id, userId: expU.id } })
+    const expDiary = await prisma.growDiary.create({
+      data: { title: "__av exp diary", description: "x", growType: "INDOOR", startDate: new Date(), authorId: expU.id, visibility: "PRIVATE" },
+    })
+    const expUpdate = await prisma.diaryUpdate.create({
+      data: { title: "exp update", content: "0123456789", stage: "VEGETATIVE", diaryId: expDiary.id, authorId: expU.id },
+    })
+    await prisma.diaryImage.create({ data: { url: "https://blob.test/diary.png", updateId: expUpdate.id } })
+    await prisma.growExperiment.create({
+      data: { diaryId: expDiary.id, authorId: expU.id, title: "exp experiment", change: "raised light", category: "LIGHTING", status: "ACTIVE" },
+    })
+    const expSetup = await prisma.growSetup.create({ data: { title: "__av exp setup", description: "x", authorId: expU.id } })
+    await prisma.setupImage.create({ data: { url: "https://blob.test/setup.png", setupId: expSetup.id } })
+    const expStrain = await prisma.strain.create({ data: { name: `__av exp strain ${Date.now().toString(36)}`, createdById: expU.id } })
+    await prisma.strainPhoto.create({ data: { kind: "PLANT", imageUrl: "data:image/png;base64,eA==", strainId: expStrain.id, userId: expU.id } })
+    const expAch = await prisma.achievement.create({
+      data: { key: `__av-ach-${Date.now().toString(36)}`, family: "LEGACY", name: "__av ach", description: "fixture" },
+    })
+    await prisma.userAchievement.create({ data: { userId: expU.id, achievementId: expAch.id } })
+    await prisma.masteryProgress.upsert({
+      where: { userId_mastery: { userId: expU.id, mastery: "RECORDS" } },
+      create: { userId: expU.id, mastery: "RECORDS", xp: 10 },
+      update: { xp: 10 },
+    })
+    await prisma.feedback.create({
+      data: { authorId: expU.id, type: "BUG", title: "exp bug", message: "repro", adminNotes: "internal-note", priority: "HIGH" },
+    })
+    await prisma.botEvent.create({ data: { type: "COMMAND_SLASH", key: `__av-bot-${Date.now().toString(36)}`, userId: expU.id, command: "status" } })
+
+    r = await callApi("/api/profile/export")
+    r.status === 401 ? pass("export: anonymous → 401") : fail("export: anonymous → 401", r.status)
+    r = await callApi("/api/profile/export", { cookie: expCookie })
+    const ex = r.data ?? {}
+    const exOk = r.status === 200
+      && ex.achievements?.some((a) => a.achievementId === expAch.id)
+      && ex.masteryProgress?.some((m) => m.mastery === "RECORDS")
+      && ex.content?.postImages?.length === 1
+      && ex.content?.diaryImages?.length === 1
+      && ex.content?.setupImages?.length === 1
+      && ex.content?.strainPhotos?.length === 1
+      && ex.content?.experiments?.length === 1
+      && ex.content?.polls?.length === 1
+      && ex.content?.pollVotes?.[0]?.option?.text === "opt-a"
+    exOk ? pass("export: all user-owned model families present") : fail("export completeness", { status: r.status, keys: Object.keys(ex) })
+    const expFb = ex.activity?.feedback?.[0]
+    expFb && !("adminNotes" in expFb) && !("priority" in expFb) && !("resolvedById" in expFb)
+      ? pass("export: feedback strips staff-internal fields")
+      : fail("export feedback redaction", expFb)
+    const expBe = ex.activity?.botEvents?.[0]
+    expBe && expBe.command === "status" && !("key" in expBe)
+      ? pass("export: bot events scoped + key stripped")
+      : fail("export botEvents", expBe)
+    // Privacy invariant: private-diary image rows are still the owner's data.
+    ex.content?.diaryImages?.[0]?.url === "https://blob.test/diary.png"
+      ? pass("export: private-diary image included (owner scope)")
+      : fail("export diaryImage", ex.content?.diaryImages)
+    // Rate-limit bucket for this user is spent by the fixtures above? No —
+    // only one export call so far; verify the endpoint is the gated one.
+    ex.exportedAt ? pass("export: shape carries exportedAt") : fail("export shape", Object.keys(ex))
+
     // ══ Registration CAPTCHA (HTTP) ══════════════════════════════════
     // Headroom: 5 attempts/15min per IP — clear fixture-stale buckets.
     await prisma.rateLimit.deleteMany({ where: { key: { startsWith: "register:" } } }).catch(() => {})
@@ -443,7 +519,13 @@ const main = async () => {
 
     console.log(`\n${results.filter(([s]) => s === "PASS").length} passed, ${results.filter(([s]) => s === "FAIL").length} failed`)
   } finally {
-    for (const u of [userA, userB, userC, userD, dmA, dmB, dmC, dmD, delE, rlF, phA, phB]) {
+    // Export fixtures — rows that outlive their user (Feedback SetNull,
+    // BotEvent bare userId, Achievement catalog, Strain.createdBy SetNull).
+    await prisma.feedback.deleteMany({ where: { authorId: expU.id } }).catch(() => {})
+    await prisma.botEvent.deleteMany({ where: { userId: expU.id } }).catch(() => {})
+    await prisma.achievement.deleteMany({ where: { key: { startsWith: "__av-ach-" } } }).catch(() => {})
+    await prisma.strain.deleteMany({ where: { createdById: expU.id } }).catch(() => {})
+    for (const u of [userA, userB, userC, userD, dmA, dmB, dmC, dmD, delE, rlF, phA, phB, expU]) {
       await prisma.user.delete({ where: { id: u.id } }).catch(() => {})
     }
     for (const username of registeredUsernames) {
