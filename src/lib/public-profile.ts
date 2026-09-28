@@ -87,17 +87,61 @@ export interface GrowCardDTO {
   visibility: string
   updatedAt: Date
   startDate: Date | null
+  harvestedAt?: Date | null
+  yieldAmount?: number | null
+  yieldUnit?: string | null
+  /** True on the owner's own rows when they've hidden the exact yield —
+      viewers just get a null yield instead (the flag itself never ships). */
+  yieldPrivate?: boolean
+  /** Representative thumbnail from the latest update — section pages only. */
+  image?: string | null
+  /** Real stage transitions derived from logged updates — section pages
+      only; never fabricated from current `stage` alone. */
+  stages?: string[]
 }
 
 export interface ExperimentCardDTO {
   id: string
   title: string
+  /** What the grower changed — the hypothesis, in their own words. */
+  change: string
   category: string
   status: string
   outcome: string | null
+  /** Grower's own conclusion at completion — the outcome summary. */
+  conclusion: string | null
   startedAt: Date
   endedAt: Date | null
   diary: { id: string; slug: string | null; title: string }
+}
+
+/** Follower/following list row — compact identity only; no prestige data
+    (no counts, no standing, no XP numbers). */
+export interface FollowCardDTO {
+  id: string
+  username: string
+  avatarUrl: string | null
+  rank: { name: string; icon: string; color: string }
+  buildTitle: string | null
+}
+
+export interface StrainRowDTO {
+  /** Synthetic key = strain name (unique within a portfolio). */
+  id: string
+  name: string
+  slug: string | null
+  grows: number
+}
+
+/** Deterministic harvest highlights — all derived from viewer-scoped
+    harvested diaries; null when the member has no visible harvests. */
+export interface HarvestHighlightsDTO {
+  firstHarvestAt: Date | null
+  latestHarvestAt: Date | null
+  longestGrowDays: number
+  mostGrownStrain: { name: string; grows: number } | null
+  repeatStrains: number
+  harvestCount: number
 }
 
 export interface AcceptedAnswerDTO {
@@ -177,7 +221,18 @@ export interface PublicProfileDTO {
   activeGrow: GrowCardDTO | null
   experiments: ExperimentCardDTO[]
   acceptedAnswersList: AcceptedAnswerDTO[]
-  strainPortfolio: { name: string; slug: string | null; grows: number }[]
+  strainPortfolio: StrainRowDTO[]
+  /** Total distinct strains across visible grows — the portfolio card
+      renders "top N of strainTotal" when the member grows many. */
+  strainTotal: number
+  /** Distinct mediums / lights / grow types / techniques across the
+      member's visible grows — label-first equipment chips (§20 P3). */
+  equipmentChips: string[]
+  /** Deterministic harvest highlights strip for the Harvests tab. */
+  harvestHighlights: HarvestHighlightsDTO | null
+  /** Distinct harvest years across visible harvests — the Harvests tab
+      year filter uses this instead of fabricating options. */
+  harvestYears: number[]
   customSections: ProfileSectionDTO[]
   growStreak: number
   totalUpdates: number
@@ -210,6 +265,9 @@ export interface PublicProfileResult {
   profile: PublicProfileDTO
   viewerBlocked: boolean
   viewerFollowing: boolean
+  /** True when the request carried a valid member session — follow lists
+      are members-visible, so the client gates them on this. */
+  viewerLoggedIn: boolean
   recentProgression: { id: string; label: string; amount: number; reversed: boolean; createdAt: Date }[]
   recentThreads: {
     id: string; title: string; slug: string; createdAt: Date
@@ -228,6 +286,7 @@ export interface PublicProfileResult {
     id: string; slug: string | null; title: string; strain: string | null
     startDate: Date | null; harvestedAt: Date | null
     yieldAmount: number | null; yieldUnit: string | null
+    yieldPrivate: boolean
     _count: { updates: number }
   }[]
 }
@@ -338,6 +397,7 @@ export async function getPublicProfileData(
     newFollowers30d,
     updates30d,
     newGrows30d,
+    scopedDiaryEnvRows,
   ] = await Promise.all([
     prisma.thread.findMany({
       where: { authorId: ownerId, deleted: false, category: { hidden: false } },
@@ -375,6 +435,7 @@ export async function getPublicProfileData(
       select: {
         id: true, slug: true, title: true, strain: true,
         startDate: true, harvestedAt: true, yieldAmount: true, yieldUnit: true,
+        yieldPrivate: true,
         _count: { select: { updates: true } },
       },
     }),
@@ -443,8 +504,8 @@ export async function getPublicProfileData(
       orderBy: { createdAt: "desc" },
       take: 6,
       select: {
-        id: true, title: true, category: true, status: true, outcome: true,
-        startedAt: true, endedAt: true,
+        id: true, title: true, change: true, category: true, status: true,
+        outcome: true, conclusion: true, startedAt: true, endedAt: true,
         diary: { select: { id: true, slug: true, title: true } },
       },
     }),
@@ -487,7 +548,12 @@ export async function getPublicProfileData(
     isBot ? Promise.resolve(false) : hasUnlock(ownerId, "records-widget"),
     isBot || !isOwner ? Promise.resolve(false) : hasUnlock(ownerId, "owner-analytics"),
     prisma.growDiary.findFirst({
-      where: { ...diaryOwnerScope, harvested: true, ...diaryScope, yieldAmount: { not: null } },
+      where: {
+        ...diaryOwnerScope, harvested: true, ...diaryScope, yieldAmount: { not: null },
+        // Per-harvest yield privacy (locked §6): the member's flagged rows
+        // never become the public "biggest yield" record.
+        ...(isOwner ? {} : { yieldPrivate: false }),
+      },
       orderBy: { yieldAmount: "desc" },
       select: { title: true, yieldAmount: true, yieldUnit: true },
     }),
@@ -500,6 +566,15 @@ export async function getPublicProfileData(
     isOwner
       ? prisma.growDiary.count({ where: { ...diaryOwnerScope, createdAt: { gte: thirtyDaysAgo } } })
       : Promise.resolve(0),
+    // P3 — equipment chips are derived facts: distinct structured fields
+    // across the member's viewer-scoped grows (label-first; a future
+    // product catalog can link these labels to productIds later).
+    prisma.growDiary.findMany({
+      where: { ...diaryOwnerScope, ...diaryScope },
+      orderBy: { createdAt: "desc" },
+      take: 300,
+      select: { growType: true, mediumType: true, lightType: true, techniques: true },
+    }),
   ])
 
   // Pinned harvest — Garden Perk; only while the diary is still visible to
@@ -647,14 +722,49 @@ export async function getPublicProfileData(
       })
     : []
   const strainById = new Map(strainRows.map((s) => [s.id, s]))
-  const strainPortfolio = strainsGrownRows
+  const strainPortfolioAll = strainsGrownRows
     .map((r) => {
       const s = r.strainId ? strainById.get(r.strainId) : undefined
-      return s ? { name: s.name, slug: s.slug, grows: r._count._all } : null
+      return s ? { id: s.name, name: s.name, slug: s.slug, grows: r._count._all } : null
     })
-    .filter((s): s is { name: string; slug: string | null; grows: number } => !!s)
-    .sort((a, b) => b.grows - a.grows)
-    .slice(0, 10)
+    .filter((s): s is StrainRowDTO => !!s)
+    .sort((a, b) => b.grows - a.grows || a.name.localeCompare(b.name))
+  const strainPortfolio = strainPortfolioAll.slice(0, 50)
+  const strainTotal = strainPortfolioAll.length
+
+  // Equipment chips — label-first structured facts, deduped + bounded.
+  const chipSet = new Set<string>()
+  for (const d of scopedDiaryEnvRows) {
+    if (d.mediumType) chipSet.add(d.mediumType.toLowerCase().replace(/_/g, " "))
+    if (d.lightType) chipSet.add(d.lightType.toLowerCase())
+    if (d.growType) chipSet.add(d.growType.toLowerCase())
+    for (const t of d.techniques) chipSet.add(t.toLowerCase().replace(/_/g, " "))
+  }
+  const equipmentChips = [...chipSet].sort().slice(0, 14)
+
+  // Harvest years (filter options) + highlights — both derive from the
+  // longestGrowRows pairs already fetched, so no extra roundtrips.
+  const harvestYearSet = new Set<number>()
+  let firstHarvestAt: Date | null = null
+  let latestHarvestAt: Date | null = null
+  for (const d of longestGrowRows) {
+    if (!d.harvestedAt) continue
+    harvestYearSet.add(d.harvestedAt.getUTCFullYear())
+    if (!firstHarvestAt || d.harvestedAt < firstHarvestAt) firstHarvestAt = d.harvestedAt
+    if (!latestHarvestAt || d.harvestedAt > latestHarvestAt) latestHarvestAt = d.harvestedAt
+  }
+  const harvestYears = [...harvestYearSet].sort((a, b) => b - a)
+  const mostGrown = strainPortfolioAll[0] ?? null
+  const harvestHighlights: HarvestHighlightsDTO | null = harvestedCount > 0
+    ? {
+        firstHarvestAt,
+        latestHarvestAt,
+        longestGrowDays,
+        mostGrownStrain: mostGrown ? { name: mostGrown.name, grows: mostGrown.grows } : null,
+        repeatStrains: strainPortfolioAll.filter((s) => s.grows > 1).length,
+        harvestCount: harvestedCount,
+      }
+    : null
 
   const dto: PublicProfileDTO = {
     id: ownerId,
@@ -696,12 +806,17 @@ export async function getPublicProfileData(
     featuredGrow,
     activeGrow,
     experiments: experimentsRows.map((e) => ({
-      id: e.id, title: e.title, category: e.category, status: e.status,
-      outcome: e.outcome, startedAt: e.startedAt, endedAt: e.endedAt,
+      id: e.id, title: e.title, change: e.change, category: e.category,
+      status: e.status, outcome: e.outcome, conclusion: e.conclusion,
+      startedAt: e.startedAt, endedAt: e.endedAt,
       diary: e.diary,
     })),
     acceptedAnswersList,
     strainPortfolio,
+    strainTotal,
+    equipmentChips,
+    harvestHighlights,
+    harvestYears,
     customSections: customSections.map((s) => ({
       id: s.id, title: s.title, body: s.body, order: s.order,
       visibility: s.visibility as SectionVisibility,
@@ -761,6 +876,7 @@ export async function getPublicProfileData(
     profile: dto,
     viewerBlocked,
     viewerFollowing,
+    viewerLoggedIn: !!viewerId,
     recentProgression: recentProgressionRows.map((e) => ({
       id: e.id,
       label: publicXpLabel(e.type),
@@ -771,30 +887,56 @@ export async function getPublicProfileData(
     recentThreads,
     growDiaries,
     growSetups,
-    harvestShelf,
+    // Per-harvest yield flags redact amounts for non-owners — the flag
+    // itself ships so cards can honestly read "yield hidden".
+    harvestShelf: harvestShelf.map((h) =>
+      isOwner || !h.yieldPrivate
+        ? h
+        : { ...h, yieldAmount: null, yieldUnit: null }
+    ),
   }
 }
 
 const PROFILE_SECTIONS_PUBLIC_MAX = 20
 const PROFILE_TAB_PAGE_SIZE = 12
 
-export type ProfileTabSection = "grows" | "harvests"
+export type ProfileTabSection = "grows" | "harvests" | "followers" | "following" | "strains"
 
-export interface ProfileSectionPage {
-  items: GrowCardDTO[]
-  nextCursor: string | null
+/** Deterministic portfolio filters — only dimensions backed by real
+    columns; validated server-side before they reach a where clause. */
+export interface ProfileSectionFilters {
+  status?: "active" | "completed"
+  strain?: string
+  stage?: string
+  year?: number
 }
 
+export type ProfileSectionPage = { nextCursor: string | null } & (
+  | { section: "grows"; items: GrowCardDTO[] }
+  | { section: "harvests"; items: GrowCardDTO[] }
+  | { section: "followers"; items: FollowCardDTO[] }
+  | { section: "following"; items: FollowCardDTO[] }
+  | { section: "strains"; items: StrainRowDTO[] }
+)
+
+const GROW_STAGES = new Set([
+  "GERMINATION", "SEEDLING", "VEGETATIVE", "FLOWER", "HARVEST", "DRYING", "CURING", "COMPLETED",
+])
+const FILTERED_STRAIN_MAX = 80
+
 /**
- * Cursor-paged grow portfolio for the Grows/Harvests tabs — the initial
- * payload stays bounded; tab lists page through here. Same visibility and
- * block rules as the profile itself.
+ * Cursor-paged profile section data — the initial payload stays bounded;
+ * tab lists page through here. Same visibility and block rules as the
+ * profile itself: viewer-scoped diaries only, block → null, follow lists
+ * are members-visible and exclude members blocked by the profile owner or
+ * the viewer in either direction.
  */
 export async function getProfileSection(
   username: string,
   section: ProfileTabSection,
   viewerId?: string,
-  cursor?: string
+  cursor?: string,
+  filters?: ProfileSectionFilters
 ): Promise<ProfileSectionPage | null> {
   const profile = await prisma.profile.findFirst({
     where: { username: { equals: username, mode: "insensitive" } },
@@ -806,38 +948,205 @@ export async function getProfileSection(
   const ownerId = profile.user.id
   const isOwner = viewerId === ownerId
   if (viewerId && !isOwner && (await blockExistsBetween(ownerId, viewerId))) return null
+
+  // ── Follow lists — members-visible only (locked decision #13). ────
+  if (section === "followers" || section === "following") {
+    if (!viewerId) return null
+    const ownerBlocks = await prisma.block.findMany({
+      where: { OR: [{ blockerId: ownerId }, { blockedId: ownerId }] },
+      select: { blockerId: true, blockedId: true },
+    })
+    const viewerBlocks = isOwner
+      ? []
+      : await prisma.block.findMany({
+          where: { OR: [{ blockerId: viewerId }, { blockedId: viewerId }] },
+          select: { blockerId: true, blockedId: true },
+        })
+    const excluded = new Set<string>()
+    for (const b of ownerBlocks) excluded.add(b.blockerId === ownerId ? b.blockedId : b.blockerId)
+    for (const b of viewerBlocks) excluded.add(b.blockerId === viewerId ? b.blockedId : b.blockerId)
+    excluded.delete(ownerId)
+    const excludedIds = [...excluded]
+
+    // followers = people who follow the owner; following = people the
+    // owner follows. Ordered by follow creation for a stable cursor.
+    const rows = await prisma.follow.findMany({
+      where: {
+        ...(section === "followers" ? { followingId: ownerId } : { followerId: ownerId }),
+        ...(excludedIds.length
+          ? section === "followers"
+            ? { followerId: { notIn: excludedIds } }
+            : { followingId: { notIn: excludedIds } }
+          : {}),
+      },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+      take: PROFILE_TAB_PAGE_SIZE + 1,
+      select: {
+        id: true,
+        follower: {
+          select: {
+            id: true,
+            profile: { select: { username: true, avatarUrl: true, xp: true } },
+            masteryProgress: { select: { mastery: true, xp: true } },
+          },
+        },
+        following: {
+          select: {
+            id: true,
+            profile: { select: { username: true, avatarUrl: true, xp: true } },
+            masteryProgress: { select: { mastery: true, xp: true } },
+          },
+        },
+      },
+    })
+
+    const items = rows.slice(0, PROFILE_TAB_PAGE_SIZE).map((f): FollowCardDTO | null => {
+      const member = section === "followers" ? f.follower : f.following
+      if (!member?.profile) return null
+      const pathXp = Object.fromEntries(member.masteryProgress.map((m) => [m.mastery, m.xp])) as Record<Mastery, number>
+      const totalPathXp = Object.values(pathXp).reduce((s, n) => s + n, 0)
+      const r = rankDisplay(member.profile.xp)
+      return {
+        id: member.id,
+        username: member.profile.username,
+        avatarUrl: member.profile.avatarUrl,
+        rank: { name: r.name, icon: r.icon, color: r.color },
+        buildTitle: totalPathXp >= 50 ? buildTitle(pathXp).title : null,
+      }
+    }).filter((m): m is FollowCardDTO => !!m)
+
+    return {
+      section,
+      items,
+      nextCursor: rows.length > PROFILE_TAB_PAGE_SIZE ? rows[PROFILE_TAB_PAGE_SIZE - 1].id : null,
+    }
+  }
+
   const scope = isOwner ? {} : publicDiaryWhere
 
+  // ── Strain see-all — paged distinct strains across visible grows. ──
+  if (section === "strains") {
+    const grouped = await prisma.growDiary.groupBy({
+      by: ["strainId"],
+      where: { authorId: ownerId, deleted: false, strainId: { not: null }, ...scope },
+      _count: { _all: true },
+    })
+    const strainIds = grouped.map((g) => g.strainId).filter((s): s is string => !!s)
+    const strainRows = strainIds.length
+      ? await prisma.strain.findMany({ where: { id: { in: strainIds } }, select: { id: true, name: true, slug: true } })
+      : []
+    const byId = new Map(strainRows.map((s) => [s.id, s]))
+    const all: StrainRowDTO[] = grouped
+      .map((g) => {
+        const s = g.strainId ? byId.get(g.strainId) : undefined
+        return s ? { id: s.name, name: s.name, slug: s.slug, grows: g._count._all } : null
+      })
+      .filter((s): s is StrainRowDTO => !!s)
+      .sort((a, b) => b.grows - a.grows || a.name.localeCompare(b.name))
+    const offset = Math.max(0, parseInt(cursor ?? "0", 10) || 0)
+    const items = all.slice(offset, offset + FILTERED_STRAIN_MAX)
+    const next = offset + items.length
+    return { section: "strains", items, nextCursor: next < all.length ? String(next) : null }
+  }
+
+  // ── Grow portfolio (grows) + harvest shelf (harvests) ─────────────
   const harvested = section === "harvests"
+  const strain = filters?.strain?.trim()
+  const stage = filters?.stage && GROW_STAGES.has(filters.stage) ? filters.stage : undefined
+  const year = filters?.year && filters.year >= 2000 && filters.year <= 2100 ? filters.year : undefined
+  const where = {
+    authorId: ownerId,
+    deleted: false,
+    ...(harvested ? { harvested: true } : {}),
+    ...(filters?.status === "active" ? { harvested: false } : {}),
+    ...(filters?.status === "completed" ? { harvested: true } : {}),
+    ...(stage && !harvested ? { stage } : {}),
+    ...(strain
+      ? {
+          OR: [
+            { strain: { equals: strain, mode: "insensitive" as const } },
+            { strainRef: { name: { equals: strain, mode: "insensitive" as const } } },
+          ],
+        }
+      : {}),
+    ...(year && harvested
+      ? {
+          harvestedAt: {
+            gte: new Date(Date.UTC(year, 0, 1)),
+            lt: new Date(Date.UTC(year + 1, 0, 1)),
+          },
+        }
+      : {}),
+    ...scope,
+  }
   const rows = await prisma.growDiary.findMany({
     // Grows tab = the whole portfolio, active first then completed; the
     // Harvests tab pages only finished grows, newest harvest first.
-    where: { authorId: ownerId, deleted: false, ...(harvested ? { harvested: true } : {}), ...scope },
-    orderBy: harvested ? { harvestedAt: "desc" } : [{ harvested: "asc" }, { updatedAt: "desc" }],
+    where,
+    orderBy: harvested ? [{ harvestedAt: "desc" as const }, { id: "asc" as const }] : [{ harvested: "asc" as const }, { updatedAt: "desc" as const }],
     ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
     take: PROFILE_TAB_PAGE_SIZE + 1,
     select: {
       id: true, slug: true, title: true, strain: true, stage: true,
       harvested: true, updatedAt: true, startDate: true, visibility: true,
-      yieldAmount: true, yieldUnit: true,
+      yieldAmount: true, yieldUnit: true, yieldPrivate: true,
       harvestedAt: true,
       _count: { select: { updates: true } },
+      updates: {
+        take: 1,
+        orderBy: { createdAt: "desc" as const },
+        select: { images: { take: 1, orderBy: { order: "asc" as const }, select: { url: true } } },
+      },
     },
   })
 
-  // Yield rides with diary visibility — no separate per-harvest flag exists
-  // today; a row the viewer can see is a row whose yield they can see.
-  const items = rows.slice(0, PROFILE_TAB_PAGE_SIZE).map((d) => ({
+  // Real stage transitions per grow — one grouped read over the page's
+  // diaries (bounded), ordered by when each stage was first logged. Only
+  // stages the member actually recorded appear; nothing is fabricated.
+  const pageRows = rows.slice(0, PROFILE_TAB_PAGE_SIZE)
+  const stageGroups = pageRows.length
+    ? await prisma.diaryUpdate.groupBy({
+        by: ["diaryId", "stage"],
+        where: { diaryId: { in: pageRows.map((r) => r.id) } },
+        _min: { createdAt: true },
+      })
+    : []
+  const stageMap = new Map<string, { stage: string; first: Date }[]>()
+  for (const g of stageGroups) {
+    if (!g._min.createdAt) continue
+    const list = stageMap.get(g.diaryId) ?? []
+    list.push({ stage: g.stage, first: g._min.createdAt })
+    stageMap.set(g.diaryId, list)
+  }
+  const stagesOf = (id: string): string[] => {
+    const seen = (stageMap.get(id) ?? []).sort((a, b) => a.first.getTime() - b.first.getTime())
+    const out: string[] = []
+    for (const s of seen) {
+      if (!out.includes(s.stage)) out.push(s.stage)
+    }
+    return out
+  }
+
+  const items = pageRows.map((d) => ({
     id: d.id, slug: d.slug, title: d.title, strain: d.strain, stage: d.stage,
     harvested: d.harvested,
     day: d.startDate ? Math.max(1, Math.floor((Date.now() - d.startDate.getTime()) / 86400000) + 1) : null,
     updates: d._count.updates, visibility: d.visibility,
     updatedAt: d.updatedAt, startDate: d.startDate,
     harvestedAt: d.harvestedAt,
-    yieldAmount: d.yieldAmount, yieldUnit: d.yieldUnit,
+    // Per-harvest yield flag (locked §6): the owner always sees their own
+    // numbers; other viewers get null + the flag so the card reads "yield
+    // hidden" rather than pretending the yield was never recorded.
+    yieldAmount: isOwner || !d.yieldPrivate ? d.yieldAmount : null,
+    yieldUnit: isOwner || !d.yieldPrivate ? d.yieldUnit : null,
+    yieldPrivate: d.yieldPrivate,
+    image: d.updates[0]?.images[0]?.url ?? null,
+    stages: stagesOf(d.id),
   }))
 
   return {
+    section: harvested ? "harvests" : "grows",
     items,
     nextCursor: rows.length > PROFILE_TAB_PAGE_SIZE ? rows[PROFILE_TAB_PAGE_SIZE - 1].id : null,
   }

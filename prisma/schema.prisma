@@ -434,6 +434,7 @@ model GrowDiary {
   harvestedAt   DateTime?
   yieldAmount   Float?
   yieldUnit     String?
+  yieldPrivate  Boolean  @default(false) // member-set: hide exact yield from non-owner viewers
   harvestRating     Int?    // optional 1-10 strain verdict from the harvest review
   harvestDifficulty String? // EASY | NORMAL | HARD
   harvestNotes      String? // "what I learned" — shown on the strain page

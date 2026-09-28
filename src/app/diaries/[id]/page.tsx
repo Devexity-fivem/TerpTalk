@@ -300,7 +300,7 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
         totalDays: growth.totalDays,
         harvested: diary.harvested,
         yieldOz:
-          diary.yieldAmount != null
+          diary.yieldAmount != null && (isOwner || !diary.yieldPrivate)
             ? Math.round(toOz(toGrams(diary.yieldAmount, diary.yieldUnit)) * 10) / 10
             : null,
         harvestRating: diary.harvestRating,
@@ -357,6 +357,12 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
   weeksMerged.sort((a, b) => a.week - b.week)
 
   const harvestReport = buildHarvestReport(diary, updates)
+  // Per-harvest yield privacy — non-owners never see a flagged yield,
+  // including inside the comparison math row below.
+  if (harvestReport && diary.yieldPrivate && !isOwner) {
+    harvestReport.yieldAmount = null
+    harvestReport.yieldUnit = null
+  }
   const lessons = readLessons(diary.lessons)
   const completeness = canEdit ? diaryCompleteness(diary, updates) : null
   const truncated = diary._count.updates > updates.length
@@ -645,6 +651,7 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
             initialHarvested={diary.harvested}
             initialAmount={diary.yieldAmount}
             initialUnit={diary.yieldUnit}
+            initialYieldPrivate={diary.yieldPrivate}
             initialAt={diary.harvestedAt}
             initialRating={diary.harvestRating}
             initialDifficulty={diary.harvestDifficulty}

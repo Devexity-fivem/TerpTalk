@@ -116,6 +116,7 @@ const getStats = unstable_cache(
           harvestedAt: true,
           yieldAmount: true,
           yieldUnit: true,
+          yieldPrivate: true,
           strain: true,
           strainId: true,
           title: true,
@@ -206,7 +207,9 @@ const getStats = unstable_cache(
           if (fd > 0 && fd < 500) flowerDays.push(fd)
         }
       }
-      if (d.yieldAmount != null) yieldsG.push(toGrams(d.yieldAmount, d.yieldUnit))
+      // Member-marked private yields are excluded from community stats too —
+      // a public aggregate must not leak a hidden value.
+      if (d.yieldAmount != null && !d.yieldPrivate) yieldsG.push(toGrams(d.yieldAmount, d.yieldUnit))
     }
     yieldsG.sort((a, b) => a - b)
 

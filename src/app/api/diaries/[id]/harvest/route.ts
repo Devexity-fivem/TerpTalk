@@ -40,7 +40,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   }
 
   const body = await request.json().catch(() => ({}))
-  const { harvested, harvestedAt, yieldAmount, yieldUnit, harvestRating, harvestDifficulty, harvestNotes } = body
+  const { harvested, harvestedAt, yieldAmount, yieldUnit, yieldPrivate, harvestRating, harvestDifficulty, harvestNotes } = body
 
   if (typeof harvested !== "boolean") {
     return NextResponse.json({ error: "harvested must be a boolean" }, { status: 400 })
@@ -94,6 +94,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     harvestRating?: number | null
     harvestDifficulty?: string | null
     harvestNotes?: string | null
+    yieldPrivate?: boolean
     stage: string
   } = {
     harvested,
@@ -138,6 +139,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     if (reviewRating !== undefined) data.harvestRating = reviewRating
     if (reviewDifficulty !== undefined) data.harvestDifficulty = reviewDifficulty
     if (reviewNotes !== undefined) data.harvestNotes = reviewNotes
+    // Per-harvest yield privacy (locked §6) — member-set; only meaningful
+    // while harvested. Absent = unchanged so old clients never wipe it.
+    if (typeof yieldPrivate === "boolean") data.yieldPrivate = yieldPrivate
   } else {
     data.harvestedAt = null
     data.yieldAmount = null
@@ -228,7 +232,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         ? updated.author.profile?.username || updated.author.name!
         : "a member"
     const yieldText =
-      updated.yieldAmount != null && updated.yieldUnit
+      updated.yieldAmount != null && updated.yieldUnit && !updated.yieldPrivate
         ? `${updated.yieldAmount}${updated.yieldUnit}`
         : undefined
     // PUBLIC diaries only — a chat post would broadcast a hidden grow.

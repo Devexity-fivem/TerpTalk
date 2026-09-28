@@ -5,7 +5,7 @@ import { getClientIp, hashIp, isSessionValid } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
 import { getProfileSection, PUBLIC_PROFILE_NO_STORE, type ProfileTabSection } from "@/lib/public-profile"
 
-const SECTIONS = new Set<ProfileTabSection>(["grows", "harvests"])
+const SECTIONS = new Set<ProfileTabSection>(["grows", "harvests", "followers", "following", "strains"])
 
 // GET — cursor-paged grow portfolio page for the profile Grows/Harvests tabs.
 // Same visibility/block scoping as the profile payload; never ships
@@ -35,8 +35,19 @@ export async function GET(
       viewerId = undefined
     }
 
-    const cursor = request.nextUrl.searchParams.get("cursor") ?? undefined
-    const page = await getProfileSection(username, section as ProfileTabSection, viewerId, cursor)
+    const q = request.nextUrl.searchParams
+    const cursor = q.get("cursor") ?? undefined
+    // P3 deterministic filters — validated inside getProfileSection;
+    // unknown values are ignored, never trusted.
+    const statusRaw = q.get("status")
+    const yearRaw = q.get("year")
+    const filters = {
+      ...(statusRaw === "active" || statusRaw === "completed" ? { status: statusRaw as "active" | "completed" } : {}),
+      ...(q.get("strain") ? { strain: q.get("strain")!.slice(0, 80) } : {}),
+      ...(q.get("stage") ? { stage: q.get("stage")!.slice(0, 20) } : {}),
+      ...(yearRaw && /^\d{4}$/.test(yearRaw) ? { year: Number(yearRaw) } : {}),
+    }
+    const page = await getProfileSection(username, section as ProfileTabSection, viewerId, cursor, filters)
     if (!page) {
       return NextResponse.json({ error: "User not found" }, { status: 404 })
     }

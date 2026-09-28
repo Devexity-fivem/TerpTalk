@@ -686,19 +686,22 @@ async function run() {
       })
     }
     const secPage1 = await getProfileSection(`__ss_p_${SUFFIX}`, "grows")
-    assert.equal(secPage1?.items.length, 12, "sections page is capped at 12")
-    assert.ok(secPage1?.nextCursor, "cursor returned for next page")
-    assert.ok(secPage1?.items.every((i) => i.visibility === "PUBLIC"), "anonymous page is all PUBLIC")
-    const secPage2 = await getProfileSection(`__ss_p_${SUFFIX}`, "grows", undefined, secPage1!.nextCursor!)
-    assert.ok(secPage2 && secPage2.items.length >= 1, "cursor page returns remainder")
+    assert.equal(secPage1?.section, "grows", "grows section echoes its kind")
+    if (secPage1?.section !== "grows") throw new Error("grows page missing")
+    assert.equal(secPage1.items.length, 12, "sections page is capped at 12")
+    assert.ok(secPage1.nextCursor, "cursor returned for next page")
+    assert.ok(secPage1.items.every((i) => i.visibility === "PUBLIC"), "anonymous page is all PUBLIC")
+    const secPage2 = await getProfileSection(`__ss_p_${SUFFIX}`, "grows", undefined, secPage1.nextCursor!)
+    assert.ok(secPage2?.section === "grows" && secPage2.items.length >= 1, "cursor page returns remainder")
     const secOwner = await getProfileSection(`__ss_p_${SUFFIX}`, "grows", pUser.id)
     const secOwner2 = secOwner?.nextCursor ? await getProfileSection(`__ss_p_${SUFFIX}`, "grows", pUser.id, secOwner.nextCursor) : null
-    assert.ok(
-      [...(secOwner?.items ?? []), ...(secOwner2?.items ?? [])].some((i) => i.visibility !== "PUBLIC"),
-      "owner pages include private/unlisted"
-    )
+    const ownerRows = [
+      ...(secOwner?.section === "grows" ? secOwner.items : []),
+      ...(secOwner2?.section === "grows" ? secOwner2.items : []),
+    ]
+    assert.ok(ownerRows.some((i) => i.visibility !== "PUBLIC"), "owner pages include private/unlisted")
     const secHarvests = await getProfileSection(`__ss_p_${SUFFIX}`, "harvests", pUser.id)
-    assert.ok(secHarvests?.items.every((i) => i.harvested), "harvests section is harvested rows only")
+    assert.ok(secHarvests?.section === "harvests" && secHarvests.items.every((i) => i.harvested), "harvests section is harvested rows only")
     // Route-level contract: anonymous GET → 200 + PUBLIC-only page; bad
     // section → 400; unknown user → 404.
     const secRes = await getProfileSections(
@@ -717,6 +720,136 @@ async function run() {
     await prisma.block.create({ data: { blockerId: pUser.id, blockedId: a.id } })
     assert.equal(await getProfileSection(`__ss_p_${SUFFIX}`, "grows", a.id), null, "sections 404 on block")
     await prisma.block.deleteMany({ where: { blockerId: pUser.id, blockedId: a.id } })
+
+    // ── P3 — portfolio filters, stage timeline, yield flags, strain
+    // see-all, harvest highlights, follow lists, equipment chips ──────
+
+    // Grow filters — status + strain + stage, all server-validated.
+    const filtActive = await getProfileSection(`__ss_p_${SUFFIX}`, "grows", undefined, undefined, { status: "active" })
+    assert.ok(filtActive?.section === "grows" && filtActive.items.length > 0 && filtActive.items.every((i) => !i.harvested), "status=active returns only non-harvested")
+    const filtCompleted = await getProfileSection(`__ss_p_${SUFFIX}`, "grows", undefined, undefined, { status: "completed" })
+    assert.ok(filtCompleted?.section === "grows" && filtCompleted.items.every((i) => i.harvested), "status=completed returns only harvested")
+    const filtStrain = await getProfileSection(`__ss_p_${SUFFIX}`, "grows", undefined, undefined, { strain: p1Strain.name })
+    assert.ok(
+      filtStrain?.section === "grows" && filtStrain.items.length === 1 && filtStrain.items[0].id === p1PublicGrow.id,
+      "strain filter matches the strainId-linked public grow only (private sibling excluded)"
+    )
+    const unfilteredRef = await getProfileSection(`__ss_p_${SUFFIX}`, "grows")
+    const filtBogusStage = await getProfileSection(`__ss_p_${SUFFIX}`, "grows", undefined, undefined, { stage: "NOT_A_STAGE" })
+    assert.ok(
+      filtBogusStage?.section === "grows" && unfilteredRef?.section === "grows" &&
+        filtBogusStage.items.length === unfilteredRef.items.length,
+      "unknown stage value is ignored, not trusted"
+    )
+
+    // Harvest filters — strain + real harvest years only.
+    const p3Harvest = await prisma.growDiary.create({
+      data: {
+        title: `__ss p3 harvest ${SUFFIX}`, description: "d", growType: "INDOOR",
+        startDate: new Date(Date.UTC(2024, 3, 1)), harvested: true,
+        harvestedAt: new Date(Date.UTC(2024, 6, 10)), authorId: pUser.id,
+        visibility: "PUBLIC", yieldAmount: 420, yieldUnit: "g", yieldPrivate: true,
+      },
+    })
+    const p3HarvestOld = await prisma.growDiary.create({
+      data: {
+        title: `__ss p3 harvest old ${SUFFIX}`, description: "d", growType: "OUTDOOR",
+        startDate: new Date(Date.UTC(2022, 3, 1)), harvested: true,
+        harvestedAt: new Date(Date.UTC(2022, 8, 1)), authorId: pUser.id,
+        visibility: "PUBLIC",
+      },
+    })
+    const filtYear = await getProfileSection(`__ss_p_${SUFFIX}`, "harvests", undefined, undefined, { year: 2022 })
+    assert.ok(
+      filtYear?.section === "harvests" && filtYear.items.length === 1 && filtYear.items[0].id === p3HarvestOld.id,
+      "harvests year filter returns only that year's harvests"
+    )
+
+    // Yield flag — owner sees their number; viewers get null + the flag.
+    const ownerHarvestPage = await getProfileSection(`__ss_p_${SUFFIX}`, "harvests", pUser.id)
+    assert.ok(ownerHarvestPage?.section === "harvests")
+    const ownerPriv = ownerHarvestPage!.items.find((i) => i.id === p3Harvest.id)
+    assert.equal(ownerPriv?.yieldAmount, 420, "owner sees own flagged yield")
+    assert.equal(ownerPriv?.yieldPrivate, true, "owner sees the flag")
+    const anonHarvestPage = await getProfileSection(`__ss_p_${SUFFIX}`, "harvests")
+    assert.ok(anonHarvestPage?.section === "harvests")
+    const anonPriv = anonHarvestPage!.items.find((i) => i.id === p3Harvest.id)
+    assert.equal(anonPriv?.yieldAmount, null, "viewer never receives a flagged yield amount")
+    assert.equal(anonPriv?.yieldPrivate, true, "viewer sees 'yield hidden', not 'not recorded'")
+    // …and it never feeds the public biggest-yield record.
+    pdata = await getPublicProfileData(`__ss_p_${SUFFIX}`)
+    assert.ok(
+      !pdata?.profile.records?.biggestYield || pdata.profile.records.biggestYield.amount !== 420,
+      "flagged yield is excluded from the biggest-yield record"
+    )
+
+    // Stage timeline — real logged transitions only, oldest first.
+    const p3Diary = await prisma.growDiary.create({
+      data: {
+        title: `__ss p3 timeline ${SUFFIX}`, description: "d", growType: "INDOOR",
+        startDate: new Date(), authorId: pUser.id, visibility: "PUBLIC", stage: "FLOWER",
+      },
+    })
+    await prisma.diaryUpdate.create({
+      data: { diaryId: p3Diary.id, authorId: pUser.id, title: "u1", content: "c", stage: "SEEDLING", createdAt: new Date(Date.now() - 10 * 86400000) },
+    })
+    await prisma.diaryUpdate.create({
+      data: { diaryId: p3Diary.id, authorId: pUser.id, title: "u2", content: "c", stage: "FLOWER", createdAt: new Date() },
+    })
+    const timelinePage = await getProfileSection(`__ss_p_${SUFFIX}`, "grows", pUser.id, undefined, { stage: "FLOWER" })
+    assert.ok(timelinePage?.section === "grows")
+    const timelineRow = timelinePage!.items.find((i) => i.id === p3Diary.id)
+    assert.deepEqual(timelineRow?.stages, ["SEEDLING", "FLOWER"], "timeline lists real logged stages in order")
+
+    // Strain see-all — paged distinct strains over visible grows.
+    const strainsPage = await getProfileSection(`__ss_p_${SUFFIX}`, "strains")
+    assert.ok(strainsPage?.section === "strains" && strainsPage.items.some((s) => s.name === p1Strain.name && s.grows === 1), "strains section lists public-only counts")
+    const strainsOwner = await getProfileSection(`__ss_p_${SUFFIX}`, "strains", pUser.id)
+    assert.ok(strainsOwner?.section === "strains" && strainsOwner.items.find((s) => s.name === p1Strain.name)?.grows === 2, "owner strains count private grows too")
+
+    // Harvest highlights + equipment chips — deterministic derivations.
+    pdata = await getPublicProfileData(`__ss_p_${SUFFIX}`)
+    assert.equal(pdata?.profile.harvestHighlights?.mostGrownStrain?.name, p1Strain.name, "most-grown strain is the strain-linked diary's")
+    assert.equal(pdata?.profile.harvestHighlights?.firstHarvestAt?.getUTCFullYear(), 2022, "first harvest year derives from the oldest harvestedAt")
+    assert.ok(pdata?.profile.harvestYears.includes(2022) && pdata?.profile.harvestYears.includes(2024), "harvestYears covers recorded years")
+    assert.ok(pdata?.profile.equipmentChips.includes("indoor") && pdata?.profile.equipmentChips.includes("outdoor"), "equipment chips derive from grow fields")
+
+    // Follow lists — members-visible, block-filtered, cursor-paged.
+    assert.equal(await getProfileSection(`__ss_p_${SUFFIX}`, "followers"), null, "anonymous cannot read follower lists")
+    const f1 = await mk(`__ss_f1_${SUFFIX}`)
+    const f2 = await mk(`__ss_f2_${SUFFIX}`)
+    await prisma.follow.create({ data: { followerId: a.id, followingId: pUser.id } })
+    await prisma.follow.create({ data: { followerId: f1.id, followingId: pUser.id } })
+    await prisma.follow.create({ data: { followerId: f2.id, followingId: pUser.id } })
+    await prisma.follow.create({ data: { followerId: pUser.id, followingId: f1.id } })
+    const followersPage = await getProfileSection(`__ss_p_${SUFFIX}`, "followers", a.id)
+    assert.ok(followersPage?.section === "followers" && followersPage.items.length === 3, "member sees follower list")
+    assert.ok(followersPage!.items.every((i) => i.username && i.rank.name), "follow rows carry compact identity")
+    // Owner blocks f2 → f2 drops out of every viewer's list.
+    await prisma.block.create({ data: { blockerId: pUser.id, blockedId: f2.id } })
+    const followersBlocked = await getProfileSection(`__ss_p_${SUFFIX}`, "followers", a.id)
+    assert.ok(followersBlocked?.section === "followers" && followersBlocked.items.length === 2 && !followersBlocked.items.some((i) => i.id === f2.id), "owner-blocked member is filtered")
+    // Viewer-side block also filters (a blocks f1 → a's view drops f1).
+    await prisma.block.create({ data: { blockerId: a.id, blockedId: f1.id } })
+    const followersViewerBlocked = await getProfileSection(`__ss_p_${SUFFIX}`, "followers", a.id)
+    assert.ok(followersViewerBlocked?.section === "followers" && followersViewerBlocked.items.length === 1 && followersViewerBlocked.items[0].id === a.id, "viewer-blocked member is filtered")
+    const followingPage = await getProfileSection(`__ss_p_${SUFFIX}`, "following", f1.id)
+    assert.ok(followingPage?.section === "following" && followingPage.items.some((i) => i.id === f1.id), "following lists who the owner follows")
+    // Route-level: anonymous followers GET → 404; filtered grows GET → 200.
+    const anonFollowRes = await getProfileSections(
+      new NextRequest(`http://localhost/api/users/__ss_p_${SUFFIX}/sections/followers`),
+      { params: Promise.resolve({ username: `__ss_p_${SUFFIX}`, section: "followers" }) }
+    )
+    assert.equal(anonFollowRes.status, 404, "route 404s anonymous follower lists")
+    const filteredRes = await getProfileSections(
+      new NextRequest(`http://localhost/api/users/__ss_p_${SUFFIX}/sections/grows?status=active&stage=VEGETATIVE&year=not-a-year`),
+      { params: Promise.resolve({ username: `__ss_p_${SUFFIX}`, section: "grows" }) }
+    )
+    assert.equal(filteredRes.status, 200, "route accepts valid filters and ignores garbage")
+
+    await prisma.follow.deleteMany({ where: { OR: [{ followerId: pUser.id }, { followingId: pUser.id }, { followerId: a.id }, { followerId: f1.id }, { followerId: f2.id }] } })
+    await prisma.block.deleteMany({ where: { OR: [{ blockerId: pUser.id }, { blockerId: a.id }] } })
+    await prisma.diaryUpdate.deleteMany({ where: { diaryId: p3Diary.id } })
 
     await prisma.post.delete({ where: { id: p1Post.id } })
     await prisma.thread.delete({ where: { id: p1Thread.id } })
@@ -971,7 +1104,7 @@ async function run() {
     // Records widget (Harvested) — scoped to viewer-visible diaries: a longer
     // PRIVATE grow must not inflate the public record.
     await prisma.profile.update({ where: { userId: c.id }, data: { xp: 7500 } })
-    const pubGrow = await prisma.growDiary.create({
+    await prisma.growDiary.create({
       data: {
         title: "Public harvest", description: "", growType: "INDOOR",
         strain: "Record Strain", medium: "SOIL", lighting: "LED", stage: "HARVEST",

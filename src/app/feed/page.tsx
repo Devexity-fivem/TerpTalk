@@ -398,7 +398,7 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
                               <div className="text-xs text-muted-foreground flex items-center gap-2 flex-wrap">
                                 <span>{h.author.profile?.username || h.author.name}</span>
                                 {dayCount != null && <span>• {dayCount}d</span>}
-                                {h.yieldAmount != null && <span className="text-success font-medium">• {h.yieldAmount} {h.yieldUnit || "g"}</span>}
+                                {h.yieldAmount != null && (!h.yieldPrivate || h.authorId === session?.user?.id) && <span className="text-success font-medium">• {h.yieldAmount} {h.yieldUnit || "g"}</span>}
                                 {h.harvestRating != null && <span className="text-warning">• {h.harvestRating}/10</span>}
                               </div>
                             </div>
@@ -580,7 +580,7 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
                             {dayCount != null && (
                               <span className="text-muted-foreground">{dayCount}d grow</span>
                             )}
-                            {diary.yieldAmount != null && (
+                            {diary.yieldAmount != null && (!diary.yieldPrivate || diary.authorId === session?.user?.id) && (
                               <span className="font-medium text-success">{diary.yieldAmount} {diary.yieldUnit || "g"}</span>
                             )}
                             {diary.harvestRating != null && (

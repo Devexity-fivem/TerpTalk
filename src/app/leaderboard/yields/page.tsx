@@ -28,6 +28,8 @@ const getYieldDiaries = unstable_cache(
         ...publicDiaryWhere,
         author: { ...activeAuthor(), profile: { publicMilestoneOptOut: false } },
         yieldAmount: { not: null },
+        // Member-marked private yields never feed public leaderboards.
+        yieldPrivate: false,
         strain: { not: null },
       },
       include: { author: { select: publicUserSelect } },

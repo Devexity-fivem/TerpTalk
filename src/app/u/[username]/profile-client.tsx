@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import { useSession } from "next-auth/react"
 import { useParams } from "next/navigation"
-import { User, MessageSquare, MapPin, Globe, Sprout, Dna, Leaf, Store, ChevronDown, ChevronUp, Bot, Zap, Users, Link2, HandMetal, CalendarClock, TrendingUp, Search, BookOpen, Trophy, BarChart3, AlertTriangle, Megaphone, Wrench, Award, Pin, FlaskConical, BadgeCheck, Target, CheckCircle2 } from "lucide-react"
+import { User, MessageSquare, MapPin, Globe, Sprout, Dna, Leaf, Store, ChevronDown, ChevronUp, Bot, Zap, Users, Link2, HandMetal, CalendarClock, TrendingUp, Search, BookOpen, Trophy, BarChart3, AlertTriangle, Megaphone, Wrench, Award, Pin, FlaskConical, BadgeCheck, Target, CheckCircle2, X } from "lucide-react"
 import Link from "next/link"
 import UserActions from "@/components/user-actions"
 import RoleBadge from "@/components/role-badge"
@@ -35,20 +35,41 @@ interface GrowCard {
   visibility: string
   updatedAt: string
   startDate: string | null
+  image?: string | null
+  /** Real logged stage transitions (oldest → newest) — section pages only. */
+  stages?: string[]
 }
 
 interface HarvestRow extends GrowCard {
   harvestedAt: string | null
   yieldAmount: number | null
   yieldUnit: string | null
+  yieldPrivate?: boolean
+}
+
+interface FollowRow {
+  id: string
+  username: string
+  avatarUrl: string | null
+  rank: { name: string; icon: string; color: string }
+  buildTitle: string | null
+}
+
+interface StrainRow {
+  id: string
+  name: string
+  slug: string | null
+  grows: number
 }
 
 interface ExperimentCard {
   id: string
   title: string
+  change: string
   category: string
   status: string
   outcome: string | null
+  conclusion: string | null
   startedAt: string
   endedAt: string | null
   diary: { id: string; slug: string | null; title: string }
@@ -105,7 +126,18 @@ interface PublicProfile {
   activeGrow: GrowCard | null
   experiments: ExperimentCard[]
   acceptedAnswersList: AcceptedAnswer[]
-  strainPortfolio: { name: string; slug: string | null; grows: number }[]
+  strainPortfolio: StrainRow[]
+  strainTotal: number
+  equipmentChips: string[]
+  harvestHighlights: {
+    firstHarvestAt: string | null
+    latestHarvestAt: string | null
+    longestGrowDays: number
+    mostGrownStrain: { name: string; grows: number } | null
+    repeatStrains: number
+    harvestCount: number
+  } | null
+  harvestYears: number[]
   customSections: { id: string; title: string; body: string; order: number; visibility: string }[]
   badges: Array<{ name: string; description: string; icon: string | null; pinned: boolean }>
   stats: {
@@ -203,6 +235,7 @@ interface ProfileResponse {
   profile: PublicProfile
   viewerBlocked: boolean
   viewerFollowing: boolean
+  viewerLoggedIn: boolean
   recentThreads: Thread[]
   growDiaries: GrowDiary[]
   growSetups: GrowSetup[]
@@ -307,9 +340,14 @@ function GrowRow({ grow }: { grow: GrowCard }) {
       href={diaryPath(grow)}
       className="flex items-center gap-3 rounded-xl p-2 -m-2 transition-colors hover:bg-secondary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
     >
-      <div className="w-11 h-11 bg-primary/10 rounded-xl flex items-center justify-center shrink-0">
-        <Sprout className="w-5 h-5 text-primary" />
-      </div>
+      {grow.image ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={grow.image} alt="" loading="lazy" decoding="async" className="w-11 h-11 rounded-xl object-cover shrink-0 bg-primary/10" />
+      ) : (
+        <div className="w-11 h-11 bg-primary/10 rounded-xl flex items-center justify-center shrink-0">
+          <Sprout className="w-5 h-5 text-primary" />
+        </div>
+      )}
       <div className="min-w-0 flex-1">
         <p className="font-medium text-sm truncate">{grow.title}</p>
         <div className="flex items-center gap-2 text-xs text-muted-foreground flex-wrap">
@@ -321,6 +359,18 @@ function GrowRow({ grow }: { grow: GrowCard }) {
           <span>{grow.updates} update{grow.updates === 1 ? "" : "s"}</span>
           <TimeAgo value={grow.updatedAt} />
         </div>
+        {/* Real recorded stage transitions — only stages the member logged;
+            nothing fabricated for undocumented gaps. */}
+        {grow.stages && grow.stages.length > 1 && (
+          <div className="flex items-center gap-1 mt-1 flex-wrap" aria-label="Recorded grow stages">
+            {grow.stages.map((s, i) => (
+              <span key={s} className="flex items-center gap-1">
+                {i > 0 && <span className="text-muted-foreground/60 text-[9px]" aria-hidden="true">→</span>}
+                <span className="text-[10px] text-muted-foreground">{STAGE_LABELS[s] ?? s.toLowerCase()}</span>
+              </span>
+            ))}
+          </div>
+        )}
       </div>
       <VisibilityTag visibility={grow.visibility} />
     </Link>
@@ -343,36 +393,47 @@ function LoadMore({ loading, done, onMore }: { loading: boolean; done: boolean; 
   )
 }
 
-/** Cursor-paged tab list — fetches page 1 on first open, then appends. */
-function useProfileSection<T extends { id: string }>(username: string, section: string, active: boolean) {
-  const [items, setItems] = useState<T[]>([])
-  const [cursor, setCursor] = useState<string | null>(null)
-  const [loading, setLoading] = useState(active)
-  const started = useRef(false)
+/** Cursor-paged tab list — fetches page 1 on first open, then appends.
+    `query` carries deterministic filter params; results are keyed by
+    section+query so a filter change never merges with the previous set —
+    stale pages render as empty until the fresh fetch lands. */
+function useProfileSection<T extends { id: string }>(username: string, section: string, active: boolean, query = "") {
+  const fetchKey = `${section}|${query}`
+  const [state, setState] = useState<{ key: string; items: T[]; cursor: string | null }>({
+    key: fetchKey, items: [], cursor: null,
+  })
+  const [fetching, setFetching] = useState(active)
+  const startedKey = useRef<string | null>(null)
 
   const load = useCallback(
     (c?: string) => {
-      setLoading(true)
-      fetch(`/api/users/${encodeURIComponent(username)}/sections/${section}${c ? `?cursor=${encodeURIComponent(c)}` : ""}`, { cache: "no-store" })
+      setFetching(true)
+      const suffix = `${query}${c ? `${query ? "&" : ""}cursor=${encodeURIComponent(c)}` : ""}`
+      fetch(`/api/users/${encodeURIComponent(username)}/sections/${section}${suffix ? `?${suffix}` : ""}`, { cache: "no-store" })
         .then(async (res) => {
           if (!res.ok) return
           const page = await res.json()
-          setItems((prev) => (c ? [...prev, ...page.items] : page.items))
-          setCursor(page.nextCursor)
+          setState((prev) => ({
+            key: fetchKey,
+            items: c && prev.key === fetchKey ? [...prev.items, ...page.items] : page.items,
+            cursor: page.nextCursor,
+          }))
         })
-        .finally(() => setLoading(false))
+        .finally(() => setFetching(false))
     },
-    [username, section]
+    [username, section, query, fetchKey]
   )
 
   useEffect(() => {
-    if (active && !started.current) {
-      started.current = true
+    if (active && startedKey.current !== fetchKey) {
+      startedKey.current = fetchKey
       load()
     }
-  }, [active, load])
+  }, [active, fetchKey, load])
 
-  return { items, loading, hasMore: !!cursor, loadMore: () => cursor && load(cursor) }
+  const items = state.key === fetchKey ? state.items : []
+  const cursor = state.key === fetchKey ? state.cursor : null
+  return { items, loading: fetching || state.key !== fetchKey, hasMore: !!cursor, loadMore: () => cursor && load(cursor) }
 }
 
 /* ── Member profile ──────────────────────────────────────────────── */
@@ -384,11 +445,25 @@ const TAB_LABELS: Record<string, string> = {
   about: "About",
 }
 
+const GROW_STAGE_OPTIONS = ["GERMINATION", "SEEDLING", "VEGETATIVE", "FLOWER", "HARVEST", "DRYING", "CURING", "COMPLETED"]
+
+const filterSelect =
+  "rounded-full border border-border/70 bg-background px-2.5 py-1 text-xs text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+
 function MemberProfile({ data, isSelf, username }: { data: ProfileResponse; isSelf: boolean; username: string }) {
   const { profile, viewerBlocked, viewerFollowing, recentThreads, growSetups, recentProgression } = data
   const joinDate = new Date(profile.joinDate).toLocaleDateString("en-US", { year: "numeric", month: "long" })
   const [showAllBadges, setShowAllBadges] = useState(false)
   const [tab, setTab] = useState("overview")
+  // P3 — deterministic portfolio filters (server-validated columns only)
+  // + strain see-all + follow-list dialog state.
+  const [growStatus, setGrowStatus] = useState<"" | "active" | "completed">("")
+  const [growStrain, setGrowStrain] = useState("")
+  const [growStage, setGrowStage] = useState("")
+  const [harvestStrain, setHarvestStrain] = useState("")
+  const [harvestYear, setHarvestYear] = useState("")
+  const [showAllStrains, setShowAllStrains] = useState(false)
+  const [followList, setFollowList] = useState<"followers" | "following" | null>(null)
 
   const settings = profile.profileSettings
   // Compact density — tighter spacing, same information architecture.
@@ -403,8 +478,27 @@ function MemberProfile({ data, isSelf, username }: { data: ProfileResponse; isSe
   const focusMastery = profile.mastery.reduce((top, m) => (m.xp > (top?.xp ?? -1) ? m : top), profile.mastery[0])
   const heroStats = profile.notableStats.slice(0, 4)
 
-  const growsSection = useProfileSection<GrowCard>(username, "grows", tab === "grows")
-  const harvestsSection = useProfileSection<HarvestRow>(username, "harvests", tab === "harvests")
+  const growsQuery = [
+    growStatus ? `status=${growStatus}` : "",
+    growStrain ? `strain=${encodeURIComponent(growStrain)}` : "",
+    growStage ? `stage=${encodeURIComponent(growStage)}` : "",
+  ].filter(Boolean).join("&")
+  const harvestsQuery = [
+    harvestStrain ? `strain=${encodeURIComponent(harvestStrain)}` : "",
+    harvestYear ? `year=${encodeURIComponent(harvestYear)}` : "",
+  ].filter(Boolean).join("&")
+  const growsSection = useProfileSection<GrowCard>(username, "grows", tab === "grows", growsQuery)
+  const harvestsSection = useProfileSection<HarvestRow>(username, "harvests", tab === "harvests", harvestsQuery)
+  const strainsSection = useProfileSection<StrainRow>(username, "strains", showAllStrains)
+  const followSection = useProfileSection<FollowRow>(username, followList ?? "followers", !!followList)
+
+  // Dialog a11y — Escape closes.
+  useEffect(() => {
+    if (!followList) return
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setFollowList(null) }
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+  }, [followList])
 
   const show = (id: string) => !hidden.has(id)
 
@@ -645,6 +739,36 @@ function MemberProfile({ data, isSelf, username }: { data: ProfileResponse; isSe
                           <Globe className="w-3.5 h-3.5" />{profile.website.replace(/^https?:\/\//, "").slice(0, 40)}
                         </a>
                       )}
+                      {/* Follow relationships — lists are members-visible
+                          (locked #13); anonymous viewers see the counts
+                          but nothing clickable. No ranking, no prestige. */}
+                      <span className="flex items-center gap-1">
+                        {data.viewerLoggedIn ? (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => setFollowList("followers")}
+                              className="hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
+                            >
+                              <span className="font-medium text-foreground tabular-nums">{profile.stats.followers}</span> follower{profile.stats.followers === 1 ? "" : "s"}
+                            </button>
+                            <span aria-hidden="true">·</span>
+                            <button
+                              type="button"
+                              onClick={() => setFollowList("following")}
+                              className="hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
+                            >
+                              <span className="font-medium text-foreground tabular-nums">{profile.stats.following}</span> following
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <span className="font-medium text-foreground tabular-nums">{profile.stats.followers}</span> follower{profile.stats.followers === 1 ? "" : "s"}
+                            <span aria-hidden="true">·</span>
+                            <span className="font-medium text-foreground tabular-nums">{profile.stats.following}</span> following
+                          </>
+                        )}
+                      </span>
                     </p>
                     {/* Progression identity row */}
                     <div className="flex items-center gap-2 flex-wrap mb-2">
@@ -766,7 +890,19 @@ function MemberProfile({ data, isSelf, username }: { data: ProfileResponse; isSe
               {active === "grows" && show("grows") && (
                 <div className="space-y-4">
                   {profile.strainPortfolio.length > 0 && (
-                    <SectionCard title="Strain portfolio" id="strain-portfolio" compact={compact} description="Strains across this member's visible grows">
+                    <SectionCard
+                      title="Strain portfolio" id="strain-portfolio" compact={compact}
+                      description={`Strains across this member's visible grows${profile.strainTotal > profile.strainPortfolio.length ? ` — top ${profile.strainPortfolio.length} of ${profile.strainTotal}` : ""}`}
+                      actions={profile.strainTotal > profile.strainPortfolio.length || showAllStrains ? (
+                        <button
+                          type="button"
+                          onClick={() => setShowAllStrains((v) => !v)}
+                          className="text-xs text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
+                        >
+                          {showAllStrains ? "Show less" : `See all ${profile.strainTotal}`}
+                        </button>
+                      ) : undefined}
+                    >
                       <div className="flex flex-wrap gap-1.5">
                         {profile.strainPortfolio.map((s) => (
                           <Tag key={s.name} href={`/strains?q=${encodeURIComponent(s.name)}`}>
@@ -776,11 +912,54 @@ function MemberProfile({ data, isSelf, username }: { data: ProfileResponse; isSe
                           </Tag>
                         ))}
                       </div>
+                      {showAllStrains && (
+                        <ul className="mt-3 space-y-1 border-t border-border/60 pt-3">
+                          {strainsSection.items.map((s, i) => (
+                            <li key={`${s.name}-${i}`} className="flex items-center justify-between gap-2 text-sm">
+                              <Link href={`/strains?q=${encodeURIComponent(s.name)}`} className="truncate hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded">
+                                {s.name}
+                              </Link>
+                              <span className="text-xs text-muted-foreground shrink-0">{s.grows} grow{s.grows === 1 ? "" : "s"}</span>
+                            </li>
+                          ))}
+                          {strainsSection.loading && <li className="text-xs text-muted-foreground">Loading…</li>}
+                        </ul>
+                      )}
+                      {showAllStrains && <LoadMore loading={strainsSection.loading} done={!strainsSection.hasMore && strainsSection.items.length > 0} onMore={strainsSection.loadMore} />}
                     </SectionCard>
                   )}
                   <SectionCard title="Grow portfolio" id="grow-portfolio" compact={compact} description={`${profile.stats.diaryCreator} grow${profile.stats.diaryCreator === 1 ? "" : "s"} — active first`}>
+                    <div className="flex flex-wrap items-center gap-2 mb-3" role="group" aria-label="Grow filters">
+                      <select value={growStatus} onChange={(e) => setGrowStatus(e.target.value as "" | "active" | "completed")} className={filterSelect} aria-label="Status">
+                        <option value="">All grows</option>
+                        <option value="active">Active</option>
+                        <option value="completed">Completed</option>
+                      </select>
+                      {profile.strainPortfolio.length > 1 && (
+                        <select value={growStrain} onChange={(e) => setGrowStrain(e.target.value)} className={filterSelect} aria-label="Strain">
+                          <option value="">Any strain</option>
+                          {profile.strainPortfolio.map((s) => <option key={s.name} value={s.name}>{s.name}</option>)}
+                        </select>
+                      )}
+                      <select value={growStage} onChange={(e) => setGrowStage(e.target.value)} className={filterSelect} aria-label="Stage">
+                        <option value="">Any stage</option>
+                        {GROW_STAGE_OPTIONS.map((s) => <option key={s} value={s}>{STAGE_LABELS[s] ?? s.toLowerCase()}</option>)}
+                      </select>
+                      {(growStatus || growStrain || growStage) && (
+                        <button
+                          type="button"
+                          onClick={() => { setGrowStatus(""); setGrowStrain(""); setGrowStage("") }}
+                          className="text-xs text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded px-1"
+                        >
+                          Clear
+                        </button>
+                      )}
+                    </div>
                     {growsSection.items.length === 0 && !growsSection.loading ? (
-                      <EmptyState compact icon={Sprout} title="No grows to show" description="Documented grows appear here as the member journals them." />
+                      <EmptyState
+                        compact icon={Sprout} title={growStatus || growStrain || growStage ? "Nothing matches these filters" : "No grows to show"}
+                        description={growStatus || growStrain || growStage ? "Try widening the filters — only real recorded data is listed." : "Documented grows appear here as the member journals them."}
+                      />
                     ) : (
                       <ul className="space-y-2">
                         {growsSection.items.map((d) => (
@@ -795,6 +974,30 @@ function MemberProfile({ data, isSelf, username }: { data: ProfileResponse; isSe
 
               {active === "harvests" && show("harvests") && (
                 <div className="space-y-4">
+                  {/* Deterministic harvest highlights — every line derives
+                      from the harvests the viewer can actually see. */}
+                  {profile.harvestHighlights && (
+                    <SectionCard title="Harvest highlights" id="harvest-highlights" compact={compact}>
+                      <dl className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-sm">
+                        <div><dt className="text-xs text-muted-foreground">Harvests</dt><dd className="font-semibold tabular-nums">{profile.harvestHighlights.harvestCount}</dd></div>
+                        {profile.harvestHighlights.firstHarvestAt && (
+                          <div><dt className="text-xs text-muted-foreground">First harvest</dt><dd className="font-medium">{new Date(profile.harvestHighlights.firstHarvestAt).toLocaleDateString("en-US", { year: "numeric", month: "short" })}</dd></div>
+                        )}
+                        {profile.harvestHighlights.latestHarvestAt && (
+                          <div><dt className="text-xs text-muted-foreground">Most recent</dt><dd className="font-medium">{new Date(profile.harvestHighlights.latestHarvestAt).toLocaleDateString("en-US", { year: "numeric", month: "short" })}</dd></div>
+                        )}
+                        {profile.harvestHighlights.longestGrowDays > 0 && (
+                          <div><dt className="text-xs text-muted-foreground">Longest grow</dt><dd className="font-medium">{profile.harvestHighlights.longestGrowDays} days</dd></div>
+                        )}
+                        {profile.harvestHighlights.mostGrownStrain && (
+                          <div><dt className="text-xs text-muted-foreground">Most-grown strain</dt><dd className="font-medium truncate">{profile.harvestHighlights.mostGrownStrain.name} <span className="text-muted-foreground">×{profile.harvestHighlights.mostGrownStrain.grows}</span></dd></div>
+                        )}
+                        {profile.harvestHighlights.repeatStrains > 0 && (
+                          <div><dt className="text-xs text-muted-foreground">Repeat strains</dt><dd className="font-medium tabular-nums">{profile.harvestHighlights.repeatStrains}</dd></div>
+                        )}
+                      </dl>
+                    </SectionCard>
+                  )}
                   {profile.pinnedHarvest && (
                     <SectionCard title={<span className="flex items-center gap-1.5"><Pin className="w-4 h-4 text-warning" />Pinned harvest</span>} id="pinned-harvest" compact={compact}>
                       <Link
@@ -812,8 +1015,37 @@ function MemberProfile({ data, isSelf, username }: { data: ProfileResponse; isSe
                     </SectionCard>
                   )}
                   <SectionCard title="Harvest shelf" id="harvest-shelf" compact={compact} description={`${profile.stats.harvestCount} completed grow${profile.stats.harvestCount === 1 ? "" : "s"}`}>
+                    {(profile.strainPortfolio.length > 1 || profile.harvestYears.length > 0) && (
+                      <div className="flex flex-wrap items-center gap-2 mb-3" role="group" aria-label="Harvest filters">
+                        {profile.strainPortfolio.length > 1 && (
+                          <select value={harvestStrain} onChange={(e) => setHarvestStrain(e.target.value)} className={filterSelect} aria-label="Strain">
+                            <option value="">Any strain</option>
+                            {profile.strainPortfolio.map((s) => <option key={s.name} value={s.name}>{s.name}</option>)}
+                          </select>
+                        )}
+                        {profile.harvestYears.length > 1 && (
+                          <select value={harvestYear} onChange={(e) => setHarvestYear(e.target.value)} className={filterSelect} aria-label="Year">
+                            <option value="">Any year</option>
+                            {profile.harvestYears.map((y) => <option key={y} value={y}>{y}</option>)}
+                          </select>
+                        )}
+                        {(harvestStrain || harvestYear) && (
+                          <button
+                            type="button"
+                            onClick={() => { setHarvestStrain(""); setHarvestYear("") }}
+                            className="text-xs text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded px-1"
+                          >
+                            Clear
+                          </button>
+                        )}
+                      </div>
+                    )}
                     {harvestsSection.items.length === 0 && !harvestsSection.loading ? (
-                      <EmptyState compact icon={Trophy} title="No harvests yet" description="Finished grows land here once they're harvested." />
+                      <EmptyState
+                        compact icon={Trophy}
+                        title={harvestStrain || harvestYear ? "Nothing matches these filters" : "No harvests yet"}
+                        description={harvestStrain || harvestYear ? "Try widening the filters — only real recorded harvests are listed." : "Finished grows land here once they're harvested."}
+                      />
                     ) : (
                       <ul className="grid gap-2 sm:grid-cols-2">
                         {harvestsSection.items.map((h) => {
@@ -838,6 +1070,8 @@ function MemberProfile({ data, isSelf, username }: { data: ProfileResponse; isSe
                                 <p className="text-xs mt-1">
                                   {h.yieldAmount != null && h.yieldUnit ? (
                                     <span className="text-warning font-medium">{h.yieldAmount}{h.yieldUnit}</span>
+                                  ) : h.yieldPrivate ? (
+                                    <span className="text-muted-foreground">yield hidden</span>
                                   ) : (
                                     <span className="text-muted-foreground">yield not recorded</span>
                                   )}
@@ -872,6 +1106,65 @@ function MemberProfile({ data, isSelf, username }: { data: ProfileResponse; isSe
           )}
         </Tabs>
       </div>
+
+      {/* Follow relationships — members-visible, block-filtered,
+          cursor-paged (locked #13). Compact identity rows only. */}
+      {followList && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label={followList === "followers" ? "Followers" : "Following"}
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 p-0 sm:p-4"
+          onClick={() => setFollowList(null)}
+        >
+          <div
+            className="w-full sm:max-w-md max-h-[80vh] bg-card rounded-t-2xl sm:rounded-2xl border border-border/70 overflow-hidden flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-4 py-3 border-b border-border/60">
+              <h2 className="font-display text-base font-semibold">{followList === "followers" ? "Followers" : "Following"}</h2>
+              <button
+                type="button"
+                onClick={() => setFollowList(null)}
+                className="p-1.5 rounded-lg hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                aria-label="Close"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="overflow-y-auto p-2">
+              {followSection.items.length === 0 && !followSection.loading ? (
+                <p className="text-sm text-muted-foreground text-center py-8">
+                  {followList === "followers" ? "No followers yet." : "Not following anyone yet."}
+                </p>
+              ) : (
+                <ul className="space-y-0.5">
+                  {followSection.items.map((m) => (
+                    <li key={m.id}>
+                      <Link
+                        href={`/u/${encodeURIComponent(m.username)}`}
+                        onClick={() => setFollowList(null)}
+                        className="flex items-center gap-3 rounded-xl p-2 transition-colors hover:bg-secondary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      >
+                        <Avatar src={m.avatarUrl} alt="" size="sm" className="w-9 h-9" fallback={<User className="w-4 h-4" />} />
+                        <span className="min-w-0 flex-1">
+                          <span className="block font-medium text-sm truncate">@{m.username}</span>
+                          {m.buildTitle && <span className="block text-xs text-muted-foreground truncate">{m.buildTitle}</span>}
+                        </span>
+                        <span className={cn("inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium shrink-0", m.rank.color)}>
+                          <span aria-hidden="true">{m.rank.icon}</span>{m.rank.name}
+                        </span>
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {followSection.loading && <p className="text-xs text-muted-foreground text-center py-4">Loading…</p>}
+              <div className="pb-2"><LoadMore loading={followSection.loading} done={!followSection.hasMore && followSection.items.length > 0} onMore={followSection.loadMore} /></div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -933,7 +1226,9 @@ function ContributionsTab({
                 <FlaskConical className="w-4 h-4 text-primary shrink-0 mt-0.5" aria-hidden="true" />
                 <div className="min-w-0 flex-1">
                   <p className="font-medium text-sm break-words">{e.title}</p>
-                  <p className="text-xs text-muted-foreground">
+                  {e.change && <p className="text-xs text-muted-foreground mt-0.5 break-words line-clamp-2">{e.change}</p>}
+                  {e.conclusion && <p className="text-xs mt-0.5 break-words line-clamp-2 italic">&ldquo;{e.conclusion}&rdquo;</p>}
+                  <p className="text-xs text-muted-foreground mt-1">
                     <Tag variant="muted" className="mr-1.5">{e.status.toLowerCase().replace(/_/g, " ")}</Tag>
                     {e.outcome && <Tag variant="muted" className="mr-1.5">{e.outcome.toLowerCase().replace(/_/g, " ")}</Tag>}
                     in <Link href={diaryPath(e.diary)} className="text-primary hover:underline">{e.diary.title}</Link>
@@ -1076,7 +1371,7 @@ function AboutTab({ profile, isSelf, compact }: { profile: PublicProfile; isSelf
   const identity = profile.profileSettings.identity
   const hasIdentity = profile.growExperience || profile.growSpace || profile.favoriteStrain ||
     identity.mediums.length > 0 || identity.styles.length > 0 || identity.goals
-  const hasAnything = profile.bio || hasIdentity || profile.businessName || profile.customSections.length > 0 || profile.ownerInsights
+  const hasAnything = profile.bio || hasIdentity || profile.businessName || profile.customSections.length > 0 || profile.ownerInsights || profile.equipmentChips.length > 0
 
   if (!hasAnything) {
     return <EmptyState icon={User} title="Nothing here yet" description="This member hasn't shared an about section." />
@@ -1144,6 +1439,16 @@ function AboutTab({ profile, isSelf, compact }: { profile: PublicProfile; isSelf
               <p className="text-sm whitespace-pre-wrap break-words">{identity.goals}</p>
             </div>
           )}
+        </SectionCard>
+      )}
+
+      {/* Equipment — derived label chips from the member's documented
+          grows (label-first; catalog-ready when products land). */}
+      {profile.equipmentChips.length > 0 && (
+        <SectionCard title="Equipment & methods" id="equipment" compact={compact} description="From documented grows — mediums, lighting, space, techniques">
+          <div className="flex flex-wrap gap-1.5">
+            {profile.equipmentChips.map((c) => <Tag key={c} variant="muted">{c}</Tag>)}
+          </div>
         </SectionCard>
       )}
 

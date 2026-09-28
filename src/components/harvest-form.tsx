@@ -10,6 +10,7 @@ interface HarvestFormProps {
   initialHarvested: boolean
   initialAmount?: number | null
   initialUnit?: string | null
+  initialYieldPrivate?: boolean
   initialAt?: Date | string | null
   initialRating?: number | null
   initialDifficulty?: string | null
@@ -24,6 +25,7 @@ export default function HarvestForm({
   initialHarvested,
   initialAmount,
   initialUnit,
+  initialYieldPrivate = false,
   initialAt,
   initialRating,
   initialDifficulty,
@@ -45,13 +47,14 @@ export default function HarvestForm({
   const [rating, setRating] = useState(initialRating?.toString() || "")
   const [difficulty, setDifficulty] = useState(initialDifficulty || "")
   const [notes, setNotes] = useState(initialNotes || "")
+  const [yieldPrivate, setYieldPrivate] = useState(initialYieldPrivate)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!canEdit) return
     setBusy(true)
     setError("")
-    const body: Record<string, unknown> = { harvested: true }
+    const body: Record<string, unknown> = { harvested: true, yieldPrivate }
     if (amount.trim()) body.yieldAmount = Number(amount)
     if (unit) body.yieldUnit = unit
     if (at) body.harvestedAt = at
@@ -144,11 +147,14 @@ export default function HarvestForm({
 
       {harvested && (initialAmount || initialAt) && (
         <div className="mt-4 flex flex-wrap items-center gap-3 text-sm">
-          {initialAmount ? (
+          {initialAmount && (canEdit || !initialYieldPrivate) ? (
             <span className="px-2.5 py-1 rounded-lg bg-emerald-500/10 text-success font-medium">
               Yield: {initialAmount} {initialUnit || "g"}
             </span>
           ) : null}
+          {initialYieldPrivate && canEdit && (
+            <span className="px-2 py-1 rounded-lg bg-secondary text-muted-foreground text-xs">yield hidden from others</span>
+          )}
           {initialAt ? (
             <span className="text-muted-foreground">
               Harvested {new Date(initialAt).toLocaleDateString()}
@@ -195,6 +201,20 @@ export default function HarvestForm({
                 onChange={(e) => setAt(e.target.value)}
                 className="mt-1 w-full px-3 py-2 rounded-xl border border-border/70 bg-background text-sm"
               />
+            </label>
+            <label className="flex items-start gap-2.5 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={yieldPrivate}
+                onChange={(e) => setYieldPrivate(e.target.checked)}
+                className="mt-0.5 rounded border-border"
+              />
+              <span>
+                <span className="text-sm font-medium">Keep my yield private</span>
+                <span className="block text-xs text-muted-foreground">
+                  Exact yield stays off your profile, leaderboards, and strain averages — only you see it.
+                </span>
+              </span>
             </label>
 
             {/* Optional strain review — feeds the strain page's member stats */}
