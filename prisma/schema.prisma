@@ -952,7 +952,7 @@ model ModerationAction {
 // Security Infrastructure
 model SecurityEvent {
   id        String   @id @default(cuid())
-  type      String   // LOGIN_SUCCESS, LOGIN_FAILURE, REGISTRATION, PASSWORD_CHANGE, ACCOUNT_DELETED, RATE_LIMIT_EXCEEDED, SUSPICIOUS_ACTIVITY, AUTHORIZATION_FAILURE
+  type      String   // LOGIN_SUCCESS, LOGIN_FAILURE, LOGIN_CHALLENGE_PASSED, REGISTRATION, PASSWORD_CHANGE, ACCOUNT_DELETED, RATE_LIMIT_EXCEEDED, SUSPICIOUS_ACTIVITY, AUTHORIZATION_FAILURE
   userId    String?
   ipHash    String?  // SHA-256 hash of IP (never store raw IP for privacy)
   userAgent String?

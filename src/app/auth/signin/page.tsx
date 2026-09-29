@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { signIn } from "next-auth/react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
@@ -8,10 +8,24 @@ import { Loader2 } from "lucide-react"
 import CannabisLeaf from "@/components/cannabis-leaf"
 import { safeCallbackUrl } from "@/lib/callback-url"
 
+const TURNSTILE_SITE_KEY = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || ""
+
+declare global {
+  interface Window {
+    turnstile?: {
+      render: (el: HTMLElement, opts: Record<string, unknown>) => string
+      reset: (id?: string) => void
+    }
+  }
+}
+
 export default function SignInPage() {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
+  const [turnstileToken, setTurnstileToken] = useState("")
+  const turnstileRef = useRef<HTMLDivElement>(null)
+  const turnstileWidgetId = useRef<string | null>(null)
   const [formData, setFormData] = useState({
     username: "",
     password: "",
@@ -20,6 +34,32 @@ export default function SignInPage() {
     ? safeCallbackUrl(new URLSearchParams(window.location.search).get("callbackUrl"))
     : null
   const signupHref = callback ? `/auth/signup?callbackUrl=${encodeURIComponent(callback)}` : "/auth/signup"
+
+  // The widget is rendered on load so a token is already attached when the
+  // per-username abuse bucket is saturated — the owner keeps signing in
+  // while an attacker's anonymous attempts stay denied. Tokens are
+  // single-use, so the widget resets after every attempt.
+  useEffect(() => {
+    if (!TURNSTILE_SITE_KEY || !turnstileRef.current) return
+    const render = () => {
+      if (!turnstileRef.current || turnstileWidgetId.current || !window.turnstile) return
+      turnstileWidgetId.current = window.turnstile.render(turnstileRef.current, {
+        sitekey: TURNSTILE_SITE_KEY,
+        callback: (token: string) => setTurnstileToken(token),
+        "expired-callback": () => setTurnstileToken(""),
+        "error-callback": () => setTurnstileToken(""),
+      })
+    }
+    if (window.turnstile) {
+      render()
+      return
+    }
+    const script = document.createElement("script")
+    script.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit"
+    script.async = true
+    script.onload = render
+    document.head.appendChild(script)
+  }, [])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -30,6 +70,7 @@ export default function SignInPage() {
       const result = await signIn("credentials", {
         username: formData.username,
         password: formData.password,
+        turnstileToken,
         redirect: false,
       })
 
@@ -50,6 +91,10 @@ export default function SignInPage() {
       setError("An error occurred. Please try again.")
     } finally {
       setLoading(false)
+      // Fresh token for the next attempt — a consumed token cannot be
+      // replayed through the challenge gate.
+      setTurnstileToken("")
+      if (turnstileWidgetId.current) window.turnstile?.reset(turnstileWidgetId.current)
     }
   }
 
@@ -121,6 +166,8 @@ export default function SignInPage() {
               )}
             </div>
           )}
+
+          {TURNSTILE_SITE_KEY && <div ref={turnstileRef} />}
 
           <button
             type="submit"

@@ -372,6 +372,7 @@ export function hashIp(ip: string): string {
 export type SecurityEventType =
   | "LOGIN_SUCCESS"
   | "LOGIN_FAILURE"
+  | "LOGIN_CHALLENGE_PASSED"
   | "REGISTRATION"
   | "REGISTRATION_FAILED"
   | "ACCOUNT_DELETED"

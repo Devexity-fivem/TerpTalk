@@ -991,6 +991,103 @@ async function run() {
       for (const u of [blkA, blkB, blkC]) await prisma.user.delete({ where: { id: u.id } }).catch(() => {})
     }
 
+    // ── Login abuse controls ──────────────────────────────────────────
+    // authorize() is invoked directly with a synthetic request — the
+    // rate-limit buckets are real DB rows, so these assertions exercise
+    // the production lockout path end to end. Turnstile is unconfigured
+    // in the test env, so a saturated account bucket must refuse even
+    // the correct password (fail closed); production adds the challenge
+    // path on top.
+    const credProvider = authOptions.providers.find((p) => p.id === "credentials") as
+      | { options?: { authorize?: (c: { username: string; password: string; turnstileToken?: string }, r: { headers: Record<string, string> }) => Promise<unknown> } }
+      | undefined
+    // NextAuth v4 exposes the user-supplied authorize under .options —
+    // the top-level .authorize is a `() => null` stub.
+    const authorize = credProvider?.options?.authorize
+    assert.ok(authorize, "credentials provider must expose authorize")
+    const loginAttempt = async (username: string, password: string, ip: string) => {
+      try {
+        await authorize!(
+          { username, password },
+          { headers: { "x-vercel-forwarded-for": ip, "user-agent": "sec-abuse-test" } }
+        )
+        return "ok"
+      } catch (e) {
+        return e instanceof Error ? e.message : "error"
+      }
+    }
+    const lockStamp = Date.now().toString(36)
+    const lockUserIds: string[] = []
+    const mkLoginUser = async (tag: string) => {
+      const u = await prisma.user.create({
+        data: {
+          name: `__sec_lock_${tag}_${lockStamp}`,
+          ageVerified: true,
+          sessionVersion: 1,
+          password: bcrypt.hashSync("AbusePass123!", 12),
+          profile: { create: { username: `__sec_lock_${tag}_${lockStamp}` } },
+        },
+        include: { profile: true },
+      })
+      lockUserIds.push(u.id)
+      return u.profile!.username
+    }
+    // Clean any rows left by earlier suites so bucket counts are exact.
+    await prisma.rateLimit.deleteMany({ where: { key: { startsWith: "login" } } })
+    try {
+      const victimName = await mkLoginUser("victim")
+
+      // Legitimate login before saturation succeeds.
+      assert.equal(await loginAttempt(victimName, "AbusePass123!", "10.60.0.1"), "ok", "clean login succeeds")
+
+      // Uniform error: wrong password on an existing account and on a
+      // nonexistent one produce the identical message.
+      const wrongExisting = await loginAttempt(victimName, "nope", "10.60.0.1")
+      const wrongMissing = await loginAttempt(`__sec_lock_nouser_${lockStamp}`, "nope", "10.60.0.2")
+      assert.equal(wrongExisting, "Invalid credentials")
+      assert.equal(wrongMissing, "Invalid credentials", "unknown user must answer identically")
+
+      // Distributed saturation: 8 more failures across distinct IPs
+      // (1 ok + 2 above + 8 here = 11 total) push the account bucket past
+      // its 10-attempt threshold.
+      for (let i = 0; i < 8; i++) {
+        assert.equal(await loginAttempt(victimName, "nope", `10.60.1.${i}`), "Invalid credentials", `attempt ${i} reaches credential check`)
+      }
+      // The account bucket is account-scoped, not per-IP: a fresh source
+      // address is still refused once it is saturated.
+      assert.match(await loginAttempt(victimName, "nope", "10.60.2.1"), /too many/i, "saturated username denies from fresh IP")
+      // Without a configured challenge provider the owner is refused too
+      // — fail closed rather than silently bypassed.
+      assert.match(await loginAttempt(victimName, "AbusePass123!", "10.60.3.1"), /too many/i, "saturated bucket refuses owner absent a valid challenge")
+      // A bogus challenge token is not a bypass.
+      assert.match(await loginAttempt(victimName, "AbusePass123!", "10.60.3.2"), /too many/i, "invalid challenge token is not a bypass")
+
+      // Pair cap: one address grinding one account dies at 20 attempts.
+      const pairName = await mkLoginUser("pair")
+      for (let i = 0; i < 20; i++) {
+        await loginAttempt(pairName, "nope", "10.61.0.7")
+      }
+      assert.match(await loginAttempt(pairName, "AbusePass123!", "10.61.0.7"), /too many/i, "pair cap denies continued single-address grinding")
+      // ...but the same account from a fresh address is denied only by
+      // the account bucket — the pair key does not leak across IPs.
+      const pairRec = await prisma.rateLimit.findUnique({ where: { key: `login-pair:${pairName}:${hashIp("10.61.0.7")}` } })
+      assert.ok(pairRec && pairRec.count > 20, "pair bucket records the attempts")
+
+      // IP cap: one address cycling many accounts dies at 30 total.
+      const sprayNames = [] as string[]
+      for (let i = 0; i < 4; i++) sprayNames.push(await mkLoginUser(`spray${i}`))
+      for (let i = 0; i < 30; i++) {
+        await loginAttempt(sprayNames[i % sprayNames.length], "nope", "10.62.0.9")
+      }
+      assert.match(await loginAttempt(`__sec_lock_fresh_${lockStamp}`, "nope", "10.62.0.9"), /too many/i, "IP cap denies a never-tried username once exhausted")
+      // A fresh address is unaffected by another IP's saturation.
+      const freshName = await mkLoginUser("fresh")
+      assert.equal(await loginAttempt(freshName, "AbusePass123!", "10.63.0.1"), "ok", "fresh IP login unaffected")
+    } finally {
+      await prisma.rateLimit.deleteMany({ where: { key: { startsWith: "login" } } }).catch(() => {})
+      for (const id of lockUserIds) await prisma.user.delete({ where: { id } }).catch(() => {})
+    }
+
     console.log("All security regression tests passed.")
   } finally {
     if (userId) {

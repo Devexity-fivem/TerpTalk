@@ -3,6 +3,7 @@ import CredentialsProvider from "next-auth/providers/credentials"
 import { prisma } from "@/lib/prisma"
 import { rateLimit } from "@/lib/rate-limit"
 import { logSecurityEvent, getClientIp, hashIp, bcryptDecoy } from "@/lib/security"
+import { turnstileEnabled, verifyTurnstile } from "@/lib/turnstile"
 import bcrypt from "bcryptjs"
 
 export const secureCookies = process.env.NEXTAUTH_URL?.startsWith("https://") || !!process.env.VERCEL
@@ -49,37 +50,58 @@ export const authOptions: NextAuthOptions = {
       credentials: {
         username: { label: "Username", type: "text" },
         password: { label: "Password", type: "password" },
+        // Fresh Turnstile token forwarded by the sign-in form; only
+        // consulted once the per-username bucket is saturated.
+        turnstileToken: { label: "Verification", type: "text" },
       },
       async authorize(credentials, req) {
         if (!credentials?.username || !credentials?.password) {
           throw new Error("Invalid credentials")
         }
 
-        // Rate limit credential attempts: 10 tries per 15 min per username
-        // (mitigates credential stuffing without leaking account existence)
-        const rl = await rateLimit(
-          `login:${credentials.username.trim().toLowerCase()}`,
-          10,
-          15 * 60 * 1000
-        )
-        if (!rl.allowed) {
+        const usernameKey = credentials.username.trim().toLowerCase()
+        const ip = getClientIp(req as unknown as Request)
+        const userAgent = (req?.headers as Record<string, string> | undefined)?.["user-agent"] ?? null
+
+        // Hard caps — checked first and never bypassable by a challenge:
+        // per source IP (spraying across many accounts) and per
+        // username×IP pair (grinding one account from a single address).
+        const [ipRl, pairRl] = await Promise.all([
+          rateLimit(`login-ip:${hashIp(ip)}`, 30, 15 * 60 * 1000),
+          rateLimit(`login-pair:${usernameKey}:${hashIp(ip)}`, 20, 15 * 60 * 1000),
+        ])
+        if (!ipRl.allowed || !pairRl.allowed) {
           await logSecurityEvent("RATE_LIMIT_EXCEEDED", {
-            userAgent: (req?.headers as Record<string, string> | undefined)?.["user-agent"] ?? null,
-            metadata: { endpoint: "auth/callback/credentials" },
+            ip,
+            userAgent,
+            metadata: { endpoint: "auth/callback/credentials", scope: ipRl.allowed ? "pair" : "ip" },
           })
           throw new Error("Too many attempts. Please try again later.")
         }
 
-        // Also rate limit by IP to stop distributed credential stuffing
-        const ip = getClientIp(req as unknown as Request)
-        const ipRl = await rateLimit(`login-ip:${hashIp(ip)}`, 30, 15 * 60 * 1000)
-        if (!ipRl.allowed) {
-          await logSecurityEvent("RATE_LIMIT_EXCEEDED", {
-            ip,
-            userAgent: (req?.headers as Record<string, string> | undefined)?.["user-agent"] ?? null,
-            metadata: { endpoint: "auth/callback/credentials", scope: "ip" },
+        // The per-username bucket escalates to a challenge instead of a
+        // hard denial: an attacker keeping the bucket saturated cannot
+        // lock the owner out — a valid Turnstile token lets a human
+        // through to the credential check while pair/IP caps still bound
+        // the total attempt volume.
+        const acctRl = await rateLimit(`login:${usernameKey}`, 10, 15 * 60 * 1000)
+        if (!acctRl.allowed) {
+          const challenged =
+            turnstileEnabled() &&
+            typeof credentials.turnstileToken === "string" &&
+            (await verifyTurnstile(credentials.turnstileToken, ip))
+          if (!challenged) {
+            await logSecurityEvent("RATE_LIMIT_EXCEEDED", {
+              ip,
+              userAgent,
+              metadata: { endpoint: "auth/callback/credentials", scope: "account" },
+            })
+            throw new Error("Too many attempts. Please try again later.")
+          }
+          await logSecurityEvent("LOGIN_CHALLENGE_PASSED", {
+            userAgent,
+            metadata: { endpoint: "auth/callback/credentials" },
           })
-          throw new Error("Too many attempts. Please try again later.")
         }
 
         const user = await prisma.user.findFirst({
@@ -111,7 +133,7 @@ export const authOptions: NextAuthOptions = {
           // user-visible) so transient lookup misses stay diagnosable
           // without changing what the client is told.
           await logSecurityEvent("LOGIN_FAILURE", {
-            userAgent: (req?.headers as Record<string, string> | undefined)?.["user-agent"] ?? null,
+            userAgent,
             metadata: { reason: "invalid_credentials", userFound: !!user },
           })
           throw new Error("Invalid credentials")
@@ -127,7 +149,7 @@ export const authOptions: NextAuthOptions = {
           // or existence, even for banned/suspended accounts.
           await logSecurityEvent("LOGIN_FAILURE", {
             userId: user.id,
-            userAgent: (req?.headers as Record<string, string> | undefined)?.["user-agent"] ?? null,
+            userAgent,
             metadata: { reason: "invalid_credentials" },
           })
           throw new Error("Invalid credentials")
@@ -140,7 +162,7 @@ export const authOptions: NextAuthOptions = {
         if (user.banned || isSuspended) {
           await logSecurityEvent("LOGIN_FAILURE", {
             userId: user.id,
-            userAgent: (req?.headers as Record<string, string> | undefined)?.["user-agent"] ?? null,
+            userAgent,
             metadata: { reason: user.banned ? "banned" : "suspended" },
           })
           throw new Error(user.banned ? "AccountBanned" : "AccountSuspended")
@@ -148,7 +170,7 @@ export const authOptions: NextAuthOptions = {
 
         await logSecurityEvent("LOGIN_SUCCESS", {
           userId: user.id,
-          userAgent: (req?.headers as Record<string, string> | undefined)?.["user-agent"] ?? null,
+          userAgent,
         })
 
         return {
