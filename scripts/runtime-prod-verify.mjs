@@ -179,9 +179,15 @@ async function main() {
     // Bare `ws:`/`wss:` scheme tokens (dev-only) — `wss://host` is legitimate.
     const devWs = /(^|\s)wss?:(?!\/\/)/.test(connectSrc)
     !devWs ? pass("csp: no dev websocket exceptions in production connect-src") : fail("csp dev ws", connectSrc)
-    csp.includes("unsafe-inline")
-      ? info("csp", "script-src keeps 'unsafe-inline' — known H-1 hardening item (needs nonce middleware)")
-      : null
+    // H-1 resolved: script-src is nonce-based — 'unsafe-inline' must be
+    // gone and a per-request nonce present (src/proxy.ts).
+    const scriptSrc = csp.split(";").find((d) => d.trim().startsWith("script-src")) || ""
+    !scriptSrc.includes("unsafe-inline")
+      ? pass("csp: script-src has no 'unsafe-inline'")
+      : fail("csp script-src unsafe-inline", scriptSrc)
+    ;/'nonce-[A-Za-z0-9+/=]+'/.test(scriptSrc)
+      ? pass("csp: per-request nonce present in script-src")
+      : fail("csp nonce", scriptSrc)
 
     // ── Cookie attributes ──────────────────────────────────────────────────
     const csrfRes = await probe("/api/auth/csrf")

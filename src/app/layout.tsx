@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import { headers } from "next/headers";
 import { Inter, Sora } from "next/font/google";
 import "./globals.css";
 import { Analytics } from "@vercel/analytics/next";
@@ -91,12 +92,17 @@ const siteJsonLd = [
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const gated = await shouldGatePublic()
+  // Reading headers() opts the whole tree into dynamic rendering —
+  // required so the per-request CSP nonce (src/proxy.ts) is fresh per
+  // page. The nonce trusts only this inline script; everything else
+  // inline is blocked once 'unsafe-inline' is gone.
+  const nonce = (await headers()).get("x-nonce") ?? undefined
 
   return (
     <html lang="en" className={`${inter.variable} ${sora.variable} h-full antialiased`} suppressHydrationWarning>
       <head>
         {/* Applies the saved theme before first paint to avoid a palette flash */}
-        <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
+        <script nonce={nonce} dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
       </head>
       <body className="min-h-screen flex flex-col">
         {gated ? (
