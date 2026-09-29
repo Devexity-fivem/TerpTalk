@@ -3,6 +3,7 @@ import { requireAdmin } from "@/lib/require-staff"
 import { prisma } from "@/lib/prisma"
 import { forbidden, getClientIp, logSecurityEvent } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
+import { sanitizeHref } from "@/lib/markdown"
 import { getPusher } from "@/lib/pusher"
 import { staffDisplayName } from "@/lib/moderation"
 
@@ -30,9 +31,13 @@ export async function POST(request: Request) {
         { status: 400 }
       )
     }
-    // Internal path only — reject protocol-relative (//evil.com) and
-    // backslash variants that browsers resolve as external URLs.
-    if (link !== undefined && link !== null && link !== "" && (typeof link !== "string" || !/^\/(?!\/)[a-zA-Z0-9\-_/?=&%.#]*$/.test(link) || link.includes("\\"))) {
+    // Internal path only for broadcast links — sanitizeHref applies the
+    // canonical scheme/backslash rejection; the leading "/" check keeps
+    // announcements pointing at site content.
+    if (
+      link !== undefined && link !== null && link !== "" &&
+      (typeof link !== "string" || !(sanitizeHref(link.trim()) ?? "").startsWith("/"))
+    ) {
       return NextResponse.json({ error: "Link must be a relative path like /forum" }, { status: 400 })
     }
 

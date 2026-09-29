@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma"
 import { forbidden, getClientIp, logSecurityEvent } from "@/lib/security"
 import { SITE_SETTINGS } from "@/lib/settings"
 import { rateLimit } from "@/lib/rate-limit"
+import { sanitizeHref } from "@/lib/markdown"
 
 const BOOLEAN_KEYS: Set<string> = new Set([
   SITE_SETTINGS.MAINTENANCE_MODE,
@@ -68,6 +69,15 @@ export async function PATCH(request: Request) {
     const value = String(raw)
     if (BOOLEAN_KEYS.has(key)) {
       values[key] = value === "true" || value === "1" ? "true" : "false"
+    } else if (key === SITE_SETTINGS.ANNOUNCEMENT_LINK) {
+      // Validate on write, not only on public read — canonical rules
+      // (rejects javascript:/data:, protocol-relative and backslash
+      // externals). Empty clears the link.
+      const trimmed = value.trim()
+      if (trimmed && sanitizeHref(trimmed) === null) {
+        return NextResponse.json({ error: "Announcement link is not a safe URL" }, { status: 400 })
+      }
+      values[key] = trimmed.slice(0, ANNOUNCEMENT_MAX)
     } else if (key.startsWith("announcement_")) {
       values[key] = value.slice(0, ANNOUNCEMENT_MAX)
     } else {

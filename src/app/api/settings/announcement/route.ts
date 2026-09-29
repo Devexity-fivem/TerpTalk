@@ -1,16 +1,6 @@
 import { NextResponse } from "next/server"
 import { getSetting, SITE_SETTINGS } from "@/lib/settings"
-
-const ALLOWED_LINK_PREFIXES = ["/", "https://", "http://"]
-
-function isSafeLink(link: string): boolean {
-  if (!link) return false
-  const lower = link.trim().toLowerCase()
-  if (lower.startsWith("javascript:")) return false
-  if (lower.startsWith("data:")) return false
-  if (lower.startsWith("vbscript:")) return false
-  return ALLOWED_LINK_PREFIXES.some((p) => lower.startsWith(p))
-}
+import { sanitizeHref } from "@/lib/markdown"
 
 // GET — public announcement, safe for all users
 export async function GET() {
@@ -24,7 +14,10 @@ export async function GET() {
     return NextResponse.json({ enabled: false })
   }
 
-  const safeLink = isSafeLink(link || "") ? link!.trim() : undefined
+  // Canonical safe-link validation — same rules as markdown links:
+  // no javascript:/data:/vbscript:, no protocol-relative or backslash
+  // external resolution.
+  const safeLink = link?.trim() ? sanitizeHref(link.trim()) ?? undefined : undefined
 
   return NextResponse.json({
     enabled: true,

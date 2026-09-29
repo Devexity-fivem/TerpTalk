@@ -728,6 +728,24 @@ async function run() {
     assert.equal(sanitizeHref("\\evil.com"), null)
     assert.equal(sanitizeHref("javascript:alert(1)"), null)
     assert.equal(sanitizeHref("/a\\b"), null, "embedded backslash must be rejected")
+    assert.equal(sanitizeHref("data:text/html,<script>alert(1)</script>"), null)
+    assert.equal(sanitizeHref("vbscript:msgbox(1)"), null)
+    assert.equal(sanitizeHref("JaVaScRiPt:alert(1)"), null, "scheme check is case-insensitive")
+    assert.equal(sanitizeHref("http://ok.example"), "http://ok.example")
+    assert.equal(sanitizeHref("\\\\evil.com"), null, "double-backslash external must be rejected")
+    assert.equal(sanitizeHref("/\\x"), null)
+
+    // Announcement link paths all route through sanitizeHref — the public
+    // GET, the admin settings PATCH, and the admin broadcast POST. No
+    // parallel weaker validator may survive.
+    const annGet = readFileSync("src/app/api/settings/announcement/route.ts", "utf8")
+    const adminSettings = readFileSync("src/app/api/admin/settings/route.ts", "utf8")
+    const adminAnnounce = readFileSync("src/app/api/admin/announce/route.ts", "utf8")
+    assert.ok(annGet.includes("sanitizeHref"), "announcement GET uses canonical validator")
+    assert.ok(!annGet.includes("isSafeLink"), "local isSafeLink validator removed")
+    assert.ok(adminSettings.includes("sanitizeHref"), "admin settings validates announcement_link on write")
+    assert.ok(adminSettings.includes("ANNOUNCEMENT_LINK"), "write-time check keyed to announcement_link")
+    assert.ok(adminAnnounce.includes("sanitizeHref"), "admin broadcast uses canonical validator")
 
     // Markdown tokenizer — unmatched delimiters must not hang. A delimiter
     // char failing every inline pattern used to consume 0 characters and
