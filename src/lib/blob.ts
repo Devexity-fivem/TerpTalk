@@ -26,6 +26,27 @@ const MAGIC: Record<string, (b: Buffer) => boolean> = {
 
 export const MAX_POST_IMAGES = 4
 
+const PUBLIC_BLOB_SUFFIX = ".public.blob.vercel-storage.com"
+const PRIVATE_BLOB_SUFFIX = ".private.blob.vercel-storage.com"
+
+// Hostname-suffixed checks — a substring match would accept attacker-shaped
+// hosts like "evil.com/.public.blob.vercel-storage.com".
+export function isPublicBlobUrl(url: string): boolean {
+  try {
+    return new URL(url).hostname.endsWith(PUBLIC_BLOB_SUFFIX)
+  } catch {
+    return false
+  }
+}
+
+export function isPrivateBlobUrl(url: string): boolean {
+  try {
+    return new URL(url).hostname.endsWith(PRIVATE_BLOB_SUFFIX)
+  } catch {
+    return false
+  }
+}
+
 export function isBlobConfigured(): boolean {
   return Boolean(process.env.BLOB_READ_WRITE_TOKEN) || process.env.NODE_ENV === "development"
 }
@@ -151,12 +172,15 @@ export async function readBlob(
   }
   if (!url.startsWith("https://")) return null
   try {
-    if (url.includes(".private.blob.vercel-storage.com")) {
+    if (isPrivateBlobUrl(url)) {
       if (!process.env.BLOB_READ_WRITE_TOKEN) return null
       const result = await get(url, { access: "private" })
       if (!result || result.statusCode !== 200) return null
       return { body: result.stream, contentType: result.blob.contentType }
     }
+    // Only Vercel Blob public objects are fetchable — a DB row must never
+    // turn this route into a generic outbound proxy to arbitrary hosts.
+    if (!isPublicBlobUrl(url)) return null
     const res = await fetch(url, { cache: "no-store" })
     if (!res.ok || !res.body) return null
     return {
@@ -175,7 +199,7 @@ export async function readBlob(
  * so a failed row update never orphans the content.
  */
 export async function privatizeBlob(url: string): Promise<string | null> {
-  if (!url.startsWith("https://") || !url.includes(".public.blob.vercel-storage.com")) return null
+  if (!isPublicBlobUrl(url)) return null
   if (!process.env.BLOB_READ_WRITE_TOKEN) return null
   const pathname = new URL(url).pathname.replace(/^\//, "")
   // allowOverwrite — a prior partial run may have left the private copy in

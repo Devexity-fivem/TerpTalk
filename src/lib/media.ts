@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma"
 import { canViewDiary } from "@/lib/diary-visibility"
-import { privatizeBlob, deleteImage } from "@/lib/blob"
+import { privatizeBlob, deleteImage, isPublicBlobUrl, isPrivateBlobUrl } from "@/lib/blob"
 import { isActiveAuthorRow, isModerator } from "@/lib/security"
 
 /**
@@ -18,12 +18,7 @@ export type MediaKind = "diary" | "post" | "setup"
 
 export const MEDIA_KINDS: readonly MediaKind[] = ["diary", "post", "setup"]
 
-const PRIVATE_BLOB_HOST = ".private.blob.vercel-storage.com"
-
-/** True when the stored URL points at an access:"private" blob object. */
-export function isPrivateBlobUrl(url: string): boolean {
-  return url.includes(PRIVATE_BLOB_HOST)
-}
+export { isPrivateBlobUrl, isPublicBlobUrl }
 
 export function isMediaKind(value: string): value is MediaKind {
   return (MEDIA_KINDS as readonly string[]).includes(value)
@@ -162,35 +157,61 @@ export async function resolveMediaAccess(
   return { ok: true, url }
 }
 
+export interface PrivatizeResult {
+  /** Rows successfully repointed to private copies. */
+  migrated: number
+  /**
+   * Public Vercel-blob rows that could NOT be privatized — each still
+   * resolves publicly via the old URL. Non-zero means the caller must not
+   * report a successful privacy transition.
+   */
+  failed: number
+  /**
+   * Rows needing no work: already-private objects, data: URIs (dev),
+   * and non-Vercel/malformed URLs that no storage ACL can protect — the
+   * proxy remains their only privacy boundary.
+   */
+  skipped: number
+}
+
 /**
  * Migrate a diary's legacy public-blob images to access:"private". Runs
- * inline when a diary flips to PRIVATE so a retained legacy URL stops
- * resolving at the storage layer, not just at the proxy. Best-effort per
- * object: a failed copy leaves the row on its public URL (still proxied,
- * but the raw link remains readable — the same residual the migration
- * script closes).
+ * BEFORE a diary flips to PRIVATE so a previously known URL stops
+ * resolving at the storage layer. Fail-closed: any privatizable public
+ * object that cannot be repointed counts in `failed`, and the caller
+ * aborts the visibility transition — a private diary must never sit on
+ * publicly readable blobs because a copy silently failed.
+ *
+ * Per object: copy private → repoint row → delete source. A failed
+ * source delete leaves a residual public object that no row references
+ * (logged, listed by the ops verification pass) — never lost content.
  */
-export async function privatizeDiaryMedia(diaryId: string): Promise<number> {
+export async function privatizeDiaryMedia(diaryId: string): Promise<PrivatizeResult> {
   const rows = await prisma.diaryImage.findMany({
     where: { update: { diaryId } },
     select: { id: true, url: true },
   })
-  let migrated = 0
+  const result: PrivatizeResult = { migrated: 0, failed: 0, skipped: 0 }
   for (const row of rows) {
-    if (isPrivateBlobUrl(row.url) || row.url.startsWith("data:")) continue
+    if (isPrivateBlobUrl(row.url) || row.url.startsWith("data:") || !isPublicBlobUrl(row.url)) {
+      result.skipped++
+      continue
+    }
     try {
       const newUrl = await privatizeBlob(row.url)
-      if (newUrl) {
-        await prisma.diaryImage.update({ where: { id: row.id }, data: { url: newUrl } })
-        // Source deletion only after the row points at the private copy;
-        // a failed delete leaves a readable public object (logged residual),
-        // never lost content.
-        await deleteImage(row.url)
-        migrated++
+      if (!newUrl) {
+        // Token missing — storage privacy cannot be established.
+        result.failed++
+        console.error("privatizeDiaryMedia: blob token unavailable, image left public:", row.id)
+        continue
       }
+      await prisma.diaryImage.update({ where: { id: row.id }, data: { url: newUrl } })
+      await deleteImage(row.url)
+      result.migrated++
     } catch (error) {
-      console.error("privatizeDiaryMedia: copy failed for image", row.id, error)
+      result.failed++
+      console.error("privatizeDiaryMedia: privatize failed for image", row.id, error)
     }
   }
-  return migrated
+  return result
 }

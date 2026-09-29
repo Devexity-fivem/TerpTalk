@@ -96,6 +96,23 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
     const touchesStrainStats = patchTouchesStrainStats(diary, data)
 
+    // Flipping to PRIVATE must establish storage privacy BEFORE the row
+    // flips: if any legacy public blob can't be privatized, abort the
+    // transition rather than report success while a known URL keeps
+    // resolving. The diary stays PUBLIC — consistent, retryable.
+    if (data.visibility === "PRIVATE") {
+      const priv = await privatizeDiaryMedia(id).catch((error) => {
+        console.error("privatizeDiaryMedia threw:", id, error)
+        return null
+      })
+      if (!priv || priv.failed > 0) {
+        return NextResponse.json(
+          { error: "Could not secure diary media — please try again" },
+          { status: 503 }
+        )
+      }
+    }
+
     // Guarded update: a concurrent delete between load and write can't be
     // resurrected by this PATCH.
     const updated = await prisma.growDiary.updateMany({
@@ -136,14 +153,6 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
           .deleteMany({ where: notificationLinkWhere(links) })
           .catch(() => {})
         await purgeDiaryAnnouncements(result).catch(() => {})
-      }
-      // Going PRIVATE also closes the storage hole: legacy public blobs
-      // are re-stored private so a previously known URL stops resolving.
-      // New uploads are already private; this covers pre-migration rows.
-      if (data.visibility === "PRIVATE") {
-        await privatizeDiaryMedia(id).catch((e) =>
-          console.error("privatizeDiaryMedia failed:", id, e)
-        )
       }
     }
 

@@ -15,7 +15,8 @@ const ID_RE = /^[a-z0-9]{8,40}$/i
  * restricted-class media (diary, post, setup images). The row id
  * identifies the owning content; visibility is evaluated per request via
  * the canonical predicates (canViewDiary, deletion, hidden categories,
- * active authors, block relationships). Denials are uniform 404s so the
+ * active authors — block lists filter discovery only, matching the page
+ * layer). Denials are uniform 404s so the
  * endpoint is not an existence oracle. Responses are per-viewer: they
  * must never enter a shared cache.
  */
