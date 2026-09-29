@@ -243,6 +243,7 @@ export interface PublicProfileDTO {
     commands: number; membersAssisted: number; entityLinks: number
     welcomes: number; announcements: number; daysActive: number
     assists: number; byCommand: Record<string, number>; hasFallbacks: boolean
+    mentions: number; unknownCommands: number; fallbacks: number
   } | null
   /** Records widget (Harvested) — real scoped aggregates; null when the
       member hasn't unlocked it or has no qualifying rows. */
@@ -633,6 +634,9 @@ export async function getPublicProfileData(
     assists: fullStats.assists,
     byCommand: fullStats.byCommand,
     hasFallbacks: fullStats.fallbacks > 0,
+    mentions: fullStats.mentions,
+    unknownCommands: fullStats.unknownCommands,
+    fallbacks: fullStats.fallbacks,
   }
 
   const hideStatus = profile.publicMilestoneOptOut

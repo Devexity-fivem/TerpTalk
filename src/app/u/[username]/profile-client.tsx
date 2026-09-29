@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import { useSession } from "next-auth/react"
 import { useParams } from "next/navigation"
-import { User, MessageSquare, MapPin, Globe, Sprout, Dna, Leaf, Store, ChevronDown, ChevronUp, Bot, Zap, Users, Link2, HandMetal, CalendarClock, TrendingUp, Search, BookOpen, Trophy, BarChart3, AlertTriangle, Megaphone, Wrench, Award, Pin, FlaskConical, BadgeCheck, Target, CheckCircle2, X } from "lucide-react"
+import { User, MessageSquare, MapPin, Globe, Sprout, Dna, Leaf, Store, ChevronDown, ChevronUp, Bot, Zap, Users, Link2, HandMetal, CalendarClock, TrendingUp, BookOpen, Trophy, BarChart3, AlertTriangle, Megaphone, Wrench, Award, Pin, FlaskConical, BadgeCheck, Target, CheckCircle2, X, Sparkles, ShieldCheck, Dices, AtSign, Terminal } from "lucide-react"
 import Link from "next/link"
 import UserActions from "@/components/user-actions"
 import RoleBadge from "@/components/role-badge"
@@ -22,6 +22,7 @@ import { MarkdownRenderer } from "@/lib/markdown"
 import { diaryPath, setupPath } from "@/lib/slugs"
 import { STAGE_LABELS } from "@/lib/diary-weeks"
 import { PROFILE_TAB_IDS } from "@/lib/profile-settings"
+import { CHAT_COMMANDS, type ChatCommandCategory } from "@/lib/chat-commands"
 import { cn } from "@/lib/utils"
 
 interface GrowCard {
@@ -161,6 +162,7 @@ interface PublicProfile {
     commands: number; membersAssisted: number; entityLinks: number; welcomes: number
     announcements: number; daysActive: number; assists: number
     byCommand: Record<string, number>; hasFallbacks: boolean
+    mentions: number; unknownCommands: number; fallbacks: number
   } | null
   growStreak: number
   totalUpdates: number
@@ -1503,48 +1505,76 @@ function AboutTab({ profile, isSelf, compact }: { profile: PublicProfile; isSelf
 
 /* ── TerpBot profile ─────────────────────────────────────────────── */
 
+const BOT_COMMAND_GROUPS: { category: ChatCommandCategory; label: string; icon: typeof Sprout; blurb: string }[] = [
+  { category: "grow", label: "Your grow", icon: Sprout, blurb: "Stage, streaks, readings, and what to do next — straight from your diary." },
+  { category: "knowledge", label: "Answers & research", icon: BookOpen, blurb: "Search threads, guides, strains and setups without leaving chat." },
+  { category: "community", label: "Community pulse", icon: Users, blurb: "Stats, digests, trending threads and who's around." },
+  { category: "profile", label: "You", icon: Award, blurb: "Your rep, rank and badge progress." },
+  { category: "utility", label: "Just for fun", icon: Dices, blurb: "Coin flips, dice rolls and a grow tip when you need one." },
+]
+
+const BOT_PUBLIC_COMMANDS = BOT_COMMAND_GROUPS.map((g) => ({
+  ...g,
+  commands: CHAT_COMMANDS.filter((c) => c.category === g.category && c.permission === "public" && c.handledBy === "bot"),
+}))
+
 function BotProfile({ data }: { data: ProfileResponse }) {
   const { profile } = data
   const joinDate = new Date(profile.joinDate).toLocaleDateString("en-US", { year: "numeric", month: "long" })
+  const stats = profile.botStats
+  const commandCount = BOT_PUBLIC_COMMANDS.reduce((n, g) => n + g.commands.length, 0)
+  const learningMisses = (stats?.unknownCommands ?? 0) + (stats?.fallbacks ?? 0)
   return (
     <div className="min-h-screen bg-background">
       <div className="max-w-4xl mx-auto px-4 py-8">
+        {/* ── Hero ─────────────────────────────────────────────── */}
         <div className="bg-card/80 rounded-2xl border border-border/70 mb-5 overflow-hidden">
           <div className="tt-spectrum-bar h-1" />
           <div className="p-4 sm:p-5">
             <div className="flex items-start gap-4 flex-wrap">
-              <div className="rounded-full shrink-0">
+              <div className="relative rounded-full shrink-0">
                 <Avatar src={profile.avatarUrl} alt="TerpBot avatar" size="xl" className="w-20 h-20 bg-primary/10 text-primary" fallback={<Bot className="w-10 h-10 text-primary" />} />
+                <Tooltip content="Automated — I respond when invoked">
+                  <span className="absolute bottom-0.5 right-0.5 flex h-4 w-4 items-center justify-center rounded-full border-2 border-card bg-emerald-500">
+                    <span className="sr-only">Available</span>
+                  </span>
+                </Tooltip>
               </div>
               <div className="flex-1 min-w-0">
-                <h1 className="font-display text-2xl font-bold mb-1 break-words flex items-center gap-2 tracking-tight">
+                <h1 className="font-display text-2xl font-bold mb-1 break-words flex items-center gap-2 flex-wrap tracking-tight">
                   @{profile.username} <RoleBadge role={profile.role} />
                   <Tooltip content="Automated community assistant — not a person">
                     <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider bg-primary/15 text-primary px-1.5 py-0.5 rounded">
                       <Bot className="w-3 h-3" /> Bot
                     </span>
                   </Tooltip>
+                  <Tooltip content="Every answer is computed from real TerpTalk data — no language model, no guessing">
+                    <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider bg-secondary text-muted-foreground px-1.5 py-0.5 rounded">
+                      <ShieldCheck className="w-3 h-3" /> Deterministic · No LLM
+                    </span>
+                  </Tooltip>
                 </h1>
-                <p className="text-muted-foreground text-sm mb-2 flex items-center gap-2 flex-wrap">
-                  <span>Active since {joinDate}</span>
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary/10 text-primary text-xs font-medium">
-                    <Zap className="w-3 h-3" /> Automated community helper
+                <p className="text-sm text-muted-foreground mb-1 flex items-center gap-2 flex-wrap">
+                  <span>Answering since {joinDate}</span>
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-xs font-medium">
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" /> Available in community chat
                   </span>
                 </p>
                 <p className="text-xs text-muted-foreground mb-3">
-                  I&apos;m TerpTalk&apos;s built-in assistant — mention <span className="text-primary font-medium">@terpbot</span> in chat or type <span className="text-primary font-medium">/help</span> to see what I can do.
+                  TerpBot uses TerpTalk&apos;s real community data and deterministic rules to answer grow, community, and profile questions.
+                  Mention <span className="text-primary font-medium">@terpbot</span> in chat or type <span className="text-primary font-medium">/help</span> to see the full playbook.
                 </p>
-                {profile.botStats && (
+                {stats && (
                   <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-8 gap-x-3 gap-y-4 mt-4">
                     {[
-                      { icon: Zap, v: profile.botStats.commands, l: "Commands answered" },
-                      { icon: Users, v: profile.botStats.membersAssisted, l: "Members helped" },
-                      { icon: Link2, v: profile.botStats.entityLinks, l: "Links shared" },
-                      { icon: HandMetal, v: profile.botStats.welcomes, l: "Welcomes sent" },
-                      { icon: CalendarClock, v: profile.botStats.daysActive, l: "Days active" },
-                      { icon: Megaphone, v: profile.botStats.announcements, l: "Announcements" },
-                      { icon: Bot, v: profile.botStats.assists, l: "Assists sent" },
-                      { icon: Users, v: profile.stats.followers, l: "Followers" },
+                      { icon: Zap, v: stats.commands, l: "Commands answered" },
+                      { icon: AtSign, v: stats.mentions, l: "Mentions answered" },
+                      { icon: Users, v: stats.membersAssisted, l: "Members helped" },
+                      { icon: Bot, v: stats.assists, l: "Assists sent" },
+                      { icon: HandMetal, v: stats.welcomes, l: "Welcomes sent" },
+                      { icon: Link2, v: stats.entityLinks, l: "Links shared" },
+                      { icon: Megaphone, v: stats.announcements, l: "Announcements" },
+                      { icon: CalendarClock, v: stats.daysActive, l: "Days active" },
                     ].map((s) => (
                       <div key={s.l} className="text-center">
                         <div className="text-lg font-bold text-primary flex items-center justify-center gap-1"><s.icon className="w-4 h-4" />{s.v}</div>
@@ -1553,36 +1583,54 @@ function BotProfile({ data }: { data: ProfileResponse }) {
                     ))}
                   </div>
                 )}
+                {stats && learningMisses > 0 && (
+                  <p className="text-[11px] text-muted-foreground mt-2 flex items-center gap-1.5">
+                    <Sparkles className="w-3 h-3 text-primary shrink-0" />
+                    Report card: {learningMisses.toLocaleString()} questions I couldn&apos;t parse — try rephrasing them and I&apos;ll keep working from the commands and rules I actually support.
+                  </p>
+                )}
               </div>
             </div>
           </div>
         </div>
 
-        <SectionCard title={<span className="flex items-center gap-2"><Bot className="w-4 h-4 text-primary" />What I do</span>} className="mb-4">
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
-            {[
-              { icon: MessageSquare, label: "Chat" }, { icon: Search, label: "Search" },
-              { icon: Zap, label: "Threads" }, { icon: Sprout, label: "Diaries" },
-              { icon: Dna, label: "Strains" }, { icon: BookOpen, label: "Guides" },
-              { icon: Trophy, label: "Community" }, { icon: BarChart3, label: "Stats" },
-            ].map((c) => (
-              <div key={c.label} className="flex items-center gap-2 rounded-lg border border-border bg-secondary/30 px-3 py-2 text-xs font-medium">
-                <c.icon className="w-3.5 h-3.5 text-primary shrink-0" />
-                {c.label}
+        {/* ── Command menu — the real registry, grouped ─────────── */}
+        <SectionCard
+          title={<span className="flex items-center gap-2"><Terminal className="w-4 h-4 text-primary" />My playbook — {commandCount} commands</span>}
+          className="mb-4"
+        >
+          <p className="text-xs text-muted-foreground mb-4">
+            Slash commands in <Link href="/chat" className="text-primary hover:underline">chat</Link>, or just talk to me —
+            anything tagged <Tag variant="muted">@mention</Tag> also works in plain English.
+          </p>
+          <div className="space-y-4">
+            {BOT_PUBLIC_COMMANDS.filter((g) => g.commands.length > 0).map((g) => (
+              <div key={g.category}>
+                <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">
+                  <g.icon className="w-3.5 h-3.5 text-primary" /> {g.label}
+                  <span className="normal-case font-normal">· {g.blurb}</span>
+                </p>
+                <div className="grid sm:grid-cols-2 gap-1.5">
+                  {g.commands.map((c) => (
+                    <div key={c.name} className="flex items-baseline gap-2 rounded-lg border border-border/60 bg-secondary/20 px-2.5 py-1.5">
+                      <code className="text-[11px] font-mono text-primary shrink-0">{c.usage.split(" ")[0]}</code>
+                      <span className="text-xs text-muted-foreground min-w-0">{c.description}</span>
+                      {c.surfaces.includes("mention") && (
+                        <Tooltip content={`Also works as a natural-language mention, e.g. "${c.example ?? `@terpbot ${c.name}`}"`}>
+                          <span className="ml-auto shrink-0"><Tag variant="muted">@mention</Tag></span>
+                        </Tooltip>
+                      )}
+                    </div>
+                  ))}
+                </div>
               </div>
             ))}
           </div>
-          <ul className="space-y-2 text-sm text-muted-foreground">
-            <li className="flex gap-2"><HandMetal className="w-4 h-4 text-primary shrink-0 mt-0.5" /> Welcome new members and post the daily digest in <Link href="/chat" className="text-primary hover:underline">Chat</Link>.</li>
-            <li className="flex gap-2"><MessageSquare className="w-4 h-4 text-primary shrink-0 mt-0.5" /> Answer questions when you mention <span className="text-primary font-medium">@terpbot</span> — XP, streaks, diaries, strains, guides, and more.</li>
-            <li className="flex gap-2"><Zap className="w-4 h-4 text-primary shrink-0 mt-0.5" /> Summarize linked threads and check whether a question got answered — try <span className="text-primary font-medium">@terpbot summarize this</span>.</li>
-            <li className="flex gap-2"><Sprout className="w-4 h-4 text-primary shrink-0 mt-0.5" /> Send you a private heads-up when it&apos;s useful — a welcome note, first-diary tips, or a nudge when one of your threads goes quiet.</li>
-          </ul>
-          {profile.botStats && Object.keys(profile.botStats.byCommand).length > 0 && (
+          {stats && Object.keys(stats.byCommand).length > 0 && (
             <div className="mt-4 pt-4 border-t border-border">
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">Most-used commands</p>
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">What members actually ask me</p>
               <div className="flex flex-wrap gap-2">
-                {Object.entries(profile.botStats.byCommand)
+                {Object.entries(stats.byCommand)
                   .sort((a, b) => b[1] - a[1])
                   .slice(0, 8)
                   .map(([cmd, n]) => (
@@ -1596,13 +1644,39 @@ function BotProfile({ data }: { data: ProfileResponse }) {
           )}
         </SectionCard>
 
-        <SectionCard title={<span className="flex items-center gap-2"><MessageSquare className="w-4 h-4 text-primary" />How to use me</span>}>
-          <div className="space-y-1.5">
+        {/* ── How I work ───────────────────────────────────────── */}
+        <SectionCard title={<span className="flex items-center gap-2"><ShieldCheck className="w-4 h-4 text-primary" />How I work</span>}>
+          <ul className="space-y-2.5 text-sm text-muted-foreground">
+            <li className="flex gap-2">
+              <Zap className="w-4 h-4 text-primary shrink-0 mt-0.5" />
+              <span><span className="font-medium text-foreground">Deterministic.</span> Every answer comes from explicit commands, structured data, and deterministic rules — no LLM, no generative AI, nothing made up.</span>
+            </li>
+            <li className="flex gap-2">
+              <BarChart3 className="w-4 h-4 text-primary shrink-0 mt-0.5" />
+              <span><span className="font-medium text-foreground">Real data.</span> Community-facing answers use data I&apos;m actually permitted to access. When I give you personalized grow analysis, it&apos;s computed from <em>your own</em> TerpTalk records — and only ever shown to you.</span>
+            </li>
+            <li className="flex gap-2">
+              <ShieldCheck className="w-4 h-4 text-primary shrink-0 mt-0.5" />
+              <span><span className="font-medium text-foreground">Private by design.</span> Owner-only intelligence stays owner-scoped and respects your visibility and notification settings. I never read or expose another member&apos;s private data.</span>
+            </li>
+            <li className="flex gap-2">
+              <Users className="w-4 h-4 text-primary shrink-0 mt-0.5" />
+              <span><span className="font-medium text-foreground">Not a moderator.</span> I don&apos;t make moderation decisions and can&apos;t take action against any member — humans handle all of that.</span>
+            </li>
+            <li className="flex gap-2">
+              <HandMetal className="w-4 h-4 text-primary shrink-0 mt-0.5" />
+              <span>I welcome new members, post the daily digest in <Link href="/chat" className="text-primary hover:underline">chat</Link>, and send a private heads-up when it&apos;s genuinely useful — manage those in{" "}
+              <Link href="/settings/notifications" className="text-primary hover:underline">notification settings</Link>.</span>
+            </li>
+          </ul>
+          <div className="space-y-1.5 mt-4 pt-4 border-t border-border">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">Try me</p>
             {[
               "@terpbot what's my rank?",
+              "@terpbot my grow",
               "@terpbot summarize this thread",
+              "@terpbot what should I check",
               "@terpbot find cloning guides",
-              "@terpbot next badges",
             ].map((ex) => (
               <code key={ex} className="block text-xs bg-secondary/50 rounded px-2.5 py-1.5 text-foreground/90">{ex}</code>
             ))}
@@ -1610,9 +1684,7 @@ function BotProfile({ data }: { data: ProfileResponse }) {
           <p className="text-xs text-muted-foreground mt-3 pt-3 border-t border-border flex items-start gap-1.5">
             <AlertTriangle className="w-3 h-3 shrink-0 mt-0.5" />
             <span>
-              I&apos;m fully automated — everything I say comes from real TerpTalk data, never a script pretending to be a grower. I&apos;m not a moderator, and I don&apos;t give personalized cultivation, legal, or medical advice — just general info. Manage my notifications in{" "}
-              <Link href="/settings/notifications" className="text-primary hover:underline">settings</Link>.
-              {profile.botStats?.hasFallbacks && <span className="block mt-1">If I miss your meaning, rephrase — I&apos;m still learning.</span>}
+              I&apos;m fully automated — I don&apos;t give legal or medical advice, and my grow analysis is general computed guidance from your records, not professional consultation.
             </span>
           </p>
         </SectionCard>
