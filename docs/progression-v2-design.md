@@ -1360,3 +1360,183 @@ Final tuning decisions applied:
 
 **Status: DESIGN LOCKED.** Companion implementation plan:
 `docs/progression-v2-implementation-plan.md`.
+
+---
+
+# Progression 2.1 — Reward & Engagement Overhaul (rev 4)
+
+**Status: implemented.** Problem statement: four ranks (Germinated,
+Seedling, Preflower, Ripening) granted zero live capability — the only
+"reward" on the card was roadmap text. Flowering was one thin perk.
+Separately, `showcaseSlots` (the badge-pin showcase ladder, 3→14) was
+already live via `progressionPerksFrom` but had no registry rows, so the
+catalog could not display it — an invisible reward.
+
+## Design goals
+
+- Every rank grants at least one real, current, usable capability.
+- Future roadmap items stay visible but in a clearly labeled
+  **Future unlocks (planned)** section — never presented as the reward
+  a rank delivers today.
+- Fill empty ranks by extending *already-gated capacity axes* on
+  existing infrastructure — no new features, no new gates on previously
+  free capabilities, no second currency, no schema changes.
+
+## Reward philosophy (unchanged, now enforced per-rank)
+
+- **Layer 1 — functional unlocks** are the major rewards (analytics,
+  export, quest slots, deals, rooms, spotlight).
+- **Layer 2 — capacity milestones** give intermediate ranks real gains
+  (profile sections, stat slots, saved searches, photos per post,
+  badge-showcase slots). Smaller, but real and monotonic.
+- **Layer 3 — prestige** (rank nameplates, standing chips, streak
+  alternates) is the visible-identity layer — never the primary reward.
+
+## Final rank reward matrix
+
+| Rank | XP | Live rewards | Standing req | Motivation class |
+|---|---|---|---|---|
+| Seed | 0 | base limits (4 stats, 2 sections, 3 searches, 3 quests, 4 imgs, 3 showcase) | — | entry |
+| Germinated | 60 | +1 profile section (3) | — | useful incremental |
+| Seedling | 180 | 6 saved searches (3→6) | — | useful incremental |
+| Rooted | 420 | 4th quest, members' deals, 4 sections | — | strong immediate |
+| Vegged | 900 | env analytics, harvest trends, 6 stats | — | strong immediate |
+| Trained | 1600 | CSV export, 10 searches, 4 showcase pins | — | strong immediate |
+| Preflower | 2600 | 5 photos per post (4→5) | — | useful incremental |
+| Flowering | 4000 | 6 photos per post, 5 showcase pins | — | useful incremental |
+| Ripening | 5800 | 7 stat slots, 6 showcase pins | — | useful incremental |
+| Harvested | 7500 | 1.5× rate limits, 8 photos, pinned harvest (or 60-day streak), 8 stats, 6 sections, records widget, 8 showcase | — | strong immediate |
+| Cured | 12000 | 8 sections, owner analytics, 2× rate, 7 tags, spotlight (or 100-day streak), 10 showcase | — | strong immediate |
+| Cultivator | 17000 | 5th quest, 10 photos, top-shelf deals, Grow Room | +100 standing | prestige + functional |
+| Master Cultivator | 23000 | The Vault, first-look deals, 14 showcase | +300 standing | prestige |
+
+Standing-gated privileges remain Standing-only (poll vote 25 / create
+100 / slowmode-exempt 800 / links 25 / verified 300) — XP cannot
+substitute for trust.
+
+## What changed vs 2.0
+
+- New live capacity unlocks on existing axes: `profile-sections-3`
+  (Germinated), `saved-searches-6` (Seedling), `images-5` (Preflower),
+  `stat-slots-7` (Ripening).
+- Seven `showcase-slots-*` registry rows document the already-live
+  badge-pin ladder — invisible perk → visible catalog.
+- `RANK_DISPLAY.benefit` rewritten: no rank's benefit names a feature
+  that doesn't exist.
+- `/progress` gains a "Future unlocks (planned)" rail listing
+  `status:"future"` rows as roadmap, distinct from earned rewards.
+
+## Anti-abuse / economy safety
+
+No XP source, amount, cap, or quest payout changed. All additions are
+capacity/display unlocks — they cannot be farmed, are granted by the
+same `hasUnlock`/`progressionPerksFrom` gates, honor `unlockFrozen`,
+and reverse with rank. The dormant V2 Achievement framework stays
+dormant; no achievement-gated unlock ships live.
+
+## Tests
+
+Boundary coverage added in `scripts/reputation-tests.mts`:
+`profileSectionLimit` (2→3→5), `statSlotLimit` (4→7), `savedSearchLimit`
+(3→6→10), `imagesPerPost` (5 at Preflower), registry↔perk agreement for
+showcase rows, `nextRankUnlock` skipping future rows.
+
+---
+
+# Progression 2.2 — Reward Depth & Engagement (rev 5)
+
+**Status: implemented.** 2.1 made every rank truthful; 2.2 makes every
+rank *mattering*. Several ranks shipped only a single +1 capacity bump —
+real but too thin to feel like a milestone.
+
+## Phase 0/4 findings — hidden live inventory
+
+Exhaustive sweep for gated/graduated live behavior beyond the registry:
+
+| Capability | Live | Enforced | Visible | In registry |
+|---|---|---|---|---|
+| `trusted-links` — external links in posts (25 standing + 24h age, `enforceLinkTrust`/`isTrustedForLinks`) | ✅ | ✅ | ✅ | ❌ → added |
+| Rank nameplates `tt-nameplate-*` via `rankDisplay(xp)` — username styling in chat, bylines, profile | ✅ | ✅ | ✅ | implicit in RANK_DISPLAY |
+| `STANDING_VERIFIED` (300) + `VERIFIED_MIN_AGE_DAYS_V2` | ⚠️ config only — no live V2 promotion consumer; legacy `autoVerify` reads the frozen rep ledger | — | — | no (correctly absent) |
+| Avatar frames / themes / custom titles | ❌ retired V1 cosmetics — no schema fields, nothing renders | — | — | n/a |
+
+**Bug found:** `enforceShowcaseSlots` (in `postDemotionEffects`, run on
+reversals/adjustments) pruned pins using `getReputationTier(reputation)`
+— the *frozen* V1 ledger — while the pin gate uses
+`getProgressionPerks(xp).showcaseSlots`. A post-cutover member (rep≈0)
+with ≥4 XP-earned pins would be wrongly pruned to 3 on any demotion
+event. Fixed to read the V2 perk authority.
+
+## The core fix: redistribute, don't inflate
+
+No new features, no schema, no XP changes. The ladder's material is
+identity moments (nameplate tier-ups — live but previously un-advertised)
+plus capacity axes. Two moves fix the "+1 slot" fatigue:
+
+1. **Lead weak ranks with their nameplate tier-up.** Seedling→leaf,
+   Preflower→bloom, Harvested→master, Cultivator→grand, MC→gold are real
+   visible identity changes that were silently granted before.
+2. **Move four capacity rungs earlier** to bundle them as meaningful
+   clusters — every move is an *earlier grant* (monotonic, nobody loses
+   anything, no migration needed):
+
+| Unlock | 2.1 rank | 2.2 rank | Bundled with |
+|---|---|---|---|
+| `saved-searches-6` | Seedling | **Germinated** | profile-sections-3 ("starter kit") |
+| `images-5` | Preflower | **Seedling** | first nameplate (leaf) |
+| `showcase-slots-5` | Flowering | **Preflower** | bloom nameplate |
+| `stat-slots-7` | Ripening | **Flowering** | images-6 |
+| `tags-7` (split from `rate-2` bundle) | Cured | **Ripening** | showcase-slots-6 |
+
+## Final rank matrix
+
+| Rank | XP | Headline | Secondary | Identity | Standing |
+|---|---|---|---|---|---|
+| Seed | 0 | full base kit | — | — | — |
+| Germinated | 60 | **Starter kit** — 3 sections + 6 saved searches | — | — | — |
+| Seedling | 180 | **Leaf nameplate** — username turns green site-wide | 5 photos/post | leaf | — |
+| Rooted | 420 | 4th daily quest + members' deals | 4 sections | leaf | — |
+| Vegged | 900 | Grow analytics (env + harvest trends) | 6 stat slots | leaf | — |
+| Trained | 1600 | Per-grow CSV export | 10 searches, 4 pins | leaf | — |
+| Preflower | 2600 | **Bloom nameplate** — username blooms fuchsia | 5 pins | bloom | — |
+| Flowering | 4000 | 6 photos per post | 7 stat slots | bloom | — |
+| Ripening | 5800 | 7 tags per thread | 6 pins | bloom | — |
+| Harvested | 7500 | Pinned harvest (60d-streak alt) + 1.5× limits | 8 photos, 8 stats, 6 sections, records widget, 8 pins | master | — |
+| Cured | 12000 | Grower Spotlight + owner insights + 2× limits | 8 sections, 10 pins | master | — |
+| Cultivator | 17000 | **Grow Room** + 5th quest | 10 photos, top-shelf deals, 12 pins | grand | +100 |
+| Master Cultivator | 23000 | **The Vault** + first-look deals | 14 pins | gold | +300 |
+
+Standing-only row added: `trusted-links` (25 standing + 24h age).
+
+## Choice rewards — REJECTED
+
+`meetsUnlockSpec.anyOf` supports alternate unlock *conditions*, but a
+member-*chosen* branch needs persisted selection state + a choice UI +
+audit trail — a new subsystem. Per the brief ("reject if it requires a
+large subsystem"), rejected; documented here so it isn't re-litigated.
+
+## XP thresholds — UNCHANGED
+
+Pacing was a reward-timing problem, not a threshold problem. All ladder
+movement is earlier grants of existing capacities; no thresholds or XP
+values moved.
+
+## TerpBot — UNCHANGED
+
+Owner-scoped profile intel is intentionally free for every member —
+gating it would gate a privacy-positive feature. No TerpBot behavior
+touched.
+
+## Anti-abuse impact
+
+Zero: every reward is a derived-from-XP capacity or display property;
+`unlockFrozen`, reversals, soft caps, and duplicate detection all apply
+unchanged. Earlier grants can't be farmed (they're thresholds, not
+payouts).
+
+## Tests
+
+Boundary assertions updated for each moved rung (below/at/above),
+`trusted-links` standing gate covered, `tags-7` perk provenance, frozen
+denial, and the existing "future rows never activate" sweep all live in
+`scripts/reputation-tests.mts`.

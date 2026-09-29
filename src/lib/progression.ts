@@ -1065,20 +1065,33 @@ export async function meetsUnlockSpec(userId: string, spec: UnlockSpec): Promise
   return coreOk && standingOk
 }
 
-/** Profile P2 — custom-section capacity: Seed 2 → Rooted 4 → Harvested 6 →
- *  Cured 8 (hard-capped by PROFILE_SECTION_HARD_MAX in the caller). */
+/** Profile P2 — custom-section capacity: Seed 2 → Germinated 3 → Rooted 4 →
+ *  Harvested 6 → Cured 8 (hard-capped by PROFILE_SECTION_HARD_MAX in the
+ *  caller). */
 export async function profileSectionLimit(userId: string): Promise<number> {
   if (await hasUnlock(userId, "profile-sections-8")) return 8
   if (await hasUnlock(userId, "profile-sections-6")) return 6
   if (await hasUnlock(userId, "profile-sections-4")) return 4
+  if (await hasUnlock(userId, "profile-sections-3")) return 3
   return PROFILE_SECTION_BASE_LIMIT
 }
 
-/** Profile P2 — notable-stat slots: Seed 4 → Vegged 6 → Harvested 8. */
+/** Profile P2 — notable-stat slots: Seed 4 → Vegged 6 → Ripening 7 →
+ *  Harvested 8. */
 export async function statSlotLimit(userId: string): Promise<number> {
   if (await hasUnlock(userId, "stat-slots-8")) return 8
+  if (await hasUnlock(userId, "stat-slots-7")) return 7
   if (await hasUnlock(userId, "stat-slots-6")) return 6
   return SHOWN_STATS_BASE
+}
+
+/** Saved-search capacity: Seed 3 → Seedling 6 → Trained 10.
+ *  Consumed by /api/saved-searches; existing rows above the cap stay
+ *  readable — only creation is gated. */
+export async function savedSearchLimit(userId: string): Promise<number> {
+  if (await hasUnlock(userId, "saved-searches-10")) return 10
+  if (await hasUnlock(userId, "saved-searches-6")) return 6
+  return 3
 }
 
 // ─── Enforced perks (locked §8/§9.6) ─────────────────────────────────
@@ -1091,9 +1104,12 @@ export interface ProgressionPerks {
   pollCreation: boolean // "poll-create" — Trusted (100 standing)
   rateLimitBoost: number // "rate-1.5" / "rate-2" — ×1.5 Harvested, ×2 Cured+
   slowmodeExempt: boolean // "slowmode-exempt" — Pillar (800 standing)
-  imagesPerPost: number | undefined // "images-6"/"images-8"/"images-10" — Flowering/Harvested/Cultivator
-  maxThreadTags: number | undefined // 7 at Cured (rate-2 bundle)
-  showcaseSlots: number // badge showcase capacity — scales with rank
+  imagesPerPost: number | undefined // "images-5"/"images-6"/"images-8"/"images-10" — Seedling/Flowering/Harvested/Cultivator
+  maxThreadTags: number | undefined // "tags-7" — 7 at Ripening
+  // "showcase-slots-4"/"showcase-slots-5"/"showcase-slots-6"/
+  // "showcase-slots-8"/"showcase-slots-10"/"showcase-slots-12"/
+  // "showcase-slots-14" — badge pin capacity, Trained→MC.
+  showcaseSlots: number
   rank: string
   standing: number
 }
@@ -1109,11 +1125,11 @@ export function progressionPerksFrom(xp: number, standing: number, frozen: boole
     pollCreation: !frozen && standing >= STANDING_POLL_CREATE,
     rateLimitBoost: at("Cured") ? 2 : at("Harvested") ? 1.5 : 1,
     slowmodeExempt: !frozen && standing >= STANDING_SLOWMODE_EXEMPT,
-    imagesPerPost: at("Cultivator") ? 10 : at("Harvested") ? 8 : at("Flowering") ? 6 : undefined,
-    maxThreadTags: at("Cured") ? 7 : undefined,
-    // Positional mapping from the legacy showcase ladder (3→14).
+    imagesPerPost: at("Cultivator") ? 10 : at("Harvested") ? 8 : at("Flowering") ? 6 : at("Seedling") ? 5 : undefined,
+    maxThreadTags: at("Ripening") ? 7 : undefined,
+    // Showcase ladder (3→14) — registry rows showcase-slots-4/5/6/8/10/12/14.
     showcaseSlots: at("Master Cultivator") ? 14 : at("Cultivator") ? 12 : at("Cured") ? 10
-      : at("Harvested") ? 8 : at("Ripening") ? 6 : at("Flowering") ? 5 : at("Trained") ? 4 : 3,
+      : at("Harvested") ? 8 : at("Ripening") ? 6 : at("Preflower") ? 5 : at("Trained") ? 4 : 3,
     rank: rankFromXp(xp).name,
     standing,
   }

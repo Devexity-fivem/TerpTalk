@@ -87,16 +87,16 @@ export async function enforceLinkTrust(
   return forbidden(`New users need 24 hours and Known standing (${STANDING_LINKS}) before posting links. Share plain text in the meantime.`)
 }
 
-/** Moderators and members at "Known" standing (≥25) older than 24h can post links. V2: standing, not the frozen rep balance. */
+/** Moderators and members at "Known" standing (≥25) older than 24h can post links. V2: standing, not the frozen rep balance. Registry row: "trusted-links". */
 export async function isTrustedForLinks(userId: string): Promise<boolean> {
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { role: true, createdAt: true, profile: { select: { standing: true } } },
+    select: { role: true, createdAt: true, profile: { select: { standing: true, unlockFrozen: true } } },
   })
   if (!user) return false
   if (isModerator(user.role)) return true
   const ageHours = (Date.now() - new Date(user.createdAt).getTime()) / (1000 * 60 * 60)
-  return ageHours >= 24 && (user.profile?.standing ?? 0) >= STANDING_LINKS
+  return ageHours >= 24 && (user.profile?.standing ?? 0) >= STANDING_LINKS && !user.profile?.unlockFrozen
 }
 
 /**

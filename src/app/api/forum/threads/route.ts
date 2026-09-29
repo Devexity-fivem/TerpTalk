@@ -97,7 +97,7 @@ export async function POST(request: Request) {
     // One profile read serves every progression-perk check on this route.
     const progressionPerks = await getProgressionPerks(session.user.id)
 
-    // Cured+ can attach up to 7 tags instead of 5.
+    // Ripening+ can attach up to 7 tags instead of 5.
     const tagCap = progressionPerks.maxThreadTags ?? MAX_TAGS
     if (tagInputs.length > tagCap) {
       return NextResponse.json({ error: `Maximum ${tagCap} tags per thread` }, { status: 400 })

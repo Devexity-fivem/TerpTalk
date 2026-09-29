@@ -11,11 +11,11 @@ import { useSession } from "next-auth/react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import {
-  Sprout, Lock, ChevronRight, Award, Loader2, ShieldCheck, Zap, CalendarCheck, Trophy, Flame, Check,
+  Sprout, Lock, ChevronRight, Award, Loader2, ShieldCheck, Zap, CalendarCheck, Trophy, Flame, Check, Sparkles,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { signInHref } from "@/lib/callback-url"
-import { REP_RANKS, RANK_DISPLAY } from "@/lib/progression-config"
+import { REP_RANKS, RANK_DISPLAY, UNLOCKS } from "@/lib/progression-config"
 
 interface ProgressionData {
   xp: number
@@ -246,6 +246,8 @@ export default function ProgressPage() {
           <ol className="space-y-1">
             {REP_RANKS.map((t, i) => {
               const display = RANK_DISPLAY[t.name] ?? RANK_DISPLAY.Seed
+              const prevNameplate = i > 0 ? (RANK_DISPLAY[REP_RANKS[i - 1].name]?.nameplate ?? null) : null
+              const newNameplate = display.nameplate && display.nameplate !== prevNameplate ? display.nameplate : null
               const reached = data.xp >= t.threshold
               const current = data.rank.name === t.name
               return (
@@ -275,6 +277,11 @@ export default function ProgressPage() {
                       <span className={cn("font-semibold", current && "text-primary")}>{t.name}</span>
                       <span className="text-[11px] text-muted-foreground">{t.threshold.toLocaleString()} XP</span>
                       {current && <span className="text-[10px] font-semibold uppercase tracking-wider text-primary">you are here</span>}
+                      {newNameplate && (
+                        <span className={cn("text-[11px] border border-border/60 rounded px-1.5 py-px bg-secondary/50", newNameplate)} title="Your nameplate changes everywhere at this rank">
+                          Your name
+                        </span>
+                      )}
                     </div>
                     <p className="text-[11px] text-muted-foreground mt-0.5">{display.benefit}</p>
                   </div>
@@ -282,6 +289,34 @@ export default function ProgressPage() {
               )
             })}
           </ol>
+        </section>
+
+        {/* Future unlocks — roadmap only. Everything here is still
+            planned; it is deliberately kept out of the earned-reward
+            language above so a member never thinks they "got" a feature
+            that doesn't exist yet. */}
+        <section aria-label="Future unlocks" className="rounded-2xl border border-dashed border-border/70 p-4 mb-4">
+          <div className="flex items-center gap-2 mb-1">
+            <Sparkles className="w-4 h-4 text-muted-foreground" />
+            <h2 className="font-display text-sm font-semibold text-muted-foreground">Future unlocks</h2>
+            <span className="ml-auto text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">planned</span>
+          </div>
+          <p className="text-xs text-muted-foreground mb-3">
+            Roadmap features still being built — not live yet, so they are not rewards today.
+          </p>
+          <ul className="grid gap-x-4 gap-y-1.5 sm:grid-cols-2">
+            {UNLOCKS.filter((u) => u.status === "future").map((u) => (
+              <li key={u.id} className="flex items-start gap-2 text-xs" title={u.blurb ?? u.name}>
+                <span className="mt-1.5 w-1 h-1 rounded-full bg-border shrink-0" aria-hidden="true" />
+                <span className="min-w-0">
+                  <span className="font-medium text-foreground/80">{u.name}</span>
+                  <span className="text-muted-foreground">
+                    {" · "}{u.rank ? `${u.rank} tier` : u.mastery ? `${u.mastery.path.toLowerCase()} mastery` : "roadmap"}
+                  </span>
+                </span>
+              </li>
+            ))}
+          </ul>
         </section>
 
         {/* Next Best Action */}

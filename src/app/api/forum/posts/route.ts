@@ -107,7 +107,7 @@ export async function POST(request: Request) {
     // Upload attachments first so a storage failure cannot leave a reply
     // with only some of its images.
     try {
-      // Flowering+ ranks can attach more images per post.
+      // Seedling+ ranks can attach more images per post.
       const perks = await getProgressionPerks(session.user.id)
       imageUrls = await storeImages(images, "forum", perks.imagesPerPost ?? MAX_POST_IMAGES)
     } catch (err) {

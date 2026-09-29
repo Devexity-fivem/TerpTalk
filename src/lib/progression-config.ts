@@ -372,6 +372,11 @@ export const UNLOCKS: UnlockSpec[] = [
   // (streak-dashboard, saved-searches-3, comparison-basic removed in
   // Phase I — the features are free for everyone, so the "unlock"
   // promised less than reality. The ladder keeps what genuinely changes.)
+  // Live — enforced by profileSectionLimit (2 → 3 → 4 → 6 → 8).
+  { id: "profile-sections-3", name: "3 profile sections", category: "capacity", layer: "A", rank: "Germinated", blurb: "One more custom section on your profile — up from the 2 everyone gets." },
+  // Live — enforced by savedSearchLimit (3 → 6 → 10), consumed by
+  // /api/saved-searches.
+  { id: "saved-searches-6", name: "Save 6 searches", category: "capacity", layer: "A", rank: "Germinated", blurb: "Double your saved searches — up from the 3 everyone gets." },
   { id: "comparison-slot-2", name: "Compare 2 grows at once", category: "capacity", layer: "A", rank: "Seedling", status: "future", blurb: "Keep two side-by-side comparisons open." },
   { id: "grow-templates", name: "Quick-log templates", category: "functional", layer: "A", rank: "Rooted", status: "future", blurb: "Update forms prefilled for your soil or hydro setup, so logging takes seconds." },
   { id: "quest-slot-4", name: "4th daily quest", category: "functional", layer: "A", rank: "Rooted", blurb: "One more quest on your board each day." },
@@ -388,7 +393,13 @@ export const UNLOCKS: UnlockSpec[] = [
   { id: "export-tools", name: "Per-grow CSV export", category: "functional", layer: "A", rank: "Trained", blurb: "Download a grow's full update log as a spreadsheet-ready CSV. (The whole-account JSON export stays free for everyone.)" },
   // (advanced-filters removed — every existing filter stays free; no
   //  gate was manufactured on basic search.)
-  { id: "saved-searches-10", name: "Save 10 searches", category: "capacity", layer: "A", rank: "Trained", blurb: "A full shelf of saved searches — up from the 3 everyone gets." },
+  { id: "saved-searches-10", name: "Save 10 searches", category: "capacity", layer: "A", rank: "Trained", blurb: "A full shelf of saved searches — up from the 6 you get at Germinated." },
+  // Live — enforced by progressionPerksFrom.showcaseSlots (3→4→5→6→8→
+  // 10→12→14 ladder), consumed by /api/achievements + /api/profile.
+  { id: "showcase-slots-4", name: "4 badge showcase slots", category: "showcase", layer: "A", rank: "Trained", blurb: "Pin up to 4 badges on your profile — up from the 3 everyone gets." },
+  // Live — enforced by progressionPerksFrom.imagesPerPost (4→5→6→8→10),
+  // consumed by /api/forum/posts.
+  { id: "images-5", name: "5 photos per post", category: "capacity", layer: "A", rank: "Seedling", blurb: "A little more room to show what you're seeing — up from 4." },
   { id: "custom-reminders", name: "Grow reminders", category: "functional", layer: "A", rank: "Trained", status: "future", blurb: "Set your own reminders to water, feed, or check on a grow." },
   { id: "terpbot-watch-basic", name: "TerpBot keeps an eye out", category: "terpbot", layer: "A", rank: "Preflower", status: "future", blurb: "Set up to 3 alerts — e.g. 'tell me if my tent gets too humid'." },
   { id: "longitudinal-analysis", name: "Whole-grow review", category: "terpbot", layer: "B", rank: "Flowering", mastery: { path: "RECORDS", level: 2 }, status: "future", blurb: "TerpBot looks back over a full grow and points out what changed and when." },
@@ -396,6 +407,8 @@ export const UNLOCKS: UnlockSpec[] = [
   // Live — enforced by the perk engine (progressionPerksFrom.imagesPerPost),
   // consumed by /api/forum/posts. Rank matches the perk threshold exactly.
   { id: "images-6", name: "6 photos per post", category: "capacity", layer: "A", rank: "Flowering", blurb: "More room to show what you're seeing." },
+  // Live — progressionPerksFrom.showcaseSlots (see showcase-slots-4).
+  { id: "showcase-slots-5", name: "5 badge showcase slots", category: "showcase", layer: "A", rank: "Preflower", blurb: "Pin up to 5 badges on your profile." },
 
   // Late — B + C
   { id: "guide-authoring", name: "Write grow guides", category: "leadership", layer: "B", rank: "Ripening", mastery: { path: "KNOWLEDGE", level: 3 }, anyOf: true, status: "future", blurb: "Publish your own guides for the community (staff-reviewed)." },
@@ -404,6 +417,13 @@ export const UNLOCKS: UnlockSpec[] = [
   { id: "nutrient-schedules", name: "Feed-chart presets", category: "functional", layer: "B", mastery: { path: "RECORDS", level: 3 }, status: "future", blurb: "Pick your nutrient brand and its feeding schedule drops straight into your update form." },
   { id: "data-quality-insights", name: "What's missing from your log", category: "analytics", layer: "B", mastery: { path: "RECORDS", level: 2 }, achievement: "full-spectrum", status: "future", blurb: "A gentle checklist of readings your diary doesn't have yet." },
   { id: "experiment-templates", name: "Copy a proven test", category: "functional", layer: "B", mastery: { path: "EXPERIMENTATION", level: 2 }, status: "future", blurb: "Start a new experiment from one that already worked." },
+  // Live — statSlotLimit (4 → 6 → 7 → 8), consumed by /api/profile.
+  { id: "stat-slots-7", name: "7 notable stats", category: "capacity", layer: "A", rank: "Flowering", blurb: "Show 7 notable stats on your profile — up from 6." },
+  // Live — enforced by progressionPerksFrom.maxThreadTags, consumed by
+  // /api/forum/threads (MAX_TAGS override).
+  { id: "tags-7", name: "7 tags per thread", category: "functional", layer: "A", rank: "Ripening", blurb: "Tag your threads more precisely — up from the 5 everyone gets." },
+  // Live — progressionPerksFrom.showcaseSlots (see showcase-slots-4).
+  { id: "showcase-slots-6", name: "6 badge showcase slots", category: "showcase", layer: "A", rank: "Ripening", blurb: "Pin up to 6 badges on your profile." },
   // Live — enforced by progressionPerksFrom (rateLimitBoost 1.5 / imagesPerPost 8),
   // consumed by progressionRateLimit and /api/forum/posts.
   { id: "rate-1.5", name: "Post & chat more often", category: "capacity", layer: "A", rank: "Harvested", blurb: "Looser limits on how often you can post and chat." },
@@ -412,6 +432,8 @@ export const UNLOCKS: UnlockSpec[] = [
   { id: "stat-slots-8", name: "8 notable stats", category: "capacity", layer: "A", rank: "Harvested", blurb: "The full stat strip — up to 8 notable stats on your profile." },
   { id: "profile-sections-6", name: "6 profile sections", category: "capacity", layer: "A", rank: "Harvested", blurb: "Up to 6 custom sections on your profile." },
   { id: "records-widget", name: "Records widget", category: "showcase", layer: "A", rank: "Harvested", blurb: "A records card on your profile: longest grow, biggest harvest, earliest start." },
+  // Live — progressionPerksFrom.showcaseSlots (see showcase-slots-4).
+  { id: "showcase-slots-8", name: "8 badge showcase slots", category: "showcase", layer: "A", rank: "Harvested", blurb: "Pin up to 8 badges on your profile." },
   { id: "grower-cockpit", name: "Grower Cockpit", category: "functional", layer: "A", rank: "Harvested", status: "future", blurb: "Your grows, alerts, comparisons and quests all on one screen." },
   { id: "watch-advanced", name: "More TerpBot alerts", category: "terpbot", layer: "B", rank: "Harvested", mastery: { path: "RECORDS", level: 3 }, status: "future", blurb: "Up to 10 alerts, including ones that watch over several days." },
   { id: "watch-compound", name: "Combined alerts", category: "terpbot", layer: "B", mastery: { path: "RECORDS", level: 4 }, status: "future", blurb: "Alerts that watch two things at once — say, humidity during late flower." },
@@ -420,9 +442,11 @@ export const UNLOCKS: UnlockSpec[] = [
   { id: "dashboard-advanced", name: "Bigger cockpit, 15 alerts", category: "analytics", layer: "A", rank: "Cured", status: "future", blurb: "More cockpit panels and more TerpBot alerts." },
   { id: "profile-sections-8", name: "8 profile sections", category: "capacity", layer: "A", rank: "Cured", blurb: "The full shelf — up to 8 custom sections on your profile." },
   { id: "owner-analytics", name: "Profile insights", category: "analytics", layer: "A", rank: "Cured", blurb: "A private panel on your own profile: your last 30 days of followers, updates and new grows. Only you see it." },
+  // Live — progressionPerksFrom.showcaseSlots (see showcase-slots-4).
+  { id: "showcase-slots-10", name: "10 badge showcase slots", category: "showcase", layer: "A", rank: "Cured", blurb: "Pin up to 10 badges on your profile." },
   // Live — enforced by progressionPerksFrom (rateLimitBoost 2 / maxThreadTags 7),
   // consumed by progressionRateLimit and /api/forum/threads.
-  { id: "rate-2", name: "Post & chat freely, 7 tags", category: "capacity", layer: "A", rank: "Cured", blurb: "The loosest posting limits and more tags per thread." },
+  { id: "rate-2", name: "Post & chat freely", category: "capacity", layer: "A", rank: "Cured", blurb: "The loosest posting limits on the site — 2× the base rate." },
   { id: "grower-spotlight", name: "Grower Spotlight", category: "showcase", layer: "A", rank: "Cured", streak: 100, blurb: "Your active grow can be featured on the TerpTalk home page." },
   { id: "quest-slot-5", name: "5th daily quest", category: "functional", layer: "A", rank: "Cultivator", blurb: "A fifth quest on your board each day." },
 
@@ -432,7 +456,11 @@ export const UNLOCKS: UnlockSpec[] = [
   // Live — enforced by progressionPerksFrom.imagesPerPost, consumed by /api/forum/posts.
   { id: "images-10", name: "10 photos per post", category: "capacity", layer: "A", rank: "Cultivator", blurb: "The most room for photos." },
   { id: "top-shelf-deals", name: "Top-shelf deals", category: "deals", layer: "A", rank: "Cultivator", blurb: "The best partner offers, reserved for the most experienced growers." },
+  // Live — progressionPerksFrom.showcaseSlots (see showcase-slots-4).
+  { id: "showcase-slots-12", name: "12 badge showcase slots", category: "showcase", layer: "A", rank: "Cultivator", blurb: "Pin up to 12 badges on your profile." },
   { id: "the-vault", name: "The Vault", category: "leadership", layer: "C", rank: "Master Cultivator", standing: 300, blurb: "The top room. Few get in, on purpose." },
+  // Live — progressionPerksFrom.showcaseSlots (see showcase-slots-4).
+  { id: "showcase-slots-14", name: "14 badge showcase slots", category: "showcase", layer: "A", rank: "Master Cultivator", blurb: "The full badge showcase — 14 pinned slots." },
   { id: "research-aggregates", name: "Deeper community stats", category: "analytics", layer: "B", rank: "Master Cultivator", mastery: { path: "RECORDS", level: 4 }, status: "future", blurb: "More detailed community-wide numbers, still anonymous." },
   // Enforced today for partner deals (`canSeeDeal` on /deals + /go/*);
   // the "try new features" half has no feature-flag consumers yet — the
@@ -443,6 +471,10 @@ export const UNLOCKS: UnlockSpec[] = [
   // pollCreation, slowmodeExempt). Standing-only rows have no rank, so
   // nextRankUnlock never offers them as XP-ladder goals — correct, since
   // standing is earned, not ground.
+  // Live — enforced by enforceLinkTrust/isTrustedForLinks on post content.
+  // The extra 24h account-age requirement is anti-spam depth the registry
+  // can't express; the row documents the standing floor.
+  { id: "trusted-links", name: "Post external links", category: "functional", layer: "C", standing: STANDING_LINKS, blurb: "Links in your posts work — Known standing + a 24h-old account." },
   { id: "poll-vote", name: "Vote in polls", category: "functional", layer: "C", standing: STANDING_POLL_VOTE, blurb: "Cast votes on community polls — Known standing and up." },
   { id: "poll-create", name: "Create polls", category: "functional", layer: "C", standing: STANDING_POLL_CREATE, blurb: "Start polls in your threads — Trusted standing and up." },
   { id: "slowmode-exempt", name: "No slowmode", category: "capacity", layer: "C", standing: STANDING_SLOWMODE_EXEMPT, blurb: "Chat rooms skip the slowmode timer for you — Pillar standing reads as trust." },
@@ -529,16 +561,16 @@ export const RANK_DISPLAY: Record<string, { icon: string; color: string; bg: str
   // Benefit strings name only what the rank actually delivers today.
   // Roadmap items the rank will eventually carry are phrased as future
   // (or omitted) — never as if they unlock now.
-  Germinated: { icon: "🌱", color: "text-success", bg: "bg-lime-500/10", benefit: "Roots are down — check in daily to start your streak milestones." },
-  Seedling: { icon: "🌿", color: "text-success", bg: "bg-green-500/10", benefit: "One rank closer — a 4th daily quest slot and members' deals open at Rooted.", nameplate: "tt-nameplate-leaf" },
-  Rooted: { icon: "🪴", color: "text-success", bg: "bg-green-600/10", benefit: "A 4th daily quest slot and members' deals.", nameplate: "tt-nameplate-leaf" },
-  Vegged: { icon: "🌲", color: "text-success", bg: "bg-emerald-500/10", benefit: "Advanced environment charts and harvest trends for your own grows.", nameplate: "tt-nameplate-leaf" },
-  Trained: { icon: "✂️", color: "text-success", bg: "bg-emerald-600/10", benefit: "Save up to 10 searches and export any grow's full log as CSV.", nameplate: "tt-nameplate-leaf" },
-  Preflower: { icon: "🌸", color: "text-fuchsia-500", bg: "bg-fuchsia-500/10", benefit: "TerpBot grow alerts are on the roadmap at this rank.", nameplate: "tt-nameplate-bloom" },
-  Flowering: { icon: "🌺", color: "text-fuchsia-500", bg: "bg-fuchsia-600/10", benefit: "Whole-grow review and side-by-side comparisons are on the roadmap.", nameplate: "tt-nameplate-bloom" },
-  Ripening: { icon: "🍯", color: "text-amber-500", bg: "bg-amber-500/10", benefit: "Guide writing and community challenges are on the roadmap at this rank.", nameplate: "tt-nameplate-bloom" },
-  Harvested: { icon: "🌾", color: "text-warning", bg: "bg-amber-600/10", benefit: "Pin a harvest to the top of your profile — a 60-day streak counts too.", nameplate: "tt-nameplate-master" },
-  Cured: { icon: "🏺", color: "text-cyan-500", bg: "bg-cyan-500/10", benefit: "Your active grow can be featured in the Grower Spotlight on the home page.", nameplate: "tt-nameplate-master" },
+  Germinated: { icon: "🌱", color: "text-success", bg: "bg-lime-500/10", benefit: "Starter kit — a third profile section and 6 saved searches. Daily check-ins start your streak milestones." },
+  Seedling: { icon: "🌿", color: "text-success", bg: "bg-green-500/10", benefit: "Your username turns leaf-green in chat, the forums, and your profile — plus 5 photos per post.", nameplate: "tt-nameplate-leaf" },
+  Rooted: { icon: "🪴", color: "text-success", bg: "bg-green-600/10", benefit: "A 4th daily quest slot, members' deals, and 4 profile sections.", nameplate: "tt-nameplate-leaf" },
+  Vegged: { icon: "🌲", color: "text-success", bg: "bg-emerald-500/10", benefit: "Advanced environment charts, harvest trends, and 6 notable stats.", nameplate: "tt-nameplate-leaf" },
+  Trained: { icon: "✂️", color: "text-success", bg: "bg-emerald-600/10", benefit: "Export any grow as CSV, save 10 searches, and pin 4 badges.", nameplate: "tt-nameplate-leaf" },
+  Preflower: { icon: "🌸", color: "text-fuchsia-500", bg: "bg-fuchsia-500/10", benefit: "Your username blooms fuchsia site-wide — and your showcase grows to 5 pinned badges.", nameplate: "tt-nameplate-bloom" },
+  Flowering: { icon: "🌺", color: "text-fuchsia-500", bg: "bg-fuchsia-600/10", benefit: "6 photos per post and 7 notable stats — your grows start showing in full.", nameplate: "tt-nameplate-bloom" },
+  Ripening: { icon: "🍯", color: "text-amber-500", bg: "bg-amber-500/10", benefit: "Tag threads with up to 7 tags and pin 6 badges on your profile.", nameplate: "tt-nameplate-bloom" },
+  Harvested: { icon: "🌾", color: "text-warning", bg: "bg-amber-600/10", benefit: "Pin a harvest (a 60-day streak counts too), post 8 photos, faster limits, 8 stats, 6 sections, the records widget, 8 showcase slots — and a master nameplate.", nameplate: "tt-nameplate-master" },
+  Cured: { icon: "🏺", color: "text-cyan-500", bg: "bg-cyan-500/10", benefit: "Grower Spotlight eligibility, private profile insights, 2× limits, 8 sections, 10 showcase slots.", nameplate: "tt-nameplate-master" },
   Cultivator: { icon: "🏆", color: "text-purple-500", bg: "bg-purple-500/10", benefit: "A 5th daily quest, top-shelf deals, and the Grow Room at 100 standing.", nameplate: "tt-nameplate-grand" },
   "Master Cultivator": { icon: "👑", color: "text-warning", bg: "bg-amber-400/10", benefit: "The Vault at 300 standing and first look at new partner deals.", nameplate: "tt-nameplate-gold" },
 }

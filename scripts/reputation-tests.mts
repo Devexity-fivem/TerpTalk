@@ -83,6 +83,10 @@ import {
   effectiveRank,
   hasUnlock,
   meetsUnlockSpec,
+  profileSectionLimit,
+  statSlotLimit,
+  savedSearchLimit,
+  progressionPerksFrom,
   masteryLevelFromXp,
   rankFromXp,
   REP_RANKS,
@@ -343,11 +347,12 @@ async function run() {
   // Powers every "next unlock" surface — first rank-gated UNLOCK above xp.
   const nu0 = nextRankUnlock(0)
   assert.ok(nu0, "a next unlock exists at 0 XP")
-  // Phase I removed the vacuous early-rank unlocks (the promised features were
-  // already free); the first *live* rank-gated unlock is quest-slot-4 @ Rooted.
-  const rootedRank = REP_RANKS.find((r) => r.name === "Rooted")!
-  assert.equal(nu0!.xpNeeded, rootedRank.threshold, "first live unlock lands at Rooted")
-  assert.equal(nu0!.id, "quest-slot-4", "first live unlock is the 4th quest slot")
+  // Progression 2.1: the first *live* rank-gated unlock is now the extra
+  // profile section at Germinated — early ranks grant real capacity, not
+  // roadmap promises.
+  const germRank = REP_RANKS.find((r) => r.name === "Germinated")!
+  assert.equal(nu0!.xpNeeded, germRank.threshold, "first live unlock lands at Germinated")
+  assert.equal(nu0!.id, "profile-sections-3", "first live unlock is the 3rd profile section")
   assert.equal(nextRankUnlock(23000), null, "nothing locked past max XP")
   const nu100 = nextRankUnlock(100)
   assert.ok(nu100 && nu100.xpNeeded > 100, "next unlock always above current xp")
@@ -1524,13 +1529,89 @@ async function run() {
     assert.equal(await hasUnlock(gate, "quest-slot-4"), false, "unlockFrozen denies all")
     await prisma.profile.update({ where: { userId: gate }, data: { unlockFrozen: false } })
 
+    // Progression 2.2 boundary coverage — every rank grants a real bump
+    // on an existing gated axis. Below/at/above on each.
+    const cap22 = await mkPv2("cap22")
+    // profileSectionLimit: 2 base → 3 @Germinated(60) → 4 @Rooted(420) →
+    // 6 @Harvested(7500) → 8 @Cured(12000).
+    assert.equal(await profileSectionLimit(cap22), 2, "Seed base = 2 sections")
+    await seedProgression(cap22, 59)
+    assert.equal(await profileSectionLimit(cap22), 2, "59 XP still 2 sections")
+    await seedProgression(cap22, 1)
+    assert.equal(await profileSectionLimit(cap22), 3, "Germinated grants 3rd section")
+    await seedProgression(cap22, 360) // 420 → Rooted
+    assert.equal(await profileSectionLimit(cap22), 4, "Rooted grants 4 sections")
+    await seedProgression(cap22, 7080) // 7500 → Harvested
+    assert.equal(await profileSectionLimit(cap22), 6, "Harvested grants 6 sections")
+    await seedProgression(cap22, 4500) // 12000 → Cured
+    assert.equal(await profileSectionLimit(cap22), 8, "Cured grants 8 sections")
+    // statSlotLimit: 4 base → 6 @Vegged(900) → 7 @Flowering(4000) →
+    // 8 @Harvested(7500).
+    const capStats = await mkPv2("capStats")
+    assert.equal(await statSlotLimit(capStats), 4, "Seed base = 4 stats")
+    await seedProgression(capStats, 3999)
+    assert.equal(await statSlotLimit(capStats), 6, "below Flowering stays 6 (Vegged passed at 900)")
+    await seedProgression(capStats, 1) // 4000 → Flowering
+    assert.equal(await statSlotLimit(capStats), 7, "Flowering grants 7th stat slot")
+    await seedProgression(capStats, 3500) // 7500 → Harvested
+    assert.equal(await statSlotLimit(capStats), 8, "Harvested grants 8 stat slots")
+    // savedSearchLimit: 3 base → 6 @Germinated(60) → 10 @Trained(1600).
+    const capSaved = await mkPv2("capSaved")
+    assert.equal(await savedSearchLimit(capSaved), 3, "Seed base = 3 saved searches")
+    await seedProgression(capSaved, 59)
+    assert.equal(await savedSearchLimit(capSaved), 3, "59 XP still 3 searches")
+    await seedProgression(capSaved, 1) // 60 → Germinated
+    assert.equal(await savedSearchLimit(capSaved), 6, "Germinated grants 6 saved searches")
+    await seedProgression(capSaved, 1540) // 1600 → Trained
+    assert.equal(await savedSearchLimit(capSaved), 10, "Trained grants 10 saved searches")
+    // imagesPerPost: undefined(4) → 5 @Seedling(180) → 6 @Flowering
+    // → 8 @Harvested → 10 @Cultivator. Pure form exercises the same
+    // ladder the post route consumes.
+    assert.equal(progressionPerksFrom(179, 0, false).imagesPerPost, undefined, "below Seedling keeps base 4")
+    assert.equal(progressionPerksFrom(180, 0, false).imagesPerPost, 5, "Seedling grants 5 photos")
+    assert.equal(progressionPerksFrom(4000, 0, false).imagesPerPost, 6, "Flowering grants 6 photos")
+    assert.equal(progressionPerksFrom(180, 0, true).imagesPerPost, undefined, "frozen member loses the bump")
+    // maxThreadTags: undefined(5) → 7 @Ripening(5800). Consumed by
+    // /api/forum/threads as a MAX_TAGS override.
+    assert.equal(progressionPerksFrom(5799, 0, false).maxThreadTags, undefined, "below Ripening keeps base 5 tags")
+    assert.equal(progressionPerksFrom(5800, 0, false).maxThreadTags, 7, "Ripening grants 7 tags")
+    assert.equal(progressionPerksFrom(5800, 0, true).maxThreadTags, undefined, "frozen member loses the tag bump")
+    // showcaseSlots registry↔perk agreement: every live showcase row must
+    // open exactly when progressionPerksFrom crosses the ladder rung.
+    for (const [id, xp, slots] of [
+      ["showcase-slots-4", 1600, 4], ["showcase-slots-5", 2600, 5],
+      ["showcase-slots-6", 5800, 6], ["showcase-slots-8", 7500, 8],
+      ["showcase-slots-10", 12000, 10], ["showcase-slots-12", 17000, 12],
+      ["showcase-slots-14", 23000, 14],
+    ] as const) {
+      const spec = UNLOCK_BY_ID.get(id)!
+      const rank = REP_RANKS.find((r) => r.name === spec.rank)!
+      assert.equal(rank.threshold, xp, `${id} documents its perk rung`)
+      assert.equal(progressionPerksFrom(xp - 1, 0, false).showcaseSlots < slots, true, `${id} one XP below = fewer slots`)
+      assert.equal(progressionPerksFrom(xp, 0, false).showcaseSlots >= slots, true, `${id} at rung = slot count`)
+      const sc = await mkPv2(`sc${slots}`)
+      assert.equal(await hasUnlock(sc, id), false, `${id} locked at Seed`)
+      await seedProgression(sc, xp - 1)
+      assert.equal(await hasUnlock(sc, id), false, `${id} locked one XP below its rung`)
+      await seedProgression(sc, 1)
+      assert.equal(await hasUnlock(sc, id), true, `${id} opens at its rank threshold`)
+    }
+    // Deferred capabilities stay inaccessible even at max XP + standing.
+    const maxed = await mkPv2("maxed")
+    await seedProgression(maxed, 50000, 1000)
+    for (const fut of UNLOCKS.filter((u) => u.status === "future")) {
+      assert.equal(await hasUnlock(maxed, fut.id), false, `future row ${fut.id} can never activate`)
+    }
+
     // Standing-only registry rows (M-01): these perks ship live through
     // progressionPerksFrom — the catalog rows must evaluate identically
     // through hasUnlock so display and enforcement share one truth.
     const st = await mkPv2("standing")
     assert.equal(await hasUnlock(st, "poll-vote"), false, "standing 0 locked out of polls")
+    assert.equal(await hasUnlock(st, "trusted-links"), false, "standing 0 blocks external links")
     await seedProgression(st, 0, STANDING_POLL_VOTE)
     assert.equal(await hasUnlock(st, "poll-vote"), true, "Known standing opens poll voting")
+    assert.equal(await hasUnlock(st, "trusted-links"), true, "Known standing registers trusted links")
     assert.equal(await hasUnlock(st, "poll-create"), false, "Known cannot create polls yet")
     await seedProgression(st, 0, STANDING_POLL_CREATE - STANDING_POLL_VOTE)
     assert.equal(await hasUnlock(st, "poll-create"), true, "Trusted opens poll creation")
@@ -1541,6 +1622,18 @@ async function run() {
     await prisma.profile.update({ where: { userId: st }, data: { unlockFrozen: true } })
     assert.equal(await hasUnlock(st, "slowmode-exempt"), false, "frozen member loses standing perks")
     await prisma.profile.update({ where: { userId: st }, data: { unlockFrozen: false } })
+
+    // tags-7 row ↔ perk agreement: registry gate must flip at the same XP
+    // the maxThreadTags ladder does (5800 = Ripening).
+    const tg = await mkPv2("tags")
+    assert.equal(await hasUnlock(tg, "tags-7"), false, "tags-7 locked at Seed")
+    await seedProgression(tg, 5799)
+    assert.equal(await hasUnlock(tg, "tags-7"), false, "tags-7 locked below Ripening")
+    await seedProgression(tg, 1)
+    assert.equal(await hasUnlock(tg, "tags-7"), true, "tags-7 opens at Ripening")
+    await prisma.profile.update({ where: { userId: tg }, data: { unlockFrozen: true } })
+    assert.equal(await hasUnlock(tg, "tags-7"), false, "frozen member loses tags-7")
+    await prisma.profile.update({ where: { userId: tg }, data: { unlockFrozen: false } })
 
     // Achievement route (M-02): the unlock gate reads UserAchievement — the
     // V2 grant table — and status:"future" rows can never activate even when

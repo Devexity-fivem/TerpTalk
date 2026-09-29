@@ -28,7 +28,7 @@ import {
   getReputationTier,
 } from "@/lib/reputation-config"
 import { UNLOCKS, REP_RANKS, nextRankUnlock } from "@/lib/progression-config"
-import { hasUnlock } from "@/lib/progression"
+import { hasUnlock, getProgressionPerks } from "@/lib/progression"
 import { seedBadges } from "@/lib/badges"
 import { BADGE_REGISTRY, BADGE_CATEGORIES, type BadgeCategory } from "@/lib/badge-registry"
 import { announceBadges, announceTierUp } from "@/lib/terpbot"
@@ -497,12 +497,14 @@ async function demoteIfNeeded(userId: string) {
 async function enforceShowcaseSlots(userId: string) {
   const profile = await prisma.profile.findUnique({
     where: { userId },
-    select: { reputation: true },
+    select: { userId: true },
   })
   if (!profile) return
-  const rep = profile.reputation
-
-  const slots = getReputationTier(rep).perks.showcaseSlots ?? 0
+  // Showcase capacity authority is the V2 XP perk ladder
+  // (progressionPerksFrom.showcaseSlots) — the same source the pin write
+  // gate consults. The legacy getReputationTier(rep).perks table reads
+  // the frozen V1 ledger balance and would wrongly prune V2-earned slots.
+  const slots = (await getProgressionPerks(userId)).showcaseSlots
   const pinned = await prisma.userBadge.findMany({
     where: { userId, pinned: true },
     orderBy: { earnedAt: "asc" },
