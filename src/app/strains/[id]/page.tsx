@@ -18,6 +18,7 @@ import { getStrainGrowStats, getStrainEvidence, escapeLike, strainFieldMatches, 
 import { readLessons } from "@/lib/experiments"
 import Link from "next/link"
 import { publicDiaryWhere } from "@/lib/diary-visibility"
+import { mediaProxyUrl } from "@/lib/media"
 import { blockedUserIds, notBlockedAuthor } from "@/lib/security"
 import { diaryPath, strainPath, setupPath } from "@/lib/slugs"
 import { breederPath } from "@/lib/breeders"
@@ -162,6 +163,10 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
     .filter((d) => d.strainId === strain.id || strainFieldMatches(d.strain, strain.name))
     .slice(0, 6)
   const relatedSetups = relatedSetupsRaw.filter((s) => strainFieldMatches(s.strain, strain.name)).slice(0, 6)
+
+  // Restricted-class media — thumbs serialize as the authorization endpoint.
+  for (const d of relatedDiaries) for (const img of d.updates[0]?.images ?? []) img.url = mediaProxyUrl("diary", img.id)
+  for (const s of relatedSetups) for (const img of s.images) img.url = mediaProxyUrl("setup", img.id)
 
   const plantPhotos = strain.photos.filter((p) => p.kind === "PLANT")
   const flowerPhotos = strain.photos.filter((p) => p.kind === "FLOWER")

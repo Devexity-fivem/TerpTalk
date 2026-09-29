@@ -27,6 +27,7 @@ import { hasUnlock } from "@/lib/progression"
 import { TERPBOT_USERNAME } from "@/lib/terpbot-constants"
 import { getBotStats } from "@/lib/terpbot-events"
 import { publicDiaryWhere } from "@/lib/diary-visibility"
+import { mediaProxyUrl, proxyMedia } from "@/lib/media"
 import { parseProfileSettings, type ProfileSettings, type SectionVisibility } from "@/lib/profile-settings"
 
 export const PUBLIC_PROFILE_NO_STORE = { "Cache-Control": "no-store, max-age=0, must-revalidate" }
@@ -428,7 +429,7 @@ export async function getPublicProfileData(
       take: 6,
       select: {
         id: true, slug: true, title: true, strain: true,
-        images: { take: 1, orderBy: { order: "asc" }, select: { url: true } },
+        images: { take: 1, orderBy: { order: "asc" }, select: { id: true, url: true } },
         _count: { select: { comments: true } },
       },
     }),
@@ -895,7 +896,9 @@ export async function getPublicProfileData(
     })),
     recentThreads,
     growDiaries,
-    growSetups,
+    // Restricted-class media — viewers get the authorization endpoint,
+    // never the stored blob URL.
+    growSetups: growSetups.map((s) => ({ ...s, images: proxyMedia("setup", s.images) })),
     // Per-harvest yield flags redact amounts for non-owners — the flag
     // itself ships so cards can honestly read "yield hidden".
     harvestShelf: harvestShelf.map((h) =>
@@ -1105,7 +1108,7 @@ export async function getProfileSection(
       updates: {
         take: 1,
         orderBy: { createdAt: "desc" as const },
-        select: { images: { take: 1, orderBy: { order: "asc" as const }, select: { url: true } } },
+        select: { images: { take: 1, orderBy: { order: "asc" as const }, select: { id: true, url: true } } },
       },
     },
   })
@@ -1150,7 +1153,7 @@ export async function getProfileSection(
     yieldAmount: isOwner || !d.yieldPrivate ? d.yieldAmount : null,
     yieldUnit: isOwner || !d.yieldPrivate ? d.yieldUnit : null,
     yieldPrivate: d.yieldPrivate,
-    image: d.updates[0]?.images[0]?.url ?? null,
+    image: d.updates[0]?.images[0] ? mediaProxyUrl("diary", d.updates[0].images[0].id) : null,
     stages: stagesOf(d.id),
   }))
 

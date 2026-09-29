@@ -425,7 +425,7 @@ const main = async () => {
     const expUpdate = await prisma.diaryUpdate.create({
       data: { title: "exp update", content: "0123456789", stage: "VEGETATIVE", diaryId: expDiary.id, authorId: expU.id },
     })
-    await prisma.diaryImage.create({ data: { url: "https://blob.test/diary.png", updateId: expUpdate.id } })
+    const expDiaryImg = await prisma.diaryImage.create({ data: { url: "https://blob.test/diary.png", updateId: expUpdate.id } })
     await prisma.growExperiment.create({
       data: { diaryId: expDiary.id, authorId: expU.id, title: "exp experiment", change: "raised light", category: "LIGHTING", status: "ACTIVE" },
     })
@@ -471,8 +471,10 @@ const main = async () => {
       ? pass("export: bot events scoped + key stripped")
       : fail("export botEvents", expBe)
     // Privacy invariant: private-diary image rows are still the owner's data.
-    ex.content?.diaryImages?.[0]?.url === "https://blob.test/diary.png"
-      ? pass("export: private-diary image included (owner scope)")
+    // The export serializes the authorization-aware media path, not the
+    // underlying blob URL — a private-blob URL would not resolve anyway.
+    ex.content?.diaryImages?.[0]?.url === `/api/media/diary/${expDiaryImg.id}`
+      ? pass("export: private-diary image included via owner-scoped proxy URL")
       : fail("export diaryImage", ex.content?.diaryImages)
     // Rate-limit bucket for this user is spent by the fixtures above? No —
     // only one export call so far; verify the endpoint is the gated one.

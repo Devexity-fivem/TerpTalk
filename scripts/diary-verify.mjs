@@ -558,6 +558,72 @@ const main = async () => {
           : fail(`live ${vis} diary activity ${who}`, { status: a.status, body })
       }
     }
+    // ── Media proxy authorization ──────────────────────────────────────
+    // Restricted-class images serialize as /api/media/[kind]/[id]; the
+    // route re-evaluates the same predicates per request. data: URIs stand
+    // in for blobs locally (storeImage's dev fallback), exercising the
+    // full resolve→authorize→stream path.
+    const mkMedia = async (dId) => {
+      const u = await prisma.diaryUpdate.create({
+        data: { diaryId: dId, authorId: owner.id, title: M("mi"), content: "media fixture", stage: "VEGETATIVE", dayNumber: 1, weekNumber: 1 },
+      })
+      return prisma.diaryImage.create({ data: { updateId: u.id, url: TINY_PNG } })
+    }
+    const pubImg = await mkMedia(pubD.id)
+    const prvImg = await mkMedia(prvD.id)
+    const getMedia = async (kind, id, ck) => {
+      const res = await fetch(`${BASE}/api/media/${kind}/${id}`, { headers: ck ? { cookie: ck } : {} })
+      await res.arrayBuffer().catch(() => {})
+      return { status: res.status, cache: res.headers.get("cache-control") || "", type: res.headers.get("content-type") || "" }
+    }
+    // Blocked viewers keep page-equivalent access: block hides discovery,
+    // not content the page itself renders (same verdict the diary page
+    // matrix asserts above).
+    const mediaExpect = {
+      pub: { owner: 200, other: 200, blocked: 200, guest: 200 },
+      prv: { owner: 200, other: 404, blocked: 404, guest: 404 },
+    }
+    for (const [label, img] of [["pub", pubImg], ["prv", prvImg]]) {
+      for (const [who, ck] of actors) {
+        const m = await getMedia("diary", img.id, ck)
+        m.status === mediaExpect[label][who]
+          ? pass(`media ${label} → ${who} ${mediaExpect[label][who]}`)
+          : fail(`media ${label} ${who}`, m.status)
+        if (m.status === 200 && (!/private/.test(m.cache) || !/^image\//.test(m.type))) {
+          fail(`media ${label} ${who} headers`, { cache: m.cache, type: m.type })
+        }
+      }
+    }
+
+    // PUBLIC→PRIVATE flip must revoke guest media access immediately —
+    // the proxy evaluates the row's current visibility, not a cached URL.
+    r = await callApi(`/api/diaries/${pubD.id}`, { method: "PATCH", body: { visibility: "PRIVATE" }, cookie: ownerCookie })
+    const flippedGuest = await getMedia("diary", pubImg.id, undefined)
+    r.status === 200 && flippedGuest.status === 404
+      ? pass("PUBLIC→PRIVATE flip revokes guest media access")
+      : fail("media flip revoke", { patch: r.status, media: flippedGuest.status })
+    const flippedOwner = await getMedia("diary", pubImg.id, ownerCookie)
+    flippedOwner.status === 200
+      ? pass("owner keeps media after PRIVATE flip")
+      : fail("media flip owner", flippedOwner.status)
+    r = await callApi(`/api/diaries/${pubD.id}`, { method: "PATCH", body: { visibility: "PUBLIC" }, cookie: ownerCookie })
+    const restored = await getMedia("diary", pubImg.id, undefined)
+    restored.status === 200 ? pass("PRIVATE→PUBLIC flip restores media") : fail("media flip restore", restored.status)
+
+    // Deleted objects and malformed/unknown ids are uniform 404s.
+    const delD = await mkVis("PUBLIC")
+    diaryIds.push(delD.id)
+    const delImg = await mkMedia(delD.id)
+    r = await callApi(`/api/diaries`, { method: "DELETE", body: { id: delD.id }, cookie: ownerCookie })
+    const goneImg = await getMedia("diary", delImg.id, undefined)
+    r.status === 200 && goneImg.status === 404
+      ? pass("deleted diary media is unreachable")
+      : fail("media deleted", { del: r.status, media: goneImg.status })
+    const bogus = await getMedia("diary", "cnotarealid000000000", voterCookie)
+    bogus.status === 404 ? pass("unknown media id → 404 (no oracle)") : fail("media oracle", bogus.status)
+    const badKind = await getMedia("avatar", pubImg.id, voterCookie)
+    badKind.status === 404 ? pass("non-restricted media kind rejected") : fail("media kind", badKind.status)
+
     // Index-level fingerprint for the diaries-list poller.
     r = await callApi(`/api/diaries/updates`)
     const idxBody = r.data || {}

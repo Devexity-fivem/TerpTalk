@@ -12,6 +12,7 @@ import { revalidateTag } from "next/cache"
 import { parseDiaryPatch, patchTouchesStrainStats } from "@/lib/diary-edit"
 import { notificationLinkWhere } from "@/lib/notify"
 import { purgeDiaryAnnouncements } from "@/lib/terpbot"
+import { privatizeDiaryMedia } from "@/lib/media"
 
 // PATCH /api/diaries/[id] — owner/admin metadata editing.
 // Scope: mutable descriptive fields only. startDate anchors every derived
@@ -135,6 +136,14 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
           .deleteMany({ where: notificationLinkWhere(links) })
           .catch(() => {})
         await purgeDiaryAnnouncements(result).catch(() => {})
+      }
+      // Going PRIVATE also closes the storage hole: legacy public blobs
+      // are re-stored private so a previously known URL stops resolving.
+      // New uploads are already private; this covers pre-migration rows.
+      if (data.visibility === "PRIVATE") {
+        await privatizeDiaryMedia(id).catch((e) =>
+          console.error("privatizeDiaryMedia failed:", id, e)
+        )
       }
     }
 

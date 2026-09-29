@@ -2,6 +2,7 @@ import { buildMetadata, snippet } from "@/lib/seo"
 import { Breadcrumbs } from "@/components/breadcrumbs"
 import { prisma } from "@/lib/prisma"
 import { publicUserSelect, activeAuthor, blockedUserIds } from "@/lib/security"
+import { mediaProxyUrl } from "@/lib/media"
 import { notFound, permanentRedirect } from "next/navigation"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
@@ -84,9 +85,13 @@ export default async function SetupPage({ params }: { params: Promise<{ id: stri
       stage: true,
       harvested: true,
       author: { select: publicUserSelect },
-      updates: { take: 1, orderBy: { createdAt: "desc" }, select: { images: { take: 1, orderBy: { order: "asc" }, select: { url: true } } } },
+      updates: { take: 1, orderBy: { createdAt: "desc" }, select: { images: { take: 1, orderBy: { order: "asc" }, select: { id: true, url: true } } } },
     },
   })
+
+  // Restricted-class media — serialize via the authorization endpoint.
+  for (const img of setup.images) img.url = mediaProxyUrl("setup", img.id)
+  for (const d of usedIn) for (const img of d.updates[0]?.images ?? []) img.url = mediaProxyUrl("diary", img.id)
 
   // Link free-text strain names to the strain catalogue when they match —
   // same soft-linking the diary page uses.

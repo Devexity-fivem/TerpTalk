@@ -3,6 +3,7 @@ import { requireAdmin } from "@/lib/require-staff"
 import { prisma } from "@/lib/prisma"
 import { forbidden, getClientIp, logSecurityEvent } from "@/lib/security"
 import { deleteImagesIfUnreferenced } from "@/lib/blob"
+import { mediaProxyUrl } from "@/lib/media"
 import { rateLimit } from "@/lib/rate-limit"
 import { enqueueReversal, drainOne } from "@/lib/reputation-outbox"
 import { enqueueXpReversal, drainXpOne } from "@/lib/progression-outbox"
@@ -73,10 +74,13 @@ export async function GET(request: Request) {
     }),
   ])
 
+  // Restricted-class rows emit the authorization endpoint, not the stored
+  // blob URL — staff still cannot open PRIVATE-diary media (the proxy
+  // evaluates owner-only visibility), but public/post/setup previews render.
   const items = [
-    ...postImages.map((i) => ({ id: i.id, type: "post" as const, url: i.url, createdAt: i.createdAt, author: i.post?.author?.profile?.username ?? "unknown" })),
-    ...diaryImages.map((i) => ({ id: i.id, type: "diary" as const, url: i.url, createdAt: i.createdAt, author: i.update?.author?.profile?.username ?? "unknown" })),
-    ...setupImages.map((i) => ({ id: i.id, type: "setup" as const, url: i.url, createdAt: i.createdAt, author: i.setup?.author?.profile?.username ?? "unknown" })),
+    ...postImages.map((i) => ({ id: i.id, type: "post" as const, url: mediaProxyUrl("post", i.id), createdAt: i.createdAt, author: i.post?.author?.profile?.username ?? "unknown" })),
+    ...diaryImages.map((i) => ({ id: i.id, type: "diary" as const, url: mediaProxyUrl("diary", i.id), createdAt: i.createdAt, author: i.update?.author?.profile?.username ?? "unknown" })),
+    ...setupImages.map((i) => ({ id: i.id, type: "setup" as const, url: mediaProxyUrl("setup", i.id), createdAt: i.createdAt, author: i.setup?.author?.profile?.username ?? "unknown" })),
     ...strainPhotos.map((i) => ({ id: i.id, type: "strain" as const, url: i.imageUrl, createdAt: i.createdAt, author: i.user?.profile?.username ?? "unknown" })),
     ...contestEntries.map((i) => ({ id: i.id, type: "contest" as const, url: i.imageUrl, createdAt: i.createdAt, author: i.user?.profile?.username ?? "unknown" })),
     ...profiles.map((p) => ({ id: p.userId, type: "avatar" as const, url: p.avatarUrl ?? "", createdAt: p.joinDate, author: p.username ?? "unknown" })),

@@ -25,6 +25,7 @@ import DiaryDiscussButton from "@/components/diary-discuss-button"
 import { escapeLike, strainFieldMatches, suggestStrainLink } from "@/lib/strain-stats"
 import { MEDIUM_LABELS, LIGHT_LABELS, TECHNIQUE_LABELS, DIFFICULTY_LABELS } from "@/lib/grow-fields"
 import { canViewDiary, publicDiaryWhere } from "@/lib/diary-visibility"
+import { mediaProxyUrl } from "@/lib/media"
 import { diaryPath, strainPath, setupPath } from "@/lib/slugs"
 import Tooltip from "@/components/ui/tooltip"
 import GrowIntelPanel from "@/components/grow-intel-panel"
@@ -177,7 +178,7 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
       orderBy: { updatedAt: "desc" },
       take: 6,
       include: {
-        updates: { take: 1, orderBy: { createdAt: "desc" }, select: { images: { take: 1, orderBy: { order: "asc" }, select: { url: true } } } },
+        updates: { take: 1, orderBy: { createdAt: "desc" }, select: { images: { take: 1, orderBy: { order: "asc" }, select: { id: true, url: true } } } },
         _count: { select: { updates: true, followers: true } },
       },
     }),
@@ -199,7 +200,7 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
       take: 12,
       include: {
         author: { select: publicUserSelect },
-        updates: { take: 1, orderBy: { createdAt: "desc" }, select: { images: { take: 1, orderBy: { order: "asc" }, select: { url: true } } } },
+        updates: { take: 1, orderBy: { createdAt: "desc" }, select: { images: { take: 1, orderBy: { order: "asc" }, select: { id: true, url: true } } } },
         _count: { select: { updates: true, followers: true } },
       },
     }),
@@ -221,6 +222,12 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
         (diary.strain ? strainFieldMatches(d.strain, diary.strain) : false)
     )
     .slice(0, 6)
+
+  // Restricted-class media — serialize diary images as their authorization
+  // endpoint, never the raw blob URL (visibility is re-evaluated per request).
+  for (const u of diary.updates) for (const img of u.images) img.url = mediaProxyUrl("diary", img.id)
+  for (const d of [...moreFromAuthor, ...similarGrows])
+    for (const img of d.updates[0]?.images ?? []) img.url = mediaProxyUrl("diary", img.id)
 
   // eslint-disable-next-line react-hooks/purity
   const dayCount = Math.max(0, Math.floor((Date.now() - new Date(diary.startDate).getTime()) / 86400000))

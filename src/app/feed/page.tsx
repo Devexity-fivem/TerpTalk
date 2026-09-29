@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma"
 import { publicUserSelect, activeAuthor, blockedUserIds, notBlockedAuthor } from "@/lib/security"
 import { publicDiaryWhere } from "@/lib/diary-visibility"
+import { mediaProxyUrl } from "@/lib/media"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { Leaf, MessageSquare, TrendingUp, Calendar, Users, UserPlus, Sprout, Award } from "lucide-react"
@@ -126,6 +127,12 @@ async function getFeedData(userId?: string, tab = "latest") {
       _count: { select: { updates: true, followers: true } },
     },
   })
+
+  // Restricted-class media — feed thumbs serialize as their authorization
+  // endpoint, never the raw blob URL.
+  for (const u of recentDiaryUpdates) for (const img of u.images) img.url = mediaProxyUrl("diary", img.id)
+  for (const d of recentHarvests)
+    for (const img of d.updates[0]?.images ?? []) img.url = mediaProxyUrl("diary", img.id)
 
   // Build a mixed feed — used for Latest (chronological), Following, and For You.
   // For the impersonal "latest" tab the score IS recency — engagement

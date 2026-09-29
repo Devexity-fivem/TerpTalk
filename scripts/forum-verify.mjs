@@ -93,6 +93,25 @@ const main = async () => {
       ? pass("setup: main thread created via API")
       : fail("thread setup", { s: threadRes.status })
 
+    // ── Media proxy: post images ─────────────────────────────────────
+    // PostImage is restricted-class — hidden categories and deleted
+    // threads must deny at the proxy, mirroring thread-page visibility.
+    const PNG_URI = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+    const pubImg = await prisma.postImage.create({ data: { url: PNG_URI, threadId: thread.id } })
+    const hidImg = await prisma.postImage.create({ data: { url: PNG_URI, threadId: hiddenThread.id } })
+    const delImg = await prisma.postImage.create({ data: { url: PNG_URI, threadId: deletedThread.id } })
+    const getMedia = async (kind, id, ck) => {
+      const res = await fetch(`${BASE}/api/media/${kind}/${id}`, { headers: ck ? { cookie: ck } : {} })
+      await res.arrayBuffer().catch(() => {})
+      return res.status
+    }
+    ;(await getMedia("post", pubImg.id, replierCookie)) === 200 ? pass("media: public thread image → member 200") : fail("media pub member")
+    ;(await getMedia("post", pubImg.id, undefined)) === 200 ? pass("media: public thread image → guest 200") : fail("media pub guest")
+    ;(await getMedia("post", hidImg.id, modCookie)) === 200 ? pass("media: hidden-category image → mod 200") : fail("media hidden mod")
+    ;(await getMedia("post", hidImg.id, replierCookie)) === 404 ? pass("media: hidden-category image → member 404") : fail("media hidden member")
+    ;(await getMedia("post", hidImg.id, undefined)) === 404 ? pass("media: hidden-category image → guest 404") : fail("media hidden guest")
+    ;(await getMedia("post", delImg.id, replierCookie)) === 404 ? pass("media: deleted-thread image → 404") : fail("media deleted thread")
+
     // ── 1. Follow toggle ──
     let r = await callApi(FOLLOW_URL, { method: "POST", body: {} })
     r.status === 401 ? pass("anon: follow 401") : fail("anon follow", r.status)

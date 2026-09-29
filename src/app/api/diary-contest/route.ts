@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { unauthorized, publicUserSelect, getClientIp, hashIp, logSecurityEvent, isBanned, forbidden, activeAuthor } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
+import { mediaProxyUrl } from "@/lib/media"
 import { currentMonthKey, monthRange } from "@/lib/week"
 import { getBooleanSetting, SITE_SETTINGS } from "@/lib/settings"
 import { checkMaintenance } from "@/lib/maintenance"
@@ -82,7 +83,7 @@ export async function GET(request: Request) {
             updates: {
               take: 1,
               orderBy: { createdAt: "desc" },
-              select: { images: { take: 1, orderBy: { order: "asc" as const }, select: { url: true } } },
+              select: { images: { take: 1, orderBy: { order: "asc" as const }, select: { id: true, url: true } } },
             },
           },
         },
@@ -127,7 +128,7 @@ export async function GET(request: Request) {
           stage: e.diary.stage,
           harvested: e.diary.harvested,
           updateCount: e.diary._count.updates,
-          thumb: e.diary.updates[0]?.images[0]?.url ?? null,
+          thumb: e.diary.updates[0]?.images[0] ? mediaProxyUrl("diary", e.diary.updates[0].images[0].id) : null,
         },
       })),
       eligible,

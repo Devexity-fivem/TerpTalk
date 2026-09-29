@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma"
 import { unauthorized, publicUserSelect, LIMITS, getClientIp, logSecurityEvent, isBanned, forbidden, enforceLinkTrust, isModerator, isAdmin, blockExistsBetween } from "@/lib/security"
 import { requireModerator } from "@/lib/require-staff"
 import { rateLimit } from "@/lib/rate-limit"
+import { proxyMedia } from "@/lib/media"
 import { progressionRateLimit, getProgressionPerks } from "@/lib/progression"
 import { POST_MIN_PAID_LENGTH } from "@/lib/reputation-config"
 import { awardProgression, checkDuplicateContent } from "@/lib/progression"
@@ -110,7 +111,7 @@ export async function POST(request: Request) {
     try {
       // Seedling+ ranks can attach more images per post.
       const perks = await getProgressionPerks(session.user.id)
-      imageUrls = await storeImages(images, "forum", perks.imagesPerPost ?? MAX_POST_IMAGES)
+      imageUrls = await storeImages(images, "forum", perks.imagesPerPost ?? MAX_POST_IMAGES, { access: "private" })
     } catch (err) {
       console.error("Forum post image upload error:", err)
       return NextResponse.json(
@@ -278,7 +279,10 @@ export async function POST(request: Request) {
       })
     }
 
-    return NextResponse.json({ post }, { status: 201 })
+    return NextResponse.json(
+      { post: { ...post, images: proxyMedia("post", post.images) } },
+      { status: 201 }
+    )
   } catch (error) {
     // Clean up any already-uploaded Blob objects if the post could not be created.
     deleteImagesIfUnreferenced(imageUrls).catch(() => {})

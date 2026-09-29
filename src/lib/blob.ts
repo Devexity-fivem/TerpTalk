@@ -2,7 +2,7 @@
 // Accepts client-resized data URIs; stores them in Blob and returns a
 // small https URL so DB rows stay tiny. Falls back to the data URI when
 // BLOB_READ_WRITE_TOKEN isn't configured so nothing breaks locally.
-import { put, del } from "@vercel/blob"
+import { put, del, get, copy } from "@vercel/blob"
 import { randomBytes } from "crypto"
 import sharp from "sharp"
 import { prisma } from "@/lib/prisma"
@@ -35,10 +35,22 @@ export function isBlobConfigured(): boolean {
  * Enforces the count and format limits server-side — the client uploader's
  * own checks are only a convenience and cannot be trusted.
  */
+export interface StoreImageOptions {
+  /**
+   * Blob access ACL. "private" requires an authenticated read through the
+   * app's media authorization endpoint — restricted-class media (diary,
+   * post, setup images) whose visibility can change after upload must use
+   * it. Public-class media (avatars, strain photos, contest entries) keeps
+   * the default public CDN delivery.
+   */
+  access?: "public" | "private"
+}
+
 export async function storeImages(
   input: unknown,
   folder: string,
-  max = MAX_POST_IMAGES
+  max = MAX_POST_IMAGES,
+  options?: StoreImageOptions
 ): Promise<string[]> {
   if (input === undefined || input === null) return []
   if (!Array.isArray(input)) throw new Error("Images must be an array")
@@ -46,7 +58,7 @@ export async function storeImages(
   if (input.length > max) throw new Error(`You can attach at most ${max} images`)
   if (!input.every(isValidImageDataUri)) throw new Error("One or more images are invalid or too large")
 
-  const results = await Promise.allSettled(input.map((uri) => storeImage(uri, folder)))
+  const results = await Promise.allSettled(input.map((uri) => storeImage(uri, folder, options)))
   const urls: string[] = []
   const errors: string[] = []
 
@@ -69,7 +81,11 @@ export async function storeImages(
   return urls
 }
 
-export async function storeImage(dataUri: string, folder: string): Promise<string> {
+export async function storeImage(
+  dataUri: string,
+  folder: string,
+  options?: StoreImageOptions
+): Promise<string> {
   // Validation runs before the storage branch — the dev fallback must not
   // accept payloads that production would reject.
   const m = dataUri.match(DATA_URI)
@@ -110,10 +126,63 @@ export async function storeImage(dataUri: string, folder: string): Promise<strin
   }
 
   const { url } = await put(`${folder}/${randomBytes(8).toString("hex")}.webp`, processed, {
-    access: "public",
+    access: options?.access === "private" ? "private" : "public",
     contentType: "image/webp",
   })
   return url
+}
+
+/**
+ * Server-side read of a stored blob for the media authorization endpoint.
+ * Private objects go through the authenticated SDK path; public objects
+ * (legacy rows written before the private-media migration) are fetched
+ * directly. Returns null when the object does not exist.
+ */
+export async function readBlob(
+  url: string
+): Promise<{ body: ReadableStream | Buffer; contentType: string } | null> {
+  if (url.startsWith("data:")) {
+    const m = url.match(DATA_URI)
+    if (!m) return null
+    return {
+      body: Buffer.from(m[2], "base64"),
+      contentType: `image/${m[1] === "jpg" ? "jpeg" : m[1]}`,
+    }
+  }
+  if (!url.startsWith("https://")) return null
+  try {
+    if (url.includes(".private.blob.vercel-storage.com")) {
+      if (!process.env.BLOB_READ_WRITE_TOKEN) return null
+      const result = await get(url, { access: "private" })
+      if (!result || result.statusCode !== 200) return null
+      return { body: result.stream, contentType: result.blob.contentType }
+    }
+    const res = await fetch(url, { cache: "no-store" })
+    if (!res.ok || !res.body) return null
+    return {
+      body: res.body as unknown as ReadableStream,
+      contentType: res.headers.get("content-type") ?? "image/webp",
+    }
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Re-store a public blob as access:"private" (legacy migration). Copies the
+ * object at its existing pathname and returns the private URL — the caller
+ * repoints the database row, then calls deleteImage on the old public URL
+ * so a failed row update never orphans the content.
+ */
+export async function privatizeBlob(url: string): Promise<string | null> {
+  if (!url.startsWith("https://") || !url.includes(".public.blob.vercel-storage.com")) return null
+  if (!process.env.BLOB_READ_WRITE_TOKEN) return null
+  const pathname = new URL(url).pathname.replace(/^\//, "")
+  // allowOverwrite — a prior partial run may have left the private copy in
+  // place while the row still pointed at the public URL; the migration must
+  // be idempotent, not fail on "already exists" forever.
+  const copied = await copy(url, pathname, { access: "private", allowOverwrite: true })
+  return copied.url
 }
 
 /**

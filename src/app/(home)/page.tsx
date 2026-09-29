@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma"
 import { unstable_cache } from "next/cache"
 import { publicUserSelect, activeAuthor, rankableProfile, XP_ORDER } from "@/lib/security"
 import { publicDiaryWhere } from "@/lib/diary-visibility"
+import { mediaProxyUrl } from "@/lib/media"
 import { diaryPath } from "@/lib/slugs"
 import CannabisLeaf from "@/components/cannabis-leaf"
 import { getChatTeaser } from "@/lib/chat-activity"
@@ -76,6 +77,9 @@ const getLatestDiscussions = unstable_cache(
         },
       }),
     ])
+    // Restricted-class media — thumbs serialize as the authorization
+    // endpoint; the proxy URL is stable so caching it is safe.
+    for (const u of diaryUpdates) for (const img of u.images) img.url = mediaProxyUrl("diary", img.id)
     return { categories, latest, diaryUpdates }
   },
   ["home-latest"],

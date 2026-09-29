@@ -18,6 +18,7 @@ import {
   type AttentionItem,
 } from "@/lib/grow-intel"
 import { diaryPath } from "@/lib/slugs"
+import { mediaProxyUrl } from "@/lib/media"
 import { diaryCompleteness } from "@/lib/diary-weeks"
 import { EXPERIMENT_CATEGORY_LABELS, type ExperimentCategory } from "@/lib/experiments"
 import { TECHNIQUE_LABELS } from "@/lib/grow-fields"
@@ -280,7 +281,7 @@ export async function getMemberHomeData(userId: string): Promise<MemberHomeData 
           where: { update: { diaryId: { in: diaries.map((d) => d.id) } } },
           orderBy: { createdAt: "desc" },
           take: 12,
-          select: { url: true, update: { select: { diaryId: true } } },
+          select: { id: true, url: true, update: { select: { diaryId: true } } },
         })
       : Promise.resolve([]),
     // Grow-knowledge surface — the member's whole documented history,
@@ -318,7 +319,9 @@ export async function getMemberHomeData(userId: string): Promise<MemberHomeData 
 
   const photoByDiary = new Map<string, string>()
   for (const img of latestPhotos) {
-    if (!photoByDiary.has(img.update.diaryId)) photoByDiary.set(img.update.diaryId, img.url)
+    // Owner-scoped strip, but still serialized through the authorization
+    // endpoint — a stored blob URL never leaves the server.
+    if (!photoByDiary.has(img.update.diaryId)) photoByDiary.set(img.update.diaryId, mediaProxyUrl("diary", img.id))
   }
 
   // Grow knowledge — aggregated from the member's own records only.

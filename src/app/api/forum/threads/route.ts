@@ -189,7 +189,7 @@ export async function POST(request: Request) {
     // Upload attachments before creating the thread so a storage failure
     // cannot leave a thread with half its images.
     try {
-      imageUrls = await storeImages(images, "forum")
+      imageUrls = await storeImages(images, "forum", undefined, { access: "private" })
     } catch (err) {
       console.error("Forum thread image upload error:", err)
       return NextResponse.json(

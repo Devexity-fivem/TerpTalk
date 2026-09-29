@@ -10,6 +10,7 @@ import { awardExperimentFollowups } from "@/lib/experiment-progression"
 import { enqueueReversal, drainOne } from "@/lib/reputation-outbox"
 import { enqueueXpReversal, drainXpOne } from "@/lib/progression-outbox"
 import { storeImages, deleteImagesIfUnreferenced, MAX_POST_IMAGES } from "@/lib/blob"
+import { proxyMedia } from "@/lib/media"
 import { checkMaintenance } from "@/lib/maintenance"
 import { notifyMany } from "@/lib/notify"
 import { revalidateTag, unstable_cache } from "next/cache"
@@ -214,8 +215,10 @@ export async function POST(request: Request) {
     const linkBlock = await enforceLinkTrust(`${title}\n${content}`, session.user.id, request, "diaries/updates")
     if (linkBlock) return linkBlock
 
-    // Offload to Blob storage when configured (keeps DB rows small)
-    storedImages = await storeImages(validImages, "diary-updates")
+    // Offload to Blob storage when configured (keeps DB rows small).
+    // Diary images are restricted-class (visibility can flip to PRIVATE)
+    // so they are stored private and served via /api/media/diary/*.
+    storedImages = await storeImages(validImages, "diary-updates", undefined, { access: "private" })
 
     // Derive day/week from the diary start date when the client doesn't
     // supply them — manual entry is no longer exposed in the form.
@@ -486,7 +489,10 @@ export async function POST(request: Request) {
       )
     }
 
-    return NextResponse.json({ update }, { status: 201 })
+    return NextResponse.json(
+      { update: { ...update, images: proxyMedia("diary", update.images) } },
+      { status: 201 }
+    )
   } catch (error) {
     // Clean up any already-uploaded Blob objects if the diary update could not be created.
     deleteImagesIfUnreferenced(storedImages).catch(() => {})
@@ -660,7 +666,7 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ error: "Too many images" }, { status: 400 })
     }
     if (adding.length > 0) {
-      storedImages = await storeImages(adding, "diary-updates")
+      storedImages = await storeImages(adding, "diary-updates", undefined, { access: "private" })
     }
 
     const touchesStrainStats = updatePatchTouchesStrainStats(update, data)
@@ -717,7 +723,9 @@ export async function PATCH(request: Request) {
       where: { id },
       include: { images: { orderBy: { order: "asc" } }, nutrients: true },
     })
-    return NextResponse.json({ update: result })
+    return NextResponse.json({
+      update: result ? { ...result, images: proxyMedia("diary", result.images) } : result,
+    })
   } catch (error) {
     // Newly stored images are orphaned if the mutation failed — sweep them.
     deleteImagesIfUnreferenced(storedImages).catch(() => {})

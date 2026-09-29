@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma"
 import { unauthorized, publicUserSelect, LIMITS, getClientIp, logSecurityEvent, isBanned, forbidden, enforceLinkTrust } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
 import { storeImages, deleteImagesIfUnreferenced } from "@/lib/blob"
+import { proxyMedia } from "@/lib/media"
 import { checkMaintenance } from "@/lib/maintenance"
 import { awardProgression } from "@/lib/progression"
 import { enqueueReversal, drainOne } from "@/lib/reputation-outbox"
@@ -123,7 +124,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Invalid image format" }, { status: 400 })
     }
     // Offload to Blob storage when configured
-    storedImages = await storeImages(validImages, "setups", 6)
+    storedImages = await storeImages(validImages, "setups", 6, { access: "private" })
 
     // Create grow setup
     const setup = await prisma.growSetup.create({
@@ -302,7 +303,7 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ error: "Too many images" }, { status: 400 })
     }
     if (adding.length > 0) {
-      storedImages = await storeImages(adding, "setups")
+      storedImages = await storeImages(adding, "setups", undefined, { access: "private" })
     }
 
     const touchesStrainStats = setupPatchTouchesStrainStats(setup, data)
@@ -349,7 +350,9 @@ export async function PATCH(request: Request) {
       where: { id },
       include: { images: { orderBy: { order: "asc" } } },
     })
-    return NextResponse.json({ setup: result })
+    return NextResponse.json({
+      setup: result ? { ...result, images: proxyMedia("setup", result.images) } : result,
+    })
   } catch (error) {
     // Newly stored images are orphaned if the mutation failed — sweep them.
     deleteImagesIfUnreferenced(storedImages).catch(() => {})

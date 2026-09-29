@@ -6,6 +6,7 @@ import { signInHref } from "@/lib/callback-url"
 import { buildMetadata } from "@/lib/seo"
 import EditSetupForm from "./edit-setup-form"
 import { setupPath } from "@/lib/slugs"
+import { mediaProxyUrl } from "@/lib/media"
 import Link from "next/link"
 
 export const dynamic = "force-dynamic"
@@ -36,6 +37,10 @@ export default async function EditSetupPage({ params }: { params: Promise<{ id: 
   })
   if (!setup || setup.deleted) notFound()
   if (setup.authorId !== session.user.id) notFound()
+
+  // Restricted-class media — even the owner's edit form gets proxy URLs;
+  // private blob locations are never serialized to clients.
+  for (const img of setup.images) img.url = mediaProxyUrl("setup", img.id)
 
   return (
     <div className="min-h-screen bg-background">

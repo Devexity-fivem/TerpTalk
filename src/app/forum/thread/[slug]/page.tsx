@@ -1,6 +1,7 @@
 import { Fragment } from "react"
 import { prisma } from "@/lib/prisma"
 import { publicUserSelect, isModerator, activeAuthor, blockedUserIds, notBlockedAuthor } from "@/lib/security"
+import { mediaProxyUrl } from "@/lib/media"
 import { diaryPath } from "@/lib/slugs"
 import { notFound, redirect } from "next/navigation"
 import { MessageSquare, MessagesSquare, Clock, CheckCircle2, Eye, BookOpen } from "lucide-react"
@@ -133,6 +134,12 @@ async function getThreadData(slug: string, page: number, canSeeHidden: boolean, 
   // what matters: it must include deleted/banned-author posts so a removed
   // OP never resurfaces through the fallback render below.
   const totalPostRows = await prisma.post.count({ where: { threadId: thread.id } })
+
+  // Restricted-class media — post/thread images serialize through the
+  // authorization endpoint, never the raw blob URL.
+  for (const img of thread.images) img.url = mediaProxyUrl("post", img.id)
+  for (const img of thread.acceptedAnswer?.images ?? []) img.url = mediaProxyUrl("post", img.id)
+  for (const p of thread.posts) for (const img of p.images) img.url = mediaProxyUrl("post", img.id)
 
   return { thread, totalPostRows }
 }

@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { unauthorized, getClientIp, logSecurityEvent } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
+import { mediaProxyUrl } from "@/lib/media"
 
 // GDPR-style data export: returns all data associated with the user
 export async function GET(request: Request) {
@@ -121,13 +122,16 @@ export async function GET(request: Request) {
       content: {
         threads,
         posts,
-        postImages,
+        // Restricted-class media — export carries the authorization-aware
+        // app URLs, not raw blob locations (private objects are unreadable
+        // without the store token anyway).
+        postImages: postImages.map((i) => ({ ...i, url: mediaProxyUrl("post", i.id) })),
         diaries,
         diaryUpdates,
-        diaryImages,
+        diaryImages: diaryImages.map((i) => ({ ...i, url: mediaProxyUrl("diary", i.id) })),
         experiments,
         setups,
-        setupImages,
+        setupImages: setupImages.map((i) => ({ ...i, url: mediaProxyUrl("setup", i.id) })),
         setupComments,
         strains,
         strainPhotos,

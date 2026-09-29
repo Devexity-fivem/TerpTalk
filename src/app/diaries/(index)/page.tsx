@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma"
 import { publicUserSelect, activeAuthor } from "@/lib/security"
 import { publicDiaryWhere } from "@/lib/diary-visibility"
+import { mediaProxyUrl } from "@/lib/media"
 import { unstable_cache } from "next/cache"
 import { Leaf, TrendingUp, Users, BarChart3, ChevronLeft, ChevronRight, Dna } from "lucide-react"
 import { getCommunityGrowStats, type Distribution } from "@/lib/community-stats"
@@ -99,6 +100,11 @@ const getDiaries = unstable_cache(
           })
         : Promise.resolve([]),
     ])
+
+    // Restricted-class media — cards serialize the authorization endpoint;
+    // the proxy URL is stable so caching it is safe.
+    for (const d of [...diaries, ...featured])
+      for (const img of d.updates[0]?.images ?? []) img.url = mediaProxyUrl("diary", img.id)
 
     return { diaries, total, featured }
   },

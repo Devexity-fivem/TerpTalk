@@ -9,6 +9,7 @@ import RoleBadge from "@/components/role-badge"
 import ProfileCard from "@/components/ui/profile-card"
 import EmptyState from "@/components/ui/empty-state"
 import { setupPath } from "@/lib/slugs"
+import { mediaProxyUrl } from "@/lib/media"
 
 export const revalidate = 300
 
@@ -39,6 +40,9 @@ const getSetups = unstable_cache(
       }),
       prisma.growSetup.count({ where }),
     ])
+
+    // Restricted-class media — cards serialize the authorization endpoint.
+    for (const s of setups) for (const img of s.images) img.url = mediaProxyUrl("setup", img.id)
 
     return { setups, total }
   },
