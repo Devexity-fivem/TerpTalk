@@ -595,7 +595,7 @@ const main = async () => {
         m.status === mediaExpect[label][who]
           ? pass(`media ${label} → ${who} ${mediaExpect[label][who]}`)
           : fail(`media ${label} ${who}`, m.status)
-        if (m.status === 200 && (!/private/.test(m.cache) || !/cookie/i.test(m.vary) || !/^image\//.test(m.type))) {
+        if (m.status === 200 && (!/private/.test(m.cache) || !/no-store/.test(m.cache) || !/cookie/i.test(m.vary) || !/^image\//.test(m.type))) {
           fail(`media ${label} ${who} headers`, { cache: m.cache, vary: m.vary, type: m.type })
         }
         // Denials are uniform: same status AND same empty body, so the
@@ -673,6 +673,159 @@ const main = async () => {
     r.status === 200 && retryGuest.status === 404 && retryOwner.status === 200
       ? pass("flip retry after repair succeeds and revokes guests")
       : fail("media flip retry", { patch: r.status, guest: retryGuest.status, owner: retryOwner.status })
+
+    // ── Stale public twin must block the flip ──────────────────────
+    // A row already repointed to a private URL can still have its old
+    // public object live (a repoint whose source delete failed). The flip
+    // must abort until that twin is confirmed deleted — success would mean
+    // a "private" diary whose old URLs keep serving.
+    const twinD = await mkVis("PUBLIC", voter.id)
+    diaryIds.push(twinD.id)
+    const twinUpd = await prisma.diaryUpdate.create({
+      data: { diaryId: twinD.id, authorId: voter.id, title: M("tw"), content: "twin fixture", stage: "VEGETATIVE", dayNumber: 1, weekNumber: 1 },
+    })
+    const twinImg = await prisma.diaryImage.create({
+      data: { updateId: twinUpd.id, url: "https://nonexistent0.private.blob.vercel-storage.com/diary-updates/twin.webp" },
+    })
+    r = await callApi(`/api/diaries/${twinD.id}`, { method: "PATCH", body: { visibility: "PRIVATE" }, cookie: voterCookie })
+    const twinRow = await prisma.growDiary.findUnique({ where: { id: twinD.id }, select: { visibility: true } })
+    // No BLOB_READ_WRITE_TOKEN locally → the twin cannot be confirmed
+    // deleted → fail closed, diary stays PUBLIC.
+    r.status === 503 && twinRow?.visibility === "PUBLIC"
+      ? pass("unrevoked public twin aborts PRIVATE flip")
+      : fail("twin revocation abort", { patch: r.status, vis: twinRow?.visibility })
+    // Repair the object (no public copy left to revoke) — retry completes.
+    await prisma.diaryImage.update({ where: { id: twinImg.id }, data: { url: TINY_PNG } })
+    r = await callApi(`/api/diaries/${twinD.id}`, { method: "PATCH", body: { visibility: "PRIVATE" }, cookie: voterCookie })
+    r.status === 200 ? pass("twin repaired → retry completes flip") : fail("twin retry", r.status)
+
+    // ── Mixed-direction concurrent transitions ──────────────────────
+    // The transition is last-writer-wins on the guarded update; the
+    // contract is that whatever visibility the row lands on must be
+    // consistent with what the media proxy then serves.
+    const racer = await createUser("racer")
+    users.push(racer)
+    const { cookie: racerCookie } = await login(racer.username, racer.password)
+    // Distinct title token — the visibility-matrix assertions below search
+    // by the shared `tok` and must not see these fixtures.
+    const mkRace = (visibility) => prisma.growDiary.create({
+      data: {
+        title: M(`race ${visibility}`), description: "race fixture",
+        growType: "INDOOR", startDate: new Date(), authorId: racer.id, visibility,
+      },
+    })
+    const flip = (id, vis) => callApi(`/api/diaries/${id}`, { method: "PATCH", body: { visibility: vis }, cookie: racerCookie })
+    const consistent = async (d, img, label) => {
+      const row = await prisma.growDiary.findUnique({ where: { id: d.id }, select: { visibility: true, deleted: true } })
+      if (!row || row.deleted) {
+        const g = await getMedia("diary", img.id, undefined)
+        const o = await getMedia("diary", img.id, racerCookie)
+        return g.status === 404 && o.status === 404
+          ? { ok: true, state: "deleted" }
+          : { ok: false, state: `deleted row but media ${g.status}/${o.status}` }
+      }
+      const g = await getMedia("diary", img.id, undefined)
+      const o = await getMedia("diary", img.id, racerCookie)
+      const expected = row.visibility === "PRIVATE" ? 404 : 200
+      return g.status === expected && o.status === 200
+        ? { ok: true, state: row.visibility }
+        : { ok: false, state: `${row.visibility} but media ${g.status}/${o.status}` }
+    }
+
+    // Test A: two concurrent PUBLIC→PRIVATE — idempotent, converges PRIVATE.
+    const raceA = await mkRace("PUBLIC")
+    diaryIds.push(raceA.id)
+    const raceAImg = await mkMedia(raceA.id, racer.id)
+    const [a1, a2] = await Promise.all([flip(raceA.id, "PRIVATE"), flip(raceA.id, "PRIVATE")])
+    const aState = await consistent(raceA, raceAImg, "A")
+    aState.ok && aState.state === "PRIVATE" && a1.status === 200 && a2.status === 200
+      ? pass("race: 2× PUBLIC→PRIVATE converges private, media consistent")
+      : fail("race A", { patch: [a1.status, a2.status], ...aState })
+
+    // Test B: two concurrent PRIVATE→PUBLIC — converges PUBLIC.
+    const raceB = await mkRace("PRIVATE")
+    diaryIds.push(raceB.id)
+    const raceBImg = await mkMedia(raceB.id, racer.id)
+    const [b1, b2] = await Promise.all([flip(raceB.id, "PUBLIC"), flip(raceB.id, "PUBLIC")])
+    const bState = await consistent(raceB, raceBImg, "B")
+    bState.ok && bState.state === "PUBLIC" && b1.status === 200 && b2.status === 200
+      ? pass("race: 2× PRIVATE→PUBLIC converges public, media consistent")
+      : fail("race B", { patch: [b1.status, b2.status], ...bState })
+
+    // Test C: PUBLIC→PRIVATE against PRIVATE→PUBLIC — either side may
+    // win; both outcomes are valid, an inconsistent media state is not.
+    const raceC = await mkRace("PUBLIC")
+    diaryIds.push(raceC.id)
+    const raceCImg = await mkMedia(raceC.id, racer.id)
+    const [c1, c2] = await Promise.all([flip(raceC.id, "PRIVATE"), flip(raceC.id, "PUBLIC")])
+    const cState = await consistent(raceC, raceCImg, "C")
+    cState.ok && (c1.status === 200 || c2.status === 200)
+      ? pass(`race: mixed-direction flips land consistent (${cState.state})`)
+      : fail("race C", { patch: [c1.status, c2.status], ...cState })
+
+    // Test D1: flip concurrent with an image upload on the same diary.
+    // The update PATCH and the visibility PATCH are independent writes;
+    // the final visibility must govern the final set of image rows.
+    const raceD1 = await mkRace("PUBLIC")
+    diaryIds.push(raceD1.id)
+    const d1Upd = await prisma.diaryUpdate.create({
+      data: { diaryId: raceD1.id, authorId: racer.id, title: M("d1"), content: "race fixture", stage: "VEGETATIVE", dayNumber: 1, weekNumber: 1 },
+    })
+    const [d1f, d1u] = await Promise.all([
+      flip(raceD1.id, "PRIVATE"),
+      callApi(`/api/diaries/updates`, {
+        method: "PATCH",
+        body: { id: d1Upd.id, images: [TINY_PNG] },
+        cookie: racerCookie,
+      }),
+    ])
+    const d1Row = await prisma.growDiary.findUnique({ where: { id: raceD1.id }, select: { visibility: true } })
+    const d1Imgs = await prisma.diaryImage.findMany({ where: { update: { diaryId: raceD1.id } }, select: { id: true } })
+    let d1Ok = d1Row?.visibility === "PRIVATE" && d1f.status === 200
+    for (const im of d1Imgs) {
+      const g = await getMedia("diary", im.id, undefined)
+      const o = await getMedia("diary", im.id, racerCookie)
+      if (g.status !== 404 || o.status !== 200) d1Ok = false
+    }
+    d1Ok && d1u.status === 200
+      ? pass("race: flip + concurrent upload — all rows private-consistent")
+      : fail("race D1", { flip: d1f.status, upd: d1u.status, vis: d1Row?.visibility, imgs: d1Imgs.length })
+
+    // Test D2: flip concurrent with image removal (keepImageIds=[]).
+    const raceD2 = await mkRace("PUBLIC")
+    diaryIds.push(raceD2.id)
+    const d2Img = await mkMedia(raceD2.id, racer.id)
+    const d2UpdId = (await prisma.diaryImage.findUnique({ where: { id: d2Img.id }, select: { updateId: true } })).updateId
+    const [d2f, d2u] = await Promise.all([
+      flip(raceD2.id, "PRIVATE"),
+      callApi(`/api/diaries/updates`, {
+        method: "PATCH",
+        body: { id: d2UpdId, keepImageIds: [] },
+        cookie: racerCookie,
+      }),
+    ])
+    const d2Gone = await getMedia("diary", d2Img.id, racerCookie)
+    const d2Row = await prisma.growDiary.findUnique({ where: { id: raceD2.id }, select: { visibility: true } })
+    // Removed row must not resolve regardless of the flip's outcome.
+    d2Gone.status === 404 && (d2Row?.visibility === "PRIVATE" || d2u.status === 200)
+      ? pass("race: flip + concurrent image removal — removed media unreachable")
+      : fail("race D2", { flip: d2f.status, upd: d2u.status, media: d2Gone.status })
+
+    // Test D3: flip concurrent with diary deletion — whichever lands,
+    // a deleted diary's media must never resolve.
+    const raceD3 = await mkRace("PUBLIC")
+    diaryIds.push(raceD3.id)
+    const raceD3Img = await mkMedia(raceD3.id, racer.id)
+    const [d3f, d3d] = await Promise.all([
+      flip(raceD3.id, "PRIVATE"),
+      callApi(`/api/diaries`, { method: "DELETE", body: { id: raceD3.id }, cookie: racerCookie }),
+    ])
+    const d3GoneG = await getMedia("diary", raceD3Img.id, undefined)
+    const d3GoneO = await getMedia("diary", raceD3Img.id, racerCookie)
+    const d3Row = await prisma.growDiary.findUnique({ where: { id: raceD3.id }, select: { deleted: true, visibility: true } })
+    d3Row?.deleted && d3GoneG.status === 404 && d3GoneO.status === 404
+      ? pass("race: flip + concurrent delete — deleted diary media unreachable")
+      : fail("race D3", { flip: d3f.status, del: d3d.status, media: [d3GoneG.status, d3GoneO.status], row: d3Row })
 
     // Deleted objects and malformed/unknown ids are uniform 404s.
     const delD = await mkVis("PUBLIC")
