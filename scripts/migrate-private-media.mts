@@ -6,23 +6,27 @@
 //
 // Safe to re-run — rows already on private URLs (or dev data: URIs) are
 // skipped. Non-destructive order per object: copy → repoint row → del old.
-// A row is only repointed after the private copy exists. A failed source
-// delete leaves a residual public object no row references — re-list the
-// store (--list-store) after the run to find those.
+// A row is only repointed after the private copy exists. A source delete
+// that cannot be confirmed counts as FAILED and exits non-zero — a run
+// that leaves a public object behind must never look successful. Re-list
+// the store (--list-store) after the run to find residual orphans, then
+// --revoke-orphans deletes any public object no row references.
 //
-//   npx tsx scripts/migrate-private-media.mts             # live run
-//   npx tsx scripts/migrate-private-media.mts --dry-run   # count only
-//   npx tsx scripts/migrate-private-media.mts --list-store # audit store vs rows
+//   npx tsx scripts/migrate-private-media.mts                  # live run
+//   npx tsx scripts/migrate-private-media.mts --dry-run        # count only
+//   npx tsx scripts/migrate-private-media.mts --list-store     # audit store vs rows
+//   npx tsx scripts/migrate-private-media.mts --revoke-orphans # delete orphaned public objects
 //
 // Requires BLOB_READ_WRITE_TOKEN with write access to the store (not
 // needed for --dry-run row classification).
 import "./db-guard.mjs"
 import { list } from "@vercel/blob"
 import { prisma } from "../src/lib/prisma"
-import { privatizeBlob, deleteImage, isPrivateBlobUrl, isPublicBlobUrl } from "../src/lib/blob"
+import { privatizeBlob, deleteImageStrict, isPrivateBlobUrl, isPublicBlobUrl } from "../src/lib/blob"
 
 const DRY_RUN = process.argv.includes("--dry-run")
 const LIST_STORE = process.argv.includes("--list-store")
+const REVOKE_ORPHANS = process.argv.includes("--revoke-orphans")
 const BATCH = 200
 // storeImage folder prefixes for the three restricted classes.
 const RESTRICTED_PREFIXES = ["diary-updates/", "forum/", "setups/"]
@@ -79,7 +83,13 @@ async function migrateTable(
           continue
         }
         await update(row.id, newUrl)
-        await deleteImage(row.url)
+        // Revocation is part of the migration, not best-effort cleanup:
+        // an unrevoked public source is a failed migration for this row.
+        if (!(await deleteImageStrict(row.url))) {
+          tally.failed++
+          console.error(`  FAIL ${name} ${row.id}: public source not revoked (row already private — --list-store will find the orphan)`)
+          continue
+        }
         tally.migrated++
       } catch (error) {
         tally.failed++
@@ -101,11 +111,12 @@ function report(name: string, t: Tally) {
 // Store-side audit: list objects under the restricted prefixes and
 // cross-reference pathnames against every image row. Finds orphaned
 // residual public objects (e.g. a repointed row whose source delete
-// failed) that no row scan can see.
-async function listStore() {
+// failed) that no row scan can see. With --revoke-orphans it deletes
+// them; a revocation that can't be confirmed exits non-zero.
+async function listStore(): Promise<number> {
   if (!process.env.BLOB_READ_WRITE_TOKEN) {
     console.log("--list-store skipped: BLOB_READ_WRITE_TOKEN not configured")
-    return
+    return 0
   }
   const rowUrls = new Set<string>()
   for (const rows of [
@@ -123,7 +134,7 @@ async function listStore() {
   }
   let publicObjs = 0
   let privateObjs = 0
-  let orphanedPublic = 0
+  const orphans: string[] = []
   for (const prefix of RESTRICTED_PREFIXES) {
     let cursor: string | undefined
     do {
@@ -132,7 +143,8 @@ async function listStore() {
         const host = new URL(blob.url).hostname
         if (host.endsWith(".public.blob.vercel-storage.com")) {
           publicObjs++
-          if (!rowUrls.has(blob.pathname.startsWith("/") ? blob.pathname : `/${blob.pathname}`)) orphanedPublic++
+          const path = blob.pathname.startsWith("/") ? blob.pathname : `/${blob.pathname}`
+          if (!rowUrls.has(path)) orphans.push(blob.url)
         } else {
           privateObjs++
         }
@@ -142,19 +154,30 @@ async function listStore() {
   }
   console.log(
     `store audit: ${publicObjs} public + ${privateObjs} private objects under restricted prefixes;` +
-      ` ${orphanedPublic} orphaned public (no row reference)`
+      ` ${orphans.length} orphaned public (no row reference)`
   )
+  if (!REVOKE_ORPHANS || orphans.length === 0) return orphans.length
+  let revokeFailed = 0
+  for (const url of orphans) {
+    if (!(await deleteImageStrict(url))) {
+      revokeFailed++
+      console.error(`  FAIL revoke orphan: ${new URL(url).pathname}`)
+    }
+  }
+  console.log(`orphan revocation: ${orphans.length - revokeFailed} deleted, ${revokeFailed} failed`)
+  return revokeFailed > 0 ? -1 : 0
 }
 
 async function main() {
   if (!DRY_RUN && !LIST_STORE && !process.env.BLOB_READ_WRITE_TOKEN) {
-    console.error("BLOB_READ_WRITE_TOKEN is required for the live migration")
+    console.error(`BLOB_READ_WRITE_TOKEN is required for ${REVOKE_ORPHANS ? "--revoke-orphans" : "the live migration"}`)
     process.exit(1)
   }
 
-  if (LIST_STORE) {
-    await listStore()
+  if (LIST_STORE || REVOKE_ORPHANS) {
+    const rc = await listStore()
     await prisma.$disconnect()
+    if (rc !== 0) process.exit(1)
     return
   }
 
