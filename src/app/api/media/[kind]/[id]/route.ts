@@ -51,9 +51,11 @@ export async function GET(
   return new NextResponse(blob.body as BodyInit, {
     headers: {
       "Content-Type": blob.contentType,
-      // Per-viewer authorized content — browser may cache briefly, shared
-      // caches/CDNs must not. Revalidation always re-runs authorization.
-      "Cache-Control": "private, max-age=300",
+      // Authorized-at-fetch content must not outlive the authorization:
+      // a visibility flip, block, suspension, or deletion must take effect
+      // on the next request. no-store keeps it out of the browser cache
+      // entirely; `private` bars any shared cache/CDN copy.
+      "Cache-Control": "private, no-store",
       "Vary": "Cookie",
       "X-Content-Type-Options": "nosniff",
       "Content-Security-Policy": "default-src 'none'",
