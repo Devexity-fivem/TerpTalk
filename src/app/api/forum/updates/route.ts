@@ -25,7 +25,13 @@ const getForumUpdates = unstable_cache(
         select: { id: true, createdAt: true },
       }),
     ])
-    return { threadCount, latestThreadId: latest?.id ?? null, latestThreadAt: latest?.createdAt ?? null }
+    return {
+      threadCount,
+      latestThreadId: latest?.id ?? null,
+      latestThreadAt: latest?.createdAt ?? null,
+      // Generic LiveRefresh token — bumps on any new visible thread.
+      fingerprint: `${threadCount}:${latest?.id ?? "0"}`,
+    }
   },
   ["forum-updates"],
   { revalidate: 15, tags: ["forum"] }

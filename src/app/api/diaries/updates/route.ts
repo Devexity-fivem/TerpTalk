@@ -2,7 +2,7 @@ import { after, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { unauthorized, publicUserSelect, LIMITS, getClientIp, logSecurityEvent, isBanned, forbidden, enforceLinkTrust } from "@/lib/security"
+import { unauthorized, publicUserSelect, LIMITS, getClientIp, logSecurityEvent, isBanned, forbidden, enforceLinkTrust, activeAuthor } from "@/lib/security"
 import { checkBadges } from "@/lib/reputation"
 import { progressionRateLimit } from "@/lib/progression"
 import { awardProgression, checkDuplicateContent, updateBand } from "@/lib/progression"
@@ -12,7 +12,8 @@ import { enqueueXpReversal, drainXpOne } from "@/lib/progression-outbox"
 import { storeImages, deleteImagesIfUnreferenced, MAX_POST_IMAGES } from "@/lib/blob"
 import { checkMaintenance } from "@/lib/maintenance"
 import { notifyMany } from "@/lib/notify"
-import { revalidateTag } from "next/cache"
+import { revalidateTag, unstable_cache } from "next/cache"
+import { publicDiaryWhere } from "@/lib/diary-visibility"
 import { diaryDay, diaryWeek } from "@/lib/diary-weeks"
 import { diaryPath } from "@/lib/slugs"
 import { evaluateGrowJourney } from "@/lib/grow-journey"
@@ -27,6 +28,38 @@ import {
   diffUpdateImages,
   updatePatchTouchesStrainStats,
 } from "@/lib/diary-update-edit"
+
+// GET — cheap public fingerprint for the diaries index LiveRefresh tickle:
+// public diary count + newest public update timestamp. 15s shared cache,
+// busted by the "diaries" revalidateTag on every update write.
+const getDiariesActivity = unstable_cache(
+  async () => {
+    const [count, latest] = await Promise.all([
+      prisma.growDiary.count({
+        where: { deleted: false, ...publicDiaryWhere, author: activeAuthor() },
+      }),
+      prisma.diaryUpdate.findFirst({
+        where: { diary: { deleted: false, ...publicDiaryWhere, author: activeAuthor() } },
+        orderBy: { createdAt: "desc" },
+        select: { createdAt: true },
+      }),
+    ])
+    return { fingerprint: `${count}:${latest?.createdAt.toISOString() ?? "0"}` }
+  },
+  ["diaries-activity"],
+  { revalidate: 15, tags: ["diaries"] }
+)
+
+export async function GET() {
+  try {
+    return NextResponse.json(await getDiariesActivity(), {
+      headers: { "Cache-Control": "public, max-age=15, s-maxage=15" },
+    })
+  } catch (error) {
+    console.error("Diaries activity error:", error)
+    return NextResponse.json({ fingerprint: "0:0" }, { status: 500 })
+  }
+}
 
 export async function POST(request: Request) {
   let storedImages: string[] = []

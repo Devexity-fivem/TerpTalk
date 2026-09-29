@@ -4,6 +4,7 @@ import { publicDiaryWhere } from "@/lib/diary-visibility"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { Leaf, MessageSquare, TrendingUp, Calendar, Users, UserPlus, Sprout, Award } from "lucide-react"
+import { LiveRefresh } from "@/components/live-refresh"
 import Link from "next/link"
 import RoleBadge from "@/components/role-badge"
 import ProfileCard from "@/components/ui/profile-card"
@@ -253,6 +254,8 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
   return (
     <div className="min-h-screen bg-background">
       <div className="max-w-6xl mx-auto px-4 py-8">
+        <LiveRefresh endpoint="/api/forum/updates" />
+        <LiveRefresh endpoint="/api/diaries/updates" />
         {/* Header */}
         <div className="mb-8">
           <span className="tt-eyebrow">What&apos;s new</span>

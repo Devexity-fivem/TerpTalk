@@ -544,6 +544,27 @@ const main = async () => {
       }
     }
 
+    // LiveRefresh tickle — the per-diary activity endpoint must apply the
+    // exact same visibility matrix as the page (PRIVATE 404s for all but
+    // the owner) so pollers can't probe existence.
+    for (const [vis, d] of [["PUBLIC", pubD], ["UNLISTED", unlD], ["PRIVATE", prvD]]) {
+      for (const [who, ck] of actors) {
+        const a = await callApi(`/api/diaries/${d.id}/activity`, { cookie: ck })
+        const body = a.data || {}
+        const okStatus = a.status === expect[vis][who]
+        const okShape = a.status !== 200 || typeof body.fingerprint === "string"
+        okStatus && okShape
+          ? pass(`live ${vis} diary activity → ${who} ${expect[vis][who]}`)
+          : fail(`live ${vis} diary activity ${who}`, { status: a.status, body })
+      }
+    }
+    // Index-level fingerprint for the diaries-list poller.
+    r = await callApi(`/api/diaries/updates`)
+    const idxBody = r.data || {}
+    r.status === 200 && typeof idxBody.fingerprint === "string"
+      ? pass("live: diaries index fingerprint")
+      : fail("live diaries index", { status: r.status, body: idxBody })
+
     ;/<meta name="robots"[^>]*noindex/.test(pages.UNLISTED || "")
       ? pass("unlisted page carries noindex")
       : fail("unlisted noindex", (pages.UNLISTED || "").match(/<meta name="robots"[^>]*>/)?.[0])

@@ -15,8 +15,12 @@ import EmptyState from "@/components/ui/empty-state"
 import StageProgress from "@/components/stage-progress"
 import { STAGE_LABELS, diaryCompleteness, diaryWeek } from "@/lib/diary-weeks"
 import { diaryPath } from "@/lib/slugs"
+import { LiveRefresh } from "@/components/live-refresh"
 
-export const revalidate = 300
+// Dynamic — the grid must stay fresh for LiveRefresh's router.refresh()
+// (ISR would serve the stale shell even after a fingerprint change). The
+// expensive community-stats aggregate keeps its own 300s unstable_cache.
+export const dynamic = "force-dynamic"
 
 export const metadata = {
   title: "Grow Diaries",
@@ -252,6 +256,7 @@ export default async function DiariesPage({
   return (
     <div className="min-h-screen bg-background">
       <div className="max-w-7xl mx-auto px-4 py-8">
+        <LiveRefresh endpoint="/api/diaries/updates" />
         {/* Header */}
         <div className="mb-6">
           <span className="tt-eyebrow">Seed to harvest</span>

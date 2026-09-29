@@ -14,6 +14,7 @@ import { getMemberHomeData } from "@/lib/member-home"
 import { getGrowerSpotlight } from "@/lib/spotlight"
 import MemberHome from "@/components/member-home"
 import LiveStats from "@/components/live-stats"
+import { LiveRefresh } from "@/components/live-refresh"
 import HeroCta from "@/components/hero-cta"
 import { Avatar } from "@/components/ui/avatar"
 import TierChip from "@/components/tier-chip"
@@ -205,6 +206,8 @@ export default async function Home() {
   ])
   return (
     <div className="flex flex-col min-h-screen bg-background">
+      <LiveRefresh endpoint="/api/forum/updates" />
+      <LiveRefresh endpoint="/api/diaries/updates" />
       {/* Hero — asymmetric split: pitch left, live canopy panel right */}
       <section className="relative overflow-hidden px-4 pb-16 pt-14 sm:px-6 lg:px-8 lg:pb-24 lg:pt-20">
         {/* Grow-light backdrop — blueprint grid + pine/iris/copper wash.

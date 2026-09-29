@@ -114,6 +114,13 @@ export function Navigation() {
     refresh()
     const onRead = () => refresh()
     window.addEventListener("tt-notifications-read", onRead)
+    // Resync when a sleeping/backgrounded tab regains focus — pushed
+    // events aren't replayed, so a tab that slept through one would sit
+    // on stale counts until the next event or a manual refresh.
+    const onVisible = () => {
+      if (document.visibilityState === "visible") refresh()
+    }
+    document.addEventListener("visibilitychange", onVisible)
     // Presence ping — updates lastSeenAt/online status (server throttled)
     fetch("/api/ping", { method: "POST" }).catch(() => {})
 
@@ -122,6 +129,7 @@ export function Navigation() {
     // same connection, so a signed-in user never holds two sockets.
     let poll: ReturnType<typeof setInterval> | null = null
     let cancelled = false
+    let boundPusher: import("pusher-js").default | null = null
     const startPolling = () => {
       if (!poll) poll = setInterval(refresh, 60_000)
     }
@@ -134,12 +142,16 @@ export function Navigation() {
           // Effect may have cleaned up before the import resolved —
           // don't leave an orphaned subscription behind.
           if (cancelled || !p) return
+          boundPusher = p
           const ch = p.subscribe(channel)
           ch.bind("new-notification", (n: unknown) => {
             refresh()
             window.dispatchEvent(new CustomEvent("tt-new-notification", { detail: n }))
           })
           ch.bind("pusher:subscription_error", startPolling)
+          // Reconnects resubscribe automatically but events emitted while
+          // the socket was down are never replayed — resync on connect.
+          p.connection.bind("connected", refresh)
         })
         .catch(startPolling)
     } else {
@@ -149,7 +161,9 @@ export function Navigation() {
     return () => {
       cancelled = true
       window.removeEventListener("tt-notifications-read", onRead)
+      document.removeEventListener("visibilitychange", onVisible)
       if (poll) clearInterval(poll)
+      boundPusher?.connection.unbind("connected", refresh)
       // The socket is shared — drop only this channel, never disconnect.
       peekSharedPusher()?.unsubscribe(channel)
     }

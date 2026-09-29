@@ -6,6 +6,7 @@ import { MessageSquare, Users, Clock, Pin, Lock, CheckCircle2, BookOpen } from "
 import { CATEGORY_TO_TOPICS } from "@/lib/guides"
 import Link from "next/link"
 import { buildMetadata } from "@/lib/seo"
+import { LiveRefresh } from "@/components/live-refresh"
 import { Breadcrumbs } from "@/components/breadcrumbs"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
@@ -126,6 +127,7 @@ export default async function CategoryPage({
   return (
     <div className="min-h-screen bg-background">
       <div className="max-w-7xl mx-auto px-4 py-8">
+        <LiveRefresh endpoint="/api/forum/updates" />
         <Breadcrumbs items={[
           { label: "Forum", href: "/forum" },
           { label: category.name },

@@ -607,6 +607,25 @@ const main = async () => {
     r = await callApi(`/forum/thread/${authorThread.slug}`)
     r.status === 200 ? pass("page: public thread 200 anon") : fail("anon thread page", r.status)
 
+    // ── 7. LiveRefresh tickle endpoints ──
+    // Forum-wide fingerprint feeds the list/category/tag page pollers.
+    r = await callApi(`/api/forum/updates`)
+    r.status === 200 && typeof r.data?.fingerprint === "string" && r.data.fingerprint.length > 1
+      ? pass("live: forum-updates fingerprint")
+      : fail("live forum-updates", { status: r.status, body: r.data })
+    // Per-thread fingerprint mirrors the page's visibility rules — the
+    // hidden-category thread must 404 just like its page does.
+    r = await callApi(`/api/forum/threads/${authorThread.slug}/activity`)
+    r.status === 200 && typeof r.data?.fingerprint === "string"
+      ? pass("live: thread activity fingerprint")
+      : fail("live thread activity", { status: r.status, body: r.data })
+    r = await callApi(`/api/forum/threads/__missing-slug__/activity`)
+    r.status === 404 ? pass("live: missing thread activity 404") : fail("live thread 404", r.status)
+    r = await callApi(`/api/forum/threads/${hiddenThread.slug}/activity`)
+    r.status === 404
+      ? pass("live: hidden-category thread activity 404s for anon")
+      : fail("live hidden thread activity", r.status)
+
     console.log(`\n${results.filter(([s]) => s === "PASS").length} passed, ${results.filter(([s]) => s === "FAIL").length} failed`)
   } finally {
     for (const u of users) {

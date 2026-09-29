@@ -7,6 +7,7 @@ import Link from "next/link"
 import { MessageSquare, TrendingUp, Clock, Users, Flame, Eye } from "lucide-react"
 import RoleBadge from "@/components/role-badge"
 import ProfileCard from "@/components/ui/profile-card"
+import { LiveRefresh } from "@/components/live-refresh"
 import EmptyState from "@/components/ui/empty-state"
 import TimeAgo from "@/components/ui/time-ago"
 
@@ -94,6 +95,8 @@ export default async function DiscoverPage({
   return (
     <div className="min-h-screen bg-background">
       <div className="max-w-4xl mx-auto px-4 py-8">
+        <LiveRefresh endpoint="/api/forum/updates" />
+        <LiveRefresh endpoint="/api/diaries/updates" />
         <div className="mb-6">
           <span className="tt-eyebrow">Fresh from the garden</span>
           <h1 className="font-display text-3xl font-bold mt-1.5 mb-2 tracking-tight">Discover</h1>

@@ -17,6 +17,7 @@ import OwnerDeleteButton from "@/components/owner-delete-button"
 import PostContent from "@/components/post-content"
 import ImageGallery from "@/components/image-gallery"
 import Poll from "@/components/poll"
+import { LiveRefresh } from "@/components/live-refresh"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { buildMetadata, snippet } from "@/lib/seo"
@@ -344,6 +345,7 @@ export default async function ThreadPage({
   return (
     <div className="min-h-screen bg-background">
       <div className="mx-auto max-w-7xl px-4 py-8">
+        <LiveRefresh endpoint={`/api/forum/threads/${thread.slug}/activity`} />
         <JsonLd data={discussionSchema} />
         <ViewTracker threadId={thread.id} />
         <ThreadScrollBar replyAnchor={thread.locked ? undefined : "#reply-composer"} />

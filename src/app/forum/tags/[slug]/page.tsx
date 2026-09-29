@@ -6,6 +6,7 @@ import { buildMetadata } from "@/lib/seo"
 import ProfileCard from "@/components/ui/profile-card"
 import Link from "next/link"
 import { notFound } from "next/navigation"
+import { LiveRefresh } from "@/components/live-refresh"
 
 export const dynamic = "force-dynamic"
 
@@ -62,6 +63,7 @@ export default async function TagThreadsPage({
   return (
     <div className="min-h-screen bg-background">
       <div className="max-w-4xl mx-auto px-4 py-8">
+        <LiveRefresh endpoint="/api/forum/updates" />
         <div className="mb-8">
           <Link href="/forum/tags" className="text-sm text-muted-foreground hover:text-foreground mb-2 block">
             ← All tags

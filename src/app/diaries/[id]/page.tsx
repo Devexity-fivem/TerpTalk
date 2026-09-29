@@ -38,6 +38,7 @@ import { buildGrowComparison } from "@/lib/grow-compare"
 import { hasUnlock } from "@/lib/progression"
 import { toGrams, toOz } from "@/lib/yield"
 import WeekNavigator from "@/components/week-navigator"
+import { LiveRefresh } from "@/components/live-refresh"
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -397,6 +398,7 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
   return (
     <div className="min-h-screen bg-background" data-tt-diary={JSON.stringify({ id: diary.id, title: diary.title, stage: diary.stage, harvested: diary.harvested, own: canEdit })}>
       <div className="max-w-7xl mx-auto px-4 py-8">
+        <LiveRefresh endpoint={`/api/diaries/${diary.id}/activity`} />
         {diary.visibility === "PUBLIC" && <JsonLd data={diarySchema} />}
         <Breadcrumbs items={[
           { label: "Grow Diaries", href: "/diaries" },
