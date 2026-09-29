@@ -76,11 +76,24 @@ const main = async () => {
   }).catch(() => {})
 
   const browser = await chromium.launch({ headless: true })
+  // DOMContentLoaded resolves before streamed RSC content attaches —
+  // asserting on counts immediately after it raced hydration under load
+  // (the master-run flake). Wait for the specific element each assertion
+  // reads instead of a blanket network state: Pusher keeps sockets open,
+  // so networkidle is unreliable on authed pages. waitForSelector is a
+  // bounded condition, not a sleep.
+  const gotoMain = async (page: import("playwright-core").Page, url: string, selector = "main#main-content") => {
+    const res = await page.goto(url, { waitUntil: "domcontentloaded" })
+    await page.waitForSelector(selector, { timeout: 30_000 })
+    return res
+  }
   const login = async (username: string) => {
     const context = await browser.newContext()
     const page = await context.newPage()
-    // networkidle — the controlled inputs reset to React state on hydration;
-    // filling during the race submits empty credentials (no POST is logged).
+    // networkidle is safe here specifically: the anonymous signin page
+    // opens no Pusher socket, so network settles. The controlled inputs
+    // reset to React state on hydration; the value re-check below covers
+    // a fill that landed before hydration finished.
     await page.goto(`${BASE}/auth/signin`, { waitUntil: "networkidle" })
     await page.fill("#username", username)
     await page.fill("#password", PASSWORD)
@@ -102,12 +115,12 @@ const main = async () => {
     // ── Anonymous browsing ───────────────────────────────────────────
     const anon = await browser.newContext()
     const anonPage = await anon.newPage()
-    const homeRes = await anonPage.goto(BASE, { waitUntil: "domcontentloaded" })
+    const homeRes = await gotoMain(anonPage, BASE, "main h1")
     ok("anon: home renders 200", homeRes?.status() === 200, homeRes?.status())
     ok("anon: main landmark + exactly one h1", (await anonPage.locator("main").count()) >= 1 && (await anonPage.locator("h1").count()) === 1)
     ok("anon: sign-in affordance visible", (await anonPage.locator('a[href^="/auth/signin"]').count()) >= 1)
 
-    const signinRes = await anonPage.goto(`${BASE}/auth/signin`, { waitUntil: "domcontentloaded" })
+    const signinRes = await gotoMain(anonPage, `${BASE}/auth/signin`, "label[for=username]")
     ok("anon: signin 200", signinRes?.status() === 200)
     const labeledUser = await anonPage.locator("label[for=username]").count()
     const labeledPass = await anonPage.locator("label[for=password]").count()
@@ -115,9 +128,9 @@ const main = async () => {
 
     // Public vs private diary — the existence-oracle contract must hold
     // in the rendered page, not just the route.
-    const pubRes = await anonPage.goto(`${BASE}/diaries/${pubDiary.slug}`, { waitUntil: "domcontentloaded" })
+    const pubRes = await gotoMain(anonPage, `${BASE}/diaries/${pubDiary.slug}`)
     ok("privacy: PUBLIC diary renders to anonymous", pubRes?.status() === 200, pubRes?.status())
-    const privRes = await anonPage.goto(`${BASE}/diaries/${privDiary.slug}`, { waitUntil: "domcontentloaded" })
+    const privRes = await gotoMain(anonPage, `${BASE}/diaries/${privDiary.slug}`)
     const privBody = (await anonPage.textContent("body")) ?? ""
     ok(
       "privacy: PRIVATE diary → 404/not-found for anonymous",
@@ -128,18 +141,26 @@ const main = async () => {
     // ── Auth flow ────────────────────────────────────────────────────
     const { context: aliceCtx, page: alicePage } = await login(aliceUsername)
     ok("auth: credentials login leaves /auth/signin", !alicePage.url().includes("/auth/signin"), alicePage.url())
-    await alicePage.goto(BASE, { waitUntil: "domcontentloaded" })
+    // The Messages affordance is rendered by the hydrated session nav —
+    // wait for the element itself rather than a load-state heuristic.
+    await gotoMain(alicePage, BASE)
     const msgLink = await alicePage.locator('a[aria-label*="Messages"]').count()
     ok("auth: session nav shows Messages affordance", msgLink >= 1, { found: msgLink })
 
     // ── Profile V2 surfaces ──────────────────────────────────────────
-    const profRes = await alicePage.goto(`${BASE}/u/${aliceUsername}`, { waitUntil: "domcontentloaded" })
+    const profRes = await gotoMain(alicePage, `${BASE}/u/${aliceUsername}`)
     const profBody = (await alicePage.textContent("body")) ?? ""
     ok("profile: public profile 200 + shows username", profRes?.status() === 200 && profBody.includes(aliceUsername), profRes?.status())
 
-    const selfRes = await alicePage.goto(`${BASE}/profile`, { waitUntil: "networkidle" })
+    const selfRes = await gotoMain(alicePage, `${BASE}/profile`)
+    // Client-rendered tab — identity can surface as username or display
+    // name; wait for either rather than a fixed load state.
+    await alicePage.waitForFunction(
+      (names: string[]) => names.some((n) => document.body.textContent?.includes(n)),
+      [aliceUsername, `__browser_a_${TS}`],
+      { timeout: 30_000 }
+    ).catch(() => {})
     const selfBody = (await alicePage.textContent("body")) ?? ""
-    // Client-rendered tab — identity can surface as username or display name.
     ok(
       "profile: own /profile 200 + identity rendered",
       selfRes?.status() === 200 && (selfBody.includes(aliceUsername) || selfBody.includes(`__browser_a_${TS}`)),
@@ -147,18 +168,18 @@ const main = async () => {
     )
 
     // Owner sees their private diary — the other side of the oracle.
-    const ownerPriv = await alicePage.goto(`${BASE}/diaries/${privDiary.slug}`, { waitUntil: "domcontentloaded" })
+    const ownerPriv = await gotoMain(alicePage, `${BASE}/diaries/${privDiary.slug}`)
     ok("privacy: owner can view own PRIVATE diary", ownerPriv?.status() === 200, ownerPriv?.status())
 
     // ── Progression display ──────────────────────────────────────────
-    const progRes = await alicePage.goto(`${BASE}/progress`, { waitUntil: "domcontentloaded" })
+    const progRes = await gotoMain(alicePage, `${BASE}/progress`)
     const progBody = (await alicePage.textContent("body")) ?? ""
     ok("progression: /progress renders rank/unlock surface", progRes?.status() === 200 && progBody.length > 500, progRes?.status())
 
     // ── Block boundary (privacy) ─────────────────────────────────────
     await prisma.block.create({ data: { blockerId: alice.id, blockedId: bob.id } })
     const { context: bobCtx, page: bobPage } = await login(bobUsername)
-    const blockedRes = await bobPage.goto(`${BASE}/u/${aliceUsername}`, { waitUntil: "domcontentloaded" })
+    const blockedRes = await gotoMain(bobPage, `${BASE}/u/${aliceUsername}`)
     const blockedBody = (await bobPage.textContent("body")) ?? ""
     ok(
       "privacy: blocked member sees not-found on blocker profile",
@@ -170,7 +191,7 @@ const main = async () => {
     // ── Mobile contract ──────────────────────────────────────────────
     const mob = await browser.newContext({ viewport: { width: 390, height: 844 } })
     const mobPage = await mob.newPage()
-    await mobPage.goto(BASE, { waitUntil: "domcontentloaded" })
+    await gotoMain(mobPage, BASE)
     const overflowX = await mobPage.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1)
     ok("mobile: home renders without horizontal overflow at 390px", !overflowX)
     ok("mobile: nav menu toggle present", (await mobPage.locator('button[aria-label*="navigation menu"], a[href="/auth/signin"]').count()) >= 1)
