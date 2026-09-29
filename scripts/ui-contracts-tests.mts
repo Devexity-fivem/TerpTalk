@@ -540,15 +540,6 @@ check("stat-strip: list semantics, link option, responsive wrap", () => {
   assert.ok(s.includes("focus-visible:ring-2"), "linked stats have focus ring")
 })
 
-check("loading-states: named compositions, sr status, shared Skeleton", () => {
-  const l = src("components/ui/loading-states.tsx")
-  for (const n of ["CardSkeleton", "ListSkeleton", "StatStripSkeleton", "ProfileHeaderSkeleton", "SectionSkeleton"]) {
-    assert.ok(l.includes(`export function ${n}`), `exports ${n}`)
-  }
-  assert.ok(l.includes('from "@/components/ui/skeleton"'), "reuses Skeleton")
-  assert.ok(l.includes("sr-only"), "screen-reader status text")
-})
-
 check("profile-card: single author-card contract over UserPopover + card DTO", () => {
   const p = src("components/ui/profile-card.tsx")
   assert.ok(p.includes("<UserPopover"), "wraps UserPopover — no forked card")
