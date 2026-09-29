@@ -66,6 +66,8 @@ const main = async () => {
   const postIds = []
   const roomIds = []
   const rateKeys = []                            // rateLimit keys to clear
+  const extraCategoryIds = []
+  const tagSlugs = []
 
   try {
     await prisma.rateLimit.deleteMany({ where: { key: { startsWith: "login" } } })
@@ -840,6 +842,131 @@ const main = async () => {
         : fail("card totalGrows", { anon: anonCard.data?.totalGrows, own: ownCard.data?.totalGrows })
     }
 
+    // ══ 15. Low-severity hardening regressions ════════════════════
+    {
+      await prisma.rateLimit.deleteMany({ where: { key: { startsWith: "login" } } })
+      // Ping: a still-valid JWT for a now-suspended member is refused
+      // (ping reads the token directly, not getServerSession).
+      const pg = await createUser("pingsusp")
+      users.push(pg)
+      const { cookie: pgC } = await login(pg.username, pg.password)
+      r = await callApi("/api/ping", { method: "POST", cookie: pgC })
+      const pingOk = r.status
+      await prisma.user.update({ where: { id: pg.id }, data: { suspendedUntil: new Date(Date.now() + 3600_000) } })
+      r = await callApi("/api/ping", { method: "POST", cookie: pgC })
+      pingOk === 200 && r.status === 403
+        ? pass("ping: suspended member's live token refused")
+        : fail("ping suspended", { before: pingOk, after: r.status })
+
+      // Recovery: a phrase is strictly single-use under concurrency.
+      const rc = await createUser("recon")
+      users.push(rc)
+      const phrase = generateMnemonic()
+      await prisma.user.update({ where: { id: rc.id }, data: { recoveryPhraseHash: bcrypt.hashSync(phrase, 10) } })
+      await prisma.rateLimit.deleteMany({ where: { key: { startsWith: "recover" } } }).catch(() => {})
+      const recover = () => callApi("/api/auth/recover", { method: "POST", body: { username: rc.username, phrase, newPassword: "NewPass12345!" } })
+      const [r1, r2] = await Promise.all([recover(), recover()])
+      const oks = [r1, r2].filter((x) => x.status === 200)
+      oks.length === 1 && [r1, r2].some((x) => x.status === 400)
+        ? pass("recover: concurrent reuse of one phrase succeeds exactly once")
+        : fail("recover single-use", { a: r1.status, b: r2.status })
+      await prisma.rateLimit.deleteMany({ where: { key: { startsWith: "recover" } } }).catch(() => {})
+
+      // Post edits are rate-limited like every other write on the route.
+      const ed = await createUser("editrl")
+      users.push(ed)
+      const { cookie: edC } = await login(ed.username, ed.password)
+      const edThread = await prisma.thread.create({
+        data: { title: M("editthread"), slug: `rv-et-${TS}`, content: "c", categoryId: cat.id, authorId: ed.id },
+      })
+      threadIds.push(edThread.id)
+      const edPost = await prisma.post.create({ data: { threadId: edThread.id, authorId: ed.id, content: "original body text" } })
+      postIds.push(edPost.id)
+      r = await callApi("/api/forum/posts", { method: "PATCH", body: { id: edPost.id, content: "first edit body text" }, cookie: edC })
+      const firstEdit = r.status
+      await prisma.rateLimit.upsert({
+        where: { key: `post-edit:${ed.id}` },
+        create: { key: `post-edit:${ed.id}`, count: 30, expiresAt: new Date(Date.now() + 600_000) },
+        update: { count: 30, expiresAt: new Date(Date.now() + 600_000) },
+      })
+      rateKeys.push(`post-edit:${ed.id}`)
+      r = await callApi("/api/forum/posts", { method: "PATCH", body: { id: edPost.id, content: "second edit body text" }, cookie: edC })
+      firstEdit === 200 && r.status === 429
+        ? pass("posts: edit endpoint enforces its rate limit")
+        : fail("post edit rate limit", { first: firstEdit, limited: r.status })
+
+      // Tags: a tag used only inside a hidden (staff) category is not
+      // listed publicly; counts cover only visible threads.
+      const hiddenCat = await prisma.category.create({ data: { name: M("hcat"), description: "h", slug: `rv-hcat-${TS}`, hidden: true } })
+      extraCategoryIds.push(hiddenCat.id)
+      const hTag = `rvh${TS}`.toLowerCase()
+      const pTag = `rvp${TS}`.toLowerCase()
+      const hThread = await prisma.thread.create({
+        data: {
+          title: M("hthread"), slug: `rv-ht-${TS}`, content: "c", categoryId: hiddenCat.id, authorId: admin.id,
+          tags: { create: [{ tag: { create: { name: hTag, slug: hTag } } }] },
+        },
+      })
+      threadIds.push(hThread.id)
+      const pThread = await prisma.thread.create({
+        data: {
+          title: M("pthread"), slug: `rv-pt-${TS}`, content: "c", categoryId: cat.id, authorId: a.id,
+          tags: { create: [{ tag: { create: { name: pTag, slug: pTag } } }] },
+        },
+      })
+      threadIds.push(pThread.id)
+      const hiddenList = await callApi(`/api/forum/tags?q=${hTag}`)
+      const publicList = await callApi(`/api/forum/tags?q=${pTag}`)
+      hiddenList.status === 200 && !hiddenList.data.tags.some((t) => t.name === hTag) &&
+        publicList.data?.tags?.find((t) => t.name === pTag)?.count === 1
+        ? pass("tags: hidden-category-only tag not listed; visible tag counted")
+        : fail("tags hidden", { hidden: hiddenList.data?.tags, pub: publicList.data?.tags })
+      await prisma.thread.update({ where: { id: pThread.id }, data: { deleted: true } })
+      const afterDel = await callApi(`/api/forum/tags?q=${pTag}`)
+      afterDel.data?.tags?.find((t) => t.name === pTag) === undefined
+        ? pass("tags: tag whose only thread is deleted drops out of the public list")
+        : fail("tags deleted", afterDel.data?.tags)
+      tagSlugs.push(hTag, pTag)
+
+      // Mention picker honors blocks in both directions.
+      const pk = await createUser("picker")
+      const pkT = await createUser("pickt")
+      users.push(pk, pkT)
+      const { cookie: pkC } = await login(pk.username, pk.password)
+      r = await callApi(`/api/users/search?q=${encodeURIComponent(pkT.username)}`, { cookie: pkC })
+      const seenBefore = r.data?.users?.some((u) => u.id === pkT.id)
+      await prisma.block.create({ data: { blockerId: pkT.id, blockedId: pk.id } })
+      r = await callApi(`/api/users/search?q=${encodeURIComponent(pkT.username)}`, { cookie: pkC })
+      seenBefore && r.status === 200 && !r.data.users.some((u) => u.id === pkT.id)
+        ? pass("users/search: member who blocked the viewer is excluded")
+        : fail("users/search block", { seenBefore, status: r.status })
+
+      // Experiments of a suspended author's public grow 404 for visitors.
+      const ex = await createUser("expsusp")
+      users.push(ex)
+      const exDiary = await prisma.growDiary.create({
+        data: { title: M("expdiary"), description: "d", growType: "INDOOR", startDate: new Date(), authorId: ex.id, visibility: "PUBLIC" },
+      })
+      diaryIds.push(exDiary.id)
+      await prisma.growExperiment.create({ data: { diaryId: exDiary.id, authorId: ex.id, title: "t", change: "c", category: "OTHER" } })
+      const expBefore = await callApi(`/api/diaries/${exDiary.id}/experiments`)
+      await prisma.user.update({ where: { id: ex.id }, data: { suspendedUntil: new Date(Date.now() + 3600_000) } })
+      const expAfter = await callApi(`/api/diaries/${exDiary.id}/experiments`)
+      expBefore.status === 200 && expAfter.status === 404
+        ? pass("experiments: suspended author's grow history 404s for visitors")
+        : fail("experiments inactive author", { before: expBefore.status, after: expAfter.status })
+
+      // Search: a suspension that expires after server start stops hiding
+      // the member (the filter's `now` is per query, not per module load).
+      const sx = await createUser("srchsusp", { suspendedUntil: new Date(Date.now() + 1500) })
+      users.push(sx)
+      await new Promise((res) => setTimeout(res, 2500))
+      r = await callApi(`/api/search?q=${encodeURIComponent(sx.username)}&type=users`)
+      r.status === 200 && r.data.users?.some((u) => u.username === sx.username)
+        ? pass("search: expired suspension no longer hides the member")
+        : fail("search expired suspension", { status: r.status, users: r.data?.users })
+    }
+
     console.log(`\n${results.filter(([s]) => s === "PASS").length} passed, ${results.filter(([s]) => s === "FAIL").length} failed`)
   } catch (e) {
     fail("suite error", String(e?.stack || e))
@@ -847,6 +974,8 @@ const main = async () => {
     for (const id of postIds) await prisma.post.delete({ where: { id } }).catch(() => {})
     for (const id of roomIds) await prisma.chatRoom.delete({ where: { id } }).catch(() => {})
     for (const id of threadIds) await prisma.thread.delete({ where: { id } }).catch(() => {})
+    if (tagSlugs.length) await prisma.tag.deleteMany({ where: { slug: { in: tagSlugs } } }).catch(() => {})
+    for (const id of extraCategoryIds) await prisma.category.delete({ where: { id } }).catch(() => {})
     for (const id of diaryIds) await prisma.growDiary.delete({ where: { id } }).catch(() => {})
     for (const id of setupIds) await prisma.growSetup.delete({ where: { id } }).catch(() => {})
     for (const id of strainIds) await prisma.strain.delete({ where: { id } }).catch(() => {})

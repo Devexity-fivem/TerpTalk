@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { unauthorized, publicUserSelect, LIMITS, getClientIp, logSecurityEvent, isBanned, forbidden, enforceLinkTrust, isModerator, isAdmin, blockExistsBetween } from "@/lib/security"
 import { requireModerator } from "@/lib/require-staff"
+import { rateLimit } from "@/lib/rate-limit"
 import { progressionRateLimit, getProgressionPerks } from "@/lib/progression"
 import { POST_MIN_PAID_LENGTH } from "@/lib/reputation-config"
 import { awardProgression, checkDuplicateContent } from "@/lib/progression"
@@ -317,6 +318,13 @@ export async function PATCH(request: Request) {
         { error: "Content must be between 10 and 10,000 characters" },
         { status: 400 }
       )
+    }
+
+    // Edits were the one unthrottled write on this route — each re-runs
+    // the link policy and rewrites searchable content.
+    const rl = await rateLimit(`post-edit:${session.user.id}`, 30, 10 * 60 * 1000)
+    if (!rl.allowed) {
+      return NextResponse.json({ error: "Editing too fast. Please slow down." }, { status: 429 })
     }
 
     const post = await prisma.post.findUnique({

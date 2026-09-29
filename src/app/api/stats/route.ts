@@ -13,8 +13,9 @@ const getStats = unstable_cache(
     const [members, diaries, threads, posts] = await Promise.all([
       prisma.user.count({ where: activeAuthor() }),
       prisma.growDiary.count({ where: { deleted: false, author: activeAuthor(), ...publicDiaryWhere } }),
-      prisma.thread.count({ where: { deleted: false, author: activeAuthor() } }),
-      prisma.post.count({ where: { deleted: false, author: activeAuthor() } }),
+      // Staff-only (hidden) categories never contribute to public totals.
+      prisma.thread.count({ where: { deleted: false, category: { hidden: false }, author: activeAuthor() } }),
+      prisma.post.count({ where: { deleted: false, thread: { deleted: false, category: { hidden: false } }, author: activeAuthor() } }),
     ])
     return { members, diaries, discussions: threads + posts }
   },

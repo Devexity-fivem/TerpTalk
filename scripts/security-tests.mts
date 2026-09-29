@@ -2,7 +2,8 @@ import "./db-guard.mjs"
 import { strict as assert } from "node:assert"
 import { readFileSync } from "node:fs"
 import { prisma } from "@/lib/prisma"
-import { isBanned, isSessionValid, isAdmin, isModerator, isStaff, isSupport, hashIp, getTrustLevel, LIMITS, blockedUserIds, notBlockedAuthor } from "@/lib/security"
+import { isBanned, isSessionValid, isAdmin, isModerator, isStaff, isSupport, hashIp, getTrustLevel, LIMITS, blockedUserIds, notBlockedAuthor, safeEqualSecret, bcryptDecoy } from "@/lib/security"
+import bcrypt from "bcryptjs"
 import { isValidImageDataUri, storeImage } from "@/lib/blob"
 import sharp from "sharp"
 import { isTrustedForLinks, containsExternalLink, enforceLinkTrust } from "@/lib/security"
@@ -608,6 +609,28 @@ async function run() {
     } finally {
       await prisma.chatMessage.deleteMany({ where: { roomId: { in: [privateRoom.id, publicRoom.id] } } }).catch(() => {})
       await prisma.chatRoom.deleteMany({ where: { id: { in: [privateRoom.id, publicRoom.id] } } }).catch(() => {})
+    }
+
+    // ── Timing-safe credential helpers ────────────────────────────
+    {
+      // Cron bearer check: exact match only, no prefix/length shortcuts.
+      assert.equal(safeEqualSecret("Bearer s3cret", "Bearer s3cret"), true, "matching secret accepted")
+      assert.equal(safeEqualSecret("Bearer s3cre", "Bearer s3cret"), false, "prefix of secret rejected")
+      assert.equal(safeEqualSecret("Bearer s3cret-extra", "Bearer s3cret"), false, "longer value rejected")
+      assert.equal(safeEqualSecret(null, "Bearer s3cret"), false, "missing header rejected")
+      assert.equal(safeEqualSecret("", "Bearer s3cret"), false, "empty header rejected")
+      // Unknown-account paths must pay a real bcrypt compare and never
+      // report success. Warm the decoy hash first, then time a compare at
+      // the same cost as a real password check.
+      await bcryptDecoy("warm", 10)
+      const realHash = await bcrypt.hash("correct horse", 10)
+      const t0 = performance.now()
+      await bcrypt.compare("wrong guess", realHash)
+      const realMs = performance.now() - t0
+      const t1 = performance.now()
+      assert.equal(await bcryptDecoy("wrong guess", 10), false, "decoy never authenticates")
+      const decoyMs = performance.now() - t1
+      assert.ok(decoyMs > realMs * 0.5, `decoy compare costs a real bcrypt round (decoy ${decoyMs.toFixed(0)}ms vs real ${realMs.toFixed(0)}ms)`)
     }
 
     // ── Cron claim integrity ──────────────────────────────────────

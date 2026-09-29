@@ -121,6 +121,8 @@ export async function POST(request: Request) {
         })
         .catch(() => null)
       if (!entry) {
+        // The swallowed create left the just-stored public blob unreferenced.
+        await deleteImagesIfUnreferenced([imageUrl]).catch(() => {})
         return NextResponse.json({ error: "You have already entered this week" }, { status: 409 })
       }
       // +5 CONTEST_ENTRY — once per entered contest period. The (userId,

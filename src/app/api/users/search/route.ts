@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { publicUserSelect, isBanned, getClientIp, hashIp } from "@/lib/security"
+import { publicUserSelect, isBanned, getClientIp, hashIp, blockedUserIds } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
 
 function escapeLike(str: string): string {
@@ -36,10 +36,13 @@ export async function GET(request: Request) {
   }
 
   const q = escapeLike(raw)
+  // Mention/DM pickers honor blocks in both directions, like global search.
+  const blocked = await blockedUserIds(userId)
 
   const users = await prisma.user.findMany({
     where: {
       banned: false,
+      ...(blocked.length ? { id: { notIn: blocked } } : {}),
       // TerpBot is a bot, not a community member — keep it out of user pickers.
       profile: { isNot: { username: "terpbot" } },
       // Suspended accounts aren't discoverable while suspended (same rule

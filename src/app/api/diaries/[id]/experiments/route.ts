@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { unauthorized, forbidden, isBanned, getClientIp, logSecurityEvent, enforceLinkTrust } from "@/lib/security"
+import { unauthorized, forbidden, isBanned, getClientIp, logSecurityEvent, enforceLinkTrust, isActiveAuthorRow } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
 import { checkMaintenance } from "@/lib/maintenance"
 import { revalidateTag } from "next/cache"
@@ -37,14 +37,16 @@ export async function GET(
 
   const diary = await prisma.growDiary.findUnique({
     where: { id },
-    select: { id: true, authorId: true, deleted: true, visibility: true },
+    select: { id: true, authorId: true, deleted: true, visibility: true, author: { select: { banned: true, suspendedUntil: true } } },
   })
   // One 404 for missing/deleted — no existence oracle.
   if (!diary || diary.deleted) {
     return NextResponse.json({ error: "Diary not found" }, { status: 404 })
   }
   const isOwner = session?.user?.id === diary.authorId
-  if (!isOwner && diary.visibility === "PRIVATE") {
+  // Mirrors the diary page: a banned/suspended author's grow 404s for
+  // everyone else, so its experiment history can't stay reachable here.
+  if (!isOwner && (diary.visibility === "PRIVATE" || !isActiveAuthorRow(diary.author))) {
     return NextResponse.json({ error: "Diary not found" }, { status: 404 })
   }
 

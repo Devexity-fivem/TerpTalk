@@ -14,7 +14,7 @@ import { reconcileReferralPayouts } from "@/lib/referrals"
 import { drainPendingReversals } from "@/lib/reputation-outbox"
 import { drainPendingXpReversals } from "@/lib/progression-outbox"
 import { findProgressionDrift } from "@/lib/progression"
-import { logSecurityEvent } from "@/lib/security"
+import { logSecurityEvent, safeEqualSecret } from "@/lib/security"
 import { reconcileQuestPayouts } from "@/lib/quests"
 import { reconcileChallengePayouts } from "@/lib/challenges"
 import { sweepExpiredSessions } from "@/lib/terpbot-session"
@@ -42,7 +42,7 @@ export async function GET(request: NextRequest) {
   // production (local/manual runs).
   const secret = process.env.CRON_SECRET
   if (secret) {
-    if (request.headers.get("authorization") !== `Bearer ${secret}`) {
+    if (!safeEqualSecret(request.headers.get("authorization"), `Bearer ${secret}`)) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
   } else {

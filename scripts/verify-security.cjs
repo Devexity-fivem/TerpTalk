@@ -226,7 +226,7 @@ const apiFiles = () => {
   // ── 11. Discovery security invariants ──
   const search = read("app/api/search/route.ts");
   check("search: hidden categories filtered", search.includes("hidden: false"));
-  check("search: suspended users excluded", search.includes("suspendedUntil"));
+  check("search: suspended users excluded", search.includes("suspendedUntil") || search.includes("activeAuthor()"));
   check("search: LIKE wildcards escaped", search.includes("escapeLike"));
   check("search: query length bounded", /slice\(0,\s*100\)/.test(search));
   check("search: results bounded (take)", search.includes("take:"));

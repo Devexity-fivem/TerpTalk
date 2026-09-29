@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { getClientIp, hashIp } from "@/lib/security"
+import { getClientIp, hashIp, activeAuthor } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
 
 // Public: list tags. Optionally search with ?q=soil
@@ -15,20 +15,20 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url)
     const q = searchParams.get("q")?.trim().toLowerCase().slice(0, 40) || ""
 
+    // Same visibility rule as search's tag bucket: counts cover only live
+    // public threads by active authors, and a tag used solely inside
+    // hidden (staff) categories isn't listed at all. Unused tags stay.
+    const visibleThread = { deleted: false, category: { hidden: false }, author: activeAuthor() }
     const tags = await prisma.tag.findMany({
-      where: q
-        ? {
-            OR: [
-              { name: { startsWith: q } },
-              { slug: { startsWith: q } },
-            ],
-          }
-        : undefined,
+      where: {
+        OR: [{ threads: { none: {} } }, { threads: { some: { thread: visibleThread } } }],
+        ...(q ? { AND: [{ OR: [{ name: { startsWith: q } }, { slug: { startsWith: q } }] }] } : {}),
+      },
       take: q ? 10 : 200,
       orderBy: { name: "asc" },
       include: {
         _count: {
-          select: { threads: true },
+          select: { threads: { where: { thread: visibleThread } } },
         },
       },
     })

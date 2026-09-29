@@ -2,7 +2,7 @@ import { NextAuthOptions } from "next-auth"
 import CredentialsProvider from "next-auth/providers/credentials"
 import { prisma } from "@/lib/prisma"
 import { rateLimit } from "@/lib/rate-limit"
-import { logSecurityEvent, getClientIp, hashIp } from "@/lib/security"
+import { logSecurityEvent, getClientIp, hashIp, bcryptDecoy } from "@/lib/security"
 import bcrypt from "bcryptjs"
 
 export const secureCookies = process.env.NEXTAUTH_URL?.startsWith("https://") || !!process.env.VERCEL
@@ -104,7 +104,9 @@ export const authOptions: NextAuthOptions = {
         })
 
         if (!user || !user.password) {
-          // Uniform error — do not reveal whether the account exists.
+          // Uniform error AND uniform timing — do not reveal whether the
+          // account exists.
+          await bcryptDecoy(credentials.password, 12)
           // userFound is internal-only metadata (SecurityEvent is never
           // user-visible) so transient lookup misses stay diagnosable
           // without changing what the client is told.

@@ -29,11 +29,14 @@ export async function POST(request: NextRequest) {
     const user = await prisma.user.findUnique({
       where: { id: userId },
       select: {
-        banned: true, sessionVersion: true, lastSeenAt: true,
+        banned: true, suspendedUntil: true, sessionVersion: true, lastSeenAt: true,
         profile: { select: { hideOnlineStatus: true } },
       },
     })
-    if (!user || user.banned || (token?.sessionVersion as number | undefined ?? 0) !== (user.sessionVersion ?? 0)) {
+    // Same predicate as isSessionValid — a suspended member must not keep
+    // stamping presence or triggering quest/streak/challenge evaluation.
+    const suspended = !!user?.suspendedUntil && user.suspendedUntil > new Date()
+    if (!user || user.banned || suspended || (token?.sessionVersion as number | undefined ?? 0) !== (user.sessionVersion ?? 0)) {
       return forbidden()
     }
 

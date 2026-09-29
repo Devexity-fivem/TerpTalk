@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { unstable_cache } from "next/cache"
-import { getClientIp, hashIp, XP_ORDER, blockedUserIds } from "@/lib/security"
+import { getClientIp, hashIp, XP_ORDER, blockedUserIds, activeAuthor } from "@/lib/security"
 import { getToken } from "next-auth/jwt"
 import { sessionCookieName } from "@/lib/auth"
 import { rateLimit } from "@/lib/rate-limit"
@@ -26,13 +26,6 @@ function matchSnippet(text: string, q: string, max = 160): string {
   return excerpt.replace(/\s+/g, " ").trim()
 }
 
-// Suspended accounts behave like banned ones in search results — their
-// profiles should not be discoverable while suspended.
-const activeUser = {
-  banned: false,
-  OR: [{ suspendedUntil: null }, { suspendedUntil: { lt: new Date() } }],
-}
-
 const TYPES = new Set(["all", "threads", "strains", "users", "diaries", "guides", "setups", "tags"])
 const ALL_LIMIT = 10
 const TYPE_PAGE = 20
@@ -40,6 +33,10 @@ const MAX_PAGE = 50
 
 const getSearchResults = unstable_cache(
   async (q: string, t: string, sort: string, categorySlug: string, page: number) => {
+    // Suspended accounts behave like banned ones in search results. Built
+    // per call — a module-level fragment froze `now` at import time, so
+    // expired suspensions stayed hidden until the next cold start.
+    const activeUser = activeAuthor()
     const contains = { contains: q, mode: "insensitive" as const }
     const limit = t === "all" ? ALL_LIMIT : TYPE_PAGE
     const skip = t === "all" ? 0 : (page - 1) * limit

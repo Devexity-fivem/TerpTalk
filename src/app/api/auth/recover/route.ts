@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { getClientIp, hashIp, logSecurityEvent, LIMITS } from "@/lib/security"
+import { getClientIp, hashIp, logSecurityEvent, LIMITS, bcryptDecoy } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
 import { isValidPhrase, verifyPhrase, newRecoveryPhrase, hashPhrase } from "@/lib/recovery"
 import bcrypt from "bcryptjs"
@@ -69,7 +69,12 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Recovery failed — check your username and phrase." }, { status: 400 })
     }
 
-    if (!user || user.banned || !user.recoveryPhraseHash) return fail()
+    // Same bcrypt cost on every failure path — an unknown or phrase-less
+    // account must not answer measurably faster than a wrong phrase.
+    if (!user || user.banned || !user.recoveryPhraseHash) {
+      await bcryptDecoy(phrase, 10)
+      return fail()
+    }
 
     const ok = await verifyPhrase(phrase, user.recoveryPhraseHash)
     if (!ok) return fail()
@@ -80,14 +85,18 @@ export async function POST(request: Request) {
       hashPhrase(newPhrase),
     ])
 
-    await prisma.user.update({
-      where: { id: user.id },
+    // Compare-and-swap on the verified hash: a phrase is strictly single
+    // use, so two concurrent recoveries with the same phrase can't both
+    // succeed (and hand out a phrase that the other write already replaced).
+    const swapped = await prisma.user.updateMany({
+      where: { id: user.id, recoveryPhraseHash: user.recoveryPhraseHash },
       data: {
         password: hashed,
         recoveryPhraseHash: newPhraseHash,
         sessionVersion: { increment: 1 },
       },
     })
+    if (swapped.count !== 1) return fail()
 
     await logSecurityEvent("RECOVERY_SUCCESS", { userId: user.id, ip })
 

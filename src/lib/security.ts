@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma"
-import { createHash } from "crypto"
+import { createHash, randomBytes, timingSafeEqual } from "crypto"
+import bcrypt from "bcryptjs"
 import { NextResponse } from "next/server"
 import { STANDING_LINKS } from "@/lib/progression-config"
 import { TERPBOT_USERNAME } from "@/lib/terpbot-constants"
@@ -324,6 +325,32 @@ export function getClientIp(request: { headers: Headers | Record<string, string 
     }
   }
   return "unknown"
+}
+
+// ─── Timing-safe credential helpers ─────────────────────────────────
+
+// Decoy bcrypt compare for credential paths where the account (or its
+// secret) doesn't exist. Without it an unknown username answers in ~1ms
+// while a real one pays the full bcrypt cost — a timing oracle that
+// undoes the uniform error message. Cost must match the real hash.
+const decoyHashes = new Map<number, Promise<string>>()
+export async function bcryptDecoy(input: string, cost: 10 | 12): Promise<false> {
+  let hash = decoyHashes.get(cost)
+  if (!hash) {
+    hash = bcrypt.hash(randomBytes(16).toString("hex"), cost)
+    decoyHashes.set(cost, hash)
+  }
+  await bcrypt.compare(input, await hash)
+  return false
+}
+
+// Constant-time secret comparison. Both sides are hashed first so the
+// comparison never short-circuits on length.
+export function safeEqualSecret(provided: string | null | undefined, expected: string): boolean {
+  if (typeof provided !== "string") return false
+  const a = createHash("sha256").update(provided).digest()
+  const b = createHash("sha256").update(expected).digest()
+  return timingSafeEqual(a, b)
 }
 
 export function hashIp(ip: string): string {

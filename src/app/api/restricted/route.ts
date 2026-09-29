@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import bcrypt from "bcryptjs"
 import { prisma } from "@/lib/prisma"
-import { getClientIp, hashIp, logSecurityEvent } from "@/lib/security"
+import { getClientIp, hashIp, logSecurityEvent, bcryptDecoy } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
 import { notifyMany } from "@/lib/notify"
 
@@ -43,8 +43,10 @@ export async function POST(request: NextRequest) {
       },
     })
 
-    const ok = !!user?.password && (await bcrypt.compare(password, user.password))
-    if (!ok) {
+    const ok = user?.password
+      ? await bcrypt.compare(password, user.password)
+      : await bcryptDecoy(password, 12)
+    if (!ok || !user) {
       await logSecurityEvent("LOGIN_FAILURE", {
         ip,
         userAgent: request.headers.get("user-agent"),
