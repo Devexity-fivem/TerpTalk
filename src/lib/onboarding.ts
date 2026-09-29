@@ -33,6 +33,7 @@ async function fetchCandidatePool() {
         bio: true,
         avatarUrl: true,
         xp: true,
+        publicMilestoneOptOut: true,
         user: {
           select: {
             id: true,
@@ -129,7 +130,9 @@ export async function getSuggestedUsers(viewerId: string, limit = 10): Promise<S
     image: p.avatarUrl ?? p.user.image,
     role: p.user.role,
     bio: p.bio,
-    xp: p.xp,
+    // Opted-out members hide public status — null XP before it crosses the
+    // client boundary (internal scoring above still uses the real value).
+    xp: p.publicMilestoneOptOut ? null : p.xp,
     followers: p.user._count.following,
   }))
 }

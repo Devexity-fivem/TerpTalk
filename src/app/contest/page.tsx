@@ -61,7 +61,7 @@ export default async function ContestPage() {
                 username={lastWinner.user.profile?.username}
                 name={lastWinner.user.profile?.username || lastWinner.user.name}
                 avatarUrl={lastWinner.user.image}
-                xp={lastWinner.user.profile?.xp}
+                xp={lastWinner.user.profile?.publicMilestoneOptOut ? null : lastWinner.user.profile?.xp}
                 publicMilestoneOptOut={lastWinner.user.profile?.publicMilestoneOptOut}
                 size="sm"
               />
@@ -100,7 +100,7 @@ export default async function ContestPage() {
                   username={lastDiaryWinner.user.profile?.username}
                   name={lastDiaryWinner.user.profile?.username || lastDiaryWinner.user.name}
                   avatarUrl={lastDiaryWinner.user.image}
-                  xp={lastDiaryWinner.user.profile?.xp}
+                  xp={lastDiaryWinner.user.profile?.publicMilestoneOptOut ? null : lastDiaryWinner.user.profile?.xp}
                   publicMilestoneOptOut={lastDiaryWinner.user.profile?.publicMilestoneOptOut}
                   size="sm"
                 />

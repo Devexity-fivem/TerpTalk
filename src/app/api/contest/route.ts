@@ -16,7 +16,9 @@ function userDto(u: { id?: string; name?: string | null; image?: string | null; 
     username: u.profile?.username ?? null,
     image: u.image ?? null,
     role: u.role ?? null,
-    xp: u.profile?.xp ?? 0,
+    // Opted-out members hide public status — null XP so the hidden value
+    // never ships; the flag stays for client-side chip suppression.
+    xp: u.profile?.publicMilestoneOptOut ? null : (u.profile?.xp ?? 0),
     publicMilestoneOptOut: u.profile?.publicMilestoneOptOut ?? false,
   }
 }

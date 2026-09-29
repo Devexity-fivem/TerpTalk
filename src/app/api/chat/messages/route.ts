@@ -46,7 +46,7 @@ function messageDto(m: ChatMessageWithAuthor) {
           username: m.replyTo.author.profile?.username ?? null,
           image: m.replyTo.author.image ?? null,
           role: m.replyTo.author.role ?? null,
-          xp: m.replyTo.author.profile?.xp ?? 0,
+          xp: m.replyTo.author.profile?.publicMilestoneOptOut ? null : (m.replyTo.author.profile?.xp ?? 0),
           publicMilestoneOptOut: m.replyTo.author.profile?.publicMilestoneOptOut ?? false,
         },
       }
@@ -62,7 +62,9 @@ function messageDto(m: ChatMessageWithAuthor) {
       username: m.author.profile?.username ?? null,
       image: m.author.image ?? null,
       role: m.author.role ?? null,
-      xp: m.author.profile?.xp ?? 0,
+      // Opted-out members hide public status — null XP so the hidden value
+      // never ships; the flag stays for client-side chip suppression.
+      xp: m.author.profile?.publicMilestoneOptOut ? null : (m.author.profile?.xp ?? 0),
       publicMilestoneOptOut: m.author.profile?.publicMilestoneOptOut ?? false,
     },
     replyTo,

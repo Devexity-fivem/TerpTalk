@@ -1,7 +1,7 @@
 import { buildMetadata, snippet } from "@/lib/seo"
 import { Breadcrumbs } from "@/components/breadcrumbs"
 import { prisma } from "@/lib/prisma"
-import { publicUserSelect, activeAuthor } from "@/lib/security"
+import { publicUserSelect, activeAuthor, blockedUserIds } from "@/lib/security"
 import { notFound, permanentRedirect } from "next/navigation"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
@@ -63,6 +63,10 @@ export default async function SetupPage({ params }: { params: Promise<{ id: stri
 
   const session = await getServerSession(authOptions)
   const isOwner = session?.user?.id === setup.authorId
+  // Hide comments from members the viewer blocked (or who blocked the
+  // viewer) — same boundary the thread page applies to posts.
+  const blockedIds = new Set(await blockedUserIds(session?.user?.id))
+  const comments = setup.comments.filter((c) => !blockedIds.has(c.authorId))
   // Derived "edited" marker — same 60s grace as diary updates: a plain
   // creation write must not count as an edit.
   const edited = setup.updatedAt.getTime() - setup.createdAt.getTime() > 60_000
@@ -226,10 +230,10 @@ export default async function SetupPage({ params }: { params: Promise<{ id: stri
         {/* Comments */}
         <div className="bg-card/80 rounded-2xl border border-border/70 p-6">
           <h2 className="font-display font-semibold mb-4 flex items-center gap-2">
-            <MessageSquare className="w-5 h-5 text-primary" /> Comments ({setup._count.comments})
+            <MessageSquare className="w-5 h-5 text-primary" /> Comments ({comments.length})
           </h2>
           <div className="space-y-4 mb-6">
-            {setup.comments.map((c) => (
+            {comments.map((c) => (
               <div key={c.id} id={`comment-${c.id}`} className="flex gap-3 scroll-mt-20">
                 <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0 text-primary text-xs font-bold">
                   {(c.author.profile?.username || c.author.name || "?")[0].toUpperCase()}
@@ -256,7 +260,7 @@ export default async function SetupPage({ params }: { params: Promise<{ id: stri
                 </div>
               </div>
             ))}
-            {setup.comments.length === 0 && (
+            {comments.length === 0 && (
               <p className="text-sm text-muted-foreground">No comments yet — be the first to ask about this setup.</p>
             )}
           </div>

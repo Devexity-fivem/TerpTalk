@@ -28,7 +28,9 @@ export function toSearchProfileDTO(u: SearchProfileRow) {
     username: u.username,
     userId: u.userId,
     avatarUrl: u.avatarUrl,
-    xp: u.xp,
+    // Opted-out members hide public status — null the raw XP so the hidden
+    // value never reaches the client; the flag stays for chip suppression.
+    xp: u.publicMilestoneOptOut ? null : u.xp,
     publicMilestoneOptOut: u.publicMilestoneOptOut,
     bio: u.bio,
     buildTitle: u.publicMilestoneOptOut || totalPathXp < 50 ? null : buildTitle(pathXp).title,

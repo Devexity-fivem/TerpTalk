@@ -81,6 +81,7 @@ function diaryRow(over: Partial<CommunityDiaryRow> = {}): CommunityDiaryRow {
     harvestedAt: null,
     yieldAmount: null,
     yieldUnit: null,
+    yieldPrivate: false,
     harvestRating: null,
     harvestDifficulty: null,
     mediumType: null,
@@ -173,6 +174,19 @@ async function run() {
     assert.equal(y.suppressed, false)
     // sorted oz: [2, 3.5, 4, 16, 17.6] → median 4
     assert.equal(y.value, 4)
+  })
+
+  await check("harvest: yieldPrivate rows excluded from public yield aggregates", () => {
+    const mk = (oz: number, priv = false) =>
+      diaryRow({ harvested: true, harvestedAt: d(90), yieldAmount: oz, yieldUnit: "oz", yieldPrivate: priv })
+    const diaries = [mk(1), mk(2), mk(3), mk(4), mk(5), mk(99, true)]
+    const s = summarizeCommunityDiaries(diaries, 6)
+    const y = s.harvest.medianYieldOz
+    assert.equal(y.n, 5, "private yield must not count toward the median sample")
+    // sorted oz: [1, 2, 3, 4, 5] → median 3 (99 oz private row must not shift it)
+    assert.equal(y.value, 3)
+    const buckets = s.harvest.yieldBuckets.rows.map((r) => r.label)
+    assert.ok(buckets.every((l) => l !== "8+ oz"), "private 99 oz must not appear in the 8+ oz bucket")
   })
 
   await check("harvest: median even sample + suppression below 5", () => {

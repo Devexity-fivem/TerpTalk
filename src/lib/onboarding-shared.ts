@@ -9,7 +9,8 @@ export interface SuggestedUser {
   image: string | null
   role: string
   bio: string | null
-  xp: number
+  /** Raw XP — null when the member opted out of public status display. */
+  xp: number | null
   followers: number
 }
 

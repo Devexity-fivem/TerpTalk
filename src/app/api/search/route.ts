@@ -269,7 +269,13 @@ const getSearchResults = unstable_cache(
       users: usersDto,
       diaries: paginate(diariesRaw),
       guides: paginate(guidesRaw),
-      setups: paginate(setupsRaw),
+      // Opted-out authors ship xp: null (public status hidden) — the flag
+      // stays so ProfileCard/TierChip suppress the rank chip client-side.
+      setups: paginate(setupsRaw).map((s) =>
+        s.author?.profile?.publicMilestoneOptOut
+          ? { ...s, author: { ...s.author, profile: { ...s.author.profile, xp: null } } }
+          : s
+      ),
       tags: paginate(tagsRaw),
       hasMore,
     }

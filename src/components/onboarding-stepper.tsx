@@ -644,7 +644,7 @@ export default function OnboardingStepper({
                             <RoleBadge role={u.role} />
                           </div>
                           <div className="text-xs text-muted-foreground">
-                            {u.xp.toLocaleString()} XP · {u.followers} follower{u.followers === 1 ? "" : "s"}
+                            {u.xp != null && <>{u.xp.toLocaleString()} XP · </>}{u.followers} follower{u.followers === 1 ? "" : "s"}
                           </div>
                         </div>
                         {on && <Check className="w-4 h-4 text-primary flex-shrink-0" aria-hidden />}

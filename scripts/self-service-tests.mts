@@ -344,6 +344,16 @@ async function run() {
     assert.ok(Array.isArray(optOut.recentProgression), "recentProgression is an array")
     assert.equal(optOut.recentProgression.length, 0, "opted-out member exposes no recentProgression")
     assert.equal(optOut.profile.growStreak, 0, "opted-out member growStreak zeroed")
+    // XP and all its derivatives must be nulled server-side — the hidden
+    // value may not reach the payload and rely on display suppression.
+    assert.equal(optOut.profile.xp, null, "opted-out member xp nulled")
+    assert.equal(optOut.profile.rank, null, "opted-out member rank nulled")
+    assert.equal(optOut.profile.rankProgress, null, "opted-out member rankProgress nulled")
+    assert.equal(optOut.profile.xpStage, null, "opted-out member xpStage nulled")
+    assert.equal(optOut.profile.stageProgress, null, "opted-out member stageProgress nulled")
+    assert.equal(optOut.profile.standingTier, null, "opted-out member standingTier nulled")
+    assert.equal(optOut.profile.nextUnlock, null, "opted-out member nextUnlock nulled")
+    assert.equal(optOut.profile.mastery.length, 0, "opted-out member mastery hidden")
 
     // Default member with one public XP event: rows carry the public
     // label/amount/createdAt shape and never leak the raw type.
@@ -361,6 +371,10 @@ async function run() {
     // hideOnlineStatus alone must not empty recentProgression — the two
     // privacy flags stay independent (b has hideOnlineStatus=true).
     assert.ok(visible.recentProgression.length >= 1, "hideOnlineStatus does not hide recentProgression")
+    // Non-opted-out member keeps real progression values (permitted viewer).
+    assert.equal(typeof visible.profile.xp, "number", "default member xp ships")
+    assert.ok(visible.profile.rank?.name, "default member rank ships")
+    assert.ok(visible.profile.mastery.length > 0, "default member mastery ships")
 
     // Diary visibility helpers + PATCH validation.
     assert.equal(isDiaryVisibility("PUBLIC"), true)
@@ -615,7 +629,10 @@ async function run() {
     const dto = toSearchProfileDTO({ ...dtoBase, publicMilestoneOptOut: false })
     assert.ok(typeof dto.buildTitle === "string" && dto.buildTitle.length > 0, "search DTO derives identity from path XP")
     assert.ok(!("masteryProgress" in dto) && !("user" in dto), "search DTO drops internals")
-    assert.equal(toSearchProfileDTO({ ...dtoBase, publicMilestoneOptOut: true }).buildTitle, null, "opt-out hides search identity")
+    assert.equal(dto.xp, 10, "non-opted-out member keeps xp for the tier chip")
+    const dtoHidden = toSearchProfileDTO({ ...dtoBase, publicMilestoneOptOut: true })
+    assert.equal(dtoHidden.buildTitle, null, "opt-out hides search identity")
+    assert.equal(dtoHidden.xp, null, "opt-out nulls raw xp in the payload")
     assert.equal(
       toSearchProfileDTO({ ...dtoBase, publicMilestoneOptOut: false, user: { masteryProgress: [{ mastery: "KNOWLEDGE", xp: 10 }] } }).buildTitle,
       null, "below 50 path XP → no identity claim"

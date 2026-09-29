@@ -421,6 +421,7 @@ export async function getMemberHomeData(userId: string): Promise<MemberHomeData 
             title: true,
             yieldAmount: true,
             yieldUnit: true,
+            yieldPrivate: true,
             strain: true,
             strainRef: { select: { name: true } },
             author: { select: publicUserSelect },
@@ -541,8 +542,11 @@ export async function getMemberHomeData(userId: string): Promise<MemberHomeData 
         slug: h.slug,
         title: h.title,
         strainName: h.strainRef?.name ?? h.strain ?? "strain",
+        // yieldPrivate harvests show title/strain only — the member flagged
+        // the yield as private, so it must not appear on other members'
+        // home feeds even as part of a public diary.
         yieldText:
-          h.yieldAmount != null && h.yieldUnit ? `${h.yieldAmount}${h.yieldUnit}` : null,
+          !h.yieldPrivate && h.yieldAmount != null && h.yieldUnit ? `${h.yieldAmount}${h.yieldUnit}` : null,
         authorName: h.author.profile?.username || h.author.name || "a grower",
       })),
     },

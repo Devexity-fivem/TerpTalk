@@ -534,7 +534,9 @@ function MemberProfile({ data, isSelf, username }: { data: ProfileResponse; isSe
   const statsBlock = show("stats") && (
     <>
       {/* Mastery map — "what kind of grower am I becoming".
-          Relative share bars, not five competing currencies. */}
+          Relative share bars, not five competing currencies. Empty for
+          members who opted out of public status display (server ships []). */}
+      {profile.mastery.length > 0 && (
       <SectionCard
         title="Grower profile"
         id="mastery-map"
@@ -565,6 +567,7 @@ function MemberProfile({ data, isSelf, username }: { data: ProfileResponse; isSe
           ))}
         </ul>
       </SectionCard>
+      )}
 
       {/* Expanded stats — the full ≤8 registry beyond the hero 4 */}
       {profile.notableStats.length > heroStats.length && (
@@ -576,7 +579,9 @@ function MemberProfile({ data, isSelf, username }: { data: ProfileResponse; isSe
         </SectionCard>
       )}
 
-      {/* Progression — informative, never the point of the page */}
+      {/* Progression — informative, never the point of the page. Server
+          nulls rank/xp fields for opt-outs, so the whole card drops out. */}
+      {profile.rank && profile.rankProgress && (
       <SectionCard title="Progression" id="progression" compact={compact} actions={<Link href="/reputation" className="text-xs text-primary hover:underline">How it works</Link>}>
         <div className="flex items-center gap-2 flex-wrap text-sm mb-2">
           <span className={cn("inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium", profile.rank.bg, profile.rank.color)}>
@@ -592,7 +597,7 @@ function MemberProfile({ data, isSelf, username }: { data: ProfileResponse; isSe
           <span>
             {profile.stageProgress && profile.stageProgress.next > 0
               ? <>{profile.stageProgress.current} / {profile.stageProgress.next} XP to next stage</>
-              : <>{profile.xp} XP — top of the ladder</>}
+              : <>{profile.xp ?? 0} XP — top of the ladder</>}
           </span>
           <span>{profile.stageProgress?.percent ?? profile.rankProgress.percent}%</span>
         </div>
@@ -609,6 +614,7 @@ function MemberProfile({ data, isSelf, username }: { data: ProfileResponse; isSe
           </p>
         )}
       </SectionCard>
+      )}
     </>
   )
 
@@ -721,7 +727,7 @@ function MemberProfile({ data, isSelf, username }: { data: ProfileResponse; isSe
                 <div className="flex items-start justify-between gap-4 flex-wrap">
                   <div className="min-w-0">
                     <h1 className="font-display text-2xl font-bold mb-1 break-words flex items-center gap-2 flex-wrap tracking-tight">
-                      <span className={profile.statusHidden ? "" : (profile.rank.nameplate ?? "")}>@{profile.username}</span>
+                      <span className={profile.statusHidden ? "" : (profile.rank?.nameplate ?? "")}>@{profile.username}</span>
                       <RoleBadge role={profile.role} />
                       {profile.verified && (
                         <Tooltip content={profile.verified === "legacy" ? "Verified member — established community account" : "Progression verified — Respected standing earned through real contributions"}>
@@ -775,12 +781,14 @@ function MemberProfile({ data, isSelf, username }: { data: ProfileResponse; isSe
                     </p>
                     {/* Progression identity row */}
                     <div className="flex items-center gap-2 flex-wrap mb-2">
+                      {profile.rank && (
                       <Tooltip content={`${profile.rank.name} rank — earned from community contributions`}>
                         <span className={cn("inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium", profile.rank.bg, profile.rank.color)}>
                           <span className="text-sm" aria-hidden="true">{profile.rank.icon}</span>
                           {profile.rank.name}
                         </span>
                       </Tooltip>
+                      )}
                       {profile.xpStage && (
                         <span className="text-xs text-muted-foreground">
                           Grow Level {profile.xpStage.level} · {profile.xpStage.stageName}

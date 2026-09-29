@@ -192,14 +192,17 @@ export interface PublicProfileDTO {
   businessUrl: string | null
   image: string | null
   joinDate: Date
-  xp: number
+  /** Raw XP — null when the member opted out of public status display
+      (publicMilestoneOptOut) or the profile is a bot, so the hidden value
+      never reaches an unauthorized viewer's payload. */
+  xp: number | null
   /** Named standing tier for display, or null when the member opted out of
       public status display. The raw standing number is never public. */
   standingTier: { name: string; icon: string; color: string; bg: string } | null
-  rank: ReturnType<typeof rankDisplay>
-  rankProgress: ReturnType<typeof xpRankProgress>
-  xpStage: ReturnType<typeof xpStage>
-  stageProgress: ReturnType<typeof xpStageProgress>
+  rank: ReturnType<typeof rankDisplay> | null
+  rankProgress: ReturnType<typeof xpRankProgress> | null
+  xpStage: ReturnType<typeof xpStage> | null
+  stageProgress: ReturnType<typeof xpStageProgress> | null
   /** Deterministic path-XP identity ("Grow Mentor"…) — ≥50 path XP only,
       and suppressed when the member hides public status. */
   buildTitle: string | null
@@ -787,7 +790,7 @@ export async function getPublicProfileData(
     businessUrl: safeUrl(profile.businessUrl),
     image: profile.user.image || profile.avatarUrl,
     joinDate: profile.joinDate,
-    xp: profile.xp,
+    xp: hideStatus || isBot ? null : profile.xp,
     // Named tier only, and only when the member hasn't opted out of public
     // status display — same rule as the /card DTO. Raw standing never ships.
     // Named tier only from "Known" upward — below it nothing renders (no
@@ -796,15 +799,17 @@ export async function getPublicProfileData(
     standingTier: hideStatus || isBot || profile.standing < STANDINGS[1].min
       ? null
       : standingDisplay(profile.standing),
-    rank: rankDisplay(profile.xp),
-    rankProgress: xpRankProgress(profile.xp),
-    xpStage: xpStage(profile.xp),
-    stageProgress: xpStageProgress(profile.xp),
+    rank: hideStatus || isBot ? null : rankDisplay(profile.xp),
+    rankProgress: hideStatus || isBot ? null : xpRankProgress(profile.xp),
+    xpStage: hideStatus || isBot ? null : xpStage(profile.xp),
+    stageProgress: hideStatus || isBot ? null : xpStageProgress(profile.xp),
     buildTitle: hideStatus || isBot || totalPathXp < 50 ? null : buildTitle(pathXp).title,
     verified,
     nextUnlock: hideStatus || isBot ? null : nextRankUnlock(profile.xp),
     statusHidden: hideStatus,
-    mastery,
+    // Mastery XP/levels are progression data — suppressed entirely when the
+    // member opted out of public status display.
+    mastery: hideStatus || isBot ? [] : mastery,
     notableStats,
     pinnedHarvest,
     featuredGrow,

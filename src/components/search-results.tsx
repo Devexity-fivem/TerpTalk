@@ -413,7 +413,7 @@ export default function SearchResults() {
                       fallback={<span className="text-primary font-bold text-sm">{u.username[0].toUpperCase()}</span>}
                     />
                     <div className="min-w-0">
-                      <div className="font-medium text-sm flex items-center gap-1.5"><UserPopover username={u.username}>{u.username}</UserPopover> <TierChip xp={u.xp} publicMilestoneOptOut={u.publicMilestoneOptOut} /></div>
+                      <div className="font-medium text-sm flex items-center gap-1.5"><UserPopover username={u.username}>{u.username}</UserPopover> <TierChip xp={u.xp ?? 0} publicMilestoneOptOut={u.publicMilestoneOptOut} /></div>
                       {/* SearchProfileDTO — one-line identity (earned title),
                           never a raw XP number on a card. */}
                       {(u.buildTitle || u.bio) && (

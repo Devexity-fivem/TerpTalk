@@ -69,6 +69,9 @@ export interface CommunityDiaryRow {
   harvestedAt: Date | string | null
   yieldAmount: number | null
   yieldUnit: string | null
+  /** Member flagged this harvest's yield as private — excluded from public
+      yield aggregates (median/buckets). */
+  yieldPrivate: boolean
   harvestRating: number | null
   harvestDifficulty: string | null
   mediumType: string | null
@@ -205,7 +208,9 @@ export function summarizeCommunityDiaries(
       harvestedCount++
       const days = (new Date(d.harvestedAt).getTime() - new Date(d.startDate).getTime()) / DAY_MS
       if (days > 0 && days < 1000) totalDays.push(days)
-      if (d.yieldAmount != null) yieldsOz.push(toOz(toGrams(d.yieldAmount, d.yieldUnit)))
+      // yieldPrivate rows never contribute to public yield aggregates —
+      // a public median/bucket must not leak a hidden value.
+      if (d.yieldAmount != null && !d.yieldPrivate) yieldsOz.push(toOz(toGrams(d.yieldAmount, d.yieldUnit)))
       if (d.harvestRating != null) {
         const key = String(d.harvestRating)
         ratings.set(key, (ratings.get(key) ?? 0) + 1)
@@ -285,6 +290,7 @@ const getGrowStats = unstable_cache(
           harvestedAt: true,
           yieldAmount: true,
           yieldUnit: true,
+          yieldPrivate: true,
           harvestRating: true,
           harvestDifficulty: true,
           mediumType: true,
