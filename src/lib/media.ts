@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma"
 import { canViewDiary } from "@/lib/diary-visibility"
-import { privatizeBlob, deleteImage, isPublicBlobUrl, isPrivateBlobUrl } from "@/lib/blob"
+import { privatizeBlob, deleteImageStrict, publicTwinUrl, isPublicBlobUrl, isPrivateBlobUrl } from "@/lib/blob"
 import { isActiveAuthorRow, isModerator } from "@/lib/security"
 
 /**
@@ -182,9 +182,12 @@ export interface PrivatizeResult {
  * aborts the visibility transition — a private diary must never sit on
  * publicly readable blobs because a copy silently failed.
  *
- * Per object: copy private → repoint row → delete source. A failed
- * source delete leaves a residual public object that no row references
- * (logged, listed by the ops verification pass) — never lost content.
+ * Per object: copy private → repoint row → delete public source. The row
+ * always references a live object — a failed delete never strands content
+ * on a dead URL, but it DOES count as `failed` because the known public
+ * URL still resolves. Retrying is what converges: already-private rows
+ * re-enter here and strict-delete their stale public twin, so the flip
+ * only completes once no public copy of any object remains.
  */
 export async function privatizeDiaryMedia(diaryId: string): Promise<PrivatizeResult> {
   const rows = await prisma.diaryImage.findMany({
@@ -193,7 +196,20 @@ export async function privatizeDiaryMedia(diaryId: string): Promise<PrivatizeRes
   })
   const result: PrivatizeResult = { migrated: 0, failed: 0, skipped: 0 }
   for (const row of rows) {
-    if (isPrivateBlobUrl(row.url) || row.url.startsWith("data:") || !isPublicBlobUrl(row.url)) {
+    if (isPrivateBlobUrl(row.url)) {
+      // Already repointed — but a prior run may have failed to delete the
+      // stale public twin. Revoke it now; if it can't be confirmed gone,
+      // the privacy transition cannot honestly report success.
+      const twin = publicTwinUrl(row.url)
+      if (twin && !(await deleteImageStrict(twin))) {
+        result.failed++
+        console.error("privatizeDiaryMedia: stale public twin survives:", row.id)
+        continue
+      }
+      result.skipped++
+      continue
+    }
+    if (row.url.startsWith("data:") || !isPublicBlobUrl(row.url)) {
       result.skipped++
       continue
     }
@@ -206,7 +222,13 @@ export async function privatizeDiaryMedia(diaryId: string): Promise<PrivatizeRes
         continue
       }
       await prisma.diaryImage.update({ where: { id: row.id }, data: { url: newUrl } })
-      await deleteImage(row.url)
+      if (!(await deleteImageStrict(row.url))) {
+        // Row is private and the copy exists, but the old public URL still
+        // resolves — report failure so the visibility flip aborts.
+        result.failed++
+        console.error("privatizeDiaryMedia: public source survives after repoint:", row.id)
+        continue
+      }
       result.migrated++
     } catch (error) {
       result.failed++

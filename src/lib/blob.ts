@@ -2,7 +2,7 @@
 // Accepts client-resized data URIs; stores them in Blob and returns a
 // small https URL so DB rows stay tiny. Falls back to the data URI when
 // BLOB_READ_WRITE_TOKEN isn't configured so nothing breaks locally.
-import { put, del, get, copy } from "@vercel/blob"
+import { put, del, get, copy, head, BlobNotFoundError } from "@vercel/blob"
 import { randomBytes } from "crypto"
 import sharp from "sharp"
 import { prisma } from "@/lib/prisma"
@@ -44,6 +44,20 @@ export function isPrivateBlobUrl(url: string): boolean {
     return new URL(url).hostname.endsWith(PRIVATE_BLOB_SUFFIX)
   } catch {
     return false
+  }
+}
+
+// The public twin of a private blob — same store id and pathname, only the
+// host suffix differs. Restricted-class objects are copied to private at
+// the same pathname, so a stale public copy is always addressable.
+export function publicTwinUrl(privateUrl: string): string | null {
+  if (!isPrivateBlobUrl(privateUrl)) return null
+  try {
+    const u = new URL(privateUrl)
+    u.hostname = u.hostname.replace(PRIVATE_BLOB_SUFFIX, PUBLIC_BLOB_SUFFIX)
+    return u.toString()
+  } catch {
+    return null
   }
 }
 
@@ -221,6 +235,35 @@ export async function deleteImage(url: string | null | undefined): Promise<void>
     await del(url)
   } catch (error) {
     console.error("Failed to delete blob:", url, error)
+  }
+}
+
+/**
+ * Strict variant for privacy-critical revocation (privatization transitions
+ * and the migration script). Returns false when the object could not be
+ * confirmed deleted — missing token or a store error — so callers can fail
+ * closed instead of reporting a privacy change that didn't happen.
+ * Non-blob URLs return true: there is no public object to revoke.
+ */
+export async function deleteImageStrict(url: string | null | undefined): Promise<boolean> {
+  if (!url || !url.startsWith("https://")) return true
+  if (!isPublicBlobUrl(url) && !isPrivateBlobUrl(url)) return true
+  if (!process.env.BLOB_READ_WRITE_TOKEN) return false
+  try {
+    // Existence check first: deleting an object that was never there is a
+    // successful revocation, and this avoids relying on del()'s exact
+    // behavior toward missing keys.
+    await head(url)
+  } catch (error) {
+    if (error instanceof BlobNotFoundError) return true
+  }
+  try {
+    await del(url)
+    return true
+  } catch (error) {
+    if (error instanceof BlobNotFoundError) return true
+    console.error("Failed to delete blob (strict):", url, error)
+    return false
   }
 }
 
