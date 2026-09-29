@@ -8,14 +8,21 @@
 // skipped. Non-destructive order per object: copy → repoint row → del old.
 // A row is only repointed after the private copy exists. A source delete
 // that cannot be confirmed counts as FAILED and exits non-zero — a run
-// that leaves a public object behind must never look successful. Re-list
-// the store (--list-store) after the run to find residual orphans, then
-// --revoke-orphans deletes any public object no row references.
+// that leaves a public object behind must never look successful.
 //
 //   npx tsx scripts/migrate-private-media.mts                  # live run
 //   npx tsx scripts/migrate-private-media.mts --dry-run        # count only
 //   npx tsx scripts/migrate-private-media.mts --list-store     # audit store vs rows
-//   npx tsx scripts/migrate-private-media.mts --revoke-orphans # delete orphaned public objects
+//   npx tsx scripts/migrate-private-media.mts --revoke-orphans # orphan report (dry-run)
+//   npx tsx scripts/migrate-private-media.mts --revoke-orphans --confirm  # delete twin-safe orphans
+//
+// Orphan remediation is deliberately conservative: an unreferenced public
+// object is only revocable when a private object exists at the same
+// pathname (the migrated copy — deleting the public twin destroys nothing).
+// Unreferenced public objects with NO private twin could be the only
+// surviving copy of something and are never auto-deleted; same for
+// unreferenced private objects, which may be the sole copy left by a
+// failed repoint. "No DB row" alone is never treated as safe-to-destroy.
 //
 // Requires BLOB_READ_WRITE_TOKEN with write access to the store (not
 // needed for --dry-run row classification).
@@ -27,9 +34,13 @@ import { privatizeBlob, deleteImageStrict, isPrivateBlobUrl, isPublicBlobUrl } f
 const DRY_RUN = process.argv.includes("--dry-run")
 const LIST_STORE = process.argv.includes("--list-store")
 const REVOKE_ORPHANS = process.argv.includes("--revoke-orphans")
+const CONFIRM = process.argv.includes("--confirm")
 const BATCH = 200
 // storeImage folder prefixes for the three restricted classes.
 const RESTRICTED_PREFIXES = ["diary-updates/", "forum/", "setups/"]
+// storeImage writes `${folder}/${16 hex chars}.webp` — anything else under
+// a restricted prefix is an unknown shape and never auto-remediated.
+const EXPECTED_OBJECT = /^[a-f0-9]{16}\.webp$/
 
 type Row = { id: string; url: string }
 
@@ -108,11 +119,28 @@ function report(name: string, t: Tally) {
   )
 }
 
+interface StoreObject {
+  url: string
+  pathname: string
+  isPublic: boolean
+  prefix: string
+}
+
 // Store-side audit: list objects under the restricted prefixes and
-// cross-reference pathnames against every image row. Finds orphaned
-// residual public objects (e.g. a repointed row whose source delete
-// failed) that no row scan can see. With --revoke-orphans it deletes
-// them; a revocation that can't be confirmed exits non-zero.
+// cross-reference pathnames against every image row AND against the
+// private side of the store. Per object we report the pathname and class
+// only — never a signed URL, token, or row content.
+//
+// Buckets:
+//   referenced-public  — a row still points at it (pre/post-migration live data)
+//   referenced-private — a row points at it (migrated)
+//   orphan-twin        — unreferenced public WITH a private object at the
+//                        same pathname → the migrated copy exists; safe to revoke
+//   orphan-unique      — unreferenced public with NO private twin → could
+//                        be the only copy; never auto-deleted, needs review
+//   orphan-private     — unreferenced private (e.g. repoint-failure
+//                        leftover) → could be the only copy; report only
+//   suspicious         — pathname doesn't match the storeImage shape
 async function listStore(): Promise<number> {
   if (!process.env.BLOB_READ_WRITE_TOKEN) {
     console.log("--list-store skipped: BLOB_READ_WRITE_TOKEN not configured")
@@ -132,40 +160,101 @@ async function listStore(): Promise<number> {
       }
     }
   }
-  let publicObjs = 0
-  let privateObjs = 0
-  const orphans: string[] = []
+
+  const objects: StoreObject[] = []
   for (const prefix of RESTRICTED_PREFIXES) {
     let cursor: string | undefined
     do {
       const page = await list({ prefix, limit: 1000, ...(cursor ? { cursor } : {}) })
       for (const blob of page.blobs) {
-        const host = new URL(blob.url).hostname
-        if (host.endsWith(".public.blob.vercel-storage.com")) {
-          publicObjs++
-          const path = blob.pathname.startsWith("/") ? blob.pathname : `/${blob.pathname}`
-          if (!rowUrls.has(path)) orphans.push(blob.url)
-        } else {
-          privateObjs++
-        }
+        const pathname = blob.pathname.startsWith("/") ? blob.pathname : `/${blob.pathname}`
+        objects.push({
+          url: blob.url,
+          pathname,
+          isPublic: new URL(blob.url).hostname.endsWith(".public.blob.vercel-storage.com"),
+          prefix,
+        })
       }
       cursor = page.hasMore ? page.cursor : undefined
     } while (cursor)
   }
-  console.log(
-    `store audit: ${publicObjs} public + ${privateObjs} private objects under restricted prefixes;` +
-      ` ${orphans.length} orphaned public (no row reference)`
-  )
-  if (!REVOKE_ORPHANS || orphans.length === 0) return orphans.length
-  let revokeFailed = 0
-  for (const url of orphans) {
-    if (!(await deleteImageStrict(url))) {
-      revokeFailed++
-      console.error(`  FAIL revoke orphan: ${new URL(url).pathname}`)
+
+  const privatePaths = new Set(objects.filter((o) => !o.isPublic).map((o) => o.pathname))
+  const basename = (p: string) => p.slice(p.lastIndexOf("/") + 1)
+
+  const tally = {
+    referencedPublic: 0,
+    referencedPrivate: 0,
+    orphanTwin: [] as StoreObject[],
+    orphanUnique: [] as StoreObject[],
+    orphanPrivate: [] as StoreObject[],
+    suspicious: [] as StoreObject[],
+  }
+  for (const o of objects) {
+    const expected = EXPECTED_OBJECT.test(basename(o.pathname))
+    if (rowUrls.has(o.pathname)) {
+      if (o.isPublic) tally.referencedPublic++
+      else tally.referencedPrivate++
+      continue
+    }
+    if (!expected) {
+      tally.suspicious.push(o)
+      continue
+    }
+    if (!o.isPublic) {
+      tally.orphanPrivate.push(o)
+    } else if (privatePaths.has(o.pathname)) {
+      tally.orphanTwin.push(o)
+    } else {
+      tally.orphanUnique.push(o)
     }
   }
-  console.log(`orphan revocation: ${orphans.length - revokeFailed} deleted, ${revokeFailed} failed`)
-  return revokeFailed > 0 ? -1 : 0
+
+  console.log(
+    `store audit: ${tally.referencedPublic} referenced-public, ${tally.referencedPrivate} referenced-private,` +
+      ` ${tally.orphanTwin.length} orphan-public-with-twin, ${tally.orphanUnique.length} orphan-public-unique,` +
+      ` ${tally.orphanPrivate.length} orphan-private, ${tally.suspicious.length} suspicious`
+  )
+  const printCandidate = (kind: string) => (o: StoreObject) =>
+    console.log(`  ${kind} ${o.prefix} ${o.pathname} ${o.isPublic ? "public" : "private"}`)
+  tally.orphanTwin.forEach(printCandidate("orphan-twin "))
+  tally.orphanUnique.forEach(printCandidate("orphan-unique"))
+  tally.orphanPrivate.forEach(printCandidate("orphan-private"))
+  tally.suspicious.forEach(printCandidate("suspicious   "))
+
+  // Non-zero exit when the store disagrees with "migration complete":
+  // a row still references a public object, an unrevoked public orphan
+  // exists, or an unknown-shaped object needs a human. Unreferenced
+  // private objects are report-only — they are not a public exposure.
+  const unresolved = () =>
+    tally.referencedPublic + tally.orphanTwin.length + tally.orphanUnique.length + tally.suspicious.length
+
+  if (!REVOKE_ORPHANS) {
+    return unresolved()
+  }
+
+  // Remediation. Only twin-verified public orphans are eligible — deleting
+  // them destroys nothing because the same pathname exists privately.
+  if (!CONFIRM) {
+    console.log(
+      `revoke-orphans DRY RUN: ${tally.orphanTwin.length} twin-verified public orphans eligible;` +
+        ` ${tally.orphanUnique.length} unique and ${tally.orphanPrivate.length} private orphans` +
+        ` are report-only. Pass --confirm to delete the twin-verified set.`
+    )
+    return tally.orphanUnique.length + tally.suspicious.length
+  }
+  let revokeFailed = 0
+  for (const o of tally.orphanTwin) {
+    if (!(await deleteImageStrict(o.url))) {
+      revokeFailed++
+      console.error(`  FAIL revoke orphan: ${o.pathname}`)
+    }
+  }
+  console.log(
+    `orphan revocation: ${tally.orphanTwin.length - revokeFailed} deleted, ${revokeFailed} failed;` +
+      ` ${tally.orphanUnique.length} unique + ${tally.orphanPrivate.length} private + ${tally.suspicious.length} suspicious left for manual disposition`
+  )
+  return revokeFailed + tally.referencedPublic + tally.orphanUnique.length + tally.suspicious.length > 0 ? -1 : 0
 }
 
 async function main() {
