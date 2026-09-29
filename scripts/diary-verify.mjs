@@ -501,10 +501,10 @@ const main = async () => {
     // owner / viewer (blocked by owner — mutual semantics) / voter
     // (unrelated member) / guest × PUBLIC / UNLISTED / PRIVATE.
     const tok = M("vis")
-    const mkVis = (visibility) => prisma.growDiary.create({
+    const mkVis = (visibility, authorId = owner.id) => prisma.growDiary.create({
       data: {
         title: `${tok} ${visibility}`, description: "visibility fixture",
-        growType: "INDOOR", startDate: new Date(), authorId: owner.id, visibility,
+        growType: "INDOOR", startDate: new Date(), authorId, visibility,
       },
     })
     const pubD = await mkVis("PUBLIC")
@@ -563,9 +563,9 @@ const main = async () => {
     // route re-evaluates the same predicates per request. data: URIs stand
     // in for blobs locally (storeImage's dev fallback), exercising the
     // full resolve→authorize→stream path.
-    const mkMedia = async (dId) => {
+    const mkMedia = async (dId, authorId = owner.id) => {
       const u = await prisma.diaryUpdate.create({
-        data: { diaryId: dId, authorId: owner.id, title: M("mi"), content: "media fixture", stage: "VEGETATIVE", dayNumber: 1, weekNumber: 1 },
+        data: { diaryId: dId, authorId, title: M("mi"), content: "media fixture", stage: "VEGETATIVE", dayNumber: 1, weekNumber: 1 },
       })
       return prisma.diaryImage.create({ data: { updateId: u.id, url: TINY_PNG } })
     }
@@ -573,8 +573,14 @@ const main = async () => {
     const prvImg = await mkMedia(prvD.id)
     const getMedia = async (kind, id, ck) => {
       const res = await fetch(`${BASE}/api/media/${kind}/${id}`, { headers: ck ? { cookie: ck } : {} })
-      await res.arrayBuffer().catch(() => {})
-      return { status: res.status, cache: res.headers.get("cache-control") || "", type: res.headers.get("content-type") || "" }
+      const buf = await res.arrayBuffer().catch(() => null)
+      return {
+        status: res.status,
+        cache: res.headers.get("cache-control") || "",
+        vary: res.headers.get("vary") || "",
+        type: res.headers.get("content-type") || "",
+        bodyLen: buf?.byteLength ?? -1,
+      }
     }
     // Blocked viewers keep page-equivalent access: block hides discovery,
     // not content the page itself renders (same verdict the diary page
@@ -589,8 +595,13 @@ const main = async () => {
         m.status === mediaExpect[label][who]
           ? pass(`media ${label} → ${who} ${mediaExpect[label][who]}`)
           : fail(`media ${label} ${who}`, m.status)
-        if (m.status === 200 && (!/private/.test(m.cache) || !/^image\//.test(m.type))) {
-          fail(`media ${label} ${who} headers`, { cache: m.cache, type: m.type })
+        if (m.status === 200 && (!/private/.test(m.cache) || !/cookie/i.test(m.vary) || !/^image\//.test(m.type))) {
+          fail(`media ${label} ${who} headers`, { cache: m.cache, vary: m.vary, type: m.type })
+        }
+        // Denials are uniform: same status AND same empty body, so the
+        // endpoint can't distinguish "exists but private" from "missing".
+        if (m.status === 404 && m.bodyLen !== 0) {
+          fail(`media ${label} ${who} denial leaks a body`, m.bodyLen)
         }
       }
     }
@@ -609,6 +620,59 @@ const main = async () => {
     r = await callApi(`/api/diaries/${pubD.id}`, { method: "PATCH", body: { visibility: "PUBLIC" }, cookie: ownerCookie })
     const restored = await getMedia("diary", pubImg.id, undefined)
     restored.status === 200 ? pass("PRIVATE→PUBLIC flip restores media") : fail("media flip restore", restored.status)
+
+    // Repeated transitions stay consistent — a second cycle re-evaluates.
+    // Runs under `voter` so these PATCHes don't consume owner's edit quota.
+    const repD = await mkVis("PUBLIC", voter.id)
+    diaryIds.push(repD.id)
+    const repImg = await mkMedia(repD.id, voter.id)
+    r = await callApi(`/api/diaries/${repD.id}`, { method: "PATCH", body: { visibility: "PRIVATE" }, cookie: voterCookie })
+    const againGuest = await getMedia("diary", repImg.id, undefined)
+    r.status === 200 && againGuest.status === 404
+      ? pass("repeat PUBLIC→PRIVATE flip re-revokes media")
+      : fail("media flip repeat", { patch: r.status, media: againGuest.status })
+    r = await callApi(`/api/diaries/${repD.id}`, { method: "PATCH", body: { visibility: "PUBLIC" }, cookie: voterCookie })
+    const againRestored = await getMedia("diary", repImg.id, undefined)
+    r.status === 200 && againRestored.status === 200
+      ? pass("repeat PRIVATE→PUBLIC flip re-restores media")
+      : fail("media flip repeat restore", { patch: r.status, media: againRestored.status })
+
+    // ── Privatization failure must abort the flip ────────────────────
+    // A row on a real Vercel public host that cannot be privatized (no
+    // BLOB_READ_WRITE_TOKEN here → null; with a token the nonexistent
+    // source throws) means storage privacy cannot be established — the
+    // transition must fail instead of reporting success on public blobs.
+    const failD = await mkVis("PUBLIC", voter.id)
+    diaryIds.push(failD.id)
+    const failUpd = await prisma.diaryUpdate.create({
+      data: { diaryId: failD.id, authorId: voter.id, title: M("fm"), content: "failure fixture", stage: "VEGETATIVE", dayNumber: 1, weekNumber: 1 },
+    })
+    const legacyImg = await prisma.diaryImage.create({
+      data: { updateId: failUpd.id, url: "https://nonexistent0.public.blob.vercel-storage.com/diary-updates/legacy.webp" },
+    })
+    const failOkImg = await mkMedia(failD.id, voter.id)
+    // Missing blob object → uniform 404 even for the owner.
+    const missingBlob = await getMedia("diary", legacyImg.id, voterCookie)
+    missingBlob.status === 404 && missingBlob.bodyLen === 0
+      ? pass("media: unresolvable blob object → uniform 404")
+      : fail("media missing blob", missingBlob.status)
+    r = await callApi(`/api/diaries/${failD.id}`, { method: "PATCH", body: { visibility: "PRIVATE" }, cookie: voterCookie })
+    r.status === 503
+      ? pass("flip to PRIVATE aborts when media cannot be privatized")
+      : fail("media flip failure abort", r.status)
+    const failStillPub = await getMedia("diary", failOkImg.id, undefined)
+    const failRow = await prisma.growDiary.findUnique({ where: { id: failD.id }, select: { visibility: true } })
+    failStillPub.status === 200 && failRow?.visibility === "PUBLIC"
+      ? pass("aborted flip leaves diary PUBLIC and media reachable")
+      : fail("aborted flip state", { media: failStillPub.status, vis: failRow?.visibility })
+    // Repair the object (fixture repoint), retry — transition completes.
+    await prisma.diaryImage.update({ where: { id: legacyImg.id }, data: { url: TINY_PNG } })
+    r = await callApi(`/api/diaries/${failD.id}`, { method: "PATCH", body: { visibility: "PRIVATE" }, cookie: voterCookie })
+    const retryGuest = await getMedia("diary", failOkImg.id, undefined)
+    const retryOwner = await getMedia("diary", failOkImg.id, voterCookie)
+    r.status === 200 && retryGuest.status === 404 && retryOwner.status === 200
+      ? pass("flip retry after repair succeeds and revokes guests")
+      : fail("media flip retry", { patch: r.status, guest: retryGuest.status, owner: retryOwner.status })
 
     // Deleted objects and malformed/unknown ids are uniform 404s.
     const delD = await mkVis("PUBLIC")

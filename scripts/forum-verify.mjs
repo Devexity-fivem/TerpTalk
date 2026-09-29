@@ -112,6 +112,22 @@ const main = async () => {
     ;(await getMedia("post", hidImg.id, undefined)) === 404 ? pass("media: hidden-category image → guest 404") : fail("media hidden guest")
     ;(await getMedia("post", delImg.id, replierCookie)) === 404 ? pass("media: deleted-thread image → 404") : fail("media deleted thread")
 
+    // ── Media proxy: setup images ────────────────────────────────────
+    // SetupImage is restricted-class — reachable while the setup lives,
+    // denied after deletion. data: URI fixtures exercise the same
+    // resolve→authorize→stream path as blob objects.
+    const mediaSetup = await prisma.growSetup.create({
+      data: { authorId: replier.id, title: "__verify media setup", description: "setup media fixture" },
+    })
+    const setupImg = await prisma.setupImage.create({ data: { url: PNG_URI, setupId: mediaSetup.id } })
+    ;(await getMedia("setup", setupImg.id, replierCookie)) === 200 ? pass("media: setup image → member 200") : fail("media setup member")
+    ;(await getMedia("setup", setupImg.id, undefined)) === 200 ? pass("media: setup image → guest 200") : fail("media setup guest")
+    const delSetupRes = await callApi("/api/setups", { method: "DELETE", body: { id: mediaSetup.id }, cookie: replierCookie })
+    delSetupRes.status === 200 ? pass("setup: owner delete via API") : fail("setup delete", delSetupRes.status)
+    ;(await getMedia("setup", setupImg.id, replierCookie)) === 404 ? pass("media: deleted-setup image → owner 404") : fail("media setup deleted owner")
+    ;(await getMedia("setup", setupImg.id, undefined)) === 404 ? pass("media: deleted-setup image → guest 404") : fail("media setup deleted guest")
+    await prisma.growSetup.delete({ where: { id: mediaSetup.id } }).catch(() => {})
+
     // ── 1. Follow toggle ──
     let r = await callApi(FOLLOW_URL, { method: "POST", body: {} })
     r.status === 401 ? pass("anon: follow 401") : fail("anon follow", r.status)
