@@ -774,6 +774,72 @@ const main = async () => {
       if (sec2) await prisma.profileCustomSection.delete({ where: { id: sec2 } }).catch(() => {})
     }
 
+    // ══ 14. Data minimization / indirect disclosure ═══════════════
+    {
+      // Chat: the viewer only learns block ids for authors actually
+      // present in the room — never the full "who blocked me" list.
+      const vw = await createUser("blview")
+      const blocker = await createUser("blocker")
+      users.push(vw, blocker)
+      const { cookie: vwC } = await login(vw.username, vw.password)
+      const blRoom = await prisma.chatRoom.create({ data: { name: `__rv-blroom-${TS}`, slug: `rv-blroom-${TS}`, isPrivate: false }, select: { id: true } })
+      roomIds.push(blRoom.id)
+      await prisma.block.create({ data: { blockerId: blocker.id, blockedId: vw.id } })
+      r = await callApi(`/api/chat/messages?roomId=${blRoom.id}`, { cookie: vwC })
+      r.status === 200 && Array.isArray(r.data?.blockedIds) && !r.data.blockedIds.includes(blocker.id)
+        ? pass("chat: blocker absent from room is not disclosed in blockedIds")
+        : fail("chat blockedIds leak", { status: r.status, ids: r.data?.blockedIds })
+      await prisma.chatMessage.create({ data: { roomId: blRoom.id, authorId: blocker.id, content: M("blmsg") } })
+      r = await callApi(`/api/chat/messages?roomId=${blRoom.id}`, { cookie: vwC })
+      r.status === 200 && r.data.blockedIds.includes(blocker.id) && !r.data.messages.some((m) => m.author?.id === blocker.id)
+        ? pass("chat: blocked author with room messages is filtered and purge-listed")
+        : fail("chat blocked filter", { status: r.status, ids: r.data?.blockedIds })
+
+      // Export: the member's own reports/applications never carry staff
+      // triage notes or staff identities.
+      await prisma.report.create({
+        data: {
+          type: "PROFILE", reason: "SPAM", reporterId: vw.id, reportedId: blocker.id, targetId: blocker.id,
+          status: "RESOLVED", resolution: M("internal-note"), assignedToId: admin.id, resolvedById: admin.id,
+        },
+      })
+      await prisma.staffApplication.create({
+        data: { userId: vw.id, role: "SUPPORT", why: "w", experience: "e", about: "a", status: "REJECTED", reviewNote: M("admin-note"), reviewedBy: admin.id },
+      })
+      const exp = await getHtml("/api/profile/export", vwC)
+      let body = null
+      try { body = JSON.parse(exp.html) } catch { /* reported below */ }
+      const rep = body?.activity?.reportsFiled?.[0]
+      const app = body?.activity?.staffApplications?.[0]
+      exp.status === 200 && rep && app &&
+        !("resolution" in rep) && !("assignedToId" in rep) && !("resolvedById" in rep) &&
+        !("reviewNote" in app) && !("reviewedBy" in app) &&
+        !exp.html.includes(admin.id) && !exp.html.includes(M("internal-note")) && !exp.html.includes(M("admin-note"))
+        ? pass("export: staff triage fields and staff ids stripped from own reports/applications")
+        : fail("export staff fields", { status: exp.status, rep, app })
+      const expCache = exp.headers.get("cache-control") || ""
+      expCache.includes("no-store")
+        ? pass("export: response is no-store")
+        : fail("export cache-control", exp.headers.get("cache-control"))
+      rateKeys.push(`export:${vw.id}`)
+
+      // User card: grow totals are viewer-scoped — private and deleted
+      // diaries never inflate the public count.
+      const mk = (visibility, deleted = false) => prisma.growDiary.create({
+        data: { title: M("cardgrow"), description: "d", growType: "INDOOR", startDate: new Date(), authorId: vw.id, visibility, deleted },
+        select: { id: true },
+      }).then((d) => diaryIds.push(d.id))
+      await mk("PUBLIC")
+      await mk("PRIVATE")
+      await mk("UNLISTED")
+      await mk("PUBLIC", true)
+      const anonCard = await callApi(`/api/users/${vw.username}/card`)
+      const ownCard = await callApi(`/api/users/${vw.username}/card`, { cookie: vwC })
+      anonCard.status === 200 && anonCard.data.totalGrows === 1 && ownCard.data?.totalGrows === 3
+        ? pass("card: totalGrows is public-scoped for visitors, owner sees own non-deleted grows")
+        : fail("card totalGrows", { anon: anonCard.data?.totalGrows, own: ownCard.data?.totalGrows })
+    }
+
     console.log(`\n${results.filter(([s]) => s === "PASS").length} passed, ${results.filter(([s]) => s === "FAIL").length} failed`)
   } catch (e) {
     fail("suite error", String(e?.stack || e))
@@ -785,6 +851,7 @@ const main = async () => {
     for (const id of setupIds) await prisma.growSetup.delete({ where: { id } }).catch(() => {})
     for (const id of strainIds) await prisma.strain.delete({ where: { id } }).catch(() => {})
     for (const u of users) await prisma.user.delete({ where: { id: u.id } }).catch(() => {})
+    if (rateKeys.length) await prisma.rateLimit.deleteMany({ where: { key: { in: rateKeys } } }).catch(() => {})
     await prisma.rateLimit.deleteMany({ where: { OR: [{ key: { contains: "login" } }, { key: { startsWith: "search-suggest" } }, { key: { startsWith: "diary-discuss" } }, { key: { startsWith: "profile-update" } }, { key: { startsWith: "recover" } }] } }).catch(() => {})
     await prisma.$disconnect()
   }

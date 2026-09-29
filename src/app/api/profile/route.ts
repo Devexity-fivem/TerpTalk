@@ -651,7 +651,7 @@ export async function DELETE(request: Request) {
     // Require typed username confirmation for destructive action
     const user = await prisma.user.findUnique({
       where: { id: session.user.id },
-      include: { profile: { select: { username: true, avatarUrl: true } } },
+      include: { profile: { select: { username: true, avatarUrl: true, profileSettings: true } } },
     })
 
     if (!user) {
@@ -725,6 +725,10 @@ export async function DELETE(request: Request) {
       ...strainPhotos.map((i) => i.imageUrl),
       ...contestImages.map((i) => i.imageUrl),
       user.profile?.avatarUrl,
+      user.image,
+      // Profile V2 banner lives in the settings blob — without this the
+      // public blob outlives the account.
+      parseOldBanner(user.profile?.profileSettings),
     ]
 
     // Scrub the username out of other members' notifications before the
@@ -807,6 +811,9 @@ export async function DELETE(request: Request) {
     // The cascade removed all of the member's diaries/threads — community
     // aggregates must drop them immediately, not at TTL.
     revalidateTag("analytics", { expire: 0 })
+    // Cached search results would otherwise keep the deleted username and
+    // content discoverable until TTL.
+    revalidateTag("search", { expire: 0 })
 
     return NextResponse.json({ deleted: true })
   } catch (error) {

@@ -78,8 +78,15 @@ const PROFILE_SELECT = {
       createdAt: true,
       _count: {
         // "following" counts this user's followers (schema relation
-        // names are inverted — see api/users/[username]).
-        select: { threadCreator: true, posts: true, diaryCreator: true, following: true },
+        // names are inverted — see api/users/[username]). Content counts
+        // are public-scope: no deleted rows, hidden categories, or
+        // non-PUBLIC diaries.
+        select: {
+          threadCreator: { where: { deleted: false, category: { hidden: false } } },
+          posts: { where: { deleted: false, thread: { deleted: false, category: { hidden: false } } } },
+          diaryCreator: { where: { deleted: false, ...publicDiaryWhere } },
+          following: true,
+        },
       },
     },
   },

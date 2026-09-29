@@ -2,6 +2,7 @@ import { unstable_cache } from "next/cache"
 import { prisma } from "@/lib/prisma"
 import { TERPBOT_USERNAME } from "@/lib/terpbot-constants"
 import { XP_ORDER } from "@/lib/security"
+import { publicDiaryWhere } from "@/lib/diary-visibility"
 
 // ─── Suggested growers ─────────────────────────────────────────────
 // Deterministic, inexpensive suggestions for cold-start onboarding.
@@ -41,8 +42,15 @@ async function fetchCandidatePool() {
             lastSeenAt: true,
             // Note: `following` is the inverted relation name — its _count
             // is this user's follower count.
+            // Feeds a ranking shown to other members — private/deleted
+            // content must not influence it.
             _count: {
-              select: { following: true, posts: true, threadCreator: true, diaryCreator: true },
+              select: {
+                following: true,
+                posts: { where: { deleted: false } },
+                threadCreator: { where: { deleted: false } },
+                diaryCreator: { where: { deleted: false, ...publicDiaryWhere } },
+              },
             },
           },
         },

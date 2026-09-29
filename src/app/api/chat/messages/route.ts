@@ -162,6 +162,17 @@ export async function GET(request: NextRequest) {
       deletedIds = rows.map((r) => r.id)
     }
 
+    // The client only needs ids to purge rows it may already have rendered,
+    // so ship only blocked authors who actually have messages in this room.
+    // The full mutual set would disclose who has blocked the viewer.
+    const roomBlockedIds = blockedIds.length
+      ? (await prisma.chatMessage.findMany({
+          where: { roomId, authorId: { in: blockedIds } },
+          distinct: ["authorId"],
+          select: { authorId: true },
+        })).map((r) => r.authorId)
+      : []
+
     return NextResponse.json({
       messages: (afterDate ? messages : messages.reverse()).map((m) => {
         const msg = m as unknown as ChatMessageWithAuthor
@@ -172,7 +183,7 @@ export async function GET(request: NextRequest) {
         return messageDto(msg)
       }),
       ...(deletedIds ? { deletedIds } : {}),
-      blockedIds,
+      blockedIds: roomBlockedIds,
     })
   } catch (error) {
     console.error("Failed to fetch messages:", error)

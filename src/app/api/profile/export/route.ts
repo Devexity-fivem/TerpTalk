@@ -30,7 +30,9 @@ export async function GET(request: Request) {
     // SecurityEvent/AbuseFlag/ModerationAction (trust & safety internals),
     // AffiliateClick (system telemetry), BotSession (ephemeral derived
     // state), PendingReversal/PendingXpReversal (internal ledger ops), and
-    // reports filed *about* the user are intentionally not exported.
+    // reports filed *about* the user are intentionally not exported. Staff
+    // triage fields on the member's own reports/applications are stripped
+    // below.
     const [user, profile, customSections, threads, posts, diaries, diaryUpdates, diaryImages, experiments, setups, setupImages, setupComments, chatMessages, sentMessages, receivedMessages, reactions, postImages, strainPhotos, polls, pollVotes, badges, achievements, reputationEvents, progressionEvents, masteryProgress, notifications, followsGiven, followsReceived, blocksMade, bookmarks, savedSearches, contestEntries, contestVotes, diaryContestEntries, diaryContestVotes, strains, guideEdits, staffApplications, reportsFiled, feedback, categoryFollows, threadFollows, diaryFollows, botEvents] =
       await Promise.all([
         prisma.user.findUnique({
@@ -152,7 +154,13 @@ export async function GET(request: Request) {
         contestVotes,
         diaryContestEntries,
         diaryContestVotes,
-        reportsFiled,
+        // Reports the member filed — the moderator's resolution note and
+        // assignee/resolver staff ids are internal case data, not theirs.
+        reportsFiled: reportsFiled.map(
+          ({ type, reason, description, targetId, status, resolvedAt, createdAt }) => ({
+            type, reason, description, targetId, status, resolvedAt, createdAt,
+          })
+        ),
         // Feedback the member filed — staff-internal triage fields
         // (priority, adminNotes, resolvedById) stay out of the export.
         feedback: feedback.map(
@@ -160,7 +168,13 @@ export async function GET(request: Request) {
             type, status, source, title, message, pagePath, deviceType, resolvedAt, createdAt, updatedAt,
           })
         ),
-        staffApplications,
+        // reviewNote is an admin-only triage note and reviewedBy the
+        // reviewing admin's id — neither is ever shown to the applicant.
+        staffApplications: staffApplications.map(
+          ({ role, why, experience, about, status, createdAt, updatedAt }) => ({
+            role, why, experience, about, status, createdAt, updatedAt,
+          })
+        ),
         referralsMade,
         // TerpBot command telemetry scoped to this user — internal
         // idempotency keys stripped.
@@ -190,6 +204,7 @@ export async function GET(request: Request) {
       headers: {
         "Content-Type": "application/json",
         "Content-Disposition": `attachment; filename="terptalk-export-${userId}.json"`,
+        "Cache-Control": "private, no-store, max-age=0",
       },
     })
   } catch (error) {

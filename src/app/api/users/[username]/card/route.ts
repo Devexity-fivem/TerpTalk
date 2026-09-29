@@ -62,9 +62,6 @@ export async function GET(
               select: { badge: { select: { name: true, icon: true } } },
             },
             masteryProgress: { select: { mastery: true, xp: true } },
-            _count: {
-              select: { diaryCreator: true },
-            },
           },
         },
       },
@@ -147,7 +144,9 @@ export async function GET(
         trustStanding: standing,
         badges: profile.user.badges.map((b) => ({ name: b.badge.name, icon: b.badge.icon })),
         harvestedGrows,
-        totalGrows: profile.user._count.diaryCreator,
+        // Same viewer scope as the two counts above — a raw _count would
+        // include deleted and non-PUBLIC diaries.
+        totalGrows: harvestedGrows + activeGrows,
       },
       { headers: NO_STORE }
     )

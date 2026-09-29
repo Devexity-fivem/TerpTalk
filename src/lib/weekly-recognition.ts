@@ -16,6 +16,7 @@ import { WEEKLY_BOARD_XP_TYPES } from "@/lib/progression-config"
 import { awardProgression } from "@/lib/progression"
 import { grantBadge } from "@/lib/reputation"
 import { getBooleanSetting, SITE_SETTINGS } from "@/lib/settings"
+import { publicDiaryWhere } from "@/lib/diary-visibility"
 
 // [start, end) UTC range for an ISO week key "YYYY-Www".
 export function weekRange(key: string): { start: Date; end: Date } | null {
@@ -43,8 +44,14 @@ const WEEKLY_SELECT = {
       name: true,
       role: true,
       createdAt: true,
+      // Rendered publicly on the leaderboard — same public-scope counts.
       _count: {
-        select: { threadCreator: true, posts: true, diaryCreator: true, following: true },
+        select: {
+          threadCreator: { where: { deleted: false, category: { hidden: false } } },
+          posts: { where: { deleted: false, thread: { deleted: false, category: { hidden: false } } } },
+          diaryCreator: { where: { deleted: false, ...publicDiaryWhere } },
+          following: true,
+        },
       },
     },
   },
