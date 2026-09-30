@@ -149,6 +149,16 @@ export async function POST(request: Request) {
       case "contest": {
         const row = await tx.contestEntry.delete({ where: { id }, select: { imageUrl: true } })
         url = row.imageUrl
+        // The entry earned +5 CONTEST_ENTRY keyed contest-entry:<id> with
+        // sourceId=entry.id — reverse it atomically with the delete.
+        reversalId = await enqueueReversal(tx, {
+          kind: "SOURCE", sourceType: "CONTEST", sourceId: id,
+          reason: "Contest entry removed by staff", requestedBy: admin.id,
+        })
+        xpReversalId = await enqueueXpReversal(tx, {
+          kind: "SOURCE", sourceType: "CONTEST", sourceId: id,
+          reason: "Contest entry removed by staff", requestedBy: admin.id,
+        })
         break
       }
       case "avatar": {

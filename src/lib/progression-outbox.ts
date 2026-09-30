@@ -121,7 +121,7 @@ export async function drainXpOne(id: string): Promise<boolean> {
     } else if (row.kind === "KEY" && row.eventKey) {
       await reverseProgressionByKey(row.eventKey, row.reason, row.requestedBy ?? undefined)
     } else if (row.kind === "ACTOR" && row.actorId) {
-      await reverseProgressionByActor(row.actorId, row.reason, { before: row.enqueuedAt })
+      await reverseProgressionByActor(row.actorId, row.reason, { before: row.enqueuedAt, requestedBy: row.requestedBy ?? undefined })
     }
   } catch (error) {
     await prisma.pendingXpReversal.update({

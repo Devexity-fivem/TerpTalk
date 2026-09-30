@@ -10,8 +10,10 @@
  * Honors the module contract: outcomes are grower-stated only — nothing
  * here infers success from data.
  */
+import { Prisma } from "@prisma/client"
 import { awardProgression, experimentSimilarity } from "@/lib/progression"
-import { reverseXpKeyDurable } from "@/lib/progression-outbox"
+import { prisma } from "@/lib/prisma"
+import { enqueueXpReversal, drainXpOne } from "@/lib/progression-outbox"
 import { DUP_WITHHOLD_PCT } from "@/lib/progression-config"
 
 const expKey = (expId: string, suffix: string) => `experiment:${expId}:${suffix}`
@@ -164,9 +166,31 @@ export async function evaluateExperimentAwards(
   }).catch(() => {})
 }
 
-/** Experiment deleted — durably reverse every award it produced. */
-export async function reverseExperimentAwards(experimentId: string, why = "Experiment deleted"): Promise<void> {
-  for (const suffix of ["created", "hypothesis", "completed", "failure", "failure:w", "followups", "problem"]) {
-    await reverseXpKeyDurable(expKey(experimentId, suffix), why).catch(() => null)
+const EXP_SUFFIXES = ["created", "hypothesis", "completed", "failure", "failure:w", "followups", "problem"] as const
+
+/**
+ * Enqueue durable reversal intents for every award an experiment produced.
+ * Call inside the deleting transaction so the intents commit atomically
+ * with the delete — a crash can't strand awarded XP on removed content.
+ * Returns the intent ids for post-commit draining.
+ */
+export async function enqueueExperimentReversals(
+  tx: Prisma.TransactionClient,
+  experimentId: string,
+  why = "Experiment deleted"
+): Promise<string[]> {
+  const ids: string[] = []
+  for (const suffix of EXP_SUFFIXES) {
+    ids.push(await enqueueXpReversal(tx, { kind: "KEY", eventKey: expKey(experimentId, suffix), reason: why }))
   }
+  return ids
+}
+
+/**
+ * Post-commit convenience wrapper — enqueue all intents in one tx, then
+ * drain. Prefer enqueueExperimentReversals inside the delete tx.
+ */
+export async function reverseExperimentAwards(experimentId: string, why = "Experiment deleted"): Promise<void> {
+  const ids = await prisma.$transaction(async (tx) => enqueueExperimentReversals(tx, experimentId, why))
+  for (const id of ids) await drainXpOne(id).catch(() => false)
 }

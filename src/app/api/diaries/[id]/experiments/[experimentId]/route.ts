@@ -7,7 +7,8 @@ import { rateLimit } from "@/lib/rate-limit"
 import { checkMaintenance } from "@/lib/maintenance"
 import { revalidateTag } from "next/cache"
 import { parseExperimentPatch, serializeExperiment } from "@/lib/experiments"
-import { evaluateExperimentAwards, reverseExperimentAwards } from "@/lib/experiment-progression"
+import { evaluateExperimentAwards, enqueueExperimentReversals } from "@/lib/experiment-progression"
+import { drainXpOne } from "@/lib/progression-outbox"
 
 /**
  * /api/diaries/[id]/experiments/[experimentId]
@@ -124,10 +125,16 @@ export async function DELETE(
     if (!owned) return NextResponse.json({ error: "Experiment not found" }, { status: 404 })
     if (owned === "forbidden") return forbidden()
 
-    await prisma.growExperiment.delete({ where: { id: experimentId } })
-    // Deleting the experiment claws back every award it produced —
-    // durable intents, so a crash here retries via the outbox.
-    await reverseExperimentAwards(experimentId).catch(() => {})
+    // Deleting the experiment claws back every award it produced — the
+    // reversal intents commit in the SAME transaction as the delete, so a
+    // crash can't strand XP; draining happens post-commit.
+    const reversalIds = await prisma.$transaction(async (tx) => {
+      await tx.growExperiment.delete({ where: { id: experimentId } })
+      return enqueueExperimentReversals(tx, experimentId)
+    })
+    for (const rid of reversalIds) {
+      await drainXpOne(rid).catch(() => false)
+    }
     revalidateTag("diaries", { expire: 0 })
     return NextResponse.json({ deleted: true })
   } catch (error) {

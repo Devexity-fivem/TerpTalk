@@ -273,22 +273,27 @@ export async function GET(request: NextRequest) {
   // tampering — auto-"fixing" balances would mask it. Unresolved outbox
   // rows are surfaced in the same signal.
   await runCronTask(`reputation:drift-check:${today}`, async () => {
-    const [drift, xpDrift, pending, pendingXp] = await Promise.all([
+    const [drift, xpDrift, pending, pendingXp, dead, deadXp] = await Promise.all([
       findReputationDrift(),
       findProgressionDrift(),
       prisma.pendingReversal.count({ where: { status: { in: ["PENDING", "RUNNING"] } } }),
       prisma.pendingXpReversal.count({ where: { status: { in: ["PENDING", "RUNNING"] } } }),
+      // DEAD rows exhausted retries — a dead-letter backlog must surface in
+      // the same signal, not read as "healthy" alongside empty queues.
+      prisma.pendingReversal.count({ where: { status: "DEAD" } }),
+      prisma.pendingXpReversal.count({ where: { status: "DEAD" } }),
     ])
-    if (drift.length > 0 || xpDrift.length > 0 || pending > 0 || pendingXp > 0) {
+    if (drift.length > 0 || xpDrift.length > 0 || pending > 0 || pendingXp > 0 || dead > 0 || deadXp > 0) {
       console.error("[cron] progression inconsistency:", {
         legacyDriftUsers: drift.length, driftUsers: xpDrift.length,
         pendingReversals: pending, pendingXpReversals: pendingXp,
+        deadReversals: dead, deadXpReversals: deadXp,
       })
       await logSecurityEvent("SUSPICIOUS_ACTIVITY", {
-        metadata: { reputationDrift: drift.length, xpDrift: xpDrift.length, pendingReversals: pending, pendingXpReversals: pendingXp, sample: xpDrift.slice(0, 10) },
+        metadata: { reputationDrift: drift.length, xpDrift: xpDrift.length, pendingReversals: pending, pendingXpReversals: pendingXp, deadReversals: dead, deadXpReversals: deadXp, sample: xpDrift.slice(0, 10) },
       }).catch(() => {})
     }
-    return `drift:${drift.length}u/${pending}p xp:${xpDrift.length}u/${pendingXp}p`
+    return `drift:${drift.length}u/${pending}p/${dead}d xp:${xpDrift.length}u/${pendingXp}p/${deadXp}d`
   }, posted, failed, "drift-check")
 
   // ── Trust & safety signal scan (once per UTC day) ──────────────────

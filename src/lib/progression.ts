@@ -923,7 +923,7 @@ export async function reverseProgressionBySource(
 export async function reverseProgressionByActor(
   actorId: string,
   reason: string,
-  opts: { before?: Date } = {}
+  opts: { before?: Date; requestedBy?: string } = {}
 ): Promise<number> {
   let events
   try {
@@ -946,7 +946,10 @@ export async function reverseProgressionByActor(
   for (let i = 0; i < events.length; i += BATCH) {
     const results = await Promise.all(
       events.slice(i, i + BATCH).map((e) =>
-        reverseProgressionEvent(e.id, reason, actorId).catch((err) => {
+        // The swept user owns the events, but the reversal rows should be
+        // attributed to whoever requested the sweep (staff, deletion flow)
+        // — default to the user only when nobody requested it.
+        reverseProgressionEvent(e.id, reason, opts.requestedBy ?? actorId).catch((err) => {
           console.error("[progression] actor reversal failed:", actorId, e.id, err)
           return { reversed: false } as ProgressionReversalResult
         })
