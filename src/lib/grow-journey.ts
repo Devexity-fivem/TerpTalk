@@ -17,7 +17,7 @@ import { prisma } from "@/lib/prisma"
 import { awardProgression } from "@/lib/progression"
 import { reverseXpKeyDurable } from "@/lib/progression-outbox"
 import { getBooleanSetting, SITE_SETTINGS } from "@/lib/settings"
-import { isMeaningfulUpdate } from "@/lib/meaningful-update"
+import { isMeaningfulUpdate, MIN_UPDATE_LENGTH, MEANINGFUL_UPDATE_SQL } from "@/lib/meaningful-update"
 import { diaryCompleteness, type DiaryUpdateLike } from "@/lib/diary-weeks"
 
 export const GROW_STAGES = [
@@ -104,24 +104,53 @@ async function loadJourneyInputs(diaryId: string) {
     },
   })
   if (!diary) return null
-  const updates = await prisma.diaryUpdate.findMany({
-    where: { diaryId },
-    select: {
-      id: true,
-      createdAt: true,
-      stage: true,
-      content: true,
-      temperature: true,
-      humidity: true,
-      vpd: true,
-      ph: true,
-      ec: true,
-      feeding: true,
-      training: true,
-      images: { select: { id: true } },
-      nutrients: { select: { id: true }, take: 1 },
-    },
-  })
+  // Compact rows: the meaningful flag is evaluated in SQL (same expression
+  // as isMeaningfulUpdate — MEANINGFUL_UPDATE_SQL is its canonical twin) so
+  // content/feeding/training text and image/nutrient joins never leave the
+  // database. diaryCompleteness only needs stage, env readings, image
+  // presence and the row count — the projection below is field-for-field
+  // identical for both consumers.
+  const rows = await prisma.$queryRaw<
+    {
+      id: string
+      createdAt: Date
+      stage: string | null
+      temperature: number | null
+      humidity: number | null
+      vpd: number | null
+      meaningful: boolean
+      hasImage: boolean
+    }[]
+  >`
+    SELECT
+      du."id",
+      du."createdAt",
+      du."stage",
+      du."temperature",
+      du."humidity",
+      du."vpd",
+      ${MEANINGFUL_UPDATE_SQL} AS "meaningful",
+      EXISTS (SELECT 1 FROM "DiaryImage" i WHERE i."updateId" = du."id") AS "hasImage"
+    FROM "DiaryUpdate" du
+    WHERE du."diaryId" = ${diaryId}`
+  // Project back into the computeGrowJourney update shape: meaningful ⇔
+  // content of exactly MIN_UPDATE_LENGTH, hasImage ⇔ one image row.
+  // isMeaningfulUpdate and diaryCompleteness observe identical values.
+  const updates = rows.map((u) => ({
+    id: u.id,
+    createdAt: u.createdAt,
+    stage: u.stage,
+    content: u.meaningful ? "x".repeat(MIN_UPDATE_LENGTH) : "",
+    temperature: u.temperature,
+    humidity: u.humidity,
+    vpd: u.vpd,
+    ph: null,
+    ec: null,
+    feeding: null,
+    training: null,
+    images: u.hasImage ? [{ id: u.id }] : [],
+    nutrients: [],
+  }))
   return { diary, updates }
 }
 

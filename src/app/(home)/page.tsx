@@ -9,8 +9,8 @@ import { mediaProxyUrl } from "@/lib/media"
 import { diaryPath } from "@/lib/slugs"
 import CannabisLeaf from "@/components/cannabis-leaf"
 import { getChatTeaser } from "@/lib/chat-activity"
-import { getServerSession } from "next-auth"
-import { authOptions } from "@/lib/auth"
+import { getSiteStats } from "@/lib/community-stats"
+import { getSession } from "@/lib/session"
 import { getMemberHomeData } from "@/lib/member-home"
 import { getGrowerSpotlight } from "@/lib/spotlight"
 import MemberHome from "@/components/member-home"
@@ -29,19 +29,9 @@ import CountUp from "@/components/count-up"
 // so guest renders stay cheap.
 export const dynamic = "force-dynamic"
 
-const getStats = unstable_cache(
-  async () => {
-    const [members, diaries, threads, posts] = await Promise.all([
-      prisma.user.count({ where: activeAuthor() }),
-      prisma.growDiary.count({ where: { deleted: false, author: activeAuthor(), ...publicDiaryWhere } }),
-      prisma.thread.count({ where: { deleted: false, author: activeAuthor() } }),
-      prisma.post.count({ where: { deleted: false, author: activeAuthor() } }),
-    ])
-    return { members, diaries, discussions: threads + posts }
-  },
-  ["home-stats"],
-  { revalidate: 60, tags: ["diaries", "forum"] }
-)
+// Site-wide headline counts are shared with /feed via lib/community-stats
+// (same "home-stats" cache entry, same tags/revalidate).
+const getStats = getSiteStats
 
 const getLatestDiscussions = unstable_cache(
   async () => {
@@ -192,7 +182,7 @@ export default async function Home() {
   // Signed-in members get the personalized dashboard; guests get the
   // landing below. The session check runs first so member requests never
   // pay for the landing queries.
-  const session = await getServerSession(authOptions)
+  const session = await getSession()
   if (session?.user?.id) {
     const memberData = await getMemberHomeData(session.user.id)
     if (memberData) return <MemberHome data={memberData} />

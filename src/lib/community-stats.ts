@@ -313,6 +313,28 @@ export function getCommunityGrowStats() {
   return getGrowStats()
 }
 
+// ─── Site-wide headline counts ────────────────────────────────────────
+// Shared by the guest landing and /feed — one cache entry ("home-stats")
+// for both surfaces so neither recomputes identical global counts.
+
+const getSiteStatsCached = unstable_cache(
+  async () => {
+    const [members, diaries, threads, posts] = await Promise.all([
+      prisma.user.count({ where: activeAuthor() }),
+      prisma.growDiary.count({ where: { deleted: false, author: activeAuthor(), ...publicDiaryWhere } }),
+      prisma.thread.count({ where: { deleted: false, author: activeAuthor() } }),
+      prisma.post.count({ where: { deleted: false, author: activeAuthor() } }),
+    ])
+    return { members, diaries, discussions: threads + posts }
+  },
+  ["home-stats"],
+  { revalidate: 60, tags: ["diaries", "forum"] }
+)
+
+export function getSiteStats() {
+  return getSiteStatsCached()
+}
+
 // ─── Plant Doctor outcome stats ──────────────────────────────────────
 
 /** The only thread fields symptom analytics may read — select-limited. */

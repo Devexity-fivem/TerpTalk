@@ -1,9 +1,10 @@
 import { prisma } from "@/lib/prisma"
+import { unstable_cache } from "next/cache"
 import { publicUserSelect, activeAuthor, blockedUserIds, notBlockedAuthor } from "@/lib/security"
+import { getSiteStats } from "@/lib/community-stats"
 import { publicDiaryWhere } from "@/lib/diary-visibility"
 import { mediaProxyUrl } from "@/lib/media"
-import { getServerSession } from "next-auth"
-import { authOptions } from "@/lib/auth"
+import { getSession } from "@/lib/session"
 import { Leaf, MessageSquare, TrendingUp, Calendar, Users, UserPlus, Sprout, Award } from "@/lib/icons"
 import { LiveRefresh } from "@/components/live-refresh"
 import Link from "next/link"
@@ -14,6 +15,25 @@ import TimeAgo from "@/components/ui/time-ago"
 import { diaryPath } from "@/lib/slugs"
 
 export const dynamic = "force-dynamic"
+
+// Feed-specific global aggregates — distinct predicates from home-stats,
+// cached under the same invalidation tags as other forum surfaces.
+const getFeedStats = unstable_cache(
+  async () => {
+    const [threadCount, popularCategories] = await Promise.all([
+      prisma.thread.count({ where: { deleted: false, category: { hidden: false }, author: activeAuthor() } }),
+      prisma.category.findMany({
+        where: { hidden: false },
+        take: 4,
+        orderBy: { threads: { _count: "desc" } },
+        select: { slug: true, name: true },
+      }),
+    ])
+    return { threadCount, popularCategories }
+  },
+  ["feed-stats"],
+  { revalidate: 60, tags: ["forum"] }
+)
 
 export const metadata = {
   title: "Community Feed",
@@ -180,17 +200,14 @@ async function getFeedData(userId?: string, tab = "latest") {
     },
   })
 
-  const [memberCount, threadCount, diaryCount, popularCategories] = await Promise.all([
-    prisma.user.count({ where: activeAuthor() }),
-    prisma.thread.count({ where: { deleted: false, category: { hidden: false }, author: activeAuthor() } }),
-    prisma.growDiary.count({ where: { deleted: false, author: activeAuthor(), ...publicDiaryWhere } }),
-    prisma.category.findMany({
-      where: { hidden: false },
-      take: 4,
-      orderBy: { threads: { _count: "desc" } },
-      select: { slug: true, name: true },
-    }),
-  ])
+  // members/diaries share the site-wide "home-stats" cache entry (identical
+  // semantics). threadCount here excludes hidden categories and
+  // popularCategories ranks by all threads (incl. deleted) — different
+  // predicates from home-stats, so they get their own 60s entry.
+  const [siteStats, feedStats] = await Promise.all([getSiteStats(), getFeedStats()])
+  const memberCount = siteStats.members
+  const diaryCount = siteStats.diaries
+  const { threadCount, popularCategories } = feedStats
 
   return {
     recentDiaryUpdates,
@@ -221,7 +238,7 @@ async function isEligibleForFirstReplyNudge(userId: string) {
 
 export default async function FeedPage({ searchParams }: { searchParams: Promise<{ tab?: string }> }) {
   const { tab } = await searchParams
-  const session = await getServerSession(authOptions)
+  const session = await getSession()
   const activeTab = TABS.includes((tab || "") as (typeof TABS)[number]) ? (tab as (typeof TABS)[number]) : "latest"
   const { recentDiaryUpdates, recentThreads, recentHarvests, feedItems, trendingDiaries, memberCount, threadCount, diaryCount, popularCategories, coldStart } =
     await getFeedData(session?.user?.id, activeTab)

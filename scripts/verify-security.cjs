@@ -97,6 +97,10 @@ const apiFiles = () => {
     // lockUserRow: parameterized FOR UPDATE row lock serializing
     // check-then-act dedupe/cap writes inside interactive transactions.
     path.join("src", "lib", "prisma.ts"),
+    // Grow Journey compact update scan — parameterized tagged template;
+    // the only interpolation is MEANINGFUL_UPDATE_SQL (a static fragment)
+    // and the parameterized diaryId.
+    path.join("src", "lib", "grow-journey.ts"),
   ]);
   check("no raw SQL outside allowlist", !allSrc.some((f) => {
     if (rawSqlAllowlist.has(f)) return false;
