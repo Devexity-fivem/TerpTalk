@@ -5,7 +5,7 @@ import { signInHref } from "@/lib/callback-url"
 import { useEffect, useState, useCallback } from "react"
 import { useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
-import { ShieldCheck, Loader2, Settings, Save } from "lucide-react"
+import { ShieldCheck, Loader2, Settings, Save } from "@/lib/icons"
 
 const SETTING_LABELS: Record<string, { label: string; type: "toggle" | "text"; help: string }> = {
   maintenance_mode: { label: "Maintenance mode", type: "toggle", help: "Block public actions with a maintenance message." },

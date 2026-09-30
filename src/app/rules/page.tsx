@@ -1,5 +1,5 @@
 import Link from "next/link"
-import { ScrollText } from "lucide-react"
+import { ScrollText } from "@/lib/icons"
 
 export const metadata = {
   title: "Community Rules",

@@ -3,7 +3,7 @@
 import { signInHref } from "@/lib/callback-url"
 import { Suspense } from "react"
 import { useSession } from "next-auth/react"
-import { Loader2, MessageCircle } from "lucide-react"
+import { Loader2, MessageCircle } from "@/lib/icons"
 import Link from "next/link"
 import ChatRoom from "@/components/chat-room"
 

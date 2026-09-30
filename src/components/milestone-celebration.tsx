@@ -17,7 +17,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react"
 import Link from "next/link"
-import { Sprout, Trophy, X, Target } from "lucide-react"
+import { Sprout, Trophy, X, Target } from "@/lib/icons"
 import { cn } from "@/lib/utils"
 
 interface MilestoneMeta {

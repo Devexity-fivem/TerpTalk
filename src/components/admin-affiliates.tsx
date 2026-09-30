@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { Plus, Loader2, Tag, ExternalLink, Star, StarOff, Pencil, Trash2 } from "lucide-react"
+import { Plus, Loader2, Tag, ExternalLink, Star, StarOff, Pencil, Trash2 } from "@/lib/icons"
 import Tooltip from "@/components/ui/tooltip"
 import { REP_RANKS } from "@/lib/progression-config"
 

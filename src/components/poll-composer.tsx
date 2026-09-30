@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { Plus, X, BarChart3, Lock } from "lucide-react"
+import { Plus, X, BarChart3, Lock } from "@/lib/icons"
 import Link from "next/link"
 
 interface PollComposerProps {

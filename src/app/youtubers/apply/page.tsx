@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { useSession } from "next-auth/react"
 import Link from "next/link"
-import { Video, Loader2 } from "lucide-react"
+import { Video, Loader2 } from "@/lib/icons"
 
 export default function ApplyYoutuberPage() {
   const { status } = useSession()

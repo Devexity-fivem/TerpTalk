@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
-import { BookOpen, Loader2 } from "lucide-react"
+import { BookOpen, Loader2 } from "@/lib/icons"
 import { isModerator } from "@/lib/roles"
 
 const TOPICS = [

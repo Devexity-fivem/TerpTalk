@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma"
 import { rankableProfile } from "@/lib/security"
 import { unstable_cache } from "next/cache"
-import { Trophy, Medal, Award, Sprout, Leaf, CheckCircle2 } from "lucide-react"
+import { Trophy, Medal, Award, Sprout, Leaf, CheckCircle2 } from "@/lib/icons"
 import Link from "next/link"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"

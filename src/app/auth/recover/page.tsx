@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import Link from "next/link"
-import { KeyRound, Loader2, Check, Copy, AlertTriangle } from "lucide-react"
+import { KeyRound, Loader2, Check, Copy, AlertTriangle } from "@/lib/icons"
 
 export default function RecoverPage() {
   const [username, setUsername] = useState("")

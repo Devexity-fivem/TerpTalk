@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef } from "react"
 import { signIn } from "next-auth/react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
-import { Loader2, RefreshCw } from "lucide-react"
+import { Loader2, RefreshCw } from "@/lib/icons"
 import CannabisLeaf from "@/components/cannabis-leaf"
 import { safeCallbackUrl } from "@/lib/callback-url"
 

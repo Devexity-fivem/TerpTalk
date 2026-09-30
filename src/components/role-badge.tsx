@@ -1,4 +1,4 @@
-import { ShieldCheck, Shield, CheckCircle, LifeBuoy } from "lucide-react"
+import { ShieldCheck, Shield, CheckCircle, LifeBuoy } from "@/lib/icons"
 import Tooltip from "@/components/ui/tooltip"
 
 // Renders a staff or verified badge next to usernames.

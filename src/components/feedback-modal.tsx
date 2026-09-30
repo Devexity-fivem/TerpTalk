@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react"
 import { usePathname } from "next/navigation"
 import { useSession } from "next-auth/react"
-import { Loader2, MessageSquarePlus, X } from "lucide-react"
+import { Loader2, MessageSquarePlus, X } from "@/lib/icons"
 import { signInHref } from "@/lib/callback-url"
 import { useRouter } from "next/navigation"
 

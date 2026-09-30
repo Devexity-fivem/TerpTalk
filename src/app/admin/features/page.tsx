@@ -5,7 +5,7 @@ import { signInHref } from "@/lib/callback-url"
 import { useEffect, useState } from "react"
 import { useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
-import { ToggleLeft, Loader2 } from "lucide-react"
+import { ToggleLeft, Loader2 } from "@/lib/icons"
 import Link from "next/link"
 
 interface Feature {

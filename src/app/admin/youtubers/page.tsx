@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { Video, Check, X, Loader2 } from "lucide-react"
+import { Video, Check, X, Loader2 } from "@/lib/icons"
 import { Avatar } from "@/components/ui/avatar"
 
 interface Youtuber {

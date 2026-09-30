@@ -8,7 +8,7 @@ import {
   Leaf, MessageCircle, MessagesSquare, Home, Calendar,
   Settings, Dna, Bell, Menu, X, Mail, Search, Trophy, BookOpen, Stethoscope, Tag, TrendingUp, Info, Shield,
   ScrollText, Image as ImageIcon, Video, Tent, HelpCircle, Medal, Users, Sprout,
-} from "lucide-react"
+} from "@/lib/icons"
 import CannabisLeaf from "@/components/cannabis-leaf"
 import MobileNav from "@/components/mobile-nav"
 import ThemeToggle from "@/components/theme-toggle"

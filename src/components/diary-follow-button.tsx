@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { useSession } from "next-auth/react"
 import { usePathname } from "next/navigation"
-import { Users, UserCheck, Loader2 } from "lucide-react"
+import { Users, UserCheck, Loader2 } from "@/lib/icons"
 import { signInHref } from "@/lib/callback-url"
 import Tooltip from "@/components/ui/tooltip"
 

@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { useSession } from "next-auth/react"
-import { BarChart3, Loader2 } from "lucide-react"
+import { BarChart3, Loader2 } from "@/lib/icons"
 import Tooltip from "@/components/ui/tooltip"
 
 interface PollProps {

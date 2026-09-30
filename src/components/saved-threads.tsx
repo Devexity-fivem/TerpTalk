@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import Link from "next/link"
-import { Bookmark, MessageSquare } from "lucide-react"
+import { Bookmark, MessageSquare } from "@/lib/icons"
 
 interface SavedThread {
   id: string

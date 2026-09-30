@@ -6,7 +6,7 @@ import { canSeeDeal, DEAL_TIER_UNLOCK_ID, type DealViewer } from "@/lib/deals-ac
 import { hasUnlock } from "@/lib/progression"
 import { UNLOCK_BY_ID } from "@/lib/progression-config"
 import { DEFAULT_DISCLOSURE } from "@/lib/affiliate"
-import { Tag, ExternalLink, Percent } from "lucide-react"
+import { Tag, ExternalLink, Percent } from "@/lib/icons"
 import DealsBrowser from "@/components/deals-browser"
 
 // Cached 5 min — admin-edited affiliate data propagates quickly enough

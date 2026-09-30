@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { ArrowUp, Reply } from "lucide-react"
+import { ArrowUp, Reply } from "@/lib/icons"
 
 /**
  * Floating action pill for long threads — appears after the reader has

@@ -6,7 +6,7 @@ import { signInHref } from "@/lib/callback-url"
 import { buildMetadata } from "@/lib/seo"
 import {
   Settings, KeyRound, Download, Trash2, Ban, User, Bell, Shield, ChevronRight,
-} from "lucide-react"
+} from "@/lib/icons"
 
 export const metadata = buildMetadata({
   title: "Settings",

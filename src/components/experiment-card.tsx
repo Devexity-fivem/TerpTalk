@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
-import { FlaskConical, Loader2, MessageCircleQuestion, X } from "lucide-react"
+import { FlaskConical, Loader2, MessageCircleQuestion, X } from "@/lib/icons"
 import { cn } from "@/lib/utils"
 import { useShareComposer } from "@/components/share-composer"
 import {

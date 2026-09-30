@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import { useSession } from "next-auth/react"
 import { useToast } from "@/components/ui/toast"
 import { cn } from "@/lib/utils"
-import { Shield, CheckCircle, XCircle, Loader2, User, Clock, FileText } from "lucide-react"
+import { Shield, CheckCircle, XCircle, Loader2, User, Clock, FileText } from "@/lib/icons"
 import Link from "next/link"
 
 type Application = {

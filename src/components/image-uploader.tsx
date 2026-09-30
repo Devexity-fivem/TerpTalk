@@ -1,7 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useRef, useState } from "react"
-import { ImagePlus, Loader2, X, ArrowLeft, ArrowRight } from "lucide-react"
+import { ImagePlus, Loader2, X, ArrowLeft, ArrowRight } from "@/lib/icons"
 import { cn } from "@/lib/utils"
 
 // Must stay under MAX_DATA_URI_LEN in lib/blob.ts (400,000 chars ≈ 300KB).

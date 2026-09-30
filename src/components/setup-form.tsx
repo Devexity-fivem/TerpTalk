@@ -6,7 +6,7 @@
 // the combined total is capped at 6 client-side (the server re-checks).
 
 import { useState } from "react"
-import { Settings, Loader2, Camera, X } from "lucide-react"
+import { Settings, Loader2, Camera, X } from "@/lib/icons"
 import Link from "next/link"
 
 export interface SetupFormValues {

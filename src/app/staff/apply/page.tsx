@@ -5,7 +5,7 @@ import { useSession } from "next-auth/react"
 
 import { useToast } from "@/components/ui/toast"
 import { cn } from "@/lib/utils"
-import { Shield, Users, MessageSquare, AlertCircle, Loader2, Send } from "lucide-react"
+import { Shield, Users, MessageSquare, AlertCircle, Loader2, Send } from "@/lib/icons"
 import Link from "next/link"
 
 const ROLES = [

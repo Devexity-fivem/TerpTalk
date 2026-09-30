@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { KeyRound, Loader2, Copy, Check, AlertTriangle } from "lucide-react"
+import { KeyRound, Loader2, Copy, Check, AlertTriangle } from "@/lib/icons"
 
 // Recovery phrase manager — generates a 12-word BIP39 phrase, shown ONCE.
 export default function RecoveryPhraseCard() {

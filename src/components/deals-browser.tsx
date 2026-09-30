@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { Search, Tag, ExternalLink, Sprout, Wrench, Lock } from "lucide-react"
+import { Search, Tag, ExternalLink, Sprout, Wrench, Lock } from "@/lib/icons"
 
 interface Deal {
   slug: string

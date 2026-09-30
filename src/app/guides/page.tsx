@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma"
 import { unstable_cache } from "next/cache"
-import { BookOpen, Plus } from "lucide-react"
+import { BookOpen, Plus } from "@/lib/icons"
 import Link from "next/link"
 import EmptyState from "@/components/ui/empty-state"
 import ProfileCard from "@/components/ui/profile-card"

@@ -3,7 +3,7 @@
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { useSession } from "next-auth/react"
-import { Home, MessageCircle, Leaf, Bell, User, MessagesSquare, Search } from "lucide-react"
+import { Home, MessageCircle, Leaf, Bell, User, MessagesSquare, Search } from "@/lib/icons"
 import { cn } from "@/lib/utils"
 import { signInHref } from "@/lib/callback-url"
 import { useChatPanel } from "@/components/chat-panel"

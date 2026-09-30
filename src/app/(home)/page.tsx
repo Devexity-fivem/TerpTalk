@@ -1,4 +1,4 @@
-import { MessageSquare, Award, Dna, Sprout, Calendar, Trophy, BookOpen, Tag, ArrowRight, TrendingUp, Users, Leaf, MessagesSquare } from "lucide-react"
+import { MessageSquare, Award, Dna, Sprout, Calendar, Trophy, BookOpen, Tag, ArrowRight, TrendingUp, Users, Leaf, MessagesSquare } from "@/lib/icons"
 import ChatTeaser from "@/components/chat-teaser"
 import Link from "next/link"
 import { prisma } from "@/lib/prisma"

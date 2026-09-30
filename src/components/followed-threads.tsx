@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import Link from "next/link"
-import { BellRing, BellOff, Loader2 } from "lucide-react"
+import { BellRing, BellOff, Loader2 } from "@/lib/icons"
 import { useToast } from "@/components/ui/toast"
 import { formatRelativeTime } from "@/lib/time"
 import Tooltip from "@/components/ui/tooltip"

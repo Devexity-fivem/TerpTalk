@@ -1,6 +1,6 @@
 import { cn } from "@/lib/utils"
 import Link from "next/link"
-import type { LucideIcon } from "lucide-react"
+import type { LucideIcon } from "@/lib/icons"
 import type { ReactNode } from "react"
 
 export interface StatItem {

@@ -1,7 +1,7 @@
 "use client"
 
 import { cn } from "@/lib/utils"
-import { User } from "lucide-react"
+import { User } from "@/lib/icons"
 import { useState } from "react"
 
 interface AvatarProps {

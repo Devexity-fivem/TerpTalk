@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma"
 import Link from "next/link"
-import { Video } from "lucide-react"
+import { Video } from "@/lib/icons"
 import { Avatar } from "@/components/ui/avatar"
 import { buildMetadata } from "@/lib/seo"
 import { activeAuthor } from "@/lib/security"

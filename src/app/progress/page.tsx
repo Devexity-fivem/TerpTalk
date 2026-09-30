@@ -12,7 +12,7 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 import {
   Sprout, Lock, ChevronRight, Award, Loader2, ShieldCheck, Zap, CalendarCheck, Trophy, Flame, Check, Sparkles,
-} from "lucide-react"
+} from "@/lib/icons"
 import { cn } from "@/lib/utils"
 import { signInHref } from "@/lib/callback-url"
 import { REP_RANKS, RANK_DISPLAY, UNLOCKS } from "@/lib/progression-config"

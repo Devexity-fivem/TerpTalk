@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react"
 import { useSession } from "next-auth/react"
 import { usePathname, useRouter } from "next/navigation"
-import { Plus, Loader2, X, Camera, ImagePlus, History } from "lucide-react"
+import { Plus, Loader2, X, Camera, ImagePlus, History } from "@/lib/icons"
 import { signInHref } from "@/lib/callback-url"
 import { STAGE_TIPS } from "@/lib/stage-tips"
 

@@ -7,14 +7,14 @@ import { createPortal } from "react-dom"
 import {
   X, MessageSquare, HelpCircle, Sprout, Dna, Loader2,
   BarChart3, Leaf, Settings, ArrowLeft, Send, ImageIcon, Wheat, FlaskConical,
-} from "lucide-react"
+} from "@/lib/icons"
 import ImageUploader from "@/components/image-uploader"
 import PollComposer from "@/components/poll-composer"
 import ExperimentForm from "@/components/experiment-form"
 import { STANDING_POLL_CREATE } from "@/lib/progression-config"
 import { signInHref } from "@/lib/callback-url"
 import { cn } from "@/lib/utils"
-import type { LucideIcon } from "lucide-react"
+import type { LucideIcon } from "@/lib/icons"
 
 // Client-side mirror of the server gate in POST /api/forum/threads —
 // isStaff() lives in a Prisma-importing module, so the role set is inlined.

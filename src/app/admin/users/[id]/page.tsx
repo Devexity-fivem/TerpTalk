@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from "react"
 import { useSession } from "next-auth/react"
 import { useRouter, useParams } from "next/navigation"
-import { ShieldCheck, Loader2, User, Ban, Clock, AlertTriangle, TrendingUp } from "lucide-react"
+import { ShieldCheck, Loader2, User, Ban, Clock, AlertTriangle, TrendingUp } from "@/lib/icons"
 import Link from "next/link"
 import { signInHref } from "@/lib/callback-url"
 

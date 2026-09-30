@@ -4,7 +4,7 @@ import { useState } from "react"
 import {
   Bot, Loader2, AlertTriangle, Gauge, Bug, Wrench, MessagesSquare,
   ListChecks, Activity, ClipboardList, Ruler, History, Sparkles, FlaskConical,
-} from "lucide-react"
+} from "@/lib/icons"
 import type { GrowIntel } from "@/lib/grow-intel"
 import { EXPERIMENT_STATUS_LABELS, EXPERIMENT_FOLLOW_UP_LABELS } from "@/lib/experiments"
 import { useShareComposer } from "@/components/share-composer"

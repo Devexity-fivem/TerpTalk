@@ -1,7 +1,7 @@
 "use client"
 
 import { createContext, useCallback, useContext, useMemo, useRef, useState } from "react"
-import { CheckCircle2, AlertCircle, Info, X } from "lucide-react"
+import { CheckCircle2, AlertCircle, Info, X } from "@/lib/icons"
 import { cn } from "@/lib/utils"
 
 type ToastVariant = "success" | "error" | "info"

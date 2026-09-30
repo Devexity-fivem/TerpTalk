@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import Link from "next/link"
-import { Shield, Loader2 } from "lucide-react"
+import { Shield, Loader2 } from "@/lib/icons"
 
 type Status = {
   restricted: boolean

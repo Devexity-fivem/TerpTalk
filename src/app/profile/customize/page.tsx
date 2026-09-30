@@ -8,7 +8,7 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import {
   ArrowDown, ArrowUp, ChevronDown, ImagePlus, Loader2, Lock, Pin, Plus, Save,
   Sprout, Trash2, User, X,
-} from "lucide-react"
+} from "@/lib/icons"
 import Link from "next/link"
 import PageHeader from "@/components/ui/page-header"
 import SectionCard from "@/components/ui/section-card"

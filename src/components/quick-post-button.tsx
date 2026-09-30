@@ -1,6 +1,6 @@
 "use client"
 
-import { Plus } from "lucide-react"
+import { Plus } from "@/lib/icons"
 import { useShareComposer } from "@/components/share-composer"
 
 export default function QuickPostButton() {

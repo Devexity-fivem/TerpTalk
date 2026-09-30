@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { Loader2, Sprout, RefreshCw } from "lucide-react"
+import { Loader2, Sprout, RefreshCw } from "@/lib/icons"
 import SectionCard from "@/components/ui/section-card"
 import StatStrip from "@/components/ui/stat-strip"
 import Tag from "@/components/ui/tag"

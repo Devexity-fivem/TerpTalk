@@ -1,5 +1,5 @@
 import Link from "next/link"
-import type { LucideIcon } from "lucide-react"
+import type { LucideIcon } from "@/lib/icons"
 import type { ReactNode } from "react"
 import { cn } from "@/lib/utils"
 

@@ -1,7 +1,7 @@
 "use client"
 
 import { useCallback, useLayoutEffect, useState } from "react"
-import { Monitor, Moon, Sun } from "lucide-react"
+import { Monitor, Moon, Sun } from "@/lib/icons"
 import Tooltip from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
 import { THEME_STORAGE_KEY, type Theme } from "@/lib/theme"

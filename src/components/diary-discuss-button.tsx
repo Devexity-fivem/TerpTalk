@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
-import { MessageSquare, Loader2 } from "lucide-react"
+import { MessageSquare, Loader2 } from "@/lib/icons"
 import Link from "next/link"
 import { signInHref } from "@/lib/callback-url"
 

@@ -3,7 +3,7 @@
 import { useSession } from "next-auth/react"
 import { signInHref } from "@/lib/callback-url"
 import Link from "next/link"
-import { MessagesSquare } from "lucide-react"
+import { MessagesSquare } from "@/lib/icons"
 import { useChatPanel } from "@/components/chat-panel"
 
 interface ChatTeaserProps {

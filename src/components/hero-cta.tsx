@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { useSession } from "next-auth/react"
-import { PenLine, ArrowRight, Sprout, UserPlus } from "lucide-react"
+import { PenLine, ArrowRight, Sprout, UserPlus } from "@/lib/icons"
 
 // Session-aware hero actions — the page shell is prerendered, so the
 // signed-out vs signed-in choice happens client-side.

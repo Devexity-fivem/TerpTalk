@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { useSession } from "next-auth/react"
-import { X, KeyRound } from "lucide-react"
+import { X, KeyRound } from "@/lib/icons"
 import Link from "next/link"
 
 const DISMISS_KEY = "terptalk-no-recovery-phrase"

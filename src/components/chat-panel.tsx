@@ -31,7 +31,7 @@ import {
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { useSession } from "next-auth/react"
-import { Loader2, Maximize2, MessageSquare, MessagesSquare, X } from "lucide-react"
+import { Loader2, Maximize2, MessageSquare, MessagesSquare, X } from "@/lib/icons"
 import ChatRoom from "@/components/chat-room"
 import Tooltip from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"

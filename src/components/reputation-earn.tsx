@@ -1,6 +1,6 @@
 "use client"
 
-import { MessageSquare, MessageCircle, BookOpen, Camera, CheckCircle, UserPlus, Repeat, Trophy, FlaskConical } from "lucide-react"
+import { MessageSquare, MessageCircle, BookOpen, Camera, CheckCircle, UserPlus, Repeat, Trophy, FlaskConical } from "@/lib/icons"
 import { cn } from "@/lib/utils"
 import { XP_TABLE } from "@/lib/progression-config"
 import Tooltip, { InfoTip } from "@/components/ui/tooltip"

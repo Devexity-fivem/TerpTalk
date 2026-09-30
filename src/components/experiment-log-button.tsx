@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { FlaskConical, X } from "lucide-react"
+import { FlaskConical, X } from "@/lib/icons"
 import ExperimentForm from "@/components/experiment-form"
 
 /** Owner-only "Log experiment" entry — opens the compact capture form

@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
-import { Pin, Lock, FolderInput, Trash2 } from "lucide-react"
+import { Pin, Lock, FolderInput, Trash2 } from "@/lib/icons"
 import Tooltip from "@/components/ui/tooltip"
 import { useToast } from "@/components/ui/toast"
 

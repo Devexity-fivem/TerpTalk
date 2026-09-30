@@ -4,7 +4,7 @@ import Link from "next/link"
 import { authOptions } from "@/lib/auth"
 import { signInHref } from "@/lib/callback-url"
 import { buildMetadata } from "@/lib/seo"
-import { Ban, ArrowLeft } from "lucide-react"
+import { Ban, ArrowLeft } from "@/lib/icons"
 import BlockedMembers from "@/components/blocked-members"
 
 export const metadata = buildMetadata({

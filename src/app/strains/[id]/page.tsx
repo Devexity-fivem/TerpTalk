@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma"
 import { notFound, permanentRedirect } from "next/navigation"
-import { Leaf, Dna, Sprout, ImageIcon, BookOpen, Wrench, MessageSquare, CheckCircle2, BarChart3, Star, Bot, FlaskConical, HelpCircle } from "lucide-react"
+import { Leaf, Dna, Sprout, ImageIcon, BookOpen, Wrench, MessageSquare, CheckCircle2, BarChart3, Star, Bot, FlaskConical, HelpCircle } from "@/lib/icons"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import StrainPhotoUpload from "@/components/strain-photo-upload"

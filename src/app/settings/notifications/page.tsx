@@ -4,7 +4,7 @@ import { signInHref } from "@/lib/callback-url"
 
 import { useEffect, useState } from "react"
 import { useSession } from "next-auth/react"
-import { ArrowLeft, Bell, Loader2, Save } from "lucide-react"
+import { ArrowLeft, Bell, Loader2, Save } from "@/lib/icons"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 

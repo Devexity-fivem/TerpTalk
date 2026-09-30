@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { Calculator as CalculatorIcon, Zap, Clock, DollarSign } from "lucide-react"
+import { Calculator as CalculatorIcon, Zap, Clock, DollarSign } from "@/lib/icons"
 import CannabisLeaf from "@/components/cannabis-leaf"
 
 export default function GrowLightCalculatorPage() {

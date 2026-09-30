@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { X, Megaphone } from "lucide-react"
+import { X, Megaphone } from "@/lib/icons"
 import Link from "next/link"
 
 interface Announcement {

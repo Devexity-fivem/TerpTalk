@@ -1,6 +1,6 @@
 "use client"
 
-import * as Lucide from "lucide-react"
+import { ICON_BY_NAME, Award, Lock } from "@/lib/icons"
 import { cn } from "@/lib/utils"
 import { getBadgeByName, type BadgeRarity, type BadgeDefinition } from "@/lib/badge-registry"
 
@@ -50,7 +50,7 @@ const RARITY_STYLES: Record<BadgeRarity, { border: string; bg: string; text: str
 }
 
 function IconFor({ name, className }: { name: string; className?: string }) {
-  const Icon = (Lucide[name as keyof typeof Lucide] as React.ComponentType<{ className?: string }>) || Lucide.Award
+  const Icon = ICON_BY_NAME[name as keyof typeof ICON_BY_NAME] || Award
   return <Icon className={className} />
 }
 
@@ -141,7 +141,7 @@ export default function AchievementBadge({ name, earned = true, mode = "profile"
       <div className={cn(base, !locked && "hover:shadow-lg hover:-translate-y-0.5 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none")}>
         <span className={iconContainer}>
           {locked ? (
-            <Lucide.Lock className={cn(iconSize, "text-slate-500")} />
+            <Lock className={cn(iconSize, "text-slate-500")} />
           ) : (
             <IconFor name={definition.icon} className={iconSize} />
           )}

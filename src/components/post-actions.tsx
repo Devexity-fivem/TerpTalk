@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { useSession } from "next-auth/react"
-import { Heart, Flag, Pencil, Trash2, Loader2 } from "lucide-react"
+import { Heart, Flag, Pencil, Trash2, Loader2 } from "@/lib/icons"
 import { useRouter } from "next/navigation"
 import Tooltip from "@/components/ui/tooltip"
 import { isModerator } from "@/lib/roles"

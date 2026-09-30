@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { useSession } from "next-auth/react"
 import { usePathname } from "next/navigation"
-import { Bell, BellRing, Loader2 } from "lucide-react"
+import { Bell, BellRing, Loader2 } from "@/lib/icons"
 import { useToast } from "@/components/ui/toast"
 import { signInHref } from "@/lib/callback-url"
 import Tooltip from "@/components/ui/tooltip"

@@ -3,7 +3,7 @@ import Link from "next/link"
 import { requireStaff } from "@/lib/require-staff"
 import { isAdmin } from "@/lib/security"
 import { searchMembers } from "@/lib/ops-metrics"
-import { Search } from "lucide-react"
+import { Search } from "@/lib/icons"
 
 export const dynamic = "force-dynamic"
 

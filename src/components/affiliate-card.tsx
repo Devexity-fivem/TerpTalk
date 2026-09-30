@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma"
 import { DEFAULT_DISCLOSURE } from "@/lib/affiliate"
-import { ExternalLink, Tag } from "lucide-react"
+import { ExternalLink, Tag } from "@/lib/icons"
 
 // Reusable affiliate product card — data comes from the DB so admin
 // changes (URL, promo code, copy) update every card automatically.

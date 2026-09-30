@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { useSession } from "next-auth/react"
-import { Flag, Ban, Check, Loader2, UserPlus, UserCheck, Mail } from "lucide-react"
+import { Flag, Ban, Check, Loader2, UserPlus, UserCheck, Mail } from "@/lib/icons"
 import Link from "next/link"
 import ConfirmDialog from "@/components/ui/confirm-dialog"
 

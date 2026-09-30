@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { useSession } from "next-auth/react"
-import { Flag, Loader2 } from "lucide-react"
+import { Flag, Loader2 } from "@/lib/icons"
 import Tooltip from "@/components/ui/tooltip"
 
 // Generic report control for content types without a dedicated action bar

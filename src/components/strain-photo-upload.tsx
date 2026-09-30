@@ -2,7 +2,7 @@
 
 import { useState, useRef } from "react"
 import { useRouter } from "next/navigation"
-import { Camera, Loader2, X } from "lucide-react"
+import { Camera, Loader2, X } from "@/lib/icons"
 
 // Resize to max 800px on the long edge, WebP — keeps stored data URIs small
 function resizeImage(file: File, max = 800): Promise<string> {

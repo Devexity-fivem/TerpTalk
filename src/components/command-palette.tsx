@@ -15,7 +15,7 @@ import {
   Search, ArrowRight, MessageCircle, Leaf, Dna, Stethoscope, Trophy,
   User, BookOpen, Home, TrendingUp, Settings, Bell, Mail, Sprout,
   MessagesSquare, Plus, Medal, Tag, Tent, X,
-} from "lucide-react"
+} from "@/lib/icons"
 import { cn } from "@/lib/utils"
 import { useChatPanel } from "@/components/chat-panel"
 import { useShareComposer } from "@/components/share-composer"

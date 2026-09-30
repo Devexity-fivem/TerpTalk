@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react"
 import { LineChart, Line, ResponsiveContainer } from "recharts"
-import { ArrowDown, ArrowUp, Minus, Lock } from "lucide-react"
+import { ArrowDown, ArrowUp, Minus, Lock } from "@/lib/icons"
 import { cn } from "@/lib/utils"
 
 /**

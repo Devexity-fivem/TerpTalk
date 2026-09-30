@@ -6,7 +6,7 @@ import { isStaff, isModerator, isAdmin } from "@/lib/roles"
 import { useEffect, useState } from "react"
 import { useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
-import { Shield, Flag, Loader2, CheckCircle, XCircle, Ban, AlertTriangle, Search, UserCheck, ScrollText, ListChecks, Layers, TrendingUp, ChevronRight } from "lucide-react"
+import { Shield, Flag, Loader2, CheckCircle, XCircle, Ban, AlertTriangle, Search, UserCheck, ScrollText, ListChecks, Layers, TrendingUp, ChevronRight } from "@/lib/icons"
 import Link from "next/link"
 import Tooltip from "@/components/ui/tooltip"
 

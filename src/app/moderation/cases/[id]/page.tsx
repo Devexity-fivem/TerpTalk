@@ -9,7 +9,7 @@ import { useParams, useRouter, useSearchParams } from "next/navigation"
 import {
   Shield, Flag, TrendingUp, Loader2, CheckCircle, XCircle,
   AlertTriangle, UserCheck, Ban, ArrowLeft, Trash2,
-} from "lucide-react"
+} from "@/lib/icons"
 import Link from "next/link"
 
 interface SubjectContext {

@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
-import { Loader2, Save, ArrowLeft } from "lucide-react"
+import { Loader2, Save, ArrowLeft } from "@/lib/icons"
 
 const TOPICS = [
   { value: "BASICS", label: "Basics" },

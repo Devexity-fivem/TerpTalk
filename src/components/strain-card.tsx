@@ -1,5 +1,5 @@
 import Link from "next/link"
-import { Leaf, Dna, Clock, Gauge } from "lucide-react"
+import { Leaf, Dna, Clock, Gauge } from "@/lib/icons"
 import { strainTypeLabel } from "@/lib/strain-stats"
 import {
   STRAIN_EFFECT_LABELS,

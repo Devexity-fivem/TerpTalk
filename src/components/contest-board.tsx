@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react"
 import { useSession } from "next-auth/react"
 import Link from "next/link"
-import { Trophy, Camera, Loader2, Heart } from "lucide-react"
+import { Trophy, Camera, Loader2, Heart } from "@/lib/icons"
 import RoleBadge from "@/components/role-badge"
 import TierChip from "@/components/tier-chip"
 import EmptyState from "@/components/ui/empty-state"

@@ -1,7 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useState } from "react"
-import { Loader2, FlaskConical, GitCommitVertical } from "lucide-react"
+import { Loader2, FlaskConical, GitCommitVertical } from "@/lib/icons"
 
 interface Item {
   id: string

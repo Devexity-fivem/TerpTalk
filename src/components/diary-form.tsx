@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Loader2 } from "lucide-react"
+import { Loader2 } from "@/lib/icons"
 import Link from "next/link"
 import StrainCombobox from "@/components/strain-combobox"
 import { MEDIUM_TYPES, MEDIUM_LABELS, LIGHT_TYPES, LIGHT_LABELS, TECHNIQUES, TECHNIQUE_LABELS } from "@/lib/grow-fields"

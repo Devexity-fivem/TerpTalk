@@ -10,7 +10,7 @@
 import { useEffect, useRef, useState } from "react"
 import { useSession } from "next-auth/react"
 import Link from "next/link"
-import { Sprout, Lock, Target, ChevronRight, Award, Zap } from "lucide-react"
+import { Sprout, Lock, Target, ChevronRight, Award, Zap } from "@/lib/icons"
 import { cn } from "@/lib/utils"
 import { signInHref } from "@/lib/callback-url"
 import Tooltip from "@/components/ui/tooltip"

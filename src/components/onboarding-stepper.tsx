@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation"
 import Link from "next/link"
 import {
   Leaf, User, Camera, Loader2, Check, Copy, AlertTriangle, KeyRound, Users, Sparkles,
-} from "lucide-react"
+} from "@/lib/icons"
 import { INTEREST_GROUPS, type SuggestedUser } from "@/lib/onboarding-shared"
 import RoleBadge from "@/components/role-badge"
 

@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { Loader2, Bot, CheckCircle2, XCircle } from "lucide-react"
+import { Loader2, Bot, CheckCircle2, XCircle } from "@/lib/icons"
 
 interface BotStats {
   commands: number

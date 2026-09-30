@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import Link from "next/link"
-import { Bookmark, Trash2 } from "lucide-react"
+import { Bookmark, Trash2 } from "@/lib/icons"
 import Tooltip from "@/components/ui/tooltip"
 
 interface SavedSearch {

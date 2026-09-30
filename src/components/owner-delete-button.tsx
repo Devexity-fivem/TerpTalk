@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
-import { Trash2, Loader2 } from "lucide-react"
+import { Trash2, Loader2 } from "@/lib/icons"
 import { useToast } from "@/components/ui/toast"
 import Tooltip from "@/components/ui/tooltip"
 

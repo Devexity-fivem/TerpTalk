@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Share2, Link2, Check } from "lucide-react"
+import { Share2, Link2, Check } from "@/lib/icons"
 
 // Share a page — copy link + post to X/Reddit
 export default function ShareButtons({ path, title }: { path: string; title: string }) {

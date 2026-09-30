@@ -23,7 +23,7 @@
 //   never stopped — modals/menus above still close.
 
 import React, { useEffect, useRef, useState } from "react"
-import { Info } from "lucide-react"
+import { Info } from "@/lib/icons"
 import { cn } from "@/lib/utils"
 
 type Side = "top" | "bottom"

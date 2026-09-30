@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import Link from "next/link"
-import { Stethoscope, RotateCcw, AlertTriangle, ArrowRight, CheckCircle2, MessageSquare } from "lucide-react"
+import { Stethoscope, RotateCcw, AlertTriangle, ArrowRight, CheckCircle2, MessageSquare } from "@/lib/icons"
 import { WIZARD_START, WIZARD_NODES, WIZARD_RESULTS } from "@/lib/problem-wizard"
 
 interface CommunityThread {

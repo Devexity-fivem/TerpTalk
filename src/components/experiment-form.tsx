@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
-import { FlaskConical, Loader2 } from "lucide-react"
+import { FlaskConical, Loader2 } from "@/lib/icons"
 import {
   EXPERIMENT_CATEGORIES,
   EXPERIMENT_CATEGORY_LABELS,

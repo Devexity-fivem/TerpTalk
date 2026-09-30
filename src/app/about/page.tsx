@@ -1,5 +1,5 @@
 import Link from "next/link"
-import { MessageSquare, Sprout, MessageCircle, Dna, Users, Award, Trophy, BookOpen, Tag, Bot } from "lucide-react"
+import { MessageSquare, Sprout, MessageCircle, Dna, Users, Award, Trophy, BookOpen, Tag, Bot } from "@/lib/icons"
 
 export const metadata = {
   title: "About",

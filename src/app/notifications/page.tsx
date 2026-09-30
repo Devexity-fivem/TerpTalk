@@ -8,7 +8,7 @@ import { useRouter } from "next/navigation"
 import {
   Bell, BellRing, Loader2, CheckCheck, Check, UserPlus, Heart, MessageSquare, AtSign,
   MessageCircle, Leaf, Mail, CheckCircle2, Award, TrendingUp, Users, Shield, Settings, Bot, Trash2, Target,
-} from "lucide-react"
+} from "@/lib/icons"
 import Link from "next/link"
 import EmptyState from "@/components/ui/empty-state"
 import Tooltip from "@/components/ui/tooltip"

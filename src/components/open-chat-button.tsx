@@ -1,6 +1,6 @@
 "use client"
 
-import { MessagesSquare } from "lucide-react"
+import { MessagesSquare } from "@/lib/icons"
 import { useChatPanel } from "@/components/chat-panel"
 
 // Opens the persistent chat panel in place — the same affordance the nav

@@ -10,7 +10,7 @@ import { buildMetadata } from "@/lib/seo"
 import {
   LayoutDashboard, Users, Sprout, ShieldAlert, TrendingUp,
   MessageSquarePlus, Bot, Activity, Wrench, ShieldCheck, Flag, Repeat2, FlaskConical,
-} from "lucide-react"
+} from "@/lib/icons"
 
 export const metadata: Metadata = buildMetadata({
   title: "Admin",

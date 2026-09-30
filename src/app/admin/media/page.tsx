@@ -5,7 +5,7 @@ import { signInHref } from "@/lib/callback-url"
 import { useEffect, useState, useCallback } from "react"
 import { useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
-import { ShieldCheck, Loader2, ImageIcon, Trash2, ChevronLeft, ChevronRight } from "lucide-react"
+import { ShieldCheck, Loader2, ImageIcon, Trash2, ChevronLeft, ChevronRight } from "@/lib/icons"
 
 interface MediaItem {
   id: string

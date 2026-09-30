@@ -7,7 +7,7 @@ import {
   MessageCircle, Send, X, Loader2, Smile, RefreshCw, MoreVertical,
   Trash2, AlertTriangle, Clock, Shield, User as UserIcon, MessageSquare,
   Lock, Timer, Hash, Bot, Flag, ChevronDown,
-} from "lucide-react"
+} from "@/lib/icons"
 import Link from "next/link"
 import RoleBadge from "@/components/role-badge"
 import TierChip from "@/components/tier-chip"

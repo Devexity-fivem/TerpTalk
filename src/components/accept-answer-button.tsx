@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
-import { CheckCircle2, XCircle, Loader2 } from "lucide-react"
+import { CheckCircle2, XCircle, Loader2 } from "@/lib/icons"
 import Tooltip from "@/components/ui/tooltip"
 
 export function AcceptAnswerButton({

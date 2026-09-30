@@ -8,7 +8,7 @@ import { useRouter } from "next/navigation"
 import {
   ShieldCheck, Loader2, Users as UsersIcon,
   Megaphone, ShieldAlert, Ban, UserCheck, Search, Percent, Award, Video, TrendingUp, MessageSquarePlus, Bot,
-} from "lucide-react"
+} from "@/lib/icons"
 import Link from "next/link"
 import AdminAffiliates from "@/components/admin-affiliates"
 import AdminFeedback from "@/components/admin-feedback"

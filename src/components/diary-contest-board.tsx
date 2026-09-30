@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { BookOpen, Heart, Loader2, Trophy, Leaf } from "lucide-react"
+import { BookOpen, Heart, Loader2, Trophy, Leaf } from "@/lib/icons"
 import ProfileCard from "@/components/ui/profile-card"
 import Link from "next/link"
 import { useSession } from "next-auth/react"

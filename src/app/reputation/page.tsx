@@ -1,6 +1,6 @@
 import { XP_TABLE, REP_RANKS, RANK_DISPLAY, PROGRESSION_RUNGS, STANDINGS, STANDING_DISPLAY, REFERRAL_MIN_XP, REFERRAL_MIN_AGE_HOURS } from "@/lib/progression-config"
 import { WEEKLY_CHALLENGES } from "@/lib/challenges"
-import { TrendingUp, ShieldCheck, RotateCcw, Sprout, Target } from "lucide-react"
+import { TrendingUp, ShieldCheck, RotateCcw, Sprout, Target } from "@/lib/icons"
 import ProgressionPanel from "@/components/progression-panel"
 import type { Metadata } from "next"
 

@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { Leaf, Loader2, Scale } from "lucide-react"
+import { Leaf, Loader2, Scale } from "@/lib/icons"
 import { useRouter } from "next/navigation"
 
 interface HarvestFormProps {

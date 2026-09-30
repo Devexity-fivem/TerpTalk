@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { useSession } from "next-auth/react"
 import { useRouter, usePathname } from "next/navigation"
-import { MessageSquare, Loader2, Send } from "lucide-react"
+import { MessageSquare, Loader2, Send } from "@/lib/icons"
 import { signInHref } from "@/lib/callback-url"
 
 export default function SetupComments({ setupId }: { setupId: string }) {

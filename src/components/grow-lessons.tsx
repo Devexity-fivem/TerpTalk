@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
-import { BookOpen, Loader2, Pencil } from "lucide-react"
+import { BookOpen, Loader2, Pencil } from "@/lib/icons"
 import { LESSON_KEYS, LESSON_LABELS, type GrowLessons } from "@/lib/experiments"
 
 /**

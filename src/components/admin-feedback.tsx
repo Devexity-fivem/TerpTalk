@@ -1,7 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useState } from "react"
-import { Loader2, ExternalLink, Plus, X } from "lucide-react"
+import { Loader2, ExternalLink, Plus, X } from "@/lib/icons"
 import { cn } from "@/lib/utils"
 
 interface FeedbackItem {

@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useRef, useCallback, useEffect } from "react"
-import { Bold, Italic, Heading, Quote, Link as LinkIcon, List, ListOrdered, Code, Eye, Pencil, AtSign } from "lucide-react"
+import { Bold, Italic, Heading, Quote, Link as LinkIcon, List, ListOrdered, Code, Eye, Pencil, AtSign } from "@/lib/icons"
 import { MarkdownRenderer } from "@/lib/markdown"
 import { useSession } from "next-auth/react"
 import { Avatar } from "@/components/ui/avatar"

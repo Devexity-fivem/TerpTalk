@@ -3,7 +3,7 @@ import type { ReactNode } from "react"
 import {
   Zap, Sprout, Bell, ArrowRight, Leaf, Users, Radio, TrendingUp, CheckCircle2, Circle,
   MessageCircle, Eye, AlertTriangle, Gauge, Bug, Wrench, Clock, Wheat, FlaskConical, BookOpen,
-} from "lucide-react"
+} from "@/lib/icons"
 import MemberGreeting from "@/components/member-greeting"
 import OpenChatButton from "@/components/open-chat-button"
 import Tooltip, { InfoTip } from "@/components/ui/tooltip"

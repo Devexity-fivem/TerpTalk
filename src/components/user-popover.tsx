@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect, useCallback, type ReactNode } from "react"
 import { createPortal } from "react-dom"
 import Link from "next/link"
-import { Loader2, Sprout } from "lucide-react"
+import { Loader2, Sprout } from "@/lib/icons"
 import { Avatar } from "@/components/ui/avatar"
 import RoleBadge from "@/components/role-badge"
 import TierChip from "@/components/tier-chip"

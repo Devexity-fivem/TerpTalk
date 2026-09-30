@@ -1,5 +1,5 @@
 import ProblemWizard from "@/components/problem-wizard"
-import { Stethoscope, MessageSquare, HelpCircle, Sprout } from "lucide-react"
+import { Stethoscope, MessageSquare, HelpCircle, Sprout } from "@/lib/icons"
 import Link from "next/link"
 import { getSymptomStats } from "@/lib/community-stats"
 

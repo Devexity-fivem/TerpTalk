@@ -1,4 +1,4 @@
-import { MessageCircle } from "lucide-react"
+import { MessageCircle } from "@/lib/icons"
 import { getBooleanSetting, SITE_SETTINGS } from "@/lib/settings"
 import ChatClient from "./chat-client"
 

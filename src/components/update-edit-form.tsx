@@ -8,7 +8,7 @@
 import { useState } from "react"
 import { useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
-import { Pencil, Loader2, X, Plus, Camera, ImagePlus, FlaskConical } from "lucide-react"
+import { Pencil, Loader2, X, Plus, Camera, ImagePlus, FlaskConical } from "@/lib/icons"
 import { useToast } from "@/components/ui/toast"
 import { STAGE_TIPS } from "@/lib/stage-tips"
 import { resizeImage } from "@/components/update-form"

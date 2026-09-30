@@ -1,6 +1,6 @@
 "use client"
 
-import { Check } from "lucide-react"
+import { Check } from "@/lib/icons"
 import { cn } from "@/lib/utils"
 import { REP_RANKS, RANK_DISPLAY, rankFromXp, nextRank } from "@/lib/progression-config"
 import { InfoTip } from "@/components/ui/tooltip"

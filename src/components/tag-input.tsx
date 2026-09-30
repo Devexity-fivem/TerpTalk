@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useRef, useCallback } from "react"
-import { X } from "lucide-react"
+import { X } from "@/lib/icons"
 
 interface TagInputProps {
   value: string[]

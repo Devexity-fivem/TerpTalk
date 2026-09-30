@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma"
 import { notFound } from "next/navigation"
-import { BookOpen, Pencil } from "lucide-react"
+import { BookOpen, Pencil } from "@/lib/icons"
 import Link from "next/link"
 import ShareButtons from "@/components/share-buttons"
 import { buildMetadata, snippet } from "@/lib/seo"
@@ -11,7 +11,7 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { isModerator, activeAuthor, publicUserSelect, isActiveAuthorRow } from "@/lib/security"
 import { TOPIC_TO_CATEGORY_SLUGS } from "@/lib/guides"
-import { MessageSquare } from "lucide-react"
+import { MessageSquare } from "@/lib/icons"
 
 export const dynamic = "force-dynamic"
 

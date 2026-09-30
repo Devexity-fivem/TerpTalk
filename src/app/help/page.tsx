@@ -1,5 +1,5 @@
 import Link from "next/link"
-import { HelpCircle, Stethoscope } from "lucide-react"
+import { HelpCircle, Stethoscope } from "@/lib/icons"
 
 export const metadata = {
   title: "Help Center",

@@ -5,7 +5,7 @@ import Link from "next/link"
 import { useSession, signOut } from "next-auth/react"
 import {
   User, Award, TrendingUp, Leaf, Mail, Bell, Settings, Shield, LogOut, ChevronDown, HelpCircle, MessagesSquare, MessageSquarePlus, Activity,
-} from "lucide-react"
+} from "@/lib/icons"
 import { Avatar } from "@/components/ui/avatar"
 import { useChatPanel } from "@/components/chat-panel"
 import { FeedbackModal } from "@/components/feedback-modal"

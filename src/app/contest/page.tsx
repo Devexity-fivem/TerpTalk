@@ -1,6 +1,6 @@
 import { unstable_cache } from "next/cache"
 import { previousWeekKey, previousMonthKey } from "@/lib/week"
-import { Trophy, BookOpen } from "lucide-react"
+import { Trophy, BookOpen } from "@/lib/icons"
 import Link from "next/link"
 import ContestBoard from "@/components/contest-board"
 import ProfileCard from "@/components/ui/profile-card"

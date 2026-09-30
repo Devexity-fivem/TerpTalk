@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { Target } from "lucide-react"
+import { Target } from "@/lib/icons"
 import { cn } from "@/lib/utils"
 import Tooltip, { InfoTip } from "@/components/ui/tooltip"
 

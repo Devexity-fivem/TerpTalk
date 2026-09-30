@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { useSession } from "next-auth/react"
-import { Heart } from "lucide-react"
+import { Heart } from "@/lib/icons"
 import Tooltip from "@/components/ui/tooltip"
 
 const EMOJIS: Record<string, string> = {

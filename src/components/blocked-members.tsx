@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import Link from "next/link"
 import { useSession } from "next-auth/react"
-import { Ban, Loader2 } from "lucide-react"
+import { Ban, Loader2 } from "@/lib/icons"
 import { Avatar } from "@/components/ui/avatar"
 import { signInHref } from "@/lib/callback-url"
 

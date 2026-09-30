@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma"
 import { publicUserSelect, activeAuthor, blockedUserIds, isAdmin } from "@/lib/security"
 import { notFound, permanentRedirect } from "next/navigation"
-import { Leaf, Calendar, Users, ClipboardCheck, Camera, TrendingUp, Pencil, Sprout, Link2, Lock, MessagesSquare, FlaskConical, FileDown } from "lucide-react"
+import { Leaf, Calendar, Users, ClipboardCheck, Camera, TrendingUp, Pencil, Sprout, Link2, Lock, MessagesSquare, FlaskConical, FileDown } from "@/lib/icons"
 import Link from "next/link"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
