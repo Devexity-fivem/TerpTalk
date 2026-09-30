@@ -114,7 +114,7 @@ function getActions(openChat: () => void, composer: { open: () => void }): Actio
 
 interface SearchResult {
   id: string
-  type: "thread" | "strain" | "diary" | "user" | "guide"
+  type: "thread" | "strain" | "diary" | "user" | "guide" | "tag"
   title: string
   subtitle?: string
   href: string
@@ -126,6 +126,21 @@ const typeIcons: Record<string, React.ElementType> = {
   diary: Leaf,
   user: User,
   guide: BookOpen,
+  tag: Tag,
+}
+
+// /api/search/suggest returns { suggestions: [{ type, title, slug }] }.
+const SUGGESTION_HREFS: Record<string, (slug: string) => string> = {
+  thread: (slug) => `/forum/thread/${slug}`,
+  strain: (slug) => `/strains/${slug}`,
+  user: (slug) => `/u/${slug}`,
+  tag: (slug) => `/forum/tags/${slug}`,
+  guide: (slug) => `/guides/${slug}`,
+}
+
+function toSearchResult(s: { type: string; title: string; slug: string }): SearchResult | null {
+  const href = SUGGESTION_HREFS[s.type]?.(s.slug)
+  return href ? { id: `${s.type}:${s.slug}`, type: s.type as SearchResult["type"], title: s.title, href } : null
 }
 
 // ── Dialog ─────────────────────────────────────────────────────────
@@ -173,9 +188,14 @@ function CommandPaletteDialog({ onClose }: { onClose: () => void }) {
     const timer = setTimeout(() => {
       setSearching(true)
       fetch(`/api/search/suggest?q=${encodeURIComponent(query)}`, { signal: controller.signal })
-        .then((res) => (res.ok ? res.json() : { results: [] }))
+        .then((res) => (res.ok ? res.json() : { suggestions: [] }))
         .then((d) => {
-          setResults((d.results || []).slice(0, 6))
+          setResults(
+            ((d.suggestions || []) as { type: string; title: string; slug: string }[])
+              .map(toSearchResult)
+              .filter((r): r is SearchResult => !!r)
+              .slice(0, 6)
+          )
           setSearching(false)
         })
         .catch(() => setSearching(false))
