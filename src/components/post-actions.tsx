@@ -152,7 +152,7 @@ export default function PostActions({
           <textarea
             value={content}
             onChange={(e) => setContent(e.target.value)}
-            className="w-full px-3 py-2 rounded-xl border border-border/70 bg-background text-sm min-h-[80px]"
+            className="w-full px-3 py-2 rounded-xl border border-border/70 bg-background text-sm min-h-20"
             maxLength={10000}
           />
           <div className="flex gap-2">

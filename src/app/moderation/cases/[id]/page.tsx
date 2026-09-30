@@ -269,10 +269,10 @@ export default function CasePage() {
                   </p>
                 </div>
                 {item.description && (
-                  <div className="bg-secondary/50 rounded p-3 text-sm break-words">&ldquo;{item.description}&rdquo;</div>
+                  <div className="bg-secondary/50 rounded p-3 text-sm wrap-break-word">&ldquo;{item.description}&rdquo;</div>
                 )}
                 {item.target ? (
-                  <div className="bg-secondary/50 rounded p-3 text-sm break-words">
+                  <div className="bg-secondary/50 rounded p-3 text-sm wrap-break-word">
                     {item.target.title && <p className="font-medium mb-1">{item.target.title}</p>}
                     {item.target.content && <p className="whitespace-pre-wrap">{item.target.content}</p>}
                     <span className="flex items-center gap-2 mt-2">
