@@ -15,6 +15,7 @@ import { runBotCommand } from "@/lib/terpbot-data"
 import { recordBotEvent, countEntityLinks } from "@/lib/terpbot-events"
 import { getBooleanSetting, SITE_SETTINGS } from "@/lib/settings"
 import { checkMaintenance } from "@/lib/maintenance"
+import { CHAT_ACTIVITY_CHANNEL } from "@/lib/chat-client"
 
 const ISO_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,3})?Z$/
 
@@ -352,8 +353,14 @@ export async function POST(request: NextRequest) {
     // Realtime fan-out when Pusher is configured (clients fall back to
     // polling). The event is a content-free tickle — clients refetch through
     // the block-filtered GET, so a blocked user's message never leaves the
-    // server destined for a blocker's browser.
-    getPusher()?.trigger(`private-chat-${roomId}`, "new-message", { roomId, latestAt: dto.createdAt }).catch((e) => console.error("[pusher] chat message push failed:", roomId, e))
+    // server destined for a blocker's browser. The shared activity channel
+    // is the same tickle for closed-panel badge subscribers — reachable
+    // only from this POST, which already verified the room is non-private.
+    getPusher()?.trigger(
+      [`private-chat-${roomId}`, CHAT_ACTIVITY_CHANNEL],
+      "new-message",
+      { roomId, latestAt: dto.createdAt }
+    ).catch((e) => console.error("[pusher] chat message push failed:", roomId, e))
 
     // TerpBot answers direct pings through the deterministic intent parser.
     // At most one bot reply per room per minute so it can't be spammed into
@@ -447,7 +454,7 @@ export async function DELETE(request: NextRequest) {
     // roomId is fetched first so connected clients get a tombstone event.
     const msg = await prisma.chatMessage.findFirst({
       where: { id, authorId: userId, deleted: false },
-      select: { roomId: true },
+      select: { roomId: true, room: { select: { isPrivate: true } } },
     })
     if (!msg) {
       return NextResponse.json({ error: "Message not found" }, { status: 404 })
@@ -460,8 +467,13 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: "Message not found" }, { status: 404 })
     }
 
-    // ids-only payload — never message content or author.
-    getPusher()?.trigger(`private-chat-${msg.roomId}`, "message-deleted", { roomId: msg.roomId, ids: [id] }).catch((e) => console.error("[pusher] chat delete push failed:", msg.roomId, e))
+    // ids-only payload — never message content or author. Badge listeners
+    // on the shared activity channel only get it for non-private rooms.
+    getPusher()?.trigger(
+      msg.room.isPrivate ? `private-chat-${msg.roomId}` : [`private-chat-${msg.roomId}`, CHAT_ACTIVITY_CHANNEL],
+      "message-deleted",
+      { roomId: msg.roomId, ids: [id] }
+    ).catch((e) => console.error("[pusher] chat delete push failed:", msg.roomId, e))
 
     return NextResponse.json({ deleted: true })
   } catch (error) {

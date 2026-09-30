@@ -16,6 +16,7 @@ import { getPusher } from "@/lib/pusher"
 import { activeAuthor, chatAuthorSelect, LIMITS } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
 import { TERPBOT_USERNAME, stageLabel } from "@/lib/terpbot-constants"
+import { CHAT_ACTIVITY_CHANNEL } from "@/lib/chat-client"
 import { claimBotEvent, recordBotEvent, releaseBotEvent } from "@/lib/terpbot-events"
 import { diaryPath } from "@/lib/slugs"
 
@@ -155,8 +156,14 @@ export async function postBotMessage(roomId: string, text: string, replyToId?: s
           }
         : null,
     }
-    // Content-free tickle — same delivery contract as user messages.
-    getPusher()?.trigger(`private-chat-${roomId}`, "new-message", { roomId, latestAt: dto.createdAt }).catch((e) => console.error("[pusher] terpbot message push failed:", roomId, e))
+    // Content-free tickle — same delivery contract as user messages. The
+    // room is verified non-private above, so the shared badge channel is
+    // safe to include.
+    getPusher()?.trigger(
+      [`private-chat-${roomId}`, CHAT_ACTIVITY_CHANNEL],
+      "new-message",
+      { roomId, latestAt: dto.createdAt }
+    ).catch((e) => console.error("[pusher] terpbot message push failed:", roomId, e))
     return dto
   } catch (error) {
     console.error("[terpbot] post failed:", error)
@@ -345,7 +352,9 @@ export async function purgeDiaryAnnouncements(diary: { id: string; slug?: string
       byRoom.set(r.roomId, list)
     }
     for (const [roomId, ids] of byRoom) {
-      getPusher()?.trigger(`private-chat-${roomId}`, "message-deleted", { roomId, ids }).catch((e) => console.error("[pusher] announce purge push failed:", roomId, e))
+      // Bot messages only ever exist in public rooms (postBotMessage
+      // enforces it), so the shared badge channel is safe here too.
+      getPusher()?.trigger([`private-chat-${roomId}`, CHAT_ACTIVITY_CHANNEL], "message-deleted", { roomId, ids }).catch((e) => console.error("[pusher] announce purge push failed:", roomId, e))
     }
   } catch (error) {
     console.error("[terpbot] diary announce purge failed:", error)

@@ -669,6 +669,7 @@ export default function ChatRoom({ embedded = false, headerActions }: ChatRoomPr
     let timer: ReturnType<typeof setTimeout> | null = null
     let tickleTimer: ReturnType<typeof setTimeout> | null = null
     let subscribedChannel: string | null = null
+    let boundPusher: import("pusher-js").default | null = null
     const roomId = room.id
 
     // Single idempotent merge path for GET batches, Pusher pushes, and
@@ -751,12 +752,33 @@ export default function ChatRoom({ embedded = false, headerActions }: ChatRoomPr
     const pusherCluster = process.env.NEXT_PUBLIC_PUSHER_CLUSTER
     const realtime = !!(pusherKey && pusherCluster)
 
+    // The poll is a fallback, not a heartbeat — while the room channel is
+    // subscribed it stays idle; it starts on subscription failure or a
+    // genuine connection drop, and the next successful subscribe stops it.
+    const startPolling = () => {
+      if (!timer) timer = setTimeout(tick, 10_000)
+    }
+    const stopPolling = () => {
+      if (timer) {
+        clearTimeout(timer)
+        timer = null
+      }
+    }
+
     const tick = async () => {
       await load()
       if (cancelled) return
-      // With realtime push, a slow 30s poll is just a missed-message safety net.
-      // Without Pusher, poll every 10s to keep function invocations sane on the free tier.
-      timer = setTimeout(tick, realtime ? 30000 : 10000)
+      timer = setTimeout(tick, 10000)
+    }
+
+    // Only a drop from a previously-connected state counts as an outage
+    // needing the fallback — the initial "connecting" transition isn't
+    // one. failed/unavailable cover a socket that never establishes.
+    const onConnState = (s: { previous: string; current: string }) => {
+      if (cancelled || s.current === "connected") return
+      if (s.previous === "connected" || s.current === "failed" || s.current === "unavailable") {
+        startPolling()
+      }
     }
 
     const subscribe = async () => {
@@ -764,7 +786,12 @@ export default function ChatRoom({ embedded = false, headerActions }: ChatRoomPr
       try {
         const p = await getSharedPusher()
         // Effect may have cleaned up before the import resolved.
-        if (cancelled || !p) return
+        if (cancelled) return
+        if (!p) {
+          startPolling()
+          return
+        }
+        boundPusher = p
         const channelName = `private-chat-${roomId}`
         const channel = p.subscribe(channelName)
         subscribedChannel = channelName
@@ -797,7 +824,19 @@ export default function ChatRoom({ embedded = false, headerActions }: ChatRoomPr
           setRoom((prev) => (prev ? patch(prev) : prev))
           setRooms((prev) => prev.map(patch))
         })
-      } catch { /* stay on polling */ }
+        // Healthy subscription: stop any fallback poll and catch up on
+        // whatever landed between the initial fetch and subscribe (this
+        // also fires on reconnect auto-resubscribe — replayed-proof).
+        channel.bind("pusher:subscription_succeeded", () => {
+          if (cancelled) return
+          stopPolling()
+          void load()
+        })
+        channel.bind("pusher:subscription_error", () => {
+          if (!cancelled) startPolling()
+        })
+        p.connection.bind("state_change", onConnState)
+      } catch { startPolling() }
     }
 
     const onVisible = () => { if (!document.hidden) load() }
@@ -807,12 +846,14 @@ export default function ChatRoom({ embedded = false, headerActions }: ChatRoomPr
     tombstonesRef.current = new Set()
     blockedRef.current = new Set()
     subscribe()
-    tick()
+    void load()
+    if (!realtime) startPolling()
 
     return () => {
       cancelled = true
       if (timer) clearTimeout(timer)
       if (tickleTimer) clearTimeout(tickleTimer)
+      boundPusher?.connection.unbind("state_change", onConnState)
       if (subscribedChannel) {
         peekSharedPusher()?.unsubscribe(subscribedChannel)
       }

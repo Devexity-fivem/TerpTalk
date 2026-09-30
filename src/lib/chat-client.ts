@@ -25,6 +25,14 @@ export const CHAT_MESSAGE_EVENT = "new-message"
 export const CHAT_MESSAGE_DELETED_EVENT = "message-deleted"
 export const CHAT_ROOM_STATE_EVENT = "room-state"
 
+// Public, content-free activity channel — carries the same {roomId,
+// latestAt} tickle as the per-room private channels so the closed chat
+// panel can keep its unread dot current without a per-minute poll or a
+// per-room subscription. Message POSTs only ever target non-private
+// rooms (the route rejects private-room writes), so this exposes nothing
+// beyond what the rooms list endpoint already shows.
+export const CHAT_ACTIVITY_CHANNEL = "chat-activity"
+
 // new-message is a content-free "tickle" — it tells subscribers to refetch
 // so the server can apply per-viewer filters (blocks, deleted tombstones)
 // instead of broadcasting message content to every room subscriber.

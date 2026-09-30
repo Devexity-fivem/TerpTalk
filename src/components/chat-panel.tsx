@@ -25,6 +25,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useRef,
   useState,
   type ReactNode,
 } from "react"
@@ -35,7 +36,16 @@ import { Loader2, Maximize2, MessageSquare, MessagesSquare, X } from "@/lib/icon
 import ChatRoom from "@/components/chat-room"
 import Tooltip from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
-import { syncUnread, CHAT_SEEN_EVENT } from "@/lib/chat-client"
+import {
+  syncUnread,
+  CHAT_SEEN_EVENT,
+  CHAT_MESSAGE_EVENT,
+  CHAT_MESSAGE_DELETED_EVENT,
+  CHAT_ACTIVITY_CHANNEL,
+  type ChatMessageTickle,
+  type RoomActivity,
+} from "@/lib/chat-client"
+import { getSharedPusher, peekSharedPusher } from "@/lib/pusher-client"
 
 interface ChatPanelContextValue {
   open: boolean
@@ -63,42 +73,136 @@ export function ChatPanelProvider({ children }: { children: ReactNode }) {
   const { data: session } = useSession()
   const [open, setOpen] = useState(false)
   const [chatUnreadRooms, setChatUnreadRooms] = useState(0)
+  // Accessible-room activity list — seeded by the badge fetch, then kept
+  // current by realtime tickles so a healthy Pusher connection needs no
+  // periodic DB-backed polling.
+  const roomsRef = useRef<RoomActivity[]>([])
 
   const openPanel = useCallback(() => setOpen(true), [])
   const closePanel = useCallback(() => setOpen(false), [])
   const togglePanel = useCallback(() => setOpen((o) => !o), [])
 
   // Chat activity signal — per-room latest activity vs localStorage
-  // last-seen. One bounded fetch on mount plus a slow poll; the endpoint
-  // is auth-only so guests get no signal, and only accessible public
-  // rooms are ever included in the payload. This is the ONLY chat data
-  // fetched while the panel is closed — no message content, no sockets.
+  // last-seen. One bounded fetch on mount, then the shared "chat-activity"
+  // channel's content-free tickles update the dot locally; the 60s poll
+  // only runs when realtime is unavailable (same pattern as the nav
+  // notification fallback). This is the ONLY chat data fetched while the
+  // panel is closed — no message content.
   useEffect(() => {
     if (!session) return
-    const refreshChat = () => {
-      fetch("/api/chat/rooms?badge=1")
-        .then((res) => (res.ok ? res.json() : null))
-        .then((d) => {
-          if (!d) return
-          const unread = syncUnread(
-            (d.rooms || []).map((r: { id: string; latestAt: string | null }) => ({
-              id: r.id,
-              latestAt: r.latestAt,
-            })),
-            window.localStorage
-          )
-          setChatUnreadRooms(unread.size)
-        })
-        .catch(() => {})
+    const storage = window.localStorage
+    const recompute = () => setChatUnreadRooms(syncUnread(roomsRef.current, storage).size)
+    const refreshChat = async () => {
+      try {
+        const res = await fetch("/api/chat/rooms?badge=1")
+        if (!res.ok) return
+        const d = await res.json()
+        if (!d) return
+        roomsRef.current = (d.rooms || []).map(
+          (r: { id: string; latestAt: string | null }) => ({ id: r.id, latestAt: r.latestAt })
+        )
+        recompute()
+      } catch { /* transient — next tickle/poll resyncs */ }
     }
-    refreshChat()
-    const chatPoll = setInterval(refreshChat, 60_000)
-    // The chat surface dispatches this after marking a room seen — clears
-    // the dot immediately instead of waiting for the next poll.
-    window.addEventListener(CHAT_SEEN_EVENT, refreshChat)
+    void refreshChat()
+
+    let poll: ReturnType<typeof setInterval> | null = null
+    let cancelled = false
+    let everConnected = false
+    let boundPusher: import("pusher-js").default | null = null
+    const startPolling = () => {
+      if (!poll) poll = setInterval(() => void refreshChat(), 60_000)
+    }
+    const stopPolling = () => {
+      if (poll) {
+        clearInterval(poll)
+        poll = null
+      }
+    }
+
+    // Events that can lower latestAt (deletes) or reference a room the
+    // badge payload didn't list (created mid-session) need the server's
+    // authoritative state — coalesce into one fetch.
+    let resyncTimer: ReturnType<typeof setTimeout> | null = null
+    const scheduleResync = () => {
+      if (resyncTimer) return
+      resyncTimer = setTimeout(() => {
+        resyncTimer = null
+        void refreshChat()
+      }, 1000)
+    }
+
+    const onTickle = (e: ChatMessageTickle) => {
+      const room = roomsRef.current.find((r) => r.id === e.roomId)
+      // Unknown room (new room, or one gated from this user) — resync
+      // rather than guessing at visibility.
+      if (!room) {
+        scheduleResync()
+        return
+      }
+      if (e.latestAt > (room.latestAt ?? "")) room.latestAt = e.latestAt
+      recompute()
+    }
+
+    // The chat surface dispatches this after marking a room seen — the
+    // last-seen write already landed in storage, so recompute locally
+    // instead of refetching.
+    const onSeen = () => recompute()
+    window.addEventListener(CHAT_SEEN_EVENT, onSeen)
+    // Sleeping tabs miss pushed events — authoritative resync on focus.
+    const onVisible = () => {
+      if (!document.hidden) void refreshChat()
+    }
+    document.addEventListener("visibilitychange", onVisible)
+
+    const onConnState = (s: { previous: string; current: string }) => {
+      if (cancelled) return
+      if (s.current === "connected") {
+        // Resubscribes happen automatically, but events emitted while the
+        // socket was down are never replayed — resync on reconnect.
+        if (everConnected) void refreshChat()
+        everConnected = true
+        stopPolling()
+        return
+      }
+      // Only react to a genuine drop or an initial-connect failure — the
+      // "connecting" transition on mount is not an outage.
+      if (everConnected || s.current === "failed" || s.current === "unavailable") startPolling()
+    }
+
+    const pusherKey = process.env.NEXT_PUBLIC_PUSHER_KEY
+    const pusherCluster = process.env.NEXT_PUBLIC_PUSHER_CLUSTER
+    if (pusherKey && pusherCluster) {
+      getSharedPusher()
+        .then((p) => {
+          // Effect may have cleaned up before the import resolved.
+          if (cancelled) return
+          if (!p) {
+            startPolling()
+            return
+          }
+          boundPusher = p
+          const ch = p.subscribe(CHAT_ACTIVITY_CHANNEL)
+          ch.bind(CHAT_MESSAGE_EVENT, onTickle)
+          ch.bind(CHAT_MESSAGE_DELETED_EVENT, scheduleResync)
+          ch.bind("pusher:subscription_error", startPolling)
+          ch.bind("pusher:subscription_succeeded", stopPolling)
+          p.connection.bind("state_change", onConnState)
+        })
+        .catch(startPolling)
+    } else {
+      startPolling()
+    }
+
     return () => {
-      clearInterval(chatPoll)
-      window.removeEventListener(CHAT_SEEN_EVENT, refreshChat)
+      cancelled = true
+      window.removeEventListener(CHAT_SEEN_EVENT, onSeen)
+      document.removeEventListener("visibilitychange", onVisible)
+      if (poll) clearInterval(poll)
+      if (resyncTimer) clearTimeout(resyncTimer)
+      boundPusher?.connection.unbind("state_change", onConnState)
+      // The socket is shared — drop only this channel, never disconnect.
+      peekSharedPusher()?.unsubscribe(CHAT_ACTIVITY_CHANNEL)
     }
   }, [session])
 
