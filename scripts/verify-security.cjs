@@ -197,6 +197,9 @@ const apiFiles = () => {
     // Diary update drafts — text-only unsaved form fields, scoped by
     // user+diary id in the key so drafts never cross accounts or grows.
     path.join("src", "components", "update-form.tsx"),
+    // AsyncLocalStorage (node:async_hooks) — server-side request scope,
+    // not browser storage; the class name trips the literal scan.
+    path.join("src", "lib", "query-count.ts"),
   ]);
   check("no client-side storage (localStorage/sessionStorage)", !allSrc.some((f) => {
     if (storageAllowlist.has(f)) return false;

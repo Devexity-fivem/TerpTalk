@@ -211,6 +211,71 @@ check("panel subscribes only to the public activity channel (room subscribe live
   )
 })
 
+// ── DB-efficiency Phase A contracts ──────────────────────────────────
+// These pin the polling/dedup/batching invariants — no behavioral surface
+// exists without a browser + live DB, so the contracts are structural.
+
+check("chat-room: message poll is a fallback gated on realtime health", () => {
+  // Poll starts only when Pusher is absent or broken — never unconditionally.
+  assert.ok(room.includes("if (!realtime) startPolling()"), "poll is fallback-only when Pusher is configured")
+  assert.ok(room.includes('"pusher:subscription_error"'), "subscription failure resumes the poll")
+  assert.ok(room.includes('"state_change"'), "connection drop resumes the poll")
+  assert.ok(room.includes('"pusher:subscription_succeeded"'), "healthy subscribe stops the poll + catches up")
+})
+
+check("chat-panel: badge refresh is realtime-first with poll fallback", () => {
+  assert.ok(panel.includes("CHAT_ACTIVITY_CHANNEL"), "badge listens on the public activity channel")
+  assert.ok(panel.includes("/api/chat/rooms?badge=1"), "badge fetch remains the fallback path")
+  assert.ok(panel.includes("setInterval"), "fallback poll still exists")
+})
+
+check("navigation: notification badge uses the count-only contract", () => {
+  const nav = src("components/navigation.tsx")
+  const route = src("app/api/notifications/route.ts")
+  assert.ok(nav.includes("/api/notifications?count=1"), "navbar fetches the count-only path")
+  assert.ok(route.includes('searchParams.get("count")'), "count-only path exists in the route")
+  // Burst coalescing — realtime events funnel through one scheduled refresh.
+  assert.ok(nav.includes("scheduleRefresh"), "pushes are coalesced")
+})
+
+check("feed reuses the shared site-stats cache entry", () => {
+  const feed = src("app/feed/page.tsx")
+  assert.ok(feed.includes("getSiteStats"), "member/diary counts share the home-stats entry")
+  assert.ok(feed.includes("memberCount = siteStats.members") && feed.includes("diaryCount = siteStats.diaries"), "global counts come from the shared stats entry")
+  // unfiltered global counts are gone — the nudge's `where: { id: userId }` is per-user, not a global aggregate
+  assert.ok(!/prisma\.user\.count\(\s*\)/.test(feed), "no duplicate global member count")
+  assert.ok(!/prisma\.growDiary\.count\(\s*\)/.test(feed), "no duplicate global diary count")
+})
+
+check("outbox enqueue batches multi-intent writes", () => {
+  const rep = src("lib/reputation-outbox.ts")
+  const xp = src("lib/progression-outbox.ts")
+  assert.ok(rep.includes("createManyAndReturn"), "reputation intents batch via one INSERT")
+  assert.ok(xp.includes("createManyAndReturn"), "progression intents batch via one INSERT")
+  assert.ok(rep.includes("drainMany") && xp.includes("drainXpMany"), "concurrent drain helpers")
+})
+
+check("unlock ladders evaluate against one profile read", () => {
+  const prog = src("lib/progression.ts")
+  assert.ok(prog.includes("export async function hasUnlocks"), "batch unlock evaluator exists")
+  assert.ok(/profileSectionLimit[\s\S]*?hasUnlocks\(/.test(prog), "section ladder shares the profile read")
+  assert.ok(/statSlotLimit[\s\S]*?hasUnlocks\(/.test(prog), "stat-slot ladder shares the profile read")
+  assert.ok(/savedSearchLimit[\s\S]*?hasUnlocks\(/.test(prog), "saved-search ladder shares the profile read")
+})
+
+check("grow journey reads compact update rows, never bodies", () => {
+  const gj = src("lib/grow-journey.ts")
+  assert.ok(gj.includes("MEANINGFUL_UPDATE_SQL"), "meaningful flag uses the canonical SQL twin")
+  assert.ok(!gj.includes("diaryUpdate.findMany"), "no wide update scan")
+  assert.ok(!/content:\s*true/.test(gj), "content column is never selected")
+})
+
+check("command palette consumes the suggest contract", () => {
+  const cp = src("components/command-palette.tsx")
+  assert.ok(cp.includes("d.suggestions"), "reads the suggestions field the API returns")
+  assert.ok(!cp.includes("d.results"), "dead results field is gone")
+})
+
 check("ChatRoom unsubscribes on unmount/room switch (socket cleanup)", () => {
   // A commented-out or removed unsubscribe leaks a channel per open/switch.
   // Assert the call is live code inside an effect cleanup, not a comment.
