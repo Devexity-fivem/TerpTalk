@@ -201,8 +201,14 @@ check("exactly one browser-side Pusher construction site", () => {
   )
 })
 
-check("panel opens without subscribing (subscribe lives inside ChatRoom)", () => {
-  assert.ok(!panel.includes(".subscribe("), "dock itself holds no subscription")
+check("panel subscribes only to the public activity channel (room subscribe lives inside ChatRoom)", () => {
+  // The badge tickle is the content-free public "chat-activity" channel —
+  // the dock must never subscribe to a per-room private-chat-* channel.
+  const subs = [...panel.matchAll(/\.subscribe\(([^)]*)\)/g)].map((m) => m[1])
+  assert.ok(
+    subs.every((s) => s.includes("CHAT_ACTIVITY_CHANNEL")),
+    `dock may only subscribe to CHAT_ACTIVITY_CHANNEL: ${subs.join(", ")}`
+  )
 })
 
 check("ChatRoom unsubscribes on unmount/room switch (socket cleanup)", () => {
