@@ -102,7 +102,8 @@ export function Navigation() {
     const userId = (session?.user as { id?: string } | undefined)?.id
     if (!userId) return // signed out, or an invalidated ghost session
     const refresh = () => {
-      fetch("/api/notifications")
+      // Count-only endpoint — the badge never needs the notification rows.
+      fetch("/api/notifications?count=1")
         .then((res) => (res.ok ? res.json() : null))
         .then((d) => setUnread(d?.unreadCount || 0))
         .catch(() => {})
@@ -111,6 +112,17 @@ export function Navigation() {
         .then((res) => (res.ok ? res.json() : null))
         .then((d) => setDmUnread(d?.unread || 0))
         .catch(() => {})
+    }
+    // Pushes can arrive in bursts (announcements, fanout) — coalesce them
+    // into one refresh instead of one request pair per event. User-driven
+    // and reconnect refreshes stay immediate.
+    let refreshTimer: ReturnType<typeof setTimeout> | null = null
+    const scheduleRefresh = () => {
+      if (refreshTimer) return
+      refreshTimer = setTimeout(() => {
+        refreshTimer = null
+        refresh()
+      }, 500)
     }
     refresh()
     const onRead = () => refresh()
@@ -146,7 +158,7 @@ export function Navigation() {
           boundPusher = p
           const ch = p.subscribe(channel)
           ch.bind("new-notification", (n: unknown) => {
-            refresh()
+            scheduleRefresh()
             window.dispatchEvent(new CustomEvent("tt-new-notification", { detail: n }))
           })
           ch.bind("pusher:subscription_error", startPolling)
@@ -164,6 +176,7 @@ export function Navigation() {
       window.removeEventListener("tt-notifications-read", onRead)
       document.removeEventListener("visibilitychange", onVisible)
       if (poll) clearInterval(poll)
+      if (refreshTimer) clearTimeout(refreshTimer)
       boundPusher?.connection.unbind("connected", refresh)
       // The socket is shared — drop only this channel, never disconnect.
       peekSharedPusher()?.unsubscribe(channel)

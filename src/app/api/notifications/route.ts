@@ -17,6 +17,15 @@ export async function GET(request: NextRequest) {
     if (!userId) return unauthorized()
     if (!(await isSessionValid(userId, token?.sessionVersion as number | undefined))) return forbidden()
 
+    // Badge-only mode — the navbar just needs the unread count, so it can
+    // skip the 50-row fetch entirely. Same auth/session gate as the list.
+    if (request.nextUrl.searchParams.get("count") === "1") {
+      const unreadOnly = await prisma.notification.count({
+        where: { userId, read: false },
+      })
+      return NextResponse.json({ unreadCount: unreadOnly })
+    }
+
     const cursor = request.nextUrl.searchParams.get("cursor")
 
     const [notifications, unreadCount] = await Promise.all([
