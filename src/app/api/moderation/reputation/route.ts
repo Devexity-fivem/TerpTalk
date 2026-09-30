@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { unauthorized, forbidden, getClientIp, logSecurityEvent, isAdmin } from "@/lib/security"
+import { unauthorized, forbidden, getClientIp, logSecurityEvent, isAdmin, isStaff } from "@/lib/security"
 import { requireModerator } from "@/lib/require-staff"
 import { rateLimit } from "@/lib/rate-limit"
 import { reverseReputationEvent, REP_EVENT_TYPES, publicRepLabel } from "@/lib/reputation"
@@ -148,11 +148,11 @@ export async function POST(request: Request) {
       if (event.type === "STAFF_ADJUSTMENT" && !isAdmin(staff.role)) {
         return forbidden()
       }
-      if (event.user.role === "ADMINISTRATOR" || event.userId === staff.id) {
+      if (isAdmin(event.user.role) || event.userId === staff.id) {
         return forbidden()
       }
       // Moderators can't strip progression from fellow staff.
-      if ((event.user.role === "MODERATOR" || event.user.role === "SUPPORT") && !isAdmin(staff.role)) {
+      if (isStaff(event.user.role) && !isAdmin(event.user.role) && !isAdmin(staff.role)) {
         return forbidden()
       }
 
@@ -190,10 +190,10 @@ export async function POST(request: Request) {
     if (legacy.type === REP_EVENT_TYPES.STAFF_ADJUSTMENT && !isAdmin(staff.role)) {
       return forbidden()
     }
-    if (legacy.user.role === "ADMINISTRATOR" || legacy.userId === staff.id) {
+    if (isAdmin(legacy.user.role) || legacy.userId === staff.id) {
       return forbidden()
     }
-    if ((legacy.user.role === "MODERATOR" || legacy.user.role === "SUPPORT") && !isAdmin(staff.role)) {
+    if (isStaff(legacy.user.role) && !isAdmin(legacy.user.role) && !isAdmin(staff.role)) {
       return forbidden()
     }
 

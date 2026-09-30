@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { unauthorized, isAdmin, forbidden, getClientIp, logSecurityEvent } from "@/lib/security"
+import { unauthorized, isAdmin, isStaff, forbidden, getClientIp, logSecurityEvent } from "@/lib/security"
 import { requireModerator, ADMIN_ONLY_MOD_ACTIONS } from "@/lib/require-staff"
 import { rateLimit } from "@/lib/rate-limit"
 import { emitNotificationPush, notificationLinkWhere, postLinkWhere } from "@/lib/notify"
@@ -125,10 +125,10 @@ export async function POST(request: Request) {
           throw new Error("USER_NOT_FOUND")
         }
         if (target) {
-          if (target.role === "ADMINISTRATOR") {
+          if (isAdmin(target.role)) {
             throw new Error("FORBIDDEN")
           }
-          if ((target.role === "MODERATOR" || target.role === "SUPPORT") && !isAdmin(staff.role)) {
+          if (isStaff(target.role) && !isAdmin(target.role) && !isAdmin(staff.role)) {
             throw new Error("FORBIDDEN")
           }
         }

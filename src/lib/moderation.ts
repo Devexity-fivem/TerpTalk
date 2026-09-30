@@ -1,6 +1,6 @@
 import { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
-import { isAdmin } from "@/lib/security"
+import { isAdmin, isStaff } from "@/lib/security"
 import { ADMIN_ONLY_MOD_ACTIONS } from "@/lib/require-staff"
 
 // Shared moderation enforcement — the single implementation used by both
@@ -82,8 +82,8 @@ export async function applyAccountActionInTx(
   })
   if (!target) throw new Error("USER_NOT_FOUND")
   if (targetUserId === staffId) throw new Error("FORBIDDEN")
-  if (target.role === "ADMINISTRATOR") throw new Error("FORBIDDEN")
-  if ((target.role === "MODERATOR" || target.role === "SUPPORT") && !isAdmin(staffRole)) {
+  if (isAdmin(target.role)) throw new Error("FORBIDDEN")
+  if (isStaff(target.role) && !isAdmin(target.role) && !isAdmin(staffRole)) {
     throw new Error("FORBIDDEN")
   }
   if (ADMIN_ONLY_MOD_ACTIONS.has(actionType) && !isAdmin(staffRole)) {

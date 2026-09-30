@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma"
-import { publicUserSelect, activeAuthor, blockedUserIds } from "@/lib/security"
+import { publicUserSelect, activeAuthor, blockedUserIds, isAdmin } from "@/lib/security"
 import { notFound, permanentRedirect } from "next/navigation"
 import { Leaf, Calendar, Users, ClipboardCheck, Camera, TrendingUp, Pencil, Sprout, Link2, Lock, MessagesSquare, FlaskConical, FileDown } from "lucide-react"
 import Link from "next/link"
@@ -281,7 +281,7 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
     if (r.userId === session?.user?.id) myReaction = r.type
   }
 
-  const canEdit = session?.user?.id === diary.author.id || (session?.user as { role?: string } | undefined)?.role === "ADMINISTRATOR"
+  const canEdit = session?.user?.id === diary.author.id || isAdmin((session?.user as { role?: string } | undefined)?.role)
 
   // TerpBot intel — owner-scope only (private diaries get their
   // intelligence surface here; chat commands stay public-scope). Admin

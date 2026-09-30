@@ -5,6 +5,7 @@ import { useSession } from "next-auth/react"
 import { Heart, Flag, Pencil, Trash2, Loader2 } from "lucide-react"
 import { useRouter } from "next/navigation"
 import Tooltip from "@/components/ui/tooltip"
+import { isModerator } from "@/lib/roles"
 
 interface PostActionsProps {
   postId: string
@@ -59,7 +60,7 @@ export default function PostActions({
 
   const isOwner = session?.user?.id === authorId
   const role = (session?.user as { role?: string })?.role
-  const canModerate = role === "MODERATOR" || role === "ADMINISTRATOR"
+  const canModerate = isModerator(role)
 
   if (deleted) {
     return <p className="text-sm text-muted-foreground italic">This post was removed.</p>

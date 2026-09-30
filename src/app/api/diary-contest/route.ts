@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { unauthorized, publicUserSelect, getClientIp, hashIp, logSecurityEvent, isBanned, forbidden, activeAuthor } from "@/lib/security"
+import { unauthorized, publicUserSelect, getClientIp, hashIp, logSecurityEvent, isBanned, forbidden, activeAuthor, isModerator } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
 import { mediaProxyUrl } from "@/lib/media"
 import { currentMonthKey, monthRange } from "@/lib/week"
@@ -218,7 +218,7 @@ export async function POST(request: Request) {
       })
       const ageDays = voter ? (Date.now() - new Date(voter.createdAt).getTime()) / 86400000 : 0
       const voterXp = voter?.profile?.xp ?? 0
-      const staff = voter?.role === "ADMINISTRATOR" || voter?.role === "MODERATOR"
+      const staff = isModerator(voter?.role)
       if (!staff && (ageDays < VOTER_MIN_AGE_DAYS || voterXp < VOTER_MIN_REPUTATION)) {
         return forbidden("Voting requires an account at least 7 days old with 10+ XP")
       }

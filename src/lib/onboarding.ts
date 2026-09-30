@@ -2,6 +2,7 @@ import { unstable_cache } from "next/cache"
 import { prisma } from "@/lib/prisma"
 import { TERPBOT_USERNAME } from "@/lib/terpbot-constants"
 import { XP_ORDER } from "@/lib/security"
+import { isModerator } from "@/lib/roles"
 import { publicDiaryWhere } from "@/lib/diary-visibility"
 
 // ─── Suggested growers ─────────────────────────────────────────────
@@ -116,7 +117,7 @@ export async function getSuggestedUsers(viewerId: string, limit = 10): Promise<S
         2 * Math.log(1 + diaries) +
         Math.log(1 + contributions) +
         (u.role === "VERIFIED_MEMBER" ? 15 : 0) +
-        (u.role === "MODERATOR" || u.role === "ADMINISTRATOR" ? 10 : 0) +
+        (isModerator(u.role) ? 10 : 0) +
         (p.bio && p.avatarUrl ? 10 : 0) +
         10 * Math.max(0, 1 - daysSinceSeen / 14)
       return { p, score }

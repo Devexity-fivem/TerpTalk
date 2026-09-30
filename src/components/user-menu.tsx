@@ -10,6 +10,7 @@ import { Avatar } from "@/components/ui/avatar"
 import { useChatPanel } from "@/components/chat-panel"
 import { FeedbackModal } from "@/components/feedback-modal"
 import { cn } from "@/lib/utils"
+import { isStaff as isStaffRole, isAdmin as isAdminRole } from "@/lib/roles"
 
 const LINKS = [
   { href: "/profile", label: "My Profile", icon: User, desc: "Account, badges, saved threads" },
@@ -51,8 +52,8 @@ export default function UserMenu() {
   if (!session?.user) return null
 
   const role = (session.user as { role?: string }).role
-  const isStaff = ["MODERATOR", "ADMINISTRATOR", "SUPPORT"].includes(role || "")
-  const isAdmin = role === "ADMINISTRATOR"
+  const isStaff = isStaffRole(role)
+  const isAdmin = isAdminRole(role)
   const name = session.user.name || "Member"
   const image = (session.user as { image?: string | null }).image
 

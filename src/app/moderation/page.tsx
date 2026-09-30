@@ -1,6 +1,7 @@
 "use client"
 
 import { signInHref } from "@/lib/callback-url"
+import { isStaff, isModerator, isAdmin } from "@/lib/roles"
 
 import { useEffect, useState } from "react"
 import { useSession } from "next-auth/react"
@@ -92,10 +93,10 @@ export default function ModerationPage() {
   const [queueFilter, setQueueFilter] = useState<"OPEN" | "PENDING" | "REVIEWING" | "ESCALATED" | "MINE">("OPEN")
   const [kindFilter, setKindFilter] = useState<"ALL" | "REPORT" | "FLAG">("ALL")
   const role = (session?.user as { role?: string })?.role
-  const isMod = role === "SUPPORT" || role === "MODERATOR" || role === "ADMINISTRATOR"
-  const isAdminUser = role === "ADMINISTRATOR"
+  const isMod = isStaff(role)
+  const isAdminUser = isAdmin(role)
   // SUPPORT is view-only — every mutating endpoint requires MODERATOR+.
-  const canAct = role === "MODERATOR" || role === "ADMINISTRATOR"
+  const canAct = isModerator(role)
 
   const load = () => {
     const params = new URLSearchParams()

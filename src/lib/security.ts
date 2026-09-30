@@ -6,25 +6,11 @@ import { STANDING_LINKS } from "@/lib/progression-config"
 import { TERPBOT_USERNAME } from "@/lib/terpbot-constants"
 
 // ─── Role & status helpers ──────────────────────────────────────────
+// Canonical pure definitions live in @/lib/roles (client-safe); re-exported
+// here so the existing @/lib/security import surface is unchanged.
 
-export const MODERATOR_ROLES = new Set(["MODERATOR", "ADMINISTRATOR"])
-export const STAFF_ROLES = new Set(["SUPPORT", "MODERATOR", "ADMINISTRATOR"])
-
-export function isModerator(role?: string | null) {
-  return !!role && MODERATOR_ROLES.has(role)
-}
-
-export function isSupport(role?: string | null) {
-  return role === "SUPPORT"
-}
-
-export function isStaff(role?: string | null) {
-  return !!role && STAFF_ROLES.has(role)
-}
-
-export function isAdmin(role?: string | null) {
-  return role === "ADMINISTRATOR"
-}
+export { MODERATOR_ROLES, STAFF_ROLES, isModerator, isSupport, isStaff, isAdmin } from "@/lib/roles"
+import { isModerator } from "@/lib/roles"
 
 export function forbidden(message = "Forbidden") {
   return NextResponse.json({ error: message }, { status: 403 })

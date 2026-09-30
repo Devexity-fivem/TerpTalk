@@ -122,14 +122,9 @@ export function getChatCommand(name: string): ChatCommandMeta | undefined {
   return BY_NAME.get(name.toLowerCase())
 }
 
-// Role helpers mirrored from @/lib/security (duplicated here so this module
-// stays pure/client-safe — it must never import prisma transitively).
-function isModeratorRole(role?: string | null) {
-  return role === "MODERATOR" || role === "ADMINISTRATOR"
-}
-function isAdminRole(role?: string | null) {
-  return role === "ADMINISTRATOR"
-}
+// Role predicates come from @/lib/roles — the pure, client-safe canonical
+// source (never import @/lib/security here: it pulls prisma transitively).
+import { isModerator as isModeratorRole, isAdmin as isAdminRole } from "@/lib/roles"
 
 export function canUseCommand(cmd: ChatCommandMeta, role?: string | null): boolean {
   if (cmd.permission === "public") return true

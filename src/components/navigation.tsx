@@ -18,6 +18,7 @@ import Tooltip from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
 import { signInHref } from "@/lib/callback-url"
 import { getSharedPusher, peekSharedPusher } from "@/lib/pusher-client"
+import { isAdmin as isAdminRole } from "@/lib/roles"
 import { useChatPanel } from "@/components/chat-panel"
 import { useCommandPalette } from "@/components/command-palette"
 
@@ -85,7 +86,7 @@ export function Navigation() {
     openPalette()
   }
   const role = (session?.user as { role?: string } | undefined)?.role
-  const isAdmin = role === "ADMINISTRATOR"
+  const isAdmin = isAdminRole(role)
 
   // Server-side session invalidation (ban, suspension, sessionVersion bump)
   // returns a session with an empty user object — without this guard the

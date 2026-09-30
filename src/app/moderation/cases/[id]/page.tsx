@@ -1,6 +1,7 @@
 "use client"
 
 import { signInHref } from "@/lib/callback-url"
+import { isStaff as isStaffRole, isSupport, isModerator, isAdmin } from "@/lib/roles"
 
 import { useEffect, useState } from "react"
 import { useSession } from "next-auth/react"
@@ -100,10 +101,10 @@ export default function CasePage() {
   const kind = searchParams.get("kind") === "FLAG" ? "FLAG" : "REPORT"
 
   const role = (session?.user as { role?: string })?.role
-  const isStaff = role === "SUPPORT" || role === "MODERATOR" || role === "ADMINISTRATOR"
-  const isSupportOnly = role === "SUPPORT"
-  const canAct = role === "MODERATOR" || role === "ADMINISTRATOR"
-  const isAdminUser = role === "ADMINISTRATOR"
+  const isStaff = isStaffRole(role)
+  const isSupportOnly = isSupport(role)
+  const canAct = isModerator(role)
+  const isAdminUser = isAdmin(role)
 
   const [item, setItem] = useState<CaseItem | null>(null)
   const [subject, setSubject] = useState<SubjectContext | null>(null)

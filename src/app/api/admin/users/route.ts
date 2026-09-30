@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { forbidden, getClientIp, logSecurityEvent } from "@/lib/security"
+import { forbidden, getClientIp, logSecurityEvent, isStaff, isModerator, isAdmin, isSupport } from "@/lib/security"
 import { requireAdmin } from "@/lib/require-staff"
 import { getBadgeByName, STAFF_AWARDED_BADGES } from "@/lib/badge-registry"
 import { grantBadge } from "@/lib/reputation"
@@ -146,7 +146,7 @@ export async function PATCH(request: Request) {
     if (!target) {
       return NextResponse.json({ error: "User not found" }, { status: 404 })
     }
-    if (target.role === "ADMINISTRATOR") {
+    if (isAdmin(target.role)) {
       return forbidden("Cannot change an administrator's role")
     }
 
@@ -172,12 +172,12 @@ export async function PATCH(request: Request) {
       })
 
       // Role badges track live roles — grant on promotion, revoke on demotion.
-      const staffRole = role === "MODERATOR" || role === "ADMINISTRATOR" || role === "SUPPORT"
+      const staffRole = isStaff(role)
       if (staffRole) {
-        if (role === "MODERATOR" || role === "ADMINISTRATOR") {
+        if (isModerator(role)) {
           await grantBadge(userId, "Moderator", { notifyUser: false })
         }
-        if (role === "ADMINISTRATOR" || role === "SUPPORT") {
+        if (isAdmin(role) || isSupport(role)) {
           await grantBadge(userId, "Staff", { notifyUser: false })
         }
       } else {

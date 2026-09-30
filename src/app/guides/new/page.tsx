@@ -4,6 +4,7 @@ import { useState } from "react"
 import { useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
 import { BookOpen, Loader2 } from "lucide-react"
+import { isModerator } from "@/lib/roles"
 
 const TOPICS = [
   { value: "BASICS", label: "Basics" },
@@ -24,7 +25,7 @@ export default function NewGuidePage() {
   const [error, setError] = useState("")
 
   const role = (session?.user as { role?: string })?.role
-  const isStaff = role === "MODERATOR" || role === "ADMINISTRATOR"
+  const isStaff = isModerator(role)
 
   if (status === "loading") return <div className="min-h-screen flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>
   if (!session || !isStaff) {

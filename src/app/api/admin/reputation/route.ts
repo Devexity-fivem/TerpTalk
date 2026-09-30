@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { forbidden, getClientIp, logSecurityEvent } from "@/lib/security"
+import { forbidden, getClientIp, logSecurityEvent, isAdmin } from "@/lib/security"
 import { requireAdmin } from "@/lib/require-staff"
 import { rateLimit } from "@/lib/rate-limit"
 import { awardProgression } from "@/lib/progression"
@@ -42,7 +42,7 @@ export async function POST(request: Request) {
       select: { userId: true, username: true, user: { select: { role: true } } },
     })
     if (!profile) return NextResponse.json({ error: "User not found" }, { status: 404 })
-    if (profile.userId === admin.id || profile.user.role === "ADMINISTRATOR") {
+    if (profile.userId === admin.id || isAdmin(profile.user.role)) {
       return forbidden()
     }
 
