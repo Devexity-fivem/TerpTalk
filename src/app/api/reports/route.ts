@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
-import { prisma } from "@/lib/prisma"
+import { prisma, lockUserRow } from "@/lib/prisma"
 import { rateLimit } from "@/lib/rate-limit"
 import { unauthorized, forbidden, getClientIp, logSecurityEvent, isBanned } from "@/lib/security"
 import { notifyMany } from "@/lib/notify"
@@ -144,17 +144,36 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "You already reported this" }, { status: 409 })
     }
 
-    await prisma.report.create({
-      data: {
-        type,
-        reason,
-        description: description?.trim() || null,
-        reporterId: session.user.id,
-        reportedId: reportedUserId,
-        targetId,
-        priority: reportPriority(reason),
-      },
+    // The open-report dedupe has no unique constraint — lock the reporter's
+    // row and re-check inside the tx so concurrent submissions can't both
+    // pass the findFirst above.
+    const report = await prisma.$transaction(async (tx) => {
+      await lockUserRow(tx, session.user.id)
+      const dup = await tx.report.findFirst({
+        where: {
+          reporterId: session.user.id,
+          type,
+          targetId,
+          status: { in: ["PENDING", "REVIEWING", "ESCALATED"] },
+        },
+        select: { id: true },
+      })
+      if (dup) return null
+      return tx.report.create({
+        data: {
+          type,
+          reason,
+          description: description?.trim() || null,
+          reporterId: session.user.id,
+          reportedId: reportedUserId,
+          targetId,
+          priority: reportPriority(reason),
+        },
+      })
     })
+    if (!report) {
+      return NextResponse.json({ error: "You already reported this" }, { status: 409 })
+    }
 
     // Notify moderators — never TerpBot, even if its role is elevated again.
     const moderators = await prisma.user.findMany({

@@ -81,14 +81,18 @@ export async function PATCH(
         })
       }
 
-      await tx.staffApplication.update({
-        where: { id },
+      // Guard inside the tx — the pre-check above is a fast path only.
+      // Two reviewers racing must not both commit a review: whoever loses
+      // the PENDING→status transition aborts the whole transaction.
+      const claimed = await tx.staffApplication.updateMany({
+        where: { id, status: "PENDING" },
         data: {
           status,
           reviewNote: typeof reviewNote === "string" ? reviewNote.trim().slice(0, 1000) : null,
           reviewedBy: userId,
         },
       })
+      if (claimed.count === 0) throw new Error("ALREADY_REVIEWED")
 
       await logModAction(tx, {
         type: "STAFF_APPLICATION",
@@ -125,6 +129,9 @@ export async function PATCH(
     }
     if (error instanceof Error && error.message === "ALREADY_STAFF") {
       return NextResponse.json({ error: "Applicant already holds a staff role — change it via admin tools" }, { status: 409 })
+    }
+    if (error instanceof Error && error.message === "ALREADY_REVIEWED") {
+      return NextResponse.json({ error: "Application already reviewed" }, { status: 400 })
     }
     if (error instanceof Error && error.message === "INVALID_REQUEST") {
       return NextResponse.json({ error: "Applicant cannot be granted a role" }, { status: 400 })

@@ -64,6 +64,8 @@ export async function POST(request: Request) {
 
     const moderatorName = await staffDisplayName(user.id)
     const BATCH = 500
+    // Up to MAX_RECIPIENTS createMany batches inside one tx — keep it
+    // atomic (no partial announcements) but grant enough time for the loop.
     await prisma.$transaction(async (tx) => {
       for (let i = 0; i < users.length; i += BATCH) {
         await tx.notification.createMany({
@@ -86,7 +88,7 @@ export async function POST(request: Request) {
           moderatorName,
         },
       })
-    })
+    }, { timeout: 20000 })
 
     // Realtime fan-out — Pusher accepts up to 100 channels per call.
     const pusher = getPusher()

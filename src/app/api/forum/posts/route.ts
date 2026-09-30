@@ -435,9 +435,6 @@ export async function DELETE(request: Request) {
       // post as truly unlinked. Restore paths re-attach nothing — deleted
       // images stay deleted.
       await tx.postImage.deleteMany({ where: { postId: post.id } })
-      const remaining = await tx.post.count({ where: { threadId: post.threadId, deleted: false } })
-      // replyCount = non-deleted posts minus the opening post — but only when
-      // the OP still exists; deleting the OP must not double-subtract.
       const op = await tx.post.findFirst({
         where: { threadId: post.threadId },
         orderBy: { createdAt: "asc" },
@@ -447,11 +444,15 @@ export async function DELETE(request: Request) {
       // deleted OP keeps rendering in thread metadata/search.
       if (op?.id === post.id) {
         await tx.thread.update({ where: { id: post.threadId }, data: { content: "" } })
+      } else {
+        // replyCount counts non-OP posts — only a non-OP delete moves it.
+        // Atomic decrement with a zero floor: an absolute rewrite of a
+        // stale COUNT could clobber a concurrent reply's increment.
+        await tx.thread.updateMany({
+          where: { id: post.threadId, replyCount: { gt: 0 } },
+          data: { replyCount: { decrement: 1 } },
+        })
       }
-      await tx.thread.update({
-        where: { id: post.threadId },
-        data: { replyCount: Math.max(0, remaining - (op && !op.deleted ? 1 : 0)) },
-      })
       // If this post was the accepted answer, clear the pointer — the thread
       // is no longer solved (SetNull on the FK only fires on hard delete).
       acceptedCleared = (

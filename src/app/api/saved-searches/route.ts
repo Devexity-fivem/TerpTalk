@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
-import { prisma } from "@/lib/prisma"
+import { prisma, lockUserRow } from "@/lib/prisma"
 import { unauthorized, getClientIp, logSecurityEvent, isBanned, forbidden } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
 import { savedSearchLimit } from "@/lib/progression"
@@ -56,28 +56,35 @@ export async function POST(request: Request) {
     // rows above the cap stay readable and deletable; only new creation
     // is gated. Falls back to base on progression-read failure.
     const cap = await savedSearchLimit(session.user.id).catch(() => 3)
-    const existing = await prisma.savedSearch.count({ where: { userId: session.user.id } })
-    if (existing >= cap) {
-      const hint = cap < 6 ? "reach Germinated rank for 6" : "reach Trained rank for 10"
-      return NextResponse.json(
-        { error: `You can save ${cap} searches — ${hint}.` },
-        { status: 400 }
-      )
-    }
 
     let filtersString = "{}"
     if (typeof filters === "string" && filters.length <= 1000) {
       try { JSON.parse(filters); filtersString = filters } catch { /* ignore */ }
     }
 
-    const saved = await prisma.savedSearch.create({
-      data: {
-        userId: session.user.id,
-        name: name.trim().slice(0, 100),
-        query: query.trim().slice(0, 200),
-        filters: filtersString,
-      },
+    // The tier cap has no unique constraint to enforce it — lock the user
+    // row inside the tx and count under the lock so concurrent saves can't
+    // both pass and overshoot the cap.
+    const saved = await prisma.$transaction(async (tx) => {
+      await lockUserRow(tx, session.user.id)
+      const existing = await tx.savedSearch.count({ where: { userId: session.user.id } })
+      if (existing >= cap) return null
+      return tx.savedSearch.create({
+        data: {
+          userId: session.user.id,
+          name: name.trim().slice(0, 100),
+          query: query.trim().slice(0, 200),
+          filters: filtersString,
+        },
+      })
     })
+    if (!saved) {
+      const hint = cap < 6 ? "reach Germinated rank for 6" : "reach Trained rank for 10"
+      return NextResponse.json(
+        { error: `You can save ${cap} searches — ${hint}.` },
+        { status: 400 }
+      )
+    }
 
     return NextResponse.json({ search: saved }, { status: 201 })
   } catch (error) {

@@ -69,9 +69,17 @@ export async function POST(
       return NextResponse.json({ error: "You already voted in this poll" }, { status: 409 })
     }
 
-    await prisma.pollVote.create({
-      data: { pollId: id, optionId, userId: session.user.id },
-    })
+    try {
+      await prisma.pollVote.create({
+        data: { pollId: id, optionId, userId: session.user.id },
+      })
+    } catch (e) {
+      // A racing concurrent vote won — report it as a duplicate, not a 500.
+      if ((e as { code?: string }).code === "P2002") {
+        return NextResponse.json({ error: "You already voted in this poll" }, { status: 409 })
+      }
+      throw e
+    }
 
     const counts = await prisma.pollVote.groupBy({
       by: ["optionId"],

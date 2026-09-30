@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getToken } from "next-auth/jwt"
 import { sessionCookieName } from "@/lib/auth"
-import { prisma } from "@/lib/prisma"
+import { prisma, lockUserRow } from "@/lib/prisma"
 import { unauthorized, isSessionValid, forbidden } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
 import { checkMaintenance } from "@/lib/maintenance"
@@ -66,15 +66,29 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "You already have a pending application" }, { status: 400 })
     }
 
-    const application = await prisma.staffApplication.create({
-      data: {
-        userId,
-        role,
-        why: why.trim(),
-        experience: experience.trim(),
-        about: about.trim(),
-      },
+    // No unique constraint can express "one PENDING per user" — lock the
+    // user row inside the tx and re-check so concurrent submits can't both
+    // pass the findFirst above.
+    const application = await prisma.$transaction(async (tx) => {
+      await lockUserRow(tx, userId)
+      const pending = await tx.staffApplication.findFirst({
+        where: { userId, status: "PENDING" },
+        select: { id: true },
+      })
+      if (pending) return null
+      return tx.staffApplication.create({
+        data: {
+          userId,
+          role,
+          why: why.trim(),
+          experience: experience.trim(),
+          about: about.trim(),
+        },
+      })
     })
+    if (!application) {
+      return NextResponse.json({ error: "You already have a pending application" }, { status: 400 })
+    }
 
     const admins = await prisma.user.findMany({
       where: { role: { in: ["MODERATOR", "ADMINISTRATOR"] }, banned: false, profile: { isNot: { username: "terpbot" } } },

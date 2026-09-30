@@ -94,18 +94,23 @@ export async function POST(request: Request) {
       return NextResponse.json({ blocked: true })
     }
 
-    await prisma.block.create({
-      data: { blockerId: session.user.id, blockedId: userId },
-    })
-
-    // Remove any follow relationships in both directions
-    await prisma.follow.deleteMany({
-      where: {
-        OR: [
-          { followerId: session.user.id, followingId: userId },
-          { followerId: userId, followingId: session.user.id },
-        ],
-      },
+    // createMany+skipDuplicates is idempotent — a concurrent block request
+    // on the same pair must sever follows too, not 500 on the unique index.
+    await prisma.$transaction(async (tx) => {
+      await tx.block.createMany({
+        data: [{ blockerId: session.user.id, blockedId: userId }],
+        skipDuplicates: true,
+      })
+      // Remove any follow relationships in both directions — same tx, so a
+      // crash can't leave a block in place while follows survive.
+      await tx.follow.deleteMany({
+        where: {
+          OR: [
+            { followerId: session.user.id, followingId: userId },
+            { followerId: userId, followingId: session.user.id },
+          ],
+        },
+      })
     })
 
     return NextResponse.json({ blocked: true }, { status: 201 })

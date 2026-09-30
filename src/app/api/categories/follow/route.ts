@@ -55,8 +55,11 @@ export async function POST(request: Request) {
       return NextResponse.json({ following: false })
     }
 
-    await prisma.categoryFollow.create({
-      data: { userId: session.user.id, categoryId },
+    // skipDuplicates — a racing toggle already created the row; the end
+    // state is "following" either way, not a 500.
+    await prisma.categoryFollow.createMany({
+      data: [{ userId: session.user.id, categoryId }],
+      skipDuplicates: true,
     })
     return NextResponse.json({ following: true })
   } catch (error) {

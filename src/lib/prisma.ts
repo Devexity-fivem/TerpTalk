@@ -73,3 +73,16 @@ export const prisma =
   })()
 
 if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma
+
+/**
+ * Serialize a single member's check-then-act writes (caps, dedupe checks)
+ * that no unique constraint can protect: take a row lock on the User row
+ * inside an interactive transaction so a concurrent request waits and
+ * re-reads, instead of both passing the same check.
+ */
+export async function lockUserRow(
+  tx: Prisma.TransactionClient,
+  userId: string
+): Promise<void> {
+  await tx.$queryRaw`SELECT "id" FROM "User" WHERE "id" = ${userId} FOR UPDATE`
+}
