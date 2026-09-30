@@ -199,7 +199,7 @@ await check("route contract: actions hard-deletes strain + reverses rep + busts 
   assert.ok(strainCase.includes("imageUrl"), "photo URLs collected pre-delete")
   assert.ok(src.includes('sourceType: "STRAIN", sourceId: targetId'), "STRAIN_CREATED reversal enqueued durably")
   assert.ok(src.includes('sourceType: "STRAIN_PHOTO", sourceId: pid'), "STRAIN_PHOTO reversal enqueued per photo")
-  assert.ok(src.includes("drainOne"), "enqueued reversals are drained post-commit")
+  assert.ok(/drainOne|drainMany/.test(src), "enqueued reversals are drained post-commit")
   assert.ok(src.includes("deleteImagesIfUnreferenced(deletedBlobUrls)"), "unreferenced-blob sweep")
   assert.ok(src.includes("diaryContentDeleted || strainDeleted"), "strains bust covers strain deletion")
   assert.ok(src.includes('targetType !== "STRAIN"'), "analytics bust excludes strains")

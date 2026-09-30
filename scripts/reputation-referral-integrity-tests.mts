@@ -506,7 +506,7 @@ async function run() {
     profileRouteSrc.includes("enqueueReversal") &&
     profileRouteSrc.includes('sourceType: "POST"') &&
     profileRouteSrc.includes("thread: { authorId: user.id }") &&
-    profileRouteSrc.includes("drainOne"),
+    /drainOne|drainMany/.test(profileRouteSrc),
     "account deletion enqueues durable rep sweeps on third-party posts inside owned threads"
   )
   ok(

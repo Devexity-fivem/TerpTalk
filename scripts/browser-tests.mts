@@ -144,6 +144,7 @@ const main = async () => {
     // The Messages affordance is rendered by the hydrated session nav —
     // wait for the element itself rather than a load-state heuristic.
     await gotoMain(alicePage, BASE)
+    await alicePage.waitForSelector('a[aria-label*="Messages"]', { timeout: 15_000 }).catch(() => null)
     const msgLink = await alicePage.locator('a[aria-label*="Messages"]').count()
     ok("auth: session nav shows Messages affordance", msgLink >= 1, { found: msgLink })
 
