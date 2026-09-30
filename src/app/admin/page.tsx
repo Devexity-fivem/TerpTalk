@@ -1,7 +1,6 @@
 import { notFound, redirect } from "next/navigation"
 import Link from "next/link"
-import { getServerSession } from "next-auth"
-import { authOptions } from "@/lib/auth"
+import { getSession } from "@/lib/session"
 import { signInHref } from "@/lib/callback-url"
 import { requireStaff } from "@/lib/require-staff"
 import { isAdmin } from "@/lib/security"
@@ -50,7 +49,7 @@ function Section({ title, children, aside }: { title: string; children: React.Re
 }
 
 export default async function AdminOverviewPage() {
-  const session = await getServerSession(authOptions)
+  const session = await getSession()
   if (!session?.user?.id) redirect(signInHref("/admin"))
   const staff = await requireStaff()
   if (!staff) notFound() // layout is the gate; this is belt-and-suspenders

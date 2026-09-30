@@ -1,8 +1,7 @@
 import { prisma } from "@/lib/prisma"
 import { notFound, permanentRedirect } from "next/navigation"
 import { Leaf, Dna, Sprout, ImageIcon, BookOpen, Wrench, MessageSquare, CheckCircle2, BarChart3, Star, Bot, FlaskConical, HelpCircle } from "@/lib/icons"
-import { getServerSession } from "next-auth"
-import { authOptions } from "@/lib/auth"
+import { getSession } from "@/lib/session"
 import StrainPhotoUpload from "@/components/strain-photo-upload"
 import ShareButtons from "@/components/share-buttons"
 import ReportButton from "@/components/report-button"
@@ -61,7 +60,7 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
         },
       },
     }),
-    getServerSession(authOptions),
+    getSession(),
   ])
 
   if (!strain) notFound()

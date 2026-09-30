@@ -3,8 +3,7 @@ import { publicUserSelect, activeAuthor, blockedUserIds, isAdmin } from "@/lib/s
 import { notFound, permanentRedirect } from "next/navigation"
 import { Leaf, Calendar, Users, ClipboardCheck, Camera, TrendingUp, Pencil, Sprout, Link2, Lock, MessagesSquare, FlaskConical, FileDown } from "@/lib/icons"
 import Link from "next/link"
-import { getServerSession } from "next-auth"
-import { authOptions } from "@/lib/auth"
+import { getSession } from "@/lib/session"
 import UpdateForm from "@/components/update-form"
 import DiaryFollowButton from "@/components/diary-follow-button"
 import ShareButtons from "@/components/share-buttons"
@@ -36,7 +35,7 @@ import GrowLessons from "@/components/grow-lessons"
 import { serializeExperiment, readLessons } from "@/lib/experiments"
 import { getStrainGrowStats } from "@/lib/strain-stats"
 import { buildGrowComparison } from "@/lib/grow-compare"
-import { hasUnlock } from "@/lib/progression"
+import { hasUnlocks } from "@/lib/progression"
 import { toGrams, toOz } from "@/lib/yield"
 import WeekNavigator from "@/components/week-navigator"
 import { LiveRefresh } from "@/components/live-refresh"
@@ -58,7 +57,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
         author: { select: { banned: true, suspendedUntil: true } },
       },
     }),
-    getServerSession(authOptions),
+    getSession(),
   ])
   const authorInactive =
     !!diary &&
@@ -129,7 +128,7 @@ async function getDiaryData(id: string, viewerId?: string | null) {
 
 export default async function DiaryPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  const session = await getServerSession(authOptions)
+  const session = await getSession()
   const [diary, blockedIds] = await Promise.all([
     getDiaryData(id, session?.user?.id),
     blockedUserIds(session?.user?.id),
@@ -287,15 +286,14 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
   // intelligence surface here; chat commands stay public-scope). Admin
   // editors don't get another member's intel.
   const isOwner = session?.user?.id === diary.author.id
-  const [growIntel, envAnalyticsUnlocked, exportCsvUnlocked] = isOwner
+  const [growIntel, [envAnalyticsUnlocked, exportCsvUnlocked]] = isOwner
     ? await Promise.all([
         getGrowIntel(diary.id, session!.user!.id).catch(() => null),
         // env-analytics (Vegged + Journaling 3) and export-tools (Trained)
         // gates — checked once here, server-side, per the locked §8 registry.
-        hasUnlock(session!.user!.id, "env-analytics").catch(() => false),
-        hasUnlock(session!.user!.id, "export-tools").catch(() => false),
+        hasUnlocks(session!.user!.id, ["env-analytics", "export-tools"]).catch(() => [false, false]),
       ])
-    : [null, false, false]
+    : [null, [false, false]]
 
   // Community comparison — aggregate strain stats (public/UNLISTED only,
   // min-sample gated) against facts already visible on this page.

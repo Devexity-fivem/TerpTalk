@@ -1,8 +1,7 @@
 import { prisma } from "@/lib/prisma"
 import { publicUserSelect, activeAuthor, blockedUserIds, notBlockedAuthor } from "@/lib/security"
 import { signInHref } from "@/lib/callback-url"
-import { getServerSession } from "next-auth"
-import { authOptions } from "@/lib/auth"
+import { getSession } from "@/lib/session"
 import Link from "next/link"
 import { MessageSquare, TrendingUp, Clock, Users, Flame, Eye } from "@/lib/icons"
 import RoleBadge from "@/components/role-badge"
@@ -81,7 +80,7 @@ export default async function DiscoverPage({
 }) {
   const { tab } = (await searchParams) || {}
   const activeTab = ["latest", "trending", "following"].includes(tab || "") ? (tab as string) : "latest"
-  const session = await getServerSession(authOptions)
+  const session = await getSession()
   const { threads } = await getDiscoverData(activeTab, session?.user?.id)
 
   const tabCls = (t: string) =>

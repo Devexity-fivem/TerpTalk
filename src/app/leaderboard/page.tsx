@@ -3,8 +3,7 @@ import { rankableProfile } from "@/lib/security"
 import { unstable_cache } from "next/cache"
 import { Trophy, Medal, Award, Sprout, Leaf, CheckCircle2 } from "@/lib/icons"
 import Link from "next/link"
-import { getServerSession } from "next-auth"
-import { authOptions } from "@/lib/auth"
+import { getSession } from "@/lib/session"
 import RoleBadge from "@/components/role-badge"
 import TierChip from "@/components/tier-chip"
 import EmptyState from "@/components/ui/empty-state"
@@ -218,7 +217,7 @@ export default async function LeaderboardPage({
     ? (rawTab as Tab)
     : "rep"
 
-  const session = await getServerSession(authOptions)
+  const session = await getSession()
   const viewerId = session?.user?.id
   const week = currentWeekKey()
 

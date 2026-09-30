@@ -1,7 +1,6 @@
 import { redirect } from "next/navigation"
-import { getServerSession } from "next-auth"
+import { getSession } from "@/lib/session"
 import Link from "next/link"
-import { authOptions } from "@/lib/auth"
 import { signInHref } from "@/lib/callback-url"
 import { buildMetadata } from "@/lib/seo"
 import {
@@ -46,7 +45,7 @@ const SECTIONS: { title: string; icon: typeof KeyRound; items: Item[] }[] = [
 ]
 
 export default async function SettingsPage() {
-  const session = await getServerSession(authOptions)
+  const session = await getSession()
   if (!session?.user?.id) redirect(signInHref("/settings"))
 
   return (

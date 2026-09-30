@@ -1,7 +1,6 @@
 import { prisma } from "@/lib/prisma"
 import { publicUserSelect, activeAuthor, blockedUserIds } from "@/lib/security"
-import { getServerSession } from "next-auth"
-import { authOptions } from "@/lib/auth"
+import { getSession } from "@/lib/session"
 import { unstable_cache } from "next/cache"
 import Link from "next/link"
 import { MessageSquare, Clock, CheckCircle2, HelpCircle, Stethoscope, ChevronLeft, ChevronRight } from "@/lib/icons"
@@ -121,7 +120,7 @@ export default async function QuestionsPage({
 
   const [data, session] = await Promise.all([
     getQuestions(tab, categorySlug, page),
-    getServerSession(authOptions),
+    getSession(),
   ])
   // The cached payload is global — hide authors this viewer has blocked
   // (or been blocked by) after the cache read, same as the forum index.

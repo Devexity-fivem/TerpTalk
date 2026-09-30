@@ -1,12 +1,11 @@
 import { getBooleanSetting, SITE_SETTINGS } from "@/lib/settings"
-import { getServerSession } from "next-auth"
-import { authOptions } from "@/lib/auth"
+import { getSession } from "@/lib/session"
 import { isAdmin, isModerator } from "@/lib/security"
 import { NextResponse } from "next/server"
 
 // Staff can still use the admin panel to disable maintenance mode.
 export async function isStaffBypass(): Promise<boolean> {
-  const session = await getServerSession(authOptions)
+  const session = await getSession()
   if (!session?.user?.id) return false
   return isAdmin(session.user.role) || isModerator(session.user.role)
 }

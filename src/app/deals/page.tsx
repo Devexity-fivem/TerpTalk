@@ -1,7 +1,6 @@
 import { prisma } from "@/lib/prisma"
 import { unstable_cache } from "next/cache"
-import { getServerSession } from "next-auth"
-import { authOptions } from "@/lib/auth"
+import { getSession } from "@/lib/session"
 import { canSeeDeal, DEAL_TIER_UNLOCK_ID, type DealViewer } from "@/lib/deals-access"
 import { hasUnlock } from "@/lib/progression"
 import { UNLOCK_BY_ID } from "@/lib/progression-config"
@@ -46,7 +45,7 @@ const getDealsData = unstable_cache(
 export default async function DealsPage() {
   const [{ partners, products, setting }, session] = await Promise.all([
     getDealsData(),
-    getServerSession(authOptions).catch(() => null),
+    getSession().catch(() => null),
   ])
   const disclosure = setting?.value || DEFAULT_DISCLOSURE
   const featured = partners.filter((p) => p.featured)

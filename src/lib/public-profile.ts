@@ -23,7 +23,7 @@ import {
   type Mastery,
 } from "@/lib/progression-config"
 import { getGrowStreak } from "@/lib/grow-streak"
-import { hasUnlock } from "@/lib/progression"
+import { hasUnlocks } from "@/lib/progression"
 import { TERPBOT_USERNAME } from "@/lib/terpbot-constants"
 import { getBotStats } from "@/lib/terpbot-events"
 import { publicDiaryWhere } from "@/lib/diary-visibility"
@@ -368,6 +368,13 @@ export async function getPublicProfileData(
   const diaryOwnerScope = { authorId: ownerId, deleted: false }
   const isBot = profile.username === TERPBOT_USERNAME
   const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000)
+  // One profile read for both P2 widget gates (records-widget is checked
+  // for any viewer; owner-analytics only when the viewer is the owner).
+  const widgetUnlocks: Promise<[boolean, boolean]> = isBot
+    ? Promise.resolve([false, false])
+    : isOwner
+      ? hasUnlocks(ownerId, ["records-widget", "owner-analytics"]) as Promise<[boolean, boolean]>
+      : hasUnlocks(ownerId, ["records-widget"]).then(([r]) => [r, false] as [boolean, boolean])
 
   const [
     recentThreads,
@@ -550,8 +557,8 @@ export async function getPublicProfileData(
     }),
     // P2 widgets — eligibility is the OWNER's progression, never the
     // viewer's. Capability check, not just registry presence.
-    isBot ? Promise.resolve(false) : hasUnlock(ownerId, "records-widget"),
-    isBot || !isOwner ? Promise.resolve(false) : hasUnlock(ownerId, "owner-analytics"),
+    widgetUnlocks.then(([r]) => r),
+    widgetUnlocks.then(([, a]) => a),
     prisma.growDiary.findFirst({
       where: {
         ...diaryOwnerScope, harvested: true, ...diaryScope, yieldAmount: { not: null },

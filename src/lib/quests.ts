@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma"
-import { awardProgression, reverseProgressionByKey, hasUnlock } from "@/lib/progression"
+import { awardProgression, reverseProgressionByKey, hasUnlocks } from "@/lib/progression"
 import { reverseXpKeyDurable } from "@/lib/progression-outbox"
 import { notify } from "@/lib/notify"
 
@@ -253,10 +253,7 @@ async function countQuestProgress(userId: string, slug: string, since: Date, unt
 // Extra quest slots are unlocks, not tier perks — design §10.1
 // (3 base → 4 at Rooted → 5 at Cultivator).
 async function questSlotsFor(userId: string): Promise<number> {
-  const [slot4, slot5] = await Promise.all([
-    hasUnlock(userId, "quest-slot-4"),
-    hasUnlock(userId, "quest-slot-5"),
-  ])
+  const [slot4, slot5] = await hasUnlocks(userId, ["quest-slot-4", "quest-slot-5"])
   return DAILY_QUEST_COUNT + (slot4 ? 1 : 0) + (slot5 ? 1 : 0)
 }
 

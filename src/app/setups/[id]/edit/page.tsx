@@ -1,6 +1,5 @@
 import { notFound, redirect } from "next/navigation"
-import { getServerSession } from "next-auth"
-import { authOptions } from "@/lib/auth"
+import { getSession } from "@/lib/session"
 import { prisma } from "@/lib/prisma"
 import { signInHref } from "@/lib/callback-url"
 import { buildMetadata } from "@/lib/seo"
@@ -21,7 +20,7 @@ export async function generateMetadata() {
 // that an edit surface exists.
 export default async function EditSetupPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  const session = await getServerSession(authOptions)
+  const session = await getSession()
   if (!session?.user?.id) redirect(signInHref(`/setups/${id}/edit`))
 
   const setup = await prisma.growSetup.findUnique({

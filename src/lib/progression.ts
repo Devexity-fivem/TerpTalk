@@ -1018,6 +1018,35 @@ export async function hasUnlock(userId: string, unlockId: string): Promise<boole
   return meetsUnlockSpec(userId, spec)
 }
 
+type UnlockProfile = { xp: number; standing: number; unlockFrozen: boolean }
+
+function loadUnlockProfile(userId: string): Promise<UnlockProfile | null> {
+  return prisma.profile.findUnique({
+    where: { userId },
+    select: { xp: true, standing: true, unlockFrozen: true },
+  })
+}
+
+/**
+ * Evaluates several unlock ids against ONE profile read — for callers that
+ * check a ladder of related unlocks in the same call (profileSectionLimit,
+ * questSlotsFor, ...). Results are identical to calling hasUnlock per id:
+ * unknown/future ids are false, each live spec still issues its own
+ * achievement/streak/mastery read where the spec requires it.
+ */
+export async function hasUnlocks(userId: string, unlockIds: string[]): Promise<boolean[]> {
+  const specs = unlockIds.map((id) => UNLOCK_BY_ID.get(id))
+  if (!specs.some((s) => s && s.status !== "future")) return unlockIds.map(() => false)
+  const profile = await loadUnlockProfile(userId)
+  return Promise.all(
+    specs.map((spec) =>
+      !spec || spec.status === "future"
+        ? Promise.resolve(false)
+        : meetsUnlockSpecLoaded(profile, userId, spec)
+    )
+  )
+}
+
 /**
  * Evaluates an unlock spec against a member. Exported so the grant paths
  * (achievement, streak, rank, mastery, standing) can be exercised with any
@@ -1025,10 +1054,11 @@ export async function hasUnlock(userId: string, unlockId: string): Promise<boole
  * remains the only gate production routes call.
  */
 export async function meetsUnlockSpec(userId: string, spec: UnlockSpec): Promise<boolean> {
-  const profile = await prisma.profile.findUnique({
-    where: { userId },
-    select: { xp: true, standing: true, unlockFrozen: true },
-  })
+  const profile = await loadUnlockProfile(userId)
+  return meetsUnlockSpecLoaded(profile, userId, spec)
+}
+
+async function meetsUnlockSpecLoaded(profile: UnlockProfile | null, userId: string, spec: UnlockSpec): Promise<boolean> {
   if (!profile || profile.unlockFrozen) return false
 
   // Achievement route — reads UserAchievement, the unlock-capable
@@ -1072,19 +1102,25 @@ export async function meetsUnlockSpec(userId: string, spec: UnlockSpec): Promise
  *  Harvested 6 → Cured 8 (hard-capped by PROFILE_SECTION_HARD_MAX in the
  *  caller). */
 export async function profileSectionLimit(userId: string): Promise<number> {
-  if (await hasUnlock(userId, "profile-sections-8")) return 8
-  if (await hasUnlock(userId, "profile-sections-6")) return 6
-  if (await hasUnlock(userId, "profile-sections-4")) return 4
-  if (await hasUnlock(userId, "profile-sections-3")) return 3
+  const [r8, r6, r4, r3] = await hasUnlocks(userId, [
+    "profile-sections-8", "profile-sections-6", "profile-sections-4", "profile-sections-3",
+  ])
+  if (r8) return 8
+  if (r6) return 6
+  if (r4) return 4
+  if (r3) return 3
   return PROFILE_SECTION_BASE_LIMIT
 }
 
 /** Profile P2 — notable-stat slots: Seed 4 → Vegged 6 → Ripening 7 →
  *  Harvested 8. */
 export async function statSlotLimit(userId: string): Promise<number> {
-  if (await hasUnlock(userId, "stat-slots-8")) return 8
-  if (await hasUnlock(userId, "stat-slots-7")) return 7
-  if (await hasUnlock(userId, "stat-slots-6")) return 6
+  const [r8, r7, r6] = await hasUnlocks(userId, [
+    "stat-slots-8", "stat-slots-7", "stat-slots-6",
+  ])
+  if (r8) return 8
+  if (r7) return 7
+  if (r6) return 6
   return SHOWN_STATS_BASE
 }
 
@@ -1092,8 +1128,9 @@ export async function statSlotLimit(userId: string): Promise<number> {
  *  Consumed by /api/saved-searches; existing rows above the cap stay
  *  readable — only creation is gated. */
 export async function savedSearchLimit(userId: string): Promise<number> {
-  if (await hasUnlock(userId, "saved-searches-10")) return 10
-  if (await hasUnlock(userId, "saved-searches-6")) return 6
+  const [ten, six] = await hasUnlocks(userId, ["saved-searches-10", "saved-searches-6"])
+  if (ten) return 10
+  if (six) return 6
   return 3
 }
 

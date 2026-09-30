@@ -1,7 +1,6 @@
 import { prisma } from "@/lib/prisma"
 import { publicUserSelect, activeAuthor, blockedUserIds } from "@/lib/security"
-import { getServerSession } from "next-auth"
-import { authOptions } from "@/lib/auth"
+import { getSession } from "@/lib/session"
 import { unstable_cache } from "next/cache"
 import { MessageSquare, Users, Clock, TrendingUp } from "@/lib/icons"
 import Link from "next/link"
@@ -72,7 +71,7 @@ const getForumData = unstable_cache(
 
 export default async function ForumPage() {
   const [cached, session] =
-    await Promise.all([getForumData(), getServerSession(authOptions)])
+    await Promise.all([getForumData(), getSession()])
   const { threadCount, postCount, memberCount } = cached
   // The cached payload is global — hide content from authors the viewer
   // has blocked (or been blocked by) after the cache read.

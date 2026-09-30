@@ -1,7 +1,6 @@
 import { prisma } from "@/lib/prisma"
 import { publicUserSelect, activeAuthor, blockedUserIds } from "@/lib/security"
-import { getServerSession } from "next-auth"
-import { authOptions } from "@/lib/auth"
+import { getSession } from "@/lib/session"
 import { buildMetadata } from "@/lib/seo"
 import ProfileCard from "@/components/ui/profile-card"
 import Link from "next/link"
@@ -54,7 +53,7 @@ export default async function TagThreadsPage({
   if (!tag) notFound()
 
   // Post-filter by blocked authors — the tag list is shared content.
-  const session = await getServerSession(authOptions)
+  const session = await getSession()
   const blockedIds = await blockedUserIds(session?.user?.id)
   if (blockedIds.length) {
     tag.threads = tag.threads.filter((tt) => !blockedIds.includes(tt.thread.authorId))

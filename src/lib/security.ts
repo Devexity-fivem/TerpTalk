@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma"
+import { cache } from "react"
 import { createHash, randomBytes, timingSafeEqual } from "crypto"
 import bcrypt from "bcryptjs"
 import { NextResponse } from "next/server"
@@ -20,12 +21,28 @@ export function unauthorized() {
   return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 }
 
+/**
+ * The security-relevant fields of a User row — one read shared by
+ * isBanned / isSessionValid / require* within a request render pass
+ * (React cache is request-scoped; in route handlers it is a passthrough,
+ * so each call still issues its own fresh query — never a stale
+ * cross-request copy).
+ */
+export const getSecurityUser = cache((userId: string) =>
+  prisma.user.findUnique({
+    where: { id: userId },
+    select: {
+      banned: true,
+      suspendedUntil: true,
+      sessionVersion: true,
+      role: true,
+    },
+  })
+)
+
 /** Returns true if the user is banned or currently suspended. */
 export async function isBanned(userId: string): Promise<boolean> {
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { banned: true, suspendedUntil: true },
-  })
+  const user = await getSecurityUser(userId)
   if (!user || user.banned) return true
   return !!user.suspendedUntil && user.suspendedUntil > new Date()
 }
@@ -34,13 +51,11 @@ export async function isBanned(userId: string): Promise<boolean> {
  * Validates that the JWT session is still valid for the user.
  * Use after `getToken` to match `getServerSession` behavior: rejects banned users
  * and tokens issued before the user's sessionVersion was incremented (password
- * change, forced logout, etc.).
+ * change, forced logout, etc.). Shares one user read with isBanned and other
+ * security helpers within the same request render.
  */
 export async function isSessionValid(userId: string, tokenSessionVersion?: number): Promise<boolean> {
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { banned: true, suspendedUntil: true, sessionVersion: true },
-  })
+  const user = await getSecurityUser(userId)
   if (!user || user.banned || (!!user.suspendedUntil && user.suspendedUntil > new Date())) return false
   return (tokenSessionVersion ?? 0) === (user.sessionVersion ?? 0)
 }

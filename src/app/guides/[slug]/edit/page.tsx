@@ -1,6 +1,5 @@
 import { notFound } from "next/navigation"
-import { getServerSession } from "next-auth"
-import { authOptions } from "@/lib/auth"
+import { getSession } from "@/lib/session"
 import { prisma } from "@/lib/prisma"
 import { isModerator } from "@/lib/security"
 import EditGuideForm from "./edit-guide-form"
@@ -14,7 +13,7 @@ export const metadata = buildMetadata({
 
 export default async function EditGuidePage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params
-  const session = await getServerSession(authOptions)
+  const session = await getSession()
 
   const guide = await prisma.guide.findUnique({
     where: { slug },

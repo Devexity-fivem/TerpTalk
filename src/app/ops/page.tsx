@@ -1,6 +1,5 @@
 import { redirect, notFound } from "next/navigation"
-import { getServerSession } from "next-auth"
-import { authOptions } from "@/lib/auth"
+import { getSession } from "@/lib/session"
 import { signInHref } from "@/lib/callback-url"
 import { requireStaff } from "@/lib/require-staff"
 import { buildMetadata } from "@/lib/seo"
@@ -18,7 +17,7 @@ export const dynamic = "force-dynamic"
 // kept here so the redirect preserves semantics exactly: guests go to
 // sign-in, members get a 404 — no existence oracle.
 export default async function OpsRedirect() {
-  const session = await getServerSession(authOptions)
+  const session = await getSession()
   if (!session?.user?.id) redirect(signInHref("/ops"))
   const staff = await requireStaff()
   if (!staff) notFound()

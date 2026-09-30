@@ -1,8 +1,7 @@
 import type { Metadata } from "next"
 import { redirect, notFound } from "next/navigation"
-import { getServerSession } from "next-auth"
+import { getSession } from "@/lib/session"
 import Link from "next/link"
-import { authOptions } from "@/lib/auth"
 import { signInHref } from "@/lib/callback-url"
 import { requireStaff } from "@/lib/require-staff"
 import { isAdmin } from "@/lib/security"
@@ -23,7 +22,7 @@ export const metadata: Metadata = buildMetadata({
 // exists. Every page and API inside still enforces its own role level —
 // this nav is UX, not authorization.
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
-  const session = await getServerSession(authOptions)
+  const session = await getSession()
   if (!session?.user?.id) redirect(signInHref("/admin"))
   const staff = await requireStaff()
   if (!staff) notFound()

@@ -1,8 +1,7 @@
 import { prisma } from "@/lib/prisma"
 import { activeAuthor, blockedUserIds, rankableProfile } from "@/lib/security"
 import { publicDiaryWhere } from "@/lib/diary-visibility"
-import { getServerSession } from "next-auth"
-import { authOptions } from "@/lib/auth"
+import { getSession } from "@/lib/session"
 import { unstable_cache } from "next/cache"
 import Link from "next/link"
 import { Sprout, Users, Leaf, ChevronLeft, ChevronRight } from "@/lib/icons"
@@ -179,7 +178,7 @@ export default async function GrowersPage({
 
   const [data, session] = await Promise.all([
     getGrowers(sort, page, mastery),
-    getServerSession(authOptions),
+    getSession(),
   ])
   // Cached payload is global — apply the viewer's block graph after read.
   const blockedIds = await blockedUserIds(session?.user?.id)

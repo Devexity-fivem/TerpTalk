@@ -19,8 +19,7 @@ import PostContent from "@/components/post-content"
 import ImageGallery from "@/components/image-gallery"
 import Poll from "@/components/poll"
 import { LiveRefresh } from "@/components/live-refresh"
-import { getServerSession } from "next-auth"
-import { authOptions } from "@/lib/auth"
+import { getSession } from "@/lib/session"
 import { buildMetadata, snippet } from "@/lib/seo"
 import { Breadcrumbs } from "@/components/breadcrumbs"
 import { JsonLd } from "@/components/json-ld"
@@ -154,7 +153,7 @@ export default async function ThreadPage({
   const { slug } = await params
   const { page: pageParam, post: postParam } = await searchParams
   const page = Math.max(1, Math.min(10_000, parseInt(pageParam || "1") || 1))
-  const session = await getServerSession(authOptions)
+  const session = await getSession()
   const currentUserId = session?.user?.id
   const blockedIds = await blockedUserIds(currentUserId)
   const { thread, totalPostRows } = await getThreadData(slug, page, isModerator(session?.user?.role), currentUserId, blockedIds)

@@ -4,8 +4,7 @@ import { prisma } from "@/lib/prisma"
 import { publicUserSelect, activeAuthor, blockedUserIds } from "@/lib/security"
 import { mediaProxyUrl } from "@/lib/media"
 import { notFound, permanentRedirect } from "next/navigation"
-import { getServerSession } from "next-auth"
-import { authOptions } from "@/lib/auth"
+import { getSession } from "@/lib/session"
 import { Settings, Users, MessageSquare, Pencil } from "@/lib/icons"
 import Link from "next/link"
 import RoleBadge from "@/components/role-badge"
@@ -62,7 +61,7 @@ export default async function SetupPage({ params }: { params: Promise<{ id: stri
   // Legacy id URL → canonical slug URL.
   if (id === setup.id && setup.slug) permanentRedirect(setupPath(setup))
 
-  const session = await getServerSession(authOptions)
+  const session = await getSession()
   const isOwner = session?.user?.id === setup.authorId
   // Hide comments from members the viewer blocked (or who blocked the
   // viewer) — same boundary the thread page applies to posts.

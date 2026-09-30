@@ -1,7 +1,6 @@
 import { redirect } from "next/navigation"
-import { getServerSession } from "next-auth"
+import { getSession } from "@/lib/session"
 import Link from "next/link"
-import { authOptions } from "@/lib/auth"
 import { signInHref } from "@/lib/callback-url"
 import { buildMetadata } from "@/lib/seo"
 import { Ban, ArrowLeft } from "@/lib/icons"
@@ -15,7 +14,7 @@ export const metadata = buildMetadata({
 })
 
 export default async function BlockedSettingsPage() {
-  const session = await getServerSession(authOptions)
+  const session = await getSession()
   if (!session?.user?.id) redirect(signInHref("/settings/blocked"))
 
   return (

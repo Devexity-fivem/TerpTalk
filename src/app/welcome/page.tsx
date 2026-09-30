@@ -1,6 +1,5 @@
-import { getServerSession } from "next-auth"
+import { getSession } from "@/lib/session"
 import { redirect } from "next/navigation"
-import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { safeCallbackUrl, signInHref } from "@/lib/callback-url"
 import OnboardingStepper from "@/components/onboarding-stepper"
@@ -20,7 +19,7 @@ export default async function WelcomePage({
   searchParams: Promise<{ callbackUrl?: string }>
 }) {
   const { callbackUrl } = await searchParams
-  const session = await getServerSession(authOptions)
+  const session = await getSession()
   if (!session?.user?.id) {
     redirect(signInHref("/welcome"))
   }

@@ -8,8 +8,7 @@ import Link from "next/link"
 import { buildMetadata } from "@/lib/seo"
 import { LiveRefresh } from "@/components/live-refresh"
 import { Breadcrumbs } from "@/components/breadcrumbs"
-import { getServerSession } from "next-auth"
-import { authOptions } from "@/lib/auth"
+import { getSession } from "@/lib/session"
 import CategoryFollowButton from "@/components/category-follow-button"
 import ProfileCard from "@/components/ui/profile-card"
 import Tooltip from "@/components/ui/tooltip"
@@ -95,7 +94,7 @@ export default async function CategoryPage({
   const page = Math.max(1, Math.min(10_000, parseInt(pageParam || "1") || 1))
   const unanswered = filterParam === "unanswered"
   const category = await getCategoryData(slug, page, unanswered)
-  const session = await getServerSession(authOptions)
+  const session = await getSession()
   // Hidden categories are unlisted, not public — 404 for non-moderators.
   if (category.hidden && !isModerator(session?.user?.role)) notFound()
   // The cached payload is global — drop threads by authors the viewer

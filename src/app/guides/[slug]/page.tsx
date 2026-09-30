@@ -7,8 +7,7 @@ import { buildMetadata, snippet } from "@/lib/seo"
 import { JsonLd } from "@/components/json-ld"
 import { Breadcrumbs } from "@/components/breadcrumbs"
 import ProfileCard from "@/components/ui/profile-card"
-import { getServerSession } from "next-auth"
-import { authOptions } from "@/lib/auth"
+import { getSession } from "@/lib/session"
 import { isModerator, activeAuthor, publicUserSelect, isActiveAuthorRow } from "@/lib/security"
 import { TOPIC_TO_CATEGORY_SLUGS } from "@/lib/guides"
 import { MessageSquare } from "@/lib/icons"
@@ -35,7 +34,7 @@ export default async function GuidePage({ params }: { params: Promise<{ slug: st
       where: { slug },
       include: { author: { select: { name: true, image: true, role: true, banned: true, suspendedUntil: true, profile: { select: { username: true, xp: true, publicMilestoneOptOut: true } } } } },
     }),
-    getServerSession(authOptions),
+    getSession(),
   ])
   if (!guide || !guide.published) notFound()
 

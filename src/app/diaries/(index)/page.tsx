@@ -5,8 +5,7 @@ import { mediaProxyUrl } from "@/lib/media"
 import { unstable_cache } from "next/cache"
 import { Leaf, TrendingUp, Users, BarChart3, ChevronLeft, ChevronRight, Dna } from "@/lib/icons"
 import { getCommunityGrowStats, type Distribution } from "@/lib/community-stats"
-import { getServerSession } from "next-auth"
-import { authOptions } from "@/lib/auth"
+import { getSession } from "@/lib/session"
 import { blockedUserIds } from "@/lib/security"
 import Link from "next/link"
 import RoleBadge from "@/components/role-badge"
@@ -247,7 +246,7 @@ export default async function DiariesPage({
   const [cached, stats, session] = await Promise.all([
     getDiaries(page),
     getCommunityGrowStats(),
-    getServerSession(authOptions),
+    getSession(),
   ])
   const { total } = cached
   // The cached list is global — hide diaries by authors the viewer has

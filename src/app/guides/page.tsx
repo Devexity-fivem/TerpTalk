@@ -4,8 +4,7 @@ import { BookOpen, Plus } from "@/lib/icons"
 import Link from "next/link"
 import EmptyState from "@/components/ui/empty-state"
 import ProfileCard from "@/components/ui/profile-card"
-import { getServerSession } from "next-auth"
-import { authOptions } from "@/lib/auth"
+import { getSession } from "@/lib/session"
 import { blockedUserIds } from "@/lib/security"
 import { isModerator } from "@/lib/roles"
 
@@ -30,7 +29,7 @@ const getGuides = unstable_cache(
 )
 
 export default async function GuidesPage() {
-  const session = await getServerSession(authOptions)
+  const session = await getSession()
   const isStaff = isModerator((session?.user as { role?: string })?.role)
 
   const [allGuides, blockedIds] = await Promise.all([getGuides(), blockedUserIds(session?.user?.id)])
