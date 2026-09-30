@@ -4,7 +4,7 @@ import { publicUserSelect, isModerator, activeAuthor, blockedUserIds, notBlocked
 import { mediaProxyUrl } from "@/lib/media"
 import { diaryPath } from "@/lib/slugs"
 import { notFound, redirect } from "next/navigation"
-import { MessageSquare, MessagesSquare, Clock, CheckCircle2, Eye, BookOpen } from "lucide-react"
+import { MessageSquare, MessagesSquare, Clock, CheckCircle2, Eye, BookOpen } from "@/lib/icons"
 import Link from "next/link"
 import ReplyForm from "@/components/reply-form"
 import ThreadScrollBar from "@/components/thread-scroll-bar"
@@ -198,39 +198,56 @@ export default async function ThreadPage({
 
   const totalPages = Math.max(1, Math.ceil(thread._count.posts / POSTS_PER_PAGE))
   const tagIds = thread.tags.map((tt) => tt.tagId)
-  const relatedThreads = await prisma.thread.findMany({
-    where: {
-      deleted: false,
-      id: { not: thread.id },
-      category: { hidden: false },
-      author: activeAuthor(),
-      ...notBlockedAuthor(blockedIds),
-      OR: [
-        { categoryId: thread.categoryId },
-        ...(tagIds.length > 0 ? [{ tags: { some: { tagId: { in: tagIds } } } }] : []),
-      ],
-    },
-    take: 5,
-    orderBy: { createdAt: "desc" },
-    include: {
-      author: { select: publicUserSelect },
-      category: { select: { name: true, slug: true } },
-      _count: { select: { posts: { where: { deleted: false, author: activeAuthor() } } } },
-    },
-  })
-  const saved = currentUserId
-    ? !!(await prisma.bookmark.findUnique({
-        where: { userId_threadId: { userId: session.user.id, threadId: thread.id } },
-        select: { id: true },
-      }))
-    : false
-
-  const follow = currentUserId
-    ? await prisma.threadFollow.findUnique({
-        where: { userId_threadId: { userId: currentUserId, threadId: thread.id } },
-        select: { id: true, lastSeenAt: true },
-      })
-    : null
+  // Independent lookups batched — related threads, viewer bookmark/follow
+  // state, the OP post id, and the viewer's poll vote share no ordering
+  // constraints, so five serial roundtrips collapse into one parallel set.
+  // (The OP id is a dedicated earliest-post lookup so the OP badge/ring is
+  // correct on every page even if the OP is deleted or filtered out.)
+  const [relatedThreads, saved, follow, opPostId, userVoteOptionId] = await Promise.all([
+    prisma.thread.findMany({
+      where: {
+        deleted: false,
+        id: { not: thread.id },
+        category: { hidden: false },
+        author: activeAuthor(),
+        ...notBlockedAuthor(blockedIds),
+        OR: [
+          { categoryId: thread.categoryId },
+          ...(tagIds.length > 0 ? [{ tags: { some: { tagId: { in: tagIds } } } }] : []),
+        ],
+      },
+      take: 5,
+      orderBy: { createdAt: "desc" },
+      include: {
+        author: { select: publicUserSelect },
+        category: { select: { name: true, slug: true } },
+        _count: { select: { posts: { where: { deleted: false, author: activeAuthor() } } } },
+      },
+    }),
+    currentUserId
+      ? prisma.bookmark.findUnique({
+          where: { userId_threadId: { userId: session.user.id, threadId: thread.id } },
+          select: { id: true },
+        }).then((b) => !!b)
+      : false,
+    currentUserId
+      ? prisma.threadFollow.findUnique({
+          where: { userId_threadId: { userId: currentUserId, threadId: thread.id } },
+          select: { id: true, lastSeenAt: true },
+        })
+      : null,
+    prisma.post.findFirst({
+      where: { threadId: thread.id },
+      orderBy: { createdAt: "asc" },
+      select: { id: true },
+    }).then((p) => p?.id ?? null),
+    thread.poll && currentUserId
+      ? prisma.pollVote.findFirst({
+          where: { pollId: thread.poll.id, userId: currentUserId },
+          select: { optionId: true },
+        }).then((v) => v?.optionId ?? null)
+      : null,
+  ])
   const following = !!follow
 
   // First-unread boundary — must be read BEFORE mark-seen advances
@@ -269,25 +286,9 @@ export default async function ThreadPage({
     }
   }
 
-  // The opening post is the earliest post in the thread — resolved with one
-  // indexed lookup so the OP badge/ring is correct on every page and stays
-  // correct even if the OP is deleted or accepted answers are filtered out.
-  const opPostId = (await prisma.post.findFirst({
-    where: { threadId: thread.id },
-    orderBy: { createdAt: "asc" },
-    select: { id: true },
-  }))?.id
-
   const canSetAnswer = !!currentUserId && (
     currentUserId === thread.authorId || isModerator(session?.user?.role)
   ) && !thread.locked
-
-  const userVoteOptionId = thread.poll && currentUserId
-    ? await prisma.pollVote.findFirst({
-        where: { pollId: thread.poll.id, userId: currentUserId },
-        select: { optionId: true },
-      }).then((v) => v?.optionId ?? null)
-    : null
 
   const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://terp-talk.vercel.app"
   const canonical = `${baseUrl}/forum/thread/${thread.slug}`
