@@ -268,17 +268,25 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
   }
 
   // Diary reactions — aggregate counts + the viewer's own reaction. Reactor
-  // identities are never shipped to the client.
-  const reactionRows = await prisma.reaction.findMany({
-    where: { diaryId: diary.id },
-    select: { userId: true, type: true },
-  })
-  const reactionCounts: Record<string, number> = {}
-  let myReaction: string | null = null
-  for (const r of reactionRows) {
-    reactionCounts[r.type] = (reactionCounts[r.type] || 0) + 1
-    if (r.userId === session?.user?.id) myReaction = r.type
-  }
+  // identities are never shipped to the client; counts are grouped in SQL
+  // so a popular diary doesn't ferry one row per reaction.
+  const [reactionGroups, myReactionRow] = await Promise.all([
+    prisma.reaction.groupBy({
+      by: ["type"],
+      where: { diaryId: diary.id },
+      _count: { _all: true },
+    }),
+    session?.user?.id
+      ? prisma.reaction.findFirst({
+          where: { diaryId: diary.id, userId: session.user.id },
+          select: { type: true },
+        })
+      : Promise.resolve(null),
+  ])
+  const reactionCounts: Record<string, number> = Object.fromEntries(
+    reactionGroups.map((g) => [g.type, g._count._all])
+  )
+  const myReaction = myReactionRow?.type ?? null
 
   const canEdit = session?.user?.id === diary.author.id || isAdmin((session?.user as { role?: string } | undefined)?.role)
 
