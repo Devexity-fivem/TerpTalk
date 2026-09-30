@@ -24,8 +24,10 @@
 // unreferenced private objects, which may be the sole copy left by a
 // failed repoint. "No DB row" alone is never treated as safe-to-destroy.
 //
-// Requires BLOB_READ_WRITE_TOKEN with write access to the store (not
-// needed for --dry-run row classification).
+// Dual-store topology: legacy/public objects live in the public store
+// (BLOB_READ_WRITE_TOKEN / BLOB_STORE_ID); migrated objects are written to
+// the private store (BLOB_PRIVATE_READ_WRITE_TOKEN). Live migration and
+// --list-store need both tokens — one store per credential.
 import "./db-guard.mjs"
 import { list } from "@vercel/blob"
 import { prisma } from "../src/lib/prisma"
@@ -142,10 +144,14 @@ interface StoreObject {
 //                        leftover) → could be the only copy; report only
 //   suspicious         — pathname doesn't match the storeImage shape
 async function listStore(): Promise<number> {
-  if (!process.env.BLOB_READ_WRITE_TOKEN) {
-    console.log("--list-store skipped: BLOB_READ_WRITE_TOKEN not configured")
+  const publicToken = process.env.BLOB_READ_WRITE_TOKEN || null
+  const privateToken = process.env.BLOB_PRIVATE_READ_WRITE_TOKEN || null
+  if (!publicToken && !privateToken) {
+    console.log("--list-store skipped: no blob tokens configured")
     return 0
   }
+  if (!publicToken) console.warn("  WARN: BLOB_READ_WRITE_TOKEN missing — public store not audited")
+  if (!privateToken) console.warn("  WARN: BLOB_PRIVATE_READ_WRITE_TOKEN missing — private side not audited; public orphans will classify as unique")
   const rowUrls = new Set<string>()
   for (const rows of [
     await prisma.diaryImage.findMany({ select: { url: true } }),
@@ -162,21 +168,23 @@ async function listStore(): Promise<number> {
   }
 
   const objects: StoreObject[] = []
-  for (const prefix of RESTRICTED_PREFIXES) {
-    let cursor: string | undefined
-    do {
-      const page = await list({ prefix, limit: 1000, ...(cursor ? { cursor } : {}) })
-      for (const blob of page.blobs) {
-        const pathname = blob.pathname.startsWith("/") ? blob.pathname : `/${blob.pathname}`
-        objects.push({
-          url: blob.url,
-          pathname,
-          isPublic: new URL(blob.url).hostname.endsWith(".public.blob.vercel-storage.com"),
-          prefix,
-        })
-      }
-      cursor = page.hasMore ? page.cursor : undefined
-    } while (cursor)
+  for (const token of [publicToken, privateToken].filter((t): t is string => !!t)) {
+    for (const prefix of RESTRICTED_PREFIXES) {
+      let cursor: string | undefined
+      do {
+        const page = await list({ prefix, limit: 1000, token, ...(cursor ? { cursor } : {}) })
+        for (const blob of page.blobs) {
+          const pathname = blob.pathname.startsWith("/") ? blob.pathname : `/${blob.pathname}`
+          objects.push({
+            url: blob.url,
+            pathname,
+            isPublic: new URL(blob.url).hostname.endsWith(".public.blob.vercel-storage.com"),
+            prefix,
+          })
+        }
+        cursor = page.hasMore ? page.cursor : undefined
+      } while (cursor)
+    }
   }
 
   const privatePaths = new Set(objects.filter((o) => !o.isPublic).map((o) => o.pathname))
@@ -258,9 +266,18 @@ async function listStore(): Promise<number> {
 }
 
 async function main() {
-  if (!DRY_RUN && !LIST_STORE && !process.env.BLOB_READ_WRITE_TOKEN) {
-    console.error(`BLOB_READ_WRITE_TOKEN is required for ${REVOKE_ORPHANS ? "--revoke-orphans" : "the live migration"}`)
-    process.exit(1)
+  if (!DRY_RUN && !LIST_STORE) {
+    // Live migration needs the private token to copy objects and the public
+    // token to revoke the sources; orphan revocation deletes public-store
+    // objects only.
+    const missing = [
+      !process.env.BLOB_PRIVATE_READ_WRITE_TOKEN && !REVOKE_ORPHANS && "BLOB_PRIVATE_READ_WRITE_TOKEN",
+      !process.env.BLOB_READ_WRITE_TOKEN && "BLOB_READ_WRITE_TOKEN",
+    ].filter(Boolean)
+    if (missing.length) {
+      console.error(`${missing.join(", ")} required for ${REVOKE_ORPHANS ? "--revoke-orphans" : "the live migration"}`)
+      process.exit(1)
+    }
   }
 
   if (LIST_STORE || REVOKE_ORPHANS) {

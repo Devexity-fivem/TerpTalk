@@ -2,7 +2,7 @@
 // Accepts client-resized data URIs; stores them in Blob and returns a
 // small https URL so DB rows stay tiny. Falls back to the data URI when
 // BLOB_READ_WRITE_TOKEN isn't configured so nothing breaks locally.
-import { put, del, get, copy, head, BlobNotFoundError } from "@vercel/blob"
+import { put, del, get, head, BlobNotFoundError } from "@vercel/blob"
 import { randomBytes } from "crypto"
 import sharp from "sharp"
 import { prisma } from "@/lib/prisma"
@@ -29,6 +29,23 @@ export const MAX_POST_IMAGES = 4
 const PUBLIC_BLOB_SUFFIX = ".public.blob.vercel-storage.com"
 const PRIVATE_BLOB_SUFFIX = ".private.blob.vercel-storage.com"
 
+// Restricted-class media lives in a dedicated private-mode store. Vercel
+// Blob access modes are exclusive and immutable per store — public stores
+// reject private objects and private stores reject public objects — so
+// private operations carry their own read/write token while public-class
+// media (avatars, banners, strain photos, contest entries) and legacy
+// public objects keep using BLOB_READ_WRITE_TOKEN on the original store.
+function privateStoreToken(): string | null {
+  return process.env.BLOB_PRIVATE_READ_WRITE_TOKEN || null
+}
+
+// The credential matching a stored URL's access class. Public objects only
+// ever exist in the public store; private objects only ever exist in the
+// private store — so URL class determines which token authorizes the op.
+function tokenForBlobUrl(url: string): string | null {
+  return isPrivateBlobUrl(url) ? privateStoreToken() : process.env.BLOB_READ_WRITE_TOKEN || null
+}
+
 // Hostname-suffixed checks — a substring match would accept attacker-shaped
 // hosts like "evil.com/.public.blob.vercel-storage.com".
 export function isPublicBlobUrl(url: string): boolean {
@@ -54,6 +71,13 @@ export function publicTwinUrl(privateUrl: string): string | null {
   if (!isPrivateBlobUrl(privateUrl)) return null
   try {
     const u = new URL(privateUrl)
+    const storeId = process.env.BLOB_STORE_ID?.replace(/^store_/, "")
+    if (storeId) {
+      // Dual-store: the stale public copy lives in the public store
+      // (BLOB_STORE_ID) at the same pathname — the private store has no
+      // public host of its own, so a suffix swap would be wrong.
+      return `https://${storeId}.public.blob.vercel-storage.com${u.pathname}`
+    }
     u.hostname = u.hostname.replace(PRIVATE_BLOB_SUFFIX, PUBLIC_BLOB_SUFFIX)
     return u.toString()
   } catch {
@@ -62,7 +86,7 @@ export function publicTwinUrl(privateUrl: string): string | null {
 }
 
 export function isBlobConfigured(): boolean {
-  return Boolean(process.env.BLOB_READ_WRITE_TOKEN) || process.env.NODE_ENV === "development"
+  return Boolean(process.env.BLOB_READ_WRITE_TOKEN || privateStoreToken()) || process.env.NODE_ENV === "development"
 }
 
 /**
@@ -131,7 +155,9 @@ export async function storeImage(
   // Content must match the declared type — rejects spoofed payloads.
   if (!MAGIC[ext]?.(buf)) throw new Error("Image content does not match declared type")
 
-  if (process.env.BLOB_READ_WRITE_TOKEN) {
+  const wantsPrivate = options?.access === "private"
+  const token = wantsPrivate ? privateStoreToken() : process.env.BLOB_READ_WRITE_TOKEN || null
+  if (token) {
     const uploadsEnabled = await getBooleanSetting(SITE_SETTINGS.IMAGE_UPLOADS_ENABLED, true)
     if (!uploadsEnabled) {
       throw new Error("Image uploads are currently disabled")
@@ -161,8 +187,9 @@ export async function storeImage(
   }
 
   const { url } = await put(`${folder}/${randomBytes(8).toString("hex")}.webp`, processed, {
-    access: options?.access === "private" ? "private" : "public",
+    access: wantsPrivate ? "private" : "public",
     contentType: "image/webp",
+    token: token ?? undefined,
   })
   return url
 }
@@ -187,8 +214,9 @@ export async function readBlob(
   if (!url.startsWith("https://")) return null
   try {
     if (isPrivateBlobUrl(url)) {
-      if (!process.env.BLOB_READ_WRITE_TOKEN) return null
-      const result = await get(url, { access: "private" })
+      const token = privateStoreToken()
+      if (!token) return null
+      const result = await get(url, { access: "private", token })
       if (!result || result.statusCode !== 200) return null
       return { body: result.stream, contentType: result.blob.contentType }
     }
@@ -214,13 +242,23 @@ export async function readBlob(
  */
 export async function privatizeBlob(url: string): Promise<string | null> {
   if (!isPublicBlobUrl(url)) return null
-  if (!process.env.BLOB_READ_WRITE_TOKEN) return null
+  const token = privateStoreToken()
+  if (!token) return null
   const pathname = new URL(url).pathname.replace(/^\//, "")
-  // allowOverwrite — a prior partial run may have left the private copy in
-  // place while the row still pointed at the public URL; the migration must
-  // be idempotent, not fail on "already exists" forever.
-  const copied = await copy(url, pathname, { access: "private", allowOverwrite: true })
-  return copied.url
+  // The private copy crosses stores — Blob copy() only works within the
+  // token's own store — so fetch the (anonymous-readable) public source and
+  // re-put it privately at the same pathname. allowOverwrite keeps retries
+  // idempotent after a prior partial run.
+  const res = await fetch(url, { cache: "no-store" })
+  if (!res.ok || !res.body) return null
+  const body = Buffer.from(await res.arrayBuffer())
+  const put_ = await put(pathname, body, {
+    access: "private",
+    contentType: res.headers.get("content-type") ?? "image/webp",
+    allowOverwrite: true,
+    token,
+  })
+  return put_.url
 }
 
 /**
@@ -230,9 +268,10 @@ export async function privatizeBlob(url: string): Promise<string | null> {
  */
 export async function deleteImage(url: string | null | undefined): Promise<void> {
   if (!url || !url.startsWith("https://")) return
-  if (!process.env.BLOB_READ_WRITE_TOKEN) return
+  const token = tokenForBlobUrl(url)
+  if (!token) return
   try {
-    await del(url)
+    await del(url, { token })
   } catch (error) {
     console.error("Failed to delete blob:", url, error)
   }
@@ -248,17 +287,18 @@ export async function deleteImage(url: string | null | undefined): Promise<void>
 export async function deleteImageStrict(url: string | null | undefined): Promise<boolean> {
   if (!url || !url.startsWith("https://")) return true
   if (!isPublicBlobUrl(url) && !isPrivateBlobUrl(url)) return true
-  if (!process.env.BLOB_READ_WRITE_TOKEN) return false
+  const token = tokenForBlobUrl(url)
+  if (!token) return false
   try {
     // Existence check first: deleting an object that was never there is a
     // successful revocation, and this avoids relying on del()'s exact
     // behavior toward missing keys.
-    await head(url)
+    await head(url, { token })
   } catch (error) {
     if (error instanceof BlobNotFoundError) return true
   }
   try {
-    await del(url)
+    await del(url, { token })
     return true
   } catch (error) {
     if (error instanceof BlobNotFoundError) return true
@@ -283,7 +323,7 @@ export async function deleteImages(urls: (string | null | undefined)[]): Promise
  */
 export async function deleteImagesIfUnreferenced(urls: (string | null | undefined)[]): Promise<void> {
   const candidates = urls.filter((u): u is string => typeof u === "string" && u.startsWith("https://"))
-  if (!candidates.length || !process.env.BLOB_READ_WRITE_TOKEN) return
+  if (!candidates.length || (!process.env.BLOB_READ_WRITE_TOKEN && !privateStoreToken())) return
 
   const [postImages, diaryImages, setupImages, strainPhotos, contestImages, profiles, bannerProfiles, userImages] = await Promise.all([
     prisma.postImage.findMany({ where: { url: { in: candidates } }, select: { url: true } }),
