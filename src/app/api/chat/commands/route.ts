@@ -29,8 +29,8 @@ import { recordBotEvent, countEntityLinks } from "@/lib/terpbot-events"
 import { applyAccountActionInTx } from "@/lib/moderation"
 import { logSecurityEvent } from "@/lib/security"
 import { recordChatMessage } from "@/lib/reputation"
-import { enqueueReversal, drainOne } from "@/lib/reputation-outbox"
-import { enqueueXpReversal, drainXpOne } from "@/lib/progression-outbox"
+import { enqueueReversal, drainMany } from "@/lib/reputation-outbox"
+import { enqueueXpReversal, drainXpMany } from "@/lib/progression-outbox"
 
 type ChatMessageWithAuthor = {
   id: string
@@ -197,8 +197,8 @@ export async function POST(request: NextRequest) {
         emitNotificationPush(targetUserId, createdNotification)
       }
 
-      for (const rid of reversalIds) await drainOne(rid).catch(() => false)
-      for (const rid of xpReversalIds) await drainXpOne(rid).catch(() => false)
+      await drainMany(reversalIds)
+      await drainXpMany(xpReversalIds)
 
       await logSecurityEvent("SUSPICIOUS_ACTIVITY", {
         userId,

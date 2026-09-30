@@ -5,8 +5,8 @@ import { prisma } from "@/lib/prisma"
 import { isBanned, isModerator, forbidden, unauthorized, getClientIp, logSecurityEvent } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
 import { awardProgression } from "@/lib/progression"
-import { enqueueReversal, drainOne } from "@/lib/reputation-outbox"
-import { enqueueXpReversal, drainXpOne } from "@/lib/progression-outbox"
+import { enqueueReversals, drainMany } from "@/lib/reputation-outbox"
+import { enqueueXpReversals, drainXpMany } from "@/lib/progression-outbox"
 import { ACCEPT_MIN_ACTOR_AGE_HOURS } from "@/lib/reputation-config"
 import { checkMaintenance } from "@/lib/maintenance"
 import { notify, postDeepLink } from "@/lib/notify"
@@ -85,24 +85,23 @@ export async function POST(request: Request) {
           data: { acceptedAnswerId: null },
         })
         if (res.count === 1 && thread.acceptedAnswerId) {
-          for (const eventKey of [`accept:${thread.acceptedAnswerId}`, `accept-newcomer:${thread.acceptedAnswerId}`, `accept-op:${threadId}`]) {
-            reversalIds.push(await enqueueReversal(tx, {
-              kind: "KEY", eventKey,
-              reason: "Answer unaccepted", requestedBy: user.id,
-            }))
-            xpReversalIds.push(await enqueueXpReversal(tx, {
-              kind: "KEY", eventKey,
-              reason: "Answer unaccepted", requestedBy: user.id,
-            }))
-          }
+          const keys = [`accept:${thread.acceptedAnswerId}`, `accept-newcomer:${thread.acceptedAnswerId}`, `accept-op:${threadId}`]
+          reversalIds.push(...await enqueueReversals(tx, keys.map((eventKey) => ({
+            kind: "KEY" as const, eventKey,
+            reason: "Answer unaccepted", requestedBy: user.id,
+          }))))
+          xpReversalIds.push(...await enqueueXpReversals(tx, keys.map((eventKey) => ({
+            kind: "KEY" as const, eventKey,
+            reason: "Answer unaccepted", requestedBy: user.id,
+          }))))
         }
         return res
       })
       if (cleared.count === 0) {
         return NextResponse.json({ error: "Accepted answer changed concurrently — retry" }, { status: 409 })
       }
-      for (const rid of reversalIds) await drainOne(rid).catch(() => false)
-      for (const rid of xpReversalIds) await drainXpOne(rid).catch(() => false)
+      await drainMany(reversalIds)
+      await drainXpMany(xpReversalIds)
       // Plant Doctor outcome stats track accepted answers.
       if (thread.wizardResultId) revalidateTag("analytics", { expire: 0 })
       return NextResponse.json({ success: true })
@@ -131,24 +130,23 @@ export async function POST(request: Request) {
         data: { acceptedAnswerId: postId },
       })
       if (res.count === 1 && thread.acceptedAnswerId && thread.acceptedAnswerId !== postId) {
-        for (const eventKey of [`accept:${thread.acceptedAnswerId}`, `accept-newcomer:${thread.acceptedAnswerId}`]) {
-          swapReversalIds.push(await enqueueReversal(tx, {
-            kind: "KEY", eventKey,
-            reason: "Accepted answer changed", requestedBy: user.id,
-          }))
-          swapXpReversalIds.push(await enqueueXpReversal(tx, {
-            kind: "KEY", eventKey,
-            reason: "Accepted answer changed", requestedBy: user.id,
-          }))
-        }
+        const keys = [`accept:${thread.acceptedAnswerId}`, `accept-newcomer:${thread.acceptedAnswerId}`]
+        swapReversalIds.push(...await enqueueReversals(tx, keys.map((eventKey) => ({
+          kind: "KEY" as const, eventKey,
+          reason: "Accepted answer changed", requestedBy: user.id,
+        }))))
+        swapXpReversalIds.push(...await enqueueXpReversals(tx, keys.map((eventKey) => ({
+          kind: "KEY" as const, eventKey,
+          reason: "Accepted answer changed", requestedBy: user.id,
+        }))))
       }
       return res
     })
     if (swapped.count === 0) {
       return NextResponse.json({ error: "Accepted answer changed concurrently — retry" }, { status: 409 })
     }
-    for (const rid of swapReversalIds) await drainOne(rid).catch(() => false)
-    for (const rid of swapXpReversalIds) await drainXpOne(rid).catch(() => false)
+    await drainMany(swapReversalIds)
+    await drainXpMany(swapXpReversalIds)
 
     // Accepted-answer award — keyed per post so unaccept/re-accept cycles
     // can't farm it. The accept itself works for anyone, but the payout is

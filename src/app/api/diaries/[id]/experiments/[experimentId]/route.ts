@@ -8,7 +8,7 @@ import { checkMaintenance } from "@/lib/maintenance"
 import { revalidateTag } from "next/cache"
 import { parseExperimentPatch, serializeExperiment } from "@/lib/experiments"
 import { evaluateExperimentAwards, enqueueExperimentReversals } from "@/lib/experiment-progression"
-import { drainXpOne } from "@/lib/progression-outbox"
+import { drainXpMany } from "@/lib/progression-outbox"
 
 /**
  * /api/diaries/[id]/experiments/[experimentId]
@@ -132,9 +132,7 @@ export async function DELETE(
       await tx.growExperiment.delete({ where: { id: experimentId } })
       return enqueueExperimentReversals(tx, experimentId)
     })
-    for (const rid of reversalIds) {
-      await drainXpOne(rid).catch(() => false)
-    }
+    await drainXpMany(reversalIds)
     revalidateTag("diaries", { expire: 0 })
     return NextResponse.json({ deleted: true })
   } catch (error) {

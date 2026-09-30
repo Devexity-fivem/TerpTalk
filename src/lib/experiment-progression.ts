@@ -13,7 +13,7 @@
 import { Prisma } from "@prisma/client"
 import { awardProgression, experimentSimilarity } from "@/lib/progression"
 import { prisma } from "@/lib/prisma"
-import { enqueueXpReversal, drainXpOne } from "@/lib/progression-outbox"
+import { enqueueXpReversals, drainXpMany } from "@/lib/progression-outbox"
 import { DUP_WITHHOLD_PCT } from "@/lib/progression-config"
 
 const expKey = (expId: string, suffix: string) => `experiment:${expId}:${suffix}`
@@ -179,11 +179,9 @@ export async function enqueueExperimentReversals(
   experimentId: string,
   why = "Experiment deleted"
 ): Promise<string[]> {
-  const ids: string[] = []
-  for (const suffix of EXP_SUFFIXES) {
-    ids.push(await enqueueXpReversal(tx, { kind: "KEY", eventKey: expKey(experimentId, suffix), reason: why }))
-  }
-  return ids
+  return enqueueXpReversals(tx, EXP_SUFFIXES.map((suffix) => ({
+    kind: "KEY" as const, eventKey: expKey(experimentId, suffix), reason: why,
+  })))
 }
 
 /**
@@ -192,5 +190,5 @@ export async function enqueueExperimentReversals(
  */
 export async function reverseExperimentAwards(experimentId: string, why = "Experiment deleted"): Promise<void> {
   const ids = await prisma.$transaction(async (tx) => enqueueExperimentReversals(tx, experimentId, why))
-  for (const id of ids) await drainXpOne(id).catch(() => false)
+  await drainXpMany(ids)
 }

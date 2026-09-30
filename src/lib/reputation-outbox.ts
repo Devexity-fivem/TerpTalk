@@ -54,6 +54,37 @@ export async function enqueueReversal(db: Db, intent: ReversalIntent): Promise<s
   return row.id
 }
 
+/**
+ * Batch form of enqueueReversal — one INSERT for N intents (bulk deletes,
+ * moderation sweeps). Same durable-intent semantics as N create() calls;
+ * returns ids in input order for the post-commit drain.
+ */
+export async function enqueueReversals(db: Db, intents: ReversalIntent[]): Promise<string[]> {
+  if (intents.length === 0) return []
+  const rows = await db.pendingReversal.createManyAndReturn({
+    data: intents.map((intent) => ({
+      kind: intent.kind,
+      eventKey: intent.eventKey ?? null,
+      sourceType: intent.sourceType ?? null,
+      sourceId: intent.sourceId ?? null,
+      actorId: intent.actorId ?? null,
+      reason: intent.reason,
+      requestedBy: intent.requestedBy ?? null,
+    })),
+    select: { id: true },
+  })
+  return rows.map((r) => r.id)
+}
+
+/**
+ * Drain several intents concurrently after commit — drainOne's CAS claim
+ * makes same-row races impossible. Each drain is an independent worker
+ * pass; per-event errors stay inside drainOne.
+ */
+export async function drainMany(ids: string[]): Promise<void> {
+  await Promise.allSettled(ids.map((id) => drainOne(id)))
+}
+
 // Fixpoint proofs — the intent is complete iff NO eligible event remains
 // active, regardless of what the executor reported.
 async function reversalComplete(row: {

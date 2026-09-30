@@ -5,8 +5,8 @@ import { prisma } from "@/lib/prisma"
 import { unauthorized, publicUserSelect, LIMITS, getClientIp, logSecurityEvent, isBanned, forbidden, enforceLinkTrust } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
 import { awardProgression } from "@/lib/progression"
-import { enqueueReversal, drainOne } from "@/lib/reputation-outbox"
-import { enqueueXpReversal, drainXpOne } from "@/lib/progression-outbox"
+import { enqueueReversals, drainMany } from "@/lib/reputation-outbox"
+import { enqueueXpReversals, drainXpMany } from "@/lib/progression-outbox"
 import { notificationLinkWhere, notifyMany } from "@/lib/notify"
 import { deleteImagesIfUnreferenced } from "@/lib/blob"
 import { checkMaintenance } from "@/lib/maintenance"
@@ -312,24 +312,24 @@ export async function DELETE(request: Request) {
       // bonuses are sourced to each update id — unwind both, atomically
       // committed with the delete itself. Legacy twin unwinds pre-cutover
       // ReputationEvent rows on the same source key.
-      reversalIds.push(await enqueueReversal(tx, {
+      reversalIds.push(...await enqueueReversals(tx, [{
         kind: "SOURCE", sourceType: "DIARY", sourceId: id,
         reason: "Diary removed", requestedBy: session.user.id,
-      }))
-      xpReversalIds.push(await enqueueXpReversal(tx, {
-        kind: "SOURCE", sourceType: "DIARY", sourceId: id,
-        reason: "Diary removed", requestedBy: session.user.id,
-      }))
+      }]))
       const diaryUpdateIds = await tx.diaryUpdate.findMany({
         where: { diaryId: id },
         select: { id: true },
       })
-      for (const u of diaryUpdateIds) {
-        xpReversalIds.push(await enqueueXpReversal(tx, {
-          kind: "SOURCE", sourceType: "DIARY_UPDATE", sourceId: u.id,
+      xpReversalIds.push(...await enqueueXpReversals(tx, [
+        {
+          kind: "SOURCE", sourceType: "DIARY", sourceId: id,
           reason: "Diary removed", requestedBy: session.user.id,
-        }))
-      }
+        },
+        ...diaryUpdateIds.map((u) => ({
+          kind: "SOURCE" as const, sourceType: "DIARY_UPDATE", sourceId: u.id,
+          reason: "Diary removed", requestedBy: session.user.id,
+        })),
+      ]))
       return imgs.map((i) => i.url)
     })
 
@@ -338,8 +338,10 @@ export async function DELETE(request: Request) {
     await purgeDiaryAnnouncements(diary).catch(() => {})
 
     // Best-effort immediate drain — durable rows retry via ping/cron.
-    for (const rid of reversalIds) await drainOne(rid).catch(() => false)
-    for (const rid of xpReversalIds) await drainXpOne(rid).catch(() => false)
+    // Kept eager: reversal latency is user-visible (deleted content should
+    // stop showing phantom XP promptly); ping's drain is throttled to ~5min.
+    await drainMany(reversalIds)
+    await drainXpMany(xpReversalIds)
     deleteImagesIfUnreferenced(imageUrls).catch(() => {})
     revalidateTag("diaries", { expire: 0 })
     // Strain stats aggregate this diary — bust the cache so deleted grows

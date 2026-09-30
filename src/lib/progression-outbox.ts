@@ -39,6 +39,29 @@ export async function enqueueXpReversal(db: Db, intent: XpReversalIntent): Promi
   return row.id
 }
 
+/** Batch form — one INSERT for N intents; ids in input order. */
+export async function enqueueXpReversals(db: Db, intents: XpReversalIntent[]): Promise<string[]> {
+  if (intents.length === 0) return []
+  const rows = await db.pendingXpReversal.createManyAndReturn({
+    data: intents.map((intent) => ({
+      kind: intent.kind,
+      eventKey: intent.eventKey ?? null,
+      sourceType: intent.sourceType ?? null,
+      sourceId: intent.sourceId ?? null,
+      actorId: intent.actorId ?? null,
+      reason: intent.reason,
+      requestedBy: intent.requestedBy ?? null,
+    })),
+    select: { id: true },
+  })
+  return rows.map((r) => r.id)
+}
+
+/** Concurrent post-commit drains — drainXpOne's CAS claim owns each row. */
+export async function drainXpMany(ids: string[]): Promise<void> {
+  await Promise.allSettled(ids.map((id) => drainXpOne(id)))
+}
+
 // Actor sweeps may only claw back grants — the ACTOR_GRANTED_TYPES list in
 // progression.ts — mirrored here for the fixpoint proof.
 const FIXPOINT_ACTOR_TYPES = [

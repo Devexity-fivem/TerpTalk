@@ -7,8 +7,8 @@ import { checkBadges } from "@/lib/reputation"
 import { progressionRateLimit } from "@/lib/progression"
 import { awardProgression, checkDuplicateContent, updateBand } from "@/lib/progression"
 import { awardExperimentFollowups } from "@/lib/experiment-progression"
-import { enqueueReversal, drainOne } from "@/lib/reputation-outbox"
-import { enqueueXpReversal, drainXpOne } from "@/lib/progression-outbox"
+import { enqueueReversals, drainMany } from "@/lib/reputation-outbox"
+import { enqueueXpReversals, drainXpMany } from "@/lib/progression-outbox"
 import { storeImages, deleteImagesIfUnreferenced, MAX_POST_IMAGES } from "@/lib/blob"
 import { proxyMedia } from "@/lib/media"
 import { checkMaintenance } from "@/lib/maintenance"
@@ -551,29 +551,31 @@ export async function DELETE(request: Request) {
     const xpReversalIds: string[] = []
     await prisma.$transaction(async (tx) => {
       await tx.diaryUpdate.delete({ where: { id } })
-      // Per-update bonuses (band/structured) are sourced to the update id —
-      // one source reversal unwinds them regardless of how many fired.
-      xpReversalIds.push(await enqueueXpReversal(tx, {
-        kind: "SOURCE", sourceType: "DIARY_UPDATE", sourceId: id,
-        reason: "Diary update deleted",
-      }))
       const remaining = await tx.diaryUpdate.count({
         where: { diaryId: update.diaryId, createdAt: { gte: dayStart, lt: dayEnd } },
       })
+      // Both ledgers share the diaryupd:<diary>:<day> key convention.
       if (remaining === 0) {
-        // Both ledgers share the diaryupd:<diary>:<day> key convention.
-        reversalIds.push(await enqueueReversal(tx, {
+        reversalIds.push(...await enqueueReversals(tx, [{
           kind: "KEY", eventKey: `diaryupd:${update.diaryId}:${dayKey}`,
           reason: "Diary update deleted",
-        }))
-        xpReversalIds.push(await enqueueXpReversal(tx, {
-          kind: "KEY", eventKey: `diaryupd:${update.diaryId}:${dayKey}`,
-          reason: "Diary update deleted",
-        }))
+        }]))
       }
+      // Per-update bonuses (band/structured) are sourced to the update id —
+      // one source reversal unwinds them regardless of how many fired.
+      xpReversalIds.push(...await enqueueXpReversals(tx, [
+        {
+          kind: "SOURCE", sourceType: "DIARY_UPDATE", sourceId: id,
+          reason: "Diary update deleted",
+        },
+        ...(remaining === 0 ? [{
+          kind: "KEY" as const, eventKey: `diaryupd:${update.diaryId}:${dayKey}`,
+          reason: "Diary update deleted",
+        }] : []),
+      ]))
     })
-    for (const rid of reversalIds) await drainOne(rid).catch(() => false)
-    for (const rid of xpReversalIds) await drainXpOne(rid).catch(() => false)
+    await drainMany(reversalIds)
+    await drainXpMany(xpReversalIds)
     // Losing a meaningful update day can regress a grow-journey stage —
     // reconciliation claws the milestone award back if it no longer holds.
     await evaluateGrowJourney(update.diaryId).catch(() => {})

@@ -8,8 +8,8 @@ import { requireModerator } from "@/lib/require-staff"
 import { progressionRateLimit, getProgressionPerks } from "@/lib/progression"
 import { STANDING_LINKS, STANDING_POLL_CREATE } from "@/lib/progression-config"
 import { awardProgression } from "@/lib/progression"
-import { enqueueReversal, drainOne } from "@/lib/reputation-outbox"
-import { enqueueXpReversal, drainXpOne } from "@/lib/progression-outbox"
+import { enqueueReversals, drainMany } from "@/lib/reputation-outbox"
+import { enqueueXpReversals, drainXpMany } from "@/lib/progression-outbox"
 import { THREAD_MIN_PAID_LENGTH } from "@/lib/reputation-config"
 import { notifyMentions } from "@/lib/mentions"
 import { notifyMany, invalidateNotificationsForLink, postDeepLink } from "@/lib/notify"
@@ -433,24 +433,26 @@ export async function DELETE(request: Request) {
       await tx.postImage.deleteMany({
         where: { OR: [{ threadId: id }, { post: { threadId: id } }] },
       })
-      reversalIds.push(await enqueueReversal(tx, {
-        kind: "SOURCE", sourceType: "THREAD", sourceId: id,
-        reason: "Thread removed", requestedBy: session.user.id,
-      }))
-      xpReversalIds.push(await enqueueXpReversal(tx, {
-        kind: "SOURCE", sourceType: "THREAD", sourceId: id,
-        reason: "Thread removed", requestedBy: session.user.id,
-      }))
-      for (const p of postIds) {
-        reversalIds.push(await enqueueReversal(tx, {
-          kind: "SOURCE", sourceType: "POST", sourceId: p.id,
+      reversalIds.push(...await enqueueReversals(tx, [
+        {
+          kind: "SOURCE", sourceType: "THREAD", sourceId: id,
           reason: "Thread removed", requestedBy: session.user.id,
-        }))
-        xpReversalIds.push(await enqueueXpReversal(tx, {
-          kind: "SOURCE", sourceType: "POST", sourceId: p.id,
+        },
+        ...postIds.map((p) => ({
+          kind: "SOURCE" as const, sourceType: "POST", sourceId: p.id,
           reason: "Thread removed", requestedBy: session.user.id,
-        }))
-      }
+        })),
+      ]))
+      xpReversalIds.push(...await enqueueXpReversals(tx, [
+        {
+          kind: "SOURCE", sourceType: "THREAD", sourceId: id,
+          reason: "Thread removed", requestedBy: session.user.id,
+        },
+        ...postIds.map((p) => ({
+          kind: "SOURCE" as const, sourceType: "POST", sourceId: p.id,
+          reason: "Thread removed", requestedBy: session.user.id,
+        })),
+      ]))
     })
     await invalidateNotificationsForLink(`/forum/thread/${thread.slug}`)
 
@@ -472,8 +474,8 @@ export async function DELETE(request: Request) {
 
     // Best-effort immediate drain — preserves the instant-reversal UX while
     // the outbox rows make any failure retryable via ping/cron.
-    for (const rid of reversalIds) await drainOne(rid).catch(() => false)
-    for (const rid of xpReversalIds) await drainXpOne(rid).catch(() => false)
+    await drainMany(reversalIds)
+    await drainXpMany(xpReversalIds)
 
     // Soft-deleted content must not leave live public blobs behind.
     deleteImagesIfUnreferenced([

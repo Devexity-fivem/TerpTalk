@@ -5,8 +5,8 @@ import { getClientIp, isAdmin, logSecurityEvent } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
 import { notificationLinkWhere } from "@/lib/notify"
 import { staffDisplayName } from "@/lib/moderation"
-import { enqueueReversal, drainOne } from "@/lib/reputation-outbox"
-import { enqueueXpReversal, drainXpOne } from "@/lib/progression-outbox"
+import { enqueueReversals, drainMany } from "@/lib/reputation-outbox"
+import { enqueueXpReversals, drainXpMany } from "@/lib/progression-outbox"
 import { deleteImagesIfUnreferenced } from "@/lib/blob"
 import { revalidateTag } from "next/cache"
 
@@ -123,28 +123,14 @@ export async function POST(request: Request) {
       deleteImagesIfUnreferenced(imgs.map((i) => i.url)).catch(() => {})
       for (const t of threads) {
         const postIds = await prisma.post.findMany({ where: { threadId: t.id }, select: { id: true } })
-        const batch: string[] = []
-        const xpBatch: string[] = []
-        batch.push(await enqueueReversal(prisma, {
-          kind: "SOURCE", sourceType: "THREAD", sourceId: t.id,
-          reason: "Content removed by staff", requestedBy: staff.id,
-        }))
-        xpBatch.push(await enqueueXpReversal(prisma, {
-          kind: "SOURCE", sourceType: "THREAD", sourceId: t.id,
-          reason: "Content removed by staff", requestedBy: staff.id,
-        }))
-        for (const p of postIds) {
-          batch.push(await enqueueReversal(prisma, {
-            kind: "SOURCE", sourceType: "POST", sourceId: p.id,
-            reason: "Content removed by staff", requestedBy: staff.id,
-          }))
-          xpBatch.push(await enqueueXpReversal(prisma, {
-            kind: "SOURCE", sourceType: "POST", sourceId: p.id,
-            reason: "Content removed by staff", requestedBy: staff.id,
-          }))
-        }
-        for (const rid of batch) await drainOne(rid).catch(() => false)
-        for (const rid of xpBatch) await drainXpOne(rid).catch(() => false)
+        const repIntents: Parameters<typeof enqueueReversals>[1] = [
+          { kind: "SOURCE", sourceType: "THREAD", sourceId: t.id, reason: "Content removed by staff", requestedBy: staff.id },
+          ...postIds.map((p) => ({ kind: "SOURCE" as const, sourceType: "POST", sourceId: p.id, reason: "Content removed by staff", requestedBy: staff.id })),
+        ]
+        const batch = await enqueueReversals(prisma, repIntents)
+        const xpBatch = await enqueueXpReversals(prisma, repIntents)
+        await drainMany(batch)
+        await drainXpMany(xpBatch)
       }
     }
 

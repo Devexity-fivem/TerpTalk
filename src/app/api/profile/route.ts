@@ -6,8 +6,8 @@ import { unauthorized, forbidden, getClientIp, logSecurityEvent, LIMITS, isBanne
 import { storeImage, deleteImagesIfUnreferenced, isBlobConfigured } from "@/lib/blob"
 import { rankDisplay, xpRankProgress, xpStage, xpStageProgress, buildTitle, standingDisplay, MASTERIES, masteryLevelFromXp } from "@/lib/progression-config"
 import { getProgressionPerks, progressionPerksFrom, hasUnlock, statSlotLimit, profileSectionLimit, getMasteryMap } from "@/lib/progression"
-import { enqueueReversal, drainOne } from "@/lib/reputation-outbox"
-import { enqueueXpReversal, drainXpOne } from "@/lib/progression-outbox"
+import { enqueueReversals, drainMany } from "@/lib/reputation-outbox"
+import { enqueueXpReversals, drainXpMany } from "@/lib/progression-outbox"
 import { Prisma } from "@prisma/client"
 import { validateProfileSettingsPatch, parseProfileSettings } from "@/lib/profile-settings"
 import { rateLimit } from "@/lib/rate-limit"
@@ -765,41 +765,41 @@ export async function DELETE(request: Request) {
     const reversalIds: string[] = []
     const xpReversalIds: string[] = []
     await prisma.$transaction(async (tx) => {
-      reversalIds.push(await enqueueReversal(tx, {
-        kind: "ACTOR", actorId: user.id,
-        reason: "Granting account deleted", requestedBy: user.id,
-      }))
-      xpReversalIds.push(await enqueueXpReversal(tx, {
-        kind: "ACTOR", actorId: user.id,
-        reason: "Granting account deleted", requestedBy: user.id,
-      }))
-      for (const t of ownedThreads) {
-        reversalIds.push(await enqueueReversal(tx, {
-          kind: "SOURCE", sourceType: "THREAD", sourceId: t.id,
+      reversalIds.push(...await enqueueReversals(tx, [
+        {
+          kind: "ACTOR", actorId: user.id,
+          reason: "Granting account deleted", requestedBy: user.id,
+        },
+        ...ownedThreads.map((t) => ({
+          kind: "SOURCE" as const, sourceType: "THREAD", sourceId: t.id,
           reason: "Thread removed", requestedBy: user.id,
-        }))
-        xpReversalIds.push(await enqueueXpReversal(tx, {
-          kind: "SOURCE", sourceType: "THREAD", sourceId: t.id,
+        })),
+        ...threadPosts.map((p) => ({
+          kind: "SOURCE" as const, sourceType: "POST", sourceId: p.id,
           reason: "Thread removed", requestedBy: user.id,
-        }))
-      }
-      for (const p of threadPosts) {
-        reversalIds.push(await enqueueReversal(tx, {
-          kind: "SOURCE", sourceType: "POST", sourceId: p.id,
+        })),
+      ]))
+      xpReversalIds.push(...await enqueueXpReversals(tx, [
+        {
+          kind: "ACTOR", actorId: user.id,
+          reason: "Granting account deleted", requestedBy: user.id,
+        },
+        ...ownedThreads.map((t) => ({
+          kind: "SOURCE" as const, sourceType: "THREAD", sourceId: t.id,
           reason: "Thread removed", requestedBy: user.id,
-        }))
-        xpReversalIds.push(await enqueueXpReversal(tx, {
-          kind: "SOURCE", sourceType: "POST", sourceId: p.id,
+        })),
+        ...threadPosts.map((p) => ({
+          kind: "SOURCE" as const, sourceType: "POST", sourceId: p.id,
           reason: "Thread removed", requestedBy: user.id,
-        }))
-      }
+        })),
+      ]))
       // Cascade delete handles: profile, posts, threads, diaries, setups,
       // chat messages, DMs, notifications, reactions, follows, badges,
       // reputation events, reports filed, moderation actions, blocks
       await tx.user.delete({ where: { id: user.id } })
     })
-    for (const rid of reversalIds) await drainOne(rid).catch(() => false)
-    for (const rid of xpReversalIds) await drainXpOne(rid).catch(() => false)
+    await drainMany(reversalIds)
+    await drainXpMany(xpReversalIds)
 
     // Best-effort cleanup of owned Blob objects after the DB records are gone.
     try {

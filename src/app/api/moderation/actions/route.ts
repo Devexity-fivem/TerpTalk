@@ -6,8 +6,8 @@ import { unauthorized, isAdmin, isStaff, forbidden, getClientIp, logSecurityEven
 import { requireModerator, ADMIN_ONLY_MOD_ACTIONS } from "@/lib/require-staff"
 import { rateLimit } from "@/lib/rate-limit"
 import { emitNotificationPush, notificationLinkWhere, postLinkWhere } from "@/lib/notify"
-import { enqueueReversal, drainOne } from "@/lib/reputation-outbox"
-import { enqueueXpReversal, drainXpOne } from "@/lib/progression-outbox"
+import { enqueueReversals, drainMany, type ReversalIntent } from "@/lib/reputation-outbox"
+import { enqueueXpReversals, drainXpMany, type XpReversalIntent } from "@/lib/progression-outbox"
 import { applyAccountActionInTx, staffDisplayName } from "@/lib/moderation"
 import { deleteImagesIfUnreferenced } from "@/lib/blob"
 import { getPusher } from "@/lib/pusher"
@@ -86,6 +86,9 @@ export async function POST(request: Request) {
     // ProgressionEvent awards on the same sources.
     const reversalIds: string[] = []
     const xpReversalIds: string[] = []
+    // Intents collected through the tx, flushed as one INSERT per ledger.
+    const repIntents: ReversalIntent[] = []
+    const xpIntents: XpReversalIntent[] = []
     await prisma.$transaction(async (tx) => {
       if (isAccountAction) {
         // Shared enforcement — identical semantics to chat /warn /mute /ban.
@@ -102,14 +105,14 @@ export async function POST(request: Request) {
         // (likes they cast, answers they accepted). enqueuedAt bounds the
         // sweep so a late drain can't claw back post-ban grants.
         if (actionType === "PERMANENT_BAN") {
-          reversalIds.push(await enqueueReversal(tx, {
+          repIntents.push( {
             kind: "ACTOR", actorId: targetUserId,
             reason: "Granting account permanently banned", requestedBy: staff.id,
-          }))
-          xpReversalIds.push(await enqueueXpReversal(tx, {
+          })
+          xpIntents.push( {
             kind: "ACTOR", actorId: targetUserId,
             reason: "Granting account permanently banned", requestedBy: staff.id,
-          }))
+          })
         }
       } else {
         // Guards for content/thread actions — non-admin staff may not act
@@ -160,24 +163,24 @@ export async function POST(request: Request) {
                 where: { OR: [{ threadId: targetId }, { post: { threadId: targetId } }] },
               })
               deletedBlobUrls.push(...imgs.map((i) => i.url))
-              reversalIds.push(await enqueueReversal(tx, {
+              repIntents.push( {
                 kind: "SOURCE", sourceType: "THREAD", sourceId: targetId,
                 reason: "Content removed by staff", requestedBy: staff.id,
-              }))
-              xpReversalIds.push(await enqueueXpReversal(tx, {
+              })
+              xpIntents.push( {
                 kind: "SOURCE", sourceType: "THREAD", sourceId: targetId,
                 reason: "Content removed by staff", requestedBy: staff.id,
-              }))
+              })
               const postIds = await tx.post.findMany({ where: { threadId: targetId }, select: { id: true } })
               for (const p of postIds) {
-                reversalIds.push(await enqueueReversal(tx, {
+                repIntents.push( {
                   kind: "SOURCE", sourceType: "POST", sourceId: p.id,
                   reason: "Content removed by staff", requestedBy: staff.id,
-                }))
-                xpReversalIds.push(await enqueueXpReversal(tx, {
+                })
+                xpIntents.push( {
                   kind: "SOURCE", sourceType: "POST", sourceId: p.id,
                   reason: "Content removed by staff", requestedBy: staff.id,
-                }))
+                })
               }
             }
             break
@@ -186,14 +189,14 @@ export async function POST(request: Request) {
             const p = await tx.post.findUnique({ where: { id: targetId }, select: { threadId: true } })
             ok = !!(await tx.post.updateMany({ where: { id: targetId, authorId: targetUserId }, data: { deleted: true } })).count
             if (ok) {
-              reversalIds.push(await enqueueReversal(tx, {
+              repIntents.push( {
                 kind: "SOURCE", sourceType: "POST", sourceId: targetId,
                 reason: "Content removed by staff", requestedBy: staff.id,
-              }))
-              xpReversalIds.push(await enqueueXpReversal(tx, {
+              })
+              xpIntents.push( {
                 kind: "SOURCE", sourceType: "POST", sourceId: targetId,
                 reason: "Content removed by staff", requestedBy: staff.id,
-              }))
+              })
               // Deep-linked notifications (?post=/#post-) would dangle.
               await tx.notification.deleteMany({ where: postLinkWhere(targetId) })
               const imgs = await tx.postImage.findMany({ where: { postId: targetId }, select: { url: true } })
@@ -236,14 +239,14 @@ export async function POST(request: Request) {
             const d = await tx.growDiary.findUnique({ where: { id: targetId }, select: { slug: true } })
             ok = !!(await tx.growDiary.updateMany({ where: { id: targetId, authorId: targetUserId }, data: { deleted: true, threadId: null } })).count
             if (ok) {
-              reversalIds.push(await enqueueReversal(tx, {
+              repIntents.push( {
                 kind: "SOURCE", sourceType: "DIARY", sourceId: targetId,
                 reason: "Content removed by staff", requestedBy: staff.id,
-              }))
-              xpReversalIds.push(await enqueueXpReversal(tx, {
+              })
+              xpIntents.push( {
                 kind: "SOURCE", sourceType: "DIARY", sourceId: targetId,
                 reason: "Content removed by staff", requestedBy: staff.id,
-              }))
+              })
               // V2 per-update band/category awards are keyed to the update
               // rows — sweep those sources too (same as the owner delete).
               const updateIds = await tx.diaryUpdate.findMany({
@@ -251,10 +254,10 @@ export async function POST(request: Request) {
                 select: { id: true },
               })
               for (const u of updateIds) {
-                xpReversalIds.push(await enqueueXpReversal(tx, {
+                xpIntents.push( {
                   kind: "SOURCE", sourceType: "DIARY_UPDATE", sourceId: u.id,
                   reason: "Content removed by staff", requestedBy: staff.id,
-                }))
+                })
               }
               // Notifications may store either the old id link or the slug
               // link — invalidate both forms.
@@ -273,14 +276,14 @@ export async function POST(request: Request) {
             const s = await tx.growSetup.findUnique({ where: { id: targetId }, select: { slug: true } })
             ok = !!(await tx.growSetup.updateMany({ where: { id: targetId, authorId: targetUserId }, data: { deleted: true } })).count
             if (ok) {
-              reversalIds.push(await enqueueReversal(tx, {
+              repIntents.push( {
                 kind: "SOURCE", sourceType: "SETUP", sourceId: targetId,
                 reason: "Content removed by staff", requestedBy: staff.id,
-              }))
-              xpReversalIds.push(await enqueueXpReversal(tx, {
+              })
+              xpIntents.push( {
                 kind: "SOURCE", sourceType: "SETUP", sourceId: targetId,
                 reason: "Content removed by staff", requestedBy: staff.id,
-              }))
+              })
               deletedLink = s?.slug ? [`/setups/${targetId}`, `/setups/${s.slug}`] : [`/setups/${targetId}`]
               const imgs = await tx.setupImage.findMany({ where: { setupId: targetId }, select: { url: true } })
               await tx.setupImage.deleteMany({ where: { setupId: targetId } })
@@ -309,23 +312,23 @@ export async function POST(request: Request) {
             deletedBlobUrls.push(...strain.photos.map((p) => p.imageUrl))
             await tx.strain.delete({ where: { id: targetId } })
             // STRAIN_CREATED on the catalog row + each photo's STRAIN_PHOTO.
-            reversalIds.push(await enqueueReversal(tx, {
+            repIntents.push( {
               kind: "SOURCE", sourceType: "STRAIN", sourceId: targetId,
               reason: "Content removed by staff", requestedBy: staff.id,
-            }))
-            xpReversalIds.push(await enqueueXpReversal(tx, {
+            })
+            xpIntents.push( {
               kind: "SOURCE", sourceType: "STRAIN", sourceId: targetId,
               reason: "Content removed by staff", requestedBy: staff.id,
-            }))
+            })
             for (const pid of strainPhotoIds) {
-              reversalIds.push(await enqueueReversal(tx, {
+              repIntents.push( {
                 kind: "SOURCE", sourceType: "STRAIN_PHOTO", sourceId: pid,
                 reason: "Content removed by staff", requestedBy: staff.id,
-              }))
-              xpReversalIds.push(await enqueueXpReversal(tx, {
+              })
+              xpIntents.push( {
                 kind: "SOURCE", sourceType: "STRAIN_PHOTO", sourceId: pid,
                 reason: "Content removed by staff", requestedBy: staff.id,
-              }))
+              })
             }
             deletedLink = strain.slug ? [`/strains/${targetId}`, `/strains/${strain.slug}`] : [`/strains/${targetId}`]
             strainDeleted = true
@@ -421,6 +424,11 @@ export async function POST(request: Request) {
           },
         }).catch(() => null) : null
       }
+
+      // One INSERT per ledger — identical durable intents, committed
+      // atomically with the moderation action.
+      reversalIds.push(...await enqueueReversals(tx, repIntents))
+      xpReversalIds.push(...await enqueueXpReversals(tx, xpIntents))
     })
 
     if (createdNotification && effectiveTargetUserId) {
@@ -440,8 +448,8 @@ export async function POST(request: Request) {
 
     // Reputation reconciliation — intents were committed inside the tx;
     // drain best-effort now, and ping/cron retries any stragglers.
-    for (const rid of reversalIds) await drainOne(rid).catch(() => false)
-    for (const rid of xpReversalIds) await drainXpOne(rid).catch(() => false)
+    await drainMany(reversalIds)
+    await drainXpMany(xpReversalIds)
     // A moderated diary or strain must stop contributing to strain stats —
     // same invalidation as the owner-delete paths.
     if (diaryContentDeleted || strainDeleted) {
