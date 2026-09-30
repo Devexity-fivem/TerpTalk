@@ -94,6 +94,9 @@ const apiFiles = () => {
     // Ops dashboard: unique-contributor UNION + rate-limit GROUP BY —
     // parameterized tagged template, no user input.
     path.join("src", "lib", "ops-metrics.ts"),
+    // lockUserRow: parameterized FOR UPDATE row lock serializing
+    // check-then-act dedupe/cap writes inside interactive transactions.
+    path.join("src", "lib", "prisma.ts"),
   ]);
   check("no raw SQL outside allowlist", !allSrc.some((f) => {
     if (rawSqlAllowlist.has(f)) return false;

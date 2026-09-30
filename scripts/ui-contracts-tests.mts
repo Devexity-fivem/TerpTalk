@@ -632,7 +632,7 @@ check("experimentation awards: lifecycle callsites wired", () => {
   const patch = src("app/api/diaries/[id]/experiments/[experimentId]/route.ts")
   const updates = src("app/api/diaries/updates/route.ts")
   assert.ok(create.includes("awardExperimentCreated") && create.includes("awardHypothesisIfMet"), "create route pays created+hypothesis")
-  assert.ok(patch.includes("evaluateExperimentAwards") && patch.includes("reverseExperimentAwards"), "patch/delete reconciles and reverses")
+  assert.ok(patch.includes("evaluateExperimentAwards") && patch.includes("enqueueExperimentReversals"), "patch/delete reconciles and reverses")
   assert.ok(updates.includes("awardExperimentFollowups"), "updates route pays follow-ups")
   assert.ok(updates.includes('"METRIC_FIRST"'), "updates route pays METRIC_FIRST")
   assert.ok(src("app/api/contest/route.ts").includes('"CONTEST_ENTRY"'), "weekly contest entry pays")
