@@ -7,6 +7,7 @@ import ProfileCard from "@/components/ui/profile-card"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { blockedUserIds } from "@/lib/security"
+import { isModerator } from "@/lib/roles"
 
 export const dynamic = "force-dynamic"
 
@@ -30,7 +31,7 @@ const getGuides = unstable_cache(
 
 export default async function GuidesPage() {
   const session = await getServerSession(authOptions)
-  const isStaff = ["MODERATOR", "ADMINISTRATOR"].includes((session?.user as { role?: string })?.role || "")
+  const isStaff = isModerator((session?.user as { role?: string })?.role)
 
   const [allGuides, blockedIds] = await Promise.all([getGuides(), blockedUserIds(session?.user?.id)])
   const guides = blockedIds.length ? allGuides.filter((g) => !blockedIds.includes(g.authorId)) : allGuides

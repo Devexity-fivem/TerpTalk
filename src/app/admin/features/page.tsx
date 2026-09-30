@@ -4,6 +4,7 @@ import { signInHref } from "@/lib/callback-url"
 
 import { useEffect, useState } from "react"
 import { useSession } from "next-auth/react"
+import { isAdmin } from "@/lib/roles"
 import { useRouter } from "next/navigation"
 import { ToggleLeft, Loader2 } from "@/lib/icons"
 import Link from "next/link"
@@ -61,7 +62,7 @@ export default function AdminFeaturesPage() {
     )
   }
 
-  if (session?.user?.role !== "ADMINISTRATOR") {
+  if (!isAdmin(session?.user?.role)) {
     return (
       <div className="min-h-screen flex items-center justify-center text-muted-foreground">
         Admins only. <Link href="/" className="text-primary ml-1">Go home</Link>

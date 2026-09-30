@@ -8,15 +8,9 @@ import { enqueueReversal, drainOne } from "@/lib/reputation-outbox"
 import { rateLimit } from "@/lib/rate-limit"
 import { emitNotificationPush } from "@/lib/notify"
 import { staffDisplayName } from "@/lib/moderation"
+import { escapeLike } from "@/lib/strain-stats"
 
 const ASSIGNABLE_ROLES = new Set(["MEMBER", "VERIFIED_MEMBER", "SUPPORT", "MODERATOR", "ADMINISTRATOR"])
-
-function escapeLike(str: string): string {
-  return str
-    .replace(/\\/g, "\\\\")
-    .replace(/%/g, "\\%")
-    .replace(/_/g, "\\_")
-}
 
 // GET — list/search users (ADMINISTRATOR only)
 const MAX_PAGE_SIZE = 100

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { useSession } from "next-auth/react"
+import { isAdmin as isAdminRole } from "@/lib/roles"
 import { useToast } from "@/components/ui/toast"
 import { cn } from "@/lib/utils"
 import { Shield, CheckCircle, XCircle, Loader2, User, Clock, FileText } from "@/lib/icons"
@@ -37,7 +38,7 @@ export default function StaffApplicationsAdminPage() {
   const [filter, setFilter] = useState<"PENDING" | "APPROVED" | "REJECTED">("PENDING")
 
   const userRole = (session?.user as { role?: string } | undefined)?.role
-  const isAdmin = userRole === "ADMINISTRATOR"
+  const isAdmin = isAdminRole(userRole)
 
   useEffect(() => {
     if (status !== "authenticated" || !isAdmin) {

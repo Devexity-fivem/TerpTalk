@@ -1,6 +1,7 @@
 import { Suspense } from "react"
 import AffiliateCard from "@/components/affiliate-card"
 import { MarkdownRenderer } from "@/lib/markdown"
+import { isModerator } from "@/lib/roles"
 import MediaEmbed, { EMBED_RE } from "@/components/media-embed"
 
 // Renders post content as safe Markdown, expanding [affiliate_product id="slug"]
@@ -18,7 +19,7 @@ export default function PostContent({
   authorRole?: string
   pagePath?: string
 }) {
-  const isStaff = authorRole === "MODERATOR" || authorRole === "ADMINISTRATOR"
+  const isStaff = isModerator(authorRole)
   const parts = content.split(SHORTCODE)
 
   return (

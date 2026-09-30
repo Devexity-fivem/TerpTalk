@@ -4,6 +4,7 @@ import { signInHref } from "@/lib/callback-url"
 
 import { useEffect, useState, useCallback } from "react"
 import { useSession } from "next-auth/react"
+import { isAdmin } from "@/lib/roles"
 import { useRouter } from "next/navigation"
 import { ShieldCheck, Loader2, Search, ScrollText } from "@/lib/icons"
 
@@ -59,7 +60,7 @@ export default function AdminAuditPage() {
     return <div className="min-h-screen flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>
   }
 
-  if (role !== "ADMINISTRATOR") {
+  if (!isAdmin(role)) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">

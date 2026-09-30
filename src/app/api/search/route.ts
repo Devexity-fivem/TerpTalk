@@ -8,15 +8,9 @@ import { rateLimit } from "@/lib/rate-limit"
 import { snippet } from "@/lib/seo"
 import { publicDiaryWhere } from "@/lib/diary-visibility"
 import { toSearchProfileDTO } from "@/lib/search-dto"
+import { escapeLike } from "@/lib/strain-stats"
 
 // Escape PostgreSQL LIKE wildcards so a query cannot enumerate the whole table.
-function escapeLike(str: string): string {
-  return str
-    .replace(/\\/g, "\\\\")
-    .replace(/%/g, "\\%")
-    .replace(/_/g, "\\_")
-}
-
 // Excerpt centred on the first match so users see *why* a result matched.
 function matchSnippet(text: string, q: string, max = 160): string {
   const idx = text.toLowerCase().indexOf(q.toLowerCase())

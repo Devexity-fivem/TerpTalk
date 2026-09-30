@@ -5,13 +5,7 @@ import { prisma } from "@/lib/prisma"
 import { unstable_cache } from "next/cache"
 import { getClientIp, hashIp, XP_ORDER, activeAuthor, blockedUserIds } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
-
-function escapeLike(str: string): string {
-  return str
-    .replace(/\\/g, "\\\\")
-    .replace(/%/g, "\\%")
-    .replace(/_/g, "\\_")
-}
+import { escapeLike } from "@/lib/strain-stats"
 
 const getSearchSuggestions = unstable_cache(
   async (query: string) => {

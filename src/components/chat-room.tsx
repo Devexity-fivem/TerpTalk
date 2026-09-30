@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useMemo, memo, useCallback, Fragment, type ReactNode } from "react"
 import { useSession } from "next-auth/react"
+import { isStaff as isStaffRole, isModerator as isModeratorRole, isAdmin as isAdminRole } from "@/lib/roles"
 import { useSearchParams } from "next/navigation"
 import {
   MessageCircle, Send, X, Loader2, Smile, RefreshCw, MoreVertical,
@@ -450,9 +451,9 @@ export default function ChatRoom({ embedded = false, headerActions }: ChatRoomPr
   const searchParams = useSearchParams()
   const { toast } = useToast()
   const myRole = (session?.user as { role?: string } | undefined)?.role
-  const isStaff = myRole === "SUPPORT" || myRole === "MODERATOR" || myRole === "ADMINISTRATOR"
-  const isModerator = myRole === "MODERATOR" || myRole === "ADMINISTRATOR"
-  const isAdmin = myRole === "ADMINISTRATOR"
+  const isStaff = isStaffRole(myRole)
+  const isModerator = isModeratorRole(myRole)
+  const isAdmin = isAdminRole(myRole)
   const myId = (session?.user as { id?: string } | undefined)?.id
 
   const [rooms, setRooms] = useState<Room[]>([])

@@ -1,6 +1,7 @@
 "use client"
 
 import { signInHref } from "@/lib/callback-url"
+import { STAFF_ROLES } from "@/lib/roles"
 
 import { useState, useEffect, Suspense } from "react"
 import { useSession } from "next-auth/react"
@@ -16,8 +17,8 @@ import { SYMPTOM_TAGS, wizardResultToTag } from "@/lib/symptom-tags"
 import { STANDING_POLL_CREATE } from "@/lib/progression-config"
 
 // Client-side mirror of the server gate in POST /api/forum/threads —
-// isStaff() lives in a Prisma-importing module, so the role set is inlined.
-const STAFF = new Set(["SUPPORT", "MODERATOR", "ADMINISTRATOR"])
+// shared STAFF_ROLES set from the pure roles module keeps this in sync.
+const STAFF = STAFF_ROLES
 
 interface Category {
   id: string

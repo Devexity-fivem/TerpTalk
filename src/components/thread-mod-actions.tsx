@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import { useSession } from "next-auth/react"
+import { isModerator } from "@/lib/roles"
 import { useRouter } from "next/navigation"
 import { Pin, Lock, FolderInput, Trash2 } from "@/lib/icons"
 import Tooltip from "@/components/ui/tooltip"
@@ -35,7 +36,7 @@ export default function ThreadModActions({
   const [moveOpen, setMoveOpen] = useState(false)
   const [categories, setCategories] = useState<CategoryOption[] | null>(null)
   const role = (session?.user as { role?: string })?.role
-  if (role !== "MODERATOR" && role !== "ADMINISTRATOR") return null
+  if (!isModerator(role)) return null
 
   const post = async (body: Record<string, unknown>) => {
     setBusy(true)

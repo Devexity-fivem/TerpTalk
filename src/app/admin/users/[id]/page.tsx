@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react"
 import { useSession } from "next-auth/react"
+import { isAdmin } from "@/lib/roles"
 import { useRouter, useParams } from "next/navigation"
 import { ShieldCheck, Loader2, User, Ban, Clock, AlertTriangle, TrendingUp } from "@/lib/icons"
 import Link from "next/link"
@@ -137,7 +138,7 @@ export default function AdminUserDetailPage() {
     return <div className="min-h-screen flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>
   }
 
-  if (role !== "ADMINISTRATOR" || !user) {
+  if (!isAdmin(role) || !user) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
@@ -210,7 +211,7 @@ export default function AdminUserDetailPage() {
           </div>
         </div>
 
-        {user.role !== "ADMINISTRATOR" && (
+        {!isAdmin(user.role) && (
           <div className="bg-card rounded-xl border border-border p-4 mb-6">
             <div className="flex items-center gap-2 mb-3">
               <TrendingUp className="w-4 h-4 text-primary" />

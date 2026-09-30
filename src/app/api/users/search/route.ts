@@ -4,13 +4,7 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { publicUserSelect, isBanned, getClientIp, hashIp, blockedUserIds } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
-
-function escapeLike(str: string): string {
-  return str
-    .replace(/\\/g, "\\\\")
-    .replace(/%/g, "\\%")
-    .replace(/_/g, "\\_")
-}
+import { escapeLike } from "@/lib/strain-stats"
 
 export async function GET(request: Request) {
   const session = await getServerSession(authOptions)

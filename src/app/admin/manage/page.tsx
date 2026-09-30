@@ -4,6 +4,7 @@ import { signInHref } from "@/lib/callback-url"
 
 import { use, useCallback, useEffect, useState } from "react"
 import { useSession } from "next-auth/react"
+import { isAdmin } from "@/lib/roles"
 import { useRouter } from "next/navigation"
 import {
   ShieldCheck, Loader2, Users as UsersIcon,
@@ -204,7 +205,7 @@ export default function AdminPage({ searchParams }: { searchParams: Promise<{ ta
     return <div className="min-h-screen flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>
   }
 
-  if (denied || role !== "ADMINISTRATOR") {
+  if (denied || !isAdmin(role)) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">

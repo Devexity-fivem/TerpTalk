@@ -15,6 +15,7 @@
 import { after } from "next/server"
 import { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
+import { isAdmin, isModerator, isSupport } from "@/lib/roles"
 import {
   CHAT_DAILY_BADGE_CAP,
   LIKE_MIN_ACTOR_AGE_HOURS,
@@ -1058,8 +1059,8 @@ export async function checkBadges(userId: string, opts: { announcedTierName?: st
     await prisma.user.findUnique({ where: { id: userId }, select: { role: true } })
   )?.role
   const roleBadgeNames = [
-    ...(userRole === "MODERATOR" || userRole === "ADMINISTRATOR" ? ["Moderator"] : []),
-    ...(userRole === "ADMINISTRATOR" || userRole === "SUPPORT" ? ["Staff"] : []),
+    ...(isModerator(userRole) ? ["Moderator"] : []),
+    ...(isSupport(userRole) || isAdmin(userRole) ? ["Staff"] : []),
   ]
   for (const name of roleBadgeNames) {
     if (await grantBadge(userId, name, { notifyUser: false })) newlyEarned.push(name)

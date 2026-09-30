@@ -3,6 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react"
 import { useSession } from "next-auth/react"
 import { usePathname, useRouter } from "next/navigation"
+import { STAFF_ROLES } from "@/lib/roles"
 import { createPortal } from "react-dom"
 import {
   X, MessageSquare, HelpCircle, Sprout, Dna, Loader2,
@@ -17,8 +18,8 @@ import { cn } from "@/lib/utils"
 import type { LucideIcon } from "@/lib/icons"
 
 // Client-side mirror of the server gate in POST /api/forum/threads —
-// isStaff() lives in a Prisma-importing module, so the role set is inlined.
-const STAFF = new Set(["SUPPORT", "MODERATOR", "ADMINISTRATOR"])
+// shared STAFF_ROLES set from the pure roles module keeps this in sync.
+const STAFF = STAFF_ROLES
 
 // ── Context ────────────────────────────────────────────────────────
 

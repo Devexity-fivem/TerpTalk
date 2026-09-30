@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import { useSession } from "next-auth/react"
+import { isStaff as isStaffRole } from "@/lib/roles"
 
 import { useToast } from "@/components/ui/toast"
 import { cn } from "@/lib/utils"
@@ -68,7 +69,7 @@ export default function StaffApplyPage() {
   const [sending, setSending] = useState(false)
 
   const userRole = (session?.user as { role?: string } | undefined)?.role
-  const isStaff = ["SUPPORT", "MODERATOR", "ADMINISTRATOR"].includes(userRole ?? "")
+  const isStaff = isStaffRole(userRole)
 
   const selected = ROLES.find(r => r.id === role) ?? ROLES[0]
 
