@@ -59,10 +59,12 @@ export async function resolveMonthlyDiaryWinner(month: string) {
   ).catch(() => null)
   // Winners get the diary featured — this is the only writer for
   // GrowDiary.featured, so the "Featured" surfaces always reflect a win.
+  // The featured flag is best-effort — the award record is the authority
+  // and a retry on the next run re-flags — but a failure must be visible.
   await prisma.growDiary.update({
     where: { id: top.diaryId },
     data: { featured: true },
-  }).catch(() => {})
+  }).catch((e) => { console.error(`contest featured flag failed for diary ${top.diaryId}:`, e) })
   // try/catch: revalidateTag throws outside a Next request context
   // (test scripts / tooling) — the award itself must still complete.
   try { revalidateTag("diaries", { expire: 0 }) } catch {}
