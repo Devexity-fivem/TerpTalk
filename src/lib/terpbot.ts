@@ -157,13 +157,15 @@ export async function postBotMessage(roomId: string, text: string, replyToId?: s
         : null,
     }
     // Content-free tickle — same delivery contract as user messages. The
-    // room is verified non-private above, so the shared badge channel is
-    // safe to include.
+    // room id only rides the private channel; the shared public badge
+    // channel gets an empty tickle.
     getPusher()?.trigger(
-      [`private-chat-${roomId}`, CHAT_ACTIVITY_CHANNEL],
+      `private-chat-${roomId}`,
       "new-message",
       { roomId, latestAt: dto.createdAt }
     ).catch((e) => console.error("[pusher] terpbot message push failed:", roomId, e))
+    getPusher()?.trigger(CHAT_ACTIVITY_CHANNEL, "new-message", {})
+      .catch((e) => console.error("[pusher] terpbot activity tickle failed:", e))
     return dto
   } catch (error) {
     console.error("[terpbot] post failed:", error)
@@ -351,10 +353,16 @@ export async function purgeDiaryAnnouncements(diary: { id: string; slug?: string
       list.push(r.id)
       byRoom.set(r.roomId, list)
     }
+    let anyPurged = false
     for (const [roomId, ids] of byRoom) {
       // Bot messages only ever exist in public rooms (postBotMessage
-      // enforces it), so the shared badge channel is safe here too.
-      getPusher()?.trigger([`private-chat-${roomId}`, CHAT_ACTIVITY_CHANNEL], "message-deleted", { roomId, ids }).catch((e) => console.error("[pusher] announce purge push failed:", roomId, e))
+      // enforces it). The ids payload stays on the private room channel;
+      // the shared badge channel gets one empty tickle below.
+      getPusher()?.trigger(`private-chat-${roomId}`, "message-deleted", { roomId, ids }).catch((e) => console.error("[pusher] announce purge push failed:", roomId, e))
+      anyPurged = true
+    }
+    if (anyPurged) {
+      getPusher()?.trigger(CHAT_ACTIVITY_CHANNEL, "message-deleted", {}).catch((e) => console.error("[pusher] announce purge activity tickle failed:", e))
     }
   } catch (error) {
     console.error("[terpbot] diary announce purge failed:", error)

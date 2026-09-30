@@ -354,13 +354,15 @@ export async function POST(request: NextRequest) {
     // polling). The event is a content-free tickle — clients refetch through
     // the block-filtered GET, so a blocked user's message never leaves the
     // server destined for a blocker's browser. The shared activity channel
-    // is the same tickle for closed-panel badge subscribers — reachable
-    // only from this POST, which already verified the room is non-private.
+    // is a generic empty tickle for closed-panel badge subscribers — the
+    // room id only rides the private room channel.
     getPusher()?.trigger(
-      [`private-chat-${roomId}`, CHAT_ACTIVITY_CHANNEL],
+      `private-chat-${roomId}`,
       "new-message",
       { roomId, latestAt: dto.createdAt }
     ).catch((e) => console.error("[pusher] chat message push failed:", roomId, e))
+    getPusher()?.trigger(CHAT_ACTIVITY_CHANNEL, "new-message", {})
+      .catch((e) => console.error("[pusher] chat activity tickle failed:", e))
 
     // TerpBot answers direct pings through the deterministic intent parser.
     // At most one bot reply per room per minute so it can't be spammed into
@@ -467,13 +469,18 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: "Message not found" }, { status: 404 })
     }
 
-    // ids-only payload — never message content or author. Badge listeners
-    // on the shared activity channel only get it for non-private rooms.
+    // ids-only payload — never message content or author — stays on the
+    // private room channel. Badge listeners on the shared public activity
+    // channel get an empty tickle, and only for non-private rooms.
     getPusher()?.trigger(
-      msg.room.isPrivate ? `private-chat-${msg.roomId}` : [`private-chat-${msg.roomId}`, CHAT_ACTIVITY_CHANNEL],
+      `private-chat-${msg.roomId}`,
       "message-deleted",
       { roomId: msg.roomId, ids: [id] }
     ).catch((e) => console.error("[pusher] chat delete push failed:", msg.roomId, e))
+    if (!msg.room.isPrivate) {
+      getPusher()?.trigger(CHAT_ACTIVITY_CHANNEL, "message-deleted", {})
+        .catch((e) => console.error("[pusher] chat activity tickle failed:", e))
+    }
 
     return NextResponse.json({ deleted: true })
   } catch (error) {

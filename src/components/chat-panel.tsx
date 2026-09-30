@@ -120,16 +120,17 @@ export function ChatPanelProvider({ children }: { children: ReactNode }) {
       }
     }
 
-    // Events that can lower latestAt (deletes) or reference a room the
-    // badge payload didn't list (created mid-session) need the server's
-    // authoritative state — coalesce into one fetch.
+    // The shared activity channel is a content-free tickle (no room ids),
+    // so every event lands here — coalesce bursts into one badge fetch.
+    // 3s bounds the worst case at ~20 fetches/min/client under sustained
+    // public-room spam while staying near-instant for badge purposes.
     let resyncTimer: ReturnType<typeof setTimeout> | null = null
     const scheduleResync = () => {
       if (resyncTimer) return
       resyncTimer = setTimeout(() => {
         resyncTimer = null
         void refreshChat()
-      }, 1000)
+      }, 3000)
     }
 
     const onTickle = (e: ChatMessageTickle) => {
