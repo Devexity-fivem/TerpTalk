@@ -993,6 +993,17 @@ export async function grantBadge(
   }
   const badge = await prisma.badge.findUnique({ where: { name: badgeName } })
   if (!badge) return false
+  return grantBadgeRecord(userId, badge, opts)
+}
+
+// Grant path for callers that already hold the catalog row (checkBadges) —
+// skips the per-grant Badge.findUnique. Identical create/notify/announce
+// semantics to grantBadge.
+async function grantBadgeRecord(
+  userId: string,
+  badge: { id: string; name: string; description: string | null },
+  opts: { announce?: boolean; notifyUser?: boolean; content?: string; link?: string } = {}
+): Promise<boolean> {
   try {
     await prisma.userBadge.create({ data: { userId, badgeId: badge.id } })
   } catch (error) {
@@ -1047,12 +1058,12 @@ export async function checkBadges(
   // Fetch badge state first so we only compute the stats that unearned,
   // rule-backed badges actually need — veterans with everything earned skip
   // the ~11 stat queries entirely.
-  const allBadges = await prisma.badge.findMany()
-  const earned = await prisma.userBadge.findMany({
-    where: { userId },
-    select: { badgeId: true, badge: { select: { name: true } } },
-  })
+  const [allBadges, earned] = await Promise.all([
+    prisma.badge.findMany({ select: { id: true, name: true, description: true } }),
+    prisma.userBadge.findMany({ where: { userId }, select: { badgeId: true } }),
+  ])
   const earnedIds = new Set(earned.map((b) => b.badgeId))
+  const badgeById = new Map(allBadges.map((b) => [b.id, b]))
 
   const neededStats = new Set<keyof UserStats>()
   for (const badge of allBadges) {
@@ -1070,12 +1081,14 @@ export async function checkBadges(
   const userRole = opts.subject !== undefined
     ? opts.subject?.role ?? null
     : (await prisma.user.findUnique({ where: { id: userId }, select: { role: true } }))?.role
+  const badgeByName = new Map(allBadges.map((b) => [b.name, b]))
   const roleBadgeNames = [
     ...(isModerator(userRole) ? ["Moderator"] : []),
     ...(isSupport(userRole) || isAdmin(userRole) ? ["Staff"] : []),
   ]
   for (const name of roleBadgeNames) {
-    if (await grantBadge(userId, name, { notifyUser: false })) newlyEarned.push(name)
+    const row = badgeByName.get(name)
+    if (row && (await grantBadgeRecord(userId, row, { notifyUser: false }))) newlyEarned.push(name)
   }
 
   if (neededStats.size > 0) {
@@ -1084,9 +1097,9 @@ export async function checkBadges(
       if (earnedIds.has(badge.id)) continue
       const rule = BADGE_RULES[badge.name]
       if (!rule || !rule(stats)) continue
-      // grantBadge is P2002-safe; only count badges this call actually granted
-      // so notifications/announcements never fire for a lost race.
-      const granted = await grantBadge(userId, badge.name, { notifyUser: false })
+      // grantBadgeRecord is P2002-safe; only count badges this call actually
+      // granted so notifications/announcements never fire for a lost race.
+      const granted = await grantBadgeRecord(userId, badge, { notifyUser: false })
       if (granted) newlyEarned.push(badge.name)
     }
   }
@@ -1111,7 +1124,8 @@ export async function checkBadges(
         },
         select: { id: true },
       })
-      if (recent && (await grantBadge(userId, "Deep Roots", { notifyUser: false }))) {
+      const row = badgeByName.get("Deep Roots")
+      if (recent && row && (await grantBadgeRecord(userId, row, { notifyUser: false }))) {
         newlyEarned.push("Deep Roots")
       }
     }
@@ -1122,7 +1136,7 @@ export async function checkBadges(
   if (isUnearned("Secret Stash")) {
     const covered = new Set<BadgeCategory>()
     for (const e of earned) {
-      const def = BADGE_REGISTRY.find((b) => b.name === e.badge.name)
+      const def = BADGE_REGISTRY.find((b) => b.name === badgeById.get(e.badgeId)?.name)
       if (def) covered.add(def.category)
     }
     for (const name of newlyEarned) {
@@ -1130,7 +1144,8 @@ export async function checkBadges(
       if (def) covered.add(def.category)
     }
     if (BADGE_CATEGORIES.every((c) => c === "staff" || covered.has(c))) {
-      if (await grantBadge(userId, "Secret Stash", { notifyUser: false })) newlyEarned.push("Secret Stash")
+      const row = badgeByName.get("Secret Stash")
+      if (row && (await grantBadgeRecord(userId, row, { notifyUser: false }))) newlyEarned.push("Secret Stash")
     }
   }
 
