@@ -8,13 +8,17 @@ import { TERPBOT_USERNAME } from "@/lib/terpbot-constants"
 import { JsonLd } from "@/components/json-ld"
 import ProfileClient from "./profile-client"
 
-const getProfileForMetadata = unstable_cache(
+// One cached row feeds both generateMetadata and the page's existence/
+// inactivity gate — two renders of the same profile no longer cost two
+// identical lookups.
+const getProfileLite = unstable_cache(
   async (username: string) => {
     return prisma.profile.findFirst({
       // Usernames are unique case-insensitively — /u/GrowKing and /u/growking
       // must resolve to the same member.
       where: { username: { equals: username, mode: "insensitive" } },
       select: {
+        id: true,
         username: true,
         bio: true,
         avatarUrl: true,
@@ -40,7 +44,7 @@ export async function generateMetadata({ params }: { params: Promise<{ username:
   const { username } = await params
   const decoded = decodeURIComponent(username)
 
-  const profile = await getProfileForMetadata(decoded)
+  const profile = await getProfileLite(decoded)
 
   if (!profile || isInactiveUser(profile.user)) {
     return buildMetadata({ title: "Profile not found", robots: { index: false } })
@@ -67,17 +71,6 @@ export async function generateMetadata({ params }: { params: Promise<{ username:
   })
 }
 
-const getProfileId = unstable_cache(
-  async (username: string) => {
-    return prisma.profile.findFirst({
-      where: { username: { equals: username, mode: "insensitive" } },
-      select: { id: true, user: { select: { banned: true, suspendedUntil: true } } },
-    })
-  },
-  ["profile-id"],
-  { revalidate: 300, tags: ["profiles"] }
-)
-
 export default async function PublicProfilePage({
   params,
 }: {
@@ -86,7 +79,7 @@ export default async function PublicProfilePage({
   const { username } = await params
   const decoded = decodeURIComponent(username)
 
-  const profile = await getProfileId(decoded)
+  const profile = await getProfileLite(decoded)
 
   if (!profile || isInactiveUser(profile.user)) {
     notFound()

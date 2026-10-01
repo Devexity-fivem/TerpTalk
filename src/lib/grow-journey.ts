@@ -56,7 +56,7 @@ export interface GrowJourneyState {
   next: { stage: GrowStageKey; name: string; icon: string; summary: string } | null
 }
 
-interface JourneyDiary {
+export interface JourneyDiary {
   id: string
   authorId: string
   stage: string
@@ -84,25 +84,31 @@ interface JourneyDiary {
 
 const utcDay = (d: Date) => d.toISOString().slice(0, 10)
 
-async function loadJourneyInputs(diaryId: string) {
-  const diary = await prisma.growDiary.findUnique({
-    where: { id: diaryId },
-    select: {
-      id: true,
-      authorId: true,
-      stage: true,
-      startDate: true,
-      createdAt: true,
-      harvested: true,
-      harvestedAt: true,
-      yieldAmount: true,
-      deleted: true,
-      strain: true,
-      medium: true,
-      lighting: true,
-      strainRef: { select: { type: true } },
-    },
-  })
+async function loadJourneyInputs(diaryId: string, knownDiary?: JourneyDiary | null) {
+  // A caller that already loaded the diary row (the diary page) can pass it
+  // in and skip the re-read — the field set below is exactly what
+  // computeGrowJourney consumes.
+  const diary =
+    knownDiary !== undefined
+      ? knownDiary
+      : await prisma.growDiary.findUnique({
+          where: { id: diaryId },
+          select: {
+            id: true,
+            authorId: true,
+            stage: true,
+            startDate: true,
+            createdAt: true,
+            harvested: true,
+            harvestedAt: true,
+            yieldAmount: true,
+            deleted: true,
+            strain: true,
+            medium: true,
+            lighting: true,
+            strainRef: { select: { type: true } },
+          },
+        })
   if (!diary) return null
   // Compact rows: the meaningful flag is evaluated in SQL (same expression
   // as isMeaningfulUpdate — MEANINGFUL_UPDATE_SQL is its canonical twin) so
@@ -280,9 +286,13 @@ function nextRequirement(
   }
 }
 
-/** Derived journey state for display — read-only, no awarding. */
-export async function getGrowJourney(diaryId: string): Promise<GrowJourneyState | null> {
-  const loaded = await loadJourneyInputs(diaryId)
+/** Derived journey state for display — read-only, no awarding. `diary` lets
+ * a caller that already loaded the row (the diary page) skip the re-read. */
+export async function getGrowJourney(
+  diaryId: string,
+  opts: { diary?: JourneyDiary | null } = {}
+): Promise<GrowJourneyState | null> {
+  const loaded = await loadJourneyInputs(diaryId, opts.diary)
   if (!loaded || loaded.diary.deleted) return null
   return computeGrowJourney(loaded.diary, loaded.updates)
 }

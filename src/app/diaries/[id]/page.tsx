@@ -88,7 +88,7 @@ async function getDiaryData(id: string, viewerId?: string | null) {
     where: { OR: [{ slug: id }, { id }] },
     include: {
       author: { select: { ...publicUserSelect, banned: true, suspendedUntil: true } },
-      strainRef: { select: { id: true, slug: true, name: true } },
+      strainRef: { select: { id: true, slug: true, name: true, type: true } },
       setup: { select: { id: true, slug: true, title: true, deleted: true } },
       discussion: { select: { id: true, slug: true, deleted: true } },
       updates: {
@@ -154,7 +154,9 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
         }))
       : false,
     diary.strain ? suggestStrainLink(diary.strain) : null,
-    getGrowJourney(diary.id),
+    // The diary row was just loaded — pass it so the journey computation
+    // skips its own findUnique and only scans the update rows.
+    getGrowJourney(diary.id, { diary }),
     // Lean analytics series — the updates payload above is capped at 100,
     // which would silently drop early history from long grows. This query
     // carries only what the height chart and stage spans need.
