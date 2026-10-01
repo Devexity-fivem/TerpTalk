@@ -1751,6 +1751,176 @@ async function run() {
     const msMarkerCount = await prisma.progressionEvent.count({ where: { key: `milestone:${ms}:${rung}` } })
     assert.equal(msMarkerCount, 1, "marker row stays unique")
 
+    // ── awardProgressionBatch — diary-update award pipeline ─────────
+    // The batch path must produce byte-identical progression outcomes to
+    // sequential awardProgression calls: same events, caps, mastery
+    // accumulation, milestone markers, and ledger-vs-balance integrity.
+    const { awardProgressionBatch } = await import("../src/lib/progression")
+
+    // Single award lands; event row + profile + mastery all consistent.
+    {
+      const u = await mkPv2("batch1")
+      const r = await awardProgressionBatch(u, [
+        { type: "THREAD_STARTED", reason: "t1", key: `pv2:batch:${RUN_TAG}:s1` },
+      ])
+      assert.ok(r[0].awarded && r[0].xp === XP_TABLE.THREAD_STARTED.xp, "batch: single award pays")
+      assert.equal((await pv2Profile(u))!.xp, XP_TABLE.THREAD_STARTED.xp)
+      assert.equal((await getMasteryMap(u)).COMMUNITY, XP_TABLE.THREAD_STARTED.xp, "batch: mastery credited")
+    }
+
+    // Multiple independent awards in one batch — all pay, ledger sums match.
+    {
+      const u = await mkPv2("batchN")
+      const r = await awardProgressionBatch(u, [
+        { type: "UPDATE_DAY", reason: "day", key: `pv2:batch:${RUN_TAG}:m1`, sourceType: "DIARY", sourceId: "d1" },
+        { type: "UPDATE_RICH", reason: "rich", key: `pv2:batch:${RUN_TAG}:m2`, sourceType: "DIARY_UPDATE", sourceId: "u1" },
+        { type: "STRUCTURED_CATEGORY", reason: "cat", key: `pv2:batch:${RUN_TAG}:m3`, sourceType: "DIARY_UPDATE", sourceId: "u1" },
+        { type: "METRIC_FIRST", reason: "first temp", key: `pv2:batch:${RUN_TAG}:m4`, sourceType: "DIARY_UPDATE", sourceId: "u1" },
+      ])
+      assert.ok(r.every((x) => x.awarded), "batch: all four candidates pay")
+      const expect = XP_TABLE.UPDATE_DAY.xp + XP_TABLE.UPDATE_RICH.xp + XP_TABLE.STRUCTURED_CATEGORY.xp + XP_TABLE.METRIC_FIRST.xp
+      assert.equal((await pv2Profile(u))!.xp, expect, "batch: profile xp == summed awards")
+      const agg = await prisma.progressionEvent.aggregate({ where: { userId: u }, _sum: { xp: true } })
+      assert.equal(agg._sum.xp, expect, "batch: ledger == profile")
+    }
+
+    // Duplicate request — same keys resubmitted: all resolve to "duplicate",
+    // nothing pays twice.
+    {
+      const u = await mkPv2("batchdup")
+      const cands = [
+        { type: "UPDATE_DAY", reason: "day", key: `pv2:batch:${RUN_TAG}:d1` },
+        { type: "UPDATE_RICH", reason: "rich", key: `pv2:batch:${RUN_TAG}:d2` },
+      ]
+      const first = await awardProgressionBatch(u, cands)
+      const xpAfter = (await pv2Profile(u))!.xp
+      const second = await awardProgressionBatch(u, cands)
+      assert.ok(first.every((x) => x.awarded) && second.every((x) => x.skippedReason === "duplicate"), "batch: resubmit all-duplicate")
+      assert.equal((await pv2Profile(u))!.xp, xpAfter, "batch: resubmit pays nothing")
+      assert.equal(await prisma.progressionEvent.count({ where: { userId: u, key: `pv2:batch:${RUN_TAG}:d1` } }), 1)
+    }
+
+    // Concurrent identical batches — unique-key protection must leave
+    // exactly one award paying, on both the batch and fallback paths.
+    {
+      const u = await mkPv2("batchcc")
+      const cands = () => [
+        { type: "UPDATE_DAY", reason: "day", key: `pv2:batch:${RUN_TAG}:c1` },
+        { type: "UPDATE_RICH", reason: "rich", key: `pv2:batch:${RUN_TAG}:c2` },
+      ]
+      const [ra, rb] = await Promise.all([
+        awardProgressionBatch(u, cands()),
+        awardProgressionBatch(u, cands()),
+      ])
+      const all = [...ra, ...rb]
+      assert.equal(all.filter((x) => x.awarded).length, 2, "concurrent batches: exactly one copy pays")
+      assert.equal(all.filter((x) => x.skippedReason === "duplicate").length, 2)
+      assert.equal(
+        (await pv2Profile(u))!.xp,
+        XP_TABLE.UPDATE_DAY.xp + XP_TABLE.UPDATE_RICH.xp,
+        "concurrent batches: no double credit",
+      )
+    }
+
+    // Weekly mastery soft cap accumulates WITHIN the batch: 6× HARVEST_LOGGED
+    // (50 XP each, CULTIVATION) must land 250 full + 50@50% = 275 — the
+    // in-memory weekUsed accumulator must mirror sequential aggregates.
+    {
+      const u = await mkPv2("batchcap")
+      const r = await awardProgressionBatch(
+        u,
+        [0, 1, 2, 3, 4, 5].map((i) => ({ type: "HARVEST_LOGGED", reason: `h${i}`, key: `pv2:batch:${RUN_TAG}:h${i}` })),
+      )
+      assert.equal(r.filter((x) => x.awarded).length, 6, "softcap batch: all six pay something")
+      assert.equal((await pv2Profile(u))!.xp, 275, "softcap batch: 6×50 → 275")
+      assert.equal((await getMasteryMap(u)).CULTIVATION, 275)
+      // Sequential parity: the same awards run one-at-a-time give 275.
+      const uSeq = await mkPv2("batchcapseq")
+      for (let i = 0; i < 6; i++) {
+        await awardProgression(uSeq, "HARVEST_LOGGED", `h${i}`, { key: `pv2:batchseq:${RUN_TAG}:${i}` })
+      }
+      assert.equal((await pv2Profile(uSeq))!.xp, 275, "sequential parity check")
+    }
+
+    // UPDATE_DAY daily cap — marker rows do not consume the slot, a second
+    // paying candidate of the capped type inside one batch counts the first.
+    {
+      const u = await mkPv2("batchdaycap")
+      const dayCap = XP_TABLE.UPDATE_DAY.dailyCap ?? 1
+      const markers = Array.from({ length: 3 }, (_, i) => ({
+        type: "UPDATE_DAY", reason: "withheld", key: `pv2:batch:${RUN_TAG}:w${i}`, xp: 0, marker: true,
+      }))
+      const payers = Array.from({ length: dayCap + 1 }, (_, i) => ({
+        type: "UPDATE_DAY", reason: `d${i}`, key: `pv2:batch:${RUN_TAG}:p${i}`,
+      }))
+      const r = await awardProgressionBatch(u, [...markers, ...payers])
+      const paid = r.filter((x) => x.awarded && (x.xp ?? 0) > 0).length
+      assert.equal(paid, dayCap, "batch: daily cap enforced across in-batch candidates")
+      assert.ok(r.filter((x) => x.skippedReason === "capped").length >= 1, "batch: overflow candidate capped")
+      const markerRows = await prisma.progressionEvent.count({ where: { userId: u, xp: 0, standing: 0 } })
+      assert.equal(markerRows, 3, "batch: markers write rows without paying")
+    }
+
+    // Multi-rung XP jump — one batch crossing several progression rungs
+    // writes each milestone marker once and reports the rungs per candidate.
+    {
+      const u = await mkPv2("batchrung")
+      const rung = 60
+      const r = await awardProgressionBatch(u, [
+        { type: "STAFF_ADJUSTMENT", reason: "jump", key: `pv2:batch:${RUN_TAG}:r1`, xp: rung, force: true },
+        { type: "STAFF_ADJUSTMENT", reason: "jump2", key: `pv2:batch:${RUN_TAG}:r2`, xp: 40, force: true },
+      ])
+      assert.ok(r[0].awarded && r[1].awarded)
+      // Snapshot semantics: both candidates see oldXp=0, so rung 60's marker
+      // is written once (by the first candidate); the second dedupes in-tx.
+      const markers = await prisma.progressionEvent.count({ where: { userId: u, key: `milestone:${u}:${rung}` } })
+      assert.equal(markers, 1, "batch: rung marker written exactly once")
+      assert.equal((await pv2Profile(u))!.xp, rung + 40)
+      const tierNotifs = await prisma.notification.count({
+        where: { userId: u, type: "REPUTATION", metadata: { path: ["kind"], equals: "tier" } },
+      })
+      assert.equal(tierNotifs, 1, "batch: one rank-up notification for the crossed rung")
+    }
+
+    // Reversed (non-final) keys reinstate through the per-award path while
+    // fresh keys still batch — mixed batch handles both correctly.
+    {
+      const u = await mkPv2("batchrein")
+      await awardProgression(u, "HARVEST_REPORT", "orig", { key: `pv2:batch:${RUN_TAG}:rev` })
+      await reverseProgressionByKey(`pv2:batch:${RUN_TAG}:rev`, "retract")
+      const xpBefore = (await pv2Profile(u))!.xp
+      assert.equal(xpBefore, 0, "reversed pre-batch")
+      const r = await awardProgressionBatch(u, [
+        { type: "HARVEST_REPORT", reason: "re-earn", key: `pv2:batch:${RUN_TAG}:rev` },
+        { type: "UPDATE_RICH", reason: "fresh", key: `pv2:batch:${RUN_TAG}:fresh` },
+      ])
+      assert.ok(r[0].awarded && r[0].reinstated, "batch: reversed key reinstates")
+      assert.ok(r[1].awarded, "batch: fresh key pays")
+      assert.equal((await pv2Profile(u))!.xp, XP_TABLE.HARVEST_REPORT.xp + XP_TABLE.UPDATE_RICH.xp)
+    }
+
+    // Transaction failure mid-batch → fallback path; earlier candidates pay
+    // exactly once, the bad candidate errors, ledger stays consistent.
+    {
+      const u = await mkPv2("batchfail")
+      // Non-serializable meta throws inside the tx on event create; the same
+      // candidate fails identically on the sequential fallback path.
+      const circular: Record<string, unknown> = {}
+      circular.self = circular
+      const r = await awardProgressionBatch(u, [
+        { type: "UPDATE_RICH", reason: "good", key: `pv2:batch:${RUN_TAG}:ok` },
+        { type: "UPDATE_RICH", reason: "bad", key: `pv2:batch:${RUN_TAG}:bad`, meta: circular },
+        { type: "UPDATE_DAY", reason: "good2", key: `pv2:batch:${RUN_TAG}:ok2` },
+      ])
+      assert.ok(r[0].awarded, "fallback: good candidate before failure pays")
+      assert.ok(r[2].awarded, "fallback: good candidate after failure pays")
+      assert.ok(!r[1].awarded, "fallback: bad candidate does not pay")
+      assert.equal((await pv2Profile(u))!.xp, XP_TABLE.UPDATE_RICH.xp + XP_TABLE.UPDATE_DAY.xp, "fallback: ledger consistent")
+      const rows = await prisma.progressionEvent.findMany({ where: { userId: u, reversedAt: null }, select: { key: true } })
+      const keys = rows.map((x) => x.key).sort()
+      assert.equal(new Set(keys).size, keys.length, "fallback: no duplicate keys")
+    }
+
     // Progression drift invariant on fixtures: xp == Σ ledger.
     for (const uid of pv2) {
       const p = await prisma.profile.findUnique({ where: { userId: uid }, select: { xp: true, standing: true } })

@@ -110,7 +110,7 @@ export interface ProgressionAwardResult {
   oldXp?: number
   newXp?: number
   rungsCrossed?: { xp: number; label: string; rank: string }[]
-  skippedReason?: "bot" | "no-user" | "suspended" | "self" | "duplicate" | "capped" | "locked" | "withheld" | "dup" | "deferred"
+  skippedReason?: "bot" | "no-user" | "suspended" | "self" | "duplicate" | "capped" | "locked" | "withheld" | "dup" | "deferred" | "error"
 }
 
 type SubjectUser = {
@@ -730,6 +730,374 @@ function applySoftCap(amount: number, weekUsed: number): number {
   remaining -= m
   if (remaining > 0) out += Math.floor(remaining * MASTERY_WEEKLY_TAIL_FACTOR)
   return out
+}
+
+// ─── Batched awards ─────────────────────────────────────────────────────
+// Award several keyed progression events for one user inside a single
+// transaction. Used by the diary-update pipeline where one write emits many
+// independent awards — sequential awardProgression calls would pay a
+// key-check + cap-count + mastery-aggregate + Profile.update + mastery upsert
+// per award (~10 statements each). Here we:
+//   1. batch the key idempotency lookup into one findMany,
+//   2. query each distinct daily/weekly cap once and accumulate in memory,
+//   3. query each distinct mastery weekly sum once and accumulate in memory,
+//   4. write every ProgressionEvent row, then ONE Profile.update with the
+//      summed delta and ONE MasteryProgress upsert per touched mastery.
+// Candidates MUST carry a unique `key` — the unique constraint plus the
+// per-key precheck is what makes the sequential fallback safe even if the
+// batch transaction's commit status is ambiguous: a re-run finds the keys
+// already present and skips them. Reversed (non-final) keys keep their
+// reinstate semantics — those are run through the ordinary per-award path.
+export interface ProgressionAwardCandidate {
+  type: string
+  reason: string
+  key: string
+  sourceType?: string
+  sourceId?: string
+  actorId?: string
+  xp?: number
+  standing?: number
+  mastery?: Mastery | null
+  meta?: Record<string, unknown>
+  marker?: boolean
+  force?: boolean
+}
+
+export async function awardProgressionBatch(
+  userId: string,
+  candidates: ProgressionAwardCandidate[],
+  opts: { subject?: SubjectUser | null } = {},
+): Promise<ProgressionAwardResult[]> {
+  const results: (ProgressionAwardResult | null)[] = candidates.map(() => null)
+  if (candidates.length === 0) return results as ProgressionAwardResult[]
+
+  const runSequential = async (indices: number[]) => {
+    for (const i of indices) {
+      const c = candidates[i]
+      results[i] = await awardProgression(userId, c.type, c.reason, {
+        key: c.key, sourceType: c.sourceType, sourceId: c.sourceId,
+        actorId: c.actorId, xp: c.xp, standing: c.standing, mastery: c.mastery,
+        meta: c.meta, marker: c.marker, force: c.force, subject: opts.subject,
+      }).catch(() => ({ awarded: false, skippedReason: "error" as const }))
+    }
+  }
+
+  const subject = opts.subject !== undefined ? opts.subject : await prisma.user.findUnique({
+    where: { id: userId },
+    select: {
+      banned: true, suspendedUntil: true, createdAt: true, role: true,
+      profile: { select: { xp: true, standing: true, username: true } },
+    },
+  })
+  if (!subject?.profile) {
+    return candidates.map(() => ({ awarded: false, skippedReason: "no-user" as const }))
+  }
+  if (subject.profile.username === TERPBOT_USERNAME) {
+    return candidates.map(() => ({ awarded: false, skippedReason: "bot" as const }))
+  }
+  if (candidates.every((c) => !c.force) && isInactive(subject)) {
+    return candidates.map(() => ({ awarded: false, skippedReason: "suspended" as const }))
+  }
+
+  // Per-candidate prescreen (no DB) matching awardProgression's early exits.
+  const prescreen = (c: ProgressionAwardCandidate): ProgressionAwardResult["skippedReason"] | null => {
+    if (!c.key) return "error" // batch candidates are always keyed
+    if (!c.force && isInactive(subject)) return "suspended"
+    if (c.actorId === userId && c.type !== "STAFF_ADJUSTMENT") return "self"
+    if (XP_TABLE[c.type]?.deferred) return "deferred"
+    return null
+  }
+
+  const todo: { i: number; c: ProgressionAwardCandidate }[] = []
+  const reinstate: number[] = []
+  for (const [i, c] of candidates.entries()) {
+    const skip = prescreen(c)
+    if (skip) { results[i] = { awarded: false, skippedReason: skip }; continue }
+    todo.push({ i, c })
+  }
+
+  // One batched key lookup replaces the per-award findUnique.
+  if (todo.length > 0) {
+    const keys = [...new Set(todo.map((t) => t.c.key))]
+    const existing = await prisma.progressionEvent.findMany({
+      where: { key: { in: keys } },
+      select: { key: true, reversedAt: true, reversalFinal: true },
+    })
+    const byKey = new Map(existing.map((e) => [e.key, e]))
+    for (let k = todo.length - 1; k >= 0; k--) {
+      const { i, c } = todo[k]
+      const ex = byKey.get(c.key)
+      if (!ex) continue
+      if (!ex.reversedAt) results[i] = { awarded: false, skippedReason: "duplicate" }
+      else if (ex.reversalFinal) results[i] = { awarded: false, skippedReason: "locked" }
+      else reinstate.push(i)
+      todo.splice(k, 1)
+    }
+  }
+
+  if (todo.length > 0) {
+    const needsSerialize = todo.some(({ c }) => {
+      const spec = XP_TABLE[c.type]
+      const standing = c.standing ?? spec?.standing ?? 0
+      return spec?.dailyCap !== undefined || spec?.weeklyCap !== undefined || (standing > 0 && c.actorId)
+    })
+
+    const runTx = () =>
+      prisma.$transaction(
+        async (tx) => {
+          const dayStart = new Date()
+          dayStart.setUTCHours(0, 0, 0, 0)
+          const weekStart = isoWeekStart()
+          const oldXp = subject.profile!.xp
+          const oldStanding = subject.profile!.standing
+
+          // Each distinct capped type is counted once, then the in-loop
+          // counter tracks paying rows created by earlier candidates —
+          // identical to the sequential per-award count.
+          const dayCount = new Map<string, number>()
+          const wkCount = new Map<string, number>()
+          for (const type of new Set(todo.map((t) => t.c.type))) {
+            const spec = XP_TABLE[type]
+            if (spec?.dailyCap !== undefined) {
+              dayCount.set(type, await tx.progressionEvent.count({
+                where: { userId, type, reversedAt: null, createdAt: { gte: dayStart }, NOT: { xp: 0, standing: 0 } },
+              }))
+            }
+            if (spec?.weeklyCap !== undefined) {
+              wkCount.set(type, await tx.progressionEvent.count({
+                where: { userId, type, reversedAt: null, createdAt: { gte: weekStart }, NOT: { xp: 0, standing: 0 } },
+              }))
+            }
+          }
+          // One weekly mastery aggregate per distinct mastery — the in-memory
+          // accumulator applies the soft cap in candidate order, exactly like
+          // the sequential per-award aggregates would see.
+          const weekUsed = new Map<string, number>()
+          const batchMast = new Set<string>()
+          for (const { c } of todo) {
+            const spec = XP_TABLE[c.type]
+            const xp = c.xp ?? spec?.xp ?? 0
+            const mastery = c.mastery !== undefined ? c.mastery : (spec?.mastery ?? null)
+            if (mastery && xp > 0 && !PEER_GATED_TYPES.has(c.type)) batchMast.add(mastery)
+          }
+          for (const mastery of batchMast) {
+            const agg = await tx.progressionEvent.aggregate({
+              where: {
+                userId, mastery, xp: { gt: 0 }, reversedAt: null,
+                type: { notIn: [...PEER_GATED_TYPES, "MILESTONE", "PROGRESSION_REVERSAL", "REVERSAL", "REINSTATE"] },
+                createdAt: { gte: weekStart },
+              },
+              _sum: { xp: true },
+            })
+            weekUsed.set(mastery, agg._sum.xp ?? 0)
+          }
+
+          const seenKeys = new Set<string>()
+          const applied: { i: number; newRungs: { xp: number; label: string; rank: string }[]; newXp: number }[] = []
+          const masteryDelta = new Map<string, number>()
+          let totalXp = 0
+          let totalStanding = 0
+
+          for (const { i, c } of todo) {
+            if (seenKeys.has(c.key)) { results[i] = { awarded: false, skippedReason: "duplicate" }; continue }
+            const spec = XP_TABLE[c.type]
+            let xp = c.xp ?? spec?.xp ?? 0
+            let standing = c.standing ?? spec?.standing ?? 0
+            const mastery = c.mastery !== undefined ? c.mastery : (spec?.mastery ?? null)
+
+            if (spec?.dailyCap !== undefined && (dayCount.get(c.type) ?? 0) >= spec.dailyCap) {
+              results[i] = { awarded: false, skippedReason: "capped" }; continue
+            }
+            if (spec?.weeklyCap !== undefined && (wkCount.get(c.type) ?? 0) >= spec.weeklyCap) {
+              results[i] = { awarded: false, skippedReason: "capped" }; continue
+            }
+            if (mastery && xp > 0 && !PEER_GATED_TYPES.has(c.type)) {
+              xp = applySoftCap(xp, weekUsed.get(mastery) ?? 0)
+              if (xp === 0 && standing === 0) {
+                results[i] = { awarded: false, skippedReason: "capped" }; continue
+              }
+            }
+
+            let meta = { ...c.meta }
+            if (standing > 0 && c.type !== "STAFF_ADJUSTMENT" && c.type !== "LEGACY_STANDING" && c.type !== "STANDING_RECOVERY") {
+              const evaluated = await evaluateStandingAward(tx, userId, c.type, standing, c.actorId)
+              standing = evaluated.standing
+              meta = { ...meta, ...evaluated.meta }
+            }
+
+            if (xp === 0 && standing === 0 && !c.marker) {
+              results[i] = { awarded: false, skippedReason: "withheld" }; continue
+            }
+
+            const appliedXp = xp < 0 ? -Math.min(-xp, oldXp) : xp
+            const appliedStanding = standing < 0 ? -Math.min(-standing, oldStanding) : standing
+
+            await tx.progressionEvent.create({
+              data: {
+                userId, type: c.type, reason: c.reason, key: c.key,
+                sourceType: c.sourceType ?? null, sourceId: c.sourceId ?? null,
+                actorId: c.actorId ?? null, xp: appliedXp, standing: appliedStanding,
+                mastery,
+                meta: Object.keys(meta).length ? (meta as Prisma.InputJsonValue) : undefined,
+              },
+            })
+            seenKeys.add(c.key)
+
+            if (appliedXp !== 0 || appliedStanding !== 0) {
+              if (dayCount.has(c.type)) dayCount.set(c.type, dayCount.get(c.type)! + 1)
+              if (wkCount.has(c.type)) wkCount.set(c.type, wkCount.get(c.type)! + 1)
+            }
+            totalXp += appliedXp
+            totalStanding += appliedStanding
+            if (mastery && appliedXp !== 0) {
+              weekUsed.set(mastery, (weekUsed.get(mastery) ?? 0) + appliedXp)
+              masteryDelta.set(mastery, (masteryDelta.get(mastery) ?? 0) + appliedXp)
+            }
+
+            // Milestone rungs use the request's loaded subject XP — identical
+            // to sequential awards sharing one subject snapshot.
+            const newXp = oldXp + appliedXp
+            const newRungs: { xp: number; label: string; rank: string }[] = []
+            if (appliedXp > 0) {
+              for (const r of crossedRungs(oldXp, newXp)) {
+                const mkey = `milestone:${userId}:${r.xp}`
+                if (seenKeys.has(mkey)) continue
+                const seen = await tx.progressionEvent.findUnique({ where: { key: mkey }, select: { id: true } })
+                if (!seen) {
+                  newRungs.push(r)
+                  await tx.progressionEvent.create({
+                    data: {
+                      userId, type: "MILESTONE", xp: 0,
+                      reason: `Reached ${r.label}`, key: mkey,
+                      meta: { rung: r.xp, label: r.label, rank: r.rank },
+                    },
+                  })
+                  seenKeys.add(mkey)
+                }
+              }
+            }
+            results[i] = {
+              awarded: true, xp, standing, oldXp, newXp,
+              rungsCrossed: xp > 0 ? crossedRungs(oldXp, newXp) : [],
+            }
+            applied.push({ i, newRungs, newXp })
+          }
+
+          // Consolidated writes: one profile update + one upsert per mastery.
+          if (totalXp !== 0 || totalStanding !== 0) {
+            await tx.profile.update({
+              where: { userId },
+              data: { xp: { increment: totalXp }, standing: { increment: totalStanding } },
+            })
+          }
+          if (totalStanding < 0) {
+            await tx.profile.updateMany({ where: { userId, standing: { lt: 0 } }, data: { standing: 0 } })
+          }
+          for (const [mastery, delta] of masteryDelta) {
+            await tx.masteryProgress.upsert({
+              where: { userId_mastery: { userId, mastery } },
+              create: { userId, mastery, xp: delta },
+              update: { xp: { increment: delta } },
+            })
+            await tx.masteryProgress.updateMany({
+              where: { userId, mastery, xp: { lt: 0 } },
+              data: { xp: 0 },
+            })
+          }
+          return applied
+        },
+        needsSerialize ? { isolationLevel: "Serializable" } : undefined,
+      )
+
+    let applied: { i: number; newRungs: { xp: number; label: string; rank: string }[]; newXp: number }[] = []
+    try {
+      applied = await runTx().catch(async (e) => {
+        if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2034") {
+          return runTx() // retry once on serialization failure
+        }
+        throw e
+      })
+    } catch {
+      // The batch transaction did not commit its full result set. Because
+      // every candidate carries a unique key, re-running through the
+      // sequential path is idempotent even if the commit status was
+      // ambiguous — already-written keys resolve to "duplicate".
+      await runSequential(todo.map((t) => t.i))
+      applied = []
+    }
+
+    // Post-commit notifications — byte-identical to awardProgression's: a
+    // rank-up celebration card for the highest newly-marked rank rung,
+    // stage notifies per new sub-level rung, then the public announce.
+    for (const { newRungs, newXp } of applied) {
+      if (newRungs.length > 0) {
+        const rankCrossed = newRungs.filter((r) => r.label === r.rank)
+        const stageCrossed = newRungs.filter((r) => r.label !== r.rank)
+        if (rankCrossed.length > 0) {
+          const top = rankCrossed[rankCrossed.length - 1]
+          const disp = RANK_DISPLAY[top.rank]
+          const crossedNames = new Set(rankCrossed.map((r) => r.rank))
+          const unlocks = UNLOCKS.filter((u) => u.rank && crossedNames.has(u.rank))
+          const stage = xpStage(newXp)
+          await notify({
+            userId,
+            type: "REPUTATION",
+            title: `Rank up: ${top.rank}`,
+            content: `You reached ${newXp.toLocaleString()} XP and became ${top.rank}. ${disp?.benefit ?? ""}`,
+            link: "/reputation",
+            metadata: {
+              kind: "tier",
+              level: stage.level,
+              stageName: stage.stageName,
+              xp: newXp,
+              tier: disp ? { name: top.rank, icon: disp.icon, color: disp.color, bg: disp.bg } : undefined,
+              unlocks: unlocks.map((u) => ({ kind: u.category, key: u.id, name: u.name })),
+            },
+          }).catch(() => null)
+        }
+        for (let k = 0; k < stageCrossed.length; k++) {
+          const stage = xpStage(newXp)
+          const nextUnlock = nextRankUnlock(newXp)
+          await notify({
+            userId,
+            type: "REPUTATION",
+            title: `Grow Level ${stage.level} — ${stage.stageName}`,
+            content: nextUnlock
+              ? `Your garden reached a new stage. Next unlock: ${nextUnlock.name} at ${nextUnlock.rank} rank.`
+              : "Your garden reached a new stage.",
+            link: "/reputation",
+            metadata: {
+              kind: "stage",
+              level: stage.level,
+              stageName: stage.stageName,
+              xp: newXp,
+              nextUnlock: nextUnlock
+                ? { kind: "perk", key: nextUnlock.id, name: nextUnlock.name, unlockedAt: nextUnlock.xpNeeded }
+                : null,
+            },
+          }).catch(() => null)
+        }
+      }
+
+      const rankUp = [...newRungs].reverse().find((r) => r.label === r.rank)
+      if (rankUp && subject.profile.username) {
+        void (async () => {
+          const p = await prisma.profile.findUnique({
+            where: { userId },
+            select: { publicMilestoneOptOut: true },
+          })
+          if (!p?.publicMilestoneOptOut) {
+            await announceTierUp(subject.profile!.username, rankUp.rank, newXp).catch(() => null)
+          }
+        })().catch(() => null)
+      }
+    }
+  }
+
+  // Reversed non-final keys keep reinstate semantics via the per-award path.
+  await runSequential(reinstate)
+
+  return results.map((r) => r ?? { awarded: false, skippedReason: "error" as const })
 }
 
 // ─── Reinstate ───────────────────────────────────────────────────────

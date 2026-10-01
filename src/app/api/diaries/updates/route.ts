@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma"
 import { unauthorized, publicUserSelect, LIMITS, getClientIp, logSecurityEvent, isBanned, isBannedRow, forbidden, enforceLinkTrust, activeAuthor } from "@/lib/security"
 import { checkBadges } from "@/lib/reputation"
 import { progressionRateLimit, progressionPerksFrom } from "@/lib/progression"
-import { awardProgression, checkDuplicateContent, updateBand } from "@/lib/progression"
+import { awardProgressionBatch, checkDuplicateContent, updateBand, type ProgressionAwardCandidate } from "@/lib/progression"
 import { awardExperimentFollowups } from "@/lib/experiment-progression"
 import { enqueueReversals, drainMany } from "@/lib/reputation-outbox"
 import { enqueueXpReversals, drainXpMany } from "@/lib/progression-outbox"
@@ -319,6 +319,7 @@ export async function POST(request: Request) {
     // day (base 5), band bonus for rich/exceptional updates, +2 per
     // structured category — all gated by the simhash duplicate tiers.
     // Marker rows keep withheld/reduced decisions auditable.
+    const awardCandidates: ProgressionAwardCandidate[] = []
     {
       const envNum = [
         temperature, humidity, vpd, nightTemperature, substrateTemperature,
@@ -372,58 +373,57 @@ export async function POST(request: Request) {
           // Per-update audit key, NOT the day key — a withheld marker must
           // not consume the day's base slot; genuine content later the same
           // day still pays once (§6.7).
-          await awardProgression(session.user.id, "UPDATE_DAY", reason, {
-            subject,
+          awardCandidates.push({
+            type: "UPDATE_DAY", reason,
             key: `${dayKey}:w:${update.id}`, sourceType: "DIARY", sourceId: diaryId,
             xp: 0, marker: true,
             meta: { dup: "withheld", similarity: dup.similarity, updateId: update.id },
-          }).catch(() => {})
+          })
         } else {
           // Base always survives once per diary-day (design exception);
           // bonuses are withheld at 85–94% unless structured data changed.
           const bonusesBlocked = dup.verdict === "reduced" && !structuredChanged
-          await awardProgression(session.user.id, "UPDATE_DAY", reason, {
-            subject,
+          awardCandidates.push({
+            type: "UPDATE_DAY", reason,
             key: dayKey, sourceType: "DIARY", sourceId: diaryId,
             meta: {
               band,
               ...(dup.verdict === "reduced" ? { dup: "reduced", similarity: dup.similarity } : {}),
               updateId: update.id,
             },
-          }).catch(() => {})
+          })
           if (!bonusesBlocked) {
             if (band === 3) {
-              await awardProgression(session.user.id, "UPDATE_EXCEPTIONAL", reason, {
-            subject,
+              awardCandidates.push({
+                type: "UPDATE_EXCEPTIONAL", reason,
                 key: `diaryband:${update.id}`, sourceType: "DIARY_UPDATE", sourceId: update.id,
-              }).catch(() => {})
+              })
             } else if (band === 2) {
-              await awardProgression(session.user.id, "UPDATE_RICH", reason, {
-            subject,
+              awardCandidates.push({
+                type: "UPDATE_RICH", reason,
                 key: `diaryband:${update.id}`, sourceType: "DIARY_UPDATE", sourceId: update.id,
-              }).catch(() => {})
+              })
             }
             for (let c = 0; c < structuredCategories; c++) {
-              await awardProgression(session.user.id, "STRUCTURED_CATEGORY", reason, {
-            subject,
+              awardCandidates.push({
+                type: "STRUCTURED_CATEGORY", reason,
                 key: `diarycat:${update.id}:${c}`, sourceType: "DIARY_UPDATE", sourceId: update.id,
-              }).catch(() => {})
+              })
             }
           } else {
-            await awardProgression(session.user.id, "UPDATE_RICH", reason, {
-            subject,
+            awardCandidates.push({
+              type: "UPDATE_RICH", reason,
               key: `diaryband:${update.id}`, sourceType: "DIARY_UPDATE", sourceId: update.id,
               xp: 0, marker: true,
               meta: { dup: "reduced", similarity: dup.similarity, updateId: update.id },
-            }).catch(() => {})
+            })
           }
         }
       }
     }
 
-    // METRIC_FIRST (+5) — once ever per metric kind per member. One batched
-    // key lookup keeps this to a single read in the common case; each
-    // kind's keyed award then dedupes permanently.
+    // METRIC_FIRST (+5) — once ever per metric kind per member. The batch's
+    // batched key lookup dedupes permanently, so no separate precheck.
     const FIRST_METRIC_FIELDS = [
       "temperature", "humidity", "vpd", "ph", "ec", "heightCm",
       "nightTemperature", "substrateTemperature", "co2Ppm",
@@ -431,21 +431,18 @@ export async function POST(request: Request) {
       "runoffPh", "runoffEc", "lampDistanceCm",
     ] as const
     const presentMetrics = FIRST_METRIC_FIELDS.filter((f) => typeof numericValues[f] === "number")
-    if (presentMetrics.length > 0) {
-      const existingKeys = await prisma.progressionEvent.findMany({
-        where: { userId: session.user.id, key: { in: presentMetrics.map((f) => `metric-first:${session.user.id}:${f}`) } },
-        select: { key: true },
-      }).catch(() => [] as { key: string }[])
-      const done = new Set(existingKeys.map((e) => e.key))
-      for (const f of presentMetrics) {
-        const key = `metric-first:${session.user.id}:${f}`
-        if (done.has(key)) continue
-        await awardProgression(session.user.id, "METRIC_FIRST", `First ${f} reading logged`, {
-            subject,
-          key, sourceType: "DIARY_UPDATE", sourceId: update.id,
-        }).catch(() => {})
-      }
+    for (const f of presentMetrics) {
+      awardCandidates.push({
+        type: "METRIC_FIRST", reason: `First ${f} reading logged`,
+        key: `metric-first:${session.user.id}:${f}`, sourceType: "DIARY_UPDATE", sourceId: update.id,
+      })
     }
+
+    // All route awards share one batch: one keyed-idempotency lookup, one tx,
+    // one consolidated Profile/MasteryProgress write. Per-candidate ordering
+    // and keys are unchanged; a batch failure falls back to the sequential
+    // awardProgression path (safe — every candidate is uniquely keyed).
+    await awardProgressionBatch(session.user.id, awardCandidates, { subject }).catch(() => {})
 
     // A linked observation counts toward the experiment's +10 follow-up
     // award once it reaches 3 linked updates (once ever per experiment).

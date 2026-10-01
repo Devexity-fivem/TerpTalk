@@ -14,7 +14,7 @@
  * of same-day filler can never unlock a stage.
  */
 import { prisma } from "@/lib/prisma"
-import { awardProgression, type ProgressionAwardOptions } from "@/lib/progression"
+import { awardProgressionBatch, type ProgressionAwardOptions, type ProgressionAwardCandidate } from "@/lib/progression"
 import { reverseXpKeyDurable } from "@/lib/progression-outbox"
 import { getBooleanSetting, SITE_SETTINGS } from "@/lib/settings"
 import { isMeaningfulUpdate, MIN_UPDATE_LENGTH, MEANINGFUL_UPDATE_SQL } from "@/lib/meaningful-update"
@@ -334,16 +334,15 @@ export async function evaluateGrowJourney(
   }
 
   const pendingReversals: { key: string; reason: string }[] = []
+  const awards: ProgressionAwardCandidate[] = []
   for (const s of GROW_STAGES) {
     if (!s.event) continue // PLANTED/HARVESTED/COMPLETE pay via their own awards
     const key = milestoneKey(diary.id, s.key, diary.authorId)
     if (met.has(s.key)) {
-      await awardProgression(
-        diary.authorId,
-        s.event,
-        `Grow milestone: ${s.name}`,
-        { key, sourceType: "DIARY", sourceId: diary.id, subject: opts.subject }
-      ).catch(() => {})
+      awards.push({
+        type: s.event, reason: `Grow milestone: ${s.name}`,
+        key, sourceType: "DIARY", sourceId: diary.id,
+      })
     } else {
       // Regressed (updates deleted, harvest undone) — claw the milestone
       // back below via the durable path when a live award exists.
@@ -361,16 +360,19 @@ export async function evaluateGrowJourney(
     updates.map((u) => ({ ...u, stage: u.stage ?? diary.stage })) as DiaryUpdateLike[]
   ).percent
   if (coveragePct >= 85) {
-    await awardProgression(diary.authorId, "COVERAGE_MILESTONE", "Kept a thorough diary", {
-      key: coverageKey,
-      sourceType: "DIARY",
-      sourceId: diary.id,
-      subject: opts.subject,
+    awards.push({
+      type: "COVERAGE_MILESTONE", reason: "Kept a thorough diary",
+      key: coverageKey, sourceType: "DIARY", sourceId: diary.id,
       meta: { completeness: coveragePct },
-    }).catch(() => {})
+    })
   } else {
     pendingReversals.push({ key: coverageKey, reason: "Diary coverage fell below the milestone" })
   }
+
+  // Stage + coverage awards run as one batch — a single key lookup and one
+  // transaction instead of ~8 statements per award. Keys/idempotency/
+  // reinstate semantics are identical to sequential awardProgression calls.
+  await awardProgressionBatch(diary.authorId, awards, { subject: opts.subject }).catch(() => {})
 
   // One existence probe gates all reversal work: a key with no live
   // unreversed event has nothing to claw back, so no outbox intent is
