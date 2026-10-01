@@ -14,7 +14,7 @@ import { getSession } from "@/lib/session"
 import { getMemberHomeData } from "@/lib/member-home"
 import { getGrowerSpotlight } from "@/lib/spotlight"
 import MemberHome from "@/components/member-home"
-import LiveStats from "@/components/live-stats"
+
 import { LiveRefresh } from "@/components/live-refresh"
 import HeroCta from "@/components/hero-cta"
 import { Avatar } from "@/components/ui/avatar"
@@ -237,9 +237,8 @@ export default async function Home() {
             )}
           </div>
 
-          {/* Community canopy — a live panel rendered from real site data.
-              Desktop only; the stats strip below covers mobile. */}
-          <div className="relative hidden lg:block">
+          {/* Community canopy — a live panel rendered from real site data. */}
+          <div className="relative">
             <div className="absolute -inset-6 rounded-[2.5rem] bg-primary/10 blur-2xl" />
             <div className="absolute -right-8 -top-8 h-44 w-44 rounded-full bg-spectrum/25 blur-3xl" />
             <div className="tt-holo-border overflow-hidden rounded-3xl border border-border/70 bg-card/80 shadow-2xl backdrop-blur-xl">
@@ -305,13 +304,6 @@ export default async function Home() {
               </div>
             </div>
           </div>
-        </div>
-      </section>
-
-      {/* Community Stats */}
-      <section className="tt-reveal tt-hairline-t py-14 px-4 sm:px-6 lg:px-8 border-y border-border/60 bg-secondary/40">
-        <div className="max-w-7xl mx-auto">
-          <LiveStats initial={stats} />
         </div>
       </section>
 
