@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { publicUserSelect, isBanned, getClientIp, hashIp, blockedUserIds } from "@/lib/security"
-import { rateLimit, rateLimitMany } from "@/lib/rate-limit"
+import { rateLimitMany } from "@/lib/rate-limit"
 import { escapeLike } from "@/lib/strain-stats"
 
 export async function GET(request: Request) {
