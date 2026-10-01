@@ -349,7 +349,9 @@ export async function POST(request: Request) {
         const prev = await prisma.diaryUpdate.findFirst({
           where: { diaryId, id: { not: update.id } },
           orderBy: { createdAt: "desc" },
-          include: { images: true, nutrients: true },
+          // Only the relation counts are compared — _count keeps this one
+          // query instead of two extra row loads per update.
+          include: { _count: { select: { images: true, nutrients: true } } },
         }).catch(() => null)
         const NUM_FIELDS = [
           "temperature", "humidity", "vpd", "ph", "ec", "heightCm",
@@ -361,8 +363,8 @@ export async function POST(request: Request) {
           NUM_FIELDS.some((f) => update[f] !== prev[f]) ||
           update.feeding !== prev.feeding ||
           update.training !== prev.training ||
-          update.images.length !== prev.images.length ||
-          update.nutrients.length !== prev.nutrients.length
+          update.images.length !== prev._count.images ||
+          update.nutrients.length !== prev._count.nutrients
 
         const dup = await checkDuplicateContent(session.user.id, content ?? "", {
           structuredChanged, excludeId: update.id,
