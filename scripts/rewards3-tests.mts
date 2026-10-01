@@ -477,13 +477,44 @@ async function main() {
     })
     assert.equal(count, 1, "milestone keyed/idempotent")
 
-    // Delete the updates → stage regresses → milestone clawed back.
+    // Delete the updates → stage regresses → milestone clawed back. The
+    // ESTABLISHED event is live, so the durable path must enqueue a real
+    // intent (observed by counting PendingXpReversal creates on the shared
+    // client — drained intents are deleted, so only intent creation is
+    // observable, not residue).
     await prisma.diaryUpdate.deleteMany({ where: { diaryId } })
-    await evaluateGrowJourney(diaryId)
-    const ev2 = await prisma.progressionEvent.findUnique({
-      where: { key: `growstage:${diaryId}:ESTABLISHED:${grower.id}` },
-    })
-    assert.ok(ev2!.reversedAt, "regressed milestone reversed")
+    const peCreate = prisma.pendingXpReversal.create.bind(prisma.pendingXpReversal)
+    let enqueued = 0
+    prisma.pendingXpReversal.create = ((a: unknown) => { enqueued++; return peCreate(a as never) }) as never
+    try {
+      await evaluateGrowJourney(diaryId)
+      assert.ok(enqueued >= 1, "live milestone enqueued a durable reversal intent")
+      const ev2 = await prisma.progressionEvent.findUnique({
+        where: { key: `growstage:${diaryId}:ESTABLISHED:${grower.id}` },
+      })
+      assert.ok(ev2!.reversedAt, "regressed milestone reversed")
+
+      // Everything is now either awarded-and-reversed or never existed —
+      // re-evaluating is a pure no-op: no intents, no new ledger rows.
+      enqueued = 0
+      const eventsBefore = await prisma.progressionEvent.count({
+        where: { sourceType: "DIARY", sourceId: diaryId },
+      })
+      await evaluateGrowJourney(diaryId)
+      assert.equal(enqueued, 0, "no durable work for keys with nothing live")
+      assert.equal(
+        await prisma.progressionEvent.count({ where: { sourceType: "DIARY", sourceId: diaryId } }),
+        eventsBefore,
+        "no duplicate reversals on repeated evaluation"
+      )
+      assert.equal(
+        await prisma.pendingXpReversal.count({ where: { eventKey: { contains: diaryId } } }),
+        0,
+        "no orphaned reversal intents"
+      )
+    } finally {
+      prisma.pendingXpReversal.create = peCreate
+    }
 
     console.log("grow journey awards + clawback ok")
   } finally {

@@ -14,7 +14,7 @@
  * of same-day filler can never unlock a stage.
  */
 import { prisma } from "@/lib/prisma"
-import { awardProgression } from "@/lib/progression"
+import { awardProgression, type ProgressionAwardOptions } from "@/lib/progression"
 import { reverseXpKeyDurable } from "@/lib/progression-outbox"
 import { getBooleanSetting, SITE_SETTINGS } from "@/lib/settings"
 import { isMeaningfulUpdate, MIN_UPDATE_LENGTH, MEANINGFUL_UPDATE_SQL } from "@/lib/meaningful-update"
@@ -296,7 +296,10 @@ const milestoneKey = (diaryId: string, stage: string, userId: string) =>
  * met — deleting updates or un-harvesting claws the milestone back.
  * Called from the diary-update, harvest, and update-delete routes.
  */
-export async function evaluateGrowJourney(diaryId: string): Promise<void> {
+export async function evaluateGrowJourney(
+  diaryId: string,
+  opts: { subject?: ProgressionAwardOptions["subject"] } = {}
+): Promise<void> {
   if (!(await getBooleanSetting(SITE_SETTINGS.GROW_JOURNEY_ENABLED, true))) return
 
   const loaded = await loadJourneyInputs(diaryId)
@@ -330,6 +333,7 @@ export async function evaluateGrowJourney(diaryId: string): Promise<void> {
     if (state.stage === "COMPLETE") met.add("COMPLETE")
   }
 
+  const pendingReversals: { key: string; reason: string }[] = []
   for (const s of GROW_STAGES) {
     if (!s.event) continue // PLANTED/HARVESTED/COMPLETE pay via their own awards
     const key = milestoneKey(diary.id, s.key, diary.authorId)
@@ -338,13 +342,12 @@ export async function evaluateGrowJourney(diaryId: string): Promise<void> {
         diary.authorId,
         s.event,
         `Grow milestone: ${s.name}`,
-        { key, sourceType: "DIARY", sourceId: diary.id }
+        { key, sourceType: "DIARY", sourceId: diary.id, subject: opts.subject }
       ).catch(() => {})
     } else {
       // Regressed (updates deleted, harvest undone) — claw the milestone
-      // back. Durable intent: a failed reversal retries via ping/cron
-      // instead of leaving phantom milestone XP. No-op when no award exists.
-      await reverseXpKeyDurable(key, "Grow milestone no longer met").catch(() => null)
+      // back below via the durable path when a live award exists.
+      pendingReversals.push({ key, reason: "Grow milestone no longer met" })
     }
   }
 
@@ -362,9 +365,30 @@ export async function evaluateGrowJourney(diaryId: string): Promise<void> {
       key: coverageKey,
       sourceType: "DIARY",
       sourceId: diary.id,
+      subject: opts.subject,
       meta: { completeness: coveragePct },
     }).catch(() => {})
   } else {
-    await reverseXpKeyDurable(coverageKey, "Diary coverage fell below the milestone").catch(() => null)
+    pendingReversals.push({ key: coverageKey, reason: "Diary coverage fell below the milestone" })
+  }
+
+  // One existence probe gates all reversal work: a key with no live
+  // unreversed event has nothing to claw back, so no outbox intent is
+  // created. When a row DOES exist, the identical durable path runs
+  // (enqueue → CAS drain → fixpoint → delete). A failed probe treats every
+  // key as live — under uncertainty we keep today's behavior rather than
+  // risk skipping a needed reversal.
+  if (pendingReversals.length > 0) {
+    const live = await prisma.progressionEvent
+      .findMany({
+        where: { key: { in: pendingReversals.map((r) => r.key) }, reversedAt: null },
+        select: { key: true },
+      })
+      .catch(() => null)
+    const liveKeys = live ? new Set(live.map((e) => e.key)) : null
+    for (const r of pendingReversals) {
+      if (liveKeys && !liveKeys.has(r.key)) continue
+      await reverseXpKeyDurable(r.key, r.reason).catch(() => null)
+    }
   }
 }
