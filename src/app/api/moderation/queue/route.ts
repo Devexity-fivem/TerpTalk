@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { parsePageParams } from "@/lib/pagination"
 import { prisma } from "@/lib/prisma"
 import { forbidden, getClientIp, isAdmin, isSupport, logSecurityEvent, STAFF_ROLES } from "@/lib/security"
 import { requireStaff } from "@/lib/require-staff"
@@ -14,7 +15,6 @@ import {
   TERMINAL_STATUSES,
 } from "@/lib/trust-signals"
 
-const MAX_PAGE_SIZE = 100
 // Upper bound of rows pulled per source before the merge — open items stay
 // far below this at current scale; raise only if the backlog outgrows it.
 const SOURCE_FETCH_CAP = 500
@@ -137,9 +137,7 @@ export async function GET(request: Request) {
   const typeFilter = searchParams.get("type")
   const q = (searchParams.get("q") || "").trim().slice(0, 30)
 
-  const page = Math.max(1, Number(searchParams.get("page")) || 1)
-  const limit = Math.min(MAX_PAGE_SIZE, Math.max(1, Number(searchParams.get("limit")) || 50))
-  const skip = (page - 1) * limit
+  const { page, limit, skip } = parsePageParams(searchParams)
 
   const statusFilter =
     status === "OPEN" ? { in: ["PENDING", "REVIEWING", "ESCALATED"] }

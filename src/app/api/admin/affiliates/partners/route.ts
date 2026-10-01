@@ -1,12 +1,11 @@
 import { NextResponse } from "next/server"
+import { parsePageParams } from "@/lib/pagination"
 import { prisma } from "@/lib/prisma"
 import { unauthorized, forbidden } from "@/lib/security"
 import { requireAdmin } from "@/lib/require-staff"
 import { isValidUrl, slugify, cleanText, DEFAULT_DISCLOSURE } from "@/lib/affiliate"
 import { rateLimit } from "@/lib/rate-limit"
 import { revalidateTag } from "next/cache"
-
-const MAX_PAGE_SIZE = 100
 
 // GET — all partners (admin view incl. inactive)
 export async function GET(request: Request) {
@@ -19,9 +18,7 @@ export async function GET(request: Request) {
   }
 
   const { searchParams } = new URL(request.url)
-  const page = Math.max(1, Number(searchParams.get("page")) || 1)
-  const limit = Math.min(MAX_PAGE_SIZE, Math.max(1, Number(searchParams.get("limit")) || 50))
-  const skip = (page - 1) * limit
+  const { limit, skip } = parsePageParams(searchParams)
 
   const partners = await prisma.affiliatePartner.findMany({
     orderBy: { name: "asc" },

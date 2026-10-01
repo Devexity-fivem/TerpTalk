@@ -60,8 +60,11 @@ export async function POST(request: Request) {
       )
     }
 
+    // One profile read serves the rate limit and the image-cap check below.
+    const perks = await getProgressionPerks(session.user.id)
+
     // Rate limit: 30 posts per 10 minutes per user (Cultivator+ scale it up)
-    const rl = await progressionRateLimit(session.user.id, `post:${session.user.id}`, 30, 10 * 60 * 1000)
+    const rl = await progressionRateLimit(session.user.id, `post:${session.user.id}`, 30, 10 * 60 * 1000, perks)
     if (!rl.allowed) {
       await logSecurityEvent("RATE_LIMIT_EXCEEDED", {
         userId: session.user.id,
@@ -110,7 +113,6 @@ export async function POST(request: Request) {
     // with only some of its images.
     try {
       // Seedling+ ranks can attach more images per post.
-      const perks = await getProgressionPerks(session.user.id)
       imageUrls = await storeImages(images, "forum", perks.imagesPerPost ?? MAX_POST_IMAGES, { access: "private" })
     } catch (err) {
       console.error("Forum post image upload error:", err)

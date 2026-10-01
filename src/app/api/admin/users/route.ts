@@ -9,11 +9,9 @@ import { rateLimit } from "@/lib/rate-limit"
 import { emitNotificationPush } from "@/lib/notify"
 import { staffDisplayName } from "@/lib/moderation"
 import { escapeLike } from "@/lib/strain-stats"
+import { parsePageParams } from "@/lib/pagination"
 
 const ASSIGNABLE_ROLES = new Set(["MEMBER", "VERIFIED_MEMBER", "SUPPORT", "MODERATOR", "ADMINISTRATOR"])
-
-// GET — list/search users (ADMINISTRATOR only)
-const MAX_PAGE_SIZE = 100
 
 // GET — list/search users (ADMINISTRATOR only)
 export async function GET(request: Request) {
@@ -34,9 +32,7 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "Invalid filter" }, { status: 400 })
     }
 
-    const page = Math.max(1, Number(searchParams.get("page")) || 1)
-    const limit = Math.min(MAX_PAGE_SIZE, Math.max(1, Number(searchParams.get("limit")) || 50))
-    const skip = (page - 1) * limit
+    const { limit, skip } = parsePageParams(searchParams)
 
     const contains = q ? { contains: escapeLike(q), mode: "insensitive" as const } : undefined
 

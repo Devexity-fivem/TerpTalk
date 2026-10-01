@@ -3,8 +3,7 @@ import { requireAdmin } from "@/lib/require-staff"
 import { prisma } from "@/lib/prisma"
 import { forbidden } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
-
-const MAX_PAGE_SIZE = 100
+import { parsePageParams } from "@/lib/pagination"
 
 // GET — detailed user data for admin user detail page
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -22,9 +21,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   }
 
   const { searchParams } = new URL(request.url)
-  const page = Math.max(1, Number(searchParams.get("page")) || 1)
-  const limit = Math.min(MAX_PAGE_SIZE, Math.max(1, Number(searchParams.get("limit")) || 50))
-  const skip = (page - 1) * limit
+  const { limit, skip } = parsePageParams(searchParams)
 
   const user = await prisma.user.findUnique({
     where: { id },

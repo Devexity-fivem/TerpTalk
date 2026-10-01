@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { parsePageParams } from "@/lib/pagination"
 import { prisma } from "@/lib/prisma"
 import { forbidden, getClientIp, isAdmin, isSupport, logSecurityEvent } from "@/lib/security"
 import { requireModerator, requireStaff } from "@/lib/require-staff"
@@ -7,8 +8,6 @@ import { rateLimit } from "@/lib/rate-limit"
 
 const VALID_REPORT_STATUSES = ["PENDING", "REVIEWING", "ESCALATED", "RESOLVED", "DISMISSED"]
 const MAX_DAYS = 90
-const MAX_PAGE_SIZE = 100
-
 // GET — moderation queue (DB-verified staff: support, moderators, admins)
 export async function GET(request: Request) {
   const staff = await requireStaff()
@@ -34,9 +33,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: `Date range must be within ${MAX_DAYS} days` }, { status: 400 })
   }
 
-  const page = Math.max(1, Number(searchParams.get("page")) || 1)
-  const limit = Math.min(MAX_PAGE_SIZE, Math.max(1, Number(searchParams.get("limit")) || 50))
-  const skip = (page - 1) * limit
+  const { limit, skip } = parsePageParams(searchParams)
 
   const where: Record<string, unknown> = {
     createdAt: {

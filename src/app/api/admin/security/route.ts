@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { parsePageParams } from "@/lib/pagination"
 import { requireAdmin } from "@/lib/require-staff"
 import { prisma } from "@/lib/prisma"
 import { forbidden } from "@/lib/security"
@@ -9,8 +10,6 @@ import { rateLimit } from "@/lib/rate-limit"
 // never returned to the UI. Events are auto-purged after 90 days —
 // security telemetry doesn't need indefinite retention.
 const RETENTION_DAYS = 90
-const MAX_PAGE_SIZE = 100
-
 export async function GET(request: Request) {
   const admin = await requireAdmin()
   if (!admin) return forbidden()
@@ -21,9 +20,7 @@ export async function GET(request: Request) {
   }
 
   const { searchParams } = new URL(request.url)
-  const page = Math.max(1, Number(searchParams.get("page")) || 1)
-  const limit = Math.min(MAX_PAGE_SIZE, Math.max(1, Number(searchParams.get("limit")) || 50))
-  const skip = (page - 1) * limit
+  const { limit, skip } = parsePageParams(searchParams)
 
   // Opportunistic retention enforcement
   prisma.securityEvent

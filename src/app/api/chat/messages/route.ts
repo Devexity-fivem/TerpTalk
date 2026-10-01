@@ -212,9 +212,13 @@ export async function POST(request: NextRequest) {
     const userId = token?.id as string | undefined
     if (!token || !userId) return unauthorized()
 
-    if (!(await isSessionValid(userId, token?.sessionVersion as number | undefined))) return forbidden("Your account is suspended")
-
-    if (!(await getBooleanSetting(SITE_SETTINGS.CHAT_ENABLED, true))) {
+    // Independent checks — one round trip for both.
+    const [sessionOk, chatEnabled] = await Promise.all([
+      isSessionValid(userId, token?.sessionVersion as number | undefined),
+      getBooleanSetting(SITE_SETTINGS.CHAT_ENABLED, true),
+    ])
+    if (!sessionOk) return forbidden("Your account is suspended")
+    if (!chatEnabled) {
       return forbidden("Chat is temporarily disabled")
     }
 
@@ -235,8 +239,11 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // One profile read serves the rate limit and the slowmode check below.
+    const perks = await getProgressionPerks(userId)
+
     // Rate limit: 30 messages per minute per user (Cultivator+ scale it up)
-    const rl = await progressionRateLimit(userId, `chat:${userId}`, 30, 60 * 1000)
+    const rl = await progressionRateLimit(userId, `chat:${userId}`, 30, 60 * 1000, perks)
     if (!rl.allowed) {
       await logSecurityEvent("RATE_LIMIT_EXCEEDED", {
         userId,
@@ -298,7 +305,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Pillar standing (and staff) are exempt from room slowmode.
-    const slowmodeExempt = staff || (await getProgressionPerks(userId)).slowmodeExempt
+    const slowmodeExempt = staff || perks.slowmodeExempt
     if (
       room.slowModeSeconds > 0 &&
       !slowmodeExempt &&

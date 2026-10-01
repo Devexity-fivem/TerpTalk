@@ -135,7 +135,7 @@ export async function POST(request: Request) {
     }
 
     // Rate limit: 10 threads per hour per user (Cultivator+ scale it up)
-    const rl = await progressionRateLimit(session.user.id, `thread:${session.user.id}`, 10, 60 * 60 * 1000)
+    const rl = await progressionRateLimit(session.user.id, `thread:${session.user.id}`, 10, 60 * 60 * 1000, progressionPerks)
     if (!rl.allowed) {
       await logSecurityEvent("RATE_LIMIT_EXCEEDED", {
         userId: session.user.id,

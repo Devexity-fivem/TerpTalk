@@ -1,12 +1,11 @@
 import { NextResponse } from "next/server"
+import { parsePageParams } from "@/lib/pagination"
 import { requireAdmin } from "@/lib/require-staff"
 import { prisma } from "@/lib/prisma"
 import { forbidden } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
 
 const MAX_DAYS = 90
-const MAX_PAGE_SIZE = 100
-
 // GET — centralized admin audit log (ADMINISTRATOR only)
 // Combines moderation actions and security events, newest first.
 // ?from=ISO&to=ISO&page=1&limit=100
@@ -44,9 +43,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: `Date range must be within ${MAX_DAYS} days` }, { status: 400 })
   }
 
-  const page = Math.max(1, Number(searchParams.get("page")) || 1)
-  const limit = Math.min(MAX_PAGE_SIZE, Math.max(1, Number(searchParams.get("limit")) || 100))
-  const skip = (page - 1) * limit
+  const { limit, skip } = parsePageParams(searchParams, { defaultLimit: 100 })
 
   const where = {
     createdAt: {

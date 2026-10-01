@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
-import { unauthorized, getClientIp, logSecurityEvent, isBanned, forbidden, blockExistsBetween } from "@/lib/security"
+import { unauthorized, getClientIp, logSecurityEvent, getSecurityUser, isBannedRow, forbidden, blockExistsBetween } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
 import { checkMaintenance } from "@/lib/maintenance"
 import { notify } from "@/lib/notify"
@@ -16,7 +16,8 @@ export async function POST(request: Request) {
     const session = await getServerSession(authOptions)
     if (!session?.user?.id) return unauthorized()
 
-    if (await isBanned(session.user.id)) return forbidden()
+    const securityUser = await getSecurityUser(session.user.id)
+    if (isBannedRow(securityUser)) return forbidden()
 
     const maintenance = await checkMaintenance()
     if (maintenance) return maintenance
@@ -38,7 +39,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Slow down." }, { status: 429 })
     }
 
-    if (await isBanned(session.user.id)) return forbidden("Your account is suspended")
+    if (isBannedRow(securityUser)) return forbidden("Your account is suspended")
 
     // ---- User follow ----
     if (userId) {
