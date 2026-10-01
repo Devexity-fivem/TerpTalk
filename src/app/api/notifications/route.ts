@@ -17,13 +17,17 @@ export async function GET(request: NextRequest) {
     if (!userId) return unauthorized()
     if (!(await isSessionValid(userId, token?.sessionVersion as number | undefined))) return forbidden()
 
-    // Badge-only mode — the navbar just needs the unread count, so it can
+    // Badge-only mode — the navbar just needs the unread counts, so it can
     // skip the 50-row fetch entirely. Same auth/session gate as the list.
+    // unreadDm rides along so chrome refreshes cost one request + one
+    // session read instead of two of each; it's the caller's own inbox
+    // count, identical scope to /api/messages?unread=1.
     if (request.nextUrl.searchParams.get("count") === "1") {
-      const unreadOnly = await prisma.notification.count({
-        where: { userId, read: false },
-      })
-      return NextResponse.json({ unreadCount: unreadOnly })
+      const [unreadOnly, unreadDm] = await Promise.all([
+        prisma.notification.count({ where: { userId, read: false } }),
+        prisma.directMessage.count({ where: { receiverId: userId, read: false, deleted: false } }),
+      ])
+      return NextResponse.json({ unreadCount: unreadOnly, unreadDm })
     }
 
     const cursor = request.nextUrl.searchParams.get("cursor")

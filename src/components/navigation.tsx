@@ -101,17 +101,45 @@ export function Navigation() {
   useEffect(() => {
     const userId = (session?.user as { id?: string } | undefined)?.id
     if (!userId) return // signed out, or an invalidated ghost session
-    const refresh = () => {
-      // Count-only endpoint — the badge never needs the notification rows.
+    // One combined badge request — the count endpoint returns the
+    // caller's own unread notification AND DM counts (same auth scope).
+    // Cross-tab coalescing: under Web Locks one tab fetches and shares the
+    // result over BroadcastChannel; N open tabs cost ~1 refresh per burst
+    // instead of N request pairs. Browsers without Web Locks fetch as
+    // before — this is amplification control only, never correctness.
+    const bc =
+      typeof BroadcastChannel !== "undefined" ? new BroadcastChannel("tt-nav-badges") : null
+    let lastCountsAt = 0
+    const applyCounts = (d: { unreadCount?: number; unreadDm?: number } | null) => {
+      setUnread(d?.unreadCount || 0)
+      setDmUnread(d?.unreadDm || 0)
+    }
+    const fetchCounts = () =>
       fetch("/api/notifications?count=1")
         .then((res) => (res.ok ? res.json() : null))
-        .then((d) => setUnread(d?.unreadCount || 0))
+        .then((d) => {
+          if (!d) return
+          lastCountsAt = Date.now()
+          applyCounts(d)
+          bc?.postMessage(d)
+        })
         .catch(() => {})
-      // One indexed COUNT — never the whole inbox — for the mail badge.
-      fetch("/api/messages?unread=1")
-        .then((res) => (res.ok ? res.json() : null))
-        .then((d) => setDmUnread(d?.unread || 0))
-        .catch(() => {})
+    if (bc) {
+      bc.onmessage = (e: MessageEvent) => {
+        lastCountsAt = Date.now()
+        applyCounts(e.data)
+      }
+    }
+    const refresh = () => {
+      if (bc && typeof navigator !== "undefined" && "locks" in navigator) {
+        navigator.locks
+          .request("tt-nav-badge-refresh", () =>
+            Date.now() - lastCountsAt < 2000 ? Promise.resolve() : fetchCounts()
+          )
+          .catch(() => fetchCounts())
+        return
+      }
+      void fetchCounts()
     }
     // Pushes can arrive in bursts (announcements, fanout) — coalesce them
     // into one refresh instead of one request pair per event. User-driven
@@ -173,6 +201,7 @@ export function Navigation() {
 
     return () => {
       cancelled = true
+      bc?.close()
       window.removeEventListener("tt-notifications-read", onRead)
       document.removeEventListener("visibilitychange", onVisible)
       if (poll) clearInterval(poll)
