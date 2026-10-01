@@ -34,6 +34,61 @@ const ASSIST_CUSHION_MS = 7 * 24 * 60 * 60 * 1000
 const ASSIST_GROUP_PREFIX = "bot-assist"
 
 /**
+ * Preloaded scan state — the daily scans evaluate dozens of candidates and
+ * the per-assist preamble reads (bot id, recipient row, cushion probe,
+ * dead-key probe) are identical for every candidate. `loadAssistPrelude`
+ * turns those N×3 reads into three batched queries. `cushioned` is
+ * mutated by botAssist on send so in-run ordering semantics match the
+ * sequential path exactly (a send cushions that user's later candidates).
+ */
+export interface AssistPrelude {
+  botId: string
+  recipients: Map<string, { banned: boolean; suspendedUntil: Date | null; notifyOnBotAssist: boolean | null | undefined }>
+  cushioned: Set<string>
+  dead: Set<string>
+}
+
+export async function loadAssistPrelude(userIds: string[], keys: string[]): Promise<AssistPrelude> {
+  const uniq = [...new Set(userIds)]
+  const since = new Date(Date.now() - ASSIST_CUSHION_MS)
+  const [botId, users, cushionedRows, deadRows] = await Promise.all([
+    getBotUserId(),
+    prisma.user.findMany({
+      where: { id: { in: uniq } },
+      select: {
+        id: true,
+        banned: true,
+        suspendedUntil: true,
+        profile: { select: { notifyOnBotAssist: true } },
+      },
+    }),
+    uniq.length
+      ? prisma.notification.findMany({
+          where: {
+            userId: { in: uniq },
+            type: "BOT_ASSIST",
+            groupKey: { startsWith: ASSIST_GROUP_PREFIX },
+            createdAt: { gte: since },
+          },
+          select: { userId: true },
+          distinct: ["userId"],
+        })
+      : Promise.resolve([] as { userId: string }[]),
+    keys.length
+      ? prisma.botEvent.findMany({ where: { key: { in: keys } }, select: { key: true } })
+      : Promise.resolve([] as { key: string }[]),
+  ])
+  return {
+    botId,
+    recipients: new Map(
+      users.map((u) => [u.id, { banned: u.banned, suspendedUntil: u.suspendedUntil, notifyOnBotAssist: u.profile?.notifyOnBotAssist }])
+    ),
+    cushioned: new Set(cushionedRows.map((r) => r.userId)),
+    dead: new Set(deadRows.map((r) => r.key)),
+  }
+}
+
+/**
  * The single pipeline every event-driven assist flows through.
  *
  * Returns "sent" when a notification was created, or "skipped" when
@@ -56,31 +111,36 @@ export async function botAssist(opts: {
   /** structured payload carried on Notification.metadata — canonical
    *  ids/labels only, never raw user text */
   metadata?: Prisma.InputJsonValue
+  /** Batched scan state — when provided, the recipient/cushion/dead-key
+   *  probes read from the snapshot instead of querying per candidate. */
+  pre?: AssistPrelude
 }): Promise<"sent" | "skipped"> {
   // Track whether THIS call claimed the key — a catch-path release is
   // only safe then (releasing unconditionally could delete a prior
   // legitimate claim and cause a duplicate send next run).
   let claimedHere = false
   try {
-    const botId = await getBotUserId()
+    const botId = opts.pre ? opts.pre.botId : await getBotUserId()
     if (opts.userId === botId) return "skipped"
 
     // Recipient must exist, be active, and not have opted out — all
     // checked before we burn a claim so a policy refusal never consumes
     // a once-ever key or a daily-cap slot.
-    const recipient = await prisma.user.findUnique({
-      where: { id: opts.userId },
-      select: {
-        banned: true,
-        suspendedUntil: true,
-        profile: { select: { notifyOnBotAssist: true } },
-      },
-    })
+    const recipient = opts.pre
+      ? opts.pre.recipients.get(opts.userId)
+      : await prisma.user.findUnique({
+          where: { id: opts.userId },
+          select: {
+            banned: true,
+            suspendedUntil: true,
+            profile: { select: { notifyOnBotAssist: true } },
+          },
+        }).then((r) => (r ? { banned: r.banned, suspendedUntil: r.suspendedUntil, notifyOnBotAssist: r.profile?.notifyOnBotAssist } : undefined))
     if (
       !recipient ||
       recipient.banned ||
       (recipient.suspendedUntil && recipient.suspendedUntil > new Date()) ||
-      recipient.profile?.notifyOnBotAssist === false
+      recipient.notifyOnBotAssist === false
     ) {
       return "skipped"
     }
@@ -89,7 +149,9 @@ export async function botAssist(opts: {
     // before the claim AND before the daily counter so a cushioned event
     // doesn't burn either budget.
     if (!opts.noCushion) {
-      const recent = await prisma.notification.findFirst({
+      const recent = opts.pre
+        ? opts.pre.cushioned.has(opts.userId)
+        : await prisma.notification.findFirst({
         where: {
           userId: opts.userId,
           type: "BOT_ASSIST",
@@ -106,10 +168,12 @@ export async function botAssist(opts: {
     // month). Exit BEFORE the daily counter so replayed keys can't
     // drain the 3/day cap and starve fresh assists. claimBotEvent's
     // unique constraint is still the atomic backstop for the race.
-    const dead = await prisma.botEvent.findUnique({
-      where: { key: opts.key },
-      select: { key: true },
-    })
+    const dead = opts.pre
+      ? opts.pre.dead.has(opts.key)
+      : await prisma.botEvent.findUnique({
+          where: { key: opts.key },
+          select: { key: true },
+        })
     if (dead) return "skipped"
 
     const cap = await rateLimit(
@@ -145,6 +209,10 @@ export async function botAssist(opts: {
       await releaseBotEvent(opts.key).catch(() => {})
       return "skipped"
     }
+    // Snapshot callers replay sequential semantics: this send cushions the
+    // user's remaining candidates in the same scan, matching what the fresh
+    // cushion read would have seen.
+    opts.pre?.cushioned.add(opts.userId)
     return "sent"
   } catch (e) {
     console.error("[terpbot] assist failed:", opts.key, e)
@@ -270,10 +338,23 @@ export async function scanDormantThreads(opts: {
     select: { id: true, slug: true, title: true, authorId: true, replyCount: true },
   })
 
+  if (!unanswered.length && !unresolved.length) return { dormant: 0, unresolved: 0 }
+
+  // One batched prelude replaces the per-candidate recipient/cushion/
+  // dead-key probes — N×3 reads collapse to three queries per scan.
+  const pre = await loadAssistPrelude(
+    [...unanswered, ...unresolved].map((t) => t.authorId),
+    [
+      ...unanswered.map((t) => `assist:dormant:${t.id}`),
+      ...unresolved.map((t) => `assist:unresolved:${t.id}`),
+    ]
+  )
+
   let dormantSent = 0
   for (const t of unanswered) {
     const r = await botAssist({
       key: `assist:dormant:${t.id}`,
+      pre,
       kind: "dormant",
       userId: t.authorId,
       title: "No replies yet on your thread",
@@ -287,6 +368,7 @@ export async function scanDormantThreads(opts: {
   for (const t of unresolved) {
     const r = await botAssist({
       key: `assist:unresolved:${t.id}`,
+      pre,
       kind: "unresolved",
       userId: t.authorId,
       title: "Did any reply solve it?",
@@ -336,16 +418,27 @@ export async function scanStaleDiaries(opts: {
   const latestMap = new Map(latestRows.map((r) => [r.diaryId, r._max.createdAt]))
 
   const monthKey = new Date().toISOString().slice(0, 7)
+  // A diary whose latest update is fresh stays quiet even if the diary
+  // row itself hasn't been edited in 5 days.
+  const stale = diaries.filter((d) => {
+    const last = latestMap.get(d.id) ?? d.createdAt
+    return !!last && last < staleBefore
+  })
+  if (!stale.length) return { scanned: diaries.length, sent: 0 }
+
+  const pre = await loadAssistPrelude(
+    stale.map((d) => d.authorId),
+    stale.map((d) => `assist:diary-stale:${d.id}:${monthKey}`)
+  )
+
   let sent = 0
-  for (const d of diaries) {
+  for (const d of stale) {
     if (sent >= 20) break
     const last = latestMap.get(d.id) ?? d.createdAt
-    // A diary whose latest update is fresh stays quiet even if the diary
-    // row itself hasn't been edited in 5 days.
-    if (!last || last >= staleBefore) continue
-    const days = Math.floor((Date.now() - last.getTime()) / 86400000)
+    const days = Math.floor((Date.now() - last!.getTime()) / 86400000)
     const r = await botAssist({
       key: `assist:diary-stale:${d.id}:${monthKey}`,
+      pre,
       kind: "diary-stale",
       userId: d.authorId,
       title: "Your grow is waiting for an update",

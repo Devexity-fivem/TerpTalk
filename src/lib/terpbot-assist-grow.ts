@@ -23,7 +23,7 @@
 
 import { prisma } from "@/lib/prisma"
 import { activeAuthor } from "@/lib/security"
-import { botAssist } from "@/lib/terpbot-assist"
+import { botAssist, loadAssistPrelude } from "@/lib/terpbot-assist"
 import { evaluateAssists } from "@/lib/terpbot-assist-triggers"
 import { buildGrowContext } from "@/lib/terpbot-intel-context"
 import { mergeSessionState, REPORTABLE_METRICS } from "@/lib/terpbot-intel-merge"
@@ -126,6 +126,12 @@ export async function scanGrowAssists(opts: {
     if (!targets.get(d.authorId)) targets.set(d.authorId, d.id)
   }
   const userIds = [...targets.keys()].slice(0, SCAN_USER_CAP)
+  if (!userIds.length) return { scanned: 0, sent: 0 }
+
+  // One batched recipient/cushion preload for the whole scan — the
+  // per-candidate botAssist probes then read from the snapshot. Keys
+  // stay per-fire (evidence epochs are computed inside the loop).
+  const pre = await loadAssistPrelude(userIds, [])
 
   let sent = 0
   let scanned = 0
@@ -209,6 +215,7 @@ export async function scanGrowAssists(opts: {
         key: fire.key,
         kind: fire.triggerId,
         userId,
+        pre,
         title: fire.title,
         content: fire.content,
         link: `/chat`,
