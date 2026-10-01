@@ -579,6 +579,37 @@ const main = async () => {
       : fail("suggest rl/xff", sLast)
     await prisma.rateLimit.deleteMany({ where: { key: { startsWith: "search-suggest" } } })
 
+    // Batched login counters — the multi-key upsert must still increment
+    // every distinct control (ip / pair / account) on one attempt.
+    await prisma.rateLimit.deleteMany({ where: { key: { contains: "login" } } })
+    await tryLogin(b.username, "wrong-batched-check")
+    const loginKeys = await prisma.rateLimit.findMany({ where: { key: { contains: "login" } }, select: { key: true, count: true } })
+    const scopes = ["login-ip:", "login-pair:", "login:"].map((p) =>
+      loginKeys.find((r) => r.key.startsWith(p) && r.key.includes(b.username.toLowerCase()) === (p === "login:" || p === "login-pair:")))
+    scopes.every((r) => r && r.count === 1) && loginKeys.length === 3
+      ? pass("ratelimit: batched login writes all three counters")
+      : fail("batched login counters", loginKeys)
+    await prisma.rateLimit.deleteMany({ where: { key: { contains: "login" } } })
+
+    // Sampled counting (chat-rooms read poll): enforcement still fires on
+    // every request once the sampled counter crosses the limit, and the
+    // deny persists on the read path — an optimistic-allow hole would let
+    // post-limit requests through.
+    await prisma.rateLimit.deleteMany({ where: { key: { startsWith: "chat-rooms:" } } })
+    let cLast = null, cDenied = 0
+    for (let i = 0; i < 90; i++) {
+      cLast = await fetch(`${BASE}/api/chat/rooms?badge=1`, { headers: { "x-forwarded-for": "10.66.66.66" } })
+      if (cLast.status === 429) { cDenied++; break }
+    }
+    const cDeniedAfter = cDenied > 0
+      ? (await fetch(`${BASE}/api/chat/rooms?badge=1`, { headers: { "x-forwarded-for": "10.66.66.66" } })).status === 429
+      : false
+    const cRow = await prisma.rateLimit.findMany({ where: { key: { startsWith: "chat-rooms:" } } })
+    cDenied > 0 && cDeniedAfter && cRow.some((r) => r.count > 60)
+      ? pass("ratelimit: sampled chat-rooms poll still enforces (read-path deny)")
+      : fail("sampled chat-rooms rl", { cDenied, cDeniedAfter, rows: cRow })
+    await prisma.rateLimit.deleteMany({ where: { key: { startsWith: "chat-rooms:" } } })
+
     // ══ 11. Enumeration ═══════════════════════════════════════════
     const exUser = await callApi(`/api/users/${a.username}`)
     const noUser = await callApi(`/api/users/__rv_no_such_${TS}`)

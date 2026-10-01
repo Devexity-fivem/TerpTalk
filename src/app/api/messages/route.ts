@@ -27,7 +27,9 @@ export async function GET(request: NextRequest) {
     if (!(await isSessionValid(userId, token?.sessionVersion as number | undefined))) return forbidden()
 
     const ip = getClientIp(request)
-    const rl = await rateLimit(`messages-read:${userId}:${hashIp(ip)}`, 120, 60 * 1000)
+    // Sampled counting — high-frequency read poll; enforcement unchanged,
+    // DB writes reduced ~6x. See rate-limit.ts.
+    const rl = await rateLimit(`messages-read:${userId}:${hashIp(ip)}`, 120, 60 * 1000, false, 6)
     if (!rl.allowed) {
       return NextResponse.json({ error: "Too many requests" }, { status: 429 })
     }

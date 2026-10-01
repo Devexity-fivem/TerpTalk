@@ -22,7 +22,9 @@ export async function GET(request: NextRequest) {
     if (!(await isSessionValid(userId, token?.sessionVersion as number | undefined))) return forbidden()
 
     const ip = getClientIp(request)
-    const rl = await rateLimit(`chat-rooms:${hashIp(ip)}`, 60, 60 * 1000)
+    // High-frequency read polling — sampled counting (see rate-limit.ts):
+    // every request still enforces, only ~1/6 of requests write.
+    const rl = await rateLimit(`chat-rooms:${hashIp(ip)}`, 60, 60 * 1000, false, 6)
     if (!rl.allowed) {
       return NextResponse.json({ error: "Too many requests" }, { status: 429 })
     }
