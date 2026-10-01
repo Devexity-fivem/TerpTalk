@@ -594,15 +594,17 @@ const main = async () => {
     // Sampled counting (chat-rooms read poll): enforcement still fires on
     // every request once the sampled counter crosses the limit, and the
     // deny persists on the read path — an optimistic-allow hole would let
-    // post-limit requests through.
+    // post-limit requests through. Authed (the route 401s anonymous before
+    // the limiter) and pinned to one spoofed IP bucket.
     await prisma.rateLimit.deleteMany({ where: { key: { startsWith: "chat-rooms:" } } })
-    let cLast = null, cDenied = 0
+    const rlHeaders = { cookie: aC, "x-forwarded-for": "10.66.66.66" }
+    let cDenied = 0
     for (let i = 0; i < 90; i++) {
-      cLast = await fetch(`${BASE}/api/chat/rooms?badge=1`, { headers: { "x-forwarded-for": "10.66.66.66" } })
-      if (cLast.status === 429) { cDenied++; break }
+      const cRes = await fetch(`${BASE}/api/chat/rooms?badge=1`, { headers: rlHeaders })
+      if (cRes.status === 429) { cDenied++; break }
     }
     const cDeniedAfter = cDenied > 0
-      ? (await fetch(`${BASE}/api/chat/rooms?badge=1`, { headers: { "x-forwarded-for": "10.66.66.66" } })).status === 429
+      ? (await fetch(`${BASE}/api/chat/rooms?badge=1`, { headers: rlHeaders })).status === 429
       : false
     const cRow = await prisma.rateLimit.findMany({ where: { key: { startsWith: "chat-rooms:" } } })
     cDenied > 0 && cDeniedAfter && cRow.some((r) => r.count > 60)
