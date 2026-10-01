@@ -54,16 +54,18 @@ export default async function AdminSystemPage() {
         {d.security.rateLimitHits7d.length === 0 ? (
           <p className="text-sm text-muted-foreground">No rate-limit events in the window.</p>
         ) : (
-          <table className="w-full text-sm mb-4">
-            <tbody>
-              {d.security.rateLimitHits7d.map((r) => (
-                <tr key={r.endpoint} className="border-b border-border/40 last:border-0">
-                  <td className="py-1.5 font-mono text-xs">{r.endpoint}</td>
-                  <td className="py-1.5 text-right tabular-nums">{r.count}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <div className="overflow-x-auto mb-4">
+            <table className="w-full text-sm min-w-[360px]">
+              <tbody>
+                {d.security.rateLimitHits7d.map((r) => (
+                  <tr key={r.endpoint} className="border-b border-border/40 last:border-0">
+                    <td className="py-1.5 font-mono text-xs break-all">{r.endpoint}</td>
+                    <td className="py-1.5 text-right tabular-nums">{r.count}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
         <div className="flex gap-2 flex-wrap">
           {d.security.eventsByType7d.map((e) => (

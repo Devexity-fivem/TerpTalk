@@ -20,17 +20,19 @@ function FunnelTable({ funnel }: { funnel: FunnelWindow }) {
     ["Returned ≥7d later", funnel.returned7d],
   ]
   return (
-    <table className="w-full text-sm">
-      <tbody>
-        {rows.map(([label, n]) => (
-          <tr key={label} className="border-b border-border/40 last:border-0">
-            <td className="py-2 text-muted-foreground">{label}</td>
-            <td className="py-2 text-right tabular-nums font-medium">{n}</td>
-            <td className="py-2 text-right tabular-nums text-muted-foreground w-16">{pct(n)}</td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm min-w-[380px]">
+        <tbody>
+          {rows.map(([label, n]) => (
+            <tr key={label} className="border-b border-border/40 last:border-0">
+              <td className="py-2 text-muted-foreground">{label}</td>
+              <td className="py-2 text-right tabular-nums font-medium">{n}</td>
+              <td className="py-2 text-right tabular-nums text-muted-foreground w-16">{pct(n)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   )
 }
 
@@ -107,26 +109,28 @@ export default async function AdminGrowthPage() {
         {fa.byFirstAction.length === 0 ? (
           <p className="text-sm text-muted-foreground">No contributions yet in this window.</p>
         ) : (
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-left text-xs text-muted-foreground">
-                <th className="py-1.5 font-medium">First action</th>
-                <th className="py-1.5 text-right font-medium">Members</th>
-                <th className="py-1.5 text-right font-medium">Returned ≥24h</th>
-              </tr>
-            </thead>
-            <tbody>
-              {fa.byFirstAction.map((r) => (
-                <tr key={r.type} className="border-t border-border/40">
-                  <td className="py-1.5">{r.type}</td>
-                  <td className="py-1.5 text-right tabular-nums">{r.count}</td>
-                  <td className="py-1.5 text-right tabular-nums text-muted-foreground">
-                    {r.returnedPct !== null ? `${r.returnedPct}%` : `n=${r.count} — too small`}
-                  </td>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm min-w-[440px]">
+              <thead>
+                <tr className="text-left text-xs text-muted-foreground">
+                  <th className="py-1.5 font-medium">First action</th>
+                  <th className="py-1.5 text-right font-medium">Members</th>
+                  <th className="py-1.5 text-right font-medium">Returned ≥24h</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {fa.byFirstAction.map((r) => (
+                  <tr key={r.type} className="border-t border-border/40">
+                    <td className="py-1.5">{r.type}</td>
+                    <td className="py-1.5 text-right tabular-nums">{r.count}</td>
+                    <td className="py-1.5 text-right tabular-nums text-muted-foreground">
+                      {r.returnedPct !== null ? `${r.returnedPct}%` : `n=${r.count} — too small`}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </section>
 
