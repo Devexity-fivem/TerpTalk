@@ -101,6 +101,10 @@ const apiFiles = () => {
     // the only interpolation is MEANINGFUL_UPDATE_SQL (a static fragment)
     // and the parameterized diaryId.
     path.join("src", "lib", "grow-journey.ts"),
+    // rateLimitMany: multi-row upsert — the only interpolated fragment is
+    // a statically generated "($N, 1, $M)" placeholder list; every key and
+    // expiry value travels as a bound parameter.
+    path.join("src", "lib", "rate-limit.ts"),
   ]);
   check("no raw SQL outside allowlist", !allSrc.some((f) => {
     if (rawSqlAllowlist.has(f)) return false;
