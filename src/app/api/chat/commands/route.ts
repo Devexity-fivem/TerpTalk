@@ -16,7 +16,7 @@ import {
   USERNAME_REGEX,
   enforceLinkTrust,
 } from "@/lib/security"
-import { rateLimit } from "@/lib/rate-limit"
+import { rateLimit, rateLimitMany } from "@/lib/rate-limit"
 import { checkMaintenance } from "@/lib/maintenance"
 import { getBooleanSetting, SITE_SETTINGS } from "@/lib/settings"
 import { canAccessRoom } from "@/lib/chat-access"
@@ -88,8 +88,10 @@ export async function POST(request: NextRequest) {
     })
     if (!user) return forbidden()
 
-    const userRl = await rateLimit(`chat-commands-user:${userId}`, 30, 60 * 1000)
-    const ipRl = await rateLimit(`chat-commands:${hashIp(getClientIp(request))}`, 30, 60 * 1000)
+    const [userRl, ipRl] = await rateLimitMany([
+      { key: `chat-commands-user:${userId}`, limit: 30, windowMs: 60 * 1000 },
+      { key: `chat-commands:${hashIp(getClientIp(request))}`, limit: 30, windowMs: 60 * 1000 },
+    ])
     if (!userRl.allowed || !ipRl.allowed) {
       return NextResponse.json({ error: "Too many commands" }, { status: 429 })
     }

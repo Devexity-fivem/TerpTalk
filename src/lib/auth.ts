@@ -1,7 +1,7 @@
 import { NextAuthOptions } from "next-auth"
 import CredentialsProvider from "next-auth/providers/credentials"
 import { prisma } from "@/lib/prisma"
-import { rateLimit } from "@/lib/rate-limit"
+import { rateLimit, rateLimitMany } from "@/lib/rate-limit"
 import { logSecurityEvent, getClientIp, hashIp, bcryptDecoy } from "@/lib/security"
 import { turnstileEnabled, verifyTurnstile } from "@/lib/turnstile"
 import bcrypt from "bcryptjs"
@@ -66,9 +66,9 @@ export const authOptions: NextAuthOptions = {
         // Hard caps — checked first and never bypassable by a challenge:
         // per source IP (spraying across many accounts) and per
         // username×IP pair (grinding one account from a single address).
-        const [ipRl, pairRl] = await Promise.all([
-          rateLimit(`login-ip:${hashIp(ip)}`, 30, 15 * 60 * 1000),
-          rateLimit(`login-pair:${usernameKey}:${hashIp(ip)}`, 20, 15 * 60 * 1000),
+        const [ipRl, pairRl] = await rateLimitMany([
+          { key: `login-ip:${hashIp(ip)}`, limit: 30, windowMs: 15 * 60 * 1000 },
+          { key: `login-pair:${usernameKey}:${hashIp(ip)}`, limit: 20, windowMs: 15 * 60 * 1000 },
         ])
         if (!ipRl.allowed || !pairRl.allowed) {
           await logSecurityEvent("RATE_LIMIT_EXCEEDED", {

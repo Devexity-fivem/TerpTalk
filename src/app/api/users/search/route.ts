@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { publicUserSelect, isBanned, getClientIp, hashIp, blockedUserIds } from "@/lib/security"
-import { rateLimit } from "@/lib/rate-limit"
+import { rateLimit, rateLimitMany } from "@/lib/rate-limit"
 import { escapeLike } from "@/lib/strain-stats"
 
 export async function GET(request: Request) {
@@ -17,8 +17,10 @@ export async function GET(request: Request) {
     return NextResponse.json({ users: [] }, { status: 403 })
   }
 
-  const rl = await rateLimit(`users-search:${userId}`, 30, 60 * 1000)
-  const ipRl = await rateLimit(`users-search-ip:${hashIp(getClientIp(request))}`, 60, 60 * 1000)
+  const [rl, ipRl] = await rateLimitMany([
+    { key: `users-search:${userId}`, limit: 30, windowMs: 60 * 1000 },
+    { key: `users-search-ip:${hashIp(getClientIp(request))}`, limit: 60, windowMs: 60 * 1000 },
+  ])
   if (!rl.allowed || !ipRl.allowed) {
     return NextResponse.json({ users: [] }, { status: 429 })
   }
