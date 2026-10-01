@@ -295,6 +295,22 @@ export async function POST(request: Request) {
       return created
     })
 
+    // One subject read feeds every award in this request (all awards below
+    // are xp/standing >= 0, so the snapshot is safe — see
+    // ProgressionAwardOptions.subject).
+    const awardSubjectUserId = session.user.id
+    let awardSubjectP: ReturnType<typeof loadAwardSubject> | null = null
+    function loadAwardSubject() {
+      return prisma.user.findUnique({
+        where: { id: awardSubjectUserId },
+        select: {
+          role: true, createdAt: true, banned: true, suspendedUntil: true,
+          profile: { select: { xp: true, standing: true, username: true } },
+        },
+      }).catch(() => null)
+    }
+    const getAwardSubject = () => (awardSubjectP ??= loadAwardSubject())
+
     // V2 update economy (design §6.7): one paying update per diary per UTC
     // day (base 5), band bonus for rich/exceptional updates, +2 per
     // structured category — all gated by the simhash duplicate tiers.
@@ -353,6 +369,7 @@ export async function POST(request: Request) {
           // not consume the day's base slot; genuine content later the same
           // day still pays once (§6.7).
           await awardProgression(session.user.id, "UPDATE_DAY", reason, {
+            subject: await getAwardSubject(),
             key: `${dayKey}:w:${update.id}`, sourceType: "DIARY", sourceId: diaryId,
             xp: 0, marker: true,
             meta: { dup: "withheld", similarity: dup.similarity, updateId: update.id },
@@ -362,6 +379,7 @@ export async function POST(request: Request) {
           // bonuses are withheld at 85–94% unless structured data changed.
           const bonusesBlocked = dup.verdict === "reduced" && !structuredChanged
           await awardProgression(session.user.id, "UPDATE_DAY", reason, {
+            subject: await getAwardSubject(),
             key: dayKey, sourceType: "DIARY", sourceId: diaryId,
             meta: {
               band,
@@ -372,20 +390,24 @@ export async function POST(request: Request) {
           if (!bonusesBlocked) {
             if (band === 3) {
               await awardProgression(session.user.id, "UPDATE_EXCEPTIONAL", reason, {
+            subject: await getAwardSubject(),
                 key: `diaryband:${update.id}`, sourceType: "DIARY_UPDATE", sourceId: update.id,
               }).catch(() => {})
             } else if (band === 2) {
               await awardProgression(session.user.id, "UPDATE_RICH", reason, {
+            subject: await getAwardSubject(),
                 key: `diaryband:${update.id}`, sourceType: "DIARY_UPDATE", sourceId: update.id,
               }).catch(() => {})
             }
             for (let c = 0; c < structuredCategories; c++) {
               await awardProgression(session.user.id, "STRUCTURED_CATEGORY", reason, {
+            subject: await getAwardSubject(),
                 key: `diarycat:${update.id}:${c}`, sourceType: "DIARY_UPDATE", sourceId: update.id,
               }).catch(() => {})
             }
           } else {
             await awardProgression(session.user.id, "UPDATE_RICH", reason, {
+            subject: await getAwardSubject(),
               key: `diaryband:${update.id}`, sourceType: "DIARY_UPDATE", sourceId: update.id,
               xp: 0, marker: true,
               meta: { dup: "reduced", similarity: dup.similarity, updateId: update.id },
@@ -415,6 +437,7 @@ export async function POST(request: Request) {
         const key = `metric-first:${session.user.id}:${f}`
         if (done.has(key)) continue
         await awardProgression(session.user.id, "METRIC_FIRST", `First ${f} reading logged`, {
+            subject: await getAwardSubject(),
           key, sourceType: "DIARY_UPDATE", sourceId: update.id,
         }).catch(() => {})
       }

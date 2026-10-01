@@ -94,6 +94,12 @@ export interface ProgressionAwardOptions {
   meta?: Record<string, unknown> // audit detail — band, dup, standingSource
   force?: boolean // staff adjustments bypass inactive-recipient skip
   marker?: boolean // write a 0-value audit row even when nothing pays (§6.7)
+  // Caller-loaded subject snapshot — skips the per-award user read when a
+  // request issues several awards. Only pass a snapshot loaded in the same
+  // request for awards with xp >= 0 and standing >= 0: a stale profile.xp
+  // is only used to clamp negative deltas (not applicable) and milestone
+  // re-announces are independently key-guarded.
+  subject?: SubjectUser | null
 }
 
 export interface ProgressionAwardResult {
@@ -429,16 +435,18 @@ export async function awardProgression(
   opts: ProgressionAwardOptions = {}
 ): Promise<ProgressionAwardResult> {
   try {
-    const subject = await prisma.user.findUnique({
-      where: { id: userId },
-      select: {
-        role: true,
-        createdAt: true,
-        banned: true,
-        suspendedUntil: true,
-        profile: { select: { xp: true, standing: true, username: true } },
-      },
-    })
+    const subject =
+      opts.subject ??
+      (await prisma.user.findUnique({
+        where: { id: userId },
+        select: {
+          role: true,
+          createdAt: true,
+          banned: true,
+          suspendedUntil: true,
+          profile: { select: { xp: true, standing: true, username: true } },
+        },
+      }))
     if (!subject?.profile) return { awarded: false, skippedReason: "no-user" }
     if (subject.profile.username === TERPBOT_USERNAME) return { awarded: false, skippedReason: "bot" }
     if (!opts.force && isInactive(subject)) return { awarded: false, skippedReason: "suspended" }
