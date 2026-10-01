@@ -376,6 +376,12 @@ export async function getPublicProfileData(
       ? hasUnlocks(ownerId, ["records-widget", "owner-analytics"]) as Promise<[boolean, boolean]>
       : hasUnlocks(ownerId, ["records-widget"]).then(([r]) => [r, false] as [boolean, boolean])
 
+  const harvestCounts = prisma.growDiary.groupBy({
+    by: ["harvested"],
+    where: { ...diaryOwnerScope, ...diaryScope },
+    _count: { _all: true },
+  })
+
   const [
     recentThreads,
     streakData,
@@ -451,8 +457,10 @@ export async function getPublicProfileData(
         _count: { select: { updates: true } },
       },
     }),
-    prisma.growDiary.count({ where: { ...diaryOwnerScope, ...diaryScope } }),
-    prisma.growDiary.count({ where: { ...diaryOwnerScope, harvested: true, ...diaryScope } }),
+    // One grouped count feeds diaryCount / harvestedCount / activeGrowCount
+    // (identical scope; only the harvested flag differs).
+    harvestCounts.then((rows) => rows.reduce((s, r) => s + r._count._all, 0)),
+    harvestCounts.then((rows) => rows.find((r) => r.harvested)?._count._all ?? 0),
     prisma.post.count({ where: { authorId: ownerId, deleted: false, acceptedAnswerFor: { isNot: null } } }),
     prisma.growDiary.groupBy({
       by: ["strainId"],
@@ -510,7 +518,7 @@ export async function getPublicProfileData(
         _count: { select: { updates: true } },
       },
     }),
-    prisma.growDiary.count({ where: { ...diaryOwnerScope, harvested: false, ...diaryScope } }),
+    harvestCounts.then((rows) => rows.find((r) => !r.harvested)?._count._all ?? 0),
     prisma.growExperiment.findMany({
       where: { authorId: ownerId, diary: { deleted: false, ...diaryScope } },
       orderBy: { createdAt: "desc" },
