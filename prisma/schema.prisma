@@ -273,7 +273,6 @@ model Thread {
   @@index([categoryId])
   @@index([authorId])
   @@index([wizardResultId])
-  @@index([slug])
   @@index([replyCount])
   @@index([createdAt])
   @@index([views])
@@ -315,7 +314,6 @@ model Post {
   images    PostImage[]
   acceptedAnswerFor Thread? @relation("ThreadAcceptedAnswer")
 
-  @@index([threadId])
   @@index([authorId])
   @@index([createdAt])
   @@index([threadId, createdAt])
@@ -463,6 +461,7 @@ model GrowDiary {
   @@index([visibility])
   @@index([createdAt])
   @@index([harvested, harvestedAt(sort: Desc)])
+  @@index([deleted, visibility, updatedAt(sort: Desc)])
 }
 
 model DiaryUpdate {
@@ -707,6 +706,7 @@ model DirectMessage {
   @@index([receiverId])
   @@index([createdAt])
   @@index([senderId, receiverId])
+  @@index([receiverId, read, deleted])
 }
 
 // Notifications
@@ -726,13 +726,12 @@ model Notification {
   user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   actor     User?            @relation("NotificationActor", fields: [actorId], references: [id], onDelete: SetNull)
 
-  @@index([userId])
-  @@index([read])
   @@index([createdAt])
   @@index([userId, read])
   @@index([userId, createdAt])
   @@index([actorId])
   @@index([userId, groupKey])
+  @@index([link])
 }
 
 // Strain Database
@@ -1216,6 +1215,7 @@ model ProgressionEvent {
   user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, createdAt])
+  @@index([userId, type, createdAt])
   @@index([userId, mastery, createdAt])
   @@index([sourceType, sourceId])
   @@index([actorId])
