@@ -1192,9 +1192,16 @@ export async function getProgressionPerks(userId: string): Promise<ProgressionPe
 }
 
 // rateLimit() scaled by the caller's V2 rank — Harvested+ get a boost.
-export async function progressionRateLimit(userId: string, key: string, baseLimit: number, windowMs: number) {
-  const perks = await getProgressionPerks(userId)
-  const limit = Math.floor(baseLimit * perks.rateLimitBoost)
+// `perks` lets a request that already loaded them skip the profile read.
+export async function progressionRateLimit(
+  userId: string,
+  key: string,
+  baseLimit: number,
+  windowMs: number,
+  perks?: ProgressionPerks
+) {
+  const p = perks ?? (await getProgressionPerks(userId))
+  const limit = Math.floor(baseLimit * p.rateLimitBoost)
   return rateLimit(key, limit, windowMs)
 }
 

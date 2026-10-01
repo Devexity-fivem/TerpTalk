@@ -40,11 +40,16 @@ export const getSecurityUser = cache((userId: string) =>
   })
 )
 
-/** Returns true if the user is banned or currently suspended. */
-export async function isBanned(userId: string): Promise<boolean> {
-  const user = await getSecurityUser(userId)
+/** Row-level form of isBanned — same predicate against an already-loaded
+ *  User row, for requests that hold a fresh subject snapshot. */
+export function isBannedRow(user: { banned: boolean; suspendedUntil: Date | null } | null): boolean {
   if (!user || user.banned) return true
   return !!user.suspendedUntil && user.suspendedUntil > new Date()
+}
+
+/** Returns true if the user is banned or currently suspended. */
+export async function isBanned(userId: string): Promise<boolean> {
+  return isBannedRow(await getSecurityUser(userId))
 }
 
 /**
@@ -79,8 +84,9 @@ export async function enforceLinkTrust(
   userId: string,
   request: { headers: Headers | Record<string, string | undefined> },
   endpoint: string,
+  loadedUser?: LinkTrustRow | null,
 ): Promise<NextResponse | null> {
-  if (!containsExternalLink(text) || (await isTrustedForLinks(userId))) return null
+  if (!containsExternalLink(text) || (await isTrustedForLinks(userId, loadedUser))) return null
   await logSecurityEvent("NEWBIE_LINK_BLOCKED", {
     userId,
     ip: getClientIp(request),
@@ -89,16 +95,28 @@ export async function enforceLinkTrust(
   return forbidden(`New users need 24 hours and Known standing (${STANDING_LINKS}) before posting links. Share plain text in the meantime.`)
 }
 
-/** Moderators and members at "Known" standing (≥25) older than 24h can post links. V2: standing, not the frozen rep balance. Registry row: "trusted-links". */
-export async function isTrustedForLinks(userId: string): Promise<boolean> {
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { role: true, createdAt: true, profile: { select: { standing: true, unlockFrozen: true } } },
-  })
+export interface LinkTrustRow {
+  role: string | null
+  createdAt: Date
+  profile: { standing: number; unlockFrozen: boolean } | null
+}
+
+/** Row-level form of isTrustedForLinks — same predicate against an
+ *  already-loaded User row. */
+export function trustedForLinksRow(user: LinkTrustRow | null): boolean {
   if (!user) return false
   if (isModerator(user.role)) return true
   const ageHours = (Date.now() - new Date(user.createdAt).getTime()) / (1000 * 60 * 60)
   return ageHours >= 24 && (user.profile?.standing ?? 0) >= STANDING_LINKS && !user.profile?.unlockFrozen
+}
+
+/** Moderators and members at "Known" standing (≥25) older than 24h can post links. V2: standing, not the frozen rep balance. Registry row: "trusted-links". */
+export async function isTrustedForLinks(userId: string, loaded?: LinkTrustRow | null): Promise<boolean> {
+  const user = loaded !== undefined ? loaded : await prisma.user.findUnique({
+    where: { id: userId },
+    select: { role: true, createdAt: true, profile: { select: { standing: true, unlockFrozen: true } } },
+  })
+  return trustedForLinksRow(user)
 }
 
 /**

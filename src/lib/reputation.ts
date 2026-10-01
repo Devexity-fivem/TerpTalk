@@ -1026,8 +1026,20 @@ export async function grantBadge(
 // Evaluate all badge rules and grant any newly earned badges (+ notification).
 // `announcedTierName` lets the caller suppress a duplicate chat announce when
 // the same award just fired announceTierUp for the same-named milestone badge.
-export async function checkBadges(userId: string, opts: { announcedTierName?: string | null } = {}) {
-  if (await isBotUser(userId)) return
+export async function checkBadges(
+  userId: string,
+  opts: {
+    announcedTierName?: string | null
+    // Caller-loaded subject row — the same User fields the badge preamble
+    // would otherwise re-read (username for the bot check, role for
+    // role-tracked badges). `undefined` means "not provided — query".
+    subject?: { role: string | null; profile: { username: string | null } | null } | null
+  } = {}
+) {
+  const isBot = opts.subject === undefined
+    ? await isBotUser(userId)
+    : opts.subject?.profile?.username === TERPBOT_USERNAME
+  if (isBot) return
   if (!badgeSeedComplete) {
     await seedBadges()
     badgeSeedComplete = true
@@ -1055,9 +1067,9 @@ export async function checkBadges(userId: string, opts: { announcedTierName?: st
 
   // Role-tracked badges self-heal here too, so staff promoted outside the
   // admin role-change API (seeds, direct edits) still get their badges.
-  const userRole = (
-    await prisma.user.findUnique({ where: { id: userId }, select: { role: true } })
-  )?.role
+  const userRole = opts.subject !== undefined
+    ? opts.subject?.role ?? null
+    : (await prisma.user.findUnique({ where: { id: userId }, select: { role: true } }))?.role
   const roleBadgeNames = [
     ...(isModerator(userRole) ? ["Moderator"] : []),
     ...(isSupport(userRole) || isAdmin(userRole) ? ["Staff"] : []),

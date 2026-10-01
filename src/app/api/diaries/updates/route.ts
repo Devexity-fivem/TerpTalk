@@ -2,9 +2,9 @@ import { after, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { unauthorized, publicUserSelect, LIMITS, getClientIp, logSecurityEvent, isBanned, forbidden, enforceLinkTrust, activeAuthor } from "@/lib/security"
+import { unauthorized, publicUserSelect, LIMITS, getClientIp, logSecurityEvent, isBanned, isBannedRow, forbidden, enforceLinkTrust, activeAuthor } from "@/lib/security"
 import { checkBadges } from "@/lib/reputation"
-import { progressionRateLimit } from "@/lib/progression"
+import { progressionRateLimit, progressionPerksFrom } from "@/lib/progression"
 import { awardProgression, checkDuplicateContent, updateBand } from "@/lib/progression"
 import { awardExperimentFollowups } from "@/lib/experiment-progression"
 import { enqueueReversals, drainMany } from "@/lib/reputation-outbox"
@@ -160,8 +160,24 @@ export async function POST(request: Request) {
       nutrientRows = parsedNutrients.rows
     }
 
+    // One request-scoped subject row feeds the ban gate, link-trust check,
+    // progression perks, badge preamble, and every award call below.
+    // Loaded once post-session — same-request fresh. Safe to reuse because
+    // every award issued here is xp/standing >= 0 (no negative clamping can
+    // consume a stale balance) and milestone re-announces are key-guarded.
+    const subject = await prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: {
+        role: true, createdAt: true, banned: true, suspendedUntil: true,
+        profile: { select: { xp: true, standing: true, username: true, unlockFrozen: true } },
+      },
+    })
+
     // Rate limit + ban check before any expensive work
-    const rl = await progressionRateLimit(session.user.id, `diary-update:${session.user.id}`, 30, 60 * 60 * 1000)
+    const rl = await progressionRateLimit(
+      session.user.id, `diary-update:${session.user.id}`, 30, 60 * 60 * 1000,
+      progressionPerksFrom(subject?.profile?.xp ?? 0, subject?.profile?.standing ?? 0, subject?.profile?.unlockFrozen ?? true)
+    )
     if (!rl.allowed) {
       await logSecurityEvent("RATE_LIMIT_EXCEEDED", {
         userId: session.user.id,
@@ -174,7 +190,7 @@ export async function POST(request: Request) {
       )
     }
 
-    if (await isBanned(session.user.id)) {
+    if (isBannedRow(subject)) {
       return forbidden("Your account is suspended")
     }
 
@@ -212,7 +228,7 @@ export async function POST(request: Request) {
       }
     }
 
-    const linkBlock = await enforceLinkTrust(`${title}\n${content}`, session.user.id, request, "diaries/updates")
+    const linkBlock = await enforceLinkTrust(`${title}\n${content}`, session.user.id, request, "diaries/updates", subject)
     if (linkBlock) return linkBlock
 
     // Offload to Blob storage when configured (keeps DB rows small).
@@ -295,21 +311,9 @@ export async function POST(request: Request) {
       return created
     })
 
-    // One subject read feeds every award in this request (all awards below
-    // are xp/standing >= 0, so the snapshot is safe — see
+    // `subject` doubles as the award subject snapshot (all awards below are
+    // xp/standing >= 0, so the pre-mutation snapshot is safe — see
     // ProgressionAwardOptions.subject).
-    const awardSubjectUserId = session.user.id
-    let awardSubjectP: ReturnType<typeof loadAwardSubject> | null = null
-    function loadAwardSubject() {
-      return prisma.user.findUnique({
-        where: { id: awardSubjectUserId },
-        select: {
-          role: true, createdAt: true, banned: true, suspendedUntil: true,
-          profile: { select: { xp: true, standing: true, username: true } },
-        },
-      }).catch(() => null)
-    }
-    const getAwardSubject = () => (awardSubjectP ??= loadAwardSubject())
 
     // V2 update economy (design §6.7): one paying update per diary per UTC
     // day (base 5), band bonus for rich/exceptional updates, +2 per
@@ -369,7 +373,7 @@ export async function POST(request: Request) {
           // not consume the day's base slot; genuine content later the same
           // day still pays once (§6.7).
           await awardProgression(session.user.id, "UPDATE_DAY", reason, {
-            subject: await getAwardSubject(),
+            subject,
             key: `${dayKey}:w:${update.id}`, sourceType: "DIARY", sourceId: diaryId,
             xp: 0, marker: true,
             meta: { dup: "withheld", similarity: dup.similarity, updateId: update.id },
@@ -379,7 +383,7 @@ export async function POST(request: Request) {
           // bonuses are withheld at 85–94% unless structured data changed.
           const bonusesBlocked = dup.verdict === "reduced" && !structuredChanged
           await awardProgression(session.user.id, "UPDATE_DAY", reason, {
-            subject: await getAwardSubject(),
+            subject,
             key: dayKey, sourceType: "DIARY", sourceId: diaryId,
             meta: {
               band,
@@ -390,24 +394,24 @@ export async function POST(request: Request) {
           if (!bonusesBlocked) {
             if (band === 3) {
               await awardProgression(session.user.id, "UPDATE_EXCEPTIONAL", reason, {
-            subject: await getAwardSubject(),
+            subject,
                 key: `diaryband:${update.id}`, sourceType: "DIARY_UPDATE", sourceId: update.id,
               }).catch(() => {})
             } else if (band === 2) {
               await awardProgression(session.user.id, "UPDATE_RICH", reason, {
-            subject: await getAwardSubject(),
+            subject,
                 key: `diaryband:${update.id}`, sourceType: "DIARY_UPDATE", sourceId: update.id,
               }).catch(() => {})
             }
             for (let c = 0; c < structuredCategories; c++) {
               await awardProgression(session.user.id, "STRUCTURED_CATEGORY", reason, {
-            subject: await getAwardSubject(),
+            subject,
                 key: `diarycat:${update.id}:${c}`, sourceType: "DIARY_UPDATE", sourceId: update.id,
               }).catch(() => {})
             }
           } else {
             await awardProgression(session.user.id, "UPDATE_RICH", reason, {
-            subject: await getAwardSubject(),
+            subject,
               key: `diaryband:${update.id}`, sourceType: "DIARY_UPDATE", sourceId: update.id,
               xp: 0, marker: true,
               meta: { dup: "reduced", similarity: dup.similarity, updateId: update.id },
@@ -437,7 +441,7 @@ export async function POST(request: Request) {
         const key = `metric-first:${session.user.id}:${f}`
         if (done.has(key)) continue
         await awardProgression(session.user.id, "METRIC_FIRST", `First ${f} reading logged`, {
-            subject: await getAwardSubject(),
+            subject,
           key, sourceType: "DIARY_UPDATE", sourceId: update.id,
         }).catch(() => {})
       }
@@ -466,12 +470,12 @@ export async function POST(request: Request) {
 
     // Grow-journey milestones recompute from live rows — a new meaningful
     // update day or stage change may cross a gate. Keyed, idempotent.
-    await evaluateGrowJourney(diaryId).catch(() => {})
+    await evaluateGrowJourney(diaryId, { subject }).catch(() => {})
 
     // Streak and diary badges are rule-backed via the growStreak stat —
     // run the standard check so updates under the 10-char rep floor (which
     // skip the award pipeline) still advance badges.
-    await checkBadges(session.user.id).catch(() => {})
+    await checkBadges(session.user.id, { subject }).catch(() => {})
 
     // TerpBot announces genuine stage transitions publicly — once per
     // diary + resulting stage. The helper re-checks PUBLIC visibility,
