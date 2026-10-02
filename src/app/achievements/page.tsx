@@ -9,6 +9,7 @@ import EmptyState from "@/components/ui/empty-state"
 import AchievementBadge from "@/components/achievement-badge"
 import { useToast } from "@/components/ui/toast"
 import Tooltip from "@/components/ui/tooltip"
+import PageHeader from "@/components/ui/page-header"
 import { cn } from "@/lib/utils"
 
 interface Achievement {
@@ -119,18 +120,22 @@ export default function AchievementsPage() {
   return (
     <div className="min-h-screen bg-background">
       <div className="max-w-4xl mx-auto px-4 py-8">
-        <div className="mb-6">
-          <div className="flex items-center gap-2 mb-1">
-            <Award className="w-6 h-6 text-primary" />
-            <h1 className="font-display text-2xl font-bold tracking-tight">Achievements</h1>
-          </div>
-          <p className="text-sm text-muted-foreground">
-            {earnedCount} of {achievements.length} earned.
-            {showcase
-              ? ` Pin up to ${showcase.slots} favorites to showcase on your profile (${showcase.pinned} pinned).`
-              : " Pin your favorites to showcase them on your profile."}
-          </p>
-        </div>
+        <PageHeader
+          size="md"
+          title={
+            <span className="flex items-center gap-2">
+              <Award className="w-6 h-6 text-primary" /> Achievements
+            </span>
+          }
+          description={
+            <>
+              {earnedCount} of {achievements.length} earned.
+              {showcase
+                ? ` Pin up to ${showcase.slots} favorites to showcase on your profile (${showcase.pinned} pinned).`
+                : " Pin your favorites to showcase them on your profile."}
+            </>
+          }
+        />
 
         <div className="flex gap-2 mb-6 flex-wrap">
           {(["all", "earned", "in-progress", "locked"] as Filter[]).map((f) => (

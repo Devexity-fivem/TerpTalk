@@ -13,6 +13,7 @@ import { Avatar } from "@/components/ui/avatar"
 import UserPopover from "@/components/user-popover"
 import { cn } from "@/lib/utils"
 import LinkTabs from "@/components/ui/link-tabs"
+import PageHeader from "@/components/ui/page-header"
 import { publicDiaryWhere } from "@/lib/diary-visibility"
 
 export const revalidate = 300 // public content, edge-cached
@@ -286,14 +287,15 @@ export default async function LeaderboardPage({
   return (
     <div className="min-h-screen bg-background">
       <div className="max-w-3xl mx-auto px-4 py-8">
-        <div className="mb-6 text-center">
-          <Award className="w-12 h-12 text-primary mx-auto mb-3" />
-          <span className="tt-eyebrow">The ladder</span>
-          <h1 className="font-display text-3xl sm:text-4xl font-bold mt-1.5 mb-2 tracking-tight">Top Growers</h1>
-          <p className="text-muted-foreground">
-            Earn XP by posting, journaling, adding strains, and helping the community.
-          </p>
-        </div>
+        <PageHeader
+          context={<span className="tt-eyebrow">The ladder</span>}
+          title={
+            <span className="flex items-center gap-3">
+              <Award className="w-8 h-8 text-primary" /> Top Growers
+            </span>
+          }
+          description="Earn XP by posting, journaling, adding strains, and helping the community."
+        />
 
         {/* Category tabs */}
         {/* sm:overflow-x-visible keeps pill tooltips from clipping; small screens still scroll */}

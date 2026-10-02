@@ -5,6 +5,7 @@ import Link from "next/link"
 import ContestBoard from "@/components/contest-board"
 import ProfileCard from "@/components/ui/profile-card"
 import DiaryContestBoard from "@/components/diary-contest-board"
+import PageHeader from "@/components/ui/page-header"
 import { resolveWeeklyWinner, resolveMonthlyDiaryWinner } from "@/lib/contest-awards"
 import { diaryPath } from "@/lib/slugs"
 
@@ -41,15 +42,19 @@ export default async function ContestPage() {
   return (
     <div className="min-h-screen bg-background">
       <div className="max-w-5xl mx-auto px-4 py-8">
-        <div className="mb-8">
-          <span className="tt-eyebrow">Weekly showdown</span>
-          <h1 className="font-display text-3xl sm:text-4xl font-bold mt-1.5 mb-2 flex items-center gap-3 tracking-tight">
-            <Trophy className="w-8 h-8 text-warning" /> Budshot of the Week
-          </h1>
-          <p className="text-muted-foreground">
-            Submit your best budshot each week. The community votes — most votes earns the <span className="text-warning font-medium">Weekly Winner</span> badge.
-          </p>
-        </div>
+        <PageHeader
+          context={<span className="tt-eyebrow">Weekly showdown</span>}
+          title={
+            <span className="flex items-center gap-3">
+              <Trophy className="w-8 h-8 text-warning" /> Budshot of the Week
+            </span>
+          }
+          description={
+            <>
+              Submit your best budshot each week. The community votes — most votes earns the <span className="text-warning font-medium">Weekly Winner</span> badge.
+            </>
+          }
+        />
 
         {lastWinner && (
           <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-4 mb-6 flex items-center gap-4">

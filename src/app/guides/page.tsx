@@ -4,6 +4,7 @@ import { BookOpen, Plus } from "@/lib/icons"
 import Link from "next/link"
 import EmptyState from "@/components/ui/empty-state"
 import ProfileCard from "@/components/ui/profile-card"
+import PageHeader from "@/components/ui/page-header"
 import { getSession } from "@/lib/session"
 import { blockedUserIds } from "@/lib/security"
 import { isModerator } from "@/lib/roles"
@@ -40,20 +41,22 @@ export default async function GuidesPage() {
   return (
     <div className="min-h-screen bg-background">
       <div className="max-w-4xl mx-auto px-4 py-8">
-        <div className="flex justify-between items-start mb-8">
-          <div>
-            <span className="tt-eyebrow">Knowledge base</span>
-            <h1 className="font-display text-3xl sm:text-4xl font-bold mt-1.5 mb-2 flex items-center gap-3 tracking-tight">
+        <PageHeader
+          context={<span className="tt-eyebrow">Knowledge base</span>}
+          title={
+            <span className="flex items-center gap-3">
               <BookOpen className="w-8 h-8 text-primary" /> Grow Guides
-            </h1>
-            <p className="text-muted-foreground">Staff-written knowledge — from seed to cure.</p>
-          </div>
-          {isStaff && (
-            <Link href="/guides/new" className="flex items-center gap-1.5 px-4 py-2 bg-primary text-primary-foreground rounded-full text-sm hover:bg-primary/90">
-              <Plus className="w-4 h-4" /> New Guide
-            </Link>
-          )}
-        </div>
+            </span>
+          }
+          description="Staff-written knowledge — from seed to cure."
+          actions={
+            isStaff && (
+              <Link href="/guides/new" className="flex items-center gap-1.5 px-4 py-2 bg-primary text-primary-foreground rounded-full text-sm hover:bg-primary/90">
+                <Plus className="w-4 h-4" /> New Guide
+              </Link>
+            )
+          }
+        />
 
         {guides.length === 0 ? (
           <div className="bg-card/80 rounded-2xl border border-border/70">

@@ -12,6 +12,7 @@ import RoleBadge from "@/components/role-badge"
 import ProfileCard from "@/components/ui/profile-card"
 import Tooltip from "@/components/ui/tooltip"
 import TimeAgo from "@/components/ui/time-ago"
+import PageHeader from "@/components/ui/page-header"
 import { diaryPath } from "@/lib/slugs"
 
 export const dynamic = "force-dynamic"
@@ -281,11 +282,11 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
         <LiveRefresh endpoint="/api/forum/updates" />
         <LiveRefresh endpoint="/api/diaries/updates" />
         {/* Header */}
-        <div className="mb-8">
-          <span className="tt-eyebrow">What&apos;s new</span>
-          <h1 className="font-display text-3xl font-bold mt-1.5 mb-2 tracking-tight">Your Feed</h1>
-          <p className="text-muted-foreground">Stay updated with the latest activity from across the community</p>
-        </div>
+        <PageHeader
+          context={<span className="tt-eyebrow">What&apos;s new</span>}
+          title="Your Feed"
+          description="Stay updated with the latest activity from across the community"
+        />
 
         {/* Onboarding resume banner */}
         {session?.user?.id && !session.user.onboardingCompletedAt && (

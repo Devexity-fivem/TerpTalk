@@ -14,6 +14,8 @@ import {
   Sprout, Lock, ChevronRight, Award, Loader2, ShieldCheck, Zap, CalendarCheck, Trophy, Flame, Check, Sparkles,
 } from "@/lib/icons"
 import { cn } from "@/lib/utils"
+import PageHeader from "@/components/ui/page-header"
+import SectionCard from "@/components/ui/section-card"
 import { signInHref } from "@/lib/callback-url"
 import { REP_RANKS, RANK_DISPLAY, UNLOCKS } from "@/lib/progression-config"
 
@@ -120,15 +122,15 @@ export default function ProgressPage() {
   return (
     <div className="min-h-screen bg-background">
       <div className="max-w-2xl mx-auto px-4 py-8">
-        <div className="mb-6">
-          <div className="flex items-center gap-2 mb-1">
-            <Sprout className="w-6 h-6 text-primary" />
-            <h1 className="font-display text-2xl font-bold tracking-tight">My progress</h1>
-          </div>
-          <p className="text-sm text-muted-foreground">
-            Your garden, your goals, and what you can unlock next.
-          </p>
-        </div>
+        <PageHeader
+          size="md"
+          title={
+            <span className="flex items-center gap-2">
+              <Sprout className="w-6 h-6 text-primary" /> My progress
+            </span>
+          }
+          description="Your garden, your goals, and what you can unlock next."
+        />
 
         {/* Level card */}
         <section aria-label="Level" className="bg-card/80 rounded-2xl border border-border/70 p-4 mb-4">
@@ -210,14 +212,22 @@ export default function ProgressPage() {
 
         {/* Garden streak — consecutive daily check-ins pay once-ever
             milestone bonuses. Missed days just restart the count. */}
-        <section aria-label="Garden streak" className="bg-card/80 rounded-2xl border border-border/70 p-4 mb-4">
-          <div className="flex items-center gap-2 mb-1">
-            <Flame className={cn("w-4 h-4", (data.streak?.days ?? 0) > 0 ? "text-warning" : "text-muted-foreground")} />
-            <h2 className="font-display text-sm font-semibold">Garden streak</h2>
-            <span className="ml-auto text-xs text-muted-foreground">
+        <SectionCard
+          compact
+          className="mb-4"
+          id="garden-streak"
+          title={
+            <span className="flex items-center gap-2">
+              <Flame className={cn("w-4 h-4", (data.streak?.days ?? 0) > 0 ? "text-warning" : "text-muted-foreground")} />
+              Garden streak
+            </span>
+          }
+          actions={
+            <span className="text-xs text-muted-foreground">
               {data.streak && data.streak.days > 0 ? `${data.streak.days} day${data.streak.days === 1 ? "" : "s"}` : "not started"}
             </span>
-          </div>
+          }
+        >
           {data.streak && data.streak.days > 0 ? (
             <p className="text-xs text-muted-foreground">
               {data.streak.next ? (
@@ -234,15 +244,22 @@ export default function ProgressPage() {
               Check in daily to grow your streak — milestones mark your run, and long streaks open perk shortcuts (60 days pins a harvest, 100 puts your grow in the Spotlight).
             </p>
           )}
-        </section>
+        </SectionCard>
 
         {/* The Path — every rank on the road to Master Gardener */}
-        <section aria-label="The Path to Master Cultivator" className="bg-card/80 rounded-2xl border border-border/70 p-4 mb-4">
-          <div className="flex items-center gap-2 mb-3">
-            <Trophy className="w-4 h-4 text-primary" />
-            <h2 className="font-display text-sm font-semibold">The Path to Master Cultivator</h2>
-            <span className="ml-auto text-xs text-muted-foreground">{data.rank.name} · rank {REP_RANKS.findIndex((t) => t.name === data.rank.name) + 1} of {REP_RANKS.length}</span>
-          </div>
+        <SectionCard
+          compact
+          className="mb-4"
+          id="path-to-mastery"
+          title={
+            <span className="flex items-center gap-2">
+              <Trophy className="w-4 h-4 text-primary" /> The Path to Master Cultivator
+            </span>
+          }
+          actions={
+            <span className="text-xs text-muted-foreground">{data.rank.name} · rank {REP_RANKS.findIndex((t) => t.name === data.rank.name) + 1} of {REP_RANKS.length}</span>
+          }
+        >
           <ol className="space-y-1">
             {REP_RANKS.map((t, i) => {
               const display = RANK_DISPLAY[t.name] ?? RANK_DISPLAY.Seed
@@ -289,7 +306,7 @@ export default function ProgressPage() {
               )
             })}
           </ol>
-        </section>
+        </SectionCard>
 
         {/* Future unlocks — roadmap only. Everything here is still
             planned; it is deliberately kept out of the earned-reward
@@ -340,15 +357,22 @@ export default function ProgressPage() {
 
         {/* Getting Rooted journey */}
         {data.journey && !data.journey.complete && (
-          <section aria-label="Getting Rooted journey" className="bg-card/80 rounded-2xl border border-border/70 p-4 mb-4">
-            <div className="flex items-center gap-2 mb-1">
-              <Sprout className="w-4 h-4 text-primary" />
-              <h2 className="font-display text-sm font-semibold">{data.journey.name}</h2>
-              <span className="ml-auto text-xs text-muted-foreground">
+          <SectionCard
+            compact
+            className="mb-4"
+            id="journey"
+            title={
+              <span className="flex items-center gap-2">
+                <Sprout className="w-4 h-4 text-primary" /> {data.journey.name}
+              </span>
+            }
+            description={data.journey.description}
+            actions={
+              <span className="text-xs text-muted-foreground">
                 {data.journey.doneCount}/{data.journey.steps.length} · +{data.journey.reward} XP
               </span>
-            </div>
-            <p className="text-xs text-muted-foreground mb-3">{data.journey.description}</p>
+            }
+          >
             <ol className="space-y-2">
               {data.journey.steps.map((s, i) => (
                 <li key={s.key} className="flex items-center gap-2.5">
@@ -372,19 +396,26 @@ export default function ProgressPage() {
                 </li>
               ))}
             </ol>
-          </section>
+          </SectionCard>
         )}
 
         {/* Trust standing */}
         {data.trust && (
-          <section aria-label="Community trust" className="bg-card/80 rounded-2xl border border-border/70 p-4 mb-4">
-            <div className="flex items-center gap-2 mb-2">
-              <ShieldCheck className="w-4 h-4 text-primary" />
-              <h2 className="font-display text-sm font-semibold">Community standing</h2>
-              <span className={cn("ml-auto inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium", data.trust.standing.bg, data.trust.standing.color)}>
+          <SectionCard
+            compact
+            className="mb-4"
+            id="community-trust"
+            title={
+              <span className="flex items-center gap-2">
+                <ShieldCheck className="w-4 h-4 text-primary" /> Community standing
+              </span>
+            }
+            actions={
+              <span className={cn("inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium", data.trust.standing.bg, data.trust.standing.color)}>
                 <span aria-hidden="true">{data.trust.standing.icon}</span> {data.trust.standing.name}
               </span>
-            </div>
+            }
+          >
             <p className="text-xs text-muted-foreground">
               Standing grows when other members value your contributions — accepted answers,
               likes received, and referrals count. Posting alone doesn&apos;t raise it.
@@ -395,19 +426,26 @@ export default function ProgressPage() {
                 {data.trust.next.min.toLocaleString()} trust ({data.trust.score.toLocaleString()} now)
               </p>
             )}
-          </section>
+          </SectionCard>
         )}
 
         {/* Today's quests */}
         {data.quests && data.quests.items.length > 0 && (
-          <section aria-label="Daily quests" className="bg-card/80 rounded-2xl border border-border/70 p-4 mb-4">
-            <div className="flex items-center gap-2 mb-1">
-              <Zap className="w-4 h-4 text-primary" />
-              <h2 className="font-display text-sm font-semibold">Today&apos;s quests</h2>
-              <span className="ml-auto text-xs text-muted-foreground">
+          <SectionCard
+            compact
+            className="mb-4"
+            id="daily-quests"
+            title={
+              <span className="flex items-center gap-2">
+                <Zap className="w-4 h-4 text-primary" /> Today&apos;s quests
+              </span>
+            }
+            actions={
+              <span className="text-xs text-muted-foreground">
                 {questsDone}/{data.quests.items.length} · resets daily
               </span>
-            </div>
+            }
+          >
             <p className="text-[11px] text-muted-foreground mb-3">
               Small optional goals. Miss them freely — tomorrow brings a new mix.
             </p>
@@ -435,19 +473,26 @@ export default function ProgressPage() {
                 </div>
               ))}
             </div>
-          </section>
+          </SectionCard>
         )}
 
         {/* Weekly challenges */}
-        <section aria-label="Weekly challenges" className="bg-card/80 rounded-2xl border border-border/70 p-4 mb-4">
-          <div className="flex items-center gap-2 mb-1">
-            <CalendarCheck className="w-4 h-4 text-primary" />
-            <h2 className="font-display text-sm font-semibold">This week</h2>
-            <span className="ml-auto text-xs text-muted-foreground">
+        <SectionCard
+          compact
+          className="mb-4"
+          id="weekly-challenges"
+          title={
+            <span className="flex items-center gap-2">
+              <CalendarCheck className="w-4 h-4 text-primary" /> This week
+            </span>
+          }
+          actions={
+            <span className="text-xs text-muted-foreground">
               {challengesDone}/{data.challenges.items.length} · resets{" "}
               {new Date(data.challenges.endsAt).toLocaleDateString([], { weekday: "short" })}
             </span>
-          </div>
+          }
+        >
           <div className="space-y-2 mt-3">
             {data.challenges.items.map((c) => (
               <div key={c.slug} className="flex items-center gap-3 text-sm">
@@ -469,18 +514,25 @@ export default function ProgressPage() {
               </div>
             ))}
           </div>
-        </section>
+        </SectionCard>
 
         {/* Almost earned */}
         {data.nearBadges.length > 0 && (
-          <section aria-label="Almost earned" className="bg-card/80 rounded-2xl border border-border/70 p-4 mb-4">
-            <div className="flex items-center gap-2 mb-3">
-              <Trophy className="w-4 h-4 text-primary" />
-              <h2 className="font-display text-sm font-semibold">Almost earned</h2>
-              <Link href="/achievements" className="ml-auto text-xs text-primary hover:underline inline-flex items-center gap-0.5">
+          <SectionCard
+            compact
+            className="mb-4"
+            id="almost-earned"
+            title={
+              <span className="flex items-center gap-2">
+                <Trophy className="w-4 h-4 text-primary" /> Almost earned
+              </span>
+            }
+            actions={
+              <Link href="/achievements" className="text-xs text-primary hover:underline inline-flex items-center gap-0.5">
                 All achievements <ChevronRight className="w-3 h-3" aria-hidden="true" />
               </Link>
-            </div>
+            }
+          >
             <div className="space-y-2">
               {data.nearBadges.map((b) => (
                 <div key={b.name} className="flex items-center gap-3 text-sm">
@@ -499,16 +551,22 @@ export default function ProgressPage() {
                 </div>
               ))}
             </div>
-          </section>
+          </SectionCard>
         )}
 
         {/* Recent wins + links */}
-        <section aria-label="Recent accomplishments" className="bg-card/80 rounded-2xl border border-border/70 p-4">
-          <div className="flex items-center gap-2 mb-3">
-            <Award className="w-4 h-4 text-primary" />
-            <h2 className="font-display text-sm font-semibold">Recent accomplishments</h2>
-            <span className="ml-auto text-xs text-muted-foreground">{data.badgeCount} badges total</span>
-          </div>
+        <SectionCard
+          compact
+          id="recent-accomplishments"
+          title={
+            <span className="flex items-center gap-2">
+              <Award className="w-4 h-4 text-primary" /> Recent accomplishments
+            </span>
+          }
+          actions={
+            <span className="text-xs text-muted-foreground">{data.badgeCount} badges total</span>
+          }
+        >
           {data.recentBadges.length > 0 ? (
             <div className="flex flex-wrap gap-1.5">
               {data.recentBadges.map((b) => (
@@ -529,7 +587,7 @@ export default function ProgressPage() {
             <Link href="/leaderboard" className="text-primary hover:underline">Leaderboard</Link>
             <Link href="/profile#rewards" className="text-primary hover:underline">Rewards</Link>
           </div>
-        </section>
+        </SectionCard>
       </div>
     </div>
   )

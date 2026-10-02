@@ -11,6 +11,7 @@ import FollowedThreads from "@/components/followed-threads"
 import Tooltip from "@/components/ui/tooltip"
 import Surface from "@/components/ui/surface"
 import TimeAgo from "@/components/ui/time-ago"
+import PageHeader from "@/components/ui/page-header"
 
 // Dynamic: the client polls for new threads and calls router.refresh(),
 // so this page must not serve stale ISR when refreshed.
@@ -142,11 +143,11 @@ export default async function ForumPage() {
       <ForumLiveRefresh latestThreadId={recentThreads[0]?.id ?? null} />
       <div className="max-w-7xl mx-auto px-4 py-8">
         {/* Header */}
-        <div className="mb-6">
-          <span className="tt-eyebrow">The commons</span>
-          <h1 className="font-display text-3xl font-bold mt-1.5 mb-1 tracking-tight">Discussions</h1>
-          <p className="text-sm text-muted-foreground">Join discussions, share knowledge, and connect with fellow growers</p>
-        </div>
+        <PageHeader
+          context={<span className="tt-eyebrow">The commons</span>}
+          title="Discussions"
+          description="Join discussions, share knowledge, and connect with fellow growers"
+        />
 
         <div className="grid lg:grid-cols-3 gap-6">
           {/* Main Forum Categories */}

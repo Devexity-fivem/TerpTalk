@@ -8,7 +8,9 @@ import RoleBadge from "@/components/role-badge"
 import ProfileCard from "@/components/ui/profile-card"
 import { LiveRefresh } from "@/components/live-refresh"
 import EmptyState from "@/components/ui/empty-state"
+import SectionCard from "@/components/ui/section-card"
 import TimeAgo from "@/components/ui/time-ago"
+import PageHeader from "@/components/ui/page-header"
 
 export const dynamic = "force-dynamic"
 
@@ -96,11 +98,11 @@ export default async function DiscoverPage({
       <div className="max-w-4xl mx-auto px-4 py-8">
         <LiveRefresh endpoint="/api/forum/updates" />
         <LiveRefresh endpoint="/api/diaries/updates" />
-        <div className="mb-6">
-          <span className="tt-eyebrow">Fresh from the garden</span>
-          <h1 className="font-display text-3xl font-bold mt-1.5 mb-2 tracking-tight">Discover</h1>
-          <p className="text-muted-foreground">Find the best and latest grower conversations.</p>
-        </div>
+        <PageHeader
+          context={<span className="tt-eyebrow">Fresh from the garden</span>}
+          title="Discover"
+          description="Find the best and latest grower conversations."
+        />
 
         <div className="flex gap-1.5 mb-6 p-1 rounded-full bg-secondary/50 border border-border/60 w-fit">
           <Link href="/discover?tab=latest" className={tabCls("latest")}>Latest</Link>
@@ -108,11 +110,7 @@ export default async function DiscoverPage({
           <Link href="/discover?tab=following" className={tabCls("following")}><Users className="w-4 h-4 inline mr-1" /> Following</Link>
         </div>
 
-        <div className="bg-card/80 rounded-2xl border border-border/70 p-4 sm:p-5">
-          <div className="flex items-center gap-2 mb-4">
-            {icon}
-            <h2 className="font-display font-semibold">{heading}</h2>
-          </div>
+        <SectionCard title={<span className="flex items-center gap-2">{icon}{heading}</span>}>
           {threads.length === 0 ? (
             <EmptyState
               icon={activeTab === "following" && !session?.user?.id ? Users : MessageSquare}
@@ -174,7 +172,7 @@ export default async function DiscoverPage({
               ))}
             </div>
           )}
-        </div>
+        </SectionCard>
       </div>
     </div>
   )

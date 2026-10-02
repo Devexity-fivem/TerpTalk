@@ -1,6 +1,7 @@
 import { Suspense } from "react"
 import { buildMetadata } from "@/lib/seo"
 import SearchResults from "@/components/search-results"
+import PageHeader from "@/components/ui/page-header"
 
 export const metadata = buildMetadata({
   title: "Search",
@@ -13,10 +14,10 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
   return (
     <div className="min-h-screen bg-background">
       <div className="max-w-4xl mx-auto px-4 py-8">
-        <div className="mb-6">
-          <span className="tt-eyebrow">The whole commons</span>
-          <h1 className="font-display text-3xl font-bold mt-1.5 tracking-tight">Search TerpTalk</h1>
-        </div>
+        <PageHeader
+          context={<span className="tt-eyebrow">The whole commons</span>}
+          title="Search TerpTalk"
+        />
         <Suspense fallback={<p className="text-muted-foreground">Loading…</p>}>
           {/* key forces a fresh fetch-state when the query changes */}
           <SearchResults key={q || ""} />

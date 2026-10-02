@@ -6,6 +6,7 @@ import { Search, Plus, Leaf, ChevronLeft, ChevronRight, SlidersHorizontal } from
 import Link from "next/link"
 import EmptyState from "@/components/ui/empty-state"
 import StrainCard from "@/components/strain-card"
+import PageHeader from "@/components/ui/page-header"
 import { strainTypeLabel } from "@/lib/strain-stats"
 import {
   STRAIN_TYPES,
@@ -190,11 +191,11 @@ export default async function StrainsPage({
     <div className="min-h-screen bg-background">
       <div className="max-w-7xl mx-auto px-4 py-8">
         {/* Header */}
-        <div className="mb-8">
-          <span className="tt-eyebrow">Genetics vault</span>
-          <h1 className="font-display text-3xl sm:text-4xl font-bold mt-1.5 mb-2 tracking-tight">Strain Database</h1>
-          <p className="text-muted-foreground">Community-maintained database of cannabis strains, genetics, and growing characteristics</p>
-        </div>
+        <PageHeader
+          context={<span className="tt-eyebrow">Genetics vault</span>}
+          title="Strain Database"
+          description="Community-maintained database of cannabis strains, genetics, and growing characteristics"
+        />
 
         {/* Search */}
         <form action="/strains" className="mb-4">

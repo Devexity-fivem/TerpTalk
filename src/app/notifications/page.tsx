@@ -14,6 +14,7 @@ import EmptyState from "@/components/ui/empty-state"
 import Tabs from "@/components/ui/tabs"
 import ConfirmDialog from "@/components/ui/confirm-dialog"
 import Tooltip from "@/components/ui/tooltip"
+import PageHeader from "@/components/ui/page-header"
 import { Avatar } from "@/components/ui/avatar"
 import { formatRelativeTime } from "@/lib/time"
 import { cn } from "@/lib/utils"
@@ -268,49 +269,54 @@ export default function NotificationsPage() {
   return (
     <div className="min-h-screen bg-background">
       <div className="mx-auto max-w-2xl px-4 py-8">
-        <div className="mb-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Bell className="h-6 w-6 text-primary" />
-            <h1 className="font-display text-2xl font-bold tracking-tight">Notifications</h1>
-            {unread > 0 && (
-              <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-medium text-primary" aria-live="polite">
-                {unread} new
-              </span>
-            )}
-          </div>
-          <div className="flex items-center gap-1">
-          <Tooltip content="Notification settings">
-            <Link
-              href="/settings/notifications"
-              aria-label="Notification settings"
-              className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
-            >
-              <Settings className="h-4 w-4" />
-            </Link>
-          </Tooltip>
-          {unread > 0 && (
-            <button
-              onClick={markAllRead}
-              disabled={marking}
-              className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground disabled:opacity-50"
-            >
-              {marking ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCheck className="h-4 w-4" />}
-              Mark all read
-            </button>
-          )}
-          {notifications.length > 0 && (
-            <Tooltip content="Clear all notifications">
-              <button
-                onClick={() => setConfirmClearAll(true)}
-                aria-label="Clear all notifications"
-                className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-secondary hover:text-destructive"
-              >
-                <Trash2 className="h-4 w-4" />
-              </button>
-            </Tooltip>
-          )}
-          </div>
-        </div>
+        <PageHeader
+          size="md"
+          title={
+            <span className="flex items-center gap-3">
+              <Bell className="h-6 w-6 text-primary" />
+              Notifications
+              {unread > 0 && (
+                <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-medium text-primary" aria-live="polite">
+                  {unread} new
+                </span>
+              )}
+            </span>
+          }
+          actions={
+            <>
+              <Tooltip content="Notification settings">
+                <Link
+                  href="/settings/notifications"
+                  aria-label="Notification settings"
+                  className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+                >
+                  <Settings className="h-4 w-4" />
+                </Link>
+              </Tooltip>
+              {unread > 0 && (
+                <button
+                  onClick={markAllRead}
+                  disabled={marking}
+                  className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground disabled:opacity-50"
+                >
+                  {marking ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCheck className="h-4 w-4" />}
+                  Mark all read
+                </button>
+              )}
+              {notifications.length > 0 && (
+                <Tooltip content="Clear all notifications">
+                  <button
+                    onClick={() => setConfirmClearAll(true)}
+                    aria-label="Clear all notifications"
+                    className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-secondary hover:text-destructive"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </Tooltip>
+              )}
+            </>
+          }
+        />
 
         {/* Notification group tabs */}
         <Tabs

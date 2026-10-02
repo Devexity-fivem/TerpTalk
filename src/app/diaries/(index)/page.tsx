@@ -16,6 +16,8 @@ import StageProgress from "@/components/stage-progress"
 import { STAGE_LABELS, diaryCompleteness, diaryWeek } from "@/lib/diary-weeks"
 import { diaryPath } from "@/lib/slugs"
 import { LiveRefresh } from "@/components/live-refresh"
+import PageHeader from "@/components/ui/page-header"
+import SectionCard from "@/components/ui/section-card"
 
 // Dynamic — the grid must stay fresh for LiveRefresh's router.refresh()
 // (ISR would serve the stale shell even after a fingerprint change). The
@@ -263,23 +265,28 @@ export default async function DiariesPage({
       <div className="max-w-7xl mx-auto px-4 py-8">
         <LiveRefresh endpoint="/api/diaries/updates" />
         {/* Header */}
-        <div className="mb-6">
-          <span className="tt-eyebrow">Seed to harvest</span>
-          <h1 className="font-display text-3xl font-bold mt-1.5 mb-1 tracking-tight">Grow Diaries</h1>
-          <p className="text-sm text-muted-foreground">Document and share your complete grow journey from seed to harvest</p>
-        </div>
+        <PageHeader
+          context={<span className="tt-eyebrow">Seed to harvest</span>}
+          title="Grow Diaries"
+          description="Document and share your complete grow journey from seed to harvest"
+        />
 
         {/* Community grow data — aggregate-only stats, descriptive wording */}
-        <div className="bg-card/80 rounded-2xl border border-border/70 p-5 mb-6 tt-edge-card">
-          <div className="flex items-center gap-2 mb-4 flex-wrap">
-            <BarChart3 className="w-4 h-4 text-primary" />
-            <h2 className="font-display font-semibold">Community grow data</h2>
-            {stats.label && (
-              <span className={`text-xs px-2 py-0.5 rounded ml-auto ${stats.tier === "early" ? "bg-amber-500/10 text-warning" : "bg-secondary text-muted-foreground"}`}>
+        <SectionCard
+          className="mb-6 tt-edge-card"
+          title={
+            <span className="flex items-center gap-2">
+              <BarChart3 className="w-4 h-4 text-primary" /> Community grow data
+            </span>
+          }
+          actions={
+            stats.label && (
+              <span className={`text-xs px-2 py-0.5 rounded ${stats.tier === "early" ? "bg-amber-500/10 text-warning" : "bg-secondary text-muted-foreground"}`}>
                 {stats.label}
               </span>
-            )}
-          </div>
+            )
+          }
+        >
           {stats.tier === "none" ? (
             <p className="text-sm text-muted-foreground">
               Not enough community data yet — stats appear as members log grow diaries.
@@ -339,7 +346,7 @@ export default async function DiariesPage({
               </div>
             </div>
           )}
-        </div>
+        </SectionCard>
 
         {/* Featured Diaries — page 1 only */}
         {featured.length > 0 && (

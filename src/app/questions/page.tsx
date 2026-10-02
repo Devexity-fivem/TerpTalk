@@ -10,6 +10,7 @@ import Surface from "@/components/ui/surface"
 import TimeAgo from "@/components/ui/time-ago"
 import EmptyState from "@/components/ui/empty-state"
 import LinkTabs from "@/components/ui/link-tabs"
+import PageHeader from "@/components/ui/page-header"
 import { cn } from "@/lib/utils"
 
 export const metadata = {
@@ -139,13 +140,11 @@ export default async function QuestionsPage({
     <div className="min-h-screen bg-background">
       <div className="max-w-7xl mx-auto px-4 py-8">
         {/* Header */}
-        <div className="mb-6">
-          <span className="tt-eyebrow">Community</span>
-          <h1 className="font-display text-3xl sm:text-4xl font-bold mt-1.5 mb-2 tracking-tight">Grow Questions</h1>
-          <p className="text-muted-foreground max-w-2xl">
-            Real questions from real grows — answer what you can, and mark the reply that solved yours.
-          </p>
-        </div>
+        <PageHeader
+          context={<span className="tt-eyebrow">Community</span>}
+          title="Grow Questions"
+          description="Real questions from real grows — answer what you can, and mark the reply that solved yours."
+        />
 
         {/* Tabs */}
         <LinkTabs
