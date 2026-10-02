@@ -20,6 +20,7 @@ import { groupUpdatesByWeek, buildHarvestReport, diaryCompleteness, diaryDay, di
 import ReportButton from "@/components/report-button"
 import DiaryReactions from "@/components/diary-reactions"
 import OwnerDeleteButton from "@/components/owner-delete-button"
+import FeatureGrowButton from "@/components/feature-grow-button"
 import DiaryDiscussButton from "@/components/diary-discuss-button"
 import { escapeLike, strainFieldMatches, suggestStrainLink } from "@/lib/strain-stats"
 import { MEDIUM_LABELS, LIGHT_LABELS, TECHNIQUE_LABELS, DIFFICULTY_LABELS } from "@/lib/grow-fields"
@@ -296,14 +297,19 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
   // intelligence surface here; chat commands stay public-scope). Admin
   // editors don't get another member's intel.
   const isOwner = session?.user?.id === diary.author.id
-  const [growIntel, [envAnalyticsUnlocked, exportCsvUnlocked]] = isOwner
+  const [growIntel, [envAnalyticsUnlocked, exportCsvUnlocked], ownerProfile] = isOwner
     ? await Promise.all([
         getGrowIntel(diary.id, session!.user!.id).catch(() => null),
         // env-analytics (Vegged + Journaling 3) and export-tools (Trained)
         // gates — checked once here, server-side, per the locked §8 registry.
         hasUnlocks(session!.user!.id, ["env-analytics", "export-tools"]).catch(() => [false, false]),
+        // Featured-grow toggle state — owner-only read, joins the same batch.
+        prisma.profile.findUnique({
+          where: { userId: diary.author.id },
+          select: { featuredDiaryId: true },
+        }),
       ])
-    : [null, [false, false]]
+    : [null, [false, false], null]
 
   // Community comparison — aggregate strain stats (public/UNLISTED only,
   // min-sample gated) against facts already visible on this page.
@@ -632,6 +638,12 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
                       <Pencil className="w-4 h-4" />
                     </Link>
                   </Tooltip>
+                )}
+                {isOwner && (
+                  <FeatureGrowButton
+                    diaryId={diary.id}
+                    featured={ownerProfile?.featuredDiaryId === diary.id}
+                  />
                 )}
                 {isOwner && exportCsvUnlocked && (
                   <Tooltip content="Download full grow log (CSV)">
