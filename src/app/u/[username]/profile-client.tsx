@@ -1145,9 +1145,11 @@ function MemberProfile({ data, isSelf, username }: { data: ProfileResponse; isSe
             </div>
             <div className="overflow-y-auto p-2">
               {followSection.items.length === 0 && !followSection.loading ? (
-                <p className="text-sm text-muted-foreground text-center py-8">
-                  {followList === "followers" ? "No followers yet." : "Not following anyone yet."}
-                </p>
+                <EmptyState
+                  compact
+                  icon={Users}
+                  title={followList === "followers" ? "No followers yet." : "Not following anyone yet."}
+                />
               ) : (
                 <ul className="space-y-0.5">
                   {followSection.items.map((m) => (

@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation"
 import { Trash2, Loader2 } from "@/lib/icons"
 import { useToast } from "@/components/ui/toast"
 import Tooltip from "@/components/ui/tooltip"
+import ConfirmDialog from "@/components/ui/confirm-dialog"
 
 interface OwnerDeleteButtonProps {
   /** API route that accepts DELETE { id } */
@@ -34,11 +35,11 @@ export default function OwnerDeleteButton({
   const router = useRouter()
   const { toast } = useToast()
   const [busy, setBusy] = useState(false)
+  const [confirming, setConfirming] = useState(false)
 
   if (!session?.user?.id || session.user.id !== authorId) return null
 
   const handleDelete = async () => {
-    if (!confirm(confirmText)) return
     setBusy(true)
     try {
       const res = await fetch(endpoint, {
@@ -60,20 +61,34 @@ export default function OwnerDeleteButton({
   }
 
   return (
-    <Tooltip content={label}>
-      <button
-        onClick={handleDelete}
-        disabled={busy}
-        className={
-          iconOnly
-            ? "p-1.5 -m-1 text-muted-foreground hover:text-destructive transition-colors disabled:opacity-50"
-            : "inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-destructive border border-destructive/40 rounded-lg hover:bg-destructive/10 transition-colors disabled:opacity-50"
-        }
-        aria-label={label}
-      >
-        {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
-        {!iconOnly && label}
-      </button>
-    </Tooltip>
+    <>
+      <Tooltip content={label}>
+        <button
+          onClick={() => setConfirming(true)}
+          disabled={busy}
+          className={
+            iconOnly
+              ? "p-1.5 -m-1 text-muted-foreground hover:text-destructive transition-colors disabled:opacity-50"
+              : "inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-destructive border border-destructive/40 rounded-lg hover:bg-destructive/10 transition-colors disabled:opacity-50"
+          }
+          aria-label={label}
+        >
+          {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+          {!iconOnly && label}
+        </button>
+      </Tooltip>
+      <ConfirmDialog
+        open={confirming}
+        onCancel={() => setConfirming(false)}
+        onConfirm={async () => {
+          setConfirming(false)
+          await handleDelete()
+        }}
+        title={confirmText.split("?")[0] + "?"}
+        description={confirmText.includes("?") ? confirmText.slice(confirmText.indexOf("?") + 1).trim() || undefined : confirmText}
+        confirmLabel="Delete"
+        destructive
+      />
+    </>
   )
 }

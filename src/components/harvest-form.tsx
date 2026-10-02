@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import { Leaf, Loader2, Scale } from "@/lib/icons"
+import ConfirmDialog from "@/components/ui/confirm-dialog"
 import { useRouter } from "next/navigation"
 
 interface HarvestFormProps {
@@ -42,6 +43,7 @@ export default function HarvestForm({
     return isNaN(d.getTime()) ? "" : d.toISOString().slice(0, 10)
   })
   const [busy, setBusy] = useState(false)
+  const [confirmUnmark, setConfirmUnmark] = useState(false)
   const [error, setError] = useState("")
   // Optional strain review — folded into the harvest record, never required.
   const [rating, setRating] = useState(initialRating?.toString() || "")
@@ -81,7 +83,7 @@ export default function HarvestForm({
   }
 
   const handleUnmark = async () => {
-    if (!canEdit || !confirm("Remove harvest record?")) return
+    if (!canEdit) return
     setBusy(true)
     setError("")
     const res = await fetch(`/api/diaries/${diaryId}/harvest`, {
@@ -133,7 +135,7 @@ export default function HarvestForm({
                   Edit
                 </button>
                 <button
-                  onClick={handleUnmark}
+                  onClick={() => setConfirmUnmark(true)}
                   disabled={busy}
                   className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-lg bg-destructive/10 text-destructive hover:bg-destructive/20 transition-colors disabled:opacity-50"
                 >
@@ -287,6 +289,19 @@ export default function HarvestForm({
           </form>
         </div>
       )}
+
+      <ConfirmDialog
+        open={confirmUnmark}
+        onCancel={() => setConfirmUnmark(false)}
+        onConfirm={async () => {
+          setConfirmUnmark(false)
+          await handleUnmark()
+        }}
+        title="Remove harvest record?"
+        description="This diary will be marked as still growing — the yield entry is cleared."
+        confirmLabel="Remove"
+        destructive
+      />
     </div>
   )
 }

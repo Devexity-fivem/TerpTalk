@@ -12,7 +12,7 @@ import { currentWeekKey } from "@/lib/week"
 import { Avatar } from "@/components/ui/avatar"
 import UserPopover from "@/components/user-popover"
 import { cn } from "@/lib/utils"
-import Tooltip from "@/components/ui/tooltip"
+import LinkTabs from "@/components/ui/link-tabs"
 import { publicDiaryWhere } from "@/lib/diary-visibility"
 
 export const revalidate = 300 // public content, edge-cached
@@ -297,34 +297,22 @@ export default async function LeaderboardPage({
 
         {/* Category tabs */}
         {/* sm:overflow-x-visible keeps pill tooltips from clipping; small screens still scroll */}
-        <div className="flex gap-2 mb-2 overflow-x-auto sm:overflow-x-visible pb-1" role="tablist" aria-label="Leaderboard categories">
-          {TABS.map((t) => {
-            const pill = (
-              <Link
-                key={t.key}
-                href={t.key === "rep" ? "/leaderboard" : `/leaderboard?tab=${t.key}`}
-                role="tab"
-                aria-selected={tab === t.key}
-                className={cn(
-                  "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border whitespace-nowrap transition-colors",
-                  tab === t.key
-                    ? "border-primary bg-primary/10 text-primary"
-                    : "border-border text-muted-foreground hover:text-foreground"
-                )}
-              >
+        <LinkTabs
+          ariaLabel="Leaderboard categories"
+          className="mb-2 sm:overflow-x-visible"
+          value={tab}
+          items={TABS.map((t) => ({
+            id: t.key,
+            tip: t.tip,
+            href: t.key === "rep" ? "/leaderboard" : `/leaderboard?tab=${t.key}`,
+            label: (
+              <>
                 <t.icon className="w-3.5 h-3.5" aria-hidden="true" />
                 {t.label}
-              </Link>
-            )
-            return t.tip ? (
-              <Tooltip key={t.key} content={t.tip} side="bottom">
-                {pill}
-              </Tooltip>
-            ) : (
-              pill
-            )
-          })}
-        </div>
+              </>
+            ),
+          }))}
+        />
         <p className="text-xs text-muted-foreground mb-4 px-1">{activeTab.blurb}</p>
 
         <div className="bg-card/80 rounded-2xl border border-border/70 overflow-hidden">

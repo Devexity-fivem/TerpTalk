@@ -6,6 +6,7 @@ import { isModerator } from "@/lib/roles"
 import { useRouter } from "next/navigation"
 import { Pin, Lock, FolderInput, Trash2 } from "@/lib/icons"
 import Tooltip from "@/components/ui/tooltip"
+import ConfirmDialog from "@/components/ui/confirm-dialog"
 import { useToast } from "@/components/ui/toast"
 
 interface CategoryOption {
@@ -35,6 +36,7 @@ export default function ThreadModActions({
   const [busy, setBusy] = useState(false)
   const [moveOpen, setMoveOpen] = useState(false)
   const [categories, setCategories] = useState<CategoryOption[] | null>(null)
+  const [confirmDelete, setConfirmDelete] = useState(false)
   const role = (session?.user as { role?: string })?.role
   if (!isModerator(role)) return null
 
@@ -92,7 +94,6 @@ export default function ThreadModActions({
   }
 
   const remove = async () => {
-    if (!confirm("Delete this thread? All replies are removed and the author is notified.")) return
     const reason = prompt("Reason shown to the author (required):")
     if (!reason?.trim()) return
     const ok = await post({
@@ -154,10 +155,23 @@ export default function ThreadModActions({
         )}
       </div>
       <Tooltip content="Delete: remove this thread and all replies (audited, author notified)">
-        <button onClick={remove} disabled={busy} className={`${btn} bg-destructive/10 text-destructive hover:bg-destructive/20`}>
+        <button onClick={() => setConfirmDelete(true)} disabled={busy} className={`${btn} bg-destructive/10 text-destructive hover:bg-destructive/20`}>
           <Trash2 className="w-3 h-3" /> Delete
         </button>
       </Tooltip>
+
+      <ConfirmDialog
+        open={confirmDelete}
+        onCancel={() => setConfirmDelete(false)}
+        onConfirm={async () => {
+          setConfirmDelete(false)
+          await remove()
+        }}
+        title="Delete this thread?"
+        description="All replies are removed and the author is notified. You'll be asked for a reason next."
+        confirmLabel="Delete thread"
+        destructive
+      />
     </div>
   )
 }

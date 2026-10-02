@@ -5,6 +5,7 @@ import { notFound } from "next/navigation"
 import { MessageSquare, Users, Clock, Pin, Lock, CheckCircle2, BookOpen } from "@/lib/icons"
 import { CATEGORY_TO_TOPICS } from "@/lib/guides"
 import Link from "next/link"
+import EmptyState from "@/components/ui/empty-state"
 import { buildMetadata } from "@/lib/seo"
 import { LiveRefresh } from "@/components/live-refresh"
 import { Breadcrumbs } from "@/components/breadcrumbs"
@@ -195,17 +196,12 @@ export default async function CategoryPage({
           </div>
 
           {category.threads.length === 0 ? (
-            <div className="p-8 text-center">
-              <MessageSquare className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
-              <h3 className="font-display text-base font-semibold mb-1">No discussions yet</h3>
-              <p className="text-sm text-muted-foreground mb-3">Be the first to start a discussion in this category!</p>
-              <Link
-                href={`/forum/new?category=${category.slug}`}
-                className="tt-cta inline-block rounded-full px-6 py-2.5 font-semibold text-primary-foreground transition-all"
-              >
-                Create First Discussion
-              </Link>
-            </div>
+            <EmptyState
+              icon={MessageSquare}
+              title="No discussions yet"
+              description="Be the first to start a discussion in this category!"
+              action={{ label: "Create First Discussion", href: `/forum/new?category=${category.slug}` }}
+            />
           ) : (
             <div className="divide-y divide-border/60">
               {category.threads.map((thread) => (

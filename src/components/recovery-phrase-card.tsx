@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { KeyRound, Loader2, Copy, Check, AlertTriangle } from "@/lib/icons"
+import ConfirmDialog from "@/components/ui/confirm-dialog"
 
 // Recovery phrase manager — generates a 12-word BIP39 phrase, shown ONCE.
 export default function RecoveryPhraseCard() {
@@ -20,8 +21,13 @@ export default function RecoveryPhraseCard() {
       .catch(() => setHasPhrase(false))
   }, [])
 
+  const [confirmRegen, setConfirmRegen] = useState(false)
+
   const startGenerate = () => {
-    if (hasPhrase && !confirm("Generate a NEW phrase? Your old phrase will stop working.")) return
+    if (hasPhrase) {
+      setConfirmRegen(true)
+      return
+    }
     setError("")
     setConfirming(true)
   }
@@ -150,6 +156,20 @@ export default function RecoveryPhraseCard() {
         </div>
       )}
       {error && <p className="text-xs text-destructive mt-2">{error}</p>}
+
+      <ConfirmDialog
+        open={confirmRegen}
+        onCancel={() => setConfirmRegen(false)}
+        onConfirm={() => {
+          setConfirmRegen(false)
+          setError("")
+          setConfirming(true)
+        }}
+        title="Generate a new phrase?"
+        description="Your old recovery phrase will stop working immediately."
+        confirmLabel="Generate new phrase"
+        destructive
+      />
     </div>
   )
 }

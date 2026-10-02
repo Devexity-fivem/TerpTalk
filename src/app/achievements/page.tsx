@@ -4,7 +4,8 @@ import { useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
 import { useEffect, useMemo, useState } from "react"
 import { signInHref } from "@/lib/callback-url"
-import { Award, Loader2, Pin, PinOff } from "@/lib/icons"
+import { Award, Loader2, Pin, PinOff, Trophy } from "@/lib/icons"
+import EmptyState from "@/components/ui/empty-state"
 import AchievementBadge from "@/components/achievement-badge"
 import { useToast } from "@/components/ui/toast"
 import Tooltip from "@/components/ui/tooltip"
@@ -149,7 +150,12 @@ export default function AchievementsPage() {
         </div>
 
         {grouped.length === 0 && (
-          <p className="text-sm text-muted-foreground">Nothing in this view yet — keep growing.</p>
+          <EmptyState
+            compact
+            icon={Trophy}
+            title="Nothing in this view yet"
+            description="Keep growing — achievements unlock as you contribute."
+          />
         )}
 
         {grouped.map(([cat, list]) => (

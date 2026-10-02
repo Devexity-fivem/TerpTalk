@@ -38,6 +38,8 @@ import {
   type ChatMessageDeletedEvent,
 } from "@/lib/chat-client"
 import { useToast } from "@/components/ui/toast"
+import ConfirmDialog from "@/components/ui/confirm-dialog"
+import EmptyState from "@/components/ui/empty-state"
 import Tooltip from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
 import dynamic from "next/dynamic"
@@ -1033,9 +1035,9 @@ export default function ChatRoom({ embedded = false, headerActions }: ChatRoomPr
     }
   }
 
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null)
   const deleteOwnMessage = async (msgId: string) => {
     setActiveMenu(null)
-    if (!confirm("Delete this message? This cannot be undone.")) return
     try {
       const res = await fetch("/api/chat/messages", {
         method: "DELETE",
@@ -1272,13 +1274,11 @@ export default function ChatRoom({ embedded = false, headerActions }: ChatRoomPr
                 </p>
               </div>
             ) : messages.length === 0 ? (
-              <div className="text-center py-10">
-                <MessageCircle className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
-                <p className="font-medium text-sm">No messages yet</p>
-                <p className="text-xs text-muted-foreground">
-                  Start the conversation — or ask <span className="text-primary font-medium">@terpbot</span> for help.
-                </p>
-              </div>
+              <EmptyState
+                icon={MessageCircle}
+                title="No messages yet"
+                description="Start the conversation — or ask @terpbot for help."
+              />
             ) : (
               messages.map((msg, i) => {
                 // Group consecutive same-author messages — the first row of
@@ -1310,7 +1310,7 @@ export default function ChatRoom({ embedded = false, headerActions }: ChatRoomPr
                       onToggleMenu={toggleMenu}
                       onReply={startReply}
                       onModerate={takeModerationAction}
-                      onDeleteOwn={deleteOwnMessage}
+                      onDeleteOwn={setPendingDeleteId}
                     />
                   </Fragment>
                 )
@@ -1503,6 +1503,20 @@ export default function ChatRoom({ embedded = false, headerActions }: ChatRoomPr
           )}
         </div>
       </div>
+
+      <ConfirmDialog
+        open={pendingDeleteId !== null}
+        onCancel={() => setPendingDeleteId(null)}
+        onConfirm={async () => {
+          const id = pendingDeleteId
+          setPendingDeleteId(null)
+          if (id) await deleteOwnMessage(id)
+        }}
+        title="Delete this message?"
+        description="This cannot be undone."
+        confirmLabel="Delete"
+        destructive
+      />
     </div>
   )
 }

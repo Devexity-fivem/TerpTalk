@@ -11,6 +11,8 @@ import {
 } from "@/lib/icons"
 import Link from "next/link"
 import EmptyState from "@/components/ui/empty-state"
+import Tabs from "@/components/ui/tabs"
+import ConfirmDialog from "@/components/ui/confirm-dialog"
 import Tooltip from "@/components/ui/tooltip"
 import { Avatar } from "@/components/ui/avatar"
 import { formatRelativeTime } from "@/lib/time"
@@ -120,6 +122,7 @@ export default function NotificationsPage() {
   const [error, setError] = useState(false)
   const [marking, setMarking] = useState(false)
   const [activeGroup, setActiveGroup] = useState<NotifGroup>("all")
+  const [confirmClearAll, setConfirmClearAll] = useState(false)
   const seen = useRef(new Set<string>())
 
   const load = useCallback(async (cursor?: string) => {
@@ -200,7 +203,6 @@ export default function NotificationsPage() {
   }
 
   const clearAll = async () => {
-    if (!confirm("Clear all notifications? This can't be undone.")) return
     setNotifications([])
     await fetch("/api/notifications", {
       method: "DELETE",
@@ -299,7 +301,7 @@ export default function NotificationsPage() {
           {notifications.length > 0 && (
             <Tooltip content="Clear all notifications">
               <button
-                onClick={clearAll}
+                onClick={() => setConfirmClearAll(true)}
                 aria-label="Clear all notifications"
                 className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-secondary hover:text-destructive"
               >
@@ -311,34 +313,29 @@ export default function NotificationsPage() {
         </div>
 
         {/* Notification group tabs */}
-        <div className="mb-4 flex gap-1 overflow-x-auto scrollbar-none rounded-xl bg-secondary/40 p-1" role="tablist" aria-label="Notification categories">
-          {GROUP_LABELS.map(({ key, label, icon: GIcon }) => {
+        <Tabs
+          ariaLabel="Notification categories"
+          value={activeGroup}
+          onChange={(id) => setActiveGroup(id as NotifGroup)}
+          items={GROUP_LABELS.map(({ key, label, icon: GIcon }) => {
             const count = groupUnread(key)
-            return (
-              <button
-                key={key}
-                role="tab"
-                aria-selected={activeGroup === key}
-                onClick={() => setActiveGroup(key)}
-                className={cn(
-                  "flex items-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-2 text-sm font-medium transition-colors",
-                  activeGroup === key
-                    ? "bg-card text-foreground shadow-sm"
-                    : "text-muted-foreground hover:text-foreground hover:bg-card/50"
-                )}
-              >
-                <GIcon className="h-3.5 w-3.5" />
-                {label}
-                {count > 0 && (
-                  <span className="ml-0.5 rounded-full bg-primary/15 px-1.5 py-0.5 text-[10px] font-semibold text-primary tabular-nums">
-                    {count}
-                  </span>
-                )}
-              </button>
-            )
+            return {
+              id: key,
+              label: (
+                <>
+                  <GIcon className="h-3.5 w-3.5" />
+                  {label}
+                  {count > 0 && (
+                    <span className="ml-0.5 rounded-full bg-primary/15 px-1.5 py-0.5 text-[10px] font-semibold text-primary tabular-nums">
+                      {count}
+                    </span>
+                  )}
+                </>
+              ),
+            }
           })}
-        </div>
-
+        >
+          {() => (
         <ul className="divide-y divide-border/60 rounded-2xl border border-border/70 bg-card/80" aria-label="Notifications">
           {filteredNotifications.length === 0 && (
             <li className="list-none">
@@ -452,6 +449,8 @@ export default function NotificationsPage() {
             )
           })}
         </ul>
+          )}
+        </Tabs>
 
         {nextCursor && (
           <div className="mt-4 text-center">
@@ -465,6 +464,19 @@ export default function NotificationsPage() {
           </div>
         )}
       </div>
+
+      <ConfirmDialog
+        open={confirmClearAll}
+        onCancel={() => setConfirmClearAll(false)}
+        onConfirm={async () => {
+          setConfirmClearAll(false)
+          await clearAll()
+        }}
+        title="Clear all notifications?"
+        description="Every notification will be permanently deleted. This can't be undone."
+        confirmLabel="Clear all"
+        destructive
+      />
     </div>
   )
 }

@@ -9,6 +9,7 @@ import ProfileCard from "@/components/ui/profile-card"
 import Surface from "@/components/ui/surface"
 import TimeAgo from "@/components/ui/time-ago"
 import EmptyState from "@/components/ui/empty-state"
+import LinkTabs from "@/components/ui/link-tabs"
 import { cn } from "@/lib/utils"
 
 export const metadata = {
@@ -147,24 +148,12 @@ export default async function QuestionsPage({
         </div>
 
         {/* Tabs */}
-        <div className="flex flex-wrap gap-1.5 mb-4" role="tablist" aria-label="Filter questions">
-          {TABS.map((t) => (
-            <Link
-              key={t.key}
-              href={qs(t.key, activeCategory, 1)}
-              role="tab"
-              aria-selected={tab === t.key}
-              className={cn(
-                "rounded-full px-3.5 py-1.5 text-sm font-medium transition-colors min-h-9 inline-flex items-center",
-                tab === t.key
-                  ? "bg-primary text-primary-foreground"
-                  : "bg-secondary text-muted-foreground hover:text-foreground"
-              )}
-            >
-              {t.label}
-            </Link>
-          ))}
-        </div>
+        <LinkTabs
+          ariaLabel="Filter questions"
+          className="mb-4"
+          value={tab}
+          items={TABS.map((t) => ({ id: t.key, label: t.label, href: qs(t.key, activeCategory, 1) }))}
+        />
 
         {/* Question-category chips — only categories that read as help surfaces */}
         {data.categories.length > 1 && (

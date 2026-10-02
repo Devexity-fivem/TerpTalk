@@ -9,6 +9,7 @@ import RoleBadge from "@/components/role-badge"
 import TierChip from "@/components/tier-chip"
 import Surface from "@/components/ui/surface"
 import EmptyState from "@/components/ui/empty-state"
+import LinkTabs from "@/components/ui/link-tabs"
 import PageHeader from "@/components/ui/page-header"
 import { Avatar } from "@/components/ui/avatar"
 import UserPopover from "@/components/user-popover"
@@ -203,23 +204,13 @@ export default async function GrowersPage({
         />
 
         {/* Sort tabs — discovery, not ranking. No order here is a status claim. */}
-        <div className="flex flex-wrap gap-1.5 mb-6" role="tablist" aria-label="Browse growers">
-          {SORTS.map((s) => (
-            <Link
-              key={s.key}
-              href={href(s.key, 1)}
-              role="tab"
-              aria-selected={sort === s.key}
-              className={cn(
-                "rounded-full px-3.5 py-1.5 text-sm font-medium transition-colors min-h-9 inline-flex items-center",
-                sort === s.key
-                  ? "bg-primary text-primary-foreground"
-                  : "bg-secondary text-muted-foreground hover:text-foreground"
-              )}
-            >
-              {s.label}
-            </Link>
-          ))}
+        <div className="flex flex-wrap items-center gap-1.5 mb-6">
+          <LinkTabs
+            ariaLabel="Browse growers"
+            className="flex-1 min-w-0"
+            value={sort}
+            items={SORTS.map((s) => ({ id: s.key, label: s.label, href: href(s.key, 1) }))}
+          />
           <Link
             href="/leaderboard"
             className="ml-auto rounded-full px-3.5 py-1.5 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors min-h-9 inline-flex items-center"

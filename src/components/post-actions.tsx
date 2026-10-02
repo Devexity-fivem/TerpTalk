@@ -5,6 +5,7 @@ import { useSession } from "next-auth/react"
 import { Heart, Flag, Pencil, Trash2, Loader2 } from "@/lib/icons"
 import { useRouter } from "next/navigation"
 import Tooltip from "@/components/ui/tooltip"
+import ConfirmDialog from "@/components/ui/confirm-dialog"
 import { isModerator } from "@/lib/roles"
 
 interface PostActionsProps {
@@ -56,6 +57,7 @@ export default function PostActions({
   const [reportDesc, setReportDesc] = useState("")
   const [busy, setBusy] = useState(false)
   const [deleted, setDeleted] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(false)
   const [message, setMessage] = useState("")
 
   const isOwner = session?.user?.id === authorId
@@ -115,7 +117,6 @@ export default function PostActions({
   }
 
   const handleDelete = async () => {
-    if (!confirm("Delete this post? This cannot be undone.")) return
     setBusy(true)
     try {
       const res = await fetch("/api/forum/posts", {
@@ -206,7 +207,7 @@ export default function PostActions({
               </button>
             </Tooltip>
             <Tooltip content="Delete">
-              <button onClick={handleDelete} aria-label="Delete post" className="tap-target p-1.5 text-muted-foreground hover:text-destructive transition-colors rounded-lg hover:bg-secondary">
+              <button onClick={() => setConfirmDelete(true)} aria-label="Delete post" className="tap-target p-1.5 text-muted-foreground hover:text-destructive transition-colors rounded-lg hover:bg-secondary">
                 <Trash2 className="w-3.5 h-3.5" />
               </button>
             </Tooltip>
@@ -221,7 +222,7 @@ export default function PostActions({
         )}
         {canModerate && !isOwner && (
           <Tooltip content="Remove this post (moderator action)">
-            <button onClick={handleDelete} aria-label="Remove post" className="tap-target p-1.5 text-warning hover:text-warning transition-colors rounded-lg hover:bg-amber-500/10">
+            <button onClick={() => setConfirmDelete(true)} aria-label="Remove post" className="tap-target p-1.5 text-warning hover:text-warning transition-colors rounded-lg hover:bg-amber-500/10">
               <Trash2 className="w-3.5 h-3.5" />
             </button>
           </Tooltip>
@@ -284,6 +285,19 @@ export default function PostActions({
       )}
 
       {message && <p role="status" aria-live="polite" className="text-xs text-muted-foreground">{message}</p>}
+
+      <ConfirmDialog
+        open={confirmDelete}
+        onCancel={() => setConfirmDelete(false)}
+        onConfirm={async () => {
+          setConfirmDelete(false)
+          await handleDelete()
+        }}
+        title="Delete this post?"
+        description="This cannot be undone."
+        confirmLabel="Delete"
+        destructive
+      />
     </div>
   )
 }
