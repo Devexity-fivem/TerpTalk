@@ -6,6 +6,7 @@ import ContestBoard from "@/components/contest-board"
 import ProfileCard from "@/components/ui/profile-card"
 import DiaryContestBoard from "@/components/diary-contest-board"
 import PageHeader from "@/components/ui/page-header"
+import BlobImage from "@/components/ui/blob-image"
 import { resolveWeeklyWinner, resolveMonthlyDiaryWinner } from "@/lib/contest-awards"
 import { diaryPath } from "@/lib/slugs"
 
@@ -58,8 +59,7 @@ export default async function ContestPage() {
 
         {lastWinner && (
           <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-4 mb-6 flex items-center gap-4">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={lastWinner.imageUrl} alt="Last week's winner" loading="lazy" decoding="async" className="w-16 h-16 rounded-lg object-cover" />
+            <BlobImage src={lastWinner.imageUrl} alt="Last week's winner" width={64} height={64} className="w-16 h-16 rounded-lg object-cover" />
             <div>
               <p className="text-xs text-warning font-semibold uppercase tracking-wide">Last week&apos;s winner</p>
               <ProfileCard

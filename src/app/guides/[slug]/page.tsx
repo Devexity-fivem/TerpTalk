@@ -7,6 +7,7 @@ import { buildMetadata, snippet } from "@/lib/seo"
 import { JsonLd } from "@/components/json-ld"
 import { Breadcrumbs } from "@/components/breadcrumbs"
 import ProfileCard from "@/components/ui/profile-card"
+import SectionCard from "@/components/ui/section-card"
 import { getSession } from "@/lib/session"
 import { isModerator, activeAuthor, publicUserSelect, isActiveAuthorRow } from "@/lib/security"
 import { TOPIC_TO_CATEGORY_SLUGS } from "@/lib/guides"
@@ -146,11 +147,7 @@ export default async function GuidePage({ params }: { params: Promise<{ slug: st
         {(relatedGuides.length > 0 || relatedThreads.length > 0) && (
           <div className="mt-6 space-y-6">
             {relatedGuides.length > 0 && (
-              <section className="bg-card/80 rounded-2xl border border-border/70 p-5">
-                <h2 className="font-display font-semibold mb-3 flex items-center gap-2">
-                  <BookOpen className="w-4 h-4 text-primary" />
-                  Related guides
-                </h2>
+              <SectionCard title={<span className="flex items-center gap-2"><BookOpen className="w-4 h-4 text-primary" />Related guides</span>}>
                 <ul className="space-y-2">
                   {relatedGuides.map((g) => (
                     <li key={g.slug}>
@@ -161,14 +158,10 @@ export default async function GuidePage({ params }: { params: Promise<{ slug: st
                     </li>
                   ))}
                 </ul>
-              </section>
+              </SectionCard>
             )}
             {relatedThreads.length > 0 && (
-              <section className="bg-card/80 rounded-2xl border border-border/70 p-5">
-                <h2 className="font-display font-semibold mb-3 flex items-center gap-2">
-                  <MessageSquare className="w-4 h-4 text-primary" />
-                  Related discussions
-                </h2>
+              <SectionCard title={<span className="flex items-center gap-2"><MessageSquare className="w-4 h-4 text-primary" />Related discussions</span>}>
                 <ul className="space-y-2">
                   {relatedThreads.map((t) => (
                     <li key={t.slug}>
@@ -188,7 +181,7 @@ export default async function GuidePage({ params }: { params: Promise<{ slug: st
                     </li>
                   ))}
                 </ul>
-              </section>
+              </SectionCard>
             )}
           </div>
         )}

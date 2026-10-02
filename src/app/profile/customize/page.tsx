@@ -11,6 +11,7 @@ import {
 } from "@/lib/icons"
 import Link from "next/link"
 import PageHeader from "@/components/ui/page-header"
+import BlobImage from "@/components/ui/blob-image"
 import SectionCard from "@/components/ui/section-card"
 import Tabs from "@/components/ui/tabs"
 import Tag from "@/components/ui/tag"
@@ -449,8 +450,11 @@ export default function ProfileCustomizePage() {
         >
           <p className="px-4 pt-3 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Preview</p>
           {settings.bannerImage ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={settings.bannerImage} alt="" className="h-16 w-full object-cover" />
+            <div className="relative h-16 w-full">
+              {/* src may be a data URI mid-edit — BlobImage falls back
+                  to <img> for non-blob URLs automatically. */}
+              <BlobImage src={settings.bannerImage} alt="" fill sizes="896px" className="object-cover" />
+            </div>
           ) : (
             <div className="tt-spectrum-bar h-1 mt-2" />
           )}

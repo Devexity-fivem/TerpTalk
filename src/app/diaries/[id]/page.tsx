@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma"
 import { publicUserSelect, activeAuthor, blockedUserIds, isAdmin } from "@/lib/security"
 import { notFound, permanentRedirect } from "next/navigation"
 import { Leaf, Calendar, Users, ClipboardCheck, Camera, TrendingUp, Pencil, Sprout, Link2, Lock, MessagesSquare, FlaskConical, FileDown } from "@/lib/icons"
+import SectionCard from "@/components/ui/section-card"
 import Link from "next/link"
 import { getSession } from "@/lib/session"
 import UpdateForm from "@/components/update-form"
@@ -690,16 +691,15 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
 
         {/* Harvest report — the grow's final result, shown to everyone */}
         {harvestReport && (
-          <div className="bg-card/80 rounded-2xl border border-border/70 p-5 mt-4">
-            <div className="flex items-center gap-2 mb-4">
-              <ClipboardCheck className="w-4 h-4 text-success" />
-              <h2 className="font-display font-semibold">Harvest Report</h2>
-              {harvestReport.yieldAmount != null && (
-                <span className="ml-auto px-2.5 py-1 rounded-lg bg-emerald-500/10 text-success font-medium text-sm">
-                  {harvestReport.yieldAmount} {harvestReport.yieldUnit || "g"}
-                </span>
-              )}
-            </div>
+          <SectionCard
+            className="mt-4"
+            title={<span className="flex items-center gap-2"><ClipboardCheck className="w-4 h-4 text-success" />Harvest Report</span>}
+            actions={harvestReport.yieldAmount != null ? (
+              <span className="px-2.5 py-1 rounded-lg bg-emerald-500/10 text-success font-medium text-sm">
+                {harvestReport.yieldAmount} {harvestReport.yieldUnit || "g"}
+              </span>
+            ) : undefined}
+          >
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-center">
               <div>
                 <div className="text-2xl font-bold text-primary">{harvestReport.totalDays}</div>
@@ -778,7 +778,7 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
             <p className="text-xs text-muted-foreground mt-3">
               Harvested {harvestReport.harvestedAt.toLocaleDateString()} · started {new Date(diary.startDate).toLocaleDateString()}
             </p>
-          </div>
+          </SectionCard>
         )}
 
         {/* Completeness nudge — owner only, encourages better records */}
@@ -919,14 +919,17 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
             currentWeek={diaryWeek(diary.startDate, now)}
           />
 
-          <section className="bg-card/80 rounded-2xl border border-border/70 p-4 mb-4" aria-label="Grow progress">
-              <div className="flex items-center gap-2 mb-2">
-                <TrendingUp className="w-4 h-4 text-primary" />
-                <h2 className="font-display font-semibold text-sm">Growth</h2>
-                <span className="text-xs text-muted-foreground ml-auto">
-                  day {growth.totalDays}{diary.harvested ? " (harvested)" : ""}
-                </span>
-              </div>
+          <SectionCard
+            compact
+            className="mb-4"
+            id="grow-progress"
+            title={<span className="flex items-center gap-2 text-sm"><TrendingUp className="w-4 h-4 text-primary" />Growth</span>}
+            actions={
+              <span className="text-xs text-muted-foreground">
+                day {growth.totalDays}{diary.harvested ? " (harvested)" : ""}
+              </span>
+            }
+          >
               <p className="text-sm text-muted-foreground">
                 {growth.measurements === 0
                   ? "Height measurements will appear here as they are recorded."
@@ -949,7 +952,7 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
                   />
                 </div>
               )}
-            </section>
+          </SectionCard>
 
           {growIntel && (
             <GrowIntelPanel
@@ -1000,19 +1003,17 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
           )}
 
           {compareRows.length > 0 && strainLink && (
-            <section
-              className="bg-card/80 rounded-2xl border border-border/70 p-4 mb-4"
-              aria-label="Community comparison"
-            >
-              <div className="flex items-center gap-2 mb-3">
-                <Users className="w-4 h-4 text-spectrum" />
-                <h2 className="font-display font-semibold text-sm">
-                  Compared to community {strainLink.name} grows
-                </h2>
-                <span className="text-xs text-muted-foreground ml-auto">
+            <SectionCard
+              compact
+              className="mb-4"
+              id="community-comparison"
+              title={<span className="flex items-center gap-2 text-sm"><Users className="w-4 h-4 text-spectrum" />Compared to community {strainLink.name} grows</span>}
+              actions={
+                <span className="text-xs text-muted-foreground">
                   {strainStats!.growCount} public grow{strainStats!.growCount === 1 ? "" : "s"}
                 </span>
-              </div>
+              }
+            >
               <dl className="space-y-2 text-sm">
                 {compareRows.map((r) => (
                   <div key={r.label} className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
@@ -1027,7 +1028,7 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
               <p className="mt-3 text-[11px] text-muted-foreground">
                 Aggregated from public community grows only — private diaries are never included.
               </p>
-            </section>
+            </SectionCard>
           )}
 
           {truncated && (

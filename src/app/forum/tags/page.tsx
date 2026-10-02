@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma"
 import Link from "next/link"
+import PageHeader from "@/components/ui/page-header"
 
 export const metadata = {
   title: "Tags",
@@ -19,11 +20,11 @@ export default async function TagsPage() {
   return (
     <div className="min-h-screen bg-background">
       <div className="max-w-4xl mx-auto px-4 py-8">
-        <div className="mb-8">
-          <span className="tt-eyebrow">Topics</span>
-          <h1 className="font-display text-3xl font-bold mt-1.5 mb-2 tracking-tight">Discussion Tags</h1>
-          <p className="text-muted-foreground">Find threads by topic, strain, or growing method.</p>
-        </div>
+        <PageHeader
+          context={<span className="tt-eyebrow">Topics</span>}
+          title="Discussion Tags"
+          description="Find threads by topic, strain, or growing method."
+        />
 
         {tags.length === 0 ? (
           <p className="text-muted-foreground">No tags yet.</p>

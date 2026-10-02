@@ -11,6 +11,7 @@ import Link from "next/link"
 import RoleBadge from "@/components/role-badge"
 import TierChip from "@/components/tier-chip"
 import AchievementBadge from "@/components/achievement-badge"
+import BlobImage from "@/components/ui/blob-image"
 import ReputationRoadmap from "@/components/reputation-roadmap"
 import ReputationEarn from "@/components/reputation-earn"
 import { useToast } from "@/components/ui/toast"
@@ -436,8 +437,7 @@ export default function ProfilePage() {
         <div className="bg-card/80 rounded-2xl border border-border/70 mb-5 overflow-hidden">
           {psettings.bannerImage ? (
             <div className="relative h-24 sm:h-32 w-full">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={psettings.bannerImage} alt="" aria-hidden="true" className="h-full w-full object-cover" />
+              <BlobImage src={psettings.bannerImage} alt="" fill sizes="896px" ariaHidden className="object-cover" />
               <div className="absolute inset-0 bg-gradient-to-t from-card/90 to-transparent" />
             </div>
           ) : (

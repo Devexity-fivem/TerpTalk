@@ -7,6 +7,7 @@ import { Trophy, Camera, Loader2, Heart } from "@/lib/icons"
 import RoleBadge from "@/components/role-badge"
 import TierChip from "@/components/tier-chip"
 import EmptyState from "@/components/ui/empty-state"
+import BlobImage from "@/components/ui/blob-image"
 import Tooltip from "@/components/ui/tooltip"
 import UserPopover from "@/components/user-popover"
 
@@ -126,9 +127,8 @@ export default function ContestBoard() {
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {entries.map((e, i) => (
             <div key={e.id} className="bg-card/80 border border-border/70 rounded-2xl overflow-hidden">
-              <div className="relative">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={e.imageUrl} alt={e.caption || "Budshot entry"} loading="lazy" decoding="async" className="w-full aspect-square object-cover" />
+              <div className="relative aspect-square">
+                <BlobImage src={e.imageUrl} alt={e.caption || "Budshot entry"} fill sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw" className="object-cover" />
                 {i === 0 && e.votes > 0 && (
                   <Tooltip content="Currently in first place this week" side="bottom" className="absolute top-2 left-2">
                     <span className="bg-amber-500 text-black text-xs font-bold px-2 py-1 rounded-full flex items-center gap-1">

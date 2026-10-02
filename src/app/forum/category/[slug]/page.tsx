@@ -6,6 +6,8 @@ import { MessageSquare, Users, Clock, Pin, Lock, CheckCircle2, BookOpen } from "
 import { CATEGORY_TO_TOPICS } from "@/lib/guides"
 import Link from "next/link"
 import EmptyState from "@/components/ui/empty-state"
+import PageHeader from "@/components/ui/page-header"
+import SectionCard from "@/components/ui/section-card"
 import { buildMetadata } from "@/lib/seo"
 import { LiveRefresh } from "@/components/live-refresh"
 import { Breadcrumbs } from "@/components/breadcrumbs"
@@ -132,25 +134,20 @@ export default async function CategoryPage({
           { label: "Forum", href: "/forum" },
           { label: category.name },
         ]} />
-        {/* Header */}
-        <div className="mb-6">
-          <div className="flex items-start justify-between gap-4 flex-wrap">
-            <div>
-              <span className="tt-eyebrow">Category</span>
-              <h1 className="font-display text-3xl font-bold mt-1.5 mb-1 tracking-tight">{category.name}</h1>
-              <p className="text-sm text-muted-foreground">{category.description}</p>
-            </div>
-            <CategoryFollowButton categoryId={category.id} initiallyFollowing={isFollowing} />
-          </div>
-        </div>
+        <PageHeader
+          context={<span className="tt-eyebrow">Category</span>}
+          title={category.name}
+          description={category.description}
+          actions={<CategoryFollowButton categoryId={category.id} initiallyFollowing={isFollowing} />}
+        />
 
         {/* Related guides for this category's topics */}
         {category.guides.length > 0 && (
-          <div className="bg-card/80 rounded-2xl border border-border/70 p-4 mb-6">
-            <div className="flex items-center gap-2 mb-3">
-              <BookOpen className="w-4 h-4 text-spectrum" />
-              <h2 className="font-display font-semibold text-sm">Related Guides</h2>
-            </div>
+          <SectionCard
+            className="mb-6"
+            compact
+            title={<span className="flex items-center gap-2 text-sm"><BookOpen className="w-4 h-4 text-spectrum" />Related Guides</span>}
+          >
             <div className="grid sm:grid-cols-2 gap-2">
               {category.guides.map((g) => (
                 <Link
@@ -163,7 +160,7 @@ export default async function CategoryPage({
                 </Link>
               ))}
             </div>
-          </div>
+          </SectionCard>
         )}
 
         {/* Threads List */}

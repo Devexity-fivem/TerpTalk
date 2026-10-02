@@ -6,6 +6,7 @@ import { mediaProxyUrl } from "@/lib/media"
 import { notFound, permanentRedirect } from "next/navigation"
 import { getSession } from "@/lib/session"
 import { Settings, Users, MessageSquare, Pencil } from "@/lib/icons"
+import SectionCard from "@/components/ui/section-card"
 import Link from "next/link"
 import RoleBadge from "@/components/role-badge"
 import TierChip from "@/components/tier-chip"
@@ -177,10 +178,10 @@ export default async function SetupPage({ params }: { params: Promise<{ id: stri
         </div>
 
         {/* Specs */}
-        <div className="bg-card/80 rounded-2xl border border-border/70 p-6 mb-6">
-          <h2 className="font-display font-semibold mb-4 flex items-center gap-2">
-            <Settings className="w-5 h-5 text-primary" /> Equipment &amp; Specs
-          </h2>
+        <SectionCard
+          className="mb-6"
+          title={<span className="flex items-center gap-2"><Settings className="w-5 h-5 text-primary" /> Equipment &amp; Specs</span>}
+        >
           <div className="grid md:grid-cols-2 gap-4">
             {specs.filter(([, v]) => v).map(([label, value]) => (
               <div key={label}>
@@ -198,12 +199,11 @@ export default async function SetupPage({ params }: { params: Promise<{ id: stri
               <p className="text-sm text-muted-foreground">No specs listed.</p>
             )}
           </div>
-        </div>
+        </SectionCard>
 
         {/* Grows using this setup */}
         {usedIn.length > 0 && (
-          <div className="bg-card/80 rounded-2xl border border-border/70 p-6 mb-6">
-            <h2 className="font-display font-semibold mb-4">Used in {usedIn.length} grow{usedIn.length === 1 ? "" : "s"}</h2>
+          <SectionCard className="mb-6" title={`Used in ${usedIn.length} grow${usedIn.length === 1 ? "" : "s"}`}>
             <ul className="grid sm:grid-cols-2 gap-3">
               {usedIn.map((d) => (
                 <li key={d.id}>
@@ -228,14 +228,13 @@ export default async function SetupPage({ params }: { params: Promise<{ id: stri
                 </li>
               ))}
             </ul>
-          </div>
+          </SectionCard>
         )}
 
         {/* Comments */}
-        <div className="bg-card/80 rounded-2xl border border-border/70 p-6">
-          <h2 className="font-display font-semibold mb-4 flex items-center gap-2">
-            <MessageSquare className="w-5 h-5 text-primary" /> Comments ({comments.length})
-          </h2>
+        <SectionCard
+          title={<span className="flex items-center gap-2"><MessageSquare className="w-5 h-5 text-primary" /> Comments ({comments.length})</span>}
+        >
           <div className="space-y-4 mb-6">
             {comments.map((c) => (
               <div key={c.id} id={`comment-${c.id}`} className="flex gap-3 scroll-mt-20">
@@ -269,7 +268,7 @@ export default async function SetupPage({ params }: { params: Promise<{ id: stri
             )}
           </div>
           <SetupComments setupId={setup.id} />
-        </div>
+        </SectionCard>
       </div>
     </div>
   )

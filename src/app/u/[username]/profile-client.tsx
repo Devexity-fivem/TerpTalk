@@ -9,6 +9,7 @@ import UserActions from "@/components/user-actions"
 import RoleBadge from "@/components/role-badge"
 import AchievementBadge from "@/components/achievement-badge"
 import { Avatar } from "@/components/ui/avatar"
+import BlobImage from "@/components/ui/blob-image"
 import Tooltip from "@/components/ui/tooltip"
 import { Skeleton } from "@/components/ui/skeleton"
 import Tabs from "@/components/ui/tabs"
@@ -705,8 +706,7 @@ function MemberProfile({ data, isSelf, username }: { data: ProfileResponse; isSe
         <div className="bg-card/80 rounded-2xl border border-border/70 mb-5 overflow-hidden">
           {profile.profileSettings.bannerImage ? (
             <div className="relative h-24 sm:h-32 w-full">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={profile.profileSettings.bannerImage} alt="" aria-hidden="true" className="h-full w-full object-cover" />
+              <BlobImage src={profile.profileSettings.bannerImage} alt="" fill sizes="896px" ariaHidden className="object-cover" />
               <div className="absolute inset-0 bg-gradient-to-t from-card/90 to-transparent" />
             </div>
           ) : (

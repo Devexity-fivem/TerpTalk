@@ -1,4 +1,5 @@
 import Link from "next/link"
+import BlobImage from "@/components/ui/blob-image"
 import { Leaf, Dna, Clock, Gauge } from "@/lib/icons"
 import { strainTypeLabel } from "@/lib/strain-stats"
 import {
@@ -40,8 +41,13 @@ export default function StrainCard({ strain }: { strain: StrainCardData }) {
     >
       <div className="relative aspect-[16/9] bg-gradient-to-br from-primary/15 via-secondary to-spectrum/10 flex items-center justify-center overflow-hidden">
         {strain.photos[0] ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={strain.photos[0].imageUrl} alt={strain.name} loading="lazy" decoding="async" className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" />
+          <BlobImage
+            src={strain.photos[0].imageUrl}
+            alt={strain.name}
+            fill
+            sizes="(max-width: 768px) 100vw, (max-width: 1024px) 50vw, (max-width: 1280px) 33vw, 25vw"
+            className="object-cover transition-transform duration-500 group-hover:scale-105"
+          />
         ) : strain.breederImageUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={strain.breederImageUrl} alt={`${strain.name} — breeder photo`} loading="lazy" decoding="async" className="w-full h-full object-contain p-3 transition-transform duration-500 group-hover:scale-105" />

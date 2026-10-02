@@ -11,6 +11,8 @@ import { Breadcrumbs } from "@/components/breadcrumbs"
 import { publicUserSelect, activeAuthor, isActiveAuthorRow } from "@/lib/security"
 import TierChip from "@/components/tier-chip"
 import ProfileCard from "@/components/ui/profile-card"
+import BlobImage from "@/components/ui/blob-image"
+import SectionCard from "@/components/ui/section-card"
 import UserPopover from "@/components/user-popover"
 import Tooltip from "@/components/ui/tooltip"
 import { getStrainGrowStats, getStrainEvidence, escapeLike, strainFieldMatches, strainTypeLabel } from "@/lib/strain-stats"
@@ -262,12 +264,11 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
             when at least one facet exists; values are reported, not
             lab-verified, so the wording stays honest. */}
         {(strain.effects.length > 0 || strain.flavors.length > 0 || strain.thcMin != null || strain.thcMax != null || strain.floweringWeeks != null || strain.seedToHarvestWeeks != null || strain.difficulty) && (
-          <div className="bg-card/80 rounded-2xl border border-border/70 p-5 mb-6">
-            <div className="flex items-center gap-2 mb-4">
-              <Dna className="w-4 h-4 text-spectrum" />
-              <h2 className="font-display font-semibold">Characteristics</h2>
-              <span className="text-xs text-muted-foreground ml-auto">member-reported</span>
-            </div>
+          <SectionCard
+            className="mb-6"
+            title={<span className="flex items-center gap-2"><Dna className="w-4 h-4 text-spectrum" />Characteristics</span>}
+            actions={<span className="text-xs text-muted-foreground">member-reported</span>}
+          >
             <div className="grid sm:grid-cols-2 gap-x-6 gap-y-4 text-sm">
               {(strain.thcMin != null || strain.thcMax != null) && (
                 <div>
@@ -322,7 +323,7 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
                 </div>
               )}
             </div>
-          </div>
+          </SectionCard>
         )}
 
         {/* Personal context — your history with this strain */}
@@ -385,42 +386,34 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
 
         <div className="grid md:grid-cols-2 gap-6 mb-6 items-start">
           {strain.genetics && (
-            <div className="bg-card/80 rounded-2xl border border-border/70 p-5">
-              <div className="flex items-center gap-2 mb-2">
-                <Dna className="w-4 h-4 text-primary" />
-                <h2 className="font-display font-semibold">Genetics</h2>
-              </div>
+            <SectionCard title={<span className="flex items-center gap-2"><Dna className="w-4 h-4 text-primary" />Genetics</span>}>
               <p className="text-sm text-muted-foreground whitespace-pre-wrap">{strain.genetics}</p>
-            </div>
+            </SectionCard>
           )}
           {strain.growingInfo && (
-            <div className="bg-card/80 rounded-2xl border border-border/70 p-5">
-              <div className="flex items-center gap-2 mb-2">
-                <Sprout className="w-4 h-4 text-primary" />
-                <h2 className="font-display font-semibold">Growing Info</h2>
-              </div>
+            <SectionCard title={<span className="flex items-center gap-2"><Sprout className="w-4 h-4 text-primary" />Growing Info</span>}>
               <p className="text-sm text-muted-foreground whitespace-pre-wrap">{strain.growingInfo}</p>
-            </div>
+            </SectionCard>
           )}
         </div>
 
         {strain.description && (
-          <div className="bg-card/80 rounded-2xl border border-border/70 p-5 mb-6">
-            <h2 className="font-display font-semibold mb-2">Description</h2>
+          <SectionCard className="mb-6" title="Description">
             <p className="text-sm text-muted-foreground whitespace-pre-wrap">{strain.description}</p>
-          </div>
+          </SectionCard>
         )}
 
         {/* Community grow data — stats stay honest about sample size */}
         {growStats.tier !== "none" && (
-          <div className="bg-card/80 rounded-2xl border border-border/70 p-5 mb-6">
-            <div className="flex items-center gap-2 mb-4 flex-wrap">
-              <BarChart3 className="w-4 h-4 text-primary" />
-              <h2 className="font-display font-semibold">Community grow data</h2>
-              <span className={`text-xs px-2 py-0.5 rounded ml-auto ${growStats.tier === "early" ? "bg-amber-500/10 text-warning" : "bg-secondary text-muted-foreground"}`}>
+          <SectionCard
+            className="mb-6"
+            title={<span className="flex items-center gap-2"><BarChart3 className="w-4 h-4 text-primary" />Community grow data</span>}
+            actions={
+              <span className={`text-xs px-2 py-0.5 rounded ${growStats.tier === "early" ? "bg-amber-500/10 text-warning" : "bg-secondary text-muted-foreground"}`}>
                 {growStats.label}
               </span>
-            </div>
+            }
+          >
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-center">
               <div>
                 <div className="text-2xl font-bold text-primary">{growStats.growCount}</div>
@@ -509,19 +502,18 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
                   ))}
               </div>
             )}
-          </div>
+          </SectionCard>
         )}
 
         {/* Documented community evidence — experiments and grower-recorded
             lessons across public grows. Counts surface only above the
             minimum sample thresholds set in getStrainEvidence. */}
         {(evidence.experimentCount > 0 || evidence.lessons.length > 0) && (
-          <div className="bg-card/80 rounded-2xl border border-border/70 p-5 mb-6">
-            <div className="flex items-center gap-2 mb-4">
-              <FlaskConical className="w-4 h-4 text-primary" />
-              <h2 className="font-display font-semibold">Documented approaches</h2>
-              <span className="text-xs text-muted-foreground ml-auto">community records</span>
-            </div>
+          <SectionCard
+            className="mb-6"
+            title={<span className="flex items-center gap-2"><FlaskConical className="w-4 h-4 text-primary" />Documented approaches</span>}
+            actions={<span className="text-xs text-muted-foreground">community records</span>}
+          >
             {evidence.experimentCount > 0 && (
               <p className="text-sm text-muted-foreground mb-3">
                 Community growers have documented {evidence.experimentCount} experiment
@@ -564,16 +556,15 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
             <p className="mt-3 text-[11px] text-muted-foreground">
               Aggregated from public grows only — reported experience, not proven results.
             </p>
-          </div>
+          </SectionCard>
         )}
 
         {/* Member harvest reviews — real notes from growers who finished this strain */}
         {growStats.reviews.length > 0 && (
-          <div className="bg-card/80 rounded-2xl border border-border/70 p-5 mb-6">
-            <div className="flex items-center gap-2 mb-4">
-              <Star className="w-4 h-4 text-warning" />
-              <h2 className="font-display font-semibold">Member reviews</h2>
-            </div>
+          <SectionCard
+            className="mb-6"
+            title={<span className="flex items-center gap-2"><Star className="w-4 h-4 text-warning" />Member reviews</span>}
+          >
             <ul className="space-y-4">
               {growStats.reviews.map((r) => (
                 <li key={r.diaryId} className="text-sm">
@@ -588,16 +579,15 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
                 </li>
               ))}
             </ul>
-          </div>
+          </SectionCard>
         )}
 
         {/* Community diaries for this strain */}
         {relatedDiaries.length > 0 && (
-          <div className="bg-card/80 rounded-2xl border border-border/70 p-5 mb-6">
-            <div className="flex items-center gap-2 mb-4">
-              <BookOpen className="w-4 h-4 text-primary" />
-              <h2 className="font-display font-semibold">Grows with this strain</h2>
-            </div>
+          <SectionCard
+            className="mb-6"
+            title={<span className="flex items-center gap-2"><BookOpen className="w-4 h-4 text-primary" />Grows with this strain</span>}
+          >
             <div className="grid sm:grid-cols-2 gap-3">
               {relatedDiaries.map((d) => (
                 <Link
@@ -630,16 +620,15 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
                 </Link>
               ))}
             </div>
-          </div>
+          </SectionCard>
         )}
 
         {/* Community setups for this strain */}
         {relatedSetups.length > 0 && (
-          <div className="bg-card/80 rounded-2xl border border-border/70 p-5 mb-6">
-            <div className="flex items-center gap-2 mb-4">
-              <Wrench className="w-4 h-4 text-primary" />
-              <h2 className="font-display font-semibold">Setups growing this strain</h2>
-            </div>
+          <SectionCard
+            className="mb-6"
+            title={<span className="flex items-center gap-2"><Wrench className="w-4 h-4 text-primary" />Setups growing this strain</span>}
+          >
             <div className="grid sm:grid-cols-2 gap-3">
               {relatedSetups.map((s) => (
                 <Link
@@ -672,17 +661,16 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
                 </Link>
               ))}
             </div>
-          </div>
+          </SectionCard>
         )}
 
         {/* Discussions about this strain */}
         {relatedThreads.length > 0 && (
-          <div className="bg-card/80 rounded-2xl border border-border/70 p-5 mb-6">
-            <div className="flex items-center gap-2 mb-4">
-              <MessageSquare className="w-4 h-4 text-primary" />
-              <h2 className="font-display font-semibold">Discussions</h2>
-            </div>
-            <div className="divide-y divide-border -mx-5 px-5">
+          <SectionCard
+            className="mb-6"
+            title={<span className="flex items-center gap-2"><MessageSquare className="w-4 h-4 text-primary" />Discussions</span>}
+          >
+            <div className="divide-y divide-border -mx-4 sm:-mx-5 px-4 sm:px-5">
               {relatedThreads.map((t) => (
                 <Link
                   key={t.slug}
@@ -699,7 +687,7 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
                 </Link>
               ))}
             </div>
-          </div>
+          </SectionCard>
         )}
 
         {/* Discussions empty state — encourage first conversation */}
@@ -723,14 +711,12 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
         {(["PLANT", "FLOWER"] as const).map((kind) => {
           const photos = kind === "PLANT" ? plantPhotos : flowerPhotos
           return (
-            <div key={kind} className="bg-card/80 rounded-2xl border border-border/70 p-5 mb-6">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="font-display font-semibold flex items-center gap-2">
-                  <ImageIcon className="w-4 h-4 text-primary" />
-                  {kind === "PLANT" ? "Plant Photos" : "Harvested Flower"}
-                </h2>
-                {session && <StrainPhotoUpload strainId={strain.id} kind={kind} />}
-              </div>
+            <SectionCard
+              key={kind}
+              className="mb-6"
+              title={<span className="flex items-center gap-2"><ImageIcon className="w-4 h-4 text-primary" />{kind === "PLANT" ? "Plant Photos" : "Harvested Flower"}</span>}
+              actions={session ? <StrainPhotoUpload strainId={strain.id} kind={kind} /> : undefined}
+            >
               {photos.length === 0 ? (
                 <p className="text-sm text-muted-foreground">
                   No {kind === "PLANT" ? "plant" : "flower"} photos yet
@@ -739,14 +725,13 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
               ) : (
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                   {photos.map((photo) => (
-                    <div key={photo.id} className="group relative">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
+                    <div key={photo.id} className="group relative aspect-square">
+                      <BlobImage
                         src={photo.imageUrl}
                         alt={photo.caption || `${strain.name} ${kind.toLowerCase()}`}
-                        loading="lazy"
-                        decoding="async"
-                        className="w-full aspect-square object-cover rounded-lg border border-border"
+                        fill
+                        sizes="(max-width: 640px) 50vw, 33vw"
+                        className="object-cover rounded-lg border border-border"
                       />
                       <div className="absolute bottom-0 inset-x-0 bg-black/60 text-[10px] text-white px-2 py-1 rounded-b-lg opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
                         by {photo.user.profile?.username || photo.user.name}
@@ -765,7 +750,7 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
                   ))}
                 </div>
               )}
-            </div>
+            </SectionCard>
           )
         })}
 

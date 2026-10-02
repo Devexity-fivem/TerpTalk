@@ -22,6 +22,12 @@ const securityHeaders = [
 const nextConfig: NextConfig = {
   allowedDevOrigins: ["127.0.0.1"],
   poweredByHeader: false,
+  images: {
+    // Public Vercel Blob stores only — member media is served through
+    // the auth-aware /api/media proxy, and breeder/affiliate images are
+    // external attribution links; neither goes through the optimizer.
+    remotePatterns: [{ protocol: "https", hostname: "**.public.blob.vercel-storage.com" }],
+  },
   experimental: {
     serverSourceMaps: false,
   },

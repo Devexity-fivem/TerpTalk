@@ -3,6 +3,7 @@ import { publicUserSelect, activeAuthor, blockedUserIds } from "@/lib/security"
 import { getSession } from "@/lib/session"
 import { buildMetadata } from "@/lib/seo"
 import ProfileCard from "@/components/ui/profile-card"
+import PageHeader from "@/components/ui/page-header"
 import Link from "next/link"
 import { notFound } from "next/navigation"
 import { LiveRefresh } from "@/components/live-refresh"
@@ -63,13 +64,15 @@ export default async function TagThreadsPage({
     <div className="min-h-screen bg-background">
       <div className="max-w-4xl mx-auto px-4 py-8">
         <LiveRefresh endpoint="/api/forum/updates" />
-        <div className="mb-8">
-          <Link href="/forum/tags" className="text-sm text-muted-foreground hover:text-foreground mb-2 block">
-            ← All tags
-          </Link>
-          <h1 className="font-display text-3xl font-bold mb-2 tracking-tight"><span className="text-spectrum">#</span>{tag.name}</h1>
-          <p className="text-muted-foreground">{tag.threads.length} thread{tag.threads.length === 1 ? "" : "s"}</p>
-        </div>
+        <PageHeader
+          context={
+            <Link href="/forum/tags" className="text-sm text-muted-foreground hover:text-foreground">
+              ← All tags
+            </Link>
+          }
+          title={<><span className="text-spectrum">#</span>{tag.name}</>}
+          description={`${tag.threads.length} thread${tag.threads.length === 1 ? "" : "s"}`}
+        />
 
         <div className="space-y-4">
           {tag.threads.map((tt) => {
