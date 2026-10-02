@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getToken } from "next-auth/jwt"
 import { sessionCookieName } from "@/lib/auth"
-import { unauthorized, forbidden, isBanned, isSessionValid } from "@/lib/security"
+import { unauthorized, isSessionValid } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
 import { buildProfileIntel } from "@/lib/terpbot-profile"
 
@@ -21,8 +21,6 @@ export async function GET(request: NextRequest) {
     viewerId = undefined
   }
   if (!viewerId) return unauthorized()
-  if (await isBanned(viewerId)) return forbidden()
-
   // Deferred + bounded: the About tab fetches this lazily; the analysis
   // itself is a fixed set of aggregates + at most one grow snapshot.
   const rl = await rateLimit(`profile-terpbot:${viewerId}`, 30, 60 * 60 * 1000)

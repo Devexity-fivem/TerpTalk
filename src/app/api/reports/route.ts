@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma, lockUserRow } from "@/lib/prisma"
 import { rateLimit } from "@/lib/rate-limit"
-import { unauthorized, forbidden, getClientIp, logSecurityEvent, isBanned } from "@/lib/security"
+import { unauthorized, getClientIp, logSecurityEvent } from "@/lib/security"
 import { notifyMany } from "@/lib/notify"
 import { reportPriority } from "@/lib/trust-signals"
 
@@ -34,8 +34,6 @@ export async function POST(request: Request) {
     if (!session?.user?.id) {
       return unauthorized()
     }
-
-    if (await isBanned(session.user.id)) return forbidden("Your account is suspended")
 
     const rl = await rateLimit(`report:${session.user.id}`, 10, 60 * 60 * 1000)
     if (!rl.allowed) {

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { unauthorized, forbidden, isBanned, getClientIp, logSecurityEvent, enforceLinkTrust } from "@/lib/security"
+import { unauthorized, forbidden, getClientIp, logSecurityEvent, enforceLinkTrust } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
 import { checkMaintenance } from "@/lib/maintenance"
 import { revalidateTag } from "next/cache"
@@ -51,8 +51,6 @@ export async function PATCH(
 
     const session = await getServerSession(authOptions)
     if (!session?.user?.id) return unauthorized()
-    if (await isBanned(session.user.id)) return forbidden("Your account is suspended")
-
     const rl = await rateLimit(`experiment-edit:${session.user.id}`, 30, 60 * 60 * 1000)
     if (!rl.allowed) {
       await logSecurityEvent("RATE_LIMIT_EXCEEDED", {
@@ -118,8 +116,6 @@ export async function DELETE(
   try {
     const session = await getServerSession(authOptions)
     if (!session?.user?.id) return unauthorized()
-    if (await isBanned(session.user.id)) return forbidden("Your account is suspended")
-
     const { id, experimentId } = await params
     const owned = await loadOwned(id, experimentId, session.user.id)
     if (!owned) return NextResponse.json({ error: "Experiment not found" }, { status: 404 })

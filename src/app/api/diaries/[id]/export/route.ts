@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { unauthorized, forbidden, isBanned, getClientIp, logSecurityEvent } from "@/lib/security"
+import { unauthorized, forbidden, getClientIp, logSecurityEvent } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
 import { hasUnlock } from "@/lib/progression"
 import { diaryDay, diaryWeek } from "@/lib/diary-weeks"
@@ -36,8 +36,6 @@ export async function GET(
   try {
     const session = await getServerSession(authOptions)
     if (!session?.user?.id) return unauthorized()
-    if (await isBanned(session.user.id)) return forbidden("Your account is suspended")
-
     // The unlock is the member's own rank gate — enforced before any read.
     if (!(await hasUnlock(session.user.id, "export-tools"))) {
       return forbidden("Per-grow CSV export unlocks at Trained rank")

@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { getPusher } from "@/lib/pusher"
-import { unauthorized, forbidden, isBanned } from "@/lib/security"
+import { unauthorized, forbidden } from "@/lib/security"
 import { canAccessRoom } from "@/lib/chat-access"
 import { rateLimit } from "@/lib/rate-limit"
 
@@ -12,8 +12,6 @@ export async function POST(request: Request) {
   try {
     const session = await getServerSession(authOptions)
     if (!session?.user?.id) return unauthorized()
-
-    if (await isBanned(session.user.id)) return forbidden()
 
     const rl = await rateLimit(`pusher-auth:${session.user.id}`, 60, 60 * 1000)
     if (!rl.allowed) {

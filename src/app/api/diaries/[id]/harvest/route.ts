@@ -2,7 +2,7 @@ import { NextResponse, after } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { unauthorized, forbidden, isBanned, isAdmin, enforceLinkTrust } from "@/lib/security"
+import { unauthorized, forbidden, isAdmin, enforceLinkTrust } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
 import { checkMaintenance } from "@/lib/maintenance"
 import { announceHarvest } from "@/lib/terpbot"
@@ -18,8 +18,6 @@ import { diaryPath } from "@/lib/slugs"
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await getServerSession(authOptions)
   if (!session?.user?.id) return unauthorized()
-
-  if (await isBanned(session.user.id)) return forbidden()
 
   const maintenance = await checkMaintenance()
   if (maintenance) return maintenance

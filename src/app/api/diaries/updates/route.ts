@@ -2,7 +2,7 @@ import { after, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { unauthorized, publicUserSelect, LIMITS, getClientIp, logSecurityEvent, isBanned, isBannedRow, forbidden, enforceLinkTrust, activeAuthor } from "@/lib/security"
+import { unauthorized, publicUserSelect, LIMITS, getClientIp, logSecurityEvent, isBannedRow, forbidden, enforceLinkTrust, activeAuthor } from "@/lib/security"
 import { checkBadges } from "@/lib/reputation"
 import { progressionRateLimit, progressionPerksFrom } from "@/lib/progression"
 import { awardProgressionBatch, checkDuplicateContent, updateBand, type ProgressionAwardCandidate } from "@/lib/progression"
@@ -540,8 +540,6 @@ export async function DELETE(request: Request) {
   try {
     const session = await getServerSession(authOptions)
     if (!session?.user?.id) return unauthorized()
-    if (await isBanned(session.user.id)) return forbidden("Your account is suspended")
-
     const body = await request.json().catch(() => ({}))
     const { id } = body
     if (typeof id !== "string" || !id) {
@@ -633,8 +631,6 @@ export async function PATCH(request: Request) {
 
     const session = await getServerSession(authOptions)
     if (!session?.user?.id) return unauthorized()
-
-    if (await isBanned(session.user.id)) return forbidden("Your account is suspended")
 
     const rl = await rateLimit(`diary-update-edit:${session.user.id}`, 10, 60 * 1000)
     if (!rl.allowed) {

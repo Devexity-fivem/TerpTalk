@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
-import { unauthorized, isBanned, forbidden } from "@/lib/security"
+import { unauthorized } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
 import { getSuggestedUsers } from "@/lib/onboarding"
 
@@ -11,8 +11,6 @@ export async function GET() {
   try {
     const session = await getServerSession(authOptions)
     if (!session?.user?.id) return unauthorized()
-    if (await isBanned(session.user.id)) return forbidden()
-
     const rl = await rateLimit(`onboarding-suggestions:${session.user.id}`, 30, 10 * 60 * 1000)
     if (!rl.allowed) {
       return NextResponse.json({ error: "Slow down." }, { status: 429 })

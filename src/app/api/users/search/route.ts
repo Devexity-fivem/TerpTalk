@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { publicUserSelect, isBanned, getClientIp, hashIp, blockedUserIds } from "@/lib/security"
+import { publicUserSelect, getClientIp, hashIp, blockedUserIds } from "@/lib/security"
 import { rateLimitMany } from "@/lib/rate-limit"
 import { escapeLike } from "@/lib/strain-stats"
 
@@ -13,10 +13,6 @@ export async function GET(request: Request) {
   }
 
   const userId = session.user.id
-  if (await isBanned(userId)) {
-    return NextResponse.json({ users: [] }, { status: 403 })
-  }
-
   const [rl, ipRl] = await rateLimitMany([
     { key: `users-search:${userId}`, limit: 30, windowMs: 60 * 1000 },
     { key: `users-search-ip:${hashIp(getClientIp(request))}`, limit: 60, windowMs: 60 * 1000 },

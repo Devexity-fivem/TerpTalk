@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { unauthorized, getClientIp, logSecurityEvent, isBanned, forbidden, isModerator } from "@/lib/security"
+import { unauthorized, getClientIp, logSecurityEvent, isModerator } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
 import { checkMaintenance } from "@/lib/maintenance"
 
@@ -30,8 +30,6 @@ export async function POST(request: Request) {
       })
       return NextResponse.json({ error: "Slow down." }, { status: 429 })
     }
-
-    if (await isBanned(session.user.id)) return forbidden("Your account is suspended")
 
     const currentUser = await prisma.user.findUnique({
       where: { id: session.user.id },

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma, lockUserRow } from "@/lib/prisma"
-import { unauthorized, getClientIp, logSecurityEvent, isBanned, forbidden } from "@/lib/security"
+import { unauthorized, getClientIp, logSecurityEvent } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
 import { savedSearchLimit } from "@/lib/progression"
 
@@ -11,8 +11,6 @@ export async function GET() {
   try {
     const session = await getServerSession(authOptions)
     if (!session?.user?.id) return unauthorized()
-    if (await isBanned(session.user.id)) return forbidden()
-
     const searches = await prisma.savedSearch.findMany({
       where: { userId: session.user.id },
       orderBy: { createdAt: "desc" },
@@ -31,8 +29,6 @@ export async function POST(request: Request) {
   try {
     const session = await getServerSession(authOptions)
     if (!session?.user?.id) return unauthorized()
-
-    if (await isBanned(session.user.id)) return forbidden("Your account is suspended")
 
     const body = await request.json().catch(() => ({}))
     const { name, query, filters } = body
@@ -98,8 +94,6 @@ export async function DELETE(request: Request) {
   try {
     const session = await getServerSession(authOptions)
     if (!session?.user?.id) return unauthorized()
-    if (await isBanned(session.user.id)) return forbidden()
-
     const body = await request.json().catch(() => ({}))
     const { id } = body
     if (typeof id !== "string" || !id) {

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { isBanned, isModerator, forbidden, unauthorized, getClientIp, logSecurityEvent } from "@/lib/security"
+import { isBannedRow, isModerator, forbidden, unauthorized, getClientIp, logSecurityEvent } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
 import { awardProgression } from "@/lib/progression"
 import { enqueueReversals, drainMany } from "@/lib/reputation-outbox"
@@ -21,7 +21,7 @@ export async function POST(request: Request) {
 
     const user = await prisma.user.findUnique({
       where: { id: session.user.id },
-      select: { id: true, role: true, banned: true, createdAt: true, profile: { select: { xp: true } } },
+      select: { id: true, role: true, banned: true, suspendedUntil: true, createdAt: true, profile: { select: { xp: true } } },
     })
     if (!user) return unauthorized()
 
@@ -32,7 +32,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Invalid request" }, { status: 400 })
     }
 
-    if (await isBanned(user.id) || user.banned) {
+    if (isBannedRow(user)) {
       return forbidden("Your account is suspended")
     }
 

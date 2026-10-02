@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { unauthorized, publicUserSelect, getClientIp, logSecurityEvent, getSecurityUser, isBannedRow, isBanned, forbidden, blockExistsBetween, enforceLinkTrust } from "@/lib/security"
+import { unauthorized, publicUserSelect, getClientIp, logSecurityEvent, getSecurityUser, isBannedRow, forbidden, blockExistsBetween, enforceLinkTrust } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
 import { notifyMentions } from "@/lib/mentions"
 import { notify } from "@/lib/notify"
@@ -93,8 +93,6 @@ export async function DELETE(request: Request) {
   try {
     const session = await getServerSession(authOptions)
     if (!session?.user?.id) return unauthorized()
-    if (await isBanned(session.user.id)) return forbidden("Your account is suspended")
-
     const body = await request.json().catch(() => ({}))
     const { id } = body
     if (typeof id !== "string" || !id) {

@@ -2,7 +2,7 @@ import { NextResponse, after } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { unauthorized, publicUserSelect, LIMITS, getClientIp, logSecurityEvent, isBanned, forbidden, enforceLinkTrust, isModerator, isAdmin, blockExistsBetween } from "@/lib/security"
+import { unauthorized, publicUserSelect, LIMITS, getClientIp, logSecurityEvent, forbidden, enforceLinkTrust, isModerator, isAdmin, blockExistsBetween } from "@/lib/security"
 import { requireModerator } from "@/lib/require-staff"
 import { rateLimit } from "@/lib/rate-limit"
 import { proxyMedia } from "@/lib/media"
@@ -424,10 +424,6 @@ export async function DELETE(request: Request) {
     if (!isOwn && mod && !isAdmin(mod.role) && !["MEMBER", "VERIFIED_MEMBER"].includes(post.author.role)) {
       return forbidden()
     }
-    if (isOwn && (await isBanned(session.user.id))) {
-      return forbidden("Your account is suspended")
-    }
-
     let acceptedCleared = 0
     let reversalId: string | null = null
     let xpReversalId: string | null = null

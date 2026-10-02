@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { unauthorized, LIMITS, getClientIp, hashIp, logSecurityEvent, isBanned, forbidden, enforceLinkTrust } from "@/lib/security"
+import { unauthorized, LIMITS, getClientIp, hashIp, logSecurityEvent, enforceLinkTrust } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
 import { STRAIN_MIN_PAID_DESCRIPTION } from "@/lib/reputation-config"
 import { awardProgression } from "@/lib/progression"
@@ -141,10 +141,6 @@ export async function POST(request: Request) {
         { error: "Too many submissions. Please try again later." },
         { status: 429 }
       )
-    }
-
-    if (await isBanned(session.user.id)) {
-      return forbidden("Your account is suspended")
     }
 
     // name/genetics/breeder are echoed by TerpBot's /strain replies — leaving

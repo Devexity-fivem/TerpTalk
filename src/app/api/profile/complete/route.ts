@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { unauthorized, LIMITS, USERNAME_REGEX, isReservedUsername, getClientIp, logSecurityEvent, isBanned, forbidden, enforceLinkTrust } from "@/lib/security"
+import { unauthorized, LIMITS, USERNAME_REGEX, isReservedUsername, getClientIp, logSecurityEvent, enforceLinkTrust } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
 import { storeImage, deleteImagesIfUnreferenced } from "@/lib/blob"
 import { grantBadge } from "@/lib/reputation"
@@ -24,8 +24,6 @@ export async function POST(request: Request) {
       })
       return NextResponse.json({ error: "Too many attempts" }, { status: 429 })
     }
-
-    if (await isBanned(session.user.id)) return forbidden()
 
     const body = await request.json().catch(() => null)
     if (!body || typeof body !== "object") {

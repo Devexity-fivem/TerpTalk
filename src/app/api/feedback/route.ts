@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { rateLimit } from "@/lib/rate-limit"
-import { unauthorized, forbidden, getClientIp, logSecurityEvent, isBanned } from "@/lib/security"
+import { unauthorized, getClientIp, logSecurityEvent } from "@/lib/security"
 
 export const FEEDBACK_TYPES = new Set(["BUG", "UX", "FEATURE", "CONTENT", "OTHER"])
 
@@ -19,8 +19,6 @@ export async function POST(request: Request) {
     if (!session?.user?.id) {
       return unauthorized()
     }
-
-    if (await isBanned(session.user.id)) return forbidden("Your account is suspended")
 
     // A few submissions per hour per user — feedback is a signal inbox,
     // not a conversation channel.

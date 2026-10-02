@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
-import { unauthorized, forbidden, isBanned } from "@/lib/security"
+import { unauthorized } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
 import { getGrowIntel } from "@/lib/grow-intel"
 import { activeChecklist } from "@/lib/terpbot-intel-checklist"
@@ -52,8 +52,6 @@ export async function GET(
 ) {
   const session = await getServerSession(authOptions)
   if (!session?.user?.id) return unauthorized()
-  if (await isBanned(session.user.id)) return forbidden()
-
   const rl = await rateLimit(`diary-intel:${session.user.id}`, 60, 60 * 60 * 1000)
   if (!rl.allowed) {
     return NextResponse.json(

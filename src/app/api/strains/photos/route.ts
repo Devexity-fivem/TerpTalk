@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { unauthorized, getClientIp, logSecurityEvent, isBanned, forbidden, isModerator, isStaff, isAdmin } from "@/lib/security"
+import { unauthorized, getClientIp, logSecurityEvent, forbidden, isModerator, isStaff, isAdmin } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
 import { awardProgression } from "@/lib/progression"
 import { enqueueReversal, drainOne } from "@/lib/reputation-outbox"
@@ -56,10 +56,6 @@ export async function POST(request: Request) {
         { error: "Too many uploads. Please try again tomorrow." },
         { status: 429 }
       )
-    }
-
-    if (await isBanned(session.user.id)) {
-      return forbidden("Your account is suspended")
     }
 
     const strain = await prisma.strain.findUnique({ where: { id: strainId }, select: { id: true, createdById: true } })

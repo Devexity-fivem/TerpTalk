@@ -3,7 +3,7 @@ import { revalidateTag } from "next/cache"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { unauthorized, publicUserSelect, LIMITS, getClientIp, logSecurityEvent, forbidden, containsExternalLink, isTrustedForLinks, isModerator, isAdmin, isBanned, isStaff } from "@/lib/security"
+import { unauthorized, publicUserSelect, LIMITS, getClientIp, logSecurityEvent, forbidden, containsExternalLink, isTrustedForLinks, isModerator, isAdmin, isStaff } from "@/lib/security"
 import { requireModerator } from "@/lib/require-staff"
 import { progressionRateLimit, getProgressionPerks } from "@/lib/progression"
 import { STANDING_LINKS, STANDING_POLL_CREATE } from "@/lib/progression-config"
@@ -409,10 +409,6 @@ export async function DELETE(request: Request) {
     if (!isOwn && mod && !isAdmin(mod.role) && !["MEMBER", "VERIFIED_MEMBER"].includes(thread.author.role)) {
       return forbidden()
     }
-    if (isOwn && (await isBanned(session.user.id))) {
-      return forbidden("Your account is suspended")
-    }
-
     // Fetch post ids up front — they feed both the reversal intents and the
     // blob cleanup below.
     const postIds = await prisma.post.findMany({

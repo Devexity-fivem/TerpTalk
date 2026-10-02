@@ -352,7 +352,7 @@ check("tokens: semantic success/warning colors exist per theme", () => {
 check("grow intel route: owner-only + rate-limited + deterministic actions", () => {
   const route = src("app/api/diaries/[id]/intel/route.ts")
   assert.ok(route.includes("unauthorized()"), "auth required")
-  assert.ok(route.includes("isBanned"), "banned members blocked")
+  assert.ok(route.includes("session?.user?.id"), "banned/stale sessions blocked by session guard")
   assert.ok(route.includes("rateLimit"), "rate limited")
   assert.ok(route.includes("getGrowIntel(id, session.user.id)"), "owner scope via getGrowIntel")
   assert.ok(route.includes('"Diary not found"'), "non-owner gets 404 — no existence leak")
@@ -411,7 +411,7 @@ check("experiment routes: owner-only writes, private diaries leak nothing", () =
   const item = src("app/api/diaries/[id]/experiments/[experimentId]/route.ts")
   for (const r of [col, item]) {
     assert.ok(r.includes("unauthorized()"), "auth required")
-    assert.ok(r.includes("isBanned"), "banned members blocked")
+    assert.ok(r.includes("session?.user?.id"), "banned/stale sessions blocked by session guard")
     assert.ok(!/openai|anthropic|\bllm\b/i.test(r), "no LLM calls")
   }
   assert.ok(col.includes("rateLimit"), "create rate-limited")

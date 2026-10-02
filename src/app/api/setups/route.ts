@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { unauthorized, publicUserSelect, LIMITS, getClientIp, logSecurityEvent, isBanned, forbidden, enforceLinkTrust } from "@/lib/security"
+import { unauthorized, publicUserSelect, LIMITS, getClientIp, logSecurityEvent, forbidden, enforceLinkTrust } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
 import { storeImages, deleteImagesIfUnreferenced } from "@/lib/blob"
 import { proxyMedia } from "@/lib/media"
@@ -104,10 +104,6 @@ export async function POST(request: Request) {
       )
     }
 
-    if (await isBanned(session.user.id)) {
-      return forbidden("Your account is suspended")
-    }
-
     const linkBlock = await enforceLinkTrust(
       [title, description].filter((f): f is string => typeof f === "string").join("\n"),
       session.user.id,
@@ -186,8 +182,6 @@ export async function DELETE(request: Request) {
   try {
     const session = await getServerSession(authOptions)
     if (!session?.user?.id) return unauthorized()
-    if (await isBanned(session.user.id)) return forbidden("Your account is suspended")
-
     const body = await request.json().catch(() => ({}))
     const { id } = body
     if (typeof id !== "string" || !id) {
@@ -248,8 +242,6 @@ export async function PATCH(request: Request) {
 
     const session = await getServerSession(authOptions)
     if (!session?.user?.id) return unauthorized()
-
-    if (await isBanned(session.user.id)) return forbidden("Your account is suspended")
 
     const rl = await rateLimit(`setup-edit:${session.user.id}`, 10, 60 * 1000)
     if (!rl.allowed) {

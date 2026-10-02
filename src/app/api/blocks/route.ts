@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { rateLimit } from "@/lib/rate-limit"
-import { unauthorized, forbidden, isBanned } from "@/lib/security"
+import { unauthorized } from "@/lib/security"
 import { checkMaintenance } from "@/lib/maintenance"
 
 // GET — list users I have blocked (private to requester)
@@ -13,8 +13,6 @@ export async function GET() {
     if (!session?.user?.id) {
       return unauthorized()
     }
-    if (await isBanned(session.user.id)) return forbidden()
-
     const blocks = await prisma.block.findMany({
       where: { blockerId: session.user.id },
       orderBy: { createdAt: "desc" },
@@ -53,8 +51,6 @@ export async function POST(request: Request) {
     if (!session?.user?.id) {
       return unauthorized()
     }
-    if (await isBanned(session.user.id)) return forbidden()
-
     const maintenance = await checkMaintenance()
     if (maintenance) return maintenance
 

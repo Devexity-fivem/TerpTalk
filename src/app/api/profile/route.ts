@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { unauthorized, forbidden, getClientIp, logSecurityEvent, LIMITS, isBanned, enforceLinkTrust } from "@/lib/security"
+import { unauthorized, getClientIp, logSecurityEvent, LIMITS, enforceLinkTrust } from "@/lib/security"
 import { storeImage, deleteImagesIfUnreferenced, isBlobConfigured } from "@/lib/blob"
 import { rankDisplay, xpRankProgress, xpStage, xpStageProgress, buildTitle, standingDisplay, MASTERIES, masteryLevelFromXp } from "@/lib/progression-config"
 import { getProgressionPerks, progressionPerksFrom, hasUnlock, statSlotLimit, profileSectionLimit, getMasteryMap } from "@/lib/progression"
@@ -214,10 +214,6 @@ export async function PATCH(request: Request) {
       where: { userId },
       select: { avatarUrl: true, xp: true },
     })
-
-    if (await isBanned(userId)) {
-      return forbidden()
-    }
 
     const rl = await rateLimit(`profile-update:${userId}`, 20, 60 * 60 * 1000)
     if (!rl.allowed) {

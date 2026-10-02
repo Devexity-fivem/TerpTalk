@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { unauthorized, isBanned, forbidden } from "@/lib/security"
+import { unauthorized } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
 import { checkMaintenance } from "@/lib/maintenance"
 import { grantBadge } from "@/lib/reputation"
@@ -14,8 +14,6 @@ export async function POST() {
   try {
     const session = await getServerSession(authOptions)
     if (!session?.user?.id) return unauthorized()
-    if (await isBanned(session.user.id)) return forbidden()
-
     const maintenance = await checkMaintenance()
     if (maintenance) return maintenance
 

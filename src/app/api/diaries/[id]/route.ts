@@ -2,10 +2,8 @@ import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import {
-  unauthorized, forbidden, isBanned, isAdmin,
-  getClientIp, logSecurityEvent, publicUserSelect, enforceLinkTrust,
-} from "@/lib/security"
+import { unauthorized, forbidden, isAdmin,
+  getClientIp, logSecurityEvent, publicUserSelect, enforceLinkTrust } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
 import { checkMaintenance } from "@/lib/maintenance"
 import { revalidateTag } from "next/cache"
@@ -24,8 +22,6 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   try {
     const session = await getServerSession(authOptions)
     if (!session?.user?.id) return unauthorized()
-
-    if (await isBanned(session.user.id)) return forbidden("Your account is suspended")
 
     const maintenance = await checkMaintenance()
     if (maintenance) return maintenance

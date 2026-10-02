@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { unauthorized, publicUserSelect, getClientIp, hashIp, logSecurityEvent, isBanned, forbidden, activeAuthor, isModerator } from "@/lib/security"
+import { unauthorized, publicUserSelect, getClientIp, hashIp, logSecurityEvent, forbidden, activeAuthor, isModerator } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
 import { mediaProxyUrl } from "@/lib/media"
 import { currentMonthKey, monthRange } from "@/lib/week"
@@ -148,8 +148,6 @@ export async function POST(request: Request) {
 
     const session = await getServerSession(authOptions)
     if (!session?.user?.id) return unauthorized()
-
-    if (await isBanned(session.user.id)) return forbidden("Your account is suspended")
 
     if (!(await getBooleanSetting(SITE_SETTINGS.CONTEST_ENABLED, true))) {
       return forbidden("Contests are currently disabled")

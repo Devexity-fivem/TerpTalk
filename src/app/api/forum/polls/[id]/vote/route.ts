@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { unauthorized, forbidden, isBanned, isModerator, isStaff } from "@/lib/security"
+import { unauthorized, forbidden, isModerator, isStaff } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
 import { getProgressionPerks } from "@/lib/progression"
 import { STANDING_POLL_VOTE } from "@/lib/progression-config"
@@ -16,10 +16,6 @@ export async function POST(
     const { id } = await params
     const session = await getServerSession(authOptions)
     if (!session?.user?.id) return unauthorized()
-
-    if (await isBanned(session.user.id)) {
-      return forbidden("Your account is suspended")
-    }
 
     const maintenance = await checkMaintenance()
     if (maintenance) return maintenance

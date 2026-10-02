@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
-import { unauthorized, forbidden, getClientIp, logSecurityEvent, isBanned, blockExistsBetween } from "@/lib/security"
+import { unauthorized, forbidden, getClientIp, logSecurityEvent, blockExistsBetween } from "@/lib/security"
 import { progressionRateLimit } from "@/lib/progression"
 import { checkMaintenance } from "@/lib/maintenance"
 import { notify, postDeepLink } from "@/lib/notify"
@@ -29,8 +29,6 @@ export async function POST(request: Request) {
     if (!session?.user?.id) {
       return unauthorized()
     }
-
-    if (await isBanned(session.user.id)) return forbidden()
 
     const maintenance = await checkMaintenance()
     if (maintenance) return maintenance

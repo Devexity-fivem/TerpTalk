@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { unauthorized, getClientIp, logSecurityEvent, isBanned, forbidden, LIMITS } from "@/lib/security"
+import { unauthorized, getClientIp, logSecurityEvent, LIMITS } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
 import { newRecoveryPhrase, hashPhrase, recoveryPhraseUpdateData } from "@/lib/recovery"
 import bcrypt from "bcryptjs"
@@ -12,8 +12,6 @@ export async function GET() {
   try {
     const session = await getServerSession(authOptions)
     if (!session?.user?.id) return unauthorized()
-    if (await isBanned(session.user.id)) return forbidden()
-
     const user = await prisma.user.findUnique({
       where: { id: session.user.id },
       select: { recoveryPhraseHash: true },
@@ -42,8 +40,6 @@ export async function POST(request: Request) {
     if (!rl.allowed) {
       return NextResponse.json({ error: "Too many attempts. Try again later." }, { status: 429 })
     }
-    if (await isBanned(session.user.id)) return forbidden("Your account is suspended")
-
     const user = await prisma.user.findUnique({
       where: { id: session.user.id },
       select: { password: true, recoveryPhraseHash: true },

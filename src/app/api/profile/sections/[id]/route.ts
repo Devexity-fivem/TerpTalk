@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { Prisma } from "@prisma/client"
-import { unauthorized, forbidden, isBanned } from "@/lib/security"
+import { unauthorized } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
 import { checkMaintenance } from "@/lib/maintenance"
 import { validateSectionInput, parseProfileSettings } from "@/lib/profile-settings"
@@ -36,8 +36,6 @@ export async function PATCH(
 
   const session = await getServerSession(authOptions)
   if (!session?.user?.id) return unauthorized()
-  if (await isBanned(session.user.id)) return forbidden()
-
   const rl = await rateLimit(`profile-sections:${session.user.id}`, 30, 60 * 60 * 1000)
   if (!rl.allowed) return NextResponse.json({ error: "Too many requests" }, { status: 429 })
 
@@ -76,8 +74,6 @@ export async function DELETE(
 
   const session = await getServerSession(authOptions)
   if (!session?.user?.id) return unauthorized()
-  if (await isBanned(session.user.id)) return forbidden()
-
   const rl = await rateLimit(`profile-sections:${session.user.id}`, 30, 60 * 60 * 1000)
   if (!rl.allowed) return NextResponse.json({ error: "Too many requests" }, { status: 429 })
 
