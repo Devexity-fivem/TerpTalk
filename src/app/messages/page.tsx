@@ -199,7 +199,7 @@ function MessagesInner() {
           <Mail className="w-6 h-6 text-primary" /> Messages
         </h1>
 
-        <div className="grid md:grid-cols-3 gap-4 h-[70dvh] min-h-[320px]">
+        <div className="grid md:grid-cols-3 gap-4 h-[70dvh] min-h-80">
           {/* Conversation list */}
           <div className="bg-card/80 border border-border/70 rounded-2xl overflow-y-auto">
             {convos.length === 0 ? (
@@ -291,7 +291,7 @@ function MessagesInner() {
                         <div className={`max-w-[75%] px-3 py-2 rounded-xl text-sm ${
                           mine ? "bg-primary text-primary-foreground" : "bg-secondary"
                         }`}>
-                          <p className="whitespace-pre-wrap break-words">{m.content}</p>
+                          <p className="whitespace-pre-wrap wrap-break-word">{m.content}</p>
                           <p className={`text-[10px] mt-1 ${mine ? "text-primary-foreground/70" : "text-muted-foreground"}`}>
                             {new Date(m.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                           </p>

@@ -14,7 +14,7 @@ export default function PrivacyPage() {
         <h1 className="font-display text-3xl font-bold mb-2 tracking-tight">Privacy Policy</h1>
         <p className="text-sm text-muted-foreground mb-8">Last updated: {LAST_UPDATED}</p>
 
-        <div className="space-y-6 text-sm text-muted-foreground leading-relaxed break-words">
+        <div className="space-y-6 text-sm text-muted-foreground leading-relaxed wrap-break-word">
           <section>
             <h2 className="font-display text-lg font-semibold text-foreground mb-2">What we collect</h2>
             <ul className="list-disc list-inside space-y-1.5">

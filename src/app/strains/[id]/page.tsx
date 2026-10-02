@@ -222,7 +222,7 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
               </div>
             )}
             <div>
-              <h1 className="font-display text-3xl font-bold tracking-tight break-words">{strain.name}</h1>
+              <h1 className="font-display text-3xl font-bold tracking-tight wrap-break-word">{strain.name}</h1>
               <div className="flex gap-3 text-sm text-muted-foreground mt-1 flex-wrap">
                 {strain.type && <span className="px-2 py-0.5 bg-primary/10 text-primary rounded">{strainTypeLabel(strain.type)}</span>}
                 {strain.breeder && (

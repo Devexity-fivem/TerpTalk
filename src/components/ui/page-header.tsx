@@ -35,7 +35,7 @@ export default function PageHeader({
         <div className="min-w-0">
           <h1
             className={cn(
-              "font-display font-bold tracking-tight break-words",
+              "font-display font-bold tracking-tight wrap-break-word",
               size === "lg" ? "text-3xl sm:text-4xl" : "text-2xl"
             )}
           >

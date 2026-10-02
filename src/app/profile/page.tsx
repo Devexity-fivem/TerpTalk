@@ -438,7 +438,7 @@ export default function ProfilePage() {
           {psettings.bannerImage ? (
             <div className="relative h-24 sm:h-32 w-full">
               <BlobImage src={psettings.bannerImage} alt="" fill sizes="896px" ariaHidden className="object-cover" />
-              <div className="absolute inset-0 bg-gradient-to-t from-card/90 to-transparent" />
+              <div className="absolute inset-0 bg-linear-to-t from-card/90 to-transparent" />
             </div>
           ) : (
             <div className="tt-spectrum-bar h-1" />
@@ -457,7 +457,7 @@ export default function ProfilePage() {
               <div className="flex-1 min-w-0">
                 <div className="flex items-start justify-between gap-4 flex-wrap">
                   <div className="min-w-0">
-                    <h1 className="font-display text-2xl font-bold mb-1 break-words flex items-center gap-2 flex-wrap tracking-tight">
+                    <h1 className="font-display text-2xl font-bold mb-1 wrap-break-word flex items-center gap-2 flex-wrap tracking-tight">
                       {profileData.profile?.username || profileData.user.name}
                       <RoleBadge role={profileData.user.role} />
                       <TierChip xp={profileData.profile?.xp ?? 0} size="md" />
@@ -496,7 +496,7 @@ export default function ProfilePage() {
                       )}
                     </div>
                     {profileData.profile?.bio && (
-                      <p className="text-sm mb-2 break-words whitespace-pre-wrap line-clamp-4">{profileData.profile.bio}</p>
+                      <p className="text-sm mb-2 wrap-break-word whitespace-pre-wrap line-clamp-4">{profileData.profile.bio}</p>
                     )}
                     {/* Cultivation identity line */}
                     <div className="flex gap-x-4 gap-y-1 text-sm text-muted-foreground flex-wrap">

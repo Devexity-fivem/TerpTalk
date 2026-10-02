@@ -55,7 +55,7 @@ export default async function AdminSystemPage() {
           <p className="text-sm text-muted-foreground">No rate-limit events in the window.</p>
         ) : (
           <div className="overflow-x-auto mb-4">
-            <table className="w-full text-sm min-w-[360px]">
+            <table className="w-full text-sm min-w-90">
               <tbody>
                 {d.security.rateLimitHits7d.map((r) => (
                   <tr key={r.endpoint} className="border-b border-border/40 last:border-0">

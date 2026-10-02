@@ -461,7 +461,7 @@ export default function ProfileCustomizePage() {
           <div className="p-4 flex items-center gap-3 flex-wrap">
             <Avatar src={payload.profile?.avatarUrl} alt="" size="md" className="bg-primary/10 text-primary" fallback={<User className="w-5 h-5 text-primary" />} />
             <div className="min-w-0 flex-1">
-              <p className="font-display font-bold break-words">@{username}</p>
+              <p className="font-display font-bold wrap-break-word">@{username}</p>
               <div className="flex items-center gap-1.5 flex-wrap mt-1">
                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary/10 text-primary text-xs font-medium">
                   <Sprout className="w-3 h-3" aria-hidden="true" /> {payload.stats?.rank?.name ?? "Seed"}
@@ -781,7 +781,7 @@ export default function ProfileCustomizePage() {
                             ) : (
                               <div className="flex items-start gap-2">
                                 <div className="min-w-0 flex-1">
-                                  <p className="font-medium text-sm break-words flex items-center gap-2">
+                                  <p className="font-medium text-sm wrap-break-word flex items-center gap-2">
                                     {s.title}
                                     {settings.pinnedSection === s.id && (
                                       <Tag variant="primary"><Pin className="w-3 h-3 mr-0.5" aria-hidden="true" />Pinned</Tag>
@@ -790,7 +790,7 @@ export default function ProfileCustomizePage() {
                                       <Tag variant="muted">{s.visibility === "MEMBERS" ? "Members" : "Only you"}</Tag>
                                     )}
                                   </p>
-                                  <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1 break-words">{s.body.slice(0, 90)}</p>
+                                  <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1 wrap-break-word">{s.body.slice(0, 90)}</p>
                                 </div>
                                 <div className="flex items-center gap-0.5 shrink-0">
                                   <button type="button" aria-label={`Move "${s.title}" up`} disabled={i === 0 || !!sectionBusy} onClick={() => moveSection(s.id, -1)} className="p-1.5 rounded-lg hover:bg-secondary transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-30">

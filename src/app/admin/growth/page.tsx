@@ -21,7 +21,7 @@ function FunnelTable({ funnel }: { funnel: FunnelWindow }) {
   ]
   return (
     <div className="overflow-x-auto">
-      <table className="w-full text-sm min-w-[380px]">
+      <table className="w-full text-sm min-w-95">
         <tbody>
           {rows.map(([label, n]) => (
             <tr key={label} className="border-b border-border/40 last:border-0">
@@ -110,7 +110,7 @@ export default async function AdminGrowthPage() {
           <p className="text-sm text-muted-foreground">No contributions yet in this window.</p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-sm min-w-[440px]">
+            <table className="w-full text-sm min-w-110">
               <thead>
                 <tr className="text-left text-xs text-muted-foreground">
                   <th className="py-1.5 font-medium">First action</th>

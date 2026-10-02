@@ -272,7 +272,7 @@ export default function MarkdownComposer({
             )}
           </div>
         ) : (
-          <div className="px-4 py-3 min-h-[144px] max-h-[400px] overflow-y-auto post-content">
+          <div className="px-4 py-3 min-h-36 max-h-100 overflow-y-auto post-content">
             {value.trim() ? <MarkdownRenderer content={value} /> : <p className="text-muted-foreground italic">Nothing to preview yet.</p>}
           </div>
         )}

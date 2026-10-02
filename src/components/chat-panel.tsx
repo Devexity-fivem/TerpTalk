@@ -232,7 +232,7 @@ export function ChatPanelInset({ children }: { children: ReactNode }) {
     <div
       className={cn(
         "flex min-w-0 flex-1 flex-col transition-[padding] duration-200",
-        open && "lg:pr-[340px]"
+        open && "lg:pr-85"
       )}
     >
       {children}
@@ -370,7 +370,7 @@ export function ChatDock() {
           className={cn(
             "fixed inset-x-0 top-16 z-40 flex flex-col border-t border-border bg-card",
             "bottom-[calc(3.5rem+env(safe-area-inset-bottom))]",
-            "lg:left-auto lg:bottom-0 lg:right-0 lg:w-[340px] lg:border-l lg:border-t-0"
+            "lg:left-auto lg:bottom-0 lg:right-0 lg:w-85 lg:border-l lg:border-t-0"
           )}
         >
           <Suspense fallback={<PanelFallback />}>

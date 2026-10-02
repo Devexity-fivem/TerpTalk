@@ -195,7 +195,7 @@ export default function SignUpPage() {
     <div className="relative min-h-screen flex items-center justify-center overflow-hidden bg-background px-4 py-10">
       <div className="pointer-events-none absolute inset-0" aria-hidden="true">
         <div className="tt-grid-bg absolute inset-0" />
-        <div className="absolute left-1/2 top-0 h-[300px] w-[560px] -translate-x-1/2 -translate-y-1/3 rounded-full bg-primary/10 blur-[110px]" />
+        <div className="absolute left-1/2 top-0 h-75 w-140 -translate-x-1/2 -translate-y-1/3 rounded-full bg-primary/10 blur-[110px]" />
       </div>
       <div className="relative max-w-md w-full">
         <div className="text-center mb-8">

@@ -128,7 +128,7 @@ export default function MemberHome({ data }: { data: MemberHomeData }) {
           href={data.nextAction.href}
           className="group relative mb-6 flex items-center gap-4 overflow-hidden rounded-2xl border border-primary/30 bg-primary/5 p-4 transition-colors hover:border-primary/60 hover:bg-primary/10 sm:p-5"
         >
-          <span className="pointer-events-none absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r from-primary via-spectrum to-amber-500" aria-hidden="true" />
+          <span className="pointer-events-none absolute inset-x-0 top-0 h-0.5 bg-linear-to-r from-primary via-spectrum to-amber-500" aria-hidden="true" />
           <span className="text-2xl" aria-hidden="true">{data.nextAction.icon}</span>
           <div className="min-w-0 flex-1">
             <Tooltip content="Suggested next step — picked from your progress and activity">
@@ -213,7 +213,7 @@ export default function MemberHome({ data }: { data: MemberHomeData }) {
                       </div>
                       <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-secondary">
                         <div
-                          className="h-full rounded-full bg-gradient-to-r from-primary to-spectrum transition-all"
+                          className="h-full rounded-full bg-linear-to-r from-primary to-spectrum transition-all"
                           style={{ width: `${Math.min(100, Math.round((q.progress / q.target) * 100))}%` }}
                         />
                       </div>

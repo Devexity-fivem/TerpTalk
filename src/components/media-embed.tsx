@@ -20,7 +20,7 @@ export default function MediaEmbed({ url, className }: MediaEmbedProps) {
   const video = getVideoId(url)
   // EMBED_RE only produces YouTube/Vimeo URLs, but if getVideoId somehow fails
   // (shortened/corrupted URL), do not use the raw URL as an unvalidated href.
-  if (!video) return <span className="text-primary break-words">{url}</span>
+  if (!video) return <span className="text-primary wrap-break-word">{url}</span>
 
   const src =
     video.provider === "youtube"

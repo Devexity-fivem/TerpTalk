@@ -9,7 +9,7 @@ const HEADING_CLASS = "mb-3 text-[11px] font-semibold uppercase tracking-[0.14em
 export default function Footer() {
   return (
     <footer className="relative mt-auto border-t border-border/60 px-4 pb-20 pt-10 sm:px-6 lg:px-8 lg:pb-10">
-      <div className="tt-spectrum-bar absolute inset-x-0 top-0 h-[2px] opacity-70" />
+      <div className="tt-spectrum-bar absolute inset-x-0 top-0 h-0.5 opacity-70" />
       <div className="mx-auto max-w-7xl">
         <div className="grid grid-cols-2 gap-8 sm:grid-cols-3 lg:grid-cols-5">
           {/* Brand */}

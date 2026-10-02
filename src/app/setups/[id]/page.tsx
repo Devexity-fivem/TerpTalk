@@ -125,8 +125,8 @@ export default async function SetupPage({ params }: { params: Promise<{ id: stri
         ]} />
 
         <div className="bg-card/80 rounded-2xl border border-border/70 p-6 mb-6">
-          <h1 className="font-display text-3xl font-bold mb-2 break-words tracking-tight">{setup.title}</h1>
-          <p className="text-muted-foreground mb-4 whitespace-pre-wrap break-words">{setup.description}</p>
+          <h1 className="font-display text-3xl font-bold mb-2 wrap-break-word tracking-tight">{setup.title}</h1>
+          <p className="text-muted-foreground mb-4 whitespace-pre-wrap wrap-break-word">{setup.description}</p>
           <div className="flex items-center gap-4 text-sm text-muted-foreground mb-4">
             <UserPopover username={setup.author.profile?.username}>
               <Link
@@ -259,7 +259,7 @@ export default async function SetupPage({ params }: { params: Promise<{ id: stri
                       iconOnly
                     />
                   </div>
-                  <p className="text-sm text-muted-foreground whitespace-pre-wrap break-words">{c.content}</p>
+                  <p className="text-sm text-muted-foreground whitespace-pre-wrap wrap-break-word">{c.content}</p>
                 </div>
               </div>
             ))}

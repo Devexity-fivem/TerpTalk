@@ -218,7 +218,7 @@ const MessageRow = memo(function MessageRow({
       {renderContent(msg.content.slice(1, -1))}
     </p>
   ) : (
-    <p className="text-sm pl-0.5 break-words">
+    <p className="text-sm pl-0.5 wrap-break-word">
       {isDeleted ? <span className="italic text-muted-foreground">{msg.content}</span> : renderContent(msg.content)}
     </p>
   )

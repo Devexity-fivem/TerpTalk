@@ -217,7 +217,7 @@ export default function AdminFeedback() {
             required maxLength={5000} rows={3} value={obsForm.message}
             onChange={(e) => setObsForm({ ...obsForm, message: e.target.value })}
             placeholder="What you observed, where, and why it matters."
-            className={cn(inputCls, "resize-y min-h-[72px]")}
+            className={cn(inputCls, "resize-y min-h-18")}
           />
           <input
             maxLength={300} value={obsForm.pagePath}
@@ -277,7 +277,7 @@ export default function AdminFeedback() {
                     <Pill label="Observation" cls="bg-amber-500/10 text-warning" />
                   )}
                 </div>
-                <div className="font-medium text-sm break-words">{f.title}</div>
+                <div className="font-medium text-sm wrap-break-word">{f.title}</div>
                 <div className="text-xs text-muted-foreground mt-0.5 flex flex-wrap gap-x-3">
                   <span>@{f.author?.profile?.username || f.author?.name || "deleted"}</span>
                   {f.deviceType && <span className="px-1.5 py-px rounded bg-secondary">{f.deviceType}</span>}
@@ -326,7 +326,7 @@ export default function AdminFeedback() {
                   <Pill label={STATUS_LABEL[detail.status] ?? detail.status} cls={STATUS_CLS[detail.status] ?? STATUS_CLS.NEW} />
                   {detail.source === "ADMIN_OBSERVATION" && <Pill label="Observation" cls="bg-amber-500/10 text-warning" />}
                 </div>
-                <h2 id="fb-detail-title" className="font-display text-lg font-semibold break-words">{detail.title}</h2>
+                <h2 id="fb-detail-title" className="font-display text-lg font-semibold wrap-break-word">{detail.title}</h2>
                 <div className="text-xs text-muted-foreground mt-1 flex flex-wrap gap-x-3">
                   <span>by @{detail.author?.profile?.username || detail.author?.name || "deleted"}</span>
                   {detail.deviceType && <span className="px-1.5 py-px rounded bg-secondary">{detail.deviceType}</span>}
@@ -345,7 +345,7 @@ export default function AdminFeedback() {
             </div>
 
             <div className="bg-secondary/40 rounded-lg p-3 mb-4">
-              <p className="text-sm whitespace-pre-wrap break-words">{detail.message}</p>
+              <p className="text-sm whitespace-pre-wrap wrap-break-word">{detail.message}</p>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
@@ -378,7 +378,7 @@ export default function AdminFeedback() {
                 value={editState.adminNotes}
                 onChange={(e) => setEditState({ ...editState, adminNotes: e.target.value })}
                 placeholder="Confirmed on iPhone 15. Reproduces at 390px. / Fixed in b354c06."
-                className={cn(inputCls, "resize-y min-h-[72px]")}
+                className={cn(inputCls, "resize-y min-h-18")}
               />
             </div>
 

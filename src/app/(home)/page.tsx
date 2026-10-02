@@ -209,9 +209,9 @@ export default async function Home() {
             The content grid is `relative` so it still paints on top. */}
         <div className="pointer-events-none absolute inset-0">
           <div className="tt-grid-bg absolute inset-0" />
-          <div className="absolute left-1/2 top-0 h-[440px] w-[780px] -translate-x-1/2 -translate-y-1/3 rounded-full bg-primary/12 blur-[130px]" />
-          <div className="absolute right-[4%] top-24 h-[280px] w-[280px] rounded-full bg-spectrum/14 blur-[110px]" />
-          <div className="absolute left-[6%] top-44 h-[200px] w-[200px] rounded-full bg-accent/10 blur-[100px]" />
+          <div className="absolute left-1/2 top-0 h-110 w-195 -translate-x-1/2 -translate-y-1/3 rounded-full bg-primary/12 blur-[130px]" />
+          <div className="absolute right-[4%] top-24 h-70 w-70 rounded-full bg-spectrum/14 blur-[110px]" />
+          <div className="absolute left-[6%] top-44 h-50 w-50 rounded-full bg-accent/10 blur-[100px]" />
         </div>
         <div className="relative mx-auto grid max-w-7xl items-center gap-12 lg:grid-cols-[1.05fr_0.95fr] lg:gap-16">
           <div className="text-center lg:text-left">
@@ -221,7 +221,7 @@ export default async function Home() {
             </div>
             <h1 className="font-display text-5xl sm:text-6xl md:text-7xl font-bold tracking-tight text-foreground mb-6">
               Grow better,{" "}
-              <span className="tt-gradient-text bg-gradient-to-r from-primary via-success to-spectrum">
+              <span className="tt-gradient-text bg-linear-to-r from-primary via-success to-spectrum">
                 together.
               </span>
             </h1>
@@ -632,8 +632,8 @@ export default async function Home() {
         <div className="tt-holo-border relative mx-auto max-w-5xl overflow-hidden rounded-3xl border border-border/70 bg-card/70 px-6 py-14 text-center shadow-xl backdrop-blur-sm sm:px-10">
           <div className="tt-spectrum-bar absolute inset-x-0 top-0 h-1" />
           <div className="pointer-events-none absolute inset-0">
-            <div className="absolute left-1/2 top-0 h-[220px] w-[480px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary/15 blur-[90px]" />
-            <div className="absolute -right-10 bottom-0 h-[160px] w-[160px] rounded-full bg-spectrum/15 blur-[80px]" />
+            <div className="absolute left-1/2 top-0 h-55 w-120 -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary/15 blur-[90px]" />
+            <div className="absolute -right-10 bottom-0 h-40 w-40 rounded-full bg-spectrum/15 blur-[80px]" />
           </div>
           <div className="relative">
             <span className="tt-eyebrow">Lights on</span>

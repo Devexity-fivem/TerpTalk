@@ -136,7 +136,7 @@ export default async function GuidePage({ params }: { params: Promise<{ slug: st
             )}
           </div>
           <h1 className="font-display text-3xl font-bold mb-6 tracking-tight">{guide.title}</h1>
-          <div className="max-w-none text-foreground whitespace-pre-wrap break-words leading-relaxed">
+          <div className="max-w-none text-foreground whitespace-pre-wrap wrap-break-word leading-relaxed">
             {guide.content}
           </div>
           <div className="mt-8 pt-4 border-t border-border">

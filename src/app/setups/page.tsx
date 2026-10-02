@@ -110,7 +110,7 @@ export default async function SetupsPage({
                       // eslint-disable-next-line @next/next/no-img-element
                       <img src={setup.images[0].url} alt={setup.title} loading="lazy" decoding="async" className="aspect-video w-full object-cover" />
                     ) : (
-                      <div className="aspect-video bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center">
+                      <div className="aspect-video bg-linear-to-br from-primary/20 to-primary/5 flex items-center justify-center">
                         <Settings className="w-16 h-16 text-primary/30" />
                       </div>
                     )}

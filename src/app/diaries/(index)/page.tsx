@@ -146,7 +146,7 @@ function DiaryCard({ diary, showFeatured = false }: { diary: DiaryCardData; show
   return (
     <div className="tt-spotlight group bg-card rounded-2xl border border-border/70 overflow-hidden tt-lift hover:border-primary/50">
       <Link href={diaryPath(diary)} className="block relative">
-        <div className="aspect-[16/10] bg-gradient-to-br from-primary/15 via-secondary to-spectrum/10 flex items-center justify-center overflow-hidden">
+        <div className="aspect-[16/10] bg-linear-to-br from-primary/15 via-secondary to-spectrum/10 flex items-center justify-center overflow-hidden">
           {diary.updates[0]?.images[0]?.url ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
@@ -159,7 +159,7 @@ function DiaryCard({ diary, showFeatured = false }: { diary: DiaryCardData; show
           ) : (
             <Leaf className="w-10 h-10 text-primary/30" />
           )}
-          <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-black/55 to-transparent" />
+          <div className="absolute inset-x-0 bottom-0 h-16 bg-linear-to-t from-black/55 to-transparent" />
         </div>
         {/* Overlay chips — stage + week badge, grow type, featured */}
         <div className="absolute left-3 top-3 flex gap-1.5">

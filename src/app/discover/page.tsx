@@ -162,7 +162,7 @@ export default async function DiscoverPage({
                       </div>
                     </div>
                   </div>
-                  <h3 className="font-display font-semibold mb-2 break-words group-hover:text-primary transition-colors">{thread.title}</h3>
+                  <h3 className="font-display font-semibold mb-2 wrap-break-word group-hover:text-primary transition-colors">{thread.title}</h3>
                   <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground mt-auto">
                     <span className="flex items-center gap-1"><Clock className="w-3.5 h-3.5" /> <TimeAgo value={thread.createdAt} /></span>
                     <span className="flex items-center gap-1"><Eye className="w-3.5 h-3.5" /> {thread.views}</span>

@@ -543,7 +543,7 @@ export default function UpdateEditSection({ update, day, dateLabel, edited }: Up
             <ImageGallery images={update.images} />
           )}
 
-          <p className="text-muted-foreground my-4 whitespace-pre-wrap break-words">{update.content}</p>
+          <p className="text-muted-foreground my-4 whitespace-pre-wrap wrap-break-word">{update.content}</p>
 
           {(update.temperature != null || update.humidity != null || update.vpd != null || update.ph != null || update.ec != null || update.heightCm != null ||
             update.nightTemperature != null || update.substrateTemperature != null || update.co2Ppm != null || update.wateringLiters != null ||

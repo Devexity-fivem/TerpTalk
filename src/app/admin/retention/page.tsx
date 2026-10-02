@@ -38,7 +38,7 @@ export default async function AdminRetentionPage() {
       <section className="rounded-2xl border border-border/60 bg-card/40 p-4 md:p-5">
         <h2 className="font-display text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-3">Weekly cohorts</h2>
         <div className="overflow-x-auto">
-          <table className="w-full text-sm min-w-[560px]">
+          <table className="w-full text-sm min-w-140">
             <thead>
               <tr className="text-left text-xs text-muted-foreground">
                 <th className="py-2 font-medium">Cohort</th>

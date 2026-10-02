@@ -54,7 +54,7 @@ export default function AboutPage() {
     <div className="min-h-screen bg-background">
       <div className="max-w-4xl mx-auto px-4 py-12">
         <h1 className="font-display text-4xl font-bold tracking-tight mb-4">
-          About <span className="tt-gradient-text bg-gradient-to-r from-primary to-spectrum">TerpTalk</span>
+          About <span className="tt-gradient-text bg-linear-to-r from-primary to-spectrum">TerpTalk</span>
         </h1>
         <p className="text-lg text-muted-foreground leading-relaxed mb-10 max-w-2xl">
           TerpTalk is a privacy-first, 21+ community built by growers, for growers.
@@ -116,7 +116,7 @@ export default function AboutPage() {
         </div>
 
         <div className="relative overflow-hidden text-center bg-card/80 border border-border/70 rounded-2xl p-8 mb-8">
-          <span className="pointer-events-none absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-primary via-spectrum to-amber-500" aria-hidden="true" />
+          <span className="pointer-events-none absolute inset-x-0 top-0 h-1 bg-linear-to-r from-primary via-spectrum to-amber-500" aria-hidden="true" />
           <h2 className="font-display text-xl font-bold mb-2">Ready to grow with us?</h2>
           <p className="text-sm text-muted-foreground mb-5">Free forever. No email required. 21+ only.</p>
           <Link href="/auth/signup" className="tt-cta inline-block px-8 py-3 rounded-full font-semibold text-primary-foreground transition-all">

@@ -171,7 +171,7 @@ export function FeedbackModal({ onClose }: { onClose: () => void }) {
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
                 placeholder="Tell us what happened, what you expected, and what you were trying to do."
-                className="w-full rounded-lg border border-border bg-secondary/50 px-3 py-2 text-sm placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-ring resize-y min-h-[96px]"
+                className="w-full rounded-lg border border-border bg-secondary/50 px-3 py-2 text-sm placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-ring resize-y min-h-24"
               />
             </div>
 

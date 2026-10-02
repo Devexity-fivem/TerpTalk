@@ -630,7 +630,7 @@ export default function OnboardingStepper({
                       }`}
                     >
                       <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-full bg-secondary overflow-hidden flex items-center justify-center flex-shrink-0">
+                        <div className="w-10 h-10 rounded-full bg-secondary overflow-hidden flex items-center justify-center shrink-0">
                           {u.image ? (
                             // eslint-disable-next-line @next/next/no-img-element -- external avatar URL
                             <img src={u.image} alt="" className="w-full h-full object-cover" />
@@ -647,7 +647,7 @@ export default function OnboardingStepper({
                             {u.xp != null && <>{u.xp.toLocaleString()} XP · </>}{u.followers} follower{u.followers === 1 ? "" : "s"}
                           </div>
                         </div>
-                        {on && <Check className="w-4 h-4 text-primary flex-shrink-0" aria-hidden />}
+                        {on && <Check className="w-4 h-4 text-primary shrink-0" aria-hidden />}
                       </div>
                       {u.bio && <p className="text-xs text-muted-foreground mt-2 line-clamp-2">{u.bio}</p>}
                     </button>

@@ -314,7 +314,7 @@ function ShareComposerDialog({ prefill, onClose }: { prefill?: ComposerPrefill; 
                 key={opt.type}
                 onClick={() => setType(opt.type)}
                 className={cn(
-                  "flex flex-col items-center gap-1.5 p-3 rounded-xl border transition-all text-center min-h-[64px]",
+                  "flex flex-col items-center gap-1.5 p-3 rounded-xl border transition-all text-center min-h-16",
                   type === opt.type
                     ? "border-primary bg-primary/5 text-primary"
                     : "border-border hover:border-border/80 hover:bg-secondary/50 text-muted-foreground"

@@ -20,7 +20,7 @@ export default function RulesPage() {
           is the legal document — this page is the everyday version.
         </p>
 
-        <div className="space-y-6 text-sm text-muted-foreground leading-relaxed break-words">
+        <div className="space-y-6 text-sm text-muted-foreground leading-relaxed wrap-break-word">
           <section>
             <h2 className="font-display text-lg font-semibold text-foreground mb-2">1. You must be 21 or older</h2>
             <p>TerpTalk is for adults 21+ — or the legal cannabis age where you live, if that&apos;s higher. Accounts belonging to underage users are removed.</p>

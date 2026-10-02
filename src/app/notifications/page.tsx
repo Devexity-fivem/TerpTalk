@@ -386,10 +386,10 @@ export default function NotificationsPage() {
                   </Tooltip>
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className={cn("text-sm break-words", !n.read ? "font-semibold" : "text-muted-foreground")}>
+                  <p className={cn("text-sm wrap-break-word", !n.read ? "font-semibold" : "text-muted-foreground")}>
                     {n.title}
                   </p>
-                  <p className="text-sm text-muted-foreground break-words line-clamp-2">{n.content}</p>
+                  <p className="text-sm text-muted-foreground wrap-break-word line-clamp-2">{n.content}</p>
                   <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
                     <Tooltip content={new Date(n.createdAt).toLocaleString()} align="start">
                       <time dateTime={n.createdAt}>

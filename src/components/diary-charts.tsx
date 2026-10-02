@@ -13,11 +13,11 @@ function EnvChartsPlaceholder() {
     <div className="mb-6">
       <section className="bg-card/80 rounded-2xl border border-border/70 p-4">
         <Skeleton className="h-4 w-44 mb-3" />
-        <Skeleton className="w-full h-[220px]" />
+        <Skeleton className="w-full h-55" />
       </section>
       <section className="bg-card/80 rounded-2xl border border-border/70 p-4 mt-4">
         <Skeleton className="h-4 w-48 mb-3" />
-        <Skeleton className="w-full h-[200px]" />
+        <Skeleton className="w-full h-50" />
       </section>
     </div>
   )
@@ -28,11 +28,11 @@ const EnvChartsLazy = dynamic(() => import("./env-chart"), {
 })
 
 const HeightChartLazy = dynamic(() => import("./height-chart"), {
-  loading: () => <Skeleton className="w-full h-[200px] mb-6" />,
+  loading: () => <Skeleton className="w-full h-50 mb-6" />,
 })
 
 const EnvInsightsLazy = dynamic(() => import("./env-insights"), {
-  loading: () => <Skeleton className="w-full h-[140px] mb-6" />,
+  loading: () => <Skeleton className="w-full h-35 mb-6" />,
 })
 
 export { EnvChartsLazy, HeightChartLazy, EnvInsightsLazy }

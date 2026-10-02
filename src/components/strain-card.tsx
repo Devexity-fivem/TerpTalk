@@ -39,7 +39,7 @@ export default function StrainCard({ strain }: { strain: StrainCardData }) {
       href={strainPath(strain)}
       className="tt-spotlight group bg-card rounded-2xl border border-border/70 overflow-hidden tt-lift hover:border-primary/50"
     >
-      <div className="relative aspect-[16/9] bg-gradient-to-br from-primary/15 via-secondary to-spectrum/10 flex items-center justify-center overflow-hidden">
+      <div className="relative aspect-[16/9] bg-linear-to-br from-primary/15 via-secondary to-spectrum/10 flex items-center justify-center overflow-hidden">
         {strain.photos[0] ? (
           <BlobImage
             src={strain.photos[0].imageUrl}

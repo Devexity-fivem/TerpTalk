@@ -125,13 +125,13 @@ function renderTokens(tokens: MarkdownToken[], keyBase: string): React.ReactNode
         return <code key={key} className="px-1 py-0.5 bg-secondary rounded text-sm font-mono">{t.text}</code>
       case "link":
         if (t.href) {
-          return <Link key={key} href={t.href} className="text-primary hover:underline break-words" target={t.href.startsWith("http") ? "_blank" : undefined} rel={t.href.startsWith("http") ? "noopener noreferrer" : undefined}>{t.text}</Link>
+          return <Link key={key} href={t.href} className="text-primary hover:underline wrap-break-word" target={t.href.startsWith("http") ? "_blank" : undefined} rel={t.href.startsWith("http") ? "noopener noreferrer" : undefined}>{t.text}</Link>
         }
         return <span key={key}>[{t.text}]</span>
       case "mention":
         return <Link key={key} href={`/u/${t.username}`} className="text-primary hover:underline">@{t.username}</Link>
       case "url":
-        return <Link key={key} href={t.href} className="text-primary hover:underline break-words" target="_blank" rel="noopener noreferrer">{t.href}</Link>
+        return <Link key={key} href={t.href} className="text-primary hover:underline wrap-break-word" target="_blank" rel="noopener noreferrer">{t.href}</Link>
     }
   })
 }
@@ -249,7 +249,7 @@ export function MarkdownRenderer({ content }: { content: string }): React.ReactE
             return <H key={key} className={`font-semibold mt-4 mb-2 text-foreground ${sizeClass}`}>{parseInlineToNodes(b.content, key)}</H>
           }
           case "paragraph":
-            return <p key={key} className="mb-3 leading-relaxed whitespace-pre-wrap break-words">{parseInlineToNodes(b.content, key)}</p>
+            return <p key={key} className="mb-3 leading-relaxed whitespace-pre-wrap wrap-break-word">{parseInlineToNodes(b.content, key)}</p>
           case "blockquote":
             return (
               <blockquote key={key} className="border-l-4 border-primary/50 pl-4 py-1 my-3 italic text-muted-foreground bg-secondary/30 rounded-r-lg">

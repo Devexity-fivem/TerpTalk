@@ -604,7 +604,7 @@ function MemberProfile({ data, isSelf, username }: { data: ProfileResponse; isSe
         </div>
         <div className="h-2 w-full bg-secondary rounded-full overflow-hidden">
           <div
-            className="h-full bg-gradient-to-r from-primary to-spectrum transition-all motion-reduce:transition-none"
+            className="h-full bg-linear-to-r from-primary to-spectrum transition-all motion-reduce:transition-none"
             style={{ width: `${profile.stageProgress?.percent ?? profile.rankProgress.percent}%` }}
           />
         </div>
@@ -661,7 +661,7 @@ function MemberProfile({ data, isSelf, username }: { data: ProfileResponse; isSe
           {recentThreads.slice(0, 5).map((t) => (
             <li key={`t-${t.id}`}>
               <Link href={`/forum/thread/${t.slug}`} className="block rounded-lg p-2 -m-2 transition-colors hover:bg-secondary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-                <p className="font-medium text-sm break-words">{t.title}</p>
+                <p className="font-medium text-sm wrap-break-word">{t.title}</p>
                 <p className="text-xs text-muted-foreground">{t.category.name} · {t.replyCount} repl{t.replyCount === 1 ? "y" : "ies"} · <TimeAgo value={t.createdAt} /></p>
               </Link>
             </li>
@@ -707,7 +707,7 @@ function MemberProfile({ data, isSelf, username }: { data: ProfileResponse; isSe
           {profile.profileSettings.bannerImage ? (
             <div className="relative h-24 sm:h-32 w-full">
               <BlobImage src={profile.profileSettings.bannerImage} alt="" fill sizes="896px" ariaHidden className="object-cover" />
-              <div className="absolute inset-0 bg-gradient-to-t from-card/90 to-transparent" />
+              <div className="absolute inset-0 bg-linear-to-t from-card/90 to-transparent" />
             </div>
           ) : (
             <div className="tt-spectrum-bar h-1" />
@@ -726,7 +726,7 @@ function MemberProfile({ data, isSelf, username }: { data: ProfileResponse; isSe
               <div className="flex-1 min-w-0">
                 <div className="flex items-start justify-between gap-4 flex-wrap">
                   <div className="min-w-0">
-                    <h1 className="font-display text-2xl font-bold mb-1 break-words flex items-center gap-2 flex-wrap tracking-tight">
+                    <h1 className="font-display text-2xl font-bold mb-1 wrap-break-word flex items-center gap-2 flex-wrap tracking-tight">
                       <span className={profile.statusHidden ? "" : (profile.rank?.nameplate ?? "")}>@{profile.username}</span>
                       <RoleBadge role={profile.role} />
                       {profile.verified && (
@@ -811,7 +811,7 @@ function MemberProfile({ data, isSelf, username }: { data: ProfileResponse; isSe
                         </Tooltip>
                       )}
                     </div>
-                    {profile.bio && <p className="text-sm mb-2 break-words whitespace-pre-wrap line-clamp-4">{profile.bio}</p>}
+                    {profile.bio && <p className="text-sm mb-2 wrap-break-word whitespace-pre-wrap line-clamp-4">{profile.bio}</p>}
                     {/* Cultivation identity line */}
                     <div className="flex gap-x-4 gap-y-1 text-sm text-muted-foreground flex-wrap">
                       {profile.growExperience && (
@@ -1070,7 +1070,7 @@ function MemberProfile({ data, isSelf, username }: { data: ProfileResponse; isSe
                                 className="block h-full rounded-lg border border-border p-3 transition-colors hover:border-amber-500/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                               >
                                 <div className="flex items-start justify-between gap-2">
-                                  <h3 className="font-medium text-sm break-words">{h.title}</h3>
+                                  <h3 className="font-medium text-sm wrap-break-word">{h.title}</h3>
                                   <VisibilityTag visibility={h.visibility} />
                                 </div>
                                 <p className="text-xs text-muted-foreground mt-0.5">
@@ -1238,9 +1238,9 @@ function ContributionsTab({
               <li key={e.id} className="flex items-start gap-2.5 rounded-lg p-2 -m-2">
                 <FlaskConical className="w-4 h-4 text-primary shrink-0 mt-0.5" aria-hidden="true" />
                 <div className="min-w-0 flex-1">
-                  <p className="font-medium text-sm break-words">{e.title}</p>
-                  {e.change && <p className="text-xs text-muted-foreground mt-0.5 break-words line-clamp-2">{e.change}</p>}
-                  {e.conclusion && <p className="text-xs mt-0.5 break-words line-clamp-2 italic">&ldquo;{e.conclusion}&rdquo;</p>}
+                  <p className="font-medium text-sm wrap-break-word">{e.title}</p>
+                  {e.change && <p className="text-xs text-muted-foreground mt-0.5 wrap-break-word line-clamp-2">{e.change}</p>}
+                  {e.conclusion && <p className="text-xs mt-0.5 wrap-break-word line-clamp-2 italic">&ldquo;{e.conclusion}&rdquo;</p>}
                   <p className="text-xs text-muted-foreground mt-1">
                     <Tag variant="muted" className="mr-1.5">{e.status.toLowerCase().replace(/_/g, " ")}</Tag>
                     {e.outcome && <Tag variant="muted" className="mr-1.5">{e.outcome.toLowerCase().replace(/_/g, " ")}</Tag>}
@@ -1299,7 +1299,7 @@ function ContributionsTab({
             {recentThreads.map((t) => (
               <li key={t.id}>
                 <Link href={`/forum/thread/${t.slug}`} className="block rounded-lg p-2 -m-2 transition-colors hover:bg-secondary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-                  <p className="font-medium text-sm break-words">{t.title}</p>
+                  <p className="font-medium text-sm wrap-break-word">{t.title}</p>
                   <p className="text-xs text-muted-foreground">{t.category.name} · {t.replyCount} repl{t.replyCount === 1 ? "y" : "ies"} · <TimeAgo value={t.createdAt} /></p>
                 </Link>
               </li>
@@ -1372,7 +1372,7 @@ function CollapsibleSectionCard({
         onClick={() => setOpen((v) => !v)}
         className="flex w-full items-center justify-between gap-3 p-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-2xl"
       >
-        <h2 id={headingId} className="font-display text-base font-semibold break-words min-w-0">{title}</h2>
+        <h2 id={headingId} className="font-display text-base font-semibold wrap-break-word min-w-0">{title}</h2>
         {open ? <ChevronUp className="w-4 h-4 shrink-0 text-muted-foreground" aria-hidden="true" /> : <ChevronDown className="w-4 h-4 shrink-0 text-muted-foreground" aria-hidden="true" />}
       </button>
       {open && <div id={`${id}-body`} className="px-3 pb-3">{children}</div>}
@@ -1426,7 +1426,7 @@ function AboutTab({ profile, isSelf, compact }: { profile: PublicProfile; isSelf
 
       {profile.bio && (
         <SectionCard title="Bio" id="bio" compact={compact}>
-          <p className="text-sm whitespace-pre-wrap break-words">{profile.bio}</p>
+          <p className="text-sm whitespace-pre-wrap wrap-break-word">{profile.bio}</p>
         </SectionCard>
       )}
 
@@ -1461,7 +1461,7 @@ function AboutTab({ profile, isSelf, compact }: { profile: PublicProfile; isSelf
           {identity.goals && (
             <div className="mt-4">
               <p className="text-xs text-muted-foreground mb-1">Goals</p>
-              <p className="text-sm whitespace-pre-wrap break-words">{identity.goals}</p>
+              <p className="text-sm whitespace-pre-wrap wrap-break-word">{identity.goals}</p>
             </div>
           )}
         </SectionCard>
@@ -1551,7 +1551,7 @@ function BotProfile({ data }: { data: ProfileResponse }) {
                 </Tooltip>
               </div>
               <div className="flex-1 min-w-0">
-                <h1 className="font-display text-2xl font-bold mb-1 break-words flex items-center gap-2 flex-wrap tracking-tight">
+                <h1 className="font-display text-2xl font-bold mb-1 wrap-break-word flex items-center gap-2 flex-wrap tracking-tight">
                   @{profile.username} <RoleBadge role={profile.role} />
                   <Tooltip content="Automated community assistant — not a person">
                     <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider bg-primary/15 text-primary px-1.5 py-0.5 rounded">

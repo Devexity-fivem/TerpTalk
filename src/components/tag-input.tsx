@@ -88,7 +88,7 @@ export default function TagInput({ value, onChange, max = 5, disabled }: TagInpu
   return (
     <div className="space-y-2">
       <label className="block text-sm font-medium">Tags</label>
-      <div className="min-h-[44px] w-full rounded-xl border border-border/70 bg-background px-3 py-2 focus-within:ring-2 focus-within:ring-primary">
+      <div className="min-h-11 w-full rounded-xl border border-border/70 bg-background px-3 py-2 focus-within:ring-2 focus-within:ring-primary">
         <div className="flex flex-wrap items-center gap-2">
           {value.map((tag) => (
             <span
@@ -117,7 +117,7 @@ export default function TagInput({ value, onChange, max = 5, disabled }: TagInpu
             disabled={disabled || value.length >= max}
             aria-label="Add tags"
             placeholder={value.length >= max ? "" : "Add tags..."}
-            className="flex-1 min-w-[120px] bg-transparent outline-none text-sm"
+            className="flex-1 min-w-30 bg-transparent outline-none text-sm"
           />
         </div>
       </div>

@@ -255,7 +255,7 @@ export default async function QuestionsPage({
                           </div>
 
                           <div className="flex-1 min-w-0">
-                            <h3 className="font-display font-semibold mb-1 break-words">{thread.title}</h3>
+                            <h3 className="font-display font-semibold mb-1 wrap-break-word">{thread.title}</h3>
                             <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
                               <span className="flex min-w-0 items-center gap-1.5">
                                 <ProfileCard

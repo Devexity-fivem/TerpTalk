@@ -70,8 +70,8 @@ check("ChatRoom mounts only while the panel is open", () => {
 })
 
 check("panel pushes layout instead of overlaying on lg+", () => {
-  assert.ok(panel.includes("lg:pr-[340px]"), "inset right padding when open")
-  assert.ok(panel.includes("w-[340px]"), "panel width in the 320-380 target band")
+  assert.ok(panel.includes("lg:pr-85"), "inset right padding when open")
+  assert.ok(panel.includes("w-85"), "panel width in the 320-380 target band")
 })
 
 check("single responsive surface — never two mounted ChatRooms", () => {
@@ -79,7 +79,7 @@ check("single responsive surface — never two mounted ChatRooms", () => {
   // (duplicate sockets). The dock must render exactly one.
   assert.equal(panel.match(/<ChatRoom/g)?.length, 1, "exactly one ChatRoom mount point")
   assert.ok(panel.includes("env(safe-area-inset-bottom)"), "sheet respects safe area")
-  assert.ok(panel.includes("lg:w-[340px]"), "desktop panel geometry")
+  assert.ok(panel.includes("lg:w-85"), "desktop panel geometry")
 })
 
 check("closed desktop state exposes a compact edge tab with unread dot", () => {
@@ -588,7 +588,7 @@ check("page-header: single h1, actions wrap, no truncation", () => {
   const h = src("components/ui/page-header.tsx")
   assert.ok(h.includes("<h1"), "renders the page h1")
   assert.ok(h.includes("flex-wrap"), "actions wrap on mobile")
-  assert.ok(h.includes("break-words"), "long titles wrap")
+  assert.ok(h.includes("wrap-break-word"), "long titles wrap")
   const growers = src("app/growers/page.tsx")
   assert.ok(growers.includes("<PageHeader"), "growers page consumes PageHeader")
 })

@@ -48,7 +48,7 @@ export default function SectionCard({
         <div className={cn("flex items-start justify-between gap-3", padded ? "mb-3" : "p-4 sm:p-5 pb-0", padded && !compact && "mb-4")}>
           <div className="min-w-0">
             {title && (
-              <h2 id={headingId} className="font-display text-lg font-semibold break-words">
+              <h2 id={headingId} className="font-display text-lg font-semibold wrap-break-word">
                 {title}
               </h2>
             )}

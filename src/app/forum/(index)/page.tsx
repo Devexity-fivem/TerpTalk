@@ -169,8 +169,8 @@ export default async function ForumPage() {
                         <MessageSquare className="w-6 h-6 text-primary" />
                       </div>
                       <div className="flex-1 min-w-0">
-                        <h3 className="font-display font-semibold mb-1 break-words">{category.name}</h3>
-                        <p className="text-sm text-muted-foreground mb-2 break-words">{category.description}</p>
+                        <h3 className="font-display font-semibold mb-1 wrap-break-word">{category.name}</h3>
+                        <p className="text-sm text-muted-foreground mb-2 wrap-break-word">{category.description}</p>
                         <div className="flex items-center gap-4 text-sm text-muted-foreground">
                           <span className="flex items-center gap-1">
                             <MessageSquare className="w-4 h-4" />
@@ -210,7 +210,7 @@ export default async function ForumPage() {
                               <span className="h-2 w-2 rounded-full bg-primary" role="img" aria-label="Unread" />
                             </Tooltip>
                           )}
-                          <span className="min-w-0 break-words">{thread.title}</span>
+                          <span className="min-w-0 wrap-break-word">{thread.title}</span>
                         </h3>
                         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
                           <span className="flex min-w-0 items-center gap-1.5">

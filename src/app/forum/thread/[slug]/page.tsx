@@ -382,7 +382,7 @@ export default async function ThreadPage({
             )}
             <ThreadModActions threadId={thread.id} authorId={thread.authorId} categoryId={thread.categoryId} pinned={thread.pinned} locked={thread.locked} />
           </div>
-          <h1 className="font-display text-3xl sm:text-4xl font-bold mb-3 break-words tracking-tight">{thread.title}</h1>
+          <h1 className="font-display text-3xl sm:text-4xl font-bold mb-3 wrap-break-word tracking-tight">{thread.title}</h1>
           {thread.tags.length > 0 && (
             <div className="flex flex-wrap gap-1.5 mb-3">
               {thread.tags.map((tt) => (
@@ -537,7 +537,7 @@ export default async function ThreadPage({
             page — or is the accepted answer, which renders above this list */}
         {firstUnread && (firstUnreadPage !== page || firstUnread.id === acceptedPost?.id) && (
           <div className="mb-4 text-sm text-muted-foreground flex items-center gap-2">
-            <MessageSquare className="w-4 h-4 text-primary flex-shrink-0" />
+            <MessageSquare className="w-4 h-4 text-primary shrink-0" />
             <span>
               New activity since your last visit —{" "}
               <Link

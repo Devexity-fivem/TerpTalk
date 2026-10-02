@@ -291,8 +291,8 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
         {/* Onboarding resume banner */}
         {session?.user?.id && !session.user.onboardingCompletedAt && (
           <div className="mb-6 bg-primary/10 border border-primary/30 rounded-lg p-4 flex flex-wrap items-center gap-3">
-            <Leaf className="w-5 h-5 text-primary flex-shrink-0" />
-            <p className="text-sm flex-1 min-w-[200px]">
+            <Leaf className="w-5 h-5 text-primary shrink-0" />
+            <p className="text-sm flex-1 min-w-50">
               Finish setting up your account — pick your interests and growers to follow.
             </p>
             <Link
@@ -319,7 +319,7 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
         {/* Cold-start note — content below is global, not personalized */}
         {coldStart && (recentDiaryUpdates.length > 0 || recentThreads.length > 0) && (
           <div className="mb-6 text-sm text-muted-foreground flex items-center gap-2">
-            <UserPlus className="w-4 h-4 text-primary flex-shrink-0" />
+            <UserPlus className="w-4 h-4 text-primary shrink-0" />
             <span>
               Your feed is getting started — showing community highlights.{" "}
               <Link href="/forum" className="text-primary hover:underline">Follow growers and topics</Link>{" "}
@@ -332,8 +332,8 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
             Disappears permanently after their first post. */}
         {showFirstReplyNudge && (
           <div className="mb-6 bg-card/80 border border-border/70 rounded-2xl p-4 flex flex-wrap items-center gap-3">
-            <MessageSquare className="w-5 h-5 text-primary flex-shrink-0" />
-            <p className="text-sm flex-1 min-w-[200px]">
+            <MessageSquare className="w-5 h-5 text-primary shrink-0" />
+            <p className="text-sm flex-1 min-w-50">
               See something interesting? Join the conversation — your first reply helps other growers.
             </p>
             <Link
@@ -368,7 +368,7 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
                           className="block p-4 hover:bg-secondary/50 transition-colors"
                         >
                           <div className="flex items-start gap-3">
-                            <div className="flex-shrink-0 w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center">
+                            <div className="shrink-0 w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center">
                               <MessageSquare className="w-5 h-5 text-primary" />
                             </div>
                             <div className="flex-1 min-w-0">
@@ -418,7 +418,7 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
                               // eslint-disable-next-line @next/next/no-img-element
                               <img src={thumb} alt="" loading="lazy" decoding="async" className="w-16 h-16 rounded-xl object-cover shrink-0" />
                             ) : (
-                              <div className="flex-shrink-0 w-16 h-16 bg-success/10 rounded-xl flex items-center justify-center">
+                              <div className="shrink-0 w-16 h-16 bg-success/10 rounded-xl flex items-center justify-center">
                                 <Leaf className="w-6 h-6 text-success" />
                               </div>
                             )}
@@ -459,7 +459,7 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
                               // eslint-disable-next-line @next/next/no-img-element
                               <img src={u.images[0].url} alt="" loading="lazy" decoding="async" className="w-10 h-10 rounded-lg object-cover shrink-0" />
                             ) : (
-                              <div className="flex-shrink-0 w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center">
+                              <div className="shrink-0 w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center">
                                 <Leaf className="w-5 h-5 text-primary" />
                               </div>
                             )}
@@ -496,7 +496,7 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
                       className="block p-4 hover:bg-secondary/50 transition-colors"
                     >
                       <div className="flex items-start gap-3">
-                        <div className="flex-shrink-0 w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center">
+                        <div className="shrink-0 w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center">
                           <Users className="w-5 h-5 text-primary" />
                         </div>
                         <div className="flex-1 min-w-0">
@@ -556,7 +556,7 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
                           // eslint-disable-next-line @next/next/no-img-element
                           <img src={update.images[0].url} alt="" loading="lazy" decoding="async" className="w-16 h-16 rounded-xl object-cover shrink-0" />
                         ) : (
-                          <div className="flex-shrink-0 w-16 h-16 bg-primary/10 rounded-xl flex items-center justify-center">
+                          <div className="shrink-0 w-16 h-16 bg-primary/10 rounded-xl flex items-center justify-center">
                             <Leaf className="w-6 h-6 text-primary" />
                           </div>
                         )}
@@ -619,7 +619,7 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
                               <Leaf className="w-8 h-8 text-muted-foreground" />
                             </div>
                           )}
-                          <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/60 to-transparent px-3 py-2">
+                          <div className="absolute bottom-0 inset-x-0 bg-linear-to-t from-black/60 to-transparent px-3 py-2">
                             {diary.strain && (
                               <span className="text-[11px] font-medium text-white/90">{diary.strain}</span>
                             )}
@@ -672,7 +672,7 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
                       className="block p-4 hover:bg-secondary/50 transition-colors"
                     >
                       <div className="flex items-start gap-3">
-                        <div className="flex-shrink-0 w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center">
+                        <div className="shrink-0 w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center">
                           <Users className="w-5 h-5 text-primary" />
                         </div>
                         <div className="flex-1 min-w-0">
@@ -728,7 +728,7 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
                       className="block p-4 hover:bg-secondary/50 transition-colors"
                     >
                       <div className="flex items-start gap-3">
-                        <div className="flex-shrink-0 w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center">
+                        <div className="shrink-0 w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center">
                           <Users className="w-5 h-5 text-primary" />
                         </div>
                         <div className="flex-1 min-w-0">
@@ -873,11 +873,11 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
                     className="block p-4 hover:bg-secondary/50 transition-colors"
                   >
                     <div className="flex items-start gap-3">
-                      <div className="flex-shrink-0 w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center">
+                      <div className="shrink-0 w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center">
                         <Leaf className="w-5 h-5 text-primary" />
                       </div>
                       <div className="flex-1 min-w-0">
-                        <h3 className="font-medium text-sm mb-1 break-words">{diary.title}</h3>
+                        <h3 className="font-medium text-sm mb-1 wrap-break-word">{diary.title}</h3>
                         <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
                           <span className="flex min-w-0 items-center gap-1.5">
                             <ProfileCard
