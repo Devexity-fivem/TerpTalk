@@ -13,6 +13,7 @@ import { buildMetadata } from "@/lib/seo";
 import { JsonLd } from "@/components/json-ld";
 import { THEME_INIT_SCRIPT } from "@/lib/theme";
 import { shouldGatePublic } from "@/lib/maintenance";
+import { getSiteAnnouncement } from "@/lib/announcement";
 import MaintenancePage from "./maintenance/page";
 import AnnouncementBanner from "@/components/announcement-banner";
 import RecoveryWarningBanner from "@/components/recovery-warning-banner";
@@ -91,7 +92,10 @@ const siteJsonLd = [
 ]
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
-  const gated = await shouldGatePublic()
+  // Gate + announcement load concurrently — one batched Setting read each,
+  // replacing the banner's former client-side /api/settings/announcement
+  // request on every page load.
+  const [gated, announcement] = await Promise.all([shouldGatePublic(), getSiteAnnouncement()])
   // Reading headers() opts the whole tree into dynamic rendering —
   // required so the per-request CSP nonce (src/proxy.ts) is fresh per
   // page. The nonce trusts only this inline script; everything else
@@ -117,7 +121,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
               Skip to content
             </a>
             <Providers>
-              <AnnouncementBanner />
+              <AnnouncementBanner announcement={announcement} />
               <RecoveryWarningBanner />
               <ChatPanelProvider>
                 <CommandPaletteProvider>

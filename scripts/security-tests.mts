@@ -26,6 +26,8 @@ import { claimTask, markDone, releaseClaim, runCronTask } from "@/lib/cron-claim
 import React from "react"
 import { renderToString } from "react-dom/server"
 import { MarkdownRenderer, sanitizeHref } from "@/lib/markdown"
+import { getSiteAnnouncement } from "@/lib/announcement"
+import { SITE_SETTINGS } from "@/lib/settings"
 import {
   parseProfileSettings, validateProfileSettingsPatch, validateSectionInput,
   PROFILE_SECTION_TITLE_MAX, PROFILE_SECTION_BODY_MAX, DEFAULT_PROFILE_SETTINGS,
@@ -735,14 +737,51 @@ async function run() {
     assert.equal(sanitizeHref("\\\\evil.com"), null, "double-backslash external must be rejected")
     assert.equal(sanitizeHref("/\\x"), null)
 
-    // Announcement link paths all route through sanitizeHref — the public
-    // GET, the admin settings PATCH, and the admin broadcast POST. No
-    // parallel weaker validator may survive.
+    // Announcement link paths all route through sanitizeHref — the shared
+    // loader (public GET + server-rendered layout banner), the admin
+    // settings PATCH, and the admin broadcast POST. No parallel weaker
+    // validator may survive.
+    const annLib = readFileSync("src/lib/announcement.ts", "utf8")
     const annGet = readFileSync("src/app/api/settings/announcement/route.ts", "utf8")
+    const annBanner = readFileSync("src/components/announcement-banner.tsx", "utf8")
     const adminSettings = readFileSync("src/app/api/admin/settings/route.ts", "utf8")
     const adminAnnounce = readFileSync("src/app/api/admin/announce/route.ts", "utf8")
-    assert.ok(annGet.includes("sanitizeHref"), "announcement GET uses canonical validator")
-    assert.ok(!annGet.includes("isSafeLink"), "local isSafeLink validator removed")
+    assert.ok(annLib.includes("sanitizeHref"), "announcement loader uses canonical validator")
+    assert.ok(!annLib.includes("isSafeLink"), "local isSafeLink validator removed")
+    assert.ok(annGet.includes("getSiteAnnouncement"), "announcement GET delegates to shared loader")
+    // The globally mounted banner must not request the endpoint — the
+    // layout passes the sanitized bundle as a prop.
+    assert.ok(!annBanner.includes("settings/announcement"), "banner makes no announcement API request")
+    assert.ok(!annBanner.includes("fetch("), "banner performs no client fetch")
+
+    // Shared loader behavior — exercised through the real function on the
+    // real DB so sanitization and disabled-state semantics can't drift.
+    {
+      const keys = [SITE_SETTINGS.ANNOUNCEMENT_TITLE, SITE_SETTINGS.ANNOUNCEMENT_CONTENT, SITE_SETTINGS.ANNOUNCEMENT_LINK]
+      await prisma.setting.deleteMany({ where: { key: { in: keys } } })
+      try {
+        const off = await getSiteAnnouncement()
+        assert.equal(off.enabled, false, "no announcement rows → disabled")
+        await prisma.setting.createMany({
+          data: [
+            { key: SITE_SETTINGS.ANNOUNCEMENT_TITLE, value: "  Heads up  " },
+            { key: SITE_SETTINGS.ANNOUNCEMENT_CONTENT, value: "Maintenance tonight" },
+            { key: SITE_SETTINGS.ANNOUNCEMENT_LINK, value: "javascript:alert(1)" },
+          ],
+        })
+        const on = await getSiteAnnouncement()
+        assert.equal(on.enabled, true, "title+content → enabled")
+        assert.equal(on.title, "Heads up", "title trimmed")
+        assert.equal(on.content, "Maintenance tonight", "content preserved")
+        assert.equal(on.link, undefined, "unsafe link stripped by sanitizeHref")
+        assert.equal("recoveryPhraseHash" in on, false, "no unrelated settings in the bundle")
+        await prisma.setting.update({ where: { key: SITE_SETTINGS.ANNOUNCEMENT_LINK }, data: { value: "https://example.com/a" } })
+        const safe = await getSiteAnnouncement()
+        assert.equal(safe.link, "https://example.com/a", "safe https link survives")
+      } finally {
+        await prisma.setting.deleteMany({ where: { key: { in: keys } } })
+      }
+    }
     assert.ok(adminSettings.includes("sanitizeHref"), "admin settings validates announcement_link on write")
     assert.ok(adminSettings.includes("ANNOUNCEMENT_LINK"), "write-time check keyed to announcement_link")
     assert.ok(adminAnnounce.includes("sanitizeHref"), "admin broadcast uses canonical validator")

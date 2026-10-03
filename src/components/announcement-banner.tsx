@@ -3,40 +3,27 @@
 import { useEffect, useState } from "react"
 import { X, Megaphone } from "@/lib/icons"
 import Link from "next/link"
+import type { SiteAnnouncement } from "@/lib/announcement"
 
-interface Announcement {
-  enabled: boolean
-  title?: string | null
-  content?: string | null
-  link?: string
-}
-
-function bannerKey(a: Announcement) {
+function bannerKey(a: SiteAnnouncement) {
   return `terptalk-banner-${a.title}-${a.content}`
 }
 
-export default function AnnouncementBanner() {
-  const [announcement, setAnnouncement] = useState<Announcement | null>(null)
+// Server-rendered from the root layout — the announcement payload arrives
+// as a prop, so this component makes no client API request.
+export default function AnnouncementBanner({ announcement }: { announcement: SiteAnnouncement }) {
   const [dismissed, setDismissed] = useState(true)
 
+  // localStorage read is deferred to a microtask so no setState runs
+  // synchronously inside the effect body (react-hooks/set-state-in-effect).
   useEffect(() => {
-    const t = setTimeout(() => {
-      fetch("/api/settings/announcement")
-        .then((res) => (res.ok ? res.json() : { enabled: false }))
-        .then((d: Announcement) => {
-          setAnnouncement(d)
-          if (d.enabled && (d.title || d.content)) {
-            const key = bannerKey(d)
-            setDismissed(typeof window !== "undefined" && localStorage.getItem(key) === "1")
-          } else {
-            setDismissed(true)
-          }
-        })
-    }, 0)
-    return () => clearTimeout(t)
-  }, [])
+    if (!announcement.enabled || !(announcement.title || announcement.content)) return
+    queueMicrotask(() => {
+      setDismissed(typeof window !== "undefined" && localStorage.getItem(bannerKey(announcement)) === "1")
+    })
+  }, [announcement])
 
-  if (!announcement?.enabled || dismissed) return null
+  if (!announcement.enabled || dismissed) return null
 
   const dismiss = () => {
     if (typeof window !== "undefined") {
