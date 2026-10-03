@@ -920,7 +920,7 @@ const main = async () => {
     r = await callApi(`/api/diaries/${discD.id}/discuss`, { method: "POST", cookie: voterCookie })
     const discThread = r.data?.threadId && await prisma.thread.findUnique({
       where: { id: r.data.threadId },
-      select: { id: true, authorId: true, posts: { select: { authorId: true, deleted: true } } },
+      select: { id: true, slug: true, authorId: true, posts: { select: { authorId: true, deleted: true } } },
     })
     if (discThread) threadIds.push(discThread.id)
     r.status === 201 && discThread?.authorId === owner.id
@@ -963,6 +963,35 @@ const main = async () => {
       liveThreads.length === 1 && liveThreads[0].authorId === owner.id
       ? pass("concurrent discuss yields one canonical owner-authored thread")
       : fail("discuss race", { ra: ra.status, rb: rb.status, tid: raceRow?.threadId, threads: raceThreads })
+
+    // ── Update-anchored discussion affordance ────────────────────────
+    // Each update on a PUBLIC diary exposes the canonical diary
+    // discussion — same lazy-create/link flow as the header button,
+    // never a separate per-update thread. Non-public diaries render no
+    // affordance, matching the discuss route's publicDiaryWhere gate.
+    await prisma.diaryUpdate.create({
+      data: { diaryId: discD.id, authorId: owner.id, title: M("du"), content: "discuss me", stage: "VEGETATIVE", dayNumber: 1, weekNumber: 1 },
+    })
+    const updPage = await getHtml(`/diaries/${discD.id}`, voterCookie)
+    updPage.status === 200 && updPage.html.includes("Discuss this update")
+      ? pass("PUBLIC diary update exposes the discussion affordance")
+      : fail("update discuss affordance", updPage.status)
+    // The update-level action itself routes to the canonical thread —
+    // resolve the href of the anchor whose content carries the label so
+    // a coincidental link elsewhere on the page can't satisfy the check.
+    const updHref = updPage.html.match(/href="([^"]*)"[^>]*>(?:(?!<\/a>)[\s\S])*?Discuss this update/)?.[1]
+    updHref === `/forum/thread/${discThread.slug}`
+      ? pass("update affordance links the canonical discussion thread")
+      : fail("update affordance thread link", updHref)
+    !pages.PRIVATE_owner.includes("Discuss this update")
+      ? pass("PRIVATE diary update has no discussion affordance")
+      : fail("private update affordance")
+    !pages.UNLISTED.includes("Discuss this update") && !pages.UNLISTED.includes("Discuss this grow")
+      ? pass("UNLISTED diary exposes no discussion affordance")
+      : fail("unlisted discuss affordance")
+    !updPage.html.includes("Discuss in chat") && !pages.PUBLIC.includes("Discuss in chat")
+      ? pass("contextless chat-discussion link removed from diary page")
+      : fail("contextless chat link")
 
     // Visibility mutations
     r = await callApi(`/api/diaries/${pubD.id}`, { method: "PATCH", body: { visibility: "PRIVATE" }, cookie: voterCookie })

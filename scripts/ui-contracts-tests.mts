@@ -831,5 +831,21 @@ check("profile P2: owner-only edit entry point + unauthed editor gate", () => {
   assert.ok(e.includes("/api/auth/session") || e.includes("useSession") || e.includes("getServerSession") || e.includes("api/profile"), "editor loads via the session-scoped profile API — never a client-supplied id")
 })
 
+// ── Update-anchored conversation (Batch N) ───────────────────────────
+
+check("update affordance reuses the canonical diary discussion primitive", () => {
+  const f = src("components/update-edit-form.tsx")
+  assert.ok(f.includes("DiaryDiscussButton"), "update cards reuse DiaryDiscussButton — no second discussion mechanism")
+  assert.ok(!f.includes("/api/forum/threads"), "update cards never create threads directly")
+})
+
+check("update discussion affordance stays behind the PUBLIC visibility gate", () => {
+  const p = src("app/diaries/[id]/page.tsx")
+  const idx = p.indexOf("discussion={")
+  assert.ok(idx > -1, "update timeline passes discussion context")
+  assert.ok(p.slice(idx, idx + 400).includes('visibility === "PUBLIC"'), "affordance gated on PUBLIC visibility — same gate as the header button")
+  assert.ok(!p.includes("Discuss in chat"), "contextless /chat discussion affordance removed")
+})
+
 console.log(`\n${passed} passed, ${failed} failed`)
 if (failed > 0) process.exit(1)

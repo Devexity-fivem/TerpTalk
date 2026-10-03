@@ -14,6 +14,7 @@ import { STAGE_TIPS } from "@/lib/stage-tips"
 import { resizeImage } from "@/components/update-form"
 import ImageGallery from "@/components/image-gallery"
 import OwnerDeleteButton from "@/components/owner-delete-button"
+import DiaryDiscussButton from "@/components/diary-discuss-button"
 import Tooltip from "@/components/ui/tooltip"
 
 export interface EditableUpdate {
@@ -55,11 +56,14 @@ interface UpdateEditSectionProps {
   dateLabel: string
   /** updatedAt - createdAt > 60s — informational "edited" marker. */
   edited: boolean
+  /** Canonical diary discussion entry — passed only for PUBLIC diaries;
+   *  omitted entirely otherwise so the affordance never leaks. */
+  discussion?: { diaryId: string; diaryHref: string; slug: string | null }
 }
 
 const num = (v: number | null) => (v == null ? "" : String(v))
 
-export default function UpdateEditSection({ update, day, dateLabel, edited }: UpdateEditSectionProps) {
+export default function UpdateEditSection({ update, day, dateLabel, edited, discussion }: UpdateEditSectionProps) {
   const { data: session } = useSession()
   const router = useRouter()
   const { toast } = useToast()
@@ -669,6 +673,18 @@ export default function UpdateEditSection({ update, day, dateLabel, edited }: Up
                   </li>
                 ))}
               </ul>
+            </div>
+          )}
+
+          {discussion && (
+            <div className="pt-3 border-t border-border/60">
+              <DiaryDiscussButton
+                diaryId={discussion.diaryId}
+                diaryHref={discussion.diaryHref}
+                existingSlug={discussion.slug}
+                label="Discuss this update"
+                variant="link"
+              />
             </div>
           )}
         </>

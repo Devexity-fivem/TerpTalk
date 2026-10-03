@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma"
 import { publicUserSelect, activeAuthor, blockedUserIds, isAdmin } from "@/lib/security"
 import { notFound, permanentRedirect } from "next/navigation"
-import { Leaf, Calendar, Users, ClipboardCheck, Camera, TrendingUp, Pencil, Sprout, Link2, Lock, MessagesSquare, FlaskConical, FileDown } from "@/lib/icons"
+import { Leaf, Calendar, Users, ClipboardCheck, Camera, TrendingUp, Pencil, Sprout, Link2, Lock, FlaskConical, FileDown } from "@/lib/icons"
 import SectionCard from "@/components/ui/section-card"
 import Link from "next/link"
 import { getSession } from "@/lib/session"
@@ -1137,6 +1137,15 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
                             day={diaryDay(diary.startDate, item.u.createdAt)}
                             dateLabel={new Date(item.u.createdAt).toLocaleDateString()}
                             edited={item.u.updatedAt.getTime() - item.u.createdAt.getTime() > 60_000}
+                            discussion={
+                              diary.visibility === "PUBLIC"
+                                ? {
+                                    diaryId: diary.id,
+                                    diaryHref: diaryPath(diary),
+                                    slug: diary.discussion && !diary.discussion.deleted ? diary.discussion.slug : null,
+                                  }
+                                : undefined
+                            }
                           />
                         )
                       )}
@@ -1317,16 +1326,6 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
                 </Link>
               </div>
             )}
-
-            {/* Live chat */}
-            <div className="bg-card/80 rounded-2xl border border-border/70 p-4">
-              <Link
-                href="/chat"
-                className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-secondary/60 hover:text-foreground transition-colors -mx-3 -my-2"
-              >
-                <MessagesSquare className="w-4 h-4 text-primary" /> Discuss in chat
-              </Link>
-            </div>
 
             {/* Setup link */}
             {diary.setup && !diary.setup.deleted && (
