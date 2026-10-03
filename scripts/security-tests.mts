@@ -946,6 +946,33 @@ async function run() {
         token: { id: userId, sessionVersion: 2 },
       } as never)
       assert.equal((ok.user as { id?: string }).id, userId)
+      // Layout-capability fields exposed by the callback — booleans/numbers
+      // only; the raw recovery hash must never reach session.user.
+      const okUser = ok.user as { standing?: number; unlockFrozen?: boolean; hasRecoveryPhrase?: boolean }
+      assert.equal(typeof okUser.standing, "number", "session exposes standing")
+      assert.equal(typeof okUser.unlockFrozen, "boolean", "session exposes unlockFrozen")
+      assert.equal(okUser.hasRecoveryPhrase, false, "user without a phrase → hasRecoveryPhrase=false")
+      assert.equal("recoveryPhraseHash" in (ok.user as object), false, "recovery hash never serialized")
+
+      // A user WITH a stored phrase flips only the boolean.
+      const recUser = await prisma.user.create({
+        data: {
+          name: `__sec_rec_${Date.now().toString(36)}`, ageVerified: true,
+          sessionVersion: 1, recoveryPhraseHash: "hashed-not-a-phrase",
+          profile: { create: { username: `__secr${Date.now().toString(36)}` } },
+        },
+      })
+      try {
+        const rec = await sessionCb!({
+          session: { user: {}, expires: "x" } as never,
+          token: { id: recUser.id, sessionVersion: 1 },
+        } as never)
+        const recUserSession = rec.user as { hasRecoveryPhrase?: boolean; standing?: number }
+        assert.equal(recUserSession.hasRecoveryPhrase, true, "user with a phrase → hasRecoveryPhrase=true")
+        assert.equal("recoveryPhraseHash" in (rec.user as object), false, "recovery hash never serialized (phrase user)")
+      } finally {
+        await prisma.user.delete({ where: { id: recUser.id } }).catch(() => {})
+      }
     }
 
     // ── Case-insensitive usernames ────────────────────────────────

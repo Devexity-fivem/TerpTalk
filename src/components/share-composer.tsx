@@ -12,7 +12,7 @@ import {
 import ImageUploader from "@/components/image-uploader"
 import PollComposer from "@/components/poll-composer"
 import ExperimentForm from "@/components/experiment-form"
-import { STANDING_POLL_CREATE } from "@/lib/progression-config"
+import { STANDING_POLL_CREATE, pollCreationAllowed } from "@/lib/progression-config"
 import { signInHref } from "@/lib/callback-url"
 import { cn } from "@/lib/utils"
 import type { LucideIcon } from "@/lib/icons"
@@ -145,12 +145,13 @@ function ShareComposerDialog({ prefill, onClose }: { prefill?: ComposerPrefill; 
   const [diaryInfo, setDiaryInfo] = useState<{ id: string; title: string; stage: string; harvested?: boolean; own?: boolean } | null>(null)
   const [strainInfo, setStrainInfo] = useState<{ id: string; name: string } | null>(null)
   const [ctxChecked, setCtxChecked] = useState(false)
-  // null = still loading — reputation decides whether the poll type is
-  // unlocked. Staff bypass the fetch entirely.
-  const [pollPerk, setPollPerk] = useState<boolean | null>(null)
-
   const isStaff = STAFF.has((session?.user as { role?: string } | undefined)?.role ?? "")
-  const canCreatePoll = isStaff ? true : pollPerk
+  // null = session still resolving — standing decides whether the poll
+  // type is unlocked. Derived from session data loaded by the auth
+  // callback, so no /api/profile request is needed here.
+  const canCreatePoll = isStaff ? true
+    : !session ? null
+    : pollCreationAllowed(session.user.standing, session.user.unlockFrozen)
 
   // Load initial data. The DOM attribute reads are deferred to a microtask
   // so no setState runs synchronously inside the effect body.
@@ -183,15 +184,7 @@ function ShareComposerDialog({ prefill, onClose }: { prefill?: ComposerPrefill; 
   }, [ctx.diaryId, ctx.strainId])
 
   // Poll perk gate — mirrors POST /api/forum/threads; server still enforces.
-  // Staff bypass is derived during render so no synchronous setState is
-  // needed in the effect; non-staff users are checked via /api/profile.
-  useEffect(() => {
-    if (!session || isStaff) return
-    fetch("/api/profile")
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => setPollPerk(d?.stats?.pollCreation === true))
-      .catch(() => setPollPerk(false))
-  }, [session, isStaff])
+  // The session-derived hint above replaces the old /api/profile fetch.
 
   // Keyboard: Escape to close
   useEffect(() => {

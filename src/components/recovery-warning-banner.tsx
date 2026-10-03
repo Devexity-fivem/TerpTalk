@@ -11,25 +11,20 @@ const DISMISS_KEY = "terptalk-no-recovery-phrase"
 // per-session (sessionStorage) — the warning comes back next session while the
 // account still has no recovery path.
 export default function RecoveryWarningBanner() {
-  const { status } = useSession()
-  const [missing, setMissing] = useState(false)
+  const { data: session, status } = useSession()
   const [dismissed, setDismissed] = useState(true)
 
+  // Derived from the session (the auth callback loads recoveryPhraseHash
+  // server-side and exposes only the boolean) — no /api/profile/recovery
+  // request needed.
+  const missing = status === "authenticated" && session?.user.hasRecoveryPhrase === false
+
+  // sessionStorage read is deferred to a microtask so no setState runs
+  // synchronously inside the effect body (react-hooks/set-state-in-effect).
   useEffect(() => {
-    if (status !== "authenticated") return
-    let cancelled = false
-    fetch("/api/profile/recovery")
-      .then((res) => (res.ok ? res.json() : { hasPhrase: true }))
-      .then((d: { hasPhrase?: boolean }) => {
-        if (cancelled) return
-        if (d.hasPhrase === false) {
-          setMissing(true)
-          setDismissed(sessionStorage.getItem(DISMISS_KEY) === "1")
-        }
-      })
-      .catch(() => {})
-    return () => { cancelled = true }
-  }, [status])
+    if (!missing) return
+    queueMicrotask(() => setDismissed(sessionStorage.getItem(DISMISS_KEY) === "1"))
+  }, [missing])
 
   if (!missing || dismissed) return null
 

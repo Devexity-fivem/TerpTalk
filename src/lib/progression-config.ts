@@ -314,6 +314,13 @@ export const STANDING_POLL_CREATE = 100
 export const STANDING_VERIFIED = 300 // Progression Verified (Respected + 30d + no flags)
 export const STANDING_VERIFIED_FLOOR = 100 // demote buffer — drops below Trusted → demote
 export const STANDING_SLOWMODE_EXEMPT = 800
+
+/** The "poll-create" gate — Trusted standing and unlocks unfrozen. Shared
+ *  by the server perk map and session-derived client hints so the rule
+ *  lives in exactly one place. */
+export function pollCreationAllowed(standing: number | null | undefined, unlockFrozen: boolean | null | undefined): boolean {
+  return !unlockFrozen && (standing ?? 0) >= STANDING_POLL_CREATE
+}
 export const VERIFIED_MIN_AGE_DAYS_V2 = 30
 
 // ─── Quality + duplicate detection (locked §6.7) ─────────────────────

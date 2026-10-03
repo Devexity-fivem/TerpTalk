@@ -7,6 +7,9 @@ declare module "next-auth" {
       username?: string
       role?: string
       onboardingCompletedAt?: string | null
+      standing?: number
+      unlockFrozen?: boolean
+      hasRecoveryPhrase?: boolean
     } & DefaultSession["user"]
   }
 

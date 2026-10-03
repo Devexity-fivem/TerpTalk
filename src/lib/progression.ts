@@ -34,7 +34,7 @@ import {
   STANDING_GRANTOR_WINDOW_DAYS,
   STANDING_PER_GRANTOR_LIFETIME,
   STANDING_PER_SOURCE_WEEK_CAP,
-  STANDING_POLL_CREATE,
+  pollCreationAllowed,
   STANDING_POLL_VOTE,
   STANDING_RECIPROCAL_WINDOW_DAYS,
   STANDING_SLOWMODE_EXEMPT,
@@ -1539,7 +1539,7 @@ export function progressionPerksFrom(xp: number, standing: number, frozen: boole
   const at = (rankName: string) => !frozen && xp >= (REP_RANKS.find((r) => r.name === rankName)?.threshold ?? Infinity)
   return {
     pollVoting: !frozen && standing >= STANDING_POLL_VOTE,
-    pollCreation: !frozen && standing >= STANDING_POLL_CREATE,
+    pollCreation: pollCreationAllowed(standing, frozen),
     rateLimitBoost: at("Cured") ? 2 : at("Harvested") ? 1.5 : 1,
     slowmodeExempt: !frozen && standing >= STANDING_SLOWMODE_EXEMPT,
     imagesPerPost: at("Cultivator") ? 10 : at("Harvested") ? 8 : at("Flowering") ? 6 : at("Seedling") ? 5 : undefined,

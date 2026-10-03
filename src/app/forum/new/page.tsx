@@ -14,7 +14,7 @@ import PollComposer from "@/components/poll-composer"
 import Link from "next/link"
 import { WIZARD_RESULTS } from "@/lib/problem-wizard"
 import { SYMPTOM_TAGS, wizardResultToTag } from "@/lib/symptom-tags"
-import { STANDING_POLL_CREATE } from "@/lib/progression-config"
+import { STANDING_POLL_CREATE, pollCreationAllowed } from "@/lib/progression-config"
 
 // Client-side mirror of the server gate in POST /api/forum/threads —
 // shared STAFF_ROLES set from the pure roles module keeps this in sync.
@@ -79,8 +79,11 @@ function NewThreadForm() {
     return out
   })
   const [poll, setPoll] = useState<{ question: string; options: string[] } | null>(null)
-  // null = still loading; reputation decides whether the poll perk shows.
-  const [canCreatePoll, setCanCreatePoll] = useState<boolean | null>(null)
+  // null = session still resolving; standing decides whether the poll
+  // perk shows. Derived from session data — no /api/profile fetch.
+  const canCreatePoll = status !== "authenticated" ? null
+    : STAFF.has(session?.user?.role ?? "") ||
+      pollCreationAllowed(session?.user.standing, session?.user.unlockFrozen)
 
   useEffect(() => {
     fetch("/api/categories")
@@ -88,17 +91,6 @@ function NewThreadForm() {
       .then(data => setCategories(data.categories || []))
       .catch(() => setError("Failed to load categories"))
   }, [])
-
-  useEffect(() => {
-    if (status !== "authenticated") return
-    fetch("/api/profile")
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => setCanCreatePoll(
-        STAFF.has((session?.user as { role?: string } | undefined)?.role ?? "") ||
-        d?.stats?.pollCreation === true
-      ))
-      .catch(() => setCanCreatePoll(false))
-  }, [status, session])
 
   useEffect(() => {
     const t = setTimeout(() => {

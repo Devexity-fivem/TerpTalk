@@ -52,6 +52,7 @@ import {
   STANDING_POLL_VOTE,
   STANDING_POLL_CREATE,
   STANDING_SLOWMODE_EXEMPT,
+  pollCreationAllowed,
 } from "@/lib/progression-config"
 import { WEEKLY_CHALLENGES, reconcileChallengePayouts, currentWeekKey } from "@/lib/challenges"
 import {
@@ -1622,6 +1623,22 @@ async function run() {
     await prisma.profile.update({ where: { userId: st }, data: { unlockFrozen: true } })
     assert.equal(await hasUnlock(st, "slowmode-exempt"), false, "frozen member loses standing perks")
     await prisma.profile.update({ where: { userId: st }, data: { unlockFrozen: false } })
+
+    // Session-derived poll hint (Batch K): share-composer and /forum/new
+    // read standing/unlockFrozen off session.user and call this helper —
+    // it must agree exactly with the server-side perk map.
+    assert.equal(pollCreationAllowed(STANDING_POLL_CREATE - 1, false), false, "below Trusted cannot create polls")
+    assert.equal(pollCreationAllowed(STANDING_POLL_CREATE, false), true, "Trusted opens poll creation")
+    assert.equal(pollCreationAllowed(STANDING_POLL_CREATE + 1, false), true, "above threshold stays open")
+    assert.equal(pollCreationAllowed(STANDING_POLL_CREATE, true), false, "frozen at threshold still locked")
+    assert.equal(pollCreationAllowed(undefined, undefined), false, "missing session fields fail closed")
+    for (const s of [0, STANDING_POLL_CREATE - 1, STANDING_POLL_CREATE, STANDING_POLL_CREATE + 500]) {
+      for (const f of [false, true]) {
+        assert.equal(
+          progressionPerksFrom(0, s, f).pollCreation, pollCreationAllowed(s, f),
+          `hint agrees with perk map at standing=${s} frozen=${f}`)
+      }
+    }
 
     // tags-7 row ↔ perk agreement: registry gate must flip at the same XP
     // the maxThreadTags ladder does (5800 = Ripening).
