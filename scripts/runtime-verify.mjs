@@ -481,6 +481,24 @@ const main = async () => {
       fail("pusher config", "NEXT_PUBLIC_PUSHER_KEY unset — realtime delivery not verifiable")
     }
 
+    // ══ 6b. Chat mention deep-links to the exact message (Batch P) ══
+    const mentionRes = await callApi("/api/chat/messages", { method: "POST", body: { roomId: room.id, content: `ping @${b.username} for Batch P` }, cookie: aC })
+    const mentionMsgId = mentionRes.data?.message?.id
+    // notifyMentions is fire-and-forget — poll the stored row directly
+    // (the notifications API is paginated; b's inbox may exceed a page).
+    let mentionN = null
+    for (let i = 0; i < 10 && !mentionN; i++) {
+      await new Promise((res) => setTimeout(res, 500))
+      mentionN = await prisma.notification.findFirst({
+        where: { userId: b.id, type: "MENTION", link: { startsWith: "/chat?room=" } },
+        orderBy: { createdAt: "desc" },
+        select: { link: true },
+      }).catch(() => null)
+    }
+    mentionRes.status === 201 && mentionN?.link === `/chat?room=rv-room-${TS}#msg-${mentionMsgId}`
+      ? pass("chat mention notification links to the exact message")
+      : fail("mention deep link", { status: mentionRes.status, msgId: mentionMsgId, got: mentionN?.link })
+
     // ══ 7. Browser data exposure ══════════════════════════════════
     const FORBIDDEN = [/recoveryPhraseHash/i, /sessionVersion/i, /\$2[aby]\$\d+\$/, /IP_HASH_SALT/i, /NEXTAUTH_SECRET/i, /"password"\s*:/]
     const exposurePages = ["/settings", "/profile", `/diaries/${aDiary.id}`, `/forum/thread/${aThread.slug}`, "/messages"]

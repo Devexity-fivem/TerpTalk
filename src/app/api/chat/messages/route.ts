@@ -374,9 +374,9 @@ export async function POST(request: NextRequest) {
       content,
       userId,
       actorName,
-      // Deep link into the room — /chat?room=<slug> is the existing
-      // room-selection contract the client already understands.
-      `/chat?room=${encodeURIComponent(room.slug)}`,
+      // Deep link to the exact message — /chat?room=<slug> selects the room
+      // and #msg-<id> is the client-side scroll anchor the chat UI resolves.
+      `/chat?room=${encodeURIComponent(room.slug)}#msg-${message.id}`,
       `the ${room.name} chat room`
     ).catch(() => {})
 

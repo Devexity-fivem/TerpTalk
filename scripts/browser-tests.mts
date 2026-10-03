@@ -249,6 +249,41 @@ const main = async () => {
       (await alicePage.locator('button[role="menuitem"]:has-text("Ask the community")').count()) === 0)
     await alicePage.locator(`[data-mid="${bobChatMsg.id}"] button[aria-label="Message options"]`).click()
 
+    // Mention → notification → #msg link → exact message (Batch P).
+    // Emit through the real POST endpoint using alice's session cookie.
+    const aliceCookies = await aliceCtx.cookies(BASE)
+    const cookieHeader = aliceCookies.map((c) => `${c.name}=${c.value}`).join("; ")
+    const mentionPost = await fetch(`${BASE}/api/chat/messages`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: cookieHeader },
+      body: JSON.stringify({ roomId: chatRoom.id, content: `hey @${bobUsername} look at this ${TS}` }),
+    })
+    const mentionMsg = (await mentionPost.json().catch(() => ({})))?.message
+    // Bury the mention under newer messages so a bottom-landing would miss
+    // it — proving the anchor pulled bob to the exact row. Keep the room
+    // under the 50-message GET window so older fixture rows still render.
+    if (mentionMsg?.id) {
+      await prisma.chatMessage.createMany({
+        data: Array.from({ length: 4 }, (_, i) => ({
+          roomId: chatRoom.id, authorId: alice.id,
+          content: `__br post-mention ${TS} #${i + 1}`,
+          createdAt: new Date(Date.now() + (i + 1) * 1000),
+        })),
+      })
+    }
+    const { context: bobChatCtx, page: bobChatPage } = await login(bobUsername)
+    await gotoMain(bobChatPage, `${BASE}/notifications`)
+    const mentionLink = bobChatPage.locator(`a[href*="#msg-"]`).first()
+    const linkFound = await mentionLink.waitFor({ state: "visible", timeout: 15_000 }).then(() => true).catch(() => false)
+    ok("chat: mention notification carries a #msg-<id> link", linkFound && mentionPost.status === 201, { status: mentionPost.status, id: mentionMsg?.id })
+    await mentionLink.click()
+    await bobChatPage.waitForSelector(`[data-mid="${mentionMsg?.id}"]`, { timeout: 30_000 }).catch(() => null)
+    const mentionAnchored = mentionMsg?.id
+      ? await bobChatPage.waitForFunction(inView, mentionMsg.id, { timeout: 15_000 }).then(() => true).catch(() => false)
+      : false
+    ok("chat: clicking the mention notification lands on the exact message", mentionAnchored)
+    await bobChatCtx.close()
+
     // Mobile: anchor lands at 390px and the menu fits the viewport.
     const { context: chatMobCtx, page: chatMobPage } = await login(aliceUsername, { viewport: { width: 390, height: 844 } })
     await gotoMain(chatMobPage, `${BASE}/chat?room=${chatRoom.slug}#msg-${chatTarget.id}`, '[role="log"]')

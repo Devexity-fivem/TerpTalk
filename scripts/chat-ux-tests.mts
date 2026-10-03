@@ -362,6 +362,13 @@ async function run() {
     assert.ok(!body.includes("wizardResultId"), "no origin tagging — a normal question")
   })
 
+  check("mention notification link emits #msg-<messageId> (Batch P)", () => {
+    const r = src("app/api/chat/messages/route.ts")
+    assert.ok(r.includes("encodeURIComponent(room.slug)}#msg-${message.id}"), "mention link = room slug + message anchor")
+    // The id is the freshly created row — no second read to obtain it.
+    assert.ok(!r.includes("chatMessage.findUnique"), "no extra DB read for the id")
+  })
+
   check("#msg-<id> deep link is a scroll hint over rendered rows only", () => {
     assert.ok(room.includes("window.location.hash.match(/^#msg-"), "reads #msg-<id> client-side")
     const fx = room.slice(room.indexOf("deep link lands on the exact message"), room.indexOf("On room entry with unread history"))
