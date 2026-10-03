@@ -1,3 +1,4 @@
+import { cache } from "react"
 import { prisma } from "@/lib/prisma"
 
 export const SITE_SETTINGS = {
@@ -18,10 +19,15 @@ export const SITE_SETTINGS = {
   GROW_ROOM_ENABLED: "grow_room_enabled",
 } as const
 
-export async function getSetting(key: string): Promise<string | null> {
+// Request-local memoization (React cache): repeated reads of the same key
+// inside one request collapse to a single query. Outside a render scope
+// (route handlers' cold paths, scripts) cache() is a passthrough, so
+// feature flags and kill-switches stay freshly read across requests —
+// no cross-request staleness, no invalidation surface.
+export const getSetting = cache(async (key: string): Promise<string | null> => {
   const row = await prisma.setting.findUnique({ where: { key }, select: { value: true } })
   return row?.value ?? null
-}
+})
 
 export async function getBooleanSetting(key: string, defaultValue = false): Promise<boolean> {
   const value = await getSetting(key)
