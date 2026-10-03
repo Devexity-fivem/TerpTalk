@@ -7,7 +7,7 @@ import { useSearchParams } from "next/navigation"
 import {
   MessageCircle, Send, X, Loader2, Smile, RefreshCw, MoreVertical,
   Trash2, AlertTriangle, Clock, Shield, User as UserIcon, MessageSquare,
-  Lock, Timer, Hash, Bot, Flag, ChevronDown,
+  Lock, Timer, Hash, Bot, Flag, ChevronDown, MessageCircleQuestion,
 } from "@/lib/icons"
 import Link from "next/link"
 import RoleBadge from "@/components/role-badge"
@@ -38,6 +38,7 @@ import {
   type ChatMessageDeletedEvent,
 } from "@/lib/chat-client"
 import { useToast } from "@/components/ui/toast"
+import { useShareComposer } from "@/components/share-composer"
 import ConfirmDialog from "@/components/ui/confirm-dialog"
 import EmptyState from "@/components/ui/empty-state"
 import Tooltip from "@/components/ui/tooltip"
@@ -140,13 +141,14 @@ interface MessageRowProps {
   compact: boolean
   onToggleMenu: (id: string) => void
   onReply: (msg: Message) => void
+  onAskCommunity: (msg: Message) => void
   onModerate: (actionType: string, targetUserId: string, opts?: { targetType?: string; targetId?: string; durationDays?: number }) => void
   onDeleteOwn: (id: string) => void
 }
 
 // Memoized — a 100-message room re-renders only the row whose menu toggled.
 const MessageRow = memo(function MessageRow({
-  msg, isMenuOpen, isOwn, canManage, isAdmin, compact, onToggleMenu, onReply, onModerate, onDeleteOwn,
+  msg, isMenuOpen, isOwn, canManage, isAdmin, compact, onToggleMenu, onReply, onAskCommunity, onModerate, onDeleteOwn,
 }: MessageRowProps) {
   const isDeleted = msg.content === "[deleted]"
   const isBot = msg.author.username === BOT_USERNAME
@@ -279,6 +281,15 @@ const MessageRow = memo(function MessageRow({
             >
               <MessageSquare className="w-3 h-3 text-primary" /> Reply
             </button>
+            {isOwn && !isDeleted && !isBot && (
+              <button
+                role="menuitem"
+                onClick={() => onAskCommunity(msg)}
+                className="w-full flex items-center gap-1.5 px-2 py-1 rounded text-xs text-left hover:bg-secondary text-foreground"
+              >
+                <MessageCircleQuestion className="w-3 h-3 text-primary" /> Ask the community
+              </button>
+            )}
             <Link
               role="menuitem"
               href={`/u/${encodeURIComponent(displayName)}`}
@@ -451,6 +462,7 @@ interface ChatRoomProps {
 export default function ChatRoom({ embedded = false, headerActions }: ChatRoomProps = {}) {
   const { data: session } = useSession()
   const searchParams = useSearchParams()
+  const composer = useShareComposer()
   const { toast } = useToast()
   const myRole = (session?.user as { role?: string } | undefined)?.role
   const isStaff = isStaffRole(myRole)
@@ -1103,6 +1115,14 @@ export default function ChatRoom({ embedded = false, headerActions }: ChatRoomPr
     inputRef.current?.focus()
   }, [])
 
+  // Own-message-only bridge: hand the text to the shared question
+  // composer — the member edits and explicitly publishes a normal
+  // forum question. Nothing is persisted or sent by this action alone.
+  const askCommunity = useCallback((msg: Message) => {
+    setActiveMenu(null)
+    composer.open({ type: "question", title: "", content: msg.content })
+  }, [composer])
+
   const listboxId = "chat-suggestions"
 
   if (!session) {
@@ -1309,6 +1329,7 @@ export default function ChatRoom({ embedded = false, headerActions }: ChatRoomPr
                       isAdmin={isAdmin}
                       onToggleMenu={toggleMenu}
                       onReply={startReply}
+                      onAskCommunity={askCommunity}
                       onModerate={takeModerationAction}
                       onDeleteOwn={setPendingDeleteId}
                     />

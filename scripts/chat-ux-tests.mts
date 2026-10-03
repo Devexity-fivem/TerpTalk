@@ -347,6 +347,21 @@ async function run() {
     assert.ok(mobileNav.includes("chatUnread"), "chatUnread prop wired")
   })
 
+  // ── Batch O: ask-the-community bridge + #msg- deep links ─────────────
+
+  check("ask-the-community is gated to own live member messages", () => {
+    assert.ok(room.includes("isOwn && !isDeleted && !isBot"), "gate: own + non-deleted + non-bot")
+    assert.ok(room.includes("Ask the community"), "menuitem label present")
+  })
+
+  check("ask-the-community opens the shared composer — no request, no origin tag", () => {
+    const body = room.slice(room.indexOf("const askCommunity"), room.indexOf("const listboxId"))
+    assert.ok(body.includes('composer.open({ type: "question"'), "opens the shared composer as a question")
+    assert.ok(body.includes("content: msg.content"), "message text becomes the editable draft")
+    assert.ok(!body.includes("fetch") && !body.includes("/api/"), "menu select performs no request — publish stays explicit")
+    assert.ok(!body.includes("wizardResultId"), "no origin tagging — a normal question")
+  })
+
   // ── Database-backed: activity visibility boundaries ──────────────────
 
   const member = await prisma.user.create({

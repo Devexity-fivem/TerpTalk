@@ -857,5 +857,25 @@ check("onboarding Done step offers contribution actions through complete()", () 
   }
 })
 
+// ── Chat → question bridge (Batch O) ──────────────────────────────────
+
+check("chat bridges through the shared composer — no conversion endpoint exists", () => {
+  assert.ok(room.includes("useShareComposer"), "chat reuses the global composer context")
+  assert.ok(room.includes("composer.open"), "menu action hands off to composer.open")
+  // The only thread-creation surface stays /api/forum/threads — nothing
+  // under /api/chat may create forum content (no server-side 'convert'
+  // path that could bypass the client-side own-message gate).
+  for (const f of [...walk(join(SRC, "app/api/chat"))].filter((p) => p.endsWith("route.ts"))) {
+    assert.ok(!readFileSync(f, "utf8").includes("prisma.thread.create"), `${f} must not create forum threads`)
+  }
+})
+
+check("chat-originated question rides the existing question flow", () => {
+  const sc = src("components/share-composer.tsx")
+  const submit = sc.slice(sc.indexOf('case "question"'), sc.indexOf("const result"))
+  assert.ok(submit.includes("/api/forum/threads"), "question type posts to the existing thread endpoint")
+  assert.ok(sc.includes("content?: string"), "ComposerPrefill carries editable content")
+})
+
 console.log(`\n${passed} passed, ${failed} failed`)
 if (failed > 0) process.exit(1)

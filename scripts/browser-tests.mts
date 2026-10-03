@@ -68,6 +68,27 @@ const main = async () => {
     },
   })
 
+  // Chat fixtures (Batch O) — a public room where the anchor target is the
+  // OLDEST message and ~40 newer fillers force the initial view to land at
+  // the bottom, so an in-view target proves the #msg- scroll ran.
+  const chatRoom = await prisma.chatRoom.create({
+    data: { name: `__br lounge ${TS}`, slug: `__br-lounge-${TS}`, order: 990 },
+  })
+  const chatTarget = await prisma.chatMessage.create({
+    data: { roomId: chatRoom.id, authorId: alice.id, content: `__br anchor ${TS} — the pinned question`, createdAt: new Date(Date.now() - 60 * 60_000) },
+  })
+  const bobChatMsg = await prisma.chatMessage.create({
+    data: { roomId: chatRoom.id, authorId: bob.id, content: `__br bob's message ${TS}`, createdAt: new Date(Date.now() - 59 * 60_000) },
+  })
+  await prisma.chatMessage.createMany({
+    data: Array.from({ length: 40 }, (_, i) => ({
+      roomId: chatRoom.id,
+      authorId: alice.id,
+      content: `__br filler ${TS} #${i + 1}`,
+      createdAt: new Date(Date.now() - (58 - i) * 60_000),
+    })),
+  })
+
   // Login attempts are bucketed per-IP (30/15min) — earlier HTTP suites in
   // a master run can exhaust the allowance. Clear the login buckets like
   // account-verify does for register, so this suite is deterministic.
@@ -87,8 +108,8 @@ const main = async () => {
     await page.waitForSelector(selector, { timeout: 30_000 })
     return res
   }
-  const login = async (username: string) => {
-    const context = await browser.newContext()
+  const login = async (username: string, contextOpts?: import("playwright-core").BrowserContextOptions) => {
+    const context = await browser.newContext(contextOpts)
     const page = await context.newPage()
     // networkidle is safe here specifically: the anonymous signin page
     // opens no Pusher socket, so network settles. The controlled inputs
@@ -177,6 +198,40 @@ const main = async () => {
     const progBody = (await alicePage.textContent("body")) ?? ""
     ok("progression: /progress renders rank/unlock surface", progRes?.status() === 200 && progBody.length > 500, progRes?.status())
 
+    // ── Chat: ask-the-community (Batch O) ────────────────────────────
+    await gotoMain(alicePage, `${BASE}/chat?room=${chatRoom.slug}`, '[role="log"]')
+    await alicePage.waitForSelector(`[data-mid="${chatTarget.id}"]`, { timeout: 30_000 })
+
+    // Own message → Ask the community → composer prefill → cancel = nothing.
+    await alicePage.locator(`[data-mid="${chatTarget.id}"] button[aria-label="Message options"]`).click()
+    const askItem = alicePage.locator('button[role="menuitem"]:has-text("Ask the community")')
+    ok("chat: own message exposes Ask the community", (await askItem.count()) === 1)
+    await askItem.click()
+    await alicePage.waitForSelector('div[role="dialog"][aria-label="Share something"]', { timeout: 10_000 })
+    const prefill = await alicePage.inputValue('div[role="dialog"] textarea')
+    ok("chat: composer opens with the message text as editable draft", prefill === chatTarget.content, prefill.slice(0, 80))
+    await alicePage.keyboard.press("Escape")
+    await alicePage.waitForSelector('div[role="dialog"]', { state: "detached", timeout: 10_000 })
+    ok("chat: cancelling the composer creates no thread", (await prisma.thread.count({ where: { authorId: alice.id } })) === 0)
+
+    // Another member's message must not expose the action.
+    await alicePage.locator(`[data-mid="${bobChatMsg.id}"] button[aria-label="Message options"]`).click()
+    ok("chat: another member's message hides Ask the community",
+      (await alicePage.locator('button[role="menuitem"]:has-text("Ask the community")').count()) === 0)
+    await alicePage.locator(`[data-mid="${bobChatMsg.id}"] button[aria-label="Message options"]`).click()
+
+    // Mobile: the message menu fits a 390px viewport.
+    const { context: chatMobCtx, page: chatMobPage } = await login(aliceUsername, { viewport: { width: 390, height: 844 } })
+    await gotoMain(chatMobPage, `${BASE}/chat?room=${chatRoom.slug}`, '[role="log"]')
+    await chatMobPage.waitForSelector(`[data-mid="${chatTarget.id}"]`, { timeout: 30_000 })
+    await chatMobPage.locator(`[data-mid="${chatTarget.id}"] button[aria-label="Message options"]`).click()
+    const menu = chatMobPage.locator('div[role="menu"]').first()
+    await menu.waitFor({ state: "visible", timeout: 10_000 })
+    const menuBox = await menu.boundingBox()
+    ok("mobile: message menu fits the 390px viewport",
+      !!menuBox && menuBox.x >= 0 && menuBox.x + menuBox.width <= 391 && menuBox.width > 0)
+    await chatMobCtx.close()
+
     // ── Block boundary (privacy) ─────────────────────────────────────
     await prisma.block.create({ data: { blockerId: alice.id, blockedId: bob.id } })
     const { context: bobCtx, page: bobPage } = await login(bobUsername)
@@ -203,6 +258,7 @@ const main = async () => {
   } finally {
     await browser.close().catch(() => {})
     await prisma.block.deleteMany({ where: { OR: [{ blockerId: alice.id }, { blockerId: bob.id }] } }).catch(() => {})
+    await prisma.chatRoom.deleteMany({ where: { id: chatRoom.id } }).catch(() => {})
     await prisma.user.deleteMany({ where: { id: { in: [alice.id, bob.id] } } }).catch(() => {})
     await prisma.$disconnect()
   }
