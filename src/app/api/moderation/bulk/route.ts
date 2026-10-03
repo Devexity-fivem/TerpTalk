@@ -121,11 +121,23 @@ export async function POST(request: Request) {
         where: { OR: [{ threadId: { in: ids } }, { post: { threadId: { in: ids } } }] },
       })
       deleteImagesIfUnreferenced(imgs.map((i) => i.url)).catch(() => {})
+      // One bulk read for all posts — grouped by thread in memory — instead
+      // of a per-thread findMany inside the reversal loop.
+      const allPosts = await prisma.post.findMany({
+        where: { threadId: { in: ids } },
+        select: { id: true, threadId: true },
+      })
+      const postsByThread = new Map<string, string[]>()
+      for (const p of allPosts) {
+        const list = postsByThread.get(p.threadId)
+        if (list) list.push(p.id)
+        else postsByThread.set(p.threadId, [p.id])
+      }
       for (const t of threads) {
-        const postIds = await prisma.post.findMany({ where: { threadId: t.id }, select: { id: true } })
+        const postIds = postsByThread.get(t.id) ?? []
         const repIntents: Parameters<typeof enqueueReversals>[1] = [
           { kind: "SOURCE", sourceType: "THREAD", sourceId: t.id, reason: "Content removed by staff", requestedBy: staff.id },
-          ...postIds.map((p) => ({ kind: "SOURCE" as const, sourceType: "POST", sourceId: p.id, reason: "Content removed by staff", requestedBy: staff.id })),
+          ...postIds.map((postId) => ({ kind: "SOURCE" as const, sourceType: "POST", sourceId: postId, reason: "Content removed by staff", requestedBy: staff.id })),
         ]
         const batch = await enqueueReversals(prisma, repIntents)
         const xpBatch = await enqueueXpReversals(prisma, repIntents)

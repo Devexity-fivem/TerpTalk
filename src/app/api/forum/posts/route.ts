@@ -32,14 +32,6 @@ export async function POST(request: Request) {
       return unauthorized()
     }
 
-    const currentUser = await prisma.user.findUnique({
-      where: { id: session.user.id },
-      select: { role: true, banned: true },
-    })
-    if (!currentUser || currentUser.banned) {
-      return forbidden("Your account is suspended")
-    }
-
     const body = await request.json().catch(() => ({}))
     const { content, threadId, images } = body
 
@@ -93,7 +85,7 @@ export async function POST(request: Request) {
       )
     }
 
-    if (thread.locked || thread.deleted || (thread.category?.hidden && !isModerator(currentUser.role))) {
+    if (thread.locked || thread.deleted || (thread.category?.hidden && !isModerator(session.user.role))) {
       return NextResponse.json(
         { error: "Thread is locked" },
         { status: 403 }
@@ -304,14 +296,6 @@ export async function PATCH(request: Request) {
       return unauthorized()
     }
 
-    const currentUser = await prisma.user.findUnique({
-      where: { id: session.user.id },
-      select: { role: true, banned: true },
-    })
-    if (!currentUser || currentUser.banned) {
-      return forbidden("Your account is suspended")
-    }
-
     const body = await request.json().catch(() => ({}))
     const { id, content } = body
 
@@ -352,7 +336,7 @@ export async function PATCH(request: Request) {
     if (
       post.thread.locked ||
       post.thread.deleted ||
-      (post.thread.category?.hidden && !isModerator(currentUser.role))
+      (post.thread.category?.hidden && !isModerator(session.user.role))
     ) {
       return NextResponse.json({ error: "Thread is locked" }, { status: 403 })
     }

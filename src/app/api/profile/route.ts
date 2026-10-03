@@ -53,76 +53,85 @@ export async function GET() {
       )
     }
 
-    // Get recent activity — exclude soft-deleted items; the _count selects
-    // above already filter them, so the lists must match.
-    const recentThreads = await prisma.thread.findMany({
-      where: { authorId: user.id, deleted: false },
-      take: 5,
-      orderBy: { createdAt: "desc" },
-      select: {
-        id: true,
-        title: true,
-        slug: true,
-        createdAt: true,
-        replyCount: true,
-        category: { select: { name: true } },
-      },
-    })
-
-    const recentDiaries = await prisma.growDiary.findMany({
-      where: { authorId: user.id, deleted: false },
-      take: 5,
-      orderBy: { createdAt: "desc" },
-      include: {
-        _count: {
-          select: { updates: true, followers: true },
+    // All of the reads below depend only on the already-loaded user/profile —
+    // run them concurrently instead of as serial round trips. The unlock/limit
+    // helpers take the loaded profile so they don't each re-read the same row.
+    const [
+      recentThreads,
+      recentDiaries,
+      referralCount,
+      harvestedDiaries,
+      featureableDiaries,
+      sectionLimit,
+      statSlots,
+      recordsWidget,
+      insightsWidget,
+      masteryMap,
+    ] = await Promise.all([
+      // Recent activity — exclude soft-deleted items; the _count selects
+      // above already filter them, so the lists must match.
+      prisma.thread.findMany({
+        where: { authorId: user.id, deleted: false },
+        take: 5,
+        orderBy: { createdAt: "desc" },
+        select: {
+          id: true,
+          title: true,
+          slug: true,
+          createdAt: true,
+          replyCount: true,
+          category: { select: { name: true } },
         },
-      },
-    })
-
-    const referralCount = user.profile
-      ? await prisma.profile.count({ where: { referredById: user.profile.id } })
-      : 0
-
-    // Harvested grows the member can pin to their profile (Garden Perk).
-    const harvestedDiaries = await prisma.growDiary.findMany({
-      where: { authorId: user.id, deleted: false, harvested: true },
-      orderBy: { harvestedAt: "desc" },
-      take: 50,
-      select: {
-        id: true,
-        slug: true,
-        title: true,
-        strain: true,
-        harvestedAt: true,
-        visibility: true,
-      },
-    })
-
-    // P2 — every own non-deleted diary is eligible for the featured-grow
-    // picker (any visibility; a PRIVATE pick simply doesn't render publicly).
-    const featureableDiaries = await prisma.growDiary.findMany({
-      where: { authorId: user.id, deleted: false },
-      orderBy: { updatedAt: "desc" },
-      take: 100,
-      select: {
-        id: true,
-        slug: true,
-        title: true,
-        strain: true,
-        harvested: true,
-        stage: true,
-        visibility: true,
-      },
-    })
-
-    // P2 — progression-derived customization caps for the editor, plus the
-    // mastery map the hub hero needs for its build-title chip.
-    const [sectionLimit, statSlots, recordsWidget, insightsWidget, masteryMap] = await Promise.all([
-      profileSectionLimit(user.id),
-      statSlotLimit(user.id),
-      hasUnlock(user.id, "records-widget"),
-      hasUnlock(user.id, "owner-analytics"),
+      }),
+      prisma.growDiary.findMany({
+        where: { authorId: user.id, deleted: false },
+        take: 5,
+        orderBy: { createdAt: "desc" },
+        include: {
+          _count: {
+            select: { updates: true, followers: true },
+          },
+        },
+      }),
+      user.profile
+        ? prisma.profile.count({ where: { referredById: user.profile.id } })
+        : Promise.resolve(0),
+      // Harvested grows the member can pin to their profile (Garden Perk).
+      prisma.growDiary.findMany({
+        where: { authorId: user.id, deleted: false, harvested: true },
+        orderBy: { harvestedAt: "desc" },
+        take: 50,
+        select: {
+          id: true,
+          slug: true,
+          title: true,
+          strain: true,
+          harvestedAt: true,
+          visibility: true,
+        },
+      }),
+      // P2 — every own non-deleted diary is eligible for the featured-grow
+      // picker (any visibility; a PRIVATE pick simply doesn't render publicly).
+      prisma.growDiary.findMany({
+        where: { authorId: user.id, deleted: false },
+        orderBy: { updatedAt: "desc" },
+        take: 100,
+        select: {
+          id: true,
+          slug: true,
+          title: true,
+          strain: true,
+          harvested: true,
+          stage: true,
+          visibility: true,
+        },
+      }),
+      // P2 — progression-derived customization caps for the editor, plus the
+      // mastery map the hub hero needs for its build-title chip.
+      profileSectionLimit(user.id, user.profile),
+      statSlotLimit(user.id, user.profile),
+      hasUnlock(user.id, "records-widget", user.profile),
+      hasUnlock(user.id, "owner-analytics", user.profile),
       getMasteryMap(user.id),
     ])
     const masteryLevels = Object.fromEntries(

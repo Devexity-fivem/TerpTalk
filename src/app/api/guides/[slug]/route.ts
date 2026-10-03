@@ -52,14 +52,9 @@ export async function PATCH(
       return NextResponse.json({ error: "Slow down." }, { status: 429 })
     }
 
-    // Permission: guide author or moderator (fresh DB role check)
-    const user = await prisma.user.findUnique({
-      where: { id: session.user.id },
-      select: { createdAt: true, banned: true, role: true, profile: { select: { username: true } } },
-    })
-    if (!user || user.banned) return forbidden()
-
-    const canEdit = guide.authorId === session.user.id || isModerator(user.role)
+    // Permission: guide author or moderator — role comes from the fresh
+    // session-callback user read.
+    const canEdit = guide.authorId === session.user.id || isModerator(session.user.role)
 
     if (!canEdit) {
       return forbidden("Only the guide author or a moderator can edit this guide")
@@ -73,7 +68,7 @@ export async function PATCH(
       if (!current) throw new Error("Guide missing")
 
       await tx.guideEdit.create({
-        data: { guideId: guide.id, editorId: session.user.id, editorName: user.profile?.username ?? null, content: current.content },
+        data: { guideId: guide.id, editorId: session.user.id, editorName: session.user.username ?? null, content: current.content },
       })
 
       return tx.guide.update({

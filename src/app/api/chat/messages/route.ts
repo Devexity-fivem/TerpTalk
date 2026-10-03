@@ -169,14 +169,35 @@ export async function GET(request: NextRequest) {
 
     // The client only needs ids to purge rows it may already have rendered,
     // so ship only blocked authors who actually have messages in this room.
-    // The full mutual set would disclose who has blocked the viewer.
-    const roomBlockedIds = blockedIds.length
-      ? (await prisma.chatMessage.findMany({
-          where: { roomId, authorId: { in: blockedIds } },
-          distinct: ["authorId"],
-          select: { authorId: true },
-        })).map((r) => r.authorId)
-      : []
+    // The full mutual set would disclose who has blocked the viewer. Authors
+    // already present in the returned page (their messages are excluded by
+    // notBlockedAuthor, but they can surface via replyTo embeds) resolve in
+    // memory; the rest get a LIMIT-1 existence probe per id instead of the
+    // old room-wide distinct scan over every matching message row.
+    let roomBlockedIds: string[] = []
+    if (blockedIds.length) {
+      const found = new Set<string>()
+      for (const m of messages) {
+        if (m.author?.id && blockedSet.has(m.author.id)) found.add(m.author.id)
+        const rtAuthor = m.replyTo?.author?.id
+        if (rtAuthor && blockedSet.has(rtAuthor)) found.add(rtAuthor)
+      }
+      const remaining = blockedIds.filter((id) => !found.has(id))
+      if (remaining.length) {
+        const probes = await Promise.all(
+          remaining.map((id) =>
+            prisma.chatMessage.findFirst({
+              where: { roomId, authorId: id },
+              select: { id: true },
+            })
+          )
+        )
+        probes.forEach((row, i) => {
+          if (row) found.add(remaining[i])
+        })
+      }
+      roomBlockedIds = blockedIds.filter((id) => found.has(id))
+    }
 
     return NextResponse.json({
       messages: (afterDate ? messages : messages.reverse()).map((m) => {

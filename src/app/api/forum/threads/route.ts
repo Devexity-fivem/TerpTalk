@@ -56,14 +56,6 @@ export async function POST(request: Request) {
       return forbidden("New thread creation is temporarily disabled")
     }
 
-    const currentUser = await prisma.user.findUnique({
-      where: { id: session.user.id },
-      select: { role: true, banned: true },
-    })
-    if (!currentUser || currentUser.banned) {
-      return forbidden("Your account is suspended")
-    }
-
     const body = await request.json().catch(() => ({}))
     const { title, content, categoryId, images, wizardResultId } = body
     const tagInputs = Array.isArray(body.tags) ? body.tags.filter((t: unknown): t is string => typeof t === "string").map((t: string) => t.trim()).filter(Boolean) : []
@@ -112,7 +104,7 @@ export async function POST(request: Request) {
     if (body.poll && typeof body.poll === "object" && !Array.isArray(body.poll)) {
       // Poll creation is a Trusted-standing gate (poll *voting* is
       // enforced separately on the vote route). Staff always can.
-      if (!isStaff(currentUser.role) && !progressionPerks.pollCreation) {
+      if (!isStaff(session.user.role) && !progressionPerks.pollCreation) {
         return forbidden(`Creating polls unlocks at Trusted standing (${STANDING_POLL_CREATE})`)
       }
       const pollInput = body.poll as { question?: unknown; options?: unknown }
@@ -170,7 +162,7 @@ export async function POST(request: Request) {
       )
     }
 
-    if (category.hidden && !isModerator(currentUser.role)) {
+    if (category.hidden && !isModerator(session.user.role)) {
       return forbidden()
     }
 

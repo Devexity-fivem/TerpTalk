@@ -121,17 +121,11 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ error: "Photo not found" }, { status: 404 })
     }
 
-    const user = await prisma.user.findUnique({
-      where: { id: session.user.id },
-      select: { role: true, banned: true },
-    })
-    if (!user || user.banned) return forbidden()
-
     if (photo.userId !== session.user.id) {
-      if (!isModerator(user.role)) return forbidden()
+      if (!isModerator(session.user.role)) return forbidden()
       // Staff-owned photos need an admin — same protected-target rule as
       // account sanctions, so a moderator can't strip a colleague's content.
-      if (isStaff(photo.user?.role) && !isAdmin(user.role)) return forbidden()
+      if (isStaff(photo.user?.role) && !isAdmin(session.user.role)) return forbidden()
     }
 
     // Delete + reversal intents in one tx — the award can't outlive the
