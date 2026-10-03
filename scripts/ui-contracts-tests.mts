@@ -847,5 +847,15 @@ check("update discussion affordance stays behind the PUBLIC visibility gate", ()
   assert.ok(!p.includes("Discuss in chat"), "contextless /chat discussion affordance removed")
 })
 
+check("onboarding Done step offers contribution actions through complete()", () => {
+  const s = src("components/onboarding-stepper.tsx")
+  assert.ok(s.includes('complete("/diaries/new")'), "start-grow action completes onboarding then lands on diary creation")
+  assert.ok(s.includes('complete("/forum/new")'), "ask-question action completes onboarding then lands on the composer")
+  assert.ok(s.includes("complete(destination)"), "feed destination preserved")
+  for (const href of ['href="/chat"', 'href="/guides"', 'href="/rules"', 'href="/help"']) {
+    assert.ok(s.includes(href), `informational link ${href} preserved`)
+  }
+})
+
 console.log(`\n${passed} passed, ${failed} failed`)
 if (failed > 0) process.exit(1)

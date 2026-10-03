@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation"
 import Link from "next/link"
 import {
   Leaf, User, Camera, Loader2, Check, Copy, AlertTriangle, KeyRound, Users, Sparkles,
+  MessageSquare,
 } from "@/lib/icons"
 import { INTEREST_GROUPS, type SuggestedUser } from "@/lib/onboarding-shared"
 import RoleBadge from "@/components/role-badge"
@@ -280,6 +281,8 @@ export default function OnboardingStepper({
 
   const btnPrimary =
     "min-h-12 px-6 rounded-lg bg-primary text-primary-foreground font-semibold hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+  const btnSecondary =
+    "min-h-12 px-6 rounded-lg border border-border font-semibold hover:bg-secondary disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
   const btnGhost = "min-h-11 px-4 rounded-lg text-sm text-muted-foreground hover:text-foreground"
 
   return (
@@ -676,18 +679,28 @@ export default function OnboardingStepper({
             </div>
             <h1 ref={headingRef} tabIndex={-1} className="font-display text-2xl font-bold mb-3 outline-none tracking-tight">You&apos;re all set 🌱</h1>
             <p className="text-muted-foreground mb-6 max-w-md mx-auto">
-              Your TerpTalk feed is ready. Follow growers, join a discussion, hop into live chat, or start your own grow diary whenever you&apos;re ready.
+              Your TerpTalk feed is ready. The best way in is to start something
+              of your own — document a grow, or ask the growers who&apos;ve been there.
             </p>
-            <div className="flex justify-center gap-4 text-sm mb-6">
+            <div className="grid sm:grid-cols-2 gap-3 mb-4">
+              <button onClick={() => complete("/diaries/new")} disabled={busy} className={btnPrimary}>
+                {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Leaf className="w-4 h-4" />}
+                Start a grow diary
+              </button>
+              <button onClick={() => complete("/forum/new")} disabled={busy} className={btnSecondary}>
+                {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <MessageSquare className="w-4 h-4" />}
+                Ask a question
+              </button>
+            </div>
+            <button onClick={() => complete(destination)} disabled={busy} className={btnGhost + " w-full"}>
+              Enter TerpTalk
+            </button>
+            <div className="flex justify-center gap-4 text-sm mt-6">
               <Link href="/chat" className="text-primary hover:underline">Live chat</Link>
               <Link href="/guides" className="text-primary hover:underline">Browse guides</Link>
               <Link href="/rules" className="text-primary hover:underline">Community rules</Link>
               <Link href="/help" className="text-primary hover:underline">Help Center</Link>
             </div>
-            <button onClick={() => complete(destination)} disabled={busy} className={btnPrimary + " w-full"}>
-              {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-              Enter TerpTalk
-            </button>
           </div>
         )}
       </div>
