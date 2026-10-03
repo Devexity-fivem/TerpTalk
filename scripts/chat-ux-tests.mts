@@ -362,6 +362,14 @@ async function run() {
     assert.ok(!body.includes("wizardResultId"), "no origin tagging — a normal question")
   })
 
+  check("#msg-<id> deep link is a scroll hint over rendered rows only", () => {
+    assert.ok(room.includes("window.location.hash.match(/^#msg-"), "reads #msg-<id> client-side")
+    const fx = room.slice(room.indexOf("deep link lands on the exact message"), room.indexOf("On room entry with unread history"))
+    assert.ok(fx.includes('data-mid="${anchorMsgRef.current}"'), "targets the rendered row's data-mid")
+    assert.ok(fx.includes("scrollIntoView"), "scrolls when the row mounts")
+    assert.ok(!fx.includes("fetch"), "the anchor never fetches — not an authorization path")
+  })
+
   // ── Database-backed: activity visibility boundaries ──────────────────
 
   const member = await prisma.user.create({

@@ -517,6 +517,9 @@ export default function ChatRoom({ embedded = false, headerActions }: ChatRoomPr
   const blockedRef = useRef<Set<string>>(new Set())
   const nearBottomRef = useRef(true)
   const scrolledToUnreadRef = useRef(false)
+  // #msg-<id> deep link — read from the URL once, scrolled to when rendered.
+  const anchorMsgRef = useRef<string | null>(null)
+  const anchoredRef = useRef(false)
 
   // Record "seen up to ts" for a room and tell the nav badge to recompute.
   const markSeenNow = useCallback((roomId: string, ts: string) => {
@@ -574,6 +577,19 @@ export default function ChatRoom({ embedded = false, headerActions }: ChatRoomPr
   useEffect(() => {
     const el = messagesContainerRef.current
     if (!el) return
+    // A #msg-<id> deep link lands on the exact message once it renders —
+    // wins over both the unread divider and the default bottom scroll.
+    if (anchorMsgRef.current && !anchoredRef.current) {
+      const target = el.querySelector(`[data-mid="${anchorMsgRef.current}"]`)
+      if (target) {
+        anchoredRef.current = true
+        scrolledToUnreadRef.current = true
+        target.scrollIntoView({ block: "center" })
+        return
+      }
+      // Not in the rendered set (deleted/pruned/not loaded) — fall
+      // through to normal scrolling; retried on each messages update.
+    }
     // On room entry with unread history, land on the "New" divider once
     // instead of the bottom.
     if (unreadBoundaryId && !scrolledToUnreadRef.current) {
@@ -588,6 +604,15 @@ export default function ChatRoom({ embedded = false, headerActions }: ChatRoomPr
       el.scrollTo({ top: el.scrollHeight, behavior: "instant" as ScrollBehavior })
     }
   }, [messages, unreadBoundaryId])
+
+  // Read a #msg-<id> anchor once — the dedicated page is the only surface
+  // with a linkable URL. Purely a client-side scroll hint over messages
+  // the member is already authorized to see; never a fetch key.
+  useEffect(() => {
+    if (embedded) return
+    const m = window.location.hash.match(/^#msg-([a-zA-Z0-9]+)$/)
+    anchorMsgRef.current = m?.[1] ?? null
+  }, [embedded])
 
   // Load the room list once — all public rooms, ordered server-side.
   useEffect(() => {
@@ -661,6 +686,8 @@ export default function ChatRoom({ embedded = false, headerActions }: ChatRoomPr
     setUnreadBoundaryId(null)
     nearBottomRef.current = true
     scrolledToUnreadRef.current = false
+    // The rewritten URL drops the hash — the old anchor can't apply here.
+    anchorMsgRef.current = null
     if (store) {
       setLastRoom(store, slug)
       // Entering a room clears its unread dot immediately — the message

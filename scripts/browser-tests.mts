@@ -198,9 +198,38 @@ const main = async () => {
     const progBody = (await alicePage.textContent("body")) ?? ""
     ok("progression: /progress renders rank/unlock surface", progRes?.status() === 200 && progBody.length > 500, progRes?.status())
 
-    // ── Chat: ask-the-community (Batch O) ────────────────────────────
-    await gotoMain(alicePage, `${BASE}/chat?room=${chatRoom.slug}`, '[role="log"]')
+    // ── Chat deep links + ask-the-community (Batch O) ────────────────
+    const inView = (mid: string) => {
+      const el = document.querySelector(`[data-mid="${mid}"]`)
+      const log = el?.closest('[role="log"]')
+      if (!el || !log) return false
+      const r = el.getBoundingClientRect()
+      const c = log.getBoundingClientRect()
+      // Inside the scrollport AND not pinned at the bottom — the anchor
+      // target is the oldest row, so bottom-landing would exclude it.
+      return r.top >= c.top - 2 && r.bottom <= c.bottom + 2 &&
+        log.scrollHeight - log.scrollTop - log.clientHeight > 4
+    }
+    const chatRes = await gotoMain(alicePage, `${BASE}/chat?room=${chatRoom.slug}#msg-${chatTarget.id}`, '[role="log"]')
+    ok("chat: /chat?room=<slug>#msg-<id> loads", chatRes?.status() === 200, chatRes?.status())
     await alicePage.waitForSelector(`[data-mid="${chatTarget.id}"]`, { timeout: 30_000 })
+    const anchored = await alicePage.waitForFunction(inView, chatTarget.id, { timeout: 15_000 })
+      .then(() => true).catch(() => false)
+    ok("chat: #msg anchor scrolls the exact message into view", anchored)
+
+    // Regression: a room-only link still lands at the newest messages.
+    await gotoMain(alicePage, `${BASE}/chat?room=${chatRoom.slug}`, '[role="log"]')
+    await alicePage.waitForSelector("[data-mid]", { timeout: 30_000 })
+    const landedBottom = await alicePage.waitForFunction(() => {
+      const log = document.querySelector('[role="log"]')
+      return !!log && log.scrollHeight - log.scrollTop - log.clientHeight < 4
+    }, null, { timeout: 15_000 }).then(() => true).catch(() => false)
+    ok("chat: room-only link still lands at the newest messages", landedBottom)
+
+    // Nonexistent anchor → normal room view, no crash.
+    await gotoMain(alicePage, `${BASE}/chat?room=${chatRoom.slug}#msg-doesnotexist`, '[role="log"]')
+    const rows = await alicePage.locator("[data-mid]").count()
+    ok("chat: nonexistent #msg anchor degrades to a normal room view", rows > 30, rows)
 
     // Own message → Ask the community → composer prefill → cancel = nothing.
     await alicePage.locator(`[data-mid="${chatTarget.id}"] button[aria-label="Message options"]`).click()
@@ -220,10 +249,13 @@ const main = async () => {
       (await alicePage.locator('button[role="menuitem"]:has-text("Ask the community")').count()) === 0)
     await alicePage.locator(`[data-mid="${bobChatMsg.id}"] button[aria-label="Message options"]`).click()
 
-    // Mobile: the message menu fits a 390px viewport.
+    // Mobile: anchor lands at 390px and the menu fits the viewport.
     const { context: chatMobCtx, page: chatMobPage } = await login(aliceUsername, { viewport: { width: 390, height: 844 } })
-    await gotoMain(chatMobPage, `${BASE}/chat?room=${chatRoom.slug}`, '[role="log"]')
+    await gotoMain(chatMobPage, `${BASE}/chat?room=${chatRoom.slug}#msg-${chatTarget.id}`, '[role="log"]')
     await chatMobPage.waitForSelector(`[data-mid="${chatTarget.id}"]`, { timeout: 30_000 })
+    const mobAnchored = await chatMobPage.waitForFunction(inView, chatTarget.id, { timeout: 15_000 })
+      .then(() => true).catch(() => false)
+    ok("mobile: #msg anchor lands on the message at 390px", mobAnchored)
     await chatMobPage.locator(`[data-mid="${chatTarget.id}"] button[aria-label="Message options"]`).click()
     const menu = chatMobPage.locator('div[role="menu"]').first()
     await menu.waitFor({ state: "visible", timeout: 10_000 })
