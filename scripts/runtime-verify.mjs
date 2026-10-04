@@ -249,6 +249,79 @@ const main = async () => {
     const notifStill = await prisma.notification.findUnique({ where: { id: aNotif.id } })
     !!notifStill ? pass("authz: notification DELETE on foreign id is a no-op") : fail("notif DELETE", r.status)
 
+    // ══ Setup canonical discussion (Batch Q) ══════════════════════════
+    // Lazy-created Thread owned by the setup author; one per setup.
+    r = await callApi(`/api/setups/${aSetup.id}/discuss`, { method: "POST" })
+    r.status === 401 ? pass("setup discuss: anonymous denied") : fail("discuss anon", r.status)
+    r = await callApi(`/api/setups/nope-${TS}/discuss`, { method: "POST", cookie: bC })
+    r.status === 404 ? pass("setup discuss: missing setup 404s") : fail("discuss 404", r.status)
+
+    const d1 = await callApi(`/api/setups/${aSetup.id}/discuss`, { method: "POST", cookie: bC })
+    const dThreadId = d1.data?.threadId
+    const dSlug = d1.data?.threadSlug
+    d1.status === 201 && dThreadId && dSlug ? pass("setup discuss: lazy-creates canonical thread") : fail("discuss create", { s: d1.status, d: d1.data })
+    const sdThread = dThreadId
+      ? await prisma.thread.findUnique({ where: { id: dThreadId }, include: { posts: { select: { authorId: true, content: true } } } })
+      : null
+    if (sdThread) threadIds.push(sdThread.id)
+    sdThread?.authorId === a.id && sdThread?.posts[0]?.authorId === a.id && sdThread?.posts[0]?.content.includes("/setups/")
+      ? pass("setup discuss: thread + opening post are owner-attributed, link the setup")
+      : fail("discuss attribution", { author: sdThread?.authorId, owner: a.id })
+    const sLinked = await prisma.growSetup.findUnique({ where: { id: aSetup.id }, select: { threadId: true } })
+    sLinked?.threadId === dThreadId ? pass("setup discuss: setup row links canonical thread") : fail("discuss link", sLinked)
+    const dFollows = new Set(
+      (await prisma.threadFollow.findMany({ where: { threadId: dThreadId ?? "" }, select: { userId: true } })).map((f) => f.userId)
+    )
+    dFollows.has(a.id) && dFollows.has(b.id) ? pass("setup discuss: owner + opener follow thread") : fail("discuss follows", [...dFollows])
+    // Reopen is idempotent — a second click returns the same thread.
+    const d2 = await callApi(`/api/setups/${aSetup.id}/discuss`, { method: "POST", cookie: cC })
+    d2.status === 200 && d2.data?.threadSlug === dSlug && d2.data?.threadId === dThreadId
+      ? pass("setup discuss: reopen returns canonical thread, no duplicate")
+      : fail("discuss reopen", { s: d2.status, slug: d2.data?.threadSlug })
+
+    // Concurrent clicks on a fresh setup still resolve to exactly one thread.
+    const raceSetup = await prisma.growSetup.create({ data: { title: M("racesetup"), description: "d", authorId: a.id } })
+    setupIds.push(raceSetup.id)
+    const [r1, r2] = await Promise.all([
+      callApi(`/api/setups/${raceSetup.id}/discuss`, { method: "POST", cookie: bC }),
+      callApi(`/api/setups/${raceSetup.id}/discuss`, { method: "POST", cookie: cC }),
+    ])
+    const raceIds = [r1.data?.threadId, r2.data?.threadId].filter(Boolean)
+    for (const tid of raceIds) threadIds.push(tid)
+    const raceThreads = await prisma.thread.findMany({ where: { id: { in: raceIds } }, select: { deleted: true } })
+    const raceLinked = await prisma.growSetup.findUnique({ where: { id: raceSetup.id }, select: { threadId: true } })
+    r1.data?.threadSlug === r2.data?.threadSlug && raceIds[0] === raceIds[1] &&
+    raceThreads.filter((t) => !t.deleted).length === 1 && raceLinked?.threadId === raceIds[0]
+      ? pass("setup discuss: concurrent create resolves to one canonical thread")
+      : fail("discuss race", { s1: r1.data?.threadSlug, s2: r2.data?.threadSlug, live: raceThreads.filter((t) => !t.deleted).length })
+
+    // Deleted canonical thread → next click creates a fresh discussion.
+    await prisma.thread.update({ where: { id: dThreadId }, data: { deleted: true } })
+    const d3 = await callApi(`/api/setups/${aSetup.id}/discuss`, { method: "POST", cookie: bC })
+    const d3Id = d3.data?.threadId
+    if (d3Id) threadIds.push(d3Id)
+    const sReLinked = await prisma.growSetup.findUnique({ where: { id: aSetup.id }, select: { threadId: true } })
+    d3.status === 201 && d3Id && d3Id !== dThreadId && sReLinked?.threadId === d3Id
+      ? pass("setup discuss: stale thread link replaced by new canonical thread")
+      : fail("discuss stale", { s: d3.status, id: d3Id, linked: sReLinked?.threadId })
+
+    const deadSetup = await prisma.growSetup.create({ data: { title: M("deadsetup"), description: "d", authorId: a.id, deleted: true } })
+    setupIds.push(deadSetup.id)
+    r = await callApi(`/api/setups/${deadSetup.id}/discuss`, { method: "POST", cookie: bC })
+    r.status === 404 ? pass("setup discuss: deleted setup 404s") : fail("discuss deleted", r.status)
+
+    // Page affordance — fresh setup offers lazy-create; linked setup offers the thread.
+    const freshSetup = await prisma.growSetup.create({ data: { title: M("fresh"), description: "d", authorId: a.id } })
+    setupIds.push(freshSetup.id)
+    const pFresh = await getHtml(`/setups/${freshSetup.id}`)
+    pFresh.status === 200 && pFresh.html.includes("Discuss this setup")
+      ? pass("setup page: discuss affordance renders without thread")
+      : fail("page discuss btn", pFresh.status)
+    const pLinked = await getHtml(`/setups/${aSetup.id}`)
+    pLinked.status === 200 && pLinked.html.includes(`/forum/thread/${d3.data?.threadSlug}`)
+      ? pass("setup page: canonical discussion link renders")
+      : fail("page discuss link", pLinked.status)
+
     // Bookmark — B cannot remove A's bookmark.
     await callApi("/api/bookmarks", { method: "POST", body: { threadId: aThread.id }, cookie: aC })
     await callApi("/api/bookmarks", { method: "DELETE", body: { threadId: aThread.id }, cookie: bC })
@@ -1032,7 +1105,7 @@ const main = async () => {
     for (const id of strainIds) await prisma.strain.delete({ where: { id } }).catch(() => {})
     for (const u of users) await prisma.user.delete({ where: { id: u.id } }).catch(() => {})
     if (rateKeys.length) await prisma.rateLimit.deleteMany({ where: { key: { in: rateKeys } } }).catch(() => {})
-    await prisma.rateLimit.deleteMany({ where: { OR: [{ key: { contains: "login" } }, { key: { startsWith: "search-suggest" } }, { key: { startsWith: "diary-discuss" } }, { key: { startsWith: "profile-update" } }, { key: { startsWith: "recover" } }] } }).catch(() => {})
+    await prisma.rateLimit.deleteMany({ where: { OR: [{ key: { contains: "login" } }, { key: { startsWith: "search-suggest" } }, { key: { startsWith: "diary-discuss" } }, { key: { startsWith: "setup-discuss" } }, { key: { startsWith: "profile-update" } }, { key: { startsWith: "recover" } }] } }).catch(() => {})
     await prisma.$disconnect()
   }
 

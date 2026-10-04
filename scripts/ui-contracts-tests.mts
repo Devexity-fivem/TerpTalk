@@ -877,5 +877,31 @@ check("chat-originated question rides the existing question flow", () => {
   assert.ok(sc.includes("content?: string"), "ComposerPrefill carries editable content")
 })
 
+// ── Setup discussion bridge (Batch Q) ─────────────────────────────────
+
+check("setup discussion: lazy-create button never creates on render", () => {
+  const btn = src("components/setup-discuss-button.tsx")
+  assert.ok(btn.includes("existingSlug"), "existing-slug link path present")
+  assert.ok(btn.includes("/discuss"), "lazy-create hits the discuss route")
+  // The POST must live behind the click handler — nothing before onClick
+  // may reference the endpoint, so render alone can't create a thread.
+  assert.ok(!(btn.split("onClick")[0] ?? "").includes("/discuss"), "no eager discuss call outside the click handler")
+})
+
+check("setup comments stay a flat comment system", () => {
+  const comp = src("components/setup-comments.tsx")
+  assert.ok(!/parentId|replyTo/.test(comp), "no reply/parent affordance in composer")
+  const route = src("app/api/setups/comments/route.ts")
+  assert.ok(!route.includes("prisma.thread.create"), "comments must not create forum threads")
+  assert.ok(route.includes("#comment-"), "comment deep links preserved")
+})
+
+check("setup discussion thread is owner-attributed like the diary bridge", () => {
+  const route = src("app/api/setups/[id]/discuss/route.ts")
+  assert.ok(route.includes("authorId: setup.authorId"), "thread authored by setup owner")
+  assert.ok(route.includes("updateMany"), "atomic claim via updateMany, not read-then-write")
+  assert.ok(route.includes("threadFollow.upsert"), "owner + opener follow the thread")
+})
+
 console.log(`\n${passed} passed, ${failed} failed`)
 if (failed > 0) process.exit(1)

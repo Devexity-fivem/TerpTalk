@@ -12,6 +12,7 @@ import RoleBadge from "@/components/role-badge"
 import TierChip from "@/components/tier-chip"
 import UserPopover from "@/components/user-popover"
 import SetupComments from "@/components/setup-comments"
+import SetupDiscussButton from "@/components/setup-discuss-button"
 import ShareButtons from "@/components/share-buttons"
 import ReportButton from "@/components/report-button"
 import OwnerDeleteButton from "@/components/owner-delete-button"
@@ -51,6 +52,7 @@ export default async function SetupPage({ params }: { params: Promise<{ id: stri
         take: 50,
         include: { author: { select: publicUserSelect } },
       },
+      discussion: { select: { id: true, slug: true, deleted: true } },
       _count: {
         select: { comments: { where: { author: activeAuthor() } } },
       },
@@ -168,6 +170,11 @@ export default async function SetupPage({ params }: { params: Promise<{ id: stri
               iconOnly
             />
             <ReportButton type="SETUP" targetId={setup.id} authorId={setup.authorId} />
+            <SetupDiscussButton
+              setupId={setup.id}
+              setupHref={setupPath(setup)}
+              existingSlug={setup.discussion && !setup.discussion.deleted ? setup.discussion.slug : null}
+            />
           </div>
 
           {setup.images.length > 0 && (

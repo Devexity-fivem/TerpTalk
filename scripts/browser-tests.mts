@@ -299,6 +299,32 @@ const main = async () => {
       !!menuBox && menuBox.x >= 0 && menuBox.x + menuBox.width <= 391 && menuBox.width > 0)
     await chatMobCtx.close()
 
+    // ── Setup canonical discussion (Batch Q) ─────────────────────────
+    const setup = await prisma.growSetup.create({
+      data: { title: `__br setup ${TS}`, slug: `__br-setup-${TS}`, description: "browser fixture", authorId: alice.id },
+    })
+    const setupRes = await gotoMain(anonPage, `${BASE}/setups/${setup.slug}`)
+    ok("setup: page renders 200 to anonymous", setupRes?.status() === 200, setupRes?.status())
+    ok("setup: discuss affordance renders without a thread",
+      (await anonPage.locator('button:has-text("Discuss this setup")').count()) === 1)
+    // Member clicks Discuss → lazy-creates the canonical thread → thread page.
+    const { context: bobSetupCtx, page: bobSetupPage } = await login(bobUsername)
+    await gotoMain(bobSetupPage, `${BASE}/setups/${setup.slug}`)
+    await bobSetupPage.locator('button:has-text("Discuss this setup")').click()
+    await bobSetupPage.waitForURL(/\/forum\/thread\//, { timeout: 45_000 })
+    const createdSlug = bobSetupPage.url().split("/forum/thread/")[1]
+    const createdThread = await prisma.thread.findFirst({ where: { slug: createdSlug }, select: { authorId: true } })
+    const linkedSetup = await prisma.growSetup.findUnique({ where: { id: setup.id }, select: { threadId: true } })
+    ok("setup: discuss click lazy-creates canonical thread owned by the setup author",
+      !!createdThread && createdThread.authorId === alice.id && !!linkedSetup?.threadId,
+      { slug: createdSlug })
+    // The setup page now links the canonical discussion instead of offering create.
+    await gotoMain(bobSetupPage, `${BASE}/setups/${setup.slug}`)
+    const discLink = bobSetupPage.locator('a[href*="/forum/thread/"]')
+    ok("setup: canonical discussion link replaces the affordance",
+      (await discLink.count()) >= 1 && (await discLink.first().getAttribute("href"))?.includes(createdSlug) === true)
+    await bobSetupCtx.close()
+
     // ── Block boundary (privacy) ─────────────────────────────────────
     await prisma.block.create({ data: { blockerId: alice.id, blockedId: bob.id } })
     const { context: bobCtx, page: bobPage } = await login(bobUsername)

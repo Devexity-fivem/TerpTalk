@@ -269,6 +269,7 @@ model Thread {
   acceptedAnswer Post?  @relation("ThreadAcceptedAnswer", fields: [acceptedAnswerId], references: [id], onDelete: SetNull)
   followers  ThreadFollow[]
   diaryFor   GrowDiary? @relation("DiaryDiscussion")
+  setupFor   GrowSetup? @relation("SetupDiscussion")
 
   @@index([categoryId])
   @@index([authorId])
@@ -601,6 +602,7 @@ model GrowSetup {
   strain      String?
   authorId    String
   deleted     Boolean  @default(false)
+  threadId    String?  @unique // 0-1 canonical discussion thread, lazy-created
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -608,6 +610,7 @@ model GrowSetup {
   images      SetupImage[]
   comments    SetupComment[]
   diaries     GrowDiary[] @relation("SetupDiaries")
+  discussion  Thread?   @relation("SetupDiscussion", fields: [threadId], references: [id], onDelete: SetNull)
 
   @@index([authorId])
   @@index([createdAt])
