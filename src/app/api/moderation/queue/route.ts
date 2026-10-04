@@ -203,7 +203,7 @@ export async function GET(request: Request) {
         reason: r.reason,
         subject: names.get(r.reportedId) ?? "Deleted user",
         subjectId: r.reportedId,
-        reporter: supportOnly ? null : r.reporter.profile?.username ?? "unknown",
+        reporter: supportOnly ? null : r.reporter?.profile?.username ?? null,
         targetLabel: t?.label ?? null,
         targetDeleted: t?.deleted ?? false,
       })

@@ -856,7 +856,7 @@ model Report {
   type         String    // THREAD, POST, CHAT_MESSAGE, PROFILE, DIARY, SETUP, SETUP_COMMENT
   reason       String
   description  String?
-  reporterId   String
+  reporterId   String?   // SetNull on reporter account deletion — the case outlives the reporter
   reportedId   String
   targetId     String?   // ID of the reported content (thread/post/message id)
   status       String    @default("PENDING") // PENDING, REVIEWING, ESCALATED, RESOLVED, DISMISSED
@@ -868,7 +868,7 @@ model Report {
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
-  reporter    User        @relation(fields: [reporterId], references: [id], onDelete: Cascade)
+  reporter    User?       @relation(fields: [reporterId], references: [id], onDelete: SetNull)
 
   @@index([reporterId])
   @@index([status])

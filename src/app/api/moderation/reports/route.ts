@@ -129,7 +129,7 @@ export async function GET(request: Request) {
         resolution: r.resolution,
         createdAt: r.createdAt,
         // Reporter identity is confidential from view-only SUPPORT staff.
-        reporter: isSupport(staff.role) ? null : r.reporter.profile?.username ?? "unknown",
+        reporter: isSupport(staff.role) ? null : r.reporter?.profile?.username ?? null,
         reportedUserId: r.reportedId,
         assignedToId: r.assignedToId,
         targetId: r.targetId,
