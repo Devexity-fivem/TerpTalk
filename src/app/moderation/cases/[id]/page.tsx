@@ -73,6 +73,8 @@ interface Activity {
   type: string
   reason: string
   moderator: string
+  targetType?: string | null
+  targetId?: string | null
   createdAt: string
 }
 
@@ -163,7 +165,9 @@ export default function CasePage() {
       const res = await fetch("/api/moderation/actions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ actionType, targetUserId: userId, reason }),
+        // reportId ties case-driven enforcement to this case — the server
+        // verifies the report actually names this subject.
+        body: JSON.stringify({ actionType, targetUserId: userId, reason, ...(kind === "REPORT" ? { reportId: id } : {}) }),
       })
       if (!res.ok) { const d = await res.json(); setError(d.error || "Action failed") }
       else load()
@@ -185,6 +189,7 @@ export default function CasePage() {
           targetId: item.targetId,
           targetUserId: item.reportedUserId,
           reason: `Reported for ${item.reason?.toLowerCase()}`,
+          reportId: id,
         }),
       })
       if (!res.ok) setError("Failed to remove content")
@@ -492,7 +497,11 @@ export default function CasePage() {
             <div className="space-y-2">
               {activity.map((a) => (
                 <div key={a.id} className="text-xs flex items-center justify-between gap-2">
-                  <span><span className="font-medium">{a.type.replace(/_/g, " ")}</span> by @{a.moderator} — {a.reason}</span>
+                  <span>
+                    <span className="font-medium">{a.type.replace(/_/g, " ")}</span> by @{a.moderator}
+                    {a.targetType && <span className="text-muted-foreground"> · {a.targetType.replace(/_/g, " ").toLowerCase()} {a.targetId}</span>}
+                    {" "}— {a.reason}
+                  </span>
                   <span className="text-muted-foreground shrink-0">{new Date(a.createdAt).toLocaleDateString()}</span>
                 </div>
               ))}

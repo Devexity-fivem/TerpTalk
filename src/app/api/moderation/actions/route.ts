@@ -20,7 +20,9 @@ const ACTION_TYPES = new Set([
 ])
 
 // POST — take a moderation action (moderators/admins only)
-// { actionType, targetType?, targetId?, targetUserId, reason, durationDays? }
+// { actionType, targetType?, targetId?, targetUserId, reason, durationDays?, reportId? }
+// reportId links enforcement to the case that motivated it — only accepted
+// when the named report actually matches this action's target/subject.
 export async function POST(request: Request) {
   try {
     // Fresh DB check — a demoted or banned mod loses access immediately
@@ -38,7 +40,7 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json().catch(() => ({}))
-    const { actionType, targetType, targetId, targetUserId, targetCategoryId, reason, durationDays } = body
+    const { actionType, targetType, targetId, targetUserId, targetCategoryId, reason, durationDays, reportId } = body
 
     // STRAIN is the one content type whose creator may no longer exist —
     // createdById is SetNull'd on account deletion, so "" is accepted only
@@ -51,7 +53,8 @@ export async function POST(request: Request) {
       (!targetUserId && !emptyTargetUserAllowed) ||
       typeof reason !== "string" ||
       !reason.trim() ||
-      reason.length > 500
+      reason.length > 500 ||
+      (reportId !== undefined && reportId !== null && (typeof reportId !== "string" || !reportId))
     ) {
       return NextResponse.json({ error: "Invalid request" }, { status: 400 })
     }
@@ -91,7 +94,27 @@ export async function POST(request: Request) {
     const repIntents: ReversalIntent[] = []
     const xpIntents: XpReversalIntent[] = []
     await prisma.$transaction(async (tx) => {
+      // Case provenance — a report may only back an action that matches its
+      // own subject/target, so a caller can't forge false provenance by
+      // attaching an unrelated reportId to a direct action.
+      const linkedReport = reportId
+        ? await tx.report.findUnique({
+            where: { id: reportId },
+            select: { id: true, type: true, targetId: true, reportedId: true },
+          })
+        : null
+      if (reportId && !linkedReport) {
+        throw new Error("REPORT_MISMATCH")
+      }
+      // Set by the content/thread branches — the fields persisted on the
+      // audit row. Account actions act on a user, so they carry no target.
+      let auditTargetType: string | null = null
+      let auditTargetId: string | null = null
+
       if (isAccountAction) {
+        if (linkedReport && linkedReport.reportedId !== targetUserId) {
+          throw new Error("REPORT_MISMATCH")
+        }
         // Shared enforcement — identical semantics to chat /warn /mute /ban.
         createdNotification = await applyAccountActionInTx(tx, {
           actionType: actionType as "WARNING" | "TEMPORARY_BAN" | "PERMANENT_BAN" | "UNBAN" | "REMOVE_SUSPENSION",
@@ -101,6 +124,7 @@ export async function POST(request: Request) {
           staffId: staff.id,
           staffRole: staff.role,
           staffName,
+          reportId: linkedReport?.id ?? null,
         })
         // A permanent ban voids reputation the banned account granted others
         // (likes they cast, answers they accepted). enqueuedAt bounds the
@@ -145,6 +169,18 @@ export async function POST(request: Request) {
         if (!targetType || !CONTENT_TYPES.has(targetType) || typeof targetId !== "string" || !targetId) {
           throw new Error("INVALID_REQUEST")
         }
+        // A linked report must name this exact content and its author —
+        // the same cross-check the queue resolver applies.
+        if (
+          linkedReport &&
+          (linkedReport.targetId !== targetId ||
+            linkedReport.type !== targetType ||
+            linkedReport.reportedId !== targetUserId)
+        ) {
+          throw new Error("REPORT_MISMATCH")
+        }
+        auditTargetType = targetType
+        auditTargetId = targetId
         let ok = false
         let deletedLink: string[] | null = null
         switch (targetType) {
@@ -385,6 +421,8 @@ export async function POST(request: Request) {
         })
         // Audit/notify the thread author — not the caller-supplied id.
         effectiveTargetUserId = thread.authorId
+        auditTargetType = "THREAD"
+        auditTargetId = targetId
       }
 
       if (actionType === "MOVE_THREAD") {
@@ -415,6 +453,20 @@ export async function POST(request: Request) {
           threadMoved = true
         }
         effectiveTargetUserId = thread.authorId
+        auditTargetType = "THREAD"
+        auditTargetId = targetId
+      }
+
+      // Cross-check the linked report for thread actions — the report must
+      // name this thread and its real author (not the caller-supplied id).
+      if (!isAccountAction && actionType !== "CONTENT_DELETION" && linkedReport) {
+        if (
+          linkedReport.targetId !== auditTargetId ||
+          linkedReport.type !== auditTargetType ||
+          linkedReport.reportedId !== effectiveTargetUserId
+        ) {
+          throw new Error("REPORT_MISMATCH")
+        }
       }
 
       if (!isAccountAction) {
@@ -426,6 +478,9 @@ export async function POST(request: Request) {
             moderatorId: staff.id,
             moderatorName: staffName,
             duration: typeof durationDays === "number" ? durationDays : null,
+            reportId: linkedReport?.id ?? null,
+            targetId: auditTargetId,
+            targetType: auditTargetType,
           },
         })
 
@@ -504,6 +559,9 @@ export async function POST(request: Request) {
     if (error instanceof Error && error.message === "USER_NOT_FOUND") {
       return NextResponse.json({ error: "User not found" }, { status: 404 })
     }
+    if (error instanceof Error && error.message === "REPORT_MISMATCH") {
+      return NextResponse.json({ error: "Report does not match this action" }, { status: 400 })
+    }
     if (error instanceof Error && ["FORBIDDEN", "INVALID_REQUEST", "CONTENT_NOT_FOUND"].includes(error.message)) {
       // Do not leak whether a target is an admin/moderator or why an action failed.
       return NextResponse.json({ error: "Forbidden" }, { status: 403 })
@@ -546,6 +604,9 @@ export async function GET(request: Request) {
       targetUserId: a.targetUserId,
       moderator: a.moderator?.profile?.username ?? a.moderatorName ?? "unknown",
       duration: a.duration,
+      targetType: a.targetType,
+      targetId: a.targetId,
+      reportId: a.reportId,
       createdAt: a.createdAt,
     })),
   })

@@ -469,6 +469,99 @@ const main = async () => {
       ? pass("setup comment: deleted comments hidden; public count reflects live comments only")
       : fail("public rendering", { showsLive, hidesDeleted, countMatch })
 
+    // ══ Batch S — moderation audit-trail hardening ════════════════════
+    // S.a — direct staff deletion records the exact content target on the
+    // ModerationAction row itself (previously only SecurityEvent metadata).
+    const sComment = await callApi("/api/setups/comments", { method: "POST", body: { setupId: modSetup.id, content: "audit target" }, cookie: cC })
+    const sCommentId = sComment.data?.comment?.id
+    r = await callApi("/api/moderation/actions", { method: "POST", body: { actionType: "CONTENT_DELETION", targetType: "SETUP_COMMENT", targetId: sCommentId, targetUserId: c.id, reason: "s direct" }, cookie: modC })
+    const sDirect = await prisma.moderationAction.findFirst({ where: { targetType: "SETUP_COMMENT", targetId: sCommentId } })
+    r.status === 200 && sDirect?.targetType === "SETUP_COMMENT" && sDirect?.targetId === sCommentId && sDirect?.reportId === null
+      ? pass("audit: direct content deletion stores targetId/targetType on the action")
+      : fail("direct target audit", { status: r.status, sDirect })
+
+    // S.b — case-driven enforcement links reportId and shows up in the
+    // case's activity feed alongside the lifecycle rows.
+    const rComment = await callApi("/api/setups/comments", { method: "POST", body: { setupId: modSetup.id, content: "report me" }, cookie: cC })
+    const rCommentId = rComment.data?.comment?.id
+    await callApi("/api/reports", { method: "POST", body: { type: "SETUP_COMMENT", targetId: rCommentId, reason: "SPAM" }, cookie: bC })
+    const sReport = await prisma.report.findFirst({ where: { type: "SETUP_COMMENT", targetId: rCommentId } })
+    r = await callApi("/api/moderation/actions", { method: "POST", body: { actionType: "CONTENT_DELETION", targetType: "SETUP_COMMENT", targetId: rCommentId, targetUserId: c.id, reason: "rv", reportId: sReport?.id }, cookie: modC })
+    const linked = sReport ? await prisma.moderationAction.findFirst({ where: { reportId: sReport.id, type: "CONTENT_DELETION" } }) : null
+    const caseView = sReport ? await callApi(`/api/moderation/queue/${sReport.id}?kind=REPORT`, { cookie: modC }) : { data: {} }
+    const act = caseView.data?.activity?.find((x) => x.type === "CONTENT_DELETION")
+    r.status === 200 && linked?.targetId === rCommentId && linked?.targetType === "SETUP_COMMENT" && act?.targetId === rCommentId
+      ? pass("audit: case-driven deletion links reportId; enforcement appears in case activity")
+      : fail("report provenance", { status: r.status, linked: !!linked, act })
+
+    // S.c — forged provenance refused: nonexistent report, a report naming
+    // a different target, and a valid report with a mismatched author all
+    // 400; the target row and the audit log stay untouched.
+    const fComment = await callApi("/api/setups/comments", { method: "POST", body: { setupId: modSetup.id, content: "forge target" }, cookie: cC })
+    const fCommentId = fComment.data?.comment?.id
+    const badId = await callApi("/api/moderation/actions", { method: "POST", body: { actionType: "CONTENT_DELETION", targetType: "SETUP_COMMENT", targetId: fCommentId, targetUserId: c.id, reason: "x", reportId: "no-such-report" }, cookie: modC })
+    const wrongTarget = await callApi("/api/moderation/actions", { method: "POST", body: { actionType: "CONTENT_DELETION", targetType: "SETUP_COMMENT", targetId: fCommentId, targetUserId: c.id, reason: "x", reportId: sReport.id }, cookie: modC })
+    const wrongAuthor = await callApi("/api/moderation/actions", { method: "POST", body: { actionType: "CONTENT_DELETION", targetType: "SETUP_COMMENT", targetId: fCommentId, targetUserId: b.id, reason: "x", reportId: sReport.id }, cookie: modC })
+    const forgedRow = await prisma.setupComment.findUnique({ where: { id: fCommentId }, select: { deleted: true } })
+    const forgedAudit = await prisma.moderationAction.count({ where: { targetId: fCommentId } })
+    badId.status === 400 && wrongTarget.status === 400 && wrongAuthor.status === 400 && forgedRow?.deleted === false && forgedAudit === 0
+      ? pass("audit: forged/mismatched reportId refused (400), content + audit untouched")
+      : fail("forged reportId", { badId: badId.status, wrongTarget: wrongTarget.status, wrongAuthor: wrongAuthor.status, deleted: forgedRow?.deleted, forgedAudit })
+
+    // S.d — case-driven account action preserves reportId with no content
+    // target; a report about a different subject cannot back it.
+    await callApi("/api/reports", { method: "POST", body: { type: "PROFILE", targetId: c.id, reason: "HARASSMENT" }, cookie: bC })
+    const cReport = await prisma.report.findFirst({ where: { type: "PROFILE", targetId: c.id } })
+    r = await callApi("/api/moderation/actions", { method: "POST", body: { actionType: "WARNING", targetUserId: c.id, reason: "rv warn", reportId: cReport?.id }, cookie: modC })
+    const warn = cReport ? await prisma.moderationAction.findFirst({ where: { type: "WARNING", targetUserId: c.id, reportId: cReport.id } }) : null
+    const wrongSubj = await callApi("/api/moderation/actions", { method: "POST", body: { actionType: "WARNING", targetUserId: b.id, reason: "rv", reportId: cReport?.id }, cookie: modC })
+    warn?.reportId === cReport?.id && warn?.targetType === null && warn?.targetId === null && r.status === 200 && wrongSubj.status === 400
+      ? pass("audit: case-driven WARNING stores reportId (no content target); wrong-subject report refused")
+      : fail("account provenance", { status: r.status, warn: !!warn, wrongSubj: wrongSubj.status })
+
+    // S.e — bulk thread deletion keeps item-level identity: one audit row
+    // per thread carrying its own targetId; the SecurityEvent lists them.
+    const bt1 = await prisma.thread.create({ data: { title: M("bt1"), slug: `rv-bt1-${TS}`, content: "x", categoryId: cat.id, authorId: b.id } })
+    const bt2 = await prisma.thread.create({ data: { title: M("bt2"), slug: `rv-bt2-${TS}`, content: "x", categoryId: cat.id, authorId: b.id } })
+    threadIds.push(bt1.id, bt2.id)
+    r = await callApi("/api/moderation/bulk", { method: "POST", body: { ids: [bt1.id, bt2.id], action: "delete", reason: "rv bulk" }, cookie: modC })
+    const bulkActs = await prisma.moderationAction.findMany({ where: { targetType: "THREAD", targetId: { in: [bt1.id, bt2.id] } } })
+    const bulkSE = await prisma.securityEvent.findFirst({ where: { type: "SUSPICIOUS_ACTIVITY", userId: mod.id, metadata: { contains: bt1.id } } })
+    r.status === 200 && bulkActs.length === 2 && bulkActs.every((x) => x.targetType === "THREAD") && !!bulkSE
+      ? pass("audit: bulk delete records per-thread targets + ids in the security event")
+      : fail("bulk audit", { status: r.status, rows: bulkActs.length, bulkSE: !!bulkSE })
+
+    // S.f — forum-UI staff deletion records the same target identity.
+    const fp = await prisma.post.create({ data: { threadId: aThread.id, authorId: b.id, content: "staff remove me" } })
+    postIds.push(fp.id)
+    r = await callApi("/api/forum/posts", { method: "DELETE", body: { id: fp.id }, cookie: modC })
+    const fpAct = await prisma.moderationAction.findFirst({ where: { targetType: "POST", targetId: fp.id } })
+    r.status === 200 && fpAct?.targetId === fp.id && fpAct?.targetType === "POST"
+      ? pass("audit: forum-UI staff post deletion records target identity")
+      : fail("forum ui audit", { status: r.status, fpAct: !!fpAct })
+
+    // S.g — the staff action list exposes the new fields; rows without a
+    // content target (account actions, legacy rows) stay null — the shape
+    // is backward compatible for historical records.
+    r = await callApi("/api/moderation/actions?page=1&limit=50", { cookie: modC })
+    const sRows = r.data?.actions ?? []
+    const linkedRow = sRows.find((x) => x.targetId === sCommentId)
+    const legacyRow = sRows.find((x) => x.type === "PERMANENT_BAN" && x.targetUserId === sess.id)
+    r.status === 200 && linkedRow?.targetType === "SETUP_COMMENT" && linkedRow?.reportId === null && legacyRow && legacyRow.targetType === null && legacyRow.targetId === null && "reportId" in legacyRow
+      ? pass("audit: actions GET exposes target fields; null-safe for account actions")
+      : fail("actions GET", { status: r.status, linkedRow, legacyRow })
+
+    // Fixture cleanup — audit rows are bare-string linked, never cascaded.
+    await prisma.moderationAction.deleteMany({
+      where: {
+        OR: [
+          { targetId: { in: [sCommentId, rCommentId, fCommentId, fp.id, bt1.id, bt2.id] } },
+          { reportId: { in: [sReport?.id, cReport?.id].filter(Boolean) } },
+          { type: "WARNING", targetUserId: b.id, reason: "rv" },
+        ],
+      },
+    })
+
     // Bookmark — B cannot remove A's bookmark.
     await callApi("/api/bookmarks", { method: "POST", body: { threadId: aThread.id }, cookie: aC })
     await callApi("/api/bookmarks", { method: "DELETE", body: { threadId: aThread.id }, cookie: bC })
