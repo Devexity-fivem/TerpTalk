@@ -95,6 +95,18 @@ async function reportTargetLabels(reports: { type: string; targetId: string | nu
         })
         return fetch(type, rows.map((s) => ({ id: s.id, label: s.title, deleted: s.deleted, href: setupPath(s) })))
       }
+      case "SETUP_COMMENT": {
+        const rows = await prisma.setupComment.findMany({
+          where: { id: { in: ids } },
+          select: { id: true, content: true, deleted: true, setup: { select: { id: true, slug: true, deleted: true } } },
+        })
+        return fetch(type, rows.map((c) => ({
+          id: c.id,
+          label: c.content.slice(0, 120),
+          deleted: c.deleted || !!c.setup?.deleted,
+          href: c.setup && !c.setup.deleted ? `${setupPath(c.setup)}#comment-${c.id}` : null,
+        })))
+      }
       case "STRAIN": {
         // Strains are hard-deleted — a missing row means the catalog entry
         // is gone (label falls back to null, same as any absent target).

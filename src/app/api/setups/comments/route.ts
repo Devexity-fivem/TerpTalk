@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma"
 import { unauthorized, publicUserSelect, getClientIp, logSecurityEvent, getSecurityUser, isBannedRow, forbidden, blockExistsBetween, enforceLinkTrust } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
 import { notifyMentions } from "@/lib/mentions"
-import { notify, notifyMany } from "@/lib/notify"
+import { notify, notifyMany, commentLinkWhere } from "@/lib/notify"
 import { checkMaintenance } from "@/lib/maintenance"
 import { setupPath } from "@/lib/slugs"
 import { revalidateTag } from "next/cache"
@@ -88,7 +88,7 @@ export async function POST(request: Request) {
     // noisy commenter can't stack notifications — while a different
     // commenter (e.g. the owner answering) still notifies immediately.
     const prior = await prisma.setupComment.findMany({
-      where: { setupId, id: { not: comment.id }, authorId: { not: session.user.id } },
+      where: { setupId, deleted: false, id: { not: comment.id }, authorId: { not: session.user.id } },
       select: { authorId: true },
       distinct: ["authorId"],
     })
@@ -116,8 +116,11 @@ export async function POST(request: Request) {
 }
 
 // DELETE — delete own setup comment: { id }
-// SetupComment has no `deleted` flag and nothing references it, so a hard
-// delete is safe. Reputation has no comment award — nothing to reverse.
+// Soft-delete, same as every other member-speech surface: the row stays
+// for moderation/audit while the public page filters `deleted: false`.
+// Setup owners intentionally cannot remove others' comments — matching
+// thread OPs, who can't delete others' posts either (posts route).
+// Reputation has no comment award — nothing to reverse.
 export async function DELETE(request: Request) {
   try {
     const session = await getServerSession(authOptions)
@@ -137,7 +140,13 @@ export async function DELETE(request: Request) {
     }
     if (comment.authorId !== session.user.id) return forbidden()
 
-    await prisma.setupComment.delete({ where: { id } })
+    await prisma.$transaction(async (tx) => {
+      // updateMany keeps a repeated delete idempotent instead of erroring.
+      await tx.setupComment.updateMany({ where: { id, deleted: false }, data: { deleted: true } })
+      // COMMENT + MENTION notifications for this comment all carry the
+      // same `#comment-<id>` link — one sweep covers them.
+      await tx.notification.deleteMany({ where: commentLinkWhere(id) })
+    })
     revalidateTag("setups", { expire: 0 })
 
     return NextResponse.json({ deleted: true })

@@ -443,7 +443,7 @@ export async function getPublicProfileData(
       select: {
         id: true, slug: true, title: true, strain: true,
         images: { take: 1, orderBy: { order: "asc" }, select: { id: true, url: true } },
-        _count: { select: { comments: true } },
+        _count: { select: { comments: { where: { deleted: false } } } },
       },
     }),
     prisma.growDiary.findMany({

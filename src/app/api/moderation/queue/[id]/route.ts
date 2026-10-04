@@ -276,6 +276,21 @@ async function reportTargetDetail(type: string, targetId: string | null) {
         })
         return s && { title: s.title, content: (s.description ?? "").slice(0, 2000), deleted: s.deleted, href: setupPath(s) }
       }
+      case "SETUP_COMMENT": {
+        const c = await prisma.setupComment.findUnique({
+          where: { id: targetId },
+          select: {
+            id: true, content: true, deleted: true,
+            setup: { select: { id: true, title: true, slug: true, deleted: true } },
+          },
+        })
+        return c && {
+          title: c.setup?.title ? `Comment on "${c.setup.title}"` : "Setup comment",
+          content: c.content.slice(0, 2000),
+          deleted: c.deleted || !!c.setup?.deleted,
+          href: c.setup && !c.setup.deleted ? `${setupPath(c.setup)}#comment-${c.id}` : null,
+        }
+      }
       case "STRAIN": {
         const s = await prisma.strain.findUnique({
           where: { id: targetId },

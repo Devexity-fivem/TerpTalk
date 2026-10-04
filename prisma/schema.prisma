@@ -635,6 +635,7 @@ model SetupComment {
   content   String
   setupId   String
   authorId  String
+  deleted   Boolean  @default(false)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -852,7 +853,7 @@ model ReputationEvent {
 // Reports and Moderation
 model Report {
   id           String    @id @default(cuid())
-  type         String    // THREAD, POST, CHAT_MESSAGE, PROFILE, DIARY, SETUP
+  type         String    // THREAD, POST, CHAT_MESSAGE, PROFILE, DIARY, SETUP, SETUP_COMMENT
   reason       String
   description  String?
   reporterId   String

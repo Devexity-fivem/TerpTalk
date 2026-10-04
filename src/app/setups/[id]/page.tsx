@@ -49,14 +49,16 @@ export default async function SetupPage({ params }: { params: Promise<{ id: stri
       // Latest 50 — notification anchors always target recent comments;
       // reversed below so the list still renders oldest → newest.
       comments: {
-        where: { author: activeAuthor() },
+        where: { deleted: false, author: activeAuthor() },
         orderBy: { createdAt: "desc" },
         take: 50,
         include: { author: { select: publicUserSelect } },
       },
       discussion: { select: { id: true, slug: true, deleted: true } },
       _count: {
-        select: { comments: { where: { author: activeAuthor() } } },
+        // Same convention as thread _count.posts — moderated/deleted
+        // comments don't inflate the public count.
+        select: { comments: { where: { deleted: false, author: activeAuthor() } } },
       },
     },
   })
@@ -267,6 +269,7 @@ export default async function SetupPage({ params }: { params: Promise<{ id: stri
                       confirmText="Delete this comment? This cannot be undone."
                       iconOnly
                     />
+                    <ReportButton type="SETUP_COMMENT" targetId={c.id} authorId={c.author.id} />
                   </div>
                   <p className="text-sm text-muted-foreground whitespace-pre-wrap wrap-break-word">{c.content}</p>
                 </div>

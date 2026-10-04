@@ -33,7 +33,7 @@ const getSetups = unstable_cache(
           author: { select: publicUserSelect },
           images: { take: 1, orderBy: { order: "asc" } },
           _count: {
-            select: { comments: true },
+            select: { comments: { where: { deleted: false } } },
           },
         },
       }),

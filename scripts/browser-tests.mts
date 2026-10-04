@@ -311,6 +311,9 @@ const main = async () => {
         createdAt: new Date(Date.now() - (30 - i) * 60_000),
       })),
     })
+    const aliceComment = await prisma.setupComment.create({
+      data: { setupId: setup.id, authorId: alice.id, content: `__br sc alice ${TS}` },
+    })
     const firstComment = await prisma.setupComment.findFirst({
       where: { setupId: setup.id }, orderBy: { createdAt: "asc" }, select: { id: true },
     })
@@ -329,9 +332,32 @@ const main = async () => {
         }, firstComment.id, { timeout: 15_000 }).then(() => true).catch(() => false)
       : false
     ok("setup: #comment anchor scrolls the exact comment into view", commentAnchored)
+    // Batch R — anonymous visitors get no per-comment report affordance.
+    ok("setup: anonymous sees no comment report affordance",
+      (await anonPage.locator('button:has-text("Report")').count()) === 0)
     // Member clicks Discuss → lazy-creates the canonical thread → thread page.
     const { context: bobSetupCtx, page: bobSetupPage } = await login(bobUsername)
     await gotoMain(bobSetupPage, `${BASE}/setups/${setup.slug}`)
+    // Batch R — members can report others' comments but never their own.
+    // ReportButton gates on useSession(), which resolves after hydration —
+    // wait for it rather than counting synchronously.
+    const aliceCommentRow = bobSetupPage.locator(`#comment-${aliceComment.id}`)
+    const reportBtn = aliceCommentRow.locator('button:has-text("Report")')
+    const reportVisible = await reportBtn.waitFor({ state: "visible", timeout: 15_000 }).then(() => true).catch(() => false)
+    ok("setup: member sees Report on another member's comment", reportVisible)
+    ok("setup: author sees no Report on own comment",
+      (await bobSetupPage.locator(`#comment-${firstComment?.id} button:has-text("Report")`).count()) === 0)
+    if (reportVisible) {
+      await reportBtn.click()
+      await bobSetupPage.locator('button:has-text("Submit report")').click()
+      // Wait for the round-trip — the button swaps to a confirmation label.
+      await bobSetupPage.locator('text=Reported').first()
+        .waitFor({ state: "visible", timeout: 15_000 }).catch(() => {})
+    }
+    const commentReport = await prisma.report.findFirst({
+      where: { type: "SETUP_COMMENT", targetId: aliceComment.id, reporterId: bob.id },
+    })
+    ok("setup: comment report submits through the existing report API", !!commentReport)
     await bobSetupPage.locator('button:has-text("Discuss this setup")').click()
     await bobSetupPage.waitForURL(/\/forum\/thread\//, { timeout: 45_000 })
     const createdSlug = bobSetupPage.url().split("/forum/thread/")[1]

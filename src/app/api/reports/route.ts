@@ -14,6 +14,7 @@ const REPORT_TYPES = new Set([
   "PROFILE",
   "DIARY",
   "SETUP",
+  "SETUP_COMMENT",
   "STRAIN",
 ])
 
@@ -102,6 +103,16 @@ export async function POST(request: Request) {
       case "SETUP": {
         const s = await prisma.growSetup.findUnique({ where: { id: targetId }, select: { authorId: true } })
         reportedUserId = s?.authorId ?? null
+        break
+      }
+      case "SETUP_COMMENT": {
+        // Only live comments are reportable — a deleted/moderated comment
+        // resolves to the same not-found as any other absent target.
+        const c = await prisma.setupComment.findFirst({
+          where: { id: targetId, deleted: false },
+          select: { authorId: true },
+        })
+        reportedUserId = c?.authorId ?? null
         break
       }
       case "STRAIN": {

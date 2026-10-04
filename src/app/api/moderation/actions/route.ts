@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma"
 import { unauthorized, isAdmin, isStaff, forbidden, getClientIp, logSecurityEvent } from "@/lib/security"
 import { requireModerator, ADMIN_ONLY_MOD_ACTIONS } from "@/lib/require-staff"
 import { rateLimit } from "@/lib/rate-limit"
-import { emitNotificationPush, notificationLinkWhere, postLinkWhere } from "@/lib/notify"
+import { emitNotificationPush, notificationLinkWhere, postLinkWhere, commentLinkWhere } from "@/lib/notify"
 import { enqueueReversals, drainMany, type ReversalIntent } from "@/lib/reputation-outbox"
 import { enqueueXpReversals, drainXpMany, type XpReversalIntent } from "@/lib/progression-outbox"
 import { applyAccountActionInTx, staffDisplayName } from "@/lib/moderation"
@@ -13,7 +13,7 @@ import { deleteImagesIfUnreferenced } from "@/lib/blob"
 import { getPusher } from "@/lib/pusher"
 import { revalidateTag } from "next/cache"
 
-const CONTENT_TYPES = new Set(["THREAD", "POST", "CHAT_MESSAGE", "DIARY", "SETUP", "STRAIN"])
+const CONTENT_TYPES = new Set(["THREAD", "POST", "CHAT_MESSAGE", "DIARY", "SETUP", "SETUP_COMMENT", "STRAIN"])
 const ACTION_TYPES = new Set([
   "WARNING", "CONTENT_DELETION", "TEMPORARY_BAN", "PERMANENT_BAN", "UNBAN", "REMOVE_SUSPENSION",
   "PIN_THREAD", "LOCK_THREAD", "MOVE_THREAD",
@@ -80,6 +80,7 @@ export async function POST(request: Request) {
     let strainPhotoIds: string[] = []
     let deletedChatRoomId: string | null = null
     let threadMoved = false
+    let setupCommentDeleted = false
     // Durable reversal intents — committed atomically with the deletion so
     // staff rep reconciliation can never be silently lost. Both ledgers:
     // legacy ReputationEvent rows still on the frozen balance plus live V2
@@ -291,6 +292,24 @@ export async function POST(request: Request) {
             }
             break
           }
+          case "SETUP_COMMENT": {
+            // authorId-scoped like every other content case — targetUserId
+            // must be the comment's real author, not a caller guess.
+            // updateMany on a live or already-deleted row both count, so a
+            // repeated action stays idempotent. Comments award no rep/XP —
+            // nothing to reverse. COMMENT + MENTION notifications share the
+            // `#comment-<id>` link; one sweep clears them.
+            const c = await tx.setupComment.updateMany({
+              where: { id: targetId, authorId: targetUserId },
+              data: { deleted: true },
+            })
+            ok = c.count > 0
+            if (ok) {
+              await tx.notification.deleteMany({ where: commentLinkWhere(targetId) })
+              setupCommentDeleted = true
+            }
+            break
+          }
           case "STRAIN": {
             const strain = await tx.strain.findUnique({
               where: { id: targetId },
@@ -467,6 +486,9 @@ export async function POST(request: Request) {
     // lingers in the wrong category for up to a minute.
     if (threadMoved || (actionType === "CONTENT_DELETION" && targetType === "THREAD")) {
       revalidateTag("forum", { expire: 0 })
+    }
+    if (setupCommentDeleted) {
+      revalidateTag("setups", { expire: 0 })
     }
 
 

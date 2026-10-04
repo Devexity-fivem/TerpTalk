@@ -418,6 +418,16 @@ export function postLinkWhere(postId: string): Prisma.NotificationWhereInput {
 }
 
 /**
+ * Where-clause matching notification links that target a specific setup
+ * comment — `/setups/<slug-or-id>#comment-{id}`. cuid suffixes can't
+ * collide with unrelated links; the `#comment-` fragment is unique to
+ * SetupComment, so a plain contains is boundary-safe here.
+ */
+export function commentLinkWhere(commentId: string): Prisma.NotificationWhereInput {
+  return { link: { contains: `#comment-${commentId}` } }
+}
+
+/**
  * Remove notifications that link to a deleted target so users never see
  * a live link to removed content. Called from content soft-delete paths.
  */

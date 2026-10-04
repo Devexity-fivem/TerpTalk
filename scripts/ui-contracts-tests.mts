@@ -896,6 +896,25 @@ check("setup comments stay a flat comment system", () => {
   assert.ok(route.includes("#comment-"), "comment deep links preserved")
 })
 
+// ── SetupComment moderation & safety (Batch R) ────────────────────────
+
+check("setup comment moderation reuses the existing report + action systems", () => {
+  const reports = src("app/api/reports/route.ts")
+  assert.ok(reports.includes('"SETUP_COMMENT"'), "SETUP_COMMENT report type registered")
+  const actions = src("app/api/moderation/actions/route.ts")
+  assert.ok(actions.includes('"SETUP_COMMENT"'), "SETUP_COMMENT in staff content types")
+  assert.ok(actions.includes("authorId: targetUserId"), "staff delete is author-scoped")
+  const route = src("app/api/setups/comments/route.ts")
+  assert.ok(route.includes("commentLinkWhere"), "self-delete sweeps comment notification links")
+  assert.ok(!route.includes("setupComment.delete("), "no hard delete on the self-delete path")
+  // The author-only guard must stay — no owner/member privilege creep.
+  assert.ok(route.includes("comment.authorId !== session.user.id"), "author-only delete guard preserved")
+  const page = src("app/setups/[id]/page.tsx")
+  assert.ok(page.includes("deleted: false"), "deleted comments filtered from member view")
+  const btn = src("components/report-button.tsx")
+  assert.ok(btn.includes('"SETUP_COMMENT"'), "report affordance accepts SETUP_COMMENT")
+})
+
 check("setup discussion thread is owner-attributed like the diary bridge", () => {
   const route = src("app/api/setups/[id]/discuss/route.ts")
   assert.ok(route.includes("authorId: setup.authorId"), "thread authored by setup owner")

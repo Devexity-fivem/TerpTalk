@@ -377,6 +377,88 @@ const main = async () => {
       ? pass("setup comments: latest-50 window keeps newest comment anchor reachable")
       : fail("comment window", { hasNewest, hasOldest })
 
+    // ══ Batch R — SetupComment moderation & notification lifecycle ════
+    const modSetup = await prisma.growSetup.create({ data: { title: M("modsetup"), description: "d", authorId: a.id } })
+    setupIds.push(modSetup.id)
+    const mLink = { contains: `/setups/${modSetup.id}#comment-` }
+
+    const mb1 = await callApi("/api/setups/comments", { method: "POST", body: { setupId: modSetup.id, content: "b first" }, cookie: bC })
+    const mb1Id = mb1.data?.comment?.id
+    const mb2 = await callApi("/api/setups/comments", { method: "POST", body: { setupId: modSetup.id, content: "b second" }, cookie: bC })
+    const mb2Id = mb2.data?.comment?.id
+    const mc = await callApi("/api/setups/comments", { method: "POST", body: { setupId: modSetup.id, content: `nice tent @${b.username}` }, cookie: cC })
+    const mcId = mc.data?.comment?.id
+    // C's comment both mentions B (participant) and notifies B as prior
+    // participant — both links carry the same #comment- fragment.
+    const [bMention, bPart2] = await Promise.all([
+      prisma.notification.findFirst({ where: { userId: b.id, type: "MENTION", link: { endsWith: `#comment-${mcId}` } } }),
+      prisma.notification.findFirst({ where: { userId: b.id, type: "COMMENT", link: { endsWith: `#comment-${mcId}` }, actorId: c.id } }),
+    ])
+    bMention && bPart2
+      ? pass("setup comments: mention + participant notifications both link the comment anchor")
+      : fail("mention/participant links", { mention: !!bMention, part: !!bPart2 })
+
+    // R.1 — report lifecycle on an individual comment.
+    r = await callApi("/api/reports", { method: "POST", body: { type: "SETUP_COMMENT", targetId: mcId, reason: "SPAM" }, cookie: bC })
+    r.status === 201 ? pass("setup comment: member can report a comment") : fail("comment report create", r.status)
+    r = await callApi("/api/reports", { method: "POST", body: { type: "SETUP_COMMENT", targetId: mcId, reason: "SPAM" }, cookie: bC })
+    r.status === 409 ? pass("setup comment: duplicate open report rejected") : fail("comment report dup", r.status)
+    r = await callApi("/api/reports", { method: "POST", body: { type: "SETUP_COMMENT", targetId: mcId, reason: "SPAM" }, cookie: cC })
+    r.status === 400 ? pass("setup comment: self-report rejected") : fail("comment self-report", r.status)
+    r = await callApi("/api/reports", { method: "POST", body: { type: "SETUP_COMMENT", targetId: "no-such-id", reason: "SPAM" }, cookie: bC })
+    r.status === 404 ? pass("setup comment: missing target 404s") : fail("comment report missing", r.status)
+
+    // R.2 — staff-only CONTENT_DELETION, author-scoped, idempotent, and
+    // it sweeps every notification that linked the comment anchor.
+    r = await callApi("/api/moderation/actions", { method: "POST", body: { actionType: "CONTENT_DELETION", targetType: "SETUP_COMMENT", targetId: mcId, targetUserId: c.id, reason: "x" }, cookie: bC })
+    const memberDenied = [401, 403].includes(r.status)
+    memberDenied
+      ? pass("setup comment: member denied staff CONTENT_DELETION")
+      : fail("member staff action", r.status)
+    r = await callApi("/api/moderation/actions", { method: "POST", body: { actionType: "CONTENT_DELETION", targetType: "SETUP_COMMENT", targetId: mcId, targetUserId: b.id, reason: "x" }, cookie: modC })
+    r.status !== 200
+      ? pass("setup comment: staff action with wrong author refused (authorId-scoped)")
+      : fail("wrong-author action", r.status)
+    r = await callApi("/api/moderation/actions", { method: "POST", body: { actionType: "CONTENT_DELETION", targetType: "SETUP_COMMENT", targetId: mcId, targetUserId: c.id, reason: "rv" }, cookie: modC })
+    const mcRow = await prisma.setupComment.findUnique({ where: { id: mcId }, select: { deleted: true } })
+    const mcAct = await prisma.moderationAction.findFirst({ where: { type: "CONTENT_DELETION", targetUserId: c.id } })
+    const mcNotifs = await prisma.notification.count({ where: { link: { contains: `#comment-${mcId}` } } })
+    r.status === 200 && mcRow?.deleted === true && !!mcAct && mcNotifs === 0
+      ? pass("setup comment: staff deletion soft-deletes, audits, sweeps notifications")
+      : fail("staff comment deletion", { status: r.status, deleted: mcRow?.deleted, act: !!mcAct, notifs: mcNotifs })
+    r = await callApi("/api/moderation/actions", { method: "POST", body: { actionType: "CONTENT_DELETION", targetType: "SETUP_COMMENT", targetId: mcId, targetUserId: c.id, reason: "rv" }, cookie: modC })
+    r.status === 200 ? pass("setup comment: repeated staff deletion is idempotent") : fail("idempotent staff delete", r.status)
+    r = await callApi("/api/reports", { method: "POST", body: { type: "SETUP_COMMENT", targetId: mcId, reason: "SPAM" }, cookie: bC })
+    r.status === 404 ? pass("setup comment: deleted target is not reportable") : fail("report deleted", r.status)
+    await prisma.moderationAction.deleteMany({ where: { type: "CONTENT_DELETION", targetUserId: c.id } })
+
+    // R.4 — author self-delete is now a soft delete that sweeps its own
+    // notification links; the row stays auditable but leaves public view.
+    r = await callApi("/api/setups/comments", { method: "DELETE", body: { id: mb1Id }, cookie: bC })
+    const mb1Row = await prisma.setupComment.findUnique({ where: { id: mb1Id }, select: { deleted: true } })
+    const mb1Notifs = await prisma.notification.count({ where: { link: { contains: `#comment-${mb1Id}` } } })
+    r.status === 200 && mb1Row?.deleted === true && mb1Notifs === 0
+      ? pass("setup comment: author self-delete soft-deletes and sweeps notifications")
+      : fail("author self-delete", { status: r.status, deleted: mb1Row?.deleted, notifs: mb1Notifs })
+
+    // Invariant — the setup owner has no per-comment privilege: A owns
+    // modSetup but cannot delete B's live comment on it.
+    r = await callApi("/api/setups/comments", { method: "DELETE", body: { id: mb2Id }, cookie: aC })
+    const mb2Alive = await prisma.setupComment.findUnique({ where: { id: mb2Id }, select: { deleted: true } })
+    r.status === 403 && mb2Alive?.deleted === false
+      ? pass("setup comment: owner cannot delete another member's comment")
+      : fail("owner delete others", { status: r.status, deleted: mb2Alive?.deleted })
+
+    // R.3 — public rendering: only live comments render, and the header
+    // count matches (forum _count convention — deleted rows excluded).
+    const modPage = await getHtml(`/setups/${modSetup.id}`)
+    const showsLive = modPage.html.includes(`id="comment-${mb2Id}"`)
+    const hidesDeleted = !modPage.html.includes(`id="comment-${mcId}"`) && !modPage.html.includes(`id="comment-${mb1Id}"`)
+    const countMatch = /Comments \(<!-- -->?1<!-- -->?\)|Comments \(1\)/.test(modPage.html)
+    showsLive && hidesDeleted && countMatch
+      ? pass("setup comment: deleted comments hidden; public count reflects live comments only")
+      : fail("public rendering", { showsLive, hidesDeleted, countMatch })
+
     // Bookmark — B cannot remove A's bookmark.
     await callApi("/api/bookmarks", { method: "POST", body: { threadId: aThread.id }, cookie: aC })
     await callApi("/api/bookmarks", { method: "DELETE", body: { threadId: aThread.id }, cookie: bC })
