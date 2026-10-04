@@ -581,6 +581,38 @@ const main = async () => {
       : fail("audit member lookup", r.status)
     await prisma.moderationAction.deleteMany({ where: { targetId: tCommentId } })
 
+    // ══ Batch Y — report outlives its reporter ══════════════════════
+    // A filed report is a staff-triage record (Feedback.author SetNull
+    // precedent): deleting the reporter must not destroy the case or the
+    // enforcement provenance — reporterId SetNulls instead of cascading.
+    const yrep = await createUser("yrep")
+    const { cookie: yrepC } = await login(yrep.username, yrep.password)
+    const yComment = await callApi("/api/setups/comments", { method: "POST", body: { setupId: modSetup.id, content: "yrep fixture" }, cookie: cC })
+    const yCommentId = yComment.data?.comment?.id
+    r = await callApi("/api/reports", { method: "POST", body: { type: "SETUP_COMMENT", targetId: yCommentId, reason: "OTHER", description: "y" }, cookie: yrepC })
+    const yReport = await prisma.report.findFirst({ where: { targetId: yCommentId, type: "SETUP_COMMENT" } })
+    r.status === 201 && yReport?.reporterId === yrep.id
+      ? pass("reporter lifecycle: report filed with live reporter")
+      : fail("y report setup", { status: r.status, yReport: !!yReport })
+    r = await callApi("/api/moderation/actions", { method: "POST", body: { actionType: "CONTENT_DELETION", targetType: "SETUP_COMMENT", targetId: yCommentId, targetUserId: c.id, reason: "y", reportId: yReport?.id }, cookie: modC })
+    const yAction = await prisma.moderationAction.findFirst({ where: { reportId: yReport?.id } })
+    r.status === 200 && yAction?.reportId === yReport?.id
+      ? pass("reporter lifecycle: case-driven enforcement linked")
+      : fail("y enforcement", { status: r.status })
+    // Delete the reporter — same tx.user.delete the account route runs.
+    await prisma.user.delete({ where: { id: yrep.id } })
+    const yReportAfter = await prisma.report.findUnique({ where: { id: yReport?.id ?? "" } })
+    yReportAfter && yReportAfter.reporterId === null
+      ? pass("reporter lifecycle: report survives reporter deletion, reporterId SetNull")
+      : fail("y report survival", yReportAfter)
+    r = await callApi(`/api/moderation/queue/${yReport?.id}?kind=REPORT`, { cookie: modC })
+    const yActs = r.data?.activity ?? []
+    r.status === 200 && r.data?.item?.reporter === null && yActs.some((x) => x.type === "CONTENT_DELETION")
+      ? pass("reporter lifecycle: case stays coherent — masked reporter + enforcement activity")
+      : fail("y case coherence", { status: r.status, reporter: r.data?.item?.reporter, types: yActs.map((x) => x.type) })
+    await prisma.report.deleteMany({ where: { id: yReport?.id ?? "" } })
+    await prisma.moderationAction.deleteMany({ where: { OR: [{ targetId: yCommentId }, { reportId: yReport?.id ?? "" }] } })
+
     // Bookmark — B cannot remove A's bookmark.
     await callApi("/api/bookmarks", { method: "POST", body: { threadId: aThread.id }, cookie: aC })
     await callApi("/api/bookmarks", { method: "DELETE", body: { threadId: aThread.id }, cookie: bC })
