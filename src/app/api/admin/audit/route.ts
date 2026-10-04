@@ -86,6 +86,11 @@ export async function GET(request: Request) {
       actor: a.moderator?.profile?.username ?? a.moderatorName ?? a.moderatorId ?? "unknown",
       targetId: a.targetUserId,
       duration: a.duration,
+      // Direct content identity — new rows carry it; pre-S rows are null and
+      // fall back to SecurityEvent metadata correlation.
+      targetType: a.targetType,
+      targetContentId: a.targetId,
+      reportId: a.reportId,
       metadata: null as string | null,
       createdAt: a.createdAt,
     })),

@@ -28,7 +28,10 @@ export async function staffDisplayName(userId: string): Promise<string> {
 }
 
 // Write an audit row. `moderatorName` is a snapshot so the record stays
-// attributable if the moderator's account is later deleted.
+// attributable if the moderator's account is later deleted. `targetId`/
+// `targetType` identify the exact content acted on — bare strings like
+// reportId, so the audit row still names the target after the content
+// (or the case) is gone. Callers only pass them for content actions.
 export async function logModAction(
   db: Db,
   data: {
@@ -40,6 +43,8 @@ export async function logModAction(
     duration?: number | null
     reportId?: string | null
     flagId?: string | null
+    targetId?: string | null
+    targetType?: string | null
   }
 ) {
   const moderatorName =
@@ -54,6 +59,8 @@ export async function logModAction(
       duration: data.duration ?? null,
       reportId: data.reportId ?? null,
       flagId: data.flagId ?? null,
+      targetId: data.targetId ?? null,
+      targetType: data.targetType ?? null,
     },
   })
 }
@@ -72,9 +79,13 @@ export async function applyAccountActionInTx(
     staffId: string
     staffRole: string
     staffName: string
+    // Case provenance — set only when the action was genuinely initiated
+    // from a report case; callers must validate the report matches the
+    // target before passing it. Direct actions stay unlinked.
+    reportId?: string | null
   }
 ) {
-  const { actionType, targetUserId, reason, durationDays, staffId, staffRole, staffName } = params
+  const { actionType, targetUserId, reason, durationDays, staffId, staffRole, staffName, reportId } = params
 
   const target = await tx.user.findUnique({
     where: { id: targetUserId },
@@ -130,6 +141,7 @@ export async function applyAccountActionInTx(
       moderatorId: staffId,
       moderatorName: staffName,
       duration: typeof durationDays === "number" ? durationDays : null,
+      reportId: reportId ?? null,
     },
   })
 

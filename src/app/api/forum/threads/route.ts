@@ -452,6 +452,8 @@ export async function DELETE(request: Request) {
         reason: "Thread removed via forum UI",
         targetUserId: thread.authorId,
         moderatorId: mod.id,
+        targetType: "THREAD",
+        targetId: id,
       }).catch(() => null)
       await logSecurityEvent("SUSPICIOUS_ACTIVITY", {
         userId: mod.id,

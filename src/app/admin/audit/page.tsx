@@ -16,6 +16,9 @@ interface AuditEvent {
   actor: string
   targetId: string | null
   duration?: number | null
+  targetType?: string | null
+  targetContentId?: string | null
+  reportId?: string | null
   metadata?: string | null
   createdAt: string
 }
@@ -123,6 +126,12 @@ export default function AdminAuditPage() {
                     <span className="text-xs text-muted-foreground">by @{e.actor}</span>
                   </div>
                   {e.reason && <p className="text-sm text-muted-foreground">{e.reason}</p>}
+                  {e.targetType && (
+                    <p className="text-xs text-muted-foreground mt-0.5 truncate">
+                      target: {e.targetType.replace(/_/g, " ").toLowerCase()} {e.targetContentId}
+                      {e.reportId && ` · case ${e.reportId}`}
+                    </p>
+                  )}
                   {e.metadata && <p className="text-xs text-muted-foreground mt-0.5 truncate">{e.metadata}</p>}
                 </div>
                 <span className="text-xs text-muted-foreground shrink-0">{new Date(e.createdAt).toLocaleString()}</span>

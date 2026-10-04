@@ -164,6 +164,8 @@ async function caseActivity(where: { reportId?: string; flagId?: string }) {
     type: a.type,
     reason: a.reason,
     moderator: a.moderator?.profile?.username ?? a.moderatorName ?? "unknown",
+    targetType: a.targetType,
+    targetId: a.targetId,
     createdAt: a.createdAt,
   }))
 }
@@ -233,6 +235,7 @@ async function subjectContext(userId: string, supportOnly: boolean) {
       id: a.id, type: a.type, reason: a.reason,
       moderator: a.moderator?.profile?.username ?? a.moderatorName ?? "unknown",
       createdAt: a.createdAt, duration: a.duration,
+      targetType: a.targetType, targetId: a.targetId,
     })),
   }
 }

@@ -88,6 +88,8 @@ export async function GET(request: Request) {
       reason: a.reason,
       duration: a.duration,
       moderator: a.moderator?.profile?.username ?? a.moderatorName ?? "unknown",
+      targetType: a.targetType,
+      targetId: a.targetId,
       createdAt: a.createdAt,
     })),
     progression: recentRep.map((e) => ({

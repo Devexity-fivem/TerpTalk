@@ -939,8 +939,10 @@ model ModerationAction {
   moderatorId String?  // SetNull on staff deletion — the audit row must survive
   moderatorName String? // username snapshot; survives moderator account deletion
   duration    Int?     // in days for temporary bans
-  reportId    String?  // links REPORT_* / assignment actions back to the case
+  reportId    String?  // links REPORT_* / assignment / case enforcement back to the case
   flagId      String?  // links FLAG_* actions back to the abuse flag
+  targetId    String?  // content target id — bare string, survives target deletion (nullable for pre-S rows)
+  targetType  String?  // THREAD, POST, CHAT_MESSAGE, DIARY, SETUP, SETUP_COMMENT, STRAIN
   createdAt   DateTime @default(now())
 
   moderator   User?                @relation(fields: [moderatorId], references: [id], onDelete: SetNull)
@@ -950,6 +952,7 @@ model ModerationAction {
   @@index([createdAt])
   @@index([reportId])
   @@index([flagId])
+  @@index([targetType, targetId])
 }
 
 // Security Infrastructure

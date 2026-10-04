@@ -465,6 +465,8 @@ export async function DELETE(request: Request) {
         reason: "Post removed via forum UI",
         targetUserId: post.authorId,
         moderatorId: mod.id,
+        targetType: "POST",
+        targetId: id,
       }).catch(() => null)
       await logSecurityEvent("SUSPICIOUS_ACTIVITY", {
         userId: mod.id,

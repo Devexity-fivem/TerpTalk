@@ -82,12 +82,17 @@ export async function POST(request: Request) {
         data,
       }),
       prisma.moderationAction.createMany({
+        // One audit row per thread — the item-level target identity lives on
+        // each row so a bulk op stays fully reconstructable without relying
+        // on the SecurityEvent summary.
         data: threads.map((t) => ({
           type: action === "delete" || action === "restore" ? "CONTENT_DELETION" : "CONTENT_EDIT",
           reason: reason || `Bulk ${action} by moderator`,
           targetUserId: t.authorId,
           moderatorId: staff.id,
           moderatorName,
+          targetType: "THREAD",
+          targetId: t.id,
         })),
       }),
     ]
@@ -149,7 +154,9 @@ export async function POST(request: Request) {
     await logSecurityEvent("SUSPICIOUS_ACTIVITY", {
       userId: staff.id,
       ip: getClientIp(request),
-      metadata: { action, count: ids.length, reason },
+      // Bounded by the 100-id request cap — ids keep the bulk event itself
+      // reconstructable in addition to the per-thread ModerationAction rows.
+      metadata: { action, count: ids.length, reason, targetIds: ids },
     })
 
     // Bulk-deleted/restored threads can carry wizardResultId + accepted
