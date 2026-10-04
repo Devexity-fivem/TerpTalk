@@ -382,12 +382,22 @@ const main = async () => {
     setupIds.push(modSetup.id)
     const mLink = { contains: `/setups/${modSetup.id}#comment-` }
 
+    // R.5 — owner dedupe: two rapid comments from B notify A once; a
+    // different actor (C) is never suppressed by B's throttle window.
     const mb1 = await callApi("/api/setups/comments", { method: "POST", body: { setupId: modSetup.id, content: "b first" }, cookie: bC })
     const mb1Id = mb1.data?.comment?.id
     const mb2 = await callApi("/api/setups/comments", { method: "POST", body: { setupId: modSetup.id, content: "b second" }, cookie: bC })
     const mb2Id = mb2.data?.comment?.id
+    const aFromB = await prisma.notification.count({ where: { userId: a.id, type: "COMMENT", actorId: b.id, link: mLink } })
+    aFromB === 1
+      ? pass("setup comments: owner notification dedupes rapid comments from one member")
+      : fail("owner dedupe", { aFromB, s: [mb1.status, mb2.status] })
     const mc = await callApi("/api/setups/comments", { method: "POST", body: { setupId: modSetup.id, content: `nice tent @${b.username}` }, cookie: cC })
     const mcId = mc.data?.comment?.id
+    const aFromC = await prisma.notification.findFirst({ where: { userId: a.id, type: "COMMENT", link: { endsWith: `#comment-${mcId}` } } })
+    aFromC
+      ? pass("setup comments: owner notified by a different actor despite prior-actor dedupe")
+      : fail("owner dedupe cross-actor", { status: mc.status })
     // C's comment both mentions B (participant) and notifies B as prior
     // participant — both links carry the same #comment- fragment.
     const [bMention, bPart2] = await Promise.all([

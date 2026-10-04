@@ -71,6 +71,11 @@ export async function POST(request: Request) {
         content: `@${session.user.name || "Someone"} commented on "${setup.title.slice(0, 60)}"`,
         link: `${setupPath(setup)}#comment-${comment.id}`,
         actorId: session.user.id,
+        // Same throttle as thread REPLY fanout — the groupKey is
+        // recipient+setup+actor scoped so rapid comments from one member
+        // dedupe, while a different commenter still notifies immediately.
+        groupKey: `setup-comment-owner:${setup.id}:${session.user.id}`,
+        dedupeMs: 60 * 60 * 1000,
       })
     }
     await notifyMentions(
