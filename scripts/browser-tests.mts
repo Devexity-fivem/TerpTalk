@@ -299,14 +299,36 @@ const main = async () => {
       !!menuBox && menuBox.x >= 0 && menuBox.x + menuBox.width <= 391 && menuBox.width > 0)
     await chatMobCtx.close()
 
-    // ── Setup canonical discussion (Batch Q) ─────────────────────────
+    // ── Setup canonical discussion + comment anchor (Batch Q) ────────
     const setup = await prisma.growSetup.create({
       data: { title: `__br setup ${TS}`, slug: `__br-setup-${TS}`, description: "browser fixture", authorId: alice.id },
+    })
+    // 30 comments so the list is tall; the anchor target is the OLDEST —
+    // landing on it proves the hash scrolled past the page top.
+    await prisma.setupComment.createMany({
+      data: Array.from({ length: 30 }, (_, i) => ({
+        setupId: setup.id, authorId: bob.id, content: `__br sc ${TS} #${i + 1}`,
+        createdAt: new Date(Date.now() - (30 - i) * 60_000),
+      })),
+    })
+    const firstComment = await prisma.setupComment.findFirst({
+      where: { setupId: setup.id }, orderBy: { createdAt: "asc" }, select: { id: true },
     })
     const setupRes = await gotoMain(anonPage, `${BASE}/setups/${setup.slug}`)
     ok("setup: page renders 200 to anonymous", setupRes?.status() === 200, setupRes?.status())
     ok("setup: discuss affordance renders without a thread",
       (await anonPage.locator('button:has-text("Discuss this setup")').count()) === 1)
+    // #comment-<id> lands on the exact comment (browser-native anchor).
+    await gotoMain(anonPage, `${BASE}/setups/${setup.slug}#comment-${firstComment?.id}`)
+    const commentAnchored = firstComment?.id
+      ? await anonPage.waitForFunction((id: string) => {
+          const el = document.getElementById(`comment-${id}`)
+          if (!el) return false
+          const r = el.getBoundingClientRect()
+          return r.top >= -2 && r.bottom <= window.innerHeight + 2 && window.scrollY > 0
+        }, firstComment.id, { timeout: 15_000 }).then(() => true).catch(() => false)
+      : false
+    ok("setup: #comment anchor scrolls the exact comment into view", commentAnchored)
     // Member clicks Discuss → lazy-creates the canonical thread → thread page.
     const { context: bobSetupCtx, page: bobSetupPage } = await login(bobUsername)
     await gotoMain(bobSetupPage, `${BASE}/setups/${setup.slug}`)

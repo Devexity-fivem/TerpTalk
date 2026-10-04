@@ -322,6 +322,61 @@ const main = async () => {
       ? pass("setup page: canonical discussion link renders")
       : fail("page discuss link", pLinked.status)
 
+    // ══ Q.1 — prior comment participants get notified ═════════════════
+    // Comments so far on aSetup: A's seed comment. B comments → owner A
+    // gets the COMMENT notification; B is the only prior-author pool and
+    // is the actor, so no participant notification fires.
+    const bComment = await callApi("/api/setups/comments", { method: "POST", body: { setupId: aSetup.id, content: "b asks about the lights" }, cookie: bC })
+    const aOwnerNotif = await prisma.notification.findFirst({
+      where: { userId: a.id, type: "COMMENT", link: { endsWith: `#comment-${bComment.data?.comment?.id}` } },
+    })
+    aOwnerNotif ? pass("setup comments: owner notified of new comment") : fail("owner comment notif", bComment.status)
+    // C comments → A (owner) again, plus B as the prior participant.
+    const cComment = await callApi("/api/setups/comments", { method: "POST", body: { setupId: aSetup.id, content: "c has the same tent" }, cookie: cC })
+    const bPart = await prisma.notification.findFirst({
+      where: { userId: b.id, type: "COMMENT", link: { endsWith: `#comment-${cComment.data?.comment?.id}` }, actorId: c.id },
+    })
+    bPart ? pass("setup comments: prior participant notified of follow-up") : fail("participant notif", cComment.status)
+    // Dedupe is per actor — a second rapid comment from the SAME member
+    // can't stack another notification on the same participant.
+    const cC2 = await callApi("/api/setups/comments", { method: "POST", body: { setupId: aSetup.id, content: "c adds detail" }, cookie: cC })
+    const bCount = await prisma.notification.count({ where: { userId: b.id, type: "COMMENT", link: { contains: `/setups/${aSetup.id}` } } })
+    cC2.status === 201 && bCount === 1 ? pass("setup comments: participant dedupe suppresses repeats from one actor") : fail("participant dedupe", { s: cC2.status, count: bCount })
+    // Owner replies → B and C both learn the answer arrived — even though
+    // B was notified seconds ago, because dedupe keys per actor.
+    const aReply = await callApi("/api/setups/comments", { method: "POST", body: { setupId: aSetup.id, content: "a answers: 240w bar LED" }, cookie: aC })
+    const [bAnswer, cAnswer, aSelf] = await Promise.all([
+      prisma.notification.findFirst({ where: { userId: b.id, type: "COMMENT", link: { endsWith: `#comment-${aReply.data?.comment?.id}` } } }),
+      prisma.notification.findFirst({ where: { userId: c.id, type: "COMMENT", link: { endsWith: `#comment-${aReply.data?.comment?.id}` } } }),
+      prisma.notification.findFirst({ where: { userId: a.id, link: { endsWith: `#comment-${aReply.data?.comment?.id}` } } }),
+    ])
+    bAnswer && cAnswer ? pass("setup comments: owner reply reaches all prior participants") : fail("owner reply notify", { b: !!bAnswer, c: !!cAnswer })
+    !aSelf ? pass("setup comments: actor is never notified of own comment") : fail("self notif", aSelf?.id)
+    // Blocked pair — C cannot comment at all once A blocks them, let alone notify.
+    const ab = await prisma.block.create({ data: { blockerId: a.id, blockedId: c.id } }).catch(() => null)
+    const blockedComment = await callApi("/api/setups/comments", { method: "POST", body: { setupId: aSetup.id, content: "c tries again" }, cookie: cC })
+    blockedComment.status === 403 ? pass("setup comments: blocked-by-owner cannot comment") : fail("blocked comment", blockedComment.status)
+    if (ab) await prisma.block.delete({ where: { id: ab.id } })
+
+    // ══ Q.2 — comment window keeps recent comments reachable ═══════════
+    const bigSetup = await prisma.growSetup.create({ data: { title: M("big"), description: "d", authorId: a.id } })
+    setupIds.push(bigSetup.id)
+    const base = Date.now() - 60 * 60_000
+    await prisma.setupComment.createMany({
+      data: Array.from({ length: 55 }, (_, i) => ({
+        setupId: bigSetup.id, authorId: b.id, content: `c${i}`, createdAt: new Date(base + i * 60_000),
+      })),
+    })
+    const ordered = await prisma.setupComment.findMany({ where: { setupId: bigSetup.id }, orderBy: { createdAt: "asc" }, select: { id: true } })
+    const newestId = ordered[ordered.length - 1].id
+    const oldestId = ordered[0].id
+    const bigPage = await getHtml(`/setups/${bigSetup.id}`)
+    const hasNewest = bigPage.html.includes(`id="comment-${newestId}"`)
+    const hasOldest = bigPage.html.includes(`id="comment-${oldestId}"`)
+    hasNewest && !hasOldest
+      ? pass("setup comments: latest-50 window keeps newest comment anchor reachable")
+      : fail("comment window", { hasNewest, hasOldest })
+
     // Bookmark — B cannot remove A's bookmark.
     await callApi("/api/bookmarks", { method: "POST", body: { threadId: aThread.id }, cookie: aC })
     await callApi("/api/bookmarks", { method: "DELETE", body: { threadId: aThread.id }, cookie: bC })

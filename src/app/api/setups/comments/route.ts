@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma"
 import { unauthorized, publicUserSelect, getClientIp, logSecurityEvent, getSecurityUser, isBannedRow, forbidden, blockExistsBetween, enforceLinkTrust } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
 import { notifyMentions } from "@/lib/mentions"
-import { notify } from "@/lib/notify"
+import { notify, notifyMany } from "@/lib/notify"
 import { checkMaintenance } from "@/lib/maintenance"
 import { setupPath } from "@/lib/slugs"
 import { revalidateTag } from "next/cache"
@@ -78,6 +78,35 @@ export async function POST(request: Request) {
       `${setupPath(setup)}#comment-${comment.id}`, `a comment on "${setup.title.slice(0, 50)}"`,
       [setup.authorId]
     )
+
+    // Prior participants — an earlier commenter is told when the
+    // conversation continues, so the owner's answer reaches the asker.
+    // The query excludes the new comment (participants of 1..N-1 only) and
+    // the actor; the owner already got the COMMENT notification above.
+    // notifyMany re-checks prefs (notifyOnComment), bans/suspension, and
+    // mutual blocks. The groupKey keys per recipient+setup+actor so one
+    // noisy commenter can't stack notifications — while a different
+    // commenter (e.g. the owner answering) still notifies immediately.
+    const prior = await prisma.setupComment.findMany({
+      where: { setupId, id: { not: comment.id }, authorId: { not: session.user.id } },
+      select: { authorId: true },
+      distinct: ["authorId"],
+    })
+    const participants = prior.map((p) => p.authorId).filter((id) => id !== setup.authorId)
+    if (participants.length > 0) {
+      await notifyMany(
+        participants.map((userId) => ({
+          userId,
+          type: "COMMENT" as const,
+          title: "New comment on a setup you commented on",
+          content: `@${session.user.name || "Someone"} also commented on "${setup.title.slice(0, 60)}"`,
+          link: `${setupPath(setup)}#comment-${comment.id}`,
+          actorId: session.user.id,
+          groupKey: `setup-comment:${setup.id}:${session.user.id}`,
+          dedupeMs: 60 * 60 * 1000,
+        }))
+      )
+    }
 
     return NextResponse.json({ comment }, { status: 201 })
   } catch (error) {

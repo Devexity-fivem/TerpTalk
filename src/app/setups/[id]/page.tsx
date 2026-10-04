@@ -46,9 +46,11 @@ export default async function SetupPage({ params }: { params: Promise<{ id: stri
     include: {
       author: { select: publicUserSelect },
       images: { orderBy: { order: "asc" }, take: 50 },
+      // Latest 50 — notification anchors always target recent comments;
+      // reversed below so the list still renders oldest → newest.
       comments: {
         where: { author: activeAuthor() },
-        orderBy: { createdAt: "asc" },
+        orderBy: { createdAt: "desc" },
         take: 50,
         include: { author: { select: publicUserSelect } },
       },
@@ -69,7 +71,7 @@ export default async function SetupPage({ params }: { params: Promise<{ id: stri
   // Hide comments from members the viewer blocked (or who blocked the
   // viewer) — same boundary the thread page applies to posts.
   const blockedIds = new Set(await blockedUserIds(session?.user?.id))
-  const comments = setup.comments.filter((c) => !blockedIds.has(c.authorId))
+  const comments = setup.comments.filter((c) => !blockedIds.has(c.authorId)).reverse()
   // Derived "edited" marker — same 60s grace as diary updates: a plain
   // creation write must not count as an edit.
   const edited = setup.updatedAt.getTime() - setup.createdAt.getTime() > 60_000
@@ -240,7 +242,7 @@ export default async function SetupPage({ params }: { params: Promise<{ id: stri
 
         {/* Comments */}
         <SectionCard
-          title={<span className="flex items-center gap-2"><MessageSquare className="w-5 h-5 text-primary" /> Comments ({comments.length})</span>}
+          title={<span className="flex items-center gap-2"><MessageSquare className="w-5 h-5 text-primary" /> Comments ({setup._count.comments})</span>}
         >
           <div className="space-y-4 mb-6">
             {comments.map((c) => (
