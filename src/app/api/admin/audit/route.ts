@@ -102,6 +102,9 @@ export async function GET(request: Request) {
       actorId: e.userId,
       actor: e.userId ? usernameById.get(e.userId) ?? e.userId : "anonymous",
       targetId: e.userId,
+      targetType: null as string | null,
+      targetContentId: null as string | null,
+      reportId: null as string | null,
       metadata: e.metadata,
       createdAt: e.createdAt,
     })),
@@ -113,6 +116,12 @@ export async function GET(request: Request) {
         e.type.toLowerCase().includes(q) ||
         e.actor.toLowerCase().includes(q) ||
         e.reason.toLowerCase().includes(q) ||
+        // Exact-id lookup — subject user, content target, or originating
+        // case — so a known id resolves its moderation history directly
+        // instead of requiring timestamp correlation.
+        (e.targetId?.toLowerCase().includes(q) ?? false) ||
+        (e.targetContentId?.toLowerCase().includes(q) ?? false) ||
+        (e.reportId?.toLowerCase().includes(q) ?? false) ||
         (e.metadata?.toLowerCase().includes(q) ?? false)
       )
     })

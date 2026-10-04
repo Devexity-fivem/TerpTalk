@@ -562,6 +562,25 @@ const main = async () => {
       },
     })
 
+    // ══ Batch T — moderation workflow consistency ═══════════════════
+    // A known content id resolves its moderation history through the
+    // admin audit search — no timestamp correlation needed.
+    const tComment = await callApi("/api/setups/comments", { method: "POST", body: { setupId: modSetup.id, content: "t lookup" }, cookie: cC })
+    const tCommentId = tComment.data?.comment?.id
+    await callApi("/api/moderation/actions", { method: "POST", body: { actionType: "CONTENT_DELETION", targetType: "SETUP_COMMENT", targetId: tCommentId, targetUserId: c.id, reason: "t" }, cookie: modC })
+    r = await callApi(`/api/admin/audit?q=${tCommentId}`, { cookie: adminC })
+    const tHit = (r.data?.events ?? []).find((x) => x.kind === "moderation" && x.targetContentId === tCommentId)
+    r.status === 200 && tHit?.targetType === "SETUP_COMMENT"
+      ? pass("audit: admin audit search resolves actions by content target id")
+      : fail("audit target search", { status: r.status, tHit })
+    // Members never reach the audit surface at all.
+    r = await callApi(`/api/admin/audit?q=${tCommentId}`, { cookie: bC })
+    const memberAuditDenied = [401, 403].includes(r.status)
+    memberAuditDenied
+      ? pass("audit: member denied admin audit target lookup")
+      : fail("audit member lookup", r.status)
+    await prisma.moderationAction.deleteMany({ where: { targetId: tCommentId } })
+
     // Bookmark — B cannot remove A's bookmark.
     await callApi("/api/bookmarks", { method: "POST", body: { threadId: aThread.id }, cookie: aC })
     await callApi("/api/bookmarks", { method: "DELETE", body: { threadId: aThread.id }, cookie: bC })
