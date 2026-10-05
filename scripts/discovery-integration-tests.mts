@@ -41,6 +41,10 @@ async function run() {
   const ids: string[] = []
   const diaryIds: string[] = []
   const strainIds: string[] = []
+  const categoryIds: string[] = []
+  const threadIds: string[] = []
+  const postIds: string[] = []
+  const setupIds: string[] = []
 
   try {
     // ─────────────────────────────────────────────────────────────
@@ -420,8 +424,146 @@ async function run() {
     assert.ok(!liveGrows.some((g) => g.id === unlisted.id), "unlisted diary never becomes a live-grow card")
     assert.ok(!liveGrows.some((g) => g.authorId === banned.id || g.authorId === suspended.id), "inactive authors excluded")
 
+    // ─────────────────────────────────────────────────────────────
+    // Discover unified browse (Initiative #3) — behavioral coverage of
+    // the uncached compute cores (unstable_cache can't run outside Next).
+    // ─────────────────────────────────────────────────────────────
+    {
+      const { computeDiscoverLatest, computeDiscoverQuestions, computeDiscoverGrows, computeDiscoverHarvests, computeDiscoverStrains, computeDiscoverSetups, computeDiscoverGrowers, filterDiscoverBlocked } =
+        await import("@/lib/discover")
+
+      const qcat = await prisma.category.create({
+        data: { name: `__t_disc questions ${STAMP}`, slug: `__t-disc-q-${STAMP}`, order: 999, description: "t" },
+      })
+      const gcat = await prisma.category.create({
+        data: { name: `__t_disc lounge ${STAMP}`, slug: `__t-disc-g-${STAMP}`, order: 999, description: "t" },
+      })
+      categoryIds.push(qcat.id, gcat.id)
+
+      const hiddenGrower = await mkUser(`__t_dh_${STAMP}`)
+      await prisma.profile.update({ where: { userId: hiddenGrower.id }, data: { hideOnlineStatus: true } })
+      const viewer = await mkUser(`__t_dv_${STAMP}`)
+      ids.push(hiddenGrower.id, viewer.id)
+
+      const mkT = (authorId: string, slug: string, categoryId: string, over: Record<string, unknown> = {}) =>
+        prisma.thread
+          .create({
+            data: { title: `__t_disc ${slug}`, slug: `__t-disc-${slug}-${STAMP}`, content: "x", authorId, categoryId, ...over },
+          })
+          .then((t) => (threadIds.push(t.id), t))
+
+      const openQ = await mkT(active.id, "openq", qcat.id, { replyCount: 0 })
+      const solvedQ = await mkT(active.id, "solvedq", qcat.id, { replyCount: 1 })
+      const solPost = await prisma.post.create({ data: { content: "a", threadId: solvedQ.id, authorId: follower.id } })
+      postIds.push(solPost.id)
+      await prisma.thread.update({ where: { id: solvedQ.id }, data: { acceptedAnswerId: solPost.id } })
+      await mkT(active.id, "plain", gcat.id)
+      await mkT(banned.id, "bannedq", qcat.id)
+      await mkT(active.id, "delq", qcat.id, { deleted: true })
+
+      const discStrain = await prisma.strain.create({ data: { name: `__t_disc strain ${STAMP}` } })
+      strainIds.push(discStrain.id)
+
+      const pubGrow = await prisma.growDiary.create({
+        data: { title: "__t_disc pubgrow", description: "", growType: "INDOOR", startDate: new Date(), authorId: active.id, strainId: discStrain.id },
+      })
+      const pubHarvest = await prisma.growDiary.create({
+        data: { title: "__t_disc pubharvest", description: "", growType: "INDOOR", startDate: new Date(), authorId: active.id, harvested: true, harvestedAt: new Date(), harvestRating: 8, strainId: discStrain.id },
+      })
+      const privHarvest = await prisma.growDiary.create({
+        data: { title: "__t_disc privharvest", description: "", growType: "INDOOR", startDate: new Date(), authorId: active.id, harvested: true, harvestedAt: new Date(), visibility: "PRIVATE", strainId: discStrain.id },
+      })
+      const unlGrow = await prisma.growDiary.create({
+        data: { title: "__t_disc unlgrow", description: "", growType: "INDOOR", startDate: new Date(), authorId: active.id, visibility: "UNLISTED" },
+      })
+      const delGrow = await prisma.growDiary.create({
+        data: { title: "__t_disc delgrow", description: "", growType: "INDOOR", startDate: new Date(), authorId: active.id, deleted: true },
+      })
+      diaryIds.push(pubGrow.id, pubHarvest.id, privHarvest.id, unlGrow.id, delGrow.id)
+
+      const setup = await prisma.growSetup.create({
+        data: { title: `__t_disc setup ${STAMP}`, description: "t", medium: "soil", authorId: active.id },
+      })
+      setupIds.push(setup.id)
+
+      // Latest: unified stream — threads + public diaries + harvests + setups.
+      const latest = await computeDiscoverLatest()
+      const byId = new Map(latest.map((i) => [i.id, i]))
+      assert.ok(byId.has(openQ.id), "latest includes a question thread (as THREAD)")
+      assert.ok(byId.get(openQ.id)?.kind === "THREAD", "questions are not double-listed as QUESTION in latest")
+      assert.ok(byId.has(pubGrow.id), "latest includes a public grow")
+      assert.ok(byId.has(pubHarvest.id), "latest includes a public harvest")
+      assert.ok(byId.has(setup.id), "latest includes a setup")
+      assert.ok(!byId.has(privHarvest.id), "latest excludes PRIVATE diaries")
+      assert.ok(!byId.has(unlGrow.id), "latest excludes UNLISTED diaries")
+      assert.ok(!byId.has(delGrow.id), "latest excludes deleted diaries")
+      for (const ts of latest.map((i) => i.timestamp)) assert.ok(ts, "every latest item carries a timestamp")
+
+      // Questions tab: question-category only, open first.
+      const qs = await computeDiscoverQuestions()
+      const qids = qs.map((q) => q.id)
+      assert.ok(qids.includes(openQ.id) && qids.includes(solvedQ.id), "question tab includes tagged-category questions")
+      assert.ok(!qs.some((q) => q.title.includes("plain")), "non-question category excluded")
+      assert.ok(!qids.includes("bannedq") && !qs.some((q) => q.author?.id === banned.id), "banned author excluded")
+      assert.ok(!qs.some((q) => q.title.includes("delq")), "deleted thread excluded")
+      assert.equal(qs.find((q) => q.id === openQ.id)?.flag, "open")
+      assert.equal(qs.find((q) => q.id === solvedQ.id)?.flag, "solved")
+      const qFlags = qs.map((q) => q.flag)
+      const firstSolved = qFlags.indexOf("solved")
+      const lastOpen = qFlags.lastIndexOf("open")
+      assert.ok(firstSolved === -1 || lastOpen === -1 || firstSolved > lastOpen, "open questions rank ahead of solved")
+
+      // Grows: public non-deleted only.
+      const grows = await computeDiscoverGrows()
+      assert.ok(grows.some((g) => g.id === pubGrow.id), "public grow listed")
+      assert.ok(grows.some((g) => g.id === pubHarvest.id), "harvested grow still a grow")
+      assert.ok(!grows.some((g) => [privHarvest.id, unlGrow.id, delGrow.id].includes(g.id)), "private/unlisted/deleted excluded")
+
+      // Harvests: public harvested only.
+      const harvests = await computeDiscoverHarvests()
+      assert.ok(harvests.some((h) => h.id === pubHarvest.id), "public harvest listed")
+      assert.ok(!harvests.some((h) => h.id === privHarvest.id), "private harvest excluded")
+      assert.ok(!harvests.some((h) => h.id === pubGrow.id), "unharvested grow excluded")
+
+      // Strains: catalog entry carries public grow count.
+      const strains = await computeDiscoverStrains()
+      const sEntry = strains.find((s) => s.id === discStrain.id)
+      assert.ok(sEntry, "strain listed")
+      assert.ok(/2 public grows/.test(sEntry!.meta[0] ?? ""), `public grow count shown, got ${sEntry!.meta[0]}`)
+
+      // Setups.
+      const setups = await computeDiscoverSetups()
+      assert.ok(setups.some((s) => s.id === setup.id), "setup listed")
+
+      // Growers: contribution + online-status-visible; banned/terpbot/hidden excluded.
+      const growers = await computeDiscoverGrowers()
+      assert.ok(growers.some((g) => g.userId === active.id), "active contributor listed")
+      assert.ok(!growers.some((g) => g.userId === banned.id), "banned member excluded")
+      assert.ok(!growers.some((g) => g.userId === hiddenGrower.id), "hideOnlineStatus member excluded")
+      assert.ok(!growers.some((g) => g.author?.username === "terpbot"), "terpbot excluded")
+
+      // Block post-filter: items attributed to blocked users drop out.
+      await prisma.block.create({ data: { blockerId: viewer.id, blockedId: active.id } })
+      const filtered = filterDiscoverBlocked(latest, [active.id])
+      assert.ok(!filtered.some((i) => i.userId === active.id), "blocked author's items filtered")
+      assert.ok(filtered.some((i) => i.userId !== active.id), "unrelated items remain")
+      await prisma.block.deleteMany({ where: { blockerId: viewer.id, blockedId: active.id } })
+    }
+
     console.log("All Discovery filters + sitemap tests passed.")
   } finally {
+    for (const id of postIds) {
+      await prisma.post.delete({ where: { id } }).catch(() => {})
+    }
+    for (const id of threadIds) {
+      await prisma.thread.delete({ where: { id } }).catch(() => {})
+    }
+    for (const id of setupIds) {
+      await prisma.growSetup.delete({ where: { id } }).catch(() => {})
+    }
+    for (const id of categoryIds) {
+      await prisma.category.delete({ where: { id } }).catch(() => {})
+    }
     for (const id of diaryIds) {
       await prisma.growDiary.delete({ where: { id } }).catch(() => {})
     }
