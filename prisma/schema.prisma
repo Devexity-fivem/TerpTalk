@@ -75,6 +75,7 @@ model User {
   feedback      Feedback[]
   botSession    BotSession?
   productChanges ProductChange[]
+  plantDoctorCases PlantDoctorCase[]
 
   @@index([role])
   @@index([status])
@@ -450,6 +451,7 @@ model GrowDiary {
   reactions     Reaction[]
   followers     DiaryFollow[]
   diaryContestEntries DiaryContestEntry[]
+  plantDoctorCases  PlantDoctorCase[]
   pinnedBy      Profile[]  @relation("PinnedHarvest")
   featuredBy    Profile[]  @relation("ProfileFeaturedGrow")
 
@@ -463,6 +465,48 @@ model GrowDiary {
   @@index([createdAt])
   @@index([harvested, harvestedAt(sort: Desc)])
   @@index([deleted, visibility, updatedAt(sort: Desc)])
+}
+
+// Plant Doctor outcome loop — one tracked diagnosis per (member, wizard
+// result, optional grow). The case is owner-scoped forever: it records
+// what the deterministic wizard suggested and which structured grow
+// context applied; outcomes are appended by the grower, never inferred.
+model PlantDoctorCase {
+  id         String   @id @default(cuid())
+  userId     String
+  resultId   String   // WIZARD_RESULTS key — the diagnosis identity
+  tagSlug    String?  // SYMPTOM_TAGS slug resolved at creation — knowledge linkage
+  diaryId    String?
+  strainId   String?  // denormalized diary context snapshot for future aggregation
+  stage      String?
+  mediumType String?
+  lightType  String?
+  growType   String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  user      User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  diary     GrowDiary?           @relation(fields: [diaryId], references: [id], onDelete: SetNull)
+  strain    Strain?              @relation(fields: [strainId], references: [id], onDelete: SetNull)
+  outcomes  PlantDoctorOutcome[]
+
+  @@index([userId, createdAt])
+  @@index([diaryId])
+}
+
+// Append-only outcome reports — correction keeps history; the current
+// state is simply the latest row. Vocabulary is deliberately small:
+// IMPROVED | NO_CHANGE | WORSE | UNSURE ("not sure yet").
+model PlantDoctorOutcome {
+  id        String   @id @default(cuid())
+  caseId    String
+  outcome   String
+  note      String?  // optional free text, bounded at the API layer
+  createdAt DateTime @default(now())
+
+  case      PlantDoctorCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
+
+  @@index([caseId, createdAt])
 }
 
 model DiaryUpdate {
@@ -763,6 +807,7 @@ model Strain {
   createdBy   User?    @relation(fields: [createdById], references: [id])
   photos      StrainPhoto[]
   diaries     GrowDiary[] @relation("DiaryStrain")
+  plantDoctorCases PlantDoctorCase[]
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 

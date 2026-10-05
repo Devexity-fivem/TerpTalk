@@ -6,6 +6,7 @@ import { scanDormantThreads, scanStaleDiaries } from "@/lib/terpbot-assist"
 import { scanAnswerMatches } from "@/lib/answer-match"
 import { runWeeklyDigest } from "@/lib/weekly-digest"
 import { scanGrowAssists } from "@/lib/terpbot-assist-grow"
+import { scanPlantDoctorFollowups } from "@/lib/plant-doctor"
 import { recordBotEvent } from "@/lib/terpbot-events"
 import { currentWeekKey, previousWeekKey, currentMonthKey, previousMonthKey } from "@/lib/week"
 import { resolveWeeklyWinner, resolveMonthlyDiaryWinner } from "@/lib/contest-awards"
@@ -234,6 +235,16 @@ export async function GET(request: NextRequest) {
     const { scanned, matched, sent } = await scanAnswerMatches()
     return `answer-match:${scanned}scanned/${matched}matched/${sent}sent`
   }, posted, failed, "answer-match")
+
+  // ── Plant Doctor follow-ups (once per UTC day) ────────────────────
+  // Tracked cases 5–30 days old with no reported outcome get exactly one
+  // private "did it help?" nudge per case, ever. The once-ever claim key
+  // (assist:pd-followup:<caseId>) plus the outcome-existence filter make
+  // retries and reported cases permanently quiet.
+  await runCronTask(`terpbot:pd-followup:${today}`, async () => {
+    const { scanned, sent } = await scanPlantDoctorFollowups()
+    return `pd-followup:${scanned}scanned/${sent}sent`
+  }, posted, failed, "pd-followup")
 
   // ── Weekly in-app digest (once per ISO week) ──────────────────────
   // Proactive counterpart to /mydigest: dormant, onboarded members get

@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from "react"
 import Link from "next/link"
-import { Stethoscope, RotateCcw, AlertTriangle, ArrowRight, CheckCircle2, MessageSquare } from "@/lib/icons"
+import { useRouter } from "next/navigation"
+import { Stethoscope, RotateCcw, AlertTriangle, ArrowRight, CheckCircle2, MessageSquare, ClipboardCheck } from "@/lib/icons"
 import { WIZARD_START, WIZARD_NODES, WIZARD_RESULTS } from "@/lib/problem-wizard"
 
 interface CommunityThread {
@@ -20,10 +21,20 @@ const SEVERITY = {
   watch: { label: "Monitor", cls: "bg-primary/15 text-primary" },
 }
 
-export default function ProblemWizard() {
+export default function ProblemWizard({
+  loggedIn = false,
+  diaries = [],
+}: {
+  loggedIn?: boolean
+  diaries?: { id: string; title: string }[]
+}) {
+  const router = useRouter()
   const [nodeId, setNodeId] = useState(WIZARD_START)
   const [resultId, setResultId] = useState<string | null>(null)
   const [history, setHistory] = useState<string[]>([])
+  const [trackDiaryId, setTrackDiaryId] = useState("")
+  const [tracked, setTracked] = useState(false)
+  const [tracking, setTracking] = useState(false)
 
   const node = WIZARD_NODES[nodeId]
   const result = resultId ? WIZARD_RESULTS[resultId] : null
@@ -42,8 +53,29 @@ export default function ProblemWizard() {
     return () => { cancelled = true }
   }, [resultId])
 
-  const reset = () => { setNodeId(WIZARD_START); setResultId(null); setHistory([]); setCommunity(null) }
+  const reset = () => { setNodeId(WIZARD_START); setResultId(null); setHistory([]); setCommunity(null); setTracked(false); setTrackDiaryId("") }
   const communityThreads = community?.forId === resultId ? community.threads : []
+
+  // Persist this diagnosis as a tracked case so the grower can report
+  // what happened later. Optional grow linkage snapshots structured
+  // context (strain/medium/lighting/stage) onto the private record.
+  const track = async () => {
+    if (!resultId || tracking || tracked) return
+    setTracking(true)
+    try {
+      const res = await fetch("/api/plant-doctor/cases", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ resultId, diaryId: trackDiaryId || null }),
+      })
+      if (res.ok) {
+        setTracked(true)
+        router.refresh() // pick up the new case in "Your tracked fixes"
+      }
+    } finally {
+      setTracking(false)
+    }
+  }
 
   return (
     <div className="bg-card/80 border border-border/70 rounded-2xl p-6">
@@ -71,6 +103,49 @@ export default function ProblemWizard() {
             <Link href={`/forum/new?category=plant-problems&result=${encodeURIComponent(resultId || "")}`} className="flex items-center gap-1.5 px-4 py-2 bg-primary text-primary-foreground rounded-full text-sm hover:bg-primary/90">
               Ask in Plant Problems <ArrowRight className="w-4 h-4" />
             </Link>
+          </div>
+
+          {/* Outcome loop — keep the fix on record, report back later */}
+          <div className="mt-5 pt-4 border-t border-border/60">
+            {loggedIn ? (
+              tracked ? (
+                <p className="text-sm text-success flex items-center gap-1.5">
+                  <CheckCircle2 className="w-4 h-4" />
+                  Tracked — come back and report what happened below.
+                </p>
+              ) : (
+                <div className="flex flex-wrap items-center gap-2">
+                  {diaries.length > 0 && (
+                    <select
+                      value={trackDiaryId}
+                      onChange={(e) => setTrackDiaryId(e.target.value)}
+                      aria-label="Link to one of your grows"
+                      className="px-3 py-2 rounded-xl border border-border bg-background text-sm max-w-[220px]"
+                    >
+                      <option value="">No grow linked</option>
+                      {diaries.map((d) => (
+                        <option key={d.id} value={d.id}>{d.title}</option>
+                      ))}
+                    </select>
+                  )}
+                  <button
+                    onClick={track}
+                    disabled={tracking}
+                    className="flex items-center gap-1.5 px-4 py-2 rounded-full border border-primary/40 text-primary text-sm font-medium hover:bg-primary/10 disabled:opacity-50"
+                  >
+                    <ClipboardCheck className="w-4 h-4" />
+                    {tracking ? "Tracking…" : "Track this fix"}
+                  </button>
+                  <p className="w-full text-[11px] text-muted-foreground">
+                    Saves this diagnosis privately so you can report whether it worked.
+                  </p>
+                </div>
+              )
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                <Link href="/auth/signin" className="text-primary hover:underline">Sign in</Link> to track this fix and report back what happened.
+              </p>
+            )}
           </div>
 
           {/* Community threads — real member answers, not a diagnosis */}

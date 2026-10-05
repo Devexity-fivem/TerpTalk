@@ -26,6 +26,7 @@
     "test:reputation-referral": "tsx scripts/reputation-referral-integrity-tests.mts",
     "test:trust-safety": "node scripts/trust-safety-verify.mjs",
     "test:terpbot-pipeline": "tsx scripts/terpbot-pipeline-tests.mts",
+    "test:plant-doctor": "tsx scripts/plant-doctor-tests.mts",
     "test:self-service": "tsx scripts/self-service-tests.mts",
     "test:chat": "tsx scripts/chat-ux-tests.mts",
     "test:ui-contracts": "tsx scripts/ui-contracts-tests.mts",

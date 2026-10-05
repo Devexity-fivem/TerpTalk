@@ -373,6 +373,44 @@ const main = async () => {
       (await discLink.count()) >= 1 && (await discLink.first().getAttribute("href"))?.includes(createdSlug) === true)
     await bobSetupCtx.close()
 
+    // ── Plant Doctor outcome loop ──────────────────────────────────
+    // Wizard → track the fix → report outcome → survives reload.
+    await gotoMain(alicePage, `${BASE}/plant-doctor`)
+    await alicePage.locator('button:has-text("Leaves")').click()
+    await alicePage.locator('button:has-text("Yellowing")').click()
+    await alicePage.locator('button:has-text("All over evenly")').click()
+    const trackBtn = alicePage.locator('button:has-text("Track this fix")')
+    await trackBtn.waitFor({ state: "visible", timeout: 15_000 })
+    await trackBtn.click()
+    const tracked = await alicePage.locator('text=/Tracked — come back/')
+      .waitFor({ state: "visible", timeout: 15_000 }).then(() => true).catch(() => false)
+    ok("pd: member tracks a diagnosis into a case", tracked)
+    // router.refresh() swaps the server-rendered case list in below.
+    const trackedFixes = alicePage.locator('text=Your tracked fixes')
+    const fixesVisible = await trackedFixes.waitFor({ state: "visible", timeout: 15_000 }).then(() => true).catch(() => false)
+    ok("pd: tracked fix appears in owner list", fixesVisible)
+    if (fixesVisible) {
+      await alicePage.locator('button:has-text("It helped")').first().click()
+      const reported = await alicePage.locator('text=/^It helped$/').last()
+        .waitFor({ state: "visible", timeout: 15_000 }).then(() => true).catch(() => false)
+      ok("pd: outcome report renders as current state", reported)
+      // Reload — the record is durable, not session state.
+      await gotoMain(alicePage, `${BASE}/plant-doctor`)
+      const persisted = await alicePage.locator('text=Your tracked fixes')
+        .waitFor({ state: "visible", timeout: 15_000 }).then(() => true).catch(() => false)
+      const body = persisted ? (await alicePage.textContent("body")) ?? "" : ""
+      ok("pd: outcome survives reload", persisted && body.includes("It helped"))
+    }
+    // Anonymous visitors get the wizard but not the tracking affordance.
+    await gotoMain(anonPage, `${BASE}/plant-doctor`)
+    await anonPage.locator('button:has-text("Leaves")').click()
+    await anonPage.locator('button:has-text("Yellowing")').click()
+    await anonPage.locator('button:has-text("All over evenly")').click()
+    await anonPage.locator('text=Sign in').waitFor({ state: "visible", timeout: 15_000 }).catch(() => {})
+    const anonBody = (await anonPage.textContent("body")) ?? ""
+    ok("pd: anonymous sees sign-in instead of tracking",
+      anonBody.includes("Sign in") && !anonBody.includes("Track this fix") && !anonBody.includes("Your tracked fixes"))
+
     // ── Block boundary (privacy) ─────────────────────────────────────
     await prisma.block.create({ data: { blockerId: alice.id, blockedId: bob.id } })
     const { context: bobCtx, page: bobPage } = await login(bobUsername)

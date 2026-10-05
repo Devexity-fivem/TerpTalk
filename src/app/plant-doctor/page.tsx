@@ -1,7 +1,12 @@
 import ProblemWizard from "@/components/problem-wizard"
+import PlantDoctorCases from "@/components/plant-doctor-cases"
 import { Stethoscope, MessageSquare, HelpCircle, Sprout } from "@/lib/icons"
 import Link from "next/link"
 import { getSymptomStats } from "@/lib/community-stats"
+import { getServerSession } from "next-auth"
+import { authOptions } from "@/lib/auth"
+import { prisma } from "@/lib/prisma"
+import { plantDoctorCasesFor } from "@/lib/plant-doctor"
 
 export const dynamic = "force-dynamic"
 
@@ -11,7 +16,21 @@ export const metadata = {
 }
 
 export default async function PlantDoctorPage() {
-  const stats = await getSymptomStats()
+  const session = await getServerSession(authOptions)
+  const userId = session?.user?.id ?? null
+
+  const [stats, diaries, cases] = await Promise.all([
+    getSymptomStats(),
+    userId
+      ? prisma.growDiary.findMany({
+          where: { authorId: userId, deleted: false },
+          orderBy: { updatedAt: "desc" },
+          take: 10,
+          select: { id: true, title: true },
+        })
+      : Promise.resolve([] as { id: string; title: string }[]),
+    userId ? plantDoctorCasesFor(userId) : Promise.resolve([]),
+  ])
 
   return (
     <div className="min-h-screen bg-background">
@@ -24,7 +43,11 @@ export default async function PlantDoctorPage() {
             Looking for site help instead? Visit the <Link href="/help" className="text-primary hover:underline">Help Center</Link>.
           </p>
         </div>
-        <ProblemWizard />
+        <ProblemWizard loggedIn={!!userId} diaries={diaries} />
+
+        {/* Outcome loop — the member's private tracked cases. Reporting
+            here is what turns a recommendation into reusable evidence. */}
+        <PlantDoctorCases initialCases={cases} />
 
         {/* Grower context — a diagnosis is more useful attached to a
             documented grow, and the community can weigh in either way. */}
