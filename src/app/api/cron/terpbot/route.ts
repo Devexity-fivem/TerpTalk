@@ -4,6 +4,7 @@ import { runCronTask } from "@/lib/cron-claim"
 import { postToGeneral, GROW_TIPS, sanitizeEcho } from "@/lib/terpbot"
 import { scanDormantThreads, scanStaleDiaries } from "@/lib/terpbot-assist"
 import { scanAnswerMatches } from "@/lib/answer-match"
+import { runWeeklyDigest } from "@/lib/weekly-digest"
 import { scanGrowAssists } from "@/lib/terpbot-assist-grow"
 import { recordBotEvent } from "@/lib/terpbot-events"
 import { currentWeekKey, previousWeekKey, currentMonthKey, previousMonthKey } from "@/lib/week"
@@ -233,6 +234,17 @@ export async function GET(request: NextRequest) {
     const { scanned, matched, sent } = await scanAnswerMatches()
     return `answer-match:${scanned}scanned/${matched}matched/${sent}sent`
   }, posted, failed, "answer-match")
+
+  // ── Weekly in-app digest (once per ISO week) ──────────────────────
+  // Proactive counterpart to /mydigest: dormant, onboarded members get
+  // one private BOT_ASSIST summarizing what they missed. The cron key is
+  // week-scoped so the job claims once per week; per-member keys
+  // (assist:weekly-digest:<userId>:<weekKey>) keep retries idempotent.
+  const weekKey = currentWeekKey()
+  await runCronTask(`terpbot:weekly-digest:${weekKey}`, async () => {
+    const { eligible, sent, skipped } = await runWeeklyDigest()
+    return `weekly-digest:${eligible}eligible/${sent}sent/${skipped}skipped`
+  }, posted, failed, "weekly-digest")
 
   // ── Stale-diary reminders (once per UTC day) ─────────────────────
   // Active grows that haven't been updated in 5+ days get one private
