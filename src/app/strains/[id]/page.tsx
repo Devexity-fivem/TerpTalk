@@ -15,7 +15,8 @@ import BlobImage from "@/components/ui/blob-image"
 import SectionCard from "@/components/ui/section-card"
 import UserPopover from "@/components/user-popover"
 import Tooltip from "@/components/ui/tooltip"
-import { getStrainGrowStats, getStrainEvidence, escapeLike, strainFieldMatches, strainTypeLabel } from "@/lib/strain-stats"
+import { escapeLike, strainFieldMatches, strainTypeLabel } from "@/lib/strain-stats"
+import { getStrainKnowledge } from "@/lib/strain-knowledge"
 import { readLessons } from "@/lib/experiments"
 import Link from "next/link"
 import { publicDiaryWhere } from "@/lib/diary-visibility"
@@ -76,7 +77,7 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
     strain.photos = strain.photos.filter((p) => !blockedIds.includes(p.user.id))
   }
 
-  const [relatedDiariesRaw, relatedSetupsRaw, relatedThreads, growStats, myDiaries, evidence] = await Promise.all([
+  const [relatedDiariesRaw, relatedSetupsRaw, relatedThreads, knowledge, myDiaries] = await Promise.all([
     prisma.growDiary.findMany({
       where: {
         deleted: false,
@@ -129,7 +130,7 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
         category: { select: { name: true } },
       },
     }),
-    getStrainGrowStats(strain.name, strain.id),
+    getStrainKnowledge(strain.name, strain.id),
     // Personal context — the viewer's own diaries on this strain (all
     // visibilities; it's their own data, never shown to others).
     session?.user?.id
@@ -152,10 +153,18 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
           },
         })
       : Promise.resolve([]),
-    // Community evidence — experiment categories, grower-stated outcomes
-    // and recorded lessons across public grows of this strain.
-    getStrainEvidence(strain.name, strain.id),
   ])
+
+  // Canonical community knowledge — outcomes, questions, notable harvests.
+  const { stats: growStats, evidence, questions, harvests } = knowledge
+  // List items respect the viewer's block direction (same post-filter as
+  // strain.photos); aggregate counts stay public.
+  const questionItems = blockedIds.length
+    ? questions.items.filter((q) => !blockedIds.includes(q.authorId))
+    : questions.items
+  const harvestExamples = blockedIds.length
+    ? harvests.filter((h) => !blockedIds.includes(h.authorId))
+    : harvests
 
   // `contains` is a recall pre-filter — apply the same precision post-filter
   // as the stats block so short names can't pull in unrelated grows. A
@@ -502,6 +511,94 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
                   ))}
               </div>
             )}
+          </SectionCard>
+        )}
+
+        {/* Community knowledge — strain-tagged questions (solved first)
+            plus notable public harvests. Counts are public aggregates;
+            list items are post-filtered for viewer blocks above. */}
+        {(questions.total > 0 || harvestExamples.length > 0) && (
+          <SectionCard
+            className="mb-6"
+            title={<span className="flex items-center gap-2"><HelpCircle className="w-4 h-4 text-primary" />Community knowledge</span>}
+            actions={<span className="text-xs text-muted-foreground">from public records</span>}
+          >
+            {questions.total > 0 && (
+              <div>
+                <p className="text-sm text-muted-foreground mb-3">
+                  {questions.total}
+                  {questions.truncated ? "+" : ""} question{questions.total === 1 ? "" : "s"} tagged
+                  {questions.solved > 0 ? ` · ${questions.solved} solved` : ""}
+                </p>
+                {questions.topics.length > 0 && (
+                  <div className="flex flex-wrap gap-2 mb-3">
+                    {questions.topics.map((t) => (
+                      <span key={t.name} className="text-xs px-2.5 py-1 rounded-full bg-secondary text-muted-foreground">
+                        {t.name} · {t.count}
+                      </span>
+                    ))}
+                  </div>
+                )}
+                {questionItems.length > 0 && (
+                  <div className="divide-y divide-border -mx-4 sm:-mx-5 px-4 sm:px-5 mb-3">
+                    {questionItems.map((q) => (
+                      <Link
+                        key={q.slug}
+                        href={`/forum/thread/${q.slug}`}
+                        className="flex items-center justify-between gap-3 py-2.5 hover:bg-secondary/50 transition-colors -mx-2 px-2 rounded"
+                      >
+                        <span className="min-w-0 text-sm font-medium truncate flex items-center gap-2">
+                          {q.title}
+                          {q.status === "solved" && <CheckCircle2 className="w-3.5 h-3.5 text-success shrink-0" aria-label="Solved" />}
+                        </span>
+                        <span
+                          className={`text-xs shrink-0 ${
+                            q.status === "solved"
+                              ? "text-success"
+                              : q.status === "open"
+                                ? "text-warning"
+                                : "text-muted-foreground"
+                          }`}
+                        >
+                          {q.status === "solved" ? "Solved" : q.status === "answered" ? `${q.replyCount} repl${q.replyCount === 1 ? "y" : "ies"}` : "Open"}
+                        </span>
+                      </Link>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+            {harvestExamples.length > 0 && (
+              <div className={questions.total > 0 ? "pt-3 border-t border-border" : ""}>
+                <p className="text-xs font-medium text-muted-foreground mb-2">Notable public harvests</p>
+                <ul className="space-y-1.5">
+                  {harvestExamples.map((h) => (
+                    <li key={h.id}>
+                      <Link
+                        href={diaryPath(h)}
+                        className="group flex items-center gap-2 text-sm"
+                      >
+                        <Leaf className="w-3.5 h-3.5 shrink-0 text-primary" aria-hidden="true" />
+                        <span className="min-w-0 truncate font-medium group-hover:text-primary">{h.title}</span>
+                        <span className="text-xs text-muted-foreground shrink-0">{h.authorName}</span>
+                        <span className="text-xs text-muted-foreground ml-auto shrink-0 tabular-nums">
+                          {[
+                            h.rating != null ? `${h.rating}/10` : null,
+                            h.days != null ? `${h.days}d` : null,
+                            h.yieldOz != null ? `${h.yieldOz} oz` : null,
+                          ]
+                            .filter(Boolean)
+                            .join(" · ")}
+                        </span>
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            <p className="mt-3 text-[11px] text-muted-foreground">
+              Community-reported records — shared experience, not proven results.
+            </p>
           </SectionCard>
         )}
 
