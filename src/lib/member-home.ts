@@ -20,6 +20,7 @@ import {
 import { diaryPath } from "@/lib/slugs"
 import { mediaProxyUrl } from "@/lib/media"
 import { diaryCompleteness } from "@/lib/diary-weeks"
+import { helpWantedForUser, type HelpWantedItem } from "@/lib/answer-match"
 import { EXPERIMENT_CATEGORY_LABELS, type ExperimentCategory } from "@/lib/experiments"
 import { TECHNIQUE_LABELS } from "@/lib/grow-fields"
 import { hasUnlock } from "@/lib/progression"
@@ -115,6 +116,10 @@ export interface MemberHomeData {
     unreadNotifications: number
   }
   live: ChatTeaser | null
+  /** Answer-recruitment — unanswered questions this member's PUBLIC
+   *  grow evidence could help with. Same matching as the TerpBot
+   *  answer-match scan; private/unlisted grows never signal. */
+  helpWanted: { total: number; items: HelpWantedItem[] }
   /** Community pulse — trending threads to make the cockpit feel alive */
   trending: {
     title: string
@@ -131,7 +136,7 @@ const GROW_STAGE_LABELS: Record<string, string> = Object.fromEntries(
 )
 
 export async function getMemberHomeData(userId: string): Promise<MemberHomeData | null> {
-  const [user, quests, journey, staleDiary, diaries, followedThreads, followedDiaries, unreadNotifications, live, trendingCandidates, harvestAnalyticsUnlocked] =
+  const [user, quests, journey, staleDiary, diaries, followedThreads, followedDiaries, unreadNotifications, live, trendingCandidates, harvestAnalyticsUnlocked, helpWanted] =
     await Promise.all([
       prisma.user.findUnique({
         where: { id: userId },
@@ -241,6 +246,9 @@ export async function getMemberHomeData(userId: string): Promise<MemberHomeData 
       // harvest-analytics gate (Cultivator) — checked up front so the
       // owner-harvest query below costs nothing for locked members.
       hasUnlock(userId, "harvest-analytics").catch(() => false),
+      // Answer-recruitment card — bounded (≤15 threads scored); failures
+      // degrade to an empty card rather than breaking the cockpit.
+      helpWantedForUser(userId).catch(() => ({ total: 0, items: [] })),
     ])
 
   if (!user) return null
@@ -570,6 +578,7 @@ export async function getMemberHomeData(userId: string): Promise<MemberHomeData 
       unreadNotifications,
     },
     live,
+    helpWanted,
     trending: trending.map((t) => ({
       title: t.title,
       slug: t.slug,

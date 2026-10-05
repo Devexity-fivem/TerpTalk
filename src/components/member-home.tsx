@@ -3,6 +3,7 @@ import type { ReactNode } from "react"
 import {
   Zap, Sprout, Bell, ArrowRight, Leaf, Users, Radio, TrendingUp, CheckCircle2, Circle,
   MessageCircle, Eye, AlertTriangle, Gauge, Bug, Wrench, Clock, Wheat, FlaskConical, BookOpen,
+  HeartHandshake,
 } from "@/lib/icons"
 import MemberGreeting from "@/components/member-greeting"
 import OpenChatButton from "@/components/open-chat-button"
@@ -12,6 +13,7 @@ import StageProgress from "@/components/stage-progress"
 import { DIFFICULTY_LABELS } from "@/lib/grow-fields"
 import type { MemberHomeData } from "@/lib/member-home"
 import { diaryPath } from "@/lib/slugs"
+import { helpWantedReasonText } from "@/lib/answer-match"
 import { cn } from "@/lib/utils"
 
 // The signed-in "Today" homepage — a compact dashboard composing the
@@ -589,6 +591,53 @@ export default function MemberHome({ data }: { data: MemberHomeData }) {
                 ))}
               </ul>
             </div>
+          </section>
+        )}
+
+        {/* Could use your help — unanswered questions matched to this
+            member's PUBLIC grow evidence (same rules as TerpBot's
+            answer-match scan; private/unlisted grows never signal). */}
+        {data.helpWanted.items.length > 0 && (
+          <section className="mt-4 tt-spotlight bg-card/80 rounded-2xl border border-border/70 p-4 sm:p-5">
+            <div className="mb-3 flex items-center justify-between gap-2">
+              <h2 className="flex items-center gap-2 font-display text-sm font-semibold">
+                <HeartHandshake className="h-4 w-4 text-primary" />
+                Could use your help
+                <InfoTip content="Unanswered questions matched to what you've publicly grown, run, or discussed — jump in if you can." />
+              </h2>
+              <Link
+                href="/questions"
+                className="tap-target shrink-0 text-xs font-medium text-primary inline-flex items-center gap-0.5 hover:underline"
+              >
+                All questions <ArrowRight className="h-3 w-3" />
+              </Link>
+            </div>
+            <ul className="space-y-1.5">
+              {data.helpWanted.items.map((q) => (
+                <li key={q.slug}>
+                  <Link
+                    href={`/forum/thread/${q.slug}`}
+                    className="group flex items-center gap-2 rounded-xl px-3 py-2 hover:bg-secondary/60"
+                  >
+                    <MessageCircle className="h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" />
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm group-hover:text-primary">{q.title}</span>
+                      <span className="block truncate text-xs text-muted-foreground">
+                        {q.category} · {helpWantedReasonText(q)}
+                      </span>
+                    </span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+            {data.helpWanted.total > data.helpWanted.items.length && (
+              <p className="mt-2 px-3 text-xs text-muted-foreground">
+                +{data.helpWanted.total - data.helpWanted.items.length} more unanswered{" "}
+                <Link href="/questions" className="text-primary hover:underline">
+                  on Grow Questions
+                </Link>
+              </p>
+            )}
           </section>
         )}
 

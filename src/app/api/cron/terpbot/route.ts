@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma"
 import { runCronTask } from "@/lib/cron-claim"
 import { postToGeneral, GROW_TIPS, sanitizeEcho } from "@/lib/terpbot"
 import { scanDormantThreads, scanStaleDiaries } from "@/lib/terpbot-assist"
+import { scanAnswerMatches } from "@/lib/answer-match"
 import { scanGrowAssists } from "@/lib/terpbot-assist-grow"
 import { recordBotEvent } from "@/lib/terpbot-events"
 import { currentWeekKey, previousWeekKey, currentMonthKey, previousMonthKey } from "@/lib/week"
@@ -222,6 +223,16 @@ export async function GET(request: NextRequest) {
     const { scanned, sent } = await scanGrowAssists()
     return `grow-assist:${scanned}scanned/${sent}sent`
   }, posted, failed, "grow-assist")
+
+  // ── Answer-recruitment assists (once per UTC day) ────────────────
+  // Unanswered question threads ≥24h old invite up to 5 members each
+  // whose PUBLIC grow evidence matches (strain grown / setup /
+  // technique / topic participation). Once-ever claim per
+  // (thread, member) pair — edits and re-scans can never re-send.
+  await runCronTask(`terpbot:answer-match:${today}`, async () => {
+    const { scanned, matched, sent } = await scanAnswerMatches()
+    return `answer-match:${scanned}scanned/${matched}matched/${sent}sent`
+  }, posted, failed, "answer-match")
 
   // ── Stale-diary reminders (once per UTC day) ─────────────────────
   // Active grows that haven't been updated in 5+ days get one private

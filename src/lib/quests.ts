@@ -117,6 +117,15 @@ export const DAILY_QUESTS: QuestDef[] = [
     target: 1,
     mastery: "RECORDS",
   },
+  {
+    slug: "answer-the-call",
+    title: "Answer the Call",
+    description: "Give the first reply to an unanswered grow question.",
+    icon: "🗣️",
+    reward: 10,
+    target: 1,
+    mastery: "KNOWLEDGE",
+  },
 ]
 
 // Base 3/day — quests are seasoning, not the main progression loop.
@@ -243,6 +252,27 @@ async function countQuestProgress(userId: string, slug: string, since: Date, unt
       return prisma.growSetup.count({
         where: { authorId: userId, deleted: false, createdAt: { gte: since, lt: until } },
       })
+    case "answer-the-call":
+      // First live reply in a question-category thread — the answer-
+      // recruitment contribution. Self-answers never count; the post
+      // must still be the thread's earliest live reply (deleted answers
+      // un-earn the quest like every other live-row measure). The
+      // category regex is the QUESTION_RE convention from /questions.
+      return prisma.$queryRaw<{ n: bigint }[]>`
+        SELECT COUNT(DISTINCT p."threadId") AS n
+        FROM "Post" p
+        JOIN "Thread" t ON t."id" = p."threadId"
+        JOIN "Category" c ON c."id" = t."categoryId"
+        WHERE p."authorId" = ${userId}
+          AND p."createdAt" >= ${since} AND p."createdAt" < ${until}
+          AND p."deleted" = false AND t."deleted" = false AND c."hidden" = false
+          AND t."authorId" <> ${userId}
+          AND (c."slug" ~* 'question|help|problem|doctor' OR c."name" ~* 'question|help|problem|doctor')
+          AND p."createdAt" = (
+            SELECT MIN(p2."createdAt") FROM "Post" p2
+            WHERE p2."threadId" = p."threadId" AND p2."deleted" = false
+              AND p2."authorId" <> t."authorId"
+          )`.then((r) => Number(r[0]?.n ?? 0))
     default:
       return 0
   }

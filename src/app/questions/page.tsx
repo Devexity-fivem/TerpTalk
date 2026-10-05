@@ -3,7 +3,7 @@ import { publicUserSelect, activeAuthor, blockedUserIds } from "@/lib/security"
 import { getSession } from "@/lib/session"
 import { unstable_cache } from "next/cache"
 import Link from "next/link"
-import { MessageSquare, Clock, CheckCircle2, HelpCircle, Stethoscope, ChevronLeft, ChevronRight } from "@/lib/icons"
+import { MessageSquare, Clock, CheckCircle2, HelpCircle, Stethoscope, ChevronLeft, ChevronRight, HeartHandshake } from "@/lib/icons"
 import RoleBadge from "@/components/role-badge"
 import ProfileCard from "@/components/ui/profile-card"
 import Surface from "@/components/ui/surface"
@@ -94,7 +94,24 @@ const getQuestions = unstable_cache(
       prisma.thread.count({ where }),
     ])
 
-    return { categories, threads, total, invalidCategory: !!categorySlug && !activeCat }
+    // Answer-recruitment visibility — unanswered threads show how many
+    // growers TerpBot has already invited. Aggregate count only; the
+    // candidate list itself never leaves the private notification.
+    const openIds = threads.filter((t) => t.replyCount === 0).map((t) => t.id)
+    const helperCounts = new Map<string, number>()
+    if (openIds.length) {
+      const events = await prisma.botEvent.findMany({
+        where: { OR: openIds.map((id) => ({ key: { startsWith: `assist:answer-match:${id}:` } })) },
+        select: { key: true },
+      })
+      for (const e of events) {
+        const tid = e.key.split(":")[2]
+        helperCounts.set(tid, (helperCounts.get(tid) ?? 0) + 1)
+      }
+    }
+    const decorated = threads.map((t) => ({ ...t, helpers: helperCounts.get(t.id) ?? 0 }))
+
+    return { categories, threads: decorated, total, invalidCategory: !!categorySlug && !activeCat }
   },
   ["questions-list"],
   { revalidate: 60, tags: ["forum"] }
@@ -275,6 +292,12 @@ export default async function QuestionsPage({
                               </span>
                               {thread.replyCount === 0 && !solved && (
                                 <span className="text-xs font-medium text-primary">Awaiting first reply</span>
+                              )}
+                              {thread.replyCount === 0 && !solved && thread.helpers > 0 && (
+                                <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                                  <HeartHandshake className="w-3.5 h-3.5 text-primary" />
+                                  {thread.helpers} grower{thread.helpers === 1 ? "" : "s"} invited to help
+                                </span>
                               )}
                             </div>
                             {thread.tags.length > 0 && (
