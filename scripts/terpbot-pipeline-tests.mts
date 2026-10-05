@@ -1777,12 +1777,140 @@ async function run() {
       console.log("✓ scanAnswerMatches matching + privacy + dedupe + member-home card")
     }
 
+    // ── 10d. runWeeklyDigest: eligibility, minimum value, idempotence ──
+    {
+      const DAY = 86400000
+      const mkDormant = async (username: string, extra: Record<string, unknown> = {}) => {
+        const u = await mk(username)
+        await prisma.user.update({
+          where: { id: u.id },
+          data: {
+            onboardingCompletedAt: new Date(Date.now() - 4 * DAY),
+            createdAt: new Date(Date.now() - 4 * DAY),
+            lastSeenAt: new Date(Date.now() - 3 * DAY),
+            ...extra,
+          },
+        })
+        return u
+      }
+      const d1 = await mkDormant(`__tbp_dg_a_${SUFFIX}`) // full signals
+      const d2 = await mkDormant(`__tbp_dg_b_${SUFFIX}`) // no value → skipped
+      const d3 = await mkDormant(`__tbp_dg_c_${SUFFIX}`) // opted out
+      const d4 = await mkDormant(`__tbp_dg_d_${SUFFIX}`) // active today
+      const d5 = await mkDormant(`__tbp_dg_e_${SUFFIX}`, { banned: true })
+      const d6 = await mkDormant(`__tbp_dg_f_${SUFFIX}`) // week-2 resend
+      const dgOp = await mk(`__tbp_dg_op_${SUFFIX}`)
+      await prisma.user.update({ where: { id: d4.id }, data: { lastSeenAt: new Date() } })
+      await prisma.profile.update({ where: { userId: d3.id }, data: { notifyOnBotAssist: false } })
+
+      // Personal signals for d1: 2 unreads + a followed-diary update this
+      // week + a public-diary evidence trail that answer-match can score.
+      for (let i = 0; i < 2; i++) {
+        const n = await prisma.notification.create({
+          data: { userId: d1.id, type: "REPLY", title: "t", content: `__tbp dg unread ${i}` },
+        })
+        notificationIds.push(n.id)
+      }
+      for (const u of [d3, d4, d5, d6]) {
+        const n = await prisma.notification.create({
+          data: { userId: u.id, type: "REPLY", title: "t", content: "__tbp dg unread" },
+        })
+        notificationIds.push(n.id)
+      }
+      const fd = await prisma.growDiary.create({
+        data: { title: `__tbp dg fd ${SUFFIX}`, description: "t", growType: "INDOOR", startDate: new Date(), authorId: dgOp.id },
+      })
+      diaryIds.push(fd.id)
+      await prisma.diaryFollow.create({ data: { userId: d1.id, diaryId: fd.id } })
+      await prisma.diaryUpdate.create({ data: { diaryId: fd.id, authorId: dgOp.id, stage: "VEG", title: "__tbp dg u", content: "__tbp dg update long enough" } })
+
+      // Initiative #1 integration: d1 publicly grows strain S → a tagged
+      // unanswered question should surface in the digest via
+      // helpWantedForUser, not a second matcher.
+      const dgStrain = await prisma.strain.create({ data: { name: `__tbp DigestGlue ${SUFFIX}` } })
+      strainIds.push(dgStrain.id)
+      const d1Diary = await prisma.growDiary.create({
+        data: { title: `__tbp dg d1 ${SUFFIX}`, description: "t", growType: "INDOOR", startDate: new Date(), authorId: d1.id, strainId: dgStrain.id },
+      })
+      diaryIds.push(d1Diary.id)
+      const dgQCat = await prisma.category.create({
+        data: { name: `__tbp Digest Questions ${SUFFIX}`, slug: `__tbp-digest-questions-${SUFFIX}`, order: 999, description: "t" },
+      })
+      const dgTag = await prisma.tag.upsert({
+        where: { name: `__tbp digestglue ${SUFFIX}` },
+        update: {},
+        create: { name: `__tbp digestglue ${SUFFIX}`, slug: `__tbp-digestglue-${SUFFIX}` },
+      })
+      const dgQ = await prisma.thread.create({
+        data: {
+          title: `__tbp dg question ${SUFFIX}`, slug: `__tbp-dg-q-${SUFFIX}`, content: "x",
+          authorId: dgOp.id, categoryId: dgQCat.id, tags: { create: [{ tagId: dgTag.id }] },
+        },
+      })
+      threadIds.push(dgQ.id)
+      const dgOld = new Date(Date.now() - 2 * DAY)
+      await prisma.thread.update({ where: { id: dgQ.id }, data: { createdAt: dgOld, lastActivityAt: dgOld } })
+
+      const { runWeeklyDigest } = await import("@/lib/weekly-digest")
+      const wk1 = `2099-W10`
+      const six = [d1, d2, d3, d4, d5, d6].map((u) => u.id)
+      rateLimitKeys.push(`terpbot:assist:user:${d1.id}`, `terpbot:assist:user:${d6.id}`)
+
+      const res = await runWeeklyDigest({ userIds: six, weekKey: wk1 })
+      assert.equal(res.eligible, 3, `only d1/d2/d6 pass eligibility: ${JSON.stringify(res)}`)
+      assert.equal(res.sent, 2, `d1 + d6 have value: ${JSON.stringify(res)}`)
+      assert.equal(res.skipped, 1, "d2 has nothing worth sending")
+
+      const dgNotifs = await prisma.notification.findMany({
+        where: { userId: { in: six }, type: "BOT_ASSIST", title: "Your TerpTalk week" },
+      })
+      notificationIds.push(...dgNotifs.map((n) => n.id))
+      const dgByUser = new Map(dgNotifs.map((n) => [n.userId, n]))
+      const d1n = dgByUser.get(d1.id)
+      assert.ok(d1n, "d1 received the digest")
+      assert.match(d1n!.content, /2 unread notifications/, "unread aggregate section")
+      assert.match(d1n!.content, /updates? on grows you follow/, "followed-grow section")
+      assert.match(d1n!.content, /match grows like yours/, "answer-match section")
+      assert.equal(d1n!.link, "/mydigest", "deep link lands on the digest page")
+      for (const u of [d2, d3, d4, d5])
+        assert.ok(!dgByUser.has(u.id), `no digest for ${u.id}`)
+      assert.ok(dgByUser.has(d6.id), "d6 received the digest")
+
+      // Same-week reruns are claim-deduped: zero sends, claims intact.
+      const rerun = await runWeeklyDigest({ userIds: six, weekKey: wk1 })
+      assert.equal(rerun.sent, 0, "same-week rerun sends nothing")
+      assert.equal(
+        await prisma.botEvent.count({ where: { key: `assist:weekly-digest:${d1.id}:${wk1}` } }),
+        1, "one claim per (member, week)"
+      )
+      assert.equal(
+        await prisma.notification.count({ where: { userId: d1.id, title: "Your TerpTalk week" } }),
+        1, "one digest notification per week"
+      )
+
+      // Next week re-opens eligibility. Backdate d6's digest notification
+      // past the 7-day cushion, exactly as a real week-later run sees it.
+      await prisma.notification.updateMany({
+        where: { userId: d6.id, title: "Your TerpTalk week" },
+        data: { createdAt: new Date(Date.now() - 8 * DAY) },
+      })
+      const res2 = await runWeeklyDigest({ userIds: [d6.id], weekKey: `2099-W11` })
+      assert.equal(res2.sent, 1, "new week → new digest for an eligible member")
+      assert.equal(
+        await prisma.notification.count({ where: { userId: d6.id, title: "Your TerpTalk week" } }),
+        2, "one notification per week"
+      )
+      console.log("✓ runWeeklyDigest eligibility + minimum value + idempotence + week rollover")
+    }
+
     console.log("All TerpBot pipeline tests passed.")
   } finally {
     await prisma.notification.deleteMany({ where: { id: { in: notificationIds } } }).catch(() => {})
     await prisma.notification.deleteMany({ where: { type: "BOT_ASSIST", userId: { in: ids } } }).catch(() => {})
     await prisma.post.deleteMany({ where: { id: { in: postIds } } }).catch(() => {})
     await prisma.thread.deleteMany({ where: { id: { in: threadIds } } }).catch(() => {})
+    await prisma.diaryUpdate.deleteMany({ where: { diaryId: { in: diaryIds } } }).catch(() => {})
+    await prisma.diaryFollow.deleteMany({ where: { diaryId: { in: diaryIds } } }).catch(() => {})
     await prisma.growDiary.deleteMany({ where: { id: { in: diaryIds } } }).catch(() => {})
     await prisma.growSetup.deleteMany({ where: { id: { in: setupIds } } }).catch(() => {})
     await prisma.strain.deleteMany({ where: { id: { in: strainIds } } }).catch(() => {})
