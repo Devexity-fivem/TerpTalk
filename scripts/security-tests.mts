@@ -37,6 +37,7 @@ import { PROFILE_WIDGETS, isProfileWidgetId } from "@/lib/profile-widgets"
 import { UNLOCK_BY_ID } from "@/lib/progression-config"
 import { applyAccountActionInTx } from "@/lib/moderation"
 import { authOptions } from "@/lib/auth"
+import { collectBackfillRows, applyBackfill } from "./lib/backfill-modaction-targets"
 
 const TEST_USERNAME = `__test_security_${Date.now()}`
 const TEST_NAME = `__test_security_name_${Date.now()}`
@@ -1171,6 +1172,69 @@ async function run() {
       await prisma.rateLimit.deleteMany({ where: { key: { startsWith: "login" } } }).catch(() => {})
       for (const id of lockUserIds) await prisma.user.delete({ where: { id } }).catch(() => {})
     }
+
+    // ── ModerationAction historical target backfill guards ───────────
+    // The one-time repair may only write a row whose target fields are
+    // still NULL and which has exactly one correlated SecurityEvent.
+    // Fixtures are offset minutes apart so correlation windows can't
+    // overlap; all rows are deleted below.
+    const bfActionIds: string[] = []
+    const bfEventIds: string[] = []
+    const bfT0 = Date.now()
+    const mkAction = async (minute: number, targets: { targetId?: string; targetType?: string } = {}) =>
+      prisma.moderationAction
+        .create({
+          data: {
+            type: "CONTENT_DELETION",
+            reason: "bf guard test",
+            targetUserId: userId,
+            moderatorId: userId,
+            targetId: targets.targetId ?? null,
+            targetType: targets.targetType ?? null,
+            createdAt: new Date(bfT0 + minute * 60_000),
+          },
+        })
+        .then((a) => (bfActionIds.push(a.id), a))
+    const mkSe = async (minute: number, targetId: string, targetType = "POST") =>
+      prisma.securityEvent
+        .create({
+          data: {
+            type: "SUSPICIOUS_ACTIVITY",
+            userId,
+            metadata: JSON.stringify({ moderationAction: "CONTENT_DELETION", targetType, targetId }),
+            createdAt: new Date(bfT0 + minute * 60_000 + 20),
+          },
+        })
+        .then((e) => (bfEventIds.push(e.id), e))
+
+    const bfA1 = await mkAction(0) // single correlated event → eligible
+    bfEventIds.push((await mkSe(0, "bf-post-1")).id)
+    const bfA2 = await mkAction(1) // two candidates → ambiguous, skip
+    bfEventIds.push((await mkSe(1, "bf-post-2a")).id, (await mkSe(1, "bf-post-2b")).id)
+    const bfA3 = await mkAction(2) // no candidate → skip
+    const bfA4 = await mkAction(3, { targetId: "keep-me", targetType: "THREAD" }) // populated → excluded
+    bfEventIds.push((await mkSe(3, "bf-post-4")).id)
+
+    const bfRows = await collectBackfillRows(prisma)
+    const bfById = new Map<string, (typeof bfRows)[number]>(bfRows.map((r) => [r.actionId, r]))
+    assert.equal(bfById.get(bfA1.id)?.status, "eligible", "single-candidate row is eligible")
+    assert.equal(bfById.get(bfA1.id)?.candidate?.targetId, "bf-post-1")
+    assert.equal(bfById.get(bfA1.id)?.candidate?.targetType, "POST")
+    assert.equal(bfById.get(bfA2.id)?.status, "skipped-ambiguous", "two-candidate row must be skipped")
+    assert.equal(bfById.get(bfA3.id)?.status, "skipped-zero-candidates", "orphan row must be skipped")
+    assert.ok(!bfById.has(bfA4.id), "populated row is never collected")
+
+    const bfWritten = await applyBackfill(prisma, bfRows)
+    assert.ok(bfWritten.written.includes(bfA1.id), "eligible row is written")
+    assert.ok(!bfWritten.written.includes(bfA2.id) && !bfWritten.written.includes(bfA3.id), "skipped rows stay untouched")
+    const bfA1After = await prisma.moderationAction.findUnique({ where: { id: bfA1.id } })
+    assert.equal(bfA1After?.targetId, "bf-post-1")
+    assert.equal(bfA1After?.targetType, "POST")
+    const bfA4After = await prisma.moderationAction.findUnique({ where: { id: bfA4.id } })
+    assert.equal(bfA4After?.targetId, "keep-me", "existing target is never overwritten")
+
+    await prisma.moderationAction.deleteMany({ where: { id: { in: bfActionIds } } })
+    await prisma.securityEvent.deleteMany({ where: { id: { in: bfEventIds } } })
 
     console.log("All security regression tests passed.")
   } finally {
