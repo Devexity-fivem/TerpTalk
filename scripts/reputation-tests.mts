@@ -1067,6 +1067,69 @@ async function run() {
         }
       }
     }
+
+    // ── answer-the-call — first live reply in a question category ────
+    // The recruitment quest measures the earliest live Post in a
+    // QUESTION_RE category thread: first-answer payouts survive
+    // reconciliation, later-reply and self-answer payouts reverse.
+    {
+      const acqUser = await mkTestUser(`${PROG_USERNAME}_acq`)
+      const acqOp = await mkTestUser(`${PROG_USERNAME}_acqop`)
+      const acqLate = await mkTestUser(`${PROG_USERNAME}_acqlate`)
+      const acqCat = await prisma.category.create({
+        data: { name: `${PROG_USERNAME} Questions`, slug: `${PROG_USERNAME}-questions`, order: 999, description: "t" },
+      })
+      const acqThread = await prisma.thread.create({
+        data: { title: `${PROG_USERNAME}_qt`, slug: `${PROG_USERNAME}-qt`, content: "x", authorId: acqOp.id, categoryId: acqCat.id },
+      })
+      try {
+        const first = await prisma.post.create({
+          data: { content: "first answer", threadId: acqThread.id, authorId: acqUser.id },
+        })
+        const late = await prisma.post.create({
+          data: { content: "later answer", threadId: acqThread.id, authorId: acqLate.id },
+        })
+        // Distinct timestamps — "first" is decided by MIN(createdAt).
+        await prisma.post.update({
+          where: { id: late.id },
+          data: { createdAt: new Date(first.createdAt.getTime() + 1000) },
+        })
+        // Self-answer — backdated EARLIEST so only the self-exclusion
+        // (not the MIN check) can disqualify it.
+        const self = await prisma.post.create({
+          data: { content: "self", threadId: acqThread.id, authorId: acqOp.id },
+        })
+        await prisma.post.update({
+          where: { id: self.id },
+          data: { createdAt: new Date(first.createdAt.getTime() - 500) },
+        })
+        const evA = await mkXpEvent(acqUser.id, {
+          type: "QUEST_DAILY", key: `quest:${dayKey}:answer-the-call:${acqUser.id}`, xp: 10,
+        })
+        const evB = await mkXpEvent(acqLate.id, {
+          type: "QUEST_DAILY", key: `quest:${dayKey}:answer-the-call:${acqLate.id}`, xp: 10,
+        })
+        const evC = await mkXpEvent(acqOp.id, {
+          type: "QUEST_DAILY", key: `quest:${dayKey}:answer-the-call:${acqOp.id}`, xp: 10,
+        })
+        await reconcileQuestPayouts()
+        const [a, b, c] = await Promise.all(
+          [evA, evB, evC].map((e) =>
+            prisma.progressionEvent.findUnique({ where: { id: e.id }, select: { reversedAt: true } })
+          )
+        )
+        assert.equal(a?.reversedAt, null, "first-answer payout survives reconciliation")
+        assert.ok(b?.reversedAt, "non-first reply payout reverses")
+        assert.ok(c?.reversedAt, "self-answer payout reverses")
+      } finally {
+        await prisma.post.deleteMany({ where: { threadId: acqThread.id } }).catch(() => {})
+        await prisma.thread.delete({ where: { id: acqThread.id } }).catch(() => {})
+        await prisma.category.delete({ where: { id: acqCat.id } }).catch(() => {})
+        for (const u of [acqUser, acqOp, acqLate]) {
+          await prisma.user.delete({ where: { id: u.id } }).catch(() => {})
+        }
+      }
+    }
   } finally {
     await prisma.user.delete({ where: { id: progUser.id } }).catch(() => {})
   }

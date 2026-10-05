@@ -105,6 +105,9 @@ const apiFiles = () => {
     // a statically generated "($N, 1, $M)" placeholder list; every key and
     // expiry value travels as a bound parameter.
     path.join("src", "lib", "rate-limit.ts"),
+    // Answer-recruitment: per-category participation GROUP BY queries —
+    // parameterized tagged templates, categoryId/userId bound params only.
+    path.join("src", "lib", "answer-match.ts"),
   ]);
   check("no raw SQL outside allowlist", !allSrc.some((f) => {
     if (rawSqlAllowlist.has(f)) return false;

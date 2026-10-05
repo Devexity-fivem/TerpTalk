@@ -17,6 +17,7 @@ import {
   scanStaleDiaries,
 } from "@/lib/terpbot-assist"
 import { scanGrowAssists } from "@/lib/terpbot-assist-grow"
+import { scanAnswerMatches, helpWantedForUser } from "@/lib/answer-match"
 import { getBotUserId, sanitizeEcho, announceStageTransition, purgeDiaryAnnouncements } from "@/lib/terpbot"
 import { runBotCommand } from "@/lib/terpbot-data"
 import { buildGrowContext } from "@/lib/terpbot-intel-context"
@@ -1644,6 +1645,138 @@ async function run() {
       console.log("✓ phase I: /plan, harvested reachability, evidence stamping, privacy")
     }
 
+    // ── 10c. scanAnswerMatches: deterministic answer recruitment ────
+    {
+      // Question-category fixture — slug/name must hit the shared
+      // QUESTION_CATEGORY_RE convention; the lounge category never can.
+      const qcat = await prisma.category.create({
+        data: { name: `__tbp Questions ${SUFFIX}`, slug: `__tbp-questions-${SUFFIX}`, order: 999, description: "t" },
+      })
+      const gcat = await prisma.category.create({
+        data: { name: `__tbp Lounge ${SUFFIX}`, slug: `__tbp-lounge-${SUFFIX}`, order: 999, description: "t" },
+      })
+
+      const op = await mk(`__tbp_am_op_${SUFFIX}`)
+      const cStrain = await mk(`__tbp_am_st_${SUFFIX}`)
+      const cTech = await mk(`__tbp_am_te_${SUFFIX}`)
+      const cSetup = await mk(`__tbp_am_su_${SUFFIX}`)
+      const cPart = await mk(`__tbp_am_pa_${SUFFIX}`)
+      const cBlocked = await mk(`__tbp_am_bl_${SUFFIX}`)
+      const cPrivate = await mk(`__tbp_am_pr_${SUFFIX}`)
+      const cBanned = await mk(`__tbp_am_bn_${SUFFIX}`)
+      await prisma.user.update({ where: { id: cBanned.id }, data: { banned: true } })
+      await prisma.block.create({ data: { blockerId: op.id, blockedId: cBlocked.id } })
+
+      const strain = await prisma.strain.create({ data: { name: `__tbp Zkittlez ${SUFFIX}` } })
+      strainIds.push(strain.id)
+
+      const mkAmDiary = async (authorId: string, data: Record<string, unknown>) => {
+        const d = await prisma.growDiary.create({
+          data: {
+            title: `__tbp am d ${SUFFIX}`, description: "t", growType: "INDOOR",
+            startDate: new Date(), authorId, ...(data as object),
+          },
+        })
+        diaryIds.push(d.id)
+        return d
+      }
+      await mkAmDiary(cStrain.id, { strainId: strain.id })
+      await mkAmDiary(cTech.id, { techniques: ["SCROG"] })
+      // PRIVATE diary carries the same strain — must never signal.
+      await mkAmDiary(cPrivate.id, { strainId: strain.id, visibility: "PRIVATE" })
+      await mkAmDiary(cBanned.id, { strainId: strain.id })
+      const amSetup = await prisma.growSetup.create({
+        data: { title: `__tbp am s ${SUFFIX}`, description: "t", medium: "soil and perlite", lighting: "LED bar", authorId: cSetup.id },
+      })
+      setupIds.push(amSetup.id)
+
+      // Participant evidence — ≥3 live posts across ≥2 threads in qcat.
+      const f1 = await prisma.thread.create({ data: { title: `__tbp am f1`, slug: `__tbp-am-f1-${SUFFIX}`, content: "x", authorId: op.id, categoryId: qcat.id } })
+      const f2 = await prisma.thread.create({ data: { title: `__tbp am f2`, slug: `__tbp-am-f2-${SUFFIX}`, content: "x", authorId: op.id, categoryId: qcat.id } })
+      threadIds.push(f1.id, f2.id)
+      for (const [tid, n] of [[f1.id, 2], [f2.id, 1]] as const)
+        for (let i = 0; i < n; i++) {
+          const p = await prisma.post.create({ data: { content: "x", threadId: tid, authorId: cPart.id } })
+          postIds.push(p.id)
+        }
+
+      const mkTag = async (name: string) =>
+        prisma.tag.upsert({
+          where: { name },
+          update: {},
+          create: { name, slug: `${name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${SUFFIX}` },
+        })
+      const tags = [
+        await mkTag(`__tbp zkittlez ${SUFFIX}`),
+        await mkTag("scrog"),
+        await mkTag("soil"),
+      ]
+
+      const twoDaysAgo = new Date(Date.now() - 2 * 86400000)
+      const mkQuestion = async (slug: string, categoryId: string) => {
+        const t = await prisma.thread.create({
+          data: {
+            title: `__tbp am ${slug} ${SUFFIX}`, slug: `__tbp-am-${slug}-${SUFFIX}`, content: "x",
+            authorId: op.id, categoryId,
+            tags: { create: tags.map((tg) => ({ tagId: tg.id })) },
+          },
+        })
+        threadIds.push(t.id)
+        await prisma.thread.update({ where: { id: t.id }, data: { createdAt: twoDaysAgo, lastActivityAt: twoDaysAgo } })
+        return t
+      }
+      const q = await mkQuestion("q", qcat.id)
+      // Same tags in a non-question category — never scanned.
+      const gq = await mkQuestion("gq", gcat.id)
+      // Solved question — never recruits.
+      const sq = await mkQuestion("sq", qcat.id)
+      await prisma.thread.update({ where: { id: sq.id }, data: { replyCount: 1 } })
+
+      const everyone = [op, cStrain, cTech, cSetup, cPart, cBlocked, cPrivate, cBanned].map((u) => u.id)
+      const expected = [cStrain, cTech, cSetup, cPart]
+      botEventKeys.push(...expected.map((u) => `assist:answer-match:${q.id}:${u.id}`))
+      rateLimitKeys.push(...expected.map((u) => `terpbot:assist:user:${u.id}`))
+
+      const res = await scanAnswerMatches({ threadIds: [q.id, gq.id, sq.id], userIds: everyone })
+      assert.equal(res.sent, 4, `one invite per qualifying candidate: ${JSON.stringify(res)}`)
+
+      const notifs = await prisma.notification.findMany({
+        where: { userId: { in: everyone }, type: "BOT_ASSIST", link: `/forum/thread/${q.slug}` },
+      })
+      notificationIds.push(...notifs.map((n) => n.id))
+      const byUser = new Map(notifs.map((n) => [n.userId, n]))
+      assert.ok(/publicly grown/i.test(byUser.get(cStrain.id)?.content ?? ""), "strain reason explained")
+      assert.ok(/ScrOG/.test(byUser.get(cTech.id)?.content ?? ""), "technique reason explained")
+      assert.ok(/setup/i.test(byUser.get(cSetup.id)?.content ?? ""), "setup reason explained")
+      assert.ok(/active in/i.test(byUser.get(cPart.id)?.content ?? ""), "participation reason explained")
+      for (const u of [op, cBlocked, cPrivate, cBanned])
+        assert.ok(!byUser.has(u.id), `no invite for ${u.id}`)
+
+      // Claim keys are once-ever — re-scans and edits can never re-send.
+      const res2 = await scanAnswerMatches({ threadIds: [q.id, gq.id, sq.id], userIds: everyone })
+      assert.equal(res2.sent, 0, "second scan sends nothing")
+      assert.equal(
+        await prisma.botEvent.count({ where: { key: `assist:answer-match:${q.id}:${cStrain.id}` } }),
+        1, "exactly one claim per (thread, member)"
+      )
+
+      // Member-home card — same matching, viewer scope.
+      const hw = await helpWantedForUser(cStrain.id, { threadIds: [q.id, gq.id, sq.id] })
+      const hwItem = hw.items.find((i) => i.slug === q.slug)
+      assert.ok(hwItem, "strain-grower's card shows the question")
+      assert.equal(hwItem!.reason, "STRAIN_GROWN")
+      for (const [u, why] of [
+        [op, "author never sees own question"],
+        [cBlocked, "blocked member never sees the ask"],
+        [cPrivate, "private diary never signals"],
+        [cBanned, "banned member never signals"],
+      ] as const) {
+        const h = await helpWantedForUser(u.id, { threadIds: [q.id, gq.id, sq.id] })
+        assert.ok(!h.items.some((i) => i.slug === q.slug), why)
+      }
+      console.log("✓ scanAnswerMatches matching + privacy + dedupe + member-home card")
+    }
+
     console.log("All TerpBot pipeline tests passed.")
   } finally {
     await prisma.notification.deleteMany({ where: { id: { in: notificationIds } } }).catch(() => {})
@@ -1660,6 +1793,7 @@ async function run() {
     await prisma.rateLimit.deleteMany({ where: { key: { startsWith: "bot-diagnose:" } } }).catch(() => {})
     await prisma.botSession.deleteMany({ where: { userId: { in: ids } } }).catch(() => {})
     await prisma.category.deleteMany({ where: { slug: { startsWith: `__tbp-` } } }).catch(() => {})
+    await prisma.tag.deleteMany({ where: { name: { startsWith: "__tbp" } } }).catch(() => {})
     await prisma.user.deleteMany({ where: { id: { in: ids } } }).catch(() => {})
     await prisma.$disconnect()
   }
