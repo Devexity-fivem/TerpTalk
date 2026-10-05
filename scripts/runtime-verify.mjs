@@ -562,6 +562,45 @@ const main = async () => {
       },
     })
 
+    // ══ Batch AA — bulk restore audit semantics ═══════════════════
+    // Restore is admin-only, only touches threads that are actually
+    // deleted, and audits CONTENT_RESTORATION — inheriting the reportId
+    // of the deletion it undoes so the case shows both events.
+    const rt = await prisma.thread.create({ data: { title: M("rt"), slug: `rv-rt-${TS}`, content: "x", categoryId: cat.id, authorId: b.id } })
+    threadIds.push(rt.id)
+    await callApi("/api/reports", { method: "POST", body: { type: "THREAD", targetId: rt.id, reason: "SPAM" }, cookie: cC })
+    const rtReport = await prisma.report.findFirst({ where: { type: "THREAD", targetId: rt.id } })
+    await callApi("/api/moderation/actions", { method: "POST", body: { actionType: "CONTENT_DELETION", targetType: "THREAD", targetId: rt.id, targetUserId: b.id, reason: "rv", reportId: rtReport?.id }, cookie: modC })
+
+    r = await callApi("/api/moderation/bulk", { method: "POST", body: { ids: [rt.id], action: "restore", reason: "rv restore" }, cookie: modC })
+    const rtStillDeleted = await prisma.thread.findUnique({ where: { id: rt.id }, select: { deleted: true } })
+    r.status === 403 && rtStillDeleted?.deleted === true
+      ? pass("restore: moderator denied admin-only restore")
+      : fail("mod restore", { status: r.status, deleted: rtStillDeleted?.deleted })
+
+    // A live thread is not restorable — no mutation, no phantom audit row.
+    r = await callApi("/api/moderation/bulk", { method: "POST", body: { ids: [aThread.id], action: "restore", reason: "rv live" }, cookie: adminC })
+    const phantom = await prisma.moderationAction.count({ where: { type: "CONTENT_RESTORATION", targetId: aThread.id } })
+    r.status === 200 && r.data?.updated === 0 && phantom === 0
+      ? pass("restore: live thread produces no phantom audit row")
+      : fail("phantom restore", { status: r.status, updated: r.data?.updated, phantom })
+
+    r = await callApi("/api/moderation/bulk", { method: "POST", body: { ids: [rt.id], action: "restore", reason: "rv restore" }, cookie: adminC })
+    const rtAfter = await prisma.thread.findUnique({ where: { id: rt.id }, select: { deleted: true } })
+    const restAct = await prisma.moderationAction.findFirst({ where: { type: "CONTENT_RESTORATION", targetId: rt.id } })
+    r.status === 200 && rtAfter?.deleted === false && restAct?.targetType === "THREAD" && restAct?.reportId === rtReport?.id
+      ? pass("restore: undeletes + audits CONTENT_RESTORATION inheriting deletion reportId")
+      : fail("restore audit", { status: r.status, deleted: rtAfter?.deleted, restAct })
+
+    r = await callApi(`/api/moderation/queue/${rtReport?.id}?kind=REPORT`, { cookie: modC })
+    const rtActs = r.data?.activity ?? []
+    r.status === 200 && rtActs.some((x) => x.type === "CONTENT_DELETION") && rtActs.some((x) => x.type === "CONTENT_RESTORATION")
+      ? pass("restore: case activity shows deletion + restoration")
+      : fail("restore case activity", { status: r.status, types: rtActs.map((x) => x.type) })
+
+    await prisma.moderationAction.deleteMany({ where: { OR: [{ targetId: rt.id }, { reportId: rtReport?.id ?? "" }] } })
+    await prisma.report.deleteMany({ where: { id: rtReport?.id ?? "" } })
+
     // ══ Batch T — moderation workflow consistency ═══════════════════
     // A known content id resolves its moderation history through the
     // admin audit search — no timestamp correlation needed.
