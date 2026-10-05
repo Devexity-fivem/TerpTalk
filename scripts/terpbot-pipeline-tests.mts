@@ -1851,6 +1851,18 @@ async function run() {
       const dgOld = new Date(Date.now() - 2 * DAY)
       await prisma.thread.update({ where: { id: dgQ.id }, data: { createdAt: dgOld, lastActivityAt: dgOld } })
 
+      // Canonical grow-match consumer: dgOp publicly grows the same strain
+      // as d1, so the digest's "grows like yours" line must come from
+      // lib/grow-matches — no second matcher exists.
+      const dgMatch = await prisma.growDiary.create({
+        data: {
+          title: `__tbp dg match ${SUFFIX}`, description: "t", growType: "INDOOR",
+          startDate: new Date(), authorId: dgOp.id, strainId: dgStrain.id,
+          mediumType: "COCO",
+        },
+      })
+      diaryIds.push(dgMatch.id)
+
       const { runWeeklyDigest } = await import("@/lib/weekly-digest")
       const wk1 = `2099-W10`
       const six = [d1, d2, d3, d4, d5, d6].map((u) => u.id)
@@ -1870,7 +1882,8 @@ async function run() {
       assert.ok(d1n, "d1 received the digest")
       assert.match(d1n!.content, /2 unread notifications/, "unread aggregate section")
       assert.match(d1n!.content, /updates? on grows you follow/, "followed-grow section")
-      assert.match(d1n!.content, /match grows like yours/, "answer-match section")
+      assert.match(d1n!.content, /could help answer/, "answer-match section")
+      assert.match(d1n!.content, /grows? like yours to learn from/, "canonical grow-match section")
       assert.equal(d1n!.link, "/mydigest", "deep link lands on the digest page")
       for (const u of [d2, d3, d4, d5])
         assert.ok(!dgByUser.has(u.id), `no digest for ${u.id}`)
@@ -1901,6 +1914,111 @@ async function run() {
         2, "one notification per week"
       )
       console.log("✓ runWeeklyDigest eligibility + minimum value + idempotence + week rollover")
+    }
+
+    // ── 10e. growMatchesForUser: canonical Grows-Like-Yours matcher ────
+    {
+      const { growMatchesForUser, scoreGrowMatch } = await import("@/lib/grow-matches")
+      const gmStrain = await prisma.strain.create({ data: { name: `__tbp GMStrain ${SUFFIX}` } })
+      strainIds.push(gmStrain.id)
+
+      const mkGrower = (n: string) => mk(`__tbp_gm_${n}_${SUFFIX}`)
+      const viewer = await mkGrower("v")
+      const aStrong = await mkGrower("strong")
+      const aModerate = await mkGrower("mod")
+      const aWeak = await mkGrower("weak")
+      const aBlocked = await mkGrower("block")
+      const aPrivate = await mkGrower("priv")
+      const aUnlisted = await mkGrower("unlist")
+      const aBanned = await mkGrower("ban")
+      const aDeleted = await mkGrower("del")
+      await prisma.user.update({ where: { id: aBanned.id }, data: { banned: true } })
+      await prisma.block.create({ data: { blockerId: viewer.id, blockedId: aBlocked.id } })
+
+      const mkDiary = async (authorId: string, data: Record<string, unknown>, tag: string) => {
+        const d = await prisma.growDiary.create({
+          data: {
+            title: `__tbp gm ${tag} ${SUFFIX}`, description: "t", growType: "INDOOR",
+            startDate: new Date(), authorId, ...(data as object),
+          },
+        })
+        diaryIds.push(d.id)
+        return d
+      }
+
+      // Reference: viewer's active public grow — strain + COCO + LED +
+      // LST/SCROG, in flower.
+      const refDiary = await mkDiary(viewer.id, {
+        strainId: gmStrain.id, mediumType: "COCO", lightType: "LED",
+        techniques: ["LST", "SCROG"], stage: "FLOWER",
+      }, "ref")
+
+      const strong = await mkDiary(aStrong.id, { strainId: gmStrain.id, mediumType: "COCO", stage: "FLOWER" }, "strong")
+      const moderate = await mkDiary(aModerate.id, { mediumType: "COCO", lightType: "LED" }, "mod")
+      const weak = await mkDiary(aWeak.id, { stage: "SEEDLING" }, "weak") // INDOOR only → below threshold
+      const blocked = await mkDiary(aBlocked.id, { strainId: gmStrain.id, mediumType: "COCO" }, "blocked")
+      const priv = await mkDiary(aPrivate.id, { strainId: gmStrain.id, mediumType: "COCO", visibility: "PRIVATE" }, "priv")
+      const unlist = await mkDiary(aUnlisted.id, { strainId: gmStrain.id, mediumType: "COCO", visibility: "UNLISTED" }, "unlist")
+      const ban = await mkDiary(aBanned.id, { strainId: gmStrain.id, mediumType: "COCO" }, "ban")
+      const del = await mkDiary(aDeleted.id, { strainId: gmStrain.id, mediumType: "COCO", deleted: true }, "del")
+      const pool = [strong, moderate, weak, blocked, priv, unlist, ban, del].map((d) => d.id)
+
+      // Pure scoring: component hits produce matching reasons.
+      const sc = scoreGrowMatch(
+        { strainId: "s1", strainName: "Zkittlez", mediumType: "COCO", lightType: "LED", growType: "INDOOR", techniques: ["LST"], stage: "FLOWER" },
+        { strainId: "s1", strain: null, strainRefName: "Zkittlez", mediumType: "COCO", lightType: null, growType: "INDOOR", techniques: ["LST", "HST"], stage: "VEGETATIVE" }
+      )
+      assert.equal(sc.score, 40 + 20 + 10 + 8, "strain+medium+type+technique")
+      assert.deepEqual(sc.reasons.map((r) => r.kind), ["STRAIN", "MEDIUM", "TECHNIQUE", "GROW_TYPE"])
+      const scWeak = scoreGrowMatch(
+        { strainId: null, strainName: null, mediumType: null, lightType: null, growType: "INDOOR", techniques: [], stage: "FLOWER" },
+        { strainId: null, strain: null, strainRefName: null, mediumType: null, lightType: null, growType: "INDOOR", techniques: [], stage: "FLOWER" }
+      )
+      assert.ok(scWeak.score < 30, "generic shared traits stay below threshold")
+
+      const res = await growMatchesForUser(viewer.id, { candidateIds: pool })
+      assert.equal(res.reference?.diaryId, refDiary.id, "reference = viewer's public grow")
+      const ids = res.matches.map((m) => m.diaryId)
+      assert.deepEqual(ids, [strong.id, moderate.id], "strong > moderate, threshold applied")
+      assert.equal(res.matches[0].strength, "STRONG")
+      assert.equal(res.matches[1].strength, "MODERATE")
+      assert.ok(res.matches[0].reasons.some((r) => r.kind === "STRAIN"), "strain reason surfaced")
+      assert.ok(res.matches[1].reasons.some((r) => r.kind === "MEDIUM"), "medium reason surfaced")
+      for (const d of [weak, blocked, priv, unlist, ban, del])
+        assert.ok(!ids.includes(d.id), `excluded candidate ${d.id}`)
+
+      // Determinism: same input → identical ranking.
+      const res2 = await growMatchesForUser(viewer.id, { candidateIds: pool })
+      assert.deepEqual(res2.matches.map((m) => m.diaryId), ids, "stable ranking")
+
+      // Empty states: no public reference → no matches, no error.
+      const privOnly = await mkGrower("privonly")
+      await mkDiary(privOnly.id, { strainId: gmStrain.id, visibility: "PRIVATE" }, "pref")
+      const resPriv = await growMatchesForUser(privOnly.id)
+      assert.equal(resPriv.reference, null, "private-only member has no reference")
+      assert.deepEqual(resPriv.matches, [])
+      const noGrow = await mkGrower("nogrow")
+      const resNone = await growMatchesForUser(noGrow.id)
+      assert.equal(resNone.reference, null, "no diary → no reference")
+      assert.deepEqual(resNone.matches, [])
+
+      // Reference precedence: active public grow wins over harvested.
+      const multi = await mkGrower("multi")
+      await mkDiary(multi.id, { strainId: gmStrain.id, harvested: true, harvestedAt: new Date() }, "done")
+      const activeD = await mkDiary(multi.id, { mediumType: "HYDRO" }, "active")
+      const resMulti = await growMatchesForUser(multi.id)
+      assert.equal(resMulti.reference?.diaryId, activeD.id, "active grow beats harvested")
+
+      // Member home consumes the canonical matcher — same result object.
+      // (Unscoped pool here: other suites' public diaries may also match,
+      // so assert presence rather than exact set.)
+      const { getMemberHomeData } = await import("@/lib/member-home")
+      const home = await getMemberHomeData(viewer.id)
+      const homeStrong = home?.growMatches.matches.find((m) => m.diaryId === strong.id)
+      assert.ok(homeStrong, "member home shares the canonical source")
+      assert.equal(home!.growMatches.reference?.diaryId, refDiary.id)
+
+      console.log("✓ growMatchesForUser scoring + privacy + determinism + member-home integration")
     }
 
     console.log("All TerpBot pipeline tests passed.")
