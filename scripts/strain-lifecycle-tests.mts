@@ -10,6 +10,7 @@ import { createRequire } from "node:module"
 import { prisma } from "@/lib/prisma"
 import { STRAIN_TYPES, parseSeedToHarvestWeeks } from "@/lib/strain-fields"
 import { strainTypeLabel } from "@/lib/strain-stats"
+import { computeStrainQuestions, computeStrainHarvests } from "@/lib/strain-knowledge"
 
 
 const tag = Date.now().toString(36)
@@ -27,6 +28,10 @@ const cleanup = {
   strainIds: [] as string[],
   diaryIds: [] as string[],
   reportIds: [] as string[],
+  categoryIds: [] as string[],
+  threadIds: [] as string[],
+  postIds: [] as string[],
+  tagIds: [] as string[],
   // Live catalog rows whose genetics were dirtied to exercise the FORCE_NULL
   // guard — restored to their captured value no matter how the check ended.
   geneticsRestore: [] as { id: string; genetics: string | null }[],
@@ -423,6 +428,126 @@ await check("seed-guard: unordered insensitive findFirst spares the community ro
   }
 })
 
+// ─── Community knowledge (strain knowledge card) ─────────────────────
+// Behavioral tests against the uncached compute cores — unstable_cache
+// cannot run outside the Next runtime.
+{
+  const banned = await mkUser("banned")
+  await prisma.user.update({ where: { id: banned.id }, data: { banned: true } })
+
+  const kStrain = await mkStrain(creator.id)
+  const emptyStrain = await mkStrain(creator.id)
+
+  const qcat = await prisma.category.create({
+    data: { name: `__test_sl questions ${tag}`, slug: `__test-sl-q-${tag}`, order: 999, description: "t" },
+  })
+  const gcat = await prisma.category.create({
+    data: { name: `__test_sl lounge ${tag}`, slug: `__test-sl-g-${tag}`, order: 999, description: "t" },
+  })
+  cleanup.categoryIds.push(qcat.id, gcat.id)
+
+  const mkTag = (name: string) =>
+    prisma.tag.upsert({
+      where: { name },
+      update: {},
+      create: { name, slug: `${name.toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 40)}-${tag}` },
+    })
+  const strainTag = await mkTag(kStrain.name)
+  const defTag = await mkTag(`__test_sl_def_${tag}`)
+  const soloTag = await mkTag(`__test_sl_solo_${tag}`)
+  cleanup.tagIds.push(strainTag.id, defTag.id, soloTag.id)
+
+  const mkThread = async (
+    authorId: string,
+    slug: string,
+    categoryId: string,
+    tagIds: string[],
+    over: Record<string, unknown> = {}
+  ) => {
+    const t = await prisma.thread.create({
+      data: {
+        title: `__test_sl ${slug} ${tag}`, slug: `__test-sl-${slug}-${tag}`, content: "x",
+        authorId, categoryId,
+        tags: { create: tagIds.map((tagId) => ({ tagId })) },
+        ...over,
+      },
+    })
+    cleanup.threadIds.push(t.id)
+    return t
+  }
+
+  // q1 solved, q2 answered, q3 open → expect order solved > answered > open.
+  const q1 = await mkThread(creator.id, "k-q1", qcat.id, [strainTag.id, defTag.id], { replyCount: 2 })
+  const q2 = await mkThread(other.id, "k-q2", qcat.id, [strainTag.id, defTag.id], { replyCount: 3 })
+  const q3 = await mkThread(creator.id, "k-q3", qcat.id, [strainTag.id, soloTag.id], { replyCount: 0 })
+  const a1 = await prisma.post.create({ data: { content: "answer", threadId: q1.id, authorId: other.id } })
+  cleanup.postIds.push(a1.id)
+  await prisma.thread.update({ where: { id: q1.id }, data: { acceptedAnswerId: a1.id } })
+  // Excluded: wrong category, deleted, banned author, no strain tag.
+  await mkThread(creator.id, "k-gq", gcat.id, [strainTag.id])
+  await mkThread(creator.id, "k-del", qcat.id, [strainTag.id], { deleted: true })
+  await mkThread(banned.id, "k-ban", qcat.id, [strainTag.id])
+  await mkThread(other.id, "k-notag", qcat.id, [defTag.id])
+
+  // Harvests: public strainId grow, free-text match, private yield,
+  // and exclusions (private/unlisted/deleted/unharvested/wrong strain).
+  const d1 = await mkDiary(creator.id, {
+    strainId: kStrain.id, harvested: true, harvestedAt: new Date("2026-04-20"),
+    startDate: new Date("2026-01-01"), harvestRating: 9, harvestDifficulty: "NORMAL",
+    yieldAmount: 4, yieldUnit: "oz",
+  })
+  const d2 = await mkDiary(other.id, {
+    strain: kStrain.name, harvested: true, harvestedAt: new Date("2026-03-10"),
+    startDate: new Date("2026-01-01"), harvestRating: 7, yieldAmount: 100, yieldUnit: "g",
+  })
+  const d3 = await mkDiary(creator.id, {
+    strainId: kStrain.id, harvested: true, harvestedAt: new Date("2026-02-01"),
+    startDate: new Date("2026-01-01"), yieldAmount: 2, yieldUnit: "oz", yieldPrivate: true,
+  })
+  await mkDiary(creator.id, { strainId: kStrain.id, harvested: true, visibility: "PRIVATE", harvestRating: 10 })
+  await mkDiary(creator.id, { strainId: kStrain.id, harvested: true, visibility: "UNLISTED", harvestRating: 10 })
+  await mkDiary(creator.id, { strainId: kStrain.id, harvested: true, deleted: true, harvestRating: 10 })
+  await mkDiary(creator.id, { strainId: kStrain.id }) // not harvested
+  const otherStrain = await mkStrain(creator.id)
+  await mkDiary(other.id, { strainId: otherStrain.id, harvested: true, harvestRating: 10 })
+
+  await check("knowledge: questions counted, solved first, excluded sets filtered", async () => {
+    const k = await computeStrainQuestions(kStrain.name)
+    assert.equal(k.total, 3, `expected 3 question threads, got ${JSON.stringify(k.items.map((i) => i.slug))}`)
+    assert.equal(k.solved, 1, "one solved")
+    assert.equal(k.truncated, false)
+    assert.deepEqual(k.items.map((i) => i.slug), [q1.slug, q2.slug, q3.slug], "solved > answered > open")
+    assert.deepEqual(k.items.map((i) => i.status), ["solved", "answered", "open"])
+  })
+
+  await check("knowledge: topics aggregate co-occurring tags, strain tag excluded, singletons dropped", async () => {
+    const k = await computeStrainQuestions(kStrain.name)
+    const def = k.topics.find((t) => t.name === defTag.name)
+    assert.ok(def && def.count === 2, `deficiency topic ×2, got ${JSON.stringify(k.topics)}`)
+    assert.ok(!k.topics.some((t) => t.name === soloTag.name), "count-1 topic suppressed")
+    assert.ok(!k.topics.some((t) => t.name.toLowerCase() === kStrain.name.toLowerCase()), "strain tag never a topic")
+  })
+
+  await check("knowledge: public harvests only, rating-ordered, units normalized, private yield masked", async () => {
+    const h = await computeStrainHarvests(kStrain.name, kStrain.id)
+    assert.deepEqual(h.map((x) => x.id), [d1.id, d2.id, d3.id], "public harvested only, rating desc nulls last")
+    assert.equal(h[0].yieldOz, 4, "oz passthrough")
+    assert.equal(h[1].yieldOz, 3.5, `100g → 3.5oz, got ${h[1].yieldOz}`)
+    assert.equal(h[2].yieldOz, null, "yieldPrivate masked")
+    assert.equal(h[0].days, 109, "seed→harvest days")
+    assert.equal(h[0].rating, 9)
+  })
+
+  await check("knowledge: empty strain yields empty structures, not errors", async () => {
+    const k = await computeStrainQuestions(emptyStrain.name)
+    const h = await computeStrainHarvests(emptyStrain.name, emptyStrain.id)
+    assert.equal(k.total, 0)
+    assert.deepEqual(k.items, [])
+    assert.deepEqual(k.topics, [])
+    assert.deepEqual(h, [])
+  })
+}
+
 // ─── Summary + cleanup ───────────────────────────────────────────────
 const failed = results.filter(([s]) => s === "FAIL")
 console.log(`\n${results.length - failed.length}/${results.length} passed`)
@@ -435,6 +560,10 @@ await prisma.report.deleteMany({ where: { id: { in: cleanup.reportIds } } })
 await prisma.reputationEvent.deleteMany({
   where: { OR: [{ userId: { in: cleanup.userIds } }, { actorId: { in: cleanup.userIds } }] },
 })
+await prisma.post.deleteMany({ where: { id: { in: cleanup.postIds } } })
+await prisma.thread.deleteMany({ where: { id: { in: cleanup.threadIds } } })
+await prisma.tag.deleteMany({ where: { id: { in: cleanup.tagIds } } })
+await prisma.category.deleteMany({ where: { id: { in: cleanup.categoryIds } } })
 await prisma.growDiary.deleteMany({ where: { id: { in: cleanup.diaryIds } } })
 await prisma.strain.deleteMany({ where: { id: { in: cleanup.strainIds } } })
 await prisma.profile.deleteMany({ where: { userId: { in: cleanup.userIds } } })
