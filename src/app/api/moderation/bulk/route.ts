@@ -47,7 +47,7 @@ export async function POST(request: Request) {
 
     const threads = await prisma.thread.findMany({
       where: { id: { in: ids } },
-      select: { id: true, slug: true, authorId: true, author: { select: { role: true } } },
+      select: { id: true, slug: true, authorId: true, deleted: true, author: { select: { role: true } } },
     })
 
     const threadIds = new Set(threads.map((t) => t.id))
@@ -67,6 +67,27 @@ export async function POST(request: Request) {
 
     const moderatorName = await staffDisplayName(staff.id)
 
+    // Restore applies only to threads that are actually deleted — a live
+    // thread must not accrue a phantom audit row.
+    const affected = action === "restore" ? threads.filter((t) => t.deleted) : threads
+
+    // A restoration inherits case provenance from the most recent deletion
+    // action on each thread, so a case-driven deletion's restore appears in
+    // that case's activity. Original deletion rows are never rewritten.
+    const lastDeletionReport = new Map<string, string>()
+    if (action === "restore" && affected.length > 0) {
+      const prevDeletions = await prisma.moderationAction.findMany({
+        where: { type: "CONTENT_DELETION", targetType: "THREAD", targetId: { in: affected.map((t) => t.id) } },
+        orderBy: { createdAt: "desc" },
+        select: { targetId: true, reportId: true },
+      })
+      for (const p of prevDeletions) {
+        if (p.targetId && p.reportId && !lastDeletionReport.has(p.targetId)) {
+          lastDeletionReport.set(p.targetId, p.reportId)
+        }
+      }
+    }
+
     const data: Record<string, boolean> = {
       lock: { locked: true },
       unlock: { locked: false },
@@ -78,21 +99,22 @@ export async function POST(request: Request) {
 
     const ops = [
       prisma.thread.updateMany({
-        where: { id: { in: ids } },
+        where: { id: { in: ids }, ...(action === "restore" ? { deleted: true } : {}) },
         data,
       }),
       prisma.moderationAction.createMany({
         // One audit row per thread — the item-level target identity lives on
         // each row so a bulk op stays fully reconstructable without relying
         // on the SecurityEvent summary.
-        data: threads.map((t) => ({
-          type: action === "delete" || action === "restore" ? "CONTENT_DELETION" : "CONTENT_EDIT",
+        data: affected.map((t) => ({
+          type: action === "delete" ? "CONTENT_DELETION" : action === "restore" ? "CONTENT_RESTORATION" : "CONTENT_EDIT",
           reason: reason || `Bulk ${action} by moderator`,
           targetUserId: t.authorId,
           moderatorId: staff.id,
           moderatorName,
           targetType: "THREAD",
           targetId: t.id,
+          reportId: lastDeletionReport.get(t.id) ?? null,
         })),
       }),
     ]
@@ -160,12 +182,14 @@ export async function POST(request: Request) {
     })
 
     // Bulk-deleted/restored threads can carry wizardResultId + accepted
-    // answers — keep Plant Doctor outcome stats honest.
+    // answers — keep Plant Doctor outcome stats honest. Threads also leave
+    // or re-enter the cached forum listings, same as single deletes.
     if (action === "delete" || action === "restore") {
       revalidateTag("analytics", { expire: 0 })
+      revalidateTag("forum", { expire: 0 })
     }
 
-    return NextResponse.json({ updated: threads.length })
+    return NextResponse.json({ updated: affected.length })
   } catch (error) {
     console.error("Bulk moderation error:", error)
     return NextResponse.json({ error: "Failed" }, { status: 500 })

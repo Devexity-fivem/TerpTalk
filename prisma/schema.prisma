@@ -933,7 +933,7 @@ model AbuseFlag {
 
 model ModerationAction {
   id          String   @id @default(cuid())
-  type        String   // WARNING, TEMPORARY_BAN, PERMANENT_BAN, CONTENT_DELETION, CONTENT_EDIT
+  type        String   // WARNING, TEMPORARY_BAN, PERMANENT_BAN, CONTENT_DELETION, CONTENT_RESTORATION, CONTENT_EDIT
   reason      String
   targetUserId String
   moderatorId String?  // SetNull on staff deletion — the audit row must survive
