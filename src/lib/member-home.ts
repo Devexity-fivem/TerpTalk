@@ -21,6 +21,7 @@ import { diaryPath } from "@/lib/slugs"
 import { mediaProxyUrl } from "@/lib/media"
 import { diaryCompleteness } from "@/lib/diary-weeks"
 import { helpWantedForUser, type HelpWantedItem } from "@/lib/answer-match"
+import { growMatchesForUser, type GrowMatchesResult } from "@/lib/grow-matches"
 import { EXPERIMENT_CATEGORY_LABELS, type ExperimentCategory } from "@/lib/experiments"
 import { TECHNIQUE_LABELS } from "@/lib/grow-fields"
 import { hasUnlock } from "@/lib/progression"
@@ -120,6 +121,10 @@ export interface MemberHomeData {
    *  grow evidence could help with. Same matching as the TerpBot
    *  answer-match scan; private/unlisted grows never signal. */
   helpWanted: { total: number; items: HelpWantedItem[] }
+  /** Grows-Like-Yours — public diaries matching the member's own public
+   *  reference grow on strain/medium/lighting/techniques (canonical
+   *  matcher in lib/grow-matches; same source as the weekly digest). */
+  growMatches: GrowMatchesResult
   /** Community pulse — trending threads to make the cockpit feel alive */
   trending: {
     title: string
@@ -136,7 +141,7 @@ const GROW_STAGE_LABELS: Record<string, string> = Object.fromEntries(
 )
 
 export async function getMemberHomeData(userId: string): Promise<MemberHomeData | null> {
-  const [user, quests, journey, staleDiary, diaries, followedThreads, followedDiaries, unreadNotifications, live, trendingCandidates, harvestAnalyticsUnlocked, helpWanted] =
+  const [user, quests, journey, staleDiary, diaries, followedThreads, followedDiaries, unreadNotifications, live, trendingCandidates, harvestAnalyticsUnlocked, helpWanted, growMatches] =
     await Promise.all([
       prisma.user.findUnique({
         where: { id: userId },
@@ -249,6 +254,9 @@ export async function getMemberHomeData(userId: string): Promise<MemberHomeData 
       // Answer-recruitment card — bounded (≤15 threads scored); failures
       // degrade to an empty card rather than breaking the cockpit.
       helpWantedForUser(userId).catch(() => ({ total: 0, items: [] })),
+      // Grows-Like-Yours card — bounded candidate pool scored in memory;
+      // failures degrade to an empty card rather than breaking the cockpit.
+      growMatchesForUser(userId).catch((): GrowMatchesResult => ({ reference: null, matches: [] })),
     ])
 
   if (!user) return null
@@ -579,6 +587,7 @@ export async function getMemberHomeData(userId: string): Promise<MemberHomeData 
     },
     live,
     helpWanted,
+    growMatches,
     trending: trending.map((t) => ({
       title: t.title,
       slug: t.slug,

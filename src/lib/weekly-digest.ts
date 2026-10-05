@@ -16,6 +16,7 @@
 import { prisma } from "@/lib/prisma"
 import { botAssist, loadAssistPrelude } from "@/lib/terpbot-assist"
 import { helpWantedForUser } from "@/lib/answer-match"
+import { growMatchesForUser, type GrowMatchesResult } from "@/lib/grow-matches"
 import { getQuestProgress } from "@/lib/quests"
 import { getGrowStreak } from "@/lib/grow-streak"
 import { currentWeekKey } from "@/lib/week"
@@ -164,7 +165,16 @@ export async function runWeeklyDigest(
     const hasEvidence = m._count.diaryCreator > 0 || m._count.posts > 0
     if (hasEvidence) {
       const help = await helpWantedForUser(m.id)
-      if (help.total) parts.push(`${help.total} question${help.total === 1 ? "" : "s"} match grows like yours`)
+      if (help.total) parts.push(`${help.total} question${help.total === 1 ? "" : "s"} you could help answer`)
+    }
+
+    // Grows like yours — the canonical matcher (lib/grow-matches). The
+    // reference grow must be public, so the public-diary count is a
+    // sufficient pre-filter.
+    if (m._count.diaryCreator > 0) {
+      const gm = await growMatchesForUser(m.id)
+      if (gm.matches.length)
+        parts.push(`${gm.matches.length} grow${gm.matches.length === 1 ? "" : "s"} like yours to learn from`)
     }
 
     // Progression signals only surface for members who've engaged it —
@@ -213,6 +223,7 @@ export interface WeeklyDigestView {
   followedThreads: { total: number; items: { slug: string; title: string }[] }
   followedGrows: { total: number; items: { href: string; title: string; updates: number }[] }
   questions: { total: number; items: HelpWantedItem[] }
+  growMatches: GrowMatchesResult
   openQuests: { title: string; reward: number }[]
   streak: number
   highlight: { slug: string; title: string } | null
@@ -241,7 +252,7 @@ export async function weeklyDigestForUser(userId: string, now = new Date()): Pro
   ])
 
   const diaryIds = diaryFollows.map((f) => f.diary.id)
-  const [diaryUpdateRows, help, quests, streakRes, highlight, threadTotal] = await Promise.all([
+  const [diaryUpdateRows, help, growMatches, quests, streakRes, highlight, threadTotal] = await Promise.all([
     diaryIds.length
       ? prisma.diaryUpdate.groupBy({
           by: ["diaryId"],
@@ -250,6 +261,7 @@ export async function weeklyDigestForUser(userId: string, now = new Date()): Pro
         })
       : Promise.resolve([] as { diaryId: string; _count: { _all: number } }[]),
     helpWantedForUser(userId),
+    growMatchesForUser(userId),
     getQuestProgress(userId, now),
     getGrowStreak(userId),
     weeklyHighlight(),
@@ -278,6 +290,7 @@ export async function weeklyDigestForUser(userId: string, now = new Date()): Pro
     threadTotal > 0 ||
     followedDiaryUpdates > 0 ||
     help.total > 0 ||
+    growMatches.matches.length > 0 ||
     openQuests.length > 0 ||
     streakRes.streak > 1
 
@@ -290,6 +303,7 @@ export async function weeklyDigestForUser(userId: string, now = new Date()): Pro
     },
     followedGrows: { total: followedDiaryUpdates, items: growItems.slice(0, 3) },
     questions: help,
+    growMatches,
     openQuests,
     streak: streakRes.streak,
     highlight,

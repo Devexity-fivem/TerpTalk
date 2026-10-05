@@ -641,6 +641,47 @@ export default function MemberHome({ data }: { data: MemberHomeData }) {
           </section>
         )}
 
+        {/* Grows like yours — public diaries matched to the member's own
+            public grow on structured fields (canonical matcher). */}
+        {data.growMatches.matches.length > 0 && data.growMatches.reference && (
+          <section className="mt-4 tt-spotlight bg-card/80 rounded-2xl border border-border/70 p-4 sm:p-5">
+            <div className="mb-3 flex items-center justify-between gap-2">
+              <h2 className="flex items-center gap-2 font-display text-sm font-semibold">
+                <Sprout className="h-4 w-4 text-primary" />
+                Grows like yours
+                <InfoTip content={`Public grows matching "${data.growMatches.reference.title}" on strain, medium, lighting, and techniques.`} />
+              </h2>
+              <Link
+                href="/diaries"
+                className="tap-target shrink-0 text-xs font-medium text-primary inline-flex items-center gap-0.5 hover:underline"
+              >
+                All grows <ArrowRight className="h-3 w-3" />
+              </Link>
+            </div>
+            <ul className="space-y-1.5">
+              {data.growMatches.matches.map((g) => (
+                <li key={g.diaryId}>
+                  <Link
+                    href={g.href}
+                    className="group flex items-center gap-2 rounded-xl px-3 py-2 hover:bg-secondary/60"
+                  >
+                    <Leaf className="h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" />
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm group-hover:text-primary">
+                        {g.title}
+                        <span className="text-muted-foreground"> — {g.author.username ?? g.author.name ?? "a grower"}</span>
+                      </span>
+                      <span className="block truncate text-xs text-muted-foreground">
+                        {g.reasons.slice(0, 2).map((r) => r.label).join(" · ")}
+                      </span>
+                    </span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+
         {/* Community pulse — trending threads make the cockpit feel alive */}
         {data.trending.length > 0 && (
           <section className="mt-6 tt-spotlight bg-card/80 rounded-2xl border border-border/70 p-4 sm:p-5">

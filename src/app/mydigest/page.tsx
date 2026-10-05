@@ -7,7 +7,7 @@ import { helpWantedReasonText } from "@/lib/answer-match"
 import PageHeader from "@/components/ui/page-header"
 import Surface from "@/components/ui/surface"
 import EmptyState from "@/components/ui/empty-state"
-import { Bell, Leaf, HeartHandshake, Target, Flame, TrendingUp, MessageSquare } from "@/lib/icons"
+import { Bell, Leaf, Sprout, HeartHandshake, Target, Flame, TrendingUp, MessageSquare } from "@/lib/icons"
 
 export const metadata = {
   title: "Your Weekly Digest",
@@ -109,6 +109,27 @@ export default async function MyDigestPage() {
                 </Link>
               </li>
             )}
+          </ul>
+        </Surface>
+      )}
+
+      {d.growMatches.matches.length > 0 && (
+        <Surface>
+          <h2 className="font-semibold flex items-center gap-2 mb-3">
+            <Sprout className="h-5 w-5 text-primary" /> Grows like yours
+          </h2>
+          <ul className="space-y-2 text-sm">
+            {d.growMatches.matches.map((g) => (
+              <li key={g.diaryId}>
+                <Link href={g.href} className="hover:underline font-medium">
+                  {g.title}
+                </Link>
+                <span className="text-muted-foreground">
+                  {" "}— {g.author.username ?? g.author.name ?? "a grower"} ·{" "}
+                  {g.reasons.slice(0, 2).map((r) => r.label).join(" · ")}
+                </span>
+              </li>
+            ))}
           </ul>
         </Surface>
       )}
