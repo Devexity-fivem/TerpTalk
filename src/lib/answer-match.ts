@@ -147,7 +147,7 @@ const SETUP_TEXT_FIELDS = [
 
 // ── Question extraction ──────────────────────────────────────────────
 
-interface QuestionSignals {
+export interface QuestionSignals {
   /** normalized full tag names that resolve to catalog strains */
   strainTagNames: string[]
   strainIds: string[]
@@ -242,6 +242,15 @@ async function extractSignalsBatch(
   const map = new Map<string, QuestionSignals>()
   for (const t of threads) map.set(t.id, buildSignals(tagNamesOf(t), byNorm))
   return map
+}
+
+/** Single-thread convenience wrapper over the batch resolver — used by
+ *  the question-evidence rail so page code never re-implements the
+ *  tag→strain/technique/setup extraction. */
+export async function extractQuestionSignals(
+  thread: { id: string; tags: { tag: { name: string } }[] }
+): Promise<QuestionSignals> {
+  return (await extractSignalsBatch([thread])).get(thread.id)!
 }
 
 // ── Shared eligibility predicates ────────────────────────────────────

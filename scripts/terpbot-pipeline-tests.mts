@@ -2021,6 +2021,207 @@ async function run() {
       console.log("✓ growMatchesForUser scoring + privacy + determinism + member-home integration")
     }
 
+    // ── 10f. questionEvidenceForThread: the "what might already help" rail
+    {
+      const { questionEvidenceForThread, helperFollowPromptAllowed } = await import("@/lib/question-evidence")
+      const { computeStrainKnowledge } = await import("@/lib/strain-knowledge")
+      const { blockedUserIds } = await import("@/lib/security")
+      const knowledge = { getKnowledge: computeStrainKnowledge }
+
+      const qcat = await prisma.category.create({
+        data: { name: `__tbp EvHelp ${SUFFIX}`, slug: `__tbp-evhelp-${SUFFIX}`, order: 999, description: "t" },
+      })
+      const ncat = await prisma.category.create({
+        data: { name: `__tbp EvTalk ${SUFFIX}`, slug: `__tbp-evtalk-${SUFFIX}`, order: 999, description: "t" },
+      })
+
+      const asker = await mk(`__tbp_ev_ask_${SUFFIX}`)
+      const grower = await mk(`__tbp_ev_g1_${SUFFIX}`)
+      const grower2 = await mk(`__tbp_ev_g2_${SUFFIX}`)
+      const blockedG = await mk(`__tbp_ev_bl_${SUFFIX}`)
+      const privG = await mk(`__tbp_ev_pr_${SUFFIX}`)
+      const bannedG = await mk(`__tbp_ev_bn_${SUFFIX}`)
+      await prisma.user.update({ where: { id: bannedG.id }, data: { banned: true } })
+      await prisma.block.create({ data: { blockerId: asker.id, blockedId: blockedG.id } })
+
+      const evStrain = await prisma.strain.create({ data: { name: `__tbp EvStrain ${SUFFIX}` } })
+      strainIds.push(evStrain.id)
+      // Tag name equals the catalog strain name — the canonical tag↔strain link.
+      const evTag = await prisma.tag.upsert({
+        where: { name: evStrain.name },
+        update: {},
+        create: { name: evStrain.name, slug: `__tbp-evtag-${SUFFIX}` },
+      })
+
+      const mkEvDiary = async (authorId: string, data: Record<string, unknown>, tag: string) => {
+        const d = await prisma.growDiary.create({
+          data: {
+            title: `__tbp ev ${tag} ${SUFFIX}`, description: "t", growType: "INDOOR",
+            startDate: new Date(), authorId, ...(data as object),
+          },
+        })
+        diaryIds.push(d.id)
+        return d
+      }
+      const g1 = await mkEvDiary(grower.id, { strainId: evStrain.id }, "g1")
+      const g2 = await mkEvDiary(grower2.id, { strainId: evStrain.id }, "g2")
+      await mkEvDiary(blockedG.id, { strainId: evStrain.id }, "blocked")
+      await mkEvDiary(privG.id, { strainId: evStrain.id, visibility: "PRIVATE" }, "priv")
+      await mkEvDiary(bannedG.id, { strainId: evStrain.id }, "banned")
+      await mkEvDiary(asker.id, { strainId: evStrain.id }, "own") // asker's own grow is never "evidence"
+
+      const mkEvThread = async (slug: string, categoryId: string, opts: { tags?: string[]; contextDiaryId?: string; authorId?: string } = {}) => {
+        const t = await prisma.thread.create({
+          data: {
+            title: `__tbp ev ${slug} ${SUFFIX}`, slug: `__tbp-ev-${slug}-${SUFFIX}`, content: "x",
+            authorId: opts.authorId ?? asker.id, categoryId,
+            ...(opts.contextDiaryId ? { contextDiaryId: opts.contextDiaryId } : {}),
+            ...(opts.tags?.length ? { tags: { create: opts.tags.map((tagId) => ({ tagId })) } } : {}),
+          },
+        })
+        threadIds.push(t.id)
+        return t
+      }
+
+      // Signal-path question: tagged with the strain, no linked grow.
+      const qt = await mkEvThread("q", qcat.id, { tags: [evTag.id] })
+      const ev = await questionEvidenceForThread({
+        threadId: qt.id,
+        categoryId: qcat.id,
+        category: { slug: qcat.slug, name: qcat.name },
+        authorId: asker.id,
+        tagIds: [evTag.id],
+        tags: [{ tag: { name: evTag.name } }],
+        contextDiary: null,
+        viewerId: asker.id,
+        blockedIds: await blockedUserIds(asker.id),
+      }, knowledge)
+
+      assert.equal(ev.isQuestion, true, "question category → rail eligible")
+      const growIds = ev.grows.map((g) => g.href)
+      assert.ok(growIds.includes(`/diaries/${g1.slug ?? g1.id}`) || ev.grows.some((g) => g.title === g1.title), "matching public grow surfaced")
+      assert.equal(ev.grows.length, 2, "exactly the two eligible growers' diaries")
+      assert.ok(ev.grows.every((g) => !["blocked", "priv", "banned", "own"].some((t) => g.title.includes(t))),
+        "blocked/private/banned/self diaries never surface")
+      assert.ok(ev.strain && ev.strain.href.includes("/strains/"), "strain knowledge item present")
+      assert.equal(ev.strain!.name, evStrain.name)
+      assert.equal(ev.solved.length, 0, "no solved questions yet")
+
+      // Solved-question items — only question-category threads with a LIVE
+      // accepted answer qualify.
+      const solver = await mk(`__tbp_ev_sv_${SUFFIX}`)
+      const mkSolved = async (slug: string, categoryId: string, opts: { deleteAnswer?: boolean } = {}) => {
+        const t = await mkEvThread(slug, categoryId, { tags: [evTag.id], authorId: solver.id })
+        const p = await prisma.post.create({ data: { content: "x", threadId: t.id, authorId: grower.id } })
+        postIds.push(p.id)
+        await prisma.thread.update({ where: { id: t.id }, data: { acceptedAnswerId: p.id } })
+        if (opts.deleteAnswer) await prisma.post.update({ where: { id: p.id }, data: { deleted: true } })
+        return t
+      }
+      const solvedQ = await mkSolved("sq", qcat.id)
+      await mkSolved("gq", ncat.id)               // solved but not a question category — excluded
+      await mkSolved("dq", qcat.id, { deleteAnswer: true })
+      await mkEvThread("uq", qcat.id, { tags: [evTag.id], authorId: solver.id }) // unanswered — never "solved" evidence
+
+      const ev2 = await questionEvidenceForThread({
+        threadId: qt.id,
+        categoryId: qcat.id,
+        category: { slug: qcat.slug, name: qcat.name },
+        authorId: asker.id,
+        tagIds: [evTag.id],
+        tags: [{ tag: { name: evTag.name } }],
+        contextDiary: null,
+        viewerId: asker.id,
+        blockedIds: await blockedUserIds(asker.id),
+      }, knowledge)
+      assert.deepEqual(ev2.solved.map((s) => s.slug), [solvedQ.slug], "only the live-answered question surfaces")
+
+      // Blocked-author solved question — never surfaces to the asker.
+      const blkSolved = await mkEvThread("bsq", qcat.id, { tags: [evTag.id], authorId: blockedG.id })
+      const bp = await prisma.post.create({ data: { content: "x", threadId: blkSolved.id, authorId: grower.id } })
+      postIds.push(bp.id)
+      await prisma.thread.update({ where: { id: blkSolved.id }, data: { acceptedAnswerId: bp.id } })
+      const ev3 = await questionEvidenceForThread({
+        threadId: qt.id, categoryId: qcat.id,
+        category: { slug: qcat.slug, name: qcat.name },
+        authorId: asker.id, tagIds: [evTag.id], tags: [{ tag: { name: evTag.name } }],
+        contextDiary: null, viewerId: asker.id, blockedIds: await blockedUserIds(asker.id),
+      }, knowledge)
+      assert.ok(!ev3.solved.some((s) => s.slug === blkSolved.slug), "blocked author's solved question excluded")
+
+      // Non-question thread — the rail is inert no matter what matches.
+      const talk = await mkEvThread("talk", ncat.id, { tags: [evTag.id] })
+      const evTalk = await questionEvidenceForThread({
+        threadId: talk.id, categoryId: ncat.id,
+        category: { slug: ncat.slug, name: ncat.name },
+        authorId: asker.id, tagIds: [evTag.id], tags: [{ tag: { name: evTag.name } }],
+        contextDiary: null, viewerId: asker.id, blockedIds: [],
+      }, knowledge)
+      assert.equal(evTalk.isQuestion, false)
+      assert.deepEqual([evTalk.solved, evTalk.grows], [[], []])
+      assert.equal(evTalk.strain, null)
+
+      // Context-diary path: the linked PUBLIC grow is the matching
+      // reference — scoreGrowMatch ranks candidates by structured overlap.
+      const ctxDiary = await mkEvDiary(asker.id, { mediumType: "COCO", lightType: "LED", stage: "FLOWER" }, "ctx")
+      const refMatch = await mkEvDiary(grower.id, { mediumType: "COCO", lightType: "LED", stage: "FLOWER" }, "refmatch")
+      await mkEvDiary(grower2.id, { mediumType: "SOIL", lightType: "HPS", stage: "SEEDLING" }, "refweak")
+      const ctxQ = await mkEvThread("ctxq", qcat.id, { contextDiaryId: ctxDiary.id })
+      const evCtx = await questionEvidenceForThread({
+        threadId: ctxQ.id, categoryId: qcat.id,
+        category: { slug: qcat.slug, name: qcat.name },
+        authorId: asker.id, tagIds: [], tags: [],
+        contextDiary: {
+          id: ctxDiary.id, authorId: asker.id, visibility: "PUBLIC",
+          strain: null, strainId: null, mediumType: "COCO", lightType: "LED",
+          growType: "INDOOR", stage: "FLOWER", techniques: [], strainRef: null,
+        },
+        viewerId: asker.id, blockedIds: await blockedUserIds(asker.id),
+      }, knowledge)
+      assert.ok(evCtx.grows.some((g) => g.title === refMatch.title && g.reason), "context-grow match surfaced with an explainable reason")
+      assert.ok(!evCtx.grows.some((g) => g.title.includes("refweak")), "below-threshold candidate excluded")
+      assert.ok(!evCtx.grows.some((g) => g.title === ctxDiary.title), "reference grow never lists itself")
+
+      // Privacy gate: an UNLISTED context grow invisible to the viewer is
+      // never a matching reference — falls back to tag signals (none here).
+      const evPriv = await questionEvidenceForThread({
+        threadId: ctxQ.id, categoryId: qcat.id,
+        category: { slug: qcat.slug, name: qcat.name },
+        authorId: asker.id, tagIds: [], tags: [],
+        contextDiary: {
+          id: ctxDiary.id, authorId: asker.id, visibility: "UNLISTED",
+          strain: null, strainId: null, mediumType: "COCO", lightType: "LED",
+          growType: "INDOOR", stage: "FLOWER", techniques: [], strainRef: null,
+        },
+        viewerId: grower.id, blockedIds: [],
+      }, knowledge)
+      assert.equal(evPriv.grows.length, 0, "non-public context grow never drives matching for others")
+
+      // Empty question → empty evidence → no rail rendered.
+      const emptyQ = await mkEvThread("eq", qcat.id)
+      const evEmpty = await questionEvidenceForThread({
+        threadId: emptyQ.id, categoryId: qcat.id,
+        category: { slug: qcat.slug, name: qcat.name },
+        authorId: asker.id, tagIds: [], tags: [],
+        contextDiary: null, viewerId: asker.id, blockedIds: [],
+      }, knowledge)
+      assert.equal(evEmpty.grows.length, 0)
+      assert.equal(evEmpty.strain, null)
+
+      // Accepted-answer follow prompt — pure eligibility rules.
+      const TB = "terpbot"
+      const base = { threadAuthorId: asker.id, answerAuthorId: grower.id, answerAuthorUsername: `__tbp_ev_g1_${SUFFIX}`, alreadyFollowing: false, blockedIds: [] as string[], terpbotUsername: TB }
+      assert.equal(helperFollowPromptAllowed({ ...base, viewerId: asker.id }), true, "asker may be prompted")
+      assert.equal(helperFollowPromptAllowed({ ...base, viewerId: grower2.id }), false, "non-asker never sees the prompt")
+      assert.equal(helperFollowPromptAllowed({ ...base, viewerId: asker.id, answerAuthorId: asker.id }), false, "self-answer never prompts")
+      assert.equal(helperFollowPromptAllowed({ ...base, viewerId: asker.id, alreadyFollowing: true }), false, "already following suppresses")
+      assert.equal(helperFollowPromptAllowed({ ...base, viewerId: asker.id, blockedIds: [grower.id] }), false, "block suppresses")
+      assert.equal(helperFollowPromptAllowed({ ...base, viewerId: asker.id, answerAuthorUsername: TB }), false, "TerpBot never prompts")
+      assert.equal(helperFollowPromptAllowed({ ...base, viewerId: undefined }), false, "guest never prompts")
+
+      console.log("✓ questionEvidenceForThread rail + accepted-answer follow prompt eligibility")
+    }
+
     console.log("All TerpBot pipeline tests passed.")
   } finally {
     await prisma.notification.deleteMany({ where: { id: { in: notificationIds } } }).catch(() => {})

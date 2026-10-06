@@ -407,6 +407,32 @@ const apiFiles = () => {
     }
   }
 
+  // ── Deals + question-evidence integrity contracts ──
+  {
+    const dealsData = read("lib/deals-data.ts");
+    check("deals: partner count filtered to active products",
+      /products:\s*{\s*where:\s*{\s*active:\s*true\s*}\s*}/.test(dealsData));
+    const dealsPage = read("app/deals/page.tsx");
+    check("deals: no untracked price-freshness claim", !dealsPage.includes("prices checked by staff"));
+
+    const ev = read("lib/question-evidence.ts");
+    check("evidence: question-category gate is the shared convention",
+      ev.includes("QUESTION_CATEGORY_RE.test"));
+    check("evidence: grow pool is public-only", ev.includes("publicDiaryWhere"));
+    check("evidence: grow pool filters blocked + asker", ev.includes("notBlockedAuthor") && ev.includes("activeAuthor()"));
+    check("evidence: solved requires live accepted answer",
+      ev.includes("acceptedAnswerId: { not: null }") && ev.includes("!t.acceptedAnswer.deleted"));
+    check("evidence: reuses canonical matchers — no second engine",
+      ev.includes("scoreGrowMatch") && ev.includes("extractQuestionSignals") && ev.includes("getStrainKnowledge") && ev.includes("suggestStrainLink"));
+    check("evidence: non-public context diary never a reference",
+      ev.includes('contextDiary.visibility === "PUBLIC"'));
+
+    const followPrompt = read("components/answer-follow-prompt.tsx");
+    check("answer-follow: prompt goes through /api/follows", followPrompt.includes('"/api/follows"'));
+    const threadPage = read("app/forum/thread/[slug]/page.tsx");
+    check("answer-follow: asker-scoped eligibility via helper", threadPage.includes("helperFollowPromptAllowed"));
+  }
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })().catch((e) => { console.error(e); process.exit(1); }).finally(() => p.$disconnect());

@@ -550,6 +550,42 @@ async function run() {
       await prisma.block.deleteMany({ where: { blockerId: viewer.id, blockedId: active.id } })
     }
 
+    // ── /deals catalog: partner count must equal listed products ─────
+    {
+      const { loadDealsData } = await import("@/lib/deals-data")
+      const slug = `__t_da_deal_${STAMP}`
+      const partner = await prisma.affiliatePartner.create({
+        data: {
+          name: `__t_da Partner ${STAMP}`, slug,
+          websiteUrl: "https://example.com", affiliateUrl: "https://example.com/?a=1",
+          description: "t", featured: true,
+        },
+      })
+      const mkProduct = async (n: string, activeFlag: boolean) =>
+        prisma.affiliateProduct.create({
+          data: {
+            name: `__t_da ${n} ${STAMP}`, slug: `__t_da-${n}-${STAMP}`, partnerId: partner.id,
+            description: "t", category: "gear", active: activeFlag,
+          },
+        })
+      await mkProduct("p1", true)
+      await mkProduct("p2", true)
+      await mkProduct("p3", false) // inactive — must neither count nor list
+      try {
+        const data = await loadDealsData()
+        const p = data.partners.find((x) => x.slug === slug)
+        assert.ok(p, "fixture partner loaded")
+        assert.equal(p!._count.products, 2, "partner header count is active products only")
+        const listed = data.products.filter((x) => x.partnerId === partner.id)
+        assert.equal(listed.length, 2, "product list excludes inactive")
+        assert.ok(listed.every((x) => x.active))
+        console.log("✓ /deals partner count = active listed products")
+      } finally {
+        await prisma.affiliateProduct.deleteMany({ where: { partnerId: partner.id } }).catch(() => {})
+        await prisma.affiliatePartner.delete({ where: { id: partner.id } }).catch(() => {})
+      }
+    }
+
     console.log("All Discovery filters + sitemap tests passed.")
   } finally {
     for (const id of postIds) {

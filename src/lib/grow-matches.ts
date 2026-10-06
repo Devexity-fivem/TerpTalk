@@ -23,7 +23,7 @@ const CANDIDATE_CAP = 120
 const RESULT_LIMIT = 3
 // Below this a match is too weak to surface — a shared generic trait
 // alone (e.g. "both indoor") never qualifies.
-const MIN_SCORE = 30
+export const MIN_SCORE = 30
 const STRONG_SCORE = 55
 
 // Weights follow informational value: same genetics >> same substrate >>

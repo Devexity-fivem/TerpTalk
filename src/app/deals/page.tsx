@@ -5,6 +5,7 @@ import { canSeeDeal, DEAL_TIER_UNLOCK_ID, type DealViewer } from "@/lib/deals-ac
 import { hasUnlock } from "@/lib/progression"
 import { UNLOCK_BY_ID } from "@/lib/progression-config"
 import { DEFAULT_DISCLOSURE } from "@/lib/affiliate"
+import { loadDealsData } from "@/lib/deals-data"
 import { Tag, ExternalLink, Percent } from "@/lib/icons"
 import DealsBrowser from "@/components/deals-browser"
 import PageHeader from "@/components/ui/page-header"
@@ -21,27 +22,7 @@ export const metadata = {
 // as genetics rather than hardware — everything else is grow equipment.
 const CLONE_SECTION_RE = /clone|seed|genetic/i
 
-const getDealsData = unstable_cache(
-  async () => {
-    const [partners, products, setting] = await Promise.all([
-      prisma.affiliatePartner.findMany({
-        where: { active: true },
-        orderBy: [{ featured: "desc" }, { name: "asc" }],
-        include: { _count: { select: { products: true } } },
-      }),
-      prisma.affiliateProduct.findMany({
-        where: { active: true, partner: { active: true } },
-        orderBy: [{ featured: "desc" }, { name: "asc" }],
-        take: 200,
-        include: { partner: { select: { name: true, slug: true, promoCode: true, affiliateUrl: true, promoText: true } } },
-      }),
-      prisma.setting.findUnique({ where: { key: "affiliateDisclosure" } }),
-    ])
-    return { partners, products, setting }
-  },
-  ["deals-data"],
-  { revalidate: 300, tags: ["deals"] }
-)
+const getDealsData = unstable_cache(loadDealsData, ["deals-data"], { revalidate: 300, tags: ["deals"] })
 
 export default async function DealsPage() {
   const [{ partners, products, setting }, session] = await Promise.all([
@@ -100,7 +81,7 @@ export default async function DealsPage() {
                 <h2 className="font-display text-2xl font-bold tracking-tight">{p.name}</h2>
                 <p className="text-muted-foreground text-sm mt-1">{p.description}</p>
                 <p className="text-[11px] text-muted-foreground/70 mt-1.5">
-                  {p._count.products} {p._count.products === 1 ? "product" : "products"} listed · prices checked by staff
+                  {p._count.products} {p._count.products === 1 ? "product" : "products"} listed · staff-reviewed catalog
                 </p>
                 {p.promoText && (
                   <p className="text-sm mt-2 font-medium text-warning">🔥 {p.promoText}</p>

@@ -441,7 +441,7 @@ check("diary page: experiments merge into the existing timeline", () => {
 check("strain evidence: public scope + min-sample thresholds", () => {
   const lib = src("lib/strain-stats.ts")
   assert.ok(lib.includes("getStrainEvidence"), "evidence service")
-  const fn = lib.slice(lib.indexOf("getEvidence"))
+  const fn = lib.slice(lib.indexOf("computeStrainEvidence"))
   assert.ok(fn.includes("publicDiaryWhere"), "public diaries only")
   assert.ok(fn.includes("activeAuthor"), "deleted/banned authors excluded")
   assert.ok(fn.includes("experimentDiaryCount >= 3"), "category threshold ≥3 grows")

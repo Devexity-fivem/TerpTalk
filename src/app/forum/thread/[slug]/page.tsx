@@ -4,7 +4,7 @@ import { publicUserSelect, isModerator, activeAuthor, blockedUserIds, notBlocked
 import { mediaProxyUrl } from "@/lib/media"
 import { diaryPath } from "@/lib/slugs"
 import { notFound, redirect } from "next/navigation"
-import { MessageSquare, MessagesSquare, Clock, CheckCircle2, Eye, BookOpen, Sprout } from "@/lib/icons"
+import { MessageSquare, MessagesSquare, Clock, CheckCircle2, Eye, BookOpen, Sprout, Lightbulb, Leaf } from "@/lib/icons"
 import Link from "next/link"
 import ReplyForm from "@/components/reply-form"
 import ThreadScrollBar from "@/components/thread-scroll-bar"
@@ -27,7 +27,10 @@ import { AcceptAnswerButton } from "@/components/accept-answer-button"
 import ViewTracker from "@/components/view-tracker"
 import ThreadFollowButton from "@/components/thread-follow-button"
 import ProfileCard from "@/components/ui/profile-card"
+import AnswerFollowPrompt from "@/components/answer-follow-prompt"
 import { rankDisplay } from "@/lib/progression-config"
+import { questionEvidenceForThread, helperFollowPromptAllowed } from "@/lib/question-evidence"
+import { TERPBOT_USERNAME } from "@/lib/terpbot-constants"
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params
@@ -110,11 +113,17 @@ async function getThreadData(slug: string, page: number, canSeeHidden: boolean, 
           slug: true,
           title: true,
           strain: true,
+          strainId: true,
           stage: true,
           harvested: true,
           deleted: true,
           visibility: true,
           authorId: true,
+          mediumType: true,
+          lightType: true,
+          growType: true,
+          techniques: true,
+          strainRef: { select: { id: true, slug: true, name: true } },
           author: { select: { ...publicUserSelect, banned: true, suspendedUntil: true } },
         },
       },
@@ -230,7 +239,7 @@ export default async function ThreadPage({
   // constraints, so five serial roundtrips collapse into one parallel set.
   // (The OP id is a dedicated earliest-post lookup so the OP badge/ring is
   // correct on every page even if the OP is deleted or filtered out.)
-  const [relatedThreads, saved, follow, opPostId, userVoteOptionId] = await Promise.all([
+  const [relatedThreads, saved, follow, opPostId, userVoteOptionId, evidence, alreadyFollowingHelper] = await Promise.all([
     prisma.thread.findMany({
       where: {
         deleted: false,
@@ -274,6 +283,34 @@ export default async function ThreadPage({
           select: { optionId: true },
         }).then((v) => v?.optionId ?? null)
       : null,
+    // Question evidence rail — "what might already help". Composes the
+    // existing question/strain/grow knowledge systems; internally a small
+    // constant number of bounded queries, no per-result lookups.
+    questionEvidenceForThread({
+      threadId: thread.id,
+      categoryId: thread.categoryId,
+      category: { slug: thread.category.slug, name: thread.category.name },
+      authorId: thread.authorId,
+      tagIds,
+      tags: thread.tags,
+      contextDiary: thread.contextDiary,
+      viewerId: currentUserId,
+      blockedIds,
+    }),
+    // Accepted-answer person-follow prompt — person-follow state between
+    // the asker and the answer author. Only fetched when a prompt could
+    // possibly render (asker viewing their own solved thread).
+    currentUserId === thread.authorId && thread.acceptedAnswer && thread.acceptedAnswer.authorId !== currentUserId
+      ? prisma.follow.findUnique({
+          where: {
+            followerId_followingId: {
+              followerId: currentUserId,
+              followingId: thread.acceptedAnswer.authorId,
+            },
+          },
+          select: { id: true },
+        }).then((f) => !!f)
+      : false,
   ])
   const following = !!follow
 
@@ -377,6 +414,21 @@ export default async function ThreadPage({
   const acceptedPost = thread.acceptedAnswer
   const diaryCtx = thread.diaryFor
   const contextCtx = thread.contextDiary
+  // Accepted-answer person-follow prompt — asker only, consent-based;
+  // the helper is already proven active/unblocked by the answer query.
+  const answerFollowAllowed =
+    !!acceptedPost &&
+    helperFollowPromptAllowed({
+      viewerId: currentUserId,
+      threadAuthorId: thread.authorId,
+      answerAuthorId: acceptedPost.authorId,
+      answerAuthorUsername: acceptedPost.author.profile?.username,
+      alreadyFollowing: alreadyFollowingHelper,
+      blockedIds,
+      terpbotUsername: TERPBOT_USERNAME,
+    })
+  const hasEvidence =
+    evidence.isQuestion && (evidence.solved.length > 0 || evidence.grows.length > 0 || !!evidence.strain)
 
   return (
     <div className="min-h-screen bg-background">
@@ -529,6 +581,60 @@ export default async function ThreadPage({
           )}
         </div>
 
+        {/* Question evidence — solved questions, public grow records, and
+            the canonical strain card, surfaced the moment a member asks.
+            Compact by design; vanishes entirely when nothing is relevant. */}
+        {hasEvidence && (
+          <div className="bg-card/80 rounded-2xl border border-primary/25 p-4 sm:p-5 mb-4">
+            <div className="flex items-center gap-2 mb-3">
+              <Lightbulb className="w-4 h-4 text-primary" />
+              <h2 className="font-display text-base font-semibold">What might already help</h2>
+            </div>
+            <ul className="space-y-2.5">
+              {evidence.solved.map((q) => (
+                <li key={q.slug}>
+                  <Link href={`/forum/thread/${q.slug}`} className="group flex items-start gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-success shrink-0 mt-0.5" />
+                    <span>
+                      <span className="text-sm group-hover:text-primary group-hover:underline">{q.title}</span>
+                      <span className="ml-2 text-xs text-muted-foreground">Solved · {q.categoryName}</span>
+                    </span>
+                  </Link>
+                </li>
+              ))}
+              {evidence.grows.map((g) => (
+                <li key={g.href}>
+                  <Link href={g.href} className="group flex items-start gap-2">
+                    <Sprout className="w-4 h-4 text-primary shrink-0 mt-0.5" />
+                    <span>
+                      <span className="text-sm group-hover:text-primary group-hover:underline">{g.title}</span>
+                      <span className="ml-2 text-xs text-muted-foreground">
+                        {[g.strainName, g.harvested ? "harvested" : g.stage.toLowerCase(), `by ${g.authorName}`]
+                          .filter(Boolean)
+                          .join(" · ")}
+                        {g.reason ? ` — ${g.reason}` : ""}
+                      </span>
+                    </span>
+                  </Link>
+                </li>
+              ))}
+              {evidence.strain && (
+                <li>
+                  <Link href={evidence.strain.href} className="group flex items-start gap-2">
+                    <Leaf className="w-4 h-4 text-spectrum shrink-0 mt-0.5" />
+                    <span>
+                      <span className="text-sm group-hover:text-primary group-hover:underline">
+                        Strain knowledge: {evidence.strain.name}
+                      </span>
+                      <span className="ml-2 text-xs text-muted-foreground">{evidence.strain.summary}</span>
+                    </span>
+                  </Link>
+                </li>
+              )}
+            </ul>
+          </div>
+        )}
+
         {/* Accepted answer — renders on every page, so its anchor always resolves */}
         {acceptedPost && (
           <div id={`post-${acceptedPost.id}`} tabIndex={-1} className="bg-card rounded-2xl border-2 border-green-500/50 p-4 sm:p-5 mb-4 ring-1 ring-green-500/20">
@@ -573,6 +679,12 @@ export default async function ThreadPage({
                     canAccept={canSetAnswer}
                   />
                 </div>
+                {answerFollowAllowed && (
+                  <AnswerFollowPrompt
+                    userId={acceptedPost.author.id}
+                    username={acceptedPost.author.profile?.username || acceptedPost.author.name || "member"}
+                  />
+                )}
               </div>
             </div>
           </div>

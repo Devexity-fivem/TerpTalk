@@ -92,8 +92,10 @@ export interface StrainGrowStats {
 
 
 
-const getStats = unstable_cache(
-  async (strainName: string, strainId: string): Promise<StrainGrowStats> => {
+// Uncached core — exported for behavioral tests (unstable_cache cannot
+// run outside the Next runtime) and for the question-evidence rail's
+// test seam. The cached entry point stays getStrainGrowStats.
+export async function computeStrainGrowStats(strainName: string, strainId: string): Promise<StrainGrowStats> {
     const [rawDiaries, rawSetups] = await Promise.all([
       prisma.growDiary.findMany({
         where: {
@@ -305,10 +307,9 @@ const getStats = unstable_cache(
               ? `Early community data — ${n} grows`
               : `Based on ${n} community grows`,
     }
-  },
-  ["strain-grow-stats"],
-  { revalidate: 300, tags: ["strains"] }
-)
+}
+
+const getStats = unstable_cache(computeStrainGrowStats, ["strain-grow-stats"], { revalidate: 300, tags: ["strains"] })
 
 export function getStrainGrowStats(strainName: string, strainId: string) {
   return getStats(strainName, strainId)
@@ -333,8 +334,8 @@ export interface StrainEvidenceSummary {
   lessons: { key: string; label: string; text: string; authorName: string; diarySlug: string | null }[]
 }
 
-const getEvidence = unstable_cache(
-  async (strainName: string, strainId: string): Promise<StrainEvidenceSummary> => {
+// Uncached core — same test-seam pattern as computeStrainGrowStats.
+export async function computeStrainEvidence(strainName: string, strainId: string): Promise<StrainEvidenceSummary> {
     const diaries = await prisma.growDiary.findMany({
       where: {
         deleted: false,
@@ -416,10 +417,9 @@ const getEvidence = unstable_cache(
       outcomes: outcomeTotal >= 3 ? outcomes : null,
       lessons,
     }
-  },
-  ["strain-evidence"],
-  { revalidate: 300, tags: ["strains", "diaries"] }
-)
+}
+
+const getEvidence = unstable_cache(computeStrainEvidence, ["strain-evidence"], { revalidate: 300, tags: ["strains", "diaries"] })
 
 export function getStrainEvidence(strainName: string, strainId: string) {
   return getEvidence(strainName, strainId)

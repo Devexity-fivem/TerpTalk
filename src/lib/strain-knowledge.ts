@@ -8,6 +8,8 @@ import {
   strainFieldMatches,
   getStrainGrowStats,
   getStrainEvidence,
+  computeStrainGrowStats,
+  computeStrainEvidence,
   type StrainGrowStats,
   type StrainEvidenceSummary,
 } from "@/lib/strain-stats"
@@ -251,6 +253,18 @@ export async function getStrainKnowledge(strainName: string, strainId: string): 
     getStrainEvidence(strainName, strainId),
     getQuestions(strainName),
     getHarvests(strainName, strainId),
+  ])
+  return { stats, evidence, questions, harvests }
+}
+
+/** Uncached twin of getStrainKnowledge — the test seam. Same
+ *  composition, same shape, just straight through to the compute cores. */
+export async function computeStrainKnowledge(strainName: string, strainId: string): Promise<StrainKnowledge> {
+  const [stats, evidence, questions, harvests] = await Promise.all([
+    computeStrainGrowStats(strainName, strainId),
+    computeStrainEvidence(strainName, strainId),
+    computeStrainQuestions(strainName),
+    computeStrainHarvests(strainName, strainId),
   ])
   return { stats, evidence, questions, harvests }
 }
