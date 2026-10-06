@@ -108,6 +108,10 @@ const apiFiles = () => {
     // Answer-recruitment: per-category participation GROUP BY queries —
     // parameterized tagged templates, categoryId/userId bound params only.
     path.join("src", "lib", "answer-match.ts"),
+    // Activation milestones: column-to-column (createdAt + 24h) and
+    // reply-vs-own-thread joins — parameterized tagged templates, the
+    // cohort id array is a bound ANY($1) param; no string interpolation.
+    path.join("src", "lib", "activation.ts"),
   ]);
   check("no raw SQL outside allowlist", !allSrc.some((f) => {
     if (rawSqlAllowlist.has(f)) return false;
@@ -199,6 +203,9 @@ const apiFiles = () => {
     path.join("src", "components", "chat-room.tsx"),
     // Per-session dismissal flag for the recovery-phrase banner.
     path.join("src", "components", "recovery-warning-banner.tsx"),
+    // Push invitation "Not now"/declined flag — one boolean, no identity,
+    // so a dismissed or declined member is never re-prompted on this device.
+    path.join("src", "components", "push-toggle.tsx"),
     // ⌘K discoverability hint — one-time "palette seen" flag.
     path.join("src", "components", "navigation.tsx"),
     // Diary update drafts — text-only unsaved form fields, scoped by

@@ -249,6 +249,21 @@ const main = async () => {
         ? pass("admin feedback list carries deviceType")
         : fail("admin feedback list carries deviceType", { s: listRes.status, keys: item ? Object.keys(item) : list })
     }
+
+    // ── Activation report gate (/api/admin/activation) ──────────────
+    {
+      const guest = await fetch(`${BASE}/api/admin/activation`)
+      guest.status === 403 ? pass("guest activation report → 403") : fail("guest activation report → 403", { s: guest.status })
+      const mem = await fetch(`${BASE}/api/admin/activation`, { headers: { cookie: memberCookie } })
+      mem.status === 403 ? pass("member activation report → 403") : fail("member activation report → 403", { s: mem.status })
+      const res = await fetch(`${BASE}/api/admin/activation?days=7`, { headers: { cookie: modCookie } })
+      const rep = await res.json().catch(() => ({}))
+      const json = JSON.stringify(rep)
+      res.status === 200 && rep.windowDays === 7 && Array.isArray(rep.steps) && Array.isArray(rep.returnByPush) &&
+        !json.includes(member.id) && !json.includes(member.username)
+        ? pass("staff activation report: aggregate shape, no member ids/usernames")
+        : fail("staff activation report", { s: res.status })
+    }
   } finally {
     if (feedbackIds.length) await prisma.feedback.deleteMany({ where: { id: { in: feedbackIds } } })
     for (const u of users) {

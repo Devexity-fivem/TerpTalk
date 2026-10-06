@@ -74,7 +74,8 @@ Test domains (one canonical suite each — extend these, don't add one-off scrip
 | TerpBot (integration) | `terpbot-pipeline-tests.mts` (DB) · `bot-verify.mjs` (HTTP) |
 | HTTP boundaries | `account-verify` (auth, onboarding, DMs, deletion, captcha) · `forum-verify` · `search-verify` · `diary-verify` · `trust-safety-verify` (moderation + feedback) · `runtime-verify` (black-box security) · `ops-tests` (admin surfaces) |
 | Security + platform libs | `security-tests.mts` (sessions, roles, uploads, links, cron, captcha, markdown) |
-| Privacy / account | `self-service-tests.mts` (blocks, recovery, privacy prefs, DM policy, visibility) · `notification-2-tests.mts` |
+| Privacy / account | `self-service-tests.mts` (blocks, recovery, privacy prefs, DM policy, visibility) · `notification-2-tests.mts` (incl. Web Push delivery channel: allowlist, dedupe, failure/cleanup) |
+| Activation & push | `push-activation-tests.mts` (push subscription boundary + derived activation milestones / return definition) · real-browser push leg in `browser-tests.mts` (needs Microsoft Edge: bundled headless Chromium has no push service) |
 | Reputation / progression | `reputation-tests` (ledger + tiers + quests + velocity) · `reputation-referral-integrity-tests` · `rewards3-tests` · `check-drift` (whole-DB scan, runs last) |
 | Content | `content-edit-tests.mts` · `strain-lifecycle-tests.mts` (incl. catalog-prune safety) · `discovery-integration-tests.mts` · `chat-ux-tests.mts` |
 

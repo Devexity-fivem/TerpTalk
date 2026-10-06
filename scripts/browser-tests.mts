@@ -12,8 +12,21 @@ import "./db-guard.mjs"
 import { PrismaClient } from "@prisma/client"
 import bcrypt from "bcryptjs"
 import { chromium } from "playwright-core"
+import { mkdtempSync, rmSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
+import { createPlantDoctorCase, scanPlantDoctorFollowups } from "@/lib/plant-doctor"
+import { WIZARD_RESULTS } from "@/lib/problem-wizard"
+import { settlePendingPush } from "@/lib/web-push"
 
 const prisma = new PrismaClient()
+// Minimal service-worker surface used inside sw.evaluate() — the scripts
+// tsconfig has no webworker lib.
+type SWNote = { title: string; data: unknown; close(): void }
+type SWScope = {
+  registration: { getNotifications(): Promise<SWNote[]> }
+  NotificationEvent: new (type: string, init: { notification: SWNote }) => Event
+}
 const BASE = (process.env.MASTER_BASE_URL ?? "http://localhost:3000").replace(/\/$/, "")
 const TS = Date.now().toString(36)
 const PASSWORD = "VerifyPass123!"
@@ -481,6 +494,126 @@ const main = async () => {
     await gotoMain(alicePage, `${BASE}/forum/thread/${privCtxThread.slug}`)
     const privOwnerBody = (await alicePage.textContent("body")) ?? ""
     ok("kc: private context grow shown to owner", privOwnerBody.includes("About their grow:"))
+
+    // ── Web Push: opt-in → real delivery → click routing ─────────────
+    // Bundled headless-shell Chromium has no push service and reports
+    // notifications as denied, so this leg drives Microsoft Edge
+    // (Chromium + a real WNS push service) through a persistent profile —
+    // Push is disabled in incognito-style contexts by design. Real VAPID
+    // keys from .env, real push service, real service worker.
+    {
+      const profileDir = mkdtempSync(join(tmpdir(), "tt-push-"))
+      const edge = await chromium.launchPersistentContext(profileDir, { headless: true, channel: "msedge" })
+        .catch((e) => { throw new Error(`push leg needs Microsoft Edge (channel "msedge"): ${String(e).slice(0, 160)}`) })
+      try {
+        await edge.grantPermissions(["notifications"], { origin: BASE })
+        const p = await edge.newPage()
+        await p.goto(`${BASE}/auth/signin`, { waitUntil: "networkidle" })
+        await p.fill("#username", aliceUsername)
+        await p.fill("#password", PASSWORD)
+        await p.press("#password", "Enter")
+        await p.waitForURL((u) => !u.pathname.startsWith("/auth/signin"), { timeout: 45_000 })
+
+        // Invitation renders without overflow at every required width.
+        let inviteOk = true
+        for (const w of [360, 390, 1024, 1280, 1440]) {
+          await p.setViewportSize({ width: w, height: 900 })
+          await gotoMain(p, BASE)
+          const seen = await p.locator('[data-testid="push-invite"]').waitFor({ timeout: 20_000 }).then(() => true).catch(() => false)
+          const over = await p.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1)
+          if (!seen || over) { inviteOk = false; console.log(`  invite @${w}px seen=${seen} overflow=${over}`) }
+        }
+        ok("push: invitation renders at 360/390/1024/1280/1440 without overflow", inviteOk)
+
+        await p.locator('[data-testid="push-invite"] button:has-text("Turn on")').click()
+        await p.locator('[data-testid="push-invite"]').waitFor({ state: "detached", timeout: 20_000 }).catch(() => {})
+        const subs = await prisma.pushSubscription.findMany({ where: { userId: alice.id }, select: { endpoint: true } })
+        ok("push: Turn on persists a real push-service subscription",
+          subs.length === 1 && new URL(subs[0].endpoint).protocol === "https:", subs.map((s) => new URL(s.endpoint).host))
+
+        await gotoMain(p, `${BASE}/settings/notifications`, '[data-testid="push-status"]')
+        await p.waitForFunction(() => document.querySelector('[data-testid="push-status"]')?.textContent?.includes("On for this device"), null, { timeout: 15_000 }).catch(() => {})
+        ok("push: settings shows the enabled state",
+          ((await p.textContent('[data-testid="push-status"]')) ?? "").includes("On for this device"))
+
+        // Reload keeps the invitation away (already subscribed).
+        await gotoMain(p, BASE)
+        await p.waitForTimeout(2500)
+        ok("push: invitation hidden once enabled", (await p.locator('[data-testid="push-invite"]').count()) === 0)
+
+        // Real reply from bob → in-app REPLY + one OS notification.
+        const pushThread = await prisma.thread.create({
+          data: { title: `__br push thread ${TS}`, slug: `__br-push-${TS}`, content: "push e2e", categoryId: qCatRow.id, authorId: alice.id },
+        })
+        const { context: bobPushCtx } = await login(bobUsername)
+        const replyRes = await bobPushCtx.request.post(`${BASE}/api/forum/posts`, {
+          data: { threadId: pushThread.id, content: `__br push reply ${TS} — enough content to pass the minimum` },
+        })
+        await bobPushCtx.close()
+        const sw = edge.serviceWorkers()[0] ?? await edge.waitForEvent("serviceworker")
+        const shownNotes = async () => sw.evaluate(async () =>
+          (await (self as unknown as SWScope).registration.getNotifications())
+            .map((n) => ({ title: n.title, url: (n.data as { url: string }).url })))
+        let shown: { title: string; url: string }[] = []
+        for (let i = 0; i < 30 && !shown.length; i++) {
+          await p.waitForTimeout(1000)
+          shown = await shownNotes()
+        }
+        const replyRows = await prisma.notification.count({ where: { userId: alice.id, type: "REPLY" } })
+        ok("push: reply → exactly one in-app notification + one OS notification",
+          replyRes.status() === 201 && replyRows === 1 && shown.length === 1 && shown[0].url.startsWith(`/forum/thread/${pushThread.slug}?post=`),
+          { s: replyRes.status(), replyRows, shown })
+
+        // Click → existing deep link + CLICKED telemetry.
+        await sw.evaluate(async () => {
+          const reg = (self as unknown as SWScope).registration
+          const [n] = await reg.getNotifications()
+          self.dispatchEvent(new (self as unknown as SWScope).NotificationEvent("notificationclick", { notification: n }))
+        })
+        await p.waitForURL((u) => u.pathname === `/forum/thread/${pushThread.slug}`, { timeout: 15_000 }).catch(() => {})
+        let clicked = 0
+        for (let i = 0; i < 10 && !clicked; i++) {
+          await p.waitForTimeout(500)
+          clicked = await prisma.pushEvent.count({ where: { userId: alice.id, type: "CLICKED", category: "REPLY" } })
+        }
+        ok("push: click opens the exact thread/post deep link", new URL(p.url()).pathname === `/forum/thread/${pushThread.slug}` && p.url().includes("#post-"), p.url())
+        ok("push: click recorded (type + category only)", clicked === 1, clicked)
+
+        // Plant Doctor follow-up — same logical reminder: one in-app
+        // BOT_ASSIST, one OS notification to /plant-doctor, no repeat.
+        const pdCase = await createPlantDoctorCase({ userId: alice.id, resultId: Object.keys(WIZARD_RESULTS)[3] })
+        if (!("caseId" in pdCase)) throw new Error("pd case create failed")
+        await prisma.plantDoctorCase.update({ where: { id: pdCase.caseId }, data: { createdAt: new Date(Date.now() - 10 * 86400000) } })
+        await sw.evaluate(async () => {
+          for (const n of await (self as unknown as SWScope).registration.getNotifications()) n.close()
+        })
+        const pd1 = await scanPlantDoctorFollowups({ caseIds: [pdCase.caseId] })
+        const pd2 = await scanPlantDoctorFollowups({ caseIds: [pdCase.caseId] })
+        await settlePendingPush()
+        shown = []
+        for (let i = 0; i < 30 && !shown.length; i++) {
+          await p.waitForTimeout(1000)
+          shown = await shownNotes()
+        }
+        const pdRows = await prisma.notification.count({ where: { userId: alice.id, type: "BOT_ASSIST", link: "/plant-doctor" } })
+        ok("push: Plant Doctor reminder → one in-app row + one OS notification to /plant-doctor, retry deduped",
+          pd1.sent === 1 && pd2.sent === 0 && pdRows === 1 && shown.length === 1 && shown[0].url === "/plant-doctor",
+          { pd1, pd2, pdRows, shown })
+        await prisma.botEvent.deleteMany({ where: { key: `assist:pd-followup:${pdCase.caseId}` } })
+        await prisma.rateLimit.deleteMany({ where: { key: `terpbot:assist:user:${alice.id}` } })
+
+        // Turn off from settings removes the subscription.
+        await gotoMain(p, `${BASE}/settings/notifications`, '[data-testid="push-status"]')
+        await p.locator('[data-testid="push-settings"] button:has-text("Turn off")').click({ timeout: 15_000 })
+        await p.waitForFunction(() => document.querySelector('[data-testid="push-status"]')?.textContent?.includes("Off on this device"), null, { timeout: 15_000 }).catch(() => {})
+        ok("push: Turn off removes the stored subscription",
+          (await prisma.pushSubscription.count({ where: { userId: alice.id } })) === 0)
+      } finally {
+        await edge.close().catch(() => {})
+        await prisma.pushEvent.deleteMany({ where: { userId: { in: [alice.id, bob.id] } } }).catch(() => {})
+        rmSync(profileDir, { recursive: true, force: true })
+      }
+    }
 
     // ── Block boundary (privacy) ─────────────────────────────────────
     await prisma.block.create({ data: { blockerId: alice.id, blockedId: bob.id } })
