@@ -390,6 +390,23 @@ const apiFiles = () => {
   check("migration: only twin-verified public orphans are deleted", mig.includes("for (const o of tally.orphanTwin)") && !/for \(const \w+ of tally\.orphanUnique/.test(mig) && !/for \(const \w+ of tally\.orphanPrivate/.test(mig));
   check("migration: list-store reports every bucket", ["referencedPublic", "orphanTwin", "orphanUnique", "orphanPrivate", "suspicious"].every((b) => mig.includes(b)));
 
+  // ── Affiliate image hosts ⊆ CSP img-src ──
+  // Partner product images are hotlinked; a seed imageUrl on a host missing
+  // from img-src silently renders broken in production. Pin the invariant.
+  {
+    const proxySrc = read("proxy.ts");
+    const imgSrc = (proxySrc.match(/"img-src ([^"]+)"/) || [])[1] || "";
+    for (const seed of ["seed-clone-to-home.cjs", "seed-mars-hydro-products.cjs"]) {
+      const urls = (read(`../scripts/${seed}`).match(/imageUrl:\s*"([^"]+)"/g) || [])
+        .map((s) => s.replace(/imageUrl:\s*"/, "").replace(/"$/, ""));
+      for (const u of urls) {
+        const host = new URL(u).host;
+        const allowed = imgSrc.split(/\s+/).some((h) => host === h.replace(/^https?:\/\//, "") || (h.includes("*.") && host.endsWith(h.split("*.")[1])));
+        check(`${seed}: image host ${host} in CSP img-src`, allowed);
+      }
+    }
+  }
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })().catch((e) => { console.error(e); process.exit(1); }).finally(() => p.$disconnect());

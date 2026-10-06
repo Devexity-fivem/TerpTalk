@@ -25,8 +25,10 @@ export function proxy(request: NextRequest) {
     "style-src 'self' 'unsafe-inline'",
     // Breeder-hosted strain photos are linked with attribution, not
     // re-hosted — img-src enumerates the verified breeder hosts in the
-    // catalog (scripts/seed-strains-data.cjs breederImageUrl values).
-    "img-src 'self' data: blob: https://*.vercel-storage.com https://*.public.blob.vercel-storage.com https://img.sensiseeds.com https://shop.greenhouseseeds.nl https://dutch-passion.com https://www.seriousseeds.com https://brothersgrimmseeds.com https://www.dinafem.org https://www.barneysfarm.com https://nirvanashop.com https://dnagenetics.com https://www.g13labs.com https://www.royalqueenseeds.com https://2fast4buds.com https://cdn.shopify.com https://www.humboldtseeds.net https://resinseeds.net",
+    // catalog (scripts/seed-strains-data.cjs breederImageUrl values) plus
+    // verified affiliate-partner product image hosts (cdn.shopify.com for
+    // Clone to Home, mars-hydro.com for Mars Hydro).
+    "img-src 'self' data: blob: https://*.vercel-storage.com https://*.public.blob.vercel-storage.com https://img.sensiseeds.com https://shop.greenhouseseeds.nl https://dutch-passion.com https://www.seriousseeds.com https://brothersgrimmseeds.com https://www.dinafem.org https://www.barneysfarm.com https://nirvanashop.com https://dnagenetics.com https://www.g13labs.com https://www.royalqueenseeds.com https://2fast4buds.com https://cdn.shopify.com https://www.humboldtseeds.net https://resinseeds.net https://www.mars-hydro.com",
     "font-src 'self' data:",
     `connect-src 'self' https://*.pusher.com wss://*.pusher.com https://va.vercel-scripts.com https://challenges.cloudflare.com${isDev ? " ws: wss:" : ""}`,
     "frame-ancestors 'none'",
