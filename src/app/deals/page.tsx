@@ -33,7 +33,7 @@ const getDealsData = unstable_cache(
         where: { active: true, partner: { active: true } },
         orderBy: [{ featured: "desc" }, { name: "asc" }],
         take: 200,
-        include: { partner: { select: { name: true, slug: true, promoCode: true, affiliateUrl: true } } },
+        include: { partner: { select: { name: true, slug: true, promoCode: true, affiliateUrl: true, promoText: true } } },
       }),
       prisma.setting.findUnique({ where: { key: "affiliateDisclosure" } }),
     ])
@@ -99,6 +99,9 @@ export default async function DealsPage() {
               <div className="flex-1">
                 <h2 className="font-display text-2xl font-bold tracking-tight">{p.name}</h2>
                 <p className="text-muted-foreground text-sm mt-1">{p.description}</p>
+                <p className="text-[11px] text-muted-foreground/70 mt-1.5">
+                  {p._count.products} {p._count.products === 1 ? "product" : "products"} listed · prices checked by staff
+                </p>
                 {p.promoText && (
                   <p className="text-sm mt-2 font-medium text-warning">🔥 {p.promoText}</p>
                 )}
@@ -143,9 +146,11 @@ export default async function DealsPage() {
             imageUrl: p.imageUrl,
             price: p.price,
             recommendedFor: p.recommendedFor,
+            pros: p.pros,
             featured: p.featured,
             promoCode: p.promoCode || p.partner.promoCode,
             partnerName: p.partner.name,
+            partnerPromoText: p.partner.promoText,
             lockedAtRank,
             lockedUnlockName: tierUnlockId ? UNLOCK_BY_ID.get(tierUnlockId)?.name ?? null : null,
           }))}

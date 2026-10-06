@@ -12,9 +12,11 @@ interface Deal {
   imageUrl: string | null
   price: string | null
   recommendedFor: string | null
+  pros: string | null
   featured: boolean
   promoCode: string | null
   partnerName: string
+  partnerPromoText: string | null
   /** Rank name when this deal is a members-only teaser for the viewer. */
   lockedAtRank?: string | null
   /** The unlock-registry name for that tier's gate, when one exists. */
@@ -50,15 +52,24 @@ function DealCard({ p }: { p: Deal }) {
       )}
       <div className="flex items-center gap-2 flex-wrap">
         <h3 className="font-display font-semibold text-sm">{p.name}</h3>
+        <span className="text-[11px] text-muted-foreground">by {p.partnerName}</span>
         {p.featured && <span className="text-[10px] bg-amber-500/15 text-warning px-1.5 py-0.5 rounded font-semibold">Featured</span>}
       </div>
       <p className="text-xs text-muted-foreground mt-1 flex-1">{p.description}</p>
+      {(() => {
+        const pros = p.pros?.split("\n").filter(Boolean).slice(0, 3) ?? []
+        return pros.length > 0 ? (
+          <ul className="text-[11px] text-muted-foreground mt-1.5 space-y-0.5">
+            {pros.map((pro, i) => <li key={i}>✓ {pro}</li>)}
+          </ul>
+        ) : null
+      })()}
       {p.recommendedFor && <p className="text-[11px] text-muted-foreground mt-1">For: {p.recommendedFor}</p>}
       <div className="flex items-center justify-between mt-3 gap-2">
         <div className="flex items-center gap-2">
           {p.price && <span className="text-sm font-bold">{p.price}</span>}
           {p.promoCode && (
-            <span className="inline-flex items-center gap-1 text-[11px] font-bold bg-primary/15 text-primary px-2 py-0.5 rounded">
+            <span className="inline-flex items-center gap-1 text-[11px] font-bold bg-primary/15 text-primary px-2 py-0.5 rounded" title={p.partnerPromoText || undefined}>
               <Tag className="w-3 h-3" /> {p.promoCode}
             </span>
           )}

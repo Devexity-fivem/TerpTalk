@@ -1,6 +1,6 @@
 // Shared affiliate helpers — validation, disclosure, URL fallback
 export const DEFAULT_DISCLOSURE =
-  "Affiliate Disclosure: TerpTalk may earn a commission from qualifying purchases made through some links on this page. This does not affect the price you pay."
+  "Affiliate Disclosure: TerpTalk may earn a commission from qualifying purchases made through links on this page. Promo codes shown are partner discounts — they lower the price you pay at checkout."
 
 // Only allow https URLs (or http for dev) — blocks javascript:/data: URIs
 export function isValidUrl(url: string): boolean {
