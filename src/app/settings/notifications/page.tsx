@@ -7,6 +7,7 @@ import { useSession } from "next-auth/react"
 import { ArrowLeft, Bell, Loader2, Save } from "@/lib/icons"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
+import PushToggle from "@/components/push-toggle"
 
 const TOGGLES = [
   { key: "notifyOnReply", label: "Replies to my threads", desc: "When someone replies to a thread I started." },
@@ -112,6 +113,13 @@ export default function NotificationSettingsPage() {
               />
             </label>
           ))}
+        </div>
+
+        {/* Delivery channel — not another preference. What gets created is
+            decided by the toggles above; this only adds OS-level delivery
+            on this device for a small set of high-value types. */}
+        <div className="mt-4 bg-card/80 rounded-2xl border border-border/70 p-4">
+          <PushToggle variant="settings" />
         </div>
 
         <h2 id="privacy" className="font-display text-lg font-semibold mt-8 mb-3 scroll-mt-20">Privacy</h2>

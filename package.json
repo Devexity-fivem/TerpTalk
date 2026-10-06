@@ -27,6 +27,7 @@
     "test:trust-safety": "node scripts/trust-safety-verify.mjs",
     "test:terpbot-pipeline": "tsx scripts/terpbot-pipeline-tests.mts",
     "test:plant-doctor": "tsx scripts/plant-doctor-tests.mts",
+    "test:push-activation": "tsx scripts/push-activation-tests.mts",
     "test:self-service": "tsx scripts/self-service-tests.mts",
     "test:chat": "tsx scripts/chat-ux-tests.mts",
     "test:ui-contracts": "tsx scripts/ui-contracts-tests.mts",
@@ -56,7 +57,8 @@
     "react-dom": "19.2.8",
     "recharts": "^3.2.1",
     "sharp": "^0.35.4",
-    "tailwind-merge": "^3.6.0"
+    "tailwind-merge": "^3.6.0",
+    "web-push": "3.6.7"
   },
   "overrides": {
     "cookie": "^0.7.2",
@@ -67,6 +69,7 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@types/web-push": "^3.6.4",
     "eslint": "^9",
     "eslint-config-next": "16.3.7",
     "playwright-core": "1.63.0",

@@ -338,5 +338,16 @@ export async function GET(request: NextRequest) {
     return `signal-scan:${created}`
   }, posted, failed, "signal-scan")
 
+  // ── Push telemetry retention (once per UTC day) ────────────────────
+  // PushEvent rows are lifecycle counts, not a history — keep 180 days.
+  // Once-per-member keyed rows (prompt/granted/denied) are kept so those
+  // funnel steps stay counted exactly once per member.
+  await runCronTask(`push:event-prune:${today}`, async () => {
+    const { count } = await prisma.pushEvent.deleteMany({
+      where: { key: null, createdAt: { lt: new Date(Date.now() - 180 * 86400000) } },
+    })
+    return `push-prune:${count}`
+  }, posted, failed, "push-prune")
+
   return NextResponse.json({ ok: failed.length === 0, posted, failed })
 }

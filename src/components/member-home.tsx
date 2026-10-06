@@ -10,6 +10,7 @@ import OpenChatButton from "@/components/open-chat-button"
 import Tooltip, { InfoTip } from "@/components/ui/tooltip"
 import EmptyState from "@/components/ui/empty-state"
 import StageProgress from "@/components/stage-progress"
+import PushToggle from "@/components/push-toggle"
 import { DIFFICULTY_LABELS } from "@/lib/grow-fields"
 import type { MemberHomeData } from "@/lib/member-home"
 import { diaryPath } from "@/lib/slugs"
@@ -144,6 +145,9 @@ export default function MemberHome({ data }: { data: MemberHomeData }) {
             {data.nextAction.cta} <ArrowRight className="h-4 w-4" />
           </span>
         </Link>
+
+        {/* Web Push invitation — client decides final visibility */}
+        {data.pushInvite && <PushToggle variant="invite" />}
 
         {/* Needs attention — grow signals, not notifications */}
         {data.attention.length > 0 && (

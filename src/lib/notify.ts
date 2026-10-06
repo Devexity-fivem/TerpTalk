@@ -2,6 +2,7 @@ import { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
 import { getPusher } from "@/lib/pusher"
 import { blockExistsBetween } from "@/lib/security"
+import { deliverPush, deliverPushMany, pushCategory, schedulePush } from "@/lib/web-push"
 
 // ─── Notification taxonomy ─────────────────────────────────────────
 // `type` stays a free string in the DB (no migration per new type) but
@@ -264,6 +265,18 @@ export async function notify(input: NotifyInput): Promise<NotificationWithActor 
     })
 
     if (input.push !== false) pushNotification(input.userId, toPushDto(notification))
+    // Optional OS-level delivery of THIS row — after the response, never
+    // blocking, never a second logical notification.
+    if (input.push !== false && pushCategory(notification)) {
+      schedulePush(() => deliverPush({
+        userId: input.userId,
+        type: notification.type,
+        title: notification.title,
+        content: notification.content,
+        link: notification.link,
+        groupKey: notification.groupKey,
+      }))
+    }
     return notification
   } catch (e) {
     console.error("[notify] failed:", input.type, input.userId, e)
@@ -381,6 +394,20 @@ export async function notifyMany(
       if (failed > 0) {
         console.error("[notifyMany] pusher delivery failed for", failed, "of", pushes.length, "batches")
       }
+    }
+
+    // Optional OS-level delivery for the allowlisted rows just written —
+    // one push opportunity per created notification, after the response.
+    const pushable = allowed.filter((i) => i.push !== false && pushCategory(i))
+    if (pushable.length > 0) {
+      schedulePush(() => deliverPushMany(pushable.map((i) => ({
+        userId: i.userId,
+        type: i.type,
+        title: i.title.slice(0, 200),
+        content: i.content.slice(0, 500),
+        link: i.link && SAFE_LINK.test(i.link) ? i.link : null,
+        groupKey: i.groupKey ?? null,
+      }))))
     }
 
     return { sent: result.count, deliveredUserIds: [...new Set(allowed.map((i) => i.userId))] }

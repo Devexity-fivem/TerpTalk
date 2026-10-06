@@ -76,6 +76,7 @@ model User {
   botSession    BotSession?
   productChanges ProductChange[]
   plantDoctorCases PlantDoctorCase[]
+  pushSubscriptions PushSubscription[]
 
   @@index([role])
   @@index([status])
@@ -1491,4 +1492,42 @@ model ProductChange {
 
   @@index([createdAt])
   @@index([status])
+}
+
+// ─── Web Push delivery channel ──────────────────────────────────────
+// One row per browser push endpoint a member opted in from. Push is a
+// DELIVERY CHANNEL for existing Notification rows — it carries no state of
+// its own. Only what the Web Push protocol needs is stored: no user agent,
+// no IP, no device fingerprint. Owner-only; never publicly readable.
+model PushSubscription {
+  id            String    @id @default(cuid())
+  userId        String
+  endpoint      String    @unique // push-service URL — globally unique per browser subscription
+  p256dh        String
+  auth          String
+  lastSuccessAt DateTime?
+  failureCount  Int       @default(0) // consecutive transient failures; reset on success
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+// Push lifecycle telemetry — the only activation signals that durable
+// product state cannot answer (was the invitation shown, declined,
+// clicked). userId is a bare string like BotEvent so account deletion
+// never blocks; no content, no endpoint, no notification text. `key`
+// makes once-per-member types idempotent (prompt/granted/denied).
+model PushEvent {
+  id        String   @id @default(cuid())
+  type      String   // PROMPT_SHOWN | PERMISSION_GRANTED | PERMISSION_DENIED | SUBSCRIPTION_REMOVED | SENT | FAILED | CLICKED
+  userId    String?
+  category  String?  // notification type for SENT/FAILED/CLICKED, e.g. REPLY | weekly-digest
+  key       String?  @unique
+  createdAt DateTime @default(now())
+
+  @@index([type, createdAt])
+  @@index([userId])
 }

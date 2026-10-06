@@ -125,6 +125,10 @@ export interface MemberHomeData {
    *  reference grow on strain/medium/lighting/techniques (canonical
    *  matcher in lib/grow-matches; same source as the weekly digest). */
   growMatches: GrowMatchesResult
+  /** Web Push invitation eligibility — onboarded AND (contributed or
+   *  came back after day one). The client still hides it when the browser
+   *  can't push, permission isn't "default", or it was dismissed. */
+  pushInvite: boolean
   /** Community pulse — trending threads to make the cockpit feel alive */
   trending: {
     title: string
@@ -147,6 +151,8 @@ export async function getMemberHomeData(userId: string): Promise<MemberHomeData 
         where: { id: userId },
         select: {
           name: true,
+          createdAt: true,
+          onboardingCompletedAt: true,
           profile: { select: { username: true, xp: true, standing: true } },
         },
       }),
@@ -588,6 +594,9 @@ export async function getMemberHomeData(userId: string): Promise<MemberHomeData 
     live,
     helpWanted,
     growMatches,
+    pushInvite:
+      !!user.onboardingCompletedAt &&
+      ((user.profile?.xp ?? 0) > 0 || diaries.length > 0 || Date.now() - user.createdAt.getTime() > 86400000),
     trending: trending.map((t) => ({
       title: t.title,
       slug: t.slug,
