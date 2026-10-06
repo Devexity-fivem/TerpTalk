@@ -18,6 +18,29 @@ import { purgeDiaryAnnouncements } from "@/lib/terpbot"
 import { isDiaryVisibility } from "@/lib/diary-visibility"
 import { entitySlug, diaryPath } from "@/lib/slugs"
 
+// GET — the caller's own diaries, minimal shape for pickers ("link your
+// grow" on thread create, Plant Doctor case context). Owner-scoped by
+// construction: returns nothing for anonymous callers.
+export async function GET() {
+  const session = await getServerSession(authOptions)
+  if (!session?.user?.id) return unauthorized()
+  const diaries = await prisma.growDiary.findMany({
+    where: { authorId: session.user.id, deleted: false },
+    orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
+    take: 200,
+    select: {
+      id: true,
+      title: true,
+      stage: true,
+      harvested: true,
+      visibility: true,
+      strain: true,
+      strainRef: { select: { name: true } },
+    },
+  })
+  return NextResponse.json({ diaries })
+}
+
 export async function POST(request: Request) {
   try {
     const maintenance = await checkMaintenance()

@@ -411,6 +411,77 @@ const main = async () => {
     ok("pd: anonymous sees sign-in instead of tracking",
       anonBody.includes("Sign in") && !anonBody.includes("Track this fix") && !anonBody.includes("Your tracked fixes"))
 
+    // ── Knowledge compounding — grow context + symptom filters ───────
+    // Fixtures are created HERE (not at suite start): the chat section's
+    // "cancelling creates no thread" check requires alice to own zero
+    // threads until this point.
+    const QUESTION_RE = /question|help|problem|doctor/i
+    const qCatRow = (await prisma.category.findMany({ where: { hidden: false }, select: { id: true, slug: true, name: true } }))
+      .find((c) => QUESTION_RE.test(`${c.slug} ${c.name}`))
+    if (!qCatRow) throw new Error("browser: no question-like category seeded")
+    const ctxThread = await prisma.thread.create({
+      data: {
+        title: `__br ctx question ${TS}`,
+        slug: `__br-ctx-${TS}`,
+        content: "browser fixture — symptom question with linked grow context",
+        categoryId: qCatRow.id,
+        authorId: alice.id,
+        contextDiaryId: pubDiary.id,
+      },
+    })
+    const pestTag = await prisma.tag.upsert({
+      where: { slug: "pests" },
+      update: {},
+      create: { name: "pests", slug: "pests" },
+    })
+    await prisma.threadTag.upsert({
+      where: { threadId_tagId: { threadId: ctxThread.id, tagId: pestTag.id } },
+      update: {},
+      create: { threadId: ctxThread.id, tagId: pestTag.id },
+    })
+    const privCtxThread = await prisma.thread.create({
+      data: {
+        title: `__br ctx private ${TS}`,
+        slug: `__br-ctxp-${TS}`,
+        content: "browser fixture — question linked to a private grow",
+        categoryId: qCatRow.id,
+        authorId: alice.id,
+        contextDiaryId: privDiary.id,
+      },
+    })
+    // The prisma-created fixtures need one real thread POST to bust the
+    // cached "forum" tag before /questions recomputes.
+    const bustRes = await aliceCtx.request.post(`${BASE}/api/forum/threads`, {
+      data: { title: `__br bust ${TS}`, content: "browser cache-bust thread body — enough chars", categoryId: qCatRow.id },
+    })
+    ok("kc: cache-bust thread create", bustRes.status() === 201, bustRes.status())
+
+    // Symptom filter — the pests-tagged question shows under its tag.
+    await gotoMain(anonPage, `${BASE}/questions?filter=all&symptom=pests`)
+    const qPestBody = (await anonPage.textContent("body")) ?? ""
+    ok("kc: symptom filter lists tagged question", qPestBody.includes(`__br ctx question ${TS}`))
+    // A different symptom does not.
+    await gotoMain(anonPage, `${BASE}/questions?filter=all&symptom=nutrient-deficiency`)
+    const qDefBody = (await anonPage.textContent("body")) ?? ""
+    ok("kc: other symptom excludes untagged question", !qDefBody.includes(`__br ctx question ${TS}`))
+    // The "grow linked" indicator rides the question card.
+    ok("kc: grow-linked indicator renders", qPestBody.includes("grow linked"))
+
+    // Thread page — public context chip visible to anon…
+    await gotoMain(anonPage, `${BASE}/forum/thread/${ctxThread.slug}`)
+    const ctxBody = (await anonPage.textContent("body")) ?? ""
+    ok("kc: public context grow chip renders for anon",
+      ctxBody.includes("About their grow:") && ctxBody.includes(`__br public grow ${TS}`))
+    // …private context hidden from anon…
+    const ctxPrivRes = await gotoMain(anonPage, `${BASE}/forum/thread/${privCtxThread.slug}`)
+    const ctxPrivBody = (await anonPage.textContent("body")) ?? ""
+    ok("kc: private context grow hidden from anon",
+      ctxPrivRes?.status() === 200 && !ctxPrivBody.includes("About their grow:"), ctxPrivRes?.status())
+    // …and shown to the diary owner.
+    await gotoMain(alicePage, `${BASE}/forum/thread/${privCtxThread.slug}`)
+    const privOwnerBody = (await alicePage.textContent("body")) ?? ""
+    ok("kc: private context grow shown to owner", privOwnerBody.includes("About their grow:"))
+
     // ── Block boundary (privacy) ─────────────────────────────────────
     await prisma.block.create({ data: { blockerId: alice.id, blockedId: bob.id } })
     const { context: bobCtx, page: bobPage } = await login(bobUsername)
@@ -430,6 +501,11 @@ const main = async () => {
     const overflowX = await mobPage.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1)
     ok("mobile: home renders without horizontal overflow at 390px", !overflowX)
     ok("mobile: nav menu toggle present", (await mobPage.locator('button[aria-label*="navigation menu"], a[href="/auth/signin"]').count()) >= 1)
+    await gotoMain(mobPage, `${BASE}/questions`)
+    const qOverflow = await mobPage.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1)
+    const qMobBody = (await mobPage.textContent("body")) ?? ""
+    ok("mobile: /questions renders symptom chips without overflow at 390px",
+      !qOverflow && qMobBody.includes("All symptoms"))
     await mob.close()
 
     await aliceCtx.close()

@@ -58,6 +58,7 @@ export async function POST(request: Request) {
 
     const body = await request.json().catch(() => ({}))
     const { title, content, categoryId, images, wizardResultId } = body
+    const { contextDiaryId } = body
     const tagInputs = Array.isArray(body.tags) ? body.tags.filter((t: unknown): t is string => typeof t === "string").map((t: string) => t.trim()).filter(Boolean) : []
 
     // Plant Doctor handoff — persist which wizard result produced this
@@ -166,6 +167,24 @@ export async function POST(request: Request) {
       return forbidden()
     }
 
+    // Optional "asking about my grow" context — only the author's own
+    // non-deleted diary can be attached. Any visibility is allowed at
+    // create; rendering applies the public-viewable rule at read time.
+    let cleanContextDiaryId: string | null = null
+    if (contextDiaryId != null) {
+      if (typeof contextDiaryId !== "string" || !contextDiaryId.trim()) {
+        return NextResponse.json({ error: "Invalid diary" }, { status: 400 })
+      }
+      const diary = await prisma.growDiary.findUnique({
+        where: { id: contextDiaryId.trim() },
+        select: { id: true, authorId: true, deleted: true },
+      })
+      if (!diary || diary.deleted || diary.authorId !== session.user.id) {
+        return NextResponse.json({ error: "Diary not found" }, { status: 400 })
+      }
+      cleanContextDiaryId = diary.id
+    }
+
     if ((containsExternalLink(title) || containsExternalLink(content)) && !(await isTrustedForLinks(session.user.id))) {
       await logSecurityEvent("NEWBIE_LINK_BLOCKED", {
         userId: session.user.id,
@@ -229,6 +248,7 @@ export async function POST(request: Request) {
         categoryId,
         authorId: session.user.id,
         wizardResultId: cleanWizardResultId,
+        contextDiaryId: cleanContextDiaryId,
         posts: {
           create: {
             content,

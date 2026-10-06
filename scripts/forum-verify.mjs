@@ -636,6 +636,115 @@ const main = async () => {
       ? pass("questions: unknown category falls back to all topics")
       : fail("questions bogus category", "bogus slug lost questions")
 
+    // ── 5e. Knowledge compounding — grow context + symptom filters ──
+    // Author's own diaries: one PUBLIC (link renders to everyone), one
+    // PRIVATE (link renders only to the owner).
+    const ctxDiaryPub = await prisma.growDiary.create({
+      data: { title: `__ctx pub ${Date.now()}`, description: "ctx", growType: "INDOOR", startDate: new Date(), authorId: author.id, visibility: "PUBLIC" },
+    })
+    const ctxDiaryPriv = await prisma.growDiary.create({
+      data: { title: `__ctx priv ${Date.now()}`, description: "ctx", growType: "INDOOR", startDate: new Date(), authorId: author.id, visibility: "PRIVATE" },
+    })
+    const foreignDiary = await prisma.growDiary.create({
+      data: { title: `__ctx foreign ${Date.now()}`, description: "ctx", growType: "INDOOR", startDate: new Date(), authorId: follower.id, visibility: "PUBLIC" },
+    })
+
+    r = await callApi("/api/diaries", { method: "GET" })
+    r.status === 401 ? pass("diaries: anon list → 401") : fail("anon diary list", r.status)
+    r = await callApi("/api/diaries", { method: "GET", cookie: authorCookie })
+    const ownList = r.data?.diaries ?? []
+    ;(r.status === 200 && ownList.some((d) => d.id === ctxDiaryPub.id) && ownList.some((d) => d.id === ctxDiaryPriv.id) && !ownList.some((d) => d.id === foreignDiary.id))
+      ? pass("diaries: owner list is owner-scoped")
+      : fail("diary list scope", { s: r.status, n: ownList.length })
+
+    // Symptom tag fixture on the unanswered question — a canonical
+    // taxonomy tag ("nutrient deficiency") as an ordinary ThreadTag.
+    const symTag = await prisma.tag.upsert({
+      where: { slug: "nutrient-deficiency" },
+      update: {},
+      create: { name: "nutrient deficiency", slug: "nutrient-deficiency" },
+    })
+    await prisma.threadTag.upsert({
+      where: { threadId_tagId: { threadId: qUnanswered.id, tagId: symTag.id } },
+      update: {},
+      create: { threadId: qUnanswered.id, tagId: symTag.id },
+    })
+
+    // Context-diary threads via the real API — each create busts the
+    // "forum" cache tag so the pages below recompute with the fixtures.
+    const qCtx = await callApi("/api/forum/threads", {
+      method: "POST",
+      body: { title: `${qTag} ctx pub`, content: "verification grow-context question — enough chars", categoryId: qCat.id, contextDiaryId: ctxDiaryPub.id },
+      cookie: authorCookie,
+    })
+    const qCtxThread = qCtx.data?.thread
+    if (qCtxThread?.id) threads.push(qCtxThread)
+    const storedCtx = qCtxThread ? await prisma.thread.findUnique({ where: { id: qCtxThread.id }, select: { contextDiaryId: true } }) : null
+    ;(qCtx.status === 201 && storedCtx?.contextDiaryId === ctxDiaryPub.id)
+      ? pass("context diary: own diary links on create")
+      : fail("context create", { s: qCtx.status, got: storedCtx?.contextDiaryId })
+
+    const qPriv = await callApi("/api/forum/threads", {
+      method: "POST",
+      body: { title: `${qTag} ctx priv`, content: "verification private-context question — enough chars", categoryId: qCat.id, contextDiaryId: ctxDiaryPriv.id },
+      cookie: authorCookie,
+    })
+    if (qPriv.data?.thread?.id) threads.push(qPriv.data.thread)
+    qPriv.status === 201
+      ? pass("context diary: private diary allowed at create")
+      : fail("context private create", { s: qPriv.status, d: qPriv.data })
+
+    r = await callApi("/api/forum/threads", {
+      method: "POST",
+      body: { title: `${qTag} ctx foreign`, content: "verification foreign-context question — enough chars", categoryId: qCat.id, contextDiaryId: foreignDiary.id },
+      cookie: authorCookie,
+    })
+    r.status === 400 ? pass("context diary: foreign diary rejected") : fail("foreign context", r.status)
+
+    r = await callApi("/api/forum/threads", {
+      method: "POST",
+      body: { title: `${qTag} ctx missing`, content: "verification missing-context question — enough chars", categoryId: qCat.id, contextDiaryId: "nonexistent-diary-id" },
+      cookie: authorCookie,
+    })
+    r.status === 400 ? pass("context diary: missing diary rejected") : fail("missing context", r.status)
+
+    // Thread page renders the linked grow — public diary visible to all,
+    // private diary only to its owner.
+    if (qCtxThread?.slug) {
+      const ctxHtml = await (await fetch(`${BASE}/forum/thread/${qCtxThread.slug}`)).text()
+      ctxHtml.includes("About their grow:")
+        ? pass("page: context grow chip renders for anon")
+        : fail("context chip anon", "chip missing")
+    }
+    if (qPriv.data?.thread?.slug) {
+      const privSlug = qPriv.data.thread.slug
+      const privAnon = await (await fetch(`${BASE}/forum/thread/${privSlug}`)).text()
+      const privOwner = await (await fetch(`${BASE}/forum/thread/${privSlug}`, { headers: { cookie: authorCookie } })).text()
+      ;(!privAnon.includes("About their grow:") && privOwner.includes("About their grow:"))
+        ? pass("page: private context hidden from anon, shown to owner")
+        : fail("context privacy", { anon: privAnon.includes("About their grow:"), owner: privOwner.includes("About their grow:") })
+    }
+
+    // Symptom-filter chips — the tagged fixture must appear under its tag
+    // and nowhere else; bogus slugs fall back to the unfiltered list.
+    qHtml = await (await fetch(`${BASE}/questions?filter=all&symptom=nutrient-deficiency`)).text()
+    qHtml.includes(`${qTag} unanswered`)
+      ? pass("questions: symptom filter finds tagged thread")
+      : fail("questions symptom", "tagged thread missing under its symptom")
+    qHtml = await (await fetch(`${BASE}/questions?filter=all&symptom=pests`)).text()
+    !qHtml.includes(`${qTag} unanswered`)
+      ? pass("questions: other symptom excludes untagged thread")
+      : fail("questions symptom scope", "untagged thread leaked into pests filter")
+    qHtml = await (await fetch(`${BASE}/questions?filter=all&symptom=__bogus__`)).text()
+    qHtml.includes(`${qTag} unanswered`)
+      ? pass("questions: unknown symptom falls back to unfiltered")
+      : fail("questions bogus symptom", "bogus symptom lost questions")
+    // The grow-linked question card carries the indicator.
+    qHtml = await (await fetch(`${BASE}/questions?filter=all`)).text()
+    qHtml.includes("grow linked")
+      ? pass("questions: grow-linked indicator on context threads")
+      : fail("grow linked chip", "indicator missing")
+
     // ── 6. Anon page smoke ──
     // authorThread, not thread — replier was permanently banned above, and
     // banned-author thread pages correctly 404 for everyone.

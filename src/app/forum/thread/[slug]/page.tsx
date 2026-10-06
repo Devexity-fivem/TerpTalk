@@ -4,7 +4,7 @@ import { publicUserSelect, isModerator, activeAuthor, blockedUserIds, notBlocked
 import { mediaProxyUrl } from "@/lib/media"
 import { diaryPath } from "@/lib/slugs"
 import { notFound, redirect } from "next/navigation"
-import { MessageSquare, MessagesSquare, Clock, CheckCircle2, Eye, BookOpen } from "@/lib/icons"
+import { MessageSquare, MessagesSquare, Clock, CheckCircle2, Eye, BookOpen, Sprout } from "@/lib/icons"
 import Link from "next/link"
 import ReplyForm from "@/components/reply-form"
 import ThreadScrollBar from "@/components/thread-scroll-bar"
@@ -102,6 +102,22 @@ async function getThreadData(slug: string, page: number, canSeeHidden: boolean, 
           author: { select: { ...publicUserSelect, banned: true, suspendedUntil: true } },
         },
       },
+      // "Asking about my grow" — author-linked context diary. Same
+      // disclosure rules as diaryFor: filtered below before render.
+      contextDiary: {
+        select: {
+          id: true,
+          slug: true,
+          title: true,
+          strain: true,
+          stage: true,
+          harvested: true,
+          deleted: true,
+          visibility: true,
+          authorId: true,
+          author: { select: { ...publicUserSelect, banned: true, suspendedUntil: true } },
+        },
+      },
     },
   })
 
@@ -125,6 +141,18 @@ async function getThreadData(slug: string, page: number, canSeeHidden: boolean, 
     const blocked = blockedIds.includes(thread.diaryFor.authorId)
     if (thread.diaryFor.deleted || a.banned || (a.suspendedUntil && a.suspendedUntil.getTime() > Date.now()) || notPublic || blocked) {
       thread.diaryFor = null
+    }
+  }
+
+  // Context diary — identical disclosure rules: hidden when deleted, its
+  // author inactive/blocked, or the diary isn't PUBLIC and the viewer
+  // isn't the diary's owner.
+  if (thread.contextDiary) {
+    const a = thread.contextDiary.author
+    const notPublic = thread.contextDiary.visibility !== "PUBLIC" && thread.contextDiary.authorId !== viewerId
+    const blocked = blockedIds.includes(thread.contextDiary.authorId)
+    if (thread.contextDiary.deleted || a.banned || (a.suspendedUntil && a.suspendedUntil.getTime() > Date.now()) || notPublic || blocked) {
+      thread.contextDiary = null
     }
   }
 
@@ -348,6 +376,7 @@ export default async function ThreadPage({
 
   const acceptedPost = thread.acceptedAnswer
   const diaryCtx = thread.diaryFor
+  const contextCtx = thread.contextDiary
 
   return (
     <div className="min-h-screen bg-background">
@@ -461,6 +490,22 @@ export default async function ThreadPage({
                 <span>Grow diary: {diaryCtx.title}</span>
                 <span className="text-xs text-muted-foreground">
                   {diaryCtx.strain ? `${diaryCtx.strain} · ` : ""}{diaryCtx.harvested ? "harvested" : diaryCtx.stage.toLowerCase()}
+                </span>
+              </Link>
+            </div>
+          )}
+          {/* Grow context — the asker linked one of their own diaries so
+              answers can reference its strain/stage/setup. */}
+          {contextCtx && (
+            <div className="mt-3 mb-2">
+              <Link
+                href={diaryPath(contextCtx)}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-spectrum/30 bg-spectrum/5 text-sm hover:bg-spectrum/10 hover:border-spectrum/50 transition-colors"
+              >
+                <Sprout className="w-4 h-4 text-spectrum shrink-0" />
+                <span>About their grow: {contextCtx.title}</span>
+                <span className="text-xs text-muted-foreground">
+                  {contextCtx.strain ? `${contextCtx.strain} · ` : ""}{contextCtx.harvested ? "harvested" : contextCtx.stage.toLowerCase()}
                 </span>
               </Link>
             </div>

@@ -35,14 +35,31 @@ interface SimilarThread {
   replyCount: number
 }
 
+interface OwnDiary {
+  id: string
+  title: string
+  stage: string
+  harvested: boolean
+  strain: string | null
+  strainRef: { name: string } | null
+}
+
+// Categories that read as help surfaces — mirrors the server-side
+// QUESTION_RE convention used by /questions and the answer matcher.
+const QUESTION_RE = /question|help|problem|doctor/i
+
 function NewThreadForm() {
   const { data: session, status } = useSession()
   const router = useRouter()
   const searchParams = useSearchParams()
-  
+
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
   const [categories, setCategories] = useState<Category[]>([])
+  const [ownDiaries, setOwnDiaries] = useState<OwnDiary[]>([])
+  // "Asking about my grow" — an optional link to one of the member's own
+  // diaries. ?diary=<id> prefills (e.g. a future diary-page affordance).
+  const [contextDiaryId, setContextDiaryId] = useState<string>(() => searchParams?.get("diary")?.trim() || "")
   const wizardResultId = searchParams?.get("result") || null
   const [formData, setFormData] = useState(() => {
     const resultId = searchParams?.get("result")
@@ -90,6 +107,10 @@ function NewThreadForm() {
       .then(res => res.json())
       .then(data => setCategories(data.categories || []))
       .catch(() => setError("Failed to load categories"))
+    fetch("/api/diaries")
+      .then(res => res.ok ? res.json() : { diaries: [] })
+      .then(data => setOwnDiaries(data.diaries || []))
+      .catch(() => setOwnDiaries([]))
   }, [])
 
   useEffect(() => {
@@ -139,7 +160,7 @@ function NewThreadForm() {
       const response = await fetch("/api/forum/threads", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...formData, categoryId, images, tags, poll, wizardResultId }),
+        body: JSON.stringify({ ...formData, categoryId, images, tags, poll, wizardResultId, contextDiaryId: contextDiaryId || null }),
       })
 
       if (!response.ok) {
@@ -283,6 +304,36 @@ function NewThreadForm() {
                         )
                       })}
                     </div>
+                  </div>
+                )}
+                {/* Grow context — on help/question categories the member
+                    can attach one of their own diaries so answers carry the
+                    grow's structured facts. Only the author links; readers
+                    see it only while the diary is publicly viewable. */}
+                {ownDiaries.length > 0 &&
+                  (QUESTION_RE.test(`${categories.find((c) => c.id === (formData.categoryId || prefillCategoryId))?.slug ?? ""} ${categories.find((c) => c.id === (formData.categoryId || prefillCategoryId))?.name ?? ""}`) ||
+                    contextDiaryId) && (
+                  <div>
+                    <label htmlFor="contextDiary" className="block text-sm font-medium mb-2">
+                      About one of your grows? (optional)
+                    </label>
+                    <select
+                      id="contextDiary"
+                      value={contextDiaryId}
+                      disabled={loading}
+                      onChange={(e) => setContextDiaryId(e.target.value)}
+                      className="w-full px-4 py-2 rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary"
+                    >
+                      <option value="">No grow linked</option>
+                      {ownDiaries.map((d) => (
+                        <option key={d.id} value={d.id}>
+                          {d.title}{d.strainRef?.name || d.strain ? ` — ${d.strainRef?.name ?? d.strain}` : ""}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="mt-1.5 text-xs text-muted-foreground">
+                      Links your question to the grow&apos;s strain, stage, and setup. Private grows stay hidden — the link only shows while the diary is public.
+                    </p>
                   </div>
                 )}
                 <PollComposer

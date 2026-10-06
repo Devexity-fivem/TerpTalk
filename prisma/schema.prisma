@@ -259,6 +259,10 @@ model Thread {
   // Set when the thread was created from the Plant Doctor wizard — powers
   // exact-match community answers and the symptom tag taxonomy.
   wizardResultId String?
+  // Optional "asking about my grow" context — always the thread author's
+  // own diary. Rendered only when the diary is publicly viewable (or the
+  // viewer owns it); SetNull keeps the thread intact if the diary goes.
+  contextDiaryId String?
 
   category   Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
   author     User     @relation("ThreadAuthor", fields: [authorId], references: [id], onDelete: Cascade)
@@ -271,10 +275,12 @@ model Thread {
   followers  ThreadFollow[]
   diaryFor   GrowDiary? @relation("DiaryDiscussion")
   setupFor   GrowSetup? @relation("SetupDiscussion")
+  contextDiary GrowDiary? @relation("ThreadContextDiary", fields: [contextDiaryId], references: [id], onDelete: SetNull)
 
   @@index([categoryId])
   @@index([authorId])
   @@index([wizardResultId])
+  @@index([contextDiaryId])
   @@index([replyCount])
   @@index([createdAt])
   @@index([views])
@@ -452,6 +458,7 @@ model GrowDiary {
   followers     DiaryFollow[]
   diaryContestEntries DiaryContestEntry[]
   plantDoctorCases  PlantDoctorCase[]
+  contextThreads  Thread[]    @relation("ThreadContextDiary")
   pinnedBy      Profile[]  @relation("PinnedHarvest")
   featuredBy    Profile[]  @relation("ProfileFeaturedGrow")
 
