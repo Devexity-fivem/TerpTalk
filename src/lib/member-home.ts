@@ -22,6 +22,7 @@ import { mediaProxyUrl } from "@/lib/media"
 import { diaryCompleteness } from "@/lib/diary-weeks"
 import { helpWantedForUser, type HelpWantedItem } from "@/lib/answer-match"
 import { growMatchesForUser, type GrowMatchesResult } from "@/lib/grow-matches"
+import { getSuggestedGrowers, type SuggestedGrower } from "@/lib/suggested-growers"
 import { EXPERIMENT_CATEGORY_LABELS, type ExperimentCategory } from "@/lib/experiments"
 import { TECHNIQUE_LABELS } from "@/lib/grow-fields"
 import { hasUnlock } from "@/lib/progression"
@@ -129,6 +130,11 @@ export interface MemberHomeData {
    *  came back after day one). The client still hides it when the browser
    *  can't push, permission isn't "default", or it was dismissed. */
   pushInvite: boolean
+  /** Suggested growers — deterministic relevance (shared grow signals,
+   *  follow-graph proximity, contribution evidence) from
+   *  lib/suggested-growers. Personalized for the member; already-
+   *  followed and blocked members are excluded at query time. */
+  suggestedGrowers: SuggestedGrower[]
   /** Community pulse — trending threads to make the cockpit feel alive */
   trending: {
     title: string
@@ -145,7 +151,7 @@ const GROW_STAGE_LABELS: Record<string, string> = Object.fromEntries(
 )
 
 export async function getMemberHomeData(userId: string): Promise<MemberHomeData | null> {
-  const [user, quests, journey, staleDiary, diaries, followedThreads, followedDiaries, unreadNotifications, live, trendingCandidates, harvestAnalyticsUnlocked, helpWanted, growMatches] =
+  const [user, quests, journey, staleDiary, diaries, followedThreads, followedDiaries, unreadNotifications, live, trendingCandidates, harvestAnalyticsUnlocked, helpWanted, growMatches, suggestedGrowers] =
     await Promise.all([
       prisma.user.findUnique({
         where: { id: userId },
@@ -263,6 +269,9 @@ export async function getMemberHomeData(userId: string): Promise<MemberHomeData 
       // Grows-Like-Yours card — bounded candidate pool scored in memory;
       // failures degrade to an empty card rather than breaking the cockpit.
       growMatchesForUser(userId).catch((): GrowMatchesResult => ({ reference: null, matches: [] })),
+      // Growers-to-follow card — bounded deterministic suggestions;
+      // failures degrade to an empty section.
+      getSuggestedGrowers(userId, { limit: 3 }).catch((): SuggestedGrower[] => []),
     ])
 
   if (!user) return null
@@ -594,6 +603,7 @@ export async function getMemberHomeData(userId: string): Promise<MemberHomeData 
     live,
     helpWanted,
     growMatches,
+    suggestedGrowers,
     pushInvite:
       !!user.onboardingCompletedAt &&
       ((user.profile?.xp ?? 0) > 0 || diaries.length > 0 || Date.now() - user.createdAt.getTime() > 86400000),

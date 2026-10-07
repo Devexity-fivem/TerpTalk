@@ -19,6 +19,8 @@ import {
   type DiscoverItem,
   type DiscoverTab,
 } from "@/lib/discover"
+import { getSuggestedGrowers } from "@/lib/suggested-growers"
+import SuggestedGrowerCard from "@/components/suggested-grower-card"
 
 export const dynamic = "force-dynamic"
 
@@ -137,9 +139,13 @@ export default async function DiscoverPage({
   const { tab } = (await searchParams) || {}
   const activeTab: DiscoverTab = DISCOVER_TABS.includes(tab as DiscoverTab) ? (tab as DiscoverTab) : "latest"
   const session = await getSession()
-  const [browse, blockedIds] = await Promise.all([
+  const [browse, blockedIds, suggestedGrowers] = await Promise.all([
     getDiscoverBrowse(activeTab),
     blockedUserIds(session?.user?.id),
+    // Suggestions only load for the growers tab — personalized for
+    // members, public-evidence ranking for guests. Never cached:
+    // follow/block state is re-applied every request.
+    activeTab === "growers" ? getSuggestedGrowers(session?.user?.id ?? null) : Promise.resolve(null),
   ])
 
   const tabCls = (t: DiscoverTab) =>
@@ -194,6 +200,29 @@ export default async function DiscoverPage({
               )}
             </SectionCard>
           </div>
+        ) : activeTab === "growers" ? (
+          <div className="space-y-6">
+            <SectionCard title={<span className="flex items-center gap-2"><Users className="w-5 h-5 text-primary" />Growers you may want to follow</span>}>
+              {suggestedGrowers && suggestedGrowers.length > 0 ? (
+                <div className="grid sm:grid-cols-2 gap-3">
+                  {suggestedGrowers.map((g) => (
+                    <SuggestedGrowerCard key={g.userId} grower={g} />
+                  ))}
+                </div>
+              ) : (
+                <EmptyState icon={Users} title={EMPTY.growers.title} description={EMPTY.growers.description} action={EMPTY.growers.action} />
+              )}
+            </SectionCard>
+            {(() => {
+              const suggestedIds = new Set((suggestedGrowers ?? []).map((g) => g.userId))
+              const rest = filtered(browse.layout === "list" ? browse.items : []).filter((i) => !suggestedIds.has(i.userId ?? ""))
+              return rest.length === 0 ? null : (
+                <SectionCard title={<span className="flex items-center gap-2"><Users className="w-5 h-5 text-primary" />Active growers</span>}>
+                  <ItemGrid items={rest} />
+                </SectionCard>
+              )
+            })()}
+          </div>
         ) : (
           <SectionCard
             title={
@@ -204,8 +233,6 @@ export default async function DiscoverPage({
                   <Dna className="w-5 h-5 text-primary" />
                 ) : activeTab === "setups" ? (
                   <Wrench className="w-5 h-5 text-primary" />
-                ) : activeTab === "growers" ? (
-                  <Users className="w-5 h-5 text-primary" />
                 ) : activeTab === "grows" ? (
                   <Sprout className="w-5 h-5 text-primary" />
                 ) : activeTab === "harvests" ? (
@@ -222,7 +249,7 @@ export default async function DiscoverPage({
               const items = filtered(browse.layout === "list" ? browse.items : [])
               return items.length === 0 ? (
                 <EmptyState
-                  icon={KIND_ICON[activeTab === "questions" ? "QUESTION" : activeTab === "strains" ? "STRAIN" : activeTab === "setups" ? "SETUP" : activeTab === "growers" ? "GROWER" : activeTab === "harvests" ? "HARVEST" : activeTab === "grows" ? "DIARY" : "THREAD"]}
+                  icon={KIND_ICON[activeTab === "questions" ? "QUESTION" : activeTab === "strains" ? "STRAIN" : activeTab === "setups" ? "SETUP" : activeTab === "harvests" ? "HARVEST" : activeTab === "grows" ? "DIARY" : "THREAD"]}
                   title={EMPTY[activeTab].title}
                   description={EMPTY[activeTab].description}
                   action={EMPTY[activeTab].action}

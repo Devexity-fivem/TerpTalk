@@ -9,6 +9,7 @@ import MemberGreeting from "@/components/member-greeting"
 import OpenChatButton from "@/components/open-chat-button"
 import Tooltip, { InfoTip } from "@/components/ui/tooltip"
 import EmptyState from "@/components/ui/empty-state"
+import SuggestedGrowerCard from "@/components/suggested-grower-card"
 import StageProgress from "@/components/stage-progress"
 import PushToggle from "@/components/push-toggle"
 import { DIFFICULTY_LABELS } from "@/lib/grow-fields"
@@ -683,6 +684,32 @@ export default function MemberHome({ data }: { data: MemberHomeData }) {
                 </li>
               ))}
             </ul>
+          </section>
+        )}
+
+        {/* Growers to follow — deterministic suggestions matched on the
+            member's public grow signals + follow graph (canonical
+            lib/suggested-growers). Every reason cites a real signal. */}
+        {data.suggestedGrowers.length > 0 && (
+          <section className="mt-4 tt-spotlight bg-card/80 rounded-2xl border border-border/70 p-4 sm:p-5">
+            <div className="mb-3 flex items-center justify-between gap-2">
+              <h2 className="flex items-center gap-2 font-display text-sm font-semibold">
+                <Users className="h-4 w-4 text-primary" />
+                Growers to follow
+                <InfoTip content="Members whose public grows, strains, and contributions match yours — ranked deterministically, never by popularity." />
+              </h2>
+              <Link
+                href="/discover?tab=growers"
+                className="tap-target shrink-0 text-xs font-medium text-primary inline-flex items-center gap-0.5 hover:underline"
+              >
+                All growers <ArrowRight className="h-3 w-3" />
+              </Link>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {data.suggestedGrowers.map((g) => (
+                <SuggestedGrowerCard key={g.userId} grower={g} />
+              ))}
+            </div>
           </section>
         )}
 

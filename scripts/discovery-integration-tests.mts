@@ -586,6 +586,127 @@ async function run() {
       }
     }
 
+    // ─────────────────────────────────────────────────────────────
+    // Suggested growers (Phase 4) — deterministic relevance, privacy
+    // non-influence, eligibility gates, stable ordering.
+    // ─────────────────────────────────────────────────────────────
+    {
+      const { getSuggestedGrowers } = await import("@/lib/suggested-growers")
+
+      const sugViewer = await mkUser(`__t_sv_${STAMP}`)
+      const sugMatch = await mkUser(`__t_sm_${STAMP}`)     // shared public strain
+      const sugGraph = await mkUser(`__t_sg_${STAMP}`)     // shared followee only
+      const sugPrivEv = await mkUser(`__t_sp_${STAMP}`)    // grows viewer's PRIVATE strain publicly
+      const sugUnlEv = await mkUser(`__t_su_${STAMP}`)     // grows viewer's UNLISTED strain publicly
+      const sugFollowed = await mkUser(`__t_sf_${STAMP}`)  // already followed
+      const sugBlocked = await mkUser(`__t_sb_${STAMP}`)   // blocked by viewer
+      const sugBlocksViewer = await mkUser(`__t_sx_${STAMP}`) // blocked the viewer
+      const sugBanned = await mkUser(`__t_sz_${STAMP}`, { banned: true })
+      const sugHidden = await mkUser(`__t_sh_${STAMP}`)    // hideOnlineStatus
+      const sharedFollowee = await mkUser(`__t_st_${STAMP}`)
+      ids.push(
+        sugViewer.id, sugMatch.id, sugGraph.id, sugPrivEv.id, sugUnlEv.id,
+        sugFollowed.id, sugBlocked.id, sugBlocksViewer.id, sugBanned.id,
+        sugHidden.id, sharedFollowee.id,
+      )
+      await prisma.profile.update({ where: { userId: sugHidden.id }, data: { hideOnlineStatus: true } })
+
+      const mkD = (authorId: string, over: Record<string, unknown>) =>
+        prisma.growDiary.create({
+          data: { title: `__t_sgrow ${STAMP}`, description: "", growType: "INDOOR", startDate: new Date(), authorId, ...over },
+          select: { id: true },
+        }).then((d) => (diaryIds.push(d.id), d))
+
+      // Viewer signals: PUBLIC diary grows "SG SharedDream" in coco w/ LST.
+      // PRIVATE + UNLISTED diaries must never become recommendation evidence.
+      await mkD(sugViewer.id, { strain: "SG SharedDream", mediumType: "COCO", techniques: ["LST"], stage: "VEGETATIVE" })
+      await mkD(sugViewer.id, { strain: "SG PrivOnly", visibility: "PRIVATE" })
+      await mkD(sugViewer.id, { strain: "SG UnlOnly", visibility: "UNLISTED" })
+
+      // Candidates' public evidence.
+      await mkD(sugMatch.id, { strain: "SG SharedDream", mediumType: "COCO", stage: "VEGETATIVE" })
+      await mkD(sugGraph.id, { strain: "SG NoOverlap", mediumType: "HYDRO", growType: "OUTDOOR" })
+      await mkD(sugPrivEv.id, { strain: "SG PrivOnly" })
+      await mkD(sugUnlEv.id, { strain: "SG UnlOnly" })
+      await mkD(sugFollowed.id, { strain: "SG SharedDream" })
+      await mkD(sugBlocked.id, { strain: "SG SharedDream" })
+      await mkD(sugBlocksViewer.id, { strain: "SG SharedDream" })
+      await mkD(sugBanned.id, { strain: "SG SharedDream" })
+      await mkD(sugHidden.id, { strain: "SG SharedDream" })
+
+      // Graph: viewer follows sharedFollowee; sugGraph follows them too.
+      await prisma.follow.create({ data: { followerId: sugViewer.id, followingId: sharedFollowee.id } })
+      await prisma.follow.create({ data: { followerId: sugGraph.id, followingId: sharedFollowee.id } })
+      // Already-followed + both-direction blocks.
+      await prisma.follow.create({ data: { followerId: sugViewer.id, followingId: sugFollowed.id } })
+      await prisma.block.create({ data: { blockerId: sugViewer.id, blockedId: sugBlocked.id } })
+      await prisma.block.create({ data: { blockerId: sugBlocksViewer.id, blockedId: sugViewer.id } })
+
+      // Accepted answer for sugMatch — helpfulness signal.
+      const sugThread = await prisma.thread.create({
+        data: { title: `__t_sg q ${STAMP}`, slug: `__t-sg-q-${STAMP}`, content: "x", authorId: sugViewer.id, categoryId: (await prisma.category.findFirstOrThrow()).id },
+      })
+      threadIds.push(sugThread.id)
+      const sugPost = await prisma.post.create({ data: { content: "answer", threadId: sugThread.id, authorId: sugMatch.id } })
+      postIds.push(sugPost.id)
+      await prisma.thread.update({ where: { id: sugThread.id }, data: { acceptedAnswerId: sugPost.id } })
+
+      const res = await getSuggestedGrowers(sugViewer.id, { limit: 12 })
+      const idsOf = res.map((g) => g.userId)
+
+      // Eligibility gates.
+      assert.ok(!idsOf.includes(sugViewer.id), "viewer never suggested to self")
+      assert.ok(!idsOf.includes(sugFollowed.id), "already-followed excluded")
+      assert.ok(!idsOf.includes(sugBlocked.id), "blocked-by-viewer excluded")
+      assert.ok(!idsOf.includes(sugBlocksViewer.id), "viewer-blocked-by excluded")
+      assert.ok(!idsOf.includes(sugBanned.id), "banned member excluded")
+      assert.ok(!idsOf.includes(sugHidden.id), "hideOnlineStatus member excluded")
+
+      // Personalized relevance + honest reasons.
+      const matchCard = res.find((g) => g.userId === sugMatch.id)
+      assert.ok(matchCard, "shared-strain grower suggested")
+      assert.ok(matchCard!.reasons.some((r) => r.kind === "STRAIN" && r.label.includes("SG SharedDream")), `strain reason cites real strain, got ${JSON.stringify(matchCard!.reasons)}`)
+      assert.ok(matchCard!.reasons.some((r) => r.kind === "ACCEPTED_ANSWERS"), "accepted-answer reason present")
+      assert.ok(matchCard!.href === `/u/${matchCard!.username}`, "canonical /u/ link")
+
+      // Private/unlisted viewer data must not influence suggestions:
+      // those candidates may appear only via public evidence, never a
+      // STRAIN reason naming the private/unlisted strain.
+      for (const [cand, leaked] of [[sugPrivEv, "SG PrivOnly"], [sugUnlEv, "SG UnlOnly"]] as const) {
+        const card = res.find((g) => g.userId === cand.id)
+        if (card) assert.ok(!card.reasons.some((r) => r.label.includes(leaked)), `${leaked} never a reason`)
+      }
+
+      // Graph proximity: shared followee produces an honest reason.
+      const graphCard = res.find((g) => g.userId === sugGraph.id)
+      if (graphCard) {
+        assert.ok(graphCard.reasons.some((r) => r.kind === "SHARED_FOLLOW"), `shared-follow reason, got ${JSON.stringify(graphCard.reasons)}`)
+      }
+
+      // Determinism: identical ordering across repeat calls, and the
+      // strongest relevance match ranks ahead of weaker fillers.
+      const res2 = await getSuggestedGrowers(sugViewer.id, { limit: 12 })
+      assert.deepEqual(res2.map((g) => g.userId), idsOf, "deterministic ordering across calls")
+      if (matchCard && graphCard) {
+        assert.ok(idsOf.indexOf(sugMatch.id) < idsOf.indexOf(sugGraph.id), "strain match outranks graph-only")
+      }
+
+      // Follow-through: after the viewer follows a suggestion, they are
+      // excluded on the next call (no stale recommendation).
+      await prisma.follow.create({ data: { followerId: sugViewer.id, followingId: sugMatch.id } })
+      const res3 = await getSuggestedGrowers(sugViewer.id, { limit: 12 })
+      assert.ok(!res3.some((g) => g.userId === sugMatch.id), "newly-followed grower excluded immediately")
+
+      // Guest path: public evidence only — no self/follow personalization,
+      // no shared-follow reasons, no private-strain leakage.
+      const guest = await getSuggestedGrowers(null, { limit: 12 })
+      assert.ok(!guest.some((g) => g.userId === sugBanned.id), "guest: banned excluded")
+      assert.ok(!guest.some((g) => g.userId === sugHidden.id), "guest: hideOnlineStatus excluded")
+      assert.ok(guest.every((g) => !g.reasons.some((r) => r.kind === "SHARED_FOLLOW")), "guest: no graph reasons")
+      assert.ok(guest.every((g) => !g.reasons.some((r) => /SG PrivOnly|SG UnlOnly/.test(r.label))), "guest: no non-public strain evidence")
+      console.log("✓ suggested growers — eligibility, reasons, privacy, determinism")
+    }
+
     console.log("All Discovery filters + sitemap tests passed.")
   } finally {
     for (const id of postIds) {
