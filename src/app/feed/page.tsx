@@ -1,19 +1,18 @@
 import { prisma } from "@/lib/prisma"
 import { unstable_cache } from "next/cache"
-import { publicUserSelect, activeAuthor, blockedUserIds, notBlockedAuthor } from "@/lib/security"
+import { publicUserSelect, activeAuthor } from "@/lib/security"
 import { getSiteStats } from "@/lib/community-stats"
-import { publicDiaryWhere } from "@/lib/diary-visibility"
-import { mediaProxyUrl } from "@/lib/media"
 import { getSession } from "@/lib/session"
-import { Leaf, MessageSquare, TrendingUp, Calendar, Users, UserPlus, Sprout, Award, Heart } from "@/lib/icons"
-import { updateAnchor } from "@/lib/update-social"
+import { Leaf, MessageSquare, TrendingUp, Calendar, UserPlus, Sprout, Award } from "@/lib/icons"
 import { LiveRefresh } from "@/components/live-refresh"
 import Link from "next/link"
 import RoleBadge from "@/components/role-badge"
 import ProfileCard from "@/components/ui/profile-card"
-import Tooltip from "@/components/ui/tooltip"
-import TimeAgo from "@/components/ui/time-ago"
 import PageHeader from "@/components/ui/page-header"
+import FeedList from "@/components/feed-list"
+import type { FeedAppearance } from "@/components/feed-list"
+import { FEED_KINDS, feedDiaryWhere, getFeedPage, resolveFeedScope } from "@/lib/feed"
+import type { FeedKind, FeedMode } from "@/lib/feed"
 import { diaryPath } from "@/lib/slugs"
 
 export const dynamic = "force-dynamic"
@@ -44,191 +43,19 @@ export const metadata = {
   robots: { index: false, follow: false },
 }
 
-async function getFeedData(userId?: string, tab = "latest") {
-  // Resolve follow sets when the Following / For You tabs are active
-  const personal = tab === "following" || tab === "for-you"
-  let followingIds: string[] = []
-  let followedDiaryIds: string[] = []
-  let followedCategoryIds: string[] = []
-  if (userId && personal) {
-    const [follows, diaryFollows, categoryFollows] = await Promise.all([
-      prisma.follow.findMany({ where: { followerId: userId }, select: { followingId: true } }),
-      prisma.diaryFollow.findMany({ where: { userId }, select: { diaryId: true } }),
-      tab === "for-you"
-        ? prisma.categoryFollow.findMany({ where: { userId }, select: { categoryId: true } })
-        : Promise.resolve([] as { categoryId: string }[]),
-    ])
-    followingIds = follows.map((f) => f.followingId)
-    followedDiaryIds = diaryFollows.map((f) => f.diaryId)
-    followedCategoryIds = categoryFollows.map((f) => f.categoryId)
-  }
-
-  // Authors the viewer has blocked or been blocked by never appear.
-  const blockedIds = await blockedUserIds(userId)
-  const noBlocked = notBlockedAuthor(blockedIds)
-
-  // Cold start: a signed-in user on a personal tab with zero follows falls
-  // back to global content instead of an empty feed — decided before
-  // querying, so no extra queries run.
-  const coldStart =
-    personal && !!userId &&
-    followingIds.length === 0 && followedDiaryIds.length === 0 && followedCategoryIds.length === 0
-
-  // Visibility: global tabs are PUBLIC-only. On the Following tab a member
-  // sees PUBLIC rows from followed authors, plus PUBLIC|UNLISTED rows for
-  // diaries they explicitly followed (they already hold the link).
-  const updateWhere = personal && !coldStart
-    ? {
-        diary: { deleted: false, author: activeAuthor() },
-        ...noBlocked,
-        OR: [
-          { authorId: { in: followingIds }, diary: { visibility: "PUBLIC" } },
-          { diaryId: { in: followedDiaryIds }, diary: { visibility: { in: ["PUBLIC", "UNLISTED"] } } },
-        ],
-      }
-    : { diary: { deleted: false, author: activeAuthor(), ...publicDiaryWhere }, ...noBlocked }
-  const threadWhere = personal && !coldStart
-    ? tab === "following"
-      ? { deleted: false, category: { hidden: false }, author: activeAuthor(), authorId: { in: followingIds, ...(blockedIds.length ? { notIn: blockedIds } : {}) } }
-      : { deleted: false, category: { hidden: false }, author: activeAuthor(), OR: [{ authorId: { in: followingIds } }, { categoryId: { in: followedCategoryIds } }], ...noBlocked }
-    : { deleted: false, category: { hidden: false }, author: activeAuthor(), ...noBlocked }
-  const diaryWhere = personal && !coldStart
-    ? {
-        deleted: false,
-        author: activeAuthor(),
-        ...noBlocked,
-        OR: [
-          { ...publicDiaryWhere, authorId: { in: followingIds } },
-          { followers: { some: { userId } }, visibility: { in: ["PUBLIC", "UNLISTED"] } },
-        ],
-      }
-    : { deleted: false, author: activeAuthor(), ...publicDiaryWhere, ...noBlocked }
-
-  // Get recent activity from various sources
-  const recentDiaryUpdates = await prisma.diaryUpdate.findMany({
-    where: updateWhere,
-    take: 10,
-    orderBy: { createdAt: "desc" },
-    include: {
-      diary: {
-        include: {
-          author: { select: publicUserSelect },
-          _count: { select: { followers: true, updates: true } },
-        },
-      },
-      author: { select: publicUserSelect },
-      images: { take: 1 },
-      // Social Grow Updates — interaction counts ride the existing query
-      // (SQL COUNT subselects, no extra round trip, no reaction rows).
-      _count: { select: { reactions: true, comments: { where: { deleted: false, author: activeAuthor() } } } },
-    },
-  })
-
-  const recentThreads = await prisma.thread.findMany({
-    where: threadWhere,
-    take: 10,
-    orderBy: { createdAt: "desc" },
-    include: {
-      author: { select: publicUserSelect },
-      category: true,
-      _count: {
-        select: { posts: { where: { deleted: false } } },
-      },
-    },
-  })
-
-  // Harvests — completed grows, needed for both mixed feed and harvests mode
-  const recentHarvests = await prisma.growDiary.findMany({
-    where: {
-      ...diaryWhere,
-      harvested: true,
-      harvestedAt: { not: null },
-    },
-    take: 8,
-    orderBy: { harvestedAt: "desc" },
-    include: {
-      author: { select: publicUserSelect },
-      updates: { take: 1, orderBy: { createdAt: "desc" }, include: { images: { take: 1, orderBy: { order: "asc" } } } },
-      _count: { select: { updates: true, followers: true } },
-    },
-  })
-
-  // Restricted-class media — feed thumbs serialize as their authorization
-  // endpoint, never the raw blob URL.
-  for (const u of recentDiaryUpdates) for (const img of u.images) img.url = mediaProxyUrl("diary", img.id)
-  for (const d of recentHarvests)
-    for (const img of d.updates[0]?.images ?? []) img.url = mediaProxyUrl("diary", img.id)
-
-  // Build a mixed feed — used for Latest (chronological), Following, and For You.
-  // For the impersonal "latest" tab the score IS recency — engagement
-  // weighting would let old hot content outrank fresh posts, which
-  // contradicts what "Latest" promises.
-  const feedItems: { type: "thread" | "update" | "harvest"; score: number; data: (typeof recentDiaryUpdates)[number] | (typeof recentThreads)[number] | (typeof recentHarvests)[number] }[] = []
-  {
-    const now = Date.now()
-    const weekMs = 7 * 24 * 60 * 60 * 1000
-    const threadItems = recentThreads.map((t) => {
-      const ts = new Date(t.createdAt).getTime()
-      const recency = Math.max(0, 1 - (now - ts) / weekMs)
-      const engagement = Math.min(1, (t.replyCount + t.views) / 100)
-      return { type: "thread" as const, score: personal ? recency * 0.6 + engagement * 0.4 : ts, data: t }
-    })
-    const updateItems = recentDiaryUpdates.map((u) => {
-      const ts = new Date(u.createdAt).getTime()
-      const recency = Math.max(0, 1 - (now - ts) / weekMs)
-      const engagement = Math.min(1, ((u.diary._count?.followers ?? 0) + (u.diary._count?.updates ?? 0)) / 20)
-      return { type: "update" as const, score: personal ? recency * 0.6 + engagement * 0.4 : ts, data: u }
-    })
-    const harvestItems = recentHarvests.map((h) => {
-      const ts = new Date(h.harvestedAt ?? h.createdAt).getTime()
-      const recency = Math.max(0, 1 - (now - ts) / weekMs)
-      const engagement = Math.min(1, (h._count?.followers ?? 0) / 20)
-      return { type: "harvest" as const, score: personal ? recency * 0.7 + engagement * 0.3 : ts, data: h }
-    })
-    feedItems.push(...threadItems, ...updateItems, ...harvestItems)
-    feedItems.sort((a, b) => b.score - a.score)
-    feedItems.splice(12)
-  }
-
-  const trendingDiaries = await prisma.growDiary.findMany({
-    where: diaryWhere,
-    take: 5,
-    orderBy: [
-      { featured: "desc" },
-      { createdAt: "desc" },
-    ],
-    include: {
-      author: { select: publicUserSelect },
-      _count: {
-        select: { updates: true, followers: true },
-      },
-    },
-  })
-
-  // members/diaries share the site-wide "home-stats" cache entry (identical
-  // semantics). threadCount here excludes hidden categories and
-  // popularCategories ranks by all threads (incl. deleted) — different
-  // predicates from home-stats, so they get their own 60s entry.
-  const [siteStats, feedStats] = await Promise.all([getSiteStats(), getFeedStats()])
-  const memberCount = siteStats.members
-  const diaryCount = siteStats.diaries
-  const { threadCount, popularCategories } = feedStats
-
-  return {
-    recentDiaryUpdates,
-    recentThreads,
-    recentHarvests,
-    feedItems,
-    trendingDiaries,
-    memberCount,
-    threadCount,
-    diaryCount,
-    popularCategories,
-    coldStart,
-  }
-}
-
 const TABS = ["latest", "following", "for-you", "discussions", "grows", "harvests"] as const
+type FeedTab = (typeof TABS)[number]
+
+// Each tab is a (mode, kinds, appearance) selection over the canonical
+// feed — one stream implementation, filtered per surface.
+const TAB_FEED: Record<FeedTab, { mode: FeedMode; kinds: readonly FeedKind[]; appearance: FeedAppearance }> = {
+  latest: { mode: "latest", kinds: FEED_KINDS, appearance: "mixed" },
+  following: { mode: "following", kinds: FEED_KINDS, appearance: "mixed" },
+  "for-you": { mode: "for-you", kinds: FEED_KINDS, appearance: "mixed" },
+  discussions: { mode: "latest", kinds: ["thread"], appearance: "threads" },
+  grows: { mode: "latest", kinds: ["update"], appearance: "updates" },
+  harvests: { mode: "latest", kinds: ["harvest"], appearance: "harvests" },
+}
 
 // First-reply nudge eligibility: zero posts and an account under 30 days old.
 async function isEligibleForFirstReplyNudge(userId: string) {
@@ -241,44 +68,73 @@ async function isEligibleForFirstReplyNudge(userId: string) {
   return posts === 0 && recent > 0
 }
 
-export default async function FeedPage({ searchParams }: { searchParams: Promise<{ tab?: string }> }) {
-  const { tab } = await searchParams
+export default async function FeedPage({ searchParams }: { searchParams: Promise<{ tab?: string; cursor?: string }> }) {
+  const { tab, cursor } = await searchParams
   const session = await getSession()
-  const activeTab = TABS.includes((tab || "") as (typeof TABS)[number]) ? (tab as (typeof TABS)[number]) : "latest"
-  const { recentDiaryUpdates, recentThreads, recentHarvests, feedItems, trendingDiaries, memberCount, threadCount, diaryCount, popularCategories, coldStart } =
-    await getFeedData(session?.user?.id, activeTab)
+  const activeTab: FeedTab = TABS.includes((tab || "") as FeedTab) ? (tab as FeedTab) : "latest"
+  const conf = TAB_FEED[activeTab]
 
-  // The nudge is for new members only — suppress it while the cold-start note
-  // is showing (no stacked banners) and for accounts older than 30 days.
-  const showFirstReplyNudge =
-    session?.user?.id != null &&
-    session.user.onboardingCompletedAt != null &&
-    !coldStart &&
-    (await isEligibleForFirstReplyNudge(session.user.id))
+  const scope = await resolveFeedScope(session?.user?.id, conf.mode)
+  const coldStart = scope.coldStart
+
+  const wantNudge =
+    session?.user?.id != null && session.user.onboardingCompletedAt != null && !coldStart
+
+  const harvestScope = { ...feedDiaryWhere(scope), harvested: true, harvestedAt: { not: null } }
+  const [page, hasHarvests, trendingDiaries, siteStats, feedStats, showFirstReplyNudge] = await Promise.all([
+    getFeedPage({ scope, kinds: conf.kinds, cursor }),
+    prisma.growDiary.findFirst({ where: harvestScope, select: { id: true } }).then((r) => !!r),
+    prisma.growDiary.findMany({
+      where: feedDiaryWhere(scope),
+      take: 5,
+      orderBy: [{ featured: "desc" }, { createdAt: "desc" }],
+      include: {
+        author: { select: publicUserSelect },
+        _count: { select: { updates: true, followers: true } },
+      },
+    }),
+    getSiteStats(),
+    getFeedStats(),
+    wantNudge ? isEligibleForFirstReplyNudge(session!.user!.id) : Promise.resolve(false),
+  ])
+
+  const { items, nextCursor } = page
+  const memberCount = siteStats.members
+  const diaryCount = siteStats.diaries
+  const { threadCount, popularCategories } = feedStats
 
   // Unread indicators on feed thread cards — same followed-thread rule as
   // the forum lists, kept out of any cached payload.
-  const unreadThreadIds = new Set<string>()
+  const unreadThreadIds: string[] = []
   if (session?.user?.id) {
-    const feedThreadIds = [
-      ...new Set([
-        ...recentThreads.map((t) => t.id),
-        ...feedItems.filter((i) => i.type === "thread").map((i) => (i.data as { id: string }).id),
-      ]),
-    ]
-    if (feedThreadIds.length > 0) {
+    const threadIds = items.filter((i) => i.kind === "thread").map((i) => i.id)
+    if (threadIds.length > 0) {
       const follows = await prisma.threadFollow.findMany({
-        where: { userId: session.user.id, threadId: { in: feedThreadIds } },
+        where: { userId: session.user.id, threadId: { in: threadIds } },
         select: { threadId: true, lastSeenAt: true, thread: { select: { lastActivityAt: true } } },
       })
       for (const f of follows) {
-        if (f.thread.lastActivityAt > (f.lastSeenAt ?? new Date(0))) unreadThreadIds.add(f.threadId)
+        if (f.thread.lastActivityAt > (f.lastSeenAt ?? new Date(0))) unreadThreadIds.push(f.threadId)
       }
     }
   }
 
+  const feedEmpty = items.length === 0
+
   const tabCls = (t: string) =>
     `px-4 py-2 text-sm font-medium transition-colors ${activeTab === t ? "border-b-2 border-primary text-primary" : "text-muted-foreground hover:text-foreground"}`
+
+  const streamTitle =
+    conf.appearance === "mixed"
+      ? activeTab === "for-you" ? "Top Picks for You" : activeTab === "following" ? "From Your Follows" : "Community Feed"
+      : conf.appearance === "threads" ? "Discussions"
+      : conf.appearance === "updates" ? "Grow Updates"
+      : "Recent Harvests"
+  const StreamIcon =
+    conf.appearance === "mixed" ? TrendingUp
+      : conf.appearance === "threads" ? MessageSquare
+      : conf.appearance === "updates" ? Sprout
+      : Award
 
   return (
     <div className="min-h-screen bg-background">
@@ -315,13 +171,13 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
           <Link href="/feed?tab=for-you" className={tabCls("for-you")}>For You</Link>
           <Link href="/feed?tab=discussions" className={tabCls("discussions")}>Discussions</Link>
           <Link href="/feed?tab=grows" className={tabCls("grows")}>Grows</Link>
-          {recentHarvests.length > 0 && (
+          {hasHarvests && (
             <Link href="/feed?tab=harvests" className={tabCls("harvests")}>Harvests</Link>
           )}
         </div>
 
         {/* Cold-start note — content below is global, not personalized */}
-        {coldStart && (recentDiaryUpdates.length > 0 || recentThreads.length > 0) && (
+        {coldStart && items.length > 0 && (
           <div className="mb-6 text-sm text-muted-foreground flex items-center gap-2">
             <UserPlus className="w-4 h-4 text-primary shrink-0" />
             <span>
@@ -352,449 +208,26 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
         <div className="grid lg:grid-cols-3 gap-6">
           {/* Main Feed */}
           <div className="min-w-0 lg:col-span-2 space-y-6">
-            {/* Mixed feed — Latest and For You use the unified stream */}
-            {(activeTab === "for-you" || activeTab === "latest" || activeTab === "following") && feedItems.length > 0 && (
+            {!feedEmpty && (
               <div className="tt-spotlight bg-card/80 rounded-2xl border border-border/70">
                 <div className="p-4 border-b border-border flex items-center gap-2">
-                  <TrendingUp className="w-5 h-5 text-primary" />
-                  <h2 className="font-display font-semibold">
-                    {activeTab === "for-you" ? "Top Picks for You" : activeTab === "following" ? "From Your Follows" : "Community Feed"}
-                  </h2>
+                  <StreamIcon className={`w-5 h-5 ${conf.appearance === "harvests" ? "text-success" : "text-primary"}`} />
+                  <h2 className="font-display font-semibold">{streamTitle}</h2>
                 </div>
-                <div className="divide-y divide-border">
-                  {feedItems.map((item) => {
-                    if (item.type === "thread") {
-                      const t = item.data as (typeof recentThreads)[number]
-                      return (
-                        <Link
-                          key={`t-${t.id}`}
-                          href={`/forum/thread/${t.slug}`}
-                          className="block p-4 hover:bg-secondary/50 transition-colors"
-                        >
-                          <div className="flex items-start gap-3">
-                            <div className="shrink-0 w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center">
-                              <MessageSquare className="w-5 h-5 text-primary" />
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <div className="font-semibold text-sm mb-1 flex items-center gap-2">
-                                {unreadThreadIds.has(t.id) && (
-                                  <Tooltip content="New activity" className="shrink-0">
-                                    <span className="h-2 w-2 rounded-full bg-primary" role="img" aria-label="Unread" />
-                                  </Tooltip>
-                                )}
-                                {t.title}
-                              </div>
-                              <div className="text-xs text-muted-foreground flex items-center gap-2 flex-wrap">
-                                <ProfileCard
-                                  username={t.author.profile?.username}
-                                  name={t.author.profile?.username || t.author.name}
-                                  avatarUrl={t.author.image}
-                                  xp={t.author.profile?.xp}
-                                  publicMilestoneOptOut={t.author.profile?.publicMilestoneOptOut}
-                                  size="sm"
-                                  linked={false}
-                                />
-                                <span>•</span>
-                                <span>{t.category.name}</span>
-                                <span>•</span>
-                                <span>{t.replyCount} repl{t.replyCount === 1 ? "y" : "ies"}</span>
-                                <span>•</span>
-                                <span><TimeAgo value={t.createdAt} /></span>
-                              </div>
-                            </div>
-                          </div>
-                        </Link>
-                      )
-                    } else if (item.type === "harvest") {
-                      const h = item.data as (typeof recentHarvests)[number]
-                      const thumb = h.updates[0]?.images[0]?.url
-                      const dayCount = h.harvestedAt && h.startDate
-                        ? Math.max(0, Math.floor((new Date(h.harvestedAt).getTime() - new Date(h.startDate).getTime()) / 86400000))
-                        : null
-                      return (
-                        <Link
-                          key={`h-${h.id}`}
-                          href={diaryPath(h)}
-                          className="block p-4 hover:bg-secondary/50 transition-colors"
-                        >
-                          <div className="flex items-start gap-3">
-                            {thumb ? (
-                              // eslint-disable-next-line @next/next/no-img-element
-                              <img src={thumb} alt="" loading="lazy" decoding="async" className="w-16 h-16 rounded-xl object-cover shrink-0" />
-                            ) : (
-                              <div className="shrink-0 w-16 h-16 bg-success/10 rounded-xl flex items-center justify-center">
-                                <Leaf className="w-6 h-6 text-success" />
-                              </div>
-                            )}
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2 mb-0.5">
-                                <span className="text-xs font-medium text-success">Harvested</span>
-                                {h.strain && <span className="text-xs text-muted-foreground truncate">{h.strain}</span>}
-                              </div>
-                              <h3 className="font-medium text-sm mb-1">{h.title}</h3>
-                              <div className="text-xs text-muted-foreground flex items-center gap-2 flex-wrap">
-                                <ProfileCard
-                                  username={h.author.profile?.username}
-                                  name={h.author.profile?.username || h.author.name}
-                                  avatarUrl={h.author.image}
-                                  xp={h.author.profile?.xp}
-                                  publicMilestoneOptOut={h.author.profile?.publicMilestoneOptOut}
-                                  size="sm"
-                                  linked={false}
-                                />
-                                {dayCount != null && <span>• {dayCount}d</span>}
-                                {h.yieldAmount != null && (!h.yieldPrivate || h.authorId === session?.user?.id) && <span className="text-success font-medium">• {h.yieldAmount} {h.yieldUnit || "g"}</span>}
-                                {h.harvestRating != null && <span className="text-warning">• {h.harvestRating}/10</span>}
-                              </div>
-                            </div>
-                          </div>
-                        </Link>
-                      )
-                    } else {
-                      const u = item.data as (typeof recentDiaryUpdates)[number]
-                      // Anchored comments only exist/render on PUBLIC grows —
-                      // never surface a count for a followed UNLISTED grow.
-                      const commentCount = u.diary.visibility === "PUBLIC" ? u._count.comments : 0
-                      return (
-                        <Link
-                          key={`u-${u.id}`}
-                          href={updateAnchor(diaryPath(u.diary), u.id)}
-                          className="block p-4 hover:bg-secondary/50 transition-colors"
-                        >
-                          <div className="flex items-start gap-3">
-                            {u.images[0]?.url ? (
-                              // eslint-disable-next-line @next/next/no-img-element
-                              <img src={u.images[0].url} alt="" loading="lazy" decoding="async" className="w-10 h-10 rounded-lg object-cover shrink-0" />
-                            ) : (
-                              <div className="shrink-0 w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center">
-                                <Leaf className="w-5 h-5 text-primary" />
-                              </div>
-                            )}
-                            <div className="flex-1 min-w-0">
-                              <div className="font-semibold text-sm mb-1">{u.title}</div>
-                              <p className="text-xs text-muted-foreground line-clamp-1 mb-1">{u.content}</p>
-                              <div className="text-xs text-muted-foreground flex items-center gap-2 flex-wrap">
-                                <span className="truncate">{u.diary.title}</span>
-                                <span>•</span>
-                                <span><TimeAgo value={u.createdAt} /></span>
-                                {u._count.reactions > 0 && (
-                                  <span className="inline-flex items-center gap-0.5" aria-label={`${u._count.reactions} reactions`}>
-                                    <Heart className="w-3 h-3" /> {u._count.reactions}
-                                  </span>
-                                )}
-                                <span className="inline-flex items-center gap-0.5 text-primary" aria-label={commentCount > 0 ? `${commentCount} comments` : "Comment"}>
-                                  <MessageSquare className="w-3 h-3" /> {commentCount > 0 ? commentCount : "Comment"}
-                                </span>
-                              </div>
-                            </div>
-                          </div>
-                        </Link>
-                      )
-                    }
-                  })}
-                </div>
-              </div>
-            )}
-
-            {/* Discussions-only mode */}
-            {activeTab === "discussions" && recentThreads.length > 0 && (
-              <div className="tt-spotlight bg-card/80 rounded-2xl border border-border/70">
-                <div className="p-4 border-b border-border flex items-center gap-2">
-                  <MessageSquare className="w-5 h-5 text-primary" />
-                  <h2 className="font-display font-semibold">Discussions</h2>
-                </div>
-                <div className="divide-y divide-border">
-                  {recentThreads.map((thread) => (
-                    <Link
-                      key={thread.id}
-                      href={`/forum/thread/${thread.slug}`}
-                      className="block p-4 hover:bg-secondary/50 transition-colors"
-                    >
-                      <div className="flex items-start gap-3">
-                        <div className="shrink-0 w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center">
-                          <Users className="w-5 h-5 text-primary" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-1">
-                            <span className="flex min-w-0 items-center gap-1.5 font-semibold text-sm">
-                              <ProfileCard
-                                username={thread.author.profile?.username}
-                                name={thread.author.profile?.username || thread.author.name}
-                                avatarUrl={thread.author.image}
-                                xp={thread.author.profile?.xp}
-                                publicMilestoneOptOut={thread.author.profile?.publicMilestoneOptOut}
-                                size="sm"
-                                linked={false}
-                              />
-                              <RoleBadge role={thread.author.role} />
-                            </span>
-                          </div>
-                          <h3 className="font-medium mb-1 flex items-center gap-2">
-                            {unreadThreadIds.has(thread.id) && (
-                              <Tooltip content="New activity" className="shrink-0">
-                                <span className="h-2 w-2 rounded-full bg-primary" role="img" aria-label="Unread" />
-                              </Tooltip>
-                            )}
-                            {thread.title}
-                          </h3>
-                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                            <span className="flex items-center gap-1"><MessageSquare className="w-3 h-3" /> {thread.category.name}</span>
-                            <span>•</span>
-                            <span>{thread.replyCount} repl{thread.replyCount === 1 ? "y" : "ies"}</span>
-                            <span>•</span>
-                            <span><TimeAgo value={thread.createdAt} /></span>
-                          </div>
-                        </div>
-                      </div>
-                    </Link>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Grows-only mode */}
-            {activeTab === "grows" && recentDiaryUpdates.length > 0 && (
-              <div className="tt-spotlight bg-card/80 rounded-2xl border border-border/70">
-                <div className="p-4 border-b border-border flex items-center gap-2">
-                  <Sprout className="w-5 h-5 text-primary" />
-                  <h2 className="font-display font-semibold">Grow Updates</h2>
-                </div>
-                <div className="divide-y divide-border">
-                  {recentDiaryUpdates.map((update) => (
-                    <Link
-                      key={update.id}
-                      href={diaryPath(update.diary)}
-                      className="block p-4 hover:bg-secondary/50 transition-colors"
-                    >
-                      <div className="flex items-start gap-3">
-                        {update.images[0]?.url ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img src={update.images[0].url} alt="" loading="lazy" decoding="async" className="w-16 h-16 rounded-xl object-cover shrink-0" />
-                        ) : (
-                          <div className="shrink-0 w-16 h-16 bg-primary/10 rounded-xl flex items-center justify-center">
-                            <Leaf className="w-6 h-6 text-primary" />
-                          </div>
-                        )}
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-1">
-                            <span className="flex min-w-0 items-center gap-1.5 text-sm">
-                              <ProfileCard
-                                username={update.author.profile?.username}
-                                name={update.author.profile?.username || update.author.name}
-                                avatarUrl={update.author.image}
-                                xp={update.author.profile?.xp}
-                                publicMilestoneOptOut={update.author.profile?.publicMilestoneOptOut}
-                                size="sm"
-                                linked={false}
-                              />
-                            </span>
-                            <span className="text-xs text-muted-foreground ml-auto shrink-0">
-                              <TimeAgo value={update.createdAt} />
-                            </span>
-                          </div>
-                          <h3 className="font-medium text-sm mb-0.5">{update.title}</h3>
-                          <p className="text-xs text-muted-foreground line-clamp-2 mb-1">{update.content}</p>
-                          <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                            <Leaf className="w-3 h-3" />
-                            <span className="truncate">{update.diary.title}</span>
-                          </div>
-                        </div>
-                      </div>
-                    </Link>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Harvests mode — completed grows */}
-            {activeTab === "harvests" && recentHarvests.length > 0 && (
-              <div className="tt-spotlight bg-card/80 rounded-2xl border border-border/70">
-                <div className="p-4 border-b border-border flex items-center gap-2">
-                  <Award className="w-5 h-5 text-success" />
-                  <h2 className="font-display font-semibold">Recent Harvests</h2>
-                </div>
-                <div className="grid sm:grid-cols-2 gap-3 p-4">
-                  {recentHarvests.map((diary) => {
-                    const thumb = diary.updates[0]?.images[0]?.url
-                    const dayCount = diary.harvestedAt && diary.startDate
-                      ? Math.max(0, Math.floor((new Date(diary.harvestedAt).getTime() - new Date(diary.startDate).getTime()) / 86400000))
-                      : null
-                    return (
-                      <Link
-                        key={diary.id}
-                        href={diaryPath(diary)}
-                        className="group flex flex-col rounded-xl border border-border/70 hover:border-primary/40 overflow-hidden transition-all"
-                      >
-                        <div className="relative h-32 bg-secondary">
-                          {thumb ? (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img src={thumb} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
-                          ) : (
-                            <div className="w-full h-full flex items-center justify-center">
-                              <Leaf className="w-8 h-8 text-muted-foreground" />
-                            </div>
-                          )}
-                          <div className="absolute bottom-0 inset-x-0 bg-linear-to-t from-black/60 to-transparent px-3 py-2">
-                            {diary.strain && (
-                              <span className="text-[11px] font-medium text-white/90">{diary.strain}</span>
-                            )}
-                          </div>
-                        </div>
-                        <div className="p-3 flex-1">
-                          <h3 className="font-medium text-sm mb-1 line-clamp-1 group-hover:text-primary transition-colors">{diary.title}</h3>
-                          <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
-                            <ProfileCard
-                              username={diary.author.profile?.username}
-                              name={diary.author.profile?.username || diary.author.name}
-                              avatarUrl={diary.author.image}
-                              xp={diary.author.profile?.xp}
-                              publicMilestoneOptOut={diary.author.profile?.publicMilestoneOptOut}
-                              size="sm"
-                              linked={false}
-                            />
-                          </div>
-                          <div className="flex items-center gap-3 text-xs">
-                            {dayCount != null && (
-                              <span className="text-muted-foreground">{dayCount}d grow</span>
-                            )}
-                            {diary.yieldAmount != null && (!diary.yieldPrivate || diary.authorId === session?.user?.id) && (
-                              <span className="font-medium text-success">{diary.yieldAmount} {diary.yieldUnit || "g"}</span>
-                            )}
-                            {diary.harvestRating != null && (
-                              <span className="font-medium text-warning">{diary.harvestRating}/10</span>
-                            )}
-                          </div>
-                        </div>
-                      </Link>
-                    )
-                  })}
-                </div>
-              </div>
-            )}
-
-            {/* Recent Diary Updates — only when no mixed feed items exist */}
-            {activeTab !== "discussions" && activeTab !== "harvests" && activeTab !== "grows" && feedItems.length === 0 && recentDiaryUpdates.length > 0 && (
-              <div className="tt-spotlight bg-card/80 rounded-2xl border border-border/70">
-                <div className="p-4 border-b border-border flex items-center gap-2">
-                  <Leaf className="w-5 h-5 text-primary" />
-                  <h2 className="font-display font-semibold">Recent Grow Updates</h2>
-                </div>
-                <div className="divide-y divide-border">
-                  {recentDiaryUpdates.map((update) => (
-                    <Link
-                      key={update.id}
-                      href={diaryPath(update.diary)}
-                      className="block p-4 hover:bg-secondary/50 transition-colors"
-                    >
-                      <div className="flex items-start gap-3">
-                        <div className="shrink-0 w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center">
-                          <Users className="w-5 h-5 text-primary" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-1">
-                            <span className="flex min-w-0 items-center gap-1.5 font-semibold text-sm">
-                              <ProfileCard
-                                username={update.author.profile?.username}
-                                name={update.author.profile?.username || update.author.name}
-                                avatarUrl={update.author.image}
-                                xp={update.author.profile?.xp}
-                                publicMilestoneOptOut={update.author.profile?.publicMilestoneOptOut}
-                                size="sm"
-                                linked={false}
-                              />
-                              <RoleBadge role={update.author.role} />
-                            </span>
-                            <span className="text-xs text-muted-foreground">
-                              updated their diary
-                            </span>
-                          </div>
-                          <h3 className="font-medium mb-1">{update.title}</h3>
-                          <p className="text-sm text-muted-foreground line-clamp-2 mb-2">
-                            {update.content}
-                          </p>
-                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                            <span className="flex items-center gap-1">
-                              <Leaf className="w-3 h-3" />
-                              {update.diary.title}
-                            </span>
-                            <span>•</span>
-                            <span><TimeAgo value={update.createdAt} /></span>
-                          </div>
-                        </div>
-                      </div>
-                    </Link>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Recent Forum Threads — fallback when mixed feed is empty */}
-            {activeTab !== "grows" && activeTab !== "harvests" && activeTab !== "discussions" && feedItems.length === 0 && recentThreads.length > 0 && (
-              <div className="tt-spotlight bg-card/80 rounded-2xl border border-border/70">
-                <div className="p-4 border-b border-border flex items-center gap-2">
-                  <MessageSquare className="w-5 h-5 text-primary" />
-                  <h2 className="font-display font-semibold">New Discussions</h2>
-                </div>
-                <div className="divide-y divide-border">
-                  {recentThreads.map((thread) => (
-                    <Link
-                      key={thread.id}
-                      href={`/forum/thread/${thread.slug}`}
-                      className="block p-4 hover:bg-secondary/50 transition-colors"
-                    >
-                      <div className="flex items-start gap-3">
-                        <div className="shrink-0 w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center">
-                          <Users className="w-5 h-5 text-primary" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-1">
-                            <span className="flex min-w-0 items-center gap-1.5 font-semibold text-sm">
-                              <ProfileCard
-                                username={thread.author.profile?.username}
-                                name={thread.author.profile?.username || thread.author.name}
-                                avatarUrl={thread.author.image}
-                                xp={thread.author.profile?.xp}
-                                publicMilestoneOptOut={thread.author.profile?.publicMilestoneOptOut}
-                                size="sm"
-                                linked={false}
-                              />
-                              <RoleBadge role={thread.author.role} />
-                            </span>
-                            <span className="text-xs text-muted-foreground">
-                              started a discussion
-                            </span>
-                          </div>
-                          <h3 className="font-medium mb-1 flex items-center gap-2">
-                            {unreadThreadIds.has(thread.id) && (
-                              <Tooltip content="New activity" className="shrink-0">
-                                <span className="h-2 w-2 rounded-full bg-primary" role="img" aria-label="Unread" />
-                              </Tooltip>
-                            )}
-                            {thread.title}
-                          </h3>
-                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                            <span className="flex items-center gap-1">
-                              <MessageSquare className="w-3 h-3" />
-                              {thread.category.name}
-                            </span>
-                            <span>•</span>
-                            <span>{thread.replyCount} repl{thread.replyCount === 1 ? "y" : "ies"}</span>
-                            <span>•</span>
-                            <span><TimeAgo value={thread.createdAt} /></span>
-                          </div>
-                        </div>
-                      </div>
-                    </Link>
-                  ))}
-                </div>
+                <FeedList
+                  mode={conf.mode}
+                  kinds={conf.kinds}
+                  initialItems={items}
+                  initialCursor={nextCursor}
+                  initialUnreadThreadIds={unreadThreadIds}
+                  appearance={conf.appearance}
+                  viewerId={session?.user?.id}
+                />
               </div>
             )}
 
             {/* Empty State — mode-aware */}
-            {((activeTab === "discussions" && recentThreads.length === 0) ||
-              (activeTab === "grows" && recentDiaryUpdates.length === 0) ||
-              (activeTab === "harvests" && recentHarvests.length === 0) ||
-              (!["discussions", "grows", "harvests"].includes(activeTab) && recentDiaryUpdates.length === 0 && recentThreads.length === 0)) && (
+            {feedEmpty && (
               <div className="tt-spotlight bg-card/80 rounded-2xl border border-border/70 p-12 text-center">
                 {!session?.user?.id && (activeTab === "following" || activeTab === "for-you") ? (
                   <>

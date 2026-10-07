@@ -18,6 +18,7 @@
     "test:forum": "node scripts/forum-verify.mjs",
     "test:search": "node scripts/search-verify.mjs",
     "test:diary": "node scripts/diary-verify.mjs",
+    "test:feed": "tsx scripts/feed-verify.mts",
     "test:bot": "node scripts/bot-verify.mjs",
     "test:terpbot-parser": "tsx scripts/terpbot-parser-tests.mts",
     "test:terpbot-intelligence": "tsx scripts/terpbot-intelligence-tests.mts",

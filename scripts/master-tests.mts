@@ -71,6 +71,7 @@ const HTTP_PHASE: Suite[] = [
   { id: "forum", file: "scripts/forum-verify.mjs", runner: "node", cls: "A", label: "Forum HTTP behavior", tier: "full" },
   { id: "search", file: "scripts/search-verify.mjs", runner: "node", cls: "A", label: "Search HTTP behavior", tier: "full" },
   { id: "diary", file: "scripts/diary-verify.mjs", runner: "node", cls: "A", label: "Grow diary HTTP behavior", tier: "full" },
+  { id: "feed", file: "scripts/feed-verify.mts", runner: "tsx", cls: "A", label: "Feed core: keyset pagination, scope privacy, /api/feed contract", tier: "full" },
   { id: "bot", file: "scripts/bot-verify.mjs", runner: "node", cls: "A", label: "TerpBot HTTP end-to-end", tier: "full", timeoutMs: 12 * 60_000 },
   { id: "trust-safety", file: "scripts/trust-safety-verify.mjs", runner: "node", cls: "A", label: "Trust & safety + feedback HTTP behavior", tier: "full" },
   { id: "ops", file: "scripts/ops-tests.mts", runner: "tsx", cls: "A", label: "Ops surface gate + metrics shape + feedback deviceType", tier: "full" },
