@@ -455,6 +455,16 @@ export function commentLinkWhere(commentId: string): Prisma.NotificationWhereInp
 }
 
 /**
+ * Where-clause matching notification links that target a specific grow
+ * update — `/diaries/<slug>[?post=<id>]#update-{id}` (update reactions and
+ * anchored comments). The `#update-` fragment is unique to DiaryUpdate and
+ * a cuid can't collide, so a plain contains is boundary-safe.
+ */
+export function updateLinkWhere(updateId: string): Prisma.NotificationWhereInput {
+  return { link: { contains: `#update-${updateId}` } }
+}
+
+/**
  * Remove notifications that link to a deleted target so users never see
  * a live link to removed content. Called from content soft-delete paths.
  */

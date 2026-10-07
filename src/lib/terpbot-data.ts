@@ -27,6 +27,7 @@ import { buildHelpText } from "@/lib/chat-commands"
 import { buildGrowContext, emptyContext } from "@/lib/terpbot-intel-context"
 import { evaluateContext, renderIntelLines } from "@/lib/terpbot-intel"
 import { mergeSessionState, REPORTABLE_METRICS } from "@/lib/terpbot-intel-merge"
+import { anchoredPostVisibleWhere } from "@/lib/update-social"
 import { renderStatus, renderChanges, renderCheck, renderMeasurements, renderNext, renderPlan, snapshotFrom } from "@/lib/terpbot-intel-status"
 import { buildSnapshot } from "@/lib/terpbot-intel-snapshot"
 import { buildCultivationDecisions, topAskableMetric, decisionLine } from "@/lib/terpbot-intel-decisions"
@@ -249,13 +250,13 @@ async function loadThreadContext(ref: ThreadRef): Promise<ThreadContext | null> 
 
   const [topReplies, recentReplies] = await Promise.all([
     prisma.post.findMany({
-      where: { threadId: t.id, deleted: false, author: activeAuthor() },
+      where: { threadId: t.id, deleted: false, author: activeAuthor(), ...anchoredPostVisibleWhere() },
       orderBy: [{ reactions: { _count: "desc" } }, { id: "desc" }],
       take: 3,
       select: postSelect,
     }),
     prisma.post.findMany({
-      where: { threadId: t.id, deleted: false, author: activeAuthor() },
+      where: { threadId: t.id, deleted: false, author: activeAuthor(), ...anchoredPostVisibleWhere() },
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       take: 3,
       select: postSelect,
@@ -1924,6 +1925,8 @@ async function handle(name: string, ctx: BotCommandCtx): Promise<BotCommandResul
                   threadId: t.id,
                   deleted: false,
                   OR: terms.map((w) => ({ content: { contains: w, mode: "insensitive" as const } })),
+                  // AND-wrapped: both fragments use OR.
+                  AND: [anchoredPostVisibleWhere()],
                 },
                 orderBy: [{ createdAt: "asc" }, { id: "asc" }],
                 take: 2,

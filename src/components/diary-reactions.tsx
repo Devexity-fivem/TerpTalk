@@ -17,15 +17,22 @@ const EMOJIS: Record<string, string> = {
 
 const ORDER = ["LIKE", "LOVE", "LAUGH", "THINKING", "FIRE", "THUMBS_UP", "THUMBS_DOWN"]
 
+// One reaction control for both grow-level and update-level targets — the
+// same /api/reactions endpoint, toggle/switch semantics, and emoji set.
 export default function DiaryReactions({
   diaryId,
+  diaryUpdateId,
   initialCounts,
   initialMine,
 }: {
-  diaryId: string
+  diaryId?: string
+  /** Social Grow Updates — react to one update instead of the whole grow. */
+  diaryUpdateId?: string
   initialCounts: Record<string, number>
   initialMine: string | null
 }) {
+  const target = diaryUpdateId ? { diaryUpdateId } : { diaryId }
+  const noun = diaryUpdateId ? "update" : "diary"
   const { data: session } = useSession()
   const [counts, setCounts] = useState(initialCounts)
   const [mine, setMine] = useState<string | null>(initialMine)
@@ -40,7 +47,7 @@ export default function DiaryReactions({
       const res = await fetch("/api/reactions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type, diaryId }),
+        body: JSON.stringify({ type, ...target }),
       })
       if (!res.ok) return
       const data = await res.json()
@@ -70,7 +77,7 @@ export default function DiaryReactions({
   return (
     <div className="flex flex-wrap items-center gap-1.5">
       <div className="relative">
-        <Tooltip content={!session ? "Sign in to react" : mine ? "Remove your reaction" : "Add a reaction to this diary"}>
+        <Tooltip content={!session ? "Sign in to react" : mine ? "Remove your reaction" : `Add a reaction to this ${noun}`}>
           <button
             onClick={() => (mine ? react(mine) : setShowPicker(!showPicker))}
             disabled={!session || busy}

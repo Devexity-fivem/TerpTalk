@@ -969,29 +969,286 @@ const main = async () => {
     // discussion — same lazy-create/link flow as the header button,
     // never a separate per-update thread. Non-public diaries render no
     // affordance, matching the discuss route's publicDiaryWhere gate.
-    await prisma.diaryUpdate.create({
+    const discUpd = await prisma.diaryUpdate.create({
       data: { diaryId: discD.id, authorId: owner.id, title: M("du"), content: "discuss me", stage: "VEGETATIVE", dayNumber: 1, weekNumber: 1 },
     })
     const updPage = await getHtml(`/diaries/${discD.id}`, voterCookie)
-    updPage.status === 200 && updPage.html.includes("Discuss this update")
+    updPage.status === 200 && updPage.html.includes("Discuss the grow")
       ? pass("PUBLIC diary update exposes the discussion affordance")
       : fail("update discuss affordance", updPage.status)
     // The update-level action itself routes to the canonical thread —
     // resolve the href of the anchor whose content carries the label so
     // a coincidental link elsewhere on the page can't satisfy the check.
-    const updHref = updPage.html.match(/href="([^"]*)"[^>]*>(?:(?!<\/a>)[\s\S])*?Discuss this update/)?.[1]
+    const updHref = updPage.html.match(/href="([^"]*)"[^>]*>(?:(?!<\/a>)[\s\S])*?Discuss the grow/)?.[1]
     updHref === `/forum/thread/${discThread.slug}`
       ? pass("update affordance links the canonical discussion thread")
       : fail("update affordance thread link", updHref)
-    !pages.PRIVATE_owner.includes("Discuss this update")
+    !pages.PRIVATE_owner.includes("Discuss the grow")
       ? pass("PRIVATE diary update has no discussion affordance")
       : fail("private update affordance")
-    !pages.UNLISTED.includes("Discuss this update") && !pages.UNLISTED.includes("Discuss this grow")
+    !pages.UNLISTED.includes("Discuss the grow") && !pages.UNLISTED.includes("Discuss this grow")
       ? pass("UNLISTED diary exposes no discussion affordance")
       : fail("unlisted discuss affordance")
     !updPage.html.includes("Discuss in chat") && !pages.PUBLIC.includes("Discuss in chat")
       ? pass("contextless chat-discussion link removed from diary page")
       : fail("contextless chat link")
+
+    // ── Social Grow Updates (Phase 1) ────────────────────────────────
+    // A DiaryUpdate is a reaction target (Reaction.diaryUpdateId) and a
+    // comment anchor (Post.diaryUpdateId inside the grow's canonical
+    // discussion thread). Actors: owner (grower), voter (unrelated member),
+    // viewer (blocked by owner since the block section above), guest.
+    // Invariant: an interaction is never broader than its content.
+    {
+      const updReact = (body, cookie) => callApi("/api/reactions", { method: "POST", body, cookie })
+      const updComment = (body, cookie) => callApi("/api/forum/posts", { method: "POST", body, cookie })
+      const ownerUsername = (await prisma.profile.findUnique({ where: { userId: owner.id }, select: { username: true } }))?.username
+
+      // Reactions — valid, toggle/switch, single row, exact-one-target.
+      r = await updReact({ type: "LIKE", diaryUpdateId: discUpd.id }, voterCookie)
+      const reactRow = await prisma.reaction.findFirst({ where: { userId: voter.id, diaryUpdateId: discUpd.id } })
+      r.status === 201 && r.data?.action === "added" && reactRow && reactRow.postId === null && reactRow.diaryId === null
+        ? pass("member reacts to a PUBLIC grow update (single update-target row)")
+        : fail("update reaction add", { s: r.status, d: r.data, row: reactRow })
+      r = await updReact({ type: "LIKE", diaryUpdateId: discUpd.id }, voterCookie)
+      r.data?.action === "removed" ? pass("same-type update reaction toggles off") : fail("update reaction toggle", r.data)
+      await updReact({ type: "LIKE", diaryUpdateId: discUpd.id }, voterCookie)
+      r = await updReact({ type: "FIRE", diaryUpdateId: discUpd.id }, voterCookie)
+      const reactRows = await prisma.reaction.count({ where: { userId: voter.id, diaryUpdateId: discUpd.id } })
+      r.data?.action === "switched" && reactRows === 1
+        ? pass("different type switches — duplicate prevention holds one row")
+        : fail("update reaction switch/dupe", { a: r.data?.action, reactRows })
+      r = await updReact({ type: "LIKE", diaryUpdateId: discUpd.id, diaryId: discD.id }, voterCookie)
+      r.status === 400 ? pass("multi-target reaction body rejected") : fail("multi-target reaction", r.status)
+      r = await updReact({ type: "BOGUS", diaryUpdateId: discUpd.id }, voterCookie)
+      r.status === 400 ? pass("unknown reaction type rejected for updates") : fail("update reaction type", r.status)
+      r = await updReact({ type: "LIKE", diaryUpdateId: discUpd.id })
+      r.status === 401 ? pass("guest cannot react to an update") : fail("update reaction anon", r.status)
+      r = await updReact({ type: "LIKE", diaryUpdateId: discUpd.id }, viewerCookie)
+      r.status === 403 ? pass("blocked member cannot react to the grower's update") : fail("update reaction block", r.status)
+
+      // Reaction notification — existing REACTION type, grouped per update,
+      // deep-linked to the update anchor, deduped across toggles.
+      const reactNotes = await prisma.notification.findMany({
+        where: { userId: owner.id, type: "REACTION", groupKey: `REACTION:update:${discUpd.id}` },
+        select: { link: true },
+      })
+      reactNotes.length === 1 && reactNotes[0].link?.endsWith(`#update-${discUpd.id}`)
+        ? pass("update reaction notifies grower once (grouped, update deep link)")
+        : fail("update reaction notification", reactNotes)
+
+      // Visibility matrix for update reactions — same canViewDiary rule.
+      const prvUpd = await prisma.diaryUpdate.findFirst({ where: { diaryId: prvD.id }, select: { id: true } })
+      r = await updReact({ type: "LIKE", diaryUpdateId: prvUpd.id }, voterCookie)
+      r.status === 404 ? pass("non-owner cannot react to a PRIVATE grow update (404, no oracle)") : fail("private update reaction", r.status)
+      r = await updReact({ type: "LIKE", diaryUpdateId: prvUpd.id }, ownerCookie)
+      r.status === 201 ? pass("owner can react to own PRIVATE update") : fail("owner private update reaction", r.status)
+      const unlUpd = await prisma.diaryUpdate.create({
+        data: { diaryId: unlD.id, authorId: owner.id, title: M("uu"), content: "unlisted update", stage: "VEGETATIVE", dayNumber: 1, weekNumber: 1 },
+      })
+      r = await updReact({ type: "LIKE", diaryUpdateId: unlUpd.id }, voterCookie)
+      r.status === 201
+        ? pass("UNLISTED update reaction follows the grow's link-holder rule (same as diary reactions)")
+        : fail("unlisted update reaction", r.status)
+      r = await updReact({ type: "LIKE", diaryUpdateId: M("nope") }, voterCookie)
+      r.status === 404 ? pass("unknown update id 404s") : fail("missing update reaction", r.status)
+
+      // Deleted grow / suspended grower → 404.
+      const delD = await prisma.growDiary.create({
+        data: { title: `${tok} del`, description: "s", growType: "INDOOR", startDate: new Date(), authorId: owner.id, visibility: "PUBLIC", deleted: true },
+      })
+      diaryIds.push(delD.id)
+      const delUpd = await prisma.diaryUpdate.create({
+        data: { diaryId: delD.id, authorId: owner.id, title: M("dlu"), content: "deleted grow update", stage: "VEGETATIVE", dayNumber: 1, weekNumber: 1 },
+      })
+      r = await updReact({ type: "LIKE", diaryUpdateId: delUpd.id }, voterCookie)
+      r.status === 404 ? pass("deleted grow's update cannot be reacted to") : fail("deleted grow update reaction", r.status)
+      const susp = await createUser("susp")
+      users.push(susp)
+      await prisma.user.update({ where: { id: susp.id }, data: { suspendedUntil: new Date(Date.now() + 86400000) } })
+      const suspD = await prisma.growDiary.create({
+        data: { title: `${tok} susp`, description: "s", growType: "INDOOR", startDate: new Date(), authorId: susp.id, visibility: "PUBLIC" },
+      })
+      diaryIds.push(suspD.id)
+      const suspUpd = await prisma.diaryUpdate.create({
+        data: { diaryId: suspD.id, authorId: susp.id, title: M("su"), content: "suspended grower update", stage: "VEGETATIVE", dayNumber: 1, weekNumber: 1 },
+      })
+      r = await updReact({ type: "LIKE", diaryUpdateId: suspUpd.id }, voterCookie)
+      r.status === 404 ? pass("suspended grower's update cannot be reacted to") : fail("suspended update reaction", r.status)
+
+      // Regression — existing Post and whole-diary targets unchanged.
+      const opPost = await prisma.post.findFirst({ where: { threadId: discThread.id }, orderBy: { createdAt: "asc" }, select: { id: true } })
+      r = await updReact({ type: "LIKE", postId: opPost.id }, voterCookie)
+      const r2 = await updReact({ type: "LIKE", diaryId: discD.id }, voterCookie)
+      r.status === 201 && r2.status === 201
+        ? pass("existing Post + GrowDiary reaction targets still work")
+        : fail("reaction target regression", { post: r.status, diary: r2.status })
+
+      // Comments — a normal Post in the canonical discussion, anchored.
+      const cTok = M("cmt")
+      r = await updComment({ threadId: discThread.id, diaryUpdateId: discUpd.id, content: `${cTok} looks healthy, nice canopy` }, voterCookie)
+      const cRow = r.data?.post?.id && await prisma.post.findUnique({ where: { id: r.data.post.id }, select: { threadId: true, diaryUpdateId: true } })
+      r.status === 201 && cRow?.threadId === discThread.id && cRow?.diaryUpdateId === discUpd.id
+        ? pass("update comment is a Post in the grow's discussion thread, anchored to the update")
+        : fail("update comment create", { s: r.status, d: r.data, row: cRow })
+      const commentId = r.data?.post?.id
+      const otherThread = await prisma.thread.create({
+        data: {
+          title: M("other"), slug: M("other").toLowerCase().replace(/_/g, "-"), content: "x",
+          authorId: owner.id, categoryId: (await prisma.thread.findUnique({ where: { id: discThread.id }, select: { categoryId: true } })).categoryId,
+        },
+      })
+      threadIds.push(otherThread.id)
+      r = await updComment({ threadId: otherThread.id, diaryUpdateId: discUpd.id, content: "anchored to the wrong thread" }, voterCookie)
+      r.status === 404 ? pass("anchor must target the grow's own discussion thread") : fail("comment wrong thread", r.status)
+      r = await updComment({ threadId: discThread.id, diaryUpdateId: discUpd.id, content: "comment with a photo", images: [TINY_PNG] }, voterCookie)
+      r.status === 400 ? pass("update comments are text-only") : fail("comment images", r.status)
+      r = await updComment({ threadId: discThread.id, diaryUpdateId: discUpd.id, content: "a comment from a guest" })
+      r.status === 401 ? pass("guest cannot comment") : fail("comment anon", r.status)
+      r = await updComment({ threadId: discThread.id, diaryUpdateId: discUpd.id, content: "a comment from blocked" }, viewerCookie)
+      r.status === 403 ? pass("blocked member cannot comment on the grower's update") : fail("comment block", r.status)
+      r = await updComment({ threadId: discThread.id, diaryUpdateId: prvUpd.id, content: "comment on a private update" }, voterCookie)
+      const rU = await updComment({ threadId: discThread.id, diaryUpdateId: unlUpd.id, content: "comment on an unlisted update" }, voterCookie)
+      r.status === 404 && rU.status === 404
+        ? pass("PRIVATE + UNLISTED updates reject comments (404)")
+        : fail("non-public update comment", { prv: r.status, unl: rU.status })
+      r = await updComment({ threadId: discThread.id, diaryUpdateId: delUpd.id, content: "comment on a deleted grow" }, voterCookie)
+      r.status === 404 ? pass("deleted grow's update rejects comments") : fail("deleted grow comment", r.status)
+      r = await updComment({ threadId: discThread.id, diaryUpdateId: { id: discUpd.id }, content: "malformed anchor value" }, voterCookie)
+      r.status === 400 ? pass("non-string diaryUpdateId rejected (no mass assignment)") : fail("anchor type", r.status)
+
+      // Comment notification — existing COMMENT type, update deep link that
+      // carries ?post= for delete cleanup; no REPLY for the same event; a
+      // second comment inside the window does not stack.
+      await updComment({ threadId: discThread.id, diaryUpdateId: discUpd.id, content: `${cTok} second comment, same window` }, voterCookie)
+      const cNotes = await prisma.notification.findMany({
+        where: { userId: owner.id, type: "COMMENT", groupKey: `COMMENT:update:${discUpd.id}` },
+        select: { link: true },
+      })
+      const replyNotes = await prisma.notification.count({ where: { userId: owner.id, type: "REPLY", link: { contains: commentId } } })
+      cNotes.length === 1 && cNotes[0].link?.includes(`?post=${commentId}#update-${discUpd.id}`) && replyNotes === 0
+        ? pass("comment notifies grower once via COMMENT (grouped, update deep link, no REPLY dupe)")
+        : fail("comment notification", { cNotes, replyNotes })
+
+      // Mentions in an update comment use the existing mention path.
+      const ment = await createUser("ment")
+      users.push(ment)
+      const mentUsername = (await prisma.profile.findUnique({ where: { userId: ment.id }, select: { username: true } }))?.username
+      await updComment({ threadId: discThread.id, diaryUpdateId: discUpd.id, content: `@${mentUsername} @${ownerUsername} check this trichome shot` }, voterCookie)
+      const mNote = await prisma.notification.findFirst({ where: { userId: ment.id, type: "MENTION" }, select: { link: true } })
+      const ownerMention = await prisma.notification.count({ where: { userId: owner.id, type: "MENTION", actorId: voter.id } })
+      mNote?.link?.includes(`#update-${discUpd.id}`) && ownerMention === 0
+        ? pass("mention in update comment notifies mentionee (update link); grower not double-notified")
+        : fail("comment mention", { mNote, ownerMention })
+
+      // Rate limit — anchored comments share the post limiter.
+      await prisma.rateLimit.upsert({
+        where: { key: `post:${voter.id}` },
+        create: { key: `post:${voter.id}`, count: 100000, expiresAt: new Date(Date.now() + 600000) },
+        update: { count: 100000, expiresAt: new Date(Date.now() + 600000) },
+      })
+      r = await updComment({ threadId: discThread.id, diaryUpdateId: discUpd.id, content: "one comment too many" }, voterCookie)
+      r.status === 429 ? pass("update comments honor the post rate limit") : fail("comment rate limit", r.status)
+      await prisma.rateLimit.delete({ where: { key: `post:${voter.id}` } }).catch(() => {})
+
+      // Rendering — diary timeline + thread chip.
+      const socPage = await getHtml(`/diaries/${discD.id}`, voterCookie)
+      socPage.html.includes(`data-update-social="${discUpd.id}"`) &&
+      socPage.html.includes(`data-update-comment="${discUpd.id}"`) &&
+      socPage.html.includes(`${cTok} looks healthy`) &&
+      socPage.html.includes("Comments on this update")
+        ? pass("diary timeline renders update reactions, comment action, and inline comments")
+        : fail("update social render", socPage.status)
+      const guestSoc = await getHtml(`/diaries/${discD.id}`)
+      guestSoc.html.includes(`${cTok} looks healthy`) ? pass("guest sees public update comments") : fail("guest comment render")
+      const blockedSoc = await getHtml(`/diaries/${discD.id}`, viewerCookie)
+      blockedSoc.status === 200 && !blockedSoc.html.includes(`data-update-comment="${discUpd.id}"`)
+        ? pass("blocked member gets a read-only interaction row (no composer)")
+        : fail("blocked render", blockedSoc.status)
+      !pages.PRIVATE_owner.includes("data-update-comment=") && !pages.UNLISTED.includes("data-update-comment=")
+        ? pass("non-public grows render no comment composer")
+        : fail("non-public composer")
+      const emptyUpd = await prisma.diaryUpdate.create({
+        data: { diaryId: discD.id, authorId: owner.id, title: M("eu"), content: "no comments yet", stage: "VEGETATIVE", dayNumber: 2, weekNumber: 1 },
+      })
+      const emptyPage = await getHtml(`/diaries/${discD.id}`, voterCookie)
+      // Slice this update's rendered block only — stop at the next update
+      // row and at the RSC flight payload (<script>), which serializes every
+      // row's props and would otherwise bleed into the last block.
+      const emptyBlock = emptyPage.html
+        .split(`data-update-social="${emptyUpd.id}"`)[1]
+        ?.split("data-update-social=")[0]
+        .split("<script")[0] ?? ""
+      emptyBlock && !emptyBlock.includes("Comments on this update")
+        ? pass("update without comments renders no empty comment list")
+        : fail("empty comment state", { status: emptyPage.status, found: !!emptyBlock, len: emptyBlock.length })
+      let threadPage = await getHtml(`/forum/thread/${discThread.slug}`)
+      threadPage.html.includes(`${cTok} looks healthy`) && threadPage.html.includes("on update:")
+        ? pass("anchored comment appears in the grow discussion with its update chip")
+        : fail("thread anchored render", threadPage.status)
+
+      // Privacy flip — UNLISTED / deleted grow hides anchored comments from
+      // the public thread and search; restoring PUBLIC brings them back.
+      // Positive control first (search results are cached per query, so the
+      // control and the negative use distinct never-before-searched tokens).
+      const pTok = M("srch")
+      await updComment({ threadId: discThread.id, diaryUpdateId: discUpd.id, content: `${pTok} searchable while public` }, voterCookie)
+      const searchVisible = await callApi(`/api/search?q=${encodeURIComponent(pTok)}`)
+      JSON.stringify(searchVisible.data ?? {}).includes("searchable while public")
+        ? pass("public anchored comment is searchable (positive control)")
+        : fail("anchored search control", { s: searchVisible.status })
+      await prisma.growDiary.update({ where: { id: discD.id }, data: { visibility: "UNLISTED" } })
+      threadPage = await getHtml(`/forum/thread/${discThread.slug}`)
+      const searchHidden = await callApi(`/api/search?q=${encodeURIComponent(cTok)}`)
+      !threadPage.html.includes(`${cTok} looks healthy`) && !JSON.stringify(searchHidden.data ?? {}).includes("looks healthy")
+        ? pass("grow leaves PUBLIC → anchored comments vanish from thread + search")
+        : fail("anchored privacy flip", { thread: threadPage.html.includes(cTok), search: searchHidden.status })
+      await prisma.growDiary.update({ where: { id: discD.id }, data: { visibility: "PUBLIC", deleted: true } })
+      threadPage = await getHtml(`/forum/thread/${discThread.slug}`)
+      !threadPage.html.includes(`${cTok} looks healthy`)
+        ? pass("deleted grow → anchored comments never leak through the thread")
+        : fail("anchored deleted grow")
+      await prisma.growDiary.update({ where: { id: discD.id }, data: { deleted: false } })
+      threadPage = await getHtml(`/forum/thread/${discThread.slug}`)
+      threadPage.html.includes(`${cTok} looks healthy`)
+        ? pass("restoring PUBLIC restores anchored comments (non-destructive)")
+        : fail("anchored restore")
+
+      // Comment delete — normal Post delete; its notification is cleaned.
+      r = await callApi("/api/forum/posts", { method: "DELETE", body: { id: commentId }, cookie: ownerCookie })
+      r.status === 403 ? pass("grower cannot delete another member's comment (moderation stays staff-only)") : fail("owner delete other comment", r.status)
+      r = await callApi("/api/forum/posts", { method: "DELETE", body: { id: commentId }, cookie: voterCookie })
+      const delNote = await prisma.notification.count({ where: { link: { contains: `?post=${commentId}` } } })
+      r.status === 200 && delNote === 0
+        ? pass("comment author deletes own comment; deep-link notification removed")
+        : fail("comment delete", { s: r.status, delNote })
+
+      // Update delete — anchored comments soft-deleted (no orphans),
+      // update reactions cascade, update-linked notifications removed.
+      const goneUpd = await prisma.diaryUpdate.create({
+        data: { diaryId: discD.id, authorId: owner.id, title: M("gu"), content: "about to be deleted", stage: "VEGETATIVE", dayNumber: 3, weekNumber: 1 },
+      })
+      await updReact({ type: "LIKE", diaryUpdateId: goneUpd.id }, voterCookie)
+      r = await updComment({ threadId: discThread.id, diaryUpdateId: goneUpd.id, content: `${cTok} orphan candidate comment` }, voterCookie)
+      const orphanId = r.data?.post?.id
+      const replyBefore = (await prisma.thread.findUnique({ where: { id: discThread.id }, select: { replyCount: true } })).replyCount
+      r = await callApi("/api/diaries/updates", { method: "DELETE", body: { id: goneUpd.id }, cookie: ownerCookie })
+      const orphan = orphanId && await prisma.post.findUnique({ where: { id: orphanId }, select: { deleted: true } })
+      const goneReacts = await prisma.reaction.count({ where: { diaryUpdateId: goneUpd.id } })
+      const goneNotes = await prisma.notification.count({ where: { link: { contains: `#update-${goneUpd.id}` } } })
+      const replyAfter = (await prisma.thread.findUnique({ where: { id: discThread.id }, select: { replyCount: true } })).replyCount
+      threadPage = await getHtml(`/forum/thread/${discThread.slug}`)
+      r.status === 200 && orphan?.deleted === true && goneReacts === 0 && goneNotes === 0 &&
+      replyAfter === replyBefore - 1 && !threadPage.html.includes("orphan candidate comment")
+        ? pass("update delete soft-deletes anchored comments, cascades reactions, purges notifications")
+        : fail("update delete social cleanup", { s: r.status, orphan, goneReacts, goneNotes, replyBefore, replyAfter })
+
+      // Feed card exposes interaction counts + update deep link.
+      const feedHtml = (await getHtml("/feed", voterCookie)).html
+      feedHtml.includes(`#update-${emptyUpd.id}`)
+        ? pass("feed update card deep-links to the update with interaction counts")
+        : fail("feed update card link")
+    }
 
     // Visibility mutations
     r = await callApi(`/api/diaries/${pubD.id}`, { method: "PATCH", body: { visibility: "PRIVATE" }, cookie: voterCookie })

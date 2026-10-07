@@ -2,7 +2,9 @@ import { NextResponse, after } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { unauthorized, publicUserSelect, LIMITS, getClientIp, logSecurityEvent, forbidden, enforceLinkTrust, isModerator, isAdmin, blockExistsBetween } from "@/lib/security"
+import { unauthorized, publicUserSelect, LIMITS, getClientIp, logSecurityEvent, forbidden, enforceLinkTrust, isModerator, isAdmin, blockExistsBetween, isActiveAuthorRow } from "@/lib/security"
+import { diaryPath } from "@/lib/slugs"
+import { updateAnchor } from "@/lib/update-social"
 import { requireModerator } from "@/lib/require-staff"
 import { rateLimit } from "@/lib/rate-limit"
 import { proxyMedia } from "@/lib/media"
@@ -33,11 +35,12 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json().catch(() => ({}))
-    const { content, threadId, images } = body
+    const { content, threadId, images, diaryUpdateId } = body
 
     if (
       typeof content !== "string" || !content.trim() ||
-      typeof threadId !== "string" || !threadId
+      typeof threadId !== "string" || !threadId ||
+      (diaryUpdateId !== undefined && diaryUpdateId !== null && (typeof diaryUpdateId !== "string" || !diaryUpdateId))
     ) {
       return NextResponse.json(
         { error: "Missing required fields" },
@@ -98,6 +101,53 @@ export async function POST(request: Request) {
       return forbidden()
     }
 
+    // Social Grow Updates — an anchored comment is a normal Post, but only
+    // inside the grow's own canonical discussion thread and only while the
+    // grow is PUBLIC (the thread is public forum content; an interaction may
+    // never be broader than the content it belongs to). One 404 for every
+    // failure so update/grow existence can't be probed.
+    let anchor: { updateId: string; diaryHref: string; diaryAuthorId: string; updateTitle: string } | null = null
+    if (typeof diaryUpdateId === "string") {
+      const update = await prisma.diaryUpdate.findUnique({
+        where: { id: diaryUpdateId },
+        select: {
+          id: true,
+          title: true,
+          diary: {
+            select: {
+              id: true, slug: true, authorId: true, visibility: true, deleted: true, threadId: true,
+              author: { select: { banned: true, suspendedUntil: true } },
+            },
+          },
+        },
+      })
+      if (
+        !update ||
+        update.diary.deleted ||
+        update.diary.visibility !== "PUBLIC" ||
+        !isActiveAuthorRow(update.diary.author) ||
+        update.diary.threadId !== threadId
+      ) {
+        return NextResponse.json({ error: "Update not found" }, { status: 404 })
+      }
+      // Grow owner == discussion thread author (discuss route invariant);
+      // the block check above already covers them — re-check defensively in
+      // case the thread author ever diverges.
+      if (update.diary.authorId !== thread.authorId && await blockExistsBetween(session.user.id, update.diary.authorId)) {
+        return forbidden()
+      }
+      // Update comments are short and text-only.
+      if (Array.isArray(images) && images.length > 0) {
+        return NextResponse.json({ error: "Comments can't include images" }, { status: 400 })
+      }
+      anchor = {
+        updateId: update.id,
+        diaryHref: diaryPath(update.diary),
+        diaryAuthorId: update.diary.authorId,
+        updateTitle: update.title,
+      }
+    }
+
     const linkBlock = await enforceLinkTrust(content, session.user.id, request, "forum/posts")
     if (linkBlock) return linkBlock
 
@@ -105,7 +155,7 @@ export async function POST(request: Request) {
     // with only some of its images.
     try {
       // Seedling+ ranks can attach more images per post.
-      imageUrls = await storeImages(images, "forum", perks.imagesPerPost ?? MAX_POST_IMAGES, { access: "private" })
+      imageUrls = anchor ? [] : await storeImages(images, "forum", perks.imagesPerPost ?? MAX_POST_IMAGES, { access: "private" })
     } catch (err) {
       console.error("Forum post image upload error:", err)
       return NextResponse.json(
@@ -122,6 +172,7 @@ export async function POST(request: Request) {
           content,
           threadId,
           authorId: session.user.id,
+          diaryUpdateId: anchor?.updateId ?? null,
           images: {
             create: imageUrls.map((url, order) => ({ url, order })),
           },
@@ -186,7 +237,24 @@ export async function POST(request: Request) {
     // groupKey+dedupeMs bound reply-bombs: the same replier can't stack more
     // than one REPLY notification per hour on the same thread.
     // Hidden categories never notify — title/link would leak staff-only content.
-    if (thread.authorId !== session.user.id && !thread.category?.hidden) {
+    // Anchored update comments notify the grower with the existing COMMENT
+    // type (notifyOnComment pref; in-app only — pushCategory never maps it),
+    // linking straight to the update. `?post=` keeps postLinkWhere cleanup
+    // working when the comment is deleted.
+    if (anchor) {
+      if (anchor.diaryAuthorId !== session.user.id) {
+        await notify({
+          userId: anchor.diaryAuthorId,
+          type: "COMMENT",
+          title: "New comment on your grow update",
+          content: `@${session.user.name || "Someone"} commented on "${anchor.updateTitle.slice(0, 80)}"`,
+          link: updateAnchor(anchor.diaryHref, anchor.updateId, post.id),
+          actorId: session.user.id,
+          groupKey: `COMMENT:update:${anchor.updateId}`,
+          dedupeMs: 60 * 60 * 1000,
+        })
+      }
+    } else if (thread.authorId !== session.user.id && !thread.category?.hidden) {
       await notify({
         userId: thread.authorId,
         type: "REPLY",
@@ -199,16 +267,16 @@ export async function POST(request: Request) {
       })
     }
 
-    // Notify @mentions in the reply — excluding the thread author, who
-    // already got the REPLY notification above. Same hidden-category gate.
+    // Notify @mentions in the reply — excluding the thread/grow owner, who
+    // already got the REPLY/COMMENT notification above. Same hidden-category gate.
     if (!thread.category?.hidden) {
       await notifyMentions(
         content,
         session.user.id,
         session.user.name || "Someone",
-        postDeepLink(thread.slug, post.id),
-        `a reply in "${thread.title.slice(0, 60)}"`,
-        [thread.authorId]
+        anchor ? updateAnchor(anchor.diaryHref, anchor.updateId, post.id) : postDeepLink(thread.slug, post.id),
+        anchor ? `a comment on "${anchor.updateTitle.slice(0, 60)}"` : `a reply in "${thread.title.slice(0, 60)}"`,
+        [anchor?.diaryAuthorId ?? thread.authorId]
       )
     }
 

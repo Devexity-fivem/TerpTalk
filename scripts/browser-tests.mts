@@ -615,6 +615,85 @@ const main = async () => {
       }
     }
 
+    // ── Social Grow Updates (Phase 1) ────────────────────────────────
+    // Real UI: bob reacts to + comments on alice's PUBLIC update; the
+    // comment lands as an anchored Post in the lazily created discussion.
+    // UNLISTED/PRIVATE grows render no composer; deleting the update
+    // leaves no orphan comment anywhere.
+    const mkSocDiary = (visibility: string, tag: string) => prisma.growDiary.create({
+      data: {
+        title: `__br social ${tag} ${TS}`, slug: `__br-soc-${tag}-${TS}`, description: "social fixture",
+        growType: "INDOOR", startDate: new Date(), authorId: alice.id, visibility,
+      },
+    })
+    const socDiary = await mkSocDiary("PUBLIC", "pub")
+    const unlSocDiary = await mkSocDiary("UNLISTED", "unl")
+    const mkSocUpdate = (diaryId: string, tag: string) => prisma.diaryUpdate.create({
+      data: { diaryId, authorId: alice.id, title: `__br update ${tag} ${TS}`, content: "week 2 canopy", stage: "VEGETATIVE", dayNumber: 9, weekNumber: 2 },
+    })
+    const socUpd = await mkSocUpdate(socDiary.id, "pub")
+    const unlUpd = await mkSocUpdate(unlSocDiary.id, "unl")
+    const privUpd = await mkSocUpdate(privDiary.id, "priv")
+    const socComment = `__br comment ${TS} — love the canopy`
+    {
+      const { context: bobSocCtx, page: bp } = await login(bobUsername)
+      const row = `[data-update-social="${socUpd.id}"]`
+      await gotoMain(bp, `${BASE}/diaries/${socDiary.slug}`, row)
+      await bp.locator(`${row} button:has-text("React")`).first().click()
+      await bp.locator(`${row} button[aria-label="React with like"]`).click()
+      await bp.waitForFunction((sel) => !!document.querySelector(sel)?.textContent?.includes("1"), row, { timeout: 15_000 }).catch(() => {})
+      ok("social: member reacts to a PUBLIC grow update in the UI",
+        (await prisma.reaction.count({ where: { userId: bob.id, diaryUpdateId: socUpd.id } })) === 1)
+
+      await bp.locator(`[data-update-comment="${socUpd.id}"]`).click()
+      await bp.fill(`#update-comment-${socUpd.id}`, socComment)
+      await bp.locator(`${row} button:has-text("Post comment")`).click()
+      // Done = composer closed (submit succeeded) AND the refreshed inline
+      // list carries the comment. The textarea's own value must not count.
+      await bp.waitForSelector(`#update-comment-${socUpd.id}`, { state: "detached", timeout: 30_000 }).catch(() => {})
+      await bp.waitForFunction(
+        ([sel, text]) => !!document.querySelector(`${sel} ul[aria-label="Comments on this update"]`)?.textContent?.includes(text),
+        [row, socComment] as const,
+        { timeout: 30_000 }
+      ).catch(() => {})
+      const anchored = await prisma.post.findFirst({
+        where: { authorId: bob.id, diaryUpdateId: socUpd.id },
+        select: { threadId: true, deleted: true },
+      })
+      const socThread = await prisma.growDiary.findUnique({ where: { id: socDiary.id }, select: { threadId: true } })
+      ok("social: UI comment is an anchored Post in the grow's discussion thread",
+        !!anchored && !anchored.deleted && anchored.threadId === socThread?.threadId,
+        { anchored, socThread })
+      ok("social: comment renders inline under the update",
+        ((await bp.locator(`${row} ul[aria-label="Comments on this update"]`).textContent().catch(() => "")) ?? "").includes(socComment))
+
+      await gotoMain(bp, `${BASE}/diaries/${unlSocDiary.slug}`, `[data-update-social="${unlUpd.id}"]`)
+      ok("social: UNLISTED grow renders no comment composer",
+        (await bp.locator(`[data-update-comment="${unlUpd.id}"]`).count()) === 0)
+      await bp.goto(`${BASE}/diaries/${privDiary.slug}`, { waitUntil: "domcontentloaded" })
+      ok("social: PRIVATE grow exposes no update interaction to non-owner",
+        (await bp.locator(`[data-update-social="${privUpd.id}"]`).count()) === 0)
+      await bobSocCtx.close()
+    }
+    {
+      const anonSoc = await browser.newContext()
+      const ap = await anonSoc.newPage()
+      await gotoMain(ap, `${BASE}/diaries/${socDiary.slug}`, `[data-update-social="${socUpd.id}"]`)
+      ok("social: anonymous visitor sees PUBLIC update comments",
+        ((await ap.textContent("body")) ?? "").includes(socComment))
+      // Grower deletes the update — the anchored comment must not survive
+      // as an orphan in the grow discussion.
+      const del = await aliceCtx.request.delete(`${BASE}/api/diaries/updates`, { data: { id: socUpd.id } })
+      const thread = await prisma.growDiary.findUnique({
+        where: { id: socDiary.id }, select: { discussion: { select: { slug: true } } },
+      })
+      await gotoMain(ap, `${BASE}/forum/thread/${thread?.discussion?.slug}`)
+      ok("social: deleting the update leaves no orphan comment in the discussion",
+        del.status() === 200 && !((await ap.textContent("body")) ?? "").includes(socComment),
+        { status: del.status() })
+      await anonSoc.close()
+    }
+
     // ── Block boundary (privacy) ─────────────────────────────────────
     await prisma.block.create({ data: { blockerId: alice.id, blockedId: bob.id } })
     const { context: bobCtx, page: bobPage } = await login(bobUsername)
@@ -625,6 +704,19 @@ const main = async () => {
       blockedRes?.status() === 404 || /not found|404/i.test(blockedBody),
       { status: blockedRes?.status() }
     )
+    // Blocked member gets a read-only update row — no reaction control,
+    // no composer — and the API rejects the write regardless.
+    const blockedUpd = await mkSocUpdate(socDiary.id, "blk")
+    await gotoMain(bobPage, `${BASE}/diaries/${socDiary.slug}`)
+    // The blocked row has no visible children (no controls) — wait for
+    // attachment, not visibility.
+    await bobPage.waitForSelector(`[data-update-social="${blockedUpd.id}"]`, { state: "attached", timeout: 30_000 })
+    const blockedReact = await bobCtx.request.post(`${BASE}/api/reactions`, { data: { type: "LIKE", diaryUpdateId: blockedUpd.id } })
+    ok("social: blocked member has no update reaction/comment controls and the API refuses",
+      (await bobPage.locator(`[data-update-comment="${blockedUpd.id}"]`).count()) === 0 &&
+      (await bobPage.locator(`[data-update-social="${blockedUpd.id}"] button:has-text("React")`).count()) === 0 &&
+      blockedReact.status() === 403,
+      { react: blockedReact.status() })
     await bobCtx.close()
 
     // ── Mobile contract ──────────────────────────────────────────────

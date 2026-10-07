@@ -31,6 +31,7 @@ import AnswerFollowPrompt from "@/components/answer-follow-prompt"
 import { rankDisplay } from "@/lib/progression-config"
 import { questionEvidenceForThread, helperFollowPromptAllowed } from "@/lib/question-evidence"
 import { TERPBOT_USERNAME } from "@/lib/terpbot-constants"
+import { anchoredPostVisibleWhere, updateAnchor } from "@/lib/update-social"
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params
@@ -71,7 +72,7 @@ async function getThreadData(slug: string, page: number, canSeeHidden: boolean, 
         },
       },
       acceptedAnswer: {
-        where: { deleted: false, author: activeAuthor(), ...notBlockedAuthor(blockedIds) },
+        where: { deleted: false, author: activeAuthor(), ...notBlockedAuthor(blockedIds), ...anchoredPostVisibleWhere() },
         include: {
           author: { select: publicUserSelect },
           reactions: { select: { userId: true, type: true } },
@@ -79,17 +80,19 @@ async function getThreadData(slug: string, page: number, canSeeHidden: boolean, 
         },
       },
       posts: {
-        where: { deleted: false, author: activeAuthor(), ...notBlockedAuthor(blockedIds) },
+        // Anchored update comments render only while their grow is PUBLIC.
+        where: { deleted: false, author: activeAuthor(), ...notBlockedAuthor(blockedIds), ...anchoredPostVisibleWhere() },
         include: {
           author: { select: publicUserSelect },
           reactions: { select: { userId: true, type: true } },
           images: { orderBy: { order: "asc" } },
+          diaryUpdate: { select: { id: true, title: true } },
         },
         orderBy: { createdAt: "asc" },
         skip: (page - 1) * POSTS_PER_PAGE,
         take: POSTS_PER_PAGE,
       },
-      _count: { select: { posts: { where: { deleted: false, author: activeAuthor(), ...notBlockedAuthor(blockedIds) } } } },
+      _count: { select: { posts: { where: { deleted: false, author: activeAuthor(), ...notBlockedAuthor(blockedIds), ...anchoredPostVisibleWhere() } } } },
       // Canonical diary this thread discusses (0-1) — surfaced as a context card.
       diaryFor: {
         select: {
@@ -203,13 +206,13 @@ export default async function ThreadPage({
     typeof postParam === "string" && postParam.length <= 40 &&
     postParam !== thread.acceptedAnswerId
   ) {
-    const target = await prisma.post.findUnique({
-      where: { id: postParam },
+    const target = await prisma.post.findFirst({
+      where: { id: postParam, ...anchoredPostVisibleWhere() },
       select: { threadId: true, deleted: true, createdAt: true },
     })
     if (target && !target.deleted && target.threadId === thread.id) {
       const before = await prisma.post.count({
-        where: { threadId: thread.id, deleted: false, createdAt: { lt: target.createdAt } },
+        where: { threadId: thread.id, deleted: false, createdAt: { lt: target.createdAt }, ...anchoredPostVisibleWhere() },
       })
       const targetPage = Math.floor(before / POSTS_PER_PAGE) + 1
       if (targetPage !== page) {
@@ -322,13 +325,13 @@ export default async function ThreadPage({
   let firstUnreadPage = page
   if (follow?.lastSeenAt && follow.lastSeenAt < thread.lastActivityAt) {
     firstUnread = await prisma.post.findFirst({
-      where: { threadId: thread.id, deleted: false, createdAt: { gt: follow.lastSeenAt } },
+      where: { threadId: thread.id, deleted: false, createdAt: { gt: follow.lastSeenAt }, ...anchoredPostVisibleWhere() },
       orderBy: { createdAt: "asc" },
       select: { id: true, createdAt: true },
     })
     if (firstUnread) {
       const before = await prisma.post.count({
-        where: { threadId: thread.id, deleted: false, createdAt: { lt: firstUnread.createdAt } },
+        where: { threadId: thread.id, deleted: false, createdAt: { lt: firstUnread.createdAt }, ...anchoredPostVisibleWhere() },
       })
       firstUnreadPage = Math.floor(before / POSTS_PER_PAGE) + 1
     }
@@ -753,6 +756,18 @@ export default async function ThreadPage({
                         )}
                         {post.edited && (
                           <span className="text-xs text-muted-foreground">(edited)</span>
+                        )}
+                        {post.diaryUpdate && (
+                          thread.diaryFor ? (
+                            <Link
+                              href={updateAnchor(diaryPath(thread.diaryFor), post.diaryUpdate.id)}
+                              className="text-xs text-primary hover:underline truncate max-w-56"
+                            >
+                              on update: {post.diaryUpdate.title}
+                            </Link>
+                          ) : (
+                            <span className="text-xs text-muted-foreground truncate max-w-56">on update: {post.diaryUpdate.title}</span>
+                          )
                         )}
                       </div>
                       <span className="text-xs text-muted-foreground shrink-0">

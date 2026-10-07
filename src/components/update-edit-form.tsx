@@ -5,7 +5,7 @@
 // preloaded with the current values. The server remains the authorization
 // boundary — the pencil visibility is only a UI convenience.
 
-import { useState } from "react"
+import { useState, type ReactNode } from "react"
 import { useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
 import { Pencil, Loader2, X, Plus, Camera, ImagePlus, FlaskConical } from "@/lib/icons"
@@ -59,11 +59,13 @@ interface UpdateEditSectionProps {
   /** Canonical diary discussion entry — passed only for PUBLIC diaries;
    *  omitted entirely otherwise so the affordance never leaks. */
   discussion?: { diaryId: string; diaryHref: string; slug: string | null }
+  /** Social Grow Updates — server-rendered reactions + anchored comments slot. */
+  social?: ReactNode
 }
 
 const num = (v: number | null) => (v == null ? "" : String(v))
 
-export default function UpdateEditSection({ update, day, dateLabel, edited, discussion }: UpdateEditSectionProps) {
+export default function UpdateEditSection({ update, day, dateLabel, edited, discussion, social }: UpdateEditSectionProps) {
   const { data: session } = useSession()
   const router = useRouter()
   const { toast } = useToast()
@@ -189,7 +191,7 @@ export default function UpdateEditSection({ update, day, dateLabel, edited, disc
   if (update.nutrients?.length) eventChips.push({ label: "Nutrients", color: "text-success bg-success/10" })
 
   return (
-    <div className="bg-card/80 rounded-2xl border border-border/70 p-4">
+    <div id={`update-${update.id}`} className="bg-card/80 rounded-2xl border border-border/70 p-4 scroll-mt-20">
       <div className="flex flex-wrap items-start justify-between gap-2 mb-3">
         <div>
           <div className="flex items-center gap-1.5 mb-1.5 flex-wrap">
@@ -676,15 +678,20 @@ export default function UpdateEditSection({ update, day, dateLabel, edited, disc
             </div>
           )}
 
-          {discussion && (
-            <div className="pt-3 border-t border-border/60">
-              <DiaryDiscussButton
-                diaryId={discussion.diaryId}
-                diaryHref={discussion.diaryHref}
-                existingSlug={discussion.slug}
-                label="Discuss this update"
-                variant="link"
-              />
+          {(social || discussion) && (
+            <div className="pt-3 border-t border-border/60 space-y-2">
+              {/* Fast social interaction on this update… */}
+              {social}
+              {/* …versus the grow's long-form forum discussion. */}
+              {discussion && (
+                <DiaryDiscussButton
+                  diaryId={discussion.diaryId}
+                  diaryHref={discussion.diaryHref}
+                  existingSlug={discussion.slug}
+                  label="Discuss the grow"
+                  variant="link"
+                />
+              )}
             </div>
           )}
         </>

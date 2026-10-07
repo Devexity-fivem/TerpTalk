@@ -5,7 +5,8 @@ import { getSiteStats } from "@/lib/community-stats"
 import { publicDiaryWhere } from "@/lib/diary-visibility"
 import { mediaProxyUrl } from "@/lib/media"
 import { getSession } from "@/lib/session"
-import { Leaf, MessageSquare, TrendingUp, Calendar, Users, UserPlus, Sprout, Award } from "@/lib/icons"
+import { Leaf, MessageSquare, TrendingUp, Calendar, Users, UserPlus, Sprout, Award, Heart } from "@/lib/icons"
+import { updateAnchor } from "@/lib/update-social"
 import { LiveRefresh } from "@/components/live-refresh"
 import Link from "next/link"
 import RoleBadge from "@/components/role-badge"
@@ -117,6 +118,9 @@ async function getFeedData(userId?: string, tab = "latest") {
       },
       author: { select: publicUserSelect },
       images: { take: 1 },
+      // Social Grow Updates — interaction counts ride the existing query
+      // (SQL COUNT subselects, no extra round trip, no reaction rows).
+      _count: { select: { reactions: true, comments: { where: { deleted: false, author: activeAuthor() } } } },
     },
   })
 
@@ -448,10 +452,13 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
                       )
                     } else {
                       const u = item.data as (typeof recentDiaryUpdates)[number]
+                      // Anchored comments only exist/render on PUBLIC grows —
+                      // never surface a count for a followed UNLISTED grow.
+                      const commentCount = u.diary.visibility === "PUBLIC" ? u._count.comments : 0
                       return (
                         <Link
                           key={`u-${u.id}`}
-                          href={diaryPath(u.diary)}
+                          href={updateAnchor(diaryPath(u.diary), u.id)}
                           className="block p-4 hover:bg-secondary/50 transition-colors"
                         >
                           <div className="flex items-start gap-3">
@@ -470,6 +477,14 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
                                 <span className="truncate">{u.diary.title}</span>
                                 <span>•</span>
                                 <span><TimeAgo value={u.createdAt} /></span>
+                                {u._count.reactions > 0 && (
+                                  <span className="inline-flex items-center gap-0.5" aria-label={`${u._count.reactions} reactions`}>
+                                    <Heart className="w-3 h-3" /> {u._count.reactions}
+                                  </span>
+                                )}
+                                <span className="inline-flex items-center gap-0.5 text-primary" aria-label={commentCount > 0 ? `${commentCount} comments` : "Comment"}>
+                                  <MessageSquare className="w-3 h-3" /> {commentCount > 0 ? commentCount : "Comment"}
+                                </span>
                               </div>
                             </div>
                           </div>

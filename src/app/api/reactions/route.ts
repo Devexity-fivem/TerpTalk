@@ -3,12 +3,13 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
-import { unauthorized, forbidden, getClientIp, logSecurityEvent, blockExistsBetween } from "@/lib/security"
+import { unauthorized, forbidden, getClientIp, logSecurityEvent, blockExistsBetween, isActiveAuthorRow } from "@/lib/security"
 import { progressionRateLimit } from "@/lib/progression"
 import { checkMaintenance } from "@/lib/maintenance"
 import { notify, postDeepLink } from "@/lib/notify"
 import { canViewDiary } from "@/lib/diary-visibility"
 import { diaryPath } from "@/lib/slugs"
+import { updateAnchor } from "@/lib/update-social"
 
 const VALID_REACTION_TYPES = new Set(["LIKE", "LOVE", "LAUGH", "THINKING", "FIRE", "THUMBS_UP", "THUMBS_DOWN"])
 
@@ -34,19 +35,27 @@ export async function POST(request: Request) {
     if (maintenance) return maintenance
 
     const body = await request.json().catch(() => ({}))
-    const { type, postId, diaryId } = body
+    const { type, postId, diaryId, diaryUpdateId } = body
 
     const hasPostId = typeof postId === "string" && postId.length > 0
     const hasDiaryId = typeof diaryId === "string" && diaryId.length > 0
+    const hasUpdateId = typeof diaryUpdateId === "string" && diaryUpdateId.length > 0
 
+    // Exactly one target — never a mixed/multi-target row.
     if (
       typeof type !== "string" ||
       !VALID_REACTION_TYPES.has(type) ||
-      (!hasPostId && !hasDiaryId) ||
-      (hasPostId && hasDiaryId)
+      [hasPostId, hasDiaryId, hasUpdateId].filter(Boolean).length !== 1
     ) {
       return NextResponse.json({ error: "Invalid request" }, { status: 400 })
     }
+    // The single target column this request writes — explicit, never spread
+    // from the body.
+    const target: { postId: string } | { diaryId: string } | { diaryUpdateId: string } = hasPostId
+      ? { postId }
+      : hasDiaryId
+        ? { diaryId }
+        : { diaryUpdateId }
 
     // Rate limit: 120 reactions per 10 minutes per user (tier-scaled)
     const rl = await progressionRateLimit(session.user.id, `reaction:${session.user.id}`, 120, 10 * 60 * 1000)
@@ -91,6 +100,34 @@ export async function POST(request: Request) {
       targetAuthorId = diary.authorId
       targetLink = diaryPath(diary)
       targetTitle = diary.title
+    } else {
+      // Grow update — inherits its grow's canonical view rule
+      // (canViewDiary: PRIVATE = owner only), plus deleted-grow and
+      // inactive-author gates. One 404 for every failure: no existence oracle.
+      const update = await prisma.diaryUpdate.findUnique({
+        where: { id: diaryUpdateId },
+        select: {
+          id: true,
+          title: true,
+          diary: {
+            select: {
+              id: true, slug: true, authorId: true, visibility: true, deleted: true,
+              author: { select: { banned: true, suspendedUntil: true } },
+            },
+          },
+        },
+      })
+      if (
+        !update ||
+        update.diary.deleted ||
+        !isActiveAuthorRow(update.diary.author) ||
+        !canViewDiary(update.diary, session.user.id)
+      ) {
+        return NextResponse.json({ error: "Update not found" }, { status: 404 })
+      }
+      targetAuthorId = update.diary.authorId
+      targetLink = updateAnchor(diaryPath(update.diary), update.id)
+      targetTitle = update.title
     }
 
     // Blocked users can't react to each other's content (previously only
@@ -103,11 +140,7 @@ export async function POST(request: Request) {
 
     // Check if reaction already exists
     const existingReaction = await prisma.reaction.findFirst({
-      where: {
-        userId: session.user.id,
-        ...(hasPostId ? { postId } : {}),
-        ...(hasDiaryId ? { diaryId } : {}),
-      },
+      where: { userId: session.user.id, ...target },
     })
 
     // Progression V2: reactions pay 0 XP and 0 standing — the entire
@@ -133,21 +166,12 @@ export async function POST(request: Request) {
     let reaction
     try {
       reaction = await prisma.reaction.create({
-        data: {
-          type,
-          userId: session.user.id,
-          ...(hasPostId ? { postId } : {}),
-          ...(hasDiaryId ? { diaryId } : {}),
-        },
+        data: { type, userId: session.user.id, ...target },
       })
     } catch (e) {
       if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
         reaction = await prisma.reaction.findFirst({
-          where: {
-            userId: session.user.id,
-            ...(hasPostId ? { postId } : {}),
-            ...(hasDiaryId ? { diaryId } : {}),
-          },
+          where: { userId: session.user.id, ...target },
         })
         if (!reaction) throw e
       } else {
@@ -160,8 +184,10 @@ export async function POST(request: Request) {
     // the recipient's notifyOnReaction pref, bans, and blocks.
     if (targetAuthorId && targetAuthorId !== session.user.id) {
       const emoji = REACTION_EMOJI[type] ?? "👍"
-      const targetKind = hasPostId ? "post" : "grow diary"
+      const targetKind = hasPostId ? "post" : hasDiaryId ? "grow diary" : "grow update"
       const context = targetTitle ? ` on "${targetTitle.slice(0, 60)}"` : ""
+      // REACTION is in-app only (pushCategory never maps it) — update
+      // reactions stay quiet like every other reaction.
       await notify({
         userId: targetAuthorId,
         type: "REACTION",
@@ -169,7 +195,7 @@ export async function POST(request: Request) {
         content: `${session.user.name ?? "Someone"} reacted ${emoji} to your ${targetKind}${context}`,
         link: targetLink,
         actorId: session.user.id,
-        groupKey: `REACTION:${hasPostId ? `post:${postId}` : `diary:${diaryId}`}`,
+        groupKey: `REACTION:${hasPostId ? `post:${postId}` : hasDiaryId ? `diary:${diaryId}` : `update:${diaryUpdateId}`}`,
         dedupeMs: 24 * 60 * 60 * 1000,
       })
     }

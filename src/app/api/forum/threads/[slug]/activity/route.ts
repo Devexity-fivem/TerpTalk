@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { isModerator, activeAuthor } from "@/lib/security"
+import { anchoredPostVisibleWhere } from "@/lib/update-social"
 
 export const dynamic = "force-dynamic"
 
@@ -35,9 +36,9 @@ export async function GET(_request: Request, { params }: { params: Promise<{ slu
     }
 
     const [posts, lastPost] = await Promise.all([
-      prisma.post.count({ where: { threadId: thread.id, deleted: false, author: activeAuthor() } }),
+      prisma.post.count({ where: { threadId: thread.id, deleted: false, author: activeAuthor(), ...anchoredPostVisibleWhere() } }),
       prisma.post.findFirst({
-        where: { threadId: thread.id, deleted: false, author: activeAuthor() },
+        where: { threadId: thread.id, deleted: false, author: activeAuthor(), ...anchoredPostVisibleWhere() },
         orderBy: { createdAt: "desc" },
         select: { createdAt: true, updatedAt: true },
       }),

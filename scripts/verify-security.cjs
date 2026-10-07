@@ -112,6 +112,11 @@ const apiFiles = () => {
     // reply-vs-own-thread joins — parameterized tagged templates, the
     // cohort id array is a bound ANY($1) param; no string interpolation.
     path.join("src", "lib", "activation.ts"),
+    // Social Grow Updates: per-update inline comment window — one
+    // ROW_NUMBER() OVER (PARTITION BY diaryUpdateId) pass instead of N
+    // queries. Parameterized tagged template; the update-id and blocked-id
+    // arrays are bound ANY($n::text[]) params, the window size a bound int.
+    path.join("src", "lib", "update-social.ts"),
   ]);
   check("no raw SQL outside allowlist", !allSrc.some((f) => {
     if (rawSqlAllowlist.has(f)) return false;
@@ -431,6 +436,81 @@ const apiFiles = () => {
     check("answer-follow: prompt goes through /api/follows", followPrompt.includes('"/api/follows"'));
     const threadPage = read("app/forum/thread/[slug]/page.tsx");
     check("answer-follow: asker-scoped eligibility via helper", threadPage.includes("helperFollowPromptAllowed"));
+  }
+
+  // ── Social Grow Updates (Phase 1) — update interaction contracts ──
+  {
+    const schema = fs.readFileSync(path.join("prisma", "schema.prisma"), "utf8");
+    const model = (name) => schema.slice(schema.indexOf(`model ${name} {`), schema.indexOf("}", schema.indexOf(`model ${name} {`)));
+    const reaction = model("Reaction");
+    const post = model("Post");
+    check("social: Reaction keeps explicit target columns (no polymorphic target)",
+      /postId\s+String\?/.test(reaction) && /diaryId\s+String\?/.test(reaction) && /diaryUpdateId\s+String\?/.test(reaction)
+      && !/targetType|targetId/.test(reaction));
+    check("social: one reaction per member per update (unique)", reaction.includes("@@unique([userId, diaryUpdateId])"));
+    check("social: update reactions cascade with the update",
+      /diaryUpdate\s+DiaryUpdate\?\s+@relation\(fields: \[diaryUpdateId\], references: \[id\], onDelete: Cascade\)/.test(reaction));
+    check("social: comment anchor is optional + SetNull (Post survives as soft-deleted)",
+      /diaryUpdateId\s+String\?/.test(post) && /onDelete: SetNull\)/.test(post.slice(post.indexOf("diaryUpdate "))));
+    check("social: no standalone Comment / SocialPost model", !/^model (Comment|SocialPost|UpdateComment) \{/m.test(schema));
+
+    const social = read("lib/update-social.ts");
+    check("social: anchored-comment gate = PUBLIC + not deleted + active author",
+      /anchoredDiaryWhere = \{[\s\S]*deleted: false[\s\S]*publicDiaryWhere[\s\S]*activeAuthor\(\)/.test(social));
+    check("social: inline comment window is bounded per update (ROW_NUMBER)",
+      social.includes("ROW_NUMBER() OVER") && social.includes("UPDATE_INLINE_COMMENTS"));
+
+    const reactions = read("app/api/reactions/route.ts");
+    check("social: reaction body must name exactly one target",
+      reactions.includes("[hasPostId, hasDiaryId, hasUpdateId].filter(Boolean).length !== 1"));
+    const updBranch = reactions.slice(reactions.indexOf("prisma.diaryUpdate.findUnique"));
+    check("social: update reactions use canonical canViewDiary + deleted + active-author gates",
+      updBranch.includes("canViewDiary(update.diary, session.user.id)") && updBranch.includes("update.diary.deleted")
+      && updBranch.includes("isActiveAuthorRow(update.diary.author)"));
+    check("social: update reactions keep the block check + rate limit",
+      reactions.includes("blockExistsBetween(session.user.id, targetAuthorId)") && reactions.includes("progressionRateLimit"));
+    check("social: reaction writes use the explicit target, never the raw body",
+      reactions.includes("data: { type, userId: session.user.id, ...target }") && !/\.\.\.body\b/.test(reactions));
+
+    const posts = read("app/api/forum/posts/route.ts");
+    check("social: anchored comment requires PUBLIC grow + the grow's own discussion thread",
+      posts.includes('update.diary.visibility !== "PUBLIC"') && posts.includes("update.diary.threadId !== threadId")
+      && posts.includes("update.diary.deleted") && posts.includes("isActiveAuthorRow(update.diary.author)"));
+    check("social: anchor written from the validated update, not the body",
+      posts.includes("diaryUpdateId: anchor?.updateId ?? null"));
+    check("social: comment notifications reuse COMMENT with a cleanup-safe ?post= link",
+      posts.includes('type: "COMMENT"') && posts.includes("updateAnchor(anchor.diaryHref, anchor.updateId, post.id)"));
+
+    const notifyLib = read("lib/notify.ts");
+    check("social: no new notification types (COMMENT/REACTION reused)",
+      !notifyLib.includes('"UPDATE_COMMENT"') && !notifyLib.includes('"UPDATE_REACTION"'));
+    const webPush = read("lib/web-push.ts");
+    const pushSwitch = webPush.slice(webPush.indexOf("export function pushCategory"), webPush.indexOf("export function pushConfigured"));
+    check("social: reactions/comments stay out of Web Push", !pushSwitch.includes('"REACTION"') && !pushSwitch.includes('"COMMENT"'));
+
+    // Every surface that renders post content to other members applies
+    // the anchored-comment visibility fragment.
+    for (const f of [
+      "app/forum/thread/[slug]/page.tsx",
+      "app/api/forum/threads/[slug]/activity/route.ts",
+      "app/api/search/route.ts",
+      "lib/terpbot-data.ts",
+    ]) {
+      check(`social: ${f} filters anchored comments by grow visibility`, read(f).includes("anchoredPostVisibleWhere()"));
+    }
+
+    const updates = read("app/api/diaries/updates/route.ts");
+    const del = updates.slice(updates.indexOf("export async function DELETE"));
+    const softIdx = del.indexOf("where: { diaryUpdateId: id, deleted: false }");
+    const hardIdx = del.indexOf("tx.diaryUpdate.delete");
+    check("social: update delete soft-deletes anchored comments before the hard delete",
+      softIdx > -1 && hardIdx > softIdx && del.includes("data: { deleted: true }") && del.includes("updateLinkWhere(id)"));
+    check("social: removed comments enqueue durable rep + XP reversals",
+      del.includes('sourceType: "POST"') && del.includes("enqueueReversals(tx, intents)") && del.includes("enqueueXpReversals(tx, intents)"));
+
+    const diaryPage = read("app/diaries/[id]/page.tsx");
+    check("social: diary page loads update social state in one batch",
+      diaryPage.includes("loadUpdateSocial(updates.map((u) => u.id)") && diaryPage.includes('withComments: commentable'));
   }
 
   console.log(`\n${pass} passed, ${fail} failed`);

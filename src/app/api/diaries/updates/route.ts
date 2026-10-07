@@ -12,7 +12,7 @@ import { enqueueXpReversals, drainXpMany } from "@/lib/progression-outbox"
 import { storeImages, deleteImagesIfUnreferenced, MAX_POST_IMAGES } from "@/lib/blob"
 import { proxyMedia } from "@/lib/media"
 import { checkMaintenance } from "@/lib/maintenance"
-import { notifyMany } from "@/lib/notify"
+import { notifyMany, postLinkWhere, updateLinkWhere } from "@/lib/notify"
 import { revalidateTag, unstable_cache } from "next/cache"
 import { publicDiaryWhere } from "@/lib/diary-visibility"
 import { diaryDay, diaryWeek } from "@/lib/diary-weeks"
@@ -573,7 +573,40 @@ export async function DELETE(request: Request) {
     const dayKey = update.createdAt.toISOString().slice(0, 10)
     const reversalIds: string[] = []
     const xpReversalIds: string[] = []
+    let removedComments = 0
     await prisma.$transaction(async (tx) => {
+      // Social Grow Updates — anchored comments must not outlive their
+      // update as orphan discussion posts. Soft-delete them with the same
+      // side effects as a post delete (replyCount, deep-link notifications,
+      // durable rep/XP reversal intents) BEFORE the hard delete nulls the
+      // anchor. Update-reaction rows cascade with the update itself.
+      const anchored = await tx.post.findMany({
+        where: { diaryUpdateId: id, deleted: false },
+        select: { id: true, threadId: true },
+      })
+      removedComments = anchored.length
+      if (anchored.length > 0) {
+        const postIds = anchored.map((p) => p.id)
+        await tx.post.updateMany({ where: { id: { in: postIds } }, data: { deleted: true } })
+        const perThread = new Map<string, number>()
+        for (const p of anchored) perThread.set(p.threadId, (perThread.get(p.threadId) ?? 0) + 1)
+        for (const [threadId, n] of perThread) {
+          // Atomic decrement with a zero floor — same rule as post DELETE.
+          const dec = await tx.thread.updateMany({
+            where: { id: threadId, replyCount: { gte: n } },
+            data: { replyCount: { decrement: n } },
+          })
+          if (dec.count === 0) await tx.thread.updateMany({ where: { id: threadId }, data: { replyCount: 0 } })
+        }
+        await tx.notification.deleteMany({ where: { OR: postIds.map(postLinkWhere) } })
+        const intents = postIds.map((sourceId) => ({
+          kind: "SOURCE" as const, sourceType: "POST", sourceId, reason: "Diary update deleted",
+        }))
+        reversalIds.push(...await enqueueReversals(tx, intents))
+        xpReversalIds.push(...await enqueueXpReversals(tx, intents))
+      }
+      // Reaction/comment notifications deep-linking to the update would dangle.
+      await tx.notification.deleteMany({ where: updateLinkWhere(id) })
       await tx.diaryUpdate.delete({ where: { id } })
       const remaining = await tx.diaryUpdate.count({
         where: { diaryId: update.diaryId, createdAt: { gte: dayStart, lt: dayEnd } },
@@ -605,6 +638,8 @@ export async function DELETE(request: Request) {
     await evaluateGrowJourney(update.diaryId).catch(() => {})
     deleteImagesIfUnreferenced(update.images.map((i) => i.url)).catch(() => {})
     revalidateTag("diaries", { expire: 0 })
+    // Removed comments moved the discussion thread's replyCount.
+    if (removedComments > 0) revalidateTag("forum", { expire: 0 })
 
     return NextResponse.json({ deleted: true })
   } catch (error) {

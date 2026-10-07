@@ -20,6 +20,8 @@ import UpdateEditSection from "@/components/update-edit-form"
 import { groupUpdatesByWeek, buildHarvestReport, diaryCompleteness, diaryDay, diaryWeek, growthSummary, stageDurations, latestFeedingNote } from "@/lib/diary-weeks"
 import ReportButton from "@/components/report-button"
 import DiaryReactions from "@/components/diary-reactions"
+import UpdateSocialSection from "@/components/update-social-section"
+import { loadUpdateSocial } from "@/lib/update-social"
 import OwnerDeleteButton from "@/components/owner-delete-button"
 import FeatureGrowButton from "@/components/feature-grow-button"
 import DiaryDiscussButton from "@/components/diary-discuss-button"
@@ -274,7 +276,14 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
   // Diary reactions — aggregate counts + the viewer's own reaction. Reactor
   // identities are never shipped to the client; counts are grouped in SQL
   // so a popular diary doesn't ferry one row per reaction.
-  const [reactionGroups, myReactionRow] = await Promise.all([
+  // Social Grow Updates — reactions + anchored comments for every rendered
+  // update in a constant number of batched queries, alongside the grow-level
+  // reaction reads. Comments exist only on PUBLIC grows; a block in either
+  // direction with the grower makes the row read-only (the APIs reject the
+  // writes regardless).
+  const commentable = diary.visibility === "PUBLIC"
+  const viewerBlockedWithGrower = blockedIds.includes(diary.author.id)
+  const [reactionGroups, myReactionRow, updateSocial] = await Promise.all([
     prisma.reaction.groupBy({
       by: ["type"],
       where: { diaryId: diary.id },
@@ -286,11 +295,17 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
           select: { type: true },
         })
       : Promise.resolve(null),
+    loadUpdateSocial(updates.map((u) => u.id), {
+      viewerId: session?.user?.id,
+      blockedIds,
+      withComments: commentable,
+    }),
   ])
   const reactionCounts: Record<string, number> = Object.fromEntries(
     reactionGroups.map((g) => [g.type, g._count._all])
   )
   const myReaction = myReactionRow?.type ?? null
+  const discussionThread = diary.discussion && !diary.discussion.deleted ? diary.discussion : null
 
   const canEdit = session?.user?.id === diary.author.id || isAdmin((session?.user as { role?: string } | undefined)?.role)
 
@@ -1145,6 +1160,19 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
                                     slug: diary.discussion && !diary.discussion.deleted ? diary.discussion.slug : null,
                                   }
                                 : undefined
+                            }
+                            social={
+                              <UpdateSocialSection
+                                updateId={item.u.id}
+                                diaryId={diary.id}
+                                diaryHref={diaryPath(diary)}
+                                social={updateSocial.get(item.u.id)!}
+                                commentable={commentable}
+                                interactive={!viewerBlockedWithGrower}
+                                threadId={discussionThread?.id ?? null}
+                                threadSlug={discussionThread?.slug ?? null}
+                                viewerId={session?.user?.id}
+                              />
                             }
                           />
                         )

@@ -316,9 +316,16 @@ model Post {
   deleted   Boolean  @default(false)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  // Social Grow Updates — a comment anchored to one DiaryUpdate. Always a
+  // Post in the grow's canonical discussion thread (GrowDiary.threadId);
+  // visible only while that grow is PUBLIC (lib/update-social.ts). The
+  // update-delete path soft-deletes anchored comments first; SetNull only
+  // keeps the hard delete of the update from failing.
+  diaryUpdateId String?
 
   thread    Thread   @relation(fields: [threadId], references: [id], onDelete: Cascade)
   author    User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  diaryUpdate DiaryUpdate? @relation(fields: [diaryUpdateId], references: [id], onDelete: SetNull)
   reactions Reaction[]
   images    PostImage[]
   acceptedAnswerFor Thread? @relation("ThreadAcceptedAnswer")
@@ -326,6 +333,7 @@ model Post {
   @@index([authorId])
   @@index([createdAt])
   @@index([threadId, createdAt])
+  @@index([diaryUpdateId, createdAt])
 }
 
 // Images attached to a thread's opening post or to a reply. Exactly one of
@@ -353,16 +361,20 @@ model Reaction {
   userId    String
   postId    String?
   diaryId   String?
+  diaryUpdateId String? // Social Grow Updates — exactly one target is set
   createdAt DateTime @default(now())
 
   user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   post      Post?        @relation(fields: [postId], references: [id], onDelete: Cascade)
   diary     GrowDiary?   @relation(fields: [diaryId], references: [id], onDelete: Cascade)
+  diaryUpdate DiaryUpdate? @relation(fields: [diaryUpdateId], references: [id], onDelete: Cascade)
 
   @@unique([userId, postId])
   @@unique([userId, diaryId])
+  @@unique([userId, diaryUpdateId])
   @@index([postId])
   @@index([diaryId])
+  @@index([diaryUpdateId])
 }
 
 // Bookmarks
@@ -553,6 +565,8 @@ model DiaryUpdate {
   experiment   GrowExperiment? @relation(fields: [experimentId], references: [id], onDelete: SetNull)
   images       DiaryImage[]
   nutrients    DiaryUpdateNutrient[]
+  reactions    Reaction[]
+  comments     Post[]
 
   @@index([diaryId])
   @@index([diaryId, createdAt])

@@ -9,6 +9,7 @@ import { snippet } from "@/lib/seo"
 import { publicDiaryWhere } from "@/lib/diary-visibility"
 import { toSearchProfileDTO } from "@/lib/search-dto"
 import { escapeLike } from "@/lib/strain-stats"
+import { anchoredPostVisibleWhere } from "@/lib/update-social"
 
 // Escape PostgreSQL LIKE wildcards so a query cannot enumerate the whole table.
 // Excerpt centred on the first match so users see *why* a result matched.
@@ -64,6 +65,8 @@ const getSearchResults = unstable_cache(
           content: contains,
           author: activeUser,
           thread: { deleted: false, category: threadCategory },
+          // Anchored update comments are searchable only while their grow is PUBLIC.
+          ...anchoredPostVisibleWhere(),
         },
         orderBy: { createdAt: "desc" },
         take: 50,
