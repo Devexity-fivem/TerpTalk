@@ -5,7 +5,7 @@ import { getClientIp, hashIp, isSessionValid } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
 import { getProfileSection, PUBLIC_PROFILE_NO_STORE, type ProfileTabSection } from "@/lib/public-profile"
 
-const SECTIONS = new Set<ProfileTabSection>(["grows", "harvests", "followers", "following", "strains"])
+const SECTIONS = new Set<ProfileTabSection>(["grows", "harvests", "followers", "following", "strains", "activity"])
 
 // GET — cursor-paged grow portfolio page for the profile Grows/Harvests tabs.
 // Same visibility/block scoping as the profile payload; never ships

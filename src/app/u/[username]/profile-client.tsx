@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import { useSession } from "next-auth/react"
 import { useParams } from "next/navigation"
-import { User, MessageSquare, MapPin, Globe, Sprout, Dna, Leaf, Store, ChevronDown, ChevronUp, Bot, Zap, Users, Link2, HandMetal, CalendarClock, TrendingUp, BookOpen, Trophy, BarChart3, AlertTriangle, Megaphone, Wrench, Award, Pin, FlaskConical, BadgeCheck, Target, CheckCircle2, X, Sparkles, ShieldCheck, Dices, AtSign, Terminal } from "@/lib/icons"
+import { User, MessageSquare, MapPin, Globe, Sprout, Dna, Leaf, Store, ChevronDown, ChevronUp, Bot, Zap, Users, Link2, HandMetal, CalendarClock, TrendingUp, BookOpen, Trophy, BarChart3, AlertTriangle, Megaphone, Wrench, Award, Pin, FlaskConical, BadgeCheck, Target, CheckCircle2, X, Sparkles, ShieldCheck, Dices, AtSign, Terminal, Video } from "@/lib/icons"
 import Link from "next/link"
 import UserActions from "@/components/user-actions"
 import RoleBadge from "@/components/role-badge"
@@ -19,10 +19,12 @@ import EmptyState from "@/components/ui/empty-state"
 import TimeAgo from "@/components/ui/time-ago"
 import Tag from "@/components/ui/tag"
 import TerpBotInsights from "@/components/terpbot-insights"
+import { FeedThreadCard, FeedUpdateCard, FeedHarvestCard } from "@/components/feed-cards"
 import { MarkdownRenderer } from "@/lib/markdown"
 import { diaryPath, setupPath } from "@/lib/slugs"
 import { STAGE_LABELS } from "@/lib/diary-weeks"
 import { PROFILE_TAB_IDS } from "@/lib/profile-settings"
+import type { FeedItem } from "@/lib/feed"
 import { CHAT_COMMANDS, type ChatCommandCategory } from "@/lib/chat-commands"
 import { cn } from "@/lib/utils"
 
@@ -127,6 +129,8 @@ interface PublicProfile {
   } | null
   featuredGrow: GrowCard | null
   activeGrow: GrowCard | null
+  currentGrows: GrowCard[]
+  youtubeChannelUrl: string | null
   experiments: ExperimentCard[]
   acceptedAnswersList: AcceptedAnswer[]
   strainPortfolio: StrainRow[]
@@ -443,6 +447,7 @@ function useProfileSection<T extends { id: string }>(username: string, section: 
 /* ── Member profile ──────────────────────────────────────────────── */
 
 const TAB_LABELS: Record<string, string> = {
+  activity: "Activity",
   grows: "Grows",
   harvests: "Harvests",
   contributions: "Contributions",
@@ -491,6 +496,7 @@ function MemberProfile({ data, isSelf, username }: { data: ProfileResponse; isSe
     harvestStrain ? `strain=${encodeURIComponent(harvestStrain)}` : "",
     harvestYear ? `year=${encodeURIComponent(harvestYear)}` : "",
   ].filter(Boolean).join("&")
+  const activitySection = useProfileSection<FeedItem>(username, "activity", tab === "activity")
   const growsSection = useProfileSection<GrowCard>(username, "grows", tab === "grows", growsQuery)
   const harvestsSection = useProfileSection<HarvestRow>(username, "harvests", tab === "harvests", harvestsQuery)
   const strainsSection = useProfileSection<StrainRow>(username, "strains", showAllStrains)
@@ -685,8 +691,26 @@ function MemberProfile({ data, isSelf, username }: { data: ProfileResponse; isSe
     </SectionCard>
   )
 
+  // "Currently growing" — the member's whole active set (distinct from
+  // Activity: what they're doing NOW, not history). The hero already
+  // leads with one grow, so it's filtered out to avoid a double render.
+  const extraGrows = profile.currentGrows.filter((g) => g.id !== heroGrow?.id)
+  const growingBlock = extraGrows.length > 0 && show("growing") && (
+    <SectionCard
+      title="Currently growing" id="currently-growing" compact={compact}
+      description={`${profile.stats.activeGrows} active grow${profile.stats.activeGrows === 1 ? "" : "s"}`}
+    >
+      <ul className="space-y-2">
+        {extraGrows.map((g) => (
+          <li key={g.id}><GrowRow grow={g} /></li>
+        ))}
+      </ul>
+    </SectionCard>
+  )
+
   const overviewBlocks: Record<string, ReactNode> = {
     featured: featuredBlock,
+    growing: growingBlock,
     stats: statsBlock,
     records: recordsBlock,
     pinned: pinnedBlock,
@@ -746,6 +770,11 @@ function MemberProfile({ data, isSelf, username }: { data: ProfileResponse; isSe
                       {profile.website && (
                         <a href={profile.website} target="_blank" rel="noopener noreferrer nofollow" className="flex items-center gap-1 text-primary hover:underline">
                           <Globe className="w-3.5 h-3.5" />{profile.website.replace(/^https?:\/\//, "").slice(0, 40)}
+                        </a>
+                      )}
+                      {profile.youtubeChannelUrl && (
+                        <a href={profile.youtubeChannelUrl} target="_blank" rel="noopener noreferrer nofollow" className="flex items-center gap-1 text-primary hover:underline">
+                          <Video className="w-3.5 h-3.5" />YouTube creator
                         </a>
                       )}
                       {/* Follow relationships — lists are members-visible
@@ -896,6 +925,38 @@ function MemberProfile({ data, isSelf, username }: { data: ProfileResponse; isSe
                     <div key={id} className="contents">{overviewBlocks[id]}</div>
                   ))}
                 </div>
+              )}
+
+              {active === "activity" && show("activity") && (
+                <SectionCard
+                  title="Activity" id="activity" compact={compact}
+                  description="Recent updates, discussions, and harvests — newest first"
+                >
+                  {activitySection.items.length === 0 && !activitySection.loading ? (
+                    <EmptyState
+                      compact icon={Sprout}
+                      title={isSelf ? "Nothing to show yet" : "No public activity yet"}
+                      description={isSelf ? "Your updates, discussions, and harvests appear here as you share them." : "This member's updates, discussions, and harvests appear here."}
+                    />
+                  ) : (
+                    // Canonical FeedItems — same cards the feed renders,
+                    // so identity/interaction state can't drift.
+                    <ul className="space-y-1">
+                      {activitySection.items.map((item) => (
+                        <li key={`${item.kind}-${item.id}`}>
+                          {item.kind === "thread" ? (
+                            <FeedThreadCard thread={item.data} href={item.href} variant="compact" />
+                          ) : item.kind === "harvest" ? (
+                            <FeedHarvestCard diary={item.data} href={item.href} variant="compact" />
+                          ) : (
+                            <FeedUpdateCard update={item.data} href={item.href} variant="compact" />
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  <LoadMore loading={activitySection.loading} done={!activitySection.hasMore && activitySection.items.length > 0} onMore={activitySection.loadMore} />
+                </SectionCard>
               )}
 
               {active === "grows" && show("grows") && (

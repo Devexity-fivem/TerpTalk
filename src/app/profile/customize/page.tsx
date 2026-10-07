@@ -84,11 +84,13 @@ interface SectionInfo { name: string; desc: string; unlockRank?: string }
 const SECTION_INFO: Record<string, SectionInfo> = {
   overview: { name: "Overview", desc: "Your profile home — always first, can't be hidden." },
   featured: { name: "Featured grow", desc: "The grow you picked to lead your profile." },
+  growing: { name: "Currently growing", desc: "Your active grows, right under the hero." },
   stats: { name: "Grower profile & stats", desc: "Mastery map, stat strip, and progression." },
   records: { name: "Records", desc: "Longest grow, biggest harvest, earliest start.", unlockRank: "Harvested" },
   pinned: { name: "Pinned section", desc: "A custom section pinned high on your overview." },
   history: { name: "Recent activity", desc: "Latest threads and progression events." },
   badges: { name: "Badges", desc: "Your badge showcase on Contributions." },
+  activity: { name: "Activity tab", desc: "Your recent public history — grow updates, discussions, harvests." },
   grows: { name: "Grows tab", desc: "Your grow portfolio." },
   harvests: { name: "Harvests tab", desc: "Your completed harvest shelf." },
   contributions: { name: "Contributions tab", desc: "Answers, experiments, setups, discussions." },

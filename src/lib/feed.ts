@@ -116,6 +116,10 @@ function keysetAfter(col: "createdAt" | "harvestedAt", cur: { ts: number; id: st
 // `personalRequested`: a following/for-you stream was asked for.
 // `personalized`: the viewer is signed in AND requested personal — only
 // then do follow-graph scoping and the cold-start fallback apply.
+// `authorId`: profile-activity mode — scope the whole stream to one
+// author. Follow scoping does not apply; visibility matches the public
+// profile contract (owner sees own non-deleted rows, everyone else
+// PUBLIC only — UNLISTED is link-reachable but never profile-listed).
 // Follows are pushed into the WHERE clauses as relation predicates
 // (EXISTS subqueries) — the full follow list is never materialized into
 // an application-side array, so follow-graph size does not bound memory.
@@ -127,6 +131,8 @@ export interface FeedScope {
   personalized: boolean
   coldStart: boolean
   blockedIds: string[]
+  /** Profile-activity mode: restrict every source to this author. */
+  authorId?: string
 }
 
 export async function resolveFeedScope(viewerId: string | null | undefined, mode: FeedMode): Promise<FeedScope> {
@@ -151,13 +157,50 @@ export async function resolveFeedScope(viewerId: string | null | undefined, mode
   return { mode, viewerId: uid, personalRequested, personalized, coldStart, blockedIds }
 }
 
+/** Scope for "everything this author has shared" — profile Activity.
+ *  Block filtering still applies (a blocked viewer gets nothing), and
+ *  non-owners see PUBLIC diaries only — the same visibility contract as
+ *  the public profile. The profile-level block gate (either direction →
+ *  404/empty) lives in the caller, same as every other profile section. */
+export async function resolveAuthorFeedScope(
+  authorId: string,
+  viewerId: string | null | undefined
+): Promise<FeedScope> {
+  const uid = viewerId ?? null
+  return {
+    mode: "latest",
+    viewerId: uid,
+    personalRequested: false,
+    personalized: false,
+    coldStart: false,
+    blockedIds: await blockedUserIds(uid),
+    authorId,
+  }
+}
+
 // "viewer follows this author" as a relation predicate. Schema naming is
 // counterintuitive: `User.following` are the Follow rows naming this user
 // as the followed party (i.e. this author's followers).
 const followedBy = (viewerId: string) => ({ following: { some: { followerId: viewerId } } })
 
+/** Author-scope predicate — `authorId` AND the block exclusion must live
+ *  in ONE field predicate: spreading `notBlockedAuthor` after a plain
+ *  `authorId` would overwrite it and silently unscope the stream. */
+const authoredBy = (authorId: string, blockedIds: string[]) =>
+  blockedIds.length ? { equals: authorId, notIn: blockedIds } : authorId
+
 export function feedUpdateWhere(scope: FeedScope): Prisma.DiaryUpdateWhereInput {
   const noBlocked = notBlockedAuthor(scope.blockedIds)
+  if (scope.authorId) {
+    return {
+      authorId: authoredBy(scope.authorId, scope.blockedIds),
+      diary: {
+        deleted: false,
+        author: activeAuthor(),
+        ...(scope.viewerId === scope.authorId ? {} : publicDiaryWhere),
+      },
+    }
+  }
   if (scope.personalized && !scope.coldStart) {
     const uid = scope.viewerId!
     return {
@@ -177,6 +220,9 @@ export function feedUpdateWhere(scope: FeedScope): Prisma.DiaryUpdateWhereInput 
 
 export function feedThreadWhere(scope: FeedScope): Prisma.ThreadWhereInput {
   const base = { deleted: false, category: { hidden: false }, author: activeAuthor() }
+  if (scope.authorId) {
+    return { ...base, authorId: authoredBy(scope.authorId, scope.blockedIds) }
+  }
   if (scope.personalized && !scope.coldStart) {
     const uid = scope.viewerId!
     if (scope.mode === "for-you") {
@@ -192,6 +238,14 @@ export function feedThreadWhere(scope: FeedScope): Prisma.ThreadWhereInput {
 }
 
 export function feedDiaryWhere(scope: FeedScope): Prisma.GrowDiaryWhereInput {
+  if (scope.authorId) {
+    return {
+      authorId: authoredBy(scope.authorId, scope.blockedIds),
+      deleted: false,
+      author: activeAuthor(),
+      ...(scope.viewerId === scope.authorId ? {} : publicDiaryWhere),
+    }
+  }
   if (scope.personalized && !scope.coldStart) {
     const uid = scope.viewerId!
     return {
@@ -293,6 +347,13 @@ export async function getFeedPage(opts: {
   }
   for (const h of harvests) {
     for (const img of h.updates[0]?.images ?? []) img.url = mediaProxyUrl("diary", img.id)
+    // Per-harvest yield privacy (locked §6): the flagged member's exact
+    // yield never serializes for anyone but the author — the card shows
+    // "yield hidden" off the flag alone.
+    if (h.yieldPrivate && h.authorId !== scope.viewerId) {
+      h.yieldAmount = null
+      h.yieldUnit = null
+    }
     candidates.push({ kind: "harvest", id: h.id, href: diaryPath(h), sortAt: h.harvestedAt!, data: h })
   }
 

@@ -41,6 +41,7 @@ export type ProfileDensity = (typeof PROFILE_DENSITIES)[number]
 //    src/lib/profile-widgets.ts.
 export const PROFILE_REQUIRED_ID = "overview"
 export const PROFILE_TAB_IDS = [
+  "activity",
   "grows",
   "harvests",
   "contributions",
@@ -52,6 +53,7 @@ export const PROFILE_WIDGET_IDS = ["records", "owner-insights"] as const
 // tabs, so their slot here only matters to hiddenSections.
 export const PROFILE_BLOCK_IDS = [
   "featured",
+  "growing",
   "stats",
   "records",
   "pinned",

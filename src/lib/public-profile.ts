@@ -27,6 +27,7 @@ import { hasUnlocks } from "@/lib/progression"
 import { TERPBOT_USERNAME } from "@/lib/terpbot-constants"
 import { getBotStats } from "@/lib/terpbot-events"
 import { publicDiaryWhere } from "@/lib/diary-visibility"
+import { getFeedPage, resolveAuthorFeedScope, type FeedItem } from "@/lib/feed"
 import { mediaProxyUrl, proxyMedia } from "@/lib/media"
 import { parseProfileSettings, type ProfileSettings, type SectionVisibility } from "@/lib/profile-settings"
 
@@ -223,6 +224,14 @@ export interface PublicProfileDTO {
   featuredGrow: GrowCardDTO | null
   /** Latest non-harvested viewer-visible diary — the "currently growing" card. */
   activeGrow: GrowCardDTO | null
+  /** All non-harvested viewer-visible diaries (≤3), freshest activity
+      first — the compact "Currently growing" strip. Distinct from
+      Activity: this is what the grower is doing NOW, not a history. */
+  currentGrows: GrowCardDTO[]
+  /** Verified YouTuber channel link — shipped only when the member
+      actually holds the badge (the field is set on apply, before staff
+      verify it), so an unverified self-link never renders. */
+  youtubeChannelUrl: string | null
   experiments: ExperimentCardDTO[]
   acceptedAnswersList: AcceptedAnswerDTO[]
   strainPortfolio: StrainRowDTO[]
@@ -330,6 +339,7 @@ export async function getPublicProfileData(
       standing: true,
       pinnedDiaryId: true,
       featuredDiaryId: true,
+      youtubeChannelUrl: true,
       legacyVerified: true,
       profileSettings: true,
       publicMilestoneOptOut: true,
@@ -398,6 +408,7 @@ export async function getPublicProfileData(
     botStatsRaw,
     recentProgressionRows,
     activeGrowRow,
+    currentGrowRows,
     activeGrowCount,
     experimentsRows,
     experimentsCount,
@@ -512,6 +523,18 @@ export async function getPublicProfileData(
     prisma.growDiary.findFirst({
       where: { ...diaryOwnerScope, harvested: false, ...diaryScope },
       orderBy: { updatedAt: "desc" },
+      select: {
+        id: true, slug: true, title: true, strain: true, stage: true,
+        harvested: true, updatedAt: true, startDate: true, visibility: true,
+        _count: { select: { updates: true } },
+      },
+    }),
+    // "Currently growing" strip — the member's full active set (bounded
+    // to 3), not just the single hero pick. Same viewer scope.
+    prisma.growDiary.findMany({
+      where: { ...diaryOwnerScope, harvested: false, ...diaryScope },
+      orderBy: { updatedAt: "desc" },
+      take: 3,
       select: {
         id: true, slug: true, title: true, strain: true, stage: true,
         harvested: true, updatedAt: true, startDate: true, visibility: true,
@@ -633,6 +656,12 @@ export async function getPublicProfileData(
   // Active grow — the member's freshest non-harvested visible diary. The
   // hero prefers the member's pick (featured); this is the honest fallback.
   const activeGrow: GrowCardDTO | null = activeGrowRow ? toGrowCard(activeGrowRow) : null
+  const currentGrows: GrowCardDTO[] = currentGrowRows.map(toGrowCard)
+
+  // Verified-creator channel link — the badge is the trust signal, not
+  // the self-submitted URL: only ship it when the member holds the badge.
+  const isVerifiedCreator = profile.user.badges.some((b) => b.badge.name === "Verified YouTuber")
+  const youtubeChannelUrl = isVerifiedCreator ? safeUrl(profile.youtubeChannelUrl) : null
 
   const xpByMastery = new Map(profile.user.masteryProgress.map((m) => [m.mastery, m.xp]))
   const mastery: PublicMasteryEntry[] = MASTERIES.map((m) => {
@@ -830,6 +859,8 @@ export async function getPublicProfileData(
     pinnedHarvest,
     featuredGrow,
     activeGrow,
+    currentGrows,
+    youtubeChannelUrl,
     experiments: experimentsRows.map((e) => ({
       id: e.id, title: e.title, change: e.change, category: e.category,
       status: e.status, outcome: e.outcome, conclusion: e.conclusion,
@@ -927,7 +958,7 @@ export async function getPublicProfileData(
 const PROFILE_SECTIONS_PUBLIC_MAX = 20
 const PROFILE_TAB_PAGE_SIZE = 12
 
-export type ProfileTabSection = "grows" | "harvests" | "followers" | "following" | "strains"
+export type ProfileTabSection = "grows" | "harvests" | "followers" | "following" | "strains" | "activity"
 
 /** Deterministic portfolio filters — only dimensions backed by real
     columns; validated server-side before they reach a where clause. */
@@ -944,6 +975,7 @@ export type ProfileSectionPage = { nextCursor: string | null } & (
   | { section: "followers"; items: FollowCardDTO[] }
   | { section: "following"; items: FollowCardDTO[] }
   | { section: "strains"; items: StrainRowDTO[] }
+  | { section: "activity"; items: FeedItem[] }
 )
 
 const GROW_STAGES = new Set([
@@ -1051,6 +1083,17 @@ export async function getProfileSection(
   }
 
   const scope = isOwner ? {} : publicDiaryWhere
+
+  // ── Activity — the member's mixed stream, rendered by the canonical
+  //    Feed Core. Same cursor format, same item shape, and the same
+  //    visibility contract as the feed: owner sees own non-deleted rows,
+  //    everyone else PUBLIC diaries only; UNLISTED is never profile-
+  //    listed; blocks (either direction) already returned null above. ──
+  if (section === "activity") {
+    const scope = await resolveAuthorFeedScope(ownerId, viewerId)
+    const page = await getFeedPage({ scope, cursor, limit: PROFILE_TAB_PAGE_SIZE })
+    return { section, items: page.items, nextCursor: page.nextCursor }
+  }
 
   // ── Strain see-all — paged distinct strains across visible grows. ──
   if (section === "strains") {

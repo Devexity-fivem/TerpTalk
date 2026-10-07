@@ -8,7 +8,8 @@
 import "./db-guard.mjs"
 import { makeHarness } from "./lib/http-harness.mjs"
 import { prisma } from "@/lib/prisma"
-import { resolveFeedScope, getFeedPage, encodeFeedCursor } from "@/lib/feed"
+import { resolveFeedScope, resolveAuthorFeedScope, getFeedPage, encodeFeedCursor } from "@/lib/feed"
+import { getProfileSection } from "@/lib/public-profile"
 import type { FeedItem, FeedKind, FeedScope } from "@/lib/feed"
 
 const harnessOpts = {
@@ -356,6 +357,98 @@ async function main() {
     : fail("guest following html", htmlG.length)
   const htmlD = await (await fetch(`${BASE}/feed?tab=discussions`, { headers: { cookie: vc } })).text()
   htmlD.includes("Discussions") ? pass("/feed?tab=discussions renders") : fail("discussions html", htmlD.length)
+
+  // ── D. profile activity (author-scoped feed) ────────────────────
+  // The Activity tab is the canonical feed with an author scope. The
+  // profile visibility contract differs from Following on purpose:
+  // UNLISTED is never profile-listed — even for a diary-follower.
+  {
+    const memberScope = await resolveAuthorFeedScope(author.id, viewer.id)
+    const all = await pageAll(memberScope, undefined, 7)
+    const want = [...pubUpdates, ...authorThreads.map((t) => ({ id: t.id, createdAt: t.createdAt })), { id: discussion.id, createdAt: discussion.createdAt }]
+      .map((x) => ({ id: x.id, ts: x.createdAt }))
+    want.push({ id: diaryHarv.id, ts: new Date(base - 5 * 60_000) })
+    want.sort((a, b) => b.ts.getTime() - a.ts.getTime() || (b.id < a.id ? -1 : b.id > a.id ? 1 : 0))
+    const got = all.map((i) => i.id)
+    JSON.stringify(got) === JSON.stringify(want.map((w) => w.id))
+      ? pass("profile activity: exact public author set, (ts,id) order")
+      : fail("profile activity set", { got: got.slice(0, 8), want: want.slice(0, 8).map((w) => w.id) })
+    const gotSet = new Set(got)
+    unlUpdates.every((u) => !gotSet.has(u.id)) && privUpdates.every((u) => !gotSet.has(u.id)) && !gotSet.has(deletedUpdateId)
+      ? pass("profile activity: unlisted/private/deleted excluded (even for diary-follower)")
+      : fail("profile activity leak", { unl: unlUpdates.filter((u) => gotSet.has(u.id)).length })
+
+    // Guests get the same public set — no personalized material.
+    const guestSet = new Set((await pageAll(await resolveAuthorFeedScope(author.id, null), undefined, 30)).map((i) => i.id))
+    JSON.stringify([...guestSet].sort()) === JSON.stringify([...gotSet].sort())
+      ? pass("guest profile activity = member public set")
+      : fail("guest activity", { guest: guestSet.size, member: gotSet.size })
+
+    // The owner sees their own UNLISTED/PRIVATE rows — deleted stays out.
+    const ownIds = new Set((await pageAll(await resolveAuthorFeedScope(author.id, author.id), ["update"], 40)).map((i) => i.id))
+    unlUpdates.every((u) => ownIds.has(u.id)) && privUpdates.every((u) => ownIds.has(u.id)) && !ownIds.has(deletedUpdateId)
+      ? pass("owner activity includes own unlisted+private updates, not deleted")
+      : fail("owner activity", { unl: unlUpdates.filter((u) => ownIds.has(u.id)).length })
+
+    // Keyset page boundary within the author stream.
+    const p1 = await getFeedPage({ scope: memberScope, limit: 5 })
+    const p2 = await getFeedPage({ scope: memberScope, cursor: p1.nextCursor, limit: 5 })
+    const p1k = new Set(p1.items.map((i) => `${i.kind}:${i.id}`))
+    p2.items.length > 0 && p2.items.every((i) => !p1k.has(`${i.kind}:${i.id}`))
+      ? pass("profile activity page 2 disjoint from page 1")
+      : fail("profile activity overlap", p2.items.map((i) => i.id))
+    const bad = await getFeedPage({ scope: memberScope, cursor: "f1.garbage!!", limit: 5 })
+    bad.items.length === 5 && bad.items[0].id === want[0].id
+      ? pass("profile activity malformed cursor → page 1")
+      : fail("activity malformed cursor", bad.items[0]?.id)
+
+    // Yield privacy: a yieldPrivate harvest never serializes the amount
+    // for non-owners (payload-level, not just card-level).
+    const yh = await mkDiary(author.id, M("yieldpriv"), { harvested: true, harvestedAt: new Date(base - 3 * 60_000), yieldAmount: 420, yieldUnit: "g", yieldPrivate: true })
+    const memberItems = await getFeedPage({ scope: memberScope, kinds: ["harvest"], limit: 10 })
+    const yItem = memberItems.items.find((i) => i.id === yh.id)
+    yItem && yItem.kind === "harvest" && yItem.data.yieldAmount === null && yItem.data.yieldPrivate === true
+      ? pass("yieldPrivate harvest redacts amount for non-owner")
+      : fail("yield privacy", yItem?.kind === "harvest" ? { y: yItem.data.yieldAmount, p: yItem.data.yieldPrivate } : "missing")
+    const ownItems = await getFeedPage({ scope: await resolveAuthorFeedScope(author.id, author.id), kinds: ["harvest"], limit: 10 })
+    const ownY = ownItems.items.find((i) => i.id === yh.id)
+    ownY && ownY.kind === "harvest" && ownY.data.yieldAmount === 420
+      ? pass("yieldPrivate harvest keeps amount for the owner")
+      : fail("owner yield", ownY?.kind === "harvest" ? ownY.data.yieldAmount : "missing")
+
+    // getProfileSection plumbing: block → null, banned → null.
+    const blockedPage = await getProfileSection(blockedU.username, "activity", viewer.id)
+    blockedPage === null ? pass("activity section: block either direction → null") : fail("activity block", blockedPage)
+    const bannedPage = await getProfileSection(bannedU.username, "activity", viewer.id)
+    bannedPage === null ? pass("activity section: banned author → null") : fail("activity banned", bannedPage)
+    const activityPage = await getProfileSection(author.username, "activity", viewer.id, undefined)
+    activityPage?.section === "activity" && Array.isArray(activityPage.items) && activityPage.items.length > 0 && (activityPage.items[0] as FeedItem).kind
+      ? pass("activity section returns canonical FeedItems")
+      : fail("activity section", activityPage && activityPage.items.length)
+  }
+
+  // HTTP boundary for the profile activity endpoint.
+  {
+    r = await api(`/api/users/${author.username}/sections/activity`)
+    const acts = (r.data?.items ?? []) as FeedItem[]
+    const aSet = new Set(acts.map((i) => i.id))
+    r.status === 200 && acts.length > 0 && acts.every((i) => i.kind && i.id && i.href)
+      ? pass("GET sections/activity guest → canonical items")
+      : fail("api activity", { s: r.status, n: acts.length })
+    unlUpdates.every((u) => !aSet.has(u.id)) && privUpdates.every((u) => !aSet.has(u.id))
+      ? pass("api activity: unlisted/private absent for guest")
+      : fail("api activity leak", "present")
+    r = await api(`/api/users/${author.username}/sections/activity?cursor=${encodeURIComponent("f1.garbage!!")}`)
+    r.status === 200 && ((r.data?.items ?? []) as FeedItem[]).length > 0
+      ? pass("api activity malformed cursor → page 1")
+      : fail("api activity cursor", r.status)
+    r = await api(`/api/users/${blockedU.username}/sections/activity`, { cookie: vc })
+    r.status === 404 ? pass("api activity blocked → 404") : fail("api activity blocked", r.status)
+    r = await api("/api/users/no-such-member-xyz/sections/activity")
+    r.status === 404 ? pass("api activity unknown member → 404") : fail("api activity 404", r.status)
+    r = await api("/api/users/x/sections/bogus-section")
+    r.status === 400 ? pass("api unknown section → 400") : fail("api bogus section", r.status)
+  }
 
   // ── cleanup ─────────────────────────────────────────────────────
   for (const u of [author, viewer, other, blockedU, bannedU, nofollow]) {
