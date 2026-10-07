@@ -6,7 +6,7 @@ import { unauthorized, forbidden, isAdmin, enforceLinkTrust } from "@/lib/securi
 import { rateLimit } from "@/lib/rate-limit"
 import { checkMaintenance } from "@/lib/maintenance"
 import { announceHarvest } from "@/lib/terpbot"
-import { notifyMany } from "@/lib/notify"
+import { notifyMany, fanoutFollowedContent } from "@/lib/notify"
 import { grantBadge } from "@/lib/reputation"
 import { awardProgression } from "@/lib/progression"
 import { evaluateGrowJourney } from "@/lib/grow-journey"
@@ -250,9 +250,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         select: { userId: true },
         take: 5000,
       })
-      if (followers.length === 0) return
       const authorName = updated.author.profile?.username || updated.author.name || "Someone"
-      await notifyMany(
+      if (followers.length > 0) await notifyMany(
         followers.map((f) => ({
           userId: f.userId,
           type: "DIARY_UPDATE" as const,
@@ -264,6 +263,19 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
           dedupeMs: 24 * 60 * 60 * 1000,
         }))
       ).catch(() => {})
+
+      // Followed-grower fan-out — PUBLIC only, diary followers excluded so
+      // the harvest can't land twice. yieldText is already yieldPrivate-gated.
+      await fanoutFollowedContent({
+        authorId: diary.authorId,
+        visibility: updated.visibility,
+        title: "Harvest from someone you follow",
+        content: `@${authorName} harvested "${updated.title.slice(0, 50)}"${yieldText ? ` — reported yield ${yieldText}` : ""}`,
+        link: diaryPath(updated),
+        groupKey: `followed-content:harvest:${id}`,
+        dedupeMs: 24 * 60 * 60 * 1000,
+        excludeUserIds: followers.map((f) => f.userId),
+      }).catch(() => {})
     })
   }
 

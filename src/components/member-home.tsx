@@ -2,7 +2,7 @@ import Link from "next/link"
 import type { ReactNode } from "react"
 import {
   Zap, Sprout, Bell, ArrowRight, Leaf, Users, Radio, TrendingUp, CheckCircle2, Circle,
-  MessageCircle, Eye, AlertTriangle, Gauge, Bug, Wrench, Clock, Wheat, FlaskConical, BookOpen,
+  MessageCircle, MessageSquare, Eye, AlertTriangle, Gauge, Bug, Wrench, Clock, Wheat, FlaskConical, BookOpen,
   HeartHandshake,
 } from "@/lib/icons"
 import MemberGreeting from "@/components/member-greeting"
@@ -98,7 +98,7 @@ function MiniEmpty({ text, cta, children }: { text: string; cta?: { href: string
 export default function MemberHome({ data }: { data: MemberHomeData }) {
   const { sinceLastVisit: s } = data
   const hasActivity =
-    s.unreadThreads.length > 0 || s.diaryUpdates.length > 0 || s.unreadNotifications > 0
+    s.unreadThreads.length > 0 || s.diaryUpdates.length > 0 || s.growerThreads.length > 0 || s.unreadNotifications > 0
 
   return (
     <div className="min-h-screen bg-background">
@@ -334,7 +334,7 @@ export default function MemberHome({ data }: { data: MemberHomeData }) {
           <Card
             icon={<Bell className="h-4 w-4 text-primary" />}
             title="Since your last visit"
-            tip="New activity on threads and grow diaries you follow, plus unread notifications."
+            tip="New activity on threads, diaries and growers you follow, plus unread notifications."
             action={{ href: "/notifications", label: "Notifications" }}
           >
             {!hasActivity ? (
@@ -393,6 +393,27 @@ export default function MemberHome({ data }: { data: MemberHomeData }) {
                     </Link>
                   </li>
                 ))}
+                {s.growerThreads.map((t) => (
+                  <li key={`gt-${t.slug}`}>
+                    <Link
+                      href={`/forum/thread/${t.slug}`}
+                      className="group flex items-center gap-2 rounded-xl px-3 py-2 hover:bg-secondary/60"
+                    >
+                      <MessageSquare className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                      <span className="min-w-0 flex-1 truncate group-hover:text-primary">
+                        {t.title} <span className="text-muted-foreground">— @{t.author}</span>
+                      </span>
+                    </Link>
+                  </li>
+                ))}
+                <li>
+                  <Link
+                    href="/feed?tab=following"
+                    className="tap-target block px-3 py-1.5 text-xs text-muted-foreground hover:text-primary"
+                  >
+                    See everything in your Following feed →
+                  </Link>
+                </li>
               </ul>
             )}
           </Card>

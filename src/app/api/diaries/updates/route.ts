@@ -12,7 +12,7 @@ import { enqueueXpReversals, drainXpMany } from "@/lib/progression-outbox"
 import { storeImages, deleteImagesIfUnreferenced, MAX_POST_IMAGES } from "@/lib/blob"
 import { proxyMedia } from "@/lib/media"
 import { checkMaintenance } from "@/lib/maintenance"
-import { notifyMany, postLinkWhere, updateLinkWhere } from "@/lib/notify"
+import { notifyMany, postLinkWhere, updateLinkWhere, fanoutFollowedContent } from "@/lib/notify"
 import { revalidateTag, unstable_cache } from "next/cache"
 import { publicDiaryWhere } from "@/lib/diary-visibility"
 import { diaryDay, diaryWeek } from "@/lib/diary-weeks"
@@ -494,8 +494,8 @@ export async function POST(request: Request) {
       select: { userId: true },
       take: 5000,
     })
+    const authorName = session.user.name || "Someone"
     if (followers.length > 0) {
-      const authorName = session.user.name || "Someone"
       await notifyMany(
         followers.map((f) => ({
           userId: f.userId,
@@ -514,6 +514,22 @@ export async function POST(request: Request) {
         }))
       )
     }
+
+    // New public update from a followed member — the follow return loop.
+    // PUBLIC only (user-followers never held a private/unlisted link) and
+    // diary followers already got DIARY_UPDATE — excluding them keeps the
+    // same update from landing twice. The per-diary key throttles bursts
+    // at the same 6h window diary followers get.
+    await fanoutFollowedContent({
+      authorId: session.user.id,
+      visibility: diary.visibility,
+      title: "New update from someone you follow",
+      content: `@${authorName} added "${update.title.slice(0, 60)}" to "${diary.title.slice(0, 50)}"`,
+      link: `${diaryPath(diary)}#week-${diaryWeek(diary.startDate, update.createdAt)}`,
+      groupKey: `followed-content:diary-update:${diaryId}`,
+      dedupeMs: 6 * 60 * 60 * 1000,
+      excludeUserIds: followers.map((f) => f.userId),
+    }).catch(() => {})
 
     return NextResponse.json(
       { update: { ...update, images: proxyMedia("diary", update.images) } },

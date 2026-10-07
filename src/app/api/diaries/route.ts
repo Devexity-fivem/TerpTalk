@@ -7,7 +7,7 @@ import { rateLimit } from "@/lib/rate-limit"
 import { awardProgression } from "@/lib/progression"
 import { enqueueReversals, drainMany } from "@/lib/reputation-outbox"
 import { enqueueXpReversals, drainXpMany } from "@/lib/progression-outbox"
-import { notificationLinkWhere, notifyMany } from "@/lib/notify"
+import { notificationLinkWhere, fanoutFollowedContent } from "@/lib/notify"
 import { deleteImagesIfUnreferenced } from "@/lib/blob"
 import { checkMaintenance } from "@/lib/maintenance"
 import { parseMediumType, parseLightType, parseTechniques, GROW_TYPES } from "@/lib/grow-fields"
@@ -246,26 +246,17 @@ export async function POST(request: Request) {
     // groupKey dedupes on the diary id so retried creations don't re-notify.
     // Non-PUBLIC diaries never fan out — followers must not learn of them.
     if (diary.visibility === "PUBLIC") after(async () => {
-      const followers = await prisma.follow.findMany({
-        where: { followingId: session.user.id },
-        select: { followerId: true },
-        take: 5000,
-      })
-      if (followers.length === 0) return
       const authorName =
         diary.author.profile?.username || diary.author.name || "Someone"
-      await notifyMany(
-        followers.map((f) => ({
-          userId: f.followerId,
-          type: "FOLLOWED_CONTENT" as const,
-          title: "New diary from someone you follow",
-          content: `@${authorName} started a new grow diary: "${diary.title.slice(0, 60)}"`,
-          link: diaryPath(diary),
-          actorId: session.user.id,
-          groupKey: `followed-content:diary:${diary.id}`,
-          dedupeMs: 24 * 60 * 60 * 1000,
-        }))
-      ).catch(() => {})
+      await fanoutFollowedContent({
+        authorId: session.user.id,
+        visibility: diary.visibility,
+        title: "New diary from someone you follow",
+        content: `@${authorName} started a new grow diary: "${diary.title.slice(0, 60)}"`,
+        link: diaryPath(diary),
+        groupKey: `followed-content:diary:${diary.id}`,
+        dedupeMs: 24 * 60 * 60 * 1000,
+      })
     })
 
     revalidateTag("diaries", { expire: 0 })

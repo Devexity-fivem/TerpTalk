@@ -465,6 +465,63 @@ export function updateLinkWhere(updateId: string): Prisma.NotificationWhereInput
 }
 
 /**
+ * Canonical "content from a member you follow" fan-out — the return leg of
+ * the follow loop. Resolves the author's user-followers, drops recipients
+ * the caller already notified by another type (diary/category followers),
+ * and sends one FOLLOWED_CONTENT notification per eligible follower.
+ *
+ * `visibility` is the content's own visibility: anything other than
+ * "PUBLIC" returns without fanning out — followers must not learn of
+ * UNLISTED/PRIVATE content they never held a link to. Pref gates
+ * (`notifyOnCategoryFollow`), banned/suspended recipients, self and blocks
+ * are enforced inside notifyMany. `groupKey` + `dedupeMs` throttle bursts;
+ * callers pick the key granularity (per-item for one-time events, per-diary
+ * for recurring update streams).
+ */
+export async function fanoutFollowedContent(input: {
+  authorId: string
+  visibility?: string
+  title: string
+  content: string
+  link: string
+  groupKey: string
+  dedupeMs?: number
+  /** UserIds already notified for this event by another type. */
+  excludeUserIds?: string[]
+}): Promise<{ sent: number; deliveredUserIds: string[] }> {
+  try {
+    if (input.visibility !== undefined && input.visibility !== "PUBLIC") {
+      return { sent: 0, deliveredUserIds: [] }
+    }
+    const excluded = new Set(input.excludeUserIds ?? [])
+    const followers = await prisma.follow.findMany({
+      where: {
+        followingId: input.authorId,
+        ...(excluded.size ? { followerId: { notIn: [...excluded] } } : {}),
+      },
+      select: { followerId: true },
+      take: 5000,
+    })
+    if (followers.length === 0) return { sent: 0, deliveredUserIds: [] }
+    return await notifyMany(
+      followers.map((f) => ({
+        userId: f.followerId,
+        type: "FOLLOWED_CONTENT" as const,
+        title: input.title,
+        content: input.content,
+        link: input.link,
+        actorId: input.authorId,
+        groupKey: input.groupKey,
+        dedupeMs: input.dedupeMs,
+      }))
+    )
+  } catch (e) {
+    console.error("[fanoutFollowedContent] failed:", input.groupKey, e)
+    return { sent: 0, deliveredUserIds: [] }
+  }
+}
+
+/**
  * Remove notifications that link to a deleted target so users never see
  * a live link to removed content. Called from content soft-delete paths.
  */

@@ -1,7 +1,7 @@
 import "./db-guard.mjs"
 import { strict as assert } from "node:assert"
 import { prisma } from "@/lib/prisma"
-import { notify, notifyMany, invalidateNotificationsForLink } from "@/lib/notify"
+import { notify, notifyMany, invalidateNotificationsForLink, fanoutFollowedContent } from "@/lib/notify"
 import { notifyMentions } from "@/lib/mentions"
 import { setPushTransportForTests, settlePendingPush } from "@/lib/web-push"
 
@@ -297,6 +297,58 @@ async function run() {
       "push telemetry never stores endpoints or notification text")
     await prisma.pushEvent.deleteMany({ where: { userId: recip.id } })
     setPushTransportForTests(null)
+
+    // ── fanoutFollowedContent — the follow → awareness leg ─────────
+    // Followers of `actor`: recip (eligible), f1 (excluded via
+    // excludeUserIds), f2 (blocked by actor), f3 (pref off), third
+    // (banned), actor themselves (self-guard inside notifyMany).
+    const f1 = await mkUser(`__t_n2f1_${STAMP}`)
+    const f2 = await mkUser(`__t_n2f2_${STAMP}`)
+    const f3 = await mkUser(`__t_n2f3_${STAMP}`)
+    ids.push(f1.id, f2.id, f3.id)
+    for (const f of [recip, f1, f2, f3, third, actor]) {
+      await prisma.follow.create({ data: { followerId: f.id, followingId: actor.id } })
+    }
+    await prisma.block.create({ data: { blockerId: actor.id, blockedId: f2.id } })
+    await prisma.profile.update({ where: { userId: f3.id }, data: { notifyOnCategoryFollow: false } })
+
+    const fcBase = { authorId: actor.id, title: "New update from someone you follow", content: "@x added y", link: "/diaries/fc-test" }
+    const g1 = await fanoutFollowedContent({
+      ...fcBase,
+      visibility: "PUBLIC",
+      groupKey: `fc:${STAMP}:a`,
+      dedupeMs: 6 * 60 * 60 * 1000,
+      excludeUserIds: [f1.id],
+    })
+    assert.deepEqual(g1.deliveredUserIds, [recip.id],
+      "fanout delivers only to the eligible, non-excluded follower (self/blocked/banned/pref-off suppressed)")
+    const fc1 = await prisma.notification.findFirst({ where: { userId: recip.id, type: "FOLLOWED_CONTENT" } })
+    assert.equal(fc1?.actorId, actor.id, "fanout notification carries the author as actor")
+    assert.equal(fc1?.link, "/diaries/fc-test", "fanout link persists")
+
+    // Same groupKey inside the window → suppressed per recipient: recip
+    // (already notified) drops out; f1 (excluded last call) legitimately
+    // receives it now.
+    const g2 = await fanoutFollowedContent({ ...fcBase, visibility: "PUBLIC", groupKey: `fc:${STAMP}:a`, dedupeMs: 6 * 60 * 60 * 1000 })
+    assert.deepEqual(g2.deliveredUserIds, [f1.id], "dedupe is per-recipient — repeat recipients suppressed")
+    const g2b = await fanoutFollowedContent({ ...fcBase, visibility: "PUBLIC", groupKey: `fc:${STAMP}:a`, dedupeMs: 6 * 60 * 60 * 1000 })
+    assert.equal(g2b.sent, 0, "same groupKey inside window suppresses every repeat")
+
+    // Non-PUBLIC visibility never fans out — user-followers must not
+    // learn of unlisted/private content they never held a link to.
+    assert.equal((await fanoutFollowedContent({ ...fcBase, visibility: "UNLISTED", groupKey: `fc:${STAMP}:u` })).sent, 0, "UNLISTED never fans out")
+    assert.equal((await fanoutFollowedContent({ ...fcBase, visibility: "PRIVATE", groupKey: `fc:${STAMP}:p` })).sent, 0, "PRIVATE never fans out")
+
+    // A fresh groupKey without exclusions → the previously excluded f1
+    // now receives; blocked/pref-off/banned still don't.
+    const g3 = await fanoutFollowedContent({ ...fcBase, visibility: "PUBLIC", groupKey: `fc:${STAMP}:b` })
+    assert.deepEqual([...g3.deliveredUserIds].sort(), [f1.id, recip.id].sort(), "fresh key reaches every eligible follower")
+    const f1n = await prisma.notification.findFirst({ where: { userId: f1.id, type: "FOLLOWED_CONTENT" } })
+    assert.ok(f1n, "excluded-then-eligible follower receives on next event")
+    assert.equal(await prisma.notification.count({ where: { userId: f2.id, type: "FOLLOWED_CONTENT" } }), 0, "blocked follower never notified")
+    assert.equal(await prisma.notification.count({ where: { userId: f3.id, type: "FOLLOWED_CONTENT" } }), 0, "pref-off follower never notified")
+    assert.equal(await prisma.notification.count({ where: { userId: third.id, type: "FOLLOWED_CONTENT" } }), 0, "banned follower never notified")
+    assert.equal(await prisma.notification.count({ where: { userId: actor.id, type: "FOLLOWED_CONTENT" } }), 0, "self never notified")
 
     console.log("All Notification 2.0 regression tests passed.")
   } finally {

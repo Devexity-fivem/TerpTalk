@@ -450,6 +450,61 @@ async function main() {
     r.status === 400 ? pass("api unknown section → 400") : fail("api bogus section", r.status)
   }
 
+  // ── member home: from growers you follow ──────────────────────────
+  // viewer user-follows `author` and diary-follows diaryUnl. Home should
+  // surface public grower-authored activity without private/unlisted leak
+  // (except the diary-followed unlisted diary — viewer holds that link).
+  {
+    const { getMemberHomeData } = await import("@/lib/member-home")
+    // A followed-then-blocked author exercises the block boundary: viewer
+    // blocks blockedU already, so creating the follow row directly proves
+    // blocks win over follows on home surfaces.
+    await prisma.follow.create({ data: { followerId: viewer.id, followingId: blockedU.id } })
+    await mkThread(blockedU.id, fvCat.id, M("blk thread"), new Date())
+
+    const home = await getMemberHomeData(viewer.id)
+    const du = home?.sinceLastVisit.diaryUpdates ?? []
+    const gt = home?.sinceLastVisit.growerThreads ?? []
+    du.some((u) => u.diaryId === diaryPub.id)
+      ? pass("home: followed grower's public update surfaces")
+      : fail("home pub update", du.map((u) => u.diaryId))
+    // (The unlisted diary-followed path is asserted below via `nofollow`,
+    // whose top-4 it can win — viewer's newest 4 are all diaryPub.)
+    du.every((u) => u.diaryId !== diaryPriv.id && u.diaryId !== diaryDel.id)
+      ? pass("home: private/deleted grower updates never surface")
+      : fail("home priv leak", du.map((u) => u.diaryId))
+    du.every((u) => u.diaryId !== blkDiary.id)
+      ? pass("home: blocked grower's updates suppressed despite follow")
+      : fail("home blocked update", du.map((u) => u.diaryId))
+    du.length <= 4
+      ? pass("home: diaryUpdates bounded at 4")
+      : fail("home bound", du.length)
+    gt.some((t) => t.title === M("t0"))
+      ? pass("home: followed grower's thread surfaces")
+      : fail("home grower thread", gt.map((t) => t.slug))
+    gt.every((t) => t.title !== M("blk thread"))
+      ? pass("home: blocked grower's thread suppressed")
+      : fail("home blocked thread", gt.map((t) => t.slug))
+    gt.every((t) => t.title !== M("cat thread") && t.title !== M("other thread"))
+      ? pass("home: threads from unfollowed authors absent")
+      : fail("home unfollowed thread", gt.map((t) => t.slug))
+
+    const home2 = await getMemberHomeData(nofollow.id)
+    home2 && home2.sinceLastVisit.diaryUpdates.length === 0 && home2.sinceLastVisit.growerThreads.length === 0
+      ? pass("home: member with no follows gets empty lists")
+      : fail("home nofollow", home2?.sinceLastVisit.diaryUpdates.length)
+
+    // Diary-follow branch: a member who only diary-follows an UNLISTED
+    // diary is a link-holder — its updates surface, private ones don't.
+    await prisma.diaryFollow.create({ data: { userId: nofollow.id, diaryId: diaryUnl.id } })
+    const home3 = await getMemberHomeData(nofollow.id)
+    home3?.sinceLastVisit.diaryUpdates.some((u) => u.diaryId === diaryUnl.id)
+      ? pass("home: diary-followed unlisted update surfaces (link-holder)")
+      : fail("home unl update", home3?.sinceLastVisit.diaryUpdates.map((u) => u.diaryId))
+    await prisma.diaryFollow.deleteMany({ where: { userId: nofollow.id, diaryId: diaryUnl.id } })
+    await prisma.follow.deleteMany({ where: { followerId: viewer.id, followingId: blockedU.id } })
+  }
+
   // ── cleanup ─────────────────────────────────────────────────────
   for (const u of [author, viewer, other, blockedU, bannedU, nofollow]) {
     if (u?.id) await prisma.user.delete({ where: { id: u.id } }).catch(() => {})

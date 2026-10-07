@@ -4,7 +4,7 @@
 // notifications (unread count), and the shared chat teaser (presence +
 // room activity). No new models, no new realtime, no polling.
 import { prisma } from "@/lib/prisma"
-import { activeAuthor, publicUserSelect } from "@/lib/security"
+import { activeAuthor, blockedUserIds, publicUserSelect } from "@/lib/security"
 import { PROGRESSION_RUNGS, xpStage, nextRank, rankDisplay } from "@/lib/progression-config"
 import { getQuestProgress } from "@/lib/quests"
 import { getJourneyState } from "@/lib/journeys"
@@ -115,6 +115,7 @@ export interface MemberHomeData {
     unreadThreads: { title: string; slug: string; category: string }[]
     unreadThreadCount: number
     diaryUpdates: { title: string; diaryTitle: string; diaryId: string; diarySlug: string | null; author: string }[]
+    growerThreads: { title: string; slug: string; category: string; author: string }[]
     unreadNotifications: number
   }
   live: ChatTeaser | null
@@ -151,7 +152,7 @@ const GROW_STAGE_LABELS: Record<string, string> = Object.fromEntries(
 )
 
 export async function getMemberHomeData(userId: string): Promise<MemberHomeData | null> {
-  const [user, quests, journey, staleDiary, diaries, followedThreads, followedDiaries, unreadNotifications, live, trendingCandidates, harvestAnalyticsUnlocked, helpWanted, growMatches, suggestedGrowers] =
+  const [user, quests, journey, staleDiary, diaries, followedThreads, followedDiaries, unreadNotifications, live, trendingCandidates, harvestAnalyticsUnlocked, helpWanted, growMatches, suggestedGrowers, followedUsers, blockedIds] =
     await Promise.all([
       prisma.user.findUnique({
         where: { id: userId },
@@ -272,16 +273,43 @@ export async function getMemberHomeData(userId: string): Promise<MemberHomeData 
       // Growers-to-follow card — bounded deterministic suggestions;
       // failures degrade to an empty section.
       getSuggestedGrowers(userId, { limit: 3 }).catch((): SuggestedGrower[] => []),
+      // Growers the member follows — feeds "since last visit" awareness.
+      // Bounded; the member can't practically follow more than this.
+      prisma.follow.findMany({
+        where: { followerId: userId },
+        select: { followingId: true },
+        take: 1000,
+      }),
+      // Mutual-block boundary — social-awareness lists must never surface
+      // a blocked author even though follow rows predate the block.
+      blockedUserIds(userId),
     ])
 
   if (!user) return null
 
   const followedDiaryIds = followedDiaries.map((d) => d.diaryId)
-  const diaryUpdates = followedDiaryIds.length
+  const followedUserIds = followedUsers.map((f) => f.followingId)
+  const weekAgo = new Date(Date.now() - 7 * 86400000)
+  // Updates worth surfacing: diaries the member follows (PUBLIC|UNLISTED —
+  // link-holders) plus PUBLIC updates on diaries authored by growers the
+  // member follows. Blocked authors are excluded at the update level so a
+  // post-follow block still suppresses the item.
+  const diaryUpdates = (followedDiaryIds.length || followedUserIds.length)
     ? await prisma.diaryUpdate.findMany({
         where: {
-          diaryId: { in: followedDiaryIds },
-          createdAt: { gte: new Date(Date.now() - 7 * 86400000) },
+          createdAt: { gte: weekAgo },
+          ...(blockedIds.length ? { authorId: { notIn: blockedIds } } : {}),
+          OR: [
+            { diaryId: { in: followedDiaryIds } },
+            {
+              diary: {
+                deleted: false,
+                visibility: "PUBLIC",
+                authorId: { in: followedUserIds },
+                author: activeAuthor(),
+              },
+            },
+          ],
         },
         orderBy: { createdAt: "desc" },
         take: 4,
@@ -296,6 +324,33 @@ export async function getMemberHomeData(userId: string): Promise<MemberHomeData 
   const unreadThreads = followedThreads.filter(
     (f) => f.thread.lastActivityAt > (f.lastSeenAt ?? new Date(0))
   )
+
+  // Recent discussions from followed growers — distinct from unreadThreads
+  // (threadFollow + lastSeenAt): this is awareness, not an unread cursor,
+  // and threads already surfaced there are filtered out by slug.
+  const unreadSlugs = unreadThreads.map((f) => f.thread.slug)
+  const growerThreads = followedUserIds.length
+    ? await prisma.thread.findMany({
+        where: {
+          deleted: false,
+          category: { hidden: false },
+          createdAt: { gte: weekAgo },
+          author: {
+            ...activeAuthor(),
+            id: { in: followedUserIds, ...(blockedIds.length ? { notIn: blockedIds } : {}) },
+          },
+          ...(unreadSlugs.length ? { slug: { notIn: unreadSlugs } } : {}),
+        },
+        orderBy: { lastActivityAt: "desc" },
+        take: 4,
+        select: {
+          slug: true,
+          title: true,
+          category: { select: { name: true } },
+          author: { select: { name: true, profile: { select: { username: true } } } },
+        },
+      })
+    : []
 
   const xp = user.profile?.xp ?? 0
   const stage = xpStage(xp)
@@ -597,6 +652,12 @@ export async function getMemberHomeData(userId: string): Promise<MemberHomeData 
         diaryId: u.diary.id,
         diarySlug: u.diary.slug,
         author: u.author.profile?.username || u.author.name || "a grower",
+      })),
+      growerThreads: growerThreads.map((t) => ({
+        title: t.title,
+        slug: t.slug,
+        category: t.category.name,
+        author: t.author.profile?.username || t.author.name || "a grower",
       })),
       unreadNotifications,
     },

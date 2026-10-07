@@ -12,7 +12,7 @@ import { enqueueReversals, drainMany } from "@/lib/reputation-outbox"
 import { enqueueXpReversals, drainXpMany } from "@/lib/progression-outbox"
 import { THREAD_MIN_PAID_LENGTH } from "@/lib/reputation-config"
 import { notifyMentions } from "@/lib/mentions"
-import { notifyMany, invalidateNotificationsForLink, postDeepLink } from "@/lib/notify"
+import { notifyMany, invalidateNotificationsForLink, postDeepLink, fanoutFollowedContent } from "@/lib/notify"
 import { logModAction } from "@/lib/moderation"
 import { storeImages, deleteImagesIfUnreferenced } from "@/lib/blob"
 import { getBooleanSetting, SITE_SETTINGS } from "@/lib/settings"
@@ -345,29 +345,16 @@ export async function POST(request: Request) {
     // New thread from a followed member — the return loop for follow.
     // Hidden categories never fan out (same leak rule as the category
     // notification above); users who already got it are excluded too.
-    const authorFollowers = category.hidden ? [] : await prisma.follow.findMany({
-      where: {
-        followingId: session.user.id,
-        followerId: { notIn: categoryFollowerIds },
-      },
-      select: { followerId: true },
-      take: 5000,
-    })
-    if (authorFollowers.length > 0) {
-      await notifyMany(
-        authorFollowers
-          .filter((f) => f.followerId !== session.user.id)
-          .map((f) => ({
-            userId: f.followerId,
-            type: "FOLLOWED_CONTENT" as const,
-            title: "New thread from someone you follow",
-            content: `@${session.user.name || "Someone"} started "${title.slice(0, 60)}".`,
-            link: opLink,
-            actorId: session.user.id,
-            groupKey: `followed-content:thread:${thread.id}`,
-            dedupeMs: 24 * 60 * 60 * 1000,
-          }))
-      ).catch(() => {})
+    if (!category.hidden) {
+      await fanoutFollowedContent({
+        authorId: session.user.id,
+        title: "New thread from someone you follow",
+        content: `@${session.user.name || "Someone"} started "${title.slice(0, 60)}".`,
+        link: opLink,
+        groupKey: `followed-content:thread:${thread.id}`,
+        dedupeMs: 24 * 60 * 60 * 1000,
+        excludeUserIds: categoryFollowerIds,
+      }).catch(() => {})
     }
 
     revalidateTag("forum", { expire: 0 })
