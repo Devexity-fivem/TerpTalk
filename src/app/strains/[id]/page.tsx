@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma"
 import { notFound, permanentRedirect } from "next/navigation"
-import { Leaf, Dna, Sprout, ImageIcon, BookOpen, Wrench, MessageSquare, CheckCircle2, BarChart3, Star, Bot, FlaskConical, HelpCircle } from "@/lib/icons"
+import { Leaf, Dna, Sprout, ImageIcon, BookOpen, Wrench, MessageSquare, CheckCircle2, BarChart3, Star, Bot, FlaskConical, HelpCircle, Users } from "@/lib/icons"
 import { getSession } from "@/lib/session"
 import StrainPhotoUpload from "@/components/strain-photo-upload"
 import ShareButtons from "@/components/share-buttons"
@@ -17,6 +17,8 @@ import UserPopover from "@/components/user-popover"
 import Tooltip from "@/components/ui/tooltip"
 import { escapeLike, strainFieldMatches, strainTypeLabel } from "@/lib/strain-stats"
 import { getStrainKnowledge } from "@/lib/strain-knowledge"
+import { getSuggestedGrowers } from "@/lib/suggested-growers"
+import SuggestedGrowerCard from "@/components/suggested-grower-card"
 import { readLessons } from "@/lib/experiments"
 import Link from "next/link"
 import { publicDiaryWhere } from "@/lib/diary-visibility"
@@ -77,7 +79,7 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
     strain.photos = strain.photos.filter((p) => !blockedIds.includes(p.user.id))
   }
 
-  const [relatedDiariesRaw, relatedSetupsRaw, relatedThreads, knowledge, myDiaries] = await Promise.all([
+  const [relatedDiariesRaw, relatedSetupsRaw, relatedThreads, knowledge, myDiaries, contextGrowers] = await Promise.all([
     prisma.growDiary.findMany({
       where: {
         deleted: false,
@@ -153,6 +155,14 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
           },
         })
       : Promise.resolve([]),
+    // Contextual grower suggestions — public evidence of this strain only.
+    // `contextOnly` keeps generic fillers out: the heading below promises
+    // strain evidence, so no card may appear without it.
+    getSuggestedGrowers(session?.user?.id ?? null, {
+      limit: 3,
+      contextOnly: true,
+      context: { strainIds: [strain.id], strainNames: [strain.name] },
+    }),
   ])
 
   // Canonical community knowledge — outcomes, questions, notable harvests.
@@ -715,6 +725,22 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
                     /></p>
                   </div>
                 </Link>
+              ))}
+            </div>
+          </SectionCard>
+        )}
+
+        {/* Growers with public evidence on this strain — the person-level
+            complement to the grow list above. Every card carries real
+            strain evidence (contextOnly); empty when nobody qualifies. */}
+        {contextGrowers.length > 0 && (
+          <SectionCard
+            className="mb-6"
+            title={<span className="flex items-center gap-2"><Users className="w-4 h-4 text-primary" />Growers growing this strain</span>}
+          >
+            <div className="space-y-3">
+              {contextGrowers.map((g) => (
+                <SuggestedGrowerCard key={g.userId} grower={g} />
               ))}
             </div>
           </SectionCard>

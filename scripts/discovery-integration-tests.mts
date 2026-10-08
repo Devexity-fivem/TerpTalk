@@ -707,6 +707,130 @@ async function run() {
       console.log("✓ suggested growers — eligibility, reasons, privacy, determinism")
     }
 
+    // ─────────────────────────────────────────────────────────────
+    // Contextual suggestions (Phase 7) — context-scoped relevance on the
+    // canonical engine. Only PUBLIC evidence may qualify a grower under
+    // `contextOnly`; exclusion/dedupe rules are inherited unchanged.
+    // ─────────────────────────────────────────────────────────────
+    {
+      const { getSuggestedGrowers } = await import("@/lib/suggested-growers")
+
+      const ctxViewer = await mkUser(`__t_cv_${STAMP}`)
+      const ctxMatch = await mkUser(`__t_cm_${STAMP}`)    // public diary on ctx strain
+      const ctxMedium = await mkUser(`__t_ce_${STAMP}`)   // public diary, ctx medium only
+      const ctxTech = await mkUser(`__t_ct_${STAMP}`)     // ctx lighting+technique
+      const ctxWeak = await mkUser(`__t_cw_${STAMP}`)     // ctx growType only (below floor)
+      const ctxPriv = await mkUser(`__t_cp_${STAMP}`)     // PRIVATE diary on ctx strain
+      const ctxUnl = await mkUser(`__t_cu_${STAMP}`)      // UNLISTED diary on ctx strain
+      const ctxUnrel = await mkUser(`__t_cr_${STAMP}`)    // public diary, unrelated
+      const ctxFollowed = await mkUser(`__t_cf_${STAMP}`) // followed; public strain diary
+      const ctxBlocked = await mkUser(`__t_cb_${STAMP}`)  // blocked; public strain diary
+      const ctxBanned = await mkUser(`__t_cz_${STAMP}`, { banned: true })
+      ids.push(
+        ctxViewer.id, ctxMatch.id, ctxMedium.id, ctxTech.id, ctxWeak.id,
+        ctxPriv.id, ctxUnl.id, ctxUnrel.id, ctxFollowed.id, ctxBlocked.id, ctxBanned.id,
+      )
+
+      const ctxStrain = await prisma.strain.create({ data: { name: `P7 CtxDream ${STAMP}` } })
+      strainIds.push(ctxStrain.id)
+
+      const mkCD = (authorId: string, over: Record<string, unknown>) =>
+        prisma.growDiary.create({
+          data: { title: `__t_ctx ${STAMP}`, description: "", growType: "INDOOR", startDate: new Date(), authorId, ...over },
+          select: { id: true },
+        }).then((d) => (diaryIds.push(d.id), d))
+
+      // Viewer grows something else publicly — context reasons must not
+      // be masked by viewer phrasing for these fixtures.
+      await mkCD(ctxViewer.id, { strain: `P7 ViewerStrain ${STAMP}` })
+
+      await mkCD(ctxMatch.id, { strainId: ctxStrain.id, strain: ctxStrain.name })
+      await mkCD(ctxMedium.id, { strain: `P7 Other ${STAMP}`, mediumType: "COCO" })
+      await mkCD(ctxTech.id, { strain: `P7 Else ${STAMP}`, lightType: "LED", techniques: ["LST"] })
+      await mkCD(ctxWeak.id, { strain: `P7 Weak ${STAMP}`, growType: "OUTDOOR" })
+      // Private/unlisted strain diaries must not qualify; each candidate
+      // also owns an unrelated public diary so eligibility itself passes
+      // and only the privacy boundary is being tested.
+      await mkCD(ctxPriv.id, { strainId: ctxStrain.id, visibility: "PRIVATE" })
+      await mkCD(ctxPriv.id, { strain: `P7 PubP ${STAMP}` })
+      await mkCD(ctxUnl.id, { strainId: ctxStrain.id, visibility: "UNLISTED" })
+      await mkCD(ctxUnl.id, { strain: `P7 PubU ${STAMP}` })
+      await mkCD(ctxUnrel.id, { strain: `P7 Unrelated ${STAMP}`, mediumType: "HYDRO" })
+      await mkCD(ctxFollowed.id, { strainId: ctxStrain.id })
+      await mkCD(ctxBlocked.id, { strainId: ctxStrain.id })
+      await mkCD(ctxBanned.id, { strainId: ctxStrain.id })
+
+      await prisma.follow.create({ data: { followerId: ctxViewer.id, followingId: ctxFollowed.id } })
+      await prisma.block.create({ data: { blockerId: ctxViewer.id, blockedId: ctxBlocked.id } })
+
+      const ctx = {
+        strainIds: [ctxStrain.id],
+        strainNames: [ctxStrain.name],
+        mediums: ["COCO"],
+        lights: ["LED"],
+        growTypes: ["OUTDOOR"],
+        techniques: ["LST"],
+      }
+      const res = await getSuggestedGrowers(ctxViewer.id, { limit: 12, contextOnly: true, context: ctx })
+      const idsOf = res.map((g) => g.userId)
+
+      // Context matches with real public evidence surface.
+      const matchCard = res.find((g) => g.userId === ctxMatch.id)
+      assert.ok(matchCard, "context: strain grower suggested")
+      assert.ok(
+        matchCard!.reasons.some((r) => r.kind === "STRAIN" && r.label === `Grows ${ctxStrain.name}`),
+        `context strain reason, got ${JSON.stringify(matchCard!.reasons)}`,
+      )
+      const mediumCard = res.find((g) => g.userId === ctxMedium.id)
+      assert.ok(mediumCard, "context: medium grower suggested")
+      assert.ok(
+        mediumCard!.reasons.some((r) => r.kind === "MEDIUM" && r.label === "Grows in coco"),
+        `context medium reason, got ${JSON.stringify(mediumCard!.reasons)}`,
+      )
+      const techCard = res.find((g) => g.userId === ctxTech.id)
+      assert.ok(techCard, "context: lighting+technique grower suggested")
+      assert.ok(
+        techCard!.reasons.some((r) => r.kind === "TECHNIQUE" && r.label === "Uses LST"),
+        `context technique reason, got ${JSON.stringify(techCard!.reasons)}`,
+      )
+
+      // Below-floor and evidence-free candidates never headline.
+      assert.ok(!idsOf.includes(ctxWeak.id), "context: below-floor growType-only excluded")
+      assert.ok(!idsOf.includes(ctxUnrel.id), "context: unrelated grower excluded")
+      // Privacy boundaries — private/unlisted strain diaries must not
+      // qualify a candidate whose public record carries no context hit.
+      assert.ok(!idsOf.includes(ctxPriv.id), "context: PRIVATE strain diary never qualifies")
+      assert.ok(!idsOf.includes(ctxUnl.id), "context: UNLISTED strain diary never qualifies")
+      // Canonical exclusions hold under context.
+      assert.ok(!idsOf.includes(ctxViewer.id), "context: self excluded")
+      assert.ok(!idsOf.includes(ctxFollowed.id), "context: followed excluded")
+      assert.ok(!idsOf.includes(ctxBlocked.id), "context: blocked excluded")
+      assert.ok(!idsOf.includes(ctxBanned.id), "context: banned excluded")
+
+      // Stronger context evidence outranks weaker; ordering is stable.
+      assert.ok(
+        idsOf.indexOf(ctxMatch.id) < idsOf.indexOf(ctxMedium.id),
+        "context: strain match outranks medium match",
+      )
+      const res2 = await getSuggestedGrowers(ctxViewer.id, { limit: 12, contextOnly: true, context: ctx })
+      assert.deepEqual(res2.map((g) => g.userId), idsOf, "context: deterministic ordering")
+
+      // Guests get public context evidence; a new follow reconciles.
+      const guestRes = await getSuggestedGrowers(null, { limit: 12, contextOnly: true, context: ctx })
+      assert.ok(guestRes.some((g) => g.userId === ctxMatch.id), "context: guest sees public strain grower")
+      assert.ok(!guestRes.some((g) => g.userId === ctxBanned.id), "context: guest excludes banned")
+
+      await prisma.follow.create({ data: { followerId: ctxViewer.id, followingId: ctxMatch.id } })
+      const res3 = await getSuggestedGrowers(ctxViewer.id, { limit: 12, contextOnly: true, context: ctx })
+      assert.ok(!res3.some((g) => g.userId === ctxMatch.id), "context: followed grower reconciles out")
+
+      // contextOnly with an empty context is honest — no generic fillers.
+      const emptyRes = await getSuggestedGrowers(ctxViewer.id, { limit: 6, contextOnly: true, context: {} })
+      assert.equal(emptyRes.length, 0, "context: empty context returns nothing")
+
+      console.log("✓ contextual suggested growers — strain/medium/technique matching, privacy, exclusions")
+    }
+
     console.log("All Discovery filters + sitemap tests passed.")
   } finally {
     for (const id of postIds) {

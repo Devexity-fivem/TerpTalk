@@ -4,7 +4,7 @@ import { publicUserSelect, isModerator, activeAuthor, blockedUserIds, notBlocked
 import { mediaProxyUrl } from "@/lib/media"
 import { diaryPath } from "@/lib/slugs"
 import { notFound, redirect } from "next/navigation"
-import { MessageSquare, MessagesSquare, Clock, CheckCircle2, Eye, BookOpen, Sprout, Lightbulb, Leaf } from "@/lib/icons"
+import { MessageSquare, MessagesSquare, Clock, CheckCircle2, Eye, BookOpen, Sprout, Lightbulb, Leaf, Users } from "@/lib/icons"
 import Link from "next/link"
 import ReplyForm from "@/components/reply-form"
 import ThreadScrollBar from "@/components/thread-scroll-bar"
@@ -30,6 +30,8 @@ import ProfileCard from "@/components/ui/profile-card"
 import AnswerFollowPrompt from "@/components/answer-follow-prompt"
 import { rankDisplay } from "@/lib/progression-config"
 import { questionEvidenceForThread, helperFollowPromptAllowed } from "@/lib/question-evidence"
+import { getSuggestedGrowers } from "@/lib/suggested-growers"
+import SuggestedGrowerCard from "@/components/suggested-grower-card"
 import { TERPBOT_USERNAME } from "@/lib/terpbot-constants"
 import { anchoredPostVisibleWhere, updateAnchor } from "@/lib/update-social"
 
@@ -316,6 +318,25 @@ export default async function ThreadPage({
       : false,
   ])
   const following = !!follow
+
+  // Contextual growers — only on question threads with usable public
+  // signals (tags / viewer-visible linked grow), and only growers whose
+  // public evidence actually matches. Members get viewer relevance on
+  // top of context; guests see public-evidence matches only.
+  const contextGrowers = evidence.isQuestion
+    ? await getSuggestedGrowers(currentUserId ?? null, {
+        limit: 3,
+        contextOnly: true,
+        context: {
+          strainIds: evidence.signals.strainIds,
+          strainNames: evidence.signals.strainTagNames,
+          mediums: evidence.signals.mediumTypes,
+          lights: evidence.signals.lightTypes,
+          growTypes: evidence.signals.growTypes,
+          techniques: evidence.signals.techniqueKeys,
+        },
+      })
+    : []
 
   // First-unread boundary — must be read BEFORE mark-seen advances
   // lastSeenAt. A null lastSeenAt means "never seen" (practically
@@ -635,6 +656,23 @@ export default async function ThreadPage({
                 </li>
               )}
             </ul>
+          </div>
+        )}
+
+        {/* Contextual growers — members with public evidence tied to this
+            question's signals. Sits with the evidence rail; the answer
+            flow below stays primary. Vanishes when nothing qualifies. */}
+        {contextGrowers.length > 0 && (
+          <div className="bg-card/80 rounded-2xl border border-border/70 p-4 sm:p-5 mb-4">
+            <div className="flex items-center gap-2 mb-3">
+              <Users className="w-4 h-4 text-primary" />
+              <h2 className="font-display text-base font-semibold">Growers with related experience</h2>
+            </div>
+            <div className="space-y-3">
+              {contextGrowers.map((g) => (
+                <SuggestedGrowerCard key={g.userId} grower={g} />
+              ))}
+            </div>
           </div>
         )}
 

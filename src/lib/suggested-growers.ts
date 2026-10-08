@@ -111,6 +111,48 @@ interface ViewerSignals {
   blockedIds: string[]
 }
 
+// A page context (strain profile, question thread) can act as a second
+// signal set: candidates are generated from viewer signals ∪ context
+// signals, and each evidence dimension is scored once — the viewer's
+// phrasing wins when both match. Context never bypasses eligibility,
+// blocks, or the public-only diary scope.
+export interface GrowerContext {
+  strainIds?: string[]
+  strainNames?: string[] // raw names; normalized internally
+  mediums?: string[]
+  lights?: string[]
+  growTypes?: string[]
+  techniques?: string[]
+}
+
+interface ContextSignals {
+  strainIds: string[]
+  strainNames: string[] // normalized lowercase
+  mediums: string[]
+  lights: string[]
+  growTypes: string[]
+  techniques: string[]
+}
+
+// A context match below this bar ("indoor grower", one technique) is too
+// weak to headline a contextual surface; strain/medium-level evidence and
+// combined signals clear it. Only applies under `contextOnly`.
+export const MIN_CONTEXT_SCORE = 20
+const CONTEXT_DIARY_CAP = 100
+
+const toContextSignals = (c: GrowerContext): ContextSignals => ({
+  strainIds: [...new Set(c.strainIds ?? [])],
+  strainNames: [...new Set((c.strainNames ?? []).map((s) => norm(s)).filter((s): s is string => !!s))],
+  mediums: [...new Set(c.mediums ?? [])],
+  lights: [...new Set(c.lights ?? [])],
+  growTypes: [...new Set(c.growTypes ?? [])],
+  techniques: [...new Set(c.techniques ?? [])],
+})
+
+const ctxEmpty = (c: ContextSignals) =>
+  !c.strainIds.length && !c.strainNames.length && !c.mediums.length &&
+  !c.lights.length && !c.growTypes.length && !c.techniques.length
+
 type CandidateUser = {
   id: string
   name: string | null
@@ -227,48 +269,97 @@ const GROW_TYPE_LABELS: Record<string, string> = {
 }
 const label = (map: Record<string, string>, v: string) => map[v] ?? v.toLowerCase()
 
-// Score one candidate diary against the viewer's signal sets. Every
-// point of score produces a reason — explanations can never disagree
-// with the ranking.
-function scoreDiaryOverlap(
-  sig: ViewerSignals,
+// Score one candidate diary against the viewer's signal sets and — when
+// a page context is attached — the context's signal sets. Every point of
+// score produces a reason — explanations can never disagree with the
+// ranking. Each evidence dimension is scored once: the viewer's phrasing
+// wins when both match ("You both grow X" beats "Grows X"), and
+// `ctxScore` tracks context-attributable points for `contextOnly`
+// surfaces so a card can never headline "growers growing this strain"
+// without real context evidence.
+function scoreDiaryMatch(
+  sig: ViewerSignals | null,
+  ctx: ContextSignals | null,
   cand: { strainId: string | null; strain: string | null; strainRefName: string | null; mediumType: string | null; lightType: string | null; growType: string; techniques: string[]; stage: string; updatedAt: Date }
-): DiaryMatch {
+): DiaryMatch & { ctxHit: boolean; ctxScore: number } {
   let score = 0
+  let ctxScore = 0
   const reasons: GrowerReason[] = []
   const candStrainName = cand.strainRefName ?? cand.strain
   const candStrain = norm(candStrainName)
 
-  const strainHit =
-    (cand.strainId && sig.strainIds.includes(cand.strainId)) ||
-    (candStrain && sig.strainNames.includes(candStrain)) ||
-    (candStrain && sig.favoriteStrain === candStrain)
-  if (strainHit && candStrainName) {
+  const viewerStrainHit =
+    !!sig &&
+    ((cand.strainId && sig.strainIds.includes(cand.strainId)) ||
+      (candStrain && sig.strainNames.includes(candStrain)) ||
+      (candStrain && sig.favoriteStrain === candStrain))
+  const ctxStrainHit =
+    !!ctx &&
+    ((cand.strainId && ctx.strainIds.includes(cand.strainId)) ||
+      (candStrain && ctx.strainNames.includes(candStrain)))
+  if ((viewerStrainHit || ctxStrainHit) && candStrainName) {
     score += W.STRAIN
-    reasons.push({ kind: "STRAIN", label: `You both grow ${candStrainName.trim()}` })
+    if (ctxStrainHit) ctxScore += W.STRAIN
+    reasons.push({
+      kind: "STRAIN",
+      label: viewerStrainHit ? `You both grow ${candStrainName.trim()}` : `Grows ${candStrainName.trim()}`,
+    })
   }
-  if (cand.mediumType && sig.mediums.includes(cand.mediumType)) {
-    score += W.MEDIUM
-    reasons.push({ kind: "MEDIUM", label: `Same medium — ${label(MEDIUM_LABELS, cand.mediumType)}` })
+  if (cand.mediumType) {
+    const vHit = !!sig && sig.mediums.includes(cand.mediumType)
+    const cHit = !!ctx && ctx.mediums.includes(cand.mediumType)
+    if (vHit || cHit) {
+      score += W.MEDIUM
+      if (cHit) ctxScore += W.MEDIUM
+      reasons.push({
+        kind: "MEDIUM",
+        label: vHit
+          ? `Same medium — ${label(MEDIUM_LABELS, cand.mediumType)}`
+          : `Grows in ${label(MEDIUM_LABELS, cand.mediumType)}`,
+      })
+    }
   }
-  if (cand.lightType && sig.lights.includes(cand.lightType)) {
-    score += W.LIGHTING
-    reasons.push({ kind: "LIGHTING", label: `Same lighting — ${label(LIGHT_LABELS, cand.lightType)}` })
+  if (cand.lightType) {
+    const vHit = !!sig && sig.lights.includes(cand.lightType)
+    const cHit = !!ctx && ctx.lights.includes(cand.lightType)
+    if (vHit || cHit) {
+      score += W.LIGHTING
+      if (cHit) ctxScore += W.LIGHTING
+      reasons.push({
+        kind: "LIGHTING",
+        label: vHit
+          ? `Same lighting — ${label(LIGHT_LABELS, cand.lightType)}`
+          : `Runs ${label(LIGHT_LABELS, cand.lightType)}`,
+      })
+    }
   }
-  const sharedTech = cand.techniques.filter((t) => sig.techniques.includes(t))
-  if (sharedTech.length) {
-    score += Math.min(sharedTech.length * W.TECHNIQUE, W.TECHNIQUE_CAP)
-    reasons.push({ kind: "TECHNIQUE", label: `Shared techniques: ${sharedTech.slice(0, 3).join(", ")}` })
+  const sharedTech = sig ? cand.techniques.filter((t) => sig.techniques.includes(t)) : []
+  const ctxTech = ctx ? cand.techniques.filter((t) => ctx.techniques.includes(t) && !sharedTech.includes(t)) : []
+  if (sharedTech.length || ctxTech.length) {
+    score += Math.min((sharedTech.length + ctxTech.length) * W.TECHNIQUE, W.TECHNIQUE_CAP)
+    ctxScore += Math.min(ctxTech.length * W.TECHNIQUE, W.TECHNIQUE_CAP)
+    if (sharedTech.length)
+      reasons.push({ kind: "TECHNIQUE", label: `Shared techniques: ${sharedTech.slice(0, 3).join(", ")}` })
+    if (ctxTech.length)
+      reasons.push({ kind: "TECHNIQUE", label: `Uses ${ctxTech.slice(0, 3).join(", ")}` })
   }
-  if (sig.growTypes.includes(cand.growType)) {
-    score += W.GROW_TYPE
-    reasons.push({ kind: "GROW_TYPE", label: `Both ${label(GROW_TYPE_LABELS, cand.growType)} growers` })
+  {
+    const vHit = !!sig && sig.growTypes.includes(cand.growType)
+    const cHit = !!ctx && ctx.growTypes.includes(cand.growType)
+    if (vHit || cHit) {
+      score += W.GROW_TYPE
+      if (cHit) ctxScore += W.GROW_TYPE
+      reasons.push({
+        kind: "GROW_TYPE",
+        label: vHit ? `Both ${label(GROW_TYPE_LABELS, cand.growType)} growers` : `${label(GROW_TYPE_LABELS, cand.growType)} grower`,
+      })
+    }
   }
-  if (sig.stages.includes(cand.stage)) {
+  if (sig && sig.stages.includes(cand.stage)) {
     score += W.STAGE
     reasons.push({ kind: "STAGE", label: `Same stage — ${label(STAGE_LABELS, cand.stage)}` })
   }
-  return { score, reasons, lastActive: cand.updatedAt }
+  return { score, reasons, lastActive: cand.updatedAt, ctxHit: ctxScore > 0, ctxScore }
 }
 
 interface CandidateAgg {
@@ -276,6 +367,10 @@ interface CandidateAgg {
   growScore: number
   growReasons: GrowerReason[]
   lastActive: Date | null
+  /** Any public diary of this candidate carried a context signal. */
+  ctxMatched: boolean
+  /** Best single-diary context score — the `contextOnly` floor input. */
+  ctxScore: number
   sharedFollows: string[] // usernames of growers the viewer and candidate both follow
   acceptedAnswers: number
   recentUpdates: number
@@ -283,7 +378,7 @@ interface CandidateAgg {
   publicGrows: number
 }
 
-function finalize(agg: CandidateAgg): { g: SuggestedGrower; score: number; lastActive: number } {
+function finalize(agg: CandidateAgg): { g: SuggestedGrower; score: number; lastActive: number; ctxMatched: boolean; ctxScore: number } {
   let score = agg.growScore
   // Grow-overlap reasons lead (most relevant), but the card caps at 3 —
   // reserve a slot so trust/contribution evidence never gets truncated
@@ -326,6 +421,8 @@ function finalize(agg: CandidateAgg): { g: SuggestedGrower; score: number; lastA
   return {
     score,
     lastActive: agg.lastActive?.getTime() ?? 0,
+    ctxMatched: agg.ctxMatched,
+    ctxScore: agg.ctxScore,
     g: {
       userId: u.id,
       username: p?.username ?? null,
@@ -350,18 +447,28 @@ function finalize(agg: CandidateAgg): { g: SuggestedGrower; score: number; lastA
  * suggestions first, then public-evidence fillers so the section stays
  * useful for members with no public grows yet.
  *
+ * `opts.context` attaches a page context (strain, question signals) as a
+ * second evidence set — it generates its own bounded candidate pool and
+ * produces context-phrased reasons ("Grows X", "Uses LST"), never
+ * bypassing eligibility, blocks, or the public-only scope. With
+ * `contextOnly: true` the result is restricted to candidates with real
+ * context evidence (ctxScore ≥ MIN_CONTEXT_SCORE) — contextual surfaces
+ * never headline a grower who lacks evidence for the subject.
+ *
  * Ordering is deterministic: score → most recent public grow activity →
  * user id. Same inputs, same ranking.
  */
 export async function getSuggestedGrowers(
   viewerId: string | null,
-  opts: { limit?: number } = {}
+  opts: { limit?: number; context?: GrowerContext; contextOnly?: boolean } = {}
 ): Promise<SuggestedGrower[]> {
   const limit = Math.min(Math.max(1, opts.limit ?? RESULT_LIMIT), 24)
   const now = Date.now()
   const recentSince = new Date(now - RECENT_UPDATE_DAYS * 86_400_000)
 
   const sig = viewerId ? await loadViewerSignals(viewerId) : null
+  const ctxSig = opts.context ? toContextSignals(opts.context) : null
+  const hasCtx = !!ctxSig && !ctxEmpty(ctxSig)
   // Candidates the viewer can never be shown: self, already followed,
   // blocked either direction.
   const excluded = sig ? [viewerId!, ...sig.followingIds, ...sig.blockedIds] : []
@@ -369,7 +476,50 @@ export async function getSuggestedGrowers(
 
   const aggs = new Map<string, CandidateAgg>()
 
-  // ── Source 1: public diaries sharing at least one viewer signal ──
+  const mergeDiary = (d: {
+    authorId: string
+    strainId: string | null
+    strain: string | null
+    mediumType: string | null
+    lightType: string | null
+    growType: string
+    techniques: string[]
+    stage: string
+    updatedAt: Date
+    strainRef: { name: string } | null
+    author: CandidateUser
+  }) => {
+    if (d.author.profile?.hideOnlineStatus || d.author.profile?.username === TERPBOT_USERNAME) return
+    const m = scoreDiaryMatch(sig, ctxSig, {
+      strainId: d.strainId, strain: d.strain, strainRefName: d.strainRef?.name ?? null,
+      mediumType: d.mediumType, lightType: d.lightType, growType: d.growType,
+      techniques: d.techniques, stage: d.stage, updatedAt: d.updatedAt,
+    })
+    const prev = aggs.get(d.authorId)
+    if (!prev || m.score > prev.growScore) {
+      aggs.set(d.authorId, {
+        user: d.author, growScore: m.score, growReasons: m.reasons, lastActive: m.lastActive,
+        ctxMatched: (prev?.ctxMatched ?? false) || m.ctxHit,
+        ctxScore: Math.max(prev?.ctxScore ?? 0, m.ctxScore),
+        sharedFollows: prev?.sharedFollows ?? [], acceptedAnswers: 0, recentUpdates: 0,
+        harvests: 0, publicGrows: 0,
+      })
+    } else {
+      prev.ctxMatched ||= m.ctxHit
+      prev.ctxScore = Math.max(prev.ctxScore, m.ctxScore)
+      if (m.lastActive > (prev.lastActive ?? new Date(0))) prev.lastActive = m.lastActive
+    }
+  }
+
+  const DIARY_SELECT = {
+    authorId: true, strainId: true, strain: true, mediumType: true,
+    lightType: true, growType: true, techniques: true, stage: true,
+    updatedAt: true,
+    strainRef: { select: { name: true } },
+    author: { select: USER_SELECT },
+  } satisfies Prisma.GrowDiarySelect
+
+  // ── Source 1a: public diaries sharing at least one viewer signal ──
   // Guests have no signals — this source only runs for members.
   if (sig) {
     const or: Prisma.GrowDiaryWhereInput[] = []
@@ -394,33 +544,41 @@ export async function getSuggestedGrowers(
         },
         orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
         take: DIARY_CANDIDATE_CAP,
-        select: {
-          authorId: true, strainId: true, strain: true, mediumType: true,
-          lightType: true, growType: true, techniques: true, stage: true,
-          updatedAt: true,
-          strainRef: { select: { name: true } },
-          author: { select: USER_SELECT },
-        },
+        select: DIARY_SELECT,
       })
-      for (const d of diaries) {
-        if (d.author.profile?.hideOnlineStatus || d.author.profile?.username === TERPBOT_USERNAME) continue
-        const m = scoreDiaryOverlap(sig, {
-          strainId: d.strainId, strain: d.strain, strainRefName: d.strainRef?.name ?? null,
-          mediumType: d.mediumType, lightType: d.lightType, growType: d.growType,
-          techniques: d.techniques, stage: d.stage, updatedAt: d.updatedAt,
-        })
-        const prev = aggs.get(d.authorId)
-        if (!prev || m.score > prev.growScore) {
-          aggs.set(d.authorId, {
-            user: d.author, growScore: m.score, growReasons: m.reasons, lastActive: m.lastActive,
-            sharedFollows: prev?.sharedFollows ?? [], acceptedAnswers: 0, recentUpdates: 0,
-            harvests: 0, publicGrows: 0,
-          })
-        } else if (m.lastActive > (prev.lastActive ?? new Date(0))) {
-          prev.lastActive = m.lastActive
-        }
-      }
+      for (const d of diaries) mergeDiary(d)
     }
+  }
+
+  // ── Source 1b: public diaries matching the page context ──
+  // A separate bounded pool so popular viewer-signal diaries can never
+  // starve context matches out of the shared cap. Runs for guests too —
+  // context evidence is already public-only.
+  if (hasCtx && ctxSig) {
+    const or: Prisma.GrowDiaryWhereInput[] = []
+    if (ctxSig.strainIds.length) or.push({ strainId: { in: ctxSig.strainIds } })
+    for (const s of ctxSig.strainNames.slice(0, 12)) {
+      or.push({ strainRef: { is: { name: { equals: s, mode: "insensitive" } } } })
+      or.push({ strain: { equals: s, mode: "insensitive" } })
+    }
+    if (ctxSig.mediums.length) or.push({ mediumType: { in: ctxSig.mediums } })
+    if (ctxSig.lights.length) or.push({ lightType: { in: ctxSig.lights } })
+    if (ctxSig.growTypes.length) or.push({ growType: { in: ctxSig.growTypes } })
+    if (ctxSig.techniques.length) or.push({ techniques: { hasSome: ctxSig.techniques } })
+
+    const diaries = await prisma.growDiary.findMany({
+      where: {
+        deleted: false,
+        ...publicDiaryWhere,
+        author: activeAuthor(),
+        authorId: { notIn: excluded },
+        OR: or,
+      },
+      orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
+      take: CONTEXT_DIARY_CAP,
+      select: DIARY_SELECT,
+    })
+    for (const d of diaries) mergeDiary(d)
   }
 
   // ── Source 2: graph proximity — growers the viewer's followees follow ──
@@ -465,6 +623,7 @@ export async function getSuggestedGrowers(
         const shared = counts.get(u.id)!
         aggs.set(u.id, {
           user: u, growScore: 0, growReasons: [], lastActive: null,
+          ctxMatched: false, ctxScore: 0,
           sharedFollows: shared, acceptedAnswers: 0, recentUpdates: 0, harvests: 0, publicGrows: 0,
         })
       }
@@ -493,6 +652,7 @@ export async function getSuggestedGrowers(
     if (!aggs.has(u.id)) {
       aggs.set(u.id, {
         user: u, growScore: 0, growReasons: [], lastActive: null,
+        ctxMatched: false, ctxScore: 0,
         sharedFollows: [], acceptedAnswers: 0, recentUpdates: 0, harvests: 0, publicGrows: 0,
       })
     }
@@ -548,6 +708,17 @@ export async function getSuggestedGrowers(
   // for a member with no public grows yet. Guests get the whole pool
   // ranked on public evidence — no floor, honest reasons only.
   const hasEvidence = (s: (typeof scored)[number]) => s.score > 0 && s.g.reasons.length > 0
+  // Contextual surfaces only headline growers with real context evidence;
+  // personalization and generic fillers never stand in for it. An empty
+  // context means there is no honest contextual answer — return none.
+  if (opts.contextOnly) {
+    if (!hasCtx) return []
+    return scored
+      .filter((s) => s.ctxMatched && s.ctxScore >= MIN_CONTEXT_SCORE && hasEvidence(s))
+      .sort(order)
+      .slice(0, limit)
+      .map((s) => s.g)
+  }
   if (!sig) {
     return scored.filter(hasEvidence).sort(order).slice(0, limit).map((s) => s.g)
   }

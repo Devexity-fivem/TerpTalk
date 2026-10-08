@@ -27,6 +27,7 @@ import {
   QUESTION_CATEGORY_RE,
   questionCategoryIds,
   extractQuestionSignals,
+  type QuestionSignals,
 } from "@/lib/answer-match"
 import { scoreGrowMatch, MIN_SCORE } from "@/lib/grow-matches"
 import { suggestStrainLink } from "@/lib/strain-stats"
@@ -67,9 +68,18 @@ export interface QuestionEvidence {
   solved: SolvedQuestionItem[]
   grows: GrowEvidenceItem[]
   strain: StrainEvidenceItem | null
+  /** Public matching signals extracted for this question — tags plus the
+   *  linked grow's fields when that grow is visible to this viewer.
+   *  Reused by the page for contextual grower suggestions. */
+  signals: QuestionSignals
 }
 
-const EMPTY: QuestionEvidence = { isQuestion: false, solved: [], grows: [], strain: null }
+const EMPTY_SIGNALS: QuestionSignals = {
+  strainTagNames: [], strainIds: [], techniqueKeys: [],
+  setupTokens: [], mediumTypes: [], lightTypes: [], growTypes: [],
+}
+
+const EMPTY: QuestionEvidence = { isQuestion: false, solved: [], grows: [], strain: null, signals: EMPTY_SIGNALS }
 
 interface ContextDiaryRef {
   id: string
@@ -317,7 +327,23 @@ export async function questionEvidenceForThread(input: {
     }
   }
 
-  return { isQuestion: true, solved, grows, strain }
+  // Public signals usable for contextual grower suggestions: the tag
+  // extraction plus — only when the viewer can see the linked grow —
+  // that grow's public matching fields (same rule as refDiary matching).
+  const refName = refDiary ? (refDiary.strainRef?.name ?? refDiary.strain) : null
+  const growerSignals: QuestionSignals = refDiary
+    ? {
+        ...signals,
+        strainIds: [...new Set([...signals.strainIds, ...(refDiary.strainId ? [refDiary.strainId] : [])])],
+        strainTagNames: [...new Set([...signals.strainTagNames, ...(refName ? [refName.toLowerCase()] : [])])],
+        techniqueKeys: [...new Set([...signals.techniqueKeys, ...refDiary.techniques])],
+        mediumTypes: [...new Set([...signals.mediumTypes, ...(refDiary.mediumType ? [refDiary.mediumType] : [])])],
+        lightTypes: [...new Set([...signals.lightTypes, ...(refDiary.lightType ? [refDiary.lightType] : [])])],
+        growTypes: [...new Set([...signals.growTypes, refDiary.growType])],
+      }
+    : signals
+
+  return { isQuestion: true, solved, grows, strain, signals: growerSignals }
 }
 
 /**

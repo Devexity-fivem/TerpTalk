@@ -81,6 +81,44 @@ const main = async () => {
     },
   })
 
+  // Phase 7 contextual-surface fixtures — a catalog strain with bob's
+  // public grower diary, and a question-category thread tagged with it.
+  const ctxStrain = await prisma.strain.create({
+    data: { name: `__brCtxStrain ${TS}`, slug: `__brctx-${TS}` },
+  })
+  await prisma.growDiary.create({
+    data: {
+      title: `__br ctx grow ${TS}`, slug: `__br-ctxg-${TS}`, description: "",
+      growType: "INDOOR", startDate: new Date(), authorId: bob.id,
+      visibility: "PUBLIC", strainId: ctxStrain.id, strain: ctxStrain.name,
+    },
+  })
+  const ctxCat =
+    (await prisma.category.findFirst({
+      where: {
+        hidden: false,
+        OR: [
+          { slug: { contains: "question" } }, { name: { contains: "question" } },
+          { slug: { contains: "help" } }, { name: { contains: "help" } },
+        ],
+      },
+    })) ??
+    (await prisma.category.create({
+      data: { name: `__br questions ${TS}`, slug: `__br-qcat-${TS}`, description: "" },
+    }))
+  const ctxTag = await prisma.tag.create({
+    data: { name: ctxStrain.name.toLowerCase(), slug: `__brtag-${TS}` },
+  })
+  const ctxQThread = await prisma.thread.create({
+    data: {
+      // bob authors it — the chat suite asserts alice owns zero threads.
+      // Named ctxQThread: the KC section below declares its own ctxThread.
+      title: `__br ctx growers question ${TS}`, slug: `__br-ctxq-${TS}`, content: "x",
+      authorId: bob.id, categoryId: ctxCat.id,
+      tags: { create: [{ tagId: ctxTag.id }] },
+    },
+  })
+
   // Chat fixtures (Batch O) — a public room where the anchor target is the
   // OLDEST message and ~40 newer fillers force the initial view to land at
   // the bottom, so an in-view target proves the #msg- scroll ran.
@@ -719,6 +757,43 @@ const main = async () => {
       { react: blockedReact.status() })
     await bobCtx.close()
 
+    // ── Contextual grower surfaces (Phase 7) ─────────────────────────
+    // Strain page: anonymous viewers get public-evidence grower cards at
+    // every supported width; the section is a real h2 under the page h1
+    // and never produces horizontal overflow.
+    // Warm both routes once — dev-mode cold compile can exceed the 30s
+    // selector wait under suite load; the assertions run on warm hits.
+    await anonPage.request.get(`${BASE}/strains/${ctxStrain.slug}`).catch(() => {})
+    await anonPage.request.get(`${BASE}/forum/thread/${ctxQThread.slug}`).catch(() => {})
+    for (const w of [360, 390, 1024, 1280, 1440]) {
+      await anonPage.setViewportSize({ width: w, height: 900 })
+      await gotoMain(anonPage, `${BASE}/strains/${ctxStrain.slug}`, 'h2:has-text("Growers growing this strain")')
+      const noOverflow = !(await anonPage.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1))
+      const profileLink = await anonPage.locator(`a[href="/u/${bobUsername}"]`).count()
+      const followCta = await anonPage.locator('a[href^="/auth/signin"]:has-text("Follow")').count()
+      ok(`ctx: strain growers render + follow CTA at ${w}px without overflow`,
+        noOverflow && profileLink >= 1 && followCta >= 1, { w, profileLink, followCta })
+    }
+
+    // Question thread: the grower rail renders with real tag signals —
+    // same public-evidence rules for anonymous viewers.
+    await anonPage.setViewportSize({ width: 390, height: 844 })
+    const ctxThreadRes = await anonPage.goto(`${BASE}/forum/thread/${ctxQThread.slug}`, { waitUntil: "domcontentloaded" })
+    try {
+      await anonPage.waitForSelector('h2:has-text("Growers with related experience")', { timeout: 30_000 })
+    } catch {
+      const html = await anonPage.content()
+      const db = await prisma.thread.findUnique({ where: { id: ctxQThread.id }, select: { slug: true, deleted: true, category: { select: { slug: true, name: true, hidden: true } } } })
+      console.log("CTX DEBUG status:", ctxThreadRes?.status(), "| url:", anonPage.url(),
+        "| has-rail:", html.includes("Growers with related experience"), "| has-evidence:", html.includes("What might already help"),
+        "| notfound:", /404|not found/i.test(html.slice(0, 3000)), "| db-thread:", JSON.stringify(db))
+      throw new Error("context rail missing")
+    }
+    ok("ctx: question rail shows the strain-matched grower at 390px",
+      (await anonPage.locator(`a[href="/u/${bobUsername}"]`).count()) >= 1)
+    const qNoOverflow = !(await anonPage.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1))
+    ok("ctx: question rail no overflow at 390px", qNoOverflow)
+
     // ── Mobile contract ──────────────────────────────────────────────
     const mob = await browser.newContext({ viewport: { width: 390, height: 844 } })
     const mobPage = await mob.newPage()
@@ -738,6 +813,10 @@ const main = async () => {
   } finally {
     await browser.close().catch(() => {})
     await prisma.block.deleteMany({ where: { OR: [{ blockerId: alice.id }, { blockerId: bob.id }] } }).catch(() => {})
+    await prisma.thread.deleteMany({ where: { id: ctxQThread.id } }).catch(() => {})
+    await prisma.tag.deleteMany({ where: { id: ctxTag.id } }).catch(() => {})
+    await prisma.strain.deleteMany({ where: { id: ctxStrain.id } }).catch(() => {})
+    await prisma.category.deleteMany({ where: { id: ctxCat.id, slug: `__br-qcat-${TS}` } }).catch(() => {})
     await prisma.chatRoom.deleteMany({ where: { id: chatRoom.id } }).catch(() => {})
     await prisma.user.deleteMany({ where: { id: { in: [alice.id, bob.id] } } }).catch(() => {})
     await prisma.$disconnect()
