@@ -7,7 +7,7 @@ import { helpWantedReasonText } from "@/lib/answer-match"
 import PageHeader from "@/components/ui/page-header"
 import Surface from "@/components/ui/surface"
 import EmptyState from "@/components/ui/empty-state"
-import { Bell, Leaf, Sprout, HeartHandshake, Target, Flame, TrendingUp, MessageSquare } from "@/lib/icons"
+import { Bell, Leaf, Sprout, HeartHandshake, Target, Flame, TrendingUp, MessageSquare, Users } from "@/lib/icons"
 
 export const metadata = {
   title: "Your Weekly Digest",
@@ -83,6 +83,33 @@ export default async function MyDigestPage() {
                 </span>
               </li>
             ))}
+          </ul>
+        </Surface>
+      )}
+
+      {d.followedActivity.total > 0 && (
+        <Surface>
+          <h2 className="font-semibold flex items-center gap-2 mb-3">
+            <Users className="h-5 w-5 text-primary" /> From growers you follow
+          </h2>
+          <ul className="space-y-2 text-sm">
+            {d.followedActivity.items.map((a) => (
+              <li key={`${a.kind}-${a.href}`}>
+                <Link href={a.author.href} className="hover:underline font-medium">
+                  {a.author.name}
+                </Link>
+                <span className="text-muted-foreground"> {a.verb} </span>
+                <Link href={a.href} className="hover:underline font-medium">
+                  {a.title}
+                </Link>
+                {a.context && <span className="text-muted-foreground"> in “{a.context}”</span>}
+              </li>
+            ))}
+            {d.followedActivity.total > d.followedActivity.items.length && (
+              <li className="text-muted-foreground">
+                +{d.followedActivity.total - d.followedActivity.items.length} more from growers you follow
+              </li>
+            )}
           </ul>
         </Surface>
       )}

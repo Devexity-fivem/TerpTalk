@@ -119,6 +119,23 @@ const main = async () => {
     },
   })
 
+  // Phase 8 digest fixture — alice user-follows carol, whose public diary
+  // (created this week) + update feed "From growers you follow" on
+  // /mydigest. Carol is separate from bob: the blocked-profile check above
+  // leaves alice blocking bob for the rest of the suite.
+  const carol = await mkUser("c")
+  const carolUsername = `__br_c_${TS}`
+  const carolDiary = await prisma.growDiary.create({
+    data: {
+      title: `__br digest grow ${TS}`, slug: `__br-dg-${TS}`, description: "",
+      growType: "INDOOR", startDate: new Date(), authorId: carol.id, visibility: "PUBLIC",
+    },
+  })
+  await prisma.diaryUpdate.create({
+    data: { diaryId: carolDiary.id, authorId: carol.id, stage: "VEG", title: `__br digest update ${TS}`, content: "browser fixture — followed grower update" },
+  })
+  await prisma.follow.create({ data: { followerId: alice.id, followingId: carol.id } })
+
   // Chat fixtures (Batch O) — a public room where the anchor target is the
   // OLDEST message and ~40 newer fillers force the initial view to land at
   // the bottom, so an in-view target proves the #msg- scroll ran.
@@ -794,6 +811,22 @@ const main = async () => {
     const qNoOverflow = !(await anonPage.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1))
     ok("ctx: question rail no overflow at 390px", qNoOverflow)
 
+    // Digest (authed): "From growers you follow" renders carol's update
+    // + new grow with canonical links at every supported width.
+    await alicePage.request.get(`${BASE}/mydigest`).catch(() => {})
+    for (const w of [360, 390, 1024, 1280, 1440]) {
+      await alicePage.setViewportSize({ width: w, height: 900 })
+      await gotoMain(alicePage, `${BASE}/mydigest`, 'h2:has-text("From growers you follow")')
+      const dgBody = (await alicePage.textContent("body")) ?? ""
+      const dgNoOverflow = !(await alicePage.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1))
+      ok(`digest: followed-grower section renders at ${w}px without overflow`,
+        dgNoOverflow &&
+          (await alicePage.locator(`a[href="/u/${carolUsername}"]`).count()) >= 1 &&
+          (await alicePage.locator(`a[href^="/diaries/"]`).count()) >= 1 &&
+          dgBody.includes(`__br digest update ${TS}`),
+        { w })
+    }
+
     // ── Mobile contract ──────────────────────────────────────────────
     const mob = await browser.newContext({ viewport: { width: 390, height: 844 } })
     const mobPage = await mob.newPage()
@@ -818,7 +851,7 @@ const main = async () => {
     await prisma.strain.deleteMany({ where: { id: ctxStrain.id } }).catch(() => {})
     await prisma.category.deleteMany({ where: { id: ctxCat.id, slug: `__br-qcat-${TS}` } }).catch(() => {})
     await prisma.chatRoom.deleteMany({ where: { id: chatRoom.id } }).catch(() => {})
-    await prisma.user.deleteMany({ where: { id: { in: [alice.id, bob.id] } } }).catch(() => {})
+    await prisma.user.deleteMany({ where: { id: { in: [alice.id, bob.id, carol.id] } } }).catch(() => {})
     await prisma.$disconnect()
   }
 

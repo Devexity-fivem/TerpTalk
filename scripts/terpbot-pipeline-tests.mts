@@ -1916,6 +1916,126 @@ async function run() {
       console.log("✓ runWeeklyDigest eligibility + minimum value + idempotence + week rollover")
     }
 
+    // ── 10d2. weeklyDigestForUser: "From growers you follow" ────────
+    {
+      const DAY = 86400000
+      const { weeklyDigestForUser } = await import("@/lib/weekly-digest")
+      const viewer = await mk(`__tbp_dg2_v_${SUFFIX}`)
+      const gA = await mk(`__tbp_dg2_ga_${SUFFIX}`) // update + extra updates (cap)
+      const gB = await mk(`__tbp_dg2_gb_${SUFFIX}`) // thread
+      const gC = await mk(`__tbp_dg2_gc_${SUFFIX}`) // harvest
+      const gD = await mk(`__tbp_dg2_gd_${SUFFIX}`) // brand-new diary
+      const stranger = await mk(`__tbp_dg2_s_${SUFFIX}`)  // never followed
+      const blockedG = await mk(`__tbp_dg2_bl_${SUFFIX}`) // follow + block
+      for (const g of [gA, gB, gC, gD])
+        await prisma.follow.create({ data: { followerId: viewer.id, followingId: g.id } })
+      await prisma.follow.create({ data: { followerId: viewer.id, followingId: blockedG.id } })
+      await prisma.block.create({ data: { blockerId: viewer.id, blockedId: blockedG.id } })
+
+      const dg2Cat = await prisma.category.create({
+        data: { name: `__tbp Digest2 ${SUFFIX}`, slug: `__tbp-digest2-${SUFFIX}`, order: 999, description: "t" },
+      })
+      const mkDiary = async (authorId: string, tag: string, visibility = "PUBLIC", extra = {}) => {
+        const d = await prisma.growDiary.create({
+          data: {
+            title: `__tbp dg2 ${tag} ${SUFFIX}`, description: "t", growType: "INDOOR",
+            startDate: new Date(), authorId, visibility, ...extra,
+          },
+        })
+        diaryIds.push(d.id)
+        return d
+      }
+      const mkUpdate = (diaryId: string, authorId: string, title: string) =>
+        prisma.diaryUpdate.create({
+          data: { diaryId, authorId, stage: "VEG", title, content: "__tbp dg2 update long enough" },
+        })
+
+      // gA: diary + 3 updates (per-grower cap: only 2 items survive)
+      const aDiary = await mkDiary(gA.id, "a")
+      await mkUpdate(aDiary.id, gA.id, `__tbp dg2 au1 ${SUFFIX}`)
+      // gB: thread this week
+      const gThread = await prisma.thread.create({
+        data: { title: `__tbp dg2 thread ${SUFFIX}`, slug: `__tbp-dg2-t-${SUFFIX}`, content: "x", authorId: gB.id, categoryId: dg2Cat.id },
+      })
+      threadIds.push(gThread.id)
+      // gC: harvested this week (created earlier — only the harvest counts)
+      await mkDiary(gC.id, "c", "PUBLIC", { harvested: true, harvestedAt: new Date() })
+      // gD: brand-new diary → "started a new grow"
+      await mkDiary(gD.id, "d")
+      // viewer's own public update — self can never be a digest item
+      const vDiary = await mkDiary(viewer.id, "v")
+      await mkUpdate(vDiary.id, viewer.id, `__tbp dg2 vu ${SUFFIX}`)
+
+      // exclusions: stranger's public update, blocked grower's public
+      // update, gA's private/unlisted updates, gA's unlisted diary the
+      // viewer diary-follows (covered by "Activity you follow" instead).
+      const sDiary = await mkDiary(stranger.id, "s")
+      await mkUpdate(sDiary.id, stranger.id, `__tbp dg2 su ${SUFFIX}`)
+      const bDiary = await mkDiary(blockedG.id, "b")
+      await mkUpdate(bDiary.id, blockedG.id, `__tbp dg2 bu ${SUFFIX}`)
+      const pDiary = await mkDiary(gA.id, "p", "PRIVATE")
+      await mkUpdate(pDiary.id, gA.id, `__tbp dg2 pu ${SUFFIX}`)
+      const uDiary = await mkDiary(gA.id, "u", "UNLISTED")
+      await prisma.diaryFollow.create({ data: { userId: viewer.id, diaryId: uDiary.id } })
+      await mkUpdate(uDiary.id, gA.id, `__tbp dg2 uu ${SUFFIX}`)
+      await mkUpdate(aDiary.id, gA.id, `__tbp dg2 au2 ${SUFFIX}`)
+      await mkUpdate(aDiary.id, gA.id, `__tbp dg2 au3 ${SUFFIX}`)
+
+      const followedNames = new Set([`__tbp_dg2_ga_${SUFFIX}`, `__tbp_dg2_gb_${SUFFIX}`, `__tbp_dg2_gc_${SUFFIX}`, `__tbp_dg2_gd_${SUFFIX}`])
+      const d = await weeklyDigestForUser(viewer.id)
+      const items = d.followedActivity.items
+      const kinds = items.map((i) => i.kind)
+      assert.ok(kinds.includes("update"), `update item present: ${JSON.stringify(kinds)}`)
+      assert.ok(kinds.includes("thread"), "thread item present")
+      assert.ok(kinds.includes("harvest"), "harvest item present")
+      assert.ok(kinds.includes("diary"), "new-diary item present")
+      for (const i of items)
+        assert.ok(followedNames.has(i.author.name), `item author is a followed grower: ${i.author.name}`)
+      const perAuthor = new Map<string, number>()
+      for (const i of items) perAuthor.set(i.author.name, (perAuthor.get(i.author.name) ?? 0) + 1)
+      for (const [n, c] of perAuthor) assert.ok(c <= 2, `per-grower cap ≤2 (${n}: ${c})`)
+      assert.ok(!items.some((i) => i.title.includes(" su ") || i.title.includes(" bu ") || i.title.includes(" pu ") || i.title.includes(" uu ") || i.title.includes(" vu ")),
+        "stranger/blocked/private/unlisted/self items absent")
+
+      // self never appears even with a bogus self-follow row
+      await prisma.follow.create({ data: { followerId: viewer.id, followingId: viewer.id } }).catch(() => {})
+      const dSelf = await weeklyDigestForUser(viewer.id)
+      assert.ok(!dSelf.followedActivity.items.some((i) => i.author.name.includes("_v_")), "self excluded")
+
+      // determinism — identical ordering across regenerations
+      const d2 = await weeklyDigestForUser(viewer.id)
+      assert.deepEqual(
+        d2.followedActivity.items.map((i) => `${i.kind}:${i.href}`),
+        items.map((i) => `${i.kind}:${i.href}`),
+        "stable ordering across generations"
+      )
+
+      // unfollow all → section empties; the unlisted diary-follow update
+      // still surfaces in "Activity you follow" (link-holder semantics).
+      await prisma.follow.deleteMany({ where: { followerId: viewer.id } })
+      const d3 = await weeklyDigestForUser(viewer.id)
+      assert.ok(!d3.followedActivity.items.length, "unfollowed growers disappear")
+      assert.ok(d3.followedGrows.items.some((g) => g.title.includes(" dg2 u ")), "unlisted diary-follow still counted in Activity you follow")
+
+      // Cron signal — a dormant eligible viewer gets the growers line.
+      await prisma.user.update({
+        where: { id: viewer.id },
+        data: { onboardingCompletedAt: new Date(Date.now() - 4 * DAY), createdAt: new Date(Date.now() - 4 * DAY), lastSeenAt: new Date(Date.now() - 3 * DAY) },
+      })
+      await prisma.follow.create({ data: { followerId: viewer.id, followingId: gA.id } })
+      const { runWeeklyDigest } = await import("@/lib/weekly-digest")
+      const dgWk = `2099-W12`
+      rateLimitKeys.push(`terpbot:assist:user:${viewer.id}`)
+      const res = await runWeeklyDigest({ userIds: [viewer.id], weekKey: dgWk })
+      assert.equal(res.sent, 1, `eligible followed-grower member gets the digest: ${JSON.stringify(res)}`)
+      const dn = await prisma.notification.findFirst({
+        where: { userId: viewer.id, type: "BOT_ASSIST", title: "Your TerpTalk week" },
+      })
+      if (dn) notificationIds.push(dn.id)
+      assert.match(dn!.content, /growers? you follow posted this week/, "followed-grower line in digest")
+      console.log("✓ weeklyDigestForUser followed-grower section + privacy + cron signal")
+    }
+
     // ── 10e. growMatchesForUser: canonical Grows-Like-Yours matcher ────
     {
       const { growMatchesForUser, scoreGrowMatch } = await import("@/lib/grow-matches")
