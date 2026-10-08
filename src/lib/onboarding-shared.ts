@@ -1,18 +1,5 @@
-// Shared onboarding constants/types — pure module, no Prisma or server
-// imports. Safe for client components (onboarding stepper) and for the
-// server lib that fetches real suggestions.
-
-export interface SuggestedUser {
-  id: string
-  username: string | null
-  name: string | null
-  image: string | null
-  role: string
-  bio: string | null
-  /** Raw XP — null when the member opted out of public status display. */
-  xp: number | null
-  followers: number
-}
+// Shared onboarding constants — pure module, no Prisma or server imports.
+// Safe for client components (onboarding stepper).
 
 // Interest groups presented during onboarding — category slugs only.
 export const INTEREST_GROUPS: { label: string; slugs: string[] }[] = [

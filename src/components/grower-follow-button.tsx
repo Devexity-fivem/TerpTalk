@@ -11,7 +11,16 @@ import Tooltip from "@/components/ui/tooltip"
 // are never already-followed (excluded at query time), but the button
 // still handles the toggle honestly — unfollow keeps the card, a later
 // refetch re-excludes them.
-export default function GrowerFollowButton({ userId, username }: { userId: string; username: string | null }) {
+export default function GrowerFollowButton({
+  userId,
+  username,
+  onToggle,
+}: {
+  userId: string
+  username: string | null
+  /** Optional observer — used by onboarding to count first follows. */
+  onToggle?: (following: boolean) => void
+}) {
   const { data: session } = useSession()
   const pathname = usePathname()
   const [following, setFollowing] = useState(false)
@@ -43,6 +52,7 @@ export default function GrowerFollowButton({ userId, username }: { userId: strin
             if (res.ok) {
               const d = await res.json()
               setFollowing(d.following)
+              onToggle?.(d.following)
             }
           } finally { setBusy(false) }
         }}

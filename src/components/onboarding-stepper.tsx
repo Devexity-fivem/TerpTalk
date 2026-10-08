@@ -8,8 +8,9 @@ import {
   Leaf, User, Camera, Loader2, Check, Copy, AlertTriangle, KeyRound, Users, Sparkles,
   MessageSquare,
 } from "@/lib/icons"
-import { INTEREST_GROUPS, type SuggestedUser } from "@/lib/onboarding-shared"
-import RoleBadge from "@/components/role-badge"
+import { INTEREST_GROUPS } from "@/lib/onboarding-shared"
+import type { SuggestedGrower } from "@/lib/suggested-growers"
+import SuggestedGrowerCard from "@/components/suggested-grower-card"
 
 interface Category {
   id: string
@@ -97,9 +98,10 @@ export default function OnboardingStepper({
   const [phraseSaved, setPhraseSaved] = useState(false)
   const [copied, setCopied] = useState(false)
 
-  // Growers
-  const [suggestions, setSuggestions] = useState<SuggestedUser[] | null>(null)
-  const [selected, setSelected] = useState<Set<string>>(new Set())
+  // Growers — individual Follow toggles do the work; we just count
+  // first follows so the Done step can point at the Following feed.
+  const [suggestions, setSuggestions] = useState<SuggestedGrower[] | null>(null)
+  const [followedCount, setFollowedCount] = useState(0)
   const [suggestError, setSuggestError] = useState("")
   const headingRef = useRef<HTMLHeadingElement>(null)
 
@@ -109,7 +111,7 @@ export default function OnboardingStepper({
     setSuggestError("")
     fetch("/api/onboarding/suggestions")
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error("load failed"))))
-      .then((d) => setSuggestions(d.users ?? []))
+      .then((d) => setSuggestions(d.growers ?? []))
       .catch(() => setSuggestError("Could not load suggestions"))
   }
 
@@ -118,7 +120,7 @@ export default function OnboardingStepper({
     let cancelled = false
     fetch("/api/onboarding/suggestions")
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error("load failed"))))
-      .then((d) => { if (!cancelled) { setSuggestions(d.users ?? []); setSuggestError("") } })
+      .then((d) => { if (!cancelled) { setSuggestions(d.growers ?? []); setSuggestError("") } })
       .catch(() => { if (!cancelled) setSuggestError("Could not load suggestions") })
     return () => { cancelled = true }
   }, [step, suggestions])
@@ -218,29 +220,6 @@ export default function OnboardingStepper({
       setError("Something went wrong. Please try again.")
     } finally {
       setPassword("")
-      setBusy(false)
-    }
-  }
-
-  const followSelected = async () => {
-    if (selected.size === 0) return next()
-    setBusy(true)
-    setError("")
-    try {
-      const res = await fetch("/api/onboarding/follow", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userIds: [...selected] }),
-      })
-      if (!res.ok) {
-        const d = await res.json().catch(() => ({}))
-        setError(d.error || "Could not follow growers")
-        return
-      }
-      next()
-    } catch {
-      setError("Something went wrong. Please try again.")
-    } finally {
       setBusy(false)
     }
   }
@@ -609,53 +588,17 @@ export default function OnboardingStepper({
               </div>
             ) : suggestions.length === 0 ? (
               <p className="text-sm text-muted-foreground text-center mb-6">
-                No suggestions right now — you can find growers on profiles and the leaderboard.
+                No suggestions right now — <Link href="/discover?tab=growers" className="text-primary hover:underline">browse active growers</Link> anytime.
               </p>
             ) : (
-              <div className="grid sm:grid-cols-2 gap-3 mb-8">
-                {suggestions.map((u) => {
-                  const on = selected.has(u.id)
-                  return (
-                    <button
-                      key={u.id}
-                      type="button"
-                      aria-pressed={on}
-                      onClick={() =>
-                        setSelected((prev) => {
-                          const s = new Set(prev)
-                          if (s.has(u.id)) s.delete(u.id)
-                          else s.add(u.id)
-                          return s
-                        })
-                      }
-                      className={`min-h-11 text-left p-3 rounded-lg border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
-                        on ? "border-primary bg-primary/10" : "border-border bg-background hover:border-primary/50"
-                      }`}
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-full bg-secondary overflow-hidden flex items-center justify-center shrink-0">
-                          {u.image ? (
-                            // eslint-disable-next-line @next/next/no-img-element -- external avatar URL
-                            <img src={u.image} alt="" className="w-full h-full object-cover" />
-                          ) : (
-                            <User className="w-5 h-5 text-muted-foreground" />
-                          )}
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-1.5 text-sm font-semibold truncate">
-                            @{u.username ?? u.name}
-                            <RoleBadge role={u.role} />
-                          </div>
-                          <div className="text-xs text-muted-foreground">
-                            {u.xp != null && <>{u.xp.toLocaleString()} XP · </>}{u.followers} follower{u.followers === 1 ? "" : "s"}
-                          </div>
-                        </div>
-                        {on && <Check className="w-4 h-4 text-primary shrink-0" aria-hidden />}
-                      </div>
-                      {u.bio && <p className="text-xs text-muted-foreground mt-2 line-clamp-2">{u.bio}</p>}
-                    </button>
-                  )
-                })}
+              <div className="space-y-3 mb-8">
+                {suggestions.map((g) => (
+                  <SuggestedGrowerCard
+                    key={g.userId}
+                    grower={g}
+                    onFollowToggle={(following) => setFollowedCount((n) => n + (following ? 1 : -1))}
+                  />
+                ))}
               </div>
             )}
 
@@ -663,9 +606,9 @@ export default function OnboardingStepper({
               <button onClick={back} disabled={busy} className={btnGhost + " disabled:opacity-50"}>Back</button>
               <div className="flex-1" />
               <button onClick={next} disabled={busy} className={btnGhost + " disabled:opacity-50"}>Skip for now</button>
-              <button onClick={followSelected} disabled={busy} className={btnPrimary}>
+              <button onClick={next} disabled={busy} className={btnPrimary}>
                 {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-                {selected.size > 0 ? `Follow ${selected.size}` : "Continue"}
+                Continue
               </button>
             </div>
           </div>
@@ -679,9 +622,16 @@ export default function OnboardingStepper({
             </div>
             <h1 ref={headingRef} tabIndex={-1} className="font-display text-2xl font-bold mb-3 outline-none tracking-tight">You&apos;re all set 🌱</h1>
             <p className="text-muted-foreground mb-6 max-w-md mx-auto">
-              Your TerpTalk feed is ready. The best way in is to start something
-              of your own — document a grow, or ask the growers who&apos;ve been there.
+              {followedCount > 0
+                ? `You're following ${followedCount} grower${followedCount === 1 ? "" : "s"} — their updates will land in your feed and on your home page.`
+                : "Your TerpTalk feed is ready. The best way in is to start something of your own — document a grow, or ask the growers who've been there."}
             </p>
+            {followedCount > 0 && (
+              <button onClick={() => complete("/feed?tab=following")} disabled={busy} className={btnPrimary + " w-full mb-3"}>
+                {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Users className="w-4 h-4" />}
+                See posts from growers you follow
+              </button>
+            )}
             <div className="grid sm:grid-cols-2 gap-3 mb-4">
               <button onClick={() => complete("/diaries/new")} disabled={busy} className={btnPrimary}>
                 {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Leaf className="w-4 h-4" />}

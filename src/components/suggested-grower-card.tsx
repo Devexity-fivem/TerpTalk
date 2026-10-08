@@ -7,7 +7,14 @@ import type { SuggestedGrower } from "@/lib/suggested-growers"
 // One suggested-grower card: avatar/identity → profile, honest reason
 // lines, public contribution counts, Follow action. Server-renderable —
 // the only client island is the follow toggle.
-export default function SuggestedGrowerCard({ grower }: { grower: SuggestedGrower }) {
+export default function SuggestedGrowerCard({
+  grower,
+  onFollowToggle,
+}: {
+  grower: SuggestedGrower
+  /** Optional observer — used by onboarding to count first follows. */
+  onFollowToggle?: (following: boolean) => void
+}) {
   const meta: string[] = []
   if (grower.publicGrows > 0) meta.push(`${grower.publicGrows} public grow${grower.publicGrows === 1 ? "" : "s"}`)
   if (grower.harvests > 0) meta.push(`${grower.harvests} harvest${grower.harvests === 1 ? "" : "s"}`)
@@ -37,7 +44,7 @@ export default function SuggestedGrowerCard({ grower }: { grower: SuggestedGrowe
         {meta.length > 0 && <p className="mt-0.5 text-xs text-muted-foreground">{meta.join(" · ")}</p>}
       </Link>
       <div className="shrink-0 self-start">
-        <GrowerFollowButton userId={grower.userId} username={grower.username} />
+        <GrowerFollowButton userId={grower.userId} username={grower.username} onToggle={onFollowToggle} />
       </div>
     </div>
   )

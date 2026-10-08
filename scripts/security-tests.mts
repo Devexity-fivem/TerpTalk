@@ -11,7 +11,7 @@ import { safeCallbackUrl, signInHref } from "@/lib/callback-url"
 import { ADMIN_ONLY_MOD_ACTIONS } from "@/lib/require-staff"
 import { recoveryPhraseUpdateData, newRecoveryPhrase, hashPhrase, verifyPhrase } from "@/lib/recovery"
 import { notifyMany } from "@/lib/notify"
-import { getSuggestedUsers } from "@/lib/onboarding"
+import { getSuggestedGrowers } from "@/lib/suggested-growers"
 import { escapeLike, normalizeStrain, strainFieldMatches } from "@/lib/strain-stats"
 import { toGrams, toOz, VALID_YIELD_UNITS } from "@/lib/yield"
 import { diaryDay, diaryWeek, groupUpdatesByWeek, buildHarvestReport, diaryCompleteness, STAGE_ORDER } from "@/lib/diary-weeks"
@@ -259,7 +259,9 @@ async function run() {
     }
 
     // Suggested growers — exclusion rules: self, already-followed, blocked
-    // (either direction), banned/suspended, TerpBot.
+    // (either direction), banned/suspended, TerpBot. The canonical engine
+    // only proposes members with public contribution evidence, so the
+    // eligible fixture carries one PUBLIC diary.
     const stamp = Date.now()
     const mkUser = async (tag: string, extra: { banned?: boolean; suspended?: boolean } = {}) => {
       const u = await prisma.user.create({
@@ -281,12 +283,15 @@ async function run() {
     const sugBanned = await mkUser("b", { banned: true })
     const sugSuspended = await mkUser("s", { suspended: true })
     const sugBlocked = await mkUser("x")
+    await prisma.growDiary.create({
+      data: { authorId: sugVisible.id, title: "sug diary", strain: "Test", growType: "INDOOR", description: "", startDate: new Date() },
+    })
     try {
       await prisma.follow.create({ data: { followerId: userId, followingId: sugFollowed.id } })
       await prisma.block.create({ data: { blockerId: sugBlocked.id, blockedId: userId } })
 
-      const suggestions = await getSuggestedUsers(userId, 50)
-      const ids = new Set(suggestions.map((s) => s.id))
+      const suggestions = await getSuggestedGrowers(userId, { limit: 50 })
+      const ids = new Set(suggestions.map((s) => s.userId))
       assert.equal(ids.has(sugVisible.id), true, "visible grower should be suggested")
       assert.equal(ids.has(sugFollowed.id), false, "already-followed user must be excluded")
       assert.equal(ids.has(sugBanned.id), false, "banned user must be excluded")

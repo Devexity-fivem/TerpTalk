@@ -3,10 +3,12 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { unauthorized } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
-import { getSuggestedUsers } from "@/lib/onboarding"
+import { getSuggestedGrowers } from "@/lib/suggested-growers"
 
-// GET — suggested growers for onboarding. Auth-gated; the pool is cached
-// globally and exclusions are applied per viewer.
+// GET — suggested growers for onboarding. Auth-gated; delegates to the
+// canonical deterministic engine — a member with grow/profile signals gets
+// personalized, reasoned matches; a brand-new member gets the same
+// eligible fallback pool Discover serves.
 export async function GET() {
   try {
     const session = await getServerSession(authOptions)
@@ -16,9 +18,9 @@ export async function GET() {
       return NextResponse.json({ error: "Slow down." }, { status: 429 })
     }
 
-    const users = await getSuggestedUsers(session.user.id, 10)
+    const growers = await getSuggestedGrowers(session.user.id, { limit: 6 })
     return NextResponse.json(
-      { users },
+      { growers },
       { headers: { "Cache-Control": "no-store" } }
     )
   } catch (error) {

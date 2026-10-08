@@ -47,15 +47,23 @@ const main = async () => {
     let r = await callApi("/welcome", { cookie })
     r.status === 200 ? pass("pending user: GET /welcome 200") : fail("pending user: GET /welcome 200", r.status)
 
-    // 2. Suggestions — twice, second hits unstable_cache (Date serialization check)
+    // 2. Suggestions — canonical suggested-grower DTO, deterministic across calls
     r = await callApi("/api/onboarding/suggestions", { cookie })
     const s1 = r.status
+    const g1 = r.data?.growers
     r = await callApi("/api/onboarding/suggestions", { cookie })
     const s2 = r.status
-    s1 === 200 && s2 === 200 ? pass("suggestions 200 on cold + warm cache") : fail("suggestions cache", { s1, s2, d: r.data })
-    if (Array.isArray(r.data?.users)) {
-      !r.data.users.some((u) => u.id === userA.id) ? pass("suggestions exclude self") : fail("suggestions exclude self", "self present")
-      !r.data.users.some((u) => u.username === "terpbot" || u.name === "terpbot") ? pass("suggestions exclude terpbot") : fail("suggestions exclude terpbot", "bot present")
+    const g2 = r.data?.growers
+    s1 === 200 && s2 === 200 ? pass("suggestions 200 on both calls") : fail("suggestions", { s1, s2, d: r.data })
+    if (Array.isArray(g1)) {
+      !g1.some((u) => u.userId === userA.id) ? pass("suggestions exclude self") : fail("suggestions exclude self", "self present")
+      !g1.some((u) => u.username === "terpbot" || u.name === "terpbot") ? pass("suggestions exclude terpbot") : fail("suggestions exclude terpbot", "bot present")
+      g1.every((u) => typeof u.href === "string" && u.href.startsWith("/u/") && Array.isArray(u.reasons))
+        ? pass("suggestions carry canonical /u/ links + reason arrays")
+        : fail("suggestions DTO", g1[0])
+      g2 && JSON.stringify(g1.map((u) => u.userId)) === JSON.stringify(g2.map((u) => u.userId))
+        ? pass("suggestions deterministic across repeat calls")
+        : fail("suggestions nondeterministic", "")
     }
 
     // 3. Interests — valid + fake + hidden rejected
@@ -90,15 +98,21 @@ const main = async () => {
     const hash = await prisma.user.findUnique({ where: { id: userA.id }, select: { recoveryPhraseHash: true } })
     hash?.recoveryPhraseHash && !hash.recoveryPhraseHash.includes(phrase) ? pass("recovery: phrase stored as hash only") : fail("phrase hash", hash)
 
-    // 6. Batch follow — creates Follow + notification, dedupes on retry
-    r = await callApi("/api/onboarding/follow", { method: "POST", body: { userIds: [userB.id, userA.id, "nonexistent-id"] }, cookie })
+    // 6. First follow via the canonical toggle — creates Follow +
+    // notification; a repeat toggles off, re-follow dedupes the notif.
+    r = await callApi("/api/follows", { method: "POST", body: { userId: userB.id }, cookie })
     const follows1 = await prisma.follow.count({ where: { followerId: userA.id, followingId: userB.id } })
-    r.status === 200 && follows1 === 1 ? pass("follow: valid target followed, self/fake dropped") : fail("follow", { status: r.status, follows1 })
+    r.status === 200 && r.data?.following === true && follows1 === 1
+      ? pass("follow: canonical toggle creates the relationship")
+      : fail("follow", { status: r.status, follows1 })
     const notifs1 = await prisma.notification.count({ where: { userId: userB.id, type: "FOLLOW", groupKey: `FOLLOW:${userA.id}:${userB.id}` } })
     notifs1 === 1 ? pass("follow: one FOLLOW notification") : fail("follow notif", notifs1)
-    await callApi("/api/onboarding/follow", { method: "POST", body: { userIds: [userB.id] }, cookie })
+    await callApi("/api/follows", { method: "POST", body: { userId: userB.id }, cookie })
+    await callApi("/api/follows", { method: "POST", body: { userId: userB.id }, cookie })
     const notifs2 = await prisma.notification.count({ where: { userId: userB.id, type: "FOLLOW", groupKey: `FOLLOW:${userA.id}:${userB.id}` } })
-    notifs2 === 1 ? pass("follow retry: no duplicate notification (dedupeMs)") : fail("dedupe", notifs2)
+    notifs2 === 1 ? pass("follow toggle-retry: no duplicate notification (dedupeMs)") : fail("dedupe", notifs2)
+    r = await callApi("/api/follows", { method: "POST", body: { userId: userA.id }, cookie })
+    r.status === 400 ? pass("follow: self-follow rejected") : fail("self follow", r.status)
 
     // 7. Resume — user C mid-flow (has interests only) still gets /welcome
     await prisma.categoryFollow.create({ data: { userId: userC.id, categoryId: validCat.id } })
@@ -136,7 +150,7 @@ const main = async () => {
     // 11. Unauthenticated API access (suggestions is GET, the rest are POST)
     r = await callApi("/api/onboarding/suggestions")
     r.status === 401 ? pass("anon: /api/onboarding/suggestions 401") : fail("anon suggestions", r.status)
-    for (const p of ["/api/onboarding/interests", "/api/onboarding/follow", "/api/onboarding/complete"]) {
+    for (const p of ["/api/onboarding/interests", "/api/onboarding/complete"]) {
       r = await callApi(p, { method: "POST", body: {} })
       r.status === 401 ? pass(`anon: ${p} 401`) : fail(`anon ${p}`, r.status)
     }
