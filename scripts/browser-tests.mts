@@ -131,8 +131,17 @@ const main = async () => {
       growType: "INDOOR", startDate: new Date(), authorId: carol.id, visibility: "PUBLIC",
     },
   })
-  await prisma.diaryUpdate.create({
+  const carolUpdate = await prisma.diaryUpdate.create({
     data: { diaryId: carolDiary.id, authorId: carol.id, stage: "VEG", title: `__br digest update ${TS}`, content: "browser fixture — followed grower update" },
+  })
+  // Phase 9 harvest fixture — alice's harvested public grow; the report
+  // card must carry the canonical discussion CTA for harvest arrivals.
+  const harvDiary = await prisma.growDiary.create({
+    data: {
+      title: `__br harvest ${TS}`, slug: `__br-hv-${TS}`, description: "",
+      growType: "INDOOR", startDate: new Date(Date.now() - 70 * 86400000),
+      authorId: alice.id, visibility: "PUBLIC", harvested: true, harvestedAt: new Date(),
+    },
   })
   await prisma.follow.create({ data: { followerId: alice.id, followingId: carol.id } })
 
@@ -826,6 +835,23 @@ const main = async () => {
           dgBody.includes(`__br digest update ${TS}`),
         { w })
     }
+
+    // Interaction deep links (Phase 9): member-home "Since your last visit"
+    // lands the member on the update's own #update-<id> interaction row —
+    // same anchor the feed, digest, and notifications use.
+    await alicePage.setViewportSize({ width: 390, height: 844 })
+    await gotoMain(alicePage, BASE, `a[href*="#update-${carolUpdate.id}"]`)
+    ok("interaction: member-home update item deep-links to the update anchor",
+      (await alicePage.locator(`a[href*="#update-${carolUpdate.id}"]`).count()) >= 1)
+
+    // Harvest interaction affordance — digest/feed harvest arrivals land on
+    // the report card; the canonical discussion CTA renders right there.
+    await anonPage.request.get(`${BASE}/diaries/${harvDiary.slug}`).catch(() => {})
+    await gotoMain(anonPage, `${BASE}/diaries/${harvDiary.slug}`, 'text=Harvest Report')
+    const hvBody = (await anonPage.textContent("body")) ?? ""
+    const hvNoOverflow = !(await anonPage.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1))
+    ok("interaction: harvest report exposes the discussion CTA at 390px without overflow",
+      hvBody.includes("Discuss this harvest") && hvNoOverflow)
 
     // ── Mobile contract ──────────────────────────────────────────────
     const mob = await browser.newContext({ viewport: { width: 390, height: 844 } })

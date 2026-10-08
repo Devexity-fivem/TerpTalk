@@ -15,6 +15,7 @@ import PushToggle from "@/components/push-toggle"
 import { DIFFICULTY_LABELS } from "@/lib/grow-fields"
 import type { MemberHomeData } from "@/lib/member-home"
 import { diaryPath } from "@/lib/slugs"
+import { updateAnchor } from "@/lib/update-social"
 import { helpWantedReasonText } from "@/lib/answer-match"
 import { cn } from "@/lib/utils"
 
@@ -383,7 +384,7 @@ export default function MemberHome({ data }: { data: MemberHomeData }) {
                 {s.diaryUpdates.map((u, i) => (
                   <li key={`${u.diaryId}-${i}`}>
                     <Link
-                      href={diaryPath({ id: u.diaryId, slug: u.diarySlug })}
+                      href={updateAnchor(diaryPath({ id: u.diaryId, slug: u.diarySlug }), u.id)}
                       className="group flex items-center gap-2 rounded-xl px-3 py-2 hover:bg-secondary/60"
                     >
                       <Leaf className="h-3.5 w-3.5 shrink-0 text-success" />

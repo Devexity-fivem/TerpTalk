@@ -790,9 +790,23 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
                 )}
               </div>
             )}
-            <p className="text-xs text-muted-foreground mt-3">
-              Harvested {harvestReport.harvestedAt.toLocaleDateString()} · started {new Date(diary.startDate).toLocaleDateString()}
-            </p>
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+              <p className="text-xs text-muted-foreground">
+                Harvested {harvestReport.harvestedAt.toLocaleDateString()} · started {new Date(diary.startDate).toLocaleDateString()}
+              </p>
+              {/* The interaction point for harvest arrivals (digest, feed,
+                  notifications land here) — reuses the same canonical
+                  discussion thread the header button opens. */}
+              {diary.visibility === "PUBLIC" && (
+                <DiaryDiscussButton
+                  diaryId={diary.id}
+                  diaryHref={diaryPath(diary)}
+                  existingSlug={discussionThread?.slug ?? null}
+                  label="Discuss this harvest"
+                  variant="link"
+                />
+              )}
+            </div>
           </SectionCard>
         )}
 

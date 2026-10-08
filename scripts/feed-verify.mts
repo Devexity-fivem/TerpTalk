@@ -468,6 +468,12 @@ async function main() {
     du.some((u) => u.diaryId === diaryPub.id)
       ? pass("home: followed grower's public update surfaces")
       : fail("home pub update", du.map((u) => u.diaryId))
+    // Interaction deep-link: the item must carry the update id so the card
+    // can land at #update-<id> (the update's react/comment row), matching
+    // feed/digest/notification destinations.
+    du.every((u) => pubUpdates.some((p) => p.id === u.id) || unlUpdates.some((p) => p.id === u.id))
+      ? pass("home: update items carry the update id for #update- deep links")
+      : fail("home update id", du.map((u) => u.id))
     // (The unlisted diary-followed path is asserted below via `nofollow`,
     // whose top-4 it can win — viewer's newest 4 are all diaryPub.)
     du.every((u) => u.diaryId !== diaryPriv.id && u.diaryId !== diaryDel.id)

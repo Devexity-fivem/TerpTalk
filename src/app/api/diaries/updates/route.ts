@@ -17,6 +17,7 @@ import { revalidateTag, unstable_cache } from "next/cache"
 import { publicDiaryWhere } from "@/lib/diary-visibility"
 import { diaryDay, diaryWeek } from "@/lib/diary-weeks"
 import { diaryPath } from "@/lib/slugs"
+import { updateAnchor } from "@/lib/update-social"
 import { evaluateGrowJourney } from "@/lib/grow-journey"
 import { announceStageTransition } from "@/lib/terpbot"
 import { rateLimit } from "@/lib/rate-limit"
@@ -502,10 +503,11 @@ export async function POST(request: Request) {
           type: "DIARY_UPDATE" as const,
           title: "Diary updated",
           content: `@${authorName} added "${update.title.slice(0, 60)}" to "${diary.title.slice(0, 50)}"`,
-          // Deep-link to the week section — derive the anchor the same way
-          // the page does (createdAt vs startDate); client-supplied
-          // weekNumber is never trusted for display grouping.
-          link: `${diaryPath(diary)}#week-${diaryWeek(diary.startDate, update.createdAt)}`,
+          // Deep-link to the update itself — the canonical fragment the
+          // feed/digest/comment surfaces already use, landing the member on
+          // the update's own react/comment row. `updateLinkWhere` cleanup
+          // on update delete already matches this shape.
+          link: updateAnchor(diaryPath(diary), update.id),
           actorId: session.user.id,
           // Throttle fan-out like thread-follow notifications — rapid
           // update bursts shouldn't spam followers.
@@ -525,7 +527,7 @@ export async function POST(request: Request) {
       visibility: diary.visibility,
       title: "New update from someone you follow",
       content: `@${authorName} added "${update.title.slice(0, 60)}" to "${diary.title.slice(0, 50)}"`,
-      link: `${diaryPath(diary)}#week-${diaryWeek(diary.startDate, update.createdAt)}`,
+      link: updateAnchor(diaryPath(diary), update.id),
       groupKey: `followed-content:diary-update:${diaryId}`,
       dedupeMs: 6 * 60 * 60 * 1000,
       excludeUserIds: followers.map((f) => f.userId),

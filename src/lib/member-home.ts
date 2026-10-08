@@ -114,7 +114,7 @@ export interface MemberHomeData {
   sinceLastVisit: {
     unreadThreads: { title: string; slug: string; category: string }[]
     unreadThreadCount: number
-    diaryUpdates: { title: string; diaryTitle: string; diaryId: string; diarySlug: string | null; author: string }[]
+    diaryUpdates: { id: string; title: string; diaryTitle: string; diaryId: string; diarySlug: string | null; author: string }[]
     growerThreads: { title: string; slug: string; category: string; author: string }[]
     unreadNotifications: number
   }
@@ -314,6 +314,7 @@ export async function getMemberHomeData(userId: string): Promise<MemberHomeData 
         orderBy: { createdAt: "desc" },
         take: 4,
         select: {
+          id: true,
           title: true,
           diary: { select: { id: true, slug: true, title: true } },
           author: { select: { name: true, profile: { select: { username: true } } } },
@@ -647,6 +648,7 @@ export async function getMemberHomeData(userId: string): Promise<MemberHomeData 
       })),
       unreadThreadCount: unreadThreads.length,
       diaryUpdates: diaryUpdates.map((u) => ({
+        id: u.id,
         title: u.title,
         diaryTitle: u.diary.title,
         diaryId: u.diary.id,

@@ -326,6 +326,12 @@ const main = async () => {
     page.status === 200 && page.html.includes("Harvest Report") && page.html.includes("100") && page.html.includes("oz")
       ? pass("harvest report card renders")
       : fail("harvest report", page.status)
+    // Interaction affordance at the harvest — digest/feed/notification
+    // harvest arrivals land on this card; the canonical discussion CTA
+    // belongs where the member is looking.
+    page.html.includes("Discuss this harvest")
+      ? pass("harvest report exposes the discussion CTA")
+      : fail("harvest discuss CTA", "missing")
 
     // Unmark returns the diary to a pre-harvest stage
     r = await callApi(`/api/diaries/${diaryId}/harvest`, { method: "PATCH", body: { harvested: false }, cookie: ownerCookie })
@@ -1140,6 +1146,27 @@ const main = async () => {
       mNote?.link?.includes(`#update-${discUpd.id}`) && ownerMention === 0
         ? pass("mention in update comment notifies mentionee (update link); grower not double-notified")
         : fail("comment mention", { mNote, ownerMention })
+
+      // Update-notification deep link — a real update POST notifies diary
+      // followers at #update-<id> (the update's own react/comment row), the
+      // same anchor feed/digest/comment surfaces already use. Week-header
+      // links land near the update; update links land on it — and
+      // updateLinkWhere already purges them on update delete.
+      await callApi("/api/follows", { method: "POST", body: { diaryId: discD.id }, cookie: voterCookie })
+      r = await callApi("/api/diaries/updates", {
+        method: "POST",
+        body: { diaryId: discD.id, title: M("du-link"), content: "deep link target", stage: "VEGETATIVE", dayNumber: 2, weekNumber: 1 },
+        cookie: ownerCookie,
+      })
+      const linkUpdId = r.data?.update?.id
+      const duNote = await prisma.notification.findFirst({
+        where: { userId: voter.id, type: "DIARY_UPDATE", link: { contains: `#update-${linkUpdId}` } },
+        select: { link: true },
+      })
+      r.status === 201 && linkUpdId && duNote?.link?.endsWith(`#update-${linkUpdId}`)
+        ? pass("update notification deep-links to the update anchor (#update-<id>)")
+        : fail("update notification link", { s: r.status, linkUpdId, duNote })
+      await prisma.diaryFollow.deleteMany({ where: { userId: voter.id, diaryId: discD.id } })
 
       // Rate limit — anchored comments share the post limiter.
       await prisma.rateLimit.upsert({
