@@ -1,0 +1,148 @@
+name: CI
+
+# Tier mapping to scripts/master-tests.mts (single source of truth):
+#   verify — no DB: prisma generate, typecheck, lint, test:fast, audit
+#   db     — postgres service: migrate deploy, prod build, DB-tier suites
+#   gate   — full release gate (test:master incl. HTTP + browser + prod-mode
+#            build): master pushes, weekly schedule, manual dispatch.
+#            Requires Pusher sandbox secrets (see "gate" job env).
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  schedule:
+    # Weekly exhaustive gate — Mondays 07:00 UTC
+    - cron: "0 7 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: "24"
+  # Non-secret deterministic CI values — auth/crypto code paths need them
+  # present; they guard nothing real in CI.
+  NEXTAUTH_SECRET: ci-nextauth-secret-not-sensitive
+  IP_HASH_SALT: ci-ip-hash-salt-not-sensitive
+  CRON_SECRET: ci-cron-secret-not-sensitive
+
+jobs:
+  verify:
+    name: Static verification
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - run: npx prisma generate
+      - run: npx tsc --noEmit
+      - run: npm run lint
+      - run: npm run test:fast
+      - name: Production dependency audit
+        run: npm audit --omit=dev --audit-level=high
+
+  db:
+    name: Database suites
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: terptalk_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s --health-timeout 3s --health-retries 10
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/terptalk_test
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - run: npx prisma generate
+      - name: Apply full migration history to clean database
+        run: npx prisma migrate deploy
+      - name: Production build
+        run: npm run build
+      - name: DB-tier suites (serialized by the orchestrator)
+        run: >-
+          MASTER_ONLY=security,notifications,reputation,reputation-referral,
+          terpbot-pipeline,self-service,chat,content-edit,strain-lifecycle,
+          rewards3,discovery-integration,check-drift
+          npx tsx scripts/master-tests.mts --tier=full
+
+  gate:
+    name: Release gate (test:master)
+    # Full HTTP + browser + prod-build gate. Runs on master pushes, the
+    # weekly schedule, and manual dispatch — not on PRs (forked PRs cannot
+    # receive the Pusher sandbox secrets this job needs, and the local
+    # pre-merge gate already covers PR authors).
+    if: >-
+      github.repository == 'Devexity-fivem/TerpTalk' &&
+      github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: terptalk_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s --health-timeout 3s --health-retries 10
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/terptalk_test
+      PUSHER_APP_ID: ${{ secrets.CI_PUSHER_APP_ID }}
+      PUSHER_KEY: ${{ secrets.CI_PUSHER_KEY }}
+      PUSHER_SECRET: ${{ secrets.CI_PUSHER_SECRET }}
+      PUSHER_CLUSTER: ${{ secrets.CI_PUSHER_CLUSTER }}
+      NEXT_PUBLIC_PUSHER_KEY: ${{ secrets.CI_PUSHER_KEY }}
+      NEXT_PUBLIC_PUSHER_CLUSTER: ${{ secrets.CI_PUSHER_CLUSTER }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - name: Verify Pusher sandbox secrets are configured
+        run: |
+          for v in PUSHER_APP_ID PUSHER_KEY PUSHER_SECRET PUSHER_CLUSTER; do
+            if [ -z "${!v}" ]; then
+              echo "::error title=Missing secret::CI_PUSHER_* repo secrets are required for the gate job (dedicated Pusher sandbox app — see README Testing)"
+              exit 1
+            fi
+          done
+      - run: npm ci
+      - run: npx prisma generate
+      - run: npx prisma migrate deploy
+      - name: Generate VAPID keys for the web-push browser leg
+        run: |
+          KEYS=$(npx web-push generate-vapid-keys --json)
+          PRIV=$(echo "$KEYS" | node -e 'const d=JSON.parse(require("fs").readFileSync(0,"utf8"));console.log(d.privateKey)')
+          echo "::add-mask::$PRIV"
+          echo "NEXT_PUBLIC_VAPID_PUBLIC_KEY=$(echo "$KEYS" | node -e 'const d=JSON.parse(require("fs").readFileSync(0,"utf8"));console.log(d.publicKey)')" >> "$GITHUB_ENV"
+          echo "VAPID_PRIVATE_KEY=$PRIV" >> "$GITHUB_ENV"
+          echo "VAPID_SUBJECT=https://ci.local" >> "$GITHUB_ENV"
+      - name: Install browsers (Chromium + Edge for the push leg)
+        run: |
+          npx playwright-core install --with-deps chromium
+          curl -fsSL https://packages.microsoft.com/keys/microsoft.asc | sudo gpg --dearmor -o /usr/share/keyrings/microsoft.gpg
+          echo "deb [arch=amd64 signed-by=/usr/share/keyrings/microsoft.gpg] https://packages.microsoft.com/repos/edge stable main" | sudo tee /etc/apt/sources.list.d/microsoft-edge.list
+          sudo apt-get update -qq && sudo apt-get install -y -qq microsoft-edge-stable
+      - run: npm run test:master

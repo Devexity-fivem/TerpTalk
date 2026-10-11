@@ -55,20 +55,26 @@ const env = { ...process.env, DATABASE_URL: dbUrl }
 // work — only leaked holders.
 try {
   const sweeper = new PrismaClient({ datasources: { db: { url: dbUrl } } })
-  const killed = await sweeper.$queryRawUnsafe(
-    `SELECT pg_terminate_backend(l.pid)
-       FROM pg_locks l
-       JOIN pg_stat_activity a ON a.pid = l.pid
-      WHERE l.locktype = 'advisory'
-        AND l.objid = 72707369
-        AND l.granted
-        AND a.state = 'idle'
-        AND a.query_start < now() - interval '60 seconds'`
-  )
-  if (Array.isArray(killed) && killed.length > 0) {
-    console.log(`[prebuild-migrate] cleared ${killed.length} stale migrate lock holder(s)`)
+  try {
+    const killed = await sweeper.$queryRawUnsafe(
+      `SELECT pg_terminate_backend(l.pid)
+         FROM pg_locks l
+         JOIN pg_stat_activity a ON a.pid = l.pid
+        WHERE l.locktype = 'advisory'
+          AND l.objid = 72707369
+          AND l.granted
+          AND a.datname = current_database()
+          AND a.state = 'idle'
+          AND a.query_start < now() - interval '60 seconds'`
+    )
+    if (Array.isArray(killed) && killed.length > 0) {
+      console.log(`[prebuild-migrate] cleared ${killed.length} stale migrate lock holder(s)`)
+    }
+  } finally {
+    // Always release the sweeper pool — an open socket keeps this process
+    // (and therefore the Vercel build) alive past the script's end.
+    await sweeper.$disconnect().catch(() => {})
   }
-  await sweeper.$disconnect()
 } catch (e) {
   // Sweep is best-effort — a denied terminate must not block the deploy;
   // migrate deploy will simply contend with the lock itself.

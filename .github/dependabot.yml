@@ -1,0 +1,68 @@
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 10
+    # Groups apply to routine version updates only — security updates
+    # are opened immediately and individually (groups have no
+    # "security-updates" entry on purpose).
+    groups:
+      next-stack:
+        applies-to: version-updates
+        patterns:
+          - next
+          - eslint-config-next
+          - react
+          - react-dom
+          - "@types/react"
+          - "@types/react-dom"
+      prisma:
+        applies-to: version-updates
+        patterns:
+          - prisma
+          - "@prisma/*"
+      pusher:
+        applies-to: version-updates
+        patterns:
+          - pusher
+          - pusher-js
+      tailwind:
+        applies-to: version-updates
+        patterns:
+          - tailwindcss
+          - "@tailwindcss/*"
+          - tailwind-merge
+      vercel:
+        applies-to: version-updates
+        patterns:
+          - "@vercel/*"
+      types:
+        applies-to: version-updates
+        patterns:
+          - "@types/*"
+      dev-tools:
+        applies-to: version-updates
+        patterns:
+          - eslint
+          - typescript
+          - tsx
+          - playwright-core
+    ignore:
+      # Betas/RCs are never production candidates (see AGENTS/testing rules);
+      # next-auth v5 remains a beta line — v4 maintenance is deliberate.
+      - dependency-name: next-auth
+        versions: [">=5.0.0-a"]
+      - dependency-name: prisma
+        versions: [">=8.0.0-a"]
+      - dependency-name: "@prisma/client"
+        versions: [">=8.0.0-a"]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
