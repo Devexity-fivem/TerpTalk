@@ -97,6 +97,8 @@ This project uses a single Vercel environment:
 
 Every push to `master` runs `vercel-build` (migration gate → build → promote). Feature work happens on local branches and lands on `master` via fast-forward/merge once `npm run test:master` passes. Failed/skipped builds can be pruned from the Vercel dashboard.
 
+GitHub Actions mirror the gate: `.github/workflows/ci.yml` runs static checks (`verify` job) and DB-tier suites on every push/PR, and the full `test:master` gate on master pushes and a weekly schedule (requires `CI_PUSHER_*` repo secrets pointing at a dedicated Pusher sandbox app). `codeql.yml` scans JS/TS weekly and on every push; `dependabot.yml` batches npm + GitHub Actions updates weekly.
+
 ## Launch checklist
 
 Per deployment — short enough to actually run:
@@ -105,7 +107,7 @@ Per deployment — short enough to actually run:
 git status && git rev-parse HEAD          # clean tree, HEAD == origin/master
 npm run test:master                       # authoritative suite
 npx tsc --noEmit && npm run lint          # types + lint
-npm audit --audit-level=high              # 0 expected
+npm audit --omit=dev --audit-level=high   # 0 expected (dev-only advisories are tracked separately)
 git push origin master                    # triggers Vercel
 ```
 
