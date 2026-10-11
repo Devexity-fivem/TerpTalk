@@ -29,6 +29,7 @@
     "test:terpbot-pipeline": "tsx scripts/terpbot-pipeline-tests.mts",
     "test:plant-doctor": "tsx scripts/plant-doctor-tests.mts",
     "test:push-activation": "tsx scripts/push-activation-tests.mts",
+    "test:product-events": "tsx scripts/product-events-verify.mts",
     "test:self-service": "tsx scripts/self-service-tests.mts",
     "test:chat": "tsx scripts/chat-ux-tests.mts",
     "test:ui-contracts": "tsx scripts/ui-contracts-tests.mts",

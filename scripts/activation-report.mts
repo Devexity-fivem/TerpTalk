@@ -22,4 +22,16 @@ for (const k of r.returnByFirstAction) console.log(`  ${k.kind.padEnd(10)} ${k.r
 console.log("\nReturn rate by push (association only)")
 for (const p of r.returnByPush) console.log(`  push ${p.pushEnabled ? "on " : "off"}  ${p.returned}/${p.members}  ${p.pct ?? "—"}%`)
 console.log("\nPush lifecycle", JSON.stringify(r.push))
+
+const s = r.social
+const srcRow = (rows: { source: string; count: number }[]) =>
+  rows.length ? rows.map((x) => `${x.source} ${x.count}`).join("  ") : "—"
+console.log(`\nSocial loop — product events in the last ${s.windowDays}d${s.truncated ? " (truncated)" : ""}`)
+console.log(`  follows                    ${s.follows}   by surface: ${srcRow(s.followsBySource)}`)
+console.log(`  first follows              ${s.firstFollows}   by surface: ${srcRow(s.firstFollowBySource)}`)
+console.log(`  followed-content viewers   ${s.followedContentViewers}   by surface: ${srcRow(s.followedContentViewsBySource)}`)
+console.log(`  digest viewers             ${s.digestViewers}`)
+console.log(`  interactions               ${s.interactions}   by surface: ${srcRow(s.interactionsBySource)}`)
+console.log(`  followed-content interactors ${s.followedInteractors}   interaction rate: ${s.interactionRate ?? "—"}%`)
+console.log(`  medians (h)  signup→1st-follow ${s.medianHoursSignupToFirstFollow ?? "—"}   1st-follow→interaction ${s.medianHoursFirstFollowToInteraction ?? "—"}   encounter→interaction ${s.medianHoursEncounterToInteraction ?? "—"}`)
 await prisma.$disconnect()

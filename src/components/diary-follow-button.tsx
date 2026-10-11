@@ -33,7 +33,7 @@ export default function DiaryFollowButton({ diaryId, initiallyFollowing }: { dia
             const res = await fetch("/api/follows", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ diaryId }),
+              body: JSON.stringify({ diaryId, source: "diary" }),
             })
             if (res.ok) {
               const d = await res.json()

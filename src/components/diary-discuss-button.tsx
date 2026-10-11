@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation"
 import { MessageSquare, Loader2 } from "@/lib/icons"
 import Link from "next/link"
 import { signInHref } from "@/lib/callback-url"
+import { withVia, eventSource } from "@/lib/event-sources"
 
 // "Discuss this grow" — lazy-creates the diary's canonical discussion
 // thread on first click, then always links to it. Update cards reuse the
@@ -15,6 +16,7 @@ export default function DiaryDiscussButton({
   existingSlug,
   label,
   variant = "button",
+  via,
 }: {
   diaryId: string
   diaryHref: string
@@ -23,7 +25,10 @@ export default function DiaryDiscussButton({
   label?: string
   /** "link" renders the inline text-link style used inside cards. */
   variant?: "button" | "link"
+  /** Attribution surface — carried into the discussion thread link. */
+  via?: string | null
 }) {
+  const threadVia = eventSource(via)
   const router = useRouter()
   const [busy, setBusy] = useState(false)
 
@@ -36,7 +41,7 @@ export default function DiaryDiscussButton({
   if (existingSlug) {
     return (
       <Link
-        href={`/forum/thread/${existingSlug}`}
+        href={withVia(`/forum/thread/${existingSlug}`, threadVia)}
         className={cls}
       >
         <MessageSquare className={iconCls} /> {label ?? "Discussion"}
@@ -57,7 +62,7 @@ export default function DiaryDiscussButton({
           }
           const data = await res.json().catch(() => ({}))
           if (res.ok && data.threadSlug) {
-            router.push(`/forum/thread/${data.threadSlug}`)
+            router.push(withVia(`/forum/thread/${data.threadSlug}`, threadVia))
           }
         } finally {
           setBusy(false)

@@ -24,6 +24,7 @@ export default function UpdateSocialSection({
   threadId,
   threadSlug,
   viewerId,
+  via,
 }: {
   updateId: string
   diaryId: string
@@ -36,6 +37,8 @@ export default function UpdateSocialSection({
   threadId: string | null
   threadSlug: string | null
   viewerId?: string | null
+  /** Attribution surface from the inbound `?via=` link. */
+  via?: string | null
 }) {
   const hidden = social.commentCount - social.comments.length
   const reactionTotal = Object.values(social.reactionCounts).reduce((a, b) => a + b, 0)
@@ -63,6 +66,7 @@ export default function UpdateSocialSection({
             updateId={updateId}
             threadId={threadId}
             commentCount={social.commentCount}
+            via={via}
           />
         )}
         {commentable && !interactive && social.commentCount > 0 && (

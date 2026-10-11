@@ -349,5 +349,16 @@ export async function GET(request: NextRequest) {
     return `push-prune:${count}`
   }, posted, failed, "push-prune")
 
+  // ── Product-event retention (once per UTC day) ──────────────────
+  // Rolling 180-day window, same policy as PushEvent — except the
+  // FIRST_FOLLOW milestone, which stays keyed per member permanently so
+  // first-follow attribution outlives the raw event window.
+  await runCronTask(`product:event-prune:${today}`, async () => {
+    const { count } = await prisma.productEvent.deleteMany({
+      where: { type: { not: "FIRST_FOLLOW" }, createdAt: { lt: new Date(Date.now() - 180 * 86400000) } },
+    })
+    return `product-events-prune:${count}`
+  }, posted, failed, "product-events-prune")
+
   return NextResponse.json({ ok: failed.length === 0, posted, failed })
 }

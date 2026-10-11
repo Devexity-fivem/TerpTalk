@@ -15,11 +15,14 @@ export default function GrowerFollowButton({
   userId,
   username,
   onToggle,
+  source,
 }: {
   userId: string
   username: string | null
   /** Optional observer — used by onboarding to count first follows. */
   onToggle?: (following: boolean) => void
+  /** Attribution surface for the follow — allowlisted server-side. */
+  source?: string
 }) {
   const { data: session } = useSession()
   const pathname = usePathname()
@@ -47,7 +50,7 @@ export default function GrowerFollowButton({
             const res = await fetch("/api/follows", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ userId }),
+              body: JSON.stringify({ userId, source }),
             })
             if (res.ok) {
               const d = await res.json()

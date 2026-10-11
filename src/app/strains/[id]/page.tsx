@@ -740,7 +740,7 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
           >
             <div className="space-y-3">
               {contextGrowers.map((g) => (
-                <SuggestedGrowerCard key={g.userId} grower={g} />
+                <SuggestedGrowerCard key={g.userId} grower={g} source="strain" />
               ))}
             </div>
           </SectionCard>

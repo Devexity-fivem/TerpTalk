@@ -17,12 +17,15 @@ export default function UpdateCommentForm({
   updateId,
   threadId,
   commentCount,
+  via,
 }: {
   diaryId: string
   diaryHref: string
   updateId: string
   threadId: string | null
   commentCount: number
+  /** Attribution surface from the inbound `?via=` link — allowlisted server-side. */
+  via?: string | null
 }) {
   const { data: session } = useSession()
   const router = useRouter()
@@ -59,7 +62,7 @@ export default function UpdateCommentForm({
       const res = await fetch("/api/forum/posts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ threadId: tid, content: text, diaryUpdateId: updateId }),
+        body: JSON.stringify({ threadId: tid, content: text, diaryUpdateId: updateId, source: via ?? undefined }),
       })
       if (!res.ok) {
         const data = await res.json().catch(() => ({}))

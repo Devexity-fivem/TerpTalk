@@ -9,6 +9,8 @@ import { checkMaintenance } from "@/lib/maintenance"
 import { notify } from "@/lib/notify"
 import { TERPBOT_USERNAME } from "@/lib/terpbot-constants"
 import { canViewDiary } from "@/lib/diary-visibility"
+import { eventSource } from "@/lib/event-sources"
+import { recordProductEvent } from "@/lib/product-events"
 
 // POST — toggle follow on a user: { userId }  (or diary: { diaryId })
 export async function POST(request: Request) {
@@ -24,6 +26,8 @@ export async function POST(request: Request) {
 
     const body = await request.json().catch(() => ({}))
     const { userId, diaryId } = body
+    // Attribution surface — allowlist-validated; never a URL or free text.
+    const source = eventSource(body.source) ?? "unknown"
 
     if ((!userId && !diaryId) || (userId && diaryId)) {
       return NextResponse.json({ error: "Provide userId or diaryId" }, { status: 400 })
@@ -72,6 +76,23 @@ export async function POST(request: Request) {
         // Double-click race: the parallel request already created it.
         if (!(e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002")) throw e
       }
+      // Product events are best-effort and never block the response.
+      // FIRST_FOLLOW's keyed upsert makes "exactly once per member"
+      // durable even if the count check races a parallel follow.
+      const [followCount, diaryFollowCount] = await Promise.all([
+        prisma.follow.count({ where: { followerId: session.user.id } }),
+        prisma.diaryFollow.count({ where: { userId: session.user.id } }),
+      ])
+      await recordProductEvent({
+        type: "FOLLOW_CREATED", userId: session.user.id, source,
+        objectType: "User", objectId: userId,
+      })
+      if (followCount === 1 && diaryFollowCount === 0) {
+        await recordProductEvent({
+          type: "FIRST_FOLLOW", userId: session.user.id, source,
+          objectType: "User", objectId: userId, key: `ff:${session.user.id}`,
+        })
+      }
       const actorProfile = await prisma.profile.findUnique({
         where: { userId: session.user.id },
         select: { username: true },
@@ -111,6 +132,20 @@ export async function POST(request: Request) {
       await prisma.diaryFollow.create({ data: { userId: session.user.id, diaryId } })
     } catch (e) {
       if (!(e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002")) throw e
+    }
+    const [followCount, diaryFollowCount] = await Promise.all([
+      prisma.follow.count({ where: { followerId: session.user.id } }),
+      prisma.diaryFollow.count({ where: { userId: session.user.id } }),
+    ])
+    await recordProductEvent({
+      type: "FOLLOW_CREATED", userId: session.user.id, source,
+      objectType: "Diary", objectId: diaryId,
+    })
+    if (followCount === 0 && diaryFollowCount === 1) {
+      await recordProductEvent({
+        type: "FIRST_FOLLOW", userId: session.user.id, source,
+        objectType: "Diary", objectId: diaryId, key: `ff:${session.user.id}`,
+      })
     }
     return NextResponse.json({ following: true })
   } catch (error) {

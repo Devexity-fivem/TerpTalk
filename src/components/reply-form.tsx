@@ -12,9 +12,11 @@ import { useToast } from "@/components/ui/toast"
 interface ReplyFormProps {
   threadId: string
   wasFollowing?: boolean
+  /** Attribution surface from the inbound `?via=` link — allowlisted server-side. */
+  via?: string | null
 }
 
-export default function ReplyForm({ threadId, wasFollowing }: ReplyFormProps) {
+export default function ReplyForm({ threadId, wasFollowing, via }: ReplyFormProps) {
   const { data: session } = useSession()
   const pathname = usePathname()
   const { toast } = useToast()
@@ -43,7 +45,7 @@ export default function ReplyForm({ threadId, wasFollowing }: ReplyFormProps) {
       const response = await fetch("/api/forum/posts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content, threadId, images }),
+        body: JSON.stringify({ content, threadId, images, source: via ?? undefined }),
       })
 
       const data = await response.json().catch(() => ({}))

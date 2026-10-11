@@ -7,6 +7,8 @@ import { helpWantedReasonText } from "@/lib/answer-match"
 import PageHeader from "@/components/ui/page-header"
 import Surface from "@/components/ui/surface"
 import EmptyState from "@/components/ui/empty-state"
+import EventBeacon from "@/components/event-beacon"
+import { withVia } from "@/lib/event-sources"
 import { Bell, Leaf, Sprout, HeartHandshake, Target, Flame, TrendingUp, MessageSquare, Users } from "@/lib/icons"
 
 export const metadata = {
@@ -24,6 +26,7 @@ export default async function MyDigestPage() {
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-6 space-y-4">
+      <EventBeacon type="DIGEST_VIEWED" />
       <PageHeader
         title="Your TerpTalk week"
         description={`Week ${d.weekKey} — what happened in your TerpTalk world since last week.`}
@@ -61,7 +64,7 @@ export default async function MyDigestPage() {
           <ul className="space-y-2 text-sm">
             {d.followedThreads.items.map((t) => (
               <li key={t.slug}>
-                <Link href={`/forum/thread/${t.slug}`} className="hover:underline font-medium">
+                <Link href={withVia(`/forum/thread/${t.slug}`, "digest")} className="hover:underline font-medium">
                   {t.title}
                 </Link>
                 <span className="text-muted-foreground"> — thread you follow had new activity</span>
@@ -75,7 +78,7 @@ export default async function MyDigestPage() {
             )}
             {d.followedGrows.items.map((g) => (
               <li key={g.href}>
-                <Link href={g.href} className="hover:underline font-medium">
+                <Link href={withVia(g.href, "digest")} className="hover:underline font-medium">
                   {g.title}
                 </Link>
                 <span className="text-muted-foreground">
@@ -99,7 +102,7 @@ export default async function MyDigestPage() {
                   {a.author.name}
                 </Link>
                 <span className="text-muted-foreground"> {a.verb} </span>
-                <Link href={a.href} className="hover:underline font-medium">
+                <Link href={withVia(a.href, "digest")} className="hover:underline font-medium">
                   {a.title}
                 </Link>
                 {a.context && <span className="text-muted-foreground"> in “{a.context}”</span>}
@@ -122,7 +125,7 @@ export default async function MyDigestPage() {
           <ul className="space-y-2 text-sm">
             {d.questions.items.map((q) => (
               <li key={q.slug}>
-                <Link href={`/forum/thread/${q.slug}`} className="hover:underline font-medium">
+                <Link href={withVia(`/forum/thread/${q.slug}`, "digest")} className="hover:underline font-medium">
                   {q.title}
                 </Link>
                 <span className="text-muted-foreground"> — {helpWantedReasonText(q)}</span>
@@ -148,7 +151,7 @@ export default async function MyDigestPage() {
           <ul className="space-y-2 text-sm">
             {d.growMatches.matches.map((g) => (
               <li key={g.diaryId}>
-                <Link href={g.href} className="hover:underline font-medium">
+                <Link href={withVia(g.href, "digest")} className="hover:underline font-medium">
                   {g.title}
                 </Link>
                 <span className="text-muted-foreground">
@@ -192,7 +195,7 @@ export default async function MyDigestPage() {
           <h2 className="font-semibold flex items-center gap-2 mb-2">
             <TrendingUp className="h-5 w-5 text-primary" /> Community highlight
           </h2>
-          <Link href={`/forum/thread/${d.highlight.slug}`} className="text-sm font-medium hover:underline flex items-center gap-2">
+          <Link href={withVia(`/forum/thread/${d.highlight.slug}`, "digest")} className="text-sm font-medium hover:underline flex items-center gap-2">
             <MessageSquare className="h-4 w-4 shrink-0 text-muted-foreground" />
             <span className="min-w-0 truncate">{d.highlight.title}</span>
           </Link>

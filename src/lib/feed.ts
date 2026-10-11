@@ -5,6 +5,7 @@ import { publicDiaryWhere } from "@/lib/diary-visibility"
 import { mediaProxyUrl } from "@/lib/media"
 import { diaryPath } from "@/lib/slugs"
 import { updateAnchor } from "@/lib/update-social"
+import { withVia, type EventSource } from "@/lib/event-sources"
 
 // ─── Feed Core ─────────────────────────────────────────────────────
 // Canonical activity feed for TerpTalk. One module owns candidate
@@ -335,15 +336,21 @@ export async function getFeedPage(opts: {
       : Promise.resolve([] as FeedHarvestRow[]),
   ])
 
+  // Inbound-surface attribution: only the modes that ARE a labeled
+  // surface claim one — "following" is the followed-content stream and
+  // authorId is a profile-activity view. Everything else stays
+  // unlabeled (reports as "unknown") rather than guessing.
+  const via: EventSource | null = scope.mode === "following" ? "following_feed" : scope.authorId ? "profile" : null
+
   const candidates: FeedItem[] = []
   for (const u of updates) {
     // Restricted-class media serialize as the authorization endpoint,
     // never the raw blob URL — applied here so every consumer is safe.
     for (const img of u.images) img.url = mediaProxyUrl("diary", img.id)
-    candidates.push({ kind: "update", id: u.id, href: updateAnchor(diaryPath(u.diary), u.id), sortAt: u.createdAt, data: u })
+    candidates.push({ kind: "update", id: u.id, href: withVia(updateAnchor(diaryPath(u.diary), u.id), via), sortAt: u.createdAt, data: u })
   }
   for (const t of threads) {
-    candidates.push({ kind: "thread", id: t.id, href: `/forum/thread/${t.slug}`, sortAt: t.createdAt, data: t })
+    candidates.push({ kind: "thread", id: t.id, href: withVia(`/forum/thread/${t.slug}`, via), sortAt: t.createdAt, data: t })
   }
   for (const h of harvests) {
     for (const img of h.updates[0]?.images ?? []) img.url = mediaProxyUrl("diary", img.id)
@@ -354,7 +361,7 @@ export async function getFeedPage(opts: {
       h.yieldAmount = null
       h.yieldUnit = null
     }
-    candidates.push({ kind: "harvest", id: h.id, href: diaryPath(h), sortAt: h.harvestedAt!, data: h })
+    candidates.push({ kind: "harvest", id: h.id, href: withVia(diaryPath(h), via), sortAt: h.harvestedAt!, data: h })
   }
 
   candidates.sort(byKeyDesc)

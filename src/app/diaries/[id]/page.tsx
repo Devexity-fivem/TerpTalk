@@ -25,6 +25,8 @@ import { loadUpdateSocial } from "@/lib/update-social"
 import OwnerDeleteButton from "@/components/owner-delete-button"
 import FeatureGrowButton from "@/components/feature-grow-button"
 import DiaryDiscussButton from "@/components/diary-discuss-button"
+import EventBeacon from "@/components/event-beacon"
+import { eventSource } from "@/lib/event-sources"
 import { escapeLike, strainFieldMatches, suggestStrainLink } from "@/lib/strain-stats"
 import { MEDIUM_LABELS, LIGHT_LABELS, TECHNIQUE_LABELS, DIFFICULTY_LABELS } from "@/lib/grow-fields"
 import { canViewDiary, publicDiaryWhere } from "@/lib/diary-visibility"
@@ -130,8 +132,17 @@ async function getDiaryData(id: string, viewerId?: string | null) {
   return diary
 }
 
-export default async function DiaryPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function DiaryPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>
+  searchParams: Promise<{ via?: string }>
+}) {
   const { id } = await params
+  // Inbound attribution surface (`?via=`) — allowlist-validated; anything
+  // else reads as no attribution and reports under "unknown".
+  const via = eventSource((await searchParams).via)
   const session = await getSession()
   const [diary, blockedIds] = await Promise.all([
     getDiaryData(id, session?.user?.id),
@@ -435,6 +446,9 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
   return (
     <div className="min-h-screen bg-background" data-tt-diary={JSON.stringify({ id: diary.id, title: diary.title, stage: diary.stage, harvested: diary.harvested, own: canEdit })}>
       <div className="max-w-7xl mx-auto px-4 py-8">
+        {session?.user?.id && (
+          <EventBeacon type="FOLLOWED_CONTENT_VIEWED" source={via} objectType="Diary" objectId={diary.id} />
+        )}
         <LiveRefresh endpoint={`/api/diaries/${diary.id}/activity`} />
         {diary.visibility === "PUBLIC" && <JsonLd data={diarySchema} />}
         <Breadcrumbs items={[
@@ -641,6 +655,7 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
                     diaryId={diary.id}
                     diaryHref={diaryPath(diary)}
                     existingSlug={diary.discussion && !diary.discussion.deleted ? diary.discussion.slug : null}
+                    via={via}
                   />
                 )}
                 <ShareButtons path={diaryPath(diary)} title={`${diary.title} — grow diary on TerpTalk`} />
@@ -804,6 +819,7 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
                   existingSlug={discussionThread?.slug ?? null}
                   label="Discuss this harvest"
                   variant="link"
+                  via={via}
                 />
               )}
             </div>
@@ -1186,6 +1202,7 @@ export default async function DiaryPage({ params }: { params: Promise<{ id: stri
                                 threadId={discussionThread?.id ?? null}
                                 threadSlug={discussionThread?.slug ?? null}
                                 viewerId={session?.user?.id}
+                                via={via}
                               />
                             }
                           />

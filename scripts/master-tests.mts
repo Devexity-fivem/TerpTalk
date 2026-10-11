@@ -77,6 +77,7 @@ const HTTP_PHASE: Suite[] = [
   { id: "ops", file: "scripts/ops-tests.mts", runner: "tsx", cls: "A", label: "Ops surface gate + metrics shape + feedback deviceType", tier: "full" },
   { id: "plant-doctor", file: "scripts/plant-doctor-tests.mts", runner: "tsx", cls: "A", label: "Plant Doctor outcome loop (cases, outcomes, follow-up reminder)", tier: "full" },
   { id: "push-activation", file: "scripts/push-activation-tests.mts", runner: "tsx", cls: "A", label: "Web Push subscription boundary + derived activation milestones", tier: "full" },
+  { id: "product-events", file: "scripts/product-events-verify.mts", runner: "tsx", cls: "A", label: "Product-event telemetry: attribution, idempotency, beacon boundary, privacy, report surface", tier: "full" },
   { id: "runtime-verify", file: "scripts/runtime-verify.mjs", runner: "node", cls: "A", label: "Runtime security black-box (sessions, authz, privacy, Pusher, uploads, rate limits, staff, TerpBot)", tier: "full", timeoutMs: 12 * 60_000 },
   { id: "browser", file: "scripts/browser-tests.mts", runner: "tsx", cls: "A", label: "Browser regression (headless Chromium): auth, profile V2, privacy oracles, progression UI, mobile", tier: "full", timeoutMs: 5 * 60_000 },
 ]

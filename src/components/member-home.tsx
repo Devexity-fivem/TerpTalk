@@ -16,6 +16,7 @@ import { DIFFICULTY_LABELS } from "@/lib/grow-fields"
 import type { MemberHomeData } from "@/lib/member-home"
 import { diaryPath } from "@/lib/slugs"
 import { updateAnchor } from "@/lib/update-social"
+import { withVia } from "@/lib/event-sources"
 import { helpWantedReasonText } from "@/lib/answer-match"
 import { cn } from "@/lib/utils"
 
@@ -359,7 +360,7 @@ export default function MemberHome({ data }: { data: MemberHomeData }) {
                 {s.unreadThreads.map((t) => (
                   <li key={t.slug}>
                     <Link
-                      href={`/forum/thread/${t.slug}`}
+                      href={withVia(`/forum/thread/${t.slug}`, "member_home")}
                       className="group flex items-center gap-2 rounded-xl px-3 py-2 hover:bg-secondary/60"
                     >
                       <Tooltip content="New activity since your last visit">
@@ -384,7 +385,7 @@ export default function MemberHome({ data }: { data: MemberHomeData }) {
                 {s.diaryUpdates.map((u, i) => (
                   <li key={`${u.diaryId}-${i}`}>
                     <Link
-                      href={updateAnchor(diaryPath({ id: u.diaryId, slug: u.diarySlug }), u.id)}
+                      href={withVia(updateAnchor(diaryPath({ id: u.diaryId, slug: u.diarySlug }), u.id), "member_home")}
                       className="group flex items-center gap-2 rounded-xl px-3 py-2 hover:bg-secondary/60"
                     >
                       <Leaf className="h-3.5 w-3.5 shrink-0 text-success" />
@@ -397,7 +398,7 @@ export default function MemberHome({ data }: { data: MemberHomeData }) {
                 {s.growerThreads.map((t) => (
                   <li key={`gt-${t.slug}`}>
                     <Link
-                      href={`/forum/thread/${t.slug}`}
+                      href={withVia(`/forum/thread/${t.slug}`, "member_home")}
                       className="group flex items-center gap-2 rounded-xl px-3 py-2 hover:bg-secondary/60"
                     >
                       <MessageSquare className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
@@ -729,7 +730,7 @@ export default function MemberHome({ data }: { data: MemberHomeData }) {
             </div>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {data.suggestedGrowers.map((g) => (
-                <SuggestedGrowerCard key={g.userId} grower={g} />
+                <SuggestedGrowerCard key={g.userId} grower={g} source="member_home" />
               ))}
             </div>
           </section>

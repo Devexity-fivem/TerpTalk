@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma"
 import { TERPBOT_USERNAME } from "@/lib/terpbot-constants"
+import { socialLoopReport, type SocialLoopReport } from "@/lib/product-events"
 
 // ─── Canonical activation model ─────────────────────────────────────
 // Every milestone is DERIVED from durable product state — no duplicate
@@ -181,6 +182,10 @@ export interface ActivationReport {
   /** Return rate for push-enabled vs not — association only. */
   returnByPush: { pushEnabled: boolean; members: number; returned: number; pct: number | null }[]
   push: { promptShown: number; granted: number; denied: number; sent: number; failed: number; clicked: number; removed: number }
+  /** Event-windowed social-loop metrics from the ProductEvent sink —
+   *  distinct from the signup cohort above: these answer WHICH surface
+   *  members followed/interacted from, which state cannot derive. */
+  social: SocialLoopReport
   generatedAt: string
 }
 
@@ -253,11 +258,14 @@ export async function activationReport(windowDays = 30): Promise<ActivationRepor
     return { pushEnabled: p, members: g.length, returned: r, pct: pct(r, g.length) }
   })
 
-  const pushCounts = await prisma.pushEvent.groupBy({
-    by: ["type"],
-    where: { createdAt: { gt: since } },
-    _count: { _all: true },
-  })
+  const [pushCounts, social] = await Promise.all([
+    prisma.pushEvent.groupBy({
+      by: ["type"],
+      where: { createdAt: { gt: since } },
+      _count: { _all: true },
+    }),
+    socialLoopReport(windowDays),
+  ])
   const pc = (t: string) => pushCounts.find((r) => r.type === t)?._count._all ?? 0
 
   return {
@@ -277,6 +285,7 @@ export async function activationReport(windowDays = 30): Promise<ActivationRepor
       clicked: pc("CLICKED"),
       removed: pc("SUBSCRIPTION_REMOVED"),
     },
+    social,
     generatedAt: new Date().toISOString(),
   }
 }

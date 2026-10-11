@@ -68,7 +68,7 @@ export default function UserActions({ userId, username, initiallyBlocked, initia
               const res = await fetch("/api/follows", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ userId }),
+                body: JSON.stringify({ userId, source: "profile" }),
               })
               if (res.ok) {
                 const d = await res.json()

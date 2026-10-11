@@ -17,6 +17,8 @@ import { enqueueXpReversal, drainXpOne } from "@/lib/progression-outbox"
 import { storeImages, deleteImagesIfUnreferenced, MAX_POST_IMAGES } from "@/lib/blob"
 import { notifyMentions } from "@/lib/mentions"
 import { notify, notifyMany, postDeepLink, postLinkWhere } from "@/lib/notify"
+import { eventSource } from "@/lib/event-sources"
+import { recordProductEvent } from "@/lib/product-events"
 import { logModAction } from "@/lib/moderation"
 import { checkMaintenance } from "@/lib/maintenance"
 import { revalidateTag } from "next/cache"
@@ -36,6 +38,8 @@ export async function POST(request: Request) {
 
     const body = await request.json().catch(() => ({}))
     const { content, threadId, images, diaryUpdateId } = body
+    // Interaction attribution — allowlist-validated surface token only.
+    const source = eventSource(body.source) ?? "unknown"
 
     if (
       typeof content !== "string" || !content.trim() ||
@@ -194,6 +198,16 @@ export async function POST(request: Request) {
         update: { lastSeenAt: new Date() },
       })
       return created
+    })
+
+    // Product event: one per persisted interaction — best-effort, and it
+    // references the content (update/thread), never its text.
+    await recordProductEvent({
+      type: "INTERACTION_POSTED",
+      userId: session.user.id,
+      source,
+      objectType: anchor ? "DiaryUpdate" : "Thread",
+      objectId: anchor ? anchor.updateId : threadId,
     })
 
     // Paying floor: short replies still post — they just don't earn XP or

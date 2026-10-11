@@ -597,6 +597,7 @@ export default function OnboardingStepper({
                     key={g.userId}
                     grower={g}
                     onFollowToggle={(following) => setFollowedCount((n) => n + (following ? 1 : -1))}
+                    source="onboarding"
                   />
                 ))}
               </div>

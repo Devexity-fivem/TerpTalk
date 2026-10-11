@@ -18,6 +18,7 @@ import { publicDiaryWhere } from "@/lib/diary-visibility"
 import { diaryDay, diaryWeek } from "@/lib/diary-weeks"
 import { diaryPath } from "@/lib/slugs"
 import { updateAnchor } from "@/lib/update-social"
+import { withVia } from "@/lib/event-sources"
 import { evaluateGrowJourney } from "@/lib/grow-journey"
 import { announceStageTransition } from "@/lib/terpbot"
 import { rateLimit } from "@/lib/rate-limit"
@@ -506,8 +507,9 @@ export async function POST(request: Request) {
           // Deep-link to the update itself — the canonical fragment the
           // feed/digest/comment surfaces already use, landing the member on
           // the update's own react/comment row. `updateLinkWhere` cleanup
-          // on update delete already matches this shape.
-          link: updateAnchor(diaryPath(diary), update.id),
+          // on update delete already matches this shape. `via` marks the
+          // notification surface for product-event attribution.
+          link: withVia(updateAnchor(diaryPath(diary), update.id), "notification"),
           actorId: session.user.id,
           // Throttle fan-out like thread-follow notifications — rapid
           // update bursts shouldn't spam followers.
@@ -527,7 +529,7 @@ export async function POST(request: Request) {
       visibility: diary.visibility,
       title: "New update from someone you follow",
       content: `@${authorName} added "${update.title.slice(0, 60)}" to "${diary.title.slice(0, 50)}"`,
-      link: updateAnchor(diaryPath(diary), update.id),
+      link: withVia(updateAnchor(diaryPath(diary), update.id), "notification"),
       groupKey: `followed-content:diary-update:${diaryId}`,
       dedupeMs: 6 * 60 * 60 * 1000,
       excludeUserIds: followers.map((f) => f.userId),

@@ -1545,3 +1545,27 @@ model PushEvent {
   @@index([type, createdAt])
   @@index([userId])
 }
+
+// ─── Product-event telemetry ──────────────────────────────────────
+// The canonical product-analytics sink: the social-loop signals that
+// durable state cannot answer — WHICH SURFACE a follow/interaction came
+// from and whether followed content was actually reached. Milestones that
+// state can answer (onboarding, returns) stay derived in lib/activation.
+// Same doctrine as PushEvent: append-only, userId is a bare string so
+// account deletion never blocks, `key` makes once-per-member/per-day
+// types idempotent. Data minimization is structural: `source` is an
+// allowlisted surface token (never a URL/referrer), object references are
+// ids only — no content, no IP, no user agent, no free text.
+model ProductEvent {
+  id         String   @id @default(cuid())
+  type       String   // FIRST_FOLLOW | FOLLOW_CREATED | INTERACTION_POSTED | FOLLOWED_CONTENT_VIEWED | DIGEST_VIEWED
+  userId     String?
+  source     String?  // EVENT_SOURCES allowlist token — null reports as "unknown"
+  objectType String?  // User | Diary | DiaryUpdate | Thread — reference only, never content
+  objectId   String?
+  key        String?  @unique // ff:<uid> · dv:<uid>:<day> · fcv:<uid>:<diaryId>:<day>
+  createdAt  DateTime @default(now())
+
+  @@index([type, createdAt])
+  @@index([userId])
+}

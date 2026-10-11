@@ -3,6 +3,7 @@ import ProfileCard from "@/components/ui/profile-card"
 import RoleBadge from "@/components/role-badge"
 import GrowerFollowButton from "@/components/grower-follow-button"
 import type { SuggestedGrower } from "@/lib/suggested-growers"
+import type { EventSource } from "@/lib/event-sources"
 
 // One suggested-grower card: avatar/identity → profile, honest reason
 // lines, public contribution counts, Follow action. Server-renderable —
@@ -10,10 +11,13 @@ import type { SuggestedGrower } from "@/lib/suggested-growers"
 export default function SuggestedGrowerCard({
   grower,
   onFollowToggle,
+  source,
 }: {
   grower: SuggestedGrower
   /** Optional observer — used by onboarding to count first follows. */
   onFollowToggle?: (following: boolean) => void
+  /** Attribution surface for the follow — allowlisted server-side. */
+  source?: EventSource
 }) {
   const meta: string[] = []
   if (grower.publicGrows > 0) meta.push(`${grower.publicGrows} public grow${grower.publicGrows === 1 ? "" : "s"}`)
@@ -44,7 +48,7 @@ export default function SuggestedGrowerCard({
         {meta.length > 0 && <p className="mt-0.5 text-xs text-muted-foreground">{meta.join(" · ")}</p>}
       </Link>
       <div className="shrink-0 self-start">
-        <GrowerFollowButton userId={grower.userId} username={grower.username} onToggle={onFollowToggle} />
+        <GrowerFollowButton userId={grower.userId} username={grower.username} onToggle={onFollowToggle} source={source} />
       </div>
     </div>
   )

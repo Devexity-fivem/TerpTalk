@@ -206,7 +206,7 @@ export default async function DiscoverPage({
               {suggestedGrowers && suggestedGrowers.length > 0 ? (
                 <div className="grid sm:grid-cols-2 gap-3">
                   {suggestedGrowers.map((g) => (
-                    <SuggestedGrowerCard key={g.userId} grower={g} />
+                    <SuggestedGrowerCard key={g.userId} grower={g} source="discover" />
                   ))}
                 </div>
               ) : (

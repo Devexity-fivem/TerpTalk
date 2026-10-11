@@ -32,6 +32,7 @@ import { rankDisplay } from "@/lib/progression-config"
 import { questionEvidenceForThread, helperFollowPromptAllowed } from "@/lib/question-evidence"
 import { getSuggestedGrowers } from "@/lib/suggested-growers"
 import SuggestedGrowerCard from "@/components/suggested-grower-card"
+import { eventSource } from "@/lib/event-sources"
 import { TERPBOT_USERNAME } from "@/lib/terpbot-constants"
 import { anchoredPostVisibleWhere, updateAnchor } from "@/lib/update-social"
 
@@ -190,10 +191,11 @@ export default async function ThreadPage({
   searchParams,
 }: {
   params: Promise<{ slug: string }>
-  searchParams: Promise<{ page?: string; post?: string }>
+  searchParams: Promise<{ page?: string; post?: string; via?: string }>
 }) {
   const { slug } = await params
-  const { page: pageParam, post: postParam } = await searchParams
+  const { page: pageParam, post: postParam, via: viaParam } = await searchParams
+  const via = eventSource(viaParam)
   const page = Math.max(1, Math.min(10_000, parseInt(pageParam || "1") || 1))
   const session = await getSession()
   const currentUserId = session?.user?.id
@@ -670,7 +672,7 @@ export default async function ThreadPage({
             </div>
             <div className="space-y-3">
               {contextGrowers.map((g) => (
-                <SuggestedGrowerCard key={g.userId} grower={g} />
+                <SuggestedGrowerCard key={g.userId} grower={g} source="question" />
               ))}
             </div>
           </div>
@@ -886,7 +888,7 @@ export default async function ThreadPage({
         {/* Reply Form */}
         {!thread.locked && (
           <div id="reply-composer" className="scroll-mt-24">
-            <ReplyForm threadId={thread.id} wasFollowing={following} />
+            <ReplyForm threadId={thread.id} wasFollowing={following} via={via} />
           </div>
         )}
         {thread.locked && (
