@@ -68,7 +68,8 @@
   },
   "overrides": {
     "cookie": "^0.7.2",
-    "@auth/core": "^0.41.3"
+    "@auth/core": "^0.41.3",
+    "deepmerge-ts": "8.0.2"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
