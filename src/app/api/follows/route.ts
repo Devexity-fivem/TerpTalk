@@ -77,22 +77,18 @@ export async function POST(request: Request) {
         if (!(e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002")) throw e
       }
       // Product events are best-effort and never block the response.
-      // FIRST_FOLLOW's keyed upsert makes "exactly once per member"
-      // durable even if the count check races a parallel follow.
-      const [followCount, diaryFollowCount] = await Promise.all([
-        prisma.follow.count({ where: { followerId: session.user.id } }),
-        prisma.diaryFollow.count({ where: { userId: session.user.id } }),
-      ])
+      // FIRST_FOLLOW is an unconditional keyed upsert: the first
+      // observed transition wins the key, later transitions no-op —
+      // no count query, and a lost earlier write can't strand the
+      // milestone. "Any kind" semantics: objectType records which.
       await recordProductEvent({
         type: "FOLLOW_CREATED", userId: session.user.id, source,
         objectType: "User", objectId: userId,
       })
-      if (followCount === 1 && diaryFollowCount === 0) {
-        await recordProductEvent({
-          type: "FIRST_FOLLOW", userId: session.user.id, source,
-          objectType: "User", objectId: userId, key: `ff:${session.user.id}`,
-        })
-      }
+      await recordProductEvent({
+        type: "FIRST_FOLLOW", userId: session.user.id, source,
+        objectType: "User", objectId: userId, key: `ff:${session.user.id}`,
+      })
       const actorProfile = await prisma.profile.findUnique({
         where: { userId: session.user.id },
         select: { username: true },
@@ -133,20 +129,14 @@ export async function POST(request: Request) {
     } catch (e) {
       if (!(e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002")) throw e
     }
-    const [followCount, diaryFollowCount] = await Promise.all([
-      prisma.follow.count({ where: { followerId: session.user.id } }),
-      prisma.diaryFollow.count({ where: { userId: session.user.id } }),
-    ])
     await recordProductEvent({
       type: "FOLLOW_CREATED", userId: session.user.id, source,
       objectType: "Diary", objectId: diaryId,
     })
-    if (followCount === 0 && diaryFollowCount === 1) {
-      await recordProductEvent({
-        type: "FIRST_FOLLOW", userId: session.user.id, source,
-        objectType: "Diary", objectId: diaryId, key: `ff:${session.user.id}`,
-      })
-    }
+    await recordProductEvent({
+      type: "FIRST_FOLLOW", userId: session.user.id, source,
+      objectType: "Diary", objectId: diaryId, key: `ff:${session.user.id}`,
+    })
     return NextResponse.json({ following: true })
   } catch (error) {
     console.error("Follow error:", error)

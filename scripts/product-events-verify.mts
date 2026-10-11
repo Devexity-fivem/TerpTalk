@@ -92,6 +92,36 @@ async function run() {
     ? pass("diary follow: FOLLOW_CREATED + FIRST_FOLLOW with Diary reference")
     : fail("diary follow events", dfEvs)
 
+  // ── diary-first, grower-second: any-kind milestone consumed by the
+  // diary follow, but the grower metric must still see the member
+  // follow with ITS surface — not the diary surface ──
+  await api("/api/follows", { method: "POST", cookie: dCookie, body: { userId: grower.id, source: "member_home" } })
+  const dfAfter = await evs(diaryFollower.id, "FIRST_FOLLOW")
+  dfAfter.length === 1 && dfAfter[0].objectType === "Diary"
+    ? pass("diary-first member: FIRST_FOLLOW stays once, keeps the diary kind")
+    : fail("diary-first FIRST_FOLLOW", dfAfter)
+  const repCheck = await socialLoopReport(7)
+  const growerSrc = repCheck.firstGrowerFollowBySource.find((r) => r.source === "member_home")
+  repCheck.firstGrowerFollows >= 2 && (growerSrc?.count ?? 0) >= 1
+    ? pass("first-grower-follow: diary-first member counted with the member-follow surface")
+    : fail("first-grower-follow derivation", repCheck.firstGrowerFollowBySource)
+  // attribution stability: viewer's first grower follow is "discover"
+  // even though they later followed `third` from member_home
+  repCheck.firstGrowerFollowBySource.find((r) => r.source === "discover")
+    ? pass("first-grower-follow attribution is stable across later follows")
+    : fail("first-grower attribution stability", repCheck.firstGrowerFollowBySource)
+  // any-kind milestone still reported separately; every member lands
+  // in exactly ONE source bucket — no cross-surface double counting.
+  // (Report is global: dev-DB rows from deleted prior-run users are
+  // legitimate cohort members too, so assert the bucket invariant, not
+  // fixture counts.)
+  const sumSrc = (rows: { source: string; count: number }[]) => rows.reduce((a, r) => a + r.count, 0)
+  repCheck.firstFollowsAnyKind >= 3 && repCheck.firstGrowerFollows >= 3 &&
+    sumSrc(repCheck.firstGrowerFollowBySource) === repCheck.firstGrowerFollows &&
+    sumSrc(repCheck.firstFollowAnyKindBySource) === repCheck.firstFollowsAnyKind
+    ? pass("any-kind vs grower metrics coexist; members counted once per cohort")
+    : fail("any-kind vs grower counts", repCheck)
+
   // ── INTERACTION_POSTED: thread reply + anchored update comment ──
   const cat = await prisma.category.findFirst({ where: { hidden: false }, select: { id: true } })
   const thread = await prisma.thread.create({
@@ -190,18 +220,19 @@ async function run() {
   const staffRes = await api("/api/admin/activation?days=30", { cookie: sCookie }) as Res
   const social = (staffRes.data as { social?: Record<string, unknown> } | null)?.social
   staffRes.status === 200 && social &&
-    "firstFollowBySource" in social && "followedContentViewers" in social &&
-    "interactionsBySource" in social && "interactionRate" in social &&
+    "firstGrowerFollowBySource" in social && "followedContentViewers" in social &&
+    "interactionsBySource" in social && "growerFollowerInteractionRate" in social &&
+    "firstFollowsAnyKind" in social &&
     !JSON.stringify(social).includes(viewer.id) && !JSON.stringify(social).includes(viewer.username)
     ? pass("report: staff aggregate has the social section — counts only, no member ids")
     : fail("report staff shape", { s: staffRes.status, social })
 
   // ── socialLoopReport: fixture events aggregate correctly ──
   const rep = await socialLoopReport(7)
-  const ffSrc = rep.firstFollowBySource.find((r) => r.source === "discover")
+  const ffSrc = rep.firstGrowerFollowBySource.find((r) => r.source === "discover")
   const ixSrc = rep.interactionsBySource.find((r) => r.source === "digest")
-  rep.firstFollows >= 1 && (ffSrc?.count ?? 0) >= 1 && (ixSrc?.count ?? 0) >= 1 && rep.followedContentViewers >= 1 && rep.digestViewers >= 1
-    ? pass("socialLoopReport: first-follow source, interaction source, viewers aggregate")
+  rep.firstGrowerFollows >= 1 && (ffSrc?.count ?? 0) >= 1 && (ixSrc?.count ?? 0) >= 1 && rep.followedContentViewers >= 1 && rep.digestViewers >= 1
+    ? pass("socialLoopReport: grower-follow source, interaction source, viewers aggregate")
     : fail("socialLoopReport", rep)
 
   // withVia: query params land before the fragment, cleanup-compatible
@@ -229,5 +260,14 @@ run()
   .then(() => process.exit(finish()))
   .catch(async (e) => {
     console.error("fatal:", e)
+    // Aborted runs leak fixture users (e.g. a dead dev server fails at
+    // login). Sweep pe_-marked residue so it can't contaminate the DB.
+    try {
+      const orphans = await prisma.user.findMany({ where: { name: { startsWith: "pe_" } }, select: { id: true } })
+      const ids = orphans.map((o) => o.id)
+      await prisma.productEvent.deleteMany({ where: { userId: { in: ids } } })
+      await prisma.user.deleteMany({ where: { id: { in: ids } } })
+      console.error(`fatal cleanup: removed ${ids.length} orphaned fixture users`)
+    } catch { /* best-effort */ }
     process.exit(1)
   })
