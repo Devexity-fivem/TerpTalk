@@ -44,7 +44,7 @@
     "test:all": "tsx scripts/master-tests.mts --tier=all"
   },
   "dependencies": {
-    "@prisma/client": "^5.22.0",
+    "@prisma/client": "^6.19.3",
     "@vercel/analytics": "^2.0.1",
     "@vercel/blob": "^2.8.1",
     "@vercel/speed-insights": "^2.0.0",
@@ -55,7 +55,7 @@
     "lucide-react": "^1.55.0",
     "next": "16.4.0",
     "next-auth": "^4.24.15",
-    "prisma": "^5.22.0",
+    "prisma": "^6.19.3",
     "profanity-guard": "^1.1.17",
     "pusher": "^5.3.4",
     "pusher-js": "^8.6.0",
