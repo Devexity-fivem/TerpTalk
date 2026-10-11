@@ -138,6 +138,20 @@ check("desktop nav Chat opens the panel without navigating", () => {
   assert.ok(nav.includes("e.preventDefault()"), "nav suppresses navigation")
 })
 
+check("desktop nav shows Feed as a primary inline destination", () => {
+  const desktopBlock = nav.slice(nav.indexOf("DESKTOP_LINKS"), nav.indexOf("export function Navigation"))
+  assert.ok(desktopBlock.includes('href: "/feed"'), "feed href in desktop links")
+  assert.ok(desktopBlock.includes('label: "Feed"'), "feed label in desktop links")
+  assert.ok(desktopBlock.indexOf('href: "/feed"') < desktopBlock.indexOf('href: "/diaries"'), "feed appears before diaries")
+})
+
+check("mobile bottom-nav Feed is a primary destination", () => {
+  const itemsBlock = mobileNav.slice(mobileNav.indexOf("const ITEMS"), mobileNav.indexOf("export default"))
+  assert.ok(itemsBlock.includes('href: "/feed"'), "feed href in mobile items")
+  assert.ok(itemsBlock.includes('label: "Feed"'), "feed label in mobile items")
+  assert.ok(!itemsBlock.includes('label: "Forums"'), "forums is not in the bottom bar")
+})
+
 check("mobile bottom-nav Chat toggles the sheet in place", () => {
   assert.ok(mobileNav.includes("togglePanel()"), "mobile nav toggles panel")
   assert.ok(mobileNav.includes("e.preventDefault()"), "mobile nav suppresses navigation")
@@ -181,6 +195,35 @@ check("teaser opens the panel for signed-in users", () => {
 check("teaser keeps a direct /chat link and guest sign-in", () => {
   assert.ok(teaser.includes("/chat?room="), "full-chat link")
   assert.ok(teaser.includes("signInHref"), "guest sign-in path")
+})
+
+check("guest homepage leads with a prominent Explore the Feed CTA", () => {
+  const hero = src("components/hero-cta.tsx")
+  assert.ok(hero.includes('href="/feed"'), "guest hero links to feed")
+  assert.ok(hero.includes("Explore the Feed"), "guest hero labels feed CTA")
+})
+
+check("authenticated homepage leads with Feed and Discover growers CTAs", () => {
+  const hero = src("components/hero-cta.tsx")
+  assert.ok(hero.includes('href="/feed"'), "auth hero links to feed")
+  assert.ok(hero.includes('"/discover"'), "auth hero links to discover")
+  assert.ok(hero.includes("Discover growers"), "auth hero labels discover CTA")
+})
+
+check("member home exposes a compact community bridge with feed links", () => {
+  const memberHome = src("components/member-home.tsx")
+  assert.ok(memberHome.includes('href="/feed"'), "member home links to feed")
+  assert.ok(memberHome.includes('href="/feed?tab=following"'), "member home links to following feed")
+  assert.ok(memberHome.includes('href="/discover"'), "member home links to discover")
+})
+
+check("feed page exposes a contextual Share a grow update entry point", () => {
+  const feedPage = src("app/feed/page.tsx")
+  const feedShare = src("components/feed-share-button.tsx")
+  assert.ok(feedPage.includes("FeedShareButton"), "feed page mounts share button")
+  assert.ok(feedShare.includes('type: "grow-update"'), "share button can open grow-update")
+  assert.ok(feedShare.includes('type: "discussion"'), "share button falls back to discussion")
+  assert.ok(feedShare.includes("Start a grow diary") || feedShare.includes("Share something"), "fallback path exists")
 })
 
 // ── Realtime architecture invariants ───────────────────────────────────

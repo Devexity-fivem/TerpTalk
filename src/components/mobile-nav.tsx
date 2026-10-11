@@ -3,7 +3,7 @@
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { useSession } from "next-auth/react"
-import { Home, MessageCircle, Leaf, Bell, User, MessagesSquare, Search } from "@/lib/icons"
+import { Home, Calendar, Leaf, Bell, User, MessagesSquare, Search } from "@/lib/icons"
 import { cn } from "@/lib/utils"
 import { signInHref } from "@/lib/callback-url"
 import { useChatPanel } from "@/components/chat-panel"
@@ -14,11 +14,13 @@ interface MobileNavProps {
   chatUnread?: boolean
 }
 
-// Grower-first ordering — diaries get the prime second slot.
+// Feed-first ordering — Home, Feed, and Chat stay primary; Diaries keeps
+// a quick slot. Forums moves into the full navigation drawer so the bar
+// does not exceed a comfortable touch row.
 const ITEMS = [
   { href: "/", label: "Home", icon: Home, exact: true },
+  { href: "/feed", label: "Feed", icon: Calendar },
   { href: "/diaries", label: "Diaries", icon: Leaf },
-  { href: "/forum", label: "Forums", icon: MessageCircle },
   { href: "/chat", label: "Chat", icon: MessagesSquare },
 ]
 
