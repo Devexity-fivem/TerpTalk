@@ -1,5 +1,6 @@
 import { Prisma, PrismaClient } from "@prisma/client"
 import { censorText } from "./profanity"
+import { recordQuery } from "./query-count"
 
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined
@@ -50,27 +51,37 @@ function censorData(data: unknown): void {
   }
 }
 
-function profanityMiddleware(params: Prisma.MiddlewareParams, next: (params: Prisma.MiddlewareParams) => Promise<unknown>) {
-  if (params.model && EXCLUDED_MODELS.has(params.model)) {
-    return next(params)
-  }
-  const args = params.args as Record<string, unknown> | undefined
-  if (params.action === "create" || params.action === "createMany" || params.action === "update" || params.action === "updateMany") {
-    if (args?.data) censorData(args.data)
-  } else if (params.action === "upsert") {
-    if (args?.create) censorData(args.create)
-    if (args?.update) censorData(args.update)
-  }
-  return next(params)
+function makeClient() {
+  return new PrismaClient().$extends({
+    query: {
+      $allModels: {
+        async $allOperations({ model, operation, args, query }) {
+          recordQuery()
+          if (model && EXCLUDED_MODELS.has(model)) return query(args)
+          const a = args as Record<string, unknown> | undefined
+          if (
+            operation === "create" ||
+            operation === "createMany" ||
+            operation === "update" ||
+            operation === "updateMany"
+          ) {
+            if (a?.data) censorData(a.data)
+          } else if (operation === "upsert") {
+            if (a?.create) censorData(a.create)
+            if (a?.update) censorData(a.update)
+          }
+          return query(args)
+        },
+      },
+    },
+  })
 }
 
-export const prisma =
-  globalForPrisma.prisma ??
-  (() => {
-    const client = new PrismaClient()
-    client.$use(profanityMiddleware)
-    return client
-  })()
+// The extension changes write behavior only — no API surface — so the
+// client is exposed as a plain PrismaClient for Db/TransactionClient
+// assignability.
+export const prisma: PrismaClient = (globalForPrisma.prisma ??
+  makeClient()) as PrismaClient
 
 if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma
 
