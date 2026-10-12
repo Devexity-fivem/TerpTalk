@@ -75,6 +75,8 @@ jobs:
       - run: npx prisma generate
       - name: Apply full migration history to clean database
         run: npx prisma migrate deploy
+      - name: Seed baseline categories, chat rooms, and badges
+        run: npm run seed
       - name: Production build
         run: npm run build
       - name: DB-tier suites (serialized by the orchestrator)
@@ -129,6 +131,8 @@ jobs:
       - run: npm ci
       - run: npx prisma generate
       - run: npx prisma migrate deploy
+      - name: Seed baseline categories, chat rooms, and badges
+        run: npm run seed
       - name: Generate VAPID keys for the web-push browser leg
         run: |
           KEYS=$(npx web-push generate-vapid-keys --json)
