@@ -22,9 +22,10 @@ import { isAdmin as isAdminRole } from "@/lib/roles"
 import { useChatPanel } from "@/components/chat-panel"
 import { useCommandPalette } from "@/components/command-palette"
 
-// Information architecture: Grow first — the diary/strain/doctor loop is
-// what TerpTalk is — then Community, then the browse/discovery surfaces,
-// then reference material. Feed and Discover stay reachable from Explore.
+// Information architecture: Feed-first social surface, then the grow
+// diary/strain/doctor loop, then community discussions/chat, then
+// browse/discovery and reference material. The full drawer preserves
+// every route including Questions, Discover, Growers, and Library links.
 const NAV_LINKS = [
   { href: "/diaries", label: "Grow Diaries", icon: Leaf, section: "Grow" },
   { href: "/setups", label: "Setups", icon: Tent, section: "Grow" },
@@ -46,12 +47,13 @@ const NAV_LINKS = [
 const NAV_SECTIONS = ["Grow", "Community", "Explore", "Library"]
 
 // Shown inline on large screens; the full list stays in the drawer.
-// Grower-first ordering — diaries and strains lead, chat stays last so
-// its unread dot never jumps position mid-list.
+// Feed-first social ordering — the community stream is the primary
+// surface, followed by the grow tools, then discussions and chat.
+// Questions, Discover, Growers, and the rest remain reachable via Menu.
 const DESKTOP_LINKS = [
+  { href: "/feed", label: "Feed", icon: Calendar },
   { href: "/diaries", label: "Diaries", icon: Leaf },
   { href: "/strains", label: "Strains", icon: Dna },
-  { href: "/questions", label: "Questions", icon: HelpCircle },
   { href: "/forum", label: "Discussions", icon: MessageCircle },
   { href: "/chat", label: "Chat", icon: MessagesSquare },
 ]

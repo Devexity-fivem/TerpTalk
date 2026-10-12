@@ -3,7 +3,7 @@ import type { ReactNode } from "react"
 import {
   Zap, Sprout, Bell, ArrowRight, Leaf, Users, Radio, TrendingUp, CheckCircle2, Circle,
   MessageCircle, MessageSquare, Eye, AlertTriangle, Gauge, Bug, Wrench, Clock, Wheat, FlaskConical, BookOpen,
-  HeartHandshake,
+  HeartHandshake, Calendar, HelpCircle,
 } from "@/lib/icons"
 import MemberGreeting from "@/components/member-greeting"
 import OpenChatButton from "@/components/open-chat-button"
@@ -127,6 +127,39 @@ export default function MemberHome({ data }: { data: MemberHomeData }) {
               <span className="font-normal opacity-80">· {data.xp.toLocaleString()} XP</span>
             </Link>
           </Tooltip>
+        </div>
+
+        {/* Quick social bridge — compact, never replaces the dashboard */}
+        <div className="mb-4 flex flex-wrap items-center gap-2">
+          <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mr-1">Community</span>
+          <Link
+            href="/feed"
+            className="inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-card px-3 py-1.5 text-xs font-medium hover:border-primary/40 hover:bg-secondary transition-colors"
+          >
+            <Calendar className="h-3.5 w-3.5" />
+            Your feed
+          </Link>
+          <Link
+            href="/feed?tab=following"
+            className="inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-card px-3 py-1.5 text-xs font-medium hover:border-primary/40 hover:bg-secondary transition-colors"
+          >
+            <Users className="h-3.5 w-3.5" />
+            Following
+          </Link>
+          <Link
+            href="/discover"
+            className="inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-card px-3 py-1.5 text-xs font-medium hover:border-primary/40 hover:bg-secondary transition-colors"
+          >
+            <TrendingUp className="h-3.5 w-3.5" />
+            Discover growers
+          </Link>
+          <Link
+            href="/forum/new"
+            className="inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-card px-3 py-1.5 text-xs font-medium hover:border-primary/40 hover:bg-secondary transition-colors"
+          >
+            <HelpCircle className="h-3.5 w-3.5" />
+            Ask a question
+          </Link>
         </div>
 
         {/* Next action — the single most useful thing to do */}

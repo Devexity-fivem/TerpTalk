@@ -37,6 +37,13 @@ async function getSitemapBodies() {
 }
 
 const main = async () => {
+  // Sweep any orphaned fixtures from prior interrupted runs so stale
+  // `__dv_*` rows cannot collide with this run's assertions.
+  await prisma.user.deleteMany({ where: { name: { startsWith: "__verify_" } } }).catch(() => {})
+  await prisma.growDiary.deleteMany({ where: { title: { startsWith: "__dv_" } } }).catch(() => {})
+  await prisma.strain.deleteMany({ where: { name: { startsWith: "__dv_" } } }).catch(() => {})
+  await prisma.thread.deleteMany({ where: { title: { startsWith: "__dv_" } } }).catch(() => {})
+
   // Owner is backdated + XP-seeded so the self-vote test reaches the
   // self-vote check rather than being stopped at the voter trust gate.
   const seedXp = async (userId, amount) => {
@@ -1314,17 +1321,18 @@ const main = async () => {
     const dlBlocker = await getHtml("/diaries", ownerCookie)
     const dlGuest = await getHtml("/diaries")
     const dlUnrel = await getHtml("/diaries", voterCookie)
-    !dlBlocker.html.includes("blocked-public") ? pass("blocked author's diary hidden from blocker list") : fail("blocker /diaries", "visible")
-    dlGuest.html.includes("blocked-public") && dlUnrel.html.includes("blocked-public")
+    const blockedTitle = `${tok} blocked-public`
+    !dlBlocker.html.includes(blockedTitle) ? pass("blocked author's diary hidden from blocker list") : fail("blocker /diaries", "visible")
+    dlGuest.html.includes(blockedTitle) && dlUnrel.html.includes(blockedTitle)
       ? pass("blocked author's diary visible to guest/unrelated")
-      : fail("guest/unrelated /diaries", { g: dlGuest.html.includes("blocked-public"), u: dlUnrel.html.includes("blocked-public") })
+      : fail("guest/unrelated /diaries", { g: dlGuest.html.includes(blockedTitle), u: dlUnrel.html.includes(blockedTitle) })
     dlBlocker.html.includes(`${tok} PUBLIC`) ? pass("blocker's own diary still listed") : fail("blocker own diary", "missing")
-    sr = await callApi(`/api/search?q=${encodeURIComponent("blocked-public")}&type=diaries`, { cookie: ownerCookie })
-    !(sr.data?.diaries || []).some((d) => d.title.includes("blocked-public"))
+    sr = await callApi(`/api/search?q=${encodeURIComponent(blockedTitle)}&type=diaries`, { cookie: ownerCookie })
+    !(sr.data?.diaries || []).some((d) => d.title.includes(blockedTitle))
       ? pass("blocked author's diary hidden from blocker search")
       : fail("blocker search", sr.data?.diaries)
-    sr = await callApi(`/api/search?q=${encodeURIComponent("blocked-public")}&type=diaries`)
-    ;(sr.data?.diaries || []).some((d) => d.title.includes("blocked-public"))
+    sr = await callApi(`/api/search?q=${encodeURIComponent(blockedTitle)}&type=diaries`)
+    ;(sr.data?.diaries || []).some((d) => d.title.includes(blockedTitle))
       ? pass("blocked author's diary searchable by guest")
       : fail("guest search", sr.data?.diaries)
 
@@ -1629,7 +1637,12 @@ const main = async () => {
       r.status === 404 ? pass(`PRIVATE diary experiments invisible to ${who}`) : fail(`private experiments ${who}`, r.status)
     }
 
-    // Lessons — structured JSON on the diary, owner-authored
+    // Lessons — structured JSON on the diary, owner-authored.
+    // diary-edit is 10/min per user and DB-backed: earlier PATCHes in this
+    // suite can exhaust the fixture owner's window when CI runs fast. Reset
+    // the run-scoped counter so these asserts exercise the route contract,
+    // not leftover budget.
+    await prisma.rateLimit.deleteMany({ where: { key: `diary-edit:${owner.id}` } })
     r = await callApi(`/api/diaries/${diaryId}`, { method: "PATCH", body: { lessons: { learned: "less is more", bogus: "x" } }, cookie: ownerCookie })
     r.status === 400 ? pass("lessons reject unknown keys") : fail("lessons bogus key", r.status)
     r = await callApi(`/api/diaries/${diaryId}`, { method: "PATCH", body: { lessons: { learned: "less is more" } }, cookie: viewerCookie })

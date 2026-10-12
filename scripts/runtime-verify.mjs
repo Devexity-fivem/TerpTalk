@@ -820,6 +820,23 @@ const main = async () => {
     // Real two-client event delivery — user channel gets a content-free
     // notification DTO on DM; chat channel gets a {roomId, latestAt} tickle.
     if (process.env.NEXT_PUBLIC_PUSHER_KEY) {
+      // Sanity-check the server credentials first: a bad key/secret/cluster
+      // leaves client subscriptions pending forever (suite timeout), so probe
+      // with the server SDK to surface the real error fast.
+      try {
+        const PusherServer = (await import("pusher")).default
+        const srv = new PusherServer({
+          appId: process.env.PUSHER_APP_ID,
+          key: process.env.PUSHER_KEY,
+          secret: process.env.PUSHER_SECRET,
+          cluster: process.env.PUSHER_CLUSTER,
+          useTLS: true,
+        })
+        await srv.trigger(`private-user-${b.id}`, "cred-probe", { ts: TS })
+        pass("pusher: server credentials valid")
+      } catch (e) {
+        fail("pusher server creds", { status: e?.status, message: String(e?.message ?? e).slice(0, 200) })
+      }
       const mkClient = (cookie) => new Pusher(process.env.NEXT_PUBLIC_PUSHER_KEY, {
         cluster: process.env.NEXT_PUBLIC_PUSHER_CLUSTER,
         enabledTransports: ["ws", "wss"],
@@ -843,12 +860,23 @@ const main = async () => {
       })
       const bClient = mkClient(bC)
       const cClient = mkClient(cC)
-      const chanB = bClient.subscribe(`private-user-${b.id}`)
-      const chanC = cClient.subscribe(`private-user-${c.id}`)
-      const subRes = await Promise.all([
-        new Promise((res) => { chanB.bind("pusher:subscription_succeeded", () => res("ok")); chanB.bind("pusher:subscription_error", (e) => res(`err:${JSON.stringify(e)}`)) }),
-        new Promise((res) => { chanC.bind("pusher:subscription_succeeded", () => res("ok")); chanC.bind("pusher:subscription_error", (e) => res(`err:${JSON.stringify(e)}`)) }),
+      // Subscriptions must resolve fast — a client that can't reach Pusher
+      // (bad key/cluster) otherwise never emits succeeded/error and the suite
+      // hangs until the job timeout.
+      const subscribe = (client, channelName) => {
+        const chan = client.subscribe(channelName)
+        return Promise.race([
+          new Promise((res) => { chan.bind("pusher:subscription_succeeded", () => res({ chan, status: "ok" })); chan.bind("pusher:subscription_error", (e) => res({ chan, status: `err:${JSON.stringify(e)}` })) }),
+          new Promise((res) => setTimeout(() => res({ chan, status: `timeout: connection=${client.connection.state}` }), 20_000)),
+        ])
+      }
+      const [subB, subC] = await Promise.all([
+        subscribe(bClient, `private-user-${b.id}`),
+        subscribe(cClient, `private-user-${c.id}`),
       ])
+      const chanB = subB.chan
+      const chanC = subC.chan
+      const subRes = [subB.status, subC.status]
       const subsOk = subRes.every((s) => s === "ok")
       !subsOk && fail("pusher subscribe", subRes)
 
@@ -868,8 +896,9 @@ const main = async () => {
         ? pass("pusher: unrelated client receives nothing")
         : fail("pusher cross-talk", cEvents)
 
-      const roomB = bClient.subscribe(`private-chat-${room.id}`)
-      const roomSub = await new Promise((res) => { roomB.bind("pusher:subscription_succeeded", () => res("ok")); roomB.bind("pusher:subscription_error", (e) => res(`err:${JSON.stringify(e)}`)) })
+      const roomSubRes = await subscribe(bClient, `private-chat-${room.id}`)
+      const roomB = roomSubRes.chan
+      const roomSub = roomSubRes.status
       const roomEvents = []
       roomB.bind_global((ev, data) => roomEvents.push({ ev, data }))
       const chatRes = await callApi("/api/chat/messages", { method: "POST", body: { roomId: room.id, content: `SECRET-CHAT-${TS}` }, cookie: aC })
