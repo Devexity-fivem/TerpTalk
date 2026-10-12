@@ -33,6 +33,8 @@ export interface ComposerPrefill {
   tags?: string[]
   /** link a grow update to a documented experiment (follow-up evidence) */
   experimentId?: string
+  /** preselected diary for grow-update / harvest / experiment / moment */
+  diary?: { id: string; title: string; stage: string; harvested?: boolean; own?: boolean }
 }
 
 interface ShareComposerContextValue {
@@ -142,9 +144,11 @@ function ShareComposerDialog({ prefill, onClose }: { prefill?: ComposerPrefill; 
   const [error, setError] = useState("")
 
   const [categories, setCategories] = useState<{ id: string; name: string; slug: string }[]>([])
-  const [diaryInfo, setDiaryInfo] = useState<{ id: string; title: string; stage: string; harvested?: boolean; own?: boolean } | null>(null)
+  const [diaryInfo, setDiaryInfo] = useState<{ id: string; title: string; stage: string; harvested?: boolean; own?: boolean } | null>(
+    () => prefill?.diary ?? null
+  )
   const [strainInfo, setStrainInfo] = useState<{ id: string; name: string } | null>(null)
-  const [ctxChecked, setCtxChecked] = useState(false)
+  const [ctxChecked, setCtxChecked] = useState(() => !!prefill?.diary)
   const isStaff = STAFF.has((session?.user as { role?: string } | undefined)?.role ?? "")
   // null = session still resolving — standing decides whether the poll
   // type is unlocked. Derived from session data loaded by the auth
@@ -159,7 +163,9 @@ function ShareComposerDialog({ prefill, onClose }: { prefill?: ComposerPrefill; 
     fetch("/api/categories").then((r) => r.json()).then((d) => setCategories(d.categories ?? [])).catch(() => {})
 
     queueMicrotask(() => {
-      if (ctx.diaryId) {
+      // Prefill diary takes precedence over page-context DOM reads so a
+      // surface like the feed can route a grow update to a specific diary.
+      if (ctx.diaryId && !prefill?.diary) {
         const el = document.querySelector("[data-tt-diary]")
         if (el) {
           try {
@@ -181,7 +187,7 @@ function ShareComposerDialog({ prefill, onClose }: { prefill?: ComposerPrefill; 
 
       setCtxChecked(true)
     })
-  }, [ctx.diaryId, ctx.strainId])
+  }, [ctx.diaryId, ctx.strainId, prefill?.diary])
 
   // Poll perk gate — mirrors POST /api/forum/threads; server still enforces.
   // The session-derived hint above replaces the old /api/profile fetch.

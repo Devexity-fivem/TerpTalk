@@ -169,6 +169,7 @@ const getChatTeaserData = unstable_cache(
 )
 
 const EXPLORE_CARDS = [
+  { icon: Calendar, title: "Community Feed", desc: "The latest grow updates, discussions, and harvests from real growers.", href: "/feed" },
   { icon: Sprout, title: "Grow Diaries", desc: "Document your grow from seed to harvest.", href: "/diaries" },
   { icon: MessageSquare, title: "Discussions", desc: "Ask questions and trade techniques.", href: "/forum" },
   { icon: Dna, title: "Strain Database", desc: "Compare genetics and grower photos.", href: "/strains" },
@@ -318,8 +319,8 @@ export default async function Home() {
                 Recent discussions, grow updates, and new diaries.
               </p>
             </div>
-            <Link href="/discover" className="text-sm font-medium text-primary inline-flex items-center gap-1 hover:underline">
-              View all <ArrowRight className="w-4 h-4" />
+            <Link href="/feed" className="text-sm font-medium text-primary inline-flex items-center gap-1 hover:underline">
+              Explore the feed <ArrowRight className="w-4 h-4" />
             </Link>
           </div>
 

@@ -11,6 +11,8 @@ import ProfileCard from "@/components/ui/profile-card"
 import PageHeader from "@/components/ui/page-header"
 import FeedList from "@/components/feed-list"
 import type { FeedAppearance } from "@/components/feed-list"
+import FeedShareButton from "@/components/feed-share-button"
+import type { FeedableDiary } from "@/components/feed-share-button"
 import { FEED_KINDS, feedDiaryWhere, getFeedPage, resolveFeedScope } from "@/lib/feed"
 import type { FeedKind, FeedMode } from "@/lib/feed"
 import { diaryPath } from "@/lib/slugs"
@@ -81,7 +83,15 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
     session?.user?.id != null && session.user.onboardingCompletedAt != null && !coldStart
 
   const harvestScope = { ...feedDiaryWhere(scope), harvested: true, harvestedAt: { not: null } }
-  const [page, hasHarvests, trendingDiaries, siteStats, feedStats, showFirstReplyNudge] = await Promise.all([
+  const activeDiariesPromise = session?.user?.id
+    ? prisma.growDiary.findMany({
+        where: { authorId: session.user.id, deleted: false, harvested: false },
+        orderBy: { updatedAt: "desc" },
+        take: 5,
+        select: { id: true, title: true, stage: true, harvested: true },
+      })
+    : Promise.resolve([] as FeedableDiary[])
+  const [page, hasHarvests, trendingDiaries, siteStats, feedStats, showFirstReplyNudge, activeDiaries] = await Promise.all([
     getFeedPage({ scope, kinds: conf.kinds, cursor }),
     prisma.growDiary.findFirst({ where: harvestScope, select: { id: true } }).then((r) => !!r),
     prisma.growDiary.findMany({
@@ -96,6 +106,7 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
     getSiteStats(),
     getFeedStats(),
     wantNudge ? isEligibleForFirstReplyNudge(session!.user!.id) : Promise.resolve(false),
+    activeDiariesPromise,
   ])
 
   const { items, nextCursor } = page
@@ -142,11 +153,16 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
         <LiveRefresh endpoint="/api/forum/updates" />
         <LiveRefresh endpoint="/api/diaries/updates" />
         {/* Header */}
-        <PageHeader
-          context={<span className="tt-eyebrow">What&apos;s new</span>}
-          title="Your Feed"
-          description="Stay updated with the latest activity from across the community"
-        />
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <PageHeader
+            context={<span className="tt-eyebrow">What&apos;s new</span>}
+            title="Your Feed"
+            description="Stay updated with the latest activity from across the community"
+          />
+          <div className="shrink-0 pt-1 sm:pt-0">
+            <FeedShareButton activeDiaries={activeDiaries} />
+          </div>
+        </div>
 
         {/* Onboarding resume banner */}
         {session?.user?.id && !session.user.onboardingCompletedAt && (

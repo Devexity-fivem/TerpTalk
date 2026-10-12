@@ -217,6 +217,8 @@ const main = async () => {
     ok("anon: home renders 200", homeRes?.status() === 200, homeRes?.status())
     ok("anon: main landmark + exactly one h1", (await anonPage.locator("main").count()) >= 1 && (await anonPage.locator("h1").count()) === 1)
     ok("anon: sign-in affordance visible", (await anonPage.locator('a[href^="/auth/signin"]').count()) >= 1)
+    ok("anon: desktop nav shows a Feed link", (await anonPage.locator('header nav a[href="/feed"], #tt-top-nav a[href="/feed"]').count()) >= 1)
+    ok("anon: guest hero links to Explore the Feed", (await anonPage.locator('a[href="/feed"]:has-text("Explore the Feed")').count()) >= 1)
 
     const signinRes = await gotoMain(anonPage, `${BASE}/auth/signin`, "label[for=username]")
     ok("anon: signin 200", signinRes?.status() === 200)
@@ -245,6 +247,20 @@ const main = async () => {
     await alicePage.waitForSelector('a[aria-label*="Messages"]', { timeout: 15_000 }).catch(() => null)
     const msgLink = await alicePage.locator('a[aria-label*="Messages"]').count()
     ok("auth: session nav shows Messages affordance", msgLink >= 1, { found: msgLink })
+    ok("auth: desktop nav shows a Feed link", (await alicePage.locator('#tt-top-nav a[href="/feed"]').count()) >= 1)
+    ok("auth: member home shows a Your feed bridge link", (await alicePage.locator('a[href="/feed"]:has-text("Your feed")').count()) >= 1)
+    ok("auth: member home shows a Following feed bridge link", (await alicePage.locator('a[href="/feed?tab=following"]:has-text("Following")').count()) >= 1)
+
+    // ── Feed share composer (Phase 11) ───────────────────────────────
+    await gotoMain(alicePage, `${BASE}/feed`)
+    const feedShareBtn = alicePage.locator('button:has-text("Share a grow update")')
+    ok("feed: signed-in grower sees a grow-update share action", (await feedShareBtn.count()) === 1)
+    await feedShareBtn.click()
+    await alicePage.waitForSelector('div[role="dialog"][aria-label="Share something"]', { timeout: 10_000 })
+    const growUpdateSelected = await alicePage.locator('button[role="tab"][aria-selected="true"]:has-text("Grow Update")').count()
+    ok("feed: share button opens the composer preselected to Grow Update", growUpdateSelected === 1)
+    await alicePage.keyboard.press("Escape")
+    await alicePage.waitForSelector('div[role="dialog"]', { state: "detached", timeout: 10_000 })
 
     // ── Profile V2 surfaces ──────────────────────────────────────────
     const profRes = await gotoMain(alicePage, `${BASE}/u/${aliceUsername}`)
@@ -860,6 +876,11 @@ const main = async () => {
     const overflowX = await mobPage.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1)
     ok("mobile: home renders without horizontal overflow at 390px", !overflowX)
     ok("mobile: nav menu toggle present", (await mobPage.locator('button[aria-label*="navigation menu"], a[href="/auth/signin"]').count()) >= 1)
+    ok("mobile: bottom nav shows Feed at 390px", (await mobPage.locator('nav[aria-label="Primary"] a[href="/feed"]').count()) >= 1)
+    ok("mobile: bottom nav still shows Diaries and Chat", (await mobPage.locator('nav[aria-label="Primary"] a[href="/diaries"]').count()) >= 1 && (await mobPage.locator('nav[aria-label="Primary"] a[href="/chat"]').count()) >= 1)
+    await gotoMain(mobPage, `${BASE}/feed`)
+    const feedOverflow = await mobPage.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1)
+    ok("mobile: /feed renders without overflow at 390px", !feedOverflow)
     await gotoMain(mobPage, `${BASE}/questions`)
     const qOverflow = await mobPage.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1)
     const qMobBody = (await mobPage.textContent("body")) ?? ""
