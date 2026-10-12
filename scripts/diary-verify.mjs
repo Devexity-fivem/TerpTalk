@@ -1637,7 +1637,12 @@ const main = async () => {
       r.status === 404 ? pass(`PRIVATE diary experiments invisible to ${who}`) : fail(`private experiments ${who}`, r.status)
     }
 
-    // Lessons — structured JSON on the diary, owner-authored
+    // Lessons — structured JSON on the diary, owner-authored.
+    // diary-edit is 10/min per user and DB-backed: earlier PATCHes in this
+    // suite can exhaust the fixture owner's window when CI runs fast. Reset
+    // the run-scoped counter so these asserts exercise the route contract,
+    // not leftover budget.
+    await prisma.rateLimit.deleteMany({ where: { key: `diary-edit:${owner.id}` } })
     r = await callApi(`/api/diaries/${diaryId}`, { method: "PATCH", body: { lessons: { learned: "less is more", bogus: "x" } }, cookie: ownerCookie })
     r.status === 400 ? pass("lessons reject unknown keys") : fail("lessons bogus key", r.status)
     r = await callApi(`/api/diaries/${diaryId}`, { method: "PATCH", body: { lessons: { learned: "less is more" } }, cookie: viewerCookie })
