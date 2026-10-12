@@ -4,7 +4,7 @@ Public cannabis community platform (21+): forums, grow diaries, grow setups, str
 
 ## Stack
 
-Next.js 16 (App Router) · React 19 · TypeScript · Tailwind 4 · NextAuth 4 (credentials + JWT) · Prisma 5 · PostgreSQL · Deploys to Vercel (Neon for DB)
+Next.js 16 (App Router) · React 19 · TypeScript · Tailwind 4 · NextAuth 4 (credentials + JWT) · Prisma 6 · PostgreSQL · Deploys to Vercel (Neon for DB)
 
 ## Local development
 

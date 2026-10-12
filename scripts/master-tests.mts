@@ -320,12 +320,17 @@ async function validateEnvironment(checkDb: boolean): Promise<string[]> {
   if (process.cwd() !== ROOT) process.chdir(ROOT)
   if (!existsSync(path.join(ROOT, "node_modules"))) problems.push("node_modules missing — run npm install")
   if (!existsSync(TSX_CLI)) problems.push("tsx CLI missing — run npm install")
-  if (!existsSync(path.join(ROOT, ".env"))) problems.push(".env missing — DATABASE_URL et al. required")
 
   for (const s of ALL_SUITES) {
     if (!existsSync(path.join(ROOT, s.file))) problems.push(`suite file missing: ${s.file}`)
   }
 
+  // Fast tier is pure/static: no .env, no DATABASE_URL, no DB reachability.
+  if (TIER === "fast") return problems
+
+  // Database-dependent tiers resolve DATABASE_URL from injected env first,
+  // then the local .env file. The physical file is not required when CI
+  // already supplies the variable.
   const envText = existsSync(path.join(ROOT, ".env")) ? readFileSync(path.join(ROOT, ".env"), "utf8") : ""
   const dbUrl = process.env.DATABASE_URL ?? envText.match(/^DATABASE_URL=["']?(.+?)["']?\s*$/m)?.[1]
   if (!dbUrl) {
