@@ -77,6 +77,8 @@ jobs:
         run: npx prisma migrate deploy
       - name: Seed baseline categories, chat rooms, and badges
         run: npm run seed
+      - name: Seed curated strain catalog
+        run: node scripts/seed-strains.cjs
       - name: Production build
         run: npm run build
       - name: DB-tier suites (serialized by the orchestrator)
@@ -133,6 +135,8 @@ jobs:
       - run: npx prisma migrate deploy
       - name: Seed baseline categories, chat rooms, and badges
         run: npm run seed
+      - name: Seed curated strain catalog
+        run: node scripts/seed-strains.cjs
       - name: Generate VAPID keys for the web-push browser leg
         run: |
           KEYS=$(npx web-push generate-vapid-keys --json)
