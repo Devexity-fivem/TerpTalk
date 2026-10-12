@@ -45,6 +45,7 @@ async function run() {
   const threadIds: string[] = []
   const postIds: string[] = []
   const setupIds: string[] = []
+  const guideIds: string[] = []
 
   try {
     // ─────────────────────────────────────────────────────────────
@@ -57,6 +58,36 @@ async function run() {
     })
     const follower = await mkUser(`__t_df_${STAMP}`)
     ids.push(active.id, banned.id, suspended.id, follower.id)
+
+    // A public thread in a visible category is required for the sitemap
+    // assertions below; create it rather than assuming seeded content.
+    const sitemapCat = await prisma.category.create({
+      data: { name: `__t_sitemap-cat-${STAMP}`, slug: `__t-sitemap-cat-${STAMP}`, description: "sitemap fixture" },
+    })
+    categoryIds.push(sitemapCat.id)
+    const sitemapThread = await prisma.thread.create({
+      data: {
+        title: `__t_sitemap-thread-${STAMP}`,
+        slug: `__t-sitemap-thread-${STAMP}`,
+        content: "discovery sitemap fixture",
+        authorId: active.id,
+        categoryId: sitemapCat.id,
+      },
+    })
+    threadIds.push(sitemapThread.id)
+    // The sitemap also expects at least one published guide URL.
+    const sitemapGuide = await prisma.guide.create({
+      data: {
+        title: `__t_sitemap-guide-${STAMP}`,
+        slug: `__t-sitemap-guide-${STAMP}`,
+        excerpt: "discovery sitemap fixture",
+        content: "sitemap guide fixture content",
+        topic: "BASICS",
+        published: true,
+        authorId: active.id,
+      },
+    })
+    guideIds.push(sitemapGuide.id)
 
     const [dActive, dBanned, dSuspended] = await Promise.all([
       prisma.growDiary.create({
@@ -458,6 +489,7 @@ async function run() {
       postIds.push(solPost.id)
       await prisma.thread.update({ where: { id: solvedQ.id }, data: { acceptedAnswerId: solPost.id } })
       await mkT(active.id, "plain", gcat.id)
+      await mkT(follower.id, "other", gcat.id)
       await mkT(banned.id, "bannedq", qcat.id)
       await mkT(active.id, "delq", qcat.id, { deleted: true })
 
@@ -841,6 +873,9 @@ async function run() {
     }
     for (const id of setupIds) {
       await prisma.growSetup.delete({ where: { id } }).catch(() => {})
+    }
+    for (const id of guideIds) {
+      await prisma.guide.delete({ where: { id } }).catch(() => {})
     }
     for (const id of categoryIds) {
       await prisma.category.delete({ where: { id } }).catch(() => {})
