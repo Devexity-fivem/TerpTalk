@@ -78,11 +78,9 @@ jobs:
       - name: Production build
         run: npm run build
       - name: DB-tier suites (serialized by the orchestrator)
-        run: >-
-          MASTER_ONLY=security,notifications,reputation,reputation-referral,
-          terpbot-pipeline,self-service,chat,content-edit,strain-lifecycle,
-          rewards3,discovery-integration,check-drift
-          npx tsx scripts/master-tests.mts --tier=full
+        env:
+          MASTER_ONLY: "security,notifications,reputation,reputation-referral,terpbot-pipeline,self-service,chat,content-edit,strain-lifecycle,rewards3,discovery-integration,check-drift"
+        run: npx tsx scripts/master-tests.mts --tier=full
 
   gate:
     name: Release gate (test:master)
