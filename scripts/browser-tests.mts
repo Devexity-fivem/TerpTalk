@@ -619,9 +619,34 @@ const main = async () => {
         }
         ok("push: invitation renders at 360/390/1024/1280/1440 without overflow", inviteOk)
 
-        await p.locator('[data-testid="push-invite"] button:has-text("Turn on")').click()
+        // The subscribe round-trip goes through the real push service, and a
+        // pre-hydration click is swallowed — poll for the persisted row and
+        // re-click once if the invitation is still offering "Turn on".
+        const turnOn = p.locator('[data-testid="push-invite"] button:has-text("Turn on")')
+        const waitForSub = async () => {
+          for (let i = 0; i < 30; i++) {
+            const rows = await prisma.pushSubscription.findMany({ where: { userId: alice.id }, select: { endpoint: true } })
+            if (rows.length) return rows
+            await p.waitForTimeout(1000)
+          }
+          return []
+        }
+        await turnOn.click()
+        let subs = await waitForSub()
+        if (!subs.length && await turnOn.count()) {
+          console.log("  push: no subscription after first Turn on — retrying click")
+          await turnOn.click()
+          subs = await waitForSub()
+        }
+        if (!subs.length) {
+          const diag = await p.evaluate(async () => ({
+            permission: Notification.permission,
+            sw: !!(await navigator.serviceWorker.getRegistration()),
+            invite: document.querySelector('[data-testid="push-invite"]')?.textContent?.slice(0, 200) ?? null,
+          })).catch((e) => String(e))
+          console.log("  push: subscription diagnostics", JSON.stringify(diag))
+        }
         await p.locator('[data-testid="push-invite"]').waitFor({ state: "detached", timeout: 20_000 }).catch(() => {})
-        const subs = await prisma.pushSubscription.findMany({ where: { userId: alice.id }, select: { endpoint: true } })
         ok("push: Turn on persists a real push-service subscription",
           subs.length === 1 && new URL(subs[0].endpoint).protocol === "https:", subs.map((s) => new URL(s.endpoint).host))
 
