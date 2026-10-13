@@ -14,7 +14,7 @@
 //
 // Locked spec: docs/progression-v2-design.md (rev 3).
 import { Prisma } from "@prisma/client"
-import { prisma } from "@/lib/prisma"
+import { prisma, runTxWithRetry } from "@/lib/prisma"
 import { PROFILE_SECTION_BASE_LIMIT, SHOWN_STATS_BASE } from "@/lib/profile-settings"
 import {
   DUP_REDUCE_PCT,
@@ -586,20 +586,20 @@ export async function awardProgression(
             const rungs = crossedRungs(oldXp, newXp)
             for (const r of rungs) {
               const mkey = `milestone:${userId}:${r.xp}`
-              const seen = await tx.progressionEvent.findUnique({ where: { key: mkey }, select: { id: true } })
-              if (!seen) {
-                newRungs.push(r)
-                await tx.progressionEvent.create({
-                  data: {
-                    userId,
-                    type: "MILESTONE",
-                    xp: 0,
-                    reason: `Reached ${r.label}`,
-                    key: mkey,
-                    meta: { rung: r.xp, label: r.label, rank: r.rank },
-                  },
-                })
-              }
+              // Atomic marker claim: a concurrent award writing the same
+              // rung loses on conflict instead of aborting this award's tx.
+              const marker = await tx.progressionEvent.createMany({
+                data: {
+                  userId,
+                  type: "MILESTONE",
+                  xp: 0,
+                  reason: `Reached ${r.label}`,
+                  key: mkey,
+                  meta: { rung: r.xp, label: r.label, rank: r.rank },
+                },
+                skipDuplicates: true,
+              })
+              if (marker.count === 1) newRungs.push(r)
             }
           }
           return { oldXp, newXp, newRungs }
@@ -607,16 +607,7 @@ export async function awardProgression(
         needsSerialize ? { isolationLevel: "Serializable" } : undefined
       )
 
-    let txResult: { oldXp: number; newXp: number; newRungs: { xp: number; label: string; rank: string }[] } | "capped" | "withheld"
-    try {
-      txResult = await runTx()
-    } catch (error) {
-      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2034") {
-        txResult = await runTx()
-      } else {
-        throw error
-      }
-    }
+    const txResult = await runTxWithRetry(runTx)
     if (txResult === "capped") return { awarded: false, skippedReason: "capped" }
     if (txResult === "withheld") return { awarded: false, skippedReason: "withheld" }
     const rungsCrossed = xp > 0 ? crossedRungs(txResult.oldXp, txResult.newXp) : []
@@ -932,7 +923,9 @@ export async function awardProgressionBatch(
             const appliedXp = xp < 0 ? -Math.min(-xp, oldXp) : xp
             const appliedStanding = standing < 0 ? -Math.min(-standing, oldStanding) : standing
 
-            await tx.progressionEvent.create({
+            // Atomic dedupe claim: a concurrent award that already wrote
+            // this key loses on conflict instead of aborting the whole batch.
+            const written = await tx.progressionEvent.createMany({
               data: {
                 userId, type: c.type, reason: c.reason, key: c.key,
                 sourceType: c.sourceType ?? null, sourceId: c.sourceId ?? null,
@@ -940,7 +933,12 @@ export async function awardProgressionBatch(
                 mastery,
                 meta: Object.keys(meta).length ? (meta as Prisma.InputJsonValue) : undefined,
               },
+              skipDuplicates: true,
             })
+            if (written.count === 0) {
+              results[i] = { awarded: false, skippedReason: "duplicate" }
+              continue
+            }
             seenKeys.add(c.key)
 
             if (appliedXp !== 0 || appliedStanding !== 0) {
@@ -962,16 +960,16 @@ export async function awardProgressionBatch(
               for (const r of crossedRungs(oldXp, newXp)) {
                 const mkey = `milestone:${userId}:${r.xp}`
                 if (seenKeys.has(mkey)) continue
-                const seen = await tx.progressionEvent.findUnique({ where: { key: mkey }, select: { id: true } })
-                if (!seen) {
+                const marker = await tx.progressionEvent.createMany({
+                  data: {
+                    userId, type: "MILESTONE", xp: 0,
+                    reason: `Reached ${r.label}`, key: mkey,
+                    meta: { rung: r.xp, label: r.label, rank: r.rank },
+                  },
+                  skipDuplicates: true,
+                })
+                if (marker.count === 1) {
                   newRungs.push(r)
-                  await tx.progressionEvent.create({
-                    data: {
-                      userId, type: "MILESTONE", xp: 0,
-                      reason: `Reached ${r.label}`, key: mkey,
-                      meta: { rung: r.xp, label: r.label, rank: r.rank },
-                    },
-                  })
                   seenKeys.add(mkey)
                 }
               }
@@ -1011,12 +1009,7 @@ export async function awardProgressionBatch(
 
     let applied: { i: number; newRungs: { xp: number; label: string; rank: string }[]; newXp: number }[] = []
     try {
-      applied = await runTx().catch(async (e) => {
-        if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2034") {
-          return runTx() // retry once on serialization failure
-        }
-        throw e
-      })
+      applied = await runTxWithRetry(runTx)
     } catch {
       // The batch transaction did not commit its full result set. Because
       // every candidate carries a unique key, re-running through the
