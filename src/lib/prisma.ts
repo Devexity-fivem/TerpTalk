@@ -86,6 +86,29 @@ export const prisma: PrismaClient = (globalForPrisma.prisma ??
 if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma
 
 /**
+ * Retry a transaction body on serialization aborts. Prisma surfaces
+ * Postgres 40001 ("could not serialize access") and 40P01 deadlocks as
+ * P2034 — both are transient by design and Postgres expects the client to
+ * retry. Bounded at 3 attempts so a hot row can't spin forever.
+ */
+export async function runTxWithRetry<T>(runTx: () => Promise<T>): Promise<T> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await runTx()
+    } catch (e) {
+      if (
+        !(e instanceof Prisma.PrismaClientKnownRequestError) ||
+        e.code !== "P2034" ||
+        attempt >= 2
+      ) {
+        throw e
+      }
+      await new Promise((r) => setTimeout(r, 25 * (attempt + 1)))
+    }
+  }
+}
+
+/**
  * Serialize a single member's check-then-act writes (caps, dedupe checks)
  * that no unique constraint can protect: take a row lock on the User row
  * inside an interactive transaction so a concurrent request waits and

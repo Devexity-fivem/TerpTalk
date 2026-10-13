@@ -14,7 +14,7 @@
 //   - Only side effects (tier/badge/notification work) stay deferred.
 import { after } from "next/server"
 import { Prisma } from "@prisma/client"
-import { prisma } from "@/lib/prisma"
+import { prisma, runTxWithRetry } from "@/lib/prisma"
 import { isAdmin, isModerator, isSupport } from "@/lib/roles"
 import {
   CHAT_DAILY_BADGE_CAP,
@@ -207,16 +207,7 @@ export async function applyReputationAward(
         },
         cap !== undefined ? { isolationLevel: "Serializable" } : undefined
       )
-    let txResult: number | "capped"
-    try {
-      txResult = await runTx()
-    } catch (error) {
-      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2034") {
-        txResult = await runTx()
-      } else {
-        throw error
-      }
-    }
+    const txResult = await runTxWithRetry(runTx)
     if (txResult === "capped") return { awarded: false, skippedReason: "capped" }
     return { awarded: true, amount: applied, oldRep, newRep: txResult }
   } catch (error) {
