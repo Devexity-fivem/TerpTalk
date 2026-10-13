@@ -314,6 +314,16 @@ function tail(s: string, n = 30): string {
   return lines.slice(-n).map((l) => `      | ${l}`).join("\n")
 }
 
+// Failing assertions are printed inline mid-run by most suites, so a plain
+// tail hides them. Surface every failure marker first, then the tail.
+function failureReport(s: string): string {
+  const failed = s.split("\n").filter((l) => /^\s*(✗|FAIL\b)|AssertionError|TimeoutError/.test(l))
+  if (failed.length === 0) return tail(s)
+  const shown = failed.slice(0, 60).map((l) => `      ! ${l.trim()}`)
+  if (failed.length > 60) shown.push(`      ! … ${failed.length - 60} more failure lines (see full log)`)
+  return `${shown.join("\n")}\n${tail(s)}`
+}
+
 async function validateEnvironment(checkDb: boolean): Promise<string[]> {
   const problems: string[] = []
 
@@ -382,7 +392,7 @@ async function runSuites(suites: Suite[], extraEnv: Record<string, string> = {})
     const status = res.timedOut ? "TIMEOUT" : res.signal ? `SIG ${res.signal}` : res.code === null ? "CRASH" : res.code === 0 ? "PASS" : `FAIL exit ${res.code}`
     log(`  ${ok ? "✓" : "✗"} ${s.label} [${s.cls}] ${status} (${(res.ms / 1000).toFixed(1)}s) — ${s.file}`)
     logChunks.push(`----- output: ${s.file} -----\n${res.output}\n----- end ${s.file} -----`)
-    if (!ok) log(tail(res.output))
+    if (!ok) log(failureReport(res.output))
   }
 }
 
