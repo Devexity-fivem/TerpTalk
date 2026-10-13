@@ -1048,8 +1048,11 @@ const main = async () => {
     // the limiter) and pinned to one spoofed IP bucket.
     await prisma.rateLimit.deleteMany({ where: { key: { startsWith: "chat-rooms:" } } })
     const rlHeaders = { cookie: aC, "x-forwarded-for": "10.66.66.66" }
+    // Sampled writes are random (~1/6 add 6), so crossing 60 takes ~66
+    // requests on average but can need far more — 300 makes a miss
+    // vanishingly unlikely while a real optimistic-allow hole still fails.
     let cDenied = 0
-    for (let i = 0; i < 90; i++) {
+    for (let i = 0; i < 300; i++) {
       const cRes = await fetch(`${BASE}/api/chat/rooms?badge=1`, { headers: rlHeaders })
       if (cRes.status === 429) { cDenied++; break }
     }
