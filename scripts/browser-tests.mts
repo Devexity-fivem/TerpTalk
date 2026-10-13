@@ -248,12 +248,16 @@ const main = async () => {
     const msgLink = await alicePage.locator('a[aria-label*="Messages"]').count()
     ok("auth: session nav shows Messages affordance", msgLink >= 1, { found: msgLink })
     ok("auth: desktop nav shows a Feed link", (await alicePage.locator('#tt-top-nav a[href="/feed"]').count()) >= 1)
-    ok("auth: member home shows a Your feed bridge link", (await alicePage.locator('a[href="/feed"]:has-text("Your feed")').count()) >= 1)
-    ok("auth: member home shows a Following feed bridge link", (await alicePage.locator('a[href="/feed?tab=following"]:has-text("Following")').count()) >= 1)
+    // Session-dependent surfaces render after the client session resolves —
+    // wait for them instead of sampling count() immediately after navigation.
+    const appears = (sel: string) => alicePage.locator(sel).first().waitFor({ timeout: 15_000 }).then(() => true, () => false)
+    ok("auth: member home shows a Your feed bridge link", await appears('a[href="/feed"]:has-text("Your feed")'))
+    ok("auth: member home shows a Following feed bridge link", await appears('a[href="/feed?tab=following"]:has-text("Following")'))
 
     // ── Feed share composer (Phase 11) ───────────────────────────────
     await gotoMain(alicePage, `${BASE}/feed`)
     const feedShareBtn = alicePage.locator('button:has-text("Share a grow update")')
+    await appears('button:has-text("Share a grow update")')
     ok("feed: signed-in grower sees a grow-update share action", (await feedShareBtn.count()) === 1)
     await feedShareBtn.click()
     await alicePage.waitForSelector('div[role="dialog"][aria-label="Share something"]', { timeout: 10_000 })
