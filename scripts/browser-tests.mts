@@ -495,9 +495,19 @@ const main = async () => {
       ok("pd: outcome survives reload", persisted && body.includes("It helped"))
     }
     // Anonymous visitors get the wizard but not the tracking affordance.
+    // The wizard is client-driven — a click that lands before hydration is
+    // swallowed, so verify each step actually advanced and retry once.
     await gotoMain(anonPage, `${BASE}/plant-doctor`)
-    await anonPage.locator('button:has-text("Leaves")').click()
-    await anonPage.locator('button:has-text("Yellowing")').click()
+    const clickStep = async (pick: string, expect: string) => {
+      const pickBtn = anonPage.locator(`button:has-text("${pick}")`)
+      const nextBtn = anonPage.locator(`button:has-text("${expect}")`)
+      await pickBtn.click()
+      const advanced = await nextBtn.waitFor({ state: "visible", timeout: 10_000 }).then(() => true).catch(() => false)
+      if (!advanced) await pickBtn.click()
+      await nextBtn.waitFor({ state: "visible", timeout: 15_000 })
+    }
+    await clickStep("Leaves", "Yellowing")
+    await clickStep("Yellowing", "All over evenly")
     await anonPage.locator('button:has-text("All over evenly")').click()
     await anonPage.locator('text=Sign in').waitFor({ state: "visible", timeout: 15_000 }).catch(() => {})
     const anonBody = (await anonPage.textContent("body")) ?? ""
