@@ -367,6 +367,7 @@ export default function NotificationsPage() {
             // Derive link destination context for the notification
             const linkContext = n.link
               ? n.link.startsWith("/diaries/") ? "View grow"
+                : n.link.startsWith("/m/") ? "View post"
                 : n.link.startsWith("/forum/") ? "View discussion"
                 : n.link.startsWith("/u/") ? "View profile"
                 : n.link.startsWith("/messages") ? "Open message"

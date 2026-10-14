@@ -3,7 +3,7 @@ import type { ReactNode } from "react"
 import {
   Zap, Sprout, Bell, ArrowRight, Leaf, Users, Radio, TrendingUp, CheckCircle2, Circle,
   MessageCircle, MessageSquare, Eye, AlertTriangle, Gauge, Bug, Wrench, Clock, Wheat, FlaskConical, BookOpen,
-  HeartHandshake, Calendar, HelpCircle,
+  HeartHandshake, Calendar, HelpCircle, Sparkles,
 } from "@/lib/icons"
 import MemberGreeting from "@/components/member-greeting"
 import OpenChatButton from "@/components/open-chat-button"
@@ -100,7 +100,8 @@ function MiniEmpty({ text, cta, children }: { text: string; cta?: { href: string
 export default function MemberHome({ data }: { data: MemberHomeData }) {
   const { sinceLastVisit: s } = data
   const hasActivity =
-    s.unreadThreads.length > 0 || s.diaryUpdates.length > 0 || s.growerThreads.length > 0 || s.unreadNotifications > 0
+    s.unreadThreads.length > 0 || s.diaryUpdates.length > 0 || s.growerThreads.length > 0 ||
+    s.moments.length > 0 || s.unreadNotifications > 0
 
   return (
     <div className="min-h-screen bg-background">
@@ -437,6 +438,19 @@ export default function MemberHome({ data }: { data: MemberHomeData }) {
                       <MessageSquare className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                       <span className="min-w-0 flex-1 truncate group-hover:text-primary">
                         {t.title} <span className="text-muted-foreground">— @{t.author}</span>
+                      </span>
+                    </Link>
+                  </li>
+                ))}
+                {s.moments.map((m) => (
+                  <li key={`mm-${m.id}`}>
+                    <Link
+                      href={withVia(m.href, "member_home")}
+                      className="group flex items-center gap-2 rounded-xl px-3 py-2 hover:bg-secondary/60"
+                    >
+                      <Sparkles className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                      <span className="min-w-0 flex-1 truncate group-hover:text-primary">
+                        {m.excerpt} <span className="text-muted-foreground">— @{m.author}</span>
                       </span>
                     </Link>
                   </li>

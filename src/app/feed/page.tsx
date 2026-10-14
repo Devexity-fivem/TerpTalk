@@ -3,7 +3,7 @@ import { unstable_cache } from "next/cache"
 import { publicUserSelect, activeAuthor } from "@/lib/security"
 import { getSiteStats } from "@/lib/community-stats"
 import { getSession } from "@/lib/session"
-import { Leaf, MessageSquare, TrendingUp, Calendar, UserPlus, Sprout, Award, Hash } from "@/lib/icons"
+import { Leaf, MessageSquare, TrendingUp, Calendar, UserPlus, Sprout, Award, Hash, Sparkles } from "@/lib/icons"
 import { LiveRefresh } from "@/components/live-refresh"
 import Link from "next/link"
 import RoleBadge from "@/components/role-badge"
@@ -47,7 +47,7 @@ export const metadata = {
   robots: { index: false, follow: false },
 }
 
-const TABS = ["latest", "following", "for-you", "discussions", "grows", "harvests"] as const
+const TABS = ["latest", "following", "for-you", "posts", "discussions", "grows", "harvests"] as const
 type FeedTab = (typeof TABS)[number]
 
 // Each tab is a (mode, kinds, appearance) selection over the canonical
@@ -56,6 +56,7 @@ const TAB_FEED: Record<FeedTab, { mode: FeedMode; kinds: readonly FeedKind[]; ap
   latest: { mode: "latest", kinds: FEED_KINDS, appearance: "mixed" },
   following: { mode: "following", kinds: FEED_KINDS, appearance: "mixed" },
   "for-you": { mode: "for-you", kinds: FEED_KINDS, appearance: "mixed" },
+  posts: { mode: "latest", kinds: ["moment"], appearance: "posts" },
   discussions: { mode: "latest", kinds: ["thread"], appearance: "threads" },
   grows: { mode: "latest", kinds: ["update"], appearance: "updates" },
   harvests: { mode: "latest", kinds: ["harvest"], appearance: "harvests" },
@@ -144,11 +145,13 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
       ? activeTab === "for-you" ? "Top Picks for You" : activeTab === "following" ? "From Your Follows" : "Community Feed"
       : conf.appearance === "threads" ? "Discussions"
       : conf.appearance === "updates" ? "Grow Updates"
+      : conf.appearance === "posts" ? "Posts"
       : "Recent Harvests"
   const StreamIcon =
     conf.appearance === "mixed" ? TrendingUp
       : conf.appearance === "threads" ? MessageSquare
       : conf.appearance === "updates" ? Sprout
+      : conf.appearance === "posts" ? Sparkles
       : Award
 
   return (
@@ -192,6 +195,7 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
           <Link href="/feed" className={tabCls("latest")}>Latest</Link>
           <Link href="/feed?tab=following" className={tabCls("following")}>Following</Link>
           <Link href="/feed?tab=for-you" className={tabCls("for-you")}>For You</Link>
+          <Link href="/feed?tab=posts" className={tabCls("posts")}>Posts</Link>
           <Link href="/feed?tab=discussions" className={tabCls("discussions")}>Discussions</Link>
           <Link href="/feed?tab=grows" className={tabCls("grows")}>Grows</Link>
           {hasHarvests && (
@@ -272,6 +276,15 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
                     </p>
                     <Link href="/diaries" className="bg-primary text-primary-foreground px-6 py-2 rounded-full hover:bg-primary/90 transition-colors inline-block">
                       Browse Diaries
+                    </Link>
+                  </>
+                ) : activeTab === "posts" ? (
+                  <>
+                    <Sparkles className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+                    <h3 className="font-display text-lg font-semibold mb-2">No posts yet</h3>
+                    <p className="text-muted-foreground mb-4">Share what&apos;s happening in your garden — posts from the community will appear here.</p>
+                    <Link href="/feed" className="bg-primary text-primary-foreground px-6 py-2 rounded-full hover:bg-primary/90 transition-colors inline-block">
+                      Browse the latest feed
                     </Link>
                   </>
                 ) : activeTab === "discussions" ? (

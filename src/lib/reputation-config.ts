@@ -214,7 +214,6 @@ export interface ReputationTier {
   color: string
   bg: string
   icon: string
-  benefit: string
   // Real, enforced perks — indexed by tier position. Anything listed here
   // must be implemented in code, not just advertised.
   perks: TierPerks
@@ -254,22 +253,24 @@ const PERKS = {
 // keep the milestone-badge spine (150/500/1500/3500/7000/15000/30000/50000)
 // so badge progress specs stay aligned, with extra rungs between them so
 // unlocks land every few weeks of normal play instead of months.
-// NOTE: legacy `benefit` strings below still describe the retired
-// cosmetics layer — nothing renders them; V2 surfaces read RANK_DISPLAY.
+// Rep tiers carry no perk text of their own: V2 capacity perks are
+// XP-rank + standing projections (progressionPerksFrom), and the retired
+// cosmetics layer is gone. Tier-up copy states only what is true — the
+// reputation milestone itself.
 export const REP_TIERS: ReputationTier[] = [
-  { threshold: 0, name: "Seed", color: "text-stone-500", bg: "bg-stone-500/10", icon: "🌰", benefit: "Every grow starts somewhere — post, grow, and share to earn rep.", perks: PERKS.BASE },
-  { threshold: 50, name: "Germinated", color: "text-success", bg: "bg-lime-500/10", icon: "🌱", benefit: "Your first unlock lands fast — the Seed Shell avatar frame. Keep tending your garden.", perks: PERKS.GERM },
-  { threshold: 150, name: "Sprout", color: "text-warning", bg: "bg-amber-600/10", icon: "🌿", benefit: "Your links work instantly — no more new-member wait — and you unlock the Sprout Ring avatar frame.", perks: PERKS.SPROUT },
-  { threshold: 300, name: "Seedling", color: "text-success", bg: "bg-green-500/10", icon: "🌱", benefit: "Your username gets a leaf-green nameplate in chat and the forums — the garden knows your name.", perks: PERKS.SEEDLING },
-  { threshold: 500, name: "Rooted", color: "text-success", bg: "bg-green-600/10", icon: "🪴", benefit: "Unlocks community polls — vote AND create them — plus the Rooted Band frame and custom profile titles.", perks: PERKS.ROOTED },
-  { threshold: 1000, name: "Veg Grower", color: "text-success", bg: "bg-emerald-500/10", icon: "🌲", benefit: "A third daily quest slot — more quests means more rep every day — plus the Canopy Weave frame.", perks: PERKS.VEG },
-  { threshold: 1500, name: "Grower", color: "text-success", bg: "bg-emerald-500/10", icon: "🌳", benefit: "Earns Verified Member status and a permanent 1.5× reputation bonus, plus the Greenhouse Glow frame and Evergreen theme.", perks: PERKS.GROWER },
-  { threshold: 2500, name: "Bloom", color: "text-fuchsia-500", bg: "bg-fuchsia-500/10", icon: "🌸", benefit: "Your nameplate blooms violet, and you unlock the animated Photon Pulse frame and Ultraviolet theme.", perks: PERKS.BLOOM },
-  { threshold: 3500, name: "Cultivator", color: "text-cyan-500", bg: "bg-cyan-500/10", icon: "✂️", benefit: "Unlocks The Grow Room — the members-only space for experienced growers — plus the LED Bloom frame, Golden Hour theme, and 1.5× rate limits.", perks: PERKS.CULTIVATOR },
-  { threshold: 7000, name: "Master Grower", color: "text-purple-500", bg: "bg-purple-500/10", icon: "🏆", benefit: "Unlocks the Pistil Fire frame, the Midnight Garden theme, a glowing nameplate, slowmode immunity, and 6 images per post.", perks: PERKS.MASTER },
-  { threshold: 15000, name: "Head Grower", color: "text-destructive", bg: "bg-rose-500/10", icon: "🌟", benefit: "Unlocks The Vault — the head table for top growers — a fourth daily quest, double rate limits, 8 images per post, and 7 thread tags.", perks: PERKS.HEAD },
-  { threshold: 30000, name: "Grandmaster", color: "text-violet-300", bg: "bg-violet-500/10", icon: "🔮", benefit: "Unlocks the Rosin Ring frame, the Amber Cure theme, and legendary titles — a name the whole garden recognizes.", perks: PERKS.GRAND },
-  { threshold: 50000, name: "Master Gardener", color: "text-warning", bg: "bg-amber-400/10", icon: "👑", benefit: "The top of the ladder — the aurora-animated Northern Lights frame, Deity Glow theme, a golden nameplate, and 10 images per post.", perks: PERKS.MASTER_GARDENER },
+  { threshold: 0, name: "Seed", color: "text-stone-500", bg: "bg-stone-500/10", icon: "🌰", perks: PERKS.BASE },
+  { threshold: 50, name: "Germinated", color: "text-success", bg: "bg-lime-500/10", icon: "🌱", perks: PERKS.GERM },
+  { threshold: 150, name: "Sprout", color: "text-warning", bg: "bg-amber-600/10", icon: "🌿", perks: PERKS.SPROUT },
+  { threshold: 300, name: "Seedling", color: "text-success", bg: "bg-green-500/10", icon: "🌱", perks: PERKS.SEEDLING },
+  { threshold: 500, name: "Rooted", color: "text-success", bg: "bg-green-600/10", icon: "🪴", perks: PERKS.ROOTED },
+  { threshold: 1000, name: "Veg Grower", color: "text-success", bg: "bg-emerald-500/10", icon: "🌲", perks: PERKS.VEG },
+  { threshold: 1500, name: "Grower", color: "text-success", bg: "bg-emerald-500/10", icon: "🌳", perks: PERKS.GROWER },
+  { threshold: 2500, name: "Bloom", color: "text-fuchsia-500", bg: "bg-fuchsia-500/10", icon: "🌸", perks: PERKS.BLOOM },
+  { threshold: 3500, name: "Cultivator", color: "text-cyan-500", bg: "bg-cyan-500/10", icon: "✂️", perks: PERKS.CULTIVATOR },
+  { threshold: 7000, name: "Master Grower", color: "text-purple-500", bg: "bg-purple-500/10", icon: "🏆", perks: PERKS.MASTER },
+  { threshold: 15000, name: "Head Grower", color: "text-destructive", bg: "bg-rose-500/10", icon: "🌟", perks: PERKS.HEAD },
+  { threshold: 30000, name: "Grandmaster", color: "text-violet-300", bg: "bg-violet-500/10", icon: "🔮", perks: PERKS.GRAND },
+  { threshold: 50000, name: "Master Gardener", color: "text-warning", bg: "bg-amber-400/10", icon: "👑", perks: PERKS.MASTER_GARDENER },
 ]
 
 // ─── Perk-threshold helpers ──────────────────────────────────────────

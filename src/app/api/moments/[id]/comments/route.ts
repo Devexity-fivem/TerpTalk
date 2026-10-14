@@ -12,6 +12,8 @@ import { notify, notifyMany } from "@/lib/notify"
 import { notifyMentions } from "@/lib/mentions"
 import { decodeFeedCursor, encodeFeedCursor } from "@/lib/feed"
 import { MOMENT_COMMENT_MAX, canViewMoment, followersAudience, momentInteractionTarget, momentPath } from "@/lib/moments"
+import { eventSource } from "@/lib/event-sources"
+import { recordProductEvent } from "@/lib/product-events"
 
 type Ctx = { params: Promise<{ id: string }> }
 
@@ -59,7 +61,7 @@ export async function POST(request: Request, { params }: Ctx) {
     if (maintenance) return maintenance
 
     const { id } = await params
-    const { content } = await request.json().catch(() => ({}))
+    const { content, source } = await request.json().catch(() => ({}))
     if (typeof content !== "string" || !content.trim()) {
       return NextResponse.json({ error: "Write a comment" }, { status: 400 })
     }
@@ -84,6 +86,16 @@ export async function POST(request: Request, { params }: Ctx) {
     const comment = await prisma.momentComment.create({
       data: { momentId: m.id, authorId: userId, content: content.trim() },
       select: { id: true, content: true, createdAt: true, authorId: true, author: { select: publicUserSelect } },
+    })
+
+    // Product event: one per persisted comment — references the resolved
+    // moment id (the original for repost URLs), never the text.
+    await recordProductEvent({
+      type: "INTERACTION_POSTED",
+      userId,
+      source: eventSource(source),
+      objectType: "Moment",
+      objectId: m.id,
     })
 
     const actor = session.user.name || "Someone"

@@ -35,9 +35,9 @@ export interface EnvUpdatePoint {
 type MetricKey = Exclude<keyof EnvUpdatePoint, "createdAt">
 
 const METRICS: { key: MetricKey; label: string; unit: string; sum?: boolean }[] = [
-  { key: "temperature", label: "Day temp", unit: "°C" },
-  { key: "nightTemperature", label: "Night temp", unit: "°C" },
-  { key: "substrateTemperature", label: "Substrate temp", unit: "°C" },
+  { key: "temperature", label: "Day temp", unit: "°F" },
+  { key: "nightTemperature", label: "Night temp", unit: "°F" },
+  { key: "substrateTemperature", label: "Substrate temp", unit: "°F" },
   { key: "humidity", label: "Humidity", unit: "%" },
   { key: "vpd", label: "VPD", unit: "kPa" },
   { key: "co2Ppm", label: "CO₂", unit: "ppm" },
@@ -192,7 +192,7 @@ export default function EnvInsights({ updates, unlocked, nowMs }: { updates: Env
       {(dayNight || totalWater > 0) && (
         <p className="text-xs text-muted-foreground mb-3 tabular-nums">
           {dayNight && (
-            <>Day avg {fmt(dayNight.dAvg)}°C · night avg {fmt(dayNight.nAvg)}°C · {fmt(Math.abs(dayNight.delta))}°C swing{totalWater > 0 ? " · " : ""}</>
+            <>Day avg {fmt(dayNight.dAvg)}°F · night avg {fmt(dayNight.nAvg)}°F · {fmt(Math.abs(dayNight.delta))}°F swing{totalWater > 0 ? " · " : ""}</>
           )}
           {totalWater > 0 && <>{fmt(totalWater)}L watered in window</>}
         </p>

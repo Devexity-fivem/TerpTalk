@@ -965,5 +965,29 @@ check("setup discussion thread is owner-attributed like the diary bridge", () =>
   assert.ok(route.includes("threadFollow.upsert"), "owner + opener follow the thread")
 })
 
+// ── Batch P: Moments cohesion + honesty ────────────────────────────────
+
+check("env insights labels stored Fahrenheit data as °F, never °C", () => {
+  const e = src("components/env-insights.tsx")
+  assert.ok(!e.includes("°C"), "no Celsius label anywhere in env-insights")
+  assert.ok((e.match(/unit: "°F"/g) ?? []).length >= 3, "day/night/substrate metrics all carry °F units")
+  assert.ok(e.includes("swing"), "day/night summary line present")
+})
+
+check("moment notification links get an accurate post label", () => {
+  const n = src("app/notifications/page.tsx")
+  assert.ok(n.includes('startsWith("/m/")'), "link-label logic detects /m/ destinations")
+  const idx = n.indexOf('startsWith("/m/")')
+  assert.ok(n.slice(idx, idx + 80).includes('"View post"'), '/m/ links labelled "View post"')
+})
+
+check("tier-up notifications carry no benefit claim", () => {
+  const r = src("lib/reputation.ts")
+  assert.ok(!r.includes("newTier.benefit"), "tier-up content no longer interpolates a benefit string")
+  const c = src("lib/reputation-config.ts")
+  const tiers = c.slice(c.indexOf("REP_TIERS"))
+  assert.ok(!tiers.includes("benefit:"), "no REP_TIERS entry declares a benefit field")
+})
+
 console.log(`\n${passed} passed, ${failed} failed`)
 if (failed > 0) process.exit(1)

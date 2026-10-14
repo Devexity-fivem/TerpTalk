@@ -12,6 +12,7 @@ import { makeHarness } from "./lib/http-harness.mjs"
 import { prisma } from "@/lib/prisma"
 import { resolveFeedScope, resolveAuthorFeedScope, getFeedPage } from "@/lib/feed"
 import { getStoryRail, getAuthorStories, getTrendingHashtags, hashtagSlug } from "@/lib/moments"
+import { getMemberHomeData } from "@/lib/member-home"
 import type { FeedItem } from "@/lib/feed"
 
 const harnessOpts = {
@@ -74,6 +75,10 @@ async function main() {
 
   await prisma.follow.create({ data: { followerId: follower.id, followingId: author.id } })
   await prisma.follow.create({ data: { followerId: viewer.id, followingId: other.id } })
+  // Member-home fixtures: viewer follows a blocked + a banned author so
+  // the since-last-visit surface must still exclude their posts.
+  await prisma.follow.create({ data: { followerId: viewer.id, followingId: blockedU.id } })
+  await prisma.follow.create({ data: { followerId: viewer.id, followingId: bannedU.id } })
   await prisma.block.create({ data: { blockerId: viewer.id, blockedId: blockedU.id } })
 
   // Fixture moments for states the API can't produce directly.
@@ -545,9 +550,143 @@ async function main() {
     orphanNotif === 0 ? pass("delete sweeps notifications pointing at the post") : fail("notif sweep", orphanNotif)
   }
 
+  // ── M. member-home + site search surface ────────────────────────
+  {
+    // The canonical returning-member surface — real exported function,
+    // not a query reproduction.
+    const homeFol = await getMemberHomeData(follower.id)
+    const fMoments = homeFol?.sinceLastVisit.moments ?? []
+    fMoments.some((m) => m.id === postPub) && fMoments.some((m) => m.id === postFol)
+      ? pass("member-home: follower sees author's public + followers posts")
+      : fail("member-home follower", fMoments.map((m) => m.id))
+    const fHit = fMoments.find((m) => m.id === postPub)
+    fHit?.href === `/m/${postPub}` && fHit.excerpt.length > 0
+      ? pass("member-home: moment row carries link + excerpt")
+      : fail("member-home row", fHit)
+    !fMoments.some((m) => m.id === deletedPostId)
+      ? pass("member-home: deleted post absent")
+      : fail("member-home deleted", deletedPostId)
+
+    // viewer follows blockedU + bannedU but NOT author — their posts and
+    // the non-followed author's posts must all stay out.
+    const homeViewer = await getMemberHomeData(viewer.id)
+    const vMoments = homeViewer?.sinceLastVisit.moments ?? []
+    !vMoments.some((m) => m.id === blockedPostId) && !vMoments.some((m) => m.id === bannedPostId)
+      ? pass("member-home: blocked + banned followed authors excluded")
+      : fail("member-home block/ban leak", { b: vMoments.some((m) => m.id === blockedPostId), ban: vMoments.some((m) => m.id === bannedPostId) })
+    !vMoments.some((m) => m.id === postPub || m.id === postFol)
+      ? pass("member-home: non-followed author's posts absent")
+      : fail("member-home non-followed", postPub)
+
+    // Site search — the shared-cache surface (PUBLIC only, everywhere).
+    let r = await api(`/api/search?q=${encodeURIComponent(tagName)}&type=moments`)
+    const hits = ((r.data?.moments ?? []) as { id: string }[]).map((m) => m.id)
+    r.status === 200 && hits.includes(postPub)
+      ? pass("search: public moment found via its hashtag text")
+      : fail("search public", { s: r.status, hits })
+    r = await api(`/api/search?q=${encodeURIComponent(`mv followers post ${ts}`)}&type=moments`, { cookie: fc })
+    !(r.data?.moments as { id: string }[] | undefined)?.some((m) => m.id === postFol)
+      ? pass("search: followers post invisible even to its follower")
+      : fail("search followers leak", r.data?.moments)
+    r = await api(`/api/search?q=${encodeURIComponent(`mv blocked post ${ts}`)}&type=moments`, { cookie: vc })
+    !(r.data?.moments as { id: string }[] | undefined)?.some((m) => m.id === blockedPostId)
+      ? pass("search: blocked author's moment stripped for blocker")
+      : fail("search blocked leak", r.data?.moments)
+    r = await api(`/api/search?q=${encodeURIComponent(`mv deleted post ${ts}`)}&type=moments`)
+    !(r.data?.moments as { id: string }[] | undefined)?.some((m) => m.id === deletedPostId)
+      ? pass("search: deleted moment absent")
+      : fail("search deleted leak", r.data?.moments)
+  }
+
+  // ── N. product-event telemetry ──────────────────────────────────
+  {
+    // Create events — one per persisted moment (posts + story), none for
+    // the rejected requests that preceded them in section A.
+    const createEvents = await prisma.productEvent.count({
+      where: { type: "INTERACTION_POSTED", userId: author.id, objectType: "Moment" },
+    })
+    createEvents === 4
+      ? pass("telemetry: one INTERACTION_POSTED per created moment, none for rejects")
+      : fail("create events", createEvents)
+    const pubEv = await prisma.productEvent.findFirst({
+      where: { type: "INTERACTION_POSTED", userId: author.id, objectType: "Moment", objectId: postPub },
+      select: { id: true },
+    })
+    pubEv ? pass("telemetry: create event names objectType Moment + id") : fail("create event", "missing")
+
+    // Comment + reaction events land on the resolved target id.
+    const viewerPubEvs = await prisma.productEvent.count({
+      where: { type: "INTERACTION_POSTED", userId: viewer.id, objectType: "Moment", objectId: postPub },
+    })
+    viewerPubEvs >= 1
+      ? pass("telemetry: comments + reactions on the post recorded")
+      : fail("interaction events", viewerPubEvs)
+    // Failed/unauthorized operations recorded nothing.
+    const folEvs = await prisma.productEvent.count({
+      where: { type: "INTERACTION_POSTED", userId: viewer.id, objectType: "Moment", objectId: postFol },
+    })
+    folEvs === 0
+      ? pass("telemetry: rejected comment/reaction on followers post emitted nothing")
+      : fail("rejected events", folEvs)
+
+    // FOLLOWED_CONTENT_VIEWED — follower sees author's post, the follow
+    // is real, dedupe is day-keyed, and every failure stays silent (200).
+    const fcv = (uid: string) =>
+      prisma.productEvent.findMany({
+        where: { type: "FOLLOWED_CONTENT_VIEWED", userId: uid },
+        select: { objectType: true, objectId: true },
+      })
+    let r = await api("/api/events", { method: "POST", body: { type: "FOLLOWED_CONTENT_VIEWED", objectType: "Moment", objectId: postPub }, cookie: fc })
+    r.status === 200 && (await fcv(follower.id)).some((e) => e.objectType === "Moment" && e.objectId === postPub)
+      ? pass("telemetry: followed-content view recorded for follower")
+      : fail("fcv follower", { s: r.status, evs: await fcv(follower.id) })
+    r = await api("/api/events", { method: "POST", body: { type: "FOLLOWED_CONTENT_VIEWED", objectType: "Moment", objectId: postPub }, cookie: fc })
+    ;(await fcv(follower.id)).filter((e) => e.objectId === postPub).length === 1
+      ? pass("telemetry: repeat view same day dedupes")
+      : fail("fcv dedupe", await fcv(follower.id))
+    r = await api("/api/events", { method: "POST", body: { type: "FOLLOWED_CONTENT_VIEWED", objectType: "Moment", objectId: postPub }, cookie: vc })
+    r.status === 200 && !(await fcv(viewer.id)).some((e) => e.objectId === postPub)
+      ? pass("telemetry: non-follower view records nothing")
+      : fail("fcv non-follower", r.status)
+    r = await api("/api/events", { method: "POST", body: { type: "FOLLOWED_CONTENT_VIEWED", objectType: "Moment", objectId: postPub } })
+    r.status === 401 ? pass("telemetry: guest beacon → 401") : fail("fcv guest", r.status)
+    // Author doesn't "follow" their own post — self-views record nothing.
+    r = await api("/api/events", { method: "POST", body: { type: "FOLLOWED_CONTENT_VIEWED", objectType: "Moment", objectId: postPub }, cookie: ac })
+    !(await fcv(author.id)).some((e) => e.objectId === postPub)
+      ? pass("telemetry: self-view records nothing")
+      : fail("fcv self", r.status)
+    // Deleted/blocked/inaccessible moments record nothing either.
+    r = await api("/api/events", { method: "POST", body: { type: "FOLLOWED_CONTENT_VIEWED", objectType: "Moment", objectId: deletedPostId }, cookie: fc })
+    r.status === 200 && !(await fcv(follower.id)).some((e) => e.objectId === deletedPostId)
+      ? pass("telemetry: deleted moment view records nothing")
+      : fail("fcv deleted", r.status)
+    r = await api("/api/events", { method: "POST", body: { type: "FOLLOWED_CONTENT_VIEWED", objectType: "Moment", objectId: blockedPostId }, cookie: vc })
+    !(await fcv(viewer.id)).some((e) => e.objectId === blockedPostId)
+      ? pass("telemetry: blocked author's moment records nothing")
+      : fail("fcv blocked", r.status)
+    // A repost URL resolves to the original for the follow check.
+    const repostRow = await prisma.moment.findFirst({
+      where: { authorId: follower.id, repostOfId: postPub, content: "", deleted: false },
+      select: { id: true },
+    })
+    if (repostRow) {
+      r = await api("/api/events", { method: "POST", body: { type: "FOLLOWED_CONTENT_VIEWED", objectType: "Moment", objectId: repostRow.id }, cookie: vc })
+      // viewer doesn't follow the reposter OR the author — records nothing.
+      !(await fcv(viewer.id)).some((e) => e.objectId === repostRow.id || e.objectId === postPub)
+        ? pass("telemetry: repost URL resolves target, still gated by follow")
+        : fail("fcv repost", await fcv(viewer.id))
+    }
+    // Bogus objectType stays a silent 200 — no oracle.
+    r = await api("/api/events", { method: "POST", body: { type: "FOLLOWED_CONTENT_VIEWED", objectType: "Thread", objectId: postPub }, cookie: fc })
+    r.status === 200 ? pass("telemetry: unknown objectType fails closed") : fail("fcv bogus", r.status)
+  }
+
   // ── cleanup ─────────────────────────────────────────────────────
   await prisma.report.deleteMany({
     where: { OR: [{ reporterId: { in: [viewer.id, follower.id, author.id, blockedU.id] } }, { targetId: { in: momentIds() } }] },
+  })
+  await prisma.productEvent.deleteMany({
+    where: { userId: { in: [author.id, follower.id, viewer.id, other.id, blockedU.id, bannedU.id] } },
   })
   for (const u of [author, follower, viewer, other, blockedU, bannedU]) {
     if (u?.id) await prisma.user.delete({ where: { id: u.id } }).catch(() => {})

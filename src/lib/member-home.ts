@@ -21,6 +21,8 @@ import { diaryPath } from "@/lib/slugs"
 import { mediaProxyUrl } from "@/lib/media"
 import { diaryCompleteness } from "@/lib/diary-weeks"
 import { helpWantedForUser, type HelpWantedItem } from "@/lib/answer-match"
+import { momentVisibleWhere } from "@/lib/moments"
+import { momentPath } from "@/lib/moment-shared"
 import { growMatchesForUser, type GrowMatchesResult } from "@/lib/grow-matches"
 import { getSuggestedGrowers, type SuggestedGrower } from "@/lib/suggested-growers"
 import { EXPERIMENT_CATEGORY_LABELS, type ExperimentCategory } from "@/lib/experiments"
@@ -116,6 +118,9 @@ export interface MemberHomeData {
     unreadThreadCount: number
     diaryUpdates: { id: string; title: string; diaryTitle: string; diaryId: string; diarySlug: string | null; author: string }[]
     growerThreads: { title: string; slug: string; category: string; author: string }[]
+    /** Recent posts by followed growers — canonical Moment visibility
+     *  (PUBLIC + followers-only the member can actually open). */
+    moments: { id: string; excerpt: string; href: string; createdAt: string; author: string }[]
     unreadNotifications: number
   }
   live: ChatTeaser | null
@@ -348,6 +353,31 @@ export async function getMemberHomeData(userId: string): Promise<MemberHomeData 
           slug: true,
           title: true,
           category: { select: { name: true } },
+          author: { select: { name: true, profile: { select: { username: true } } } },
+        },
+      })
+    : []
+
+  // Recent posts from followed growers — the canonical moment predicate
+  // owns visibility (PUBLIC + the member's own + followers-only from
+  // followed authors), active-author and block rules; scoping here only
+  // narrows author + recency.
+  const growerMoments = followedUserIds.length
+    ? await prisma.moment.findMany({
+        where: {
+          AND: [
+            momentVisibleWhere({ viewerId: userId, blockedIds }),
+            // Pure reposts carry no text of their own — without repost
+            // context in this compact DTO they'd render as empty cards.
+            { authorId: { in: followedUserIds }, createdAt: { gte: weekAgo }, NOT: { content: "" } },
+          ],
+        },
+        orderBy: { createdAt: "desc" },
+        take: 4,
+        select: {
+          id: true,
+          content: true,
+          createdAt: true,
           author: { select: { name: true, profile: { select: { username: true } } } },
         },
       })
@@ -660,6 +690,13 @@ export async function getMemberHomeData(userId: string): Promise<MemberHomeData 
         slug: t.slug,
         category: t.category.name,
         author: t.author.profile?.username || t.author.name || "a grower",
+      })),
+      moments: growerMoments.map((m) => ({
+        id: m.id,
+        excerpt: m.content.length > 140 ? `${m.content.slice(0, 140)}…` : m.content,
+        href: momentPath(m.id),
+        createdAt: m.createdAt.toISOString(),
+        author: m.author.profile?.username || m.author.name || "a grower",
       })),
       unreadNotifications,
     },

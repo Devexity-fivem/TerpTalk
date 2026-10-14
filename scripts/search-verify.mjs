@@ -24,6 +24,7 @@ const main = async () => {
 
   const threads = []
   const posts = []
+  const momentIds = []
   const cleanup = { categories: [], strains: [], diaries: [], setups: [], guides: [], tags: [] }
 
   try {
@@ -116,6 +117,37 @@ const main = async () => {
     cleanup.tags.push(tag)
     await prisma.threadTag.create({ data: { threadId: threadA.id, tagId: tag.id } })
 
+    // Moment fixtures via the real POST API — same marker across a PUBLIC
+    // post, a FOLLOWERS post, another author's PUBLIC post, and a
+    // hashtag-tagged post.
+    const mkMoment = async (cookie, body) => {
+      const r = await callApi("/api/moments", { method: "POST", body, cookie })
+      const m = r.data?.moment
+      if (m?.id) momentIds.push(m.id)
+      return { r, m }
+    }
+    const pubM = await mkMoment(authorCookie, { content: `sprout check — ${M("moment")} looking healthy` })
+    pubM.r.status === 201 && pubM.m?.id
+      ? pass("setup: public moment via API")
+      : fail("public moment setup", { s: pubM.r.status })
+    const folM = await mkMoment(authorCookie, { content: `followers only ${M("moment")} update`, visibility: "FOLLOWERS" })
+    folM.r.status === 201 ? pass("setup: followers moment via API") : fail("followers moment setup", { s: folM.r.status })
+    const othM = await mkMoment(answererCookie, { content: `answerer post about ${M("moment")}` })
+    othM.r.status === 201 ? pass("setup: other-author moment via API") : fail("other moment setup", { s: othM.r.status })
+    const htagName = `svhtag${TS}`
+    const tagM = await mkMoment(authorCookie, { content: `tagged grow #${htagName}` })
+    tagM.r.status === 201 ? pass("setup: hashtag moment via API") : fail("hashtag moment setup", { s: tagM.r.status })
+    if (!pubM.m?.id || !folM.m?.id || !othM.m?.id || !tagM.m?.id) throw new Error("moment fixture setup failed — aborting")
+    // Deleted + banned-author moments with the same marker — created via
+    // prisma since the API can't produce either state.
+    const delMoment = await prisma.moment.create({
+      data: { kind: "POST", content: `deleted ${M("moment")}`, authorId: author.id, deleted: true },
+    })
+    const banMoment = await prisma.moment.create({
+      data: { kind: "POST", content: `banned author ${M("moment")}`, authorId: bannedU.id },
+    })
+    momentIds.push(delMoment.id, banMoment.id)
+
     // Accept the reply as the answer — author accepts via API.
     const acc = await callApi("/api/forum/threads/accept", {
       method: "POST",
@@ -190,6 +222,36 @@ const main = async () => {
       ? pass("threads: tag match surfaces thread")
       : fail("tag→thread", { s: r.status })
 
+    // ── Moments bucket ──
+    r = await search(`q=${M("moment")}&type=moments`)
+    const mIds = (r.data?.moments || []).map((m) => m.id)
+    mIds.includes(pubM.m.id) && mIds.includes(othM.m.id)
+      ? pass("moments: PUBLIC posts from both authors found")
+      : fail("moment match", { s: r.status, ids: mIds })
+    !mIds.includes(folM.m.id)
+      ? pass("moments: followers-only excluded (shared cache is PUBLIC-only)")
+      : fail("followers-only leak", mIds)
+    !mIds.includes(delMoment.id) && !mIds.includes(banMoment.id)
+      ? pass("moments: deleted + banned-author excluded")
+      : fail("deleted/banned leak", mIds)
+    const mHit = (r.data?.moments || []).find((m) => m.id === pubM.m.id)
+    mHit?.href === `/m/${pubM.m.id}` &&
+      typeof mHit?.excerpt === "string" && mHit.excerpt.includes(M("moment")) &&
+      mHit?.author?.profile?.username === author.username &&
+      typeof mHit?.counts?.reactions === "number" && !("authorId" in (mHit || {}))
+      ? pass("moments: result shape (link, excerpt, author, counts, no authorId)")
+      : fail("moment shape", mHit && Object.keys(mHit))
+    // Hashtag match — content has no query text, only the tag carries it.
+    r = await search(`q=${htagName}&type=moments`)
+    ;(r.data?.moments || []).some((m) => m.id === tagM.m.id)
+      ? pass("moments: hashtag match surfaces post")
+      : fail("hashtag match", r.data?.moments?.length)
+    // type=all includes the moments bucket alongside the others.
+    r = await search(`q=${M("moment")}&type=all`)
+    ;(r.data?.moments || []).some((m) => m.id === pubM.m.id)
+      ? pass("moments: present in all-type view")
+      : fail("all-type moments", r.status)
+
     // Users: normal found, banned + suspended excluded.
     r = await search(`q=__sv_${TS}_&type=users`)
     const uNames = (r.data?.users || []).map((u) => u.username)
@@ -231,7 +293,7 @@ const main = async () => {
 
     // ── Pagination & bounds ──
     r = await search(`q=${M("title")}&type=all`)
-    const buckets = ["threads", "strains", "users", "diaries", "guides", "setups", "tags"]
+    const buckets = ["threads", "strains", "users", "diaries", "guides", "setups", "tags", "moments"]
     buckets.every((b) => Array.isArray(r.data?.[b]) && r.data[b].length <= 10)
       ? pass("bounds: all-bucket view ≤10 each")
       : fail("bucket bounds", buckets.map((b) => r.data?.[b]?.length))
@@ -267,6 +329,13 @@ const main = async () => {
       ? pass("suggest: short query → empty")
       : fail("suggest short", r.status)
 
+    r = await suggest(M("moment"))
+    const mSugg = (r.data?.suggestions || []).filter((s) => s.type === "moment")
+    mSugg.some((s) => s.slug === pubM.m.id) && !mSugg.some((s) => s.slug === folM.m.id) &&
+      !mSugg.some((s) => s.slug === delMoment.id) && !mSugg.some((s) => s.slug === banMoment.id)
+      ? pass("suggest: PUBLIC moment suggested; followers/deleted/banned excluded")
+      : fail("suggest moments", mSugg.map((s) => s.slug))
+
     // L-1 regression — block semantics reach the typeahead: a member
     // blocked in either direction never autocompletes for the other side.
     await prisma.block.create({ data: { blockerId: author.id, blockedId: answerer.id } })
@@ -284,6 +353,20 @@ const main = async () => {
       ? pass("suggest: blocked member still visible to guests")
       : fail("suggest guest visibility", r.data?.suggestions)
 
+    // Block semantics reach moment results + suggestions too: with
+    // author↔answerer blocked, the answerer's PUBLIC post vanishes from
+    // the blocker's search and typeahead while their own remains.
+    r = await callApi(`/api/search?q=${M("moment")}&type=moments`, { cookie: authorCookie })
+    const bm = (r.data?.moments || []).map((m) => m.id)
+    !bm.includes(othM.m.id) && bm.includes(pubM.m.id)
+      ? pass("search: blocked author's moment stripped for blocker")
+      : fail("search block strip", bm)
+    r = await callApi(`/api/search/suggest?q=${M("moment")}`, { cookie: authorCookie })
+    !(r.data?.suggestions || []).some((s) => s.type === "moment" && s.slug === othM.m.id) &&
+      (r.data?.suggestions || []).some((s) => s.type === "moment" && s.slug === pubM.m.id)
+      ? pass("suggest: blocked author's moment hidden from blocker")
+      : fail("suggest moment block", r.data?.suggestions?.filter((s) => s.type === "moment"))
+
     console.log(`\n${results.filter(([s]) => s === "PASS").length} passed, ${results.filter(([s]) => s === "FAIL").length} failed`)
   } finally {
     for (const u of users) await prisma.user.delete({ where: { id: u.id } }).catch(() => {})
@@ -294,6 +377,8 @@ const main = async () => {
     for (const s of cleanup.setups) await prisma.growSetup.delete({ where: { id: s.id } }).catch(() => {})
     for (const g of cleanup.guides) await prisma.guide.delete({ where: { id: g.id } }).catch(() => {})
     for (const t of cleanup.tags) await prisma.tag.delete({ where: { id: t.id } }).catch(() => {})
+    for (const id of momentIds) await prisma.moment.delete({ where: { id } }).catch(() => {})
+    await prisma.tag.deleteMany({ where: { name: `svhtag${TS}` } }).catch(() => {})
     await prisma.$disconnect()
   }
 }
