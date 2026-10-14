@@ -72,7 +72,7 @@ export default async function AdminMembersPage({ searchParams }: { searchParams:
                       {m.referred ? " · referred" : ""}
                     </div>
                     <div className="text-xs text-muted-foreground mt-0.5">
-                      {m.counts.threads} threads · {m.counts.posts} replies · {m.counts.diaries} diaries · {m.counts.diaryUpdates} updates · {m.counts.chatMessages} chat · {m.counts.setups} setups
+                      {m.counts.threads} threads · {m.counts.posts} replies · {m.counts.diaries} diaries · {m.counts.diaryUpdates} updates · {m.counts.chatMessages} chat · {m.counts.setups} setups · {m.counts.moments} moments · {m.counts.momentComments} moment comments
                     </div>
                     {(m.openReportsAbout > 0 || m.abuseFlags > 0) && (
                       <div className="text-xs text-warning mt-0.5">

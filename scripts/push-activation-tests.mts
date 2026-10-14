@@ -213,6 +213,76 @@ const main = async () => {
       : fail("deleted grow", { g: afterDel.firstGrow, k: afterDel.firstContributionKind })
     await prisma.growDiary.update({ where: { id: diary.id }, data: { deleted: false } })
 
+    // ── Moment milestones — same contribution semantics as the funnel ──
+    // mPoster: authored moment is first contribution (kind=moment); a
+    // MomentComment on SOMEONE ELSE'S moment is both firstReply and the
+    // post-return secondAction.
+    const mPoster = await createUser("mp")
+    const mCommenter = await createUser("mc") // moment-comment only
+    const mReposter = await createUser("mr")  // pure repost only
+    const mDeleted = await createUser("md")   // only contribution deleted
+    users.push(mPoster, mCommenter, mReposter, mDeleted)
+    const mSignup = new Date(Date.now() - 72 * HOUR)
+    await prisma.user.update({ where: { id: mPoster.id }, data: { createdAt: mSignup } })
+    const otherMoment = await prisma.moment.create({
+      data: { authorId: other.id, kind: "POST", content: `__pa om ${TS}`, createdAt: new Date(mSignup.getTime() + 1 * HOUR) },
+    })
+    const posterMoment = await prisma.moment.create({
+      data: { authorId: mPoster.id, kind: "POST", content: `__pa pm ${TS}`, createdAt: new Date(mSignup.getTime() + 10 * HOUR) },
+    })
+    await prisma.progressionEvent.create({
+      data: { userId: mPoster.id, type: "DAILY_LOGIN", reason: "Daily check-in", key: `__pa-daily-${TS}-mp`, createdAt: new Date(mSignup.getTime() + 30 * HOUR) },
+    })
+    const posterComment = await prisma.momentComment.create({
+      data: { momentId: otherMoment.id, authorId: mPoster.id, content: `__pa pc ${TS}`, createdAt: new Date(mSignup.getTime() + 31 * HOUR) },
+    })
+    // Comment-only member — folds into reply semantics.
+    const commenterComment = await prisma.momentComment.create({
+      data: { momentId: otherMoment.id, authorId: mCommenter.id, content: `__pa cc ${TS}` },
+    })
+    // Pure repost: repostOfId + empty content — amplification, not contribution.
+    await prisma.moment.create({ data: { authorId: mReposter.id, kind: "POST", content: "", repostOfId: otherMoment.id } })
+    // Quote post DOES count (repostOfId + authored content) — mCommenter's
+    // earliest authored moment is later than their comment, so no interference.
+    // Deleted-only member: live-row convention means no milestone.
+    await prisma.moment.create({ data: { authorId: mDeleted.id, kind: "POST", content: `__pa dm ${TS}`, deleted: true } })
+
+    const mm = (await activationMilestonesFor([mPoster.id, mCommenter.id, mReposter.id, mDeleted.id]))
+    const pm = mm.get(mPoster.id)!
+    pm.firstContribution?.getTime() === posterMoment.createdAt.getTime() && pm.firstContributionKind === "moment"
+      ? pass("milestone: authored moment = first contribution, kind=moment")
+      : fail("moment first contribution", { c: pm.firstContribution, k: pm.firstContributionKind })
+    pm.firstReply?.getTime() === posterComment.createdAt.getTime()
+      ? pass("milestone: moment comment on another's post = firstReply")
+      : fail("moment comment reply", pm.firstReply)
+    pm.secondAction?.getTime() === posterComment.createdAt.getTime()
+      ? pass("milestone: moment comment after return = secondAction")
+      : fail("moment secondAction", pm.secondAction)
+    const cm = mm.get(mCommenter.id)!
+    cm.firstReply?.getTime() === commenterComment.createdAt.getTime() &&
+      cm.firstContribution?.getTime() === commenterComment.createdAt.getTime() && cm.firstContributionKind === "reply"
+      ? pass("milestone: moment-comment-only member contributes (kind=reply)")
+      : fail("comment-only", { c: cm.firstContribution, k: cm.firstContributionKind })
+    const rm = mm.get(mReposter.id)!
+    rm.firstContribution === null && rm.firstContributionKind === null && rm.firstReply === null
+      ? pass("pure repost is not a contribution")
+      : fail("pure repost", { c: rm.firstContribution, k: rm.firstContributionKind })
+    const dm = mm.get(mDeleted.id)!
+    dm.firstContribution === null && dm.firstContributionKind === null
+      ? pass("deleted-only moment leaves no milestone (live rows)")
+      : fail("deleted moment", { c: dm.firstContribution, k: dm.firstContributionKind })
+    // Own-moment comment is not a reply — same own-OP rule as Post.
+    await prisma.momentComment.create({ data: { momentId: posterMoment.id, authorId: mPoster.id, content: `__pa self ${TS}`, createdAt: new Date(mSignup.getTime() + 8 * HOUR) } })
+    const pm2 = (await activationMilestonesFor([mPoster.id])).get(mPoster.id)!
+    pm2.firstReply?.getTime() === posterComment.createdAt.getTime()
+      ? pass("comment on own moment is not a reply")
+      : fail("own-moment comment", pm2.firstReply)
+    // Report surface: "moment" appears as a first-contribution kind row.
+    const rep7 = await activationReport(7)
+    ;(rep7.returnByFirstAction.find((r) => r.kind === "moment")?.members ?? 0) >= 1
+      ? pass("activation report exposes the moment contribution kind")
+      : fail("report moment kind", rep7.returnByFirstAction)
+
     // ── Report privacy: aggregates only ───────────────────────────
     const report = await activationReport(7)
     const json = JSON.stringify(report)

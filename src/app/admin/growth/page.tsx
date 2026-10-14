@@ -16,6 +16,8 @@ function FunnelTable({ funnel }: { funnel: FunnelWindow }) {
     ["— replied", funnel.firstReply],
     ["— published a setup", funnel.firstSetup],
     ["— sent a chat message", funnel.firstChatMessage],
+    ["— posted a moment", funnel.firstMoment],
+    ["— commented on a moment", funnel.firstMomentComment],
     ["Returned ≥24h later", funnel.returned24h],
     ["Returned ≥7d later", funnel.returned7d],
   ]
