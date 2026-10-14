@@ -989,5 +989,40 @@ check("tier-up notifications carry no benefit claim", () => {
   assert.ok(!tiers.includes("benefit:"), "no REP_TIERS entry declares a benefit field")
 })
 
+// ── Batch S: activation observability + response loop ─────────────────
+
+check("growth page renders the server-side activation report sections", () => {
+  const g = src("app/admin/growth/page.tsx")
+  assert.ok(g.includes("activationReport(30)"), "report is fetched server-side, not client-fetched")
+  for (const s of ["Milestone ladder", "Step conversions", "Return by first contribution",
+    "Return by push status", "Push lifecycle", "Social loop"]) {
+    assert.ok(g.includes(s), `missing section: ${s}`)
+  }
+  assert.ok(g.includes("firstResponseReceived"), "response milestone rendered")
+  assert.ok(g.includes("act.social."), "social-loop report fields consumed from the report contract")
+})
+
+check("growth page suppresses rates below the n=5 convention", () => {
+  const g = src("app/admin/growth/page.tsx")
+  assert.ok(g.includes("den < 5"), "PctCell small-sample suppression present")
+  assert.ok(g.includes("too small"), "small-sample marker rendered")
+})
+
+check("admin overview reports Moment activity alongside community stats", () => {
+  const a = src("app/admin/page.tsx")
+  assert.ok(a.includes("moments7d"), "moment posts card uses the health metric")
+  assert.ok(a.includes("momentComments7d"), "moment comments card uses the health metric")
+  assert.ok(a.includes("Moment posts") && a.includes("Moment comments"), "distinct post/comment labels")
+})
+
+check("response milestone is durable-state only — no event ledger", () => {
+  const a = src("lib/activation.ts")
+  assert.ok(a.includes("firstResponseReceived"), "milestone field present")
+  assert.ok(a.includes("responseCapable"), "opportunity flag present")
+  assert.ok(a.includes('"SetupComment"'), "setup-comment surface queried")
+  assert.ok(a.includes('"MomentComment"'), "moment-comment surface queried")
+  assert.ok(!a.includes("recordProductEvent"), "no product-event write in the milestone path")
+})
+
 console.log(`\n${passed} passed, ${failed} failed`)
 if (failed > 0) process.exit(1)

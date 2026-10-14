@@ -103,6 +103,23 @@ const main = async () => {
         ? pass("admin /admin/growth renders")
         : fail("admin /admin/growth renders", { s: adminGrowth.status })
 
+      // Activation report + social loop render on the growth page, and the
+      // overview shows Moment volume — aggregate labels only, no member
+      // identity in the markup.
+      const growthMarkers = ["Milestone ladder", "Received a response", "Step conversions",
+        "Return by first contribution", "Return by push status", "Push lifecycle", "Social loop"]
+      growthMarkers.every((mk) => growthHtml.includes(mk))
+        ? pass("growth page renders milestone ladder, response, push + social-loop sections")
+        : fail("growth sections", { missing: growthMarkers.filter((mk) => !growthHtml.includes(mk)) })
+      !growthHtml.includes(member.username) && !growthHtml.includes(member.id)
+        ? pass("growth page stays aggregate (no member identity in markup)")
+        : fail("growth page privacy")
+      const adminHome = await fetch(`${BASE}/admin`, { headers: { cookie: adminCookie } })
+      const adminHtml = await adminHome.text()
+      adminHome.status === 200 && adminHtml.includes("Moment posts") && adminHtml.includes("Moment comments")
+        ? pass("admin overview shows Moment post/comment volume")
+        : fail("admin overview moments", { s: adminHome.status })
+
       // New admin-only sections deny moderators at the page level.
       for (const p of ["/admin/retention", "/admin/experiments"]) {
         const r = await fetch(`${BASE}${p}`, { redirect: "manual", headers: { cookie: modCookie } })
@@ -381,6 +398,21 @@ const main = async () => {
         !json.includes(member.id) && !json.includes(member.username)
         ? pass("staff activation report: aggregate shape, no member ids/usernames")
         : fail("staff activation report", { s: res.status })
+
+      // Response milestone + social-loop payload ride the same report.
+      const resp = rep.response as { eligible?: number; received?: number } | undefined
+      const respShape = resp !== undefined && typeof resp.eligible === "number" && typeof resp.received === "number" &&
+        (resp.received ?? 0) <= (resp.eligible ?? 0) &&
+        Array.isArray(rep.steps) && rep.steps.some((s: { key?: string }) => s.key === "firstResponseReceived") &&
+        Array.isArray(rep.conversions) && rep.conversions.some((c: { from?: string; to?: string }) => c.from === "responseCapable" && c.to === "firstResponseReceived")
+      respShape
+        ? pass("activation report exposes the response milestone with the opportunity denominator")
+        : fail("report response shape", resp)
+      const soc = rep.social as { followsBySource?: unknown; followedContentViewers?: number; truncated?: boolean } | undefined
+      soc !== undefined && Array.isArray(soc.followsBySource) && typeof soc.followedContentViewers === "number" &&
+        typeof rep.push?.sent === "number" && typeof rep.push?.clicked === "number"
+        ? pass("activation report carries push funnel + social-loop aggregates")
+        : fail("report social/push", { hasSocial: !!soc })
     }
   } finally {
     if (feedbackIds.length) await prisma.feedback.deleteMany({ where: { id: { in: feedbackIds } } })

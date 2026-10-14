@@ -283,6 +283,167 @@ const main = async () => {
       ? pass("activation report exposes the moment contribution kind")
       : fail("report moment kind", rep7.returnByFirstAction)
 
+    // ── Response-received milestone — other-author replies on live targets ──
+    // rThread: thread reply qualifies; a LATER second surface's response must
+    // not rewrite the milestone or the first contribution. rMoment /
+    // rSetup / rAnchor: moment comment, setup comment, and anchored
+    // diary-update comment (a Post on the grower's canonical thread) each
+    // qualify. rSelf: self-authored replies never count. rDel: response on a
+    // now-deleted target doesn't count. rNone and mCommenter: no
+    // response-capable content → not in the opportunity denominator.
+    const rThread = await createUser("rt")
+    const rMoment = await createUser("rm")
+    const rSetup = await createUser("rs")
+    const rAnchor = await createUser("ra")
+    const rSelf = await createUser("rf")
+    const rDel = await createUser("rd")
+    const rNone = await createUser("rn")
+    users.push(rThread, rMoment, rSetup, rAnchor, rSelf, rDel, rNone)
+    const rSignup = new Date(Date.now() - 48 * HOUR)
+    for (const u of [rThread, rMoment, rSetup, rAnchor, rSelf, rDel, rNone]) {
+      await prisma.user.update({ where: { id: u.id }, data: { createdAt: rSignup } })
+    }
+    const rat = (h: number) => new Date(rSignup.getTime() + h * HOUR)
+
+    // rThread: thread at +1, other's reply at +3; a second surface (moment
+    // at +5, other's comment at +6) stays later — earliest response wins.
+    const rtThread = await prisma.thread.create({
+      data: { title: `__pa rt ${TS}`, slug: `__pa-rt-${TS}`, content: "t", categoryId: qCat.id, authorId: rThread.id, createdAt: rat(1) },
+    })
+    created.threads.push(rtThread.id)
+    await prisma.post.create({ data: { content: "op", threadId: rtThread.id, authorId: rThread.id, createdAt: rat(1) } })
+    const rtReply = await prisma.post.create({
+      data: { content: "response", threadId: rtThread.id, authorId: other.id, createdAt: rat(3) },
+    })
+    const rtMoment = await prisma.moment.create({
+      data: { authorId: rThread.id, kind: "POST", content: `__pa rtm ${TS}`, createdAt: rat(5) },
+    })
+    await prisma.momentComment.create({
+      data: { momentId: rtMoment.id, authorId: other.id, content: `__pa rtc ${TS}`, createdAt: rat(6) },
+    })
+
+    // rMoment: other's comment at +2 on their moment.
+    const rmMoment = await prisma.moment.create({
+      data: { authorId: rMoment.id, kind: "POST", content: `__pa rmm ${TS}`, createdAt: rat(1) },
+    })
+    const rmComment = await prisma.momentComment.create({
+      data: { momentId: rmMoment.id, authorId: other.id, content: `__pa rmc ${TS}`, createdAt: rat(2) },
+    })
+
+    // rSetup: other's SetupComment at +2 on their showcase.
+    const rsSetup = await prisma.growSetup.create({
+      data: { title: `__pa rs ${TS}`, description: "setup fixture", authorId: rSetup.id, createdAt: rat(1) },
+    })
+    const rsComment = await prisma.setupComment.create({
+      data: { setupId: rsSetup.id, authorId: other.id, content: `__pa rsc ${TS}`, createdAt: rat(2) },
+    })
+
+    // rAnchor: anchored diary-update comment = a Post by another author on
+    // the grower's canonical discussion thread (same row shape production
+    // writes). Diary + lazy thread authored by the grower.
+    const raDiary = await prisma.growDiary.create({
+      data: {
+        title: `__pa ra grow ${TS}`, description: "d", growType: "INDOOR", startDate: rat(0),
+        authorId: rAnchor.id, visibility: "PUBLIC", createdAt: rat(1),
+      },
+    })
+    const raThread = await prisma.thread.create({
+      data: { title: `__pa ra t ${TS}`, slug: `__pa-ra-${TS}`, content: "d", categoryId: qCat.id, authorId: rAnchor.id, createdAt: rat(1) },
+    })
+    created.threads.push(raThread.id)
+    await prisma.growDiary.update({ where: { id: raDiary.id }, data: { threadId: raThread.id } })
+    const raUpdate = await prisma.diaryUpdate.create({
+      data: { title: "u", content: "u", stage: "VEGETATIVE", diaryId: raDiary.id, authorId: rAnchor.id, createdAt: rat(2) },
+    })
+    const raComment = await prisma.post.create({
+      data: { content: "nice node spacing", threadId: raThread.id, diaryUpdateId: raUpdate.id, authorId: other.id, createdAt: rat(3) },
+    })
+
+    // rSelf: thread with only the owner's own posts — never a response.
+    const rfThread = await prisma.thread.create({
+      data: { title: `__pa rf ${TS}`, slug: `__pa-rf-${TS}`, content: "t", categoryId: qCat.id, authorId: rSelf.id, createdAt: rat(1) },
+    })
+    created.threads.push(rfThread.id)
+    await prisma.post.create({ data: { content: "op", threadId: rfThread.id, authorId: rSelf.id, createdAt: rat(1) } })
+    await prisma.post.create({ data: { content: "bump", threadId: rfThread.id, authorId: rSelf.id, createdAt: rat(4) } })
+
+    // rDel: a real response arrived, then the target was deleted — live-row
+    // semantics remove the milestone.
+    const rdMoment = await prisma.moment.create({
+      data: { authorId: rDel.id, kind: "POST", content: `__pa rdm ${TS}`, createdAt: rat(1) },
+    })
+    await prisma.momentComment.create({
+      data: { momentId: rdMoment.id, authorId: other.id, content: `__pa rdc ${TS}`, createdAt: rat(2) },
+    })
+    await prisma.moment.update({ where: { id: rdMoment.id }, data: { deleted: true } })
+
+    // Soft-deleted response variant: rNone's thread gets a reply that is
+    // then soft-deleted — the target survives but the response doesn't.
+    const rnThread = await prisma.thread.create({
+      data: { title: `__pa rn ${TS}`, slug: `__pa-rn-${TS}`, content: "t", categoryId: qCat.id, authorId: rNone.id, createdAt: rat(1) },
+    })
+    created.threads.push(rnThread.id)
+    await prisma.post.create({
+      data: { content: "gone", threadId: rnThread.id, authorId: other.id, createdAt: rat(2), deleted: true },
+    })
+
+    const rmm = await activationMilestonesFor([rThread.id, rMoment.id, rSetup.id, rAnchor.id, rSelf.id, rDel.id, rNone.id, mCommenter.id])
+    const rt = rmm.get(rThread.id)!
+    rt.firstResponseReceived?.getTime() === rtReply.createdAt.getTime() && rt.responseCapable === true
+      ? pass("response: thread reply counts, earliest wins")
+      : fail("thread response", rt.firstResponseReceived)
+    rt.firstContribution?.getTime() === rat(1).getTime() && rt.firstContributionKind === "question"
+      ? pass("response: later-surface response doesn't rewrite first contribution")
+      : fail("first contribution stability", { c: rt.firstContribution, k: rt.firstContributionKind })
+    rmm.get(rMoment.id)!.firstResponseReceived?.getTime() === rmComment.createdAt.getTime()
+      ? pass("response: moment comment counts")
+      : fail("moment response", rmm.get(rMoment.id)!.firstResponseReceived)
+    rmm.get(rSetup.id)!.firstResponseReceived?.getTime() === rsComment.createdAt.getTime()
+      ? pass("response: setup comment counts")
+      : fail("setup response", rmm.get(rSetup.id)!.firstResponseReceived)
+    rmm.get(rAnchor.id)!.firstResponseReceived?.getTime() === raComment.createdAt.getTime()
+      ? pass("response: anchored diary-update comment counts")
+      : fail("anchored response", rmm.get(rAnchor.id)!.firstResponseReceived)
+    {
+      const self = rmm.get(rSelf.id)!
+      self.firstResponseReceived === null && self.responseCapable === true
+        ? pass("response: self-authored posts never count, member still eligible")
+        : fail("self response", { r: self.firstResponseReceived, e: self.responseCapable })
+    }
+    {
+      const del = rmm.get(rDel.id)!
+      del.firstResponseReceived === null && del.responseCapable === false
+        ? pass("response: deleted target removes the milestone and the opportunity")
+        : fail("deleted target", { r: del.firstResponseReceived, e: del.responseCapable })
+    }
+    {
+      const none = rmm.get(rNone.id)!
+      none.firstResponseReceived === null && none.responseCapable === true
+        ? pass("response: soft-deleted reply doesn't count; live thread still eligible")
+        : fail("soft-deleted response", { r: none.firstResponseReceived, e: none.responseCapable })
+      rmm.get(mCommenter.id)!.responseCapable === false
+        ? pass("response: comment-only member has no opportunity (not in denominator)")
+        : fail("comment-only opportunity", rmm.get(mCommenter.id)!.responseCapable)
+    }
+
+    // Report response section: eligible ⊆ cohort, received ⊆ eligible, and
+    // the milestone step + conversion row are exposed. Seven new fixtures
+    // are capable (rt, rm, rs, ra, rf, rn; rd's only target is deleted);
+    // four received (rt, rm, rs, ra).
+    const repR = await activationReport(30)
+    const resp = repR.response
+    const recvStep = repR.steps.find((s) => s.key === "firstResponseReceived")
+    const respConv = repR.conversions.find((c) => c.from === "responseCapable" && c.to === "firstResponseReceived")
+    resp.eligible >= 7 && resp.received >= 4 && resp.received <= resp.eligible && resp.pct !== null
+      ? pass("report: response opportunity/received/rate present and consistent")
+      : fail("report response", resp)
+    recvStep !== undefined && recvStep.count === resp.received
+      ? pass("report: response milestone in the ladder matches the rate numerator")
+      : fail("response step", recvStep)
+    respConv !== undefined && respConv.denominator === resp.eligible && respConv.numerator === resp.received
+      ? pass("report: response conversion uses the opportunity denominator")
+      : fail("response conversion", respConv)
+
     // ── Report privacy: aggregates only ───────────────────────────
     const report = await activationReport(7)
     const json = JSON.stringify(report)

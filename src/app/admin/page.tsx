@@ -95,6 +95,8 @@ export default async function AdminOverviewPage() {
           <Stat label="New discussions" value={d.health.newThreads7d} />
           <Stat label="Replies" value={d.health.newReplies7d} />
           <Stat label="Diary updates" value={d.health.diaryUpdates7d} />
+          <Stat label="Moment posts" value={d.health.moments7d} />
+          <Stat label="Moment comments" value={d.health.momentComments7d} />
           <Stat label="Chat messages" value={d.health.chatMessages7d} />
           <Stat label="New members" value={d.health.newMembers7d} />
           <Stat label="Returning members" value={d.health.returningMembers7d} hint="seen this week, account >1d old" />

@@ -29,6 +29,20 @@ import { socialLoopReport, type SocialLoopReport } from "@/lib/product-events"
 //   second action     earliest contribution strictly after first return
 //   first harvest     earliest GrowDiary.harvestedAt
 //   push enabled      a live PushSubscription or a PERMISSION_GRANTED event
+//   first response    earliest live OTHER-author reply to the member's own
+//                     content — Post on their Thread (which also carries
+//                     anchored diary-update comments: they live on the
+//                     grower's canonical discussion thread), MomentComment
+//                     on their Moment, SetupComment on their GrowSetup.
+//                     Soft-deleted responses and deleted targets don't
+//                     qualify; the owner's own posts never count. A diary
+//                     with no canonical thread is not response-capable —
+//                     comments can only exist as Posts on that thread.
+//   response-capable  member authored ≥1 live Thread, Moment (any kind —
+//                     even a pure repost can receive comments), or
+//                     GrowSetup. This is the response-rate denominator —
+//                     members who published nothing no one can reply to
+//                     are not divided by.
 //
 // Chat is intentionally NOT a milestone: ChatMessage rows hard-delete after
 // three days, so it is not durable evidence.
@@ -56,6 +70,8 @@ export interface MemberMilestones {
   secondAction: Date | null
   firstHarvest: Date | null
   pushEnabled: boolean
+  firstResponseReceived: Date | null
+  responseCapable: boolean
 }
 
 type MinRow = { uid: string; ts: Date | null }
@@ -73,7 +89,7 @@ export async function activationMilestonesFor(userIds: string[]): Promise<Map<st
     .filter((c) => QUESTION_RE.test(`${c.slug} ${c.name}`))
     .map((c) => c.id)
 
-  const [users, grows, structured, updates, questions, threads, replies, momentPosts, momentReplies, follows, diaryFollows, returns, harvests, pushSubs, pushGrants] =
+  const [users, grows, structured, updates, questions, threads, replies, momentPosts, momentReplies, follows, diaryFollows, returns, harvests, pushSubs, pushGrants, threadResponses, momentResponses, setupResponses, capableRows] =
     await Promise.all([
       prisma.user.findMany({ where: { id: { in: ids } }, select: { id: true, createdAt: true, onboardingCompletedAt: true } }),
       prisma.growDiary.groupBy({ by: ["authorId"], where: { authorId: { in: ids }, deleted: false }, _min: { createdAt: true } }),
@@ -114,6 +130,40 @@ export async function activationMilestonesFor(userIds: string[]): Promise<Map<st
       prisma.growDiary.groupBy({ by: ["authorId"], where: { authorId: { in: ids }, deleted: false, harvestedAt: { not: null } }, _min: { harvestedAt: true } }),
       prisma.pushSubscription.findMany({ where: { userId: { in: ids } }, select: { userId: true }, distinct: ["userId"] }),
       prisma.pushEvent.findMany({ where: { type: "PERMISSION_GRANTED", userId: { in: ids } }, select: { userId: true } }),
+      // ── Responses ON cohort members' content ──────────────────────
+      // Inverted ownership of the first-reply predicate: the response
+      // author must differ from the target owner, both rows live.
+      // Thread replies cover anchored DiaryUpdate comments and diary /
+      // setup discussion threads — all are Posts on the owner's
+      // canonical thread. Moment comments on expired stories still
+      // count: the response was genuinely received while the story was
+      // live; expiry limits future interaction, not past receipt.
+      prisma.$queryRaw<MinRow[]>`
+        SELECT t."authorId" AS uid, MIN(p."createdAt") AS ts
+        FROM "Post" p JOIN "Thread" t ON t."id" = p."threadId"
+        WHERE t."authorId" = ANY(${ids}) AND p."authorId" <> t."authorId"
+          AND p."deleted" = false AND t."deleted" = false
+        GROUP BY t."authorId"`,
+      prisma.$queryRaw<MinRow[]>`
+        SELECT m."authorId" AS uid, MIN(c."createdAt") AS ts
+        FROM "MomentComment" c JOIN "Moment" m ON m."id" = c."momentId"
+        WHERE m."authorId" = ANY(${ids}) AND c."authorId" <> m."authorId"
+          AND c."deleted" = false AND m."deleted" = false
+        GROUP BY m."authorId"`,
+      prisma.$queryRaw<MinRow[]>`
+        SELECT s."authorId" AS uid, MIN(c."createdAt") AS ts
+        FROM "SetupComment" c JOIN "GrowSetup" s ON s."id" = c."setupId"
+        WHERE s."authorId" = ANY(${ids}) AND c."authorId" <> s."authorId"
+          AND c."deleted" = false AND s."deleted" = false
+        GROUP BY s."authorId"`,
+      // Response opportunity: ≥1 live response-capable target authored
+      // by the member. A GrowDiary is not listed — it can only hold
+      // responses through its canonical thread, whose Thread row is
+      // already member-authored.
+      prisma.$queryRaw<{ uid: string }[]>`
+        SELECT "authorId" AS uid FROM "Thread" WHERE "authorId" = ANY(${ids}) AND "deleted" = false
+        UNION SELECT "authorId" FROM "Moment" WHERE "authorId" = ANY(${ids}) AND "deleted" = false
+        UNION SELECT "authorId" FROM "GrowSetup" WHERE "authorId" = ANY(${ids}) AND "deleted" = false`,
     ])
 
   const byAuthor = (rows: { authorId: string; _min: { createdAt: Date | null } }[]) =>
@@ -138,6 +188,18 @@ export async function activationMilestonesFor(userIds: string[]): Promise<Map<st
   const retM = new Map(returns.map((r) => [r.uid, r.ts ? new Date(r.ts) : null]))
   const harvM = new Map(harvests.map((r) => [r.authorId, r._min.harvestedAt]))
   const pushSet = new Set([...pushSubs.map((s) => s.userId), ...pushGrants.map((g) => g.userId).filter((u): u is string => !!u)])
+  // Earliest response across the three surfaces — a member counts once
+  // no matter how many surfaces answered them.
+  const respM = new Map<string, Date>()
+  for (const rows of [threadResponses, momentResponses, setupResponses]) {
+    for (const r of rows) {
+      if (!r.ts) continue
+      const ts = new Date(r.ts)
+      const cur = respM.get(r.uid)
+      if (!cur || ts < cur) respM.set(r.uid, ts)
+    }
+  }
+  const capableSet = new Set(capableRows.map((r) => r.uid))
 
   // Second meaningful action: first contribution strictly after the first
   // return — one bounded query over the cohort's returners only.
@@ -193,6 +255,8 @@ export async function activationMilestonesFor(userIds: string[]): Promise<Map<st
       secondAction: secondM.get(u.id) ?? null,
       firstHarvest: harvM.get(u.id) ?? null,
       pushEnabled: pushSet.has(u.id),
+      firstResponseReceived: respM.get(u.id) ?? null,
+      responseCapable: capableSet.has(u.id),
     })
   }
   return out
@@ -210,6 +274,12 @@ export interface ActivationReport {
   /** Return rate for push-enabled vs not — association only. */
   returnByPush: { pushEnabled: boolean; members: number; returned: number; pct: number | null }[]
   push: { promptShown: number; granted: number; denied: number; sent: number; failed: number; clicked: number; removed: number }
+  /** Response loop among the signup cohort: `eligible` members published
+   *  ≥1 live response-capable item (Thread, Moment, or GrowSetup);
+   *  `received` got ≥1 live other-author reply on it. Denominator is NOT
+   *  signups — members who never published anything reply-able are
+   *  excluded rather than diluting the rate. */
+  response: { eligible: number; received: number; pct: number | null }
   /** Event-windowed social-loop metrics from the ProductEvent sink —
    *  distinct from the signup cohort above: these answer WHICH surface
    *  members followed/interacted from, which state cannot derive. */
@@ -242,6 +312,7 @@ export async function activationReport(windowDays = 30): Promise<ActivationRepor
     ["firstContribution", "First contribution", (x) => !!x.firstContribution],
     ["firstQuestion", "Asked a question", (x) => !!x.firstQuestion],
     ["firstReply", "Replied to someone", (x) => !!x.firstReply],
+    ["firstResponseReceived", "Received a response", (x) => !!x.firstResponseReceived],
     ["firstFollow", "Followed a grower or grow", (x) => !!x.firstFollow],
     ["firstReturn", "Came back (≥24h)", (x) => !!x.firstReturn],
     ["secondAction", "Contributed after returning", (x) => !!x.secondAction],
@@ -265,6 +336,8 @@ export async function activationReport(windowDays = 30): Promise<ActivationRepor
     conv("firstContribution", "firstReturn", (x) => !!x.firstContribution, (x) => !!x.firstReturn),
     conv("firstReturn", "secondAction", (x) => !!x.firstReturn, (x) => !!x.secondAction),
     conv("firstGrow", "firstHarvest", (x) => !!x.firstGrow, (x) => !!x.firstHarvest),
+    // Response rate uses the opportunity denominator, not signups.
+    conv("responseCapable", "firstResponseReceived", (x) => x.responseCapable, (x) => !!x.firstResponseReceived),
   ]
 
   const kinds = ["grow", "update", "question", "thread", "moment", "reply"]
@@ -313,6 +386,11 @@ export async function activationReport(windowDays = 30): Promise<ActivationRepor
       clicked: pc("CLICKED"),
       removed: pc("SUBSCRIPTION_REMOVED"),
     },
+    response: (() => {
+      const eligible = count((x) => x.responseCapable)
+      const received = count((x) => !!x.firstResponseReceived)
+      return { eligible, received, pct: pct(received, eligible) }
+    })(),
     social,
     generatedAt: new Date().toISOString(),
   }
