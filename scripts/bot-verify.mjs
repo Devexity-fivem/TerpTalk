@@ -49,6 +49,13 @@ async function main() {
     await prisma.rateLimit.deleteMany({
       where: { key: { startsWith: "terpbot:out:" } },
     })
+    // /api/search and /api/search/suggest limit by hashed client IP — every
+    // harness request reports "unknown", so all suites share one bucket.
+    // search-verify alone fills ~23/30 of it; a boundary-straddling window can
+    // 429 the exclusion check below. Clear so this suite owns its prerequisites.
+    await prisma.rateLimit.deleteMany({
+      where: { key: { startsWith: "search" } },
+    })
 
     // ── Identity ────────────────────────────────────────────────────
     const botUser = await prisma.user.findUnique({
@@ -70,7 +77,9 @@ async function main() {
     const gsUsers = gs.data?.users || []
     gs.status === 200 && !gsUsers.some((u) => u.username === "terpbot")
       ? pass("bot excluded from /api/search users bucket")
-      : fail("bot excluded from /api/search users bucket", gsUsers)
+      // Report status + body — the users bucket alone concealed a non-200
+      // (rate-limit/5xx) behind an empty array.
+      : fail("bot excluded from /api/search users bucket", { status: gs.status, data: gs.data })
 
     const sg = await api(`/api/search/suggest?q=terp`, { cookie: memberCookie })
     const sgHit = (sg.data?.suggestions || sg.data || []).some?.((s) => s.type === "user" && s.title === "terpbot")
