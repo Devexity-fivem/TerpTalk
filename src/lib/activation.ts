@@ -13,10 +13,14 @@ import { socialLoopReport, type SocialLoopReport } from "@/lib/product-events"
 //   first structured  earliest live GrowDiary with strainId/mediumType/lightType
 //   first question    earliest live Thread in a help/question category
 //   first reply       earliest live Post on SOMEONE ELSE'S thread (an OP's
-//                     own opening Post row is not a reply)
+//                     own opening Post row is not a reply) or live
+//                     MomentComment on someone else's Moment
 //   first follow      earliest Follow (member) or DiaryFollow (grow) the
 //                     member created — ThreadFollow is auto-created, excluded
-//   first contribution earliest of grow / diary update / thread / reply
+//   first contribution earliest of grow / diary update / thread / reply /
+//                     authored Moment. Pure reposts (repostOfId set, empty
+//                     content) are amplification, not contributions — same
+//                     rule as reactions; quote posts count.
 //   first return      earliest DAILY_LOGIN check-in marker ≥ 24h after
 //                     signup. The marker is written by /api/ping only for an
 //                     authenticated, foregrounded page (navigation mount /
@@ -47,7 +51,7 @@ export interface MemberMilestones {
   firstReply: Date | null
   firstFollow: Date | null
   firstContribution: Date | null
-  firstContributionKind: "grow" | "update" | "question" | "thread" | "reply" | null
+  firstContributionKind: "grow" | "update" | "question" | "thread" | "reply" | "moment" | null
   firstReturn: Date | null
   secondAction: Date | null
   firstHarvest: Date | null
@@ -69,7 +73,7 @@ export async function activationMilestonesFor(userIds: string[]): Promise<Map<st
     .filter((c) => QUESTION_RE.test(`${c.slug} ${c.name}`))
     .map((c) => c.id)
 
-  const [users, grows, structured, updates, questions, threads, replies, follows, diaryFollows, returns, harvests, pushSubs, pushGrants] =
+  const [users, grows, structured, updates, questions, threads, replies, momentPosts, momentReplies, follows, diaryFollows, returns, harvests, pushSubs, pushGrants] =
     await Promise.all([
       prisma.user.findMany({ where: { id: { in: ids } }, select: { id: true, createdAt: true, onboardingCompletedAt: true } }),
       prisma.growDiary.groupBy({ by: ["authorId"], where: { authorId: { in: ids }, deleted: false }, _min: { createdAt: true } }),
@@ -88,6 +92,17 @@ export async function activationMilestonesFor(userIds: string[]): Promise<Map<st
         FROM "Post" p JOIN "Thread" t ON t."id" = p."threadId"
         WHERE p."authorId" = ANY(${ids}) AND p."deleted" = false AND t."authorId" <> p."authorId"
         GROUP BY p."authorId"`,
+      // Authored Moments only — pure reposts (repostOfId + empty content)
+      // are amplification, not a contribution; live rows like every
+      // milestone above.
+      prisma.moment.groupBy({ by: ["authorId"], where: { authorId: { in: ids }, deleted: false, OR: [{ repostOfId: null }, { content: { not: "" } }] }, _min: { createdAt: true } }),
+      // Moment comments count as replies — same rule as Post: only a
+      // comment on SOMEONE ELSE'S moment qualifies.
+      prisma.$queryRaw<MinRow[]>`
+        SELECT c."authorId" AS uid, MIN(c."createdAt") AS ts
+        FROM "MomentComment" c JOIN "Moment" m ON m."id" = c."momentId"
+        WHERE c."authorId" = ANY(${ids}) AND c."deleted" = false AND m."authorId" <> c."authorId"
+        GROUP BY c."authorId"`,
       prisma.follow.groupBy({ by: ["followerId"], where: { followerId: { in: ids } }, _min: { createdAt: true } }),
       prisma.diaryFollow.groupBy({ by: ["userId"], where: { userId: { in: ids } }, _min: { createdAt: true } }),
       prisma.$queryRaw<MinRow[]>`
@@ -109,6 +124,15 @@ export async function activationMilestonesFor(userIds: string[]): Promise<Map<st
   const qM = byAuthor(questions)
   const tM = byAuthor(threads)
   const replyM = new Map(replies.map((r) => [r.uid, r.ts ? new Date(r.ts) : null]))
+  // Moment comments fold into the reply milestone — same "replied to
+  // someone" semantics, earliest across both surfaces.
+  for (const r of momentReplies) {
+    const ts = r.ts ? new Date(r.ts) : null
+    if (!ts) continue
+    const cur = replyM.get(r.uid)
+    if (!cur || ts < cur) replyM.set(r.uid, ts)
+  }
+  const momentM = byAuthor(momentPosts)
   const followM = new Map(follows.map((r) => [r.followerId, r._min.createdAt]))
   const dFollowM = new Map(diaryFollows.map((r) => [r.userId, r._min.createdAt]))
   const retM = new Map(returns.map((r) => [r.uid, r.ts ? new Date(r.ts) : null]))
@@ -134,6 +158,9 @@ export async function activationMilestonesFor(userIds: string[]): Promise<Map<st
         UNION ALL SELECT "authorId", "createdAt" FROM "Thread" WHERE "authorId" = ANY(${rIds}) AND "deleted" = false
         UNION ALL SELECT p."authorId", p."createdAt" FROM "Post" p JOIN "Thread" t ON t."id" = p."threadId"
           WHERE p."authorId" = ANY(${rIds}) AND p."deleted" = false AND t."authorId" <> p."authorId"
+        UNION ALL SELECT "authorId", "createdAt" FROM "Moment" WHERE "authorId" = ANY(${rIds}) AND "deleted" = false AND ("repostOfId" IS NULL OR "content" <> '')
+        UNION ALL SELECT c."authorId", c."createdAt" FROM "MomentComment" c JOIN "Moment" m ON m."id" = c."momentId"
+          WHERE c."authorId" = ANY(${rIds}) AND c."deleted" = false AND m."authorId" <> c."authorId"
       )
       SELECT r.uid, MIN(c.ts) AS ts FROM r JOIN c ON c.uid = r.uid AND c.ts > r.ret GROUP BY r.uid`
     for (const row of rows) if (row.ts) secondM.set(row.uid, new Date(row.ts))
@@ -145,10 +172,11 @@ export async function activationMilestonesFor(userIds: string[]): Promise<Map<st
     const q = qM.get(u.id) ?? null
     const t = tM.get(u.id) ?? null
     const reply = replyM.get(u.id) ?? null
-    const first = minOf(grow, upd, t, reply)
+    const moment = momentM.get(u.id) ?? null
+    const first = minOf(grow, upd, t, reply, moment)
     // Kind of the earliest contribution — ties resolve in this fixed order.
     const kinds: [MemberMilestones["firstContributionKind"], Date | null][] = [
-      ["grow", grow], ["update", upd], ["question", q], ["thread", t && (!q || t < q) ? t : null], ["reply", reply],
+      ["grow", grow], ["update", upd], ["question", q], ["thread", t && (!q || t < q) ? t : null], ["moment", moment], ["reply", reply],
     ]
     const kind = first ? kinds.find(([, d]) => d && d.getTime() === first.getTime())?.[0] ?? null : null
     out.set(u.id, {
@@ -239,7 +267,7 @@ export async function activationReport(windowDays = 30): Promise<ActivationRepor
     conv("firstGrow", "firstHarvest", (x) => !!x.firstGrow, (x) => !!x.firstHarvest),
   ]
 
-  const kinds = ["grow", "update", "question", "thread", "reply"]
+  const kinds = ["grow", "update", "question", "thread", "moment", "reply"]
   const returnByFirstAction = [
     ...kinds.map((k) => {
       const g = m.filter((x) => x.firstContributionKind === k)

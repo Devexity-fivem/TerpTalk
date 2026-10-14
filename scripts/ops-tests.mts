@@ -3,7 +3,7 @@
 // Temp users/feedback fully cleaned up.
 import "./db-guard.mjs"
 import { makeHarness } from "./lib/http-harness.mjs"
-import { getOpsData, getGrowthDetail } from "@/lib/ops-metrics"
+import { getOpsData, getGrowthDetail, searchMembers } from "@/lib/ops-metrics"
 
 const harnessOpts = {
   username: (tag: string, ts: string) => `__ops_${tag}_${ts}`,
@@ -170,7 +170,6 @@ const main = async () => {
 
     // ── Member search bounds + privacy ──────────────────────────────
     {
-      const { searchMembers } = await import("@/lib/ops-metrics")
       const tooShort = await searchMembers("x")
       tooShort.length === 0
         ? pass("member search rejects <2 chars")
@@ -250,6 +249,125 @@ const main = async () => {
         : fail("admin feedback list carries deviceType", { s: listRes.status, keys: item ? Object.keys(item) : list })
     }
 
+    // ── Moments parity in ops metrics ─────────────────────────────
+    // Baseline-diff: suites run serially and clean up, so the delta
+    // between two real metric calls is attributable to these fixtures.
+    {
+      const baseOps = await getOpsData()
+      const baseGrowth = await getGrowthDetail()
+
+      const mPoster = await createUser("mposter")   // authored moment only
+      const mCommenter = await createUser("mcomment") // moment comment only
+      const mReactor = await createUser("mreact")   // reaction only — never a contribution
+      const mReposter = await createUser("mrepost") // pure repost only — amplification
+      const mQuoter = await createUser("mquote")    // quote post — authored content
+      const mReferred = await createUser("mref")    // referred, moment only
+      const chatter = await createUser("mchatter")  // chat + moment → multi-surface
+      const botUser = await createUser("mbot")      // TerpBot + moment comment
+      const mDeleted = await createUser("mdeleted") // only contribution deleted
+      users.push(mPoster, mCommenter, mReactor, mReposter, mQuoter, mReferred, chatter, botUser, mDeleted)
+
+      await prisma.profile.update({ where: { userId: mReferred.id }, data: { referredById: admin.profile!.id } })
+      const room = await prisma.chatRoom.findFirst({ select: { id: true } })
+      if (!room) throw new Error("no seeded chat room for ops fixture")
+
+      const anchor = await prisma.moment.create({ data: { authorId: mPoster.id, kind: "POST", content: `__ops moment ${TS}` } })
+      const mkMoment = (authorId: string, extra: Record<string, unknown> = {}) =>
+        prisma.moment.create({ data: { authorId, kind: "POST", content: `__ops m ${TS}`, ...extra } })
+      await mkMoment(mReferred.id)
+      await mkMoment(mDeleted.id).then((m) => prisma.moment.update({ where: { id: m.id }, data: { deleted: true } }))
+      await mkMoment(mReposter.id, { content: "", repostOfId: anchor.id }) // pure repost
+      await mkMoment(mQuoter.id, { repostOfId: anchor.id })                // quote: content + repostOfId
+      await mkMoment(chatter.id, { createdAt: new Date(Date.now() - 2 * 3_600_000) })
+      await prisma.momentComment.create({ data: { momentId: anchor.id, authorId: mCommenter.id, content: `__ops c ${TS}` } })
+      await prisma.momentComment.create({ data: { momentId: anchor.id, authorId: botUser.id, content: `__ops c2 ${TS}` } })
+      await prisma.reaction.create({ data: { userId: mReactor.id, momentId: anchor.id, type: "LIKE" } })
+      await prisma.chatMessage.create({ data: { roomId: room.id, authorId: chatter.id, content: `__ops chat ${TS}`, createdAt: new Date(Date.now() - 3_600_000) } })
+      await prisma.botEvent.create({ data: { type: "COMMAND_SLASH", command: "ask", userId: botUser.id, key: `__ops_bot_${TS}` } })
+
+      const ops = await getOpsData()
+      const growth = await getGrowthDetail()
+
+      // Funnel: moment post / comment / quote each activate; reaction and
+      // pure repost never do. mDeleted counts — the funnel measures that a
+      // contribution happened, symmetric with deleted forum posts.
+      const f = ops.funnel7d, bf = baseOps.funnel7d
+      const funnelOk =
+        f.signups === bf.signups + 9 &&
+        f.activated === bf.activated + 7 &&
+        f.firstMoment === bf.firstMoment + 5 &&
+        f.firstMomentComment === bf.firstMomentComment + 2 &&
+        f.referredSignups === bf.referredSignups + 1 &&
+        f.referredActivated === bf.referredActivated + 1
+      funnelOk
+        ? pass("funnel counts moment contributions; reaction/pure-repost excluded")
+        : fail("funnel moments parity", { f: { s: f.signups, a: f.activated, m: f.firstMoment, mc: f.firstMomentComment, rs: f.referredSignups, ra: f.referredActivated }, b: { s: bf.signups, a: bf.activated, m: bf.firstMoment, mc: bf.firstMomentComment, rs: bf.referredSignups, ra: bf.referredActivated } })
+
+      // Retention cohorts use the same contribution definition.
+      const cohortDelta = growth.cohorts[0].activated - baseGrowth.cohorts[0].activated
+      cohortDelta === 7
+        ? pass("retention cohort counts moment-only activated members")
+        : fail("cohort activation delta", cohortDelta)
+
+      // Community health: live-row union — deleted/repost/reaction excluded.
+      const h = ops.health, bh = baseOps.health
+      const healthOk =
+        h.uniqueContributors7d === bh.uniqueContributors7d + 6 &&
+        h.moments7d === bh.moments7d + 4 &&
+        h.momentComments7d === bh.momentComments7d + 2
+      healthOk
+        ? pass("community health: unique contributors + moment counts")
+        : fail("community health", { h: { u: h.uniqueContributors7d, m: h.moments7d, mc: h.momentComments7d }, b: { u: bh.uniqueContributors7d, m: bh.moments7d, mc: bh.momentComments7d } })
+
+      // Cross-surface: chatter's moment counts as contributing elsewhere;
+      // botUser's moment comment counts the same for TerpBot.
+      const cvOk =
+        growth.chat.uniqueChatters7d === baseGrowth.chat.uniqueChatters7d + 1 &&
+        growth.chat.chattersWhoContributeElsewhere7d === baseGrowth.chat.chattersWhoContributeElsewhere7d + 1
+      cvOk
+        ? pass("chatValue: chatter who also posts a Moment counts as elsewhere-contributor")
+        : fail("chatValue", { c: growth.chat, b: baseGrowth.chat })
+      const bvOk =
+        growth.bot.uniqueUsers7d === baseGrowth.bot.uniqueUsers7d + 1 &&
+        growth.bot.usersWhoAlsoContribute7d === baseGrowth.bot.usersWhoAlsoContribute7d + 1
+      bvOk
+        ? pass("botValue: TerpBot user with a Moment comment counts as contributor")
+        : fail("botValue", { b: growth.bot, base: baseGrowth.bot })
+
+      // First-action analysis recognises Moment surfaces; aggregate shape only.
+      const fa = growth.firstAction30d, bfa = baseGrowth.firstAction30d
+      const faCount = (rows: { type: string; count: number }[], t: string) => rows.find((r) => r.type === t)?.count ?? 0
+      const pathDelta = (fa.paths.find((p) => p.first === "moment post" && p.then === "chat")?.count ?? 0)
+        - (bfa.paths.find((p) => p.first === "moment post" && p.then === "chat")?.count ?? 0)
+      const faOk =
+        faCount(fa.byFirstAction, "moment post") === faCount(bfa.byFirstAction, "moment post") + 4 &&
+        faCount(fa.byFirstAction, "moment comment") === faCount(bfa.byFirstAction, "moment comment") + 2 &&
+        fa.multiSurfaceMembers === bfa.multiSurfaceMembers + 1 &&
+        fa.communityOnly === bfa.communityOnly + 6 &&
+        pathDelta === 1
+      faOk
+        ? pass("first-action analysis: moment post/comment surfaces + paths")
+        : fail("first-action", {
+            mp: [faCount(fa.byFirstAction, "moment post"), faCount(bfa.byFirstAction, "moment post")],
+            mc: [faCount(fa.byFirstAction, "moment comment"), faCount(bfa.byFirstAction, "moment comment")],
+            multi: [fa.multiSurfaceMembers, bfa.multiSurfaceMembers],
+            co: [fa.communityOnly, bfa.communityOnly],
+            pathDelta,
+          })
+      const faLeak = JSON.stringify(fa).match(/__ops_|email|authorId/i)
+      !faLeak ? pass("first-action analysis stays aggregate (no member identity)") : fail("first-action privacy", faLeak)
+
+      // searchMembers exposes moment contribution counts.
+      const mRows = await searchMembers(`__ops_mposter_${TS}`)
+      mRows.length === 1 && mRows[0].counts.moments === 1
+        ? pass("member summary counts authored moments")
+        : fail("member summary moments", mRows.map((r) => r.username))
+      const cRows = await searchMembers(`__ops_mcomment_${TS}`)
+      cRows.length === 1 && cRows[0].counts.momentComments === 1
+        ? pass("member summary counts moment comments")
+        : fail("member summary momentComments", cRows.map((r) => r.username))
+    }
+
     // ── Activation report gate (/api/admin/activation) ──────────────
     {
       const guest = await fetch(`${BASE}/api/admin/activation`)
@@ -266,6 +384,7 @@ const main = async () => {
     }
   } finally {
     if (feedbackIds.length) await prisma.feedback.deleteMany({ where: { id: { in: feedbackIds } } })
+    await prisma.botEvent.deleteMany({ where: { key: { startsWith: "__ops_bot_" } } }).catch(() => {})
     for (const u of users) {
       await prisma.user.delete({ where: { id: u.id } }).catch(() => {})
     }

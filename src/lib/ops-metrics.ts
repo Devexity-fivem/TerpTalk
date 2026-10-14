@@ -18,6 +18,8 @@ export interface FunnelWindow {
   firstReply: number
   firstSetup: number
   firstChatMessage: number
+  firstMoment: number
+  firstMomentComment: number
   returned24h: number
   returned7d: number
   referredSignups: number
@@ -25,9 +27,23 @@ export interface FunnelWindow {
 }
 
 // "Activated" = the member produced at least one real contribution — a
-// thread, reply, diary, diary update, setup, or chat message. That is the
-// primary activation event: TerpTalk's value is growing knowledge +
-// community, and a member who has never contributed has not experienced it.
+// thread, reply, diary, diary update, setup, chat message, Moment
+// (post/story/quote), or Moment comment. That is the primary activation
+// event: TerpTalk's value is growing knowledge + community, and a member
+// who has never contributed has not experienced it.
+//
+// Contribution semantics (applied consistently everywhere below):
+//   - Pure reposts are NOT contributions: repostOfId set + empty content
+//     is one-tap amplification, the same effort class as a reaction.
+//     Quote posts carry authored content and DO count.
+//   - Moment reactions and follows are never contributions.
+//   - Deleted rows still count here, matching every other surface in
+//     this funnel — activation measures that the member produced a
+//     contribution, not that the content survived. Live-row consumers
+//     (communityHealth, activation milestones) exclude deleted per
+//     their own convention.
+const MOMENT_ORIGINAL = { OR: [{ repostOfId: null }, { content: { not: "" } }] }
+
 const CONTRIBUTION_OR = [
   { threadCreator: { some: {} } },
   { posts: { some: {} } },
@@ -35,12 +51,14 @@ const CONTRIBUTION_OR = [
   { diaryUpdates: { some: {} } },
   { setupCreator: { some: {} } },
   { chatMessages: { some: {} } },
+  { moments: { some: MOMENT_ORIGINAL } },
+  { momentComments: { some: {} } },
 ] as const
 
 async function funnel(sinceDays: number): Promise<FunnelWindow> {
   const since = new Date(Date.now() - sinceDays * DAY)
   const base = { createdAt: { gt: since }, banned: false }
-  const [signups, onboardingCompleted, activated, firstDiary, firstThread, firstReply, firstSetup, firstChatMessage, returned24h, returned7d, referredSignups, referredActivated] =
+  const [signups, onboardingCompleted, activated, firstDiary, firstThread, firstReply, firstSetup, firstChatMessage, firstMoment, firstMomentComment, returned24h, returned7d, referredSignups, referredActivated] =
     await Promise.all([
       prisma.user.count({ where: base }),
       prisma.user.count({ where: { ...base, onboardingCompletedAt: { not: null } } }),
@@ -50,6 +68,8 @@ async function funnel(sinceDays: number): Promise<FunnelWindow> {
       prisma.user.count({ where: { ...base, posts: { some: {} } } }),
       prisma.user.count({ where: { ...base, setupCreator: { some: {} } } }),
       prisma.user.count({ where: { ...base, chatMessages: { some: {} } } }),
+      prisma.user.count({ where: { ...base, moments: { some: MOMENT_ORIGINAL } } }),
+      prisma.user.count({ where: { ...base, momentComments: { some: {} } } }),
       // Returned = lastSeenAt (kept fresh by /api/ping) is at least a day
       // past signup. Column-to-column comparison needs raw SQL; the where
       // clause keeps it to the bounded sign-up window.
@@ -73,7 +93,7 @@ async function funnel(sinceDays: number): Promise<FunnelWindow> {
         where: { ...base, profile: { referredById: { not: null } }, OR: [...CONTRIBUTION_OR] },
       }),
     ])
-  return { days: sinceDays, signups, onboardingCompleted, activated, firstDiary, firstThread, firstReply, firstSetup, firstChatMessage, returned24h, returned7d, referredSignups, referredActivated }
+  return { days: sinceDays, signups, onboardingCompleted, activated, firstDiary, firstThread, firstReply, firstSetup, firstChatMessage, firstMoment, firstMomentComment, returned24h, returned7d, referredSignups, referredActivated }
 }
 
 export interface CommunityHealth {
@@ -82,6 +102,8 @@ export interface CommunityHealth {
   newReplies7d: number
   diaryUpdates7d: number
   chatMessages7d: number
+  moments7d: number
+  momentComments7d: number
   newMembers7d: number
   returningMembers7d: number
   openReports: number
@@ -89,9 +111,12 @@ export interface CommunityHealth {
 
 async function communityHealth(): Promise<CommunityHealth> {
   const since = new Date(Date.now() - 7 * DAY)
-  const [contributorRows, newThreads7d, newReplies7d, diaryUpdates7d, chatMessages7d, newMembers7d, returningMembers7d, openReports] =
+  const [contributorRows, newThreads7d, newReplies7d, diaryUpdates7d, chatMessages7d, moments7d, momentComments7d, newMembers7d, returningMembers7d, openReports] =
     await Promise.all([
       // Distinct authors across every contribution surface in the window.
+      // Live rows only (this view counts currently-visible output, unlike
+      // the funnel); pure reposts are excluded per CONTRIBUTION_OR — a
+      // repost pointer is amplification, not an authored contribution.
       prisma.$queryRaw<[{ n: bigint }]>`
         SELECT COUNT(DISTINCT "authorId")::bigint AS n FROM (
           SELECT "authorId" AS "authorId" FROM "Thread" WHERE "createdAt" > ${since} AND "deleted" = false
@@ -100,12 +125,17 @@ async function communityHealth(): Promise<CommunityHealth> {
           UNION ALL SELECT "authorId" FROM "DiaryUpdate" WHERE "createdAt" > ${since}
           UNION ALL SELECT "authorId" FROM "ChatMessage" WHERE "createdAt" > ${since} AND "deleted" = false
           UNION ALL SELECT "authorId" FROM "GrowSetup" WHERE "createdAt" > ${since} AND "deleted" = false
+          UNION ALL SELECT "authorId" FROM "Moment" WHERE "createdAt" > ${since} AND "deleted" = false AND ("repostOfId" IS NULL OR "content" <> '')
+          UNION ALL SELECT "authorId" FROM "MomentComment" WHERE "createdAt" > ${since} AND "deleted" = false
         ) c
       `.then((r) => Number(r[0]?.n ?? 0)),
       prisma.thread.count({ where: { deleted: false, createdAt: { gt: since } } }),
       prisma.post.count({ where: { deleted: false, createdAt: { gt: since } } }),
       prisma.diaryUpdate.count({ where: { createdAt: { gt: since } } }),
       prisma.chatMessage.count({ where: { deleted: false, createdAt: { gt: since } } }),
+      // Authored moments only — pure reposts excluded like the union.
+      prisma.moment.count({ where: { deleted: false, createdAt: { gt: since }, OR: [{ repostOfId: null }, { content: { not: "" } }] } }),
+      prisma.momentComment.count({ where: { deleted: false, createdAt: { gt: since } } }),
       prisma.user.count({ where: { createdAt: { gt: since } } }),
       // Members seen this week whose account is at least a day old —
       // "came back", not "was created".
@@ -114,7 +144,7 @@ async function communityHealth(): Promise<CommunityHealth> {
       }),
       prisma.report.count({ where: { status: { in: ["PENDING", "REVIEWING", "ESCALATED"] } } }),
     ])
-  return { uniqueContributors7d: contributorRows, newThreads7d, newReplies7d, diaryUpdates7d, chatMessages7d, newMembers7d, returningMembers7d, openReports }
+  return { uniqueContributors7d: contributorRows, newThreads7d, newReplies7d, diaryUpdates7d, chatMessages7d, moments7d, momentComments7d, newMembers7d, returningMembers7d, openReports }
 }
 
 export interface UnansweredThread {
@@ -353,7 +383,7 @@ export interface MemberSummary {
   xp: number
   standing: number
   referred: boolean
-  counts: { threads: number; posts: number; diaries: number; diaryUpdates: number; chatMessages: number; setups: number }
+  counts: { threads: number; posts: number; diaries: number; diaryUpdates: number; chatMessages: number; setups: number; moments: number; momentComments: number }
   openReportsAbout: number
   abuseFlags: number
 }
@@ -378,6 +408,7 @@ export async function searchMembers(q: string): Promise<MemberSummary[]> {
             select: {
               threadCreator: true, posts: true, diaryCreator: true,
               diaryUpdates: true, chatMessages: true, setupCreator: true,
+              moments: true, momentComments: true,
             },
           },
         },
@@ -419,6 +450,8 @@ export async function searchMembers(q: string): Promise<MemberSummary[]> {
       diaryUpdates: r.user._count.diaryUpdates,
       chatMessages: r.user._count.chatMessages,
       setups: r.user._count.setupCreator,
+      moments: r.user._count.moments,
+      momentComments: r.user._count.momentComments,
     },
     openReportsAbout: repMap.get(r.user.id) ?? 0,
     abuseFlags: flagMap.get(r.user.id) ?? 0,
@@ -456,6 +489,8 @@ const SURFACES: { key: string; label: string }[] = [
   { key: "diaryUpdate", label: "diary update" },
   { key: "setup", label: "setup" },
   { key: "chat", label: "chat" },
+  { key: "moment", label: "moment post" },
+  { key: "momentComment", label: "moment comment" },
 ]
 
 // Same definition the community page uses to flag question threads.
@@ -476,7 +511,7 @@ async function firstActionAnalysis(sinceDays: number): Promise<FirstActionAnalys
   // Earliest contribution per surface per user — indexed scans only. Threads
   // are fetched (bounded, asc) instead of groupBy so the earliest thread can
   // be classified question vs discussion from its category.
-  const [threadRows, posts, diaries, updates, setups, chats] = await Promise.all([
+  const [threadRows, posts, diaries, updates, setups, chats, moments, momentComments] = await Promise.all([
     prisma.thread.findMany({
       where: { authorId: { in: ids }, deleted: false },
       orderBy: { createdAt: "asc" },
@@ -488,6 +523,10 @@ async function firstActionAnalysis(sinceDays: number): Promise<FirstActionAnalys
     prisma.diaryUpdate.groupBy({ by: ["authorId"], where: { authorId: { in: ids } }, _min: { createdAt: true } }),
     prisma.growSetup.groupBy({ by: ["authorId"], where: { authorId: { in: ids }, deleted: false }, _min: { createdAt: true } }),
     prisma.chatMessage.groupBy({ by: ["authorId"], where: { authorId: { in: ids }, deleted: false }, _min: { createdAt: true } }),
+    // Authored moments only (posts, stories, quotes) — pure reposts and
+    // deleted rows are excluded, matching the live-row convention here.
+    prisma.moment.groupBy({ by: ["authorId"], where: { authorId: { in: ids }, deleted: false, OR: [{ repostOfId: null }, { content: { not: "" } }] }, _min: { createdAt: true } }),
+    prisma.momentComment.groupBy({ by: ["authorId"], where: { authorId: { in: ids }, deleted: false }, _min: { createdAt: true } }),
   ])
   const earliest = new Map<string, { type: string; at: Date }[]>()
   const add = (rows: { authorId: string; _min: { createdAt: Date | null } }[], type: string) => {
@@ -504,6 +543,7 @@ async function firstActionAnalysis(sinceDays: number): Promise<FirstActionAnalys
   }
   add(posts, "reply"); add(diaries, "diary")
   add(updates, "diary update"); add(setups, "setup"); add(chats, "chat")
+  add(moments, "moment post"); add(momentComments, "moment comment")
 
   const DAY_MS = DAY
   const firstReturned = new Map<string, number>()
@@ -525,7 +565,7 @@ async function firstActionAnalysis(sinceDays: number): Promise<FirstActionAnalys
     }
     const types = new Set(list.map((l) => l.type))
     const hasDiary = types.has("diary") || types.has("diary update")
-    const hasCommunity = types.has("discussion") || types.has("question") || types.has("reply") || types.has("chat")
+    const hasCommunity = types.has("discussion") || types.has("question") || types.has("reply") || types.has("chat") || types.has("moment post") || types.has("moment comment")
     if (hasDiary && hasCommunity) diaryAndCommunity++
     else if (hasDiary) diaryOnly++
     else if (hasCommunity) communityOnly++
@@ -638,6 +678,9 @@ async function chatValue(): Promise<ChatValue> {
     byUser.set(m.authorId, days)
   }
   const chatters = [...byUser.keys()]
+  // "Elsewhere" = any non-chat contribution surface — Moments + Moment
+  // comments included (authored moments only; pure reposts don't count,
+  // same rule as CONTRIBUTION_OR).
   const nonChat = chatters.length === 0 ? [] : await prisma.$queryRaw<[{ authorId: string }]>`
     SELECT DISTINCT "authorId" FROM (
       SELECT "authorId" FROM "Thread" WHERE "createdAt" > ${since} AND "deleted" = false
@@ -645,6 +688,8 @@ async function chatValue(): Promise<ChatValue> {
       UNION ALL SELECT "authorId" FROM "GrowDiary" WHERE "createdAt" > ${since} AND "deleted" = false
       UNION ALL SELECT "authorId" FROM "DiaryUpdate" WHERE "createdAt" > ${since}
       UNION ALL SELECT "authorId" FROM "GrowSetup" WHERE "createdAt" > ${since} AND "deleted" = false
+      UNION ALL SELECT "authorId" FROM "Moment" WHERE "createdAt" > ${since} AND "deleted" = false AND ("repostOfId" IS NULL OR "content" <> '')
+      UNION ALL SELECT "authorId" FROM "MomentComment" WHERE "createdAt" > ${since} AND "deleted" = false
     ) c WHERE "authorId" IN (SELECT UNNEST(${chatters}::text[]))
   `
   const elsewhere = new Set(nonChat.map((r) => r.authorId))
@@ -687,6 +732,8 @@ async function botValue(): Promise<BotValue> {
         UNION ALL SELECT "authorId" FROM "DiaryUpdate" WHERE "createdAt" > ${since}
         UNION ALL SELECT "authorId" FROM "GrowSetup" WHERE "createdAt" > ${since} AND "deleted" = false
         UNION ALL SELECT "authorId" FROM "ChatMessage" WHERE "createdAt" > ${since} AND "deleted" = false
+        UNION ALL SELECT "authorId" FROM "Moment" WHERE "createdAt" > ${since} AND "deleted" = false AND ("repostOfId" IS NULL OR "content" <> '')
+        UNION ALL SELECT "authorId" FROM "MomentComment" WHERE "createdAt" > ${since} AND "deleted" = false
       ) c WHERE "authorId" IN (SELECT UNNEST(${users}::text[]))
     `
     contributors = rows.length

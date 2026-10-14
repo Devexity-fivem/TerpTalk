@@ -68,6 +68,10 @@ export async function GET(request: Request) {
           { posts: { some: { createdAt: { gt: since } } } },
           { threadCreator: { some: { createdAt: { gt: since } } } },
           { chatMessages: { some: { createdAt: { gt: since } } } },
+          // Authored Moments + comments — same contribution definition as
+          // the activation funnel (pure reposts don't qualify).
+          { moments: { some: { createdAt: { gt: since }, OR: [{ repostOfId: null }, { content: { not: "" } }] } } },
+          { momentComments: { some: { createdAt: { gt: since } } } },
         ],
       },
     }),
