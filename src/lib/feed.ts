@@ -6,6 +6,7 @@ import { mediaProxyUrl } from "@/lib/media"
 import { diaryPath } from "@/lib/slugs"
 import { updateAnchor } from "@/lib/update-social"
 import { withVia, type EventSource } from "@/lib/event-sources"
+import { momentCardSelect, momentVisibleWhere, toMomentDTO, type MomentCardRow, type MomentDTO } from "@/lib/moments"
 
 // ─── Feed Core ─────────────────────────────────────────────────────
 // Canonical activity feed for TerpTalk. One module owns candidate
@@ -14,9 +15,9 @@ import { withVia, type EventSource } from "@/lib/event-sources"
 // `/api/feed` continues it; Phase 3 surfaces (profile activity, Discover)
 // should consume this module rather than re-implementing feed queries.
 //
-// There is intentionally no feed table, no SocialPost model and no
-// materialization: items are views over the existing domain rows
-// (DiaryUpdate, Thread, harvested GrowDiary).
+// There is intentionally no feed table and no materialization: items are
+// views over the domain rows (Moment — the native social post, see
+// lib/moments.ts — DiaryUpdate, Thread, harvested GrowDiary).
 //
 // Ordering: keyset-paginated by (sortAt DESC, id DESC) where sortAt is
 // the item's activity timestamp (update/thread createdAt, diary
@@ -34,7 +35,7 @@ import { withVia, type EventSource } from "@/lib/event-sources"
 export const FEED_MODES = ["latest", "following", "for-you"] as const
 export type FeedMode = (typeof FEED_MODES)[number]
 
-export const FEED_KINDS = ["update", "thread", "harvest"] as const
+export const FEED_KINDS = ["moment", "update", "thread", "harvest"] as const
 export type FeedKind = (typeof FEED_KINDS)[number]
 
 export const FEED_PAGE_SIZE = 12
@@ -72,6 +73,7 @@ export type FeedThreadRow = Prisma.ThreadGetPayload<{ include: typeof feedThread
 export type FeedHarvestRow = Prisma.GrowDiaryGetPayload<{ include: typeof feedHarvestInclude }>
 
 export type FeedItem =
+  | { kind: "moment"; id: string; href: string; sortAt: Date; data: MomentDTO }
   | { kind: "update"; id: string; href: string; sortAt: Date; data: FeedUpdateRow }
   | { kind: "thread"; id: string; href: string; sortAt: Date; data: FeedThreadRow }
   | { kind: "harvest"; id: string; href: string; sortAt: Date; data: FeedHarvestRow }
@@ -262,12 +264,29 @@ export function feedDiaryWhere(scope: FeedScope): Prisma.GrowDiaryWhereInput {
   return { deleted: false, author: activeAuthor(), ...publicDiaryWhere, ...notBlockedAuthor(scope.blockedIds) }
 }
 
+/** Moments: the canonical audience predicate (lib/moments.ts) AND the
+ *  surface scope. Stories never enter the feed (kind POST only). */
+export function feedMomentWhere(scope: FeedScope): Prisma.MomentWhereInput {
+  const visible = momentVisibleWhere({ viewerId: scope.viewerId, blockedIds: scope.blockedIds })
+  if (scope.authorId) return { AND: [visible, { authorId: scope.authorId }] }
+  if (scope.personalized && !scope.coldStart) {
+    const uid = scope.viewerId!
+    return { AND: [visible, { OR: [{ authorId: uid }, { author: followedBy(uid) }] }] }
+  }
+  return visible
+}
+
 // ── Scoring (for-you only; the pre-existing deterministic formula) ───
 
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000
 
 function scoreItem(item: FeedItem, now: number): number {
   const recency = Math.max(0, 1 - (now - item.sortAt.getTime()) / WEEK_MS)
+  if (item.kind === "moment") {
+    const c = item.data.counts
+    const engagement = Math.min(1, (c.likes + c.comments * 2 + c.reposts * 3) / 20)
+    return recency * 0.6 + engagement * 0.4
+  }
   if (item.kind === "thread") {
     const engagement = Math.min(1, (item.data.replyCount + item.data.views) / 100)
     return recency * 0.6 + engagement * 0.4
@@ -304,7 +323,15 @@ export async function getFeedPage(opts: {
   const take = limit + 1 // +1 row per source → exact hasMore without a count query
   const want = (k: FeedKind) => kinds.includes(k)
 
-  const [updates, threads, harvests] = await Promise.all([
+  const [moments, updates, threads, harvests] = await Promise.all([
+    want("moment")
+      ? prisma.moment.findMany({
+          where: { AND: [feedMomentWhere(scope), ...(cur ? [keysetAfter("createdAt", cur)] : [])] },
+          take,
+          orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+          select: momentCardSelect(scope.viewerId),
+        })
+      : Promise.resolve([] as MomentCardRow[]),
     want("update")
       ? prisma.diaryUpdate.findMany({
           where: { ...feedUpdateWhere(scope), ...(cur ? keysetAfter("createdAt", cur) : {}) },
@@ -343,6 +370,10 @@ export async function getFeedPage(opts: {
   const via: EventSource | null = scope.mode === "following" ? "following_feed" : scope.authorId ? "profile" : null
 
   const candidates: FeedItem[] = []
+  for (const m of moments) {
+    const dto = toMomentDTO(m, scope.viewerId, scope.blockedIds)
+    candidates.push({ kind: "moment", id: m.id, href: withVia(dto.href, via), sortAt: m.createdAt, data: dto })
+  }
   for (const u of updates) {
     // Restricted-class media serialize as the authorization endpoint,
     // never the raw blob URL — applied here so every consumer is safe.

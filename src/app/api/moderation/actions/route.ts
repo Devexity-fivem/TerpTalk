@@ -13,7 +13,7 @@ import { deleteImagesIfUnreferenced } from "@/lib/blob"
 import { getPusher } from "@/lib/pusher"
 import { revalidateTag } from "next/cache"
 
-const CONTENT_TYPES = new Set(["THREAD", "POST", "CHAT_MESSAGE", "DIARY", "SETUP", "SETUP_COMMENT", "STRAIN"])
+const CONTENT_TYPES = new Set(["THREAD", "POST", "CHAT_MESSAGE", "DIARY", "SETUP", "SETUP_COMMENT", "STRAIN", "MOMENT", "MOMENT_COMMENT"])
 const ACTION_TYPES = new Set([
   "WARNING", "CONTENT_DELETION", "TEMPORARY_BAN", "PERMANENT_BAN", "UNBAN", "REMOVE_SUSPENSION",
   "PIN_THREAD", "LOCK_THREAD", "MOVE_THREAD",
@@ -343,6 +343,30 @@ export async function POST(request: Request) {
             if (ok) {
               await tx.notification.deleteMany({ where: commentLinkWhere(targetId) })
               setupCommentDeleted = true
+            }
+            break
+          }
+          case "MOMENT": {
+            const mm = await tx.moment.findUnique({ where: { id: targetId }, select: { id: true } })
+            ok = !!(await tx.moment.updateMany({ where: { id: targetId, authorId: targetUserId }, data: { deleted: true } })).count
+            if (ok && mm) {
+              deletedLink = [`/m/${targetId}`]
+              const imgs = await tx.momentImage.findMany({ where: { momentId: targetId }, select: { url: true } })
+              await tx.momentImage.deleteMany({ where: { momentId: targetId } })
+              deletedBlobUrls.push(...imgs.map((i) => i.url))
+            }
+            break
+          }
+          case "MOMENT_COMMENT": {
+            // Same shape as SETUP_COMMENT: authorId-scoped, idempotent,
+            // no rep/XP to reverse, one notification sweep.
+            const c = await tx.momentComment.updateMany({
+              where: { id: targetId, authorId: targetUserId },
+              data: { deleted: true },
+            })
+            ok = c.count > 0
+            if (ok) {
+              await tx.notification.deleteMany({ where: commentLinkWhere(targetId) })
             }
             break
           }

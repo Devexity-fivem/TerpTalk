@@ -462,7 +462,7 @@ const apiFiles = () => {
 
     const reactions = read("app/api/reactions/route.ts");
     check("social: reaction body must name exactly one target",
-      reactions.includes("[hasPostId, hasDiaryId, hasUpdateId].filter(Boolean).length !== 1"));
+      reactions.includes("[hasPostId, hasDiaryId, hasUpdateId, hasMomentId].filter(Boolean).length !== 1"));
     const updBranch = reactions.slice(reactions.indexOf("prisma.diaryUpdate.findUnique"));
     check("social: update reactions use canonical canViewDiary + deleted + active-author gates",
       updBranch.includes("canViewDiary(update.diary, session.user.id)") && updBranch.includes("update.diary.deleted")

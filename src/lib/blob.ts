@@ -325,10 +325,11 @@ export async function deleteImagesIfUnreferenced(urls: (string | null | undefine
   const candidates = urls.filter((u): u is string => typeof u === "string" && u.startsWith("https://"))
   if (!candidates.length || (!process.env.BLOB_READ_WRITE_TOKEN && !privateStoreToken())) return
 
-  const [postImages, diaryImages, setupImages, strainPhotos, contestImages, profiles, bannerProfiles, userImages] = await Promise.all([
+  const [postImages, diaryImages, setupImages, momentImages, strainPhotos, contestImages, profiles, bannerProfiles, userImages] = await Promise.all([
     prisma.postImage.findMany({ where: { url: { in: candidates } }, select: { url: true } }),
     prisma.diaryImage.findMany({ where: { url: { in: candidates } }, select: { url: true } }),
     prisma.setupImage.findMany({ where: { url: { in: candidates } }, select: { url: true } }),
+    prisma.momentImage.findMany({ where: { url: { in: candidates } }, select: { url: true } }),
     prisma.strainPhoto.findMany({ where: { imageUrl: { in: candidates } }, select: { imageUrl: true } }),
     prisma.contestEntry.findMany({ where: { imageUrl: { in: candidates } }, select: { imageUrl: true } }),
     prisma.profile.findMany({ where: { avatarUrl: { in: candidates } }, select: { avatarUrl: true } }),
@@ -352,6 +353,7 @@ export async function deleteImagesIfUnreferenced(urls: (string | null | undefine
       ...postImages.map((i) => i.url),
       ...diaryImages.map((i) => i.url),
       ...setupImages.map((i) => i.url),
+      ...momentImages.map((i) => i.url),
       ...strainPhotos.map((i) => i.imageUrl),
       ...contestImages.map((i) => i.imageUrl),
       ...profiles.map((p) => p.avatarUrl),

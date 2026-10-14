@@ -7,6 +7,7 @@ import { logModAction } from "@/lib/moderation"
 import { rateLimit } from "@/lib/rate-limit"
 import { notifyMany } from "@/lib/notify"
 import { diaryPath, setupPath, strainPath } from "@/lib/slugs"
+import { momentPath } from "@/lib/moment-shared"
 import {
   CASE_PRIORITIES,
   CASE_STATUSES,
@@ -105,6 +106,30 @@ async function reportTargetLabels(reports: { type: string; targetId: string | nu
           label: c.content.slice(0, 120),
           deleted: c.deleted || !!c.setup?.deleted,
           href: c.setup && !c.setup.deleted ? `${setupPath(c.setup)}#comment-${c.id}` : null,
+        })))
+      }
+      case "MOMENT": {
+        const rows = await prisma.moment.findMany({
+          where: { id: { in: ids } },
+          select: { id: true, content: true, kind: true, deleted: true },
+        })
+        return fetch(type, rows.map((m) => ({
+          id: m.id,
+          label: m.content.slice(0, 120) || (m.kind === "STORY" ? "(story)" : "(post)"),
+          deleted: m.deleted,
+          href: momentPath(m.id),
+        })))
+      }
+      case "MOMENT_COMMENT": {
+        const rows = await prisma.momentComment.findMany({
+          where: { id: { in: ids } },
+          select: { id: true, content: true, deleted: true, moment: { select: { id: true, deleted: true } } },
+        })
+        return fetch(type, rows.map((c) => ({
+          id: c.id,
+          label: c.content.slice(0, 120),
+          deleted: c.deleted || !!c.moment?.deleted,
+          href: c.moment && !c.moment.deleted ? `${momentPath(c.moment.id)}#comment-${c.id}` : null,
         })))
       }
       case "STRAIN": {

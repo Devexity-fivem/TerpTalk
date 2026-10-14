@@ -12,7 +12,10 @@ export async function notifyMentions(
   actorName: string,
   link: string,
   context: string,
-  excludeUserIds: string[] = []
+  excludeUserIds: string[] = [],
+  // Restricted-audience content (e.g. followers-only moments): only these
+  // mentioned members may be notified — the rest could not open the link.
+  audience?: (userIds: string[]) => Promise<Set<string>>
 ) {
   try {
     // Match the username charset exactly (3-20 chars, no hyphens) so the
@@ -30,9 +33,13 @@ export async function notifyMentions(
     const excluded = new Set([actorId, ...excludeUserIds])
     // The bot never needs a MENTION notification — @terpbot pings in chat are
     // answered by the messages route directly, and rows to the bot are dead letters.
-    const targets = users.filter(
+    let targets = users.filter(
       (u) => !excluded.has(u.userId) && u.username !== TERPBOT_USERNAME
     )
+    if (audience && targets.length > 0) {
+      const allowed = await audience(targets.map((u) => u.userId))
+      targets = targets.filter((u) => allowed.has(u.userId))
+    }
     if (targets.length === 0) return
 
     await notifyMany(

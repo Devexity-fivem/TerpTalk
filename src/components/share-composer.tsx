@@ -7,7 +7,7 @@ import { STAFF_ROLES } from "@/lib/roles"
 import { createPortal } from "react-dom"
 import {
   X, MessageSquare, HelpCircle, Sprout, Dna, Loader2,
-  BarChart3, Leaf, Settings, ArrowLeft, Send, ImageIcon, Wheat, FlaskConical,
+  BarChart3, Leaf, Settings, ArrowLeft, Send, ImageIcon, Wheat, FlaskConical, Clock, Globe, Users, Quote,
 } from "@/lib/icons"
 import ImageUploader from "@/components/image-uploader"
 import PollComposer from "@/components/poll-composer"
@@ -35,6 +35,8 @@ export interface ComposerPrefill {
   experimentId?: string
   /** preselected diary for grow-update / harvest / experiment / moment */
   diary?: { id: string; title: string; stage: string; harvested?: boolean; own?: boolean }
+  /** quote-post target — a PUBLIC moment shown above the composer */
+  quote?: { id: string; author: string; excerpt: string }
 }
 
 interface ShareComposerContextValue {
@@ -64,12 +66,13 @@ export function ShareComposerProvider({ children }: { children: ReactNode }) {
 // ── Content types ──────────────────────────────────────────────────
 
 type ComposerType =
+  | "moment"
+  | "story"
   | "discussion"
   | "question"
   | "grow-update"
   | "experiment"
   | "diary"
-  | "moment"
   | "harvest"
   | "poll"
   | "setup"
@@ -83,12 +86,13 @@ interface ComposerOption {
 }
 
 const COMPOSER_TYPES: ComposerOption[] = [
+  { type: "moment", label: "Post", icon: ImageIcon, description: "Share a quick post or photos" },
+  { type: "story", label: "Story", icon: Clock, description: "A 24-hour grow check-in" },
   { type: "discussion", label: "Discussion", icon: MessageSquare, description: "Start a conversation" },
   { type: "question", label: "Question", icon: HelpCircle, description: "Ask a focused question" },
   { type: "grow-update", label: "Grow Update", icon: Sprout, description: "Update an active grow" },
   { type: "experiment", label: "Experiment", icon: FlaskConical, description: "Document a change you're watching" },
   { type: "diary", label: "Grow Diary", icon: Leaf, description: "Track a new grow" },
-  { type: "moment", label: "Photo / Moment", icon: ImageIcon, description: "Share something visual" },
   { type: "harvest", label: "Harvest", icon: Wheat, description: "Log a completed grow" },
   { type: "poll", label: "Poll", icon: BarChart3, description: "Ask the community to weigh in" },
   { type: "setup", label: "Setup", icon: Settings, description: "Document your gear" },
@@ -118,7 +122,7 @@ function getPageContext(pathname: string): PageContext {
 function getDefaultType(ctx: PageContext): ComposerType {
   if (ctx.diaryId) return "grow-update"
   if (ctx.strainId) return "diary"
-  return "discussion"
+  return "moment"
 }
 
 // ── Stage/grow vocab (matches the server enums) ────────────────────
@@ -215,9 +219,12 @@ function ShareComposerDialog({ prefill, onClose }: { prefill?: ComposerPrefill; 
       let url = ""
 
       switch (type) {
+        case "moment":
+        case "story":
+          url = "/api/moments"
+          break
         case "discussion":
         case "question":
-        case "moment":
         case "poll":
           url = "/api/forum/threads"
           break
@@ -252,7 +259,12 @@ function ShareComposerDialog({ prefill, onClose }: { prefill?: ComposerPrefill; 
       const result = await res.json()
       onClose()
 
-      if (result.thread?.slug) router.push(`/forum/thread/${result.thread.slug}`)
+      // Posts and stories land where the member already is when that
+      // surface shows them (feed / own profile); otherwise on the post.
+      if (result.moment?.href) {
+        if (pathname.startsWith("/feed") || pathname.startsWith("/u/")) router.refresh()
+        else router.push(result.moment.kind === "STORY" ? "/feed" : result.moment.href)
+      } else if (result.thread?.slug) router.push(`/forum/thread/${result.thread.slug}`)
       else if (result.diary?.slug) router.push(`/diaries/${result.diary.slug}`)
       else if (result.diary?.id) router.push(`/diaries/${result.diary.id}`)
       else router.refresh()
@@ -406,7 +418,16 @@ function ShareComposerDialog({ prefill, onClose }: { prefill?: ComposerPrefill; 
                 </button>
               )}
             </div>
-          ) : type === "discussion" || type === "question" || type === "moment" || type === "poll" ? (
+          ) : type === "moment" || type === "story" ? (
+            <MomentForm
+              story={type === "story"}
+              diary={diaryInfo?.own === true ? diaryInfo : null}
+              quote={type === "moment" ? prefill?.quote ?? null : null}
+              initialContent={prefill?.content}
+              submitting={submitting}
+              onSubmit={handleSubmit}
+            />
+          ) : type === "discussion" || type === "question" || type === "poll" ? (
             <ThreadForm
               categories={categories}
               variant={type}
@@ -457,9 +478,109 @@ interface FormProps {
   onSubmit: (data: Record<string, unknown>) => void
 }
 
+// Native social post / 24h story → POST /api/moments. Hashtags and
+// @mentions are parsed server-side from the text.
+function MomentForm({ story, diary, quote, initialContent, submitting, onSubmit }: FormProps & {
+  story: boolean
+  diary: { id: string; title: string; stage: string } | null
+  quote: { id: string; author: string; excerpt: string } | null
+  initialContent?: string
+}) {
+  const max = story ? 200 : 1000
+  const [content, setContent] = useState(initialContent ?? "")
+  const [images, setImages] = useState<string[]>([])
+  const [visibility, setVisibility] = useState<"PUBLIC" | "FOLLOWERS">("PUBLIC")
+  const [tagGrow, setTagGrow] = useState(!!diary)
+
+  const ready = story
+    ? images.length > 0
+    : quote ? content.trim().length > 0 : content.trim().length > 0 || images.length > 0
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!ready || submitting) return
+    onSubmit({
+      kind: story ? "STORY" : "POST",
+      content: content.trim(),
+      images,
+      visibility,
+      ...(tagGrow && diary ? { diaryId: diary.id } : {}),
+      ...(quote ? { repostOfId: quote.id } : {}),
+    })
+  }
+
+  return (
+    <form onSubmit={submit} className="space-y-3">
+      {quote && (
+        <div className="p-3 rounded-xl border border-border bg-secondary/40 text-sm">
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-1">
+            <Quote className="w-3 h-3" /> Quoting @{quote.author}
+          </div>
+          <p className="line-clamp-3">{quote.excerpt}</p>
+        </div>
+      )}
+      <div>
+        <label htmlFor="moment-content" className="block text-sm font-medium mb-1">
+          {story ? "Caption (optional)" : quote ? "Your take" : "What's growing?"}
+        </label>
+        <textarea
+          id="moment-content"
+          value={content}
+          onChange={(e) => setContent(e.target.value)}
+          placeholder={story ? "Day 42 in flower…" : "Share a thought, a photo, a win — use #hashtags and @mentions"}
+          rows={story ? 2 : 4}
+          maxLength={max}
+          className={cn(INPUT, "resize-y")}
+        />
+        <span className="text-[10px] text-muted-foreground">{content.length}/{max}</span>
+      </div>
+      {!quote && (
+        <div>
+          <span className="block text-sm font-medium mb-1">{story ? "Photos (at least one)" : "Photos"}</span>
+          <ImageUploader value={images} onChange={setImages} max={4} disabled={submitting} />
+        </div>
+      )}
+      <div className="flex flex-wrap items-center gap-3">
+        <div role="radiogroup" aria-label="Who can see this" className="inline-flex rounded-full border border-border p-0.5">
+          {(["PUBLIC", "FOLLOWERS"] as const).map((v) => (
+            <button
+              key={v}
+              type="button"
+              role="radio"
+              aria-checked={visibility === v}
+              onClick={() => setVisibility(v)}
+              className={cn(
+                "inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-medium min-h-9",
+                visibility === v ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              {v === "PUBLIC" ? <Globe className="w-3.5 h-3.5" /> : <Users className="w-3.5 h-3.5" />}
+              {v === "PUBLIC" ? "Everyone" : "Followers"}
+            </button>
+          ))}
+        </div>
+        {diary && (
+          <label className="inline-flex items-center gap-2 text-xs text-muted-foreground">
+            <input type="checkbox" checked={tagGrow} onChange={(e) => setTagGrow(e.target.checked)} />
+            Tag grow: <span className="font-medium text-foreground truncate max-w-40">{diary.title}</span>
+          </label>
+        )}
+      </div>
+      {story && <p className="text-xs text-muted-foreground">Stories disappear after 24 hours.</p>}
+      <button
+        type="submit"
+        disabled={!ready || submitting}
+        className="w-full flex items-center justify-center gap-2 bg-primary text-primary-foreground px-4 py-2.5 rounded-full font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 min-h-11"
+      >
+        {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+        {story ? "Share story" : quote ? "Post quote" : "Post"}
+      </button>
+    </form>
+  )
+}
+
 function ThreadForm({ categories, variant, strainName, canCreatePoll, submitting, onSubmit, initialTitle, initialContent, initialTags }: FormProps & {
   categories: { id: string; name: string; slug: string }[]
-  variant: "discussion" | "question" | "moment" | "poll"
+  variant: "discussion" | "question" | "poll"
   strainName?: string
   canCreatePoll: boolean | null
   initialTitle?: string
@@ -467,7 +588,6 @@ function ThreadForm({ categories, variant, strainName, canCreatePoll, submitting
   initialTags?: string[]
 }) {
   const isQuestion = variant === "question"
-  const isMoment = variant === "moment"
   const isPoll = variant === "poll"
 
   const [title, setTitle] = useState(initialTitle ?? "")
@@ -492,11 +612,10 @@ function ThreadForm({ categories, variant, strainName, canCreatePoll, submitting
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    // The thread API requires non-empty content — a Moment uses the
-    // caption as the body when no details were written.
+    // The thread API requires non-empty content — a poll uses the title
+    // as the body when no details were written.
     const body = content.trim() || title.trim()
     if (!title.trim() || !body || !effectiveCategoryId) return
-    if (isMoment && images.length === 0) return
     if (isPoll) {
       const opts = poll?.options.map((o) => o.trim()).filter(Boolean) ?? []
       if (!poll?.question.trim() || opts.length < 2) return
@@ -522,21 +641,17 @@ function ThreadForm({ categories, variant, strainName, canCreatePoll, submitting
   const submitDisabled =
     submitting ||
     !title.trim() ||
-    !(content.trim() || (isMoment && title.trim())) ||
+    !content.trim() ||
     !effectiveCategoryId ||
-    (isMoment && images.length === 0) ||
     (isPoll &&
       (!poll?.question.trim() ||
         poll.options.map((o) => o.trim()).filter(Boolean).length < 2))
 
   return (
     <form onSubmit={handleSubmit} className="space-y-3">
-      {isMoment && (
-        <ImageUploader value={images} onChange={setImages} max={4} disabled={submitting} />
-      )}
       <div>
         <label className="block text-sm font-medium mb-1">
-          {isPoll ? "Poll title" : isMoment ? "Caption" : isQuestion ? "Question" : "Title"}
+          {isPoll ? "Poll title" : isQuestion ? "Question" : "Title"}
         </label>
         <input
           type="text"
@@ -544,7 +659,6 @@ function ThreadForm({ categories, variant, strainName, canCreatePoll, submitting
           onChange={(e) => setTitle(e.target.value)}
           placeholder={
             isPoll ? "What are you asking the community?"
-            : isMoment ? "Give this moment a caption"
             : isQuestion ? "What do you want to ask?"
             : "What's the discussion about?"
           }
@@ -556,19 +670,18 @@ function ThreadForm({ categories, variant, strainName, canCreatePoll, submitting
       </div>
       {!isPoll && (
         <div>
-          <label className="block text-sm font-medium mb-1">{isMoment ? "Details (optional)" : "Details"}</label>
+          <label className="block text-sm font-medium mb-1">Details</label>
           <textarea
             value={content}
             onChange={(e) => setContent(e.target.value)}
             placeholder={
-              isMoment ? "Add context about this photo..."
-              : isQuestion ? "Describe what you're seeing — the more detail, the better the answers."
+              isQuestion ? "Describe what you're seeing — the more detail, the better the answers."
               : "Share your thoughts..."
             }
-            rows={isMoment ? 2 : 4}
+            rows={4}
             maxLength={10000}
             className={cn(INPUT, "resize-y")}
-            required={!isMoment}
+            required
           />
         </div>
       )}
@@ -603,12 +716,10 @@ function ThreadForm({ categories, variant, strainName, canCreatePoll, submitting
           )}
         </>
       )}
-      {!isMoment && (
-        <div>
-          <label className="block text-sm font-medium mb-1">Photos</label>
-          <ImageUploader value={images} onChange={setImages} max={4} disabled={submitting} />
-        </div>
-      )}
+      <div>
+        <label className="block text-sm font-medium mb-1">Photos</label>
+        <ImageUploader value={images} onChange={setImages} max={4} disabled={submitting} />
+      </div>
       <div className="grid grid-cols-2 gap-3">
         <div>
           <label className="block text-sm font-medium mb-1">Category</label>
@@ -644,7 +755,7 @@ function ThreadForm({ categories, variant, strainName, canCreatePoll, submitting
         className="w-full flex items-center justify-center gap-2 bg-primary text-primary-foreground px-4 py-2.5 rounded-full font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 min-h-11"
       >
         {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-        {isPoll ? "Post poll" : isMoment ? "Share moment" : isQuestion ? "Ask question" : "Post discussion"}
+        {isPoll ? "Post poll" : isQuestion ? "Ask question" : "Post discussion"}
       </button>
     </form>
   )

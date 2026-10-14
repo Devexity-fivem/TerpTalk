@@ -106,6 +106,12 @@ export default async function TagThreadsPage({
             )
           })}
         </div>
+
+        <p className="mt-8 text-center text-xs text-muted-foreground">
+          <Link href={`/tags/${slug}`} className="inline-flex items-center gap-1 hover:text-foreground">
+            Posts tagged #{tag.name}
+          </Link>
+        </p>
       </div>
     </div>
   )

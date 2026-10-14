@@ -10,6 +10,7 @@ import { notify, postDeepLink } from "@/lib/notify"
 import { canViewDiary } from "@/lib/diary-visibility"
 import { diaryPath } from "@/lib/slugs"
 import { updateAnchor } from "@/lib/update-social"
+import { canViewMoment, momentInteractionTarget, momentPath } from "@/lib/moments"
 
 const VALID_REACTION_TYPES = new Set(["LIKE", "LOVE", "LAUGH", "THINKING", "FIRE", "THUMBS_UP", "THUMBS_DOWN"])
 
@@ -36,26 +37,30 @@ export async function POST(request: Request) {
 
     const body = await request.json().catch(() => ({}))
     const { type, postId, diaryId, diaryUpdateId } = body
+    let { momentId } = body
 
     const hasPostId = typeof postId === "string" && postId.length > 0
     const hasDiaryId = typeof diaryId === "string" && diaryId.length > 0
     const hasUpdateId = typeof diaryUpdateId === "string" && diaryUpdateId.length > 0
+    const hasMomentId = typeof momentId === "string" && momentId.length > 0
 
     // Exactly one target — never a mixed/multi-target row.
     if (
       typeof type !== "string" ||
       !VALID_REACTION_TYPES.has(type) ||
-      [hasPostId, hasDiaryId, hasUpdateId].filter(Boolean).length !== 1
+      [hasPostId, hasDiaryId, hasUpdateId, hasMomentId].filter(Boolean).length !== 1
     ) {
       return NextResponse.json({ error: "Invalid request" }, { status: 400 })
     }
     // The single target column this request writes — explicit, never spread
     // from the body.
-    const target: { postId: string } | { diaryId: string } | { diaryUpdateId: string } = hasPostId
+    let target: { postId: string } | { diaryId: string } | { diaryUpdateId: string } | { momentId: string } = hasPostId
       ? { postId }
       : hasDiaryId
         ? { diaryId }
-        : { diaryUpdateId }
+        : hasMomentId
+          ? { momentId }
+          : { diaryUpdateId }
 
     // Rate limit: 120 reactions per 10 minutes per user (tier-scaled)
     const rl = await progressionRateLimit(session.user.id, `reaction:${session.user.id}`, 120, 10 * 60 * 1000)
@@ -100,6 +105,18 @@ export async function POST(request: Request) {
       targetAuthorId = diary.authorId
       targetLink = diaryPath(diary)
       targetTitle = diary.title
+    } else if (hasMomentId) {
+      // Moment — the canonical audience rule (lib/moments.ts), uniform 404.
+      // A pure repost is a pointer: the reaction lands on the original.
+      const m = await momentInteractionTarget(momentId)
+      if (!m || !(await canViewMoment(m, session.user.id))) {
+        return NextResponse.json({ error: "Post not found" }, { status: 404 })
+      }
+      target = { momentId: m.id }
+      momentId = m.id
+      targetAuthorId = m.authorId
+      targetLink = momentPath(m.id)
+      targetTitle = null
     } else {
       // Grow update — inherits its grow's canonical view rule
       // (canViewDiary: PRIVATE = owner only), plus deleted-grow and
@@ -184,7 +201,7 @@ export async function POST(request: Request) {
     // the recipient's notifyOnReaction pref, bans, and blocks.
     if (targetAuthorId && targetAuthorId !== session.user.id) {
       const emoji = REACTION_EMOJI[type] ?? "👍"
-      const targetKind = hasPostId ? "post" : hasDiaryId ? "grow diary" : "grow update"
+      const targetKind = hasPostId ? "post" : hasDiaryId ? "grow diary" : hasMomentId ? "moment" : "grow update"
       const context = targetTitle ? ` on "${targetTitle.slice(0, 60)}"` : ""
       // REACTION is in-app only (pushCategory never maps it) — update
       // reactions stay quiet like every other reaction.
@@ -195,7 +212,7 @@ export async function POST(request: Request) {
         content: `${session.user.name ?? "Someone"} reacted ${emoji} to your ${targetKind}${context}`,
         link: targetLink,
         actorId: session.user.id,
-        groupKey: `REACTION:${hasPostId ? `post:${postId}` : hasDiaryId ? `diary:${diaryId}` : `update:${diaryUpdateId}`}`,
+        groupKey: `REACTION:${hasPostId ? `post:${postId}` : hasDiaryId ? `diary:${diaryId}` : hasMomentId ? `moment:${momentId}` : `update:${diaryUpdateId}`}`,
         dedupeMs: 24 * 60 * 60 * 1000,
       })
     }

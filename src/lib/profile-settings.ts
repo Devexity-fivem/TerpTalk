@@ -41,6 +41,8 @@ export type ProfileDensity = (typeof PROFILE_DENSITIES)[number]
 //    src/lib/profile-widgets.ts.
 export const PROFILE_REQUIRED_ID = "overview"
 export const PROFILE_TAB_IDS = [
+  "posts",
+  "media",
   "activity",
   "grows",
   "harvests",
