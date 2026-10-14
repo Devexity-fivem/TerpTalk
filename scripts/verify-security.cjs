@@ -513,6 +513,30 @@ const apiFiles = () => {
       diaryPage.includes("loadUpdateSocial(updates.map((u) => u.id)") && diaryPage.includes('withComments: commentable'));
   }
 
+  // ── Suite-boundary rate-limit isolation (structural contract) ──
+  // master-tests clears harness-owned RateLimit rows before every HTTP-bound
+  // suite; the helper must scope deletes to the shared "unknown"-IP client,
+  // never indiscriminately.
+  {
+    const master = fs.readFileSync("scripts/master-tests.mts", "utf8");
+    const helper = fs.readFileSync("scripts/lib/rate-limit-isolation.ts", "utf8");
+
+    check("rate-limit isolation: HTTP phase suites are flagged",
+      /HTTP_PHASE: Suite\[\] = \([\s\S]*?satisfies Suite\[\]\)\.map\(\(s\): Suite => \(\{ \.\.\.s, isolateRateLimits: true \}\)\)/.test(master));
+    check("rate-limit isolation: final phase suites are flagged",
+      /FINAL_PHASE: Suite\[\] = \([\s\S]*?satisfies Suite\[\]\)\.map\(\(s\): Suite => \(\{ \.\.\.s, isolateRateLimits: true \}\)\)/.test(master));
+    check("rate-limit isolation: runner clears before the flagged suite runs",
+      master.includes("if (s.isolateRateLimits)") && master.indexOf("if (s.isolateRateLimits)") < master.indexOf("await runChild(s, extraEnv)"));
+    check("rate-limit isolation: cleanup failure fails the suite (no continue-into-contamination)",
+      /rate-limit isolation failed/.test(master) && /ok: false/.test(master.slice(master.indexOf("rate-limit isolation failed"))));
+    check("rate-limit isolation: helper is db-guarded",
+      helper.includes('import "../db-guard.mjs"'));
+    check("rate-limit isolation: deletes scoped to harness client hash, not blanket",
+      helper.includes('hashIp(HARNESS_CLIENT_IP)') && !/deleteMany\(\s*\{\s*\}\s*\)/.test(helper) && !/deleteMany\(\)/.test(helper));
+    check("rate-limit isolation: never clears mid-suite (documented boundary-only contract)",
+      helper.includes("Never call this mid-suite"));
+  }
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })().catch((e) => { console.error(e); process.exit(1); }).finally(() => p.$disconnect());

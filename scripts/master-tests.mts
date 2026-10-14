@@ -50,6 +50,12 @@ interface Suite {
   label: string
   tier: Tier
   timeoutMs?: number
+  // HTTP-bound suites share database-backed, IP-keyed RateLimit buckets —
+  // the harness's requests all resolve to getClientIp's "unknown" fallback,
+  // so one suite's searches/logins/registrations can exhaust the next
+  // suite's bucket. When true, the runner clears harness-owned rate-limit
+  // state before the suite starts (see scripts/lib/rate-limit-isolation.ts).
+  isolateRateLimits?: boolean
 }
 
 const STATIC_PHASE: Suite[] = [
@@ -66,7 +72,7 @@ const PURE_PHASE: Suite[] = [
 
 // Requires a healthy dev server at BASE_URL. Serial: suites share the dev DB
 // and bot-verify toggles global settings / rate-limit rows.
-const HTTP_PHASE: Suite[] = [
+const HTTP_PHASE: Suite[] = ([
   { id: "account", file: "scripts/account-verify.mjs", runner: "node", cls: "A", label: "Account lifecycle HTTP (auth, onboarding, DMs, deletion, captcha)", tier: "full" },
   { id: "forum", file: "scripts/forum-verify.mjs", runner: "node", cls: "A", label: "Forum HTTP behavior", tier: "full" },
   { id: "search", file: "scripts/search-verify.mjs", runner: "node", cls: "A", label: "Search HTTP behavior", tier: "full" },
@@ -81,7 +87,7 @@ const HTTP_PHASE: Suite[] = [
   { id: "product-events", file: "scripts/product-events-verify.mts", runner: "tsx", cls: "A", label: "Product-event telemetry: attribution, idempotency, beacon boundary, privacy, report surface", tier: "full" },
   { id: "runtime-verify", file: "scripts/runtime-verify.mjs", runner: "node", cls: "A", label: "Runtime security black-box (sessions, authz, privacy, Pusher, uploads, rate limits, staff, TerpBot)", tier: "full", timeoutMs: 12 * 60_000 },
   { id: "browser", file: "scripts/browser-tests.mts", runner: "tsx", cls: "A", label: "Browser regression (headless Chromium): auth, profile V2, privacy oracles, progression UI, mobile", tier: "full", timeoutMs: 5 * 60_000 },
-]
+] satisfies Suite[]).map((s): Suite => ({ ...s, isolateRateLimits: true }))
 
 // STRICTLY SERIAL — all create DB fixtures; several mutate shared global
 // settings (chat_enabled, GROW_ROOM_ENABLED) and rate-limit rows.
@@ -108,12 +114,12 @@ const DRIFT_PHASE: Suite[] = [
 ]
 
 // Remaining verification.
-const FINAL_PHASE: Suite[] = [
+const FINAL_PHASE: Suite[] = ([
   // Prod-mode verification builds .next — must run after the HTTP phase has
   // stopped a master-spawned dev server (an adopted external dev server on
   // the same .next dir may be disrupted by the build).
   { id: "runtime-prod", file: "scripts/runtime-prod-verify.mjs", runner: "node", cls: "A", label: "Production-mode verification (build, headers, CSP, cookies, fail-closed)", tier: "full", timeoutMs: 20 * 60_000 },
-]
+] satisfies Suite[]).map((s): Suite => ({ ...s, isolateRateLimits: true }))
 
 const ALL_SUITES = [...STATIC_PHASE, ...PURE_PHASE, ...HTTP_PHASE, ...DB_PHASE, ...DRIFT_PHASE, ...FINAL_PHASE]
 
@@ -386,6 +392,28 @@ async function runSuites(suites: Suite[], extraEnv: Record<string, string> = {})
       results.push({ suite: s, res: { code: null, signal: null, timedOut: false, output: "", ms: 0 }, ok: false, skipped: true })
       log(`  - ${s.label} [${s.cls}] SKIP (filtered by MASTER_ONLY)`)
       continue
+    }
+    if (s.isolateRateLimits) {
+      try {
+        // Lazy import keeps the fast tier DB-free — the helper module's
+        // db-guard side effect only runs when an HTTP suite is actually
+        // about to execute (full/all tiers already require the DB).
+        const { clearHarnessRateLimits } = await import("./lib/rate-limit-isolation")
+        const { deleted } = await clearHarnessRateLimits()
+        log(`    rate-limit isolation: cleared ${deleted} shared bucket row(s)`)
+      } catch (e) {
+        const msg = e instanceof Error
+          ? (e.message.split("\n").find((l) => l.trim()) ?? e.message).trim()
+          : String(e)
+        results.push({
+          suite: s,
+          res: { code: 1, signal: null, timedOut: false, output: `rate-limit isolation failed: ${msg}`, ms: 0 },
+          ok: false,
+          skipped: false,
+        })
+        log(`  ✗ ${s.label} [${s.cls}] FAIL (rate-limit isolation) — ${s.file}`)
+        continue
+      }
     }
     const res = await runChild(s, extraEnv)
     const ok = res.code === 0 && !res.timedOut && res.signal === null

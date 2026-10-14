@@ -1,5 +1,6 @@
 import "./db-guard.mjs"
 import { strict as assert } from "node:assert"
+import { clearHarnessRateLimits, HARNESS_CLIENT_IP } from "./lib/rate-limit-isolation"
 import { readFileSync } from "node:fs"
 import { prisma } from "@/lib/prisma"
 import { isBanned, isSessionValid, isAdmin, isModerator, isStaff, isSupport, hashIp, getTrustLevel, LIMITS, blockedUserIds, notBlockedAuthor, safeEqualSecret, bcryptDecoy } from "@/lib/security"
@@ -1240,6 +1241,52 @@ async function run() {
 
     await prisma.moderationAction.deleteMany({ where: { id: { in: bfActionIds } } })
     await prisma.securityEvent.deleteMany({ where: { id: { in: bfEventIds } } })
+
+    // ── Suite-boundary rate-limit isolation ──────────────────────────
+    // scripts/lib/rate-limit-isolation.mts clears exactly the buckets the
+    // harness's shared "unknown"-IP client can own, at suite boundaries.
+    // Foreign rows — other clients' hashed IPs, per-user keys — must
+    // survive untouched.
+    const isoTag = `seciso${Date.now()}`
+    const harnessKeys = [
+      `search:${hashIp(HARNESS_CLIENT_IP)}`,
+      `search-suggest:${hashIp(HARNESS_CLIENT_IP)}`,
+      `pd-case:${isoTag}:${HARNESS_CLIENT_IP}`,
+      "register:global",
+      `login:${isoTag}`,
+      `recover-user:${isoTag}`,
+      `chat-bot-mention:${isoTag}`,
+      `terpbot:out:room:${isoTag}`,
+    ]
+    const foreignKeys = [
+      `search:${hashIp("203.0.113.7")}`,       // a different client's bucket
+      `thread:${isoTag}`,                      // per-user key — suite-scoped, never shared
+      `diary-edit:${isoTag}`,
+    ]
+    const expiresAt = new Date(Date.now() + 60_000)
+    try {
+      // Pre-existing shared-bucket rows (e.g. register:global) are exactly
+      // the state this clears — reset the fixture keys to a known count.
+      await prisma.rateLimit.deleteMany({ where: { key: { in: [...harnessKeys, ...foreignKeys] } } })
+      await prisma.rateLimit.createMany({
+        data: [...harnessKeys, ...foreignKeys].map((key) => ({ key, count: 5, expiresAt })),
+      })
+      const first = await clearHarnessRateLimits()
+      assert.ok(first.deleted >= harnessKeys.length, `isolation cleared >= ${harnessKeys.length} harness rows (got ${first.deleted})`)
+      const remaining = await prisma.rateLimit.findMany({
+        where: { key: { in: [...harnessKeys, ...foreignKeys] } },
+        select: { key: true },
+      })
+      assert.deepEqual(
+        remaining.map((r) => r.key).sort(),
+        foreignKeys.slice().sort(),
+        "isolation removes harness-owned rows and leaves foreign buckets untouched"
+      )
+      const second = await clearHarnessRateLimits()
+      assert.equal(second.deleted, 0, "isolation is idempotent — a second boundary run deletes nothing")
+    } finally {
+      await prisma.rateLimit.deleteMany({ where: { key: { in: [...harnessKeys, ...foreignKeys] } } }).catch(() => {})
+    }
 
     console.log("All security regression tests passed.")
   } finally {
