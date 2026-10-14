@@ -298,9 +298,14 @@ const main = async () => {
     const rSelf = await createUser("rf")
     const rDel = await createUser("rd")
     const rNone = await createUser("rn")
-    users.push(rThread, rMoment, rSetup, rAnchor, rSelf, rDel, rNone)
+    const rStory = await createUser("ry")   // STORY only — can't receive comments
+    const rQuote = await createUser("rq")   // quote post — own text, still a surface
+    const rMix = await createUser("rx")     // story + pure repost
+    const rMixOk = await createUser("rz")   // story + eligible POST
+    const rWs = await createUser("rw")      // whitespace-content repost
+    users.push(rThread, rMoment, rSetup, rAnchor, rSelf, rDel, rNone, rStory, rQuote, rMix, rMixOk, rWs)
     const rSignup = new Date(Date.now() - 48 * HOUR)
-    for (const u of [rThread, rMoment, rSetup, rAnchor, rSelf, rDel, rNone]) {
+    for (const u of [rThread, rMoment, rSetup, rAnchor, rSelf, rDel, rNone, rStory, rQuote, rMix, rMixOk, rWs]) {
       await prisma.user.update({ where: { id: u.id }, data: { createdAt: rSignup } })
     }
     const rat = (h: number) => new Date(rSignup.getTime() + h * HOUR)
@@ -387,7 +392,20 @@ const main = async () => {
       data: { content: "gone", threadId: rnThread.id, authorId: other.id, createdAt: rat(2), deleted: true },
     })
 
-    const rmm = await activationMilestonesFor([rThread.id, rMoment.id, rSetup.id, rAnchor.id, rSelf.id, rDel.id, rNone.id, mCommenter.id])
+    // Opportunity-eligibility variants (Batch U): STORY rows can't receive
+    // comments and pure reposts retarget comments to the original — neither
+    // is a response surface. Quote posts keep authored content → eligible.
+    await prisma.moment.create({ data: { authorId: rStory.id, kind: "STORY", content: `__pa ry ${TS}`, expiresAt: rat(72), createdAt: rat(1) } })
+    await prisma.moment.create({ data: { authorId: rQuote.id, kind: "POST", content: `__pa rq ${TS}`, repostOfId: rmMoment.id, createdAt: rat(1) } })
+    await prisma.moment.create({ data: { authorId: rMix.id, kind: "STORY", content: `__pa rxs ${TS}`, expiresAt: rat(72), createdAt: rat(1) } })
+    await prisma.moment.create({ data: { authorId: rMix.id, kind: "POST", content: "", repostOfId: rmMoment.id, createdAt: rat(2) } })
+    await prisma.moment.create({ data: { authorId: rMixOk.id, kind: "STORY", content: `__pa rzs ${TS}`, expiresAt: rat(72), createdAt: rat(1) } })
+    await prisma.moment.create({ data: { authorId: rMixOk.id, kind: "POST", content: `__pa rzp ${TS}`, createdAt: rat(2) } })
+    // Production trims content at create, but the predicate must be robust
+    // to whitespace-only content on a repost row.
+    await prisma.moment.create({ data: { authorId: rWs.id, kind: "POST", content: "   ", repostOfId: rmMoment.id, createdAt: rat(1) } })
+
+    const rmm = await activationMilestonesFor([rThread.id, rMoment.id, rSetup.id, rAnchor.id, rSelf.id, rDel.id, rNone.id, mCommenter.id, mReposter.id, mDeleted.id, rStory.id, rQuote.id, rMix.id, rMixOk.id, rWs.id])
     const rt = rmm.get(rThread.id)!
     rt.firstResponseReceived?.getTime() === rtReply.createdAt.getTime() && rt.responseCapable === true
       ? pass("response: thread reply counts, earliest wins")
@@ -425,10 +443,34 @@ const main = async () => {
         ? pass("response: comment-only member has no opportunity (not in denominator)")
         : fail("comment-only opportunity", rmm.get(mCommenter.id)!.responseCapable)
     }
+    {
+      const story = rmm.get(rStory.id)!
+      story.responseCapable === false && story.firstResponseReceived === null
+        ? pass("response: STORY-only member has no response opportunity")
+        : fail("story opportunity", { c: story.responseCapable, r: story.firstResponseReceived })
+      rmm.get(mReposter.id)!.responseCapable === false
+        ? pass("response: pure-repost-only member has no response opportunity")
+        : fail("repost opportunity", rmm.get(mReposter.id)!.responseCapable)
+      rmm.get(rQuote.id)!.responseCapable === true
+        ? pass("response: quote post qualifies as response-capable")
+        : fail("quote opportunity", rmm.get(rQuote.id)!.responseCapable)
+      rmm.get(rMix.id)!.responseCapable === false
+        ? pass("response: story + pure repost still no opportunity")
+        : fail("mixed ineligible", rmm.get(rMix.id)!.responseCapable)
+      rmm.get(rMixOk.id)!.responseCapable === true
+        ? pass("response: story + eligible post keeps the opportunity")
+        : fail("mixed eligible", rmm.get(rMixOk.id)!.responseCapable)
+      rmm.get(rWs.id)!.responseCapable === false
+        ? pass("response: whitespace-only repost content is not eligible")
+        : fail("whitespace repost", rmm.get(rWs.id)!.responseCapable)
+      rmm.get(mDeleted.id)!.responseCapable === false
+        ? pass("response: deleted-only moment has no opportunity")
+        : fail("deleted-only opportunity", rmm.get(mDeleted.id)!.responseCapable)
+    }
 
     // Report response section: eligible ⊆ cohort, received ⊆ eligible, and
-    // the milestone step + conversion row are exposed. Seven new fixtures
-    // are capable (rt, rm, rs, ra, rf, rn; rd's only target is deleted);
+    // the milestone step + conversion row are exposed. Capable fixtures:
+    // rt, rm, rs, ra, rf, rn + mp, rq, rz (rd, ry, rx, rw, mr, md are not);
     // four received (rt, rm, rs, ra).
     const repR = await activationReport(30)
     const resp = repR.response

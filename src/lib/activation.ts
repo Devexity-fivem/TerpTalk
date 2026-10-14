@@ -159,10 +159,15 @@ export async function activationMilestonesFor(userIds: string[]): Promise<Map<st
       // Response opportunity: ≥1 live response-capable target authored
       // by the member. A GrowDiary is not listed — it can only hold
       // responses through its canonical thread, whose Thread row is
-      // already member-authored.
+      // already member-authored. The Moment arm is POST-only: STORY
+      // rows can't receive comments (the comment route 404s non-POST
+      // kinds) and pure reposts retarget comments to the original —
+      // neither is a response surface. Quote posts keep authored
+      // content → still eligible.
       prisma.$queryRaw<{ uid: string }[]>`
         SELECT "authorId" AS uid FROM "Thread" WHERE "authorId" = ANY(${ids}) AND "deleted" = false
         UNION SELECT "authorId" FROM "Moment" WHERE "authorId" = ANY(${ids}) AND "deleted" = false
+          AND "kind" = 'POST' AND ("repostOfId" IS NULL OR BTRIM("content") <> '')
         UNION SELECT "authorId" FROM "GrowSetup" WHERE "authorId" = ANY(${ids}) AND "deleted" = false`,
     ])
 
