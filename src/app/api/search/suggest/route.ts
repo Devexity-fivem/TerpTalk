@@ -6,10 +6,11 @@ import { unstable_cache } from "next/cache"
 import { getClientIp, hashIp, XP_ORDER, activeAuthor, blockedUserIds } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
 import { escapeLike } from "@/lib/strain-stats"
+import { momentVisibleWhere } from "@/lib/moments"
 
 const getSearchSuggestions = unstable_cache(
   async (query: string) => {
-    const [threads, strains, users, tags, guides] = await Promise.all([
+    const [threads, strains, users, tags, guides, moments] = await Promise.all([
       prisma.thread.findMany({
         where: { deleted: false, category: { hidden: false }, author: activeAuthor(), title: { contains: query, mode: "insensitive" } },
         take: 4,
@@ -43,6 +44,23 @@ const getSearchSuggestions = unstable_cache(
         orderBy: { title: "asc" },
         select: { title: true, slug: true },
       }),
+      // PUBLIC posts only via the canonical predicate — the shared cache
+      // is viewer-agnostic; per-viewer blocks are stripped below.
+      prisma.moment.findMany({
+        where: {
+          AND: [
+            momentVisibleWhere({ viewerId: null, blockedIds: [] }),
+            { content: { contains: query, mode: "insensitive" } },
+          ],
+        },
+        take: 3,
+        orderBy: { createdAt: "desc" },
+        select: {
+          id: true,
+          content: true,
+          author: { select: { profile: { select: { username: true } } } },
+        },
+      }),
     ])
 
     const suggestions = [
@@ -51,6 +69,12 @@ const getSearchSuggestions = unstable_cache(
       ...users.map((u) => ({ type: "user" as const, title: u.username, slug: u.username })),
       ...tags.map((t) => ({ type: "tag" as const, title: t.name, slug: t.slug })),
       ...guides.map((g) => ({ type: "guide" as const, title: g.title, slug: g.slug })),
+      ...moments.map((m) => ({
+        type: "moment" as const,
+        title: m.content.length > 80 ? `${m.content.slice(0, 80)}…` : m.content,
+        slug: m.id,
+        username: m.author.profile?.username ?? null,
+      })),
     ]
 
     return { suggestions }
@@ -90,7 +114,11 @@ export async function GET(request: Request) {
           select: { username: true },
         })).map((p) => p.username.toLowerCase())
       )
-      out = suggestions.filter((s) => s.type !== "user" || !names.has(s.slug.toLowerCase()))
+      out = suggestions.filter((s) => {
+        if (s.type === "user") return !names.has(s.slug.toLowerCase())
+        if (s.type === "moment") return !s.username || !names.has(s.username.toLowerCase())
+        return true
+      })
     }
   }
 

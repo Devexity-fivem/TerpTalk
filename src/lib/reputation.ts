@@ -878,7 +878,7 @@ async function checkTierChange(userId: string, oldRep: number, newRep: number): 
     userId,
     type: "REPUTATION",
     title: `Tier up: ${newTier.name}`,
-    content: `You reached ${newRep.toLocaleString()} reputation and became a ${newTier.name}. ${newTier.benefit}`,
+    content: `You reached ${newRep.toLocaleString()} reputation and became a ${newTier.name}.`,
     link: "/reputation",
     metadata: {
       kind: "tier",

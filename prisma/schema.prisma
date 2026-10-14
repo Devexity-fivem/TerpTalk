@@ -1652,7 +1652,7 @@ model ProductEvent {
   type       String   // FIRST_FOLLOW | FOLLOW_CREATED | INTERACTION_POSTED | FOLLOWED_CONTENT_VIEWED | DIGEST_VIEWED
   userId     String?
   source     String?  // EVENT_SOURCES allowlist token — null reports as "unknown"
-  objectType String?  // User | Diary | DiaryUpdate | Thread — reference only, never content
+  objectType String?  // User | Diary | DiaryUpdate | Thread | Moment — reference only, never content
   objectId   String?
   key        String?  @unique // ff:<uid> · dv:<uid>:<day> · fcv:<uid>:<diaryId>:<day>
   createdAt  DateTime @default(now())

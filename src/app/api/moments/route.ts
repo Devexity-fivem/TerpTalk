@@ -8,6 +8,8 @@ import { checkMaintenance } from "@/lib/maintenance"
 import { storeImages, deleteImagesIfUnreferenced, MAX_POST_IMAGES } from "@/lib/blob"
 import { notifyMentions } from "@/lib/mentions"
 import { notify } from "@/lib/notify"
+import { eventSource } from "@/lib/event-sources"
+import { recordProductEvent } from "@/lib/product-events"
 import {
   MOMENT_CONTENT_MAX, STORY_CAPTION_MAX, STORY_TTL_MS, MOMENT_VISIBILITIES,
   canViewMoment, followersAudience, getMomentForViewer, momentPath, parseHashtags, resolveHashtagIds,
@@ -146,6 +148,16 @@ export async function POST(request: Request) {
       select: { id: true },
     })
     imageUrls = []
+
+    // Product event: one per persisted moment — best-effort, references
+    // the id only, never the content.
+    await recordProductEvent({
+      type: "INTERACTION_POSTED",
+      userId,
+      source: eventSource(body.source),
+      objectType: "Moment",
+      objectId: moment.id,
+    })
 
     const actorName = session.user.name || "Someone"
     const link = momentPath(moment.id)

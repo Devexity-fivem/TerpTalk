@@ -10,6 +10,8 @@ import { publicDiaryWhere } from "@/lib/diary-visibility"
 import { toSearchProfileDTO } from "@/lib/search-dto"
 import { escapeLike } from "@/lib/strain-stats"
 import { anchoredPostVisibleWhere } from "@/lib/update-social"
+import { momentVisibleWhere } from "@/lib/moments"
+import { momentPath } from "@/lib/moment-shared"
 
 // Escape PostgreSQL LIKE wildcards so a query cannot enumerate the whole table.
 // Excerpt centred on the first match so users see *why* a result matched.
@@ -21,7 +23,7 @@ function matchSnippet(text: string, q: string, max = 160): string {
   return excerpt.replace(/\s+/g, " ").trim()
 }
 
-const TYPES = new Set(["all", "threads", "strains", "users", "diaries", "guides", "setups", "tags"])
+const TYPES = new Set(["all", "threads", "strains", "users", "diaries", "guides", "setups", "tags", "moments"])
 const ALL_LIMIT = 10
 const TYPE_PAGE = 20
 const MAX_PAGE = 50
@@ -99,7 +101,7 @@ const getSearchResults = unstable_cache(
       },
     } as const
 
-    const [threadsRaw, strainsRaw, usersRaw, diariesRaw, guidesRaw, setupsRaw, tagsRaw] = await Promise.all([
+    const [threadsRaw, strainsRaw, usersRaw, diariesRaw, guidesRaw, setupsRaw, tagsRaw, momentsRaw] = await Promise.all([
       (t === "all" || t === "threads") ? (async () => {
         const base = { deleted: false, category: threadCategory, author: activeUser }
         // Tier 1: title or tag match. Tier 2: body or reply match.
@@ -218,6 +220,31 @@ const getSearchResults = unstable_cache(
           },
         },
       }) : [],
+      // Moments index PUBLIC posts only — the result set lives in a shared
+      // cache, so the viewer-agnostic half of the canonical predicate runs
+      // here and per-viewer blocks are stripped below like every other type.
+      // A pure repost carries no content or tags of its own, so it can never
+      // match; quotes and originals match on their own text.
+      (t === "all" || t === "moments") ? prisma.moment.findMany({
+        where: {
+          AND: [
+            momentVisibleWhere({ viewerId: null, blockedIds: [] }),
+            { OR: [{ content: contains }, { tags: { some: { tag: { name: contains } } } }] },
+          ],
+        },
+        take: limit + 1,
+        skip,
+        orderBy: { createdAt: "desc" },
+        select: {
+          id: true,
+          authorId: true,
+          content: true,
+          createdAt: true,
+          author: { select: { name: true, image: true, profile: { select: { username: true } } } },
+          tags: { select: { tag: { select: { name: true, slug: true } } } },
+          _count: { select: { reactions: true, comments: { where: { deleted: false } } } },
+        },
+      }) : [],
     ])
 
     // Threads: tiers are already in relevance order — apply skip/limit to the
@@ -258,6 +285,7 @@ const getSearchResults = unstable_cache(
       guides: guidesRaw.length > limit,
       setups: setupsRaw.length > limit,
       tags: tagsRaw.length > limit,
+      moments: momentsRaw.length > limit,
     }
 
     return {
@@ -274,6 +302,16 @@ const getSearchResults = unstable_cache(
           : s
       ),
       tags: paginate(tagsRaw),
+      moments: paginate(momentsRaw).map((m) => ({
+        id: m.id,
+        authorId: m.authorId,
+        excerpt: matchSnippet(m.content, q),
+        createdAt: m.createdAt,
+        href: momentPath(m.id),
+        author: m.author,
+        tags: m.tags.map((t) => t.tag),
+        counts: { reactions: m._count.reactions, comments: m._count.comments },
+      })),
       hasMore,
     }
   },
@@ -300,7 +338,7 @@ export async function GET(request: Request) {
     const categorySlug = (searchParams.get("category") || "").slice(0, 60)
     const page = Math.max(1, Math.min(MAX_PAGE, parseInt(searchParams.get("page") || "1") || 1))
 
-    const EMPTY = { threads: [], strains: [], users: [], diaries: [], guides: [], setups: [], tags: [], hasMore: {} }
+    const EMPTY = { threads: [], strains: [], users: [], diaries: [], guides: [], setups: [], tags: [], moments: [], hasMore: {} }
     if (raw.length < 2) {
       return NextResponse.json(EMPTY)
     }
@@ -333,6 +371,7 @@ export async function GET(request: Request) {
       guides: strip(results.guides),
       setups: strip(results.setups),
       users: strip(results.users),
+      moments: strip(results.moments ?? []),
     }, {
       headers: { "Cache-Control": cacheControl, "Vary": "Cookie" },
     })

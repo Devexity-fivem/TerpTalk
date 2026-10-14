@@ -4,7 +4,7 @@ import { useEffect, useState, useRef } from "react"
 import { useSearchParams, useRouter } from "next/navigation"
 import { useSession } from "next-auth/react"
 import Link from "next/link"
-import { Search, MessageSquare, Leaf, Dna, User, Tag, Loader2, Bookmark, ArrowUpDown, BookOpen, Wrench, CheckCircle2, AlertCircle } from "@/lib/icons"
+import { Search, MessageSquare, Leaf, Dna, User, Tag, Loader2, Bookmark, ArrowUpDown, BookOpen, Wrench, CheckCircle2, AlertCircle, Sparkles } from "@/lib/icons"
 import { Avatar } from "@/components/ui/avatar"
 import TierChip from "@/components/tier-chip"
 import ProfileCard from "@/components/ui/profile-card"
@@ -33,11 +33,20 @@ interface Results {
   guides: { id: string; slug: string; title: string; excerpt: string; topic: string }[]
   setups: { id: string; slug: string | null; title: string; strain: string | null; author: { name: string | null; image: string | null; profile: { username: string; xp: number; publicMilestoneOptOut: boolean } | null } }[]
   tags: { name: string; slug: string; _count: { threads: number } }[]
+  moments: {
+    id: string
+    excerpt: string
+    createdAt: string
+    href: string
+    author: { name: string | null; image: string | null; profile: { username: string } | null }
+    tags: { name: string; slug: string }[]
+    counts: { reactions: number; comments: number }
+  }[]
   hasMore: Record<string, boolean>
 }
 
 interface Suggestion {
-  type: "thread" | "strain" | "user" | "tag" | "guide"
+  type: "thread" | "strain" | "user" | "tag" | "guide" | "moment"
   title: string
   slug: string
 }
@@ -50,10 +59,11 @@ const TYPES = [
   { key: "diaries", label: "Diaries", icon: Leaf },
   { key: "setups", label: "Setups", icon: Wrench },
   { key: "tags", label: "Tags", icon: Tag },
+  { key: "moments", label: "Posts", icon: Sparkles },
   { key: "users", label: "Growers", icon: User },
 ] as const
 
-const SUGGEST_ICONS = { thread: MessageSquare, strain: Dna, user: User, tag: Tag, guide: BookOpen } as const
+const SUGGEST_ICONS = { thread: MessageSquare, strain: Dna, user: User, tag: Tag, guide: BookOpen, moment: Sparkles } as const
 
 export default function SearchResults() {
   const { data: session } = useSession()
@@ -127,7 +137,7 @@ export default function SearchResults() {
   }
 
   const sectionCounts = results
-    ? [results.threads, results.strains, results.users, results.diaries, results.guides, results.setups, results.tags]
+    ? [results.threads, results.strains, results.users, results.diaries, results.guides, results.setups, results.tags, results.moments]
         .reduce((n, arr) => n + arr.length, 0)
     : 0
   const empty = results && sectionCounts === 0
@@ -156,6 +166,7 @@ export default function SearchResults() {
                 s.type === "thread" ? `/forum/thread/${s.slug}`
                 : s.type === "strain" ? `/strains/${s.slug}`
                 : s.type === "user" ? `/u/${s.slug}`
+                : s.type === "moment" ? `/m/${s.slug}`
                 : s.type === "guide" ? `/guides/${s.slug}`
                 : `/forum/tags/${s.slug}`
               return (
@@ -390,6 +401,30 @@ export default function SearchResults() {
                   <Link key={t.slug} href={`/forum/tags/${t.slug}`} className="flex items-center justify-between p-3 hover:bg-secondary/50 transition-colors">
                     <span className="font-medium text-sm">#{t.name}</span>
                     <span className="text-xs text-muted-foreground">{t._count.threads} thread{t._count.threads === 1 ? "" : "s"}</span>
+                  </Link>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {results.moments.length > 0 && (
+            <section className="bg-card/80 rounded-2xl border border-border/70">
+              <h2 className="p-4 border-b border-border/60 font-display font-semibold flex items-center gap-2 text-sm">
+                <Sparkles className="w-4 h-4 text-primary" /> Posts
+                <span className="text-muted-foreground font-normal">({results.moments.length}{type === "all" ? " top" : ""})</span>
+              </h2>
+              <div className="divide-y divide-border">
+                {results.moments.map((m) => (
+                  <Link key={m.id} href={m.href} className="block p-3 hover:bg-secondary/50 transition-colors">
+                    <div className="text-sm line-clamp-2">{m.excerpt}</div>
+                    <div className="text-xs text-muted-foreground mt-1 flex items-center gap-1.5 flex-wrap">
+                      <span>by {m.author.profile?.username || m.author.name || "a grower"}</span>
+                      <span>· {m.counts.reactions} reaction{m.counts.reactions === 1 ? "" : "s"}</span>
+                      <span>· {m.counts.comments} comment{m.counts.comments === 1 ? "" : "s"}</span>
+                      {m.tags.slice(0, 3).map((t) => (
+                        <span key={t.slug} className="text-primary/80">#{t.name}</span>
+                      ))}
+                    </div>
                   </Link>
                 ))}
               </div>

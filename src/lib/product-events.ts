@@ -21,12 +21,15 @@ import { median } from "@/lib/diary-weeks"
 //                             this milestone, so it is not the grower
 //                             metric.
 //   FOLLOW_CREATED            one per successful follow transition
-//   INTERACTION_POSTED        one per persisted Post (reply or
-//                             anchored update comment)
-//   FOLLOWED_CONTENT_VIEWED   member opened a grow they follow —
-//                             client beacon, server re-verifies the
-//                             Follow + diary visibility; keyed
-//                             fcv:<uid>:<diaryId>:<UTC-day>
+//   INTERACTION_POSTED        one per persisted contribution — forum
+//                             reply, anchored update comment, Moment
+//                             (post/story), Moment comment, or Moment
+//                             reaction
+//   FOLLOWED_CONTENT_VIEWED   member opened a grow or post they
+//                             follow — client beacon, server
+//                             re-verifies the Follow + object
+//                             visibility; keyed
+//                             fcv:<uid>:<objectId>:<UTC-day>
 //   DIGEST_VIEWED             member opened /mydigest — client
 //                             beacon; keyed dv:<uid>:<UTC-day>
 
@@ -303,17 +306,22 @@ export async function socialLoopReport(windowDays = 30): Promise<SocialLoopRepor
   // then check the Follow relation in one bounded pair query.
   const updIds = [...new Set(ixRows.filter((r) => r.objectType === "DiaryUpdate" && r.objectId).map((r) => r.objectId!))]
   const thrIds = [...new Set(ixRows.filter((r) => r.objectType === "Thread" && r.objectId).map((r) => r.objectId!))]
-  const [updOwners, thrOwners] = await Promise.all([
+  const momIds = [...new Set(ixRows.filter((r) => r.objectType === "Moment" && r.objectId).map((r) => r.objectId!))]
+  const [updOwners, thrOwners, momOwners] = await Promise.all([
     updIds.length
       ? prisma.diaryUpdate.findMany({ where: { id: { in: updIds } }, select: { id: true, diary: { select: { authorId: true } } } })
       : Promise.resolve([] as { id: string; diary: { authorId: string } }[]),
     thrIds.length
       ? prisma.thread.findMany({ where: { id: { in: thrIds } }, select: { id: true, authorId: true } })
       : Promise.resolve([] as { id: string; authorId: string }[]),
+    momIds.length
+      ? prisma.moment.findMany({ where: { id: { in: momIds } }, select: { id: true, authorId: true } })
+      : Promise.resolve([] as { id: string; authorId: string }[]),
   ])
   const ownerOf = new Map<string, string>()
   for (const u of updOwners) ownerOf.set(`DiaryUpdate:${u.id}`, u.diary.authorId)
   for (const t of thrOwners) ownerOf.set(`Thread:${t.id}`, t.authorId)
+  for (const m of momOwners) ownerOf.set(`Moment:${m.id}`, m.authorId)
 
   const pairs = new Map<string, { actor: string; owner: string }>()
   const actors = new Set<string>()

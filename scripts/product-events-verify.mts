@@ -193,6 +193,69 @@ async function run() {
     ? pass("FCV fail-closed: private/nonexistent grows record nothing")
     : fail("FCV privacy", await evs(viewer.id, "FOLLOWED_CONTENT_VIEWED"))
 
+  // ── Moment telemetry: INTERACTION_POSTED + FCV on the social surface ──
+  const mPub = await prisma.moment.create({
+    data: { kind: "POST", content: `pe_moment_${ts}`, authorId: grower.id, visibility: "PUBLIC" },
+  })
+  const mFol = await prisma.moment.create({
+    data: { kind: "POST", content: `pe_folmoment_${ts}`, authorId: grower.id, visibility: "FOLLOWERS" },
+  })
+  const mDel = await prisma.moment.create({
+    data: { kind: "POST", content: `pe_delmoment_${ts}`, authorId: grower.id, deleted: true },
+  })
+
+  // Creation emits through the real POST route.
+  const mc = await api("/api/moments", { method: "POST", cookie: vCookie, body: { content: `pe_create_${ts}`, source: "member_home" } }) as Res
+  const mcId = (mc.data as { moment?: { id?: string } } | null)?.moment?.id
+  mc.status === 201 && !!mcId ? pass("moment create via API") : fail("moment create", mc)
+  const ixm = async () => (await evs(viewer.id, "INTERACTION_POSTED")).filter((e) => e.objectType === "Moment")
+  ;(await ixm()).some((e) => e.objectId === mcId && e.source === "member_home")
+    ? pass("INTERACTION_POSTED: moment create references the Moment id")
+    : fail("moment create event", await ixm())
+
+  // Comment + reaction emit against the moment id.
+  const cm = await api(`/api/moments/${mPub.id}/comments`, { method: "POST", cookie: vCookie, body: { content: "pe comment", source: "member_home" } }) as Res
+  const rx = await api("/api/reactions", { method: "POST", cookie: vCookie, body: { type: "LIKE", momentId: mPub.id } }) as Res
+  const mPubEvs = (await ixm()).filter((e) => e.objectId === mPub.id)
+  cm.status === 201 && rx.status === 201 && mPubEvs.length === 2
+    ? pass("INTERACTION_POSTED: moment comment + reaction each recorded once")
+    : fail("moment interaction events", { cm: cm.status, rx: rx.status, n: mPubEvs.length })
+
+  // Rejected operations emit nothing: guest create 401, non-follower
+  // comment + reaction on a followers-only post 404.
+  const gCreate = await api("/api/moments", { method: "POST", body: { content: "guest" } }) as Res
+  gCreate.status === 401 ? pass("guest moment create rejected") : fail("guest create", gCreate)
+  const ncm = await api(`/api/moments/${mFol.id}/comments`, { method: "POST", cookie: nCookie, body: { content: "x" } }) as Res
+  const nrx = await api("/api/reactions", { method: "POST", cookie: nCookie, body: { type: "LIKE", momentId: mFol.id } }) as Res
+  ncm.status === 404 && nrx.status === 404 &&
+    !(await evs(nonFollower.id, "INTERACTION_POSTED")).some((e) => e.objectType === "Moment")
+    ? pass("rejected moment interactions emit no event")
+    : fail("rejected moment events", { ncm: ncm.status, nrx: nrx.status })
+
+  // FCV on a Moment — viewer follows grower: public + followers posts both
+  // record (day-keyed), non-follower/deleted/self record nothing.
+  await api("/api/events", { method: "POST", cookie: vCookie, body: { type: "FOLLOWED_CONTENT_VIEWED", objectType: "Moment", objectId: mPub.id, source: "member_home" } })
+  await api("/api/events", { method: "POST", cookie: vCookie, body: { type: "FOLLOWED_CONTENT_VIEWED", objectType: "Moment", objectId: mPub.id, source: "member_home" } })
+  await api("/api/events", { method: "POST", cookie: vCookie, body: { type: "FOLLOWED_CONTENT_VIEWED", objectType: "Moment", objectId: mFol.id } })
+  await api("/api/events", { method: "POST", cookie: vCookie, body: { type: "FOLLOWED_CONTENT_VIEWED", objectType: "Moment", objectId: mDel.id } })
+  const fcvM = (await evs(viewer.id, "FOLLOWED_CONTENT_VIEWED")).filter((e) => e.objectType === "Moment")
+  fcvM.length === 2 && fcvM.some((e) => e.objectId === mPub.id && e.source === "member_home") &&
+    fcvM.some((e) => e.objectId === mFol.id) && !fcvM.some((e) => e.objectId === mDel.id)
+    ? pass("FCV Moment: public + followers post recorded once; deleted excluded")
+    : fail("FCV moments", fcvM)
+  await api("/api/events", { method: "POST", cookie: nCookie, body: { type: "FOLLOWED_CONTENT_VIEWED", objectType: "Moment", objectId: mPub.id } })
+  !(await evs(nonFollower.id, "FOLLOWED_CONTENT_VIEWED")).some((e) => e.objectType === "Moment")
+    ? pass("FCV Moment fail-closed: unfollowed viewer records nothing")
+    : fail("FCV moment non-follower", await evs(nonFollower.id, "FOLLOWED_CONTENT_VIEWED"))
+  const gCookie = await login(grower.username, grower.password).then((l) => l.cookie)
+  await api("/api/events", { method: "POST", cookie: gCookie, body: { type: "FOLLOWED_CONTENT_VIEWED", objectType: "Moment", objectId: mPub.id } })
+  !(await evs(grower.id, "FOLLOWED_CONTENT_VIEWED")).some((e) => e.objectId === mPub.id)
+    ? pass("FCV Moment: self-view records nothing")
+    : fail("FCV moment self", "recorded")
+  // Bogus objectType stays a silent 200.
+  const bogus = await api("/api/events", { method: "POST", cookie: vCookie, body: { type: "FOLLOWED_CONTENT_VIEWED", objectType: "Post", objectId: mPub.id } }) as Res
+  bogus.status === 200 ? pass("FCV: unknown objectType fails closed") : fail("FCV bogus", bogus)
+
   // ── lib failure isolation: a throwing client never breaks the caller ──
   const failing = { productEvent: { create: () => Promise.reject(new Error("db down")), upsert: () => Promise.reject(new Error("db down")) } }
   await recordProductEvent({ type: "FOLLOW_CREATED", userId: viewer.id, source: "discover" }, failing as never)
@@ -251,6 +314,7 @@ async function run() {
   await prisma.post.deleteMany({ where: { threadId: { in: [thread.id, dTid ?? ""] } } })
   await prisma.thread.deleteMany({ where: { id: { in: [thread.id, dTid ?? ""] } } })
   await prisma.growDiary.deleteMany({ where: { id: { in: [diary.id, privDiary.id] } } })
+  await prisma.moment.deleteMany({ where: { id: { in: [mPub.id, mFol.id, mDel.id, mcId ?? ""] } } })
   await prisma.user.deleteMany({ where: { id: { in: userIds } } })
   const left = await prisma.productEvent.count({ where: { userId: { in: userIds } } })
   left === 0 ? pass("cleanup: zero residue") : fail("cleanup", left)

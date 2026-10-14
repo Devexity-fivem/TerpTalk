@@ -232,10 +232,12 @@ async function run() {
     assert.equal(getReputationTier(rep).name, expected, `rep ${rep} → ${expected}`)
   }
 
-  // Thresholds strictly increasing, every tier has a benefit + perks object.
+  // Thresholds strictly increasing, every tier has a perks object — and NO
+  // benefit field: tier-up copy must state only the milestone, since the
+  // retired cosmetics layer made per-tier reward claims fictional.
   for (let i = 0; i < REP_TIERS.length; i++) {
     const t = REP_TIERS[i]
-    assert.ok(t.benefit.length > 0, `${t.name} has a benefit description`)
+    assert.ok(!("benefit" in t), `${t.name} carries no benefit claim`)
     assert.ok(t.perks && typeof t.perks === "object", `${t.name} has a perks object`)
     assert.ok(t.icon.length > 0, `${t.name} has an icon`)
     if (i > 0) assert.ok(t.threshold > REP_TIERS[i - 1].threshold, `${t.name} threshold increases`)
@@ -780,9 +782,13 @@ async function run() {
     const tierNotifs = await prisma.notification.findMany({
       where: { userId: uid, type: "REPUTATION" },
     })
+    const tierNotif = tierNotifs.find((n) => (n.metadata as { kind?: string } | null)?.kind === "tier")
+    assert.ok(tierNotif, "tier notification carries celebration metadata")
+    // Honesty contract: no live tier-up notification may promise the
+    // retired cosmetics (frames, themes, avatar art, glow effects).
     assert.ok(
-      tierNotifs.some((n) => (n.metadata as { kind?: string } | null)?.kind === "tier"),
-      "tier notification carries celebration metadata"
+      !/frame|avatar|theme|glow/i.test(tierNotif.content),
+      `tier-up notification cannot advertise retired cosmetics: ${tierNotif.content}`
     )
 
     // Bump to 300 — Seedling is a TIER rung in the new ladder (crossing it

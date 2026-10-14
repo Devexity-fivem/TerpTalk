@@ -358,6 +358,26 @@ async function main() {
   const htmlD = await (await fetch(`${BASE}/feed?tab=discussions`, { headers: { cookie: vc } })).text()
   htmlD.includes("Discussions") ? pass("/feed?tab=discussions renders") : fail("discussions html", htmlD.length)
 
+  // Posts tab — the Moment-only selection over the canonical stream.
+  const fvPubMoment = await prisma.moment.create({
+    data: { kind: "POST", content: M("public moment"), authorId: author.id },
+    select: { id: true },
+  })
+  const fvFolMoment = await prisma.moment.create({
+    data: { kind: "POST", content: M("followers moment"), visibility: "FOLLOWERS", authorId: author.id },
+    select: { id: true },
+  })
+  const htmlP = await (await fetch(`${BASE}/feed?tab=posts`)).text()
+  htmlP.includes(`href="/feed?tab=posts"`) ? pass("Posts tab link rendered") : fail("posts tab link", htmlP.length)
+  htmlP.includes("Posts") && htmlP.includes(M("public moment")) && !htmlP.includes(M("followers moment"))
+    ? pass("/feed?tab=posts serves visible moments only")
+    : fail("posts tab", { posts: htmlP.includes("Posts"), pub: htmlP.includes("fv"), fol: htmlP.includes(M("followers moment")) })
+  const htmlPThread = await (await fetch(`${BASE}/feed?tab=posts`, { headers: { cookie: vc } })).text()
+  !htmlPThread.includes("/forum/thread/") && !htmlPThread.includes("#update-")
+    ? pass("/feed?tab=posts excludes threads/updates (moment-only)")
+    : fail("posts tab kinds", "non-moment item present")
+  await prisma.moment.deleteMany({ where: { id: { in: [fvPubMoment.id, fvFolMoment.id] } } })
+
   // ── D. profile activity (author-scoped feed) ────────────────────
   // The Activity tab is the canonical feed with an author scope. The
   // profile visibility contract differs from Following on purpose:

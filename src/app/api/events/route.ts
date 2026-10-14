@@ -5,6 +5,7 @@ import { unauthorized } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
 import { prisma } from "@/lib/prisma"
 import { canViewDiary } from "@/lib/diary-visibility"
+import { canViewMoment, momentInteractionTarget } from "@/lib/moments"
 import { eventSource } from "@/lib/event-sources"
 import { recordProductEvent, utcDay } from "@/lib/product-events"
 
@@ -13,14 +14,14 @@ import { recordProductEvent, utcDay } from "@/lib/product-events"
 // allowlisted type/source, rate-limited, no content or URLs accepted.
 //
 //   DIGEST_VIEWED            member opened /mydigest — once per UTC day
-//   FOLLOWED_CONTENT_VIEWED  member opened a grow — recorded only when
-//                            the server can verify they actually follow
-//                            the grower AND may view that grow, once
-//                            per diary per UTC day. Fails closed: an
-//                            unfollowed or unviewable grow records
-//                            nothing and the response stays 200, so the
-//                            endpoint never becomes a follow/privacy
-//                            oracle.
+//   FOLLOWED_CONTENT_VIEWED  member opened a grow or post — recorded
+//                            only when the server can verify they
+//                            actually follow the author AND may view
+//                            that content, once per object per UTC day.
+//                            Fails closed: an unfollowed or unviewable
+//                            object records nothing and the response
+//                            stays 200, so the endpoint never becomes a
+//                            follow/privacy oracle.
 const CLIENT_TYPES = new Set(["DIGEST_VIEWED", "FOLLOWED_CONTENT_VIEWED"])
 
 export async function POST(request: Request) {
@@ -47,8 +48,29 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true })
   }
 
-  // FOLLOWED_CONTENT_VIEWED — the only meaningful object is a Diary the
-  // member follows. Anything else records nothing (fail-closed).
+  // FOLLOWED_CONTENT_VIEWED — the only meaningful objects are a Diary
+  // or Moment the member follows. Anything else records nothing
+  // (fail-closed).
+  if (body.objectType === "Moment" && typeof body.objectId === "string" && body.objectId.length <= 40) {
+    // A pure repost URL measures the resolved original — the page renders
+    // the original's thread, so the follow check lands on its author.
+    const m = await momentInteractionTarget(body.objectId)
+    if (!m || !(await canViewMoment(m, userId))) return NextResponse.json({ ok: true })
+    const follows = await prisma.follow.findUnique({
+      where: { followerId_followingId: { followerId: userId, followingId: m.authorId } },
+      select: { followerId: true },
+    })
+    if (!follows) return NextResponse.json({ ok: true })
+    await recordProductEvent({
+      type: "FOLLOWED_CONTENT_VIEWED",
+      userId,
+      source,
+      objectType: "Moment",
+      objectId: m.id,
+      key: `fcv:${userId}:${m.id}:${utcDay()}`,
+    })
+    return NextResponse.json({ ok: true })
+  }
   if (body.objectType !== "Diary" || typeof body.objectId !== "string" || body.objectId.length > 40) {
     return NextResponse.json({ ok: true })
   }

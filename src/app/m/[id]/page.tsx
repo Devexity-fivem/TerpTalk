@@ -3,11 +3,13 @@ import { getSession } from "@/lib/session"
 import { buildMetadata, snippet } from "@/lib/seo"
 import { publicUserSelect, activeAuthor, blockedUserIds } from "@/lib/security"
 import { getMomentForViewer } from "@/lib/moments"
+import { eventSource } from "@/lib/event-sources"
 import { notFound } from "next/navigation"
 import { MessageSquare } from "@/lib/icons"
 import SectionCard from "@/components/ui/section-card"
 import MomentCard from "@/components/moment-card"
 import MomentComments from "@/components/moment-comments"
+import EventBeacon from "@/components/event-beacon"
 
 export const dynamic = "force-dynamic"
 
@@ -25,10 +27,13 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   })
 }
 
-export default async function MomentPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function MomentPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ via?: string }> }) {
   const { id } = await params
   const session = await getSession()
   const viewerId = session?.user?.id ?? null
+  // Inbound attribution surface (`?via=`) — allowlist-validated; anything
+  // else records as an unattributed view.
+  const via = eventSource((await searchParams).via)
 
   const moment = await getMomentForViewer(id, viewerId)
   if (!moment || moment.kind !== "POST") notFound()
@@ -51,6 +56,9 @@ export default async function MomentPage({ params }: { params: Promise<{ id: str
 
   return (
     <div className="min-h-screen bg-background">
+      {/* Followed-content signal — server re-verifies the follow and the
+          moment's visibility; guests and non-followers record nothing. */}
+      <EventBeacon type="FOLLOWED_CONTENT_VIEWED" source={via} objectType="Moment" objectId={moment.id} />
       <div className="max-w-2xl mx-auto px-4 py-8">
         <div className="tt-spotlight bg-card/80 rounded-2xl border border-border/70 mb-6">
           <MomentCard moment={moment} variant="detail" />

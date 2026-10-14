@@ -11,6 +11,7 @@ import { canViewDiary } from "@/lib/diary-visibility"
 import { diaryPath } from "@/lib/slugs"
 import { updateAnchor } from "@/lib/update-social"
 import { canViewMoment, momentInteractionTarget, momentPath } from "@/lib/moments"
+import { recordProductEvent } from "@/lib/product-events"
 
 const VALID_REACTION_TYPES = new Set(["LIKE", "LOVE", "LAUGH", "THINKING", "FIRE", "THUMBS_UP", "THUMBS_DOWN"])
 
@@ -175,6 +176,16 @@ export async function POST(request: Request) {
         where: { id: existingReaction.id },
         data: { type },
       })
+      // A switch is a successful reaction write on a Moment — it counts
+      // as an interaction; toggle-off (removal) never reaches this path.
+      if (hasMomentId) {
+        await recordProductEvent({
+          type: "INTERACTION_POSTED",
+          userId: session.user.id,
+          objectType: "Moment",
+          objectId: momentId as string,
+        })
+      }
       return NextResponse.json({ reaction: updated, action: "switched" })
     }
 
@@ -194,6 +205,17 @@ export async function POST(request: Request) {
       } else {
         throw e
       }
+    }
+
+    // Product event: a newly persisted reaction on a Moment — after the
+    // row exists, never for rejected targets or removals.
+    if (hasMomentId) {
+      await recordProductEvent({
+        type: "INTERACTION_POSTED",
+        userId: session.user.id,
+        objectType: "Moment",
+        objectId: momentId as string,
+      })
     }
 
     // Notify the content author — once per actor per target per day so
