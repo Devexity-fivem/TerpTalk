@@ -2,6 +2,8 @@ import { notFound } from "next/navigation"
 import Link from "next/link"
 import { requireAdmin } from "@/lib/require-staff"
 import { getOpsData, getGrowthDetail, type FunnelWindow } from "@/lib/ops-metrics"
+import { activationReport } from "@/lib/activation"
+import type { SourceCount } from "@/lib/product-events"
 
 export const dynamic = "force-dynamic"
 
@@ -48,13 +50,64 @@ function Card({ label, value, hint }: { label: string; value: React.ReactNode; h
   )
 }
 
+// Small-sample convention: percentages are only shown at n≥5 — the same
+// suppression rule the first-action table already uses.
+function PctCell({ num, den, pct }: { num: number; den: number; pct: number | null }) {
+  if (den === 0) return <span className="text-muted-foreground">—</span>
+  if (den < 5) return <span className="text-muted-foreground">n={den} — too small</span>
+  return <span>{pct !== null ? `${pct}%` : "—"} ({num}/{den})</span>
+}
+
+function SourceChips({ rows }: { rows: SourceCount[] }) {
+  if (!rows.length) return <span className="text-muted-foreground">none yet</span>
+  return (
+    <span className="inline-flex flex-wrap gap-1.5">
+      {rows.map((r) => (
+        <span key={r.source} className="text-xs px-2 py-0.5 rounded-md bg-secondary text-muted-foreground">
+          {r.source} <span className="font-semibold text-foreground tabular-nums">{r.count}</span>
+        </span>
+      ))}
+    </span>
+  )
+}
+
+// Conversion endpoints are milestone keys — label them from the step
+// ladder where one exists, else a purpose-written description.
+const CONV_LABELS: Record<string, string> = {
+  signup: "signed up",
+  onboarding: "completed onboarding",
+  firstGrow: "started a grow",
+  firstContributionBeyondGrow: "contributed beyond the grow",
+  firstContribution: "made a first contribution",
+  firstReturn: "came back ≥24h later",
+  secondAction: "contributed after returning",
+  firstHarvest: "recorded a harvest",
+  responseCapable: "published reply-able content",
+  firstResponseReceived: "received a response",
+}
+const convLabel = (k: string) => CONV_LABELS[k] ?? k
+
+type ActivationReportShape = Awaited<ReturnType<typeof activationReport>>
+
+// Push stages labelled by the exact underlying event — permission, send
+// attempt, and click are deliberately not conflated.
+const PUSH_STAGES: [string, keyof ActivationReportShape["push"]][] = [
+  ["Prompt shown", "promptShown"],
+  ["Permission granted", "granted"],
+  ["Permission denied", "denied"],
+  ["Notifications sent", "sent"],
+  ["Deliveries failed", "failed"],
+  ["Notifications clicked", "clicked"],
+  ["Subscriptions removed", "removed"],
+]
+
 // Growth center — administrator only. Funnel + first-action analysis +
 // referral attribution + feedback signals. Aggregate counts only; factual
 // observations are listed with their sample sizes, never as instructions.
 export default async function AdminGrowthPage() {
   const admin = await requireAdmin()
   if (!admin) notFound()
-  const [d, g] = await Promise.all([getOpsData(), getGrowthDetail()])
+  const [d, g, act] = await Promise.all([getOpsData(), getGrowthDetail(), activationReport(30)])
   const fa = g.firstAction30d
 
   // Factual observations — each carries its sample; suppressed below n=5.
@@ -212,7 +265,202 @@ export default async function AdminGrowthPage() {
         </p>
       </section>
 
-      <p className="text-[11px] text-muted-foreground">Generated {g.generatedAt.toISOString()} · live aggregates, not sampled.</p>
+      {/* ── Activation report — durable-state milestone model ─────── */}
+      <section className="rounded-2xl border border-border/60 bg-card/40 p-4 md:p-5">
+        <h2 className="font-display text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-1">
+          Milestone ladder — {act.windowDays}d signup cohort
+        </h2>
+        <p className="text-xs text-muted-foreground mb-3">
+          Derived from durable state for the {act.cohort} members who signed up in the window
+          {act.truncated ? " (cohort truncated at the analysis cap — earlier signups in the window are not included)" : ""}.
+          Each milestone counts a member once, at its earliest qualifying timestamp.
+        </p>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm min-w-95">
+            <tbody>
+              {act.steps.map((s) => (
+                <tr key={s.key} className="border-b border-border/40 last:border-0">
+                  <td className="py-1.5 text-muted-foreground">{s.label}</td>
+                  <td className="py-1.5 text-right tabular-nums font-medium">{s.count}</td>
+                  <td className="py-1.5 text-right tabular-nums text-muted-foreground w-16">
+                    {act.cohort > 0 ? `${s.pctOfSignups}%` : "—"}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section className="rounded-2xl border border-border/60 bg-card/40 p-4 md:p-5">
+        <h2 className="font-display text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-1">
+          Step conversions
+        </h2>
+        <p className="text-xs text-muted-foreground mb-3">
+          Each row is a share of the members eligible for that step — not a share of signups.
+          Rates hide below n=5.
+        </p>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm min-w-110">
+            <tbody>
+              {act.conversions.map((c) => (
+                <tr key={`${c.from}-${c.to}`} className="border-b border-border/40 last:border-0">
+                  <td className="py-1.5 text-muted-foreground">
+                    {convLabel(c.from)} → {convLabel(c.to)}
+                  </td>
+                  <td className="py-1.5 text-right tabular-nums">
+                    <PctCell num={c.numerator} den={c.denominator} pct={c.pct} />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <section className="rounded-2xl border border-border/60 bg-card/40 p-4 md:p-5">
+          <h2 className="font-display text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-1">
+            Return by first contribution
+          </h2>
+          <p className="text-xs text-muted-foreground mb-3">
+            Grouped by the kind of a member&apos;s earliest contribution. Association only —
+            the contribution type may not have caused the return.
+          </p>
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left text-xs text-muted-foreground">
+                <th className="py-1.5 font-medium">First contribution</th>
+                <th className="py-1.5 text-right font-medium">Members</th>
+                <th className="py-1.5 text-right font-medium">Returned ≥24h</th>
+              </tr>
+            </thead>
+            <tbody>
+              {act.returnByFirstAction.map((r) => (
+                <tr key={r.kind} className="border-t border-border/40">
+                  <td className="py-1.5">{r.kind === "none" ? "no contribution yet" : r.kind}</td>
+                  <td className="py-1.5 text-right tabular-nums">{r.members}</td>
+                  <td className="py-1.5 text-right tabular-nums">
+                    <PctCell num={r.returned} den={r.members} pct={r.pct} />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </section>
+
+        <section className="rounded-2xl border border-border/60 bg-card/40 p-4 md:p-5">
+          <h2 className="font-display text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-1">
+            Return by push status
+          </h2>
+          <p className="text-xs text-muted-foreground mb-3">
+            Push-enabled = live subscription or a recorded permission grant.
+            Association only — members who enable push may already be more engaged.
+          </p>
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left text-xs text-muted-foreground">
+                <th className="py-1.5 font-medium">Push</th>
+                <th className="py-1.5 text-right font-medium">Members</th>
+                <th className="py-1.5 text-right font-medium">Returned ≥24h</th>
+              </tr>
+            </thead>
+            <tbody>
+              {act.returnByPush.map((r) => (
+                <tr key={String(r.pushEnabled)} className="border-t border-border/40">
+                  <td className="py-1.5">{r.pushEnabled ? "enabled" : "not enabled"}</td>
+                  <td className="py-1.5 text-right tabular-nums">{r.members}</td>
+                  <td className="py-1.5 text-right tabular-nums">
+                    <PctCell num={r.returned} den={r.members} pct={r.pct} />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </section>
+      </div>
+
+      <section className="rounded-2xl border border-border/60 bg-card/40 p-4 md:p-5">
+        <h2 className="font-display text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-1">
+          Push lifecycle — {act.windowDays}d events
+        </h2>
+        <p className="text-xs text-muted-foreground mb-3">
+          Event counts per stage, not a strict funnel. &quot;Sent&quot; means handed to the push
+          service — not confirmed delivered on-device; &quot;clicked&quot; is the only verified
+          delivery evidence.
+        </p>
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
+          {PUSH_STAGES.map(([label, key]) => (
+            <Card key={key} label={label} value={act.push[key]} />
+          ))}
+        </div>
+      </section>
+
+      {/* ── Social loop — ProductEvent telemetry, not the signup cohort ── */}
+      <section className="rounded-2xl border border-border/60 bg-card/40 p-4 md:p-5">
+        <h2 className="font-display text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-1">
+          Social loop — {act.social.windowDays}d telemetry window
+        </h2>
+        <p className="text-xs text-muted-foreground mb-3">
+          Event-attributed surface metrics (which surface a follow or interaction came from) —
+          a different basis than the signup-cohort milestones above. &quot;unknown&quot; means the
+          action carried no surface attribution. Moment telemetry exists only since Moments
+          instrumentation shipped; earlier activity is not visible here.
+          {act.social.truncated ? " Some inputs hit the analysis cap — treat as a lower bound." : ""}
+        </p>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+          <Card label="Follows created" value={act.social.follows} />
+          <Card label="First follows (any kind)" value={act.social.firstFollowsAnyKind} />
+          <Card label="First grower follows" value={act.social.firstGrowerFollows} />
+          <Card label="Followed-content viewers" value={act.social.followedContentViewers} hint="distinct members" />
+          <Card label="Digest viewers" value={act.social.digestViewers} hint="distinct members" />
+          <Card label="Interactions posted" value={act.social.interactions} hint="replies, comments, moments, reactions" />
+          <Card
+            label="Interacted on followed grower"
+            value={act.social.followedInteractors}
+            hint="distinct members — follow state is current, not at-interaction"
+          />
+          <Card
+            label="Grower-follower interaction rate"
+            value={
+              act.social.firstGrowerFollows < 5
+                ? act.social.firstGrowerFollows === 0 ? "—" : `n=${act.social.firstGrowerFollows}`
+                : act.social.growerFollowerInteractionRate !== null
+                  ? `${act.social.growerFollowerInteractionRate}%`
+                  : "—"
+            }
+            hint="of this window's first-grower-follow cohort"
+          />
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <h3 className="text-xs font-semibold text-muted-foreground mb-1.5">Follows by surface</h3>
+            <SourceChips rows={act.social.followsBySource} />
+            <h3 className="text-xs font-semibold text-muted-foreground mt-3 mb-1.5">First follow (any kind) by surface</h3>
+            <SourceChips rows={act.social.firstFollowAnyKindBySource} />
+            <h3 className="text-xs font-semibold text-muted-foreground mt-3 mb-1.5">First grower follow by surface</h3>
+            <SourceChips rows={act.social.firstGrowerFollowBySource} />
+          </div>
+          <div>
+            <h3 className="text-xs font-semibold text-muted-foreground mb-1.5">Interactions by surface</h3>
+            <SourceChips rows={act.social.interactionsBySource} />
+            <h3 className="text-xs font-semibold text-muted-foreground mt-3 mb-1.5">Followed-content views by surface</h3>
+            <SourceChips rows={act.social.followedContentViewsBySource} />
+          </div>
+        </div>
+        <p className="text-[11px] text-muted-foreground mt-4">
+          Median signup → first grower follow:{" "}
+          {act.social.medianHoursSignupToFirstGrowerFollow !== null ? `${act.social.medianHoursSignupToFirstGrowerFollow}h` : "no data"} ·
+          first grower follow → interaction:{" "}
+          {act.social.medianHoursFirstGrowerFollowToInteraction !== null ? `${act.social.medianHoursFirstGrowerFollowToInteraction}h` : "no data"} ·
+          encounter → interaction:{" "}
+          {act.social.medianHoursEncounterToInteraction !== null ? `${act.social.medianHoursEncounterToInteraction}h` : "no data"}
+        </p>
+      </section>
+
+      <p className="text-[11px] text-muted-foreground">
+        Generated {g.generatedAt.toISOString()} · activation report {act.generatedAt} · live aggregates, not sampled.
+      </p>
     </main>
   )
 }
