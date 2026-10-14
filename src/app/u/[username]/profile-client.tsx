@@ -20,11 +20,13 @@ import TimeAgo from "@/components/ui/time-ago"
 import Tag from "@/components/ui/tag"
 import TerpBotInsights from "@/components/terpbot-insights"
 import { FeedThreadCard, FeedUpdateCard, FeedHarvestCard } from "@/components/feed-cards"
+import MomentCard from "@/components/moment-card"
 import { MarkdownRenderer } from "@/lib/markdown"
 import { diaryPath, setupPath } from "@/lib/slugs"
 import { STAGE_LABELS } from "@/lib/diary-weeks"
 import { PROFILE_TAB_IDS } from "@/lib/profile-settings"
 import type { FeedItem } from "@/lib/feed"
+import type { MediaTileDTO } from "@/lib/public-profile"
 import { CHAT_COMMANDS, type ChatCommandCategory } from "@/lib/chat-commands"
 import { cn } from "@/lib/utils"
 
@@ -447,6 +449,8 @@ function useProfileSection<T extends { id: string }>(username: string, section: 
 /* ── Member profile ──────────────────────────────────────────────── */
 
 const TAB_LABELS: Record<string, string> = {
+  posts: "Posts",
+  media: "Media",
   activity: "Activity",
   grows: "Grows",
   harvests: "Harvests",
@@ -497,6 +501,8 @@ function MemberProfile({ data, isSelf, username }: { data: ProfileResponse; isSe
     harvestYear ? `year=${encodeURIComponent(harvestYear)}` : "",
   ].filter(Boolean).join("&")
   const activitySection = useProfileSection<FeedItem>(username, "activity", tab === "activity")
+  const postsSection = useProfileSection<FeedItem>(username, "posts", tab === "posts")
+  const mediaSection = useProfileSection<MediaTileDTO>(username, "media", tab === "media")
   const growsSection = useProfileSection<GrowCard>(username, "grows", tab === "grows", growsQuery)
   const harvestsSection = useProfileSection<HarvestRow>(username, "harvests", tab === "harvests", harvestsQuery)
   const strainsSection = useProfileSection<StrainRow>(username, "strains", showAllStrains)
@@ -927,6 +933,56 @@ function MemberProfile({ data, isSelf, username }: { data: ProfileResponse; isSe
                 </div>
               )}
 
+              {active === "posts" && show("posts") && (
+                <SectionCard
+                  title="Posts" id="posts" compact={compact}
+                  description="Posts, photos, reposts and quotes — newest first"
+                >
+                  {postsSection.items.length === 0 && !postsSection.loading ? (
+                    <EmptyState
+                      compact icon={MessageSquare}
+                      title={isSelf ? "You haven't posted yet" : "No posts yet"}
+                      description={isSelf ? "Share a quick thought or a photo from the composer — it shows up here and in your followers' feeds." : "This member's posts appear here."}
+                    />
+                  ) : (
+                    <ul className="divide-y divide-border/60">
+                      {postsSection.items.map((item) => item.kind === "moment" && (
+                        <li key={`m-${item.id}`}><MomentCard moment={item.data} /></li>
+                      ))}
+                    </ul>
+                  )}
+                  <LoadMore loading={postsSection.loading} done={!postsSection.hasMore && postsSection.items.length > 0} onMore={postsSection.loadMore} />
+                </SectionCard>
+              )}
+
+              {active === "media" && show("media") && (
+                <SectionCard
+                  title="Media" id="media" compact={compact}
+                  description="Photos from posts and grow updates"
+                >
+                  {mediaSection.items.length === 0 && !mediaSection.loading ? (
+                    <EmptyState
+                      compact icon={Sprout}
+                      title={isSelf ? "No photos yet" : "No photos to show"}
+                      description={isSelf ? "Photos you post or add to grow updates collect here." : "This member's photos appear here."}
+                    />
+                  ) : (
+                    <ul className="grid grid-cols-3 gap-1 sm:gap-1.5" aria-label="Photo grid">
+                      {mediaSection.items.map((tile) => (
+                        <li key={`${tile.source}-${tile.id}`}>
+                          <Link href={tile.href} className="block aspect-square overflow-hidden rounded-md bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={tile.url} alt="" loading="lazy" decoding="async" className="h-full w-full object-cover hover:opacity-90 transition-opacity" />
+                            <span className="sr-only">{tile.source === "moment" ? "Open post" : "Open grow update"}</span>
+                          </Link>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  <LoadMore loading={mediaSection.loading} done={!mediaSection.hasMore && mediaSection.items.length > 0} onMore={mediaSection.loadMore} />
+                </SectionCard>
+              )}
+
               {active === "activity" && show("activity") && (
                 <SectionCard
                   title="Activity" id="activity" compact={compact}
@@ -944,7 +1000,9 @@ function MemberProfile({ data, isSelf, username }: { data: ProfileResponse; isSe
                     <ul className="space-y-1">
                       {activitySection.items.map((item) => (
                         <li key={`${item.kind}-${item.id}`}>
-                          {item.kind === "thread" ? (
+                          {item.kind === "moment" ? (
+                            <MomentCard moment={item.data} />
+                          ) : item.kind === "thread" ? (
                             <FeedThreadCard thread={item.data} href={item.href} variant="compact" />
                           ) : item.kind === "harvest" ? (
                             <FeedHarvestCard diary={item.data} href={item.href} variant="compact" />

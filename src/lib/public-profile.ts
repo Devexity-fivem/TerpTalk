@@ -5,7 +5,10 @@
 // docs/audit/profile-v2-implementation-plan.md §11–§13.
 
 import { prisma } from "@/lib/prisma"
-import { blockExistsBetween } from "@/lib/security"
+import { activeAuthor, blockExistsBetween, blockedUserIds } from "@/lib/security"
+import { momentPath, momentVisibleWhere } from "@/lib/moments"
+import { updateAnchor } from "@/lib/update-social"
+import { diaryPath } from "@/lib/slugs"
 import {
   MASTERIES,
   MASTERY_META,
@@ -27,7 +30,7 @@ import { hasUnlocks } from "@/lib/progression"
 import { TERPBOT_USERNAME } from "@/lib/terpbot-constants"
 import { getBotStats } from "@/lib/terpbot-events"
 import { publicDiaryWhere } from "@/lib/diary-visibility"
-import { getFeedPage, resolveAuthorFeedScope, type FeedItem } from "@/lib/feed"
+import { decodeFeedCursor, encodeFeedCursor, getFeedPage, resolveAuthorFeedScope, type FeedItem } from "@/lib/feed"
 import { mediaProxyUrl, proxyMedia } from "@/lib/media"
 import { parseProfileSettings, type ProfileSettings, type SectionVisibility } from "@/lib/profile-settings"
 
@@ -957,8 +960,19 @@ export async function getPublicProfileData(
 
 const PROFILE_SECTIONS_PUBLIC_MAX = 20
 const PROFILE_TAB_PAGE_SIZE = 12
+const PROFILE_MEDIA_PAGE_SIZE = 24
 
-export type ProfileTabSection = "grows" | "harvests" | "followers" | "following" | "strains" | "activity"
+export type ProfileTabSection = "grows" | "harvests" | "followers" | "following" | "strains" | "activity" | "posts" | "media"
+
+/** Profile media grid tile — photos from the member's visible posts and
+ *  grow updates, newest first. URLs are always the authorization proxy. */
+export interface MediaTileDTO {
+  id: string
+  source: "moment" | "update"
+  url: string
+  href: string
+  createdAt: Date
+}
 
 /** Deterministic portfolio filters — only dimensions backed by real
     columns; validated server-side before they reach a where clause. */
@@ -976,6 +990,8 @@ export type ProfileSectionPage = { nextCursor: string | null } & (
   | { section: "following"; items: FollowCardDTO[] }
   | { section: "strains"; items: StrainRowDTO[] }
   | { section: "activity"; items: FeedItem[] }
+  | { section: "posts"; items: FeedItem[] }
+  | { section: "media"; items: MediaTileDTO[] }
 )
 
 const GROW_STAGES = new Set([
@@ -1089,10 +1105,59 @@ export async function getProfileSection(
   //    visibility contract as the feed: owner sees own non-deleted rows,
   //    everyone else PUBLIC diaries only; UNLISTED is never profile-
   //    listed; blocks (either direction) already returned null above. ──
-  if (section === "activity") {
+  if (section === "activity" || section === "posts") {
     const scope = await resolveAuthorFeedScope(ownerId, viewerId)
-    const page = await getFeedPage({ scope, cursor, limit: PROFILE_TAB_PAGE_SIZE })
+    const page = await getFeedPage({
+      scope, cursor, limit: PROFILE_TAB_PAGE_SIZE,
+      ...(section === "posts" ? { kinds: ["moment"] as const } : {}),
+    })
     return { section, items: page.items, nextCursor: page.nextCursor }
+  }
+
+  // ── Media grid — photos from visible posts (canonical moment predicate)
+  //    and grow updates (same diary visibility as the Grows tab), merged
+  //    on one (createdAt, id) keyset in the feed's cursor format. ──
+  if (section === "media") {
+    const cur = decodeFeedCursor(cursor)
+    const after = cur
+      ? { OR: [{ createdAt: { lt: new Date(cur.ts) } }, { createdAt: new Date(cur.ts), id: { lt: cur.id } }] }
+      : {}
+    const take = PROFILE_MEDIA_PAGE_SIZE + 1
+    const blockedIds = await blockedUserIds(viewerId)
+    const [momentImgs, updateImgs] = await Promise.all([
+      prisma.momentImage.findMany({
+        where: {
+          ...after,
+          moment: { AND: [momentVisibleWhere({ viewerId: viewerId ?? null, blockedIds }), { authorId: ownerId }] },
+        },
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+        take,
+        select: { id: true, createdAt: true, momentId: true },
+      }),
+      prisma.diaryImage.findMany({
+        where: {
+          ...after,
+          update: { authorId: ownerId, diary: { deleted: false, author: activeAuthor(), ...scope } },
+        },
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+        take,
+        select: { id: true, createdAt: true, update: { select: { id: true, diary: { select: { id: true, slug: true } } } } },
+      }),
+    ])
+    const tiles: MediaTileDTO[] = [
+      ...momentImgs.map((i) => ({ id: i.id, source: "moment" as const, url: mediaProxyUrl("moment", i.id), href: momentPath(i.momentId), createdAt: i.createdAt })),
+      ...updateImgs.map((i) => ({
+        id: i.id, source: "update" as const, url: mediaProxyUrl("diary", i.id),
+        href: updateAnchor(diaryPath(i.update.diary), i.update.id), createdAt: i.createdAt,
+      })),
+    ].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime() || (b.id < a.id ? -1 : b.id > a.id ? 1 : 0))
+    const items = tiles.slice(0, PROFILE_MEDIA_PAGE_SIZE)
+    const last = items[items.length - 1]
+    return {
+      section,
+      items,
+      nextCursor: tiles.length > PROFILE_MEDIA_PAGE_SIZE && last ? encodeFeedCursor(last.createdAt, last.id) : null,
+    }
   }
 
   // ── Strain see-all — paged distinct strains across visible grows. ──

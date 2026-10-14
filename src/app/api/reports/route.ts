@@ -16,6 +16,8 @@ const REPORT_TYPES = new Set([
   "SETUP",
   "SETUP_COMMENT",
   "STRAIN",
+  "MOMENT",
+  "MOMENT_COMMENT",
 ])
 
 const REPORT_REASONS = new Set([
@@ -109,6 +111,24 @@ export async function POST(request: Request) {
         // Only live comments are reportable — a deleted/moderated comment
         // resolves to the same not-found as any other absent target.
         const c = await prisma.setupComment.findFirst({
+          where: { id: targetId, deleted: false },
+          select: { authorId: true },
+        })
+        reportedUserId = c?.authorId ?? null
+        break
+      }
+      case "MOMENT": {
+        // Only live moments are reportable — a deleted or expired story
+        // resolves to the same not-found as any other absent target.
+        const m = await prisma.moment.findFirst({
+          where: { id: targetId, deleted: false },
+          select: { authorId: true },
+        })
+        reportedUserId = m?.authorId ?? null
+        break
+      }
+      case "MOMENT_COMMENT": {
+        const c = await prisma.momentComment.findFirst({
           where: { id: targetId, deleted: false },
           select: { authorId: true },
         })

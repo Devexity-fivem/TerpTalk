@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma"
 import { canViewDiary } from "@/lib/diary-visibility"
 import { privatizeBlob, deleteImageStrict, publicTwinUrl, isPublicBlobUrl, isPrivateBlobUrl } from "@/lib/blob"
 import { isActiveAuthorRow, isModerator } from "@/lib/security"
+import { canViewMoment } from "@/lib/moments"
 
 /**
  * Restricted media classes — objects whose visibility can change after
@@ -14,9 +15,9 @@ import { isActiveAuthorRow, isModerator } from "@/lib/security"
  * is not routed through the proxy; its visibility is static and it is
  * intentionally served by the public CDN.
  */
-export type MediaKind = "diary" | "post" | "setup"
+export type MediaKind = "diary" | "post" | "setup" | "moment"
 
-export const MEDIA_KINDS: readonly MediaKind[] = ["diary", "post", "setup"]
+export const MEDIA_KINDS: readonly MediaKind[] = ["diary", "post", "setup", "moment"]
 
 export { isPrivateBlobUrl, isPublicBlobUrl }
 
@@ -132,6 +133,26 @@ export async function resolveMediaAccess(
         url = img.url
         allowed = !hidden || isModerator(viewer.role)
       }
+    }
+  } else if (kind === "moment") {
+    // Same audience rule as the moment itself (lib/moments.ts): deleted /
+    // inactive author → denied; FOLLOWERS → author + followers; expired
+    // story → author only. Blocks filter discovery only, like every class.
+    const img = await prisma.momentImage.findUnique({
+      where: { id },
+      select: {
+        url: true,
+        moment: {
+          select: {
+            authorId: true, kind: true, visibility: true, deleted: true, expiresAt: true,
+            author: { select: { banned: true, suspendedUntil: true } },
+          },
+        },
+      },
+    })
+    if (img && (await canViewMoment(img.moment, viewerId ?? null, { checkBlocks: false }))) {
+      url = img.url
+      allowed = true
     }
   } else {
     const img = await prisma.setupImage.findUnique({

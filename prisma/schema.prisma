@@ -77,6 +77,8 @@ model User {
   productChanges ProductChange[]
   plantDoctorCases PlantDoctorCase[]
   pushSubscriptions PushSubscription[]
+  moments       Moment[]
+  momentComments MomentComment[]
 
   @@index([role])
   @@index([status])
@@ -362,19 +364,105 @@ model Reaction {
   postId    String?
   diaryId   String?
   diaryUpdateId String? // Social Grow Updates — exactly one target is set
+  momentId  String?      // Social Moments
   createdAt DateTime @default(now())
 
   user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   post      Post?        @relation(fields: [postId], references: [id], onDelete: Cascade)
   diary     GrowDiary?   @relation(fields: [diaryId], references: [id], onDelete: Cascade)
   diaryUpdate DiaryUpdate? @relation(fields: [diaryUpdateId], references: [id], onDelete: Cascade)
+  moment    Moment?      @relation(fields: [momentId], references: [id], onDelete: Cascade)
 
   @@unique([userId, postId])
   @@unique([userId, diaryId])
   @@unique([userId, diaryUpdateId])
+  @@unique([userId, momentId])
   @@index([postId])
   @@index([diaryId])
   @@index([diaryUpdateId])
+  @@index([momentId])
+}
+
+// ─── Social Moments ────────────────────────────────────────────────
+// The native social post. One model carries every social shape so there
+// is one source of truth for visibility and moderation:
+//   kind POST  — a feed post (text and/or up to 4 photos)
+//   kind STORY — a 24h grow check-in (expiresAt set; never in the feed)
+//   repostOfId — a repost (empty content) or quote (with content) of a
+//                PUBLIC post
+// Visibility: PUBLIC, or FOLLOWERS (the author's followers + author).
+// The canonical read predicate lives in src/lib/moments.ts.
+model Moment {
+  id         String    @id @default(cuid())
+  kind       String    @default("POST")   // POST | STORY
+  content    String    @default("")
+  visibility String    @default("PUBLIC") // PUBLIC | FOLLOWERS
+  authorId   String
+  diaryId    String?   // optional grow tag — always the author's own diary
+  strainId   String?
+  repostOfId String?
+  expiresAt  DateTime? // STORY only
+  deleted    Boolean   @default(false)
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  author    User       @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  diary     GrowDiary? @relation(fields: [diaryId], references: [id], onDelete: SetNull)
+  strain    Strain?    @relation(fields: [strainId], references: [id], onDelete: SetNull)
+  repostOf  Moment?    @relation("MomentReposts", fields: [repostOfId], references: [id], onDelete: SetNull)
+  reposts   Moment[]   @relation("MomentReposts")
+  images    MomentImage[]
+  comments  MomentComment[]
+  reactions Reaction[]
+  tags      MomentTag[]
+
+  @@index([authorId, createdAt])
+  @@index([kind, createdAt])
+  @@index([createdAt])
+  @@index([repostOfId])
+  @@index([diaryId])
+  @@index([strainId])
+  @@index([kind, expiresAt])
+}
+
+model MomentImage {
+  id        String   @id @default(cuid())
+  url       String
+  order     Int      @default(0)
+  momentId  String
+  createdAt DateTime @default(now())
+
+  moment    Moment   @relation(fields: [momentId], references: [id], onDelete: Cascade)
+
+  @@index([momentId])
+  @@index([createdAt])
+}
+
+model MomentComment {
+  id        String   @id @default(cuid())
+  content   String
+  momentId  String
+  authorId  String
+  deleted   Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  moment    Moment   @relation(fields: [momentId], references: [id], onDelete: Cascade)
+  author    User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@index([momentId, createdAt])
+  @@index([authorId])
+}
+
+model MomentTag {
+  momentId String
+  tagId    String
+
+  moment Moment @relation(fields: [momentId], references: [id], onDelete: Cascade)
+  tag    Tag    @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([momentId, tagId])
+  @@index([tagId])
 }
 
 // Bookmarks
@@ -474,6 +562,7 @@ model GrowDiary {
   contextThreads  Thread[]    @relation("ThreadContextDiary")
   pinnedBy      Profile[]  @relation("PinnedHarvest")
   featuredBy    Profile[]  @relation("ProfileFeaturedGrow")
+  moments       Moment[]
 
   @@index([authorId])
   @@index([strain])
@@ -830,6 +919,7 @@ model Strain {
   photos      StrainPhoto[]
   diaries     GrowDiary[] @relation("DiaryStrain")
   plantDoctorCases PlantDoctorCase[]
+  moments     Moment[]
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -920,7 +1010,7 @@ model ReputationEvent {
 // Reports and Moderation
 model Report {
   id           String    @id @default(cuid())
-  type         String    // THREAD, POST, CHAT_MESSAGE, PROFILE, DIARY, SETUP, SETUP_COMMENT
+  type         String    // THREAD, POST, CHAT_MESSAGE, PROFILE, DIARY, SETUP, SETUP_COMMENT, STRAIN, MOMENT, MOMENT_COMMENT
   reason       String
   description  String?
   reporterId   String?   // SetNull on reporter account deletion — the case outlives the reporter
@@ -1009,7 +1099,7 @@ model ModerationAction {
   reportId    String?  // links REPORT_* / assignment / case enforcement back to the case
   flagId      String?  // links FLAG_* actions back to the abuse flag
   targetId    String?  // content target id — bare string, survives target deletion (nullable for pre-S rows)
-  targetType  String?  // THREAD, POST, CHAT_MESSAGE, DIARY, SETUP, SETUP_COMMENT, STRAIN
+  targetType  String?  // THREAD, POST, CHAT_MESSAGE, DIARY, SETUP, SETUP_COMMENT, STRAIN, MOMENT, MOMENT_COMMENT
   createdAt   DateTime @default(now())
 
   moderator   User?                @relation(fields: [moderatorId], references: [id], onDelete: SetNull)
@@ -1429,6 +1519,7 @@ model Tag {
   updatedAt DateTime @updatedAt
 
   threads ThreadTag[]
+  moments MomentTag[]
 
   @@index([slug])
 }

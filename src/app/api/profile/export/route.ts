@@ -34,7 +34,7 @@ export async function GET(request: Request) {
     // reports filed *about* the user are intentionally not exported. Staff
     // triage fields on the member's own reports/applications are stripped
     // below.
-    const [user, profile, customSections, threads, posts, diaries, diaryUpdates, diaryImages, experiments, setups, setupImages, setupComments, chatMessages, sentMessages, receivedMessages, reactions, postImages, strainPhotos, polls, pollVotes, badges, achievements, reputationEvents, progressionEvents, masteryProgress, notifications, followsGiven, followsReceived, blocksMade, bookmarks, savedSearches, contestEntries, contestVotes, diaryContestEntries, diaryContestVotes, strains, guideEdits, staffApplications, reportsFiled, feedback, categoryFollows, threadFollows, diaryFollows, botEvents] =
+    const [user, profile, customSections, threads, posts, diaries, diaryUpdates, diaryImages, experiments, setups, setupImages, setupComments, moments, momentImages, momentComments, momentTags, chatMessages, sentMessages, receivedMessages, reactions, postImages, strainPhotos, polls, pollVotes, badges, achievements, reputationEvents, progressionEvents, masteryProgress, notifications, followsGiven, followsReceived, blocksMade, bookmarks, savedSearches, contestEntries, contestVotes, diaryContestEntries, diaryContestVotes, strains, guideEdits, staffApplications, reportsFiled, feedback, categoryFollows, threadFollows, diaryFollows, botEvents] =
       await Promise.all([
         prisma.user.findUnique({
           where: { id: userId },
@@ -65,6 +65,10 @@ export async function GET(request: Request) {
         prisma.growSetup.findMany({ where: { authorId: userId }, take: 10_000, orderBy: { createdAt: "desc" } }),
         prisma.setupImage.findMany({ where: { setup: { authorId: userId } }, take: 10_000, orderBy: { createdAt: "desc" } }),
         prisma.setupComment.findMany({ where: { authorId: userId }, take: 10_000, orderBy: { createdAt: "desc" } }),
+        prisma.moment.findMany({ where: { authorId: userId }, take: 10_000, orderBy: { createdAt: "desc" } }),
+        prisma.momentImage.findMany({ where: { moment: { authorId: userId } }, take: 10_000, orderBy: { createdAt: "desc" } }),
+        prisma.momentComment.findMany({ where: { authorId: userId }, take: 10_000, orderBy: { createdAt: "desc" } }),
+        prisma.momentTag.findMany({ where: { moment: { authorId: userId } }, take: 10_000 }),
         prisma.chatMessage.findMany({ where: { authorId: userId }, take: 10_000, orderBy: { createdAt: "desc" } }),
         prisma.directMessage.findMany({ where: { senderId: userId }, take: 10_000, orderBy: { createdAt: "desc" } }),
         prisma.directMessage.findMany({ where: { receiverId: userId }, take: 10_000, orderBy: { createdAt: "desc" } }),
@@ -133,6 +137,10 @@ export async function GET(request: Request) {
         setups,
         setupImages: setupImages.map((i) => ({ ...i, url: mediaProxyUrl("setup", i.id) })),
         setupComments,
+        moments,
+        momentImages: momentImages.map((i) => ({ ...i, url: mediaProxyUrl("moment", i.id) })),
+        momentComments,
+        momentTags,
         strains,
         strainPhotos,
         polls,

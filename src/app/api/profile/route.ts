@@ -690,6 +690,7 @@ export async function DELETE(request: Request) {
       postImages,
       diaryImages,
       setupImages,
+      momentImages,
       strainPhotos,
       contestImages,
     ] = await Promise.all([
@@ -713,6 +714,10 @@ export async function DELETE(request: Request) {
         where: { setup: { authorId: user.id } },
         select: { url: true },
       }),
+      prisma.momentImage.findMany({
+        where: { moment: { authorId: user.id } },
+        select: { url: true },
+      }),
       prisma.strainPhoto.findMany({
         where: { userId: user.id },
         select: { imageUrl: true },
@@ -727,6 +732,7 @@ export async function DELETE(request: Request) {
       ...postImages.map((i) => i.url),
       ...diaryImages.map((i) => i.url),
       ...setupImages.map((i) => i.url),
+      ...momentImages.map((i) => i.url),
       ...strainPhotos.map((i) => i.imageUrl),
       ...contestImages.map((i) => i.imageUrl),
       user.profile?.avatarUrl,

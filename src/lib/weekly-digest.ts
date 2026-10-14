@@ -71,7 +71,9 @@ async function followedGrowerActivity(
   if (!followedIds.size) return empty
 
   const [feed, newDiaries] = await Promise.all([
-    getFeedPage({ scope, limit: FOLLOWED_FEED_CANDIDATES }),
+    // Grow-activity digest — social moments are a feed surface, not digest
+    // candidates (they'd crowd the bounded candidate window).
+    getFeedPage({ scope, kinds: ["update", "thread", "harvest"], limit: FOLLOWED_FEED_CANDIDATES }),
     // New diaries are not a Feed kind — digest-local source using the
     // same semantics: PUBLIC, active author, user-followed, not blocked.
     prisma.growDiary.findMany({
@@ -122,7 +124,7 @@ async function followedGrowerActivity(
           verb: "posted a new update", title: it.data.title, context: it.data.diary.title,
         },
       })
-    } else {
+    } else if (it.kind === "harvest") {
       if (coveredDiaryIds.has(it.data.id)) continue
       cands.push({
         sortAt: it.sortAt, id: it.id, authorId: author.id,

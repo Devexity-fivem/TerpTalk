@@ -7,9 +7,10 @@
 import { useCallback, useRef, useState } from "react"
 import { Loader2 } from "@/lib/icons"
 import { FeedThreadCard, FeedUpdateCard, FeedHarvestCard } from "@/components/feed-cards"
+import MomentCard from "@/components/moment-card"
 import type { FeedItem, FeedKind, FeedMode } from "@/lib/feed"
 
-export type FeedAppearance = "mixed" | "threads" | "updates" | "harvests"
+export type FeedAppearance = "mixed" | "threads" | "updates" | "harvests" | "posts"
 
 interface FeedListProps {
   mode: FeedMode
@@ -72,6 +73,9 @@ export default function FeedList({
     <>
       <div className={grid ? "grid sm:grid-cols-2 gap-3 p-4" : "divide-y divide-border"}>
         {items.map((item) => {
+          if (item.kind === "moment") {
+            return <MomentCard key={`m-${item.id}`} moment={item.data} />
+          }
           if (item.kind === "thread") {
             return (
               <FeedThreadCard

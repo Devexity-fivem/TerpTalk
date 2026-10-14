@@ -3,7 +3,7 @@ import { unstable_cache } from "next/cache"
 import { publicUserSelect, activeAuthor } from "@/lib/security"
 import { getSiteStats } from "@/lib/community-stats"
 import { getSession } from "@/lib/session"
-import { Leaf, MessageSquare, TrendingUp, Calendar, UserPlus, Sprout, Award } from "@/lib/icons"
+import { Leaf, MessageSquare, TrendingUp, Calendar, UserPlus, Sprout, Award, Hash } from "@/lib/icons"
 import { LiveRefresh } from "@/components/live-refresh"
 import Link from "next/link"
 import RoleBadge from "@/components/role-badge"
@@ -16,6 +16,8 @@ import type { FeedableDiary } from "@/components/feed-share-button"
 import { FEED_KINDS, feedDiaryWhere, getFeedPage, resolveFeedScope } from "@/lib/feed"
 import type { FeedKind, FeedMode } from "@/lib/feed"
 import { diaryPath } from "@/lib/slugs"
+import { getStoryRail, getTrendingHashtags, hashtagPath } from "@/lib/moments"
+import StoryRail from "@/components/story-rail"
 
 export const dynamic = "force-dynamic"
 
@@ -91,7 +93,7 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
         select: { id: true, title: true, stage: true, harvested: true },
       })
     : Promise.resolve([] as FeedableDiary[])
-  const [page, hasHarvests, trendingDiaries, siteStats, feedStats, showFirstReplyNudge, activeDiaries] = await Promise.all([
+  const [page, hasHarvests, trendingDiaries, siteStats, feedStats, showFirstReplyNudge, activeDiaries, storyRail, trendingTags] = await Promise.all([
     getFeedPage({ scope, kinds: conf.kinds, cursor }),
     prisma.growDiary.findFirst({ where: harvestScope, select: { id: true } }).then((r) => !!r),
     prisma.growDiary.findMany({
@@ -107,6 +109,8 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
     getFeedStats(),
     wantNudge ? isEligibleForFirstReplyNudge(session!.user!.id) : Promise.resolve(false),
     activeDiariesPromise,
+    getStoryRail(session?.user?.id ?? null),
+    getTrendingHashtags({ days: 7, limit: 8 }),
   ])
 
   const { items, nextCursor } = page
@@ -179,6 +183,9 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
             </Link>
           </div>
         )}
+
+        {/* 24h stories — authors the viewer follows (plus their own) */}
+        <StoryRail entries={storyRail} />
 
         {/* Feed Tabs */}
         <div className="flex gap-2 mb-6 border-b border-border overflow-x-auto scrollbar-none">
@@ -364,6 +371,24 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
                 ))}
               </div>
             </div>
+
+            {/* Trending hashtags */}
+            {trendingTags.length > 0 && (
+              <div className="tt-spotlight bg-card/80 rounded-2xl border border-border/70">
+                <div className="p-4 border-b border-border flex items-center gap-2">
+                  <Hash className="w-5 h-5 text-primary" />
+                  <h2 className="font-display font-semibold">Trending</h2>
+                </div>
+                <div className="divide-y divide-border">
+                  {trendingTags.map((t) => (
+                    <Link key={t.slug} href={hashtagPath(t.slug)} className="block p-3 hover:bg-secondary/50 transition-colors">
+                      <p className="text-sm font-medium text-primary">#{t.name}</p>
+                      <p className="text-xs text-muted-foreground">{t.count} post{t.count === 1 ? "" : "s"} this week</p>
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Quick Stats */}
             <div className="tt-spotlight bg-card/80 rounded-2xl border border-border/70 p-6">

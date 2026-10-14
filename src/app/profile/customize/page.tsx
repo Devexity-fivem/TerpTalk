@@ -90,6 +90,8 @@ const SECTION_INFO: Record<string, SectionInfo> = {
   pinned: { name: "Pinned section", desc: "A custom section pinned high on your overview." },
   history: { name: "Recent activity", desc: "Latest threads and progression events." },
   badges: { name: "Badges", desc: "Your badge showcase on Contributions." },
+  posts: { name: "Posts tab", desc: "Your social wall — posts, photos, reposts and quotes." },
+  media: { name: "Media tab", desc: "A photo grid from your posts and grow updates." },
   activity: { name: "Activity tab", desc: "Your recent public history — grow updates, discussions, harvests." },
   grows: { name: "Grows tab", desc: "Your grow portfolio." },
   harvests: { name: "Harvests tab", desc: "Your completed harvest shelf." },

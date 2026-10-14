@@ -18,7 +18,7 @@ import {
 } from "@/lib/icons"
 import { cn } from "@/lib/utils"
 import { useChatPanel } from "@/components/chat-panel"
-import { useShareComposer } from "@/components/share-composer"
+import { useShareComposer, type ComposerPrefill } from "@/components/share-composer"
 
 // ── Context ────────────────────────────────────────────────────────
 
@@ -79,7 +79,7 @@ interface Action {
   keywords?: string
 }
 
-function getActions(openChat: () => void, composer: { open: () => void }): Action[] {
+function getActions(openChat: () => void, composer: { open: (prefill?: ComposerPrefill) => void }): Action[] {
   return [
     // Navigate
     { id: "home", label: "Go home", icon: Home, href: "/", section: "Navigate", keywords: "dashboard today" },
@@ -96,9 +96,11 @@ function getActions(openChat: () => void, composer: { open: () => void }): Actio
     { id: "deals", label: "Deals", icon: Tag, href: "/deals", section: "Navigate", keywords: "discount coupon" },
     // Create — open the unified share composer
     { id: "share", label: "Share something", icon: Plus, section: "Create", auth: true, action: () => composer.open(), keywords: "create post new share" },
-    { id: "new-thread", label: "Start a discussion", icon: MessageCircle, section: "Create", auth: true, action: () => composer.open(), keywords: "post thread conversation" },
-    { id: "new-question", label: "Ask the community", icon: Search, section: "Create", auth: true, action: () => composer.open(), keywords: "question help problem" },
-    { id: "new-diary", label: "Start a grow diary", icon: Sprout, section: "Create", auth: true, action: () => composer.open(), keywords: "journal grow log track" },
+    { id: "new-post", label: "New post", icon: Plus, section: "Create", auth: true, action: () => composer.open({ type: "moment" }), keywords: "post photo status social moment" },
+    { id: "new-story", label: "Share a story", icon: Plus, section: "Create", auth: true, action: () => composer.open({ type: "story" }), keywords: "story check-in 24h photo" },
+    { id: "new-thread", label: "Start a discussion", icon: MessageCircle, section: "Create", auth: true, action: () => composer.open({ type: "discussion" }), keywords: "post thread conversation" },
+    { id: "new-question", label: "Ask the community", icon: Search, section: "Create", auth: true, action: () => composer.open({ type: "question" }), keywords: "question help problem" },
+    { id: "new-diary", label: "Start a grow diary", icon: Sprout, section: "Create", auth: true, action: () => composer.open({ type: "diary" }), keywords: "journal grow log track" },
     { id: "new-setup", label: "Share a setup", icon: Tent, href: "/setups/new", section: "Create", auth: true, keywords: "equipment build gear" },
     { id: "new-strain", label: "Add a strain", icon: Dna, href: "/strains/new", section: "Create", auth: true, keywords: "genetics variety database" },
     // Personal
