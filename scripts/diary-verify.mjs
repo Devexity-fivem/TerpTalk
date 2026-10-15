@@ -1691,10 +1691,16 @@ const main = async () => {
 
     // ── Batch R1: diary-reminder cron, log-to-diary picker feed, harvest prompt ──
     {
-      // Dedicated cron route — a junk UA fails closed (dev has no
-      // CRON_SECRET, so only local/manual UAs are admitted).
+      // Dedicated cron route — fails closed. With CRON_SECRET configured
+      // (CI/prod) only a Bearer match is admitted; without it (local dev)
+      // only local/manual UAs are. A junk UA is rejected in both modes.
+      const cronAuth = process.env.CRON_SECRET
+        ? { authorization: `Bearer ${process.env.CRON_SECRET}` }
+        : { "user-agent": "curl/8 tt-verify" }
       const cronDeny = await fetch(`${BASE}/api/cron/diary-reminders`, {
-        headers: { "user-agent": "tt-verify-probe" },
+        headers: process.env.CRON_SECRET
+          ? { authorization: `Bearer wrong-${Date.now()}` }
+          : { "user-agent": "tt-verify-probe" },
       })
       cronDeny.status === 401
         ? pass("diary-reminders cron rejects unauthenticated caller")
@@ -1713,7 +1719,7 @@ const main = async () => {
       await prisma.growDiary.update({ where: { id: staleDiary.id }, data: { updatedAt: staleAt } })
 
       const cronRes = await fetch(`${BASE}/api/cron/diary-reminders`, {
-        headers: { "user-agent": "curl/8 tt-verify" },
+        headers: cronAuth,
       })
       const cronBody = await cronRes.json().catch(() => null)
       const reminder = await prisma.notification.findFirst({
@@ -1728,7 +1734,7 @@ const main = async () => {
       // Re-invocation: the day claim is done → the task skips entirely;
       // no second notification can appear.
       const cronRes2 = await fetch(`${BASE}/api/cron/diary-reminders`, {
-        headers: { "user-agent": "curl/8 tt-verify" },
+        headers: cronAuth,
       })
       const cronBody2 = await cronRes2.json().catch(() => null)
       const reminderCount = await prisma.notification.count({
