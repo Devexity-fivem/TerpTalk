@@ -15,7 +15,10 @@ import BlobImage from "@/components/ui/blob-image"
 import SectionCard from "@/components/ui/section-card"
 import UserPopover from "@/components/user-popover"
 import Tooltip from "@/components/ui/tooltip"
-import { escapeLike, strainFieldMatches, strainTypeLabel } from "@/lib/strain-stats"
+import { escapeLike, strainFieldMatches, strainTypeLabel, MIN_DERIVED_SAMPLE } from "@/lib/strain-stats"
+import { STAGE_LABELS } from "@/lib/diary-weeks"
+import { formatRelativeTime } from "@/lib/time"
+import { JsonLd } from "@/components/json-ld"
 import { getStrainKnowledge } from "@/lib/strain-knowledge"
 import { getSuggestedGrowers } from "@/lib/suggested-growers"
 import SuggestedGrowerCard from "@/components/suggested-grower-card"
@@ -97,6 +100,7 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
       include: {
         author: { select: publicUserSelect },
         updates: { take: 1, orderBy: { createdAt: "desc" }, include: { images: { take: 1, orderBy: { order: "asc" } } } },
+        _count: { select: { updates: true } },
       },
     }),
     prisma.growSetup.findMany({
@@ -204,8 +208,25 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
   const setupThumb = (s: typeof relatedSetups[0]) =>
     s.images[0]?.url
 
+  // Strain JSON-LD — only fields stored on the catalog row. No
+  // aggregateRating/reviewCount: member grow ratings measure a grower's
+  // own harvest, not the strain, and small samples would fabricate a
+  // product score. BreadcrumbList comes from <Breadcrumbs> below.
+  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://terp-talk.vercel.app"
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@type": "Product",
+    name: strain.name,
+    ...(strain.description ? { description: snippet(strain.description, 300) } : {}),
+    ...(strain.breederImageUrl ? { image: [strain.breederImageUrl] } : {}),
+    ...(strain.breeder ? { brand: { "@type": "Brand", name: strain.breeder } } : {}),
+    category: "Cannabis strain",
+    url: `${baseUrl}${strainPath(strain)}`,
+  }
+
   return (
     <div className="min-h-screen bg-background" data-tt-strain={JSON.stringify({ id: strain.id, name: strain.name })}>
+      <JsonLd data={jsonLd} />
       <div className="max-w-4xl mx-auto px-4 py-8">
         <Breadcrumbs items={[
           { label: "Strains", href: "/strains" },
@@ -497,9 +518,9 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
                 {growStats.env.ec != null && <Tooltip content="Average electrical conductivity — nutrient strength"><span>avg EC {growStats.env.ec} ({growStats.envSamples.ec})</span></Tooltip>}
               </div>
             )}
-            {(growStats.difficulty.total >= 3 || growStats.topMediums.length > 0 || growStats.topTechniques.length > 0) && (
+            {(growStats.difficulty.total >= MIN_DERIVED_SAMPLE || growStats.topMediums.length > 0 || growStats.topTechniques.length > 0) && (
               <div className="mt-4 pt-4 border-t border-border flex flex-wrap gap-x-5 gap-y-2 text-xs text-muted-foreground">
-                {growStats.difficulty.total >= 3 && (
+                {growStats.difficulty.total >= MIN_DERIVED_SAMPLE && (
                   <span>
                     difficulty: {growStats.difficulty.easy} easy · {growStats.difficulty.normal} normal · {growStats.difficulty.hard} hard
                   </span>
@@ -532,7 +553,19 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
           <SectionCard
             className="mb-6"
             title={<span className="flex items-center gap-2"><HelpCircle className="w-4 h-4 text-primary" />Community knowledge</span>}
-            actions={<span className="text-xs text-muted-foreground">from public records</span>}
+            actions={
+              <span className="flex items-center gap-3 text-xs">
+                <span className="text-muted-foreground">from public records</span>
+                {session && (
+                  <Link
+                    href={`/forum/new?strain=${encodeURIComponent(strain.name)}`}
+                    className="text-primary hover:underline font-medium"
+                  >
+                    Ask about this strain
+                  </Link>
+                )}
+              </span>
+            }
           >
             {questions.total > 0 && (
               <div>
@@ -724,11 +757,34 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
                       size="sm"
                       linked={false}
                     /></p>
+                    <p className="text-[11px] text-muted-foreground mt-0.5 truncate">
+                      {d.harvested ? "Harvested" : (STAGE_LABELS[d.stage] ?? "Active")}
+                      {" · "}{d._count.updates} update{d._count.updates === 1 ? "" : "s"}
+                      {" · "}{formatRelativeTime(d.updatedAt)}
+                    </p>
                   </div>
                 </Link>
               ))}
             </div>
           </SectionCard>
+        )}
+
+        {/* No public grows yet — honest empty state with the supported
+            prefill route (/diaries/new?strain=<id> selects this strain). */}
+        {relatedDiaries.length === 0 && growStats.tier === "none" && (
+          <div className="bg-card/80 rounded-2xl border border-border/70 p-5 mb-6 text-center">
+            <BookOpen className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
+            <h3 className="font-display font-semibold text-sm mb-1">No public grows of {strain.name} yet</h3>
+            <p className="text-xs text-muted-foreground mb-3">Be the first to document this strain for the community.</p>
+            {session && (
+              <Link
+                href={`/diaries/new?strain=${strain.id}`}
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
+              >
+                <Sprout className="w-3.5 h-3.5" /> Start the first grow
+              </Link>
+            )}
+          </div>
         )}
 
         {/* Growers with public evidence on this strain — the person-level

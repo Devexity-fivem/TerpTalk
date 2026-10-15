@@ -9,7 +9,7 @@ import { readFileSync } from "node:fs"
 import { createRequire } from "node:module"
 import { prisma } from "@/lib/prisma"
 import { STRAIN_TYPES, parseSeedToHarvestWeeks } from "@/lib/strain-fields"
-import { strainTypeLabel } from "@/lib/strain-stats"
+import { strainTypeLabel, computeStrainGrowStats, MIN_DERIVED_SAMPLE } from "@/lib/strain-stats"
 import { computeStrainQuestions, computeStrainHarvests } from "@/lib/strain-knowledge"
 
 
@@ -561,6 +561,114 @@ await check("seed-guard: unordered insensitive findFirst spares the community ro
     assert.deepEqual(k.items, [])
     assert.deepEqual(k.topics, [])
     assert.deepEqual(h, [])
+  })
+}
+
+// ─── GrowStats: derived-stat suppression + eligibility ─────────────
+// MIN_DERIVED_SAMPLE is the consistent suppression floor for every
+// derived comparison metric (means, medians, best-of, env averages) —
+// counts and sample sizes stay visible below it. Public-scope only:
+// deleted, non-PUBLIC, banned-author, and yield-private rows never join.
+{
+  const sStrain = await mkStrain(creator.id)
+  const mkGrow = (authorId: string, over: Record<string, unknown> = {}) =>
+    mkDiary(authorId, {
+      strainId: sStrain.id,
+      strain: sStrain.name,
+      startDate: new Date("2026-01-01T00:00:00Z"),
+      harvested: true,
+      harvestedAt: new Date("2026-04-01T00:00:00Z"),
+      yieldAmount: 100,
+      yieldUnit: "g",
+      harvestRating: 8,
+      harvestDifficulty: "NORMAL",
+      ...over,
+    })
+  const mkUpdate = (diaryId: string, authorId: string, over: Record<string, unknown> = {}) =>
+    prisma.diaryUpdate.create({
+      data: {
+        diaryId, authorId, title: "u", content: "c", stage: "FLOWER",
+        dayNumber: 30, weekNumber: 5, createdAt: new Date("2026-02-01T00:00:00Z"),
+        temperature: 75, ...over,
+      },
+    })
+
+  const g1 = await mkGrow(creator.id)
+  const g2 = await mkGrow(other.id)
+  // One env reading + one flower onset below the floor — both suppressed.
+  await mkUpdate(g1.id, creator.id)
+
+  await check("growStats: counts always shown; derived stats suppressed below 5", async () => {
+    const s = await computeStrainGrowStats(sStrain.name, sStrain.id)
+    assert.equal(MIN_DERIVED_SAMPLE, 5)
+    assert.equal(s.growCount, 2)
+    assert.equal(s.growerCount, 2)
+    assert.equal(s.harvestedCount, 2)
+    assert.equal(s.yieldSample, 2, "sample count still reported honestly")
+    assert.equal(s.avgYieldOz, null, "avg suppressed below MIN_DERIVED_SAMPLE")
+    assert.equal(s.medianYieldOz, null)
+    assert.equal(s.topYieldOz, null)
+    assert.equal(s.avgTotalDays, null)
+    assert.equal(s.totalDaysSample, 2)
+    assert.equal(s.avgRating, null)
+    assert.equal(s.ratingSample, 2)
+    assert.equal(s.env.temp, null, "1 reading < 5")
+    assert.equal(s.envSamples.temp, 1)
+    assert.equal(s.flowerSample, 1)
+    assert.equal(s.avgFlowerDays, null)
+    assert.equal(s.tier, "minimal")
+  })
+
+  const g3 = await mkGrow(reporter.id)
+  const g4 = await mkGrow(reporter.id)
+  const g5 = await mkGrow(other.id)
+
+  await check("growStats: derived stats unlock at exactly MIN_DERIVED_SAMPLE", async () => {
+    const s = await computeStrainGrowStats(sStrain.name, sStrain.id)
+    assert.equal(s.growCount, 5)
+    assert.equal(s.avgYieldOz, 3.5, "100g → 3.5oz")
+    assert.equal(s.medianYieldOz, 3.5)
+    assert.equal(s.topYieldOz, 3.5)
+    assert.equal(s.avgTotalDays, 90, "Jan 1 → Apr 1")
+    assert.equal(s.avgRating, 8)
+    assert.equal(s.tier, "established")
+  })
+
+  await check("growStats: private/unlisted/deleted/banned/yield-private never counted", async () => {
+    await mkGrow(other.id, { visibility: "PRIVATE" })
+    await mkGrow(other.id, { visibility: "UNLISTED" })
+    await mkGrow(other.id, { deleted: true })
+    const sban = await mkUser("sban")
+    await prisma.user.update({ where: { id: sban.id }, data: { banned: true } })
+    await mkGrow(sban.id)
+    // A PUBLIC diary with a member-marked private yield: the grow counts,
+    // its yield must not join the community aggregate.
+    await mkGrow(reporter.id, { yieldPrivate: true })
+    const s = await computeStrainGrowStats(sStrain.name, sStrain.id)
+    assert.equal(s.growCount, 6, "only the public yield-private grow joins")
+    assert.equal(s.harvestedCount, 6)
+    assert.equal(s.yieldSample, 5, "yieldPrivate excluded from yield pool")
+    assert.equal(s.ratingSample, 6, "ratings are not yield-private")
+  })
+
+  await check("growStats: env + flower aggregates unlock per-metric at 5 observations", async () => {
+    for (const g of [g2, g3, g4, g5]) await mkUpdate(g.id, g.authorId)
+    const s = await computeStrainGrowStats(sStrain.name, sStrain.id)
+    assert.equal(s.envSamples.temp, 5, "5 readings across 5 public grows")
+    assert.equal(s.env.temp, 75)
+    assert.equal(s.env.rh, null, "no humidity readings at all")
+    assert.equal(s.flowerSample, 5)
+    assert.equal(s.avgFlowerDays, 59, "Feb 1 → Apr 1")
+  })
+
+  await check("growStats: empty strain → none tier, no fabricated stats", async () => {
+    const bare = await mkStrain(creator.id)
+    const s = await computeStrainGrowStats(bare.name, bare.id)
+    assert.equal(s.growCount, 0)
+    assert.equal(s.tier, "none")
+    assert.equal(s.avgYieldOz, null)
+    assert.equal(s.env.temp, null)
+    assert.deepEqual(s.reviews, [])
   })
 }
 

@@ -14,6 +14,15 @@ import {
 
 const DAY_MS = 86400000
 
+// Consistently-applied suppression floor for DERIVED comparison
+// statistics (averages, medians, best-of, env aggregates). Below 5
+// eligible observations a mean/median is an anecdote dressed as a
+// finding — the value is suppressed to null while its sample count is
+// still reported, so callers can label honestly. Simple truthful counts
+// (grows, growers, harvested) are never gated. Matches the ≥5-diary bar
+// medianStageDurations already uses.
+export const MIN_DERIVED_SAMPLE = 5
+
 // Escape user-controlled strings before they reach a `contains` (ILIKE) filter —
 // strain names are user-created and could otherwise inject %/_ wildcards.
 export function escapeLike(s: string): string {
@@ -72,7 +81,7 @@ export interface StrainGrowStats {
   flowerSample: number
   env: { temp: number | null; rh: number | null; vpd: number | null; ph: number | null; ec: number | null }
   envSamples: { temp: number; rh: number; vpd: number; ph: number; ec: number }
-  /** null = insufficient data (fewer than 3 reviews) */
+  /** null = insufficient data (fewer than MIN_DERIVED_SAMPLE ratings) */
   avgRating: number | null
   ratingSample: number
   difficulty: { easy: number; normal: number; hard: number; total: number }
@@ -263,21 +272,21 @@ export async function computeStrainGrowStats(strainName: string, strainId: strin
       growerCount: new Set(diaries.map((d) => d.authorId)).size,
       setupCount,
       harvestedCount,
-      avgYieldOz: yieldsG.length >= 2 ? round1(toOz(avgN(yieldsG)!)) : null,
+      avgYieldOz: yieldsG.length >= MIN_DERIVED_SAMPLE ? round1(toOz(avgN(yieldsG)!)) : null,
       yieldSample: yieldsG.length,
-      medianYieldOz: yieldsG.length >= 3 ? round1(toOz(yieldsG[Math.floor(yieldsG.length / 2)])) : null,
-      topYieldOz: yieldsG.length >= 2 ? round1(toOz(yieldsG[yieldsG.length - 1])) : null,
-      avgTotalDays: totalDays.length >= 2 ? Math.round(avgN(totalDays)!) : null,
+      medianYieldOz: yieldsG.length >= MIN_DERIVED_SAMPLE ? round1(toOz(yieldsG[Math.floor(yieldsG.length / 2)])) : null,
+      topYieldOz: yieldsG.length >= MIN_DERIVED_SAMPLE ? round1(toOz(yieldsG[yieldsG.length - 1])) : null,
+      avgTotalDays: totalDays.length >= MIN_DERIVED_SAMPLE ? Math.round(avgN(totalDays)!) : null,
       totalDaysSample: totalDays.length,
-      avgFlowerDays: flowerDays.length >= 2 ? Math.round(avgN(flowerDays)!) : null,
+      avgFlowerDays: flowerDays.length >= MIN_DERIVED_SAMPLE ? Math.round(avgN(flowerDays)!) : null,
       flowerSample: flowerDays.length,
       env: envAgg
         ? {
-            temp: round1(envAgg._avg.temperature),
-            rh: round1(envAgg._avg.humidity),
-            vpd: round1(envAgg._avg.vpd),
-            ph: round1(envAgg._avg.ph),
-            ec: round1(envAgg._avg.ec),
+            temp: envAgg._count.temperature >= MIN_DERIVED_SAMPLE ? round1(envAgg._avg.temperature) : null,
+            rh: envAgg._count.humidity >= MIN_DERIVED_SAMPLE ? round1(envAgg._avg.humidity) : null,
+            vpd: envAgg._count.vpd >= MIN_DERIVED_SAMPLE ? round1(envAgg._avg.vpd) : null,
+            ph: envAgg._count.ph >= MIN_DERIVED_SAMPLE ? round1(envAgg._avg.ph) : null,
+            ec: envAgg._count.ec >= MIN_DERIVED_SAMPLE ? round1(envAgg._avg.ec) : null,
           }
         : { temp: null, rh: null, vpd: null, ph: null, ec: null },
       envSamples: envAgg
@@ -289,7 +298,7 @@ export async function computeStrainGrowStats(strainName: string, strainId: strin
             ec: envAgg._count.ec,
           }
         : { temp: 0, rh: 0, vpd: 0, ph: 0, ec: 0 },
-      avgRating: ratings.length >= 3 ? round1(avgN(ratings)!) : null,
+      avgRating: ratings.length >= MIN_DERIVED_SAMPLE ? round1(avgN(ratings)!) : null,
       ratingSample: ratings.length,
       difficulty,
       topMediums: topOf([...mediumCounts.entries()], MEDIUM_LABELS as Record<string, string>),

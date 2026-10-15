@@ -502,6 +502,26 @@ const main = async () => {
       ? pass("strain stats block renders with early-tier label")
       : fail("strain stats", page.status)
 
+    // R3 — grow cards carry lifecycle state; the harvested fixtures show
+    // "Harvested", the active one shows its stage label + update count.
+    page.status === 200 && page.html.includes("Harvested") && page.html.includes("update")
+      ? pass("strain grow cards show lifecycle state + update count")
+      : fail("strain grow card lifecycle", page.status)
+
+    // R3 — truthful strain JSON-LD (Product, catalog fields only).
+    page.status === 200 && page.html.includes("application/ld+json") && page.html.includes("Cannabis strain") && page.html.includes(strain.name.replace(/"/g, '\\"'))
+      ? pass("strain page emits truthful JSON-LD")
+      : fail("strain JSON-LD", page.status)
+
+    // R3 — a strain with zero public grows gets the honest empty state +
+    // the supported prefill CTA, never fabricated activity.
+    const emptyStrain = await prisma.strain.create({ data: { name: M("bare-cultivar"), createdById: owner.id } })
+    strainIds.push(emptyStrain.id)
+    page = await getHtml(`/strains/${emptyStrain.id}`)
+    page.status === 200 && page.html.includes("No public grows") && page.html.includes(`/diaries/new?strain=${emptyStrain.id}`) && !page.html.includes("Community grow data")
+      ? pass("strain empty state: no-grows CTA + no stats block")
+      : fail("strain empty state", { s: page.status, cta: page.html.includes(`/diaries/new?strain=${emptyStrain.id}`) })
+
     // Banned author's diary should not surface on /diaries
     const bd = await prisma.growDiary.create({
       data: { title: M("banned"), description: "s", growType: "INDOOR", startDate: new Date(), authorId: banned.id },
