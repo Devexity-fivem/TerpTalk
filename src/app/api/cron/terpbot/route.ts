@@ -67,11 +67,13 @@ export async function GET(request: NextRequest) {
   // Post-marker check: an ANNOUNCEMENT BotEvent row means this exact post
   // already landed. Retried tasks consult it so a bookkeeping failure can
   // never re-post an announcement; a failed post (no marker) stays retryable.
+  // A marker-lookup ERROR propagates — runCronTask marks the task failed and
+  // releases the claim, so a flaky read can never masquerade as "not yet
+  // announced" and send a duplicate post.
   const wasAnnounced = (key: string) =>
     prisma.botEvent
       .findUnique({ where: { key }, select: { id: true } })
       .then(Boolean)
-      .catch(() => false)
 
   // ── Daily digest + grow tip (once per UTC day) ───────────────────────
   const today = new Date().toISOString().slice(0, 10)

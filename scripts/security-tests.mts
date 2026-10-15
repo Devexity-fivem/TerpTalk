@@ -1,4 +1,5 @@
 import "./db-guard.mjs"
+import { evaluateDbTarget } from "./db-guard.mjs"
 import { strict as assert } from "node:assert"
 import { clearHarnessRateLimits, HARNESS_CLIENT_IP } from "./lib/rate-limit-isolation"
 import { readFileSync } from "node:fs"
@@ -696,6 +697,77 @@ async function run() {
         assert.equal(runs, 1)
         assert.deepEqual(posted, ["x"])
       }
+
+      // Announcement-marker lookup failure must propagate as a task
+      // failure — never be read as "not announced", which would send a
+      // duplicate post. Mirrors the terpbot cron's wasAnnounced guard.
+      const km = `__test_cron_marker_${Date.now()}`
+      claimKeys.push(km)
+      {
+        const posted: string[] = []; const failed: string[] = []
+        let sends = 0
+        const wasAnnounced = () => Promise.reject(new Error("marker read failed"))
+        await runCronTask(km, async () => {
+          if (!(await wasAnnounced())) sends++ // same guard shape as the route
+          return "announce"
+        }, posted, failed, "announce")
+        assert.equal(sends, 0, "a failed marker lookup must not send an announcement")
+        assert.deepEqual(failed, ["announce"])
+        assert.deepEqual(posted, [])
+        assert.equal(await prisma.setting.findUnique({ where: { key: km } }), null, "claim released for retry")
+        // Healthy retry completes normally and marks the task done.
+        await runCronTask(km, async () => "announce-ok", posted, failed, "announce")
+        assert.deepEqual(posted, ["announce-ok"])
+        assert.equal((await prisma.setting.findUnique({ where: { key: km } }))?.value, "1")
+      }
+    }
+
+    // ── db-guard: positive authorization on synthetic DSNs ──────────
+    // Endpoint-marker drift must fail closed: anything that is not a
+    // recognized production marker AND not a positively authorized
+    // non-production target is refused.
+    {
+      const dsn = (host: string) => `postgres://u:p@${host}:5432/db`
+      const noOverrides = { ALLOW_PRODUCTION_DB_TESTS: undefined, ALLOW_UNRECOGNIZED_DB_TESTS: undefined, DB_GUARD_EXTRA_HOSTS: undefined } as Record<string, string | undefined>
+
+      // Documented dev branch + local Postgres are authorized.
+      for (const h of [
+        "ep-old-breeze-au1f8sl5-pooler.c-10.us-east-1.aws.neon.tech",
+        "ep-old-breeze-au1f8sl5.c-10.us-east-1.aws.neon.tech", // direct (non-pooler) form
+        "localhost", "127.0.0.1", "db.localhost",
+      ]) {
+        assert.equal(evaluateDbTarget(dsn(h), noOverrides).allowed, true, `safe target refused: ${h}`)
+      }
+      // Production marker refuses even with a plausible-sounding shape.
+      for (const h of [
+        "ep-billowing-dew-a1b2c3d4-pooler.us-east-1.aws.neon.tech",
+        "ep-billowing-dew-a1b2c3d4.us-east-1.aws.neon.tech",
+      ]) {
+        assert.equal(evaluateDbTarget(dsn(h), noOverrides).allowed, false, `production allowed: ${h}`)
+      }
+      // Endpoint renames / unknown Neon branches / foreign hosts fail closed.
+      for (const h of [
+        "ep-old-breeze-renamed.us-east-1.aws.neon.tech".replace("old-breeze", "quiet-sun"), // renamed dev endpoint
+        "ep-random-branch-xyz.eu-west-1.aws.neon.tech",
+        "postgres.internal.example.com",
+      ]) {
+        assert.equal(evaluateDbTarget(dsn(h), noOverrides).allowed, false, `unrecognized target allowed: ${h}`)
+      }
+      // Explicit escapes: production override, extra-host declaration, and
+      // the unrecognized-target override each work deliberately.
+      assert.equal(
+        evaluateDbTarget(dsn("ep-billowing-dew-x.neon.tech"), { ...noOverrides, ALLOW_PRODUCTION_DB_TESTS: "1" }).allowed,
+        true, "documented production override broken")
+      assert.equal(
+        evaluateDbTarget(dsn("ep-ci-branch-1.neon.tech"), { ...noOverrides, DB_GUARD_EXTRA_HOSTS: "ep-ci-branch-1" }).allowed,
+        true, "DB_GUARD_EXTRA_HOSTS declaration broken")
+      assert.equal(
+        evaluateDbTarget(dsn("ep-ci-branch-1.neon.tech"), { ...noOverrides, ALLOW_UNRECOGNIZED_DB_TESTS: "1" }).allowed,
+        true, "unrecognized-target override broken")
+      // Refusals never leak credentials into the reason.
+      const refused = evaluateDbTarget("postgres://secretuser:secretpass@ep-billowing-dew-x.neon.tech/db", noOverrides)
+      assert.equal(refused.allowed, false)
+      assert.ok(!JSON.stringify(refused).includes("secretpass"), "reason must not echo credentials")
     }
 
     // ── CAPTCHA claim atomicity ────────────────────────────────────

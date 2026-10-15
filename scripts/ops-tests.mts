@@ -414,10 +414,79 @@ const main = async () => {
         ? pass("activation report carries push funnel + social-loop aggregates")
         : fail("report social/push", { hasSocial: !!soc })
     }
+
+    // ── Admin stats: referral block stays exact under history ────────
+    // Deltas, not absolutes — the dev DB may already carry real rows.
+    // Seeds keyed/reversed/legacy events + 60 historical payouts and
+    // asserts the aggregated response still reports exact metrics.
+    {
+      const stats = async () => {
+        const res = await fetch(`${BASE}/api/admin/stats?range=all`, { headers: { cookie: adminCookie } })
+        return { status: res.status, data: (await res.json().catch(() => ({}))) as { stats?: { referrals?: Record<string, unknown> } } }
+      }
+      const before = (await stats()).data?.stats?.referrals as
+        | { referredProfiles: number; paidKeyed: number; legacyUnkeyed: number; reversed: number; eligibleUnpaid: { username: string }[] }
+        | undefined
+      if (!before) {
+        fail("admin stats baseline", "referrals block missing")
+      } else {
+        const refSrc = await createUser("refsrc")
+        const mkReferee = async (tag: string, xp: number) => {
+          const u = await createUser(tag)
+          await prisma.profile.update({ where: { userId: u.id }, data: { referredById: refSrc.profile!.id, xp } })
+          await prisma.user.update({ where: { id: u.id }, data: { createdAt: new Date(Date.now() - 30 * 86400000) } })
+          users.push(u)
+          return u
+        }
+        users.push(refSrc)
+        const refPaid = await mkReferee("refpaid", 100)   // keyed payout → settled
+        const refRev = await mkReferee("refrev", 0)       // reversed payout, ineligible xp
+        const refElig = await mkReferee("refelig", 100)   // nothing recorded → eligible-unpaid
+        const refLeg = await mkReferee("refleg", 100)     // legacy unkeyed payout → settled
+
+        const refSrcCreated = new Date(Date.now() - 60 * 86400000)
+        await prisma.progressionEvent.create({
+          data: { userId: refSrc.id, type: "REFERRAL", xp: 50, reason: "__ops ref", key: `referral:${refPaid.id}` },
+        })
+        await prisma.progressionEvent.create({
+          data: { userId: refSrc.id, type: "REFERRAL", xp: 50, reason: "__ops ref", key: `referral:${refRev.id}`, reversedAt: new Date() },
+        })
+        // Legacy payout predates V2 keying — an unkeyed REFERRAL stamped on
+        // the referrer at the referee's signup time settles that referee.
+        const legJoined = (await prisma.user.findUnique({ where: { id: refLeg.id }, select: { createdAt: true } }))!.createdAt
+        await prisma.reputationEvent.create({
+          data: { userId: refSrc.id, type: "REFERRAL", amount: 50, reason: "__ops legacy", createdAt: legJoined },
+        })
+        // Volume: 60 keyed payouts — the response must still be exact.
+        await prisma.progressionEvent.createMany({
+          data: Array.from({ length: 60 }, (_, i) => ({
+            userId: refSrc.id, type: "REFERRAL", xp: 50, reason: "__ops hist",
+            key: `referral:hist-${TS}-${i}`, createdAt: refSrcCreated,
+          })),
+        })
+
+        const after = (await stats()).data?.stats?.referrals as typeof before
+        const deltas =
+          after &&
+          after.referredProfiles - before.referredProfiles === 4 &&
+          after.paidKeyed - before.paidKeyed === 61 &&
+          after.legacyUnkeyed - before.legacyUnkeyed === 1 &&
+          after.reversed - before.reversed === 1
+        deltas
+          ? pass("admin stats: referral counts exact under 60+ seeded rows")
+          : fail("admin stats referral deltas", { before, after })
+
+        const unpaid = (after?.eligibleUnpaid ?? []).map((c) => c.username)
+        unpaid.includes(refElig.username) && !unpaid.includes(refPaid.username) && !unpaid.includes(refLeg.username)
+          ? pass("admin stats: eligibleUnpaid lists only the genuinely unpaid referee")
+          : fail("admin stats eligibleUnpaid", unpaid)
+      }
+    }
   } finally {
     if (feedbackIds.length) await prisma.feedback.deleteMany({ where: { id: { in: feedbackIds } } })
     await prisma.botEvent.deleteMany({ where: { key: { startsWith: "__ops_bot_" } } }).catch(() => {})
-    for (const u of users) {
+    // Referred fixtures must go before the referrer — Profile.referredById.
+    for (const u of [...users].reverse()) {
       await prisma.user.delete({ where: { id: u.id } }).catch(() => {})
     }
   }

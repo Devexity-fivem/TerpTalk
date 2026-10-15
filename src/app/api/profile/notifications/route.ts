@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { unauthorized } from "@/lib/security"
+import { checkMaintenance } from "@/lib/maintenance"
 import { rateLimit } from "@/lib/rate-limit"
 import { Prisma } from "@prisma/client"
 
@@ -41,6 +42,8 @@ export async function GET() {
 export async function PATCH(request: Request) {
   const session = await getServerSession(authOptions)
   if (!session?.user?.id) return unauthorized()
+  const maintenance = await checkMaintenance()
+  if (maintenance) return maintenance
   const rl = await rateLimit(`profile-notifications:${session.user.id}`, 30, 60 * 1000)
   if (!rl.allowed) {
     return NextResponse.json({ error: "Too many requests" }, { status: 429 })

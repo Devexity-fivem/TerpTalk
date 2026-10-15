@@ -574,6 +574,28 @@ const main = async () => {
       }
       last === 429 ? pass("feedback: excess submissions rate-limited") : fail("feedback rate limit", { last })
     }
+
+    // ── Maintenance freeze — safety reporting stays available ────────
+    // Reports are an explicit exemption: members must be able to flag
+    // abuse even while ordinary product writes are frozen.
+    {
+      const { enableMaintenanceForTest } = await import("./lib/maintenance-mode.mjs")
+      const restore = await enableMaintenanceForTest()
+      try {
+        const r = await api("/api/reports", {
+          method: "POST", cookie: member2C,
+          body: { type: "PROFILE", targetId: target.id, reason: "SPAM", description: "maintenance-window report" },
+        })
+        const row = r.status === 201
+          ? await prisma.report.findFirst({ where: { reporterId: member2.id, targetId: target.id, type: "PROFILE" }, select: { id: true } })
+          : null
+        r.status === 201 && row
+          ? pass("maintenance: abuse report still accepted and persisted")
+          : fail("maintenance report exemption", { s: r.status, d: r.data, row })
+      } finally {
+        await restore()
+      }
+    }
   } finally {
     // Cleanup — users cascade reports/actions/notifications; flags, thread,
     // and feedback rows need explicit removal.

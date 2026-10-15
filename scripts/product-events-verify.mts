@@ -8,6 +8,7 @@
 // Requires a dev server at BASE. Fixtures are `pe_`-marked and cleaned up.
 import "./db-guard.mjs"
 import { makeHarness } from "./lib/http-harness.mjs"
+import { enableMaintenanceForTest } from "./lib/maintenance-mode.mjs"
 import { recordProductEvent, socialLoopReport } from "@/lib/product-events"
 import { eventSource, withVia } from "@/lib/event-sources"
 
@@ -306,6 +307,23 @@ async function run() {
   eventSource("digest") === "digest" && eventSource("javascript:alert(1)") === null && eventSource(42) === null
     ? pass("eventSource validates the allowlist")
     : fail("eventSource", null)
+
+  // ── maintenance freeze — telemetry is an explicit exemption ──
+  {
+    const restore = await enableMaintenanceForTest()
+    try {
+      let r = await api("/api/events", { method: "POST", cookie: s2Cookie, body: { type: "DIGEST_VIEWED" } }) as Res
+      r.status === 200
+        ? pass("maintenance: product events still accepted")
+        : fail("maintenance events exemption", r.status)
+      r = await api("/api/push/event", { method: "POST", cookie: s2Cookie, body: { type: "PROMPT_SHOWN" } })
+      r.status === 200
+        ? pass("maintenance: push events still accepted")
+        : fail("maintenance push-event exemption", r.status)
+    } finally {
+      await restore()
+    }
+  }
 
   // ── cleanup ──
   const userIds = [viewer.id, grower.id, third.id, stranger.id, diaryFollower.id, nonFollower.id, staff.id]

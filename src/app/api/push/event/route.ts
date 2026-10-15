@@ -12,6 +12,7 @@ import { recordPushEvent } from "@/lib/web-push"
 const CLIENT_TYPES = new Set(["PROMPT_SHOWN", "PERMISSION_DENIED", "CLICKED"])
 const CATEGORIES = new Set(["REPLY", "MENTION", "ACCEPTED_ANSWER", "weekly-digest", "pd-followup"])
 
+// Intentionally maintenance-exempt: push interaction telemetry.
 export async function POST(request: Request) {
   const session = await getServerSession(authOptions)
   if (!session?.user?.id) return unauthorized()

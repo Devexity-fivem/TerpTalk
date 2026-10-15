@@ -825,6 +825,8 @@ export async function DELETE(request: Request) {
     // Cached search results would otherwise keep the deleted username and
     // content discoverable until TTL.
     revalidateTag("search", { expire: 0 })
+    // The public profile page cache would otherwise serve a deleted account.
+    revalidateTag("profiles", { expire: 0 })
 
     return NextResponse.json({ deleted: true })
   } catch (error) {

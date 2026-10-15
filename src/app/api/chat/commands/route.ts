@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse, after } from "next/server"
+import { revalidateTag } from "next/cache"
 import { getToken } from "next-auth/jwt"
 import { sessionCookieName } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
@@ -197,6 +198,13 @@ export async function POST(request: NextRequest) {
 
       if (createdNotification) {
         emitNotificationPush(targetUserId, createdNotification)
+      }
+
+      // Ban/unban/suspension changes remove or restore the member's
+      // public profile and search row — bust both after commit.
+      if (actionType !== "WARNING") {
+        revalidateTag("profiles", { expire: 0 })
+        revalidateTag("search", { expire: 0 })
       }
 
       await drainMany(reversalIds)

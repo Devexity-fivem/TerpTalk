@@ -481,6 +481,8 @@ export async function DELETE(request: Request) {
     ]).catch(() => {})
 
     revalidateTag("forum", { expire: 0 })
+    // Threads are a search type — a deleted thread must stop matching.
+    revalidateTag("search", { expire: 0 })
     // A deleted Plant Doctor thread leaves the outcome aggregates.
     if (thread.wizardResultId) revalidateTag("analytics", { expire: 0 })
 

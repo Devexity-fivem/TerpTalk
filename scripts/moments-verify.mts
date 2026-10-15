@@ -9,6 +9,7 @@
 // lib functions. All fixtures are `mv_`-marked and cleaned up at the end.
 import "./db-guard.mjs"
 import { makeHarness } from "./lib/http-harness.mjs"
+import { enableMaintenanceForTest } from "./lib/maintenance-mode.mjs"
 import { prisma } from "@/lib/prisma"
 import { resolveFeedScope, resolveAuthorFeedScope, getFeedPage } from "@/lib/feed"
 import { getStoryRail, getAuthorStories, getTrendingHashtags, hashtagSlug } from "@/lib/moments"
@@ -730,6 +731,46 @@ async function main() {
     // Bogus objectType stays a silent 200 — no oracle.
     r = await api("/api/events", { method: "POST", body: { type: "FOLLOWED_CONTENT_VIEWED", objectType: "Thread", objectId: postPub }, cookie: fc })
     r.status === 200 ? pass("telemetry: unknown objectType fails closed") : fail("fcv bogus", r.status)
+  }
+
+  // ── O. maintenance freeze — guarded deletes ─────────────────────
+  {
+    // Own-content deletes are ordinary product mutations: they must 503
+    // during the freeze and leave every row untouched.
+    const mFreeze = await api("/api/moments", { method: "POST", body: { content: M("freeze post") }, cookie: ac })
+    const freezeMomentId = (mFreeze.data?.moment as { id?: string } | undefined)?.id ?? ""
+    const cFreeze = await api(`/api/moments/${postPub}/comments`, { method: "POST", body: { content: M("freeze comment") }, cookie: vc })
+    const freezeCommentId = (cFreeze.data?.comment as { id?: string } | undefined)?.id ?? ""
+    if (!freezeMomentId || !freezeCommentId) {
+      fail("maintenance fixtures", { m: mFreeze.status, c: cFreeze.status })
+    } else {
+      const restore = await enableMaintenanceForTest()
+      try {
+        let r = await api(`/api/moments/${freezeMomentId}`, { method: "DELETE", cookie: ac })
+        r.status === 503 && r.data?.error === "TerpTalk is temporarily down for maintenance"
+          ? pass("maintenance: moment DELETE → 503 with standard body")
+          : fail("maintenance moment delete", { s: r.status, d: r.data })
+        const mStill = await prisma.moment.findUnique({ where: { id: freezeMomentId }, select: { deleted: true } })
+        mStill && !mStill.deleted
+          ? pass("maintenance: rejected moment delete left the row untouched")
+          : fail("maintenance moment side effect", mStill)
+
+        r = await api(`/api/moments/comments/${freezeCommentId}`, { method: "DELETE", cookie: vc })
+        r.status === 503
+          ? pass("maintenance: comment DELETE → 503")
+          : fail("maintenance comment delete", r.status)
+        const cStill = await prisma.momentComment.findUnique({ where: { id: freezeCommentId }, select: { deleted: true } })
+        cStill && !cStill.deleted
+          ? pass("maintenance: rejected comment delete left the row untouched")
+          : fail("maintenance comment side effect", cStill)
+      } finally {
+        await restore()
+      }
+      const r = await api(`/api/moments/${freezeMomentId}`, { method: "DELETE", cookie: ac })
+      r.status === 200
+        ? pass("post-maintenance: moment DELETE works again after restore")
+        : fail("post-maintenance delete", r.status)
+    }
   }
 
   // ── cleanup ─────────────────────────────────────────────────────

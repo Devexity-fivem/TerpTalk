@@ -1453,6 +1453,100 @@ const main = async () => {
         : fail("search expired suspension", { status: r.status, users: r.data?.users })
     }
 
+    // ══ 16. Maintenance freeze — guard + exemption matrix ═══════════
+    // Policy: member-facing product activity freezes; safety reporting,
+    // account-security recovery, privacy controls, unsubscribe actions,
+    // and operational telemetry stay available. Staff bypass intact.
+    {
+      const { enableMaintenanceForTest } = await import("./lib/maintenance-mode.mjs")
+      const MX = "TerpTalk is temporarily down for maintenance"
+      const is503 = (x) => x.status === 503 && x.data?.error === MX
+
+      // Snapshot a's notify flag so the frozen PATCH can prove zero writes.
+      const hideBefore = (await prisma.profile.findUnique({ where: { userId: a.id }, select: { hideOnlineStatus: true } }))?.hideOnlineStatus
+
+      const restore = await enableMaintenanceForTest()
+      try {
+        // ── Guarded product writes → 503, no side effects ──
+        let r = await callApi("/api/profile/complete", { method: "POST", body: {}, cookie: aC })
+        is503(r) ? pass("maintenance: profile/complete POST → 503") : fail("mx profile-complete", { s: r.status, d: r.data })
+
+        r = await callApi("/api/profile/notifications", { method: "PATCH", body: { hideOnlineStatus: !hideBefore }, cookie: aC })
+        is503(r) ? pass("maintenance: profile/notifications PATCH → 503") : fail("mx profile-notifications", { s: r.status, d: r.data })
+        const hideAfter = (await prisma.profile.findUnique({ where: { userId: a.id }, select: { hideOnlineStatus: true } }))?.hideOnlineStatus
+        hideAfter === hideBefore
+          ? pass("maintenance: rejected prefs PATCH wrote nothing")
+          : fail("mx prefs side effect", { hideBefore, hideAfter })
+
+        r = await callApi("/api/youtubers/apply", { method: "POST", body: { channelUrl: "https://www.youtube.com/@x" }, cookie: aC })
+        is503(r) ? pass("maintenance: youtubers/apply POST → 503") : fail("mx youtubers-apply", r.status)
+
+        // ── Staff bypass — a moderator hits the same guarded route ──
+        r = await callApi("/api/profile/notifications", { method: "PATCH", body: { hideOnlineStatus: false }, cookie: modC })
+        r.status !== 503
+          ? pass("maintenance: moderator bypasses the freeze")
+          : fail("mx staff bypass", r.status)
+
+        // ── Exempt safety/privacy/recovery/telemetry paths stay open ──
+        // feedback — production-problem reporting
+        r = await callApi("/api/feedback", { method: "POST", body: { type: "OTHER", title: M("mx fb"), message: "maintenance probe" }, cookie: cC })
+        r.status === 201 || r.status === 200
+          ? pass("maintenance: feedback POST still accepted")
+          : fail("mx feedback", { s: r.status, d: r.data })
+
+        // restricted — appeal/deletion channel for members without a session
+        r = await callApi("/api/restricted", { method: "POST", body: { username: a.username, password: "wrong", message: "x" } })
+        r.status !== 503 ? pass("maintenance: restricted appeal channel open") : fail("mx restricted", r.status)
+
+        // auth/recover — account recovery
+        r = await callApi("/api/auth/recover", { method: "POST", body: { username: a.username, phrase: "bogus phrase", newPassword: "x" } })
+        r.status !== 503 ? pass("maintenance: auth/recover reachable") : fail("mx auth-recover", r.status)
+
+        // profile/recovery — recovery-phrase rotation (security remediation)
+        r = await callApi("/api/profile/recovery", { method: "POST", body: {}, cookie: aC })
+        r.status !== 503 ? pass("maintenance: profile/recovery reachable") : fail("mx profile-recovery", r.status)
+
+        // blocks — both directions are member safety controls
+        r = await callApi("/api/blocks", { method: "POST", body: { userId: c.id }, cookie: aC })
+        const blocked = await prisma.block.findUnique({ where: { blockerId_blockedId: { blockerId: a.id, blockedId: c.id } }, select: { id: true } })
+        const blockOk = (r.status === 201 || r.status === 200) && blocked
+        blockOk
+          ? pass("maintenance: block POST still works")
+          : fail("mx block post", { s: r.status, blocked: !!blocked })
+        r = await callApi("/api/blocks", { method: "DELETE", body: { userId: c.id }, cookie: aC })
+        const unblocked = await prisma.block.findUnique({ where: { blockerId_blockedId: { blockerId: a.id, blockedId: c.id } }, select: { id: true } })
+        r.status === 200 && !unblocked
+          ? pass("maintenance: unblock DELETE still works")
+          : fail("mx unblock", { s: r.status, unblocked: !!unblocked })
+
+        // notifications PATCH — own-inbox read/dismissal hygiene
+        r = await callApi("/api/notifications", { method: "PATCH", body: { all: true }, cookie: aC })
+        r.status === 200 ? pass("maintenance: notifications PATCH still works") : fail("mx notifications", r.status)
+
+        // ping — presence heartbeat
+        r = await callApi("/api/ping", { method: "POST", cookie: aC })
+        r.status === 200 ? pass("maintenance: ping still works") : fail("mx ping", r.status)
+
+        // pusher/auth — realtime authorization (writes nothing)
+        const pa = await pusherAuth(aC, "12345.67890", "private-bogus-channel")
+        pa.status !== 503 ? pass("maintenance: pusher/auth reachable") : fail("mx pusher-auth", pa.status)
+
+        // events — product telemetry
+        r = await callApi("/api/events", { method: "POST", body: { type: "DIGEST_VIEWED", source: "digest" }, cookie: aC })
+        r.status === 200 ? pass("maintenance: product events still recorded") : fail("mx events", { s: r.status, d: r.data })
+
+        // push/event — push telemetry
+        r = await callApi("/api/push/event", { method: "POST", body: { type: "PROMPT_SHOWN" }, cookie: aC })
+        r.status === 200 ? pass("maintenance: push events still recorded") : fail("mx push-event", { s: r.status, d: r.data })
+      } finally {
+        await restore()
+      }
+
+      // Post-restore: the guarded route serves members again.
+      const r = await callApi("/api/profile/notifications", { method: "PATCH", body: { hideOnlineStatus: !!hideBefore }, cookie: aC })
+      r.status === 200 ? pass("post-maintenance: guarded route serves members again") : fail("post-mx prefs", r.status)
+    }
+
     console.log(`\n${results.filter(([s]) => s === "PASS").length} passed, ${results.filter(([s]) => s === "FAIL").length} failed`)
   } catch (e) {
     fail("suite error", String(e?.stack || e))

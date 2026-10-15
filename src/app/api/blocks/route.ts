@@ -4,7 +4,6 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { rateLimit } from "@/lib/rate-limit"
 import { unauthorized } from "@/lib/security"
-import { checkMaintenance } from "@/lib/maintenance"
 
 // GET — list users I have blocked (private to requester)
 export async function GET() {
@@ -51,8 +50,8 @@ export async function POST(request: Request) {
     if (!session?.user?.id) {
       return unauthorized()
     }
-    const maintenance = await checkMaintenance()
-    if (maintenance) return maintenance
+    // Intentionally not maintenance-gated: blocking and unblocking are
+    // member-controlled safety boundaries and stay available during a freeze.
 
     const rl = await rateLimit(`block:${session.user.id}`, 30, 60 * 60 * 1000)
     if (!rl.allowed) {
@@ -117,6 +116,7 @@ export async function POST(request: Request) {
 }
 
 // DELETE — unblock: { userId }
+// Intentionally not maintenance-gated — same safety-boundary rationale as POST.
 export async function DELETE(request: Request) {
   try {
     const session = await getServerSession(authOptions)

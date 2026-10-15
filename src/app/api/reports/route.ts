@@ -31,6 +31,7 @@ const REPORT_REASONS = new Set([
 ])
 
 // POST — submit a report: { type, targetId, reason, description? }
+// Intentionally maintenance-exempt: abuse/safety reporting must stay open.
 export async function POST(request: Request) {
   try {
     const session = await getServerSession(authOptions)

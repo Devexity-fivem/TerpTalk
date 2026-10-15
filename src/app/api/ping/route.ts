@@ -15,6 +15,7 @@ import { rateLimit } from "@/lib/rate-limit"
 
 // POST — lightweight presence ping; updates lastSeenAt + ONLINE status.
 // Uses JWT verification instead of getServerSession to avoid an extra DB round-trip.
+// Intentionally maintenance-exempt: presence heartbeat is operational signal.
 export async function POST(request: NextRequest) {
   try {
     const token = await getToken({

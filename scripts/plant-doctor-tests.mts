@@ -16,6 +16,7 @@ import {
   scanPlantDoctorFollowups,
 } from "@/lib/plant-doctor"
 import { makeHarness } from "./lib/http-harness.mjs"
+import { enableMaintenanceForTest } from "./lib/maintenance-mode.mjs"
 
 const harnessOpts = {
   username: (tag: string, ts: string) => `__pd_${tag}_${ts}`,
@@ -373,6 +374,44 @@ async function main() {
       const rows = await prisma.plantDoctorOutcome.count({ where: { caseId: c.id } })
       if (rows === 0) assert.equal(c.open, true, `${c.id}: unreported ≠ success`)
     }
+  })
+
+  // ── Maintenance freeze — case + outcome writes must 503 ──────────
+  await check("maintenance freeze blocks case/outcome writes, zero side effects", async () => {
+    // Dedupe may return an existing case — count outcomes before/after the
+    // rejected call rather than assuming the case starts unreported.
+    const alt = Object.keys(WIZARD_RESULTS).find((k) => k !== RESULT_ID)!
+    const c = await createPlantDoctorCase({ userId: owner.id, resultId: alt })
+    assert.ok("caseId" in c)
+    caseIds.push(c.caseId)
+
+    const restore = await enableMaintenanceForTest()
+    try {
+      const casesBefore = await prisma.plantDoctorCase.count({ where: { userId: owner.id } })
+      const r = await api("/api/plant-doctor/cases", {
+        method: "POST", body: { resultId: RESULT_ID }, cookie: ownerCookie,
+      })
+      assert.equal(r.status, 503, "case create → 503")
+      assert.equal(r.data.error, "TerpTalk is temporarily down for maintenance")
+      const casesAfter = await prisma.plantDoctorCase.count({ where: { userId: owner.id } })
+      assert.equal(casesAfter, casesBefore, "rejected create wrote no case")
+
+      const outcomesBefore = await prisma.plantDoctorOutcome.count({ where: { caseId: c.caseId } })
+      const o = await api(`/api/plant-doctor/cases/${c.caseId}/outcome`, {
+        method: "POST", body: { outcome: "IMPROVED" }, cookie: ownerCookie,
+      })
+      assert.equal(o.status, 503, "outcome → 503")
+      const outcomesAfter = await prisma.plantDoctorOutcome.count({ where: { caseId: c.caseId } })
+      assert.equal(outcomesAfter, outcomesBefore, "rejected outcome appended no record")
+    } finally {
+      await restore()
+    }
+
+    // Post-restore: the same writes succeed again.
+    const o = await api(`/api/plant-doctor/cases/${c.caseId}/outcome`, {
+      method: "POST", body: { outcome: "IMPROVED" }, cookie: ownerCookie,
+    })
+    assert.equal(o.status, 200, "outcome works again after restore")
   })
 
   // ── Cleanup ─────────────────────────────────────────────────────

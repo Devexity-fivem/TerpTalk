@@ -13,6 +13,7 @@ const PAGE_PATH_MAX = 300
 
 // POST — submit feedback: { type, title, message, pagePath? }
 // Members only. source is always USER here — admins use the admin endpoint.
+// Intentionally maintenance-exempt: problem reporting must stay open.
 export async function POST(request: Request) {
   try {
     const session = await getServerSession(authOptions)

@@ -1688,6 +1688,31 @@ const main = async () => {
     await prisma.growDiary.update({ where: { id: sd2.id }, data: { deleted: true } })
     page = await getHtml(`/diaries/${sd2.id}`)
     page.status === 404 ? pass("deleted diary 404s") : fail("deleted diary", page.status)
+
+    // ── Maintenance freeze — update DELETE must 503 with no side effect ──
+    {
+      const { enableMaintenanceForTest } = await import("./lib/maintenance-mode.mjs")
+      const freezeDiary = await prisma.growDiary.create({
+        data: { title: M("freeze"), description: "x", growType: "INDOOR", startDate: new Date(), authorId: owner.id },
+      })
+      diaryIds.push(freezeDiary.id)
+      const freezeUpd = await prisma.diaryUpdate.create({
+        data: { diaryId: freezeDiary.id, authorId: owner.id, title: M("fu"), content: "freeze me", stage: "VEGETATIVE", dayNumber: 1, weekNumber: 1 },
+      })
+      const restore = await enableMaintenanceForTest()
+      try {
+        const r = await callApi("/api/diaries/updates", { method: "DELETE", body: { id: freezeUpd.id }, cookie: ownerCookie })
+        r.status === 503 && r.data?.error === "TerpTalk is temporarily down for maintenance"
+          ? pass("maintenance: diary-update DELETE → 503")
+          : fail("maintenance update delete", { s: r.status, d: r.data })
+        const still = await prisma.diaryUpdate.findUnique({ where: { id: freezeUpd.id }, select: { id: true } })
+        still ? pass("maintenance: rejected delete left the update intact") : fail("maintenance update side effect", "row gone")
+      } finally {
+        await restore()
+      }
+      const r = await callApi("/api/diaries/updates", { method: "DELETE", body: { id: freezeUpd.id }, cookie: ownerCookie })
+      r.status === 200 ? pass("post-maintenance: update DELETE works again") : fail("post-maintenance update delete", r.status)
+    }
   } catch (e) {
     fail("suite error", String(e))
   } finally {

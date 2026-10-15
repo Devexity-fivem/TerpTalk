@@ -770,6 +770,61 @@ const main = async () => {
       ? pass("live: hidden-category thread activity 404s for anon")
       : fail("live hidden thread activity", r.status)
 
+    // ── Maintenance freeze — saved searches + view counter ────────────
+    // All three are ordinary product writes: they must 503 under the freeze
+    // with zero side effects, while staff bypass stays intact.
+    {
+      const { enableMaintenanceForTest } = await import("./lib/maintenance-mode.mjs")
+      const preSaved = await prisma.savedSearch.create({
+        data: { userId: fresh.id, name: "__verify freeze", query: "__verify", filters: "{}" },
+      })
+      const memberSsBefore = await prisma.savedSearch.count({ where: { userId: fresh.id } })
+      const viewsBefore = (await prisma.thread.findUnique({ where: { id: thread.id }, select: { views: true } })).views
+      let adminSavedId = null
+
+      const restore = await enableMaintenanceForTest()
+      try {
+        let r2 = await callApi("/api/saved-searches", { method: "POST", body: { name: "x", query: "x" }, cookie: freshCookie })
+        r2.status === 503 && r2.data?.error === "TerpTalk is temporarily down for maintenance"
+          ? pass("maintenance: saved-search POST → 503")
+          : fail("maintenance saved-search post", { s: r2.status, d: r2.data })
+        const memberSsAfter = await prisma.savedSearch.count({ where: { userId: fresh.id } })
+        memberSsAfter === memberSsBefore
+          ? pass("maintenance: rejected save wrote no row")
+          : fail("maintenance saved-search side effect", { before: memberSsBefore, after: memberSsAfter })
+
+        r2 = await callApi("/api/saved-searches", { method: "DELETE", body: { id: preSaved.id }, cookie: freshCookie })
+        r2.status === 503 ? pass("maintenance: saved-search DELETE → 503") : fail("maintenance saved-search delete", r2.status)
+        ;(await prisma.savedSearch.findUnique({ where: { id: preSaved.id }, select: { id: true } }))
+          ? pass("maintenance: rejected delete left the saved search intact")
+          : fail("maintenance delete side effect", "row missing")
+
+        r2 = await callApi("/api/forum/threads/view", { method: "POST", body: { threadId: thread.id }, cookie: freshCookie })
+        r2.status === 503 ? pass("maintenance: thread-view POST → 503") : fail("maintenance view post", r2.status)
+        const viewsAfter = (await prisma.thread.findUnique({ where: { id: thread.id }, select: { views: true } })).views
+        viewsAfter === viewsBefore
+          ? pass("maintenance: rejected view did not increment the counter")
+          : fail("maintenance view side effect", { before: viewsBefore, after: viewsAfter })
+
+        // Staff bypass — admin keeps full product write access during a freeze.
+        r2 = await callApi("/api/saved-searches", { method: "POST", body: { name: "__verify admin", query: "x" }, cookie: adminCookie })
+        if (r2.status === 201) {
+          adminSavedId = r2.data?.search?.id ?? null
+          pass("maintenance: admin saved-search POST bypasses the freeze")
+        } else fail("maintenance staff bypass", { s: r2.status, d: r2.data })
+      } finally {
+        await restore()
+      }
+
+      // Post-restore: frozen writes succeed again.
+      r = await callApi("/api/forum/threads/view", { method: "POST", body: { threadId: thread.id } })
+      r.status === 200 && r.data?.incremented === true
+        ? pass("post-maintenance: thread-view increments again")
+        : fail("post-maintenance view", { s: r.status, d: r.data })
+
+      await prisma.savedSearch.deleteMany({ where: { id: { in: [preSaved.id, adminSavedId].filter(Boolean) } } }).catch(() => {})
+    }
+
     console.log(`\n${results.filter(([s]) => s === "PASS").length} passed, ${results.filter(([s]) => s === "FAIL").length} failed`)
   } finally {
     for (const u of users) {

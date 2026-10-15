@@ -25,6 +25,7 @@ export async function GET() {
 
 // POST — generate a NEW recovery phrase (replaces any existing one).
 // The phrase is returned ONCE in this response — we only store its hash.
+// Intentionally maintenance-exempt: recovery-credential rotation is security remediation.
 export async function POST(request: Request) {
   try {
     const session = await getServerSession(authOptions)

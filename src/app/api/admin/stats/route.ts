@@ -108,15 +108,17 @@ export async function GET(request: Request) {
   // (unkeyed) vs reversed vs eligible-but-unpaid. Same constants, same
   // active-event test.
   const referralCutoff = new Date(now.getTime() - REFERRAL_MIN_AGE_HOURS * 60 * 60 * 1000)
-  const [referredProfiles, referralEvents, legacyReferralEvents, eligibleCandidates] = await Promise.all([
+  // Counts are database-side — the full REFERRAL ledgers are never loaded.
+  const [referredProfiles, paidKeyed, reversed, legacyUnkeyed, eligibleCandidates] = await Promise.all([
     prisma.profile.count({ where: { referredById: { not: null } } }),
-    prisma.progressionEvent.findMany({
-      where: { type: "REFERRAL" },
-      select: { key: true, userId: true, xp: true, reversedAt: true, createdAt: true },
+    prisma.progressionEvent.count({
+      where: { type: "REFERRAL", key: { not: null }, reversedAt: null },
     }),
-    prisma.reputationEvent.findMany({
+    prisma.progressionEvent.count({
+      where: { type: "REFERRAL", reversedAt: { not: null } },
+    }),
+    prisma.reputationEvent.count({
       where: { type: "REFERRAL", key: null, reversedAt: null },
-      select: { userId: true, createdAt: true },
     }),
     prisma.profile.findMany({
       where: {
@@ -133,16 +135,34 @@ export async function GET(request: Request) {
   ])
   // Same gates as payReferralBonus: keyed V2 payout, legacy unkeyed payout
   // (unkeyed REFERRAL on the referrer stamped at referee signup time), and
-  // self-referrals all count as settled.
+  // self-referrals all count as settled. The ledger probes are bounded to
+  // the ≤50 candidates' own keys/referrers — never the whole table.
   const referrerIds = [...new Set(eligibleCandidates.map((c) => c.referredById).filter((x): x is string => !!x))]
   const referrers = referrerIds.length
     ? await prisma.profile.findMany({ where: { id: { in: referrerIds } }, select: { id: true, userId: true } })
     : []
   const refUserByProfileId = new Map(referrers.map((r) => [r.id, r.userId]))
-  const paidKeys = new Set(
-    referralEvents.filter((e) => e.key && !e.reversedAt).map((e) => e.key)
-  )
-  const legacyEvents = legacyReferralEvents
+  const candidateKeys = eligibleCandidates.map((c) => `referral:${c.userId}`)
+  const candidateReferrerUserIds = [...new Set(
+    eligibleCandidates
+      .map((c) => (c.referredById ? refUserByProfileId.get(c.referredById) : undefined))
+      .filter((x): x is string => !!x)
+  )]
+  const [paidKeyRows, legacyEvents] = await Promise.all([
+    candidateKeys.length
+      ? prisma.progressionEvent.findMany({
+          where: { type: "REFERRAL", reversedAt: null, key: { in: candidateKeys } },
+          select: { key: true },
+        })
+      : Promise.resolve([]),
+    candidateReferrerUserIds.length
+      ? prisma.reputationEvent.findMany({
+          where: { type: "REFERRAL", key: null, reversedAt: null, userId: { in: candidateReferrerUserIds } },
+          select: { userId: true, createdAt: true },
+        })
+      : Promise.resolve([]),
+  ])
+  const paidKeys = new Set(paidKeyRows.map((e) => e.key))
   const eligibleUnpaid = eligibleCandidates.filter((c) => {
     if (paidKeys.has(`referral:${c.userId}`)) return false
     const referrerUserId = c.referredById ? refUserByProfileId.get(c.referredById) : undefined
@@ -190,9 +210,9 @@ export async function GET(request: Request) {
       newSecurityEvents,
       referrals: {
         referredProfiles,
-        paidKeyed: referralEvents.filter((e) => e.key && !e.reversedAt).length,
-        legacyUnkeyed: legacyReferralEvents.length,
-        reversed: referralEvents.filter((e) => e.reversedAt).length,
+        paidKeyed,
+        legacyUnkeyed,
+        reversed,
         eligibleUnpaid: eligibleUnpaid.map((c) => ({ username: c.username, xp: c.xp })),
       },
       cron: {

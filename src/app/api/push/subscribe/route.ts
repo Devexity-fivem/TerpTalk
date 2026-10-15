@@ -44,6 +44,7 @@ export async function GET() {
   })
 }
 
+// Intentionally maintenance-exempt: members keep control of push delivery.
 export async function POST(request: Request) {
   try {
     const session = await getServerSession(authOptions)
@@ -84,6 +85,7 @@ export async function POST(request: Request) {
 
 // DELETE — remove this browser's subscription ({ endpoint }) or, with no
 // endpoint, every subscription the caller owns ("turn push off").
+// Intentionally maintenance-exempt: unsubscribe is a stop-delivery control.
 export async function DELETE(request: Request) {
   try {
     const session = await getServerSession(authOptions)

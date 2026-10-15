@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { unauthorized, getClientIp } from "@/lib/security"
+import { checkMaintenance } from "@/lib/maintenance"
 import { rateLimit } from "@/lib/rate-limit"
 import { reportPlantDoctorOutcome } from "@/lib/plant-doctor"
 import { isPdOutcome } from "@/lib/plant-doctor-outcomes"
@@ -13,6 +14,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   try {
     const session = await getServerSession(authOptions)
     if (!session?.user?.id) return unauthorized()
+
+    const maintenance = await checkMaintenance()
+    if (maintenance) return maintenance
 
     // Same bound as case creation (pd-case: 20/hr, user+IP key) — outcome
     // appends are the sibling owner-scoped mutation in this loop.

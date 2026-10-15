@@ -86,6 +86,7 @@ export async function GET(request: NextRequest) {
 const NOTIFICATION_RETENTION_MS = 90 * 24 * 60 * 60 * 1000
 
 // PATCH — mark notifications read: { ids?: string[] } or { all: true }
+// Intentionally maintenance-exempt: own-inbox read/dismissal is private hygiene.
 export async function PATCH(request: NextRequest) {
   try {
     const token = await getToken({ req: request, secret: process.env.NEXTAUTH_SECRET, cookieName: sessionCookieName })

@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma, lockUserRow } from "@/lib/prisma"
 import { unauthorized, getClientIp, logSecurityEvent } from "@/lib/security"
+import { checkMaintenance } from "@/lib/maintenance"
 import { rateLimit } from "@/lib/rate-limit"
 import { savedSearchLimit } from "@/lib/progression"
 
@@ -29,6 +30,8 @@ export async function POST(request: Request) {
   try {
     const session = await getServerSession(authOptions)
     if (!session?.user?.id) return unauthorized()
+    const maintenance = await checkMaintenance()
+    if (maintenance) return maintenance
 
     const body = await request.json().catch(() => ({}))
     const { name, query, filters } = body
@@ -94,6 +97,8 @@ export async function DELETE(request: Request) {
   try {
     const session = await getServerSession(authOptions)
     if (!session?.user?.id) return unauthorized()
+    const maintenance = await checkMaintenance()
+    if (maintenance) return maintenance
     const body = await request.json().catch(() => ({}))
     const { id } = body
     if (typeof id !== "string" || !id) {

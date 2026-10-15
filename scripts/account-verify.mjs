@@ -30,6 +30,7 @@ const main = async () => {
   const phA = await createUser("pha", active) // pinned-harvest, rank-gated
   const phB = await createUser("phb", active) // pinned-harvest, streak-gated
   const expU = await createUser("exp", active) // data-export fixtures
+  const mxR = await createUser("mxrecover", active) // maintenance-window recovery subject
   const captchaIds = []
   const registeredUsernames = []
 
@@ -533,6 +534,39 @@ const main = async () => {
     })
     r.status === 400 ? pass("register: non-string captchaId → 400") : fail("register: non-string captchaId → 400", r.status)
 
+    // ── Maintenance freeze — account recovery stays available ───────
+    // auth/recover is an explicit exemption: a locked-out member must be
+    // able to rotate credentials even mid-freeze. Proven end-to-end —
+    // the phrase actually resets the password, not just returns non-503.
+    {
+      const { enableMaintenanceForTest } = await import("./lib/maintenance-mode.mjs")
+      const { cookie: mxCookie } = await login(mxR.username, mxR.password)
+      const gen = await callApi("/api/profile/recovery", { method: "POST", body: { password: mxR.password }, cookie: mxCookie })
+      const phrase = gen.data?.phrase
+      gen.status === 200 && typeof phrase === "string"
+        ? pass("mx setup: recovery phrase generated")
+        : fail("mx phrase setup", { s: gen.status, d: gen.data })
+
+      if (phrase) {
+        const restore = await enableMaintenanceForTest()
+        try {
+          const rec = await callApi("/api/auth/recover", {
+            method: "POST",
+            body: { username: mxR.username, phrase, newPassword: "Recovered-456!" },
+          })
+          rec.status === 200 && typeof rec.data?.phrase === "string"
+            ? pass("maintenance: auth/recover resets the password during the freeze")
+            : fail("maintenance auth/recover", { s: rec.status, d: rec.data })
+        } finally {
+          await restore()
+        }
+        const relog = await login(mxR.username, "Recovered-456!")
+        relog.session?.user?.id
+          ? pass("post-maintenance: recovered password authenticates")
+          : fail("recovered login", relog.session)
+      }
+    }
+
     console.log(`\n${results.filter(([s]) => s === "PASS").length} passed, ${results.filter(([s]) => s === "FAIL").length} failed`)
   } finally {
     // Export fixtures — rows that outlive their user (Feedback SetNull,
@@ -541,7 +575,7 @@ const main = async () => {
     await prisma.botEvent.deleteMany({ where: { userId: expU.id } }).catch(() => {})
     await prisma.achievement.deleteMany({ where: { key: { startsWith: "__av-ach-" } } }).catch(() => {})
     await prisma.strain.deleteMany({ where: { createdById: expU.id } }).catch(() => {})
-    for (const u of [userA, userB, userC, userD, dmA, dmB, dmC, dmD, delE, rlF, phA, phB, expU]) {
+    for (const u of [userA, userB, userC, userD, dmA, dmB, dmC, dmD, delE, rlF, phA, phB, expU, mxR]) {
       await prisma.user.delete({ where: { id: u.id } }).catch(() => {})
     }
     for (const username of registeredUsernames) {

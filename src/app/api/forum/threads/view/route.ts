@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { cookies } from "next/headers"
 import { prisma } from "@/lib/prisma"
 import { getClientIp, hashIp } from "@/lib/security"
+import { checkMaintenance } from "@/lib/maintenance"
 import { rateLimit } from "@/lib/rate-limit"
 
 const VIEW_COOKIE = "tt_thread_views"
@@ -39,6 +40,11 @@ function trimViews(views: Record<string, number>): Record<string, number> {
 // on the free tier) while still counting legitimate views.
 export async function POST(request: NextRequest) {
   try {
+    // Anonymous-accessible view counter — maintenance still freezes it:
+    // counting is a product write even though there is no session check.
+    const maintenance = await checkMaintenance()
+    if (maintenance) return maintenance
+
     const body = await request.json().catch(() => ({}))
     const threadId = typeof body.threadId === "string" ? body.threadId : ""
     if (!threadId) {

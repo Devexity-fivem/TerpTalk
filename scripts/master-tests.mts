@@ -19,7 +19,8 @@
 //     all  — everything
 
 import { spawn, spawnSync, type ChildProcess } from "node:child_process"
-import { existsSync, readFileSync, writeFileSync } from "node:fs"
+import { appendFileSync, existsSync, readFileSync, writeFileSync } from "node:fs"
+import net from "node:net"
 import os from "node:os"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
@@ -56,6 +57,11 @@ interface Suite {
   // suite's bucket. When true, the runner clears harness-owned rate-limit
   // state before the suite starts (see scripts/lib/rate-limit-isolation.ts).
   isolateRateLimits?: boolean
+  // Suites that may toggle Setting.maintenance_mode mid-run. When true, the
+  // parent runner restores the captured baseline after the suite exits — a
+  // crashed or timed-out child cannot leave the shared DB frozen for the
+  // suites behind it (see scripts/lib/maintenance-mode.ts).
+  restoreMaintenance?: boolean
 }
 
 const STATIC_PHASE: Suite[] = [
@@ -87,11 +93,11 @@ const HTTP_PHASE: Suite[] = ([
   { id: "product-events", file: "scripts/product-events-verify.mts", runner: "tsx", cls: "A", label: "Product-event telemetry: attribution, idempotency, beacon boundary, privacy, report surface", tier: "full" },
   { id: "runtime-verify", file: "scripts/runtime-verify.mjs", runner: "node", cls: "A", label: "Runtime security black-box (sessions, authz, privacy, Pusher, uploads, rate limits, staff, TerpBot)", tier: "full", timeoutMs: 12 * 60_000 },
   { id: "browser", file: "scripts/browser-tests.mts", runner: "tsx", cls: "A", label: "Browser regression (headless Chromium): auth, profile V2, privacy oracles, progression UI, mobile", tier: "full", timeoutMs: 5 * 60_000 },
-] satisfies Suite[]).map((s): Suite => ({ ...s, isolateRateLimits: true }))
+] satisfies Suite[]).map((s): Suite => ({ ...s, isolateRateLimits: true, restoreMaintenance: true }))
 
 // STRICTLY SERIAL — all create DB fixtures; several mutate shared global
 // settings (chat_enabled, GROW_ROOM_ENABLED) and rate-limit rows.
-const DB_PHASE: Suite[] = [
+const DB_PHASE: Suite[] = ([
   { id: "security", file: "scripts/security-tests.mts", runner: "tsx", cls: "A", label: "Security + platform lib-level (sessions, roles, uploads, links, cron, captcha, markdown)", tier: "full" },
   { id: "notifications", file: "scripts/notification-2-tests.mts", runner: "tsx", cls: "A", label: "Notification persistence + delivery", tier: "full" },
   { id: "reputation", file: "scripts/reputation-tests.mts", runner: "tsx", cls: "A", label: "Reputation ledger + progression + quests + velocity anti-abuse", tier: "full" },
@@ -104,7 +110,7 @@ const DB_PHASE: Suite[] = [
   { id: "strain-lifecycle", file: "scripts/strain-lifecycle-tests.mts", runner: "tsx", cls: "B", label: "Strain lifecycle + staff deletion + catalog-prune safety", tier: "full" },
   { id: "rewards3", file: "scripts/rewards3-tests.mts", runner: "tsx", cls: "A", label: "Grow journey, weekly recognition, streaks, room gates", tier: "full" },
   { id: "discovery-integration", file: "scripts/discovery-integration-tests.mts", runner: "tsx", cls: "B", label: "Discovery filters + sitemap (DB)", tier: "full" },
-]
+] satisfies Suite[]).map((s): Suite => ({ ...s, restoreMaintenance: true }))
 
 // Whole-DB scan — runs alone, after every fixture suite has cleaned up, so
 // ledger drift left behind by ANY suite (not just reputation's fixtures) is
@@ -178,10 +184,26 @@ interface ChildResult {
 }
 
 const LOG_FILE = path.join(os.tmpdir(), "terptalk-master-tests.log")
-const logChunks: string[] = []
+
+// Log is written incrementally — a killed runner still leaves the latest
+// suite verdicts on disk instead of losing the whole run.
+let logInitialized = false
 function log(line: string) {
   console.log(line)
-  logChunks.push(line)
+  try {
+    if (!logInitialized) { writeFileSync(LOG_FILE, line + "\n"); logInitialized = true }
+    else appendFileSync(LOG_FILE, line + "\n")
+  } catch { /* non-fatal */ }
+}
+
+// Child/dev-server output buffers are rolling tails — an 8-minute suite or a
+// 20-minute dev-server compile stream must not grow the runner's memory
+// without bound. Failure reporting only ever reads the tail.
+const MAX_CHILD_OUTPUT = 512 * 1024
+const MAX_SERVER_LOG = 64 * 1024
+function cappedAppend(buf: string, chunk: string, max: number): string {
+  const next = buf + chunk
+  return next.length <= max ? next : next.slice(next.length - max)
 }
 
 function commandFor(s: Suite): { cmd: string; args: string[] } {
@@ -217,8 +239,8 @@ function runChild(s: Suite, extraEnv: Record<string, string> = {}): Promise<Chil
       killTree(child)
       resolve({ code: null, signal: null, timedOut: true, output, ms: Date.now() - started })
     }, s.timeoutMs ?? 8 * 60_000)
-    child.stdout?.on("data", (d) => { output += d })
-    child.stderr?.on("data", (d) => { output += d })
+    child.stdout?.on("data", (d) => { output = cappedAppend(output, d, MAX_CHILD_OUTPUT) })
+    child.stderr?.on("data", (d) => { output = cappedAppend(output, d, MAX_CHILD_OUTPUT) })
     child.on("error", (err) => {
       if (settled) return
       settled = true
@@ -257,6 +279,19 @@ async function serverHealthy(): Promise<boolean> {
   return stats === 200
 }
 
+// A socket that accepts TCP but never answers HTTP (e.g. a zombie dev server
+// orphaned by a killed runner) reports csrf=null — the same signal as a free
+// port — but a spawn then dies with EADDRINUSE. Probe TCP separately.
+async function portListening(port: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const sock = net.createConnection({ port, host: "127.0.0.1" })
+    const done = (v: boolean) => { sock.destroy(); resolve(v) }
+    sock.once("connect", () => done(true))
+    sock.once("error", () => done(false))
+    sock.setTimeout(2000, () => done(false))
+  })
+}
+
 async function startServer(): Promise<ServerHandle> {
   const healthy = await serverHealthy()
   if (healthy) {
@@ -264,12 +299,26 @@ async function startServer(): Promise<ServerHandle> {
     return { child: null, external: true }
   }
 
-  const csrf = await probe(`${BASE_URL}/api/auth/csrf`)
-  if (csrf !== null) {
+  // A bound port may be mid-boot rather than dead — give it a short grace
+  // window of health probes before declaring it busy-but-unhealthy.
+  const graceDeadline = Date.now() + 30_000
+  let csrf: number | null = null
+  do {
+    csrf = await probe(`${BASE_URL}/api/auth/csrf`)
+    if (csrf === 200 && (await probe(`${BASE_URL}/api/stats`)) === 200) {
+      log(`  dev server became healthy during grace window at ${BASE_URL} (external — will not be killed)`)
+      return { child: null, external: true }
+    }
+    if (csrf === null && !(await portListening(BASE_PORT))) break // truly free
+    if (csrf === null) await new Promise((r) => setTimeout(r, 2000))
+    else break // answering HTTP but not healthy — no point waiting
+  } while (Date.now() < graceDeadline)
+
+  if (csrf !== null || (await portListening(BASE_PORT))) {
     throw new Error(
-      `port ${BASE_PORT} answers HTTP but is not a healthy TerpTalk dev server ` +
+      `port ${BASE_PORT} is occupied but is not a healthy TerpTalk dev server ` +
       `(/api/auth/csrf=${csrf}, /api/stats=${await probe(`${BASE_URL}/api/stats`)}). ` +
-      `Free the port or point MASTER_BASE_URL elsewhere.`
+      `An orphaned dev server may be holding it — free the port or point MASTER_BASE_URL elsewhere.`
     )
   }
 
@@ -280,8 +329,8 @@ async function startServer(): Promise<ServerHandle> {
     : spawn("sh", ["-c", devCmd], { cwd: ROOT, stdio: ["ignore", "pipe", "pipe"], detached: true })
 
   let serverLog = ""
-  child.stdout?.on("data", (d) => { serverLog += d })
-  child.stderr?.on("data", (d) => { serverLog += d })
+  child.stdout?.on("data", (d) => { serverLog = cappedAppend(serverLog, d, MAX_SERVER_LOG) })
+  child.stderr?.on("data", (d) => { serverLog = cappedAppend(serverLog, d, MAX_SERVER_LOG) })
 
   const deadline = Date.now() + 150_000
   while (Date.now() < deadline) {
@@ -416,11 +465,24 @@ async function runSuites(suites: Suite[], extraEnv: Record<string, string> = {})
       }
     }
     const res = await runChild(s, extraEnv)
-    const ok = res.code === 0 && !res.timedOut && res.signal === null
+    let ok = res.code === 0 && !res.timedOut && res.signal === null
+    if (s.restoreMaintenance) {
+      try {
+        const { restoreMaintenanceBaseline } = await import("./lib/maintenance-mode.mjs")
+        const { restored } = await restoreMaintenanceBaseline()
+        if (restored) log(`    maintenance-mode isolation: restored Setting.maintenance_mode baseline`)
+      } catch (e) {
+        // A failed restore means the shared DB may still be frozen — surface
+        // it as a suite failure rather than letting later suites 503 blindly.
+        const msg = e instanceof Error ? e.message : String(e)
+        res.output += `\n[runner] maintenance-mode baseline restore failed: ${msg}`
+        ok = false
+      }
+    }
     results.push({ suite: s, res, ok, skipped: false })
     const status = res.timedOut ? "TIMEOUT" : res.signal ? `SIG ${res.signal}` : res.code === null ? "CRASH" : res.code === 0 ? "PASS" : `FAIL exit ${res.code}`
     log(`  ${ok ? "✓" : "✗"} ${s.label} [${s.cls}] ${status} (${(res.ms / 1000).toFixed(1)}s) — ${s.file}`)
-    logChunks.push(`----- output: ${s.file} -----\n${res.output}\n----- end ${s.file} -----`)
+    try { appendFileSync(LOG_FILE, `----- output: ${s.file} -----\n${res.output}\n----- end ${s.file} -----\n`) } catch { /* non-fatal */ }
     if (!ok) log(failureReport(res.output))
   }
 }
@@ -436,8 +498,8 @@ async function runPhase(title: string, suites: Suite[], extraEnv: Record<string,
 async function runSetupStep(label: string, cmd: string, args: string[]): Promise<boolean> {
   const child = spawn(cmd, args, { cwd: ROOT, env: process.env, stdio: ["ignore", "pipe", "pipe"], detached: !IS_WIN, windowsHide: true })
   let output = ""
-  child.stdout?.on("data", (d) => { output += d })
-  child.stderr?.on("data", (d) => { output += d })
+  child.stdout?.on("data", (d) => { output = cappedAppend(output, d, MAX_SERVER_LOG) })
+  child.stderr?.on("data", (d) => { output = cappedAppend(output, d, MAX_SERVER_LOG) })
   const code: number | null = await new Promise((r) => child.on("close", r))
   log(`  ${code === 0 ? "✓" : "✗"} setup: ${label}`)
   if (code !== 0) log(tail(output))
@@ -533,7 +595,6 @@ function finish(code: number) {
   log(`\n  Manual verification still required (no browser/runtime coverage exists):`)
   for (const m of MANUAL_COVERAGE) log(`    · ${m}`)
   log(`\n  Overall: ${code === 0 ? "PASS" : "FAIL"}`)
-  try { writeFileSync(LOG_FILE, logChunks.join("\n")) } catch { /* non-fatal */ }
   process.exit(code)
 }
 

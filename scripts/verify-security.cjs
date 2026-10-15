@@ -513,6 +513,57 @@ const apiFiles = () => {
       diaryPage.includes("loadUpdateSocial(updates.map((u) => u.id)") && diaryPage.includes('withComments: commentable'));
   }
 
+  // ── Maintenance-mode policy contract (F-4) ────────────────────────
+  // Guarded member mutations carry checkMaintenance; exempt safety/
+  // recovery/privacy/telemetry routes document the intentional exemption.
+  {
+    const guarded = [
+      "plant-doctor/cases", "plant-doctor/cases/[id]/outcome",
+      "profile/complete", "profile/notifications", "saved-searches",
+      "youtubers/apply", "diaries/updates", "forum/threads/view",
+      "moments/[id]", "moments/comments/[commentId]",
+    ]
+    for (const r of guarded) {
+      const c = fs.readFileSync(`src/app/api/${r}/route.ts`, "utf8")
+      check(`maintenance: ${r} guarded`, c.includes("checkMaintenance"))
+    }
+    const exempt = [
+      "reports", "feedback", "restricted", "auth/recover", "profile/recovery",
+      "events", "push/event", "push/subscribe", "ping", "pusher/auth",
+      "notifications", "blocks",
+    ]
+    for (const r of exempt) {
+      const c = fs.readFileSync(`src/app/api/${r}/route.ts`, "utf8")
+      check(`maintenance-exempt documented: ${r}`,
+        /maintenance-exempt|not maintenance-gated|maintenance still freezes/i.test(c))
+    }
+    // blocks must NOT carry the guard at all — both directions are
+    // member-controlled safety boundaries.
+    const blocks = fs.readFileSync("src/app/api/blocks/route.ts", "utf8")
+    check("maintenance: blocks POST+DELETE stay available", !blocks.includes("checkMaintenance"))
+
+    // The TerpBot cron marker lookup must fail closed — a swallowed read
+    // error reads as "not announced" and would duplicate the post.
+    const cron = fs.readFileSync("src/app/api/cron/terpbot/route.ts", "utf8")
+    // The marker-lookup DEFINITION must not swallow errors — catches on
+    // neighboring recordBotEvent calls are unrelated (post-write markers).
+    const wasAnnouncedDef = cron.match(/const wasAnnounced = \(key: string\) =>([\s\S]{0,300}?\.then\(Boolean\))/)
+    check("cron: announcement marker lookup cannot masquerade as unannounced",
+      !!wasAnnouncedDef && !wasAnnouncedDef[1].includes(".catch("))
+
+    // Runner-side recovery: a suite that dies mid-freeze can't poison the
+    // shared DB for the suites behind it.
+    const master = fs.readFileSync("scripts/master-tests.mts", "utf8")
+    check("maintenance isolation: HTTP + DB suites are flagged",
+      /HTTP_PHASE: Suite\[\] = \([\s\S]*?restoreMaintenance: true \}\)\)/.test(master) &&
+      /DB_PHASE: Suite\[\] = \([\s\S]*?restoreMaintenance: true \}\)\)/.test(master))
+    check("maintenance isolation: runner restores the baseline after each flagged suite",
+      master.includes("if (s.restoreMaintenance)") && master.includes("restoreMaintenanceBaseline"))
+    const mx = fs.readFileSync("scripts/lib/maintenance-mode.mjs", "utf8")
+    check("maintenance isolation: helper is db-guarded",
+      mx.includes('import "../db-guard.mjs"'))
+  }
+
   // ── Suite-boundary rate-limit isolation (structural contract) ──
   // master-tests clears harness-owned RateLimit rows before every HTTP-bound
   // suite; the helper must scope deletes to the shared "unknown"-IP client,

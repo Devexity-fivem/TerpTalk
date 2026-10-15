@@ -14,6 +14,7 @@ import { notifyMany } from "@/lib/notify"
 // - Wrong credentials and unrestricted accounts return the same generic
 //   failure — the status is only revealed after a correct password.
 // - Rate-limited like the login endpoint (per-IP).
+// Intentionally maintenance-exempt: restricted members' only appeal/deletion channel.
 export async function POST(request: NextRequest) {
   try {
     const ip = getClientIp(request)

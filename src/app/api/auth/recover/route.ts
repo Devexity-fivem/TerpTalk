@@ -7,6 +7,7 @@ import bcrypt from "bcryptjs"
 
 // POST — reset password with username + 12-word recovery phrase:
 // { username, phrase, newPassword }
+// Intentionally maintenance-exempt: account recovery must stay available.
 export async function POST(request: Request) {
   try {
     const ip = getClientIp(request)

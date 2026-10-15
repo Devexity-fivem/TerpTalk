@@ -8,6 +8,7 @@ import { canAccessRoom } from "@/lib/chat-access"
 import { rateLimit } from "@/lib/rate-limit"
 
 // Pusher channel authorization — private chat channels require a session and room access.
+// Intentionally maintenance-exempt: realtime auth writes no product data.
 export async function POST(request: Request) {
   try {
     const session = await getServerSession(authOptions)

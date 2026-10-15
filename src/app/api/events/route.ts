@@ -24,6 +24,7 @@ import { recordProductEvent, utcDay } from "@/lib/product-events"
 //                            follow/privacy oracle.
 const CLIENT_TYPES = new Set(["DIGEST_VIEWED", "FOLLOWED_CONTENT_VIEWED"])
 
+// Intentionally maintenance-exempt: product telemetry, no product-data side effects.
 export async function POST(request: Request) {
   const session = await getServerSession(authOptions)
   if (!session?.user?.id) return unauthorized()

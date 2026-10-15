@@ -3,6 +3,8 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { unauthorized, forbidden } from "@/lib/security"
+import { checkMaintenance } from "@/lib/maintenance"
+import { revalidateTag } from "next/cache"
 import { deleteImages } from "@/lib/blob"
 import { invalidateNotificationsForLink } from "@/lib/notify"
 import { getMomentForViewer, momentPath } from "@/lib/moments"
@@ -27,6 +29,8 @@ export async function DELETE(_request: Request, { params }: Ctx) {
   try {
     const session = await getServerSession(authOptions)
     if (!session?.user?.id) return unauthorized()
+    const maintenance = await checkMaintenance()
+    if (maintenance) return maintenance
     const { id } = await params
     const m = await prisma.moment.findUnique({ where: { id }, select: { id: true, authorId: true, deleted: true } })
     if (!m || m.deleted) return NextResponse.json({ error: "Not found" }, { status: 404 })
@@ -40,6 +44,8 @@ export async function DELETE(_request: Request, { params }: Ctx) {
     })
     await invalidateNotificationsForLink(momentPath(id))
     deleteImages(urls).catch(() => {})
+    // Moments are a search type — a deleted one must stop matching.
+    revalidateTag("search", { expire: 0 })
     return NextResponse.json({ deleted: true })
   } catch (error) {
     console.error("Moment delete error:", error)

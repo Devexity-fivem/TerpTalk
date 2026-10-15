@@ -225,6 +225,8 @@ export async function DELETE(request: Request) {
     if (xpReversalId) await drainXpOne(xpReversalId).catch(() => false)
     deleteImagesIfUnreferenced(imageUrls).catch(() => {})
     revalidateTag("setups", { expire: 0 })
+    // Setups are a search type — a deleted one must stop matching.
+    revalidateTag("search", { expire: 0 })
 
     return NextResponse.json({ deleted: true })
   } catch (error) {

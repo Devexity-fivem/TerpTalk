@@ -569,6 +569,17 @@ export async function POST(request: Request) {
     if (setupCommentDeleted) {
       revalidateTag("setups", { expire: 0 })
     }
+    // Indexed content deleted by staff must leave the search cache —
+    // the same bust the owner-delete paths issue.
+    if (actionType === "CONTENT_DELETION" && ["THREAD", "DIARY", "SETUP", "MOMENT", "STRAIN"].includes(targetType ?? "")) {
+      revalidateTag("search", { expire: 0 })
+    }
+    // Account-state changes (ban/unban/suspend) remove or restore the
+    // member's public profile and search row — bust both caches.
+    if (isAccountAction && actionType !== "WARNING") {
+      revalidateTag("profiles", { expire: 0 })
+      revalidateTag("search", { expire: 0 })
+    }
 
 
     await logSecurityEvent("SUSPICIOUS_ACTIVITY", {

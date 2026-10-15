@@ -5,6 +5,7 @@
 // Temp users/rows fully cleaned up.
 import "./db-guard.mjs"
 import { makeHarness } from "./lib/http-harness.mjs"
+import { enableMaintenanceForTest } from "./lib/maintenance-mode.mjs"
 import { activationMilestonesFor, activationReport } from "@/lib/activation"
 
 const harnessOpts = {
@@ -495,6 +496,28 @@ const main = async () => {
     report.cohort >= 1 && report.steps.find((s) => s.key === "firstReturn")!.count >= 1
       ? pass("report counts the controlled journey")
       : fail("report counts", report.steps)
+
+    // ── Maintenance freeze — unsubscribe is a stop-delivery control ──
+    {
+      await prisma.pushSubscription.create({
+        data: { userId: b.id, endpoint: sub("mx").endpoint, p256dh: sub("mx").keys.p256dh, auth: sub("mx").keys.auth },
+      })
+      const restore = await enableMaintenanceForTest()
+      try {
+        const p = await call("/api/push/subscribe", { method: "POST", body: sub("mxsub"), cookie: bCookie })
+        p.status === 200 || p.status === 201
+          ? pass("maintenance: subscribe POST still accepted")
+          : fail("maintenance subscribe", { s: p.status, d: p.data })
+        const r = await call("/api/push/subscribe", { method: "DELETE", body: { endpoint: sub("mx").endpoint }, cookie: bCookie })
+        r.status === 200 && (r.data?.removed as number | undefined) === 1 &&
+          (await prisma.pushSubscription.count({ where: { endpoint: sub("mx").endpoint } })) === 0
+          ? pass("maintenance: unsubscribe still removes the subscription")
+          : fail("maintenance unsubscribe", { s: r.status, d: r.data })
+      } finally {
+        await restore()
+      }
+      await prisma.pushSubscription.deleteMany({ where: { endpoint: sub("mxsub").endpoint } }).catch(() => {})
+    }
   } finally {
     for (const t of created.threads) await prisma.thread.delete({ where: { id: t } }).catch(() => {})
     await prisma.pushEvent.deleteMany({ where: { userId: { in: users.map((u) => u.id) } } }).catch(() => {})

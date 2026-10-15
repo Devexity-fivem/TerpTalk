@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { unauthorized, getClientIp } from "@/lib/security"
+import { checkMaintenance } from "@/lib/maintenance"
 import { rateLimit } from "@/lib/rate-limit"
 import { createPlantDoctorCase, plantDoctorCasesFor } from "@/lib/plant-doctor"
 import { isValidWizardResultId } from "@/lib/symptom-tags"
@@ -26,6 +27,9 @@ export async function POST(request: Request) {
   try {
     const session = await getServerSession(authOptions)
     if (!session?.user?.id) return unauthorized()
+
+    const maintenance = await checkMaintenance()
+    if (maintenance) return maintenance
 
     const rl = await rateLimit(`pd-case:${session.user.id}:${getClientIp(request)}`, 20, 60 * 60 * 1000)
     if (!rl.allowed) {

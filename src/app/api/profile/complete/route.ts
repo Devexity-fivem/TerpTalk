@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { unauthorized, LIMITS, USERNAME_REGEX, isReservedUsername, getClientIp, logSecurityEvent, enforceLinkTrust } from "@/lib/security"
+import { checkMaintenance } from "@/lib/maintenance"
 import { rateLimit } from "@/lib/rate-limit"
 import { storeImage, deleteImagesIfUnreferenced } from "@/lib/blob"
 import { grantBadge } from "@/lib/reputation"
@@ -16,6 +17,9 @@ export async function POST(request: Request) {
     if (!session?.user?.id) {
       return unauthorized()
     }
+
+    const maintenance = await checkMaintenance()
+    if (maintenance) return maintenance
 
     const rl = await rateLimit(`profile-complete:${session.user.id}`, 15, 60 * 60 * 1000)
     if (!rl.allowed) {
