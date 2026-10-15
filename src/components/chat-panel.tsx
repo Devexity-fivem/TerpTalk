@@ -232,6 +232,9 @@ export function ChatPanelInset({ children }: { children: ReactNode }) {
     <div
       className={cn(
         "flex min-w-0 flex-1 flex-col transition-[padding] duration-200",
+        // Left rail consumes real width on lg+ (72px icon rail, 224px
+        // labeled at xl) — page + footer recenter in the remaining space.
+        "lg:pl-[72px] xl:pl-56",
         open && "lg:pr-85"
       )}
     >

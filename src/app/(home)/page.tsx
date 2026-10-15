@@ -13,6 +13,8 @@ import { getSiteStats } from "@/lib/community-stats"
 import { getSession } from "@/lib/session"
 import { getMemberHomeData } from "@/lib/member-home"
 import { getGrowerSpotlight } from "@/lib/spotlight"
+import { FEED_KINDS, feedUnreadThreadIds, getFeedPage, resolveFeedScope } from "@/lib/feed"
+import { getStoryRail } from "@/lib/moments"
 import MemberHome from "@/components/member-home"
 
 import { LiveRefresh } from "@/components/live-refresh"
@@ -186,7 +188,31 @@ export default async function Home() {
   const session = await getSession()
   if (session?.user?.id) {
     const memberData = await getMemberHomeData(session.user.id)
-    if (memberData) return <MemberHome data={memberData} />
+    if (memberData) {
+      // The signed-in home IS the feed — same canonical For You stream
+      // as /feed, plus the member's story rail and share-box diaries.
+      const scope = await resolveFeedScope(session.user.id, "for-you")
+      const [feedPage, storyRail, activeDiaries] = await Promise.all([
+        getFeedPage({ scope, kinds: FEED_KINDS }),
+        getStoryRail(session.user.id),
+        prisma.growDiary.findMany({
+          where: { authorId: session.user.id, deleted: false, harvested: false },
+          orderBy: { updatedAt: "desc" },
+          take: 5,
+          select: { id: true, title: true, stage: true, harvested: true },
+        }),
+      ])
+      const unreadThreadIds = await feedUnreadThreadIds(session.user.id, feedPage.items)
+      return (
+        <MemberHome
+          data={memberData}
+          feed={{ items: feedPage.items, nextCursor: feedPage.nextCursor, coldStart: feedPage.coldStart, unreadThreadIds }}
+          stories={storyRail}
+          activeDiaries={activeDiaries}
+          viewerId={session.user.id}
+        />
+      )
+    }
     // Missing user row (deleted mid-session) — fall through to landing.
   }
 

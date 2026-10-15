@@ -10,6 +10,7 @@ import {
   ScrollText, Image as ImageIcon, Video, Tent, HelpCircle, Medal, Users, Sprout,
 } from "@/lib/icons"
 import CannabisLeaf from "@/components/cannabis-leaf"
+import AppRail from "@/components/app-rail"
 import MobileNav from "@/components/mobile-nav"
 import ThemeToggle from "@/components/theme-toggle"
 import CreateMenu from "@/components/create-menu"
@@ -46,17 +47,8 @@ const NAV_LINKS = [
 
 const NAV_SECTIONS = ["Grow", "Community", "Explore", "Library"]
 
-// Shown inline on large screens; the full list stays in the drawer.
-// Feed-first social ordering — the community stream is the primary
-// surface, followed by the grow tools, then discussions and chat.
-// Questions, Discover, Growers, and the rest remain reachable via Menu.
-const DESKTOP_LINKS = [
-  { href: "/feed", label: "Feed", icon: Calendar },
-  { href: "/diaries", label: "Diaries", icon: Leaf },
-  { href: "/strains", label: "Strains", icon: Dna },
-  { href: "/forum", label: "Discussions", icon: MessageCircle },
-  { href: "/chat", label: "Chat", icon: MessagesSquare },
-]
+// Primary destinations now live in the persistent left rail on lg+
+// (app-rail.tsx); the drawer still carries the full map below that.
 
 export function Navigation() {
   const { data: session, status } = useSession()
@@ -268,42 +260,9 @@ export function Navigation() {
               </Tooltip>
             </div>
 
-            {/* Desktop primary links — xl and up only; below that the
-                drawer carries the full nav so lg has room for the
-                authenticated control cluster. */}
-            <div className="hidden items-center gap-1 xl:flex">
-              {DESKTOP_LINKS.map(({ href, label, icon: Icon }) => (
-                <Link
-                  key={href}
-                  href={href}
-                  className={linkClass(href)}
-                  // Chat opens the persistent panel in place — the page
-                  // underneath stays put. The href remains so the link is
-                  // still a real, deep-linkable navigation element.
-                  // Guests get normal navigation to /chat's sign-in wall.
-                  onClick={
-                    href === "/chat" && session
-                      ? (e) => {
-                          e.preventDefault()
-                          openPanel()
-                        }
-                      : undefined
-                  }
-                >
-                  <Icon className="h-4 w-4" />
-                  {label}
-                  {href === "/chat" && chatUnread && (
-                    <Tooltip content="New chat activity" side="bottom">
-                      <span
-                        className="h-2 w-2 rounded-full bg-primary"
-                        role="status"
-                        aria-label="New chat activity"
-                      />
-                    </Tooltip>
-                  )}
-                </Link>
-              ))}
-            </div>
+            {/* Primary destinations live in the persistent left rail on
+                lg+ (app-rail, rendered below); below lg the drawer
+                carries the full map so the pill stays uncrowded. */}
 
             {/* Right side */}
             <div className="flex min-w-0 items-center gap-1 sm:gap-1.5">
@@ -581,6 +540,10 @@ export function Navigation() {
             </div>
           </div>
         )}
+        {/* Persistent left rail — the primary destination map on lg+.
+            Fixed-positioned, but kept inside this landmark so every
+            navigation affordance shares one nav scope. */}
+        <AppRail unread={unread} dmUnread={dmUnread} />
       </nav>
 
       <MobileNav unread={unread} chatUnread={chatUnread} />

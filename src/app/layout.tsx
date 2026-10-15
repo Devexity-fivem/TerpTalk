@@ -6,7 +6,6 @@ import { Analytics } from "@vercel/analytics/next";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import { Providers } from "@/components/providers";
 import { Navigation } from "@/components/navigation";
-import QuickPostButton from "@/components/quick-post-button";
 import ServiceWorkerRegister from "@/components/sw-register";
 import Footer from "@/components/footer";
 import { buildMetadata } from "@/lib/seo";
@@ -133,7 +132,6 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                       <main id="main-content" className="flex-1 min-w-0 pb-16 lg:pb-0">{children}</main>
                       <Footer />
                     </ChatPanelInset>
-                    <QuickPostButton />
                     <ChatDock />
                   </ShareComposerProvider>
                 </CommandPaletteProvider>

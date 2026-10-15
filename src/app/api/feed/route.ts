@@ -1,10 +1,9 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
-import { prisma } from "@/lib/prisma"
 import { getClientIp, hashIp } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
-import { FEED_KINDS, FEED_MODES, getFeedPage, resolveFeedScope } from "@/lib/feed"
+import { FEED_KINDS, FEED_MODES, feedUnreadThreadIds, getFeedPage, resolveFeedScope } from "@/lib/feed"
 import type { FeedKind, FeedMode } from "@/lib/feed"
 
 // GET — canonical feed continuation for /feed "Load more".
@@ -52,19 +51,9 @@ export async function GET(request: NextRequest) {
 
   // Unread indicators ride along for signed-in members — same followed-
   // thread rule the feed page applies to its first render.
-  const unreadThreadIds: string[] = []
-  if (session?.user?.id) {
-    const threadIds = page.items.filter((i) => i.kind === "thread").map((i) => i.id)
-    if (threadIds.length) {
-      const follows = await prisma.threadFollow.findMany({
-        where: { userId: session.user.id, threadId: { in: threadIds } },
-        select: { threadId: true, lastSeenAt: true, thread: { select: { lastActivityAt: true } } },
-      })
-      for (const f of follows) {
-        if (f.thread.lastActivityAt > (f.lastSeenAt ?? new Date(0))) unreadThreadIds.push(f.threadId)
-      }
-    }
-  }
+  const unreadThreadIds = session?.user?.id
+    ? await feedUnreadThreadIds(session.user.id, page.items)
+    : []
 
   return NextResponse.json({
     items: page.items,

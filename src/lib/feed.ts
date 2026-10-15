@@ -417,3 +417,18 @@ export async function getFeedPage(opts: {
     personalized: scope.personalized,
   }
 }
+
+// Unread indicators on feed thread cards — the same followed-thread
+// rule as the forum lists, kept out of any cached payload. Shared by
+// /feed and the signed-in home stream.
+export async function feedUnreadThreadIds(viewerId: string, items: FeedItem[]): Promise<string[]> {
+  const threadIds = items.filter((i) => i.kind === "thread").map((i) => i.id)
+  if (threadIds.length === 0) return []
+  const follows = await prisma.threadFollow.findMany({
+    where: { userId: viewerId, threadId: { in: threadIds } },
+    select: { threadId: true, lastSeenAt: true, thread: { select: { lastActivityAt: true } } },
+  })
+  return follows
+    .filter((f) => f.thread.lastActivityAt > (f.lastSeenAt ?? new Date(0)))
+    .map((f) => f.threadId)
+}

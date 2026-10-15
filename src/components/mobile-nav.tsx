@@ -3,31 +3,48 @@
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { useSession } from "next-auth/react"
-import { Home, Calendar, Leaf, Bell, User, MessagesSquare, Search } from "@/lib/icons"
+import { Home, Calendar, Leaf, Bell, User, MessagesSquare, Plus, TrendingUp } from "@/lib/icons"
 import { cn } from "@/lib/utils"
 import { signInHref } from "@/lib/callback-url"
 import { useChatPanel } from "@/components/chat-panel"
-import { useCommandPalette } from "@/components/command-palette"
+import { useShareComposer } from "@/components/share-composer"
 
 interface MobileNavProps {
   unread: number
   chatUnread?: boolean
 }
 
-// Feed-first ordering — Home, Feed, and Chat stay primary; Diaries keeps
-// a quick slot. Forums moves into the full navigation drawer so the bar
-// does not exceed a comfortable touch row.
-const ITEMS = [
-  { href: "/", label: "Home", icon: Home, exact: true },
-  { href: "/feed", label: "Feed", icon: Calendar },
-  { href: "/diaries", label: "Diaries", icon: Leaf },
-  { href: "/chat", label: "Chat", icon: MessagesSquare },
-]
+interface NavItem {
+  href: string
+  label: string
+  icon: React.ComponentType<{ className?: string }>
+  exact?: boolean
+  chat?: boolean
+  alerts?: boolean
+}
+
+// Feed-first ordering with a centered creation affordance — the social
+// pattern: browse left, act center, connect right. Forums stays out of
+// the bar (reachable via Menu/rail/feed), as does raw Search — the
+// drawer and Discover cover it.
+const ITEMS = {
+  left: [
+    { href: "/", label: "Home", icon: Home, exact: true },
+    { href: "/feed", label: "Feed", icon: Calendar },
+    { href: "/diaries", label: "Diaries", icon: Leaf },
+  ] as NavItem[],
+  right: [
+    { href: "/chat", label: "Chat", icon: MessagesSquare, chat: true },
+  ] as NavItem[],
+  account: { href: "/profile", label: "You", icon: User } as NavItem,
+  alerts: { href: "/notifications", label: "Alerts", icon: Bell, alerts: true } as NavItem,
+  guestExplore: { href: "/discover", label: "Discover", icon: TrendingUp } as NavItem,
+}
 
 /**
  * Purpose-built bottom navigation for touch devices. Hidden from lg upwards
- * where the header nav takes over. Targets are 56px tall for comfortable taps.
- * Search lives in the header drawer on mobile, keeping the bar at 6 items.
+ * where the left rail + header take over. Targets are 56px tall for
+ * comfortable taps; the center action is a raised composer FAB.
  */
 export default function MobileNav({ unread, chatUnread }: MobileNavProps) {
   const pathname = usePathname()
@@ -35,108 +52,86 @@ export default function MobileNav({ unread, chatUnread }: MobileNavProps) {
   // Chat opens the persistent sheet in place — tapping the bottom-nav item
   // never navigates away. href stays so it remains a real link.
   const { togglePanel, open: chatOpen } = useChatPanel()
-  const { openPalette } = useCommandPalette()
+  const composer = useShareComposer()
 
-  const isActive = (href: string, exact?: boolean) =>
-    exact ? pathname === href : pathname === href || pathname.startsWith(`${href}/`)
+  const isActive = (item: NavItem) =>
+    item.exact ? pathname === item.href : pathname === item.href || pathname.startsWith(`${item.href}/`)
 
-  const accountHref = session ? "/profile" : signInHref("/profile")
-  const accountLabel = session ? "You" : "Sign in"
+  const renderLink = (item: NavItem) => {
+    const active = isActive(item) || (item.chat && chatOpen)
+    return (
+      <li key={item.href} className="min-w-0 flex-1">
+        <Link
+          href={item.href}
+          aria-current={isActive(item) ? "page" : undefined}
+          onClick={
+            // Guests have no panel — let the link reach /chat's
+            // sign-in wall as before.
+            item.href === "/chat" && session
+              ? (e) => {
+                  e.preventDefault()
+                  togglePanel()
+                }
+              : undefined
+          }
+          className={cn(
+            "flex h-14 min-w-0 flex-col items-center justify-center gap-0.5 px-0.5 text-[11px] font-medium transition-colors",
+            active ? "text-primary" : "text-muted-foreground"
+          )}
+        >
+          <span className="relative">
+            <item.icon className="h-5 w-5" aria-hidden="true" />
+            {item.chat && chatUnread && (
+              <span
+                className="absolute -right-1.5 -top-1 h-2 w-2 rounded-full bg-primary"
+                role="status"
+                aria-label="New chat activity"
+              />
+            )}
+            {item.alerts && unread > 0 && (
+              <span
+                className="absolute -right-1.5 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-semibold text-destructive-foreground"
+                aria-label={`${unread} unread notifications`}
+                aria-live="polite"
+              >
+                {unread > 99 ? "99+" : unread}
+              </span>
+            )}
+          </span>
+          <span className="max-w-full truncate">{item.label}</span>
+        </Link>
+      </li>
+    )
+  }
+
+  const right = session
+    ? [...ITEMS.right, ITEMS.alerts, ITEMS.account]
+    : [...ITEMS.right, ITEMS.guestExplore, { ...ITEMS.account, href: signInHref("/profile"), label: "Sign in" }]
 
   return (
     <nav
       aria-label="Primary"
-        className="safe-bottom fixed bottom-0 left-0 right-0 z-40 border-t border-border bg-card/95 backdrop-blur lg:hidden"
-      >
+      className="safe-bottom fixed bottom-0 left-0 right-0 z-40 border-t border-border bg-card/95 backdrop-blur lg:hidden"
+    >
       <ul className="flex items-stretch">
-        {ITEMS.map(({ href, label, icon: Icon, exact }) => {
-          const active = isActive(href, exact) || (href === "/chat" && chatOpen)
-          return (
-            <li key={href} className="min-w-0 flex-1">
-              <Link
-                href={href}
-                aria-current={isActive(href, exact) ? "page" : undefined}
-                onClick={
-                  // Guests have no panel — let the link reach /chat's
-                  // sign-in wall as before.
-                  href === "/chat" && session
-                    ? (e) => {
-                        e.preventDefault()
-                        togglePanel()
-                      }
-                    : undefined
-                }
-                className={cn(
-                  "flex h-14 min-w-0 flex-col items-center justify-center gap-0.5 px-0.5 text-[11px] font-medium transition-colors",
-                  active ? "text-primary" : "text-muted-foreground"
-                )}
-              >
-                <span className="relative">
-                  <Icon className="h-5 w-5" aria-hidden="true" />
-                  {href === "/chat" && chatUnread && (
-                    <span
-                      className="absolute -right-1.5 -top-1 h-2 w-2 rounded-full bg-primary"
-                      role="status"
-                      aria-label="New chat activity"
-                    />
-                  )}
-                </span>
-                <span className="max-w-full truncate">{label}</span>
-              </Link>
-            </li>
-          )
-        })}
-        {/* Search — opens the command palette. On a forum this is the
-            highest-frequency mobile action, so it earns a bar slot. */}
+        {ITEMS.left.map(renderLink)}
+
+        {/* Center create FAB — opens the unified share composer in place.
+            Guests get the composer's sign-in gate, same as the header's
+            Create button. */}
         <li className="min-w-0 flex-1">
           <button
-            onClick={openPalette}
-            className="flex h-14 min-w-0 w-full flex-col items-center justify-center gap-0.5 px-0.5 text-[11px] font-medium text-muted-foreground transition-colors hover:text-foreground"
-            aria-label="Search TerpTalk"
+            onClick={() => composer.open()}
+            className="relative flex h-14 min-w-0 w-full flex-col items-center justify-center px-0.5"
+            aria-label="Share something"
           >
-            <Search className="h-5 w-5" aria-hidden="true" />
-            <span className="max-w-full truncate">Search</span>
+            <span className="tt-cta -mt-5 flex h-11 w-11 items-center justify-center rounded-full text-primary-foreground shadow-lg ring-4 ring-card">
+              <Plus className="h-5 w-5" aria-hidden="true" />
+            </span>
           </button>
         </li>
-        {session && (
-          <li className="min-w-0 flex-1">
-            <Link
-              href="/notifications"
-              aria-current={isActive("/notifications") ? "page" : undefined}
-              className={cn(
-                "relative flex h-14 min-w-0 flex-col items-center justify-center gap-0.5 px-0.5 text-[11px] font-medium transition-colors",
-                isActive("/notifications") ? "text-primary" : "text-muted-foreground"
-              )}
-            >
-              <span className="relative">
-                <Bell className="h-5 w-5" aria-hidden="true" />
-                {unread > 0 && (
-                  <span
-                    className="absolute -right-1.5 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-semibold text-destructive-foreground"
-                    aria-label={`${unread} unread notifications`}
-                    aria-live="polite"
-                  >
-                    {unread > 99 ? "99+" : unread}
-                  </span>
-                )}
-              </span>
-              <span className="max-w-full truncate">Alerts</span>
-            </Link>
-          </li>
-        )}
-        <li className="min-w-0 flex-1">
-          <Link
-            href={accountHref}
-            aria-current={isActive("/profile") ? "page" : undefined}
-            className={cn(
-              "flex h-14 min-w-0 flex-col items-center justify-center gap-0.5 px-0.5 text-[11px] font-medium transition-colors",
-              isActive("/profile") ? "text-primary" : "text-muted-foreground"
-            )}
-          >
-            <User className="h-5 w-5" aria-hidden="true" />
-            <span className="max-w-full truncate">{accountLabel}</span>
-          </Link>
-        </li>
+
+        {right.map(renderLink)}
       </ul>
     </nav>
   )

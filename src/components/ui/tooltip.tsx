@@ -26,18 +26,27 @@ import React, { useEffect, useRef, useState } from "react"
 import { Info } from "@/lib/icons"
 import { cn } from "@/lib/utils"
 
-type Side = "top" | "bottom"
+type Side = "top" | "bottom" | "right"
 type Align = "center" | "start" | "end"
 
 const SIDE_CLASS: Record<Side, string> = {
   top: "bottom-full mb-1.5",
   bottom: "top-full mt-1.5",
+  right: "left-full ml-2",
 }
 
 const ALIGN_CLASS: Record<Align, string> = {
   center: "left-1/2 -translate-x-1/2",
   start: "left-0",
   end: "right-0",
+}
+
+// On a right-side tooltip, align selects the vertical edge instead of
+// the horizontal one; "center" anchors mid-height.
+const ALIGN_CLASS_RIGHT: Record<Align, string> = {
+  center: "top-1/2 -translate-y-1/2",
+  start: "top-0",
+  end: "top-auto bottom-0",
 }
 
 const INTERACTIVE_TAGS = new Set(["a", "button", "input", "select", "textarea", "summary"])
@@ -141,7 +150,7 @@ export default function Tooltip({ content, children, side = "top", align = "cent
                 forced && "visible opacity-100"
               ),
           SIDE_CLASS[side],
-          ALIGN_CLASS[align]
+          side === "right" ? ALIGN_CLASS_RIGHT[align] : ALIGN_CLASS[align]
         )}
       >
         {content}

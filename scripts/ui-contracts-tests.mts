@@ -138,11 +138,13 @@ check("desktop nav Chat opens the panel without navigating", () => {
   assert.ok(nav.includes("e.preventDefault()"), "nav suppresses navigation")
 })
 
-check("desktop nav shows Feed as a primary inline destination", () => {
-  const desktopBlock = nav.slice(nav.indexOf("DESKTOP_LINKS"), nav.indexOf("export function Navigation"))
-  assert.ok(desktopBlock.includes('href: "/feed"'), "feed href in desktop links")
-  assert.ok(desktopBlock.includes('label: "Feed"'), "feed label in desktop links")
-  assert.ok(desktopBlock.indexOf('href: "/feed"') < desktopBlock.indexOf('href: "/diaries"'), "feed appears before diaries")
+check("desktop rail shows Feed as a primary destination", () => {
+  const rail = src("components/app-rail.tsx")
+  const railBlock = rail.slice(rail.indexOf("RAIL_SECTIONS"), rail.indexOf("export default"))
+  assert.ok(railBlock.includes('href: "/feed"'), "feed href in rail links")
+  assert.ok(railBlock.includes('label: "Feed"'), "feed label in rail links")
+  assert.ok(railBlock.indexOf('href: "/feed"') < railBlock.indexOf('href: "/diaries"'), "feed appears before diaries")
+  assert.ok(nav.includes("AppRail"), "navigation mounts the left rail")
 })
 
 check("mobile bottom-nav Feed is a primary destination", () => {
@@ -219,11 +221,11 @@ check("member home exposes a compact community bridge with feed links", () => {
 
 check("feed page exposes a contextual Share a grow update entry point", () => {
   const feedPage = src("app/feed/page.tsx")
-  const feedShare = src("components/feed-share-button.tsx")
-  assert.ok(feedPage.includes("FeedShareButton"), "feed page mounts share button")
-  assert.ok(feedShare.includes('type: "grow-update"'), "share button can open grow-update")
-  assert.ok(feedShare.includes('type: "discussion"'), "share button falls back to discussion")
-  assert.ok(feedShare.includes("Start a grow diary") || feedShare.includes("Share something"), "fallback path exists")
+  const shareEntry = src("components/share-entry.tsx")
+  assert.ok(feedPage.includes("ShareEntry"), "feed page mounts the share box")
+  assert.ok(shareEntry.includes('type: "grow-update"'), "share entry can open grow-update")
+  assert.ok(shareEntry.includes('type: "discussion"'), "share entry can open a discussion")
+  assert.ok(shareEntry.includes("Share a grow update") || shareEntry.includes("Start a diary"), "contextual grow path exists")
 })
 
 // ── Realtime architecture invariants ───────────────────────────────────

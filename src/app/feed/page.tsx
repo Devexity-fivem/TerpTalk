@@ -11,9 +11,9 @@ import ProfileCard from "@/components/ui/profile-card"
 import PageHeader from "@/components/ui/page-header"
 import FeedList from "@/components/feed-list"
 import type { FeedAppearance } from "@/components/feed-list"
-import FeedShareButton from "@/components/feed-share-button"
+import ShareEntry from "@/components/share-entry"
 import type { FeedableDiary } from "@/components/feed-share-button"
-import { FEED_KINDS, feedDiaryWhere, getFeedPage, resolveFeedScope } from "@/lib/feed"
+import { FEED_KINDS, feedDiaryWhere, feedUnreadThreadIds, getFeedPage, resolveFeedScope } from "@/lib/feed"
 import type { FeedKind, FeedMode } from "@/lib/feed"
 import { diaryPath } from "@/lib/slugs"
 import { getStoryRail, getTrendingHashtags, hashtagPath } from "@/lib/moments"
@@ -121,24 +121,14 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
 
   // Unread indicators on feed thread cards — same followed-thread rule as
   // the forum lists, kept out of any cached payload.
-  const unreadThreadIds: string[] = []
-  if (session?.user?.id) {
-    const threadIds = items.filter((i) => i.kind === "thread").map((i) => i.id)
-    if (threadIds.length > 0) {
-      const follows = await prisma.threadFollow.findMany({
-        where: { userId: session.user.id, threadId: { in: threadIds } },
-        select: { threadId: true, lastSeenAt: true, thread: { select: { lastActivityAt: true } } },
-      })
-      for (const f of follows) {
-        if (f.thread.lastActivityAt > (f.lastSeenAt ?? new Date(0))) unreadThreadIds.push(f.threadId)
-      }
-    }
-  }
+  const unreadThreadIds = session?.user?.id
+    ? await feedUnreadThreadIds(session.user.id, items)
+    : []
 
   const feedEmpty = items.length === 0
 
   const tabCls = (t: string) =>
-    `px-4 py-2 text-sm font-medium transition-colors ${activeTab === t ? "border-b-2 border-primary text-primary" : "text-muted-foreground hover:text-foreground"}`
+    `shrink-0 px-4 py-2 text-sm font-medium rounded-full transition-colors ${activeTab === t ? "bg-primary/12 text-primary ring-1 ring-inset ring-primary/25" : "text-muted-foreground hover:text-foreground hover:bg-secondary"}`
 
   const streamTitle =
     conf.appearance === "mixed"
@@ -160,16 +150,11 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
         <LiveRefresh endpoint="/api/forum/updates" />
         <LiveRefresh endpoint="/api/diaries/updates" />
         {/* Header */}
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-          <PageHeader
-            context={<span className="tt-eyebrow">What&apos;s new</span>}
-            title="Your Feed"
-            description="Stay updated with the latest activity from across the community"
-          />
-          <div className="shrink-0 pt-1 sm:pt-0">
-            <FeedShareButton activeDiaries={activeDiaries} />
-          </div>
-        </div>
+        <PageHeader
+          context={<span className="tt-eyebrow">What&apos;s new</span>}
+          title="Your Feed"
+          description="Stay updated with the latest activity from across the community"
+        />
 
         {/* Onboarding resume banner */}
         {session?.user?.id && !session.user.onboardingCompletedAt && (
@@ -187,11 +172,17 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
           </div>
         )}
 
+        {/* Composer entry — the share box, before the tabs so creation
+            never sits behind a filter choice */}
+        <div className="mt-6 mb-5">
+          <ShareEntry activeDiaries={activeDiaries} />
+        </div>
+
         {/* 24h stories — authors the viewer follows (plus their own) */}
         <StoryRail entries={storyRail} />
 
-        {/* Feed Tabs */}
-        <div className="flex gap-2 mb-6 border-b border-border overflow-x-auto scrollbar-none">
+        {/* Feed Tabs — pill row matching the Discover surface */}
+        <div className="flex gap-1.5 mb-6 p-1 rounded-2xl bg-secondary/50 border border-border/60 overflow-x-auto scrollbar-none w-full sm:w-fit">
           <Link href="/feed" className={tabCls("latest")}>Latest</Link>
           <Link href="/feed?tab=following" className={tabCls("following")}>Following</Link>
           <Link href="/feed?tab=for-you" className={tabCls("for-you")}>For You</Link>

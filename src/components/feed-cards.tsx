@@ -5,7 +5,7 @@
 // client-fetched continuation pages, so every card must be client-safe
 // and date-tolerant (API pages arrive JSON-serialized).
 import Link from "next/link"
-import { Leaf, MessageSquare, Users, Heart } from "@/lib/icons"
+import { Leaf, MessageSquare, Users, Heart, Dna } from "@/lib/icons"
 import ProfileCard from "@/components/ui/profile-card"
 import Tooltip from "@/components/ui/tooltip"
 import TimeAgo from "@/components/ui/time-ago"
@@ -68,39 +68,38 @@ export function FeedThreadCard({
     )
   }
 
+  // Compact — author-first social card: identity row, then the title,
+  // then the context/action metadata.
   return (
     <Link href={href} className="block p-4 hover:bg-secondary/50 transition-colors">
-      <div className="flex items-start gap-3">
-        <div className="shrink-0 w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center">
-          <MessageSquare className="w-5 h-5 text-primary" />
-        </div>
-        <div className="flex-1 min-w-0">
-          <div className="font-semibold text-sm mb-1 flex items-center gap-2">
-            {unread && (
-              <Tooltip content="New activity" className="shrink-0">
-                <span className="h-2 w-2 rounded-full bg-primary" role="img" aria-label="Unread" />
-              </Tooltip>
-            )}
-            {t.title}
-          </div>
-          <div className="text-xs text-muted-foreground flex items-center gap-2 flex-wrap">
-            <ProfileCard
-              username={t.author.profile?.username}
-              name={t.author.profile?.username || t.author.name}
-              avatarUrl={t.author.image}
-              xp={t.author.profile?.xp}
-              publicMilestoneOptOut={t.author.profile?.publicMilestoneOptOut}
-              size="sm"
-              linked={false}
-            />
-            <span>•</span>
-            <span>{t.category.name}</span>
-            <span>•</span>
-            <span>{t.replyCount} repl{t.replyCount === 1 ? "y" : "ies"}</span>
-            <span>•</span>
-            <span><TimeAgo value={t.createdAt} /></span>
-          </div>
-        </div>
+      <div className="mb-1.5 flex items-center gap-1.5">
+        <ProfileCard
+          username={t.author.profile?.username}
+          name={t.author.profile?.username || t.author.name}
+          avatarUrl={t.author.image}
+          xp={t.author.profile?.xp}
+          publicMilestoneOptOut={t.author.profile?.publicMilestoneOptOut}
+          size="sm"
+          linked={false}
+        />
+        <RoleBadge role={t.author.role} />
+        <span className="ml-auto shrink-0 text-xs text-muted-foreground">
+          <TimeAgo value={t.createdAt} />
+        </span>
+      </div>
+      <h3 className="mb-1.5 flex items-center gap-2 text-sm font-semibold">
+        {unread && (
+          <Tooltip content="New activity" className="shrink-0">
+            <span className="h-2 w-2 rounded-full bg-primary" role="img" aria-label="Unread" />
+          </Tooltip>
+        )}
+        <span className="min-w-0">{t.title}</span>
+      </h3>
+      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+        <span className="inline-flex items-center gap-1 rounded-full bg-secondary/80 px-2 py-0.5 font-medium">
+          <MessageSquare className="h-3 w-3" /> {t.category.name}
+        </span>
+        <span>{t.replyCount} repl{t.replyCount === 1 ? "y" : "ies"}</span>
       </div>
     </Link>
   )
@@ -163,22 +162,29 @@ export function FeedUpdateCard({
   const commentCount = u.diary.visibility === "PUBLIC" ? u._count.comments : 0
   return (
     <Link href={href} className="block p-4 hover:bg-secondary/50 transition-colors">
+      <div className="mb-1.5 flex items-center gap-1.5">
+        <ProfileCard
+          username={u.author.profile?.username}
+          name={u.author.profile?.username || u.author.name}
+          avatarUrl={u.author.image}
+          xp={u.author.profile?.xp}
+          publicMilestoneOptOut={u.author.profile?.publicMilestoneOptOut}
+          size="sm"
+          linked={false}
+        />
+        <span className="ml-auto shrink-0 text-xs text-muted-foreground">
+          <TimeAgo value={u.createdAt} />
+        </span>
+      </div>
       <div className="flex items-start gap-3">
-        {u.images[0]?.url ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={u.images[0].url} alt="" loading="lazy" decoding="async" className="w-10 h-10 rounded-lg object-cover shrink-0" />
-        ) : (
-          <div className="shrink-0 w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center">
-            <Leaf className="w-5 h-5 text-primary" />
-          </div>
-        )}
-        <div className="flex-1 min-w-0">
-          <div className="font-semibold text-sm mb-1">{u.title}</div>
-          <p className="text-xs text-muted-foreground line-clamp-1 mb-1">{u.content}</p>
-          <div className="text-xs text-muted-foreground flex items-center gap-2 flex-wrap">
-            <span className="truncate">{u.diary.title}</span>
-            <span>•</span>
-            <span><TimeAgo value={u.createdAt} /></span>
+        <div className="min-w-0 flex-1">
+          <h3 className="mb-0.5 text-sm font-semibold">{u.title}</h3>
+          <p className="mb-1.5 line-clamp-2 text-xs text-muted-foreground">{u.content}</p>
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+            <span className="inline-flex max-w-full items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 font-medium text-primary">
+              <Leaf className="h-3 w-3 shrink-0" />
+              <span className="truncate">{u.diary.title}</span>
+            </span>
             {u._count.reactions > 0 && (
               <span className="inline-flex items-center gap-0.5" aria-label={`${u._count.reactions} reactions`}>
                 <Heart className="w-3 h-3" /> {u._count.reactions}
@@ -189,6 +195,10 @@ export function FeedUpdateCard({
             </span>
           </div>
         </div>
+        {u.images[0]?.url && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={u.images[0].url} alt="" loading="lazy" decoding="async" className="h-16 w-16 shrink-0 rounded-xl border border-border/50 object-cover" />
+        )}
       </div>
     </Link>
   )
@@ -262,36 +272,41 @@ export function FeedHarvestCard({
 
   return (
     <Link href={href} className="block p-4 hover:bg-secondary/50 transition-colors">
+      <div className="mb-1.5 flex items-center gap-1.5">
+        <ProfileCard
+          username={h.author.profile?.username}
+          name={h.author.profile?.username || h.author.name}
+          avatarUrl={h.author.image}
+          xp={h.author.profile?.xp}
+          publicMilestoneOptOut={h.author.profile?.publicMilestoneOptOut}
+          size="sm"
+          linked={false}
+        />
+        <span className="ml-auto shrink-0 text-xs font-medium text-success">Harvested</span>
+      </div>
       <div className="flex items-start gap-3">
-        {thumb ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={thumb} alt="" loading="lazy" decoding="async" className="w-16 h-16 rounded-xl object-cover shrink-0" />
-        ) : (
-          <div className="shrink-0 w-16 h-16 bg-success/10 rounded-xl flex items-center justify-center">
-            <Leaf className="w-6 h-6 text-success" />
-          </div>
-        )}
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-0.5">
-            <span className="text-xs font-medium text-success">Harvested</span>
-            {h.strain && <span className="text-xs text-muted-foreground truncate">{h.strain}</span>}
-          </div>
-          <h3 className="font-medium text-sm mb-1">{h.title}</h3>
-          <div className="text-xs text-muted-foreground flex items-center gap-2 flex-wrap">
-            <ProfileCard
-              username={h.author.profile?.username}
-              name={h.author.profile?.username || h.author.name}
-              avatarUrl={h.author.image}
-              xp={h.author.profile?.xp}
-              publicMilestoneOptOut={h.author.profile?.publicMilestoneOptOut}
-              size="sm"
-              linked={false}
-            />
-            {dayCount != null && <span>• {dayCount}d</span>}
-            {showYield && <span className="text-success font-medium">• {h.yieldAmount} {h.yieldUnit || "g"}</span>}
-            {h.harvestRating != null && <span className="text-warning">• {h.harvestRating}/10</span>}
+        <div className="min-w-0 flex-1">
+          <h3 className="mb-0.5 text-sm font-semibold">{h.title}</h3>
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+            {h.strain && (
+              <span className="inline-flex max-w-full items-center gap-1 rounded-full bg-secondary/80 px-2 py-0.5 font-medium">
+                <Dna className="h-3 w-3 shrink-0" />
+                <span className="truncate">{h.strain}</span>
+              </span>
+            )}
+            {dayCount != null && <span>{dayCount}d grow</span>}
+            {showYield && <span className="font-medium text-success">{h.yieldAmount} {h.yieldUnit || "g"}</span>}
+            {h.harvestRating != null && <span className="font-medium text-warning">{h.harvestRating}/10</span>}
           </div>
         </div>
+        {thumb ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={thumb} alt="" loading="lazy" decoding="async" className="h-16 w-16 shrink-0 rounded-xl border border-border/50 object-cover" />
+        ) : (
+          <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-xl bg-success/10">
+            <Leaf className="h-6 w-6 text-success" />
+          </div>
+        )}
       </div>
     </Link>
   )

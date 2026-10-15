@@ -3,7 +3,7 @@ import type { ReactNode } from "react"
 import {
   Zap, Sprout, Bell, ArrowRight, Leaf, Users, Radio, TrendingUp, CheckCircle2, Circle,
   MessageCircle, MessageSquare, Eye, AlertTriangle, Gauge, Bug, Wrench, Clock, Wheat, FlaskConical, BookOpen,
-  HeartHandshake, Calendar, HelpCircle, Sparkles,
+  HeartHandshake, Calendar, HelpCircle, Sparkles, UserPlus,
 } from "@/lib/icons"
 import MemberGreeting from "@/components/member-greeting"
 import OpenChatButton from "@/components/open-chat-button"
@@ -12,8 +12,15 @@ import EmptyState from "@/components/ui/empty-state"
 import SuggestedGrowerCard from "@/components/suggested-grower-card"
 import StageProgress from "@/components/stage-progress"
 import PushToggle from "@/components/push-toggle"
+import ShareEntry from "@/components/share-entry"
+import StoryRail from "@/components/story-rail"
+import FeedList from "@/components/feed-list"
 import { DIFFICULTY_LABELS } from "@/lib/grow-fields"
 import type { MemberHomeData } from "@/lib/member-home"
+import type { FeedItem } from "@/lib/feed"
+import { FEED_KINDS } from "@/lib/feed"
+import type { StoryRailEntry } from "@/lib/moments"
+import type { FeedableDiary } from "@/components/feed-share-button"
 import { diaryPath } from "@/lib/slugs"
 import { updateAnchor } from "@/lib/update-social"
 import { withVia } from "@/lib/event-sources"
@@ -97,7 +104,26 @@ function MiniEmpty({ text, cta, children }: { text: string; cta?: { href: string
   )
 }
 
-export default function MemberHome({ data }: { data: MemberHomeData }) {
+interface MemberFeed {
+  items: FeedItem[]
+  nextCursor: string | null
+  coldStart: boolean
+  unreadThreadIds: string[]
+}
+
+export default function MemberHome({
+  data,
+  feed,
+  stories = [],
+  activeDiaries = [],
+  viewerId,
+}: {
+  data: MemberHomeData
+  feed?: MemberFeed
+  stories?: StoryRailEntry[]
+  activeDiaries?: FeedableDiary[]
+  viewerId?: string | null
+}) {
   const { sinceLastVisit: s } = data
   const hasActivity =
     s.unreadThreads.length > 0 || s.diaryUpdates.length > 0 || s.growerThreads.length > 0 ||
@@ -105,7 +131,7 @@ export default function MemberHome({ data }: { data: MemberHomeData }) {
 
   return (
     <div className="min-h-screen bg-background">
-      <div className="mx-auto max-w-5xl px-4 py-6 sm:py-8">
+      <div className="mx-auto max-w-6xl px-4 py-6 sm:py-8">
         {/* Header — greeting + standing, compact */}
         <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
           <div className="min-w-0">
@@ -130,112 +156,257 @@ export default function MemberHome({ data }: { data: MemberHomeData }) {
           </Tooltip>
         </div>
 
-        {/* Quick social bridge — compact, never replaces the dashboard */}
-        <div className="mb-4 flex flex-wrap items-center gap-2">
-          <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mr-1">Community</span>
-          <Link
-            href="/feed"
-            className="inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-card px-3 py-1.5 text-xs font-medium hover:border-primary/40 hover:bg-secondary transition-colors"
-          >
-            <Calendar className="h-3.5 w-3.5" />
-            Your feed
-          </Link>
-          <Link
-            href="/feed?tab=following"
-            className="inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-card px-3 py-1.5 text-xs font-medium hover:border-primary/40 hover:bg-secondary transition-colors"
-          >
-            <Users className="h-3.5 w-3.5" />
-            Following
-          </Link>
-          <Link
-            href="/discover"
-            className="inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-card px-3 py-1.5 text-xs font-medium hover:border-primary/40 hover:bg-secondary transition-colors"
-          >
-            <TrendingUp className="h-3.5 w-3.5" />
-            Discover growers
-          </Link>
-          <Link
-            href="/forum/new"
-            className="inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-card px-3 py-1.5 text-xs font-medium hover:border-primary/40 hover:bg-secondary transition-colors"
-          >
-            <HelpCircle className="h-3.5 w-3.5" />
-            Ask a question
-          </Link>
-        </div>
-
-        {/* Next action — the single most useful thing to do */}
-        <Link
-          href={data.nextAction.href}
-          className="group relative mb-6 flex items-center gap-4 overflow-hidden rounded-2xl border border-primary/30 bg-primary/5 p-4 transition-colors hover:border-primary/60 hover:bg-primary/10 sm:p-5"
-        >
-          <span className="pointer-events-none absolute inset-x-0 top-0 h-0.5 bg-linear-to-r from-primary via-spectrum to-amber-500" aria-hidden="true" />
-          <span className="text-2xl" aria-hidden="true">{data.nextAction.icon}</span>
-          <div className="min-w-0 flex-1">
-            <Tooltip content="Suggested next step — picked from your progress and activity">
-              <p className="text-[11px] font-semibold uppercase tracking-wider text-primary">
-                Next up
-              </p>
-            </Tooltip>
-            <p className="truncate text-sm font-medium sm:text-base">{data.nextAction.text}</p>
-          </div>
-          <span className="tt-cta inline-flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-2 text-sm font-semibold text-primary-foreground transition-all">
-            {data.nextAction.cta} <ArrowRight className="h-4 w-4" />
-          </span>
-        </Link>
-
         {/* Web Push invitation — client decides final visibility */}
         {data.pushInvite && <PushToggle variant="invite" />}
 
-        {/* Needs attention — grow signals, not notifications */}
-        {data.attention.length > 0 && (
-          <section className="mb-6 bg-card/80 rounded-2xl border border-warning/30 p-4 sm:p-5">
-            <div className="mb-3 flex items-center justify-between gap-2">
-              <h2 className="flex items-center gap-2 font-display text-sm font-semibold">
-                <AlertTriangle className="h-4 w-4 text-warning" />
-                Needs attention
-                <InfoTip content="Flagged from your own diaries — a reading out of range, an open symptom report, a follow-up waiting, or a diary that's gone quiet. Not notifications; nothing here is manufactured." />
-              </h2>
-            </div>
-            <ul className="space-y-1.5">
-              {data.attention.map((a, i) => (
-                <li key={`${a.diaryId}-${i}`}>
-                  <Link
-                    href={a.href}
-                    className="group flex items-center gap-2.5 rounded-xl px-3 py-2 hover:bg-secondary/60"
-                  >
-                    {a.kind === "concern" ? (
-                      <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-warning" aria-label="Reading out of range" />
-                    ) : a.kind === "episode" ? (
-                      <Bug className="h-3.5 w-3.5 shrink-0 text-destructive" aria-label="Open symptom report" />
-                    ) : a.kind === "due" ? (
-                      <Gauge className="h-3.5 w-3.5 shrink-0 text-primary" aria-label="Measurement due" />
-                    ) : a.kind === "intervention" ? (
-                      <Wrench className="h-3.5 w-3.5 shrink-0 text-spectrum" aria-label="Adjustment awaiting follow-up" />
-                    ) : a.kind === "experiment" ? (
-                      <FlaskConical className="h-3.5 w-3.5 shrink-0 text-primary" aria-label="Experiment awaiting observation" />
-                    ) : (
-                      <Clock className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-label="Diary going stale" />
-                    )}
-                    <span className="min-w-0 flex-1 truncate text-sm">
-                      {a.text}
-                      <span className="text-muted-foreground"> — {a.diaryTitle}</span>
-                    </span>
-                    <ArrowRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </section>
-        )}
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_20rem]">
+          {/* ── Main column: share → stories → the community stream ── */}
+          <div className="min-w-0 space-y-4">
+            {/* Needs attention — grow signals, not notifications */}
+            {data.attention.length > 0 && (
+              <section className="bg-card/80 rounded-2xl border border-warning/30 p-4 sm:p-5">
+                <div className="mb-3 flex items-center justify-between gap-2">
+                  <h2 className="flex items-center gap-2 font-display text-sm font-semibold">
+                    <AlertTriangle className="h-4 w-4 text-warning" />
+                    Needs attention
+                    <InfoTip content="Flagged from your own diaries — a reading out of range, an open symptom report, a follow-up waiting, or a diary that's gone quiet. Not notifications; nothing here is manufactured." />
+                  </h2>
+                </div>
+                <ul className="space-y-1.5">
+                  {data.attention.map((a, i) => (
+                    <li key={`${a.diaryId}-${i}`}>
+                      <Link
+                        href={a.href}
+                        className="group flex items-center gap-2.5 rounded-xl px-3 py-2 hover:bg-secondary/60"
+                      >
+                        {a.kind === "concern" ? (
+                          <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-warning" aria-label="Reading out of range" />
+                        ) : a.kind === "episode" ? (
+                          <Bug className="h-3.5 w-3.5 shrink-0 text-destructive" aria-label="Open symptom report" />
+                        ) : a.kind === "due" ? (
+                          <Gauge className="h-3.5 w-3.5 shrink-0 text-primary" aria-label="Measurement due" />
+                        ) : a.kind === "intervention" ? (
+                          <Wrench className="h-3.5 w-3.5 shrink-0 text-spectrum" aria-label="Adjustment awaiting follow-up" />
+                        ) : a.kind === "experiment" ? (
+                          <FlaskConical className="h-3.5 w-3.5 shrink-0 text-primary" aria-label="Experiment awaiting observation" />
+                        ) : (
+                          <Clock className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-label="Diary going stale" />
+                        )}
+                        <span className="min-w-0 flex-1 truncate text-sm">
+                          {a.text}
+                          <span className="text-muted-foreground"> — {a.diaryTitle}</span>
+                        </span>
+                        <ArrowRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
 
-        <div className="grid gap-4 md:grid-cols-2">
-          {/* Today's quests */}
-          <Card
-            icon={<Zap className="h-4 w-4 text-warning" />}
-            title="Today's quests"
-            tip="Small optional tasks that refresh daily — each pays the listed XP. Hover a quest to see how to complete it."
-            action={{ href: "/progress", label: "All progress" }}
-          >
+            {/* Composer entry — one share box, every real workflow */}
+            <ShareEntry activeDiaries={activeDiaries} />
+
+            {/* 24h stories — authors the member follows (plus their own) */}
+            {stories.length > 0 && <StoryRail entries={stories} />}
+
+            {/* Community stream — the canonical feed, embedded */}
+            <section className="tt-spotlight overflow-hidden rounded-2xl border border-border/70 bg-card/80">
+              <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-border p-4">
+                <h2 className="flex items-center gap-2 font-display text-sm font-semibold">
+                  <Link href="/feed" className="inline-flex items-center gap-2 hover:text-primary transition-colors">
+                    <Calendar className="h-4 w-4 text-primary" />
+                    Your feed
+                  </Link>
+                  <InfoTip content="Your For You stream — the same feed as /feed?tab=for-you, ranked deterministically from what you follow and what's active." />
+                </h2>
+                <div className="flex items-center gap-1.5">
+                  <Link
+                    href="/feed?tab=following"
+                    className="inline-flex items-center gap-1.5 rounded-full border border-border/70 px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:border-primary/40 hover:bg-secondary hover:text-foreground"
+                  >
+                    <Users className="h-3.5 w-3.5" />
+                    Following
+                  </Link>
+                  <Link
+                    href="/discover"
+                    className="inline-flex items-center gap-1.5 rounded-full border border-border/70 px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:border-primary/40 hover:bg-secondary hover:text-foreground"
+                  >
+                    <TrendingUp className="h-3.5 w-3.5" />
+                    Discover
+                  </Link>
+                  <Link
+                    href="/forum/new"
+                    className="inline-flex items-center gap-1.5 rounded-full border border-border/70 px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:border-primary/40 hover:bg-secondary hover:text-foreground"
+                  >
+                    <HelpCircle className="h-3.5 w-3.5" />
+                    Ask a question
+                  </Link>
+                </div>
+              </div>
+              {feed && feed.coldStart && feed.items.length > 0 && (
+                <div className="border-b border-border px-4 py-2.5 text-xs text-muted-foreground flex items-center gap-2">
+                  <UserPlus className="h-3.5 w-3.5 text-primary shrink-0" />
+                  <span>
+                    Your feed is getting started — showing community highlights.{" "}
+                    <Link href="/discover?tab=growers" className="text-primary hover:underline">Follow growers</Link>{" "}
+                    to personalize it.
+                  </span>
+                </div>
+              )}
+              {feed && feed.items.length > 0 ? (
+                <FeedList
+                  mode="for-you"
+                  kinds={FEED_KINDS}
+                  initialItems={feed.items}
+                  initialCursor={feed.nextCursor}
+                  initialUnreadThreadIds={feed.unreadThreadIds}
+                  appearance="mixed"
+                  viewerId={viewerId}
+                />
+              ) : (
+                <div className="p-8 text-center">
+                  <Calendar className="mx-auto mb-3 h-10 w-10 text-muted-foreground" />
+                  <h3 className="font-display text-base font-semibold">Your feed is quiet</h3>
+                  <p className="mx-auto mt-1 max-w-sm text-sm text-muted-foreground">
+                    Follow growers and diaries, or check what the whole community is up to.
+                  </p>
+                  <div className="mt-4 flex flex-wrap justify-center gap-2">
+                    <Link
+                      href="/feed"
+                      className="inline-flex items-center rounded-full bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90"
+                    >
+                      Browse the community feed
+                    </Link>
+                    <Link
+                      href="/discover?tab=growers"
+                      className="inline-flex items-center rounded-full border border-border px-4 py-2 text-sm font-medium hover:bg-secondary"
+                    >
+                      Find growers to follow
+                    </Link>
+                  </div>
+                </div>
+              )}
+            </section>
+          </div>
+
+          {/* ── Right rail: the member's own cockpit ── */}
+          <aside className="min-w-0 space-y-4">
+            {/* Next action — the single most useful thing to do */}
+            <Link
+              href={data.nextAction.href}
+              className="group relative flex items-center gap-3 overflow-hidden rounded-2xl border border-primary/30 bg-primary/5 p-4 transition-colors hover:border-primary/60 hover:bg-primary/10"
+            >
+              <span className="pointer-events-none absolute inset-x-0 top-0 h-0.5 bg-linear-to-r from-primary via-spectrum to-amber-500" aria-hidden="true" />
+              <span className="text-2xl" aria-hidden="true">{data.nextAction.icon}</span>
+              <div className="min-w-0 flex-1">
+                <Tooltip content="Suggested next step — picked from your progress and activity">
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-primary">
+                    Next up
+                  </p>
+                </Tooltip>
+                <p className="truncate text-sm font-medium">{data.nextAction.text}</p>
+              </div>
+              <ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
+            </Link>
+
+            {/* Your grows */}
+            <Card
+              icon={<Sprout className="h-4 w-4 text-primary" />}
+              title="Your grows"
+              tip="Your active grow diaries — stage, age, latest readings and what to check next."
+              action={data.grows.length > 0 ? { href: "/diaries", label: "All diaries" } : undefined}
+            >
+              {data.grows.length === 0 ? (
+                <MiniEmpty
+                  text="No active grow diary — documenting your grow unlocks journey milestones and XP."
+                  cta={{ href: "/diaries/new", label: "Start your first grow diary" }}
+                />
+              ) : (
+                <ul className="space-y-2.5">
+                  {data.grows.map((g) => (
+                    <li key={g.id}>
+                      <Link
+                        href={diaryPath(g)}
+                        className="flex items-start gap-3 rounded-xl border border-border/70 bg-secondary/30 p-3 transition-colors hover:border-primary/40"
+                      >
+                        {g.photo && (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={g.photo}
+                            alt=""
+                            className="h-14 w-14 shrink-0 rounded-lg border border-border/50 object-cover"
+                          />
+                        )}
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="min-w-0 truncate text-sm font-medium">{g.title}</p>
+                            <Tooltip
+                              content={
+                                g.journey?.next
+                                  ? `Journey: next milestone is ${g.journey.next.name} — ${g.journey.next.summary}`
+                                  : "Grow journey complete"
+                              }
+                              align="end"
+                            >
+                              <span className="shrink-0 text-xs">{g.stageLabel}</span>
+                            </Tooltip>
+                          </div>
+                          <p className="mt-0.5 truncate text-xs text-muted-foreground" suppressHydrationWarning>
+                            {[
+                              g.strain?.name,
+                              g.day != null ? `day ${g.day}` : null,
+                              g.week != null && g.week > 0 ? `wk ${g.week}` : null,
+                              g.latestReading,
+                              g.activeExperiments > 0
+                                ? `${g.activeExperiments} experiment${g.activeExperiments === 1 ? "" : "s"}`
+                                : null,
+                              timeAgo(g.updatedAt),
+                            ]
+                              .filter(Boolean)
+                              .join(" · ")}
+                          </p>
+                          <StageProgress stage={g.stage} className="mt-1.5" />
+                          {/* Log completeness — the owner-facing documentation
+                              signal, same metric as the diary hero. */}
+                          <div className="mt-1.5 flex items-center gap-1.5" title="Log completeness">
+                            <span className="h-1 w-16 overflow-hidden rounded-full bg-secondary">
+                              <span
+                                className={cn("block h-full rounded-full", g.completeness >= 80 ? "bg-success" : "bg-primary/70")}
+                                style={{ width: `${g.completeness}%` }}
+                              />
+                            </span>
+                            <span className="text-[10px] text-muted-foreground">
+                              {g.completeness >= 80 ? "Well documented" : `${g.completeness}% logged`}
+                            </span>
+                          </div>
+                          {g.nextStep && (
+                            <p className={cn(
+                              "mt-1 truncate text-xs",
+                              g.flagCount > 0 ? "text-foreground/90" : "text-muted-foreground"
+                            )}>
+                              <span className={cn(
+                                "mr-1 inline-block h-1.5 w-1.5 rounded-full align-middle",
+                                g.flagCount > 0 ? "bg-warning" : "bg-primary"
+                              )} aria-hidden="true" />
+                              {g.nextStep}
+                            </p>
+                          )}
+                        </div>
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </Card>
+
+            {/* Today's quests */}
+            <Card
+              icon={<Zap className="h-4 w-4 text-warning" />}
+              title="Today's quests"
+              tip="Small optional tasks that refresh daily — each pays the listed XP. Hover a quest to see how to complete it."
+              action={{ href: "/progress", label: "All progress" }}
+            >
             {data.quests.length === 0 ? (
               <MiniEmpty
                 text="No quests today — check the leaderboard or help a grower."
@@ -270,96 +441,6 @@ export default function MemberHome({ data }: { data: MemberHomeData }) {
                         </Tooltip>
                       )}
                     </span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </Card>
-
-          {/* Your grows */}
-          <Card
-            icon={<Sprout className="h-4 w-4 text-primary" />}
-            title="Your grows"
-            tip="Your active grow diaries — stage, age, latest readings and what to check next."
-            action={data.grows.length > 0 ? { href: "/diaries", label: "All diaries" } : undefined}
-          >
-            {data.grows.length === 0 ? (
-              <MiniEmpty
-                text="No active grow diary — documenting your grow unlocks journey milestones and XP."
-                cta={{ href: "/diaries/new", label: "Start your first grow diary" }}
-              />
-            ) : (
-              <ul className="space-y-2.5">
-                {data.grows.map((g) => (
-                  <li key={g.id}>
-                    <Link
-                      href={diaryPath(g)}
-                      className="flex items-start gap-3 rounded-xl border border-border/70 bg-secondary/30 p-3 transition-colors hover:border-primary/40"
-                    >
-                      {g.photo && (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={g.photo}
-                          alt=""
-                          className="h-14 w-14 shrink-0 rounded-lg border border-border/50 object-cover"
-                        />
-                      )}
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center justify-between gap-2">
-                          <p className="min-w-0 truncate text-sm font-medium">{g.title}</p>
-                          <Tooltip
-                            content={
-                              g.journey?.next
-                                ? `Journey: next milestone is ${g.journey.next.name} — ${g.journey.next.summary}`
-                                : "Grow journey complete"
-                            }
-                            align="end"
-                          >
-                            <span className="shrink-0 text-xs">{g.stageLabel}</span>
-                          </Tooltip>
-                        </div>
-                        <p className="mt-0.5 truncate text-xs text-muted-foreground" suppressHydrationWarning>
-                          {[
-                            g.strain?.name,
-                            g.day != null ? `day ${g.day}` : null,
-                            g.week != null && g.week > 0 ? `wk ${g.week}` : null,
-                            g.latestReading,
-                            g.activeExperiments > 0
-                              ? `${g.activeExperiments} experiment${g.activeExperiments === 1 ? "" : "s"}`
-                              : null,
-                            timeAgo(g.updatedAt),
-                          ]
-                            .filter(Boolean)
-                            .join(" · ")}
-                        </p>
-                        <StageProgress stage={g.stage} className="mt-1.5" />
-                        {/* Log completeness — the owner-facing documentation
-                            signal, same metric as the diary hero. */}
-                        <div className="mt-1.5 flex items-center gap-1.5" title="Log completeness">
-                          <span className="h-1 w-16 overflow-hidden rounded-full bg-secondary">
-                            <span
-                              className={cn("block h-full rounded-full", g.completeness >= 80 ? "bg-success" : "bg-primary/70")}
-                              style={{ width: `${g.completeness}%` }}
-                            />
-                          </span>
-                          <span className="text-[10px] text-muted-foreground">
-                            {g.completeness >= 80 ? "Well documented" : `${g.completeness}% logged`}
-                          </span>
-                        </div>
-                        {g.nextStep && (
-                          <p className={cn(
-                            "mt-1 truncate text-xs",
-                            g.flagCount > 0 ? "text-foreground/90" : "text-muted-foreground"
-                          )}>
-                            <span className={cn(
-                              "mr-1 inline-block h-1.5 w-1.5 rounded-full align-middle",
-                              g.flagCount > 0 ? "bg-warning" : "bg-primary"
-                            )} aria-hidden="true" />
-                            {g.nextStep}
-                          </p>
-                        )}
-                      </div>
-                    </Link>
                   </li>
                 ))}
               </ul>
@@ -506,6 +587,24 @@ export default function MemberHome({ data }: { data: MemberHomeData }) {
               </MiniEmpty>
             )}
           </Card>
+
+          {/* Growers to follow — deterministic suggestions matched on the
+              member's public grow signals + follow graph. */}
+          {data.suggestedGrowers.length > 0 && (
+            <Card
+              icon={<Users className="h-4 w-4 text-primary" />}
+              title="Growers to follow"
+              tip="Members whose public grows, strains, and contributions match yours — ranked deterministically, never by popularity."
+              action={{ href: "/discover?tab=growers", label: "All growers" }}
+            >
+              <div className="space-y-3">
+                {data.suggestedGrowers.slice(0, 3).map((g) => (
+                  <SuggestedGrowerCard key={g.userId} grower={g} source="member_home" />
+                ))}
+              </div>
+            </Card>
+          )}
+          </aside>
         </div>
 
         {/* Grow knowledge — the member's own documented history:
@@ -754,32 +853,6 @@ export default function MemberHome({ data }: { data: MemberHomeData }) {
                 </li>
               ))}
             </ul>
-          </section>
-        )}
-
-        {/* Growers to follow — deterministic suggestions matched on the
-            member's public grow signals + follow graph (canonical
-            lib/suggested-growers). Every reason cites a real signal. */}
-        {data.suggestedGrowers.length > 0 && (
-          <section className="mt-4 tt-spotlight bg-card/80 rounded-2xl border border-border/70 p-4 sm:p-5">
-            <div className="mb-3 flex items-center justify-between gap-2">
-              <h2 className="flex items-center gap-2 font-display text-sm font-semibold">
-                <Users className="h-4 w-4 text-primary" />
-                Growers to follow
-                <InfoTip content="Members whose public grows, strains, and contributions match yours — ranked deterministically, never by popularity." />
-              </h2>
-              <Link
-                href="/discover?tab=growers"
-                className="tap-target shrink-0 text-xs font-medium text-primary inline-flex items-center gap-0.5 hover:underline"
-              >
-                All growers <ArrowRight className="h-3 w-3" />
-              </Link>
-            </div>
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {data.suggestedGrowers.map((g) => (
-                <SuggestedGrowerCard key={g.userId} grower={g} source="member_home" />
-              ))}
-            </div>
           </section>
         )}
 
