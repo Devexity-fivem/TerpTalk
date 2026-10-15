@@ -25,6 +25,9 @@ export const NOTIFICATION_TYPES = [
   "BOT_ASSIST",
   // New primary content (diary/thread) from a member the recipient follows.
   "FOLLOWED_CONTENT",
+  // Batch R1 grow-loop reminder — dedicated lane with its own preference,
+  // 7-day throttle, and push eligibility. See lib/diary-reminders.ts.
+  "DIARY_REMINDER",
 ] as const
 
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number]
@@ -56,6 +59,7 @@ export const TYPE_CATEGORY: Record<NotificationType, string> = {
   REFERRAL: "SYSTEM",
   MODERATOR_ANNOUNCEMENT: "MODERATION",
   BOT_ASSIST: "SYSTEM",
+  DIARY_REMINDER: "SYSTEM",
   FOLLOWED_CONTENT: "CONTENT",
 }
 
@@ -74,6 +78,7 @@ export const TYPE_PREF = {
   REPUTATION: "notifyOnMilestone",
   ACCEPTED_ANSWER: "notifyOnMilestone",
   BOT_ASSIST: "notifyOnBotAssist",
+  DIARY_REMINDER: "notifyOnDiaryReminder",
   FOLLOWED_CONTENT: "notifyOnCategoryFollow",
 } as const
 
@@ -89,6 +94,7 @@ const PREF_SELECT = {
   notifyOnReaction: true,
   notifyOnMilestone: true,
   notifyOnBotAssist: true,
+  notifyOnDiaryReminder: true,
 } as const
 
 // Actor fields exposed to the client — username + avatar only.

@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { Leaf, Loader2, Scale } from "@/lib/icons"
+import { Leaf, Loader2, Scale, X } from "@/lib/icons"
 import ConfirmDialog from "@/components/ui/confirm-dialog"
 import { useRouter } from "next/navigation"
 
@@ -50,6 +50,28 @@ export default function HarvestForm({
   const [difficulty, setDifficulty] = useState(initialDifficulty || "")
   const [notes, setNotes] = useState(initialNotes || "")
   const [yieldPrivate, setYieldPrivate] = useState(initialYieldPrivate)
+
+  // Harvest-completion nudge — owner-only (HarvestForm renders inside the
+  // canEdit section). "Complete" mirrors the canonical GROW_COMPLETE
+  // definition: yield amount + strain rating + harvest notes recorded.
+  // Dismissal persists per diary (localStorage) so it never nags; saving
+  // the missing fields removes it via router.refresh().
+  const promptDismissedKey = `tt-harvest-nudge:${diaryId}`
+  const [promptDismissed, setPromptDismissed] = useState(() => {
+    try {
+      return typeof window !== "undefined" && window.localStorage.getItem(promptDismissedKey) === "1"
+    } catch {
+      return false
+    }
+  })
+  const missingFinalFields = initialAmount == null || initialRating == null || !initialNotes?.trim()
+  const showHarvestPrompt = canEdit && harvested && missingFinalFields && !promptDismissed
+  const dismissPrompt = () => {
+    setPromptDismissed(true)
+    try {
+      window.localStorage.setItem(promptDismissedKey, "1")
+    } catch { /* private mode — the state flag still hides it this session */ }
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -146,6 +168,30 @@ export default function HarvestForm({
           </div>
         )}
       </div>
+
+      {showHarvestPrompt && (
+        <div className="mt-4 flex items-center gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3.5 py-3" role="note">
+          <Scale className="w-4 h-4 text-amber-500 shrink-0" />
+          <p className="flex-1 text-sm text-foreground min-w-40">
+            Finish your harvest record — add yield, a strain rating, or grow notes so this grow counts as complete.
+          </p>
+          <button
+            type="button"
+            onClick={() => setOpen(true)}
+            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold rounded-full bg-primary text-primary-foreground hover:bg-primary/90 transition-colors min-h-9 shrink-0"
+          >
+            Complete record
+          </button>
+          <button
+            type="button"
+            onClick={dismissPrompt}
+            aria-label="Dismiss harvest reminder"
+            className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary/60 transition-colors shrink-0"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
 
       {harvested && (initialAmount || initialAt) && (
         <div className="mt-4 flex flex-wrap items-center gap-3 text-sm">

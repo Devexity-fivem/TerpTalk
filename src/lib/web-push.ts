@@ -11,14 +11,16 @@ import { prisma } from "@/lib/prisma"
 // and delivery runs after the response via after()/waitUntil.
 
 /** Which logical notifications are worth an OS-level interruption.
- *  Intentionally quiet: replies, mentions, accepted answers, and two
- *  TerpBot assists (weekly digest, Plant Doctor follow-up). Reactions,
- *  follows, chat, diary updates, and other assists stay in-app only. */
+ *  Intentionally quiet: replies, mentions, accepted answers, the grow-loop
+ *  diary reminder, and two TerpBot assists (weekly digest, Plant Doctor
+ *  follow-up). Reactions, follows, chat, diary updates, and other assists
+ *  stay in-app only. */
 export function pushCategory(n: { type: string; groupKey?: string | null }): string | null {
   switch (n.type) {
     case "REPLY":
     case "MENTION":
     case "ACCEPTED_ANSWER":
+    case "DIARY_REMINDER":
       return n.type
     case "BOT_ASSIST": {
       // botAssist groupKey = `bot-assist:<kind>:<userId>`

@@ -108,6 +108,25 @@ interface PageContext {
   strainId?: string
 }
 
+/** Own-diary shape returned by GET /api/diaries (owner-scoped picker feed). */
+interface MineDiary {
+  id: string
+  title: string
+  stage: string
+  harvested: boolean
+  visibility?: string
+  strain?: string | null
+  strainRef?: { name: string } | null
+}
+
+// Diary kinds a type can log onto. grow-update/experiment need a live
+// grow; harvest legitimately applies to an already-harvested diary too
+// (finishing the record is the Feature-D prompt's destination).
+function eligibleMineDiaries(diaries: MineDiary[], type: ComposerType): MineDiary[] {
+  if (type === "harvest") return diaries
+  return diaries.filter((d) => !d.harvested && d.stage !== "HARVESTED" && d.stage !== "COMPLETE")
+}
+
 function getPageContext(pathname: string): PageContext {
   const parts = pathname.split("/").filter(Boolean)
   if (parts[0] === "diaries" && parts[1] && parts[1] !== "new" && !pathname.endsWith("/edit")) {
@@ -153,6 +172,8 @@ function ShareComposerDialog({ prefill, onClose }: { prefill?: ComposerPrefill; 
   )
   const [strainInfo, setStrainInfo] = useState<{ id: string; name: string } | null>(null)
   const [ctxChecked, setCtxChecked] = useState(() => !!prefill?.diary)
+  // Own-diaries snapshot for the log-to-diary picker — null = not fetched.
+  const [mineDiaries, setMineDiaries] = useState<MineDiary[] | null>(null)
   const isStaff = STAFF.has((session?.user as { role?: string } | undefined)?.role ?? "")
   // null = session still resolving — standing decides whether the poll
   // type is unlocked. Derived from session data loaded by the auth
@@ -192,6 +213,34 @@ function ShareComposerDialog({ prefill, onClose }: { prefill?: ComposerPrefill; 
       setCtxChecked(true)
     })
   }, [ctx.diaryId, ctx.strainId, prefill?.diary])
+
+  // Log-to-diary resolution — when a diary-bound type has no diary yet,
+  // fetch the member's own diaries once (owner-scoped endpoint). One
+  // eligible grow auto-selects; several show the picker; none shows the
+  // start-a-diary path. Runs only when no diary is already chosen and the
+  // page-context diary isn't foreign-owned (that case has its own message).
+  useEffect(() => {
+    if (!session || mineDiaries !== null) return
+    if (type !== "grow-update" && type !== "harvest" && type !== "experiment") return
+    if (diaryInfo) return
+    let cancelled = false
+    fetch("/api/diaries")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (!cancelled) setMineDiaries(d?.diaries ?? []) })
+      .catch(() => { if (!cancelled) setMineDiaries([]) })
+    return () => { cancelled = true }
+  }, [session, type, diaryInfo, mineDiaries])
+
+  // Single eligible grow → one-tap path (auto-select without a picker).
+  useEffect(() => {
+    if (!mineDiaries || diaryInfo) return
+    if (type !== "grow-update" && type !== "harvest" && type !== "experiment") return
+    const eligible = eligibleMineDiaries(mineDiaries, type)
+    if (eligible.length === 1) {
+      const d = eligible[0]
+      queueMicrotask(() => setDiaryInfo({ id: d.id, title: d.title, stage: d.stage, harvested: d.harvested, own: true }))
+    }
+  }, [mineDiaries, diaryInfo, type])
 
   // Poll perk gate — mirrors POST /api/forum/threads; server still enforces.
   // The session-derived hint above replaces the old /api/profile fetch.
@@ -400,24 +449,65 @@ function ShareComposerDialog({ prefill, onClose }: { prefill?: ComposerPrefill; 
               <Loader2 className="w-5 h-5 animate-spin text-muted-foreground mx-auto" />
             </div>
           ) : needsDiary ? (
-            <div className="text-center py-6">
-              <Sprout className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
-              <p className="text-sm text-muted-foreground mb-3">
-                {diaryInfo && diaryInfo.own !== true
-                  ? "This grow belongs to another member — only its grower can post updates, experiments, or a harvest."
-                  : type === "harvest" || type === "experiment"
+            diaryInfo && diaryInfo.own !== true ? (
+              <div className="text-center py-6">
+                <Sprout className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
+                <p className="text-sm text-muted-foreground mb-3">
+                  This grow belongs to another member — only its grower can post updates, experiments, or a harvest.
+                </p>
+              </div>
+            ) : mineDiaries === null ? (
+              <div className="py-6 text-center" role="status" aria-label="Loading your grows">
+                <Loader2 className="w-5 h-5 animate-spin text-muted-foreground mx-auto" />
+              </div>
+            ) : eligibleMineDiaries(mineDiaries, type).length === 0 ? (
+              <div className="text-center py-6">
+                <Sprout className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
+                <p className="text-sm text-muted-foreground mb-3">
+                  {type === "harvest" || type === "experiment"
                     ? "Harvest logging happens on a grow diary — open your grow first."
-                    : "Open a grow diary to share an update, or start a new one."}
-              </p>
-              {(!diaryInfo || diaryInfo.own === true) && (
+                    : "You don't have an active grow yet — start one to log updates."}
+                </p>
                 <button
                   onClick={() => setType("diary")}
                   className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors min-h-11"
                 >
                   <Sprout className="w-4 h-4" /> Start a grow diary
                 </button>
-              )}
-            </div>
+              </div>
+            ) : (
+              <div>
+                <p className="text-sm font-medium mb-2">Which grow is this for?</p>
+                <div className="space-y-1.5" role="listbox" aria-label="Choose a grow diary">
+                  {eligibleMineDiaries(mineDiaries, type).map((d) => (
+                    <button
+                      key={d.id}
+                      type="button"
+                      onClick={() => setDiaryInfo({ id: d.id, title: d.title, stage: d.stage, harvested: d.harvested, own: true })}
+                      className="w-full flex items-center gap-3 p-3 rounded-xl border border-border/70 bg-secondary/30 hover:bg-secondary/60 hover:border-primary/40 transition-colors text-left min-h-11"
+                      role="option"
+                      aria-selected="false"
+                    >
+                      <Sprout className="w-4 h-4 text-primary shrink-0" />
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-sm font-medium truncate">{d.title}</span>
+                        <span className="block text-xs text-muted-foreground">
+                          {d.stage.toLowerCase()}
+                          {d.strainRef?.name || d.strain ? ` · ${d.strainRef?.name ?? d.strain}` : ""}
+                          {d.harvested ? " · harvested" : ""}
+                        </span>
+                      </span>
+                    </button>
+                  ))}
+                </div>
+                <button
+                  onClick={() => setType("diary")}
+                  className="mt-3 text-xs text-muted-foreground hover:text-foreground transition-colors underline underline-offset-2"
+                >
+                  Or start a new grow diary
+                </button>
+              </div>
+            )
           ) : type === "moment" || type === "story" ? (
             <MomentForm
               story={type === "story"}

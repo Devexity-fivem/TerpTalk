@@ -21,7 +21,11 @@ const chipCls =
 export default function ShareEntry({ activeDiaries = [] }: ShareEntryProps) {
   const { data: session } = useSession()
   const composer = useShareComposer()
-  const preferred = activeDiaries.find((d) => !d.harvested) ?? activeDiaries[0]
+  // Exactly one live grow → one-tap prefill. More than one → the composer
+  // opens its own-diary picker (it refetches, so this take:2 list just
+  // decides the label). None → the start-a-diary path.
+  const live = activeDiaries.filter((d) => !d.harvested)
+  const preferred = live.length === 1 ? live[0] : null
 
   return (
     <div className="tt-spotlight rounded-2xl border border-border/70 bg-card/80 p-3 sm:p-4">
@@ -50,25 +54,29 @@ export default function ShareEntry({ activeDiaries = [] }: ShareEntryProps) {
           <Clock className="h-4 w-4 text-primary" aria-hidden="true" />
           Story
         </button>
-        {preferred ? (
+        {live.length > 0 ? (
           <button
             type="button"
             onClick={() =>
               composer.open({
                 type: "grow-update",
-                diary: {
-                  id: preferred.id,
-                  title: preferred.title,
-                  stage: preferred.stage,
-                  harvested: preferred.harvested,
-                  own: true,
-                },
+                ...(preferred
+                  ? {
+                      diary: {
+                        id: preferred.id,
+                        title: preferred.title,
+                        stage: preferred.stage,
+                        harvested: preferred.harvested,
+                        own: true,
+                      },
+                    }
+                  : {}),
               })
             }
             className={chipCls}
           >
             <Sprout className="h-4 w-4 text-primary" aria-hidden="true" />
-            Share a grow update
+            Log to diary
           </button>
         ) : (
           <button

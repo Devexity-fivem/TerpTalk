@@ -29,6 +29,7 @@ export async function GET() {
       notifyOnReaction: true,
       notifyOnMilestone: true,
       notifyOnBotAssist: true,
+      notifyOnDiaryReminder: true,
       hideOnlineStatus: true,
       publicMilestoneOptOut: true,
       dmPolicy: true,
@@ -60,6 +61,7 @@ export async function PATCH(request: Request) {
     notifyOnReaction?: boolean
     notifyOnMilestone?: boolean
     notifyOnBotAssist?: boolean
+    notifyOnDiaryReminder?: boolean
     hideOnlineStatus?: boolean
     publicMilestoneOptOut?: boolean
     dmPolicy?: string
@@ -74,6 +76,7 @@ export async function PATCH(request: Request) {
   if ("notifyOnReaction" in body) data.notifyOnReaction = !!body.notifyOnReaction
   if ("notifyOnMilestone" in body) data.notifyOnMilestone = !!body.notifyOnMilestone
   if ("notifyOnBotAssist" in body) data.notifyOnBotAssist = !!body.notifyOnBotAssist
+  if ("notifyOnDiaryReminder" in body) data.notifyOnDiaryReminder = !!body.notifyOnDiaryReminder
   if ("hideOnlineStatus" in body) data.hideOnlineStatus = !!body.hideOnlineStatus
   if ("publicMilestoneOptOut" in body) data.publicMilestoneOptOut = !!body.publicMilestoneOptOut
   if ("dmPolicy" in body) {

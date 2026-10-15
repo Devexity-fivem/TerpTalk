@@ -7,7 +7,7 @@ import { useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
 import {
   Bell, BellRing, Loader2, CheckCheck, Check, UserPlus, Heart, MessageSquare, AtSign,
-  MessageCircle, Leaf, Mail, CheckCircle2, Award, TrendingUp, Users, Shield, Settings, Bot, Trash2, Target,
+  MessageCircle, Leaf, Mail, CheckCircle2, Award, TrendingUp, Users, Shield, Settings, Bot, Trash2, Target, CalendarClock,
 } from "@/lib/icons"
 import Link from "next/link"
 import EmptyState from "@/components/ui/empty-state"
@@ -53,6 +53,7 @@ const TYPE_ICONS: Record<string, typeof Bell> = {
   MODERATOR_ANNOUNCEMENT: Shield,
   BOT_ASSIST: Bot,
   FOLLOWED_CONTENT: UserPlus,
+  DIARY_REMINDER: CalendarClock,
 }
 
 function typeIcon(type: string, kind?: string) {
@@ -81,6 +82,7 @@ const TYPE_LABELS: Record<string, string> = {
   MODERATOR_ANNOUNCEMENT: "Announcement",
   BOT_ASSIST: "Bot assist",
   FOLLOWED_CONTENT: "Follow",
+  DIARY_REMINDER: "Diary reminder",
 }
 
 function typeLabel(type: string, kind?: string) {
@@ -93,7 +95,7 @@ function typeLabel(type: string, kind?: string) {
 type NotifGroup = "all" | "social" | "grows" | "progress" | "system"
 
 const SOCIAL_TYPES = new Set(["FOLLOW", "REACTION", "REPLY", "MENTION", "THREAD_ACTIVITY", "COMMENT", "DIRECT_MESSAGE", "FOLLOWED_CONTENT"])
-const GROW_TYPES = new Set(["DIARY_UPDATE", "BOT_ASSIST"])
+const GROW_TYPES = new Set(["DIARY_UPDATE", "BOT_ASSIST", "DIARY_REMINDER"])
 const PROGRESS_TYPES = new Set(["BADGE", "REPUTATION", "REFERRAL"])
 const SYSTEM_TYPES = new Set(["MODERATOR_ANNOUNCEMENT", "ACCEPTED_ANSWER"])
 

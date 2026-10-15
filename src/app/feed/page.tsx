@@ -18,6 +18,8 @@ import type { FeedKind, FeedMode } from "@/lib/feed"
 import { diaryPath } from "@/lib/slugs"
 import { getStoryRail, getTrendingHashtags, hashtagPath } from "@/lib/moments"
 import StoryRail from "@/components/story-rail"
+import CatchUpCard from "@/components/catch-up-card"
+import { catchUpForUser } from "@/lib/catch-up"
 
 export const dynamic = "force-dynamic"
 
@@ -94,7 +96,7 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
         select: { id: true, title: true, stage: true, harvested: true },
       })
     : Promise.resolve([] as FeedableDiary[])
-  const [page, hasHarvests, trendingDiaries, siteStats, feedStats, showFirstReplyNudge, activeDiaries, storyRail, trendingTags] = await Promise.all([
+  const [page, hasHarvests, trendingDiaries, siteStats, feedStats, showFirstReplyNudge, activeDiaries, storyRail, trendingTags, catchUp] = await Promise.all([
     getFeedPage({ scope, kinds: conf.kinds, cursor }),
     prisma.growDiary.findFirst({ where: harvestScope, select: { id: true } }).then((r) => !!r),
     prisma.growDiary.findMany({
@@ -112,6 +114,11 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
     activeDiariesPromise,
     getStoryRail(session?.user?.id ?? null),
     getTrendingHashtags({ days: 7, limit: 8 }),
+    // Member catch-up — only on the landing tab; filtered tabs are a
+    // deliberate drill-down, not the return visit.
+    session?.user?.id && activeTab === "latest"
+      ? catchUpForUser(session.user.id).catch(() => null)
+      : Promise.resolve(null),
   ])
 
   const { items, nextCursor } = page
@@ -226,6 +233,8 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
         <div className="grid lg:grid-cols-3 gap-6">
           {/* Main Feed */}
           <div className="min-w-0 lg:col-span-2 space-y-6">
+            {catchUp && <CatchUpCard data={catchUp} />}
+
             {!feedEmpty && (
               <div className="tt-spotlight bg-card/80 rounded-2xl border border-border/70">
                 <div className="p-4 border-b border-border flex items-center gap-2">

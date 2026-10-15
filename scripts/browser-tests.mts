@@ -256,8 +256,8 @@ const main = async () => {
 
     // ── Feed share composer (Phase 11) ───────────────────────────────
     await gotoMain(alicePage, `${BASE}/feed`)
-    const feedShareBtn = alicePage.locator('button:has-text("Share a grow update")')
-    await appears('button:has-text("Share a grow update")')
+    const feedShareBtn = alicePage.locator('button:has-text("Log to diary")')
+    await appears('button:has-text("Log to diary")')
     ok("feed: signed-in grower sees a grow-update share action", (await feedShareBtn.count()) === 1)
     await feedShareBtn.click()
     await alicePage.waitForSelector('div[role="dialog"][aria-label="Share something"]', { timeout: 10_000 })

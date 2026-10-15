@@ -219,13 +219,13 @@ check("member home exposes a compact community bridge with feed links", () => {
   assert.ok(memberHome.includes('href="/discover"'), "member home links to discover")
 })
 
-check("feed page exposes a contextual Share a grow update entry point", () => {
+check("feed page exposes a contextual log-to-diary entry point", () => {
   const feedPage = src("app/feed/page.tsx")
   const shareEntry = src("components/share-entry.tsx")
   assert.ok(feedPage.includes("ShareEntry"), "feed page mounts the share box")
   assert.ok(shareEntry.includes('type: "grow-update"'), "share entry can open grow-update")
   assert.ok(shareEntry.includes('type: "discussion"'), "share entry can open a discussion")
-  assert.ok(shareEntry.includes("Share a grow update") || shareEntry.includes("Start a diary"), "contextual grow path exists")
+  assert.ok(shareEntry.includes("Log to diary") || shareEntry.includes("Start a diary"), "contextual grow path exists")
 })
 
 // ── Realtime architecture invariants ───────────────────────────────────

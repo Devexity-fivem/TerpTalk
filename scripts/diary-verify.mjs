@@ -1689,6 +1689,139 @@ const main = async () => {
     page = await getHtml(`/diaries/${sd2.id}`)
     page.status === 404 ? pass("deleted diary 404s") : fail("deleted diary", page.status)
 
+    // ── Batch R1: diary-reminder cron, log-to-diary picker feed, harvest prompt ──
+    {
+      // Dedicated cron route — a junk UA fails closed (dev has no
+      // CRON_SECRET, so only local/manual UAs are admitted).
+      const cronDeny = await fetch(`${BASE}/api/cron/diary-reminders`, {
+        headers: { "user-agent": "tt-verify-probe" },
+      })
+      cronDeny.status === 401
+        ? pass("diary-reminders cron rejects unauthenticated caller")
+        : fail("cron auth", cronDeny.status)
+
+      // Controlled invocation: owner's stale active diary must produce a
+      // DIARY_REMINDER notification linking back to that diary.
+      const staleAt = new Date(Date.now() - 9 * 86400000)
+      const staleDiary = await prisma.growDiary.create({
+        data: {
+          title: M("r1stale"), description: "x", growType: "INDOOR",
+          startDate: staleAt, authorId: owner.id, createdAt: staleAt,
+        },
+      })
+      diaryIds.push(staleDiary.id)
+      await prisma.growDiary.update({ where: { id: staleDiary.id }, data: { updatedAt: staleAt } })
+
+      const cronRes = await fetch(`${BASE}/api/cron/diary-reminders`, {
+        headers: { "user-agent": "curl/8 tt-verify" },
+      })
+      const cronBody = await cronRes.json().catch(() => null)
+      const reminder = await prisma.notification.findFirst({
+        where: { userId: owner.id, type: "DIARY_REMINDER" },
+      })
+      cronRes.status === 200 &&
+      Array.isArray(cronBody?.posted) && cronBody.failed?.length === 0 &&
+      reminder && reminder.link === `/diaries/${staleDiary.slug ?? staleDiary.id}`
+        ? pass("diary-reminders cron: controlled run notifies stale-diary owner")
+        : fail("cron run", { s: cronRes.status, body: cronBody, n: !!reminder, link: reminder?.link })
+
+      // Re-invocation: the day claim is done → the task skips entirely;
+      // no second notification can appear.
+      const cronRes2 = await fetch(`${BASE}/api/cron/diary-reminders`, {
+        headers: { "user-agent": "curl/8 tt-verify" },
+      })
+      const cronBody2 = await cronRes2.json().catch(() => null)
+      const reminderCount = await prisma.notification.count({
+        where: { userId: owner.id, type: "DIARY_REMINDER" },
+      })
+      cronRes2.status === 200 && cronBody2?.posted?.length === 0 && cronBody2?.failed?.length === 0 && reminderCount === 1
+        ? pass("diary-reminders cron: repeated invocation is a no-op")
+        : fail("cron idempotency", { s: cronRes2.status, body: cronBody2, reminders: reminderCount })
+
+      await prisma.notification.deleteMany({ where: { userId: owner.id, type: "DIARY_REMINDER" } })
+      await prisma.setting.deleteMany({ where: { key: { startsWith: "diary-reminder" } } }).catch(() => {})
+
+      // GET /api/diaries — the owner-scoped picker feed the composer's
+      // "Log to diary" resolution consumes. Auth required; never lists
+      // another member's grows; deleted diaries excluded.
+      r = await callApi("/api/diaries")
+      r.status === 401 ? pass("diaries list requires auth") : fail("diaries list anon", r.status)
+
+      r = await callApi("/api/diaries", { cookie: viewerCookie })
+      const viewerDiaryIds = (r.data?.diaries ?? []).map((d) => d.id)
+      r.status === 200 && !viewerDiaryIds.includes(diaryId) && !viewerDiaryIds.includes(staleDiary.id)
+        ? pass("diaries list is owner-scoped — no other member's grows")
+        : fail("diaries owner scope", r.status)
+
+      r = await callApi("/api/diaries", { cookie: ownerCookie })
+      const own = r.data?.diaries ?? []
+      const ownIds = own.map((d) => d.id)
+      const staleRow = own.find((d) => d.id === staleDiary.id)
+      r.status === 200 && ownIds.includes(diaryId) && ownIds.includes(staleDiary.id) &&
+        !ownIds.includes(sd2.id) &&
+        typeof staleRow?.stage === "string" && typeof staleRow?.harvested === "boolean"
+        ? pass("diaries list returns own non-deleted grows with picker fields")
+        : fail("diaries owner list", { s: r.status, count: own.length, hasStale: !!staleRow, hasDeleted: ownIds.includes(sd2.id) })
+
+      // Quick-log write path — the composer's exact payload shape
+      // (diaryId + title + content + stage + optional images). Persists
+      // a real DiaryUpdate that renders on the diary page.
+      r = await callApi("/api/diaries/updates", {
+        method: "POST",
+        body: { diaryId, title: M("quicklog"), content: "quick-log entry from composer", stage: "FLOWER", images: [] },
+        cookie: ownerCookie,
+      })
+      const quickUpd = r.data?.update
+      r.status === 201 && quickUpd?.id
+        ? pass("quick-log update persists via canonical API")
+        : fail("quick-log create", { s: r.status, d: r.data })
+      if (quickUpd?.id) {
+        page = await getHtml(diaryHref, ownerCookie)
+        page.status === 200 && page.html.includes(M("quicklog"))
+          ? pass("quick-log update renders on the diary timeline")
+          : fail("quick-log timeline", page.status)
+      }
+
+      // Harvest-completion prompt — a harvested diary missing the
+      // canonical final fields (yield / rating / notes) shows the owner a
+      // prompt; complete or active diaries and visitors never see it.
+      const hpDiary = await prisma.growDiary.create({
+        data: { title: M("r1harv"), description: "x", growType: "INDOOR", startDate: new Date(Date.now() - 30 * 86400000), authorId: owner.id },
+      })
+      diaryIds.push(hpDiary.id)
+
+      page = await getHtml(`/diaries/${hpDiary.slug ?? hpDiary.id}`, ownerCookie)
+      page.status === 200 && !page.html.includes("Finish your harvest record")
+        ? pass("harvest prompt: absent while the grow is active")
+        : fail("harvest prompt active", page.status)
+
+      r = await callApi(`/api/diaries/${hpDiary.id}/harvest`, {
+        method: "PATCH", body: { harvested: true }, cookie: ownerCookie,
+      })
+      r.status === 200 ? pass("harvest prompt fixture: marked harvested") : fail("harvest mark", r.status)
+
+      page = await getHtml(`/diaries/${hpDiary.slug ?? hpDiary.id}`, ownerCookie)
+      page.status === 200 && page.html.includes("Finish your harvest record")
+        ? pass("harvest prompt: owner sees it on an incomplete harvested diary")
+        : fail("harvest prompt owner", page.status)
+
+      page = await getHtml(`/diaries/${hpDiary.slug ?? hpDiary.id}`, viewerCookie)
+      page.status === 200 && !page.html.includes("Finish your harvest record")
+        ? pass("harvest prompt: visitor never sees the owner-only prompt")
+        : fail("harvest prompt visitor", page.status)
+
+      // Completing the record through the canonical workflow removes it.
+      r = await callApi(`/api/diaries/${hpDiary.id}/harvest`, {
+        method: "PATCH",
+        body: { harvested: true, yieldAmount: 42, yieldUnit: "g", harvestRating: 8, harvestNotes: M("notes") },
+        cookie: ownerCookie,
+      })
+      page = await getHtml(`/diaries/${hpDiary.slug ?? hpDiary.id}`, ownerCookie)
+      r.status === 200 && page.status === 200 && !page.html.includes("Finish your harvest record")
+        ? pass("harvest prompt: completing the record removes the prompt")
+        : fail("harvest prompt complete", { s: r.status, p: page.status })
+    }
+
     // ── Maintenance freeze — update DELETE must 503 with no side effect ──
     {
       const { enableMaintenanceForTest } = await import("./lib/maintenance-mode.mjs")

@@ -531,6 +531,50 @@ async function main() {
     await prisma.follow.deleteMany({ where: { followerId: viewer.id, followingId: blockedU.id } })
   }
 
+  // ── catch-up card (Batch R1): real activity, window, privacy, empty ──
+  {
+    const { catchUpForUser, catchUpHasContent } = await import("@/lib/catch-up")
+
+    // A real unread notice directed at the member.
+    await prisma.notification.create({
+      data: { userId: viewer.id, type: "REPLY", title: M("cu notice"), content: "c", link: "/feed" },
+    })
+    // A followed PUBLIC diary whose ONLY update is 8 days old — outside
+    // the fixed 7-day window, so it must not surface.
+    const oldDiary = await mkDiary(author.id, M("cuold"))
+    await mkUpdate(oldDiary.id, author.id, M("cuold"), new Date(Date.now() - 8 * 86400000))
+
+    const cu = await catchUpForUser(viewer.id)
+    cu.notices.length > 0 && cu.unreadCount >= 1 && cu.notices.some((n) => n.title === M("cu notice"))
+      ? pass("catch-up: unread notification surfaces with real row")
+      : fail("catch-up notice", { notices: cu.notices.length, unread: cu.unreadCount })
+    cu.followed.length > 0 && cu.followed.some((f) => f.text.includes("pub"))
+      ? pass("catch-up: followed grower's recent update surfaces")
+      : fail("catch-up followed", cu.followed.map((f) => f.text))
+    cu.followed.every((f) => !f.text.includes("cuold"))
+      ? pass("catch-up: activity older than 7 days excluded")
+      : fail("catch-up window", cu.followed.map((f) => f.text))
+    cu.followed.every((f) => !f.text.includes("priv") && !f.text.includes("blocked") && !f.text.includes("del"))
+      ? pass("catch-up: private/blocked/deleted content never surfaces")
+      : fail("catch-up privacy", cu.followed.map((f) => f.text))
+    cu.followed.length <= 4 && cu.notices.length <= 4
+      ? pass("catch-up: sections bounded")
+      : fail("catch-up bound", cu.followed.length)
+
+    const cuEmpty = await catchUpForUser(nofollow.id)
+    cuEmpty.notices.length === 0 && cuEmpty.followed.length === 0
+      ? pass("catch-up: member with no follows/notices gets empty sections")
+      : fail("catch-up empty", { n: cuEmpty.notices.length, f: cuEmpty.followed.length })
+    cuEmpty.helpWanted.items.length === 0
+      ? pass("catch-up: no-evidence member gets no question matches")
+      : fail("catch-up helpWanted empty", cuEmpty.helpWanted.items.length)
+    !catchUpHasContent(cuEmpty) && catchUpHasContent(cu)
+      ? pass("catch-up: hasContent reflects real content, never fabricated")
+      : fail("catch-up hasContent", { cu: catchUpHasContent(cu), empty: catchUpHasContent(cuEmpty) })
+
+    await prisma.notification.deleteMany({ where: { userId: viewer.id } })
+  }
+
   // ── cleanup ─────────────────────────────────────────────────────
   for (const u of [author, viewer, other, blockedU, bannedU, nofollow]) {
     if (u?.id) await prisma.user.delete({ where: { id: u.id } }).catch(() => {})

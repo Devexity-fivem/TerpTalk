@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { runCronTask } from "@/lib/cron-claim"
 import { postToGeneral, GROW_TIPS, sanitizeEcho } from "@/lib/terpbot"
-import { scanDormantThreads, scanStaleDiaries } from "@/lib/terpbot-assist"
+import { scanDormantThreads } from "@/lib/terpbot-assist"
 import { scanAnswerMatches } from "@/lib/answer-match"
 import { runWeeklyDigest } from "@/lib/weekly-digest"
 import { scanGrowAssists } from "@/lib/terpbot-assist-grow"
@@ -219,8 +219,6 @@ export async function GET(request: NextRequest) {
   // grower's owner-scope context against the deterministic trigger
   // registry (stale critical measurement, persistent unresolved issue,
   // baseline shift, intervention follow-up, recurrence, gap filled).
-  // Runs BEFORE diary-stale so the richer evidence-backed assist wins
-  // the shared 7-day cushion slot when both would qualify.
   // Per-assist BotEvent claims make retries idempotent; the 7-day
   // cushion + 3/day cap inside botAssist keep it quiet by design.
   await runCronTask(`terpbot:grow-assist:${today}`, async () => {
@@ -259,14 +257,9 @@ export async function GET(request: NextRequest) {
     return `weekly-digest:${eligible}eligible/${sent}sent/${skipped}skipped`
   }, posted, failed, "weekly-digest")
 
-  // ── Stale-diary reminders (once per UTC day) ─────────────────────
-  // Active grows that haven't been updated in 5+ days get one private
-  // nudge per month — same claim/cushion/opt-out pipeline as every
-  // assist, capped at 20 sends per run.
-  await runCronTask(`terpbot:diary-stale:${today}`, async () => {
-    const { scanned, sent } = await scanStaleDiaries()
-    return `diary-stale:${scanned}scanned/${sent}sent`
-  }, posted, failed, "diary-stale")
+  // Stale-diary reminders moved to /api/cron/diary-reminders (Batch R1) —
+  // a dedicated DIARY_REMINDER lane with its own preference and push
+  // eligibility, replacing the old monthly BOT_ASSIST diary-stale nudge.
 
   // ── Referral payout reconciliation (once per UTC day) ─────────────
   // Safety net for qualifying referrals whose deferred payout trigger was

@@ -14,8 +14,8 @@ import {
   assistFirstDiary,
   notifyOpAcceptedAnswer,
   scanDormantThreads,
-  scanStaleDiaries,
 } from "@/lib/terpbot-assist"
+import { sendDiaryReminders, DIARY_REMINDER_WINDOW_MS } from "@/lib/diary-reminders"
 import { scanGrowAssists } from "@/lib/terpbot-assist-grow"
 import { scanAnswerMatches, helpWantedForUser } from "@/lib/answer-match"
 import { getBotUserId, sanitizeEcho, announceStageTransition, purgeDiaryAnnouncements } from "@/lib/terpbot"
@@ -355,24 +355,35 @@ async function run() {
       console.log("✓ scanDormantThreads eligibility + idempotency")
     }
 
-    // ── 10. scanStaleDiaries: eligibility + monthly idempotency ───────
+    // ── 10. sendDiaryReminders: eligibility + aggregation + throttle ──
     {
-      // m8 is fresh — no prior assists to cushion against.
       const m8 = await mk(`__tbp_h_${SUFFIX}`)
-      const sixDaysAgo = new Date(Date.now() - 6 * 24 * 60 * 60 * 1000)
-      const mkDiary = async (authorId: string, title: string, opts: { stale?: boolean; harvested?: boolean } = {}) => {
+      const staleAt = new Date(Date.now() - DIARY_REMINDER_WINDOW_MS - 24 * 60 * 60 * 1000)
+      const mkDiary = async (
+        authorId: string,
+        title: string,
+        opts: { stale?: boolean; harvested?: boolean; visibility?: "PUBLIC" | "UNLISTED" | "PRIVATE" } = {}
+      ) => {
         const d = await prisma.growDiary.create({
-          data: { title, description: "t", growType: "INDOOR", startDate: sixDaysAgo, authorId, harvested: !!opts.harvested, ...(opts.stale ? { createdAt: sixDaysAgo } : {}) },
+          data: {
+            title, description: "t", growType: "INDOOR", startDate: staleAt, authorId,
+            harvested: !!opts.harvested,
+            ...(opts.visibility ? { visibility: opts.visibility } : {}),
+            ...(opts.stale ? { createdAt: staleAt } : {}),
+          },
         })
         diaryIds.push(d.id)
         if (opts.stale) {
-          await prisma.growDiary.update({ where: { id: d.id }, data: { updatedAt: sixDaysAgo } })
+          await prisma.growDiary.update({ where: { id: d.id }, data: { updatedAt: staleAt } })
         }
         return d
       }
 
-      // Stale, no updates at all → eligible
-      const staleOk = await mkDiary(m8.id, `__tbp stale ${SUFFIX}`, { stale: true })
+      // Two stale diaries (one PRIVATE — the owner's own reminder is a
+      // private stream, so privacy must NOT suppress it) → ONE aggregated
+      // notification, not a flood.
+      await mkDiary(m8.id, `__tbp stale a ${SUFFIX}`, { stale: true })
+      await mkDiary(m8.id, `__tbp stale b ${SUFFIX}`, { stale: true, visibility: "PRIVATE" })
       // Stale diary row, but a fresh update exists → quiet
       const freshUpdate = await mkDiary(m8.id, `__tbp fresh ${SUFFIX}`, { stale: true })
       await prisma.diaryUpdate.create({
@@ -382,33 +393,44 @@ async function run() {
       await mkDiary(m8.id, `__tbp harv ${SUFFIX}`, { stale: true, harvested: true })
       // Fresh row → out of scope
       await mkDiary(m8.id, `__tbp ok ${SUFFIX}`)
-      // Banned author → excluded
+      // Opted-out member → no reminder, ever
+      const optedOut = await mk(`__tbp_dr_opt_${SUFFIX}`)
+      await prisma.profile.update({ where: { userId: optedOut.id }, data: { notifyOnDiaryReminder: false } })
+      await mkDiary(optedOut.id, `__tbp opt ${SUFFIX}`, { stale: true })
+      // Banned author → excluded upstream AND at notify()
       const bannedDiaryAuthor = await mk(`__tbp_sban_${SUFFIX}`)
       await prisma.user.update({ where: { id: bannedDiaryAuthor.id }, data: { banned: true } })
       await mkDiary(bannedDiaryAuthor.id, `__tbp sban ${SUFFIX}`, { stale: true })
+      // Member with no diaries → nothing
+      const noDiaries = await mk(`__tbp_none_${SUFFIX}`)
 
-      const monthKey = new Date().toISOString().slice(0, 7)
-      botEventKeys.push(`assist:diary-stale:${staleOk.id}:${monthKey}`)
-      rateLimitKeys.push(`terpbot:assist:user:${m8.id}`)
+      const res = await sendDiaryReminders({ authorIds: [m8.id, optedOut.id, bannedDiaryAuthor.id, noDiaries.id] })
+      assert.equal(res.scanned, 4, "only non-harvested stale-window diaries scanned")
+      assert.equal(res.reminded, 1, "one member reminded; opt-out/banned/empty suppressed")
 
-      const res = await scanStaleDiaries({ authorIds: [m8.id, bannedDiaryAuthor.id] })
-      assert.equal(res.scanned, 2, "only stale non-harvested diaries scanned")
-      assert.equal(res.sent, 1, "only the genuinely stale diary nudged")
-
-      const n = await prisma.notification.findFirst({
-        where: { userId: m8.id, type: "BOT_ASSIST", link: `/diaries/${staleOk.id}` },
+      const reminders = await prisma.notification.findMany({
+        where: { userId: m8.id, type: "DIARY_REMINDER" },
       })
-      assert.ok(n, "stale-diary nudge delivered")
-      assert.match(n!.title, /waiting for an update/)
-      notificationIds.push(n!.id)
+      assert.equal(reminders.length, 1, "two stale diaries aggregate into ONE reminder")
+      notificationIds.push(...reminders.map((r) => r.id))
+      assert.match(reminders[0].title, /waiting for an update/)
+      assert.match(reminders[0].content, /1 more active grow/, "aggregation names the other stale grow")
+      assert.match(reminders[0].link ?? "", /^\/diaries\//, "reminder links to a real diary")
+      assert.equal(reminders[0].groupKey, "diary-reminder")
       assert.equal(
-        await prisma.notification.count({ where: { userId: bannedDiaryAuthor.id } }),
-        0, "banned author never nudged"
+        await prisma.notification.count({ where: { userId: { in: [optedOut.id, bannedDiaryAuthor.id, noDiaries.id] }, type: "DIARY_REMINDER" } }),
+        0, "opted-out, banned, and empty members get nothing"
       )
 
-      const res2 = await scanStaleDiaries({ authorIds: [m8.id, bannedDiaryAuthor.id] })
-      assert.equal(res2.sent, 0, "monthly claim key suppresses re-send")
-      console.log("✓ scanStaleDiaries eligibility + monthly idempotency")
+      // Re-invocation: the durable notification throttle + weekly claim
+      // make repeat runs exact no-ops — no second notification, no push.
+      const res2 = await sendDiaryReminders({ authorIds: [m8.id, optedOut.id, bannedDiaryAuthor.id, noDiaries.id] })
+      assert.equal(res2.reminded, 0, "repeated invocation sends nothing")
+      assert.equal(
+        await prisma.notification.count({ where: { userId: m8.id, type: "DIARY_REMINDER" } }),
+        1, "no duplicate reminder row"
+      )
+      console.log("✓ sendDiaryReminders eligibility + aggregation + idempotency")
     }
 
     // ── 10b. scanGrowAssists: owner scope + evidence triggers ────────
@@ -2346,6 +2368,8 @@ async function run() {
   } finally {
     await prisma.notification.deleteMany({ where: { id: { in: notificationIds } } }).catch(() => {})
     await prisma.notification.deleteMany({ where: { type: "BOT_ASSIST", userId: { in: ids } } }).catch(() => {})
+    await prisma.notification.deleteMany({ where: { type: "DIARY_REMINDER", userId: { in: ids } } }).catch(() => {})
+    await prisma.setting.deleteMany({ where: { OR: ids.map((id) => ({ key: { startsWith: `diary-reminder:${id}:` } })) } }).catch(() => {})
     await prisma.post.deleteMany({ where: { id: { in: postIds } } }).catch(() => {})
     await prisma.thread.deleteMany({ where: { id: { in: threadIds } } }).catch(() => {})
     await prisma.diaryUpdate.deleteMany({ where: { diaryId: { in: diaryIds } } }).catch(() => {})

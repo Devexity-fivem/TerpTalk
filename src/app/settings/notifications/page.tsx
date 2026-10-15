@@ -19,6 +19,7 @@ const TOGGLES = [
   { key: "notifyOnReaction", label: "Reactions", desc: "When someone reacts to my posts or grow diaries." },
   { key: "notifyOnMilestone", label: "Milestones", desc: "Rank-ups, badges, and progression milestones." },
   { key: "notifyOnBotAssist", label: "TerpBot tips", desc: "Occasional pointers from TerpBot (our automated helper) about my threads, diaries, and account. Doesn't affect reply or accepted-answer notices." },
+  { key: "notifyOnDiaryReminder", label: "Diary reminders", desc: "A weekly nudge when an active grow hasn't had a diary update in 7+ days — a gentle prompt to keep the record alive." },
 ] as const
 
 const PRIVACY_TOGGLES = [
