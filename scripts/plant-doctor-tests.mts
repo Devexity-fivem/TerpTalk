@@ -249,6 +249,46 @@ async function main() {
     assert.equal(entry!.outcome, "UNSURE")
   })
 
+  // ── Outcome rate limit — pd-outcome:<uid>:<ip>, 20/hr per owner ──
+  await check("outcome reporting is rate-limited; 429 appends nothing", async () => {
+    const rlUser = await createUser("rl")
+    userIds.push(rlUser.id)
+    const { cookie: rlCookie } = await login(rlUser.username, rlUser.password)
+    rateLimitKeys.push(`pd-outcome:${rlUser.id}`)
+    const c = await createPlantDoctorCase({ userId: rlUser.id, resultId: RESULT_ID })
+    assert.ok("caseId" in c)
+    caseIds.push(c.caseId)
+
+    for (let i = 0; i < 20; i++) {
+      const r = await api(`/api/plant-doctor/cases/${c.caseId}/outcome`, {
+        method: "POST", body: { outcome: "UNSURE" }, cookie: rlCookie,
+      })
+      assert.equal(r.status, 200, `report ${i + 1}/20 within limit`)
+    }
+    const over = await api(`/api/plant-doctor/cases/${c.caseId}/outcome`, {
+      method: "POST", body: { outcome: "IMPROVED" }, cookie: rlCookie,
+    })
+    assert.equal(over.status, 429, "21st report rejected")
+    const rows = await prisma.plantDoctorOutcome.count({ where: { caseId: c.caseId } })
+    assert.equal(rows, 20, "rejected request appended no outcome")
+
+    // A second owner's allowance is an independent bucket.
+    const c2 = await createPlantDoctorCase({ userId: other.id, resultId: Object.keys(WIZARD_RESULTS)[1] })
+    assert.ok("caseId" in c2)
+    caseIds.push(c2.caseId)
+    rateLimitKeys.push(`pd-outcome:${other.id}`)
+    const r2 = await api(`/api/plant-doctor/cases/${c2.caseId}/outcome`, {
+      method: "POST", body: { outcome: "IMPROVED" }, cookie: otherCookie,
+    })
+    assert.equal(r2.status, 200, "other member's bucket unaffected")
+
+    // Guests never reach the limiter — auth check precedes it.
+    const g = await api(`/api/plant-doctor/cases/${c.caseId}/outcome`, {
+      method: "POST", body: { outcome: "IMPROVED" },
+    })
+    assert.equal(g.status, 401)
+  })
+
   await check("deleted diary does not break reporting or history", async () => {
     const linked = await prisma.plantDoctorCase.findUnique({ where: { id: linkedCaseId }, select: { diaryId: true } })
     await prisma.growDiary.update({ where: { id: linked!.diaryId! }, data: { deleted: true } })

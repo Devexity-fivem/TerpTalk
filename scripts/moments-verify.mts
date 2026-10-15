@@ -44,6 +44,8 @@ let author: VerifyUser, follower: VerifyUser, viewer: VerifyUser, other: VerifyU
 let postPub = "", postFol = "", postImg = "", storyId = "", expiredStoryId = ""
 let blockedPostId = "", bannedPostId = "", deletedPostId = ""
 let commentId = "", folCommentId = ""
+const rlUsers: string[] = []
+const rlRateKeys: string[] = []
 const tagName = `mvtag${ts}`.toLowerCase()
 const folTagName = `mvfol${ts}`.toLowerCase()
 
@@ -231,6 +233,55 @@ async function main() {
     r.status === 200 ? pass("comment delete: post author curates → 200") : fail("author delete", r.status)
     r = await api(`/api/moments/comments/${commentId}`, { method: "DELETE", cookie: vc })
     r.status === 200 ? pass("comment delete: own comment → 200") : fail("own delete", r.status)
+  }
+
+  // ── C2. comment delete rate limit — moment-comment-del:<uid>, 30/10min ──
+  {
+    const rl = await createUser("rl")
+    const rl2 = await createUser("rl2")
+    rlUsers.push(rl.id, rl2.id)
+    const { cookie: rlC } = await login(rl.username, rl.password)
+    const { cookie: rl2C } = await login(rl2.username, rl2.password)
+    rlRateKeys.push(`moment-comment-del:${rl.id}`, `moment-comment-del:${rl2.id}`)
+
+    // rl's own post carrying 31 comments authored by rl (fixture-created —
+    // only the deletes go over HTTP).
+    const rlPost = await prisma.moment.create({
+      data: { kind: "POST", content: M("rl post"), visibility: "PUBLIC", authorId: rl.id },
+      select: { id: true },
+    })
+    const rlComments = await Promise.all(
+      Array.from({ length: 31 }, (_, i) =>
+        prisma.momentComment.create({
+          data: { momentId: rlPost.id, authorId: rl.id, content: M(`rl c${i}`) },
+          select: { id: true },
+        })),
+    )
+
+    let r = await api(`/api/moments/comments/${rlComments[0].id}`, { method: "DELETE", cookie: rlC })
+    r.status === 200 ? pass("comment delete limit: first delete → 200") : fail("rl first delete", r.status)
+    for (let i = 1; i < 30; i++) {
+      r = await api(`/api/moments/comments/${rlComments[i].id}`, { method: "DELETE", cookie: rlC })
+      if (r.status !== 200) { fail("rl mid-bucket delete", { i, s: r.status }); break }
+    }
+    r = await api(`/api/moments/comments/${rlComments[30].id}`, { method: "DELETE", cookie: rlC })
+    r.status === 429 ? pass("comment delete limit: 31st → 429") : fail("rl over-limit", r.status)
+    const leftover = await prisma.momentComment.findUnique({ where: { id: rlComments[30].id }, select: { deleted: true } })
+    leftover?.deleted === false
+      ? pass("comment delete limit: rejected delete did not mutate")
+      : fail("over-limit mutation", leftover)
+
+    // Independent per-user bucket — rl2 deletes their own comment fine.
+    const rl2Comment = await prisma.momentComment.create({
+      data: { momentId: rlPost.id, authorId: rl2.id, content: M("rl2 c") },
+      select: { id: true },
+    })
+    r = await api(`/api/moments/comments/${rl2Comment.id}`, { method: "DELETE", cookie: rl2C })
+    r.status === 200 ? pass("comment delete limit: second user's bucket independent → 200") : fail("rl2 delete", r.status)
+
+    // No session → no derived key → 401, never reaches the limiter.
+    r = await api(`/api/moments/comments/${rlComments[30].id}`, { method: "DELETE" })
+    r.status === 401 ? pass("comment delete limit: guest → 401") : fail("guest delete", r.status)
   }
 
   // ── D. reactions ────────────────────────────────────────────────
@@ -691,6 +742,8 @@ async function main() {
   for (const u of [author, follower, viewer, other, blockedU, bannedU]) {
     if (u?.id) await prisma.user.delete({ where: { id: u.id } }).catch(() => {})
   }
+  for (const uid of rlUsers) await prisma.user.delete({ where: { id: uid } }).catch(() => {})
+  await prisma.rateLimit.deleteMany({ where: { key: { in: rlRateKeys } } }).catch(() => {})
   await prisma.tag.deleteMany({ where: { slug: { in: [hashtagSlug(tagName), hashtagSlug(folTagName)] } } }).catch(() => {})
 
   const resid = {
@@ -715,6 +768,8 @@ main().catch(async (e) => {
     for (const u of [author, follower, viewer, other, blockedU, bannedU]) {
       if (u?.id) await prisma.user.delete({ where: { id: u.id } }).catch(() => {})
     }
+    for (const uid of rlUsers) await prisma.user.delete({ where: { id: uid } }).catch(() => {})
+    await prisma.rateLimit.deleteMany({ where: { key: { in: rlRateKeys } } }).catch(() => {})
     await prisma.tag.deleteMany({ where: { slug: { in: [hashtagSlug(tagName), hashtagSlug(folTagName)] } } }).catch(() => {})
   } catch { /* best effort */ }
   await prisma.$disconnect().catch(() => {})

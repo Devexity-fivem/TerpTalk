@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
-import { unauthorized } from "@/lib/security"
+import { unauthorized, getClientIp } from "@/lib/security"
+import { rateLimit } from "@/lib/rate-limit"
 import { reportPlantDoctorOutcome } from "@/lib/plant-doctor"
 import { isPdOutcome } from "@/lib/plant-doctor-outcomes"
 
@@ -12,6 +13,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   try {
     const session = await getServerSession(authOptions)
     if (!session?.user?.id) return unauthorized()
+
+    // Same bound as case creation (pd-case: 20/hr, user+IP key) — outcome
+    // appends are the sibling owner-scoped mutation in this loop.
+    const rl = await rateLimit(`pd-outcome:${session.user.id}:${getClientIp(request)}`, 20, 60 * 60 * 1000)
+    if (!rl.allowed) {
+      return NextResponse.json({ error: "Too many requests" }, { status: 429 })
+    }
+
     const { id } = await params
 
     const body = await request.json().catch(() => ({}))
