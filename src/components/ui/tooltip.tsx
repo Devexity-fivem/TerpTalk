@@ -49,27 +49,8 @@ const ALIGN_CLASS_RIGHT: Record<Align, string> = {
   end: "top-auto bottom-0",
 }
 
-const INTERACTIVE_TAGS = new Set(["a", "button", "input", "select", "textarea", "summary"])
-
-function isInteractive(el: React.ReactNode, depth = 0): boolean {
-  if (!React.isValidElement(el)) return false
-  // Unwrap fragments / single-child wrappers one level so
-  // <><button/></> still counts as interactive.
-  if (depth < 2 && el.type === React.Fragment) {
-    const kids = React.Children.toArray((el.props as { children?: React.ReactNode }).children)
-    return kids.length === 1 && isInteractive(kids[0], depth + 1)
-  }
-  if (typeof el.type === "string") return INTERACTIVE_TAGS.has(el.type)
-  const p = el.props as Record<string, unknown>
-  return (
-    typeof p.href === "string" ||
-    typeof p.onClick === "function" ||
-    typeof p.onKeyDown === "function" ||
-    typeof p.tabIndex === "number" ||
-    p.role === "button" ||
-    p.role === "link"
-  )
-}
+const INTERACTIVE_SELECTOR =
+  'a,button,input,select,textarea,summary,[role="button"],[role="link"],[tabindex]:not([tabindex="-1"])'
 
 interface TooltipProps {
   content: React.ReactNode
@@ -85,23 +66,20 @@ export default function Tooltip({ content, children, side = "top", align = "cent
   // childInteractive must be state too: when a server component passes an
   // interactive element (e.g. <Link>) through the RSC boundary, the server
   // render sees the serialized slot, not the real element — introspecting
-  // during render disagrees with the client and produces a hydration
-  // mismatch. Post-mount evaluation keeps hydration identical.
+  // JSX during render disagrees with the client and produces a hydration
+  // mismatch. The real DOM is checked post-mount instead.
   const [childInteractive, setChildInteractive] = useState(false)
   const [insideInteractive, setInsideInteractive] = useState(false)
   const [forced, setForced] = useState(false)
   const [dismissed, setDismissed] = useState(false)
 
   useEffect(() => {
-    setChildInteractive(isInteractive(children))
-  }, [children])
-
-  useEffect(() => {
     const el = ref.current
     if (!el) return
-    const anc = el.parentElement?.closest(
-      'a,button,input,select,textarea,summary,[role="button"],[role="link"],[tabindex]:not([tabindex="-1"])'
-    )
+    if (el.firstElementChild?.matches(INTERACTIVE_SELECTOR)) {
+      setChildInteractive(true)
+    }
+    const anc = el.parentElement?.closest(INTERACTIVE_SELECTOR)
     if (!anc) return
     setInsideInteractive(true)
     const onFocusIn = () => setForced(true)
