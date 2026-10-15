@@ -433,9 +433,13 @@ export default async function ThreadPage({
     }),
   }
 
-  const visiblePosts = thread.acceptedAnswer
-    ? thread.posts.filter((p) => p.id !== thread.acceptedAnswer!.id)
-    : thread.posts
+  // The OP renders as its own anchor card under the header — pulled out
+  // of the reply stream so the question reads as "the post", not reply #1.
+  // The id anchor moves with it so #post-<op> deep links still resolve.
+  const opPost = thread.posts.find((p) => p.id === opPostId) ?? null
+  const visiblePosts = thread.posts.filter(
+    (p) => p.id !== thread.acceptedAnswer?.id && p.id !== opPostId
+  )
 
   const acceptedPost = thread.acceptedAnswer
   const diaryCtx = thread.diaryFor
@@ -468,28 +472,50 @@ export default async function ThreadPage({
         {/* ── Main column ────────────────────────────────────────── */}
         <div className="min-w-0">
         <Breadcrumbs items={breadcrumbs} />
-        <div className="mb-5">
-          <div className="flex items-center gap-2 mb-3 flex-wrap">
-            <Link
-              href={`/forum/category/${thread.category.slug}`}
-              className="rounded-full bg-primary/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-primary hover:bg-primary/20 transition-colors"
-            >
-              {thread.category.name}
-            </Link>
-            {thread.acceptedAnswer && (
-              <span className="rounded-full bg-emerald-500/12 px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-success ring-1 ring-inset ring-emerald-500/20">
-                <CheckCircle2 className="inline w-3 h-3 mr-0.5 -mt-0.5" />Solved
-              </span>
-            )}
-            {thread.pinned && (
-              <span className="rounded-full bg-spectrum/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-spectrum">Pinned</span>
-            )}
-            {thread.locked && (
-              <span className="rounded-full bg-secondary px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Locked</span>
-            )}
-            <ThreadModActions threadId={thread.id} authorId={thread.authorId} categoryId={thread.categoryId} pinned={thread.pinned} locked={thread.locked} />
-          </div>
-          <h1 className="font-display text-3xl sm:text-4xl font-bold mb-3 wrap-break-word tracking-tight">{thread.title}</h1>
+        <div className="mb-4 flex items-center gap-2 flex-wrap">
+          <Link
+            href={`/forum/category/${thread.category.slug}`}
+            className="rounded-full bg-primary/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-primary hover:bg-primary/20 transition-colors"
+          >
+            {thread.category.name}
+          </Link>
+          {thread.acceptedAnswer && (
+            <span className="rounded-full bg-emerald-500/12 px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-success ring-1 ring-inset ring-emerald-500/20">
+              <CheckCircle2 className="inline w-3 h-3 mr-0.5 -mt-0.5" />Solved
+            </span>
+          )}
+          {thread.pinned && (
+            <span className="rounded-full bg-spectrum/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-spectrum">Pinned</span>
+          )}
+          {thread.locked && (
+            <span className="rounded-full bg-secondary px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Locked</span>
+          )}
+          <span className="ml-auto flex items-center gap-2 text-xs text-muted-foreground">
+            <BookmarkButton threadId={thread.id} initiallySaved={saved} />
+            <ThreadFollowButton threadId={thread.id} initiallyFollowing={following} />
+            <ShareButtons path={`/forum/thread/${thread.slug}`} title={thread.title} />
+            <OwnerDeleteButton
+              endpoint="/api/forum/threads"
+              id={thread.id}
+              authorId={thread.authorId}
+              confirmText="Delete this thread? This permanently removes the thread and all of its replies."
+              redirectTo="/forum"
+              iconOnly
+            />
+            <ReportButton type="THREAD" targetId={thread.id} authorId={thread.authorId} />
+          </span>
+          <ThreadModActions threadId={thread.id} authorId={thread.authorId} categoryId={thread.categoryId} pinned={thread.pinned} locked={thread.locked} />
+        </div>
+
+        {/* Original post — the conversation's anchor card. Title, asker,
+            body, media, poll and post-level actions live in one surface so
+            the question reads as a post, not a page header + reply #1. */}
+        <article
+          id={opPost ? `post-${opPost.id}` : undefined}
+          tabIndex={-1}
+          className="scroll-mt-24 bg-card rounded-2xl border border-border/70 p-4 sm:p-6 mb-4 shadow-sm"
+        >
+          <h1 className="font-display text-2xl sm:text-3xl font-bold mb-3 wrap-break-word tracking-tight">{thread.title}</h1>
           {thread.tags.length > 0 && (
             <div className="flex flex-wrap gap-1.5 mb-3">
               {thread.tags.map((tt) => (
@@ -532,32 +558,53 @@ export default async function ThreadPage({
               </span>
             </div>
           </div>
-          {/* Action bar */}
-          <div className="flex items-center gap-2 flex-wrap text-xs text-muted-foreground">
-            <BookmarkButton threadId={thread.id} initiallySaved={saved} />
-            <ThreadFollowButton threadId={thread.id} initiallyFollowing={following} />
-            <ShareButtons path={`/forum/thread/${thread.slug}`} title={thread.title} />
-            <OwnerDeleteButton
-              endpoint="/api/forum/threads"
-              id={thread.id}
-              authorId={thread.authorId}
-              confirmText="Delete this thread? This permanently removes the thread and all of its replies."
-              redirectTo="/forum"
-              iconOnly
+          {opPost ? (
+            <div className="max-w-none mb-3">
+              <PostContent content={opPost.content} authorRole={opPost.author.role} pagePath={`/forum/thread/${thread.slug}`} />
+              <ImageGallery images={opPost.images} />
+            </div>
+          ) : (
+            /* OP body fallback — threads seeded without an OP Post row carry
+               their body only on thread.content. totalPostRows counts every
+               post ever created (including deleted/banned), so this renders
+               only when the thread genuinely never had a post; a removed OP
+               stays removed. */
+            totalPostRows === 0 && thread.content.trim() !== "" && (
+              <div className="max-w-none mb-3">
+                <PostContent content={thread.content} authorRole={thread.author.role} pagePath={`/forum/thread/${thread.slug}`} />
+              </div>
+            )
+          )}
+          {!opPost && thread.images.length > 0 && <ImageGallery images={thread.images} />}
+          {thread.poll && (
+            <Poll
+              poll={{
+                id: thread.poll.id,
+                question: thread.poll.question,
+                options: thread.poll.options.map((o) => ({ id: o.id, text: o.text })),
+              }}
+              initialCounts={thread.poll.options.reduce((acc, o) => {
+                acc[o.id] = o._count.votes
+                return acc
+              }, {} as Record<string, number>)}
+              initialTotal={thread.poll._count.votes}
+              userVoteOptionId={userVoteOptionId}
             />
-            <ReportButton type="THREAD" targetId={thread.id} authorId={thread.authorId} />
-          </div>
-          {/* OP body fallback — threads seeded without an OP Post row carry
-              their body only on thread.content. totalPostRows counts every
-              post ever created (including deleted/banned), so this renders
-              only when the thread genuinely never had a post; a removed OP
-              stays removed. */}
-          {totalPostRows === 0 && thread.content.trim() !== "" && (
-            <div className="mt-4 max-w-none">
-              <PostContent content={thread.content} authorRole={thread.author.role} pagePath={`/forum/thread/${thread.slug}`} />
+          )}
+          {opPost && (
+            <div className="flex flex-wrap items-center gap-2 border-t border-border/60 pt-3">
+              <PostActions
+                postId={opPost.id}
+                authorId={opPost.author.id}
+                initialContent={opPost.content}
+                currentUserId={currentUserId}
+                reactions={opPost.reactions}
+              />
             </div>
           )}
-          {/* Grow diary context — this thread is a diary's canonical discussion */}
+        </article>
+
+        {/* Grow diary context — this thread is a diary's canonical discussion */}
           {diaryCtx && (
             <div className="mt-3 mb-2">
               <Link
@@ -588,25 +635,6 @@ export default async function ThreadPage({
               </Link>
             </div>
           )}
-          {/* Photos attached when the thread was opened */}
-          <ImageGallery images={thread.images} />
-          {thread.poll && (
-            <Poll
-              poll={{
-                id: thread.poll.id,
-                question: thread.poll.question,
-                options: thread.poll.options.map((o) => ({ id: o.id, text: o.text })),
-              }}
-              initialCounts={thread.poll.options.reduce((acc, o) => {
-                acc[o.id] = o._count.votes
-                return acc
-              }, {} as Record<string, number>)}
-              initialTotal={thread.poll._count.votes}
-              userVoteOptionId={userVoteOptionId}
-            />
-          )}
-        </div>
-
         {/* Question evidence — solved questions, public grow records, and
             the canonical strain card, surfaced the moment a member asks.
             Compact by design; vanishes entirely when nothing is relevant. */}
@@ -754,11 +782,15 @@ export default async function ThreadPage({
           </div>
         )}
 
-        {/* Posts */}
+        {/* Replies */}
+        <h2 className="font-display text-base font-semibold mt-6 mb-3">
+          {thread.replyCount === 0 ? "No replies yet" : `${thread.replyCount} ${thread.replyCount === 1 ? "reply" : "replies"}`}
+        </h2>
         <div className="space-y-4">
           {visiblePosts.map((post) => {
-            const isOp = post.id === opPostId
-            const eligibleForAnswer = !isOp && post.authorId !== thread.authorId
+            const isThreadAuthor = post.authorId === thread.authorId
+            const isOwnPost = currentUserId === post.authorId
+            const eligibleForAnswer = !isThreadAuthor
             return (
               <Fragment key={post.id}>
                 {firstUnread && firstUnreadPage === page && post.id === firstUnread.id && (
@@ -772,11 +804,11 @@ export default async function ThreadPage({
                     <span className="h-px flex-1 bg-primary/40" />
                   </div>
                 )}
-              <div
+              <article
                 id={`post-${post.id}`}
                 tabIndex={-1}
-                className={`bg-card/80 rounded-2xl border border-border/70 p-4 sm:p-5 ${
-                  isOp ? "ring-1 ring-primary/25 shadow-md" : ""
+                className={`scroll-mt-24 bg-card/70 rounded-2xl border border-border/60 p-4 sm:p-5 ${
+                  isOwnPost ? "ring-1 ring-primary/20" : ""
                 }`}
               >
                 <div className="flex-1 min-w-0">
@@ -791,8 +823,8 @@ export default async function ThreadPage({
                           nameplate={post.author.profile?.publicMilestoneOptOut ? undefined : rankDisplay(post.author.profile?.xp ?? 0).nameplate ?? undefined}
                         />
                         <RoleBadge role={post.author.role} />
-                        {isOp && (
-                          <span className="text-xs text-muted-foreground">(Original Poster)</span>
+                        {isThreadAuthor && (
+                          <span className="rounded-full bg-secondary px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">OP</span>
                         )}
                         {post.edited && (
                           <span className="text-xs text-muted-foreground">(edited)</span>
@@ -836,7 +868,7 @@ export default async function ThreadPage({
                       )}
                     </div>
                   </div>
-              </div>
+              </article>
               </Fragment>
             )
           })}

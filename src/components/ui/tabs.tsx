@@ -25,6 +25,9 @@ interface TabsProps {
   syncWithUrl?: boolean
   ariaLabel: string
   className?: string
+  /** Extra classes on the tablist row only — e.g. a sticky offset bar.
+      Never put `sticky` on className: the panel would freeze with it. */
+  listClassName?: string
 }
 
 /**
@@ -42,6 +45,7 @@ export default function Tabs({
   syncWithUrl = false,
   ariaLabel,
   className,
+  listClassName,
 }: TabsProps) {
   const uid = useId()
   const router = useRouter()
@@ -96,9 +100,8 @@ export default function Tabs({
     }
   }
 
-  return (
-    <div className={className}>
-      <div
+  const tablist = (
+    <div
         ref={listRef}
         role="tablist"
         aria-label={ariaLabel}
@@ -133,6 +136,14 @@ export default function Tabs({
           )
         })}
       </div>
+  )
+
+  return (
+    <div className={className}>
+      {/* listClassName targets the tablist's non-scrolling wrapper — the
+          scrollable row inside stays a plain overflow-x container, which
+          is what allows `sticky` offsets to actually hold. */}
+      {listClassName ? <div className={listClassName}>{tablist}</div> : tablist}
       <div
         role="tabpanel"
         id={`${uid}-panel-${activeId}`}

@@ -3,8 +3,9 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import { useSession } from "next-auth/react"
 import { useParams } from "next/navigation"
-import { User, MessageSquare, MapPin, Globe, Sprout, Dna, Leaf, Store, ChevronDown, ChevronUp, Bot, Zap, Users, Link2, HandMetal, CalendarClock, TrendingUp, BookOpen, Trophy, BarChart3, AlertTriangle, Megaphone, Wrench, Award, Pin, FlaskConical, BadgeCheck, Target, CheckCircle2, X, Sparkles, ShieldCheck, Dices, AtSign, Terminal, Video } from "@/lib/icons"
+import { User, UserPlus, MessageSquare, MapPin, Globe, Sprout, Dna, Leaf, Store, ChevronDown, ChevronUp, Bot, Zap, Users, Link2, HandMetal, CalendarClock, TrendingUp, BookOpen, Trophy, BarChart3, AlertTriangle, Megaphone, Wrench, Award, Pin, FlaskConical, BadgeCheck, Target, CheckCircle2, X, Sparkles, ShieldCheck, Dices, AtSign, Terminal, Video } from "@/lib/icons"
 import Link from "next/link"
+import { signInHref } from "@/lib/callback-url"
 import UserActions from "@/components/user-actions"
 import RoleBadge from "@/components/role-badge"
 import AchievementBadge from "@/components/achievement-badge"
@@ -735,25 +736,51 @@ function MemberProfile({ data, isSelf, username }: { data: ProfileResponse; isSe
         {/* ── Hero ─────────────────────────────────────────────────── */}
         <div className="bg-card/80 rounded-2xl border border-border/70 mb-5 overflow-hidden">
           {profile.profileSettings.bannerImage ? (
-            <div className="relative h-24 sm:h-32 w-full">
+            <div className="relative h-28 sm:h-36 w-full">
               <BlobImage src={profile.profileSettings.bannerImage} alt="" fill sizes="896px" ariaHidden className="object-cover" />
-              <div className="absolute inset-0 bg-linear-to-t from-card/90 to-transparent" />
+              <div className="absolute inset-0 bg-linear-to-t from-card/70 to-transparent" />
             </div>
           ) : (
-            <div className="tt-spectrum-bar h-1" />
+            // Members without a banner still get a composed profile band —
+            // a soft botanical wash, never a bare strip.
+            <div className="h-20 sm:h-28 w-full bg-linear-to-br from-primary/15 via-emerald-500/8 to-spectrum/12" aria-hidden="true" />
           )}
-          <div className="p-4 sm:p-5">
-            <div className="flex items-start gap-4 flex-wrap">
-              <div className={cn("rounded-full shrink-0", profile.profileSettings.bannerImage && "-mt-12 sm:-mt-14 ring-4 ring-card")}>
+          <div className="px-4 sm:px-5 pb-4 sm:pb-5">
+            {/* Avatar + actions — social header row. The avatar always
+                overlaps the banner edge; actions sit on the same line. */}
+            <div className="flex items-end justify-between gap-3">
+              <div className="rounded-full shrink-0 -mt-10 sm:-mt-12 ring-4 ring-card bg-card">
                 <Avatar
                   src={profile.avatarUrl}
                   alt={`${profile.username} avatar`}
                   size="xl"
-                  className="w-20 h-20 bg-primary/10 text-primary"
+                  className="w-20 h-20 sm:w-24 sm:h-24 bg-primary/10 text-primary"
                   fallback={<User className="w-10 h-10 text-primary" />}
                 />
               </div>
-              <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 shrink-0 pt-3 flex-wrap justify-end">
+                {isSelf ? (
+                  <>
+                    <Link href="/profile/customize" className="rounded-full bg-primary/10 text-primary px-3.5 py-1.5 text-xs font-medium hover:bg-primary/15 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                      Customize
+                    </Link>
+                    <Link href="/profile" className="rounded-full bg-secondary/70 px-3.5 py-1.5 text-xs font-medium hover:bg-secondary transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                      Edit profile
+                    </Link>
+                  </>
+                ) : data.viewerLoggedIn ? (
+                  <UserActions userId={profile.id} username={profile.username} initiallyBlocked={viewerBlocked} initiallyFollowing={viewerFollowing} />
+                ) : (
+                  <Link
+                    href={signInHref(`/u/${profile.username}`)}
+                    className="tt-cta inline-flex items-center gap-1.5 rounded-full px-4 py-1.5 text-sm font-semibold text-primary-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    <UserPlus className="w-4 h-4" aria-hidden="true" /> Follow
+                  </Link>
+                )}
+              </div>
+            </div>
+            <div className="mt-3 min-w-0">
                 <div className="flex items-start justify-between gap-4 flex-wrap">
                   <div className="min-w-0">
                     <h1 className="font-display text-2xl font-bold mb-1 wrap-break-word flex items-center gap-2 flex-wrap tracking-tight">
@@ -866,18 +893,6 @@ function MemberProfile({ data, isSelf, username }: { data: ProfileResponse; isSe
                       ))}
                     </div>
                   </div>
-                  {isSelf ? (
-                    <div className="flex items-center gap-2 shrink-0">
-                      <Link href="/profile/customize" className="rounded-full bg-primary/10 text-primary px-3.5 py-1.5 text-xs font-medium hover:bg-primary/15 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-                        Customize
-                      </Link>
-                      <Link href="/profile" className="rounded-full bg-secondary/70 px-3.5 py-1.5 text-xs font-medium hover:bg-secondary transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-                        Edit profile
-                      </Link>
-                    </div>
-                  ) : (
-                    <UserActions userId={profile.id} username={profile.username} initiallyBlocked={viewerBlocked} initiallyFollowing={viewerFollowing} />
-                  )}
                 </div>
 
                 {/* Notable stats — ≤4 in the hero, deterministic + scoped */}
@@ -910,18 +925,19 @@ function MemberProfile({ data, isSelf, username }: { data: ProfileResponse; isSe
                     <VisibilityTag visibility={heroGrow.visibility} />
                   </Link>
                 )}
-              </div>
             </div>
           </div>
         </div>
 
-        {/* ── Tabs ─────────────────────────────────────────────────── */}
+        {/* ── Tabs — stick under the floating top nav so section
+            switching stays reachable mid-page on long profiles ──────── */}
         <Tabs
           syncWithUrl
           defaultValue="overview"
           onChange={setTab}
           ariaLabel="Profile sections"
           items={tabItems}
+          listClassName="sticky top-[70px] sm:top-[76px] z-30 -mx-4 px-4 py-2 bg-background/85 backdrop-blur-sm"
         >
           {(active) => (
             <>

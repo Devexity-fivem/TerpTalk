@@ -5,6 +5,7 @@ import { useSession } from "next-auth/react"
 import { usePathname } from "next/navigation"
 import { MessageSquare, Loader2 } from "@/lib/icons"
 import { signInHref } from "@/lib/callback-url"
+import { Avatar } from "@/components/ui/avatar"
 import ImageUploader from "@/components/image-uploader"
 import MarkdownComposer from "@/components/markdown-composer"
 import { useToast } from "@/components/ui/toast"
@@ -75,19 +76,32 @@ export default function ReplyForm({ threadId, wasFollowing, via }: ReplyFormProp
   }
 
   return (
-    <div className="mt-8 bg-card/80 rounded-2xl border border-border/70 p-5 sm:p-6">
-      <h3 className="font-display font-semibold mb-4">Add to Discussion</h3>
+    <div className="mt-8 bg-card/80 rounded-2xl border border-border/70 p-4 sm:p-5">
+      <div className="flex items-center gap-3 mb-4">
+        <Avatar
+          src={session?.user?.image}
+          alt={session?.user?.name ? `${session.user.name}'s avatar` : "Your avatar"}
+          size="md"
+          className="hidden sm:flex"
+        />
+        <div>
+          <h3 className="font-display font-semibold">Add to Discussion</h3>
+          {session?.user?.name && (
+            <p className="text-xs text-muted-foreground">Replying as {session.user.name}</p>
+          )}
+        </div>
+      </div>
       {!session ? (
         <p className="text-muted-foreground">
           Please <a href={signInHref(pathname)} className="text-primary hover:underline">sign in</a> to reply to this discussion.
         </p>
       ) : (
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-3">
           <MarkdownComposer
             value={content}
             onChange={setContent}
             placeholder="Share your thoughts..."
-            rows={6}
+            rows={5}
             minLength={10}
             maxLength={10000}
             disabled={loading}

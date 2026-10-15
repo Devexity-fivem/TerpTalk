@@ -455,10 +455,21 @@ export default async function DiaryPage({
           { label: "Grow Diaries", href: "/diaries" },
           { label: diary.title },
         ]} />
-        {/* Header */}
-        <div className="mb-5">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-            <div className="flex-1 min-w-0">
+        {/* Header — overview card: lead photo first on mobile, media
+            column on sm+; identity/meta on the left, actions at foot. */}
+        <div className="mb-5 bg-card/80 rounded-2xl border border-border/70 overflow-hidden">
+          <div className="flex flex-col sm:flex-row sm:items-stretch">
+            {latestPhoto && (
+              <a
+                href="#grow-timeline"
+                aria-label="Latest update photo — jump to timeline"
+                className="block shrink-0 sm:order-last sm:w-56 lg:w-64 sm:self-stretch"
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={latestPhoto} alt="" className="w-full aspect-[16/9] object-cover sm:aspect-auto sm:h-full" />
+              </a>
+            )}
+            <div className="flex-1 min-w-0 p-4 sm:p-5">
               <div className="flex items-center gap-2 mb-3 flex-wrap">
                 {diary.featured && (
                   <span className="rounded-full bg-amber-500/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-warning">
@@ -631,21 +642,9 @@ export default async function DiaryPage({
               )}
 
 
-            </div>
-            <div className="flex flex-col sm:items-end gap-2">
-              {/* Latest logged photo — "what does it look like now" at a
-                  glance; jumps to the timeline on click. */}
-              {latestPhoto && (
-                <a
-                  href="#grow-timeline"
-                  aria-label="Latest update photo — jump to timeline"
-                  className="hidden sm:block w-40 overflow-hidden rounded-xl border border-border/70 tt-lift"
-                >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={latestPhoto} alt="" className="aspect-[16/10] w-full object-cover" />
-                </a>
-              )}
-              <div className="flex flex-wrap gap-2 items-center sm:justify-end">
+              {/* Action row — footer of the overview card: social first
+                  (react/follow/discuss/share), then owner/mod tools. */}
+              <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-border/60 pt-4">
                 <DiaryReactions diaryId={diary.id} initialCounts={reactionCounts} initialMine={myReaction} />
                 {diary.visibility !== "PRIVATE" && (
                   <DiaryFollowButton diaryId={diary.id} initiallyFollowing={following} />
@@ -696,10 +695,10 @@ export default async function DiaryPage({
                   iconOnly
                 />
                 <ReportButton type="DIARY" targetId={diary.id} authorId={diary.author.id} />
+                {!following && (
+                  <p className="w-full text-xs text-muted-foreground">Follow this diary to get notified of new updates.</p>
+                )}
               </div>
-              {!following && (
-                <p className="text-xs text-muted-foreground">Follow this diary to get notified of new updates.</p>
-              )}
             </div>
           </div>
         </div>
@@ -1133,7 +1132,12 @@ export default async function DiaryPage({
                       .sort((a, b) => a.at - b.at)
                       .map((item) =>
                         item.kind === "experiment" ? (
-                          <div key={`exp-${item.e.view.id}`} className="scroll-mt-20">
+                          <div key={`exp-${item.e.view.id}`} className="relative scroll-mt-20">
+                            {/* Timeline node on the week rail */}
+                            <span
+                              aria-hidden="true"
+                              className="absolute -left-[20px] sm:-left-[28px] top-6 h-2.5 w-2.5 rounded-full bg-spectrum ring-4 ring-background"
+                            />
                             <div className="flex items-center gap-2 mb-1.5 -ml-1">
                               <FlaskConical className="w-3.5 h-3.5 text-primary" />
                               <span className="text-[10px] font-semibold uppercase tracking-wider text-primary">
@@ -1150,8 +1154,14 @@ export default async function DiaryPage({
                             />
                           </div>
                         ) : (
+                          <div key={item.u.id} className="relative">
+                            {/* Timeline node — sits on the week rail, aligned
+                                to the update card's header row */}
+                            <span
+                              aria-hidden="true"
+                              className="absolute -left-[20px] sm:-left-[28px] top-6 h-2.5 w-2.5 rounded-full bg-primary ring-4 ring-background"
+                            />
                           <UpdateEditSection
-                            key={item.u.id}
                             update={{
                               id: item.u.id,
                               authorId: item.u.authorId,
@@ -1206,6 +1216,7 @@ export default async function DiaryPage({
                               />
                             }
                           />
+                          </div>
                         )
                       )}
                   </div>

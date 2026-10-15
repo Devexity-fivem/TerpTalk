@@ -52,7 +52,7 @@ export default function ImageGallery({ images }: { images: GalleryImage[] }) {
       <ul
         className={cn(
           "mt-3 grid gap-2",
-          images.length === 1 ? "max-w-md" : "grid-cols-2 sm:grid-cols-3"
+          images.length === 1 ? "max-w-xl" : "grid-cols-2 sm:grid-cols-3"
         )}
       >
         {images.map((image, i) => (

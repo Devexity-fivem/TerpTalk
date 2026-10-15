@@ -80,12 +80,21 @@ interface TooltipProps {
 }
 
 export default function Tooltip({ content, children, side = "top", align = "center", className }: TooltipProps) {
-  const childInteractive = isInteractive(children)
   const ref = useRef<HTMLSpanElement>(null)
   // All three start false so server and client render identical markup.
+  // childInteractive must be state too: when a server component passes an
+  // interactive element (e.g. <Link>) through the RSC boundary, the server
+  // render sees the serialized slot, not the real element — introspecting
+  // during render disagrees with the client and produces a hydration
+  // mismatch. Post-mount evaluation keeps hydration identical.
+  const [childInteractive, setChildInteractive] = useState(false)
   const [insideInteractive, setInsideInteractive] = useState(false)
   const [forced, setForced] = useState(false)
   const [dismissed, setDismissed] = useState(false)
+
+  useEffect(() => {
+    setChildInteractive(isInteractive(children))
+  }, [children])
 
   useEffect(() => {
     const el = ref.current

@@ -195,11 +195,11 @@ export default function UpdateEditSection({ update, day, dateLabel, edited, disc
       <div className="flex flex-wrap items-start justify-between gap-2 mb-3">
         <div>
           <div className="flex items-center gap-1.5 mb-1.5 flex-wrap">
-            <span className="text-xs text-muted-foreground px-2 py-1 bg-secondary rounded">
-              {update.stage}
-            </span>
-            <span className="text-xs text-muted-foreground px-2 py-1 bg-secondary rounded">
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-primary bg-primary/10 px-2 py-1 rounded-full">
               Day {day}
+            </span>
+            <span className="text-xs text-muted-foreground px-2 py-1 bg-secondary rounded-full">
+              {update.stage}
             </span>
             {eventChips.map((chip) => (
               <span key={chip.label} className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${chip.color}`}>
@@ -207,7 +207,7 @@ export default function UpdateEditSection({ update, day, dateLabel, edited, disc
               </span>
             ))}
           </div>
-          {!editing && <h4 className="font-display font-semibold text-sm">{update.title}</h4>}
+          {!editing && <h4 className="font-display font-semibold text-base tracking-tight">{update.title}</h4>}
           {!editing && update.experiment && (
             <a
               href={`#experiment-${update.experiment.id}`}
