@@ -518,6 +518,22 @@ await check("seed-guard: unordered insensitive findFirst spares the community ro
     assert.equal(k.truncated, false)
     assert.deepEqual(k.items.map((i) => i.slug), [q1.slug, q2.slug, q3.slug], "solved > answered > open")
     assert.deepEqual(k.items.map((i) => i.status), ["solved", "answered", "open"])
+    // Solved rows carry the accepted answer's post id so the strain page
+    // can postDeepLink straight to it; non-solved rows never do.
+    assert.equal(k.items[0].answerId, a1.id, "solved row exposes the answer post id")
+    assert.equal(k.items[1].answerId, null)
+    assert.equal(k.items[2].answerId, null)
+  })
+
+  await check("knowledge: deleted accepted answer demotes solved → open state", async () => {
+    await prisma.post.update({ where: { id: a1.id }, data: { deleted: true } })
+    const k = await computeStrainQuestions(kStrain.name)
+    const row = k.items.find((i) => i.slug === q1.slug)
+    assert.ok(row, "q1 still listed")
+    assert.notEqual(row!.status, "solved", "deleted answer is not a solved state")
+    assert.equal(row!.answerId, null, "deleted answer never deep-linked")
+    assert.equal(k.solved, 0, "solved count reflects live answers only")
+    await prisma.post.update({ where: { id: a1.id }, data: { deleted: false } })
   })
 
   await check("knowledge: topics aggregate co-occurring tags, strain tag excluded, singletons dropped", async () => {

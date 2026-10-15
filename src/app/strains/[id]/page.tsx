@@ -25,6 +25,7 @@ import { publicDiaryWhere } from "@/lib/diary-visibility"
 import { mediaProxyUrl } from "@/lib/media"
 import { blockedUserIds, notBlockedAuthor } from "@/lib/security"
 import { diaryPath, strainPath, setupPath } from "@/lib/slugs"
+import { postDeepLink } from "@/lib/notify"
 import { breederPath } from "@/lib/breeders"
 import { STRAIN_EFFECT_LABELS, STRAIN_FLAVOR_LABELS, STRAIN_DIFFICULTY_LABELS, type StrainDifficulty } from "@/lib/strain-fields"
 
@@ -554,7 +555,7 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
                     {questionItems.map((q) => (
                       <Link
                         key={q.slug}
-                        href={`/forum/thread/${q.slug}`}
+                        href={q.answerId ? postDeepLink(q.slug, q.answerId) : `/forum/thread/${q.slug}`}
                         className="flex items-center justify-between gap-3 py-2.5 hover:bg-secondary/50 transition-colors -mx-2 px-2 rounded"
                       >
                         <span className="min-w-0 text-sm font-medium truncate flex items-center gap-2">

@@ -69,7 +69,7 @@ async function mkDiary(authorId: string, title: string, extra: Record<string, un
 async function mkThread(authorId: string, categoryId: string, title: string, createdAt: Date) {
   const t = await prisma.thread.create({
     data: { title, slug: `fv-${title.replace(/\W+/g, "-").toLowerCase()}-${ts}-${createdThreadIds.length}`, content: `${title} content`, categoryId, authorId, createdAt },
-    select: { id: true, createdAt: true },
+    select: { id: true, createdAt: true, slug: true },
   })
   createdThreadIds.push(t.id)
   return t
@@ -573,6 +573,106 @@ async function main() {
       : fail("catch-up hasContent", { cu: catchUpHasContent(cu), empty: catchUpHasContent(cuEmpty) })
 
     await prisma.notification.deleteMany({ where: { userId: viewer.id } })
+  }
+
+  // ── question board (Batch R2): open pool, matched lane, privacy ──────
+  {
+    const { questionBoardForViewer, questionBoardHasContent } = await import("@/lib/question-board")
+
+    // Question-category fixture — the shared QUESTION_CATEGORY_RE surface
+    // convention (slug or name reads as a help board).
+    const qCat = await prisma.category.create({
+      data: { name: M("help board"), slug: `fv-qcat-${ts}`, description: "", order: 991 },
+    })
+    const mkQ = async (authorId: string, title: string, data: Record<string, unknown> = {}) => {
+      const t = await prisma.thread.create({
+        data: { title: M(title), slug: `fv-q-${title.replace(/\W+/g, "-")}-${ts}`, content: "q", categoryId: qCat.id, authorId, ...data },
+        select: { id: true, slug: true },
+      })
+      createdThreadIds.push(t.id)
+      return t
+    }
+
+    const openQ = await mkQ(other.id, "qb open")
+    const unsolvedQ = await mkQ(other.id, "qb unsolved", { replyCount: 2 })
+    const solvedQ = await mkQ(other.id, "qb solved")
+    const solvedPost = await prisma.post.create({ data: { content: "a", threadId: solvedQ.id, authorId: other.id } })
+    await prisma.thread.update({ where: { id: solvedQ.id }, data: { acceptedAnswerId: solvedPost.id } })
+    await mkQ(other.id, "qb deleted", { deleted: true })
+    await mkQ(other.id, "qb locked", { locked: true })
+    const blockedQ = await mkQ(blockedU.id, "qb blocked")
+    const ownQ = await mkQ(viewer.id, "qb own")
+    const nonQ = await mkThread(other.id, fvCat.id, M("qb nonquestion"), new Date())
+
+    // Matched-lane evidence: viewer publicly grows the strain this
+    // question is tagged with. helpWanted's recruitment window needs the
+    // question ≥24h old — exactly like the real pipeline.
+    const strainTag = await prisma.tag.create({ data: { name: `fvstrain${ts}`, slug: `fvstrain-${ts}` } })
+    const strainQ = await mkQ(other.id, "qb strain", { createdAt: new Date(Date.now() - 2 * 86400000) })
+    await prisma.threadTag.create({ data: { threadId: strainQ.id, tagId: strainTag.id } })
+    await mkDiary(viewer.id, M("qb evidence"), { strain: `fvstrain${ts}` })
+
+    const guest = await questionBoardForViewer(null)
+    guest.matched.length === 0 && guest.matchedTotal === 0
+      ? pass("board: guests get no matched lane")
+      : fail("board guest matched", guest.matched.length)
+    const guestSlugs = guest.open.map((q) => q.slug)
+    guestSlugs.includes(openQ.slug) && guestSlugs.includes(unsolvedQ.slug)
+      ? pass("board: real open + unsolved questions surface for guests")
+      : fail("board guest open", guestSlugs)
+    guestSlugs.includes(solvedQ.slug)
+      ? fail("board guest solved leak", guestSlugs)
+      : pass("board: accepted-answer question excluded from seeking pool")
+    guest.open.some((q) => [M("qb deleted"), M("qb locked"), M("qb nonquestion")].includes(q.title))
+      ? fail("board guest hidden leak", guest.open.map((q) => q.title))
+      : pass("board: deleted/locked/non-question threads never surface")
+    guestSlugs.includes(nonQ.slug)
+      ? fail("board guest non-q", nonQ.slug)
+      : pass("board: question categories only")
+    guestSlugs.indexOf(openQ.slug) < guestSlugs.indexOf(unsolvedQ.slug)
+      ? pass("board: unanswered orders before unsolved")
+      : fail("board ordering", guestSlugs)
+    const openRow = guest.open.find((q) => q.slug === openQ.slug)
+    const unsRow = guest.open.find((q) => q.slug === unsolvedQ.slug)
+    openRow?.status === "unanswered" && unsRow?.status === "unsolved"
+      ? pass("board: unanswered vs unsolved labeled distinctly")
+      : fail("board status", { open: openRow?.status, uns: unsRow?.status })
+    openRow?.authorName !== "" && openRow?.authorName !== undefined
+      ? pass("board: real author context on each row")
+      : fail("board author", openRow?.authorName)
+
+    const member = await questionBoardForViewer(viewer.id)
+    member.matched.some((m) => m.slug === strainQ.slug) &&
+    member.matched.find((m) => m.slug === strainQ.slug)!.reasonText.length > 0
+      ? pass("board: strain-evidence question matched to viewer with explainable reason")
+      : fail("board matched", member.matched.map((m) => m.slug))
+    member.open.every((q) => q.slug !== strainQ.slug)
+      ? pass("board: matched question never repeats in the open pool")
+      : fail("board dup", member.open.map((q) => q.slug))
+    member.open.every((q) => q.slug !== blockedQ.slug && q.slug !== ownQ.slug) &&
+    member.matched.every((m) => m.slug !== blockedQ.slug && m.slug !== ownQ.slug)
+      ? pass("board: blocked-author and own questions excluded for the viewer")
+      : fail("board privacy", { open: member.open.map((q) => q.slug) })
+    member.open.length <= 6 && member.matched.length <= 3
+      ? pass("board: display lanes bounded")
+      : fail("board bound", { open: member.open.length, matched: member.matched.length })
+
+    const excluded = await questionBoardForViewer(null, { excludeSlugs: [openQ.slug] })
+    excluded.open.every((q) => q.slug !== openQ.slug)
+      ? pass("board: excludeSlugs dedupes against adjacent modules")
+      : fail("board excludeSlugs", excluded.open.map((q) => q.slug))
+
+    const empty = await questionBoardForViewer(nofollow.id, { excludeSlugs: guestSlugs.concat([strainQ.slug]) })
+    empty.matched.length === 0
+      ? pass("board: no-evidence member gets no invented matches")
+      : fail("board no-evidence", empty.matched.length)
+    questionBoardHasContent(guest) === true
+      ? pass("board: hasContent reflects real rows")
+      : fail("board hasContent", guest.open.length)
+
+    await prisma.threadTag.deleteMany({ where: { tagId: strainTag.id } })
+    await prisma.tag.delete({ where: { id: strainTag.id } }).catch(() => {})
+    await prisma.category.delete({ where: { id: qCat.id } }).catch(() => {})
   }
 
   // ── cleanup ─────────────────────────────────────────────────────

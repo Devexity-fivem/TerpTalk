@@ -228,6 +228,15 @@ check("feed page exposes a contextual log-to-diary entry point", () => {
   assert.ok(shareEntry.includes("Log to diary") || shareEntry.includes("Start a diary"), "contextual grow path exists")
 })
 
+check("feed page mounts the question board fed by the canonical lib", () => {
+  const feedPage = src("app/feed/page.tsx")
+  assert.ok(feedPage.includes("QuestionBoardCard"), "feed mounts the needs-answers card")
+  assert.ok(feedPage.includes("questionBoardForViewer"), "board data comes from lib/question-board")
+  const board = src("lib/question-board.ts")
+  assert.ok(board.includes("helpWantedForUser"), "matched lane reuses the canonical matcher")
+  assert.ok(board.includes("acceptedAnswerId: null"), "open pool is genuinely seeking an answer")
+})
+
 // ── Realtime architecture invariants ───────────────────────────────────
 
 check("exactly one browser-side Pusher construction site", () => {

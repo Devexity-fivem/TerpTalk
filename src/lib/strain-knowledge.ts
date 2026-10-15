@@ -29,6 +29,9 @@ export interface StrainQuestionItem {
   title: string
   authorId: string
   status: StrainQuestionStatus
+  /** Accepted-answer post id (live posts only) — feeds postDeepLink so a
+   *  "Solved" row lands on the answer, not the top of the thread. */
+  answerId: string | null
   replyCount: number
   views: number
   lastActivityAt: string
@@ -126,6 +129,7 @@ export async function computeStrainQuestions(strainName: string): Promise<Strain
         title: t.title,
         authorId: t.authorId,
         status,
+        answerId: isSolved ? t.acceptedAnswer!.id : null,
         replyCount: t.replyCount,
         views: t.views,
         lastActivityAt: t.lastActivityAt.toISOString(),

@@ -20,6 +20,8 @@ import { getStoryRail, getTrendingHashtags, hashtagPath } from "@/lib/moments"
 import StoryRail from "@/components/story-rail"
 import CatchUpCard from "@/components/catch-up-card"
 import { catchUpForUser } from "@/lib/catch-up"
+import QuestionBoardCard from "@/components/question-board-card"
+import { questionBoardForViewer } from "@/lib/question-board"
 
 export const dynamic = "force-dynamic"
 
@@ -96,7 +98,7 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
         select: { id: true, title: true, stage: true, harvested: true },
       })
     : Promise.resolve([] as FeedableDiary[])
-  const [page, hasHarvests, trendingDiaries, siteStats, feedStats, showFirstReplyNudge, activeDiaries, storyRail, trendingTags, catchUp] = await Promise.all([
+  const [page, hasHarvests, trendingDiaries, siteStats, feedStats, showFirstReplyNudge, activeDiaries, storyRail, trendingTags, catchUp, questionBoard] = await Promise.all([
     getFeedPage({ scope, kinds: conf.kinds, cursor }),
     prisma.growDiary.findFirst({ where: harvestScope, select: { id: true } }).then((r) => !!r),
     prisma.growDiary.findMany({
@@ -118,6 +120,11 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
     // deliberate drill-down, not the return visit.
     session?.user?.id && activeTab === "latest"
       ? catchUpForUser(session.user.id).catch(() => null)
+      : Promise.resolve(null),
+    // Needs-answers board — landing tab only; members get public-evidence
+    // matches first, everyone gets the general open pool. Bounded.
+    activeTab === "latest"
+      ? questionBoardForViewer(session?.user?.id ?? null).catch(() => null)
       : Promise.resolve(null),
   ])
 
@@ -384,6 +391,19 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
                 ))}
               </div>
             </div>
+
+            {/* Needs answers — real open questions; matched lane first for
+                members. Slugs the catch-up card already shows are dropped
+                so a question never renders twice on this page. */}
+            {questionBoard && (() => {
+              const shownAbove = new Set((catchUp?.helpWanted.items ?? []).map((q) => q.slug))
+              const board = {
+                ...questionBoard,
+                matched: questionBoard.matched.filter((m) => !shownAbove.has(m.slug)),
+                open: questionBoard.open.filter((o) => !shownAbove.has(o.slug)),
+              }
+              return <QuestionBoardCard data={board} />
+            })()}
 
             {/* Trending hashtags */}
             {trendingTags.length > 0 && (
