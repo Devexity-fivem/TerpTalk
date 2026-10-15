@@ -52,6 +52,14 @@ const ALIGN_CLASS_RIGHT: Record<Align, string> = {
 const INTERACTIVE_SELECTOR =
   'a,button,input,select,textarea,summary,[role="button"],[role="link"],[tabindex]:not([tabindex="-1"])'
 
+// DOM-level interactive-element test. Children arriving through the RSC
+// boundary are serialized slots during SSR, so introspecting React props
+// during render cannot agree between server and client — the mounted DOM
+// child is the only consistent truth.
+function isInteractive(el: Element | null | undefined): boolean {
+  return Boolean(el?.matches(INTERACTIVE_SELECTOR))
+}
+
 interface TooltipProps {
   content: React.ReactNode
   children: React.ReactNode
@@ -76,7 +84,7 @@ export default function Tooltip({ content, children, side = "top", align = "cent
   useEffect(() => {
     const el = ref.current
     if (!el) return
-    if (el.firstElementChild?.matches(INTERACTIVE_SELECTOR)) {
+    if (isInteractive(el.firstElementChild)) {
       setChildInteractive(true)
     }
     const anc = el.parentElement?.closest(INTERACTIVE_SELECTOR)
