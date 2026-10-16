@@ -190,23 +190,85 @@ export interface TrustSafety {
   moderationActions7d: number
   bannedUsers: number
   suspendedNow: number
+  /** Cases closed (RESOLVED/DISMISSED) in the last 7 days. */
+  resolved7d: number
+  /** Median createdAt→resolvedAt hours for cases closed in 30d —
+   *  null below the n=5 honesty floor, never a guess. */
+  medianResolveHours30d: number | null
+  /** Open-case aging — triage sees whether the backlog is fresh or stale. */
+  openAge: { under24h: number; days1to3: number; days3to7: number; over7d: number }
+  /** Per-moderator action counts (7d) — workload visibility for admins. */
+  actionsByModerator7d: { moderator: string; count: number }[]
 }
 
 async function trustSafety(): Promise<TrustSafety> {
   const since = new Date(Date.now() - 7 * DAY)
-  const [reportGroups, pendingFlags, moderationActions7d, bannedUsers, suspendedNow] = await Promise.all([
+  const since30d = new Date(Date.now() - 30 * DAY)
+  const open = { in: ["PENDING", "REVIEWING", "ESCALATED"] }
+  const terminal = { in: ["RESOLVED", "DISMISSED"] }
+  const [reportGroups, pendingFlags, moderationActions7d, bannedUsers, suspendedNow,
+    resolvedReports7d, resolvedFlags7d, resolvedRows, openRows, modActions] = await Promise.all([
     prisma.report.groupBy({ by: ["status"], _count: { _all: true } }),
-    prisma.abuseFlag.count({ where: { status: { in: ["PENDING", "REVIEWING", "ESCALATED"] } } }),
+    prisma.abuseFlag.count({ where: { status: open } }),
     prisma.moderationAction.count({ where: { createdAt: { gt: since } } }),
     prisma.user.count({ where: { banned: true } }),
     prisma.user.count({ where: { suspendedUntil: { gt: new Date() } } }),
+    prisma.report.count({ where: { resolvedAt: { gt: since } } }),
+    prisma.abuseFlag.count({ where: { resolvedAt: { gt: since } } }),
+    // Bounded pull for the median — both sources, capped, timestamps only.
+    prisma.report.findMany({
+      where: { status: terminal, resolvedAt: { gt: since30d } },
+      select: { createdAt: true, resolvedAt: true }, take: 1000,
+    }).then((rows) => prisma.abuseFlag.findMany({
+      where: { status: terminal, resolvedAt: { gt: since30d } },
+      select: { createdAt: true, resolvedAt: true }, take: 1000,
+    }).then((flags) => rows.concat(flags))),
+    // Timestamps only — bucket open cases by age in JS (small sets).
+    prisma.report.findMany({
+      where: { status: open }, select: { createdAt: true }, take: 2000,
+    }).then((rows) => prisma.abuseFlag.findMany({
+      where: { status: open }, select: { createdAt: true }, take: 2000,
+    }).then((flags) => rows.concat(flags))),
+    prisma.moderationAction.groupBy({
+      by: ["moderatorId"], where: { createdAt: { gt: since } },
+      _count: { _all: true }, orderBy: { _count: { moderatorId: "desc" } }, take: 10,
+    }),
   ])
+  const resolveHours = resolvedRows
+    .map((r) => ((r.resolvedAt?.getTime() ?? 0) - r.createdAt.getTime()) / 3600000)
+    .sort((a, b) => a - b)
+  const medianResolveHours30d = resolveHours.length >= 5
+    ? Math.round(resolveHours[Math.floor(resolveHours.length / 2)] * 10) / 10
+    : null
+  const now = Date.now()
+  const openAge = { under24h: 0, days1to3: 0, days3to7: 0, over7d: 0 }
+  for (const r of openRows) {
+    const age = (now - r.createdAt.getTime()) / DAY
+    if (age < 1) openAge.under24h++
+    else if (age < 3) openAge.days1to3++
+    else if (age < 7) openAge.days3to7++
+    else openAge.over7d++
+  }
+  const modIds = modActions.map((m) => m.moderatorId).filter((id): id is string => !!id)
+  const modNames = modIds.length
+    ? new Map((await prisma.user.findMany({
+        where: { id: { in: modIds } },
+        select: { id: true, profile: { select: { username: true } } },
+      })).map((u) => [u.id, u.profile?.username ?? "unknown"]))
+    : new Map<string, string>()
   return {
     reportsByStatus: Object.fromEntries(reportGroups.map((g) => [g.status, g._count._all])),
     pendingFlags,
     moderationActions7d,
     bannedUsers,
     suspendedNow,
+    resolved7d: resolvedReports7d + resolvedFlags7d,
+    medianResolveHours30d,
+    openAge,
+    actionsByModerator7d: modActions.map((m) => ({
+      moderator: `@${m.moderatorId ? modNames.get(m.moderatorId) ?? "unknown" : "unknown"}`,
+      count: m._count._all,
+    })),
   }
 }
 

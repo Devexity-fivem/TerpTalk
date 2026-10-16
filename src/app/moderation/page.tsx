@@ -3,7 +3,7 @@
 import { signInHref } from "@/lib/callback-url"
 import { isStaff, isModerator, isAdmin } from "@/lib/roles"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, type ReactNode } from "react"
 import { useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
 import { Shield, Flag, Loader2, CheckCircle, XCircle, Ban, AlertTriangle, Search, UserCheck, ScrollText, ListChecks, Layers, TrendingUp, ChevronRight } from "@/lib/icons"
@@ -67,12 +67,27 @@ interface ModAction {
   createdAt: string
 }
 
+// Compact age for triage — mods work oldest-first within a priority.
+function ageLabel(iso: string) {
+  const h = (Date.now() - new Date(iso).getTime()) / 3600000
+  if (h < 1) return "<1h"
+  if (h < 48) return `${Math.floor(h)}h`
+  return `${Math.floor(h / 24)}d`
+}
+
+function olderThan7d(iso: string) {
+  return Date.now() - new Date(iso).getTime() > 7 * 86400000
+}
+
 export default function ModerationPage() {
   const { data: session, status } = useSession()
   const router = useRouter()
   const [items, setItems] = useState<QueueItem[]>([])
   const [closed, setClosed] = useState<QueueItem[]>([])
-  const [counts, setCounts] = useState({ open: 0, mine: 0, escalated: 0 })
+  const [counts, setCounts] = useState<{
+    open: number; mine: number; escalated: number
+    health?: { resolved7d: number; medianResolveHours30d: number | null; oldestOpenDays: number | null }
+  }>({ open: 0, mine: 0, escalated: 0 })
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [staffList, setStaffList] = useState<StaffOption[]>([])
   const [actions, setActions] = useState<ModAction[]>([])
@@ -108,7 +123,7 @@ export default function ModerationPage() {
         if (!res.ok) { setError("Access denied"); setLoading(false); return }
         const d = await res.json()
         setItems(d.items || [])
-        setCounts(d.counts || { open: 0, mine: 0, escalated: 0 })
+        setCounts(d.counts ?? { open: 0, mine: 0, escalated: 0 })
         setLoading(false)
       })
       .catch(() => { setError("Failed to load queue"); setLoading(false) })
@@ -268,19 +283,40 @@ export default function ModerationPage() {
     })
   }
 
+  const health = counts.health
+  const fmtResolve = (h: number | null) =>
+    h === null ? "—" : h < 48 ? `${h}h` : `${Math.round(h / 24)}d`
+
+  const statTile = (label: string, value: ReactNode, warn = false) => (
+    <div className={`rounded-xl border px-4 py-3 ${warn ? "border-warning/40 bg-warning/10" : "border-border/70 bg-card"}`}>
+      <div className={`text-xl font-semibold font-display tabular-nums ${warn ? "text-warning" : ""}`}>{value}</div>
+      <div className="text-[11px] text-muted-foreground mt-0.5">{label}</div>
+    </div>
+  )
+
   return (
     <div className="min-h-screen bg-background">
-      <div className="max-w-5xl mx-auto px-4 py-8">
-        <div className="flex items-center gap-3 mb-6">
+      <div className="max-w-6xl mx-auto px-4 py-8">
+        <div className="flex items-center gap-3 mb-2">
           <Shield className="w-8 h-8 text-primary" />
           <div>
-            <h1 className="text-2xl font-bold">Moderation</h1>
+            <h1 className="text-2xl font-bold font-display">Moderation</h1>
             <p className="text-muted-foreground text-sm">{counts.open} open case{counts.open !== 1 ? "s" : ""}</p>
           </div>
         </div>
 
+        {/* Queue health — the numbers a mod actually triages by. */}
+        <div className="grid grid-cols-3 md:grid-cols-6 gap-2 my-5">
+          {statTile("Open", counts.open, counts.open > 0)}
+          {statTile("Mine", counts.mine)}
+          {statTile("Escalated", counts.escalated, counts.escalated > 0)}
+          {statTile("Resolved 7d", health?.resolved7d ?? 0)}
+          {statTile("Median close 30d", fmtResolve(health?.medianResolveHours30d ?? null))}
+          {statTile("Oldest open", health?.oldestOpenDays === null || health === undefined ? "—" : `${health.oldestOpenDays}d`, (health?.oldestOpenDays ?? 0) > 7)}
+        </div>
+
         {/* Tabs */}
-        <div className="flex gap-2 mb-6">
+        <div className="flex gap-1.5 mb-6 overflow-x-auto -mx-1 px-1 pb-1">
           {([
             { id: "queue", label: "Queue", icon: ListChecks },
             { id: "lookup", label: "User Lookup", icon: Search },
@@ -292,8 +328,8 @@ export default function ModerationPage() {
             <button
               key={id}
               onClick={() => setTab(id as typeof tab)}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                tab === id ? "bg-primary text-primary-foreground" : "bg-card border border-border hover:bg-secondary"
+              className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-colors shrink-0 ${
+                tab === id ? "bg-primary text-primary-foreground" : "bg-card border border-border/70 hover:bg-secondary"
               }`}
             >
               <Icon className="w-4 h-4" /> {label}
@@ -306,7 +342,7 @@ export default function ModerationPage() {
         {/* BULK THREAD ACTIONS */}
         {tab === "bulk" && canAct && (
           <div className="space-y-4 mb-10">
-            <div className="bg-card rounded-lg border border-border p-4 space-y-3">
+            <div className="bg-card rounded-2xl border border-border/70 p-4 md:p-5 space-y-3">
               <div>
                 <label className="block text-sm font-medium mb-1">Thread IDs (one per line or comma-separated)</label>
                 <textarea
@@ -378,7 +414,7 @@ export default function ModerationPage() {
         {/* USER LOOKUP */}
         {tab === "lookup" && (
           <div className="space-y-4 mb-10">
-            <div className="bg-card rounded-lg border border-border p-4 flex gap-3">
+            <div className="bg-card rounded-2xl border border-border/70 p-4 flex gap-3">
               <input
                 value={lookupName}
                 onChange={(e) => setLookupName(e.target.value)}
@@ -394,7 +430,7 @@ export default function ModerationPage() {
             </div>
 
             {lookupUser && (
-              <div className="bg-card rounded-lg border border-border p-5">
+              <div className="bg-card rounded-2xl border border-border/70 p-5">
                 <div className="flex items-start justify-between gap-4 flex-wrap">
                   <div>
                     <div className="flex items-center gap-2 mb-1 flex-wrap">
@@ -497,8 +533,8 @@ export default function ModerationPage() {
               <button
                 key={id}
                 onClick={() => { setQueueFilter(id); setSelected(new Set()) }}
-                className={`px-3 py-1.5 rounded-lg text-sm transition-colors ${
-                  queueFilter === id ? "bg-primary text-primary-foreground" : "bg-card border border-border hover:bg-secondary"
+                className={`px-3 py-1.5 rounded-full text-sm transition-colors ${
+                  queueFilter === id ? "bg-primary text-primary-foreground" : "bg-card border border-border/70 hover:bg-secondary"
                 }`}
               >
                 {label}
@@ -546,7 +582,7 @@ export default function ModerationPage() {
           </div>
         )}
 
-        <div className="bg-card rounded-xl border border-border divide-y divide-border mb-6">
+        <div className="bg-card rounded-2xl border border-border/70 divide-y divide-border/60 mb-6 overflow-hidden">
           {items.length === 0 && (
             <div className="p-8 text-center text-muted-foreground">
               <CheckCircle className="w-10 h-10 mx-auto mb-2 text-primary" />
@@ -587,8 +623,15 @@ export default function ModerationPage() {
                       {it.targetDeleted && " (content removed)"}
                     </span>
                   </span>
-                  <span className="text-xs text-muted-foreground shrink-0 hidden sm:block" title={new Date(it.createdAt).toLocaleString()}>
-                    {new Date(it.createdAt).toLocaleDateString()}
+                  <span
+                    className={`text-xs font-medium tabular-nums shrink-0 px-1.5 py-0.5 rounded ${
+                      olderThan7d(it.createdAt)
+                        ? "bg-warning/15 text-warning"
+                        : "bg-secondary text-muted-foreground"
+                    }`}
+                    title={new Date(it.createdAt).toLocaleString()}
+                  >
+                    {ageLabel(it.createdAt)}
                   </span>
                   <span className="text-xs text-muted-foreground shrink-0 w-24 truncate text-right hidden md:block">
                     {it.assignedTo ? `@${it.assignedTo}` : <span className="italic">unassigned</span>}
@@ -620,8 +663,8 @@ export default function ModerationPage() {
 
         {closed.length > 0 && (
           <>
-            <h2 className="text-lg font-semibold mb-4">Recently Resolved</h2>
-            <div className="bg-card/50 rounded-xl border border-border divide-y divide-border mb-10">
+            <h2 className="font-display text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-3">Recently Resolved</h2>
+            <div className="bg-card/50 rounded-2xl border border-border/60 divide-y divide-border/60 mb-10 overflow-hidden">
               {closed.map((r) => (
                 <Link key={`${r.kind}:${r.id}`} href={`/moderation/cases/${r.id}?kind=${r.kind}`}
                   className="p-3 text-sm flex items-center justify-between hover:bg-secondary/40 transition-colors">
@@ -636,7 +679,7 @@ export default function ModerationPage() {
 
         {/* MOD LOG */}
         {tab === "log" && (
-        <div className="bg-card rounded-lg border border-border divide-y divide-border">
+        <div className="bg-card rounded-2xl border border-border/70 divide-y divide-border/60 overflow-hidden">
           {actions.length === 0 && <p className="p-4 text-sm text-muted-foreground">No moderation actions recorded.</p>}
           {actions.map((a) => (
             <div key={a.id} className="p-3 text-sm flex items-center justify-between flex-wrap gap-2">

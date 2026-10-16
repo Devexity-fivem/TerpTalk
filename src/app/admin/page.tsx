@@ -144,10 +144,33 @@ export default async function AdminOverviewPage() {
           <Stat label="Reports pending" value={openReports} />
           <Stat label="Reports reviewing" value={reviewing} />
           <Stat label="Abuse flags open" value={d.trust.pendingFlags} />
+          <Stat label="Resolved (7d)" value={d.trust.resolved7d} />
+          <Stat
+            label="Median time to close"
+            value={d.trust.medianResolveHours30d !== null
+              ? d.trust.medianResolveHours30d < 48
+                ? `${d.trust.medianResolveHours30d}h`
+                : `${Math.round(d.trust.medianResolveHours30d / 24)}d`
+              : "—"}
+            hint={d.trust.medianResolveHours30d === null ? "n<5 closed cases in 30d" : "cases closed in 30d"}
+          />
           <Stat label="Mod actions (7d)" value={d.trust.moderationActions7d} />
           <Stat label="Banned accounts" value={d.trust.bannedUsers} />
           <Stat label="Suspended now" value={d.trust.suspendedNow} />
         </div>
+        {(openReports + reviewing + d.trust.pendingFlags) > 0 && (
+          <p className="text-[11px] text-muted-foreground mt-3">
+            Open-case age: {d.trust.openAge.under24h} under 24h · {d.trust.openAge.days1to3} 1–3d ·{" "}
+            {d.trust.openAge.days3to7} 3–7d · {d.trust.openAge.over7d} over a week
+            {d.trust.openAge.over7d > 0 ? " — aging cases surface first in the queue" : ""}
+          </p>
+        )}
+        {d.trust.actionsByModerator7d.length > 0 && (
+          <p className="text-[11px] text-muted-foreground mt-1">
+            Most active moderators (7d):{" "}
+            {d.trust.actionsByModerator7d.slice(0, 5).map((m) => `${m.moderator} ${m.count}`).join(" · ")}
+          </p>
+        )}
       </Section>
 
       {/* Product usage + reliability — admin only */}

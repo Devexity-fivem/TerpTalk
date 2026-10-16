@@ -281,15 +281,51 @@ export async function GET(request: Request) {
 
 async function queueCounts(staffId: string) {
   const open = { in: ["PENDING", "REVIEWING", "ESCALATED"] }
-  const [openReports, openFlags, myReports, myFlags, escReports, escFlags] = await Promise.all([
+  const terminal = { in: ["RESOLVED", "DISMISSED"] }
+  const since7d = new Date(Date.now() - 7 * 86400000)
+  const since30d = new Date(Date.now() - 30 * 86400000)
+  const [openReports, openFlags, myReports, myFlags, escReports, escFlags,
+    resolvedReports7d, resolvedFlags7d, oldestReport, oldestFlag, resolvedRows] = await Promise.all([
     prisma.report.count({ where: { status: open } }),
     prisma.abuseFlag.count({ where: { status: open } }),
     prisma.report.count({ where: { status: open, assignedToId: staffId } }),
     prisma.abuseFlag.count({ where: { status: open, assignedToId: staffId } }),
     prisma.report.count({ where: { status: "ESCALATED" } }),
     prisma.abuseFlag.count({ where: { status: "ESCALATED" } }),
+    prisma.report.count({ where: { resolvedAt: { gt: since7d } } }),
+    prisma.abuseFlag.count({ where: { resolvedAt: { gt: since7d } } }),
+    prisma.report.findFirst({ where: { status: open }, orderBy: { createdAt: "asc" }, select: { createdAt: true } }),
+    prisma.abuseFlag.findFirst({ where: { status: open }, orderBy: { createdAt: "asc" }, select: { createdAt: true } }),
+    prisma.report.findMany({
+      where: { status: terminal, resolvedAt: { gt: since30d } },
+      select: { createdAt: true, resolvedAt: true }, take: 1000,
+    }).then((rows) => prisma.abuseFlag.findMany({
+      where: { status: terminal, resolvedAt: { gt: since30d } },
+      select: { createdAt: true, resolvedAt: true }, take: 1000,
+    }).then((flags) => rows.concat(flags))),
   ])
-  return { open: openReports + openFlags, mine: myReports + myFlags, escalated: escReports + escFlags }
+  const resolveHours = resolvedRows
+    .map((r) => ((r.resolvedAt?.getTime() ?? 0) - r.createdAt.getTime()) / 3600000)
+    .sort((a, b) => a - b)
+  const oldest = [oldestReport?.createdAt, oldestFlag?.createdAt]
+    .filter((d): d is Date => !!d)
+    .sort((a, b) => a.getTime() - b.getTime())[0]
+  return {
+    open: openReports + openFlags,
+    mine: myReports + myFlags,
+    escalated: escReports + escFlags,
+    // Queue health — surfaced in the page header strip. Median stays
+    // null below the n=5 honesty floor; never guess.
+    health: {
+      resolved7d: resolvedReports7d + resolvedFlags7d,
+      medianResolveHours30d: resolveHours.length >= 5
+        ? Math.round(resolveHours[Math.floor(resolveHours.length / 2)] * 10) / 10
+        : null,
+      oldestOpenDays: oldest
+        ? Math.floor((Date.now() - oldest.getTime()) / 86400000)
+        : null,
+    },
+  }
 }
 
 // PATCH — case transitions. SUPPORT may only triage (REVIEWING/ESCALATED);

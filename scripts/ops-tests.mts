@@ -119,6 +119,20 @@ const main = async () => {
       adminHome.status === 200 && adminHtml.includes("Moment posts") && adminHtml.includes("Moment comments")
         ? pass("admin overview shows Moment post/comment volume")
         : fail("admin overview moments", { s: adminHome.status })
+      adminHtml.includes("Resolved (7d)") && adminHtml.includes("Median time to close")
+        ? pass("admin overview renders queue-health fields")
+        : fail("admin overview queue-health labels")
+
+      // Moderation queue GET returns the health block for staff.
+      const qRes = await fetch(`${BASE}/api/moderation/queue?status=OPEN`, { headers: { cookie: modCookie } })
+      const qData = await qRes.json().catch(() => ({}))
+      const hq = qData?.counts?.health
+      qRes.status === 200 && hq &&
+        typeof hq.resolved7d === "number" &&
+        (hq.medianResolveHours30d === null || typeof hq.medianResolveHours30d === "number") &&
+        (hq.oldestOpenDays === null || typeof hq.oldestOpenDays === "number")
+        ? pass("queue API returns health block (resolved7d/median/oldest)")
+        : fail("queue health block", { s: qRes.status, hq })
 
       // New admin-only sections deny moderators at the page level.
       for (const p of ["/admin/retention", "/admin/experiments"]) {
@@ -213,6 +227,21 @@ const main = async () => {
         Array.isArray(data.security.rateLimitHits7d) &&
         typeof data.cron.tasksDone === "number"
       shapeOk ? pass("getOpsData returns all bounded sections") : fail("getOpsData returns all bounded sections", Object.keys(data))
+
+      // Queue-health extension — resolution rate, median close time
+      // (null under n<5), open-age buckets, per-moderator workload.
+      const t = data.trust
+      const healthOk =
+        typeof t.resolved7d === "number" &&
+        (t.medianResolveHours30d === null || typeof t.medianResolveHours30d === "number") &&
+        t.openAge.under24h + t.openAge.days1to3 + t.openAge.days3to7 + t.openAge.over7d >= 0 &&
+        Array.isArray(t.actionsByModerator7d) &&
+        t.actionsByModerator7d.every((m) => typeof m.moderator === "string" && typeof m.count === "number")
+      healthOk ? pass("trust queue-health fields present and shaped") : fail("trust queue-health", t)
+      // Workload rows carry handles only — never raw user ids.
+      t.actionsByModerator7d.every((m) => m.moderator.startsWith("@") && !/^@?c[a-z0-9]{20,}$/i.test(m.moderator))
+        ? pass("moderator workload rows carry handles only")
+        : fail("moderator workload leak", t.actionsByModerator7d)
 
       // No message bodies, no IPs: unanswered carries only public fields.
       const leak = data.unanswered.some((t) => JSON.stringify(t).length > 500)
@@ -431,18 +460,22 @@ const main = async () => {
         fail("admin stats baseline", "referrals block missing")
       } else {
         const refSrc = await createUser("refsrc")
-        const mkReferee = async (tag: string, xp: number) => {
+        // Distinct signup times are REQUIRED: the legacy unkeyed-payout
+        // rule settles any referee who joined the same referrer within a
+        // −60s/+600s window of the legacy stamp — identical timestamps
+        // would make refElig ambiguous with refLeg.
+        const mkReferee = async (tag: string, xp: number, ageDays = 30) => {
           const u = await createUser(tag)
           await prisma.profile.update({ where: { userId: u.id }, data: { referredById: refSrc.profile!.id, xp } })
-          await prisma.user.update({ where: { id: u.id }, data: { createdAt: new Date(Date.now() - 30 * 86400000) } })
+          await prisma.user.update({ where: { id: u.id }, data: { createdAt: new Date(Date.now() - ageDays * 86400000) } })
           users.push(u)
           return u
         }
         users.push(refSrc)
-        const refPaid = await mkReferee("refpaid", 100)   // keyed payout → settled
-        const refRev = await mkReferee("refrev", 0)       // reversed payout, ineligible xp
-        const refElig = await mkReferee("refelig", 100)   // nothing recorded → eligible-unpaid
-        const refLeg = await mkReferee("refleg", 100)     // legacy unkeyed payout → settled
+        const refPaid = await mkReferee("refpaid", 100, 30)   // keyed payout → settled
+        const refRev = await mkReferee("refrev", 0, 31)       // reversed payout, ineligible xp
+        const refElig = await mkReferee("refelig", 100, 32)   // nothing recorded → eligible-unpaid
+        const refLeg = await mkReferee("refleg", 100, 33)     // legacy unkeyed payout → settled
 
         const refSrcCreated = new Date(Date.now() - 60 * 86400000)
         await prisma.progressionEvent.create({
