@@ -20,7 +20,8 @@ import {
 import { diaryPath } from "@/lib/slugs"
 import { mediaProxyUrl } from "@/lib/media"
 import { diaryCompleteness } from "@/lib/diary-weeks"
-import { helpWantedForUser, type HelpWantedItem } from "@/lib/answer-match"
+import { helpWantedForUser, questionCategoryIds, type HelpWantedItem } from "@/lib/answer-match"
+import { activationMilestonesFor } from "@/lib/activation"
 import { momentVisibleWhere } from "@/lib/moments"
 import { momentPath } from "@/lib/moment-shared"
 import { growMatchesForUser, type GrowMatchesResult } from "@/lib/grow-matches"
@@ -141,6 +142,19 @@ export interface MemberHomeData {
    *  lib/suggested-growers. Personalized for the member; already-
    *  followed and blocked members are excluded at query time. */
   suggestedGrowers: SuggestedGrower[]
+  /** First-session activation panel — derived from the canonical
+   *  activationMilestonesFor() milestones. null for established members
+   *  (xp > 0 and past the new-account window), dismissed members, and
+   *  members who completed all three milestones — established accounts
+   *  never see new-member guidance. */
+  activation: {
+    completed: { people: boolean; grow: boolean; conversation: boolean }
+    /** first incomplete milestone — the panel's contextual focus */
+    next: "people" | "grow" | "conversation"
+    /** question-category slug for the "Ask a question" CTA — null only
+     *  when no question category exists */
+    askSlug: string | null
+  } | null
   /** Community pulse — trending threads to make the cockpit feel alive */
   trending: {
     title: string
@@ -165,6 +179,7 @@ export async function getMemberHomeData(userId: string): Promise<MemberHomeData 
           name: true,
           createdAt: true,
           onboardingCompletedAt: true,
+          activationDismissedAt: true,
           profile: { select: { username: true, xp: true, standing: true } },
         },
       }),
@@ -291,6 +306,38 @@ export async function getMemberHomeData(userId: string): Promise<MemberHomeData 
     ])
 
   if (!user) return null
+
+  // ── Activation panel ────────────────────────────────────────────
+  // Show only to genuinely new or zero-contribution members who have
+  // not dismissed it. The xp>0 + older-than-30d gate keeps established
+  // members out of the milestone derivation entirely — no extra query
+  // fan-out for the common case. Milestones come from the canonical
+  // activationMilestonesFor (live rows only: deleted contributions and
+  // pure reposts never count).
+  const NEW_MEMBER_WINDOW_MS = 30 * 86400000
+  let activation: MemberHomeData["activation"] = null
+  if (!user.activationDismissedAt && (Date.now() - user.createdAt.getTime() <= NEW_MEMBER_WINDOW_MS || (user.profile?.xp ?? 0) === 0)) {
+    const milestones = (await activationMilestonesFor([userId]).catch(() => null))?.get(userId)
+    if (milestones) {
+      const completed = {
+        people: !!milestones.firstFollow,
+        grow: !!milestones.firstGrow,
+        conversation: !!milestones.firstCommunityContribution,
+      }
+      if (!(completed.people && completed.grow && completed.conversation)) {
+        const next: "people" | "grow" | "conversation" =
+          !completed.people ? "people" : !completed.grow ? "grow" : "conversation"
+        activation = {
+          completed,
+          next,
+          askSlug:
+            next === "conversation"
+              ? ((await questionCategoryIds())[0]?.slug ?? null)
+              : null,
+        }
+      }
+    }
+  }
 
   const followedDiaryIds = followedDiaries.map((d) => d.diaryId)
   const followedUserIds = followedUsers.map((f) => f.followingId)
@@ -704,6 +751,7 @@ export async function getMemberHomeData(userId: string): Promise<MemberHomeData 
     helpWanted,
     growMatches,
     suggestedGrowers,
+    activation,
     pushInvite:
       !!user.onboardingCompletedAt &&
       ((user.profile?.xp ?? 0) > 0 || diaries.length > 0 || Date.now() - user.createdAt.getTime() > 86400000),

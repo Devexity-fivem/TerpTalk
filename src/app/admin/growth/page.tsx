@@ -458,6 +458,28 @@ export default async function AdminGrowthPage() {
         </p>
       </section>
 
+      {/* ── Activation panel — CTA attempts + dismissals; completions
+          live in the milestone ladder above, never duplicated here ── */}
+      <section className="rounded-2xl border border-border/60 bg-card/40 p-4 md:p-5">
+        <h2 className="font-display text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-1">
+          Activation panel — {act.windowDays}d window
+        </h2>
+        <p className="text-xs text-muted-foreground mb-3">
+          CTA clicks are attempts, deduped per member·milestone·day. Completions
+          are the milestone-ladder steps above — never derived from clicks.
+        </p>
+        <div className="grid gap-3 sm:grid-cols-3">
+          <Card label="CTA clicks" value={act.panel.ctaClicks} hint="attempts, not completions" />
+          <Card label="Panel dismissals" value={act.panel.dismissals} />
+          <Card label="Milestones clicked" value={act.panel.ctaByMilestone.length} />
+        </div>
+        {act.panel.ctaByMilestone.length > 0 && (
+          <div className="mt-3">
+            <SourceChips rows={act.panel.ctaByMilestone.map((r) => ({ source: r.milestone, count: r.clicks }))} />
+          </div>
+        )}
+      </section>
+
       <p className="text-[11px] text-muted-foreground">
         Generated {g.generatedAt.toISOString()} · activation report {act.generatedAt} · live aggregates, not sampled.
       </p>

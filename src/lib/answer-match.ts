@@ -256,7 +256,7 @@ export async function extractQuestionSignals(
 // ── Shared eligibility predicates ────────────────────────────────────
 
 /** Question categories — help-surface boards only. */
-export async function questionCategoryIds(): Promise<{ id: string; name: string }[]> {
+export async function questionCategoryIds(): Promise<{ id: string; name: string; slug: string }[]> {
   const cats = await prisma.category.findMany({
     where: { hidden: false },
     select: { id: true, name: true, slug: true },

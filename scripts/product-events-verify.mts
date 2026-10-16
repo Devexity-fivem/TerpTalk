@@ -170,6 +170,24 @@ async function run() {
     ? pass("events: non-allowlisted type rejected")
     : fail("events type allowlist", badType)
 
+  // ── /api/events: ACTIVATION_CTA — attempt signal, keyed per
+  // member·milestone·day; non-milestone objectTypes record nothing.
+  await api("/api/events", { method: "POST", cookie: vCookie, body: { type: "ACTIVATION_CTA", objectType: "people", source: "member_home" } })
+  await api("/api/events", { method: "POST", cookie: vCookie, body: { type: "ACTIVATION_CTA", objectType: "people", source: "member_home" } })
+  const cta = await evs(viewer.id, "ACTIVATION_CTA")
+  cta.length === 1 && cta[0].objectType === "people" && cta[0].source === "member_home"
+    ? pass("ACTIVATION_CTA: recorded once per member·milestone·day")
+    : fail("ACTIVATION_CTA dedupe", cta)
+  await api("/api/events", { method: "POST", cookie: vCookie, body: { type: "ACTIVATION_CTA", objectType: "grow" } })
+  ;(await evs(viewer.id, "ACTIVATION_CTA")).length === 2
+    ? pass("ACTIVATION_CTA: a different milestone records separately")
+    : fail("ACTIVATION_CTA milestone key", await evs(viewer.id, "ACTIVATION_CTA"))
+  await api("/api/events", { method: "POST", cookie: vCookie, body: { type: "ACTIVATION_CTA", objectType: "bogus" } })
+  await api("/api/events", { method: "POST", cookie: vCookie, body: { type: "ACTIVATION_CTA" } })
+  ;(await evs(viewer.id, "ACTIVATION_CTA")).every((e) => e.objectType === "people" || e.objectType === "grow")
+    ? pass("ACTIVATION_CTA: non-milestone objectType records nothing (fail-closed)")
+    : fail("ACTIVATION_CTA objectType allowlist", await evs(viewer.id, "ACTIVATION_CTA"))
+
   // ── /api/events: FOLLOWED_CONTENT_VIEWED fail-closed semantics ──
   await api("/api/events", { method: "POST", cookie: vCookie, body: { type: "FOLLOWED_CONTENT_VIEWED", objectType: "Diary", objectId: diary.id, source: "digest" } })
   await api("/api/events", { method: "POST", cookie: vCookie, body: { type: "FOLLOWED_CONTENT_VIEWED", objectType: "Diary", objectId: diary.id, source: "digest" } })

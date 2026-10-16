@@ -22,7 +22,10 @@ import { recordProductEvent, utcDay } from "@/lib/product-events"
 //                            object records nothing and the response
 //                            stays 200, so the endpoint never becomes a
 //                            follow/privacy oracle.
-const CLIENT_TYPES = new Set(["DIGEST_VIEWED", "FOLLOWED_CONTENT_VIEWED"])
+const CLIENT_TYPES = new Set(["DIGEST_VIEWED", "FOLLOWED_CONTENT_VIEWED", "ACTIVATION_CTA"])
+
+// Activation-panel CTA clicks — objectType carries the milestone key.
+const ACTIVATION_MILESTONES = new Set(["people", "grow", "conversation"])
 
 // Intentionally maintenance-exempt: product telemetry, no product-data side effects.
 export async function POST(request: Request) {
@@ -46,6 +49,22 @@ export async function POST(request: Request) {
 
   if (body.type === "DIGEST_VIEWED") {
     await recordProductEvent({ type: "DIGEST_VIEWED", userId, source, key: `dv:${userId}:${utcDay()}` })
+    return NextResponse.json({ ok: true })
+  }
+
+  // ACTIVATION_CTA — the attempt signal; objectType must be a milestone
+  // key. Keyed once per member·milestone·day so double-mounts and
+  // retries can't inflate the count.
+  if (body.type === "ACTIVATION_CTA") {
+    const milestone = typeof body.objectType === "string" ? body.objectType : ""
+    if (!ACTIVATION_MILESTONES.has(milestone)) return NextResponse.json({ ok: true })
+    await recordProductEvent({
+      type: "ACTIVATION_CTA",
+      userId,
+      source,
+      objectType: milestone,
+      key: `act:${userId}:${milestone}:${utcDay()}`,
+    })
     return NextResponse.json({ ok: true })
   }
 

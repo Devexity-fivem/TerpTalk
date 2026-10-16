@@ -6,6 +6,7 @@ import {
   HeartHandshake, Calendar, HelpCircle, Sparkles, UserPlus,
 } from "@/lib/icons"
 import MemberGreeting from "@/components/member-greeting"
+import ActivationPanel from "@/components/activation-panel"
 import OpenChatButton from "@/components/open-chat-button"
 import Tooltip, { InfoTip } from "@/components/ui/tooltip"
 import EmptyState from "@/components/ui/empty-state"
@@ -202,6 +203,19 @@ export default function MemberHome({
                   ))}
                 </ul>
               </section>
+            )}
+
+            {/* First-session activation — server-derived milestones;
+                established members get data.activation = null and never
+                see this card. */}
+            {data.activation && (
+              <ActivationPanel
+                completed={data.activation.completed}
+                next={data.activation.next}
+                growers={data.activation.next === "people" ? data.suggestedGrowers.slice(0, 2) : []}
+                askHref={data.activation.askSlug ? `/forum/new?category=${data.activation.askSlug}` : "/forum/new"}
+                updateHref={data.grows[0] ? diaryPath(data.grows[0]) : null}
+              />
             )}
 
             {/* Composer entry — one share box, every real workflow */}
@@ -590,7 +604,9 @@ export default function MemberHome({
 
           {/* Growers to follow — deterministic suggestions matched on the
               member's public grow signals + follow graph. */}
-          {data.suggestedGrowers.length > 0 && (
+          {/* Suppressed while the activation panel is inline-suggesting
+              the same growers — one surface, never twice. */}
+          {data.suggestedGrowers.length > 0 && data.activation?.next !== "people" && (
             <Card
               icon={<Users className="h-4 w-4 text-primary" />}
               title="Growers to follow"

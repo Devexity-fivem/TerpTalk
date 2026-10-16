@@ -48,6 +48,7 @@ let otherUpdateId = "", blockedUpdateId = "", bannedUpdateId = "", deletedUpdate
 let catThreadId = "", otherThreadId = ""
 const createdThreadIds: string[] = []
 const createdDiaryIds: string[] = []
+const activationUsers: VerifyUser[] = []
 
 async function mkUpdate(diaryId: string, authorId: string, title: string, createdAt: Date) {
   const u = await prisma.diaryUpdate.create({
@@ -531,6 +532,88 @@ async function main() {
     await prisma.follow.deleteMany({ where: { followerId: viewer.id, followingId: blockedU.id } })
   }
 
+  // ── activation panel (Batch R4): canonical server-derived milestones ──
+  // Eligibility: not dismissed AND (new ≤30d OR zero contribution xp).
+  // Completion comes only from live durable rows — never from clicks.
+  {
+    const { getMemberHomeData } = await import("@/lib/member-home")
+    const act = await createUser("act")
+    activationUsers.push(act)
+    const actCookie = (await login(act.username, act.password)).cookie
+
+    const h0 = await getMemberHomeData(act.id)
+    h0?.activation && !h0.activation.completed.people && !h0.activation.completed.grow &&
+    !h0.activation.completed.conversation && h0.activation.next === "people"
+      ? pass("activation: new member sees panel, people milestone first")
+      : fail("activation new member", h0?.activation)
+
+    // A real Follow row completes people → next is grow.
+    await prisma.follow.create({ data: { followerId: act.id, followingId: author.id } })
+    const h1 = await getMemberHomeData(act.id)
+    h1?.activation?.completed.people === true && h1.activation.next === "grow"
+      ? pass("activation: follow completes people, next = grow")
+      : fail("activation follow", h1?.activation)
+
+    // A live diary completes grow but NOT conversation — the GrowDiary
+    // row itself is not a community contribution.
+    const actDiary = await mkDiary(act.id, M("act grow"))
+    const h2 = await getMemberHomeData(act.id)
+    h2?.activation?.completed.grow === true && h2.activation.completed.conversation === false &&
+    h2.activation.next === "conversation" && !!h2.activation.askSlug
+      ? pass("activation: diary completes grow only; conversation open w/ askSlug")
+      : fail("activation grow", h2?.activation)
+
+    // A real diary update is a community contribution → all done →
+    // the panel is gone for good.
+    await mkUpdate(actDiary.id, act.id, M("act upd"), new Date())
+    const h3 = await getMemberHomeData(act.id)
+    h3?.activation === null
+      ? pass("activation: first community contribution completes the panel")
+      : fail("activation complete", h3?.activation)
+
+    // Live-rows-only: soft-deleting the diary un-completes grow — the
+    // panel returns because deleted content never counts.
+    await prisma.growDiary.update({ where: { id: actDiary.id }, data: { deleted: true } })
+    const h4 = await getMemberHomeData(act.id)
+    h4?.activation && h4.activation.completed.grow === false && h4.activation.completed.people === true
+      ? pass("activation: deleted diary un-completes grow (live rows only)")
+      : fail("activation deleted", h4?.activation)
+
+    // Dismissal via the real route — durable, idempotent, and never a
+    // milestone completion.
+    const d1 = await api("/api/activation/dismiss", { method: "POST", cookie: actCookie })
+    const d2 = await api("/api/activation/dismiss", { method: "POST", cookie: actCookie })
+    const dismissed = await prisma.user.findUnique({ where: { id: act.id }, select: { activationDismissedAt: true } })
+    const h5 = await getMemberHomeData(act.id)
+    d1.status === 200 && d2.status === 200 && !!dismissed?.activationDismissedAt && h5?.activation === null
+      ? pass("activation: dismiss persists durably + idempotent")
+      : fail("activation dismiss", { d1: d1.status, d2: d2.status, dismissed: !!dismissed?.activationDismissedAt })
+    const d3 = await api("/api/activation/dismiss", { method: "POST" })
+    d3.status === 401
+      ? pass("activation: dismiss requires auth")
+      : fail("activation dismiss auth", d3.status)
+
+    // Established member — old account with contribution xp — never
+    // sees new-member guidance.
+    const vet = await createUser("vet")
+    activationUsers.push(vet)
+    await prisma.user.update({ where: { id: vet.id }, data: { createdAt: new Date(Date.now() - 60 * 86400000) } })
+    await prisma.profile.update({ where: { userId: vet.id }, data: { xp: 250 } })
+    const hv = await getMemberHomeData(vet.id)
+    hv?.activation === null
+      ? pass("activation: established member (old + xp) never sees the panel")
+      : fail("activation established", hv?.activation)
+
+    // Old account with zero activity — still low-activity → guided.
+    const lurk = await createUser("lurk")
+    activationUsers.push(lurk)
+    await prisma.user.update({ where: { id: lurk.id }, data: { createdAt: new Date(Date.now() - 60 * 86400000) } })
+    const hl = await getMemberHomeData(lurk.id)
+    hl?.activation && hl.activation.next === "people"
+      ? pass("activation: old zero-activity account still gets guidance")
+      : fail("activation lurker", hl?.activation)
+  }
+
   // ── catch-up card (Batch R1): real activity, window, privacy, empty ──
   {
     const { catchUpForUser, catchUpHasContent } = await import("@/lib/catch-up")
@@ -676,7 +759,7 @@ async function main() {
   }
 
   // ── cleanup ─────────────────────────────────────────────────────
-  for (const u of [author, viewer, other, blockedU, bannedU, nofollow]) {
+  for (const u of [author, viewer, other, blockedU, bannedU, nofollow, ...activationUsers]) {
     if (u?.id) await prisma.user.delete({ where: { id: u.id } }).catch(() => {})
   }
   if (fvCat?.id) await prisma.category.delete({ where: { id: fvCat.id } }).catch(() => {})
@@ -698,7 +781,7 @@ async function main() {
 main().catch(async (e) => {
   console.error("feed-verify crashed:", e)
   try {
-    for (const u of [author, viewer, other, blockedU, bannedU, nofollow]) {
+    for (const u of [author, viewer, other, blockedU, bannedU, nofollow, ...activationUsers]) {
       if (u?.id) await prisma.user.delete({ where: { id: u.id } }).catch(() => {})
     }
     if (fvCat?.id) await prisma.category.delete({ where: { id: fvCat.id } }).catch(() => {})

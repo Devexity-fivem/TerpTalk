@@ -32,6 +32,11 @@ import { median } from "@/lib/diary-weeks"
 //                             fcv:<uid>:<objectId>:<UTC-day>
 //   DIGEST_VIEWED             member opened /mydigest — client
 //                             beacon; keyed dv:<uid>:<UTC-day>
+//   ACTIVATION_CTA            member clicked an activation-panel
+//                             milestone CTA — an ATTEMPT, never a
+//                             completion. objectType records the
+//                             milestone key (people|grow|conversation);
+//                             keyed act:<uid>:<milestone>:<UTC-day>.
 
 export const PRODUCT_EVENT_TYPES = [
   "FIRST_FOLLOW",
@@ -39,6 +44,7 @@ export const PRODUCT_EVENT_TYPES = [
   "INTERACTION_POSTED",
   "FOLLOWED_CONTENT_VIEWED",
   "DIGEST_VIEWED",
+  "ACTIVATION_CTA",
 ] as const
 export type ProductEventType = (typeof PRODUCT_EVENT_TYPES)[number]
 

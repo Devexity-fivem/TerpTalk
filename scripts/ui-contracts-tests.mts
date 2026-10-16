@@ -1006,7 +1006,7 @@ check("growth page renders the server-side activation report sections", () => {
   const g = src("app/admin/growth/page.tsx")
   assert.ok(g.includes("activationReport(30)"), "report is fetched server-side, not client-fetched")
   for (const s of ["Milestone ladder", "Step conversions", "Return by first contribution",
-    "Return by push status", "Push lifecycle", "Social loop"]) {
+    "Return by push status", "Push lifecycle", "Social loop", "Activation panel"]) {
     assert.ok(g.includes(s), `missing section: ${s}`)
   }
   assert.ok(g.includes("firstResponseReceived"), "response milestone rendered")
@@ -1033,6 +1033,23 @@ check("response milestone is durable-state only — no event ledger", () => {
   assert.ok(a.includes('"SetupComment"'), "setup-comment surface queried")
   assert.ok(a.includes('"MomentComment"'), "moment-comment surface queried")
   assert.ok(!a.includes("recordProductEvent"), "no product-event write in the milestone path")
+})
+
+// ── Batch R4: guided activation panel ───────────────────────────────────
+
+check("activation panel derives from canonical milestones — no parallel progress state", () => {
+  const mh = src("lib/member-home.ts")
+  assert.ok(mh.includes("activationMilestonesFor"), "member-home consumes the canonical milestone engine")
+  assert.ok(mh.includes("activationDismissedAt"), "durable dismissal column read")
+  const panel = src("components/activation-panel.tsx")
+  assert.ok(panel.includes("/api/activation/dismiss"), "dismiss posts to the real route")
+  assert.ok(panel.includes("ACTIVATION_CTA"), "CTA attempts beacon through the event allowlist")
+})
+
+check("activation panel is mounted on member home for eligible members only", () => {
+  const home = src("components/member-home.tsx")
+  assert.ok(home.includes("ActivationPanel"), "panel mounted")
+  assert.ok(home.includes("activation.next === \"people\""), "suggested-grower rail deduped when panel already leads")
 })
 
 console.log(`\n${passed} passed, ${failed} failed`)

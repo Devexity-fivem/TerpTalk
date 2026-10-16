@@ -66,6 +66,11 @@ export interface MemberMilestones {
   firstFollow: Date | null
   firstContribution: Date | null
   firstContributionKind: "grow" | "update" | "question" | "thread" | "reply" | "moment" | null
+  /** Earliest contribution through a COMMUNITY surface — a diary update,
+   *  question, thread, reply, or authored Moment. Excludes the bare
+   *  GrowDiary row: starting a grow record is its own milestone, and
+   *  "join the conversation" requires a visible contribution. */
+  firstCommunityContribution: Date | null
   firstReturn: Date | null
   secondAction: Date | null
   firstHarvest: Date | null
@@ -256,6 +261,7 @@ export async function activationMilestonesFor(userIds: string[]): Promise<Map<st
       firstFollow: minOf(followM.get(u.id), dFollowM.get(u.id)),
       firstContribution: first,
       firstContributionKind: kind,
+      firstCommunityContribution: minOf(upd, q, t, reply, moment),
       firstReturn: retM.get(u.id) ?? null,
       secondAction: secondM.get(u.id) ?? null,
       firstHarvest: harvM.get(u.id) ?? null,
@@ -289,6 +295,11 @@ export interface ActivationReport {
    *  distinct from the signup cohort above: these answer WHICH surface
    *  members followed/interacted from, which state cannot derive. */
   social: SocialLoopReport
+  /** Activation-panel attribution — the one signal durable state can't
+   *  derive: which milestone CTA a member clicked (attempts, deduped
+   *  per member·day) and how many dismissed the panel in the window.
+   *  Completions are never counted here — those live in `steps`. */
+  panel: { ctaClicks: number; ctaByMilestone: { milestone: string; clicks: number }[]; dismissals: number }
   generatedAt: string
 }
 
@@ -364,15 +375,25 @@ export async function activationReport(windowDays = 30): Promise<ActivationRepor
     return { pushEnabled: p, members: g.length, returned: r, pct: pct(r, g.length) }
   })
 
-  const [pushCounts, social] = await Promise.all([
+  const [pushCounts, social, ctaGroups, panelDismissals] = await Promise.all([
     prisma.pushEvent.groupBy({
       by: ["type"],
       where: { createdAt: { gt: since } },
       _count: { _all: true },
     }),
     socialLoopReport(windowDays),
+    prisma.productEvent.groupBy({
+      by: ["objectType"],
+      where: { type: "ACTIVATION_CTA", createdAt: { gt: since } },
+      _count: { _all: true },
+    }),
+    prisma.user.count({ where: { activationDismissedAt: { gt: since } } }),
   ])
   const pc = (t: string) => pushCounts.find((r) => r.type === t)?._count._all ?? 0
+  const ctaByMilestone = ctaGroups
+    .filter((g) => g.objectType)
+    .map((g) => ({ milestone: g.objectType as string, clicks: g._count._all }))
+    .sort((a, b) => b.clicks - a.clicks || a.milestone.localeCompare(b.milestone))
 
   return {
     windowDays,
@@ -397,6 +418,11 @@ export async function activationReport(windowDays = 30): Promise<ActivationRepor
       return { eligible, received, pct: pct(received, eligible) }
     })(),
     social,
+    panel: {
+      ctaClicks: ctaByMilestone.reduce((s, c) => s + c.clicks, 0),
+      ctaByMilestone,
+      dismissals: panelDismissals,
+    },
     generatedAt: new Date().toISOString(),
   }
 }
