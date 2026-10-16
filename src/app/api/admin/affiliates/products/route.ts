@@ -138,7 +138,8 @@ export async function PATCH(request: Request) {
       ...(gate?.ok && fields.minRank !== undefined && { minRank: gate.minRank }),
       ...(gate?.ok && fields.publicAt !== undefined && { publicAt: gate.publicAt }),
     },
-  })
+  }).catch(() => null)
+  if (!product) return NextResponse.json({ error: "Product not found" }, { status: 404 })
   revalidateTag("deals", { expire: 0 })
   return NextResponse.json({ product })
 }
@@ -147,7 +148,8 @@ export async function DELETE(request: Request) {
   if (!(await requireAdmin())) return forbidden()
   const id = new URL(request.url).searchParams.get("id")
   if (!id) return NextResponse.json({ error: "id required" }, { status: 400 })
-  await prisma.affiliateProduct.delete({ where: { id } })
+  const deleted = await prisma.affiliateProduct.deleteMany({ where: { id } })
+  if (!deleted.count) return NextResponse.json({ error: "Product not found" }, { status: 404 })
   revalidateTag("deals", { expire: 0 })
   return NextResponse.json({ ok: true })
 }

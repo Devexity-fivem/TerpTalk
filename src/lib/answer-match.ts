@@ -623,6 +623,9 @@ async function loadUserEvidence(userId: string): Promise<UserEvidence> {
       // Same public-evidence rule as the assist — private/unlisted grows
       // never become a match signal, even for the owner-facing card.
       where: { authorId: userId, deleted: false, visibility: "PUBLIC" },
+      // Evidence signals only need recent history — bound the scan.
+      orderBy: { createdAt: "desc" },
+      take: 100,
       select: {
         strain: true,
         strainId: true,
@@ -635,6 +638,8 @@ async function loadUserEvidence(userId: string): Promise<UserEvidence> {
     }),
     prisma.growSetup.findMany({
       where: { authorId: userId, deleted: false },
+      orderBy: { createdAt: "desc" },
+      take: 50,
       select: {
         space: true,
         tent: true,

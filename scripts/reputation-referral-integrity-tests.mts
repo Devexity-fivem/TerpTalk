@@ -668,7 +668,9 @@ async function run() {
 
   // ── Reconciliation bound + field minimality ──────────────────────
   const bounded = await reconcileReferralPayouts(1)
-  ok(bounded.candidates <= 1, "sweep respects the limit bound", bounded.candidates)
+  // `limit` bounds payout ATTEMPTS per run — the candidate scan pages past
+  // already-paid referees so qualifying refs deep in the set aren't starved.
+  ok(bounded.attempted <= 1, "sweep respects the limit bound", bounded.attempted)
 
   console.log(`\n${passed} passed, ${failed} failed`)
   return failed

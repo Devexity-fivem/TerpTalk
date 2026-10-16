@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma"
+import { activeAuthor } from "@/lib/security"
 import Link from "next/link"
 import PageHeader from "@/components/ui/page-header"
 
@@ -10,10 +11,20 @@ export const metadata = {
 export const dynamic = "force-dynamic"
 
 export default async function TagsPage() {
+  // Same visibility rule as /api/forum/tags and search's tag bucket:
+  // counts cover only live public threads by active authors, and a tag
+  // used solely inside hidden (staff) categories isn't listed at all.
+  const visibleThread = { deleted: false, category: { hidden: false }, author: activeAuthor() }
   const tags = await prisma.tag.findMany({
+    where: {
+      OR: [{ threads: { none: {} } }, { threads: { some: { thread: visibleThread } } }],
+    },
+    take: 200,
     orderBy: { name: "asc" },
     include: {
-      _count: { select: { threads: true } },
+      _count: {
+        select: { threads: { where: { thread: visibleThread } } },
+      },
     },
   })
 

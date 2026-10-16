@@ -388,28 +388,39 @@ export async function reverseReputationBySource(
   // reversalOfId: null selects only root award rows — REVERSAL and REINSTATE
   // rows share the original's sourceType/sourceId, and reversing them would
   // double-deduct (the counter-entries already net out in the balance).
-  let events
-  try {
-    events = await prisma.reputationEvent.findMany({
-      where: { sourceType, sourceId, reversedAt: null, reversalOfId: null, type: { not: REP_EVENT_TYPES.REVERSAL } },
-      select: { id: true },
-    })
-  } catch (error) {
-    // Callers `.catch(() => 0)` — without this log a failed source sweep
-    // silently leaves every award attached to deleted content.
-    console.error("[reputation] source reversal lookup failed:", sourceType, sourceId, error)
-    throw error
-  }
+  // Keyset-paged id scan — a viral source can carry thousands of grants;
+  // enumerating them in 500-row pages bounds memory while still sweeping
+  // every matching event (a `take` on the whole set would leak rep).
+  let cursor: string | undefined
   let reversed = 0
-  for (const e of events) {
+  for (;;) {
+    let events
     try {
-      const r = await reverseReputationEvent(e.id, reason, actorId)
-      if (r.reversed) reversed++
-    } catch (err) {
-      // Callers swallow reversal failures — the log is the only trace that
-      // rep stayed attached to removed content.
-      console.error("[reputation] reversal failed:", sourceType, sourceId, e.id, err)
+      events = await prisma.reputationEvent.findMany({
+        where: { sourceType, sourceId, reversedAt: null, reversalOfId: null, type: { not: REP_EVENT_TYPES.REVERSAL }, ...(cursor ? { id: { gt: cursor } } : {}) },
+        select: { id: true },
+        orderBy: { id: "asc" },
+        take: 500,
+      })
+    } catch (error) {
+      // Callers `.catch(() => 0)` — without this log a failed source sweep
+      // silently leaves every award attached to deleted content.
+      console.error("[reputation] source reversal lookup failed:", sourceType, sourceId, error)
+      throw error
     }
+    if (events.length === 0) break
+    cursor = events[events.length - 1].id
+    for (const e of events) {
+      try {
+        const r = await reverseReputationEvent(e.id, reason, actorId)
+        if (r.reversed) reversed++
+      } catch (err) {
+        // Callers swallow reversal failures — the log is the only trace that
+        // rep stayed attached to removed content.
+        console.error("[reputation] reversal failed:", sourceType, sourceId, e.id, err)
+      }
+    }
+    if (events.length < 500) break
   }
   return reversed
 }
@@ -432,30 +443,40 @@ const ACTOR_GRANTED_TYPES = new Set([
  * required for deferred/outbox retries so a late drain can't claw back
  * grants made *after* the ban or deletion was issued. */
 export async function reverseReputationByActor(actorId: string, reason: string, opts: { before?: Date } = {}): Promise<number> {
-  let events
-  try {
-    events = await prisma.reputationEvent.findMany({
-      where: { actorId, reversedAt: null, reversalOfId: null, type: { in: [...ACTOR_GRANTED_TYPES] }, ...(opts.before ? { createdAt: { lte: opts.before } } : {}) },
-      select: { id: true },
-    })
-  } catch (error) {
-    console.error("[reputation] actor reversal lookup failed:", actorId, error)
-    throw error
-  }
   let reversed = 0
   // Bounded concurrency — a ban can reverse thousands of granted events;
-  // unbounded Promise.all would exhaust the Neon pool.
+  // unbounded Promise.all would exhaust the Neon pool. The id scan is
+  // keyset-paged so a prolific actor's ledger never loads at once.
   const BATCH = 25
-  for (let i = 0; i < events.length; i += BATCH) {
-    const results = await Promise.all(
-      events.slice(i, i + BATCH).map((e) =>
-        reverseReputationEvent(e.id, reason, actorId).catch((err) => {
-          console.error("[reputation] actor reversal failed:", actorId, e.id, err)
-          return { reversed: false } as ReversalResult
-        })
+  const PAGE = 500
+  let cursor: string | undefined
+  for (;;) {
+    let events
+    try {
+      events = await prisma.reputationEvent.findMany({
+        where: { actorId, reversedAt: null, reversalOfId: null, type: { in: [...ACTOR_GRANTED_TYPES] }, ...(opts.before ? { createdAt: { lte: opts.before } } : {}), ...(cursor ? { id: { gt: cursor } } : {}) },
+        select: { id: true },
+        orderBy: { id: "asc" },
+        take: PAGE,
+      })
+    } catch (error) {
+      console.error("[reputation] actor reversal lookup failed:", actorId, error)
+      throw error
+    }
+    if (events.length === 0) break
+    cursor = events[events.length - 1].id
+    for (let i = 0; i < events.length; i += BATCH) {
+      const results = await Promise.all(
+        events.slice(i, i + BATCH).map((e) =>
+          reverseReputationEvent(e.id, reason, actorId).catch((err) => {
+            console.error("[reputation] actor reversal failed:", actorId, e.id, err)
+            return { reversed: false } as ReversalResult
+          })
+        )
       )
-    )
-    reversed += results.filter((r) => r.reversed).length
+      reversed += results.filter((r) => r.reversed).length
+    }
+    if (events.length < PAGE) break
   }
   return reversed
 }

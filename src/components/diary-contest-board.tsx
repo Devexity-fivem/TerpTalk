@@ -61,29 +61,39 @@ export default function DiaryContestBoard() {
     if (!pickId) return
     setBusy(true)
     setError("")
-    const res = await fetch("/api/diary-contest", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "enter", diaryId: pickId }),
-    })
-    const body = await res.json().catch(() => ({}))
-    if (!res.ok) setError(body.error || "Could not enter")
-    else load()
-    setBusy(false)
+    try {
+      const res = await fetch("/api/diary-contest", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "enter", diaryId: pickId }),
+      })
+      const body = await res.json().catch(() => ({}))
+      if (!res.ok) setError(body.error || "Could not enter")
+      else load()
+    } catch {
+      setError("Network error — try again")
+    } finally {
+      setBusy(false)
+    }
   }
 
   const vote = async (entryId: string) => {
     setBusy(true)
     setError("")
-    const res = await fetch("/api/diary-contest", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "vote", entryId }),
-    })
-    const body = await res.json().catch(() => ({}))
-    if (!res.ok) setError(body.error || "Could not vote")
-    else load()
-    setBusy(false)
+    try {
+      const res = await fetch("/api/diary-contest", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "vote", entryId }),
+      })
+      const body = await res.json().catch(() => ({}))
+      if (!res.ok) setError(body.error || "Could not vote")
+      else load()
+    } catch {
+      setError("Network error — try again")
+    } finally {
+      setBusy(false)
+    }
   }
 
   if (error && !data) {

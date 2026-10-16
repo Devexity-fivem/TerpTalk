@@ -2,7 +2,7 @@
 
 import { signInHref } from "@/lib/callback-url"
 
-import { useEffect, useState, useCallback } from "react"
+import { useEffect, useRef, useState, useCallback } from "react"
 import { useSession } from "next-auth/react"
 import { isAdmin } from "@/lib/roles"
 import { useRouter } from "next/navigation"
@@ -31,29 +31,46 @@ export default function AdminMediaPage() {
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState<string | null>(null)
 
+  // Request-sequence guard: only the latest issued fetch may write state —
+  // out-of-order responses can't show a stale page's items.
+  const seq = useRef(0)
   const load = useCallback(async (p: number) => {
+    const my = ++seq.current
+    setLoading(true)
     const params = new URLSearchParams()
     if (type) params.set("type", type)
     if (q) params.set("q", q)
     params.set("page", String(p))
     params.set("limit", String(LIMIT))
-    const res = await fetch(`/api/admin/media?${params.toString()}`)
-    const d = res.ok ? await res.json() : { items: [] }
-    setItems(d.items || [])
-    setHasMore(d.hasMore || false)
-    setLoading(false)
+    try {
+      const res = await fetch(`/api/admin/media?${params.toString()}`)
+      const d = res.ok ? await res.json() : { items: [] }
+      if (my !== seq.current) return
+      setItems(d.items || [])
+      setHasMore(d.hasMore || false)
+    } catch {
+      /* network failure — keep last results */
+    } finally {
+      if (my === seq.current) setLoading(false)
+    }
   }, [type, q])
 
   useEffect(() => {
     if (status === "unauthenticated") router.push(signInHref(window.location.pathname + window.location.search))
-    else if (status === "authenticated") { const t = setTimeout(() => { setPage(1); load(1) }, 0); return () => clearTimeout(t) }
-  }, [status, router, load])
+  }, [status, router])
 
+  // Debounced reload on filter/page change — one request per settle, not
+  // per keystroke.
   useEffect(() => {
-    if (status === "authenticated") { const t = setTimeout(() => load(page), 0); return () => clearTimeout(t) }
+    if (status !== "authenticated") return
+    const t = setTimeout(() => load(page), 300)
+    return () => clearTimeout(t)
   }, [page, load, status])
 
-  const search = () => { setPage(1); const t = setTimeout(() => load(1), 0); return () => clearTimeout(t) }
+  const search = () => {
+    if (page === 1) load(1)
+    else setPage(1)
+  }
 
   const remove = async (id: string, itemType: string) => {
     if (!confirm("Delete this image and its Blob? This cannot be undone.")) return
@@ -64,7 +81,7 @@ export default function AdminMediaPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "delete", id, type: itemType }),
       })
-      if (res.ok) { const t = setTimeout(() => load(page), 0); return () => clearTimeout(t) }
+      if (res.ok) load(page)
     } finally { setBusy(null) }
   }
 

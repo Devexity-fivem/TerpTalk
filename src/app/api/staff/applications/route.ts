@@ -40,6 +40,7 @@ export async function GET(request: NextRequest) {
     const applications = await prisma.staffApplication.findMany({
       where: { status },
       orderBy: { createdAt: "desc" },
+      take: 200,
       include: {
         applicant: { select: publicUserSelect },
       },

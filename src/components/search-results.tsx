@@ -82,6 +82,9 @@ export default function SearchResults() {
   const [loading, setLoading] = useState(q.trim().length >= 2)
   const [saved, setSaved] = useState(false)
   const suggestionTimeout = useRef<number | null>(null)
+  // Sequence guard — an in-flight suggest response can't be cancelled by
+  // clearing the next debounce, so stale results must be dropped here.
+  const suggestionSeq = useRef(0)
 
   useEffect(() => {
     if (q.trim().length < 2) return
@@ -117,14 +120,15 @@ export default function SearchResults() {
       return
     }
     suggestionTimeout.current = window.setTimeout(async () => {
+      const my = ++suggestionSeq.current
       try {
         const res = await fetch(`/api/search/suggest?q=${encodeURIComponent(value)}`)
-        if (!res.ok) return
+        if (!res.ok || my !== suggestionSeq.current) return
         const data = await res.json()
         setSuggestions((data.suggestions || []) as Suggestion[])
         setShowSuggestions(true)
       } catch {
-        setSuggestions([])
+        if (my === suggestionSeq.current) setSuggestions([])
       }
     }, 150)
   }

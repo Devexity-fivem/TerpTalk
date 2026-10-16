@@ -259,6 +259,10 @@ export async function getMemberHomeData(userId: string): Promise<MemberHomeData 
         // member already holds the link. PRIVATE rows drop out.
         where: { userId, diary: { deleted: false, visibility: { in: ["PUBLIC", "UNLISTED"] }, author: activeAuthor() } },
         select: { diaryId: true },
+        // Bound the follow set like the sibling member-follow query — the
+        // ids feed an `in` clause on a take:4 teaser, so recency wins.
+        orderBy: { createdAt: "desc" },
+        take: 1000,
       }),
       prisma.notification.count({ where: { userId, read: false } }),
       getChatTeaser(),

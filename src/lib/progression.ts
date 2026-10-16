@@ -1267,24 +1267,34 @@ export async function reverseProgressionBySource(
   reason: string,
   actorId?: string
 ): Promise<number> {
-  let events
-  try {
-    events = await prisma.progressionEvent.findMany({
-      where: { sourceType, sourceId, reversedAt: null, reversalOfId: null, type: { not: "REVERSAL" } },
-      select: { id: true },
-    })
-  } catch (error) {
-    console.error("[progression] source reversal lookup failed:", sourceType, sourceId, error)
-    throw error
-  }
+  // Keyset-paged id scan — same bound-by-pages approach as the reputation
+  // sweep so a viral source's full event set is never held in memory.
+  let cursor: string | undefined
   let reversed = 0
-  for (const e of events) {
+  for (;;) {
+    let events
     try {
-      const r = await reverseProgressionEvent(e.id, reason, actorId)
-      if (r.reversed) reversed++
-    } catch (err) {
-      console.error("[progression] reversal failed:", sourceType, sourceId, e.id, err)
+      events = await prisma.progressionEvent.findMany({
+        where: { sourceType, sourceId, reversedAt: null, reversalOfId: null, type: { not: "REVERSAL" }, ...(cursor ? { id: { gt: cursor } } : {}) },
+        select: { id: true },
+        orderBy: { id: "asc" },
+        take: 500,
+      })
+    } catch (error) {
+      console.error("[progression] source reversal lookup failed:", sourceType, sourceId, error)
+      throw error
     }
+    if (events.length === 0) break
+    cursor = events[events.length - 1].id
+    for (const e of events) {
+      try {
+        const r = await reverseProgressionEvent(e.id, reason, actorId)
+        if (r.reversed) reversed++
+      } catch (err) {
+        console.error("[progression] reversal failed:", sourceType, sourceId, e.id, err)
+      }
+    }
+    if (events.length < 500) break
   }
   return reversed
 }
@@ -1294,37 +1304,47 @@ export async function reverseProgressionByActor(
   reason: string,
   opts: { before?: Date; requestedBy?: string } = {}
 ): Promise<number> {
-  let events
-  try {
-    events = await prisma.progressionEvent.findMany({
-      where: {
-        actorId,
-        reversedAt: null,
-        reversalOfId: null,
-        type: { in: [...ACTOR_GRANTED_TYPES] },
-        ...(opts.before ? { createdAt: { lte: opts.before } } : {}),
-      },
-      select: { id: true },
-    })
-  } catch (error) {
-    console.error("[progression] actor reversal lookup failed:", actorId, error)
-    throw error
-  }
   let reversed = 0
   const BATCH = 25
-  for (let i = 0; i < events.length; i += BATCH) {
-    const results = await Promise.all(
-      events.slice(i, i + BATCH).map((e) =>
-        // The swept user owns the events, but the reversal rows should be
-        // attributed to whoever requested the sweep (staff, deletion flow)
-        // — default to the user only when nobody requested it.
-        reverseProgressionEvent(e.id, reason, opts.requestedBy ?? actorId).catch((err) => {
-          console.error("[progression] actor reversal failed:", actorId, e.id, err)
-          return { reversed: false } as ProgressionReversalResult
-        })
+  const PAGE = 500
+  let cursor: string | undefined
+  for (;;) {
+    let events
+    try {
+      events = await prisma.progressionEvent.findMany({
+        where: {
+          actorId,
+          reversedAt: null,
+          reversalOfId: null,
+          type: { in: [...ACTOR_GRANTED_TYPES] },
+          ...(opts.before ? { createdAt: { lte: opts.before } } : {}),
+          ...(cursor ? { id: { gt: cursor } } : {}),
+        },
+        select: { id: true },
+        orderBy: { id: "asc" },
+        take: PAGE,
+      })
+    } catch (error) {
+      console.error("[progression] actor reversal lookup failed:", actorId, error)
+      throw error
+    }
+    if (events.length === 0) break
+    cursor = events[events.length - 1].id
+    for (let i = 0; i < events.length; i += BATCH) {
+      const results = await Promise.all(
+        events.slice(i, i + BATCH).map((e) =>
+          // The swept user owns the events, but the reversal rows should be
+          // attributed to whoever requested the sweep (staff, deletion flow)
+          // — default to the user only when nobody requested it.
+          reverseProgressionEvent(e.id, reason, opts.requestedBy ?? actorId).catch((err) => {
+            console.error("[progression] actor reversal failed:", actorId, e.id, err)
+            return { reversed: false } as ProgressionReversalResult
+          })
+        )
       )
-    )
-    reversed += results.filter((r) => r.reversed).length
+      reversed += results.filter((r) => r.reversed).length
+    }
+    if (events.length < PAGE) break
   }
   return reversed
 }

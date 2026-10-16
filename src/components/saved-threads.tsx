@@ -18,6 +18,9 @@ interface SavedThread {
 export default function SavedThreads() {
   const [items, setItems] = useState<SavedThread[]>([])
   const [loading, setLoading] = useState(true)
+  // POST /api/bookmarks toggles — without a per-row guard a double-click
+  // un-saves then re-saves while the row is already filtered out.
+  const [busyId, setBusyId] = useState<string | null>(null)
 
   useEffect(() => {
     fetch("/api/bookmarks")
@@ -27,12 +30,20 @@ export default function SavedThreads() {
   }, [])
 
   const unsave = async (item: SavedThread) => {
-    const res = await fetch("/api/bookmarks", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ threadId: item.threadId }),
-    })
-    if (res.ok) setItems(items.filter((i) => i.id !== item.id))
+    if (busyId) return
+    setBusyId(item.id)
+    try {
+      const res = await fetch("/api/bookmarks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ threadId: item.threadId }),
+      })
+      if (res.ok) setItems((prev) => prev.filter((i) => i.id !== item.id))
+    } catch {
+      /* network failure — row stays */
+    } finally {
+      setBusyId(null)
+    }
   }
 
   return (
@@ -61,7 +72,8 @@ export default function SavedThreads() {
               </Link>
               <button
                 onClick={() => unsave(t)}
-                className="text-xs text-muted-foreground hover:text-destructive transition-colors shrink-0"
+                disabled={busyId === t.id}
+                className="text-xs text-muted-foreground hover:text-destructive transition-colors shrink-0 disabled:opacity-50"
               >
                 Remove
               </button>

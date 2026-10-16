@@ -96,6 +96,9 @@ export async function POST(request: Request) {
       where: { setupId, deleted: false, id: { not: comment.id }, authorId: { not: session.user.id } },
       select: { authorId: true },
       distinct: ["authorId"],
+      // Same participant cap as the moments-comments route — a viral
+      // setup's notify fan-out stays bounded.
+      take: 200,
     })
     const participants = prior.map((p) => p.authorId).filter((id) => id !== setup.authorId)
     if (participants.length > 0) {

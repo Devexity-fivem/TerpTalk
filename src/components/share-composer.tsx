@@ -10,6 +10,7 @@ import {
   BarChart3, Leaf, Settings, ArrowLeft, Send, ImageIcon, Wheat, FlaskConical, Clock, Globe, Users, Quote,
 } from "@/lib/icons"
 import ImageUploader from "@/components/image-uploader"
+import { localDateInputValue } from "@/lib/diary-weeks"
 import PollComposer from "@/components/poll-composer"
 import ExperimentForm from "@/components/experiment-form"
 import { STANDING_POLL_CREATE, pollCreationAllowed } from "@/lib/progression-config"
@@ -1072,7 +1073,9 @@ function DiaryForm({ strainId, strainName, submitting, onSubmit }: FormProps & {
 }) {
   const [title, setTitle] = useState("")
   const [strain, setStrain] = useState(strainName ?? "")
-  const [startDate, setStartDate] = useState(new Date().toISOString().split("T")[0])
+  // Local date, not UTC — toISOString() is off by a day in the evening
+  // west of UTC / early morning east of it.
+  const [startDate, setStartDate] = useState(localDateInputValue())
   const [growType, setGrowType] = useState<string>("INDOOR")
 
   const handleSubmit = (e: React.FormEvent) => {

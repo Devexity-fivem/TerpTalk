@@ -32,18 +32,23 @@ export default function EditGuideForm({
     e.preventDefault()
     setLoading(true)
     setError("")
-    const res = await fetch(`/api/guides/${encodeURIComponent(slug)}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(form),
-    })
-    setLoading(false)
-    if (res.ok) {
-      router.push(`/guides/${slug}`)
-      router.refresh()
-    } else {
-      const d = await res.json().catch(() => ({}))
-      setError(d.error || "Failed to save")
+    try {
+      const res = await fetch(`/api/guides/${encodeURIComponent(slug)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form),
+      })
+      if (res.ok) {
+        router.push(`/guides/${slug}`)
+        router.refresh()
+      } else {
+        const d = await res.json().catch(() => ({}))
+        setError(d.error || "Failed to save")
+      }
+    } catch {
+      setError("Network error — check your connection and try again")
+    } finally {
+      setLoading(false)
     }
   }
 

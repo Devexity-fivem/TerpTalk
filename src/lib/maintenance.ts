@@ -1,13 +1,17 @@
 import { getBooleanSetting, SITE_SETTINGS } from "@/lib/settings"
 import { getSession } from "@/lib/session"
-import { isAdmin, isModerator } from "@/lib/security"
+import { getSecurityUser, isAdmin, isModerator } from "@/lib/security"
 import { NextResponse } from "next/server"
 
-// Staff can still use the admin panel to disable maintenance mode.
+// Staff can still use the admin panel to disable maintenance mode. The
+// role is re-read from the DB (same as require-staff) so a demoted or
+// banned staff member doesn't keep bypassing on a stale JWT claim.
 export async function isStaffBypass(): Promise<boolean> {
   const session = await getSession()
   if (!session?.user?.id) return false
-  return isAdmin(session.user.role) || isModerator(session.user.role)
+  const user = await getSecurityUser(session.user.id)
+  if (!user || user.banned || (!!user.suspendedUntil && user.suspendedUntil > new Date())) return false
+  return isAdmin(user.role) || isModerator(user.role)
 }
 
 export async function isMaintenanceMode(): Promise<boolean> {

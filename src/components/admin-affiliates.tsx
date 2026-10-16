@@ -58,32 +58,42 @@ export default function AdminAffiliates() {
 
   const savePartner = async () => {
     setBusy(true)
-    const method = editPartner ? "PATCH" : "POST"
-    const res = await fetch("/api/admin/affiliates/partners", {
-      method, headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(editPartner ? { id: editPartner, ...partnerForm } : { type: "partner", ...partnerForm }),
-    })
-    if (res.ok) {
-      setPartnerForm({ name: "", websiteUrl: "", affiliateUrl: "", promoCode: "", description: "", promoText: "", featured: false })
-      setEditPartner(null)
-      load(); flash(editPartner ? "Partner updated" : "Partner created")
-    } else flash((await res.json()).error || "Failed")
-    setBusy(false)
+    try {
+      const method = editPartner ? "PATCH" : "POST"
+      const res = await fetch("/api/admin/affiliates/partners", {
+        method, headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(editPartner ? { id: editPartner, ...partnerForm } : { type: "partner", ...partnerForm }),
+      })
+      if (res.ok) {
+        setPartnerForm({ name: "", websiteUrl: "", affiliateUrl: "", promoCode: "", description: "", promoText: "", featured: false })
+        setEditPartner(null)
+        load(); flash(editPartner ? "Partner updated" : "Partner created")
+      } else flash((await res.json().catch(() => ({}))).error || "Failed")
+    } catch {
+      flash("Network error — not saved")
+    } finally {
+      setBusy(false)
+    }
   }
 
   const saveProduct = async () => {
     setBusy(true)
-    const method = editProduct ? "PATCH" : "POST"
-    const res = await fetch("/api/admin/affiliates/products", {
-      method, headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(editProduct ? { id: editProduct, ...productForm } : productForm),
-    })
-    if (res.ok) {
-      setProductForm({ name: "", partnerId: "", category: "Growing Equipment", description: "", affiliateUrl: "", productUrl: "", imageUrl: "", price: "", promoCode: "", recommendedFor: "", pros: "", cons: "", featured: false, minRank: "", publicAt: "" })
-      setEditProduct(null)
-      load(); flash(editProduct ? "Product updated" : "Product created")
-    } else flash((await res.json()).error || "Failed")
-    setBusy(false)
+    try {
+      const method = editProduct ? "PATCH" : "POST"
+      const res = await fetch("/api/admin/affiliates/products", {
+        method, headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(editProduct ? { id: editProduct, ...productForm } : productForm),
+      })
+      if (res.ok) {
+        setProductForm({ name: "", partnerId: "", category: "Growing Equipment", description: "", affiliateUrl: "", productUrl: "", imageUrl: "", price: "", promoCode: "", recommendedFor: "", pros: "", cons: "", featured: false, minRank: "", publicAt: "" })
+        setEditProduct(null)
+        load(); flash(editProduct ? "Product updated" : "Product created")
+      } else flash((await res.json().catch(() => ({}))).error || "Failed")
+    } catch {
+      flash("Network error — not saved")
+    } finally {
+      setBusy(false)
+    }
   }
 
   const patchPartner = (id: string, fields: Partial<Partner>) =>

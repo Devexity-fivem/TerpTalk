@@ -53,11 +53,13 @@ export function buildGrowComparison(input: {
 
   // Stage timing — compare completed runs against community medians.
   // The diary's CURRENT open run is skipped: an in-progress stage is
-  // censored data and would inflate the "yours" side unfairly.
-  const openStage = !input.harvested ? input.stageRuns[input.stageRuns.length - 1]?.stage : null
+  // censored data and would inflate the "yours" side unfairly. Only the
+  // last run is skipped — a legitimately closed earlier run of the same
+  // stage (re-veg / stage re-entry) still counts.
+  const openRun = !input.harvested ? input.stageRuns[input.stageRuns.length - 1] : null
   const stageRows: CompareRow[] = []
   for (const run of input.stageRuns) {
-    if (run.stage === openStage) continue
+    if (run === openRun) continue
     const med = stats.stageDurations.find((s) => s.stage === run.stage)
     if (!med || med.medianDays == null) continue
     const label = STAGE_LABELS[run.stage] ?? run.stage.toLowerCase()

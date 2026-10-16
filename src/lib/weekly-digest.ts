@@ -254,6 +254,8 @@ export async function runWeeklyDigest(
   const diaryFollows = await prisma.diaryFollow.findMany({
     where: { userId: { in: ids }, diary: { deleted: false, visibility: { in: ["PUBLIC", "UNLISTED"] } } },
     select: { userId: true, diaryId: true },
+    // Bound the cohort-wide follow scan like the member-follow query below.
+    take: FOLLOWED_GROWER_CAP * DIGEST_MEMBER_CAP,
   })
   const followsByUser = new Map<string, string[]>()
   for (const f of diaryFollows) {
@@ -447,6 +449,8 @@ export async function weeklyDigestForUser(userId: string, now = new Date()): Pro
     prisma.diaryFollow.findMany({
       where: { userId, diary: { deleted: false, visibility: { in: ["PUBLIC", "UNLISTED"] } } },
       select: { diary: { select: { id: true, slug: true, title: true } } },
+      orderBy: { createdAt: "desc" },
+      take: FOLLOWED_GROWER_CAP,
     }),
   ])
 

@@ -58,14 +58,19 @@ export default function AdminUserDetailPage() {
   const userId = params.id as string
 
   const load = useCallback(async () => {
-    const res = await fetch(`/api/admin/users/${userId}`)
-    if (!res.ok) { setLoading(false); return }
-    const d = await res.json()
-    setUser(d.user)
-    setLoading(false)
-    if (d.user?.profile?.username) {
-      const rep = await fetch(`/api/moderation/reputation?username=${encodeURIComponent(d.user.profile.username)}`)
-      if (rep.ok) setLedger(await rep.json())
+    try {
+      const res = await fetch(`/api/admin/users/${userId}`)
+      if (!res.ok) { setError("Could not load this member"); return }
+      const d = await res.json()
+      setUser(d.user)
+      if (d.user?.profile?.username) {
+        const rep = await fetch(`/api/moderation/reputation?username=${encodeURIComponent(d.user.profile.username)}`)
+        if (rep.ok) setLedger(await rep.json())
+      }
+    } catch {
+      setError("Network error — could not load this member")
+    } finally {
+      setLoading(false)
     }
   }, [userId])
 
@@ -138,13 +143,25 @@ export default function AdminUserDetailPage() {
     return <div className="min-h-screen flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>
   }
 
-  if (!isAdmin(role) || !user) {
+  if (!isAdmin(role)) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
           <ShieldCheck className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
           <h1 className="text-2xl font-bold mb-2">Access denied</h1>
           <p className="text-muted-foreground">Administrator access required.</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (!user) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold mb-2">Couldn&apos;t load this member</h1>
+          <p className="text-muted-foreground">{error || "Member not found."}</p>
+          <button onClick={() => { setError(""); setLoading(true); load() }} className="mt-4 px-4 py-2 rounded-lg bg-secondary text-sm hover:bg-secondary/80">Retry</button>
         </div>
       </div>
     )

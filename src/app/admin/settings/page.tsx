@@ -32,11 +32,19 @@ export default function AdminSettingsPage() {
   const [error, setError] = useState("")
 
   const load = useCallback(async () => {
-    const res = await fetch("/api/admin/settings")
-    if (!res.ok) { setLoading(false); return }
-    const d = await res.json()
-    setSettings(d.settings || {})
-    setLoading(false)
+    try {
+      const res = await fetch("/api/admin/settings")
+      if (res.ok) {
+        const d = await res.json()
+        setSettings(d.settings || {})
+      } else {
+        setError("Could not load settings")
+      }
+    } catch {
+      setError("Network error — could not load settings")
+    } finally {
+      setLoading(false)
+    }
   }, [])
 
   useEffect(() => {

@@ -40,17 +40,22 @@ export default function AdminFeaturesPage() {
   const toggle = async (f: Feature) => {
     setSaving(f.key)
     setMessage("")
-    const res = await fetch("/api/admin/features", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ key: f.key, enabled: !f.enabled }),
-    })
-    setSaving(null)
-    if (res.ok) {
-      setFeatures((prev) => prev.map((x) => (x.key === f.key ? { ...x, enabled: !x.enabled } : x)))
-      setMessage(`Saved ${f.label}.`)
-    } else {
-      setMessage("Failed to save feature.")
+    try {
+      const res = await fetch("/api/admin/features", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key: f.key, enabled: !f.enabled }),
+      })
+      if (res.ok) {
+        setFeatures((prev) => prev.map((x) => (x.key === f.key ? { ...x, enabled: !x.enabled } : x)))
+        setMessage(`Saved ${f.label}.`)
+      } else {
+        setMessage("Failed to save feature.")
+      }
+    } catch {
+      setMessage("Network error — feature not saved.")
+    } finally {
+      setSaving(null)
     }
   }
 

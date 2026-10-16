@@ -61,64 +61,48 @@ export async function GET(request: Request) {
     },
   })
 
-  // Attach safe target previews (no sensitive user data)
-  const enriched = await Promise.all(
-    reports.map(async (r) => {
-      let target: unknown = null
-      try {
-        switch (r.type) {
-          case "THREAD":
-            target = r.targetId
-              ? await prisma.thread.findUnique({
-                  where: { id: r.targetId },
-                  select: { id: true, title: true, slug: true, deleted: true, authorId: true },
-                })
-              : null
-            break
-          case "POST":
-            target = r.targetId
-              ? await prisma.post.findUnique({
-                  where: { id: r.targetId },
-                  select: { id: true, content: true, deleted: true, thread: { select: { slug: true } } },
-                })
-              : null
-            break
-          case "CHAT_MESSAGE":
-            target = r.targetId
-              ? await prisma.chatMessage.findUnique({
-                  where: { id: r.targetId },
-                  select: { id: true, content: true, deleted: true },
-                })
-              : null
-            break
-          case "DIARY":
-            target = r.targetId
-              ? await prisma.growDiary.findUnique({
-                  where: { id: r.targetId },
-                  select: { id: true, title: true },
-                })
-              : null
-            break
-          case "SETUP":
-            target = r.targetId
-              ? await prisma.growSetup.findUnique({
-                  where: { id: r.targetId },
-                  select: { id: true, title: true },
-                })
-              : null
-            break
-          case "PROFILE":
-            target = r.targetId
-              ? await prisma.profile.findUnique({
-                  where: { userId: r.targetId },
-                  select: { username: true, bio: true },
-                })
-              : null
-            break
-        }
-      } catch {
-        target = null
-      }
+  // Attach safe target previews (no sensitive user data) — batched per
+  // target type so a full page of reports costs 6 queries, not `limit`.
+  const idsByType = (type: string) =>
+    reports.filter((r) => r.type === type && r.targetId).map((r) => r.targetId as string)
+  const [threads, posts, chatMessages, diaries, setups, profiles] = await Promise.all([
+    prisma.thread.findMany({
+      where: { id: { in: idsByType("THREAD") } },
+      select: { id: true, title: true, slug: true, deleted: true, authorId: true },
+    }),
+    prisma.post.findMany({
+      where: { id: { in: idsByType("POST") } },
+      select: { id: true, content: true, deleted: true, thread: { select: { slug: true } } },
+    }),
+    prisma.chatMessage.findMany({
+      where: { id: { in: idsByType("CHAT_MESSAGE") } },
+      select: { id: true, content: true, deleted: true },
+    }),
+    prisma.growDiary.findMany({
+      where: { id: { in: idsByType("DIARY") } },
+      select: { id: true, title: true },
+    }),
+    prisma.growSetup.findMany({
+      where: { id: { in: idsByType("SETUP") } },
+      select: { id: true, title: true },
+    }),
+    // Reported profiles are keyed by userId, not row id.
+    prisma.profile.findMany({
+      where: { userId: { in: idsByType("PROFILE") } },
+      select: { userId: true, username: true, bio: true },
+    }),
+  ])
+  const previews = {
+    THREAD: new Map(threads.map((t) => [t.id, t])),
+    POST: new Map(posts.map((p) => [p.id, p])),
+    CHAT_MESSAGE: new Map(chatMessages.map((m) => [m.id, m])),
+    DIARY: new Map(diaries.map((d) => [d.id, d])),
+    SETUP: new Map(setups.map((s) => [s.id, s])),
+    PROFILE: new Map(profiles.map((p) => [p.userId, { username: p.username, bio: p.bio }])),
+  } as Record<string, Map<string, unknown>>
+
+  const enriched = reports.map((r) => {
+      const target = r.targetId ? previews[r.type]?.get(r.targetId) ?? null : null
       return {
         id: r.id,
         type: r.type,
@@ -136,7 +120,6 @@ export async function GET(request: Request) {
         target,
       }
     })
-  )
 
   return NextResponse.json({ reports: enriched })
 }

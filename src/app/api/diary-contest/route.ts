@@ -39,6 +39,10 @@ async function eligibleDiaryIds(userId: string): Promise<Set<string>> {
   // Only PUBLIC diaries are eligible — entries surface the diary publicly.
   const candidates = await prisma.growDiary.findMany({
     where: { authorId: userId, deleted: false, ...publicDiaryWhere },
+    // A monthly contest only ever surfaces current grows — cap the scan
+    // so a prolific grower's full portfolio isn't walked per request.
+    orderBy: { createdAt: "desc" },
+    take: 50,
     select: {
       id: true,
       _count: { select: { updates: { where: { createdAt: { gte: start, lt: end } } } } },

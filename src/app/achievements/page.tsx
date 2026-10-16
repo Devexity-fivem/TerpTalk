@@ -92,20 +92,25 @@ export default function AchievementsPage() {
       ? achievements!.filter((x) => x.pinned && x.name !== a.name)
       : [...achievements!.filter((x) => x.pinned), a]
     setPinBusy(a.name)
-    const res = await fetch("/api/profile", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ pinnedBadges: next.map((x) => x.badgeId).filter(Boolean) }),
-    })
-    setPinBusy(null)
-    if (res.ok) {
-      setAchievements((prev) =>
-        prev ? prev.map((x) => (x.name === a.name ? { ...x, pinned: !a.pinned } : x)) : prev
-      )
-      toast(a.pinned ? "Removed from showcase" : "Pinned to your profile")
-    } else {
-      const d = await res.json().catch(() => ({}))
-      toast(d.error || "Could not update showcase", "error")
+    try {
+      const res = await fetch("/api/profile", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pinnedBadges: next.map((x) => x.badgeId).filter(Boolean) }),
+      })
+      if (res.ok) {
+        setAchievements((prev) =>
+          prev ? prev.map((x) => (x.name === a.name ? { ...x, pinned: !a.pinned } : x)) : prev
+        )
+        toast(a.pinned ? "Removed from showcase" : "Pinned to your profile")
+      } else {
+        const d = await res.json().catch(() => ({}))
+        toast(d.error || "Could not update showcase", "error")
+      }
+    } catch {
+      toast("Network error — try again", "error")
+    } finally {
+      setPinBusy(null)
     }
   }
 

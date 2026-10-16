@@ -105,16 +105,21 @@ export default function StoryViewer({ stories, username }: { stories: MomentDTO[
   }
 
   const remove = async () => {
-    const res = await fetch(`/api/moments/${story.id}`, { method: "DELETE" })
-    setConfirmDelete(false)
-    if (!res.ok) {
-      toast("Couldn't delete this story", "error")
-      return
+    try {
+      const res = await fetch(`/api/moments/${story.id}`, { method: "DELETE" })
+      if (!res.ok) {
+        toast("Couldn't delete this story", "error")
+        return
+      }
+      const rest = list.filter((s) => s.id !== story.id)
+      setList(rest)
+      if (rest.length === 0) router.push("/feed")
+      else setIdx((i) => Math.min(i, rest.length - 1))
+    } catch {
+      toast("Network error — couldn't delete this story", "error")
+    } finally {
+      setConfirmDelete(false)
     }
-    const rest = list.filter((s) => s.id !== story.id)
-    setList(rest)
-    if (rest.length === 0) router.push("/feed")
-    else setIdx((i) => Math.min(i, rest.length - 1))
   }
 
   const isAuthor = session?.user?.id === story.author.id

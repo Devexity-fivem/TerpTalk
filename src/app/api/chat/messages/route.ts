@@ -163,6 +163,10 @@ export async function GET(request: NextRequest) {
       const rows = await prisma.chatMessage.findMany({
         where: { roomId, deleted: true, updatedAt: { gt: afterDate } },
         select: { id: true },
+        // Bound the tombstone burst — a mass deletion reports oldest-first
+        // and the next poll delivers the remainder off the same cursor.
+        orderBy: { updatedAt: "asc" },
+        take: 500,
       })
       deletedIds = rows.map((r) => r.id)
     }

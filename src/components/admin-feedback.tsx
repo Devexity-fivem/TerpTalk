@@ -133,33 +133,43 @@ export default function AdminFeedback() {
   const saveDetail = async () => {
     if (!detail || detailBusy) return
     setDetailBusy(true)
-    const res = await fetch(`/api/admin/feedback/${detail.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(editState),
-    })
-    setDetailBusy(false)
-    if (!res.ok) { flash("Save failed"); return }
-    flash("Saved")
-    setDetail(null)
-    load(page)
+    try {
+      const res = await fetch(`/api/admin/feedback/${detail.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(editState),
+      })
+      if (!res.ok) { flash("Save failed"); return }
+      flash("Saved")
+      setDetail(null)
+      load(page)
+    } catch {
+      flash("Network error — save failed")
+    } finally {
+      setDetailBusy(false)
+    }
   }
 
   const submitObservation = async (e: React.FormEvent) => {
     e.preventDefault()
     if (obsBusy) return
     setObsBusy(true)
-    const res = await fetch("/api/admin/feedback", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(obsForm),
-    })
-    setObsBusy(false)
-    if (!res.ok) { flash("Could not save observation"); return }
-    flash("Observation recorded")
-    setObsForm({ type: "UX", title: "", message: "", pagePath: "", priority: "NORMAL" })
-    setShowObs(false)
-    load(page)
+    try {
+      const res = await fetch("/api/admin/feedback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(obsForm),
+      })
+      if (!res.ok) { flash("Could not save observation"); return }
+      flash("Observation recorded")
+      setObsForm({ type: "UX", title: "", message: "", pagePath: "", priority: "NORMAL" })
+      setShowObs(false)
+      load(page)
+    } catch {
+      flash("Network error — could not save observation")
+    } finally {
+      setObsBusy(false)
+    }
   }
 
   if (loading && items.length === 0) {

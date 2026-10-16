@@ -67,13 +67,18 @@ export default function NotificationSettingsPage() {
     if (!prefs) return
     setSaving(true)
     setMessage("")
-    const res = await fetch("/api/profile/notifications", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(prefs),
-    })
-    setSaving(false)
-    setMessage(res.ok ? "Saved." : "Failed to save.")
+    try {
+      const res = await fetch("/api/profile/notifications", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(prefs),
+      })
+      setMessage(res.ok ? "Saved." : "Failed to save.")
+    } catch {
+      setMessage("Network error — try again.")
+    } finally {
+      setSaving(false)
+    }
   }
 
   if (loading || !prefs) {

@@ -585,6 +585,10 @@ export async function getPublicProfileData(
     prisma.growDiary.findMany({
       where: { ...diaryOwnerScope, harvested: true, ...diaryScope, harvestedAt: { not: null } },
       select: { startDate: true, harvestedAt: true },
+      // Bounded to the most recent harvests — the longest-grow stat needs
+      // durations, not the full history scan on every profile render.
+      orderBy: { harvestedAt: "desc" },
+      take: 500,
     }),
     prisma.abuseFlag.count({
       where: { userId: ownerId, status: { in: ["PENDING", "REVIEWING", "ESCALATED"] } },
@@ -1315,7 +1319,7 @@ export async function resolveNotableStatValue(
       return { id: statId, label: "Documented weeks", value: String(rows.length) }
     }
     case "longestGrow": {
-      const rows = await prisma.growDiary.findMany({ where: { ...ownerScope, harvested: true, ...scope, harvestedAt: { not: null } }, select: { startDate: true, harvestedAt: true } })
+      const rows = await prisma.growDiary.findMany({ where: { ...ownerScope, harvested: true, ...scope, harvestedAt: { not: null } }, select: { startDate: true, harvestedAt: true }, orderBy: { harvestedAt: "desc" }, take: 500 })
       const days = rows.reduce((n, d) => (!d.startDate || !d.harvestedAt ? n : Math.max(n, Math.round((d.harvestedAt.getTime() - d.startDate.getTime()) / 86400000))), 0)
       return days > 0 ? { id: statId, label: "Longest grow", value: `${days} days`, hint: "start → harvest" } : null
     }

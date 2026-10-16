@@ -216,15 +216,20 @@ export default function MomentCard({
   }
 
   const remove = async () => {
-    const res = await fetch(`/api/moments/${moment.id}`, { method: "DELETE" })
-    setConfirmDelete(false)
-    if (!res.ok) {
-      toast("Couldn't delete this post", "error")
-      return
+    try {
+      const res = await fetch(`/api/moments/${moment.id}`, { method: "DELETE" })
+      if (!res.ok) {
+        toast("Couldn't delete this post", "error")
+        return
+      }
+      toast("Post deleted", "success")
+      setGone(true)
+      onDeleted?.()
+    } catch {
+      toast("Network error — couldn't delete this post", "error")
+    } finally {
+      setConfirmDelete(false)
     }
-    toast("Post deleted", "success")
-    setGone(true)
-    onDeleted?.()
   }
 
   const ownRow = viewerId === moment.author.id

@@ -97,46 +97,63 @@ export async function reconcileReferralPayouts(
   limit = 200
 ): Promise<{ candidates: number; attempted: number; failed: number }> {
   const cutoff = new Date(Date.now() - REFERRAL_MIN_AGE_HOURS * 60 * 60 * 1000)
-  const candidates = await prisma.profile.findMany({
-    where: {
-      referredById: { not: null },
-      xp: { gte: REFERRAL_MIN_XP },
-      user: { createdAt: { lte: cutoff } },
-    },
-    select: {
-      userId: true,
-      xp: true,
-      user: { select: { createdAt: true } },
-    },
-    orderBy: { userId: "asc" },
-    take: limit,
-  })
-  if (candidates.length === 0) return { candidates: 0, attempted: 0, failed: 0 }
 
-  // One indexed read filters out referees whose payout is already live —
-  // reversed/final keys deliberately stay eligible so the canonical path
-  // applies its own reinstate/locked semantics.
-  const keys = candidates.map((c) => `referral:${c.userId}`)
-  const active = await prisma.progressionEvent.findMany({
-    where: { key: { in: keys }, reversedAt: null },
-    select: { key: true },
-  })
-  const alreadyPaid = new Set(active.map((e) => e.key))
-
+  // Keyset-paginate until `limit` unpaid candidates are found or the set
+  // is exhausted. A fixed first-N window would starve later referees —
+  // already-paid referees keep satisfying the predicate and would occupy
+  // every scan slot forever once ≥ limit of them exist. `limit` bounds
+  // payout attempts per run; scanning is unbounded by design so every
+  // qualifying referee is eventually reached.
+  let cursor: string | undefined
+  let scanned = 0
   let attempted = 0
   let failed = 0
-  for (const c of candidates) {
-    if (alreadyPaid.has(`referral:${c.userId}`)) continue
-    attempted++
-    try {
-      await payReferralBonus(c.userId, c.user.createdAt, c.xp)
-    } catch (error) {
-      failed++
-      console.error("[referrals] reconciliation failed for referee", c.userId, error)
+  while (attempted < limit) {
+    const page = await prisma.profile.findMany({
+      where: {
+        referredById: { not: null },
+        xp: { gte: REFERRAL_MIN_XP },
+        user: { createdAt: { lte: cutoff } },
+        ...(cursor ? { userId: { gt: cursor } } : {}),
+      },
+      select: {
+        userId: true,
+        xp: true,
+        user: { select: { createdAt: true } },
+      },
+      orderBy: { userId: "asc" },
+      take: limit,
+    })
+    if (page.length === 0) break
+    scanned += page.length
+    cursor = page[page.length - 1].userId
+
+    // One indexed read filters out referees whose payout is already live —
+    // reversed/final keys deliberately stay eligible so the canonical path
+    // applies its own reinstate/locked semantics.
+    const keys = page.map((c) => `referral:${c.userId}`)
+    const active = await prisma.progressionEvent.findMany({
+      where: { key: { in: keys }, reversedAt: null },
+      select: { key: true },
+    })
+    const alreadyPaid = new Set(active.map((e) => e.key))
+
+    for (const c of page) {
+      if (alreadyPaid.has(`referral:${c.userId}`)) continue
+      attempted++
+      try {
+        await payReferralBonus(c.userId, c.user.createdAt, c.xp)
+      } catch (error) {
+        failed++
+        console.error("[referrals] reconciliation failed for referee", c.userId, error)
+      }
+      if (attempted >= limit) break
     }
+    if (page.length < limit) break
   }
+  if (scanned === 0) return { candidates: 0, attempted: 0, failed: 0 }
   if (failed > 0) {
     throw new Error(`referral reconciliation: ${failed}/${attempted} payouts failed`)
   }
-  return { candidates: candidates.length, attempted, failed }
+  return { candidates: scanned, attempted, failed }
 }

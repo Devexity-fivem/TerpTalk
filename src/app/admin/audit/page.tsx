@@ -2,7 +2,7 @@
 
 import { signInHref } from "@/lib/callback-url"
 
-import { useEffect, useState, useCallback } from "react"
+import { useEffect, useRef, useState, useCallback } from "react"
 import { useSession } from "next-auth/react"
 import { isAdmin } from "@/lib/roles"
 import { useRouter } from "next/navigation"
@@ -34,7 +34,10 @@ export default function AdminAuditPage() {
   const [from, setFrom] = useState("")
   const [to, setTo] = useState("")
 
+  // Sequence guard — a stale response can't overwrite newer results.
+  const seq = useRef(0)
   const load = useCallback(() => {
+    const my = ++seq.current
     const params = new URLSearchParams()
     if (q) params.set("q", q)
     if (from) params.set("from", from)
@@ -45,19 +48,24 @@ export default function AdminAuditPage() {
         if (!res.ok) return { events: [] }
         return res.json()
       })
-      .then((d) => setEvents(d.events || []))
-      .catch(() => setEvents([]))
-      .finally(() => setLoading(false))
+      .then((d) => { if (my === seq.current) setEvents(d.events || []) })
+      .catch(() => { if (my === seq.current) setEvents([]) })
+      .finally(() => { if (my === seq.current) setLoading(false) })
   }, [q, from, to])
 
   useEffect(() => {
     if (status === "unauthenticated") {
       router.push(signInHref(window.location.pathname + window.location.search))
-    } else if (status === "authenticated") {
-      const t = setTimeout(() => load(), 0)
-      return () => clearTimeout(t)
     }
-  }, [status, router, load])
+  }, [status, router])
+
+  // Debounced — `load` identity changes per keystroke, so the timer
+  // resets until the input settles.
+  useEffect(() => {
+    if (status !== "authenticated") return
+    const t = setTimeout(() => load(), 300)
+    return () => clearTimeout(t)
+  }, [status, load])
 
   if (status === "loading" || loading && events.length === 0) {
     return <div className="min-h-screen flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>

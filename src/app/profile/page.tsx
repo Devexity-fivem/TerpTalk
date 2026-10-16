@@ -815,20 +815,25 @@ export default function ProfilePage() {
                     disabled={saving}
                     onClick={async () => {
                       setSaving(true)
-                      const payload = { ...editForm, bio: bioRef.current?.value ?? editForm.bio }
-                      const res = await fetch("/api/profile", {
-                        method: "PATCH",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify(payload),
-                      })
-                      setSaving(false)
-                      if (res.ok) {
-                        const d = await res.json()
-                        setProfileData(prev => prev ? { ...prev, profile: d.profile } : prev)
-                        setEditing(false)
-                      } else {
-                        const d = await res.json()
-                        alert(d.error || "Failed to save")
+                      try {
+                        const payload = { ...editForm, bio: bioRef.current?.value ?? editForm.bio }
+                        const res = await fetch("/api/profile", {
+                          method: "PATCH",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify(payload),
+                        })
+                        if (res.ok) {
+                          const d = await res.json()
+                          setProfileData(prev => prev ? { ...prev, profile: d.profile } : prev)
+                          setEditing(false)
+                        } else {
+                          const d = await res.json()
+                          alert(d.error || "Failed to save")
+                        }
+                      } catch {
+                        alert("Network error — check your connection and try again")
+                      } finally {
+                        setSaving(false)
                       }
                     }}
                     className="flex-1 px-4 py-2 bg-primary text-primary-foreground rounded-full font-medium hover:bg-primary/90 transition-colors disabled:opacity-50"
@@ -1119,21 +1124,25 @@ export default function ProfilePage() {
                     onClick={async () => {
                       setDeleteBusy(true)
                       setDeleteError("")
-                      const res = await fetch("/api/profile", {
-                        method: "DELETE",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({
-                          confirmUsername: deleteForm.username,
-                          password: deleteForm.password,
-                        }),
-                      })
-                      if (res.ok) {
-                        await signOut({ callbackUrl: "/" })
-                      } else {
+                      try {
+                        const res = await fetch("/api/profile", {
+                          method: "DELETE",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({
+                            confirmUsername: deleteForm.username,
+                            password: deleteForm.password,
+                          }),
+                        })
+                        if (res.ok) {
+                          await signOut({ callbackUrl: "/" })
+                          return
+                        }
                         const d = await res.json().catch(() => ({}))
                         setDeleteError(d.error || "Deletion failed")
-                        setDeleteBusy(false)
+                      } catch {
+                        setDeleteError("Network error — check your connection and try again")
                       }
+                      setDeleteBusy(false)
                     }}
                     className="w-full px-4 py-2 bg-destructive text-white rounded-lg text-sm font-medium disabled:opacity-50"
                   >

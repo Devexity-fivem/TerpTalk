@@ -2,7 +2,7 @@ import { prisma } from "@/lib/prisma"
 import { unstable_cache } from "next/cache"
 import { toGrams, toOz } from "@/lib/yield"
 import { activeAuthor, publicUserSelect } from "@/lib/security"
-import { medianStageDurations, type StageMedian } from "@/lib/diary-weeks"
+import { median, medianStageDurations, type StageMedian } from "@/lib/diary-weeks"
 import { DIFFICULTY_LABELS, MEDIUM_LABELS, LIGHT_LABELS, TECHNIQUE_LABELS } from "@/lib/grow-fields"
 import { publicDiaryWhere } from "@/lib/diary-visibility"
 import {
@@ -274,7 +274,7 @@ export async function computeStrainGrowStats(strainName: string, strainId: strin
       harvestedCount,
       avgYieldOz: yieldsG.length >= MIN_DERIVED_SAMPLE ? round1(toOz(avgN(yieldsG)!)) : null,
       yieldSample: yieldsG.length,
-      medianYieldOz: yieldsG.length >= MIN_DERIVED_SAMPLE ? round1(toOz(yieldsG[Math.floor(yieldsG.length / 2)])) : null,
+      medianYieldOz: yieldsG.length >= MIN_DERIVED_SAMPLE ? round1(toOz(median(yieldsG)!)) : null,
       topYieldOz: yieldsG.length >= MIN_DERIVED_SAMPLE ? round1(toOz(yieldsG[yieldsG.length - 1])) : null,
       avgTotalDays: totalDays.length >= MIN_DERIVED_SAMPLE ? Math.round(avgN(totalDays)!) : null,
       totalDaysSample: totalDays.length,

@@ -25,14 +25,19 @@ export default function StrainCombobox({ value, strainId, onChange, disabled }: 
   const [options, setOptions] = useState<StrainOption[]>([])
   const [open, setOpen] = useState(false)
   const boxRef = useRef<HTMLDivElement>(null)
+  // Sequence guard — the debounce clears pending timers but can't stop an
+  // in-flight fetch; without this an older query's response can overwrite
+  // the list for the current text (and a wrong pick links a wrong strainId).
+  const seq = useRef(0)
 
   useEffect(() => {
     if (!open) return
     const t = setTimeout(() => {
+      const my = ++seq.current
       fetch(`/api/strains?q=${encodeURIComponent(value)}`)
         .then((res) => res.json())
-        .then((data) => setOptions(data.strains || []))
-        .catch(() => setOptions([]))
+        .then((data) => { if (my === seq.current) setOptions(data.strains || []) })
+        .catch(() => { if (my === seq.current) setOptions([]) })
     }, 200)
     return () => clearTimeout(t)
   }, [value, open])

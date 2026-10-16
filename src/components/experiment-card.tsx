@@ -284,8 +284,14 @@ function DeleteExperiment({ diaryId, experimentId }: { diaryId: string; experime
         disabled={busy}
         onClick={async () => {
           setBusy(true)
-          await fetch(`/api/diaries/${diaryId}/experiments/${experimentId}`, { method: "DELETE" })
-          router.refresh()
+          try {
+            await fetch(`/api/diaries/${diaryId}/experiments/${experimentId}`, { method: "DELETE" })
+            router.refresh()
+          } catch {
+            // Network failure — leave the confirm row usable.
+          } finally {
+            setBusy(false)
+          }
         }}
         className="text-destructive font-medium min-h-8 px-2"
       >

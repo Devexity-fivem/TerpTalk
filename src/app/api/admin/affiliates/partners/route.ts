@@ -7,6 +7,14 @@ import { isValidUrl, slugify, cleanText, DEFAULT_DISCLOSURE } from "@/lib/affili
 import { rateLimit } from "@/lib/rate-limit"
 import { revalidateTag } from "next/cache"
 
+// null → null; valid date → Date; garbage → undefined sentinel (caller 400s)
+// so a malformed promoStart/promoEnd can't reach Prisma as `Invalid Date`.
+function parseOptionalDate(v: unknown): Date | null | undefined {
+  if (v === null || v === undefined || v === "") return null
+  const d = new Date(v as string)
+  return Number.isNaN(d.getTime()) ? undefined : d
+}
+
 // GET — all partners (admin view incl. inactive)
 export async function GET(request: Request) {
   const admin = await requireAdmin()
@@ -59,6 +67,12 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "URLs must be valid https:// links" }, { status: 400 })
   }
 
+  const promoStart = parseOptionalDate(body.promoStart)
+  const promoEnd = parseOptionalDate(body.promoEnd)
+  if (promoStart === undefined || promoEnd === undefined) {
+    return NextResponse.json({ error: "Invalid promo date" }, { status: 400 })
+  }
+
   const base = slugify(String(name))
   let slug = base
   while (await prisma.affiliatePartner.findUnique({ where: { slug } })) {
@@ -75,8 +89,8 @@ export async function POST(request: Request) {
       promoCode: cleanText(body.promoCode, 40),
       description: String(body.description || "").slice(0, 1000),
       promoText: cleanText(body.promoText, 300),
-      promoStart: body.promoStart ? new Date(body.promoStart) : null,
-      promoEnd: body.promoEnd ? new Date(body.promoEnd) : null,
+      promoStart,
+      promoEnd,
       active: body.active !== false,
       featured: !!body.featured,
       adminNotes: cleanText(body.adminNotes, 1000),
@@ -100,6 +114,12 @@ export async function PATCH(request: Request) {
   if (fields.websiteUrl && !isValidUrl(fields.websiteUrl)) {
     return NextResponse.json({ error: "Invalid website URL" }, { status: 400 })
   }
+  if (fields.promoStart !== undefined && parseOptionalDate(fields.promoStart) === undefined) {
+    return NextResponse.json({ error: "Invalid promo date" }, { status: 400 })
+  }
+  if (fields.promoEnd !== undefined && parseOptionalDate(fields.promoEnd) === undefined) {
+    return NextResponse.json({ error: "Invalid promo date" }, { status: 400 })
+  }
 
   const partner = await prisma.affiliatePartner.update({
     where: { id },
@@ -111,13 +131,14 @@ export async function PATCH(request: Request) {
       ...(fields.promoCode !== undefined && { promoCode: cleanText(fields.promoCode, 40) }),
       ...(fields.description !== undefined && { description: String(fields.description).slice(0, 1000) }),
       ...(fields.promoText !== undefined && { promoText: cleanText(fields.promoText, 300) }),
-      ...(fields.promoStart !== undefined && { promoStart: fields.promoStart ? new Date(fields.promoStart) : null }),
-      ...(fields.promoEnd !== undefined && { promoEnd: fields.promoEnd ? new Date(fields.promoEnd) : null }),
+      ...(fields.promoStart !== undefined && { promoStart: parseOptionalDate(fields.promoStart) }),
+      ...(fields.promoEnd !== undefined && { promoEnd: parseOptionalDate(fields.promoEnd) }),
       ...(fields.active !== undefined && { active: !!fields.active }),
       ...(fields.featured !== undefined && { featured: !!fields.featured }),
       ...(fields.adminNotes !== undefined && { adminNotes: cleanText(fields.adminNotes, 1000) }),
     },
-  })
+  }).catch(() => null)
+  if (!partner) return NextResponse.json({ error: "Partner not found" }, { status: 404 })
   revalidateTag("deals", { expire: 0 })
   return NextResponse.json({ partner })
 }
@@ -129,7 +150,8 @@ export async function DELETE(request: Request) {
   const { searchParams } = new URL(request.url)
   const id = searchParams.get("id")
   if (!id) return NextResponse.json({ error: "id required" }, { status: 400 })
-  await prisma.affiliatePartner.delete({ where: { id } })
+  const deleted = await prisma.affiliatePartner.deleteMany({ where: { id } })
+  if (!deleted.count) return NextResponse.json({ error: "Partner not found" }, { status: 404 })
   revalidateTag("deals", { expire: 0 })
   return NextResponse.json({ ok: true })
 }
