@@ -19,6 +19,7 @@ export interface DiaryFormData {
   medium: string
   mediumType: string
   containerSize: string
+  plantCount: string
   lighting: string
   lightType: string
   nutrients: string
@@ -274,6 +275,25 @@ export default function DiaryForm({ initial, submitLabel, pendingLabel, onSubmit
               onChange={(e) => setFormData({ ...formData, containerSize: e.target.value })}
               className={inputCls}
               placeholder="e.g., 5 gallon, 10L"
+            />
+          </div>
+        </div>
+
+        <div className="grid md:grid-cols-2 gap-4">
+          <div>
+            <label htmlFor="plantCount" className="block text-sm font-medium mb-2">
+              Number of plants
+            </label>
+            <input
+              id="plantCount"
+              type="number"
+              inputMode="numeric"
+              min="1"
+              max="99"
+              value={formData.plantCount}
+              onChange={(e) => setFormData({ ...formData, plantCount: e.target.value })}
+              className={inputCls}
+              placeholder="e.g., 3"
             />
           </div>
         </div>

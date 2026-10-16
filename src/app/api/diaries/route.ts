@@ -70,6 +70,7 @@ export async function POST(request: Request) {
       equipment,
       techniques,
       spaceDimensions,
+      plantCount,
       setupId,
       visibility,
     } = body
@@ -120,6 +121,13 @@ export async function POST(request: Request) {
     // Strict: a non-array or any out-of-vocabulary value rejects the request.
     if (techniques != null && (!cleanTechniques || cleanTechniques.length !== techniques.length)) {
       return NextResponse.json({ error: "Invalid techniques" }, { status: 400 })
+    }
+
+    if (
+      plantCount !== undefined && plantCount !== null &&
+      (typeof plantCount !== "number" || !Number.isInteger(plantCount) || plantCount < 1 || plantCount > 99)
+    ) {
+      return NextResponse.json({ error: "Invalid plant count" }, { status: 400 })
     }
 
     // Optional catalog strain link — must point at a real strain. The
@@ -216,6 +224,7 @@ export async function POST(request: Request) {
         equipment,
         techniques: cleanTechniques ?? [],
         spaceDimensions,
+        plantCount: typeof plantCount === "number" ? plantCount : null,
         setupId: cleanSetupId,
         visibility: visibility ?? "PUBLIC",
         authorId: session.user.id,

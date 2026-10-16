@@ -181,6 +181,76 @@ const main = async () => {
       ? pass("PATCH edits and clears env fields")
       : fail("env PATCH", { s: r.status, row: envRow })
 
+    // ── Grower tags + plant observations ─────────────────────────────
+    r = await callApi("/api/diaries/updates", {
+      method: "POST",
+      body: {
+        diaryId, title: M("tags"), content: "topped and defoliated", stage: "VEGETATIVE",
+        events: ["TOPPED", "DEFOLIATED", "topped"], // dup normalizes away
+        issues: ["NUTRIENT_BURN"],
+        plantHealth: "STRESSED", trichomeState: "CLEAR", aromaIntensity: 3,
+      },
+      cookie: ownerCookie,
+    })
+    const tagUpd = r.data?.update
+    r.status === 201 && tagUpd?.events?.join() === "TOPPED,DEFOLIATED" &&
+    tagUpd?.issues?.join() === "NUTRIENT_BURN" && tagUpd?.plantHealth === "STRESSED" &&
+    tagUpd?.trichomeState === "CLEAR" && tagUpd?.aromaIntensity === 3
+      ? pass("event/issue tags + plant observations persist on create")
+      : fail("tag create", { s: r.status, d: tagUpd })
+
+    r = await callApi("/api/diaries/updates", {
+      method: "POST",
+      body: { diaryId, title: "x", content: "x", events: ["NOT_A_TAG"] },
+      cookie: ownerCookie,
+    })
+    r.status === 400 ? pass("unknown event tag rejected") : fail("event allowlist", r.status)
+
+    r = await callApi("/api/diaries/updates", {
+      method: "POST",
+      body: { diaryId, title: "x", content: "x", issues: "NUTRIENT_BURN" },
+      cookie: ownerCookie,
+    })
+    r.status === 400 ? pass("non-array issues rejected") : fail("issues shape", r.status)
+
+    r = await callApi("/api/diaries/updates", {
+      method: "POST",
+      body: { diaryId, title: "x", content: "x", plantHealth: "IMMORTAL" },
+      cookie: ownerCookie,
+    })
+    r.status === 400 ? pass("unknown plantHealth rejected") : fail("health enum", r.status)
+
+    r = await callApi("/api/diaries/updates", {
+      method: "POST",
+      body: { diaryId, title: "x", content: "x", aromaIntensity: 6 },
+      cookie: ownerCookie,
+    })
+    r.status === 400 ? pass("aromaIntensity >5 rejected") : fail("aroma bound", r.status)
+
+    // PATCH — tags replace wholesale; nullable enums clear with null.
+    r = await callApi("/api/diaries/updates", {
+      method: "PATCH",
+      body: { id: tagUpd.id, events: ["LST"], issues: [], plantHealth: null, aromaIntensity: 5 },
+      cookie: ownerCookie,
+    })
+    const tagRow = r.status === 200
+      ? await prisma.diaryUpdate.findUnique({
+          where: { id: tagUpd.id },
+          select: { events: true, issues: true, plantHealth: true, aromaIntensity: true },
+        })
+      : null
+    tagRow?.events.join() === "LST" && tagRow?.issues.length === 0 &&
+    tagRow?.plantHealth === null && tagRow?.aromaIntensity === 5
+      ? pass("PATCH replaces tag lists and clears observations")
+      : fail("tag PATCH", { s: r.status, row: tagRow })
+
+    r = await callApi("/api/diaries/updates", {
+      method: "PATCH",
+      body: { id: tagUpd.id, issues: ["BOGUS"] },
+      cookie: ownerCookie,
+    })
+    r.status === 400 ? pass("PATCH unknown issue tag rejected") : fail("issue PATCH allowlist", r.status)
+
     // ── Structured nutrient rows (Slice B) ──────────────────────────
     r = await callApi("/api/diaries/updates", {
       method: "POST",
@@ -358,6 +428,20 @@ const main = async () => {
 
     r = await callApi(`/api/diaries/${diaryId}`, { method: "PATCH", body: { title: M("edited") }, cookie: ownerCookie })
     r.status === 200 ? pass("diary PATCH succeeds for owner") : fail("diary PATCH owner", { s: r.status, d: r.data })
+
+    // plantCount — optional int on the diary, owner-editable, null clears
+    r = await callApi(`/api/diaries/${diaryId}`, { method: "PATCH", body: { plantCount: 3 }, cookie: ownerCookie })
+    const dPlants = await prisma.growDiary.findUnique({ where: { id: diaryId }, select: { plantCount: true } })
+    r.status === 200 && dPlants?.plantCount === 3
+      ? pass("diary PATCH sets plantCount")
+      : fail("plantCount PATCH", { s: r.status, dPlants })
+    r = await callApi(`/api/diaries/${diaryId}`, { method: "PATCH", body: { plantCount: 0 }, cookie: ownerCookie })
+    r.status === 400 ? pass("plantCount 0 rejected") : fail("plantCount bound", r.status)
+    r = await callApi(`/api/diaries/${diaryId}`, { method: "PATCH", body: { plantCount: null }, cookie: ownerCookie })
+    const dPlantsNull = await prisma.growDiary.findUnique({ where: { id: diaryId }, select: { plantCount: true } })
+    r.status === 200 && dPlantsNull?.plantCount === null
+      ? pass("diary PATCH null clears plantCount")
+      : fail("plantCount clear", { s: r.status, dPlantsNull })
 
     // ── strainId linkage through the real PATCH route ──
     const patchStrain = await prisma.strain.create({ data: { name: M("patchstrain"), createdById: owner.id } })

@@ -11,6 +11,14 @@ import { useRouter } from "next/navigation"
 import { Pencil, Loader2, X, Plus, Camera, ImagePlus, FlaskConical } from "@/lib/icons"
 import { useToast } from "@/components/ui/toast"
 import { STAGE_TIPS } from "@/lib/stage-tips"
+import {
+  UPDATE_EVENT_TAGS,
+  UPDATE_EVENT_LABELS,
+  UPDATE_ISSUE_TAGS,
+  UPDATE_ISSUE_LABELS,
+  UPDATE_PLANT_HEALTH_LABELS,
+  UPDATE_TRICHOME_LABELS,
+} from "@/lib/update-tags"
 import { resizeImage } from "@/components/update-form"
 import ImageGallery from "@/components/image-gallery"
 import OwnerDeleteButton from "@/components/owner-delete-button"
@@ -40,6 +48,11 @@ export interface EditableUpdate {
   lampDistanceCm: number | null
   feeding: string | null
   training: string | null
+  events: string[]
+  issues: string[]
+  plantHealth: string | null
+  trichomeState: string | null
+  aromaIntensity: number | null
   /** Structured nutrient rows. Undefined = the query didn't load them —
    *  the edit form then omits `nutrients` from PATCH rather than sending
    *  an empty array that would wipe rows it never saw. */
@@ -95,6 +108,11 @@ export default function UpdateEditSection({ update, day, dateLabel, edited, disc
     lampDistanceCm: num(update.lampDistanceCm),
     feeding: update.feeding ?? "",
     training: update.training ?? "",
+    events: update.events ?? [],
+    issues: update.issues ?? [],
+    plantHealth: update.plantHealth ?? "",
+    trichomeState: update.trichomeState ?? "",
+    aromaIntensity: update.aromaIntensity != null ? String(update.aromaIntensity) : "",
   })
   const [nutrientRows, setNutrientRows] = useState<{ productName: string; doseMlPerL: string }[]>(
     () => (update.nutrients ?? []).map((n) => ({
@@ -147,6 +165,11 @@ export default function UpdateEditSection({ update, day, dateLabel, edited, disc
           runoffPh: formData.runoffPh ? parseFloat(formData.runoffPh) : null,
           runoffEc: formData.runoffEc ? parseFloat(formData.runoffEc) : null,
           lampDistanceCm: formData.lampDistanceCm ? parseFloat(formData.lampDistanceCm) : null,
+          events: formData.events,
+          issues: formData.issues,
+          plantHealth: formData.plantHealth || null,
+          trichomeState: formData.trichomeState || null,
+          aromaIntensity: formData.aromaIntensity ? parseInt(formData.aromaIntensity, 10) : null,
           // Full-replacement semantics — only sent when rows were loaded,
           // so a form that never saw nutrients can't wipe them.
           ...(update.nutrients !== undefined && {
@@ -189,6 +212,21 @@ export default function UpdateEditSection({ update, day, dateLabel, edited, disc
   if (update.training) eventChips.push({ label: "Training", color: "text-warning bg-warning/10" })
   if (update.feeding) eventChips.push({ label: "Feeding", color: "text-success bg-success/10" })
   if (update.nutrients?.length) eventChips.push({ label: "Nutrients", color: "text-success bg-success/10" })
+  for (const tag of update.events ?? []) {
+    eventChips.push({ label: UPDATE_EVENT_LABELS[tag] ?? tag, color: "text-primary bg-primary/10" })
+  }
+  for (const tag of update.issues ?? []) {
+    eventChips.push({ label: UPDATE_ISSUE_LABELS[tag] ?? tag, color: "text-warning bg-warning/10" })
+  }
+  if (update.plantHealth) {
+    eventChips.push({ label: UPDATE_PLANT_HEALTH_LABELS[update.plantHealth] ?? update.plantHealth, color: "text-foreground bg-secondary" })
+  }
+  if (update.trichomeState) {
+    eventChips.push({ label: `Trichomes: ${UPDATE_TRICHOME_LABELS[update.trichomeState] ?? update.trichomeState}`, color: "text-foreground bg-secondary" })
+  }
+  if (update.aromaIntensity != null) {
+    eventChips.push({ label: `Aroma ${update.aromaIntensity}/5`, color: "text-foreground bg-secondary" })
+  }
 
   return (
     <div id={`update-${update.id}`} className="bg-card/80 rounded-2xl border border-border/70 p-4 scroll-mt-20">
@@ -361,9 +399,106 @@ export default function UpdateEditSection({ update, day, dateLabel, edited, disc
 
           <details className="border border-border rounded-lg">
             <summary className="px-4 py-3 text-sm font-medium cursor-pointer select-none text-muted-foreground">
-              Environment &amp; notes (optional)
+              Work, issues &amp; environment (optional)
             </summary>
             <div className="px-4 pb-4 space-y-4">
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">Work done this update</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {[...UPDATE_EVENT_TAGS].map((tag) => {
+                    const on = formData.events.includes(tag)
+                    return (
+                      <button
+                        key={tag}
+                        type="button"
+                        aria-pressed={on}
+                        onClick={() => setFormData({
+                          ...formData,
+                          events: on ? formData.events.filter((t) => t !== tag) : [...formData.events, tag],
+                        })}
+                        className={`px-2.5 py-1.5 rounded-full text-xs font-medium transition-colors min-h-8 ${
+                          on ? "bg-primary text-primary-foreground" : "bg-secondary text-muted-foreground hover:bg-secondary/70"
+                        }`}
+                      >
+                        {UPDATE_EVENT_LABELS[tag] ?? tag}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">Problems spotted</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {[...UPDATE_ISSUE_TAGS].map((tag) => {
+                    const on = formData.issues.includes(tag)
+                    return (
+                      <button
+                        key={tag}
+                        type="button"
+                        aria-pressed={on}
+                        onClick={() => setFormData({
+                          ...formData,
+                          issues: on ? formData.issues.filter((t) => t !== tag) : [...formData.issues, tag],
+                        })}
+                        className={`px-2.5 py-1.5 rounded-full text-xs font-medium transition-colors min-h-8 border ${
+                          on ? "bg-warning/20 text-warning border-warning/40" : "bg-secondary text-muted-foreground hover:bg-secondary/70 border-transparent"
+                        }`}
+                      >
+                        {UPDATE_ISSUE_LABELS[tag] ?? tag}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">Plant state</p>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  <div>
+                    <label className="block text-xs font-medium mb-1">Health</label>
+                    <select
+                      value={formData.plantHealth}
+                      onChange={(e) => setFormData({ ...formData, plantHealth: e.target.value })}
+                      className={envInput}
+                    >
+                      <option value="">—</option>
+                      {Object.entries(UPDATE_PLANT_HEALTH_LABELS).map(([v, label]) => (
+                        <option key={v} value={v}>{label}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium mb-1">Trichomes</label>
+                    <select
+                      value={formData.trichomeState}
+                      onChange={(e) => setFormData({ ...formData, trichomeState: e.target.value })}
+                      className={envInput}
+                    >
+                      <option value="">—</option>
+                      {Object.entries(UPDATE_TRICHOME_LABELS).map(([v, label]) => (
+                        <option key={v} value={v}>{label}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium mb-1">Aroma (1–5)</label>
+                    <select
+                      value={formData.aromaIntensity}
+                      onChange={(e) => setFormData({ ...formData, aromaIntensity: e.target.value })}
+                      className={envInput}
+                    >
+                      <option value="">—</option>
+                      <option value="1">1 — faint</option>
+                      <option value="2">2 — mild</option>
+                      <option value="3">3 — noticeable</option>
+                      <option value="4">4 — strong</option>
+                      <option value="5">5 — loud</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
               <div>
                 <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">Environment</p>
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2">

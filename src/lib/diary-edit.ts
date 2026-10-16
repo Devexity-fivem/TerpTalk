@@ -36,6 +36,7 @@ export const DIARY_EDITABLE_FIELDS = new Set([
   "equipment",
   "techniques",
   "spaceDimensions",
+  "plantCount",
   "setupId",
   "visibility",
   "lessons",
@@ -130,6 +131,13 @@ export function parseDiaryPatch(body: unknown): DiaryPatchResult {
   if ("visibility" in b) {
     if (!isDiaryVisibility(b.visibility)) return bad("Invalid visibility")
     data.visibility = b.visibility
+  }
+  if ("plantCount" in b) {
+    const v = b.plantCount
+    if (v !== null && (typeof v !== "number" || !Number.isInteger(v) || v < 1 || v > 99)) {
+      return bad("Invalid plant count")
+    }
+    data.plantCount = v
   }
   // Structured grower-recorded lessons — fixed key set, owner-authored.
   // null clears the whole block; the stored Json column holds the map.

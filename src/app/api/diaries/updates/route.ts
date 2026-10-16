@@ -25,8 +25,16 @@ import { rateLimit } from "@/lib/rate-limit"
 import {
   UPDATE_STAGES,
   UPDATE_NUMERIC_RANGES,
+  UPDATE_EVENT_TAGS,
+  UPDATE_ISSUE_TAGS,
+  UPDATE_PLANT_HEALTH,
+  UPDATE_TRICHOME_STATES,
+  UPDATE_MAX_EVENTS,
+  UPDATE_MAX_ISSUES,
+  AROMA_RANGE,
   cleanUpdateString,
   parseUpdatePatch,
+  parseUpdateTagList,
   parseNutrientRows,
   diffUpdateImages,
   updatePatchTouchesStrainStats,
@@ -102,6 +110,11 @@ export async function POST(request: Request) {
       lampDistanceCm,
       feeding,
       training,
+      events,
+      issues,
+      plantHealth,
+      trichomeState,
+      aromaIntensity,
       nutrients,
       images,
       experimentId,
@@ -129,7 +142,7 @@ export async function POST(request: Request) {
     if (stage !== undefined && stage !== null && !UPDATE_STAGES.has(stage)) {
       return NextResponse.json({ error: "Invalid stage" }, { status: 400 })
     }
-    const numericValues: Record<string, unknown> = { dayNumber, weekNumber, temperature, humidity, vpd, ph, ec, heightCm, nightTemperature, substrateTemperature, co2Ppm, wateringLiters, ppfd, photoperiodHours, runoffPh, runoffEc, lampDistanceCm }
+    const numericValues: Record<string, unknown> = { dayNumber, weekNumber, temperature, humidity, vpd, ph, ec, heightCm, nightTemperature, substrateTemperature, co2Ppm, wateringLiters, ppfd, photoperiodHours, runoffPh, runoffEc, lampDistanceCm, aromaIntensity }
     for (const n of Object.values(numericValues)) {
       if (n !== undefined && n !== null && (typeof n !== "number" || !Number.isFinite(n))) {
         return NextResponse.json({ error: "Numeric fields must be numbers" }, { status: 400 })
@@ -160,6 +173,33 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: parsedNutrients.error }, { status: 400 })
       }
       nutrientRows = parsedNutrients.rows
+    }
+
+    // Grower tag lists — allowlist-validated, deduped, capped. Omitted = [].
+    let eventTags: string[] = []
+    if (events !== undefined) {
+      const p = parseUpdateTagList(events, UPDATE_EVENT_TAGS, UPDATE_MAX_EVENTS)
+      if (!p.ok) return NextResponse.json({ error: p.error }, { status: 400 })
+      eventTags = p.tags
+    }
+    let issueTags: string[] = []
+    if (issues !== undefined) {
+      const p = parseUpdateTagList(issues, UPDATE_ISSUE_TAGS, UPDATE_MAX_ISSUES)
+      if (!p.ok) return NextResponse.json({ error: p.error }, { status: 400 })
+      issueTags = p.tags
+    }
+    if (plantHealth !== undefined && plantHealth !== null && !UPDATE_PLANT_HEALTH.has(plantHealth)) {
+      return NextResponse.json({ error: "Invalid plantHealth" }, { status: 400 })
+    }
+    if (trichomeState !== undefined && trichomeState !== null && !UPDATE_TRICHOME_STATES.has(trichomeState)) {
+      return NextResponse.json({ error: "Invalid trichomeState" }, { status: 400 })
+    }
+    if (
+      aromaIntensity !== undefined && aromaIntensity !== null &&
+      (typeof aromaIntensity !== "number" || !Number.isInteger(aromaIntensity) ||
+        aromaIntensity < AROMA_RANGE[0] || aromaIntensity > AROMA_RANGE[1])
+    ) {
+      return NextResponse.json({ error: "aromaIntensity is out of range" }, { status: 400 })
     }
 
     // One request-scoped subject row feeds the ban gate, link-trust check,
@@ -273,6 +313,11 @@ export async function POST(request: Request) {
           lampDistanceCm: typeof lampDistanceCm === "number" ? lampDistanceCm : null,
           feeding: cleanUpdateString(feeding, 300),
           training: cleanUpdateString(training, 300),
+          events: eventTags,
+          issues: issueTags,
+          plantHealth: typeof plantHealth === "string" ? plantHealth : null,
+          trichomeState: typeof trichomeState === "string" ? trichomeState : null,
+          aromaIntensity: typeof aromaIntensity === "number" ? aromaIntensity : null,
           ...(typeof experimentId === "string" && experimentId ? { experimentId } : {}),
           // Attach up to 4 client-resized photos
           ...(storedImages.length > 0 && {
@@ -333,7 +378,13 @@ export async function POST(request: Request) {
         (envNum > 0 ? 1 : 0) + (chemNum > 0 ? 1 : 0) + (measNum > 0 ? 1 : 0) +
         (nutrientRows.length > 0 ? 1 : 0) +
         (typeof feeding === "string" && feeding.trim() ? 1 : 0) +
-        (typeof training === "string" && training.trim() ? 1 : 0)
+        (typeof training === "string" && training.trim() ? 1 : 0) +
+        // Tag/observation group counts once — cheap to set, so the whole
+        // group earns a single structured-category slot regardless of how
+        // many chips were toggled.
+        (eventTags.length > 0 || issueTags.length > 0 ||
+          typeof plantHealth === "string" || typeof trichomeState === "string" ||
+          typeof aromaIntensity === "number" ? 1 : 0)
       const band = updateBand({
         chars: (content ?? "").trim().length,
         structuredCategories,
@@ -365,6 +416,11 @@ export async function POST(request: Request) {
           NUM_FIELDS.some((f) => update[f] !== prev[f]) ||
           update.feeding !== prev.feeding ||
           update.training !== prev.training ||
+          update.plantHealth !== prev.plantHealth ||
+          update.trichomeState !== prev.trichomeState ||
+          update.aromaIntensity !== prev.aromaIntensity ||
+          update.events.join() !== prev.events.join() ||
+          update.issues.join() !== prev.issues.join() ||
           update.images.length !== prev._count.images ||
           update.nutrients.length !== prev._count.nutrients
 
@@ -432,7 +488,7 @@ export async function POST(request: Request) {
       "temperature", "humidity", "vpd", "ph", "ec", "heightCm",
       "nightTemperature", "substrateTemperature", "co2Ppm",
       "wateringLiters", "ppfd", "photoperiodHours",
-      "runoffPh", "runoffEc", "lampDistanceCm",
+      "runoffPh", "runoffEc", "lampDistanceCm", "aromaIntensity",
     ] as const
     const presentMetrics = FIRST_METRIC_FIELDS.filter((f) => typeof numericValues[f] === "number")
     for (const f of presentMetrics) {

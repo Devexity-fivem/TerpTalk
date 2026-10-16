@@ -534,6 +534,7 @@ model GrowDiary {
   equipment     String?
   techniques    String[] // LST, HST, TOPPING, FIM, SCROG, SOG, DEFOLIATION, MAINLINING
   spaceDimensions String?
+  plantCount    Int?     // plants in this grow — 1 for a single-plant diary
   setupId       String?  // optional link to the grower's GrowSetup showcase
   threadId      String?  @unique // 0-1 canonical discussion thread, lazy-created
   authorId      String
@@ -646,6 +647,11 @@ model DiaryUpdate {
   lampDistanceCm      Float? // fixture-to-canopy distance
   feeding      String?
   training     String?
+  events       String[] @default([]) // cultivation actions taken — UPDATE_EVENT_TAGS
+  issues       String[] @default([]) // problems observed — UPDATE_ISSUE_TAGS
+  plantHealth  String?  // THRIVING | HEALTHY | STRESSED | RECOVERING
+  trichomeState String? // CLEAR | MOSTLY_CLEAR | CLOUDY | MOSTLY_AMBER | MIXED
+  aromaIntensity Int?   // grower-rated smell strength, 1–5
   diaryId      String
   authorId     String
   createdAt    DateTime @default(now())

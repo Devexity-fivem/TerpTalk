@@ -40,6 +40,11 @@ export const UPDATE_EDITABLE_FIELDS = new Set([
   "lampDistanceCm",
   "feeding",
   "training",
+  "events",
+  "issues",
+  "plantHealth",
+  "trichomeState",
+  "aromaIntensity",
   "nutrients",
   "keepImageIds",
   "images",
@@ -81,6 +86,33 @@ export const UPDATE_NUMERIC_RANGES = [
   ["dayNumber", 0, 1000],
   ["weekNumber", 0, 150],
 ] as const
+
+// Tag taxonomies live in update-tags.ts — a dependency-free leaf shared by
+// the client forms. Re-exported here so route/parser imports stay single-site.
+import {
+  UPDATE_EVENT_TAGS,
+  UPDATE_ISSUE_TAGS,
+  UPDATE_PLANT_HEALTH,
+  UPDATE_TRICHOME_STATES,
+  UPDATE_MAX_EVENTS,
+  UPDATE_MAX_ISSUES,
+  AROMA_RANGE,
+  parseUpdateTagList,
+} from "./update-tags"
+export {
+  UPDATE_EVENT_TAGS,
+  UPDATE_EVENT_LABELS,
+  UPDATE_ISSUE_TAGS,
+  UPDATE_ISSUE_LABELS,
+  UPDATE_PLANT_HEALTH,
+  UPDATE_PLANT_HEALTH_LABELS,
+  UPDATE_TRICHOME_STATES,
+  UPDATE_TRICHOME_LABELS,
+  UPDATE_MAX_EVENTS,
+  UPDATE_MAX_ISSUES,
+  AROMA_RANGE,
+  parseUpdateTagList,
+} from "./update-tags"
 
 export const UPDATE_MAX_IMAGES = 4
 
@@ -218,6 +250,37 @@ export function parseUpdatePatch(body: unknown): UpdatePatchResult {
     const v = b[key]
     if (v !== null && typeof v !== "string") return bad(`Invalid ${key}`)
     data[key] = cleanUpdateString(v, 300)
+  }
+
+  // Tag lists — arrays replace wholesale ([] clears); null is rejected
+  // because the columns are non-nullable TEXT[].
+  for (const [key, allowed, max] of [
+    ["events", UPDATE_EVENT_TAGS, UPDATE_MAX_EVENTS],
+    ["issues", UPDATE_ISSUE_TAGS, UPDATE_MAX_ISSUES],
+  ] as const) {
+    if (!(key in b)) continue
+    const parsed = parseUpdateTagList(b[key], allowed, max)
+    if (!parsed.ok) return bad(parsed.error)
+    data[key] = parsed.tags
+  }
+
+  // Nullable enum scalars — a real value or null to clear.
+  for (const [key, allowed] of [
+    ["plantHealth", UPDATE_PLANT_HEALTH],
+    ["trichomeState", UPDATE_TRICHOME_STATES],
+  ] as const) {
+    if (!(key in b)) continue
+    const v = b[key]
+    if (v !== null && (typeof v !== "string" || !allowed.has(v))) return bad(`Invalid ${key}`)
+    data[key] = v
+  }
+
+  if ("aromaIntensity" in b) {
+    const v = b.aromaIntensity
+    if (v !== null && (typeof v !== "number" || !Number.isInteger(v) || v < AROMA_RANGE[0] || v > AROMA_RANGE[1])) {
+      return bad("aromaIntensity is out of range")
+    }
+    data.aromaIntensity = v
   }
 
   let keepImageIds: string[] | undefined

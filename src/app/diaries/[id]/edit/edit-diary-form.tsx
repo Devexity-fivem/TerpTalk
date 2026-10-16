@@ -26,6 +26,7 @@ export default function EditDiaryForm({ diaryId, diaryHref, initial, startDateDi
         strainId: formData.strainId || null,
         mediumType: formData.mediumType || null,
         lightType: formData.lightType || null,
+        plantCount: formData.plantCount ? parseInt(formData.plantCount, 10) : null,
         setupId: formData.setupId || null,
       }),
     })

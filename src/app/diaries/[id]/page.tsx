@@ -913,6 +913,12 @@ export default async function DiaryPage({
                 <p className="font-medium">{diary.spaceDimensions}</p>
               </div>
             )}
+            {diary.plantCount != null && (
+              <div>
+                <span className="text-sm text-muted-foreground">Plants:</span>
+                <p className="font-medium">{diary.plantCount}</p>
+              </div>
+            )}
           </div>
           {diary.equipment && (
             <div className="mt-4">
@@ -1185,6 +1191,11 @@ export default async function DiaryPage({
                               lampDistanceCm: item.u.lampDistanceCm,
                               feeding: item.u.feeding,
                               training: item.u.training,
+                              events: item.u.events,
+                              issues: item.u.issues,
+                              plantHealth: item.u.plantHealth,
+                              trichomeState: item.u.trichomeState,
+                              aromaIntensity: item.u.aromaIntensity,
                               nutrients: item.u.nutrients.map((n) => ({ id: n.id, productName: n.productName, doseMlPerL: n.doseMlPerL })),
                               images: item.u.images.map((img) => ({ id: img.id, url: img.url, caption: img.caption })),
                               experiment: item.u.experiment ? { id: item.u.experiment.id, title: item.u.experiment.title } : null,
