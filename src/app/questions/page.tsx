@@ -13,11 +13,11 @@ import LinkTabs from "@/components/ui/link-tabs"
 import PageHeader from "@/components/ui/page-header"
 import { cn } from "@/lib/utils"
 
-export const metadata = {
+export const metadata = buildMetadata({
   title: "Grow Questions",
-  description:
-    "Cannabis growing questions answered by the TerpTalk community — troubleshooting, techniques, nutrients, environment, and more. Solved answers marked by the asker.",
-}
+  description: "Cannabis growing questions answered by the TerpTalk community — troubleshooting, techniques, nutrients, environment, and more. Solved answers marked by the asker.",
+  pathname: "/questions",
+})
 
 // The question-surface convention used across ops-metrics and Plant
 // Doctor handoffs: categories whose slug or name reads as a help surface.
@@ -31,6 +31,7 @@ const MAX_PAGE = 50
 // thread tags. /questions?symptom=<slug> filters to threads carrying
 // that tag; chips only render for tags that actually have questions.
 import { SYMPTOM_TAGS } from "@/lib/symptom-tags"
+import { buildMetadata } from "@/lib/seo"
 const SYMPTOM_BY_SLUG = new Map(SYMPTOM_TAGS.map((t) => [t.slug, t]))
 
 const TABS = [

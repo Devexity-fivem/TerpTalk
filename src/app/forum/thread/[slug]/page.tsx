@@ -397,7 +397,8 @@ export default async function ThreadPage({
     author: {
       "@type": "Person",
       name: thread.author.profile?.username || thread.author.name,
-      url: `${baseUrl}/u/${thread.author.profile?.username || thread.author.name}`,
+      // /u/ resolves by username only — omit url when the author has none.
+      ...(thread.author.profile?.username ? { url: `${baseUrl}/u/${thread.author.profile.username}` } : {}),
     },
     datePublished: thread.createdAt.toISOString(),
     dateModified: thread.lastActivityAt.toISOString(),
@@ -416,7 +417,7 @@ export default async function ThreadPage({
       name: "TerpTalk",
       url: baseUrl,
     },
-    answerCount: thread.replyCount,
+    commentCount: thread.replyCount,
     // QAPage-compatible accepted-answer markup — Google can surface
     // "solved" discussions with the answer inline.
     ...(thread.acceptedAnswer && {

@@ -24,13 +24,15 @@ import {
   FLOWER_BANDS,
   type StrainFilters,
 } from "@/lib/strain-filters"
+import { buildMetadata } from "@/lib/seo"
 
 export const revalidate = 300
 
-export const metadata = {
+export const metadata = buildMetadata({
   title: "Strain Database",
   description: "Community-maintained cannabis strain database — genetics, breeders, effects, growing info, and grower photos.",
-}
+  pathname: "/strains",
+})
 
 const PAGE_SIZE = 24
 const MAX_PAGE = 50

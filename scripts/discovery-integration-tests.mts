@@ -46,6 +46,8 @@ async function run() {
   const postIds: string[] = []
   const setupIds: string[] = []
   const guideIds: string[] = []
+  const momentIds: string[] = []
+  const tagIds: string[] = []
 
   try {
     // ─────────────────────────────────────────────────────────────
@@ -271,6 +273,39 @@ async function run() {
         urlsB.includes("/strains/breeder/sitemap-breeder-co"),
         "sitemap includes the breeder grouping page"
       )
+
+      // SEO-1 indexation policy — noindex routes never appear in the
+      // sitemap, and real public indexables do.
+      assert.ok(!urlsB.includes("/search"), "sitemap excludes noindexed /search")
+      assert.ok(urlsB.includes("/leaderboard/yields"), "sitemap includes /leaderboard/yields")
+
+      // lastmod truthfulness: static routes carry no timestamp (no
+      // underlying record), catalog entities carry their real updatedAt.
+      const idsAll = await generateSitemaps()
+      const entries = (await Promise.all(
+        idsAll.map((s) => buildSitemap({ id: Promise.resolve(String(s.id)) }))
+      )).flat()
+      const forumEntry = entries.find((e) => pathOf(e.url) === "/forum")
+      const threadEntry = entries.find((e) => /\/forum\/thread\/.+/.test(pathOf(e.url)))
+      assert.equal(forumEntry?.lastModified, undefined, "static routes emit no lastmod")
+      assert.ok(threadEntry?.lastModified instanceof Date, "thread entries emit real updatedAt")
+
+      // Tag chunk: only tags backed by a visible thread are destinations.
+      const tEmpty = await prisma.tag.create({ data: { name: `__tage-${STAMP}`, slug: `__tage-${STAMP}` }, select: { id: true, slug: true } })
+      const tLive = await prisma.tag.create({ data: { name: `__tagl-${STAMP}`, slug: `__tagl-${STAMP}` }, select: { id: true, slug: true } })
+      tagIds.push(tEmpty.id, tLive.id)
+      await prisma.threadTag.create({ data: { tagId: tLive.id, threadId: sitemapThread.id } })
+      // Moment chunk: PUBLIC POSTs only — STORYs expire, FOLLOWERS isn't public.
+      const mPub = await prisma.moment.create({ data: { content: "__smap-moment", authorId: active.id }, select: { id: true } })
+      const mFol = await prisma.moment.create({ data: { content: "__smap-moment-f", authorId: active.id, visibility: "FOLLOWERS" }, select: { id: true } })
+      const mStory = await prisma.moment.create({ data: { content: "__smap-moment-s", authorId: active.id, kind: "STORY", expiresAt: new Date(Date.now() + 3600e3) }, select: { id: true } })
+      momentIds.push(mPub.id, mFol.id, mStory.id)
+      const urlsM = (await allUrls()).map((u) => new URL(u).pathname)
+      assert.ok(urlsM.includes(`/forum/tags/${tLive.slug}`), "sitemap includes tag with a visible thread")
+      assert.ok(!urlsM.includes(`/forum/tags/${tEmpty.slug}`), "sitemap excludes tag with no visible threads")
+      assert.ok(urlsM.includes(`/m/${mPub.id}`), "sitemap includes PUBLIC moment")
+      assert.ok(!urlsM.includes(`/m/${mFol.id}`), "sitemap excludes FOLLOWERS moment")
+      assert.ok(!urlsM.includes(`/m/${mStory.id}`), "sitemap excludes STORY moment")
     } finally {
       await prisma.thread.delete({ where: { id: deletedThread.id } }).catch(() => {})
       await prisma.category.delete({ where: { id: hiddenCat.id } }).catch(() => {})
@@ -885,6 +920,12 @@ async function run() {
     }
     for (const id of strainIds) {
       await prisma.strain.delete({ where: { id } }).catch(() => {})
+    }
+    for (const id of momentIds) {
+      await prisma.moment.delete({ where: { id } }).catch(() => {})
+    }
+    for (const id of tagIds) {
+      await prisma.tag.delete({ where: { id } }).catch(() => {})
     }
     for (const id of ids) {
       await prisma.user.delete({ where: { id } }).catch(() => {})

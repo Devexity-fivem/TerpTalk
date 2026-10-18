@@ -1,9 +1,11 @@
 import Link from "next/link"
+import { buildMetadata } from "@/lib/seo"
 
-export const metadata = {
+export const metadata = buildMetadata({
   title: "Privacy Policy",
   description: "How TerpTalk collects, stores, and protects your data.",
-}
+  pathname: "/privacy",
+})
 
 const LAST_UPDATED = "September 13, 2026"
 

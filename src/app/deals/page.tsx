@@ -9,14 +9,16 @@ import { loadDealsData } from "@/lib/deals-data"
 import { Tag, ExternalLink, Percent } from "@/lib/icons"
 import DealsBrowser from "@/components/deals-browser"
 import PageHeader from "@/components/ui/page-header"
+import { buildMetadata } from "@/lib/seo"
 
 // Cached 5 min — admin-edited affiliate data propagates quickly enough
 export const revalidate = 300
 
-export const metadata = {
+export const metadata = buildMetadata({
   title: "TerpTalk Deals — Grow Equipment & Clones",
   description: "Recommended grow lights, tents, fans and equipment plus Farm Bill compliant clones shipped to all 50 states — from TerpTalk's affiliate partners. Community-tested gear with promo codes.",
-}
+  pathname: "/deals",
+})
 
 // Products land in the "Clones & Genetics" section when their category reads
 // as genetics rather than hardware — everything else is grow equipment.

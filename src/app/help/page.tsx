@@ -1,10 +1,12 @@
 import Link from "next/link"
 import { HelpCircle, Stethoscope } from "@/lib/icons"
+import { buildMetadata } from "@/lib/seo"
 
-export const metadata = {
+export const metadata = buildMetadata({
   title: "Help Center",
   description: "TerpTalk Help Center — how accounts, forums, grow diaries, chat, progression, privacy controls, and moderation work.",
-}
+  pathname: "/help",
+})
 
 type QA = { q: string; a: React.ReactNode }
 

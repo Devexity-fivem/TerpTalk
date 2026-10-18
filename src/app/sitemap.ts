@@ -7,12 +7,16 @@ import { breederPath, normalizeBreederName } from "@/lib/breeders"
 
 const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://terp-talk.vercel.app"
 
-// Chunked sitemap (generateSitemaps → /sitemap/<id>.xml; the index at
-// /sitemap.xml is served by app/sitemap.xml/route.ts). One chunk per
-// entity type — no artificial take caps, so every public strain/thread/
-// diary/profile/guide/setup/tag is reachable. Chunks stay well under
-// the 50k-URL per-file limit; if any entity ever approaches it, split
-// that segment by adding ids rather than capping rows.
+// Chunked sitemap (generateSitemaps → /sitemap/<id>.xml; the index is
+// served by app/sitemap-index.xml/route.ts). One chunk per entity type —
+// no artificial take caps, so every public strain/thread/diary/profile/
+// guide/setup/tag/moment is reachable. Chunks stay well under the 50k-URL
+// per-file limit; if any entity ever approaches it, split that segment by
+// adding ids rather than capping rows.
+//
+// lastmod policy: only real record timestamps are emitted. Static routes
+// have no underlying row, so they ship no lastmod rather than a fake
+// "generated just now" timestamp.
 //
 // Regenerate at most hourly so a diary visibility flip leaves the sitemap
 // quickly; entries only get dropped, never leak private rows.
@@ -28,6 +32,7 @@ export const SITEMAP_CHUNKS = [
   "guides",
   "setups",
   "tags",
+  "moments",
 ] as const
 
 export async function generateSitemaps() {
@@ -47,6 +52,7 @@ const STATIC = [
   { url: "/growers", priority: 0.7, changeFrequency: "daily" as const },
   { url: "/contest", priority: 0.6, changeFrequency: "weekly" as const },
   { url: "/leaderboard", priority: 0.6, changeFrequency: "daily" as const },
+  { url: "/leaderboard/yields", priority: 0.5, changeFrequency: "weekly" as const },
   { url: "/reputation", priority: 0.5, changeFrequency: "monthly" as const },
   { url: "/guides", priority: 0.7, changeFrequency: "weekly" as const },
   { url: "/help", priority: 0.7, changeFrequency: "weekly" as const },
@@ -58,7 +64,8 @@ const STATIC = [
   { url: "/about", priority: 0.5, changeFrequency: "monthly" as const },
   { url: "/terms", priority: 0.4, changeFrequency: "yearly" as const },
   { url: "/privacy", priority: 0.4, changeFrequency: "yearly" as const },
-  { url: "/search", priority: 0.6, changeFrequency: "weekly" as const },
+  // /search intentionally absent — the page is noindex,nofollow, so a
+  // sitemap entry would contradict the indexation policy.
 ]
 
 export default async function sitemap(props: { id: Promise<string> }): Promise<MetadataRoute.Sitemap> {
@@ -72,9 +79,10 @@ export default async function sitemap(props: { id: Promise<string> }): Promise<M
       select: { slug: true, updatedAt: true },
     })
     return [
+      // No lastModified on static routes — there is no underlying record,
+      // and a generation-time stamp would claim false freshness.
       ...STATIC.map((p) => ({
         url: `${baseUrl}${p.url}`,
-        lastModified: new Date(),
         changeFrequency: p.changeFrequency,
         priority: p.priority,
       })),
@@ -122,11 +130,21 @@ export default async function sitemap(props: { id: Promise<string> }): Promise<M
     })
     // Breeder grouping pages — one URL per distinct breeder name
     // (case-insensitive, canonical spelling from the first occurrence).
+    // lastmod = newest member strain's updatedAt: the breeder page's
+    // content is its strain list, so a catalog change under that breeder
+    // is the last truthful modification signal available.
+    const breederStamp = new Map<string, Date>()
     const breeders = [...new Map(
       strains
         .filter((s) => s.breeder?.trim())
         .map((s) => [normalizeBreederName(s.breeder!), s.breeder!.trim()])
     ).values()]
+    for (const s of strains) {
+      if (!s.breeder?.trim()) continue
+      const key = normalizeBreederName(s.breeder)
+      const prev = breederStamp.get(key)
+      if (!prev || s.updatedAt > prev) breederStamp.set(key, s.updatedAt)
+    }
     return [
       ...strains.map((s) => ({
         url: `${baseUrl}${strainPath(s)}`,
@@ -136,7 +154,7 @@ export default async function sitemap(props: { id: Promise<string> }): Promise<M
       })),
       ...breeders.map((breeder) => ({
         url: `${baseUrl}${breederPath(breeder)}`,
-        lastModified: new Date(),
+        lastModified: breederStamp.get(normalizeBreederName(breeder)),
         changeFrequency: "weekly" as const,
         priority: 0.4,
       })),
@@ -148,11 +166,12 @@ export default async function sitemap(props: { id: Promise<string> }): Promise<M
       // TerpBot excluded — its profile is a bot page, not member content.
       where: rankableProfile(),
       orderBy: XP_ORDER,
-      select: { username: true, joinDate: true },
+      select: { username: true },
     })
+    // No Profile.updatedAt exists — omit lastmod rather than claim joinDate
+    // is a modification time.
     return profiles.map((p) => ({
       url: `${baseUrl}/u/${p.username}`,
-      lastModified: p.joinDate,
       changeFrequency: "weekly" as const,
       priority: 0.5,
     }))
@@ -186,15 +205,39 @@ export default async function sitemap(props: { id: Promise<string> }): Promise<M
     }))
   }
 
-  // tags
-  const tags = await prisma.tag.findMany({
+  if (chunk === "tags") {
+    // Only tags backed by at least one visible thread — empty tag pages
+    // are thin content and shouldn't be search destinations.
+    const tags = await prisma.tag.findMany({
+      where: {
+        threads: {
+          some: {
+            thread: { deleted: false, category: { hidden: false }, author: activeAuthor() },
+          },
+        },
+      },
+      orderBy: { updatedAt: "desc" },
+      select: { slug: true, updatedAt: true },
+    })
+    return tags.map((t) => ({
+      url: `${baseUrl}/forum/tags/${t.slug}`,
+      lastModified: t.updatedAt,
+      changeFrequency: "weekly" as const,
+      priority: 0.5,
+    }))
+  }
+
+  // moments — permanently-visible PUBLIC posts only. STORYs expire and
+  // FOLLOWERS moments aren't indexable content (/m/[id] 404s for them).
+  const moments = await prisma.moment.findMany({
+    where: { kind: "POST", visibility: "PUBLIC", deleted: false, author: activeAuthor() },
     orderBy: { updatedAt: "desc" },
-    select: { slug: true, updatedAt: true },
+    select: { id: true, updatedAt: true },
   })
-  return tags.map((t) => ({
-    url: `${baseUrl}/forum/tags/${t.slug}`,
-    lastModified: t.updatedAt,
+  return moments.map((m) => ({
+    url: `${baseUrl}/m/${m.id}`,
+    lastModified: m.updatedAt,
     changeFrequency: "weekly" as const,
-    priority: 0.5,
+    priority: 0.4,
   }))
 }

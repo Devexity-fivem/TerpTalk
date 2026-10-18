@@ -8,13 +8,15 @@ import PageHeader from "@/components/ui/page-header"
 import { getSession } from "@/lib/session"
 import { blockedUserIds } from "@/lib/security"
 import { isModerator } from "@/lib/roles"
+import { buildMetadata } from "@/lib/seo"
 
 export const dynamic = "force-dynamic"
 
-export const metadata = {
+export const metadata = buildMetadata({
   title: "Grow Guides",
   description: "Staff-written guides for cannabis growers — from first germination to harvest and curing.",
-}
+  pathname: "/guides",
+})
 
 const getGuides = unstable_cache(
   async () => {

@@ -7,13 +7,15 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { plantDoctorCasesFor } from "@/lib/plant-doctor"
+import { buildMetadata } from "@/lib/seo"
 
 export const dynamic = "force-dynamic"
 
-export const metadata = {
+export const metadata = buildMetadata({
   title: "Plant Problem Solver",
   description: "Interactive diagnostic tool — answer a few questions about your plant's symptoms and get likely causes and fixes.",
-}
+  pathname: "/plant-doctor",
+})
 
 export default async function PlantDoctorPage() {
   const session = await getServerSession(authOptions)

@@ -9,13 +9,15 @@ import ProfileCard from "@/components/ui/profile-card"
 import EmptyState from "@/components/ui/empty-state"
 import { setupPath } from "@/lib/slugs"
 import { mediaProxyUrl } from "@/lib/media"
+import { buildMetadata } from "@/lib/seo"
 
 export const revalidate = 300
 
-export const metadata = {
+export const metadata = buildMetadata({
   title: "Grow Setup Showcases",
   description: "Cannabis grow room and tent setups — lighting, tents, and equipment shared by TerpTalk growers.",
-}
+  pathname: "/setups",
+})
 
 const PAGE_SIZE = 24
 const MAX_PAGE = 50

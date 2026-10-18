@@ -12,7 +12,11 @@ export default function robots(): MetadataRoute.Robots {
         "/settings",
         "/messages",
         "/notifications",
-        "/auth",
+        // /auth is intentionally crawlable — the pages carry noindex, and
+        // crawling is required for that directive to be seen (a disallow
+        // would hide it and can leave signin/signup URLs indexed as
+        // "indexed without content").
+        "/go/",
         "/api/",
         "/_next/",
       ],

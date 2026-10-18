@@ -110,10 +110,10 @@ export default async function PublicProfilePage({
         "@type": "ProfilePage",
         mainEntity: {
           "@type": "Person",
+          name: p.username,
           alternateName: p.username,
           ...(p.bio ? { description: snippet(p.bio, 200) } : {}),
           ...(p.image ? { image: p.image } : {}),
-          ...(p.joinDate ? { memberSince: new Date(p.joinDate).toISOString().slice(0, 10) } : {}),
           url: `${baseUrl}/u/${encodeURIComponent(p.username)}`,
         },
       }

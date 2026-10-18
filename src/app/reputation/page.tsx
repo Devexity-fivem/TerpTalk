@@ -2,12 +2,13 @@ import { XP_TABLE, REP_RANKS, RANK_DISPLAY, PROGRESSION_RUNGS, STANDINGS, STANDI
 import { WEEKLY_CHALLENGES } from "@/lib/challenges"
 import { TrendingUp, ShieldCheck, RotateCcw, Sprout, Target } from "@/lib/icons"
 import ProgressionPanel from "@/components/progression-panel"
-import type { Metadata } from "next"
+import { buildMetadata } from "@/lib/seo"
 
-export const metadata: Metadata = {
+export const metadata = buildMetadata({
   title: "Progression",
   description: "How XP, ranks, grow stages, standing, and badges work in the TerpTalk community.",
-}
+  pathname: "/reputation",
+})
 
 // Member-facing earning catalog — a curated subset of the XP table, in
 // display order. Standing-bearing awards are labeled so members can tell

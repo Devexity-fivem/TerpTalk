@@ -18,16 +18,18 @@ import { diaryPath } from "@/lib/slugs"
 import { LiveRefresh } from "@/components/live-refresh"
 import PageHeader from "@/components/ui/page-header"
 import SectionCard from "@/components/ui/section-card"
+import { buildMetadata } from "@/lib/seo"
 
 // Dynamic — the grid must stay fresh for LiveRefresh's router.refresh()
 // (ISR would serve the stale shell even after a fingerprint change). The
 // expensive community-stats aggregate keeps its own 300s unstable_cache.
 export const dynamic = "force-dynamic"
 
-export const metadata = {
+export const metadata = buildMetadata({
   title: "Grow Diaries",
   description: "Follow real cannabis grow journals — seed to harvest updates, environment data, and results from TerpTalk growers.",
-}
+  pathname: "/diaries",
+})
 
 const PAGE_SIZE = 24
 const MAX_PAGE = 50

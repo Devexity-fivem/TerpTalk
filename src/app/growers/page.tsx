@@ -17,12 +17,13 @@ import { STAGE_LABELS } from "@/lib/diary-weeks"
 import { MASTERIES, MASTERY_META, type Mastery } from "@/lib/progression-config"
 import { masteryParam, masteryQualified } from "@/lib/grower-directory"
 import { cn } from "@/lib/utils"
+import { buildMetadata } from "@/lib/seo"
 
-export const metadata = {
+export const metadata = buildMetadata({
   title: "Growers",
-  description:
-    "Meet the TerpTalk growers — browse community members documenting real cannabis grows, from first seed to harvest.",
-}
+  description: "Meet the TerpTalk growers — browse community members documenting real cannabis grows, from first seed to harvest.",
+  pathname: "/growers",
+})
 
 const PAGE_SIZE = 24
 const MAX_PAGE = 50

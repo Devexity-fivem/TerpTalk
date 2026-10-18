@@ -16,6 +16,7 @@ import { getGrowerSpotlight } from "@/lib/spotlight"
 import { FEED_KINDS, feedUnreadThreadIds, getFeedPage, resolveFeedScope } from "@/lib/feed"
 import { getStoryRail } from "@/lib/moments"
 import MemberHome from "@/components/member-home"
+import { buildMetadata } from "@/lib/seo"
 
 import { LiveRefresh } from "@/components/live-refresh"
 import HeroCta from "@/components/hero-cta"
@@ -30,6 +31,10 @@ import CountUp from "@/components/count-up"
 // the route dynamic; the landing's data still comes from unstable_cache,
 // so guest renders stay cheap.
 export const dynamic = "force-dynamic"
+
+// Root layout supplies title/description — this adds the canonical + og:url
+// for "/" so it doesn't resolve to a bare homepage reference.
+export const metadata = buildMetadata({ pathname: "/" })
 
 // Site-wide headline counts are shared with /feed via lib/community-stats
 // (same "home-stats" cache entry, same tags/revalidate).

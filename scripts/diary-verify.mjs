@@ -592,8 +592,12 @@ const main = async () => {
       ? pass("strain grow cards show lifecycle state + update count")
       : fail("strain grow card lifecycle", page.status)
 
-    // R3 — truthful strain JSON-LD (Product, catalog fields only).
-    page.status === 200 && page.html.includes("application/ld+json") && page.html.includes("Cannabis strain") && page.html.includes(strain.name.replace(/"/g, '\\"'))
+    // R3/SEO-1 — strain JSON-LD is an informational ItemPage→Thing, never
+    // Product markup: TerpTalk sells nothing and recreational-drug content
+    // is excluded from product rich results. Catalog fields only.
+    page.status === 200 && page.html.includes("application/ld+json") && page.html.includes('"@type":"ItemPage"')
+      && page.html.includes('"@type":"Thing"') && page.html.includes("Cannabis strain")
+      && page.html.includes(strain.name.replace(/"/g, '\\"')) && !page.html.includes('"@type":"Product"')
       ? pass("strain page emits truthful JSON-LD")
       : fail("strain JSON-LD", page.status)
 
@@ -1516,6 +1520,53 @@ const main = async () => {
       linkedBefore > 0 && linkedAfter === 0
         ? pass("diary delete invalidates id + slug notification links")
         : fail("notification invalidation", { linkedBefore, linkedAfter })
+    }
+
+    // SEO-1 — indexation + canonical policy in the real rendered HTML.
+    {
+      // Public listing pages emit a self-referential canonical on the
+      // production host (dev renders the fallback base URL).
+      const forumHtml = await getHtml("/forum")
+      const forumCanonical = forumHtml.html.match(/rel="canonical" href="([^"]*)"/)?.[1]
+      forumCanonical?.endsWith("/forum")
+        ? pass("/forum emits canonical URL")
+        : fail("/forum canonical", forumCanonical ?? "none")
+
+      const discoverHtml = await getHtml("/discover")
+      const discoverCanonical = discoverHtml.html.match(/rel="canonical" href="([^"]*)"/)?.[1]
+      discoverCanonical?.endsWith("/discover")
+        ? pass("/discover emits canonical URL")
+        : fail("/discover canonical", discoverCanonical ?? "none")
+
+      // Member-only + auth surfaces carry noindex — the only paths where
+      // a crawler can ever see these tags are the pages themselves.
+      for (const [path, label] of [["/auth/signin", "signin"], ["/auth/signup", "signup"], ["/mydigest", "mydigest"], ["/feed", "feed"], ["/search", "search"]]) {
+        const p = await getHtml(path)
+        p.html.includes('name="robots" content="noindex')
+          ? pass(`${label} is noindex`)
+          : fail(`${label} noindex`, { s: p.status, tag: p.html.match(/name="robots"[^>]*>/)?.[0] ?? "none" })
+      }
+
+      // Share image is the branded generated card, not the app icon.
+      const homeHtml = await getHtml("/")
+      homeHtml.html.includes('property="og:image" content="https://terp-talk.vercel.app/opengraph-image')
+        || homeHtml.html.includes('property="og:image" content="http://localhost:3000/opengraph-image')
+        || /og:image" content="[^"]*\/opengraph-image/.test(homeHtml.html)
+        ? pass("og:image uses the branded generated card")
+        : fail("og:image card", homeHtml.html.match(/og:image[^>]*>/)?.[0] ?? "none")
+
+      // Homepage canonical is the bare origin, not a child path.
+      const homeCanonical = homeHtml.html.match(/rel="canonical" href="([^"]*)"/)?.[1]
+      homeCanonical && (homeCanonical.endsWith(".app") || homeCanonical.endsWith(":3000"))
+        ? pass("homepage canonical is the origin root")
+        : fail("homepage canonical", homeCanonical ?? "none")
+
+      // robots.txt — policy text over HTTP.
+      const robotsTxt = await getHtml("/robots.txt")
+      robotsTxt.html.includes("Disallow: /api/") && robotsTxt.html.includes("Sitemap:")
+        && !robotsTxt.html.includes("Disallow: /auth") && robotsTxt.html.includes("Disallow: /go/")
+        ? pass("robots.txt policy")
+        : fail("robots.txt", robotsTxt.html.slice(0, 300))
     }
 
     // PRIVATE diary: slug works for the owner, id URL 308s for the owner,

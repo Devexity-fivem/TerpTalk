@@ -14,6 +14,8 @@ import { Bell, Leaf, Sprout, HeartHandshake, Target, Flame, TrendingUp, MessageS
 export const metadata = {
   title: "Your Weekly Digest",
   description: "Your TerpTalk week — unread activity, followed grows, questions you can answer, and progress.",
+  // Member-only surface — the page redirects guests, but keep it out of the index.
+  robots: { index: false, follow: false },
 }
 
 export const dynamic = "force-dynamic"

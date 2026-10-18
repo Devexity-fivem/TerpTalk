@@ -21,14 +21,15 @@ import {
 } from "@/lib/discover"
 import { getSuggestedGrowers } from "@/lib/suggested-growers"
 import SuggestedGrowerCard from "@/components/suggested-grower-card"
+import { buildMetadata } from "@/lib/seo"
 
 export const dynamic = "force-dynamic"
 
-export const metadata = {
+export const metadata = buildMetadata({
   title: "Discover",
-  description:
-    "Browse what's happening across TerpTalk — questions, grows, harvests, strains, setups, and growers.",
-}
+  description: "Browse what's happening across TerpTalk — questions, grows, harvests, strains, setups, and growers.",
+  pathname: "/discover",
+})
 
 const TAB_LABEL: Record<DiscoverTab, string> = {
   latest: "Latest",

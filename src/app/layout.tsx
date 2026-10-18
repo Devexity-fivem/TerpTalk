@@ -42,6 +42,15 @@ export const metadata: Metadata = {
   icons: { icon: "/icon.png", shortcut: "/icon.png", apple: "/icons/apple-touch-icon.png" },
   // iOS standalone mode — launched from home screen without Safari chrome.
   appleWebApp: { capable: true, statusBarStyle: "black-translucent", title: "TerpTalk" },
+  // Search Console / Bing Webmaster ownership verification. Tokens are
+  // public by design (they prove site access), but only emitted when the
+  // env var is set — nothing fake is ever rendered.
+  verification: {
+    ...(process.env.GOOGLE_SITE_VERIFICATION ? { google: process.env.GOOGLE_SITE_VERIFICATION } : {}),
+    ...(process.env.BING_SITE_VERIFICATION
+      ? { other: { "msvalidate.01": process.env.BING_SITE_VERIFICATION } }
+      : {}),
+  },
 }
 
 export const viewport: Viewport = {

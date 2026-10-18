@@ -2,11 +2,13 @@ import { prisma } from "@/lib/prisma"
 import { activeAuthor } from "@/lib/security"
 import Link from "next/link"
 import PageHeader from "@/components/ui/page-header"
+import { buildMetadata } from "@/lib/seo"
 
-export const metadata = {
+export const metadata = buildMetadata({
   title: "Tags",
   description: "Browse all discussion tags on TerpTalk.",
-}
+  pathname: "/forum/tags",
+})
 
 export const dynamic = "force-dynamic"
 

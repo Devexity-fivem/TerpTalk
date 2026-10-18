@@ -1,10 +1,12 @@
 import Link from "next/link"
 import { ScrollText } from "@/lib/icons"
+import { buildMetadata } from "@/lib/seo"
 
-export const metadata = {
+export const metadata = buildMetadata({
   title: "Community Rules",
   description: "TerpTalk community rules — the plain-language version of how we keep a 21+ cannabis growing community safe and useful.",
-}
+  pathname: "/rules",
+})
 
 export default function RulesPage() {
   return (

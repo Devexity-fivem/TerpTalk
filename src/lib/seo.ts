@@ -43,9 +43,12 @@ export function buildMetadata({
   const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://terp-talk.vercel.app"
   const fullTitle = title ? `${title} | ${SITE_NAME}` : DEFAULT_TITLE
   const fullDescription = description || DEFAULT_DESCRIPTION
-  // Every page should ship a shareable card image — an empty images list
-  // renders as a bare text link on most platforms, which kills CTR.
-  const shareImage = og?.image || twitter?.image || `${baseUrl}/icons/icon-512.png`
+  // Pages with a real representative image (member avatar, etc.) pass it
+  // explicitly. The default is the generated 1200×630 branded card from
+  // app/opengraph-image.tsx — a square app icon shares badly. (The file
+  // convention can't be used directly: an explicit `openGraph` block
+  // without `images` suppresses it, so the URL is referenced here.)
+  const shareImage = og?.image || twitter?.image || `${baseUrl}/opengraph-image`
 
   return {
     title: title ? { absolute: fullTitle } : { default: DEFAULT_TITLE, template: DEFAULT_TITLE_TEMPLATE },

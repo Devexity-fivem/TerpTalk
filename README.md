@@ -126,7 +126,23 @@ Then verify the deploy:
 - **Cron:** two daily jobs (`vercel.json`, both secured by `CRON_SECRET`). `GET /api/cron/terpbot` at 14:00 UTC — digest, grow tip, notification cleanup, dormant-member scan, referral sweep, safety signal scan. `GET /api/cron/diary-reminders` at 14:30 UTC — one aggregated DIARY_REMINDER per member with an active diary stale 7+ days (per-member weekly Setting claim + notification-window throttle; gated by the `notifyOnDiaryReminder` preference; push-eligible). Per-task claims land as `Setting` rows (`<task>:<UTC-date>`); a failed task releases its claim and retries next run.
 - **Referrals:** signup writes `referredById` + a "joined using your referral link" notification (no instant award). The bonus pays later — once the referee reaches 25 XP and is 24h old — via `reconcileReferralPayouts` (keyed `referral:<refereeId>`, weekly cap, legacy unkeyed-payout detection; paid on the V2 progression ledger). Both the post-award trigger and the daily `reputation:referral-sweep` cron call the same canonical path.
 - **Where to look when prod hurts:** `SecurityEvent` (auth failures, rate limits, registrations, deletions — `metadata.reason` distinguishes causes, `userFound` separates lookup misses from bad passwords), `BotEvent` (TerpBot command/announcement telemetry), `RateLimit` (live throttle keys), `Setting` rows (cron claims), Vercel function logs (everything else — short retention).
-- **Key env vars (prod):** `DATABASE_URL` + `DATABASE_URL_UNPOOLED` (Neon main), `NEXTAUTH_SECRET`, `NEXTAUTH_URL`, `IP_HASH_SALT`, Pusher set (`PUSHER_*` + `NEXT_PUBLIC_PUSHER_*`), `CRON_SECRET`, `TURNSTILE_SECRET_KEY` + `NEXT_PUBLIC_TURNSTILE_SITE_KEY` (signup protection), `BLOB_READ_WRITE_TOKEN` (uploads).
+- **Key env vars (prod):** `DATABASE_URL` + `DATABASE_URL_UNPOOLED` (Neon main), `NEXTAUTH_SECRET`, `NEXTAUTH_URL`, `IP_HASH_SALT`, Pusher set (`PUSHER_*` + `NEXT_PUBLIC_PUSHER_*`), `CRON_SECRET`, `TURNSTILE_SECRET_KEY` + `NEXT_PUBLIC_TURNSTILE_SITE_KEY` (signup protection), `BLOB_READ_WRITE_TOKEN` (uploads), `NEXT_PUBLIC_SITE_URL` (canonical host for canonical links, sitemap, JSON-LD, OG), optional `GOOGLE_SITE_VERIFICATION` + `BING_SITE_VERIFICATION` (search-console meta verification tokens — emitted only when set).
+
+### SEO / organic discovery
+
+- Canonical host: `NEXT_PUBLIC_SITE_URL` (falls back to `https://terp-talk.vercel.app`). Every indexable page passes `pathname` to `buildMetadata`, so `rel=canonical`, `og:url`, and sitemap URLs all agree on that host.
+- Sitemap index: `/sitemap-index.xml` → chunks `/sitemap/<id>.xml` (site, threads, diaries, strains+breeders, profiles, guides, setups, tags, moments). Only canonical, intended-for-indexing URLs: PUBLIC diaries only, visible categories, active authors, no deleted/hidden/private records, no auth routes, no `/search` (noindex), no `/feed`.
+- `robots.txt` disallows admin/moderation/settings/messages/notifications + `/api/` + `/go/` (affiliate redirects). `/auth` is **crawlable on purpose** — auth pages emit `noindex`, which Google must be able to fetch for exclusions to take effect.
+- `lastmod` is emitted only from real record timestamps (`updatedAt`); static routes omit it — never a generation-time stamp.
+- Structured data: WebSite+Organization (layout), BreadcrumbList (detail pages), `ItemPage`→`Thing` (strains — not `Product`: nothing is sold, and recreational-drug content is ineligible for product rich results), `BlogPosting` (PUBLIC diaries only), `DiscussionForumPosting` + `acceptedAnswer` (threads — only when the live accepted answer is visible), `Article` (guides), `ProfilePage`→`Person` (profiles).
+- Strain pages with no description, no catalog facets, and no public community evidence (diaries/photos) emit `noindex` — stubs aren't search destinations.
+
+**Owner steps — verify search consoles (requires the real tokens):**
+
+1. Google Search Console → add property `https://terp-talk.vercel.app` (or the custom domain if/when set) → "HTML tag" method → copy the `content` token into Vercel env `GOOGLE_SITE_VERIFICATION` → redeploy → click Verify.
+2. Bing Webmaster Tools → same flow → `BING_SITE_VERIFICATION`.
+3. Submit `https://terp-talk.vercel.app/sitemap-index.xml` in both consoles.
+4. Until verification completes, organic metrics (impressions/clicks/indexing) are unavailable — no such data is fabricated anywhere in the app.
 
 ## Project structure
 

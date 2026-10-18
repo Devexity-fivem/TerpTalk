@@ -12,15 +12,17 @@ import Tooltip from "@/components/ui/tooltip"
 import Surface from "@/components/ui/surface"
 import TimeAgo from "@/components/ui/time-ago"
 import PageHeader from "@/components/ui/page-header"
+import { buildMetadata } from "@/lib/seo"
 
 // Dynamic: the client polls for new threads and calls router.refresh(),
 // so this page must not serve stale ISR when refreshed.
 export const dynamic = "force-dynamic"
 
-export const metadata = {
+export const metadata = buildMetadata({
   title: "Grower Discussions",
   description: "Cannabis growing forum — techniques, equipment, genetics, troubleshooting and more with the TerpTalk community.",
-}
+  pathname: "/forum",
+})
 
 const getForumData = unstable_cache(
   async () => {

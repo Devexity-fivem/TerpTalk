@@ -15,13 +15,15 @@ import { cn } from "@/lib/utils"
 import LinkTabs from "@/components/ui/link-tabs"
 import PageHeader from "@/components/ui/page-header"
 import { publicDiaryWhere } from "@/lib/diary-visibility"
+import { buildMetadata } from "@/lib/seo"
 
 export const revalidate = 300 // public content, edge-cached
 
-export const metadata = {
+export const metadata = buildMetadata({
   title: "Leaderboard",
   description: "Top contributors in the TerpTalk cannabis growing community.",
-}
+  pathname: "/leaderboard",
+})
 
 type Tab = "rep" | "week" | "helpful" | "diaries" | "badges"
 

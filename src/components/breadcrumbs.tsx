@@ -9,7 +9,7 @@ function safeJsonLd(obj: unknown): string {
     .replace(/\u2029/g, "\\u2029")
 }
 
-export function Breadcrumbs({ items }: { items: Crumb[] }) {
+export function Breadcrumbs({ items, jsonLd = true }: { items: Crumb[]; jsonLd?: boolean }) {
   const structured = {
     "@context": "https://schema.org",
     "@type": "BreadcrumbList",
@@ -37,10 +37,12 @@ export function Breadcrumbs({ items }: { items: Crumb[] }) {
           </li>
         ))}
       </ol>
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: safeJsonLd(structured) }}
-      />
+      {jsonLd && (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: safeJsonLd(structured) }}
+        />
+      )}
     </nav>
   )
 }

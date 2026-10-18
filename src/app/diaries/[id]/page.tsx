@@ -429,18 +429,19 @@ export default async function DiaryPage({
     "@type": "BlogPosting",
     headline: diary.title,
     description: snippet(diary.description || `Cannabis grow diary${diary.strain ? ` — ${diary.strain}` : ""} on TerpTalk.`),
-    author: { "@type": "Person", name: authorName, url: `${diaryBase}/u/${authorName}` },
+    // /u/ pages are keyed by username — emit url only when one exists so
+    // the markup never links a dead profile path.
+    author: {
+      "@type": "Person",
+      name: authorName,
+      ...(diary.author.profile?.username ? { url: `${diaryBase}/u/${diary.author.profile.username}` } : {}),
+    },
     datePublished: diary.createdAt.toISOString(),
     dateModified: diary.updatedAt.toISOString(),
     url: diaryUrl,
     mainEntityOfPage: { "@type": "WebPage", "@id": diaryUrl },
     publisher: { "@type": "Organization", name: "TerpTalk", url: diaryBase },
     keywords: [diary.strain, "grow diary", "grow journal", "cannabis cultivation"].filter(Boolean).join(", "),
-    interactionStatistic: {
-      "@type": "InteractionCounter",
-      interactionType: "https://schema.org/CommentAction",
-      userInteractionCount: diary._count.updates,
-    },
   }
 
   return (
@@ -451,7 +452,7 @@ export default async function DiaryPage({
         )}
         <LiveRefresh endpoint={`/api/diaries/${diary.id}/activity`} />
         {diary.visibility === "PUBLIC" && <JsonLd data={diarySchema} />}
-        <Breadcrumbs items={[
+        <Breadcrumbs jsonLd={diary.visibility === "PUBLIC"} items={[
           { label: "Grow Diaries", href: "/diaries" },
           { label: diary.title },
         ]} />

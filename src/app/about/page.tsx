@@ -1,10 +1,12 @@
 import Link from "next/link"
 import { MessageSquare, Sprout, MessageCircle, Dna, Users, Award, Trophy, BookOpen, Tag, Bot } from "@/lib/icons"
+import { buildMetadata } from "@/lib/seo"
 
-export const metadata = {
+export const metadata = buildMetadata({
   title: "About",
   description: "What TerpTalk is — a privacy-first, 21+ cannabis growing community with forums, grow journals, strain database and live chat.",
-}
+  pathname: "/about",
+})
 
 const FEATURES = [
   { icon: MessageSquare, label: "Discussion forums", href: "/forum" },

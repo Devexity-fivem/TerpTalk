@@ -38,9 +38,22 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   const { id } = await params
   const strain = await prisma.strain.findFirst({
     where: { OR: [{ slug: id }, { id }] },
-    select: { id: true, slug: true, name: true, description: true, genetics: true, type: true },
+    select: {
+      id: true, slug: true, name: true, description: true, genetics: true, type: true,
+      growingInfo: true, effects: true, flavors: true, thcMin: true, thcMax: true,
+      floweringWeeks: true, seedToHarvestWeeks: true, difficulty: true, breederImageUrl: true,
+      // Community evidence — a strain with public grows or member photos is a
+      // real destination; a bare name+genetics stub is not.
+      diaries: { where: { deleted: false, ...publicDiaryWhere, author: activeAuthor() }, select: { id: true }, take: 1 },
+      photos: { where: { user: activeAuthor() }, select: { id: true }, take: 1 },
+    },
   })
   if (!strain) return buildMetadata({ title: "Strain not found", robots: { index: false } })
+  const hasSubstance =
+    !!strain.description || !!strain.growingInfo || strain.effects.length > 0 || strain.flavors.length > 0 ||
+    strain.thcMin != null || strain.thcMax != null || strain.floweringWeeks != null ||
+    strain.seedToHarvestWeeks != null || !!strain.difficulty || !!strain.breederImageUrl ||
+    strain.diaries.length > 0 || strain.photos.length > 0
   const desc = strain.description
     ? snippet(strain.description)
     : `${strain.name}${strain.type ? ` (${strain.type})` : ""}${strain.genetics ? ` — ${strain.genetics}` : ""}. Cannabis strain info and grower photos on TerpTalk.`
@@ -49,6 +62,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
     description: desc,
     keywords: [strain.name, "cannabis strain", "strain review", "cannabis genetics"],
     pathname: strainPath(strain),
+    robots: hasSubstance ? undefined : { index: false },
   })
 }
 
@@ -208,20 +222,25 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
   const setupThumb = (s: typeof relatedSetups[0]) =>
     s.images[0]?.url
 
-  // Strain JSON-LD — only fields stored on the catalog row. No
-  // aggregateRating/reviewCount: member grow ratings measure a grower's
-  // own harvest, not the strain, and small samples would fabricate a
-  // product score. BreadcrumbList comes from <Breadcrumbs> below.
+  // Strain JSON-LD — an informational entity, not a Product: TerpTalk
+  // doesn't sell strains and Google excludes recreational-drug content
+  // from product rich results anyway. ItemPage + Thing carries only real
+  // catalog fields; no offers/reviews/aggregateRating are fabricated.
+  // BreadcrumbList comes from <Breadcrumbs> below.
   const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://terp-talk.vercel.app"
   const jsonLd = {
     "@context": "https://schema.org",
-    "@type": "Product",
+    "@type": "ItemPage",
     name: strain.name,
-    ...(strain.description ? { description: snippet(strain.description, 300) } : {}),
-    ...(strain.breederImageUrl ? { image: [strain.breederImageUrl] } : {}),
-    ...(strain.breeder ? { brand: { "@type": "Brand", name: strain.breeder } } : {}),
-    category: "Cannabis strain",
     url: `${baseUrl}${strainPath(strain)}`,
+    mainEntity: {
+      "@type": "Thing",
+      name: strain.name,
+      additionalType: "Cannabis strain",
+      ...(strain.description ? { description: snippet(strain.description, 300) } : {}),
+      ...(strain.breederImageUrl ? { image: [strain.breederImageUrl] } : {}),
+      url: `${baseUrl}${strainPath(strain)}`,
+    },
   }
 
   return (
