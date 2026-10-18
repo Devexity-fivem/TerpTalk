@@ -58,9 +58,16 @@ function NewThreadForm() {
   const [categories, setCategories] = useState<Category[]>([])
   const [ownDiaries, setOwnDiaries] = useState<OwnDiary[]>([])
   // "Asking about my grow" — an optional link to one of the member's own
-  // diaries. ?diary=<id> prefills (e.g. a future diary-page affordance).
+  // diaries. ?diary=<id> prefills from the diary page's "Ask about this
+  // grow" CTA; validated against the member's diary list on mount.
   const [contextDiaryId, setContextDiaryId] = useState<string>(() => searchParams?.get("diary")?.trim() || "")
   const wizardResultId = searchParams?.get("result") || null
+  // Only known wizard results may ride into the create payload — a forged
+  // ?result= must degrade to an ordinary question, not a server 400.
+  const wizardResult = wizardResultId ? WIZARD_RESULTS[wizardResultId] : null
+  const strainParam = (searchParams?.get("strain") ?? "").trim().slice(0, 80)
+  const [strainCtx, setStrainCtx] = useState<{ id: string; name: string; slug: string | null } | null>(null)
+  const [prefillNotices, setPrefillNotices] = useState<string[]>([])
   const [formData, setFormData] = useState(() => {
     const resultId = searchParams?.get("result")
     const result = resultId ? WIZARD_RESULTS[resultId] : null
@@ -84,16 +91,12 @@ function NewThreadForm() {
 
   const [similarThreads, setSimilarThreads] = useState<SimilarThread[]>([])
   const [images, setImages] = useState<string[]>([])
-  // Plant Doctor handoff pre-applies the matching symptom tag; a ?strain=
-  // context pre-adds the strain name as a plain tag (editable/removable —
-  // nothing about the grow or diary is pulled in automatically).
+  // Plant Doctor handoff pre-applies the matching symptom tag. The
+  // ?strain= context is validated against the catalog below before it can
+  // become a tag — a forged param can't mint a junk tag.
   const [tags, setTags] = useState<string[]>(() => {
-    const out: string[] = []
     const t = wizardResultToTag(searchParams?.get("result"))
-    if (t) out.push(t.name)
-    const strain = searchParams?.get("strain")?.trim().slice(0, 80)
-    if (strain) out.push(strain)
-    return out
+    return t ? [t.name] : []
   })
   const [poll, setPoll] = useState<{ question: string; options: string[] } | null>(null)
   // null = session still resolving; standing decides whether the poll
@@ -109,8 +112,41 @@ function NewThreadForm() {
       .catch(() => setError("Failed to load categories"))
     fetch("/api/diaries")
       .then(res => res.ok ? res.json() : { diaries: [] })
-      .then(data => setOwnDiaries(data.diaries || []))
+      .then(data => {
+        const diaries = data.diaries || []
+        setOwnDiaries(diaries)
+        // A ?diary= param is only a suggestion — drop it unless it resolves
+        // to one of the member's own diaries. The server re-checks on POST.
+        if (contextDiaryId && !diaries.some((d: OwnDiary) => d.id === contextDiaryId)) {
+          setContextDiaryId("")
+          setPrefillNotices((n) => [...n, "That grow can't be linked — it may have been removed or isn't one of yours."])
+        }
+      })
       .catch(() => setOwnDiaries([]))
+    // ?strain=<name> — validate against the catalog so the pre-added tag
+    // matches the canonical spelling and a forged param degrades to an
+    // ordinary question. Tag cap is 30 chars; longer names can't tag.
+    if (strainParam) {
+      fetch(`/api/strains?q=${encodeURIComponent(strainParam)}`)
+        .then((res) => (res.ok ? res.json() : { strains: [] }))
+        .then((data) => {
+          const match = (data.strains ?? []).find(
+            (s: { name: string }) => s.name.toLowerCase() === strainParam.toLowerCase()
+          )
+          if (match) {
+            setStrainCtx(match)
+            if (match.name.length <= 30) {
+              setTags((prev) =>
+                prev.some((t) => t.toLowerCase() === match.name.toLowerCase()) ? prev : [...prev, match.name.toLowerCase()]
+              )
+            }
+          } else {
+            setPrefillNotices((n) => [...n, "That strain isn't in the database — the question will post without a strain link."])
+          }
+        })
+        .catch(() => {})
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   useEffect(() => {
@@ -160,7 +196,7 @@ function NewThreadForm() {
       const response = await fetch("/api/forum/threads", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...formData, categoryId, images, tags, poll, wizardResultId, contextDiaryId: contextDiaryId || null }),
+        body: JSON.stringify({ ...formData, categoryId, images, tags, poll, wizardResultId: wizardResult ? wizardResultId : null, contextDiaryId: contextDiaryId || null }),
       })
 
       if (!response.ok) {
@@ -187,6 +223,22 @@ function NewThreadForm() {
           </Link>
           <h1 className="font-display text-3xl font-bold mb-2 tracking-tight">Create New Discussion</h1>
           <p className="text-muted-foreground">Start a new discussion in the community</p>
+          {strainCtx && (
+            <p className="text-xs text-muted-foreground mt-2">
+              Asking about{" "}
+              <Link href={`/strains/${strainCtx.slug ?? strainCtx.id}`} className="text-primary hover:underline font-medium">
+                {strainCtx.name}
+              </Link>
+              {tags.some((t) => t.toLowerCase() === strainCtx.name.toLowerCase())
+                ? " — tagged, so it will appear on the strain page."
+                : strainCtx.name.length > 30
+                  ? " — its name is too long for a tag; mention it in the title instead."
+                  : " — add its tag back to link it to the strain page."}
+            </p>
+          )}
+          {prefillNotices.map((n, i) => (
+            <p key={i} className="text-xs text-warning mt-2">{n}</p>
+          ))}
         </div>
 
         {/* Form */}

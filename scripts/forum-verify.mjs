@@ -725,6 +725,41 @@ const main = async () => {
         : fail("context privacy", { anon: privAnon.includes("About their grow:"), owner: privOwner.includes("About their grow:") })
     }
 
+    // Strain context — a question tagged with a strain's name is the
+    // supported strain↔thread relation: the strain page's community
+    // knowledge surfaces it. Also asserts the "Ask about this strain"
+    // CTA is present on the header for every strain — including one
+    // with zero community data (the old card-level CTA hid on those).
+    const ctxStrain = await prisma.strain.create({
+      data: { name: `__Verify CtxStrain ${Date.now()}`.slice(0, 28), slug: `verify-ctxstrain-${Date.now()}` },
+    })
+    const bareStrain = await prisma.strain.create({
+      data: { name: `__Verify BareStrain ${Date.now()}`.slice(0, 28), slug: `verify-barestrain-${Date.now()}` },
+    })
+
+    const qStrain = await callApi("/api/forum/threads", {
+      method: "POST",
+      body: { title: `${qTag} ctx strain`, content: "verification strain-context question — enough chars", categoryId: qCat.id, tags: [ctxStrain.name.toLowerCase()] },
+      cookie: authorCookie,
+    })
+    if (qStrain.data?.thread?.id) threads.push(qStrain.data.thread)
+    qStrain.status === 201
+      ? pass("strain context: strain-tagged question creates")
+      : fail("strain ctx create", { s: qStrain.status, d: qStrain.data })
+
+    const strainHtml = await (await fetch(`${BASE}/strains/${ctxStrain.slug}`)).text()
+    strainHtml.includes(`${qTag} ctx strain`)
+      ? pass("strain context: tagged question surfaces on strain page")
+      : fail("strain knowledge list", "tagged thread missing")
+    strainHtml.includes("/forum/new?strain=")
+      ? pass("strain page: ask-about-strain CTA present")
+      : fail("strain ask CTA", "missing on knowledge-having strain")
+
+    const bareHtml = await (await fetch(`${BASE}/strains/${bareStrain.slug}`)).text()
+    bareHtml.includes("/forum/new?strain=")
+      ? pass("strain page: ask CTA present with zero community knowledge")
+      : fail("strain ask CTA empty", "missing on zero-knowledge strain")
+
     // Symptom-filter chips — the tagged fixture must appear under its tag
     // and nowhere else; bogus slugs fall back to the unfiltered list.
     qHtml = await (await fetch(`${BASE}/questions?filter=all&symptom=nutrient-deficiency`)).text()
@@ -834,6 +869,8 @@ const main = async () => {
       await prisma.thread.delete({ where: { id: t.id } }).catch(() => {})
     }
     if (hiddenCat) await prisma.category.delete({ where: { id: hiddenCat.id } }).catch(() => {})
+    await prisma.strain.deleteMany({ where: { slug: { startsWith: "verify-" } } }).catch(() => {})
+    await prisma.tag.deleteMany({ where: { name: { startsWith: "__verify" } } }).catch(() => {})
     await prisma.rateLimit.deleteMany({
       where: { key: { in: users.map((u) => `thread-follow:${u.id}`) } },
     }).catch(() => {})

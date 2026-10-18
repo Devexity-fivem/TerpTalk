@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma"
 import { publicUserSelect, activeAuthor, blockedUserIds, isAdmin } from "@/lib/security"
 import { notFound, permanentRedirect } from "next/navigation"
-import { Leaf, Calendar, Users, ClipboardCheck, Camera, TrendingUp, Pencil, Sprout, Link2, Lock, FlaskConical, FileDown } from "@/lib/icons"
+import { Leaf, Calendar, Users, ClipboardCheck, Camera, TrendingUp, Pencil, Sprout, Link2, Lock, FlaskConical, FileDown, MessageSquare } from "@/lib/icons"
 import SectionCard from "@/components/ui/section-card"
 import Link from "next/link"
 import { getSession } from "@/lib/session"
@@ -675,6 +675,17 @@ export default async function DiaryPage({
                     diaryId={diary.id}
                     featured={ownerProfile?.featuredDiaryId === diary.id}
                   />
+                )}
+                {/* "Ask about this grow" — owner-only: the thread's
+                    contextDiaryId pathway requires the author's own diary.
+                    Visitors use the discussion thread above instead. */}
+                {isOwner && (
+                  <Link
+                    href={`/forum/new?diary=${diary.id}`}
+                    className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-lg bg-secondary hover:bg-secondary/80 transition-colors"
+                  >
+                    <MessageSquare className="w-4 h-4" /> Ask about this grow
+                  </Link>
                 )}
                 {isOwner && exportCsvUnlocked && (
                   <Tooltip content="Download full grow log (CSV)">

@@ -313,6 +313,13 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
                   <Sprout className="w-4 h-4" />
                   Start a grow with this strain
                 </Link>
+                <Link
+                  href={`/forum/new?strain=${encodeURIComponent(strain.name)}`}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-border/70 text-sm font-medium hover:border-primary/40 transition-colors"
+                >
+                  <MessageSquare className="w-4 h-4" />
+                  Ask about this strain
+                </Link>
                 <ShareButtons path={strainPath(strain)} title={`${strain.name} strain — TerpTalk`} />
                 <ReportButton type="STRAIN" targetId={strain.id} authorId={strain.createdById ?? undefined} />
               </div>
@@ -572,19 +579,7 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
           <SectionCard
             className="mb-6"
             title={<span className="flex items-center gap-2"><HelpCircle className="w-4 h-4 text-primary" />Community knowledge</span>}
-            actions={
-              <span className="flex items-center gap-3 text-xs">
-                <span className="text-muted-foreground">from public records</span>
-                {session && (
-                  <Link
-                    href={`/forum/new?strain=${encodeURIComponent(strain.name)}`}
-                    className="text-primary hover:underline font-medium"
-                  >
-                    Ask about this strain
-                  </Link>
-                )}
-              </span>
-            }
+            actions={<span className="text-xs text-muted-foreground">from public records</span>}
           >
             {questions.total > 0 && (
               <div>

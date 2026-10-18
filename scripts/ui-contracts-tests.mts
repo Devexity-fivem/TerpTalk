@@ -1052,5 +1052,27 @@ check("activation panel is mounted on member home for eligible members only", ()
   assert.ok(home.includes("activation.next === \"people\""), "suggested-grower rail deduped when panel already leads")
 })
 
+// ── Batch U: context-to-question conversion ───────────────────────────
+
+check("contextual ask CTAs reuse /forum/new — no parallel question forms", () => {
+  const strain = src("app/strains/[id]/page.tsx")
+  assert.ok(strain.includes("/forum/new?strain="), "strain page carries strain context into the composer")
+  const diary = src("app/diaries/[id]/page.tsx")
+  assert.ok(diary.includes("/forum/new?diary="), "diary page carries grow context into the composer")
+  assert.ok(!strain.includes("/api/forum/threads") && !diary.includes("/api/forum/threads"), "no page creates threads directly")
+})
+
+check("composer validates query-string context before trusting it", () => {
+  const f = src("app/forum/new/page.tsx")
+  // ?strain= resolves against the catalog before it can become a tag —
+  // forged params can't mint junk tags or fake strain associations.
+  assert.ok(f.includes("/api/strains?q="), "strain param validated against the catalog")
+  assert.ok(f.includes("match.name.length <= 30"), "overlong strain names can't become an invalid tag")
+  // ?diary= may only select one of the member's own diaries.
+  assert.ok(f.includes('!diaries.some((d: OwnDiary) => d.id === contextDiaryId)'), "foreign/stale diary params dropped client-side")
+  // ?result= only reaches the payload when it maps to a real wizard result.
+  assert.ok(f.includes("wizardResult ? wizardResultId : null"), "forged result ids degrade to an ordinary question")
+})
+
 console.log(`\n${passed} passed, ${failed} failed`)
 if (failed > 0) process.exit(1)

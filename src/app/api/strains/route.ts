@@ -35,7 +35,7 @@ export async function GET(request: Request) {
       where: q ? { name: { contains: escapeLike(q), mode: "insensitive" } } : {},
       orderBy: { name: "asc" },
       take: 15,
-      select: { id: true, name: true, type: true },
+      select: { id: true, name: true, type: true, slug: true },
     })
     return NextResponse.json({ strains })
   } catch (error) {

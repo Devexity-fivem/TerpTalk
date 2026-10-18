@@ -359,6 +359,11 @@ const main = async () => {
     page.html.includes("Environment — Temp / RH / VPD") ? pass("env chart section renders with 2+ readings") : fail("env chart", "heading missing")
     page.html.includes("Add Update") ? pass("owner sees update form") : fail("owner update form", "missing")
     page.html.includes("Grow setup") ? pass("setup details render") : fail("setup details", "missing")
+    // "Ask about this grow" — owner-only CTA into the contextDiaryId
+    // question flow; visitors use the diary's discussion instead.
+    page.html.includes(`/forum/new?diary=${diaryId}`)
+      ? pass("owner sees ask-about-grow CTA")
+      : fail("owner ask CTA", "missing")
 
     // ── Week navigator — needs 2+ week groups, so backdate one update
     // into week 1 (createdAt drives grouping, never the annotation). ──
@@ -385,6 +390,9 @@ const main = async () => {
     page.status === 200 && !page.html.includes("Add Update") && !page.html.includes("Log harvest")
       ? pass("viewer does not see owner controls")
       : fail("viewer gating", page.html.includes("Add Update"))
+    !page.html.includes(`/forum/new?diary=${diaryId}`)
+      ? pass("viewer does not see ask-about-grow CTA")
+      : fail("viewer ask CTA", "CTA leaked to non-owner")
 
     // ── Harvest contracts + report ──────────────────────────────────
     r = await callApi(`/api/diaries/${diaryId}/harvest`, { method: "PATCH", body: {}, cookie: ownerCookie })
