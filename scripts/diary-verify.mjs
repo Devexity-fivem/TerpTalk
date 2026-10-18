@@ -1388,6 +1388,13 @@ const main = async () => {
         : fail("feed update card link")
     }
 
+    // diary-edit is 10/min per user and DB-backed: the PATCH groups above
+    // (title, plantCount, strainId, earlier visibility) can exhaust the
+    // fixture owner's window when CI runs the suite inside one minute. Reset
+    // the run-scoped counter so these asserts exercise the route contract,
+    // not leftover budget — same convention as the lessons reset below.
+    await prisma.rateLimit.deleteMany({ where: { key: `diary-edit:${owner.id}` } })
+
     // Visibility mutations
     r = await callApi(`/api/diaries/${pubD.id}`, { method: "PATCH", body: { visibility: "PRIVATE" }, cookie: voterCookie })
     r.status === 403 ? pass("non-owner visibility PATCH rejected") : fail("non-owner patch", r.status)
