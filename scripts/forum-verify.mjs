@@ -725,6 +725,51 @@ const main = async () => {
         : fail("context privacy", { anon: privAnon.includes("About their grow:"), owner: privOwner.includes("About their grow:") })
     }
 
+    // Author waiting-state on a zero-reply question — the asker sees the
+    // real mechanics (auto-follow → notification, invite count, accept
+    // step); visitors, non-question, and locked threads keep the plain
+    // "No replies yet" heading.
+    if (qCtxThread?.slug) {
+      let th = await (await fetch(`${BASE}/forum/thread/${qCtxThread.slug}`, { headers: { cookie: authorCookie } })).text()
+      ;(th.includes("While you wait") && th.includes("following your question"))
+        ? pass("thread page: author sees waiting-state on own open question")
+        : fail("author waiting card", "missing")
+      th = await (await fetch(`${BASE}/forum/thread/${qCtxThread.slug}`)).text()
+      !th.includes("While you wait")
+        ? pass("thread page: waiting-state hidden from anon")
+        : fail("anon waiting card", "leaked to anon")
+
+      // A recorded answer-match send surfaces as the real invite count —
+      // asserted on a URL not yet fetched this suite (same-URL re-fetch
+      // can serve a cached render).
+      await prisma.botEvent.create({
+        data: { type: "ASSIST", key: `assist:answer-match:${qUnanswered.id}:verify-helper`, userId: author.id },
+      })
+      const thInv = (await (await fetch(`${BASE}/forum/thread/${qUnanswered.slug}`, { headers: { cookie: authorCookie } })).text())
+        .replace(/<!--.*?-->/g, "") // strip React's expression separators before text matching
+      thInv.includes("1 grower with matching experience")
+        ? pass("thread page: invite count reflects recorded sends")
+        : fail("invite count", thInv.slice(thInv.indexOf("While you wait"), thInv.indexOf("While you wait") + 400))
+    }
+
+    if (nqThread?.slug) {
+      const th = await (await fetch(`${BASE}/forum/thread/${nqThread.slug}`, { headers: { cookie: authorCookie } })).text()
+      !th.includes("While you wait")
+        ? pass("thread page: non-question thread has no waiting card")
+        : fail("non-question waiting card", "rendered")
+    }
+
+    const lockedQ = await prisma.thread.create({
+      data: { title: `${qTag} lockedq`, slug: `${qTag}-lq`, content: "verify locked question body", categoryId: qCat.id, authorId: author.id, locked: true },
+    })
+    threads.push(lockedQ)
+    {
+      const th = await (await fetch(`${BASE}/forum/thread/${lockedQ.slug}`, { headers: { cookie: authorCookie } })).text()
+      !th.includes("While you wait")
+        ? pass("thread page: locked question has no waiting card")
+        : fail("locked waiting card", "rendered")
+    }
+
     // Strain context — a question tagged with a strain's name is the
     // supported strain↔thread relation: the strain page's community
     // knowledge surfaces it. Also asserts the "Ask about this strain"
@@ -871,6 +916,7 @@ const main = async () => {
     if (hiddenCat) await prisma.category.delete({ where: { id: hiddenCat.id } }).catch(() => {})
     await prisma.strain.deleteMany({ where: { slug: { startsWith: "verify-" } } }).catch(() => {})
     await prisma.tag.deleteMany({ where: { name: { startsWith: "__verify" } } }).catch(() => {})
+    await prisma.botEvent.deleteMany({ where: { key: { startsWith: "assist:answer-match:", contains: ":verify-helper" } } }).catch(() => {})
     await prisma.rateLimit.deleteMany({
       where: { key: { in: users.map((u) => `thread-follow:${u.id}`) } },
     }).catch(() => {})

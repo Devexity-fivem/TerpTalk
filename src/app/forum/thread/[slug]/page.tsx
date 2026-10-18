@@ -340,6 +340,14 @@ export default async function ThreadPage({
       })
     : []
 
+  // Author waiting-state signal — TerpBot's answer-match invite count for
+  // this thread (same BotEvent keys the /questions board aggregates into
+  // "N growers invited"). Only read when the author card can render.
+  const helperInvites =
+    evidence.isQuestion && currentUserId === thread.authorId && thread.replyCount === 0 && !thread.locked
+      ? await prisma.botEvent.count({ where: { key: { startsWith: `assist:answer-match:${thread.id}:` } } })
+      : 0
+
   // First-unread boundary — must be read BEFORE mark-seen advances
   // lastSeenAt. A null lastSeenAt means "never seen" (practically
   // unreachable — every creation path stamps it); treated as no affordance
@@ -780,6 +788,30 @@ export default async function ThreadPage({
                 jump to the first unread reply
               </Link>
             </span>
+          </div>
+        )}
+
+        {/* Author waiting-state — on the asker's own zero-reply question,
+            surface the mechanics that already happen invisibly: they
+            auto-followed on create, TerpBot's answer matcher points
+            matching growers here, and accepting a reply pins the fix.
+            Visitors and answered/locked threads keep the plain heading. */}
+        {thread.replyCount === 0 && currentUserId === thread.authorId && evidence.isQuestion && !thread.locked && (
+          <div className="mt-6 mb-4 rounded-xl border border-primary/25 bg-primary/5 p-4">
+            <h3 className="font-display text-sm font-semibold mb-1.5">While you wait</h3>
+            <ul className="text-xs text-muted-foreground space-y-1.5">
+              <li>You&apos;re following your question — you&apos;ll be notified when someone replies.</li>
+              {helperInvites > 0 ? (
+                <li>
+                  {helperInvites} grower{helperInvites === 1 ? "" : "s"} with matching experience
+                  {helperInvites === 1 ? " has" : " have"} already been pointed to it.
+                </li>
+              ) : (
+                <li>If it stays quiet, growers whose public grows match will be pointed here automatically.</li>
+              )}
+              <li>A reply with your medium, lighting, and pH helps growers diagnose faster.</li>
+              <li>When a reply solves it, mark it as the answer — the fix pins to the top and the helper is rewarded.</li>
+            </ul>
           </div>
         )}
 
