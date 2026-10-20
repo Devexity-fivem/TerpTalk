@@ -79,7 +79,7 @@ export async function GET(request: Request) {
   const name = new Map(users.map((u) => [u.id, u.profile?.username ?? "?"]))
 
   return NextResponse.json({
-    velocity: velocity.map((v) => ({ username: name.get(v.userId) ?? "Deleted user", userId: v.userId, gained: v.gained })),
+    velocity: velocity.map((v) => ({ username: name.get(v.userId) ?? "Deleted user", userId: v.userId, gained: v.gained, byType: v.byType })),
     reciprocalPairs: reciprocal.map((r) => ({
       a: name.get(r.aId) ?? "Deleted user", b: name.get(r.bId) ?? "Deleted user", mutual: r.mutual,
     })),

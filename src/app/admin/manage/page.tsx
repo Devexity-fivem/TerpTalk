@@ -5,6 +5,7 @@ import { signInHref } from "@/lib/callback-url"
 import { use, useCallback, useEffect, useState } from "react"
 import { useSession } from "next-auth/react"
 import { isAdmin } from "@/lib/roles"
+import { VELOCITY_XP_THRESHOLD } from "@/lib/progression-config"
 import { useRouter } from "next/navigation"
 import {
   ShieldCheck, Loader2, Users as UsersIcon,
@@ -56,7 +57,7 @@ const TABS = [
 ] as const
 
 interface RepFlags {
-  velocity: { username: string; userId: string; gained: number }[]
+  velocity: { username: string; userId: string; gained: number; byType?: Record<string, number> }[]
   reciprocalPairs: { a: string; b: string; mutual: number }[]
   newAccountLikes: { username: string; userId: string; freshLikes: number }[]
   staffActions: { id: string; type: string; amount: number; reason: string; createdAt: string; user: string; staff: string | null }[]
@@ -441,10 +442,17 @@ export default function AdminPage({ searchParams }: { searchParams: Promise<{ ta
                     <TrendingUp className="w-4 h-4 text-warning" /> Unusual XP velocity (24h)
                   </div>
                   <div className="divide-y divide-border">
-                    {repFlags.velocity.length === 0 && <p className="p-4 text-sm text-muted-foreground">No members gained over 150 XP in the last 24 hours.</p>}
+                    {repFlags.velocity.length === 0 && <p className="p-4 text-sm text-muted-foreground">No members gained over {VELOCITY_XP_THRESHOLD} repeatable XP in the last 24 hours.</p>}
                     {repFlags.velocity.map((v) => (
                       <div key={v.userId} className="p-3 text-sm flex items-center justify-between gap-3">
-                        <span><Link href={`/admin/users/${v.userId}`} className="font-medium hover:text-primary">@{v.username}</Link> gained <span className="font-semibold text-warning">+{v.gained}</span> in 24h</span>
+                        <span>
+                          <Link href={`/admin/users/${v.userId}`} className="font-medium hover:text-primary">@{v.username}</Link> gained <span className="font-semibold text-warning">+{v.gained}</span> in 24h
+                          {v.byType && (
+                            <span className="block text-xs text-muted-foreground mt-0.5">
+                              {Object.entries(v.byType).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([t, x]) => `${t} +${x}`).join(" · ")}
+                            </span>
+                          )}
+                        </span>
                         <Link href={`/moderation`} className="text-xs text-primary hover:underline shrink-0">Review</Link>
                       </div>
                     ))}

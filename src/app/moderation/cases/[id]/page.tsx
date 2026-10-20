@@ -307,7 +307,7 @@ export default function CasePage() {
                 {item.evidence && (
                   <div className="bg-secondary/50 rounded p-3">
                     {Object.entries(item.evidence).map(([k, v]) => (
-                      <p key={k} className="text-xs"><span className="text-muted-foreground">{k}:</span> {String(v)}</p>
+                      <p key={k} className="text-xs"><span className="text-muted-foreground">{k}:</span> {v !== null && typeof v === "object" ? JSON.stringify(v) : String(v)}</p>
                     ))}
                   </div>
                 )}

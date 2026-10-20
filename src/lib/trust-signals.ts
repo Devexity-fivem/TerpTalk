@@ -1,7 +1,7 @@
 import { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
 import { notifyMany } from "@/lib/notify"
-import { MEMBER_DRIVEN_XP_TYPES } from "@/lib/progression-config"
+import { VELOCITY_XP_THRESHOLD, VELOCITY_XP_TYPES } from "@/lib/progression-config"
 
 // Trust & Safety signal detection + persistence.
 //
@@ -45,7 +45,7 @@ const SIGNAL_PRIORITY: Record<string, string> = {
 
 // Member-driven reputation event types — the only events the legacy
 // velocity detector counts. Kept for the frozen legacy ledger; the live
-// V2 velocity scan uses MEMBER_DRIVEN_XP_TYPES from progression-config.
+// V2 velocity scan uses VELOCITY_XP_TYPES from progression-config.
 export const MEMBER_DRIVEN_REP_TYPES = [
   "THREAD_CREATED",
   "POST_CREATED",
@@ -66,7 +66,7 @@ export function isMemberDrivenReputationEvent(type: string): boolean {
 }
 
 export interface DetectedSignals {
-  velocity: { userId: string; gained: number }[]
+  velocity: { userId: string; gained: number; byType: Record<string, number> }[]
   reciprocal: { aId: string; bId: string; mutual: number }[]
   reciprocalAnswers: { aId: string; bId: string; mutual: number }[]
   newAccounts: { userId: string; freshLikes: number }[]
@@ -82,16 +82,17 @@ export async function detectReputationSignals(days: number): Promise<DetectedSig
 
   const [velocity, reciprocal, reciprocalAnswers, newAccounts] = await Promise.all([
     // Live V2 scan — the frozen legacy ledger can't report new grinding.
-    prisma.$queryRaw<{ userId: string; gained: bigint }[]>`
-      SELECT "userId", SUM("xp") AS gained
+    // Counts repeatable member-driven types only (VELOCITY_XP_TYPES):
+    // once-per-entity milestones like harvest/stage transitions can't be
+    // grinded and used to false-flag normal heavy days. Grouped per type
+    // so the flag evidence shows reviewers what actually drove the total.
+    prisma.$queryRaw<{ userId: string; type: string; gained: bigint }[]>`
+      SELECT "userId", "type", SUM("xp") AS gained
       FROM "ProgressionEvent"
       WHERE "reversedAt" IS NULL AND "reversalOfId" IS NULL AND "xp" > 0
-        AND "type" IN (${Prisma.join([...MEMBER_DRIVEN_XP_TYPES])})
+        AND "type" IN (${Prisma.join([...VELOCITY_XP_TYPES])})
         AND "createdAt" > NOW() - INTERVAL '24 hours'
-      GROUP BY "userId"
-      HAVING SUM("xp") > 150
-      ORDER BY gained DESC
-      LIMIT 20`,
+      GROUP BY "userId", "type"`,
 
     // Likes emit no V2 events — the reciprocal-like detector stays on the
     // frozen legacy ledger (standing reciprocity is gated in the engine).
@@ -140,8 +141,23 @@ export async function detectReputationSignals(days: number): Promise<DetectedSig
       LIMIT 20`,
   ])
 
+  // Roll per-type rows up to per-user totals, keeping the breakdown for
+  // flag evidence, then apply the velocity threshold.
+  const velocityByUser = new Map<string, { gained: number; byType: Record<string, number> }>()
+  for (const row of velocity) {
+    const entry = velocityByUser.get(row.userId) ?? { gained: 0, byType: {} }
+    entry.gained += Number(row.gained)
+    entry.byType[row.type] = Number(row.gained)
+    velocityByUser.set(row.userId, entry)
+  }
+  const velocityHits = [...velocityByUser.entries()]
+    .filter(([, v]) => v.gained > VELOCITY_XP_THRESHOLD)
+    .sort((a, b) => b[1].gained - a[1].gained)
+    .slice(0, 20)
+    .map(([userId, v]) => ({ userId, gained: v.gained, byType: v.byType }))
+
   return {
-    velocity: velocity.map((v) => ({ userId: v.userId, gained: Number(v.gained) })),
+    velocity: velocityHits,
     reciprocal: reciprocal.map((r) => ({ aId: r.actorId, bId: r.userId, mutual: Number(r.mutual) })),
     reciprocalAnswers: reciprocalAnswers.map((r) => ({ aId: r.actorId, bId: r.userId, mutual: Number(r.mutual) })),
     newAccounts: newAccounts.map((n) => ({ userId: n.userId, freshLikes: Number(n.freshLikes) })),
@@ -169,7 +185,7 @@ export async function materializeReputationFlags(days = 7): Promise<{ created: n
       signal: "REP_VELOCITY",
       userId: v.userId,
       key: `repvel:${v.userId}:${today}`,
-      evidence: { gained: v.gained, window: "24h", threshold: 150 },
+      evidence: { gained: v.gained, byType: v.byType, window: "24h", threshold: VELOCITY_XP_THRESHOLD },
     })
   }
   for (const r of signals.reciprocal) {

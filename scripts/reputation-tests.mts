@@ -1190,15 +1190,15 @@ async function run() {
         await expectClean(u.id, "T4: +200 ONBOARDING_COMPLETE → no flag")
       }
 
-      // T5 — genuine member-driven velocity flags HIGH
+      // T5 — genuine repeatable-XP velocity flags HIGH
       {
         const u = await mkTestUser(`${VEL_PREFIX}_grind`); velUsers.push(u)
         const actor = await mkTestUser(`${VEL_PREFIX}_actor`); velUsers.push(actor)
-        for (let i = 0; i < 6; i++) {
+        for (let i = 0; i < 11; i++) {
           velEventIds.push((await mkXpLedgerEvent(u.id, "ACCEPTED_ANSWER", 30, { actorId: actor.id })).id)
         }
-        velEventIds.push((await mkXpLedgerEvent(u.id, "THREAD_STARTED", 5)).id) // 185 member-driven
-        await expectFlagged(u.id, "T5: +185 member-driven in 24h → flagged")
+        velEventIds.push((await mkXpLedgerEvent(u.id, "THREAD_STARTED", 5)).id) // 335 repeatable
+        await expectFlagged(u.id, "T5: +335 repeatable XP in 24h → flagged")
         const { created } = await materializeReputationFlags(7)
         const flag = await prisma.abuseFlag.findFirst({
           where: { userId: u.id, signal: "REP_VELOCITY", key: { notIn: [...flagKeysBefore] } },
@@ -1206,13 +1206,26 @@ async function run() {
         assert.ok(flag && flag.priority === "HIGH", `T5b: materialized flag is HIGH (created=${created})`)
       }
 
-      // T6 — exactly +150 does not flag (boundary preserved)
+      // T6 — exactly +300 does not flag (boundary preserved)
       {
         const u = await mkTestUser(`${VEL_PREFIX}_edge`); velUsers.push(u)
-        for (let i = 0; i < 15; i++) {
+        for (let i = 0; i < 30; i++) {
           velEventIds.push((await mkXpLedgerEvent(u.id, "THREAD_STARTED", 10)).id)
         }
-        await expectClean(u.id, "T6: exactly +150 member-driven → no flag (>150 required)")
+        await expectClean(u.id, "T6: exactly +300 repeatable XP → no flag (>threshold required)")
+      }
+
+      // T6b — a one-time milestone burst can't flag: a real harvest day is
+      // HARVEST_LOGGED+GROW_COMPLETE+HARVEST_REPORT+COVERAGE_MILESTONE+
+      // STAGE_FLOWERING ≈ 195 XP of excluded types — the exact false
+      // positive that used to produce these cases.
+      {
+        const u = await mkTestUser(`${VEL_PREFIX}_harvest`); velUsers.push(u)
+        for (const [t, x] of [["HARVEST_LOGGED", 50], ["GROW_COMPLETE", 50], ["HARVEST_REPORT", 30], ["COVERAGE_MILESTONE", 25], ["STAGE_FLOWERING", 40]] as const) {
+          velEventIds.push((await mkXpLedgerEvent(u.id, t, x)).id) // 195 excluded
+        }
+        velEventIds.push((await mkXpLedgerEvent(u.id, "REPLY", 2)).id) // +2 repeatable
+        await expectClean(u.id, "T6b: +195 milestone XP + +2 repeatable → no flag")
       }
 
       // T7 — system + member-driven mix below threshold → no flag

@@ -239,6 +239,30 @@ export const MEMBER_DRIVEN_XP_TYPES = new Set([
 // XP stops counting; a reinstated award counts again.
 export const WEEKLY_BOARD_XP_TYPES: string[] = [...MEMBER_DRIVEN_XP_TYPES, "REVERSAL", "REINSTATE"]
 
+// Velocity-detector allowlist — the repeatable member-driven types only.
+// Once-per-entity milestones (diary stage transitions, harvest, grow
+// complete, coverage/harvest reports, experiment completion, guide
+// publication, replication) are excluded: they fire once per grow or
+// artifact, so they can't be "grinded" — and a single normal harvest day
+// (HARVEST_LOGGED + GROW_COMPLETE + HARVEST_REPORT + COVERAGE_MILESTONE ≈
+// 155 XP) used to trip the detector on its own. Velocity is meant to
+// measure repeated-action grinding, not achievement bursts.
+export const VELOCITY_XP_TYPES = new Set([
+  "THREAD_STARTED", "REPLY", "SUBSTANTIVE_ANSWER", "NEWCOMER_REPLY",
+  "OP_CURATION", "ACCEPTED_ANSWER", "NEWCOMER_ACCEPT_BONUS",
+  "DIARY_CREATED", "UPDATE_DAY", "UPDATE_RICH", "UPDATE_EXCEPTIONAL",
+  "STRUCTURED_CATEGORY", "METRIC_FIRST", "SETUP_SHOWCASE",
+  "STRAIN_PHOTO", "STRAIN_SOURCED", "PROBLEM_RESOLVED",
+  "EXPERIMENT_CREATED", "HYPOTHESIS_DOC",
+])
+
+// 24h repeatable-XP ceiling before a velocity flag materializes. Calibrated
+// above a realistic power-user day (backfilling diaries + answering
+// questions ≈ 200–250 XP of repeatable types) — a flag now means the
+// member out-produced what normal use can generate, which is the signal
+// moderators actually need to review.
+export const VELOCITY_XP_THRESHOLD = 300
+
 // Zero-XP types kept as marker/system rows.
 export const SYSTEM_EVENT_TYPES = new Set([
   "MILESTONE", // sub-level/rank-up marker (0 xp)
