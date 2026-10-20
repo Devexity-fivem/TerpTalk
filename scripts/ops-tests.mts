@@ -17,7 +17,8 @@ const { prisma, ts: TS, pass, fail, createUser, login: rawLogin, finish } = make
 const login = (u: string, p: string) =>
   rawLogin(u, p) as Promise<{ cookie: string }>
 
-const BASE = process.env.BASE_URL || "http://localhost:3000"
+// VERIFY_URL is the master-runner contract; BASE_URL kept for standalone use.
+const BASE = (process.env.VERIFY_URL || process.env.BASE_URL || "http://localhost:3000").replace(/\/$/, "")
 
 const main = async () => {
   const member = await createUser("member")

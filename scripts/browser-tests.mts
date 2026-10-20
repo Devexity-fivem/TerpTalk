@@ -27,7 +27,7 @@ type SWScope = {
   registration: { getNotifications(): Promise<SWNote[]> }
   NotificationEvent: new (type: string, init: { notification: SWNote }) => Event
 }
-const BASE = (process.env.MASTER_BASE_URL ?? "http://localhost:3000").replace(/\/$/, "")
+const BASE = (process.env.VERIFY_URL ?? process.env.MASTER_BASE_URL ?? process.env.BASE_URL ?? "http://localhost:3000").replace(/\/$/, "")
 const TS = Date.now().toString(36)
 const PASSWORD = "VerifyPass123!"
 

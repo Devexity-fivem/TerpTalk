@@ -29,7 +29,8 @@ const { prisma: hp, pass, fail, createUser, login: rawLogin, finish } = makeHarn
 )
 const login = (u: string, p: string) => rawLogin(u, p) as Promise<{ cookie: string }>
 
-const BASE = process.env.BASE_URL || "http://localhost:3000"
+// VERIFY_URL is the master-runner contract; BASE_URL kept for standalone use.
+const BASE = (process.env.VERIFY_URL || process.env.BASE_URL || "http://localhost:3000").replace(/\/$/, "")
 
 interface CaseDto { id: string; outcome: string | null; outcomeCount: number; open: boolean }
 interface ApiData { caseId?: string; reused?: boolean; cases?: CaseDto[]; error?: string }

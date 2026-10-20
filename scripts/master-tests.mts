@@ -60,7 +60,7 @@ interface Suite {
   // Suites that may toggle Setting.maintenance_mode mid-run. When true, the
   // parent runner restores the captured baseline after the suite exits — a
   // crashed or timed-out child cannot leave the shared DB frozen for the
-  // suites behind it (see scripts/lib/maintenance-mode.ts).
+  // suites behind it (see scripts/lib/maintenance-mode.mjs).
   restoreMaintenance?: boolean
 }
 
@@ -99,7 +99,7 @@ const HTTP_PHASE: Suite[] = ([
 // settings (chat_enabled, GROW_ROOM_ENABLED) and rate-limit rows.
 const DB_PHASE: Suite[] = ([
   { id: "security", file: "scripts/security-tests.mts", runner: "tsx", cls: "A", label: "Security + platform lib-level (sessions, roles, uploads, links, cron, captcha, markdown)", tier: "full" },
-  { id: "notifications", file: "scripts/notification-2-tests.mts", runner: "tsx", cls: "A", label: "Notification persistence + delivery", tier: "full" },
+  { id: "notifications", file: "scripts/notification-tests.mts", runner: "tsx", cls: "A", label: "Notification persistence + delivery", tier: "full" },
   { id: "reputation", file: "scripts/reputation-tests.mts", runner: "tsx", cls: "A", label: "Reputation ledger + progression + quests + velocity anti-abuse", tier: "full" },
   { id: "reputation-referral", file: "scripts/reputation-referral-integrity-tests.mts", runner: "tsx", cls: "A", label: "Reputation referral integrity", tier: "full" },
   { id: "terpbot-pipeline", file: "scripts/terpbot-pipeline-tests.mts", runner: "tsx", cls: "A", label: "TerpBot pipeline (DB)", tier: "full" },

@@ -1,7 +1,7 @@
 // Activation & Retention — Web Push subscription boundary (HTTP) and the
 // derived activation model (real lib against real rows). Delivery
 // semantics (notify → optional push, cleanup, dedupe) live in
-// notification-2-tests.mts; the staff report gate lives in ops-tests.mts.
+// notification-tests.mts; the staff report gate lives in ops-tests.mts.
 // Temp users/rows fully cleaned up.
 import "./db-guard.mjs"
 import { makeHarness } from "./lib/http-harness.mjs"
@@ -17,7 +17,8 @@ const { prisma, ts: TS, pass, fail, createUser, login: rawLogin, finish } = make
   harnessOpts as { name: (tag: string, ts: string) => string; summary: string },
 )
 const login = (u: string, p: string) => rawLogin(u, p) as Promise<{ cookie: string }>
-const BASE = process.env.BASE_URL || "http://localhost:3000"
+// VERIFY_URL is the master-runner contract; BASE_URL kept for standalone use.
+const BASE = (process.env.VERIFY_URL || process.env.BASE_URL || "http://localhost:3000").replace(/\/$/, "")
 const HOUR = 3600_000
 
 type Res = { status: number; data: Record<string, unknown> | null }
