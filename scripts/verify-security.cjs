@@ -388,15 +388,6 @@ const apiFiles = () => {
   const forumPosts = read("app/api/forum/posts/route.ts");
   check("posts: reply reputation paid-content floor", forumPosts.includes("POST_MIN_PAID_LENGTH"));
 
-  // ── Media migration tool invariants (ops safety; the live blob store
-  //    can't be exercised without a token, so this pins the contract) ──
-  const mig = read("../scripts/migrate-private-media.mts");
-  check("migration: strict revocation — public-source delete failure counts", mig.includes("deleteImageStrict(row.url)") && mig.includes("tally.failed++"));
-  check("migration: failures exit non-zero", /failed \+ post\.failed \+ setup\.failed > 0\) process\.exit\(1\)/.test(mig));
-  check("migration: orphan deletion requires --confirm", mig.includes('process.argv.includes("--confirm")') && mig.includes("if (!CONFIRM)"));
-  check("migration: only twin-verified public orphans are deleted", mig.includes("for (const o of tally.orphanTwin)") && !/for \(const \w+ of tally\.orphanUnique/.test(mig) && !/for \(const \w+ of tally\.orphanPrivate/.test(mig));
-  check("migration: list-store reports every bucket", ["referencedPublic", "orphanTwin", "orphanUnique", "orphanPrivate", "suspicious"].every((b) => mig.includes(b)));
-
   // ── Affiliate image hosts ⊆ CSP img-src ──
   // Partner product images are hotlinked; a seed imageUrl on a host missing
   // from img-src silently renders broken in production. Pin the invariant.

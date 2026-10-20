@@ -616,17 +616,6 @@ async function postAwardEffects(
   }
 }
 
-// Exported for paths that write reputation directly (admin adjustments,
-// contest resolutions) — they must still run the full milestone pipeline.
-export async function runPostAwardEffects(userId: string, oldRep: number, newRep: number, type?: string) {
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { role: true, createdAt: true, banned: true, suspendedUntil: true },
-  })
-  if (!user) return
-  await postAwardEffects(userId, user, oldRep, newRep, type)
-}
-
 // Hidden discovery badges tied to contribution events (not stats):
 //   Four Twenty — any contribution on April 20 UTC.
 //   Comeback    — first contribution after a 90+ day contribution gap.
