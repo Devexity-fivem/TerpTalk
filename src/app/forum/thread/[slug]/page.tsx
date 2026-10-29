@@ -522,7 +522,7 @@ export default async function ThreadPage({
         <article
           id={opPost ? `post-${opPost.id}` : undefined}
           tabIndex={-1}
-          className="scroll-mt-24 bg-card rounded-2xl border border-border/70 p-4 sm:p-6 mb-4 shadow-sm"
+          className="tt-spotlight tt-edge-card scroll-mt-24 bg-card rounded-2xl border border-border/70 p-4 sm:p-6 mb-4 shadow-sm transition-colors hover:border-primary/40"
         >
           <h1 className="font-display text-2xl sm:text-3xl font-bold mb-3 wrap-break-word tracking-tight">{thread.title}</h1>
           {thread.tags.length > 0 && (
@@ -648,7 +648,7 @@ export default async function ThreadPage({
             the canonical strain card, surfaced the moment a member asks.
             Compact by design; vanishes entirely when nothing is relevant. */}
         {hasEvidence && (
-          <div className="bg-card/80 rounded-2xl border border-primary/25 p-4 sm:p-5 mb-4">
+          <div className="tt-spotlight bg-card/80 rounded-2xl border border-primary/25 p-4 sm:p-5 mb-4">
             <div className="flex items-center gap-2 mb-3">
               <Lightbulb className="w-4 h-4 text-primary" />
               <h2 className="font-display text-base font-semibold">What might already help</h2>
@@ -702,7 +702,7 @@ export default async function ThreadPage({
             question's signals. Sits with the evidence rail; the answer
             flow below stays primary. Vanishes when nothing qualifies. */}
         {contextGrowers.length > 0 && (
-          <div className="bg-card/80 rounded-2xl border border-border/70 p-4 sm:p-5 mb-4">
+          <div className="tt-spotlight bg-card/80 rounded-2xl border border-border/70 p-4 sm:p-5 mb-4">
             <div className="flex items-center gap-2 mb-3">
               <Users className="w-4 h-4 text-primary" />
               <h2 className="font-display text-base font-semibold">Growers with related experience</h2>
@@ -717,7 +717,7 @@ export default async function ThreadPage({
 
         {/* Accepted answer — renders on every page, so its anchor always resolves */}
         {acceptedPost && (
-          <div id={`post-${acceptedPost.id}`} tabIndex={-1} className="bg-card rounded-2xl border-2 border-green-500/50 p-4 sm:p-5 mb-4 ring-1 ring-green-500/20">
+          <div id={`post-${acceptedPost.id}`} tabIndex={-1} className="tt-spotlight bg-card rounded-2xl border-2 border-green-500/50 p-4 sm:p-5 mb-4 ring-1 ring-green-500/20">
             <div className="flex items-center gap-2 text-success text-xs font-medium mb-3">
               <CheckCircle2 className="w-3.5 h-3.5" />
               <span>Accepted answer</span>
@@ -816,7 +816,8 @@ export default async function ThreadPage({
         )}
 
         {/* Replies */}
-        <h2 className="font-display text-base font-semibold mt-6 mb-3">
+        <span className="tt-eyebrow mt-6">Conversation</span>
+        <h2 className="font-display text-base font-semibold mt-1.5 mb-3">
           {thread.replyCount === 0 ? "No replies yet" : `${thread.replyCount} ${thread.replyCount === 1 ? "reply" : "replies"}`}
         </h2>
         <div className="space-y-4">
@@ -840,7 +841,7 @@ export default async function ThreadPage({
               <article
                 id={`post-${post.id}`}
                 tabIndex={-1}
-                className={`scroll-mt-24 bg-card/70 rounded-2xl border border-border/60 p-4 sm:p-5 ${
+                className={`tt-spotlight scroll-mt-24 bg-card/70 rounded-2xl border border-border/60 p-4 sm:p-5 transition-colors hover:border-primary/30 ${
                   isOwnPost ? "ring-1 ring-primary/20" : ""
                 }`}
               >
@@ -926,7 +927,7 @@ export default async function ThreadPage({
         {/* Related discussions — shown inline on mobile, moved to sidebar on lg */}
         <div className="lg:hidden">
           {relatedThreads.length > 0 && (
-            <div className="mt-6 bg-card/80 rounded-2xl border border-border/70 p-5">
+            <div className="tt-spotlight mt-6 bg-card/80 rounded-2xl border border-border/70 p-5">
               <div className="flex items-center gap-2 mb-3">
                 <MessageSquare className="w-3.5 h-3.5 text-spectrum" />
                 <h2 className="font-display text-base font-semibold">Related discussions</h2>
@@ -967,7 +968,7 @@ export default async function ThreadPage({
         <aside className="hidden lg:block" aria-label="Discussion context">
           <div className="sticky top-20 space-y-4">
             {/* Thread summary */}
-            <div className="bg-card/80 rounded-2xl border border-border/70 p-4">
+            <div className="tt-spotlight bg-card/80 rounded-2xl border border-border/70 p-4">
               <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Thread info</h3>
               <dl className="space-y-2 text-sm">
                 <div className="flex items-center justify-between">
@@ -991,7 +992,7 @@ export default async function ThreadPage({
 
             {/* Diary context — in sidebar */}
             {diaryCtx && (
-              <div className="bg-card/80 rounded-2xl border border-border/70 p-4">
+              <div className="tt-spotlight bg-card/80 rounded-2xl border border-border/70 p-4">
                 <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Linked grow</h3>
                 <Link
                   href={diaryPath(diaryCtx)}
@@ -1007,7 +1008,7 @@ export default async function ThreadPage({
 
             {/* Related discussions — desktop sidebar */}
             {relatedThreads.length > 0 && (
-              <div className="bg-card/80 rounded-2xl border border-border/70 p-4">
+              <div className="tt-spotlight bg-card/80 rounded-2xl border border-border/70 p-4">
                 <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Related</h3>
                 <ul className="space-y-2">
                   {relatedThreads.map((t) => (
@@ -1028,7 +1029,7 @@ export default async function ThreadPage({
             )}
 
             {/* Category link */}
-            <div className="bg-card/80 rounded-2xl border border-border/70 p-4">
+            <div className="tt-spotlight bg-card/80 rounded-2xl border border-border/70 p-4">
               <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Category</h3>
               <Link
                 href={`/forum/category/${thread.category.slug}`}
@@ -1042,7 +1043,7 @@ export default async function ThreadPage({
             </div>
 
             {/* Chat / community actions */}
-            <div className="bg-card/80 rounded-2xl border border-border/70 p-4 space-y-2">
+            <div className="tt-spotlight bg-card/80 rounded-2xl border border-border/70 p-4 space-y-2">
               <Link
                 href="/chat"
                 className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-secondary/60 hover:text-foreground transition-colors w-full"
