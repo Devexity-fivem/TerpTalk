@@ -4,7 +4,7 @@ Public cannabis community platform (21+): forums, grow diaries, grow setups, str
 
 ## Stack
 
-Next.js 16 (App Router) · React 19 · TypeScript · Tailwind 4 · NextAuth 4 (credentials + JWT) · Prisma 6 · PostgreSQL · Deploys to Vercel (Neon for DB)
+Next.js 16 (App Router) · React 19 · TypeScript · Tailwind 4 · NextAuth 4 (credentials + JWT) · Prisma 6 · PostgreSQL · Deploys to Vercel (Supabase for DB)
 
 ## Local development
 
@@ -18,7 +18,7 @@ npm run dev          # http://localhost:3000
 
 Requires a PostgreSQL `DATABASE_URL`. SQLite is no longer supported.
 
-**Database environments (Neon):** local development and mutation-capable tests use the **`dev`** branch; Vercel Production uses **`main`**. Never point local tooling at the `main` endpoint.
+**Database environments (Supabase):** local development and mutation-capable tests use the **`terptalk-dev`** project (`ovztvfbvylcdpsuchvps`); Vercel Production uses **`terptalk-db`** (`dtlksgtsvdfhgsiuktbt`). Never point local tooling at the prod project.
 
 ## Environment variables
 
@@ -33,7 +33,7 @@ npm run seed                         # re-seed categories, chat rooms, optional 
 npm run backup                       # pg_dump or file copy -> backups/
 ```
 
-Never run `migrate reset` or destructive commands against production. Use `npx prisma migrate dev` only against the Neon `dev` branch.
+Never run `migrate reset` or destructive commands against production. Use `npx prisma migrate dev` only against the `terptalk-dev` Supabase project.
 
 **Test safety:** every mutation-capable test/verification script under `scripts/` imports `db-guard.mjs`, which refuses to run when `DATABASE_URL` resolves to the production endpoint. `ALLOW_PRODUCTION_DB_TESTS=1` overrides it — never set it casually.
 
@@ -46,17 +46,17 @@ Never run `migrate reset` or destructive commands against production. Use `npx p
 
 Order is therefore automatic: migrate → verify schema → build → promote. You never run prod migrations manually.
 
-If you ever need a manual migration (disaster recovery), use the **direct** Neon endpoint (same host minus `-pooler`):
+If you ever need a manual migration (disaster recovery), use the **session-mode** Supabase pooler URL (port 5432 — `DATABASE_URL_UNPOOLED` on Vercel):
 
 ```bash
-DATABASE_URL="postgresql://USER:PASSWORD@ep-XXXX.us-east-1.aws.neon.tech/neondb?sslmode=require" npx prisma migrate deploy
+DATABASE_URL="postgresql://postgres.PROJECT_REF:PASSWORD@aws-0-REGION.pooler.supabase.com:5432/postgres?sslmode=require" npx prisma migrate deploy
 ```
 
 ## Testing
 
 ```bash
 npm run test:fast            # ~10s — pure + static suites only (no dev server, no DB writes); run on every iteration
-npm run test:master          # THE release gate — fast + full tiers; boots a dev server, runs HTTP + DB suites against the Neon dev branch
+npm run test:master          # THE release gate — fast + full tiers; boots a dev server, runs HTTP + DB suites against the terptalk-dev Supabase project
 npm run test:slow            # analytics/aggregate suite (community + growth) — not release-blocking
 npm run test:all             # everything (master + slow)
 npm run test:<name>          # any single suite (see package.json)
@@ -126,7 +126,7 @@ Then verify the deploy:
 - **Cron:** two daily jobs (`vercel.json`, both secured by `CRON_SECRET`). `GET /api/cron/terpbot` at 14:00 UTC — digest, grow tip, notification cleanup, dormant-member scan, referral sweep, safety signal scan. `GET /api/cron/diary-reminders` at 14:30 UTC — one aggregated DIARY_REMINDER per member with an active diary stale 7+ days (per-member weekly Setting claim + notification-window throttle; gated by the `notifyOnDiaryReminder` preference; push-eligible). Per-task claims land as `Setting` rows (`<task>:<UTC-date>`); a failed task releases its claim and retries next run.
 - **Referrals:** signup writes `referredById` + a "joined using your referral link" notification (no instant award). The bonus pays later — once the referee reaches 25 XP and is 24h old — via `reconcileReferralPayouts` (keyed `referral:<refereeId>`, weekly cap, legacy unkeyed-payout detection; paid on the V2 progression ledger). Both the post-award trigger and the daily `reputation:referral-sweep` cron call the same canonical path.
 - **Where to look when prod hurts:** `SecurityEvent` (auth failures, rate limits, registrations, deletions — `metadata.reason` distinguishes causes, `userFound` separates lookup misses from bad passwords), `BotEvent` (TerpBot command/announcement telemetry), `RateLimit` (live throttle keys), `Setting` rows (cron claims), Vercel function logs (everything else — short retention).
-- **Key env vars (prod):** `DATABASE_URL` + `DATABASE_URL_UNPOOLED` (Neon main), `NEXTAUTH_SECRET`, `NEXTAUTH_URL`, `IP_HASH_SALT`, Pusher set (`PUSHER_*` + `NEXT_PUBLIC_PUSHER_*`), `CRON_SECRET`, `TURNSTILE_SECRET_KEY` + `NEXT_PUBLIC_TURNSTILE_SITE_KEY` (signup protection), `BLOB_READ_WRITE_TOKEN` (uploads), `NEXT_PUBLIC_SITE_URL` (canonical host for canonical links, sitemap, JSON-LD, OG), optional `GOOGLE_SITE_VERIFICATION` + `BING_SITE_VERIFICATION` (search-console meta verification tokens — emitted only when set).
+- **Key env vars (prod):** `DATABASE_URL` (Supabase pooled, `pgbouncer=true`) + `DATABASE_URL_UNPOOLED` (Supabase session, port 5432), `NEXTAUTH_SECRET`, `NEXTAUTH_URL`, `IP_HASH_SALT`, Pusher set (`PUSHER_*` + `NEXT_PUBLIC_PUSHER_*`), `CRON_SECRET`, `TURNSTILE_SECRET_KEY` + `NEXT_PUBLIC_TURNSTILE_SITE_KEY` (signup protection), `BLOB_READ_WRITE_TOKEN` (uploads), `NEXT_PUBLIC_SITE_URL` (canonical host for canonical links, sitemap, JSON-LD, OG), optional `GOOGLE_SITE_VERIFICATION` + `BING_SITE_VERIFICATION` (search-console meta verification tokens — emitted only when set).
 
 ### SEO / organic discovery
 

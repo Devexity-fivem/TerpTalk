@@ -728,44 +728,55 @@ async function run() {
     // non-production target is refused.
     {
       const dsn = (host: string) => `postgres://u:p@${host}:5432/db`
+      // Supabase pooled DSNs share the pooler host across projects — the
+      // project ref lives in the username.
+      const pooled = (ref: string) =>
+        `postgres://postgres.${ref}:p@aws-0-us-east-1.pooler.supabase.com:6543/postgres`
+      const direct = (ref: string) =>
+        `postgres://postgres:p@db.${ref}.supabase.co:5432/postgres`
       const noOverrides = { ALLOW_PRODUCTION_DB_TESTS: undefined, ALLOW_UNRECOGNIZED_DB_TESTS: undefined, DB_GUARD_EXTRA_HOSTS: undefined } as Record<string, string | undefined>
 
-      // Documented dev branch + local Postgres are authorized.
-      for (const h of [
-        "ep-old-breeze-au1f8sl5-pooler.c-10.us-east-1.aws.neon.tech",
-        "ep-old-breeze-au1f8sl5.c-10.us-east-1.aws.neon.tech", // direct (non-pooler) form
-        "localhost", "127.0.0.1", "db.localhost",
+      // Documented dev database + local Postgres are authorized.
+      for (const u of [
+        pooled("ovztvfbvylcdpsuchvps"),   // dev project via shared pooler (ref in username)
+        direct("ovztvfbvylcdpsuchvps"),   // dev project direct host
+        dsn("localhost"), dsn("127.0.0.1"), dsn("db.localhost"),
       ]) {
-        assert.equal(evaluateDbTarget(dsn(h), noOverrides).allowed, true, `safe target refused: ${h}`)
+        assert.equal(evaluateDbTarget(u, noOverrides).allowed, true, `safe target refused: ${u}`)
       }
-      // Production marker refuses even with a plausible-sounding shape.
-      for (const h of [
-        "ep-billowing-dew-a1b2c3d4-pooler.us-east-1.aws.neon.tech",
-        "ep-billowing-dew-a1b2c3d4.us-east-1.aws.neon.tech",
+      // Production marker refuses even with a plausible-sounding shape —
+      // including the shared-pooler form where the ref is only in the
+      // username, and the retired Neon endpoint for stale .envs.
+      for (const u of [
+        pooled("dtlksgtsvdfhgsiuktbt"),
+        direct("dtlksgtsvdfhgsiuktbt"),
+        dsn("ep-billowing-dew-a1b2c3d4-pooler.us-east-1.aws.neon.tech"),
+        dsn("ep-billowing-dew-a1b2c3d4.us-east-1.aws.neon.tech"),
       ]) {
-        assert.equal(evaluateDbTarget(dsn(h), noOverrides).allowed, false, `production allowed: ${h}`)
+        assert.equal(evaluateDbTarget(u, noOverrides).allowed, false, `production allowed: ${u}`)
       }
-      // Endpoint renames / unknown Neon branches / foreign hosts fail closed.
-      for (const h of [
-        "ep-old-breeze-renamed.us-east-1.aws.neon.tech".replace("old-breeze", "quiet-sun"), // renamed dev endpoint
-        "ep-random-branch-xyz.eu-west-1.aws.neon.tech",
-        "postgres.internal.example.com",
+      // Unknown Supabase refs / renamed endpoints / foreign hosts fail closed.
+      for (const u of [
+        pooled("zzzzunknownrefzzzz"),
+        direct("zzzzunknownrefzzzz"),
+        dsn("ep-quiet-sun-renamed.us-east-1.aws.neon.tech"),
+        dsn("postgres.internal.example.com"),
       ]) {
-        assert.equal(evaluateDbTarget(dsn(h), noOverrides).allowed, false, `unrecognized target allowed: ${h}`)
+        assert.equal(evaluateDbTarget(u, noOverrides).allowed, false, `unrecognized target allowed: ${u}`)
       }
       // Explicit escapes: production override, extra-host declaration, and
       // the unrecognized-target override each work deliberately.
       assert.equal(
-        evaluateDbTarget(dsn("ep-billowing-dew-x.neon.tech"), { ...noOverrides, ALLOW_PRODUCTION_DB_TESTS: "1" }).allowed,
+        evaluateDbTarget(direct("dtlksgtsvdfhgsiuktbt"), { ...noOverrides, ALLOW_PRODUCTION_DB_TESTS: "1" }).allowed,
         true, "documented production override broken")
       assert.equal(
-        evaluateDbTarget(dsn("ep-ci-branch-1.neon.tech"), { ...noOverrides, DB_GUARD_EXTRA_HOSTS: "ep-ci-branch-1" }).allowed,
+        evaluateDbTarget(dsn("ci-postgres-1.internal"), { ...noOverrides, DB_GUARD_EXTRA_HOSTS: "ci-postgres-1" }).allowed,
         true, "DB_GUARD_EXTRA_HOSTS declaration broken")
       assert.equal(
-        evaluateDbTarget(dsn("ep-ci-branch-1.neon.tech"), { ...noOverrides, ALLOW_UNRECOGNIZED_DB_TESTS: "1" }).allowed,
+        evaluateDbTarget(pooled("zzzzunknownrefzzzz"), { ...noOverrides, ALLOW_UNRECOGNIZED_DB_TESTS: "1" }).allowed,
         true, "unrecognized-target override broken")
       // Refusals never leak credentials into the reason.
-      const refused = evaluateDbTarget("postgres://secretuser:secretpass@ep-billowing-dew-x.neon.tech/db", noOverrides)
+      const refused = evaluateDbTarget(pooled("dtlksgtsvdfhgsiuktbt").replace(":p@", ":secretpass@"), noOverrides)
       assert.equal(refused.allowed, false)
       assert.ok(!JSON.stringify(refused).includes("secretpass"), "reason must not echo credentials")
     }

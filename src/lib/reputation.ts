@@ -445,7 +445,7 @@ const ACTOR_GRANTED_TYPES = new Set([
 export async function reverseReputationByActor(actorId: string, reason: string, opts: { before?: Date } = {}): Promise<number> {
   let reversed = 0
   // Bounded concurrency — a ban can reverse thousands of granted events;
-  // unbounded Promise.all would exhaust the Neon pool. The id scan is
+  // unbounded Promise.all would exhaust the database pool. The id scan is
   // keyset-paged so a prolific actor's ledger never loads at once.
   const BATCH = 25
   const PAGE = 500

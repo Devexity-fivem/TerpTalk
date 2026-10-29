@@ -401,8 +401,8 @@ async function validateEnvironment(checkDb: boolean): Promise<string[]> {
   const dbUrl = process.env.DATABASE_URL ?? envText.match(/^DATABASE_URL=["']?(.+?)["']?\s*$/m)?.[1]
   if (!dbUrl) {
     problems.push("DATABASE_URL not set (env or .env)")
-  } else if (dbUrl.includes("ep-billowing-dew") && process.env.ALLOW_PRODUCTION_DB_TESTS !== "1") {
-    problems.push("DATABASE_URL points at the production Neon endpoint — tests refused (db-guard rule)")
+  } else if (["dtlksgtsvdfhgsiuktbt", "ep-billowing-dew"].some((m) => dbUrl.includes(m)) && process.env.ALLOW_PRODUCTION_DB_TESTS !== "1") {
+    problems.push("DATABASE_URL points at the production database endpoint — tests refused (db-guard rule)")
   }
 
   if (checkDb && problems.length === 0) {

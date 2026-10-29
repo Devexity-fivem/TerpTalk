@@ -1,16 +1,17 @@
 // db-guard.mjs — fail-safe for mutation-capable test/verification scripts.
 //
-// Production lives on the Neon `main` branch (compute ep-billowing-dew-*).
-// Local dev/tests must use the `dev` branch (ep-old-breeze-*) or a local
-// Postgres. Import this module for its side effect at the top of any script
-// that writes to the database:
+// Production lives on Supabase project `dtlksgtsvdfhgsiuktbt` (resource
+// terptalk-db). Local dev/tests must use the dev Supabase project
+// `ovztvfbvylcdpsuchvps` (terptalk-dev) or a local Postgres. Import this
+// module for its side effect at the top of any script that writes to the
+// database:
 //
 //   import "./db-guard.mjs"
 //
 // Authorization is positive, not substring-denial:
 //   1. A recognized production marker always refuses (independent
 //      fail-closed barrier — endpoint renames can't weaken it).
-//   2. A recognized safe target (the documented dev branch, local
+//   2. A recognized safe target (the documented dev database, local
 //      Postgres) is authorized.
 //   3. Anything else fails closed — an unknown host is never silently
 //      treated as a dev database. Declare a nonstandard safe target
@@ -23,12 +24,21 @@ import { fileURLToPath } from "node:url"
 
 // Independent production barrier — always refuses, override only via
 // ALLOW_PRODUCTION_DB_TESTS. Never extended with test-workflow entries.
-const PROD_ENDPOINT_MARKERS = ["ep-billowing-dew"]
+// Matched against the raw URL, not just the hostname: on Supabase the
+// pooled host (aws-N-<region>.pooler.supabase.com) is shared by every
+// project — the project ref only appears in the username
+// (postgres.<ref>@) for pooled DSNs and in the hostname for direct ones.
+// Retired Neon prod endpoint kept so stale .envs still fail with a clear
+// reason instead of "unrecognized".
+const PROD_URL_MARKERS = ["dtlksgtsvdfhgsiuktbt", "ep-billowing-dew"]
 
-// Positively authorized non-production targets. Local Postgres variants
-// plus the documented dev-branch endpoint. Add team-shared targets by
+// Positively authorized non-production URL substrings — the documented
+// dev database (Supabase ref + retired Neon dev branch for stale .envs).
+const SAFE_URL_MARKERS = ["ovztvfbvylcdpsuchvps", "ep-old-breeze"]
+
+// Positively authorized non-production hosts. Add team-shared targets by
 // editing this list; ad-hoc targets via DB_GUARD_EXTRA_HOSTS.
-const SAFE_HOST_MARKERS = ["ep-old-breeze", "localhost", "127.0.0.1", "::1", "[::1]"]
+const SAFE_HOST_MARKERS = ["localhost", "127.0.0.1", "::1", "[::1]"]
 
 /**
  * Classify a DATABASE_URL for mutation-capable script use.
@@ -53,12 +63,15 @@ export function evaluateDbTarget(rawUrl, env = process.env) {
   }
   if (!host) return { allowed: false, reason: "URL has no host" }
 
-  if (PROD_ENDPOINT_MARKERS.some((m) => host.includes(m))) {
-    return { allowed: false, reason: "production Neon endpoint" }
+  if (PROD_URL_MARKERS.some((m) => rawUrl.includes(m))) {
+    return { allowed: false, reason: "production database endpoint" }
   }
   const extra = (env.DB_GUARD_EXTRA_HOSTS || "")
     .split(",").map((s) => s.trim()).filter(Boolean)
-  if ([...SAFE_HOST_MARKERS, ...extra].some((m) => host === m || host.startsWith(m) || host.endsWith(`.${m}`))) {
+  if (
+    SAFE_URL_MARKERS.some((m) => rawUrl.includes(m)) ||
+    [...SAFE_HOST_MARKERS, ...extra].some((m) => host === m || host.startsWith(m) || host.endsWith(`.${m}`))
+  ) {
     return { allowed: true, reason: "authorized non-production target" }
   }
   if (env.ALLOW_UNRECOGNIZED_DB_TESTS === "1") {
@@ -83,7 +96,7 @@ if (url) {
   const verdict = evaluateDbTarget(url)
   if (!verdict.allowed) {
     console.error(`[db-guard] REFUSING TO RUN: ${verdict.reason}.`)
-    console.error("[db-guard] Point DATABASE_URL at the documented dev branch, declare the target via DB_GUARD_EXTRA_HOSTS,")
+    console.error("[db-guard] Point DATABASE_URL at the documented dev database, declare the target via DB_GUARD_EXTRA_HOSTS,")
     console.error("[db-guard] or set ALLOW_UNRECOGNIZED_DB_TESTS=1 / ALLOW_PRODUCTION_DB_TESTS=1 to override.")
     process.exit(1)
   }
