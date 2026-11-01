@@ -101,22 +101,22 @@ export default function GrowLightCalculatorPage() {
         </div>
 
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-          <div className="bg-card/80 border border-border/70 rounded-2xl p-5 text-center">
+          <div className="tt-spotlight bg-card/80 border border-border/70 rounded-2xl p-5 text-center">
             <div className="text-sm text-muted-foreground mb-1">Daily</div>
             <div className="text-2xl font-bold text-primary">${costDay.toFixed(2)}</div>
             <div className="text-xs text-muted-foreground">{kwhPerDay.toFixed(2)} kWh</div>
           </div>
-          <div className="bg-card/80 border border-border/70 rounded-2xl p-5 text-center">
+          <div className="tt-spotlight bg-card/80 border border-border/70 rounded-2xl p-5 text-center">
             <div className="text-sm text-muted-foreground mb-1">Weekly</div>
             <div className="text-2xl font-bold text-primary">${costWeek.toFixed(2)}</div>
             <div className="text-xs text-muted-foreground">{kwhPerWeek.toFixed(2)} kWh</div>
           </div>
-          <div className="bg-card/80 border border-border/70 rounded-2xl p-5 text-center">
+          <div className="tt-spotlight bg-card/80 border border-border/70 rounded-2xl p-5 text-center">
             <div className="text-sm text-muted-foreground mb-1">Monthly</div>
             <div className="text-2xl font-bold text-primary">${costMonth.toFixed(2)}</div>
             <div className="text-xs text-muted-foreground">{kwhPerMonth.toFixed(2)} kWh</div>
           </div>
-          <div className="bg-card/80 border border-border/70 rounded-2xl p-5 text-center">
+          <div className="tt-spotlight bg-card/80 border border-border/70 rounded-2xl p-5 text-center">
             <div className="text-sm text-muted-foreground mb-1">Yearly</div>
             <div className="text-2xl font-bold text-primary">${costYear.toFixed(2)}</div>
             <div className="text-xs text-muted-foreground">{kwhPerYear.toFixed(2)} kWh</div>

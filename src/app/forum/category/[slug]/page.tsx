@@ -143,7 +143,7 @@ export default async function CategoryPage({
 
         {/* Related guides for this category's topics */}
         {category.guides.length > 0 && (
-          <SectionCard
+          <SectionCard spotlight
             className="mb-6"
             compact
             title={<span className="flex items-center gap-2 text-sm"><BookOpen className="w-4 h-4 text-spectrum" />Related Guides</span>}

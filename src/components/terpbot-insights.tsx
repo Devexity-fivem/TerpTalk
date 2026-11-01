@@ -40,7 +40,7 @@ export default function TerpBotInsights({ compact }: { compact: boolean }) {
   if (state === "error") return null
 
   return (
-    <SectionCard
+    <SectionCard spotlight
       title="TerpBot insights"
       id="terpbot-insights"
       compact={compact}

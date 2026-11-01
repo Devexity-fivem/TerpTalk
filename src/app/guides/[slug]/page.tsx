@@ -147,7 +147,7 @@ export default async function GuidePage({ params }: { params: Promise<{ slug: st
         {(relatedGuides.length > 0 || relatedThreads.length > 0) && (
           <div className="mt-6 space-y-6">
             {relatedGuides.length > 0 && (
-              <SectionCard title={<span className="flex items-center gap-2"><BookOpen className="w-4 h-4 text-primary" />Related guides</span>}>
+              <SectionCard spotlight title={<span className="flex items-center gap-2"><BookOpen className="w-4 h-4 text-primary" />Related guides</span>}>
                 <ul className="space-y-2">
                   {relatedGuides.map((g) => (
                     <li key={g.slug}>
@@ -161,7 +161,7 @@ export default async function GuidePage({ params }: { params: Promise<{ slug: st
               </SectionCard>
             )}
             {relatedThreads.length > 0 && (
-              <SectionCard title={<span className="flex items-center gap-2"><MessageSquare className="w-4 h-4 text-primary" />Related discussions</span>}>
+              <SectionCard spotlight title={<span className="flex items-center gap-2"><MessageSquare className="w-4 h-4 text-primary" />Related discussions</span>}>
                 <ul className="space-y-2">
                   {relatedThreads.map((t) => (
                     <li key={t.slug}>

@@ -189,7 +189,7 @@ export default async function SetupPage({ params }: { params: Promise<{ id: stri
         </div>
 
         {/* Specs */}
-        <SectionCard
+        <SectionCard spotlight
           className="mb-6"
           title={<span className="flex items-center gap-2"><Settings className="w-5 h-5 text-primary" /> Equipment &amp; Specs</span>}
         >
@@ -214,7 +214,7 @@ export default async function SetupPage({ params }: { params: Promise<{ id: stri
 
         {/* Grows using this setup */}
         {usedIn.length > 0 && (
-          <SectionCard className="mb-6" title={`Used in ${usedIn.length} grow${usedIn.length === 1 ? "" : "s"}`}>
+          <SectionCard spotlight className="mb-6" title={`Used in ${usedIn.length} grow${usedIn.length === 1 ? "" : "s"}`}>
             <ul className="grid sm:grid-cols-2 gap-3">
               {usedIn.map((d) => (
                 <li key={d.id}>
@@ -243,7 +243,7 @@ export default async function SetupPage({ params }: { params: Promise<{ id: stri
         )}
 
         {/* Comments */}
-        <SectionCard
+        <SectionCard spotlight
           title={<span className="flex items-center gap-2"><MessageSquare className="w-5 h-5 text-primary" /> Comments ({setup._count.comments})</span>}
         >
           <div className="space-y-4 mb-6">

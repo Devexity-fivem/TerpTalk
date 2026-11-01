@@ -104,7 +104,7 @@ export default function NotificationSettingsPage() {
 
         <h2 id="notifications" className="font-display text-lg font-semibold mb-3 scroll-mt-20">Notifications</h2>
 
-        <div className="bg-card/80 rounded-2xl border border-border/70 divide-y divide-border">
+        <div className="tt-spotlight bg-card/80 rounded-2xl border border-border/70 divide-y divide-border">
           {TOGGLES.map(({ key, label, desc }) => (
             <label key={key} className="flex items-start justify-between gap-4 p-4 cursor-pointer hover:bg-secondary/30 transition-colors">
               <div>
@@ -124,12 +124,12 @@ export default function NotificationSettingsPage() {
         {/* Delivery channel — not another preference. What gets created is
             decided by the toggles above; this only adds OS-level delivery
             on this device for a small set of high-value types. */}
-        <div className="mt-4 bg-card/80 rounded-2xl border border-border/70 p-4">
+        <div className="mt-4 tt-spotlight bg-card/80 rounded-2xl border border-border/70 p-4">
           <PushToggle variant="settings" />
         </div>
 
         <h2 id="privacy" className="font-display text-lg font-semibold mt-8 mb-3 scroll-mt-20">Privacy</h2>
-        <div className="bg-card/80 rounded-2xl border border-border/70 divide-y divide-border">
+        <div className="tt-spotlight bg-card/80 rounded-2xl border border-border/70 divide-y divide-border">
           {PRIVACY_TOGGLES.map(({ key, label, desc }) => (
             <label key={key} className="flex items-start justify-between gap-4 p-4 cursor-pointer hover:bg-secondary/30 transition-colors">
               <div>

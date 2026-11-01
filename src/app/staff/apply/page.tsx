@@ -114,7 +114,7 @@ export default function StaffApplyPage() {
   if (!session) {
     return (
       <main className="min-h-screen max-w-3xl mx-auto px-4 py-12">
-        <div className="rounded-2xl border border-border bg-card p-8 text-center">
+        <div className="tt-spotlight rounded-2xl border border-border bg-card p-8 text-center">
           <AlertCircle className="w-10 h-10 text-muted-foreground mx-auto mb-4" />
           <h1 className="text-2xl font-bold mb-2">Sign in to apply</h1>
           <p className="text-muted-foreground mb-6">You need an account to apply for a staff role.</p>
@@ -129,7 +129,7 @@ export default function StaffApplyPage() {
   if (isStaff) {
     return (
       <main className="min-h-screen max-w-3xl mx-auto px-4 py-12">
-        <div className="rounded-2xl border border-border bg-card p-8 text-center">
+        <div className="tt-spotlight rounded-2xl border border-border bg-card p-8 text-center">
           <Shield className="w-10 h-10 text-primary mx-auto mb-4" />
           <h1 className="text-2xl font-bold mb-2">You are already on staff</h1>
           <p className="text-muted-foreground mb-6">Contact an administrator if you want to discuss a role change.</p>
@@ -188,7 +188,7 @@ export default function StaffApplyPage() {
         })}
       </div>
 
-      <div className="rounded-2xl border border-border bg-card p-6">
+      <div className="tt-spotlight rounded-2xl border border-border bg-card p-6">
         <div className="flex items-center gap-2 mb-4">
           <Users className="w-5 h-5 text-primary" />
           <h2 className="text-xl font-semibold">Application for {selected.title}</h2>

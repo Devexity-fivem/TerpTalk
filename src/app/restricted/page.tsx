@@ -56,7 +56,7 @@ export default function RestrictedPage() {
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center px-4">
-      <div className="w-full max-w-md bg-card/80 border border-border/70 rounded-2xl p-6">
+      <div className="w-full max-w-md tt-spotlight bg-card/80 border border-border/70 rounded-2xl p-6">
         <div className="flex items-center gap-2 mb-2">
           <Shield className="w-5 h-5 text-primary" />
           <h1 className="font-display text-xl font-bold">Restricted account</h1>

@@ -55,7 +55,7 @@ function ProfileBadges({
   const hasMore = sortedBadges.length > 6
 
   return (
-    <SectionCard
+    <SectionCard spotlight
       id="hub-badges"
       compact={compact}
       title={<span className="flex items-center gap-2"><Award className="w-5 h-5 text-primary" />Badges</span>}
@@ -226,7 +226,7 @@ function PinnedHarvestPicker({
     }
   }
   return (
-    <SectionCard
+    <SectionCard spotlight
       id="hub-pinned-harvest"
       compact={compact}
       title={<span className="flex items-center gap-2"><Pin className="w-5 h-5 text-primary" />Pinned harvest</span>}
@@ -872,7 +872,7 @@ export default function ProfilePage() {
         <div className="grid md:grid-cols-2 gap-4 md:gap-6">
           {tab === "profile" && (<>
           {/* Grow Diaries */}
-          <SectionCard
+          <SectionCard spotlight
             id="hub-diaries"
             compact={compact}
             title={<span className="flex items-center gap-2"><Leaf className="w-5 h-5 text-primary" />Grow Diaries</span>}
@@ -903,7 +903,7 @@ export default function ProfilePage() {
           </SectionCard>
 
           {/* Discussion Posts */}
-          <SectionCard
+          <SectionCard spotlight
             id="hub-discussions"
             compact={compact}
             title={<span className="flex items-center gap-2"><MessageSquare className="w-5 h-5 text-primary" />Recent Discussions</span>}
@@ -955,7 +955,7 @@ export default function ProfilePage() {
           <div className="grid gap-4 md:gap-6 md:grid-cols-2 items-start">
           <div className="space-y-4 md:space-y-6">
           {/* Rank */}
-          <SectionCard
+          <SectionCard spotlight
             id="hub-growth"
             compact={compact}
             title={<span className="flex items-center gap-2"><TrendingUp className="w-5 h-5 text-primary" />Your Growth<InfoTip content="Your grow level rises with XP. Levels are grouped into stages — finish a stage to level up. Ranks are the long arc and unlock community perks." /></span>}
@@ -1037,7 +1037,7 @@ export default function ProfilePage() {
           <SavedSearches />
 
           {/* Referrals */}
-          <SectionCard
+          <SectionCard spotlight
             id="hub-referrals"
             compact={compact}
             title={<span className="flex items-center gap-2"><User className="w-5 h-5 text-primary" />Referrals</span>}
@@ -1081,7 +1081,7 @@ export default function ProfilePage() {
           {/* Account Controls — the #account anchor must stay on a real
               element (SectionCard ids label the heading, not the section). */}
           <div id="account" className="scroll-mt-20">
-          <SectionCard compact={compact} title="Privacy &amp; Account">
+          <SectionCard spotlight compact={compact} title="Privacy &amp; Account">
             <div className="space-y-3">
               <a
                 href="/api/profile/export"

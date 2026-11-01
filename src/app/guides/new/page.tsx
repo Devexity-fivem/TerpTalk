@@ -56,7 +56,7 @@ export default function NewGuidePage() {
         <h1 className="font-display text-2xl font-bold mb-6 flex items-center gap-2 tracking-tight">
           <BookOpen className="w-6 h-6 text-primary" /> New Guide
         </h1>
-        <form onSubmit={submit} className="bg-card/80 border border-border/70 rounded-2xl p-6 space-y-4">
+        <form onSubmit={submit} className="tt-spotlight bg-card/80 border border-border/70 rounded-2xl p-6 space-y-4">
           <div>
             <label className="block text-sm font-medium mb-1">Title</label>
             <input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} required maxLength={120} className={inputCls} placeholder="e.g. Your First Grow: A Complete Checklist" />

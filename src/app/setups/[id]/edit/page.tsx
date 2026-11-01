@@ -54,7 +54,7 @@ export default async function EditSetupPage({ params }: { params: Promise<{ id: 
           </p>
         </div>
 
-        <div className="bg-card/80 rounded-2xl border border-border/70 p-6">
+        <div className="tt-spotlight bg-card/80 rounded-2xl border border-border/70 p-6">
           <EditSetupForm
             setupId={setup.id}
             setupHref={setupPath(setup)}

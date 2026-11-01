@@ -87,7 +87,7 @@ export default function NewDiaryClient({
         </div>
 
         {/* Form */}
-        <div className="bg-card/80 rounded-2xl border border-border/70 p-6">
+        <div className="tt-spotlight bg-card/80 rounded-2xl border border-border/70 p-6">
           <DiaryForm
             initial={{ ...EMPTY_FORM, ...(prefill ?? {}) }}
             submitLabel="Create Diary"

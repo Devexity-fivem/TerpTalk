@@ -274,7 +274,7 @@ export default async function DiariesPage({
         />
 
         {/* Community grow data — aggregate-only stats, descriptive wording */}
-        <SectionCard
+        <SectionCard spotlight
           className="mb-6 tt-edge-card"
           title={
             <span className="flex items-center gap-2">

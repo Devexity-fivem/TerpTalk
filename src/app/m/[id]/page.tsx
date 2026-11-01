@@ -60,12 +60,12 @@ export default async function MomentPage({ params, searchParams }: { params: Pro
           moment's visibility; guests and non-followers record nothing. */}
       <EventBeacon type="FOLLOWED_CONTENT_VIEWED" source={via} objectType="Moment" objectId={moment.id} />
       <div className="max-w-2xl mx-auto px-4 py-8">
-        <div className="tt-spotlight bg-card/80 rounded-2xl border border-border/70 mb-6">
+        <div className="tt-spotlight tt-spotlight bg-card/80 rounded-2xl border border-border/70 mb-6">
           <MomentCard moment={moment} variant="detail" />
         </div>
 
         {commentTargetId && (
-          <SectionCard
+          <SectionCard spotlight
             title={
               <span className="flex items-center gap-2">
                 <MessageSquare className="w-5 h-5 text-primary" /> Comments ({moment.isRepost ? moment.repostOf!.counts.comments : moment.counts.comments})

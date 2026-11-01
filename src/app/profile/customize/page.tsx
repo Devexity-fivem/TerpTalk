@@ -494,7 +494,7 @@ export default function ProfileCustomizePage() {
               {/* ── APPEARANCE ── */}
               {active === "appearance" && (
                 <>
-                  <SectionCard title="Theme" description="A preset look for your profile surfaces.">
+                  <SectionCard spotlight title="Theme" description="A preset look for your profile surfaces.">
                     <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3" role="radiogroup" aria-label="Theme">
                       {THEME_META.map((t) => (
                         <button
@@ -518,7 +518,7 @@ export default function ProfileCustomizePage() {
                     </div>
                   </SectionCard>
 
-                  <SectionCard title="Accent" description="The action color on your profile — buttons, links, selected tabs.">
+                  <SectionCard spotlight title="Accent" description="The action color on your profile — buttons, links, selected tabs.">
                     <div className="grid gap-2 grid-cols-2 sm:grid-cols-3 lg:grid-cols-5" role="radiogroup" aria-label="Accent">
                       {ACCENT_META.map((a) => (
                         <button
@@ -540,7 +540,7 @@ export default function ProfileCustomizePage() {
                     </div>
                   </SectionCard>
 
-                  <SectionCard title="Density" description="How tightly your profile packs its sections.">
+                  <SectionCard spotlight title="Density" description="How tightly your profile packs its sections.">
                     <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Density">
                       {DENSITY_META.map((d) => (
                         <button
@@ -561,7 +561,7 @@ export default function ProfileCustomizePage() {
                     </div>
                   </SectionCard>
 
-                  <SectionCard title="Banner" description="An image strip across the top of your profile. Images are resized, stripped of metadata, and stored on TerpTalk storage.">
+                  <SectionCard spotlight title="Banner" description="An image strip across the top of your profile. Images are resized, stripped of metadata, and stored on TerpTalk storage.">
                     <div className="flex items-center gap-2 flex-wrap">
                       <input
                         ref={bannerInputRef}
@@ -602,7 +602,7 @@ export default function ProfileCustomizePage() {
               {/* ── LAYOUT ── */}
               {active === "layout" && (
                 <>
-                  <SectionCard title="Tab order" description="Overview always leads — reorder the rest with the arrows.">
+                  <SectionCard spotlight title="Tab order" description="Overview always leads — reorder the rest with the arrows.">
                     <ul className="space-y-1.5">
                       <li className="flex items-center gap-2 rounded-xl border border-dashed border-border px-3 py-2 text-sm text-muted-foreground">
                         <span className="font-medium text-foreground">Overview</span>
@@ -628,7 +628,7 @@ export default function ProfileCustomizePage() {
                     </ul>
                   </SectionCard>
 
-                  <SectionCard title="Overview order" description="The stacked blocks on your profile home.">
+                  <SectionCard spotlight title="Overview order" description="The stacked blocks on your profile home.">
                     <ul className="space-y-1.5">
                       {blockOrder.filter((id) => ["featured", "stats", "records", "pinned", "history"].includes(id)).map((id, i, arr) => (
                         <ReorderRow
@@ -663,7 +663,7 @@ export default function ProfileCustomizePage() {
                     </ul>
                   </SectionCard>
 
-                  <SectionCard title="Hidden sections" description="Hide what you don't want on your profile. Hidden tabs and blocks disappear completely.">
+                  <SectionCard spotlight title="Hidden sections" description="Hide what you don't want on your profile. Hidden tabs and blocks disappear completely.">
                     <ul className="grid gap-1.5 sm:grid-cols-2">
                       {PROFILE_SECTION_IDS.filter((id) => id !== "overview").map((id) => {
                         const info = SECTION_INFO[id]
@@ -699,7 +699,7 @@ export default function ProfileCustomizePage() {
                     </ul>
                   </SectionCard>
 
-                  <SectionCard title="Pinned section" description="Pin one of your custom sections near the top of your overview.">
+                  <SectionCard spotlight title="Pinned section" description="Pin one of your custom sections near the top of your overview.">
                     <select
                       value={settings.pinnedSection ?? ""}
                       onChange={(e) => setSettings((s) => s && { ...s, pinnedSection: e.target.value || null })}
@@ -721,7 +721,7 @@ export default function ProfileCustomizePage() {
               {/* ── CONTENT ── */}
               {active === "content" && (
                 <>
-                  <SectionCard title="Featured grow" description="Lead your profile with the grow you're proudest of — any visibility works; visitors only see it if it's public.">
+                  <SectionCard spotlight title="Featured grow" description="Lead your profile with the grow you're proudest of — any visibility works; visitors only see it if it's public.">
                     <div className="flex items-center gap-2 flex-wrap">
                       <select
                         value={featuredId ?? ""}
@@ -742,7 +742,7 @@ export default function ProfileCustomizePage() {
                     <p className="text-xs text-muted-foreground mt-2">Leave empty to show your freshest active grow automatically.</p>
                   </SectionCard>
 
-                  <SectionCard
+                  <SectionCard spotlight
                     title="Custom sections"
                     description={`Markdown-formatted sections on your About tab. ${sections.length} of ${sectionLimit} used${sectionLimit < 8 ? " — higher ranks unlock more" : ""}.`}
                     actions={
@@ -818,7 +818,7 @@ export default function ProfileCustomizePage() {
                     )}
                   </SectionCard>
 
-                  <SectionCard title="Widgets" description="Progression widgets — they appear on your profile automatically once unlocked.">
+                  <SectionCard spotlight title="Widgets" description="Progression widgets — they appear on your profile automatically once unlocked.">
                     <ul className="space-y-1.5">
                       {PROFILE_WIDGETS.map((w) => {
                         const unlocked = w.id === "records" ? widgets.records : widgets.ownerInsights
@@ -843,7 +843,7 @@ export default function ProfileCustomizePage() {
               {/* ── IDENTITY ── */}
               {active === "identity" && (
                 <>
-                  <SectionCard
+                  <SectionCard spotlight
                     title="Notable stats"
                     description={`Pick the stats shown on your profile — ${settings.shownStats.length} of ${statSlots} slots${statSlots < 8 ? " (higher ranks unlock more)" : ""}.`}
                   >
@@ -877,7 +877,7 @@ export default function ProfileCustomizePage() {
                     <p className="text-xs text-muted-foreground mt-2">The first four show in your hero; the rest appear on your overview.</p>
                   </SectionCard>
 
-                  <SectionCard title="Grow mediums" description="What you grow in — shown as chips on your profile.">
+                  <SectionCard spotlight title="Grow mediums" description="What you grow in — shown as chips on your profile.">
                     <ChipPicker
                       options={PROFILE_MEDIUMS}
                       selected={settings.identity.mediums}
@@ -890,7 +890,7 @@ export default function ProfileCustomizePage() {
                     />
                   </SectionCard>
 
-                  <SectionCard title="Growing style" description="How you run your grows.">
+                  <SectionCard spotlight title="Growing style" description="How you run your grows.">
                     <ChipPicker
                       options={PROFILE_STYLES}
                       selected={settings.identity.styles}
@@ -903,7 +903,7 @@ export default function ProfileCustomizePage() {
                     />
                   </SectionCard>
 
-                  <SectionCard title="Goals" description="What you're working toward — up to 280 characters.">
+                  <SectionCard spotlight title="Goals" description="What you're working toward — up to 280 characters.">
                     <textarea
                       value={settings.identity.goals}
                       maxLength={PROFILE_GOALS_MAX}

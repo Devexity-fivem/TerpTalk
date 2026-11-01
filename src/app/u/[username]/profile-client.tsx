@@ -540,7 +540,7 @@ function MemberProfile({ data, isSelf, username }: { data: ProfileResponse; isSe
   // sectionOrder positions the fixed overview blocks; hidden blocks drop
   // out; gated widgets render only when their data is actually shipped.
   const featuredBlock = profile.featuredGrow && show("featured") && (
-    <SectionCard title="Featured grow" id="featured-grow" compact={compact}>
+    <SectionCard spotlight title="Featured grow" id="featured-grow" compact={compact}>
       <GrowRow grow={profile.featuredGrow} />
     </SectionCard>
   )
@@ -551,7 +551,7 @@ function MemberProfile({ data, isSelf, username }: { data: ProfileResponse; isSe
           Relative share bars, not five competing currencies. Empty for
           members who opted out of public status display (server ships []). */}
       {profile.mastery.length > 0 && (
-      <SectionCard
+      <SectionCard spotlight
         title="Grower profile"
         id="mastery-map"
         compact={compact}
@@ -585,7 +585,7 @@ function MemberProfile({ data, isSelf, username }: { data: ProfileResponse; isSe
 
       {/* Expanded stats — the full ≤8 registry beyond the hero 4 */}
       {profile.notableStats.length > heroStats.length && (
-        <SectionCard title="At a glance" id="profile-stats" compact={compact}>
+        <SectionCard spotlight title="At a glance" id="profile-stats" compact={compact}>
           <StatStrip
             className="sm:grid-cols-4"
             items={profile.notableStats.map((s) => ({ label: s.label, value: s.value, hint: s.hint }))}
@@ -596,7 +596,7 @@ function MemberProfile({ data, isSelf, username }: { data: ProfileResponse; isSe
       {/* Progression — informative, never the point of the page. Server
           nulls rank/xp fields for opt-outs, so the whole card drops out. */}
       {profile.rank && profile.rankProgress && (
-      <SectionCard title="Progression" id="progression" compact={compact} actions={<Link href="/reputation" className="text-xs text-primary hover:underline">How it works</Link>}>
+      <SectionCard spotlight title="Progression" id="progression" compact={compact} actions={<Link href="/reputation" className="text-xs text-primary hover:underline">How it works</Link>}>
         <div className="flex items-center gap-2 flex-wrap text-sm mb-2">
           <span className={cn("inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium", profile.rank.bg, profile.rank.color)}>
             <span aria-hidden="true">{profile.rank.icon}</span> {profile.rank.name}
@@ -633,7 +633,7 @@ function MemberProfile({ data, isSelf, username }: { data: ProfileResponse; isSe
   )
 
   const recordsBlock = profile.records && show("records") && (
-    <SectionCard title="Records" id="records" compact={compact} description="Personal records across visible grows">
+    <SectionCard spotlight title="Records" id="records" compact={compact} description="Personal records across visible grows">
       <ul className="grid gap-3 sm:grid-cols-3 text-sm">
         <li>
           <p className="text-xs text-muted-foreground mb-0.5">Longest grow</p>
@@ -660,13 +660,13 @@ function MemberProfile({ data, isSelf, username }: { data: ProfileResponse; isSe
   )
 
   const pinnedBlock = pinnedSection && (
-    <SectionCard title={pinnedSection.title} id="pinned-section" compact={compact}>
+    <SectionCard spotlight title={pinnedSection.title} id="pinned-section" compact={compact}>
       <div className="prose-sm max-w-none text-sm"><MarkdownRenderer content={pinnedSection.body} /></div>
     </SectionCard>
   )
 
   const historyBlock = show("history") && (
-    <SectionCard title="Recent activity" id="recent-activity" compact={compact}>
+    <SectionCard spotlight title="Recent activity" id="recent-activity" compact={compact}>
       {recentThreads.length === 0 && recentProgression.length === 0 ? (
         <EmptyState compact title="Nothing public yet" description="Activity appears here as it happens." />
       ) : (
@@ -703,7 +703,7 @@ function MemberProfile({ data, isSelf, username }: { data: ProfileResponse; isSe
   // leads with one grow, so it's filtered out to avoid a double render.
   const extraGrows = profile.currentGrows.filter((g) => g.id !== heroGrow?.id)
   const growingBlock = extraGrows.length > 0 && show("growing") && (
-    <SectionCard
+    <SectionCard spotlight
       title="Currently growing" id="currently-growing" compact={compact}
       description={`${profile.stats.activeGrows} active grow${profile.stats.activeGrows === 1 ? "" : "s"}`}
     >
@@ -950,7 +950,7 @@ function MemberProfile({ data, isSelf, username }: { data: ProfileResponse; isSe
               )}
 
               {active === "posts" && show("posts") && (
-                <SectionCard
+                <SectionCard spotlight
                   title="Posts" id="posts" compact={compact}
                   description="Posts, photos, reposts and quotes — newest first"
                 >
@@ -972,7 +972,7 @@ function MemberProfile({ data, isSelf, username }: { data: ProfileResponse; isSe
               )}
 
               {active === "media" && show("media") && (
-                <SectionCard
+                <SectionCard spotlight
                   title="Media" id="media" compact={compact}
                   description="Photos from posts and grow updates"
                 >
@@ -1000,7 +1000,7 @@ function MemberProfile({ data, isSelf, username }: { data: ProfileResponse; isSe
               )}
 
               {active === "activity" && show("activity") && (
-                <SectionCard
+                <SectionCard spotlight
                   title="Activity" id="activity" compact={compact}
                   description="Recent updates, discussions, and harvests — newest first"
                 >
@@ -1036,7 +1036,7 @@ function MemberProfile({ data, isSelf, username }: { data: ProfileResponse; isSe
               {active === "grows" && show("grows") && (
                 <div className="space-y-4">
                   {profile.strainPortfolio.length > 0 && (
-                    <SectionCard
+                    <SectionCard spotlight
                       title="Strain portfolio" id="strain-portfolio" compact={compact}
                       description={`Strains across this member's visible grows${profile.strainTotal > profile.strainPortfolio.length ? ` — top ${profile.strainPortfolio.length} of ${profile.strainTotal}` : ""}`}
                       actions={profile.strainTotal > profile.strainPortfolio.length || showAllStrains ? (
@@ -1074,7 +1074,7 @@ function MemberProfile({ data, isSelf, username }: { data: ProfileResponse; isSe
                       {showAllStrains && <LoadMore loading={strainsSection.loading} done={!strainsSection.hasMore && strainsSection.items.length > 0} onMore={strainsSection.loadMore} />}
                     </SectionCard>
                   )}
-                  <SectionCard title="Grow portfolio" id="grow-portfolio" compact={compact} description={`${profile.stats.diaryCreator} grow${profile.stats.diaryCreator === 1 ? "" : "s"} — active first`}>
+                  <SectionCard spotlight title="Grow portfolio" id="grow-portfolio" compact={compact} description={`${profile.stats.diaryCreator} grow${profile.stats.diaryCreator === 1 ? "" : "s"} — active first`}>
                     <div className="flex flex-wrap items-center gap-2 mb-3" role="group" aria-label="Grow filters">
                       <select value={growStatus} onChange={(e) => setGrowStatus(e.target.value as "" | "active" | "completed")} className={filterSelect} aria-label="Status">
                         <option value="">All grows</option>
@@ -1123,7 +1123,7 @@ function MemberProfile({ data, isSelf, username }: { data: ProfileResponse; isSe
                   {/* Deterministic harvest highlights — every line derives
                       from the harvests the viewer can actually see. */}
                   {profile.harvestHighlights && (
-                    <SectionCard title="Harvest highlights" id="harvest-highlights" compact={compact}>
+                    <SectionCard spotlight title="Harvest highlights" id="harvest-highlights" compact={compact}>
                       <dl className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-sm">
                         <div><dt className="text-xs text-muted-foreground">Harvests</dt><dd className="font-semibold tabular-nums">{profile.harvestHighlights.harvestCount}</dd></div>
                         {profile.harvestHighlights.firstHarvestAt && (
@@ -1145,7 +1145,7 @@ function MemberProfile({ data, isSelf, username }: { data: ProfileResponse; isSe
                     </SectionCard>
                   )}
                   {profile.pinnedHarvest && (
-                    <SectionCard title={<span className="flex items-center gap-1.5"><Pin className="w-4 h-4 text-warning" />Pinned harvest</span>} id="pinned-harvest" compact={compact}>
+                    <SectionCard spotlight title={<span className="flex items-center gap-1.5"><Pin className="w-4 h-4 text-warning" />Pinned harvest</span>} id="pinned-harvest" compact={compact}>
                       <Link
                         href={diaryPath(profile.pinnedHarvest)}
                         className="block rounded-xl border border-amber-500/30 bg-amber-500/5 p-3 transition-colors hover:bg-amber-500/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
@@ -1160,7 +1160,7 @@ function MemberProfile({ data, isSelf, username }: { data: ProfileResponse; isSe
                       </Link>
                     </SectionCard>
                   )}
-                  <SectionCard title="Harvest shelf" id="harvest-shelf" compact={compact} description={`${profile.stats.harvestCount} completed grow${profile.stats.harvestCount === 1 ? "" : "s"}`}>
+                  <SectionCard spotlight title="Harvest shelf" id="harvest-shelf" compact={compact} description={`${profile.stats.harvestCount} completed grow${profile.stats.harvestCount === 1 ? "" : "s"}`}>
                     {(profile.strainPortfolio.length > 1 || profile.harvestYears.length > 0) && (
                       <div className="flex flex-wrap items-center gap-2 mb-3" role="group" aria-label="Harvest filters">
                         {profile.strainPortfolio.length > 1 && (
@@ -1342,7 +1342,7 @@ function ContributionsTab({
   return (
     <div className="space-y-4">
       {profile.stats.acceptedAnswers > 0 && (
-        <SectionCard
+        <SectionCard spotlight
           title="Accepted answers"
           id="accepted-answers" compact={compact}
           description={`${profile.stats.acceptedAnswers} answer${profile.stats.acceptedAnswers === 1 ? "" : "s"} marked correct by the asker`}
@@ -1367,7 +1367,7 @@ function ContributionsTab({
       )}
 
       {profile.experiments.length > 0 && (
-        <SectionCard title="Experiments" id="experiments" compact={compact} description={`${profile.stats.experiments} documented experiment${profile.stats.experiments === 1 ? "" : "s"}`}>
+        <SectionCard spotlight title="Experiments" id="experiments" compact={compact} description={`${profile.stats.experiments} documented experiment${profile.stats.experiments === 1 ? "" : "s"}`}>
           <ul className="space-y-2">
             {profile.experiments.map((e) => (
               <li key={e.id} className="flex items-start gap-2.5 rounded-lg p-2 -m-2">
@@ -1390,7 +1390,7 @@ function ContributionsTab({
       )}
 
       {growSetups.length > 0 && (
-        <SectionCard title="Grow setups" id="grow-setups" compact={compact} description={`${profile.stats.setups} shared`}>
+        <SectionCard spotlight title="Grow setups" id="grow-setups" compact={compact} description={`${profile.stats.setups} shared`}>
           <ul className="grid gap-2 sm:grid-cols-2">
             {growSetups.map((s) => (
               <li key={s.id}>
@@ -1420,7 +1420,7 @@ function ContributionsTab({
       )}
 
       {profile.stats.contestWins > 0 && (
-        <SectionCard title="Contests" id="contests" compact={compact}>
+        <SectionCard spotlight title="Contests" id="contests" compact={compact}>
           <p className="text-sm flex items-center gap-2">
             <Trophy className="w-4 h-4 text-warning" aria-hidden="true" />
             <span><span className="font-semibold tabular-nums">{profile.stats.contestWins}</span> contest win{profile.stats.contestWins === 1 ? "" : "s"}</span>
@@ -1429,7 +1429,7 @@ function ContributionsTab({
       )}
 
       {recentThreads.length > 0 && (
-        <SectionCard title="Discussions" id="discussions" compact={compact}>
+        <SectionCard spotlight title="Discussions" id="discussions" compact={compact}>
           <ul className="space-y-2">
             {recentThreads.map((t) => (
               <li key={t.id}>
@@ -1444,7 +1444,7 @@ function ContributionsTab({
       )}
 
       {(pinnedBadges.length > 0 || restBadges.length > 0) && (
-        <SectionCard title="Badges" id="badges" compact={compact}>
+        <SectionCard spotlight title="Badges" id="badges" compact={compact}>
           {pinnedBadges.length > 0 && (
             <>
               <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">Showcase</p>
@@ -1495,7 +1495,7 @@ function CollapsibleSectionCard({
   }, [])
 
   if (!isMobile) {
-    return <SectionCard id={id} title={title} compact={compact}>{children}</SectionCard>
+    return <SectionCard spotlight id={id} title={title} compact={compact}>{children}</SectionCard>
   }
   const headingId = `${id}-title`
   return (
@@ -1536,7 +1536,7 @@ function AboutTab({ profile, isSelf, compact }: { profile: PublicProfile; isSelf
       {/* Profile insights (Cured) — the owner's private 30-day panel.
           Server ships ownerInsights only to the owner; double-gated here. */}
       {isSelf && profile.ownerInsights && !profile.profileSettings.hiddenSections.includes("owner-insights") && (
-        <SectionCard
+        <SectionCard spotlight
           title="Your last 30 days"
           id="owner-insights"
           compact={compact}
@@ -1560,13 +1560,13 @@ function AboutTab({ profile, isSelf, compact }: { profile: PublicProfile; isSelf
       )}
 
       {profile.bio && (
-        <SectionCard title="Bio" id="bio" compact={compact}>
+        <SectionCard spotlight title="Bio" id="bio" compact={compact}>
           <p className="text-sm whitespace-pre-wrap wrap-break-word">{profile.bio}</p>
         </SectionCard>
       )}
 
       {hasIdentity && (
-        <SectionCard title="Grower identity" id="grower-identity" compact={compact}>
+        <SectionCard spotlight title="Grower identity" id="grower-identity" compact={compact}>
           <dl className="grid gap-3 text-sm sm:grid-cols-2">
             {profile.growExperience && (
               <div><dt className="text-xs text-muted-foreground mb-0.5">Experience</dt><dd>{profile.growExperience}</dd></div>
@@ -1605,7 +1605,7 @@ function AboutTab({ profile, isSelf, compact }: { profile: PublicProfile; isSelf
       {/* Equipment — derived label chips from the member's documented
           grows (label-first; catalog-ready when products land). */}
       {profile.equipmentChips.length > 0 && (
-        <SectionCard title="Equipment & methods" id="equipment" compact={compact} description="From documented grows — mediums, lighting, space, techniques">
+        <SectionCard spotlight title="Equipment & methods" id="equipment" compact={compact} description="From documented grows — mediums, lighting, space, techniques">
           <div className="flex flex-wrap gap-1.5">
             {profile.equipmentChips.map((c) => <Tag key={c} variant="muted">{c}</Tag>)}
           </div>
@@ -1613,7 +1613,7 @@ function AboutTab({ profile, isSelf, compact }: { profile: PublicProfile; isSelf
       )}
 
       {profile.businessName && (
-        <SectionCard title="Business" id="business" compact={compact}>
+        <SectionCard spotlight title="Business" id="business" compact={compact}>
           <div className="flex items-center gap-2 text-sm font-medium">
             <Store className="w-4 h-4 text-primary" />
             <span>{profile.businessName}</span>
@@ -1740,7 +1740,7 @@ function BotProfile({ data }: { data: ProfileResponse }) {
         </div>
 
         {/* ── Command menu — the real registry, grouped ─────────── */}
-        <SectionCard
+        <SectionCard spotlight
           title={<span className="flex items-center gap-2"><Terminal className="w-4 h-4 text-primary" />My playbook — {commandCount} commands</span>}
           className="mb-4"
         >
@@ -1790,7 +1790,7 @@ function BotProfile({ data }: { data: ProfileResponse }) {
         </SectionCard>
 
         {/* ── How I work ───────────────────────────────────────── */}
-        <SectionCard title={<span className="flex items-center gap-2"><ShieldCheck className="w-4 h-4 text-primary" />How I work</span>}>
+        <SectionCard spotlight title={<span className="flex items-center gap-2"><ShieldCheck className="w-4 h-4 text-primary" />How I work</span>}>
           <ul className="space-y-2.5 text-sm text-muted-foreground">
             <li className="flex gap-2">
               <Zap className="w-4 h-4 text-primary shrink-0 mt-0.5" />

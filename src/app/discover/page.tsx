@@ -186,14 +186,14 @@ export default async function DiscoverPage({
 
         {browse.layout === "trending" ? (
           <div className="space-y-6">
-            <SectionCard title={<span className="flex items-center gap-2"><Flame className="w-5 h-5 text-primary" />Trending discussions</span>}>
+            <SectionCard spotlight title={<span className="flex items-center gap-2"><Flame className="w-5 h-5 text-primary" />Trending discussions</span>}>
               {filtered(browse.threads).length === 0 ? (
                 <EmptyState icon={Flame} title={EMPTY.trending.title} description={EMPTY.trending.description} action={EMPTY.trending.action} />
               ) : (
                 <ItemGrid items={filtered(browse.threads)} />
               )}
             </SectionCard>
-            <SectionCard title={<span className="flex items-center gap-2"><Award className="w-5 h-5 text-primary" />Featured grows</span>}>
+            <SectionCard spotlight title={<span className="flex items-center gap-2"><Award className="w-5 h-5 text-primary" />Featured grows</span>}>
               {filtered(browse.diaries).length === 0 ? (
                 <p className="text-sm text-muted-foreground">No featured grows yet.</p>
               ) : (
@@ -203,7 +203,7 @@ export default async function DiscoverPage({
           </div>
         ) : activeTab === "growers" ? (
           <div className="space-y-6">
-            <SectionCard title={<span className="flex items-center gap-2"><Users className="w-5 h-5 text-primary" />Growers you may want to follow</span>}>
+            <SectionCard spotlight title={<span className="flex items-center gap-2"><Users className="w-5 h-5 text-primary" />Growers you may want to follow</span>}>
               {suggestedGrowers && suggestedGrowers.length > 0 ? (
                 <div className="grid sm:grid-cols-2 gap-3">
                   {suggestedGrowers.map((g) => (
@@ -218,14 +218,14 @@ export default async function DiscoverPage({
               const suggestedIds = new Set((suggestedGrowers ?? []).map((g) => g.userId))
               const rest = filtered(browse.layout === "list" ? browse.items : []).filter((i) => !suggestedIds.has(i.userId ?? ""))
               return rest.length === 0 ? null : (
-                <SectionCard title={<span className="flex items-center gap-2"><Users className="w-5 h-5 text-primary" />Active growers</span>}>
+                <SectionCard spotlight title={<span className="flex items-center gap-2"><Users className="w-5 h-5 text-primary" />Active growers</span>}>
                   <ItemGrid items={rest} />
                 </SectionCard>
               )
             })()}
           </div>
         ) : (
-          <SectionCard
+          <SectionCard spotlight
             title={
               <span className="flex items-center gap-2">
                 {activeTab === "questions" ? (

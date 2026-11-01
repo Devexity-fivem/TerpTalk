@@ -115,7 +115,7 @@ export default function NewStrainPage() {
         </div>
 
         {/* Form */}
-        <div className="bg-card/80 rounded-2xl border border-border/70 p-6">
+        <div className="tt-spotlight bg-card/80 rounded-2xl border border-border/70 p-6">
           <form onSubmit={handleSubmit} className="space-y-6">
             <div>
               <label htmlFor="name" className="block text-sm font-medium mb-2">

@@ -65,7 +65,7 @@ export default async function EditDiaryPage({ params }: { params: Promise<{ id: 
           </p>
         </div>
 
-        <div className="bg-card/80 rounded-2xl border border-border/70 p-6">
+        <div className="tt-spotlight bg-card/80 rounded-2xl border border-border/70 p-6">
           <EditDiaryForm
             diaryId={diary.id}
             diaryHref={diaryPath(diary)}

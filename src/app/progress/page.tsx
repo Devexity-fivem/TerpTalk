@@ -212,7 +212,7 @@ export default function ProgressPage() {
 
         {/* Garden streak — consecutive daily check-ins pay once-ever
             milestone bonuses. Missed days just restart the count. */}
-        <SectionCard
+        <SectionCard spotlight
           compact
           className="mb-4"
           id="garden-streak"
@@ -247,7 +247,7 @@ export default function ProgressPage() {
         </SectionCard>
 
         {/* The Path — every rank on the road to Master Gardener */}
-        <SectionCard
+        <SectionCard spotlight
           compact
           className="mb-4"
           id="path-to-mastery"
@@ -357,7 +357,7 @@ export default function ProgressPage() {
 
         {/* Getting Rooted journey */}
         {data.journey && !data.journey.complete && (
-          <SectionCard
+          <SectionCard spotlight
             compact
             className="mb-4"
             id="journey"
@@ -401,7 +401,7 @@ export default function ProgressPage() {
 
         {/* Trust standing */}
         {data.trust && (
-          <SectionCard
+          <SectionCard spotlight
             compact
             className="mb-4"
             id="community-trust"
@@ -431,7 +431,7 @@ export default function ProgressPage() {
 
         {/* Today's quests */}
         {data.quests && data.quests.items.length > 0 && (
-          <SectionCard
+          <SectionCard spotlight
             compact
             className="mb-4"
             id="daily-quests"
@@ -477,7 +477,7 @@ export default function ProgressPage() {
         )}
 
         {/* Weekly challenges */}
-        <SectionCard
+        <SectionCard spotlight
           compact
           className="mb-4"
           id="weekly-challenges"
@@ -518,7 +518,7 @@ export default function ProgressPage() {
 
         {/* Almost earned */}
         {data.nearBadges.length > 0 && (
-          <SectionCard
+          <SectionCard spotlight
             compact
             className="mb-4"
             id="almost-earned"
@@ -555,7 +555,7 @@ export default function ProgressPage() {
         )}
 
         {/* Recent wins + links */}
-        <SectionCard
+        <SectionCard spotlight
           compact
           id="recent-accomplishments"
           title={

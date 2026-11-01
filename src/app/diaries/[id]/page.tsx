@@ -732,7 +732,7 @@ export default async function DiaryPage({
 
         {/* Harvest report — the grow's final result, shown to everyone */}
         {harvestReport && (
-          <SectionCard
+          <SectionCard spotlight
             className="mt-4"
             title={<span className="flex items-center gap-2"><ClipboardCheck className="w-4 h-4 text-success" />Harvest Report</span>}
             actions={harvestReport.yieldAmount != null ? (
@@ -981,7 +981,7 @@ export default async function DiaryPage({
             currentWeek={diaryWeek(diary.startDate, now)}
           />
 
-          <SectionCard
+          <SectionCard spotlight
             compact
             className="mb-4"
             id="grow-progress"
@@ -1065,7 +1065,7 @@ export default async function DiaryPage({
           )}
 
           {compareRows.length > 0 && strainLink && (
-            <SectionCard
+            <SectionCard spotlight
               compact
               className="mb-4"
               id="community-comparison"

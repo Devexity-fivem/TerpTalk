@@ -17,6 +17,12 @@ interface SectionCardProps {
   padded?: boolean
   /** Tighter padding — profile "compact" density preset */
   compact?: boolean
+  /** Forwarded to Surface — cursor-tracking spotlight glow */
+  spotlight?: boolean
+  /** Forwarded to Surface — spectrum edge accent on hover */
+  edge?: boolean
+  /** Forwarded to Surface — lift hover animation */
+  lift?: boolean
 }
 
 /**
@@ -34,6 +40,9 @@ export default function SectionCard({
   className,
   padded = true,
   compact = false,
+  spotlight,
+  edge,
+  lift,
 }: SectionCardProps) {
   const headingId = id ? `${id}-title` : undefined
   const padding = !padded ? "none" : compact ? "sm" : "md"
@@ -43,6 +52,9 @@ export default function SectionCard({
       padding={padding}
       className={className}
       labelledBy={headingId}
+      spotlight={spotlight}
+      edge={edge}
+      lift={lift}
     >
       {(title || actions) && (
         <div className={cn("flex items-start justify-between gap-3", padded ? "mb-3" : "p-4 sm:p-5 pb-0", padded && !compact && "mb-4")}>

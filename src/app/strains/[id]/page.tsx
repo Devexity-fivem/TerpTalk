@@ -331,7 +331,7 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
             when at least one facet exists; values are reported, not
             lab-verified, so the wording stays honest. */}
         {(strain.effects.length > 0 || strain.flavors.length > 0 || strain.thcMin != null || strain.thcMax != null || strain.floweringWeeks != null || strain.seedToHarvestWeeks != null || strain.difficulty) && (
-          <SectionCard
+          <SectionCard spotlight
             className="mb-6"
             title={<span className="flex items-center gap-2"><Dna className="w-4 h-4 text-spectrum" />Characteristics</span>}
             actions={<span className="text-xs text-muted-foreground">member-reported</span>}
@@ -453,26 +453,26 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
 
         <div className="grid md:grid-cols-2 gap-6 mb-6 items-start">
           {strain.genetics && (
-            <SectionCard title={<span className="flex items-center gap-2"><Dna className="w-4 h-4 text-primary" />Genetics</span>}>
+            <SectionCard spotlight title={<span className="flex items-center gap-2"><Dna className="w-4 h-4 text-primary" />Genetics</span>}>
               <p className="text-sm text-muted-foreground whitespace-pre-wrap">{strain.genetics}</p>
             </SectionCard>
           )}
           {strain.growingInfo && (
-            <SectionCard title={<span className="flex items-center gap-2"><Sprout className="w-4 h-4 text-primary" />Growing Info</span>}>
+            <SectionCard spotlight title={<span className="flex items-center gap-2"><Sprout className="w-4 h-4 text-primary" />Growing Info</span>}>
               <p className="text-sm text-muted-foreground whitespace-pre-wrap">{strain.growingInfo}</p>
             </SectionCard>
           )}
         </div>
 
         {strain.description && (
-          <SectionCard className="mb-6" title="Description">
+          <SectionCard spotlight className="mb-6" title="Description">
             <p className="text-sm text-muted-foreground whitespace-pre-wrap">{strain.description}</p>
           </SectionCard>
         )}
 
         {/* Community grow data — stats stay honest about sample size */}
         {growStats.tier !== "none" && (
-          <SectionCard
+          <SectionCard spotlight
             className="mb-6"
             title={<span className="flex items-center gap-2"><BarChart3 className="w-4 h-4 text-primary" />Community grow data</span>}
             actions={
@@ -576,7 +576,7 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
             plus notable public harvests. Counts are public aggregates;
             list items are post-filtered for viewer blocks above. */}
         {(questions.total > 0 || harvestExamples.length > 0) && (
-          <SectionCard
+          <SectionCard spotlight
             className="mb-6"
             title={<span className="flex items-center gap-2"><HelpCircle className="w-4 h-4 text-primary" />Community knowledge</span>}
             actions={<span className="text-xs text-muted-foreground">from public records</span>}
@@ -664,7 +664,7 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
             lessons across public grows. Counts surface only above the
             minimum sample thresholds set in getStrainEvidence. */}
         {(evidence.experimentCount > 0 || evidence.lessons.length > 0) && (
-          <SectionCard
+          <SectionCard spotlight
             className="mb-6"
             title={<span className="flex items-center gap-2"><FlaskConical className="w-4 h-4 text-primary" />Documented approaches</span>}
             actions={<span className="text-xs text-muted-foreground">community records</span>}
@@ -716,7 +716,7 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
 
         {/* Member harvest reviews — real notes from growers who finished this strain */}
         {growStats.reviews.length > 0 && (
-          <SectionCard
+          <SectionCard spotlight
             className="mb-6"
             title={<span className="flex items-center gap-2"><Star className="w-4 h-4 text-warning" />Member reviews</span>}
           >
@@ -739,7 +739,7 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
 
         {/* Community diaries for this strain */}
         {relatedDiaries.length > 0 && (
-          <SectionCard
+          <SectionCard spotlight
             className="mb-6"
             title={<span className="flex items-center gap-2"><BookOpen className="w-4 h-4 text-primary" />Grows with this strain</span>}
           >
@@ -805,7 +805,7 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
             complement to the grow list above. Every card carries real
             strain evidence (contextOnly); empty when nobody qualifies. */}
         {contextGrowers.length > 0 && (
-          <SectionCard
+          <SectionCard spotlight
             className="mb-6"
             title={<span className="flex items-center gap-2"><Users className="w-4 h-4 text-primary" />Growers growing this strain</span>}
           >
@@ -819,7 +819,7 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
 
         {/* Community setups for this strain */}
         {relatedSetups.length > 0 && (
-          <SectionCard
+          <SectionCard spotlight
             className="mb-6"
             title={<span className="flex items-center gap-2"><Wrench className="w-4 h-4 text-primary" />Setups growing this strain</span>}
           >
@@ -860,7 +860,7 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
 
         {/* Discussions about this strain */}
         {relatedThreads.length > 0 && (
-          <SectionCard
+          <SectionCard spotlight
             className="mb-6"
             title={<span className="flex items-center gap-2"><MessageSquare className="w-4 h-4 text-primary" />Discussions</span>}
           >
@@ -905,7 +905,7 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
         {(["PLANT", "FLOWER"] as const).map((kind) => {
           const photos = kind === "PLANT" ? plantPhotos : flowerPhotos
           return (
-            <SectionCard
+            <SectionCard spotlight
               key={kind}
               className="mb-6"
               title={<span className="flex items-center gap-2"><ImageIcon className="w-4 h-4 text-primary" />{kind === "PLANT" ? "Plant Photos" : "Harvested Flower"}</span>}
