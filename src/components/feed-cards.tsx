@@ -7,6 +7,7 @@
 import Link from "next/link"
 import { Leaf, MessageSquare, Users, Dna } from "@/lib/icons"
 import DiaryReactions from "@/components/diary-reactions"
+import UpdateCommentForm from "@/components/update-comment-form"
 import ProfileCard from "@/components/ui/profile-card"
 import Tooltip from "@/components/ui/tooltip"
 import TimeAgo from "@/components/ui/time-ago"
@@ -198,8 +199,25 @@ export function FeedUpdateCard({
                 initialMine={null}
               />
             </span>
-            <span className="inline-flex items-center gap-0.5 text-primary" aria-label={commentCount > 0 ? `${commentCount} comments` : "Comment"}>
-              <MessageSquare className="w-3 h-3" /> {commentCount > 0 ? commentCount : "Comment"}
+            {/* Inline quick-comment — same interaction loop as reactions,
+                only on PUBLIC grows where anchored comments exist. */}
+            <span
+              onClick={(e) => { e.preventDefault(); e.stopPropagation() }}
+              className="inline-flex items-center gap-0.5 text-primary"
+            >
+              {u.diary.visibility === "PUBLIC" ? (
+                <UpdateCommentForm
+                  diaryId={u.diary.id}
+                  diaryHref={href}
+                  updateId={u.id}
+                  threadId={u.diary.threadId}
+                  commentCount={commentCount}
+                />
+              ) : (
+                <span aria-label={`${commentCount} comments`}>
+                  <MessageSquare className="w-3 h-3 inline" /> {commentCount > 0 ? commentCount : "Comment"}
+                </span>
+              )}
             </span>
           </div>
         </div>
