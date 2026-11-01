@@ -430,7 +430,7 @@ export default async function Home() {
                 Fresh Grow Updates
               </h3>
               <div className="space-y-2">
-                {diaryUpdates.slice(0, 3).map((update) => (
+                {diaryUpdates.slice(0, 4).map((update) => (
                   <Link
                     key={update.id}
                     href={diaryPath(update.diary)}
@@ -441,10 +441,10 @@ export default async function Home() {
                       <img
                         src={update.images[0].url}
                         alt={update.title}
-                        className="w-10 h-10 rounded-md object-cover shrink-0"
+                        className="w-20 h-14 rounded-lg object-cover shrink-0"
                       />
                     ) : (
-                      <div className="w-10 h-10 rounded-md bg-primary/10 flex items-center justify-center shrink-0">
+                      <div className="w-20 h-14 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
                         <Leaf className="w-4 h-4 text-primary" />
                       </div>
                     )}
