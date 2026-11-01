@@ -55,6 +55,7 @@ const STATIC = [
   { url: "/leaderboard/yields", priority: 0.5, changeFrequency: "weekly" as const },
   { url: "/reputation", priority: 0.5, changeFrequency: "monthly" as const },
   { url: "/guides", priority: 0.7, changeFrequency: "weekly" as const },
+  { url: "/compare", priority: 0.6, changeFrequency: "monthly" as const },
   { url: "/help", priority: 0.7, changeFrequency: "weekly" as const },
   { url: "/plant-doctor", priority: 0.6, changeFrequency: "monthly" as const },
   { url: "/rules", priority: 0.5, changeFrequency: "monthly" as const },
