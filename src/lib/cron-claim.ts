@@ -44,6 +44,21 @@ export async function releaseClaim(key: string) {
   await prisma.setting.deleteMany({ where: { key } })
 }
 
+// Vercel cron is UTC-only. To pin a daily job to a fixed Central Time hour
+// year-round, vercel.json registers both the CST hour and the CDT hour for
+// the same path; the route runs only when the invocation lands inside the
+// target America/Chicago hour, and the other entry exits as a no-op.
+export function isCronTargetHourCT(targetHour: number, now = new Date()): boolean {
+  const hour = Number(
+    new Intl.DateTimeFormat("en-US", {
+      timeZone: "America/Chicago",
+      hour: "numeric",
+      hourCycle: "h23",
+    }).format(now)
+  )
+  return hour === targetHour
+}
+
 // Run one period task under an atomic claim; done only after success.
 // Every failure mode is isolated to this task — a throwing claim layer or a
 // bookkeeping error must never abort the route's remaining tasks.

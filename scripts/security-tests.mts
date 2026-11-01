@@ -24,7 +24,7 @@ import { recordBotEvent, getBotStats } from "@/lib/terpbot-events"
 import { BADGE_REGISTRY, BOT_BADGE_REGISTRY, isBotBadge } from "@/lib/badge-registry"
 import { checkBadges, BADGE_RULES } from "@/lib/reputation"
 import { notifyMentions } from "@/lib/mentions"
-import { claimTask, markDone, releaseClaim, runCronTask } from "@/lib/cron-claim"
+import { claimTask, markDone, releaseClaim, runCronTask, isCronTargetHourCT } from "@/lib/cron-claim"
 import React from "react"
 import { renderToString } from "react-dom/server"
 import { MarkdownRenderer, sanitizeHref } from "@/lib/markdown"
@@ -697,6 +697,13 @@ async function run() {
         assert.equal(runs, 1)
         assert.deepEqual(posted, ["x"])
       }
+
+      // CT-window gate: vercel.json registers both the CST and CDT UTC
+      // hours; only the invocation landing in the 8am CT hour may work.
+      assert.equal(isCronTargetHourCT(8, new Date("2026-01-15T14:00:00Z")), true, "CST 14:00Z = 8am runs")
+      assert.equal(isCronTargetHourCT(8, new Date("2026-01-15T13:00:00Z")), false, "CST 13:00Z = 7am skipped")
+      assert.equal(isCronTargetHourCT(8, new Date("2026-07-15T13:00:00Z")), true, "CDT 13:00Z = 8am runs")
+      assert.equal(isCronTargetHourCT(8, new Date("2026-07-15T14:00:00Z")), false, "CDT 14:00Z = 9am skipped")
 
       // Announcement-marker lookup failure must propagate as a task
       // failure — never be read as "not announced", which would send a
