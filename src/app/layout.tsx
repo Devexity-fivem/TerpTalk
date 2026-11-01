@@ -7,6 +7,7 @@ import { SpeedInsights } from "@vercel/speed-insights/next";
 import { Providers } from "@/components/providers";
 import { Navigation } from "@/components/navigation";
 import ServiceWorkerRegister from "@/components/sw-register";
+import InstallPrompt from "@/components/install-prompt";
 import Footer from "@/components/footer";
 import { buildMetadata } from "@/lib/seo";
 import { JsonLd } from "@/components/json-ld";
@@ -146,6 +147,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                 </CommandPaletteProvider>
               </ChatPanelProvider>
               <ServiceWorkerRegister />
+              <InstallPrompt />
               <SpotlightFX />
             </Providers>
             <Analytics />
