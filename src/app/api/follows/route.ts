@@ -7,6 +7,7 @@ import { unauthorized, getClientIp, logSecurityEvent, getSecurityUser, isBannedR
 import { rateLimit } from "@/lib/rate-limit"
 import { checkMaintenance } from "@/lib/maintenance"
 import { notify } from "@/lib/notify"
+import { awardProgression, reverseProgressionByKey } from "@/lib/progression"
 import { TERPBOT_USERNAME } from "@/lib/terpbot-constants"
 import { canViewDiary } from "@/lib/diary-visibility"
 import { eventSource } from "@/lib/event-sources"
@@ -66,6 +67,9 @@ export async function POST(request: Request) {
       })
       if (existing) {
         await prisma.follow.delete({ where: { id: existing.id } })
+        // V3: unfollow claws the standing back — the keyed reversal is
+        // idempotent so a follow that never paid is a no-op.
+        await reverseProgressionByKey(`follow:${session.user.id}:user:${userId}`, "Unfollowed", session.user.id)
         return NextResponse.json({ following: false })
       }
       try {
@@ -103,6 +107,15 @@ export async function POST(request: Request) {
         actorId: session.user.id,
         groupKey: `FOLLOW:${session.user.id}:${userId}`,
         dedupeMs: 24 * 60 * 60 * 1000,
+      })
+      // V3 social economy: a follow is the strongest community signal —
+      // standing to the *followed* member, peer-gated + capped like every
+      // judgment award.
+      await awardProgression(userId, "FOLLOWER_GAINED", "A grower followed you", {
+        actorId: session.user.id,
+        key: `follow:${session.user.id}:user:${userId}`,
+        sourceType: "USER",
+        sourceId: userId,
       })
       return NextResponse.json({ following: true })
     }

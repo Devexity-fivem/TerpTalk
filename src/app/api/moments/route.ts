@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { unauthorized, forbidden, getClientIp, logSecurityEvent, getSecurityUser, isBannedRow, enforceLinkTrust, blockExistsBetween } from "@/lib/security"
-import { progressionRateLimit, getProgressionPerks } from "@/lib/progression"
+import { progressionRateLimit, getProgressionPerks, awardProgression } from "@/lib/progression"
 import { checkMaintenance } from "@/lib/maintenance"
 import { storeImages, deleteImagesIfUnreferenced, MAX_POST_IMAGES } from "@/lib/blob"
 import { notifyMentions } from "@/lib/mentions"
@@ -158,6 +158,20 @@ export async function POST(request: Request) {
       objectType: "Moment",
       objectId: moment.id,
     })
+
+    // V3: posting to the feed earns XP (self-action, not standing).
+    await awardProgression(userId, "MOMENT_POSTED", "Posted to the feed", {
+      key: `moment:${moment.id}`,
+      sourceType: "MOMENT", sourceId: moment.id,
+    })
+    // A quote amplifies the original — standing to the quoted author.
+    if (quoted && quoted.authorId !== userId) {
+      await awardProgression(quoted.authorId, "REPOST_RECEIVED", "Someone quoted your post", {
+        actorId: userId,
+        key: `repost:${userId}:moment:${quoted.id}`,
+        sourceType: "MOMENT", sourceId: quoted.id,
+      })
+    }
 
     const actorName = session.user.name || "Someone"
     const link = momentPath(moment.id)

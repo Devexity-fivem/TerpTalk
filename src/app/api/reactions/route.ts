@@ -4,7 +4,7 @@ import { authOptions } from "@/lib/auth"
 import { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
 import { unauthorized, forbidden, getClientIp, logSecurityEvent, blockExistsBetween, isActiveAuthorRow } from "@/lib/security"
-import { progressionRateLimit } from "@/lib/progression"
+import { progressionRateLimit, awardProgression, reverseProgressionByKey } from "@/lib/progression"
 import { checkMaintenance } from "@/lib/maintenance"
 import { notify, postDeepLink } from "@/lib/notify"
 import { canViewDiary } from "@/lib/diary-visibility"
@@ -161,14 +161,32 @@ export async function POST(request: Request) {
       where: { userId: session.user.id, ...target },
     })
 
-    // Progression V2: reactions pay 0 XP and 0 standing — the entire
-    // award/reversal plumbing from the legacy economy is gone by design
-    // (§9.3 "no like/comment volume input at all"). Reactions remain a
-    // display + notification surface only.
+    // Progression V3: reactions pay the *recipient* standing — through the
+    // same peer-gated, capped path as every other judgment award. One
+    // standing slot per reactor per target: the deterministic key means
+    // toggling off reverses, re-adding re-awards, and switching type
+    // neither doubles nor loses the slot.
+    const socialKey = `react:${session.user.id}:${hasPostId ? `post:${postId}` : hasDiaryId ? `diary:${diaryId}` : hasMomentId ? `moment:${momentId}` : `update:${diaryUpdateId}`}`
+    const socialType = hasPostId
+      ? "POST_REACTION_RECEIVED"
+      : hasDiaryId
+        ? "DIARY_REACTION_RECEIVED"
+        : hasMomentId
+          ? "MOMENT_REACTION_RECEIVED"
+          : "UPDATE_REACTION_RECEIVED"
+    const socialSource = hasPostId
+      ? { sourceType: "POST", sourceId: postId }
+      : hasDiaryId
+        ? { sourceType: "DIARY", sourceId: diaryId }
+        : hasMomentId
+          ? { sourceType: "MOMENT", sourceId: momentId }
+          : { sourceType: "DIARY_UPDATE", sourceId: diaryUpdateId }
+
     if (existingReaction) {
       if (existingReaction.type === type) {
         // Same type — toggle off
         await prisma.reaction.delete({ where: { id: existingReaction.id } })
+        await reverseProgressionByKey(socialKey, "Reaction removed", session.user.id)
         return NextResponse.json({ reaction: null, action: "removed" })
       }
       // Different type — switch reaction
@@ -236,6 +254,17 @@ export async function POST(request: Request) {
         actorId: session.user.id,
         groupKey: `REACTION:${hasPostId ? `post:${postId}` : hasDiaryId ? `diary:${diaryId}` : hasMomentId ? `moment:${momentId}` : `update:${diaryUpdateId}`}`,
         dedupeMs: 24 * 60 * 60 * 1000,
+      })
+    }
+
+    // Standing to the recipient — actor is the reactor, keyed so
+    // toggle-off reverses cleanly. Caps/peer-gates apply inside the award.
+    if (targetAuthorId && targetAuthorId !== session.user.id) {
+      await awardProgression(targetAuthorId, socialType, "Someone reacted to your content", {
+        actorId: session.user.id,
+        key: socialKey,
+        ...socialSource,
+        meta: { reactionType: type },
       })
     }
 

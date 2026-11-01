@@ -7,6 +7,7 @@ import { rateLimit } from "@/lib/rate-limit"
 import { checkMaintenance } from "@/lib/maintenance"
 import { notify } from "@/lib/notify"
 import { canViewMoment, momentPath } from "@/lib/moments"
+import { awardProgression } from "@/lib/progression"
 
 type Ctx = { params: Promise<{ id: string }> }
 
@@ -60,7 +61,14 @@ export async function POST(request: Request, { params }: Ctx) {
     })
     const count = await prisma.moment.count({ where: { repostOfId: id, deleted: false } })
 
+    // V3: pure repost — standing to the original author, keyed so an
+    // un-repost path (if added later) reverses by the same token.
     if (result.reposted && target.authorId !== userId) {
+      await awardProgression(target.authorId, "REPOST_RECEIVED", "Someone reposted your post", {
+        actorId: userId,
+        key: `repost:${userId}:moment:${id}`,
+        sourceType: "MOMENT", sourceId: id,
+      })
       await notify({
         userId: target.authorId,
         type: "REACTION",

@@ -137,8 +137,12 @@ const PEER_GATED_TYPES = new Set(
   Object.entries(XP_TABLE).filter(([, s]) => s.peerGated).map(([t]) => t)
 )
 // Standing sources that fall under the per-source-type weekly cap.
+// V3: the social *_RECEIVED events join the capped set — like-rings get
+// throttled by the same ceiling that contains contests and referrals.
 const STANDING_CAPPED_TYPES = new Set([
   "CONTEST_WEEKLY_WIN", "CONTEST_MONTHLY_WIN", "REFERRAL", "REPORT_UPHELD",
+  "MOMENT_REACTION_RECEIVED", "UPDATE_REACTION_RECEIVED", "POST_REACTION_RECEIVED",
+  "DIARY_REACTION_RECEIVED", "FOLLOWER_GAINED", "COMMENT_RECEIVED", "REPOST_RECEIVED",
 ])
 
 // ─── Simhash (deterministic, prose-only) ─────────────────────────────

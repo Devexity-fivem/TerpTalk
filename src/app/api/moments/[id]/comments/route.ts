@@ -7,6 +7,7 @@ import {
   getSecurityUser, isBannedRow, enforceLinkTrust, getClientIp, logSecurityEvent,
 } from "@/lib/security"
 import { rateLimit } from "@/lib/rate-limit"
+import { awardProgression } from "@/lib/progression"
 import { checkMaintenance } from "@/lib/maintenance"
 import { notify, notifyMany } from "@/lib/notify"
 import { notifyMentions } from "@/lib/mentions"
@@ -103,6 +104,12 @@ export async function POST(request: Request, { params }: Ctx) {
     const audience = m.visibility === "FOLLOWERS" ? followersAudience(m.authorId) : null
 
     if (m.authorId !== userId) {
+      // V3: engagement pays the author — keyed per commenter per moment.
+      await awardProgression(m.authorId, "COMMENT_RECEIVED", "Someone commented on your post", {
+        actorId: userId,
+        key: `comment:${userId}:moment:${m.id}`,
+        sourceType: "MOMENT", sourceId: m.id,
+      })
       await notify({
         userId: m.authorId,
         type: "COMMENT",

@@ -257,6 +257,14 @@ export async function POST(request: Request) {
     // working when the comment is deleted.
     if (anchor) {
       if (anchor.diaryAuthorId !== session.user.id) {
+        // V3: a comment on someone's update pays them standing — keyed per
+        // commenter per update, capped like every social award.
+        await awardProgression(anchor.diaryAuthorId, "COMMENT_RECEIVED", "Someone commented on your grow update", {
+          actorId: session.user.id,
+          key: `comment:${session.user.id}:update:${anchor.updateId}`,
+          sourceType: "DIARY_UPDATE",
+          sourceId: anchor.updateId,
+        })
         await notify({
           userId: anchor.diaryAuthorId,
           type: "COMMENT",
@@ -269,6 +277,13 @@ export async function POST(request: Request) {
         })
       }
     } else if (thread.authorId !== session.user.id && !thread.category?.hidden) {
+      // V3: discussion engagement pays the thread starter too.
+      await awardProgression(thread.authorId, "COMMENT_RECEIVED", "Someone replied to your discussion", {
+        actorId: session.user.id,
+        key: `comment:${session.user.id}:thread:${thread.id}`,
+        sourceType: "THREAD",
+        sourceId: thread.id,
+      })
       await notify({
         userId: thread.authorId,
         type: "REPLY",

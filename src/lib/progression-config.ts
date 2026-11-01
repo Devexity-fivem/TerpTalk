@@ -19,7 +19,10 @@ export const MASTERY_META: Record<Mastery, { name: string; icon: string }> = {
   RECORDS: { name: "Journaling", icon: "📓" },
   KNOWLEDGE: { name: "Helping Out", icon: "💡" },
   EXPERIMENTATION: { name: "Experiments", icon: "🔬" },
-  COMMUNITY: { name: "Community", icon: "🤝" },
+  // V3: COMMUNITY renders as "Presence" — the social track (reactions,
+  // followers, reposts, engagement). Code value stays COMMUNITY; only
+  // the public label changed.
+  COMMUNITY: { name: "Presence", icon: "🤝" },
 }
 
 // Per-path XP thresholds → mastery level M1..M10.
@@ -191,6 +194,22 @@ export const XP_TABLE: Record<string, XpSpec> = {
   MENTOR_SESSION: { xp: 5, mastery: "COMMUNITY", deferred: true, label: "Mentored a grower" },
   WEEKLY_AWARD: { xp: 50, mastery: "COMMUNITY", peerGated: true, label: "Grower of the Week" },
   STAFF_ADJUSTMENT: { xp: 0, mastery: null, label: "Staff adjustment" }, // amount passed directly
+
+  // ── V3: social-first standing ──────────────────────────────────────
+  // Standing is the social currency — paid when *people* validate you.
+  // All *_RECEIVED events are peerGated + standing-capped: the existing
+  // grantor-age floor, reciprocal-pair detection, per-grantor lifetime
+  // cap, and weekly source cap all apply. That containment is what makes
+  // reaction/follow payouts safe against like-rings — V2 refused them
+  // outright; V3 pays them through the same gates instead.
+  MOMENT_POSTED: { xp: 4, mastery: "COMMUNITY", dailyCap: 5, label: "Posted to the feed" },
+  MOMENT_REACTION_RECEIVED: { xp: 0, standing: 1, mastery: "COMMUNITY", peerGated: true, label: "Someone reacted to your post" },
+  UPDATE_REACTION_RECEIVED: { xp: 0, standing: 1, mastery: "COMMUNITY", peerGated: true, label: "Someone reacted to your grow update" },
+  POST_REACTION_RECEIVED: { xp: 0, standing: 1, mastery: "COMMUNITY", peerGated: true, label: "Someone reacted to your reply" },
+  DIARY_REACTION_RECEIVED: { xp: 0, standing: 1, mastery: "COMMUNITY", peerGated: true, label: "Someone reacted to your grow" },
+  FOLLOWER_GAINED: { xp: 0, standing: 3, mastery: "COMMUNITY", peerGated: true, label: "A grower followed you" },
+  COMMENT_RECEIVED: { xp: 0, standing: 1, mastery: "COMMUNITY", peerGated: true, label: "Someone commented on your content" },
+  REPOST_RECEIVED: { xp: 0, standing: 2, mastery: "COMMUNITY", peerGated: true, label: "Someone reposted your post" },
 
   // System/sub-engine payouts — amounts passed via opts.xp.
   DAILY_LOGIN: { xp: 0, mastery: null, label: "Daily check-in" }, // 0 XP permanently (D6) — streak signal only
