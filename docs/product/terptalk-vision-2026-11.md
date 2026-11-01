@@ -45,25 +45,31 @@ assistant. The job now is depth + polish, not more surface area.
 ## Roadmap to overtake GD — ordered by leverage
 
 ### Phase 1 — Diary depth (the battleground)
-- [ ] Week-tabbed update editor rail (GD's mental model) — `UpdateForm`
-      is stage-aware but not week-navigable
-- [ ] Equipment taxonomy upgrade: structured fields for tent/lights/
-      ventilation/nutrients vs current free-text `equipment`/`lighting`
-- [ ] Diary auto-save / draft updates (GD's most-requested fix; we can
-      beat them by shipping it first-class)
-- [ ] Photo-dense feed cards (GD feed is wall-of-plants; ours is text-led)
+- [x] Week-tabbed update editor rail — chip row files updates into any
+      week ≤ current (server honors explicit `weekNumber`) — shipped
+- [x] Equipment taxonomy — `GrowSetup` already carries GD-grade fields
+      (tent, lighting, ventilation, fans, containers, medium, nutrients,
+      controllers) and diaries link via `setupId`; diary-level fields
+      (lightType, mediumType, containerSize, spaceDimensions, techniques[])
+      display on the detail page — done at the data layer
+- [x] Diary auto-save — scoped draft keys, restore-on-first-open,
+      debounced writes, discard flow — already shipped (beats GD's)
+- [x] Photo-dense feed cards — thumbs on updates, full-width harvest
+      strips, photo-backed spotlight — verified + shipped
+- [x] "Current conditions" env band in the diary hero — shipped
 
 ### Phase 2 — Community scale (vs Rollitup/420Mag)
-- [ ] Featured grow rotation on homepage (weekly spotlight exists —
-      needs a bigger visual slot)
+- [x] Featured grow rotation on homepage — weekly spotlight now
+      photo-backed with edge-bleed panel — shipped
 - [ ] Guides surface + SEO expansion (guide model exists; needs
       author-facing polish)
 - [ ] Category-level customization (icons/colors per board)
 
 ### Phase 3 — Platform moats
-- [ ] Public "vs" SEO page (cheapest acquisition content there is)
+- [x] Public "vs" page — `/compare` honest feature matrix, sitemap-wired
 - [ ] Diary import/migration hook for growers switching platforms
-- [ ] Mobile app story — PWA install prompt first, native later
+- [x] Mobile story — PWA manifest + service worker already shipped;
+      install prompt + native are the remaining layers
 
 ## Non-goals (don't build these)
 - Marketplace/seed sales — affiliate layer is enough
