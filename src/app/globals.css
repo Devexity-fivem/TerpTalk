@@ -8,7 +8,7 @@
    "Pine & Slate" system. */
 :root {
   /* Light — studio daylight */
-  --light-background: #f4f6f1;
+  --light-background: #f0f4ec;
   --light-foreground: #181a17;
   --light-card: #fcfdf9;
   --light-card-foreground: #181a17;
@@ -43,29 +43,29 @@
   /* Dark — canopy after midnight */
   --dark-background: #070a08;
   --dark-foreground: #edf1ec;
-  --dark-card: #0f1511;
+  --dark-card: #111a13;
   --dark-card-foreground: #edf1ec;
-  --dark-popover: #0f1511;
+  --dark-popover: #111a13;
   --dark-popover-foreground: #edf1ec;
-  --dark-primary: #34e29a;
+  --dark-primary: #3ef0a8;
   --dark-primary-foreground: #04130b;
-  --dark-secondary: #151c17;
+  --dark-secondary: #1a241c;
   --dark-secondary-foreground: #edf1ec;
-  --dark-muted: #151c17;
+  --dark-muted: #1a241c;
   --dark-muted-foreground: #96a69c;
   --dark-accent: #f5a94d;
   --dark-accent-foreground: #1a1202;
   --dark-destructive: #f87171;
   --dark-destructive-foreground: #1f0603;
-  --dark-border: #21302a;
-  --dark-input: #21302a;
-  --dark-ring: #34e29a;
+  --dark-border: #2c4034;
+  --dark-input: #2c4034;
+  --dark-ring: #3ef0a8;
   /* Semantic status text — luminous shades readable on near-black. */
   --dark-success: #34d399;
   --dark-warning: #f5a94d;
   /* Nameplate gradient stops — luminous on dark. */
-  --np-leaf-dark: #34e29a;
-  --np-a-dark: #34e29a;
+  --np-leaf-dark: #3ef0a8;
+  --np-a-dark: #3ef0a8;
   --np-b-dark: #a78bfa;
   --np-c-dark: #f5a94d;
   --np-gold-1-dark: #f5a94d;
@@ -123,7 +123,7 @@
   --glow-primary: 13 122 87;
   --glow-spectrum: 117 101 216;
   --glow-accent: 178 94 7;
-  --glow-strength: 0.05;
+  --glow-strength: 0.09;
   --shadow-color: 30 34 30;
 }
 
@@ -163,9 +163,9 @@
     --glow-primary: 52 226 154;
     --glow-spectrum: 167 139 250;
     --glow-accent: 245 169 77;
-    --glow-strength: 0.11;
+    --glow-strength: 0.30;
     --shadow-color: 0 0 0;
-    --card-hi: 0.08;
+    --card-hi: 0.14;
     color-scheme: dark;
   }
 }
@@ -205,9 +205,9 @@
   --glow-primary: 52 226 154;
   --glow-spectrum: 167 139 250;
   --glow-accent: 245 169 77;
-  --glow-strength: 0.11;
+  --glow-strength: 0.30;
   --shadow-color: 0 0 0;
-  --card-hi: 0.08;
+  --card-hi: 0.14;
   color-scheme: dark;
 }
 
@@ -426,10 +426,10 @@ html {
 /* Primary action glow — used on hero/signup CTAs */
 .tt-cta {
   background: linear-gradient(135deg, var(--primary), color-mix(in srgb, var(--primary) 80%, #052e20));
-  box-shadow: 0 10px 26px -10px rgb(var(--glow-primary) / 0.55);
+  box-shadow: 0 10px 30px -8px rgb(var(--glow-primary) / 0.8);
 }
 .tt-cta:hover {
-  box-shadow: 0 14px 34px -10px rgb(var(--glow-primary) / 0.7);
+  box-shadow: 0 16px 40px -8px rgb(var(--glow-primary) / 0.95);
   transform: translateY(-1px);
 }
 
@@ -445,7 +445,8 @@ html {
 /* Spectrum strip — the brand signature. Pine → iris → amber, used as a
    thin accent line on the hero panel, banners, and footer. */
 .tt-spectrum-bar {
-  background: linear-gradient(90deg, rgb(var(--glow-primary) / 0.9), rgb(var(--glow-spectrum) / 0.9) 50%, rgb(var(--glow-accent) / 0.9));
+  background: linear-gradient(90deg, rgb(var(--glow-primary) / 0.95), rgb(var(--glow-spectrum) / 0.95) 50%, rgb(var(--glow-accent) / 0.95));
+  box-shadow: 0 0 12px rgb(var(--glow-primary) / 0.35), 0 0 12px rgb(var(--glow-accent) / 0.2);
 }
 
 /* Flowing variant — the LED strip breathes. Neutralised by the global
@@ -465,8 +466,8 @@ html {
    hard-crops at a section edge. */
 .tt-grid-bg {
   background-image:
-    linear-gradient(to right, rgb(var(--glow-primary) / 0.07) 1px, transparent 1px),
-    linear-gradient(to bottom, rgb(var(--glow-primary) / 0.07) 1px, transparent 1px);
+    linear-gradient(to right, rgb(var(--glow-primary) / 0.10) 1px, transparent 1px),
+    linear-gradient(to bottom, rgb(var(--glow-primary) / 0.10) 1px, transparent 1px);
   background-size: 44px 44px;
   mask-image: radial-gradient(ellipse 75% 65% at 50% 35%, black 25%, transparent 75%);
   -webkit-mask-image: radial-gradient(ellipse 75% 65% at 50% 35%, black 25%, transparent 75%);
