@@ -12,7 +12,7 @@ import { getJourneyState, evaluateJourneys } from "@/lib/journeys"
 import { DAILY_QUEST_COUNT } from "@/lib/quests"
 import { isMeaningfulUpdate, MIN_UPDATE_LENGTH } from "@/lib/meaningful-update"
 import { getGrowStreak } from "@/lib/grow-streak"
-import { getReputationTier, getTierByName, REP_EVENT_TYPES } from "@/lib/reputation-config"
+import { getReputationTier, REP_EVENT_TYPES } from "@/lib/reputation-config"
 import { SITE_SETTINGS } from "@/lib/settings"
 
 const T = `__test_r3_${Date.now()}`

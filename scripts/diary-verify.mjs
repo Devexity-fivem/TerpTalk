@@ -844,7 +844,7 @@ const main = async () => {
       },
     })
     const flip = (id, vis) => callApi(`/api/diaries/${id}`, { method: "PATCH", body: { visibility: vis }, cookie: racerCookie })
-    const consistent = async (d, img, label) => {
+    const consistent = async (d, img, _label) => {
       const row = await prisma.growDiary.findUnique({ where: { id: d.id }, select: { visibility: true, deleted: true } })
       if (!row || row.deleted) {
         const g = await getMedia("diary", img.id, undefined)

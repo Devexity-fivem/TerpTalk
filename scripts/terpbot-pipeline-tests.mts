@@ -2206,7 +2206,7 @@ async function run() {
         return d
       }
       const g1 = await mkEvDiary(grower.id, { strainId: evStrain.id }, "g1")
-      const g2 = await mkEvDiary(grower2.id, { strainId: evStrain.id }, "g2")
+      const _g2 = await mkEvDiary(grower2.id, { strainId: evStrain.id }, "g2")
       await mkEvDiary(blockedG.id, { strainId: evStrain.id }, "blocked")
       await mkEvDiary(privG.id, { strainId: evStrain.id, visibility: "PRIVATE" }, "priv")
       await mkEvDiary(bannedG.id, { strainId: evStrain.id }, "banned")

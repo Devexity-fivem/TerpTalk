@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-require-imports */
 // ── TerpTalk strain catalog dataset (Slice C) ────────────────────────
 // Research-driven curated catalog. Every row cites its evidence in
 // docs/data/strain-research.md — a field is only populated when a source

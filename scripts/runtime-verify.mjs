@@ -963,7 +963,7 @@ const main = async () => {
     bAfter.status === 404 ? pass("cache: private page not shared after owner fetch") : fail("private cache", bAfter.status)
 
     // Viewer-dependent responses must not be publicly cacheable.
-    const profHeaders = (await getHtml("/settings", aC)).headers.get("cache-control") || ""
+    const _profHeaders = (await getHtml("/settings", aC)).headers.get("cache-control") || ""
     const apiProf = await fetch(`${BASE}/api/profile`, { headers: { cookie: aC } })
     const cc = apiProf.headers.get("cache-control") || ""
     ;(/private|no-store|no-cache/).test(cc)

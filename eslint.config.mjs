@@ -20,6 +20,15 @@ const eslintConfig = defineConfig([
       ],
     },
   },
+  {
+    // Verification/maintenance scripts assert via bare-expression DSL
+    // (`cond || fail(...)`, `expect(x).toBe(y)`-style chains) — the unused-
+    // expression warning is noise there and hid real lint signal at ~1.2k.
+    files: ["scripts/**/*.{mjs,mts}"],
+    rules: {
+      "@typescript-eslint/no-unused-expressions": "off",
+    },
+  },
   // Override default ignores of eslint-config-next.
   globalIgnores([
     // Default ignores of eslint-config-next:
