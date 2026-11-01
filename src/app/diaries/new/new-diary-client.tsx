@@ -84,6 +84,13 @@ export default function NewDiaryClient({
           </Link>
           <h1 className="font-display text-3xl font-bold mb-2 tracking-tight">Start New Grow Diary</h1>
           <p className="text-muted-foreground">Document your complete grow journey from seed to harvest</p>
+          <p className="mt-3 rounded-xl border border-primary/25 bg-primary/5 px-4 py-3 text-sm">
+            <span className="font-medium text-primary">Switching from another platform?</span>{" "}
+            <span className="text-muted-foreground">
+              Start the diary here and back-fill earlier weeks when you log updates — your history comes with you.
+              See <Link href="/compare" className="text-primary hover:underline">how TerpTalk compares</Link>.
+            </span>
+          </p>
         </div>
 
         {/* Form */}
