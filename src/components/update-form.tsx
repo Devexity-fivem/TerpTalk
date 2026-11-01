@@ -97,6 +97,9 @@ export default function UpdateForm({ diaryId, userId, currentStage, currentDay, 
   // Structured nutrient rows — separate from formData's flat string map;
   // drafts remain text-only by design.
   const [nutrientRows, setNutrientRows] = useState<{ productName: string; doseMlPerL: string }[]>([])
+  // Week-tab rail — lets a grower back-fill an update into an earlier week
+  // (GD-style week navigation). Null = auto-derive from the diary clock.
+  const [weekOverride, setWeekOverride] = useState<number | null>(null)
 
   // ── Draft autosave (localStorage, user+diary scoped) ──────────────────
   const draftKey = userId ? `tt:update-draft:${userId}:${diaryId}` : null
@@ -218,6 +221,7 @@ export default function UpdateForm({ diaryId, userId, currentStage, currentDay, 
           runoffPh: formData.runoffPh ? parseFloat(formData.runoffPh) : null,
           runoffEc: formData.runoffEc ? parseFloat(formData.runoffEc) : null,
           lampDistanceCm: formData.lampDistanceCm ? parseFloat(formData.lampDistanceCm) : null,
+          weekNumber: weekOverride,
           events: formData.events,
           issues: formData.issues,
           plantHealth: formData.plantHealth || null,
@@ -341,10 +345,38 @@ export default function UpdateForm({ diaryId, userId, currentStage, currentDay, 
                 <option value="COMPLETED">Completed</option>
               </select>
             </div>
-            <div className="flex items-end">
-              <span className="text-xs text-muted-foreground px-2 py-1.5 bg-secondary rounded">
-                Day {currentDay} · Week {currentWeek} (auto)
-              </span>
+            <div>
+              <label className="block text-sm font-medium mb-1">Week</label>
+              <div className="flex gap-1 overflow-x-auto pb-1 -mx-0.5 px-0.5">
+                <button
+                  type="button"
+                  onClick={() => setWeekOverride(null)}
+                  className={
+                    "shrink-0 px-2.5 py-1 rounded-full text-xs font-medium border transition-colors " +
+                    (weekOverride === null
+                      ? "bg-primary text-primary-foreground border-primary"
+                      : "border-border text-muted-foreground hover:border-primary/40")
+                  }
+                >
+                  Wk {currentWeek} · auto
+                </button>
+                {Array.from({ length: currentWeek }, (_, i) => currentWeek - i).map((w) => (
+                  <button
+                    key={w}
+                    type="button"
+                    onClick={() => setWeekOverride(w)}
+                    className={
+                      "shrink-0 px-2.5 py-1 rounded-full text-xs font-medium border transition-colors " +
+                      (weekOverride === w
+                        ? "bg-primary text-primary-foreground border-primary"
+                        : "border-border text-muted-foreground hover:border-primary/40")
+                    }
+                  >
+                    Wk {w}
+                  </button>
+                ))}
+              </div>
+              <span className="text-xs text-muted-foreground">Day {currentDay}</span>
             </div>
           </div>
 
