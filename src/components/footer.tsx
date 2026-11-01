@@ -62,6 +62,7 @@ export default function Footer() {
             <h4 className={HEADING_CLASS}>Site</h4>
             <ul className="space-y-2">
               <li><Link href="/about" className={LINK_CLASS}>About</Link></li>
+              <li><Link href="/compare" className={LINK_CLASS}>Why TerpTalk</Link></li>
               <li><Link href="/help" className={LINK_CLASS}>Help Center</Link></li>
               <li><FooterFeedbackLink className={LINK_CLASS} /></li>
               <li><Link href="/rules" className={LINK_CLASS}>Rules</Link></li>
