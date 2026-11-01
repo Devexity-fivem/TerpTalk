@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma"
 import { publicUserSelect, activeAuthor, blockedUserIds, isAdmin } from "@/lib/security"
 import { notFound, permanentRedirect } from "next/navigation"
-import { Leaf, Calendar, Users, ClipboardCheck, Camera, TrendingUp, Pencil, Sprout, Link2, Lock, FlaskConical, FileDown, MessageSquare } from "@/lib/icons"
+import { Leaf, Calendar, Users, ClipboardCheck, Camera, TrendingUp, Pencil, Sprout, Link2, Lock, FlaskConical, FileDown, MessageSquare, Thermometer, Droplets, Gauge, Zap, Activity } from "@/lib/icons"
 import SectionCard from "@/components/ui/section-card"
 import Link from "next/link"
 import { getSession } from "@/lib/session"
@@ -420,6 +420,11 @@ export default async function DiaryPage({
   // for the update form), both derived from the updates already loaded.
   const latestPhoto = [...updates].reverse().find((u) => u.images.length > 0)?.images[0]?.url ?? null
   const lastFeeding = latestFeedingNote(updates)
+  // Latest env snapshot — newest update carrying any field metric; drives
+  // the "Current conditions" band in the hero.
+  const latestEnv = [...updates].reverse().find((u) =>
+    u.temperature != null || u.humidity != null || u.vpd != null || u.ph != null ||
+    u.ec != null || u.ppfd != null || u.co2Ppm != null || u.heightCm != null)
 
   const diaryBase = process.env.NEXT_PUBLIC_SITE_URL || "https://terp-talk.vercel.app"
   const diaryUrl = `${diaryBase}${diaryPath(diary)}`
@@ -590,6 +595,67 @@ export default async function DiaryPage({
                       </span>
                     </span>
                   </Tooltip>
+                </div>
+              )}
+              {/* Current conditions — the at-a-glance env readout that
+                  makes a diary feel like a living grow dashboard. */}
+              {latestEnv && (
+                <div className="mt-4 rounded-xl border border-border/60 bg-secondary/40 px-3.5 py-2.5">
+                  <div className="tt-eyebrow mb-1.5">
+                    Current conditions{latestEnv.weekNumber != null ? ` · week ${latestEnv.weekNumber}` : ""}
+                  </div>
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-sm">
+                    {latestEnv.temperature != null && (
+                      <span className="flex items-center gap-1.5">
+                        <Thermometer className="w-3.5 h-3.5 text-warning" />
+                        {latestEnv.temperature}°F
+                        {latestEnv.nightTemperature != null && (
+                          <span className="text-xs text-muted-foreground">/ {latestEnv.nightTemperature}°F night</span>
+                        )}
+                      </span>
+                    )}
+                    {latestEnv.humidity != null && (
+                      <span className="flex items-center gap-1.5">
+                        <Droplets className="w-3.5 h-3.5 text-spectrum" />
+                        {latestEnv.humidity}% RH
+                      </span>
+                    )}
+                    {latestEnv.vpd != null && (
+                      <span className="flex items-center gap-1.5">
+                        <Gauge className="w-3.5 h-3.5 text-primary" />
+                        {latestEnv.vpd} kPa
+                      </span>
+                    )}
+                    {latestEnv.ph != null && (
+                      <span className="flex items-center gap-1.5">
+                        <FlaskConical className="w-3.5 h-3.5 text-primary" />
+                        pH {latestEnv.ph}
+                      </span>
+                    )}
+                    {latestEnv.ec != null && (
+                      <span className="flex items-center gap-1.5">
+                        <Activity className="w-3.5 h-3.5 text-accent" />
+                        {latestEnv.ec} mS/cm
+                      </span>
+                    )}
+                    {latestEnv.ppfd != null && (
+                      <span className="flex items-center gap-1.5">
+                        <Zap className="w-3.5 h-3.5 text-accent" />
+                        {latestEnv.ppfd} PPFD
+                      </span>
+                    )}
+                    {latestEnv.co2Ppm != null && (
+                      <span className="flex items-center gap-1.5 text-muted-foreground">
+                        {latestEnv.co2Ppm} ppm CO₂
+                      </span>
+                    )}
+                    {latestEnv.heightCm != null && (
+                      <span className="flex items-center gap-1.5">
+                        <Sprout className="w-3.5 h-3.5 text-success" />
+                        {latestEnv.heightCm} cm
+                      </span>
+                    )}
+                  </div>
                 </div>
               )}
               <StageTimeline current={diary.stage} runs={stageRuns} />

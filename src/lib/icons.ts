@@ -153,6 +153,8 @@ import Target from "lucide-react/dist/esm/icons/target"
 import Tent from "lucide-react/dist/esm/icons/tent"
 import Terminal from "lucide-react/dist/esm/icons/terminal"
 import ThumbsUp from "lucide-react/dist/esm/icons/thumbs-up"
+import Thermometer from "lucide-react/dist/esm/icons/thermometer"
+import Droplets from "lucide-react/dist/esm/icons/droplets"
 import Timer from "lucide-react/dist/esm/icons/timer"
 import ToggleLeft from "lucide-react/dist/esm/icons/toggle-left"
 import Trash2 from "lucide-react/dist/esm/icons/trash"
@@ -323,6 +325,8 @@ Sunrise,
 Tag,
 Target,
 Tent,
+Thermometer,
+Droplets,
 Terminal,
 ThumbsUp,
 Timer,
@@ -495,6 +499,8 @@ Sunrise,
 Tag,
 Target,
 Tent,
+Thermometer,
+Droplets,
 Terminal,
 ThumbsUp,
 Timer,
