@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic"
 
 function Stat({ label, value, hint }: { label: string; value: React.ReactNode; hint?: string }) {
   return (
-    <div className="rounded-xl border border-border/70 bg-card px-4 py-3">
+    <div className="tt-spotlight rounded-xl border border-border/70 bg-card px-4 py-3">
       <div className="text-2xl font-semibold font-display tabular-nums">{value}</div>
       <div className="text-xs text-muted-foreground mt-0.5">{label}</div>
       {hint && <div className="text-[11px] text-muted-foreground/70 mt-0.5">{hint}</div>}
@@ -29,7 +29,7 @@ export default async function AdminCommunityPage() {
         <p className="text-sm text-muted-foreground">Contribution and grow activity — raw facts, 7-day window unless noted.</p>
       </div>
 
-      <section className="rounded-2xl border border-border/60 bg-card/40 p-4 md:p-5">
+      <section className="tt-spotlight rounded-2xl border border-border/60 bg-card/40 p-4 md:p-5">
         <h2 className="font-display text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-3">Activity — last 7 days</h2>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <Stat label="Unique contributors" value={d.health.uniqueContributors7d} />
@@ -45,7 +45,7 @@ export default async function AdminCommunityPage() {
         </div>
       </section>
 
-      <section className="rounded-2xl border border-border/60 bg-card/40 p-4 md:p-5">
+      <section className="tt-spotlight rounded-2xl border border-border/60 bg-card/40 p-4 md:p-5">
         <h2 className="font-display text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-3">Grow documentation</h2>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <Stat label="Active public grows" value={d.grow.activePublicDiaries} />
@@ -62,7 +62,7 @@ export default async function AdminCommunityPage() {
         )}
       </section>
 
-      <section className="rounded-2xl border border-border/60 bg-card/40 p-4 md:p-5">
+      <section className="tt-spotlight rounded-2xl border border-border/60 bg-card/40 p-4 md:p-5">
         <h2 className="font-display text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-1">Unanswered discussions</h2>
         <p className="text-xs text-muted-foreground mb-3">Public threads with zero replies, oldest first — where the community needs attention.</p>
         {d.unanswered.length === 0 ? (

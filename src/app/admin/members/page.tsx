@@ -46,7 +46,7 @@ export default async function AdminMembersPage({ searchParams }: { searchParams:
       </form>
 
       {q && (
-        <section className="rounded-2xl border border-border/60 bg-card/40">
+        <section className="tt-spotlight rounded-2xl border border-border/60 bg-card/40">
           {results.length === 0 ? (
             <p className="p-4 text-sm text-muted-foreground">No members match “{q}”.</p>
           ) : (

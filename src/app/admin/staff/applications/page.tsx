@@ -137,7 +137,7 @@ export default function StaffApplicationsAdminPage() {
       </div>
 
       {applications.length === 0 ? (
-        <div className="rounded-2xl border border-border bg-card p-8 text-center text-muted-foreground">
+        <div className="tt-spotlight rounded-2xl border border-border bg-card p-8 text-center text-muted-foreground">
           No {filter.toLowerCase()} applications.
         </div>
       ) : (
@@ -145,7 +145,7 @@ export default function StaffApplicationsAdminPage() {
           {applications.map((app) => (
             <div
               key={app.id}
-              className="rounded-2xl border border-border bg-card p-5 hover:border-primary/50 transition-colors"
+              className="tt-spotlight rounded-2xl border border-border bg-card p-5 hover:border-primary/50 transition-colors"
             >
               <div className="flex items-start justify-between gap-4">
                 <div className="flex items-center gap-3">

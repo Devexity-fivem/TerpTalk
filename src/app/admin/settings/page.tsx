@@ -102,7 +102,7 @@ export default function AdminSettingsPage() {
         {error && <div className="bg-destructive/10 text-destructive px-4 py-2 rounded-lg text-sm mb-4">{error}</div>}
         {notice && <div className="bg-primary/10 text-primary px-4 py-2 rounded-lg text-sm mb-4">{notice}</div>}
 
-        <div className="bg-card rounded-xl border border-border overflow-hidden">
+        <div className="tt-spotlight bg-card rounded-xl border border-border overflow-hidden">
           <div className="divide-y divide-border">
             {Object.entries(SETTING_LABELS).map(([key, { label, type, help }]) => (
               <div key={key} className="p-4 flex items-start justify-between gap-4">

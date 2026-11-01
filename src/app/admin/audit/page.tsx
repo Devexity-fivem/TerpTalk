@@ -94,7 +94,7 @@ export default function AdminAuditPage() {
           </div>
         </div>
 
-        <div className="bg-card rounded-xl border border-border p-4 mb-6 flex gap-3 flex-wrap">
+        <div className="tt-spotlight bg-card rounded-xl border border-border p-4 mb-6 flex gap-3 flex-wrap">
           <div className="relative flex-1 min-w-48">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <input
@@ -120,7 +120,7 @@ export default function AdminAuditPage() {
           <button onClick={load} className="px-4 py-2 bg-secondary rounded-lg text-sm hover:bg-secondary/80">Search</button>
         </div>
 
-        <div className="bg-card rounded-xl border border-border overflow-hidden">
+        <div className="tt-spotlight bg-card rounded-xl border border-border overflow-hidden">
           <div className="divide-y divide-border">
             {events.length === 0 && <p className="p-6 text-sm text-muted-foreground">No audit events found.</p>}
             {events.map((e) => (

@@ -42,7 +42,7 @@ function FunnelTable({ funnel }: { funnel: FunnelWindow }) {
 
 function Card({ label, value, hint }: { label: string; value: React.ReactNode; hint?: string }) {
   return (
-    <div className="rounded-xl border border-border/70 bg-card px-4 py-3">
+    <div className="tt-spotlight rounded-xl border border-border/70 bg-card px-4 py-3">
       <div className="text-2xl font-semibold font-display tabular-nums">{value}</div>
       <div className="text-xs text-muted-foreground mt-0.5">{label}</div>
       {hint && <div className="text-[11px] text-muted-foreground/70 mt-0.5">{hint}</div>}
@@ -135,7 +135,7 @@ export default async function AdminGrowthPage() {
         </p>
       </div>
 
-      <section className="rounded-2xl border border-border/60 bg-card/40 p-4 md:p-5">
+      <section className="tt-spotlight rounded-2xl border border-border/60 bg-card/40 p-4 md:p-5">
         <h2 className="font-display text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-2">Observations</h2>
         <ul className="text-sm text-muted-foreground space-y-1 list-disc pl-5">
           {observations.map((o) => <li key={o}>{o}</li>)}
@@ -143,17 +143,17 @@ export default async function AdminGrowthPage() {
       </section>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <section className="rounded-2xl border border-border/60 bg-card/40 p-4 md:p-5">
+        <section className="tt-spotlight rounded-2xl border border-border/60 bg-card/40 p-4 md:p-5">
           <h2 className="font-display text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">Last 7 days</h2>
           <FunnelTable funnel={d.funnel7d} />
         </section>
-        <section className="rounded-2xl border border-border/60 bg-card/40 p-4 md:p-5">
+        <section className="tt-spotlight rounded-2xl border border-border/60 bg-card/40 p-4 md:p-5">
           <h2 className="font-display text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">Last 30 days</h2>
           <FunnelTable funnel={d.funnel30d} />
         </section>
       </div>
 
-      <section className="rounded-2xl border border-border/60 bg-card/40 p-4 md:p-5">
+      <section className="tt-spotlight rounded-2xl border border-border/60 bg-card/40 p-4 md:p-5">
         <h2 className="font-display text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-1">
           First contribution — 30d signups
         </h2>
@@ -190,7 +190,7 @@ export default async function AdminGrowthPage() {
       </section>
 
       {fa.paths.length > 0 && (
-        <section className="rounded-2xl border border-border/60 bg-card/40 p-4 md:p-5">
+        <section className="tt-spotlight rounded-2xl border border-border/60 bg-card/40 p-4 md:p-5">
           <h2 className="font-display text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-1">Common next steps</h2>
           <p className="text-xs text-muted-foreground mb-3">
             First contribution → second contribution (aggregate approximation — ordered by earliest recorded event per surface).
@@ -205,7 +205,7 @@ export default async function AdminGrowthPage() {
         </section>
       )}
 
-      <section className="rounded-2xl border border-border/60 bg-card/40 p-4 md:p-5">
+      <section className="tt-spotlight rounded-2xl border border-border/60 bg-card/40 p-4 md:p-5">
         <h2 className="font-display text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-3">Referrals</h2>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <Card label="Referred signups (30d)" value={d.funnel30d.referredSignups} />
@@ -222,7 +222,7 @@ export default async function AdminGrowthPage() {
         </p>
       </section>
 
-      <section className="rounded-2xl border border-border/60 bg-card/40 p-4 md:p-5">
+      <section className="tt-spotlight rounded-2xl border border-border/60 bg-card/40 p-4 md:p-5">
         <h2 className="font-display text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-1">
           Feedback signals
         </h2>
@@ -266,7 +266,7 @@ export default async function AdminGrowthPage() {
       </section>
 
       {/* ── Activation report — durable-state milestone model ─────── */}
-      <section className="rounded-2xl border border-border/60 bg-card/40 p-4 md:p-5">
+      <section className="tt-spotlight rounded-2xl border border-border/60 bg-card/40 p-4 md:p-5">
         <h2 className="font-display text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-1">
           Milestone ladder — {act.windowDays}d signup cohort
         </h2>
@@ -292,7 +292,7 @@ export default async function AdminGrowthPage() {
         </div>
       </section>
 
-      <section className="rounded-2xl border border-border/60 bg-card/40 p-4 md:p-5">
+      <section className="tt-spotlight rounded-2xl border border-border/60 bg-card/40 p-4 md:p-5">
         <h2 className="font-display text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-1">
           Step conversions
         </h2>
@@ -319,7 +319,7 @@ export default async function AdminGrowthPage() {
       </section>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <section className="rounded-2xl border border-border/60 bg-card/40 p-4 md:p-5">
+        <section className="tt-spotlight rounded-2xl border border-border/60 bg-card/40 p-4 md:p-5">
           <h2 className="font-display text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-1">
             Return by first contribution
           </h2>
@@ -349,7 +349,7 @@ export default async function AdminGrowthPage() {
           </table>
         </section>
 
-        <section className="rounded-2xl border border-border/60 bg-card/40 p-4 md:p-5">
+        <section className="tt-spotlight rounded-2xl border border-border/60 bg-card/40 p-4 md:p-5">
           <h2 className="font-display text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-1">
             Return by push status
           </h2>
@@ -380,7 +380,7 @@ export default async function AdminGrowthPage() {
         </section>
       </div>
 
-      <section className="rounded-2xl border border-border/60 bg-card/40 p-4 md:p-5">
+      <section className="tt-spotlight rounded-2xl border border-border/60 bg-card/40 p-4 md:p-5">
         <h2 className="font-display text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-1">
           Push lifecycle — {act.windowDays}d events
         </h2>
@@ -397,7 +397,7 @@ export default async function AdminGrowthPage() {
       </section>
 
       {/* ── Social loop — ProductEvent telemetry, not the signup cohort ── */}
-      <section className="rounded-2xl border border-border/60 bg-card/40 p-4 md:p-5">
+      <section className="tt-spotlight rounded-2xl border border-border/60 bg-card/40 p-4 md:p-5">
         <h2 className="font-display text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-1">
           Social loop — {act.social.windowDays}d telemetry window
         </h2>
@@ -460,7 +460,7 @@ export default async function AdminGrowthPage() {
 
       {/* ── Activation panel — CTA attempts + dismissals; completions
           live in the milestone ladder above, never duplicated here ── */}
-      <section className="rounded-2xl border border-border/60 bg-card/40 p-4 md:p-5">
+      <section className="tt-spotlight rounded-2xl border border-border/60 bg-card/40 p-4 md:p-5">
         <h2 className="font-display text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-1">
           Activation panel — {act.windowDays}d window
         </h2>

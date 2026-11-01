@@ -6,7 +6,7 @@ export const dynamic = "force-dynamic"
 
 function Stat({ label, value, hint }: { label: string; value: React.ReactNode; hint?: string }) {
   return (
-    <div className="rounded-xl border border-border/70 bg-card px-4 py-3">
+    <div className="tt-spotlight rounded-xl border border-border/70 bg-card px-4 py-3">
       <div className="text-2xl font-semibold font-display tabular-nums">{value}</div>
       <div className="text-xs text-muted-foreground mt-0.5">{label}</div>
       {hint && <div className="text-[11px] text-muted-foreground/70 mt-0.5">{hint}</div>}
@@ -35,7 +35,7 @@ export default async function AdminRetentionPage() {
         </p>
       </div>
 
-      <section className="rounded-2xl border border-border/60 bg-card/40 p-4 md:p-5">
+      <section className="tt-spotlight rounded-2xl border border-border/60 bg-card/40 p-4 md:p-5">
         <h2 className="font-display text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-3">Weekly cohorts</h2>
         <div className="overflow-x-auto">
           <table className="w-full text-sm min-w-140">
@@ -63,7 +63,7 @@ export default async function AdminRetentionPage() {
         </div>
       </section>
 
-      <section className="rounded-2xl border border-border/60 bg-card/40 p-4 md:p-5">
+      <section className="tt-spotlight rounded-2xl border border-border/60 bg-card/40 p-4 md:p-5">
         <h2 className="font-display text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-1">Diary continuation</h2>
         <p className="text-xs text-muted-foreground mb-3">
           Updates recorded per diary (latest {g.diary.diaries} diaries). “No updates yet” is a fact, not an abandonment verdict.
@@ -78,7 +78,7 @@ export default async function AdminRetentionPage() {
         </div>
       </section>
 
-      <section className="rounded-2xl border border-border/60 bg-card/40 p-4 md:p-5">
+      <section className="tt-spotlight rounded-2xl border border-border/60 bg-card/40 p-4 md:p-5">
         <h2 className="font-display text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-1">Participation overlap — 30d signups</h2>
         <p className="text-xs text-muted-foreground mb-3">
           Among members who contributed at least once (n={g.firstAction30d.sampleSize} of {g.firstAction30d.signupsInWindow} signups).
@@ -92,7 +92,7 @@ export default async function AdminRetentionPage() {
       </section>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <section className="rounded-2xl border border-border/60 bg-card/40 p-4 md:p-5">
+        <section className="tt-spotlight rounded-2xl border border-border/60 bg-card/40 p-4 md:p-5">
           <h2 className="font-display text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-3">Chat — last 7 days</h2>
           <div className="grid grid-cols-2 gap-3">
             <Stat label="Unique chatters" value={g.chat.uniqueChatters7d} />
@@ -101,7 +101,7 @@ export default async function AdminRetentionPage() {
             <Stat label="Also contribute elsewhere" value={g.chat.chattersWhoContributeElsewhere7d} hint={pct(g.chat.chattersWhoContributeElsewhere7d, g.chat.uniqueChatters7d)} />
           </div>
         </section>
-        <section className="rounded-2xl border border-border/60 bg-card/40 p-4 md:p-5">
+        <section className="tt-spotlight rounded-2xl border border-border/60 bg-card/40 p-4 md:p-5">
           <h2 className="font-display text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-3">TerpBot — last 7 days</h2>
           <div className="grid grid-cols-2 gap-3">
             <Stat label="Unique users" value={g.bot.uniqueUsers7d} />

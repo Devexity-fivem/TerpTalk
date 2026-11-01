@@ -193,14 +193,14 @@ export default function AdminUserDetailPage() {
             { label: "Setups", value: user._count.setupCreator },
             { label: "Chat messages", value: user._count.chatMessages },
           ].map((s) => (
-            <div key={s.label} className="bg-card rounded-xl border border-border p-4">
+            <div key={s.label} className="tt-spotlight bg-card rounded-xl border border-border p-4">
               <div className="text-lg font-bold tabular-nums">{s.value}</div>
               <div className="text-xs text-muted-foreground">{s.label}</div>
             </div>
           ))}
         </div>
 
-        <div className="bg-card rounded-xl border border-border p-4 mb-6">
+        <div className="tt-spotlight bg-card rounded-xl border border-border p-4 mb-6">
           <h2 className="font-semibold mb-3">Restrictions</h2>
           <div className="flex items-center gap-2 mb-3">
             {user.banned ? <Ban className="w-4 h-4 text-destructive" /> : <Clock className="w-4 h-4 text-muted-foreground" />}
@@ -229,7 +229,7 @@ export default function AdminUserDetailPage() {
         </div>
 
         {!isAdmin(user.role) && (
-          <div className="bg-card rounded-xl border border-border p-4 mb-6">
+          <div className="tt-spotlight bg-card rounded-xl border border-border p-4 mb-6">
             <div className="flex items-center gap-2 mb-3">
               <TrendingUp className="w-4 h-4 text-primary" />
               <h2 className="font-semibold">Progression</h2>
@@ -274,7 +274,7 @@ export default function AdminUserDetailPage() {
           </div>
         )}
 
-        <div className="bg-card rounded-xl border border-border overflow-hidden">
+        <div className="tt-spotlight bg-card rounded-xl border border-border overflow-hidden">
           <div className="p-4 border-b border-border font-semibold">Moderation history</div>
           <div className="divide-y divide-border">
             {user.moderationHistory.length === 0 && <p className="p-4 text-sm text-muted-foreground">No moderation actions recorded.</p>}

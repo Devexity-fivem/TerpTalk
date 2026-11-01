@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic"
 
 function Stat({ label, value, hint }: { label: string; value: React.ReactNode; hint?: string }) {
   return (
-    <div className="rounded-xl border border-border/70 bg-card px-4 py-3">
+    <div className="tt-spotlight rounded-xl border border-border/70 bg-card px-4 py-3">
       <div className="text-2xl font-semibold font-display tabular-nums">{value}</div>
       <div className="text-xs text-muted-foreground mt-0.5">{label}</div>
       {hint && <div className="text-[11px] text-muted-foreground/70 mt-0.5">{hint}</div>}
@@ -38,7 +38,7 @@ function Alert({ label, count, href }: { label: string; count: number; href: str
 
 function Section({ title, children, aside }: { title: string; children: React.ReactNode; aside?: React.ReactNode }) {
   return (
-    <section className="rounded-2xl border border-border/60 bg-card/40 p-4 md:p-5">
+    <section className="tt-spotlight rounded-2xl border border-border/60 bg-card/40 p-4 md:p-5">
       <div className="flex items-center justify-between mb-3">
         <h2 className="font-display text-sm font-semibold uppercase tracking-wider text-muted-foreground">{title}</h2>
         {aside}

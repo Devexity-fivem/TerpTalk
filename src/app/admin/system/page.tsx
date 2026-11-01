@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic"
 
 function Stat({ label, value, hint }: { label: string; value: React.ReactNode; hint?: string }) {
   return (
-    <div className="rounded-xl border border-border/70 bg-card px-4 py-3">
+    <div className="tt-spotlight rounded-xl border border-border/70 bg-card px-4 py-3">
       <div className="text-2xl font-semibold font-display tabular-nums">{value}</div>
       <div className="text-xs text-muted-foreground mt-0.5">{label}</div>
       {hint && <div className="text-[11px] text-muted-foreground/70 mt-0.5">{hint}</div>}
@@ -30,7 +30,7 @@ export default async function AdminSystemPage() {
         <p className="text-sm text-muted-foreground">Is anything broken right now — cron, rate limits, security events, TerpBot.</p>
       </div>
 
-      <section className="rounded-2xl border border-border/60 bg-card/40 p-4 md:p-5">
+      <section className="tt-spotlight rounded-2xl border border-border/60 bg-card/40 p-4 md:p-5">
         <h2 className="font-display text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-3">Reliability</h2>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <Stat label="Cron tasks done today" value={d.cron.tasksDone} />
@@ -48,7 +48,7 @@ export default async function AdminSystemPage() {
         </p>
       </section>
 
-      <section className="rounded-2xl border border-border/60 bg-card/40 p-4 md:p-5">
+      <section className="tt-spotlight rounded-2xl border border-border/60 bg-card/40 p-4 md:p-5">
         <h2 className="font-display text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-1">Rate limits &amp; security — 7 days</h2>
         <p className="text-xs text-muted-foreground mb-3">Aggregated endpoint counts only — no IPs, no identities.</p>
         {d.security.rateLimitHits7d.length === 0 ? (
@@ -76,7 +76,7 @@ export default async function AdminSystemPage() {
         </div>
       </section>
 
-      <section className="rounded-2xl border border-border/60 bg-card/40 p-4 md:p-5">
+      <section className="tt-spotlight rounded-2xl border border-border/60 bg-card/40 p-4 md:p-5">
         <h2 className="font-display text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-3">
           TerpBot — last 7 days
         </h2>

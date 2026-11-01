@@ -113,7 +113,7 @@ export default function AdminMediaPage() {
           </div>
         </div>
 
-        <div className="bg-card rounded-xl border border-border p-4 mb-6 flex gap-3 flex-wrap">
+        <div className="tt-spotlight bg-card rounded-xl border border-border p-4 mb-6 flex gap-3 flex-wrap">
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}

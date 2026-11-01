@@ -258,7 +258,7 @@ export default function CasePage() {
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
           {/* Evidence */}
-          <div className="md:col-span-2 bg-card rounded-xl border border-border p-5 space-y-4">
+          <div className="md:col-span-2 tt-spotlight bg-card rounded-xl border border-border p-5 space-y-4">
             <h2 className="font-semibold text-sm">Evidence</h2>
 
             {kind === "REPORT" && (
@@ -325,7 +325,7 @@ export default function CasePage() {
           </div>
 
           {/* Subject context */}
-          <div className="bg-card rounded-xl border border-border p-5">
+          <div className="tt-spotlight bg-card rounded-xl border border-border p-5">
             <h2 className="font-semibold text-sm mb-3">Subject</h2>
             {subject?.missing ? (
               <p className="text-sm text-muted-foreground">Account unavailable.</p>
@@ -385,7 +385,7 @@ export default function CasePage() {
 
         {/* Actions */}
         {!terminal && (
-          <div className="bg-card rounded-xl border border-border p-5 mb-6 space-y-3">
+          <div className="tt-spotlight bg-card rounded-xl border border-border p-5 mb-6 space-y-3">
             <h2 className="font-semibold text-sm">Actions</h2>
             <textarea
               value={note}
@@ -476,7 +476,7 @@ export default function CasePage() {
 
         {/* Related + activity */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="bg-card rounded-xl border border-border p-5">
+          <div className="tt-spotlight bg-card rounded-xl border border-border p-5">
             <h2 className="font-semibold text-sm mb-3">Related open cases</h2>
             {related.length === 0 && <p className="text-sm text-muted-foreground">None.</p>}
             <div className="space-y-2">
@@ -491,7 +491,7 @@ export default function CasePage() {
               ))}
             </div>
           </div>
-          <div className="bg-card rounded-xl border border-border p-5">
+          <div className="tt-spotlight bg-card rounded-xl border border-border p-5">
             <h2 className="font-semibold text-sm mb-3">Case activity</h2>
             {activity.length === 0 && <p className="text-sm text-muted-foreground">No staff actions yet.</p>}
             <div className="space-y-2">

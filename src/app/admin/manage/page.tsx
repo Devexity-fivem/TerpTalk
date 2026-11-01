@@ -295,7 +295,7 @@ export default function AdminPage({ searchParams }: { searchParams: Promise<{ ta
                 { label: "Escalated", value: stats.escalatedReports },
                 { label: "Mod Actions", value: stats.newModerationActions },
               ].map((s) => (
-                <div key={s.label} className="bg-card rounded-xl border border-border p-4">
+                <div key={s.label} className="tt-spotlight bg-card rounded-xl border border-border p-4">
                   <div className="text-2xl font-bold text-primary tabular-nums">{s.value}</div>
                   <div className="text-xs text-muted-foreground">{s.label}</div>
                 </div>
@@ -304,7 +304,7 @@ export default function AdminPage({ searchParams }: { searchParams: Promise<{ ta
 
             {/* Launch health: referral pipeline + cron status */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-              <div className="bg-card rounded-xl border border-border p-4">
+              <div className="tt-spotlight bg-card rounded-xl border border-border p-4">
                 <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">Referral Pipeline</div>
                 <div className="text-sm space-y-1">
                   <div>{stats.referrals.referredProfiles} referred · {stats.referrals.paidKeyed} paid · {stats.referrals.legacyUnkeyed} legacy · {stats.referrals.reversed} reversed</div>
@@ -317,7 +317,7 @@ export default function AdminPage({ searchParams }: { searchParams: Promise<{ ta
                   )}
                 </div>
               </div>
-              <div className="bg-card rounded-xl border border-border p-4">
+              <div className="tt-spotlight bg-card rounded-xl border border-border p-4">
                 <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">Cron Health</div>
                 <div className="text-sm space-y-1">
                   <div>Last run date: {stats.cron.lastRunDate ?? "never"}</div>
@@ -437,7 +437,7 @@ export default function AdminPage({ searchParams }: { searchParams: Promise<{ ta
               <div className="flex justify-center py-10"><Loader2 className="w-6 h-6 animate-spin text-primary" /></div>
             ) : (
               <>
-                <div className="bg-card rounded-xl border border-border overflow-hidden">
+                <div className="tt-spotlight bg-card rounded-xl border border-border overflow-hidden">
                   <div className="p-4 border-b border-border font-semibold flex items-center gap-2">
                     <TrendingUp className="w-4 h-4 text-warning" /> Unusual XP velocity (24h)
                   </div>
@@ -459,7 +459,7 @@ export default function AdminPage({ searchParams }: { searchParams: Promise<{ ta
                   </div>
                 </div>
 
-                <div className="bg-card rounded-xl border border-border overflow-hidden">
+                <div className="tt-spotlight bg-card rounded-xl border border-border overflow-hidden">
                   <div className="p-4 border-b border-border font-semibold flex items-center gap-2">
                     <UsersIcon className="w-4 h-4 text-warning" /> Reciprocal like pairs (7d)
                   </div>
@@ -474,7 +474,7 @@ export default function AdminPage({ searchParams }: { searchParams: Promise<{ ta
                   </div>
                 </div>
 
-                <div className="bg-card rounded-xl border border-border overflow-hidden">
+                <div className="tt-spotlight bg-card rounded-xl border border-border overflow-hidden">
                   <div className="p-4 border-b border-border font-semibold flex items-center gap-2">
                     <UserCheck className="w-4 h-4 text-warning" /> Likes from brand-new accounts (7d)
                   </div>
@@ -489,7 +489,7 @@ export default function AdminPage({ searchParams }: { searchParams: Promise<{ ta
                   </div>
                 </div>
 
-                <div className="bg-card rounded-xl border border-border overflow-hidden">
+                <div className="tt-spotlight bg-card rounded-xl border border-border overflow-hidden">
                   <div className="p-4 border-b border-border font-semibold flex items-center gap-2">
                     <ShieldCheck className="w-4 h-4 text-primary" /> Staff progression actions
                   </div>
