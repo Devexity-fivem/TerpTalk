@@ -5,7 +5,8 @@
 // client-fetched continuation pages, so every card must be client-safe
 // and date-tolerant (API pages arrive JSON-serialized).
 import Link from "next/link"
-import { Leaf, MessageSquare, Users, Heart, Dna } from "@/lib/icons"
+import { Leaf, MessageSquare, Users, Dna } from "@/lib/icons"
+import DiaryReactions from "@/components/diary-reactions"
 import ProfileCard from "@/components/ui/profile-card"
 import Tooltip from "@/components/ui/tooltip"
 import TimeAgo from "@/components/ui/time-ago"
@@ -185,11 +186,18 @@ export function FeedUpdateCard({
               <Leaf className="h-3 w-3 shrink-0" />
               <span className="truncate">{u.diary.title}</span>
             </span>
-            {u._count.reactions > 0 && (
-              <span className="inline-flex items-center gap-0.5" aria-label={`${u._count.reactions} reactions`}>
-                <Heart className="w-3 h-3" /> {u._count.reactions}
-              </span>
-            )}
+            {/* Inline reactions — the interaction loop that makes the feed
+                social. Guarded so reacting never triggers the card link. */}
+            <span
+              onClick={(e) => { e.preventDefault(); e.stopPropagation() }}
+              className="inline-flex"
+            >
+              <DiaryReactions
+                diaryUpdateId={u.id}
+                initialCounts={u._count.reactions > 0 ? { LIKE: u._count.reactions } : {}}
+                initialMine={null}
+              />
+            </span>
             <span className="inline-flex items-center gap-0.5 text-primary" aria-label={commentCount > 0 ? `${commentCount} comments` : "Comment"}>
               <MessageSquare className="w-3 h-3" /> {commentCount > 0 ? commentCount : "Comment"}
             </span>
