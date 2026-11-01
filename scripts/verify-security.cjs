@@ -218,6 +218,8 @@ const apiFiles = () => {
     path.join("src", "components", "update-form.tsx"),
     // Harvest-completion prompt dismissal — per-diary boolean flag only.
     path.join("src", "components", "harvest-form.tsx"),
+    // PWA install-prompt dismissal timestamp — one number, no identity.
+    path.join("src", "components", "install-prompt.tsx"),
     // AsyncLocalStorage (node:async_hooks) — server-side request scope,
     // not browser storage; the class name trips the literal scan.
     path.join("src", "lib", "query-count.ts"),
