@@ -63,13 +63,18 @@ assistant. The job now is depth + polish, not more surface area.
       photo-backed with edge-bleed panel — shipped
 - [ ] Guides surface + SEO expansion (guide model exists; needs
       author-facing polish)
-- [ ] Category-level customization (icons/colors per board)
+- [x] Category-level customization — `icon`/`color` fields existed in
+      the schema; the forum index now renders them (emoji + accent tint,
+      fallback tile when unset). Staff assigns identities via admin —
+      that's content work, not code.
 
 ### Phase 3 — Platform moats
 - [x] Public "vs" page — `/compare` honest feature matrix, sitemap-wired
-- [ ] Diary import/migration hook for growers switching platforms
-- [x] Mobile story — PWA manifest + service worker already shipped;
-      install prompt + native are the remaining layers
+- [x] Diary import/migration hook — "switching platforms?" hint on the
+      new-diary flow points at the week rail for back-filling history;
+      a real GD-export parser is a larger build if demand shows up
+- [x] Mobile story — PWA manifest + service worker + install prompt
+      shipped; native app is a separate project
 
 ## Non-goals (don't build these)
 - Marketplace/seed sales — affiliate layer is enough
