@@ -1,7 +1,8 @@
 import type { Metadata } from "next"
 import { redirect, notFound } from "next/navigation"
 import { getSession } from "@/lib/session"
-import Link from "next/link"
+import { Suspense } from "react"
+import AdminNav from "@/components/admin-nav"
 import { signInHref } from "@/lib/callback-url"
 import { requireStaff } from "@/lib/require-staff"
 import { isAdmin } from "@/lib/security"
@@ -45,26 +46,26 @@ export default async function AdminLayout({ children }: { children: React.ReactN
 
   return (
     <div className="min-h-screen bg-background">
-      <div className="border-b border-border/60 bg-card/50">
+      <div className="tt-glass tt-hairline-b border-b border-border/60">
         <div className="max-w-6xl mx-auto px-4">
           <div className="flex items-center gap-2 py-3">
-            <ShieldCheck className="w-4 h-4 text-primary shrink-0" />
-            <span className="text-sm font-semibold">Command Center</span>
-            <span className="text-[11px] text-muted-foreground">
+            <div className="tt-brand-tile rounded-lg p-1">
+              <ShieldCheck className="w-4 h-4 text-primary shrink-0" />
+            </div>
+            <span className="tt-eyebrow">Command Center</span>
+            <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">
               {admin ? "administrator" : staff.role.toLowerCase()}
             </span>
           </div>
-          <nav className="flex gap-1 overflow-x-auto pb-2 -mx-1 px-1" aria-label="Admin sections">
-            {nav.filter((n) => !n.adminOnly || admin).map(({ href, label, icon: Icon }) => (
-              <Link
-                key={href}
-                href={href}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[13px] font-medium text-muted-foreground hover:text-foreground hover:bg-secondary whitespace-nowrap transition-colors"
-              >
-                <Icon className="w-3.5 h-3.5" /> {label}
-              </Link>
-            ))}
-          </nav>
+          <Suspense fallback={
+            <nav className="flex gap-1 overflow-x-auto pb-2 -mx-1 px-1" aria-hidden>
+              {nav.filter((n) => !n.adminOnly || admin).map((n) => (
+                <span key={n.href} className="px-3 py-1.5 rounded-lg text-[13px] font-medium text-muted-foreground whitespace-nowrap">{n.label}</span>
+              ))}
+            </nav>
+          }>
+            <AdminNav items={nav.filter((n) => !n.adminOnly || admin)} />
+          </Suspense>
         </div>
       </div>
       {children}

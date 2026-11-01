@@ -1,76 +1,75 @@
 @import "tailwindcss";
 
 /* ── Palettes: single source of truth for every colour value ─────────
-   "Pine & Slate" — light is the flagship: warm-neutral paper with the
-   sage cast dialled out, near-neutral ink, deep botanical pine as the
-   restrained action colour, copper for warmth, muted iris as the
-   secondary accent.
-   "Canopy after midnight" — the dark counterpart: soft neutral
-   charcoal, a luminous but calm jade primary, warm amber and iris. */
+   "Verdant Ember" — the 2026-11 rebrand. Dark is the flagship: deep
+   ink-green surfaces, a luminous mint-jade primary, warm ember accent,
+   iris spectrum. Light is the botanical counterpart: cool paper, deep
+   emerald, terracotta-ember. Both rounder + deeper than the retired
+   "Pine & Slate" system. */
 :root {
   /* Light — studio daylight */
-  --light-background: #f7f7f4;
+  --light-background: #f4f6f1;
   --light-foreground: #181a17;
-  --light-card: #fdfdfc;
+  --light-card: #fcfdf9;
   --light-card-foreground: #181a17;
   --light-popover: #ffffff;
   --light-popover-foreground: #181a17;
-  --light-primary: #166552;
+  --light-primary: #0d7a57;
   --light-primary-foreground: #ffffff;
-  --light-secondary: #eef0ea;
+  --light-secondary: #e8ece3;
   --light-secondary-foreground: #232620;
-  --light-muted: #eef0ea;
-  --light-muted-foreground: #647066;
-  --light-accent: #b45309;
+  --light-muted: #e8ece3;
+  --light-muted-foreground: #5c6a60;
+  --light-accent: #b25e07;
   --light-accent-foreground: #ffffff;
   --light-destructive: #dc2626;
   --light-destructive-foreground: #ffffff;
-  --light-border: #e3e6df;
-  --light-input: #e3e6df;
-  --light-ring: #17795c;
+  --light-border: #dfe4da;
+  --light-input: #dfe4da;
+  --light-ring: #0f8a62;
   /* Semantic status text — darker shades that hold >=4.5:1 on the
      light surfaces. Never use raw text-amber/green-* for meaningful text. */
   --light-success: #15803d;
-  --light-warning: #a15907;
+  --light-warning: #93590a;
   /* Nameplate gradient stops — readable on neutral paper. */
-  --np-leaf: #166552;
-  --np-a: #166552;
-  --np-b: #6d5dd0;
-  --np-c: #a15907;
+  --np-leaf: #0d7a57;
+  --np-a: #0d7a57;
+  --np-b: #7565d8;
+  --np-c: #b25e07;
   --np-gold-1: #a16207;
   --np-gold-2: #854d0e;
   --np-gold-3: #713f12;
 
   /* Dark — canopy after midnight */
-  --dark-background: #0c0e0d;
-  --dark-foreground: #e8eae7;
-  --dark-card: #141715;
-  --dark-card-foreground: #e8eae7;
-  --dark-popover: #141715;
-  --dark-popover-foreground: #e8eae7;
-  --dark-primary: #3fd08f;
-  --dark-primary-foreground: #06130d;
-  --dark-secondary: #1b1f1d;
-  --dark-secondary-foreground: #e8eae7;
-  --dark-muted: #1b1f1d;
-  --dark-muted-foreground: #98a29b;
-  --dark-accent: #f2b950;
+  --dark-background: #070a08;
+  --dark-foreground: #edf1ec;
+  --dark-card: #0f1511;
+  --dark-card-foreground: #edf1ec;
+  --dark-popover: #0f1511;
+  --dark-popover-foreground: #edf1ec;
+  --dark-primary: #34e29a;
+  --dark-primary-foreground: #04130b;
+  --dark-secondary: #151c17;
+  --dark-secondary-foreground: #edf1ec;
+  --dark-muted: #151c17;
+  --dark-muted-foreground: #96a69c;
+  --dark-accent: #f5a94d;
   --dark-accent-foreground: #1a1202;
   --dark-destructive: #f87171;
   --dark-destructive-foreground: #1f0603;
-  --dark-border: #252a27;
-  --dark-input: #252a27;
-  --dark-ring: #3fd08f;
+  --dark-border: #21302a;
+  --dark-input: #21302a;
+  --dark-ring: #34e29a;
   /* Semantic status text — luminous shades readable on near-black. */
   --dark-success: #34d399;
-  --dark-warning: #f2b950;
+  --dark-warning: #f5a94d;
   /* Nameplate gradient stops — luminous on dark. */
-  --np-leaf-dark: #3fd08f;
-  --np-a-dark: #3fd08f;
-  --np-b-dark: #a58cfa;
-  --np-c-dark: #f2b950;
-  --np-gold-1-dark: #f2b950;
-  --np-gold-2-dark: #e5a83c;
+  --np-leaf-dark: #34e29a;
+  --np-a-dark: #34e29a;
+  --np-b-dark: #a78bfa;
+  --np-c-dark: #f5a94d;
+  --np-gold-1-dark: #f5a94d;
+  --np-gold-2-dark: #e89f3f;
   --np-gold-3-dark: #fbd98a;
 
   --radius: 0.5rem;
@@ -117,14 +116,14 @@
   /* Spectrum accent — muted iris, the counterpoint to pine */
   --spectrum: #6d5dd0;
   --light-spectrum: #6d5dd0;
-  --dark-spectrum: #a58cfa;
+  --dark-spectrum: #a78bfa;
 
   /* Ambient + shadow material (rgb triplets) — kept to a whisper so the
      surfaces stay clean and professional. */
-  --glow-primary: 22 101 82;
-  --glow-spectrum: 109 93 208;
-  --glow-accent: 180 83 9;
-  --glow-strength: 0.045;
+  --glow-primary: 13 122 87;
+  --glow-spectrum: 117 101 216;
+  --glow-accent: 178 94 7;
+  --glow-strength: 0.05;
   --shadow-color: 30 34 30;
 }
 
@@ -161,12 +160,12 @@
     --np-gold-3-c: var(--np-gold-3-dark);
 
     --spectrum: var(--dark-spectrum);
-    --glow-primary: 63 208 143;
-    --glow-spectrum: 165 140 250;
-    --glow-accent: 242 185 80;
-    --glow-strength: 0.09;
+    --glow-primary: 52 226 154;
+    --glow-spectrum: 167 139 250;
+    --glow-accent: 245 169 77;
+    --glow-strength: 0.11;
     --shadow-color: 0 0 0;
-    --card-hi: 0.055;
+    --card-hi: 0.08;
     color-scheme: dark;
   }
 }
@@ -203,12 +202,12 @@
   --np-gold-2-c: var(--np-gold-2-dark);
   --np-gold-3-c: var(--np-gold-3-dark);
 
-  --glow-primary: 63 208 143;
-  --glow-spectrum: 165 140 250;
-  --glow-accent: 242 185 80;
-  --glow-strength: 0.09;
+  --glow-primary: 52 226 154;
+  --glow-spectrum: 167 139 250;
+  --glow-accent: 245 169 77;
+  --glow-strength: 0.11;
   --shadow-color: 0 0 0;
-  --card-hi: 0.055;
+  --card-hi: 0.08;
   color-scheme: dark;
 }
 
@@ -248,10 +247,10 @@
 
   /* Rounder, friendlier corners — one scale change reskins every
      rounded-* utility site-wide. */
-  --radius-lg: 0.625rem;
-  --radius-xl: 0.875rem;
-  --radius-2xl: 1.25rem;
-  --radius-3xl: 1.75rem;
+  --radius-lg: 0.75rem;
+  --radius-xl: 1.125rem;
+  --radius-2xl: 1.625rem;
+  --radius-3xl: 2.25rem;
 }
 
 * {
@@ -426,7 +425,7 @@ html {
 
 /* Primary action glow — used on hero/signup CTAs */
 .tt-cta {
-  background: linear-gradient(135deg, var(--primary), color-mix(in srgb, var(--primary) 78%, #0b382c));
+  background: linear-gradient(135deg, var(--primary), color-mix(in srgb, var(--primary) 80%, #052e20));
   box-shadow: 0 10px 26px -10px rgb(var(--glow-primary) / 0.55);
 }
 .tt-cta:hover {
