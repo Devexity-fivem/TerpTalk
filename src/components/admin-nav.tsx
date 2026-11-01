@@ -2,12 +2,23 @@
 
 import Link from "next/link"
 import { usePathname, useSearchParams } from "next/navigation"
-import type { ComponentType } from "react"
+import {
+  LayoutDashboard, Users, Sprout, ShieldAlert, TrendingUp,
+  MessageSquarePlus, Bot, Activity, Wrench, Flag, Repeat2, FlaskConical,
+} from "@/lib/icons"
+import type { LucideIcon } from "@/lib/icons"
+
+// Component references can't cross the server→client boundary, so the
+// layout passes icon *names* and this map resolves them client-side.
+const ICONS: Record<string, LucideIcon> = {
+  LayoutDashboard, Users, Sprout, ShieldAlert, TrendingUp,
+  MessageSquarePlus, Bot, Activity, Wrench, Flag, Repeat2, FlaskConical,
+}
 
 export type AdminNavItem = {
   href: string
   label: string
-  icon: ComponentType<{ className?: string }>
+  icon: keyof typeof ICONS
 }
 
 // Active-state aware section nav for the command-center shell. The layout
@@ -53,45 +64,38 @@ export default function AdminNav({ items }: { items: AdminNavItem[] }) {
       />
     )
 
+  const render = (vertical: boolean) => (
+    <nav
+      className={
+        vertical
+          ? "hidden md:flex md:flex-col md:gap-0.5 md:py-2"
+          : "flex md:hidden gap-1 overflow-x-auto pb-2 -mx-1 px-1"
+      }
+      aria-label="Admin sections"
+    >
+      {items.map(({ href, label, icon }) => {
+        const active = isActive(href)
+        const Icon = ICONS[icon]
+        return (
+          <Link
+            key={href}
+            href={href}
+            aria-current={active ? "page" : undefined}
+            className={cls(active, vertical ? " pl-3 pr-3 py-2" : " px-3 py-1.5 whitespace-nowrap")}
+          >
+            {indicator(active, vertical)}
+            <Icon className={active ? (vertical ? "w-4 h-4 text-primary" : "w-3.5 h-3.5 text-primary") : vertical ? "w-4 h-4" : "w-3.5 h-3.5"} />
+            {label}
+          </Link>
+        )
+      })}
+    </nav>
+  )
+
   return (
     <>
-      {/* Desktop — vertical sidebar */}
-      <nav className="hidden md:flex md:flex-col md:gap-0.5 md:py-2" aria-label="Admin sections">
-        {items.map(({ href, label, icon: Icon }) => {
-          const active = isActive(href)
-          return (
-            <Link
-              key={href}
-              href={href}
-              aria-current={active ? "page" : undefined}
-              className={cls(active, " pl-3 pr-3 py-2")}
-            >
-              {indicator(active, true)}
-              <Icon className={active ? "w-4 h-4 text-primary" : "w-4 h-4"} />
-              {label}
-            </Link>
-          )
-        })}
-      </nav>
-
-      {/* Mobile — horizontal scroll bar */}
-      <nav className="flex md:hidden gap-1 overflow-x-auto pb-2 -mx-1 px-1" aria-label="Admin sections">
-        {items.map(({ href, label, icon: Icon }) => {
-          const active = isActive(href)
-          return (
-            <Link
-              key={href}
-              href={href}
-              aria-current={active ? "page" : undefined}
-              className={cls(active, " px-3 py-1.5 whitespace-nowrap")}
-            >
-              {indicator(active, false)}
-              <Icon className={active ? "w-3.5 h-3.5 text-primary" : "w-3.5 h-3.5"} />
-              {label}
-            </Link>
-          )
-        })}
-      </nav>
+      {render(true)}
+      {render(false)}
     </>
   )
 }

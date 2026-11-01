@@ -7,10 +7,7 @@ import { signInHref } from "@/lib/callback-url"
 import { requireStaff } from "@/lib/require-staff"
 import { isAdmin } from "@/lib/security"
 import { buildMetadata } from "@/lib/seo"
-import {
-  LayoutDashboard, Users, Sprout, ShieldAlert, TrendingUp,
-  MessageSquarePlus, Bot, Activity, Wrench, ShieldCheck, Flag, Repeat2, FlaskConical,
-} from "@/lib/icons"
+import { ShieldCheck } from "@/lib/icons"
 
 export const metadata: Metadata = buildMetadata({
   title: "Admin",
@@ -29,19 +26,19 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   if (!staff) notFound()
   const admin = isAdmin(staff.role)
 
-  const nav: { href: string; label: string; icon: typeof Flag; adminOnly?: boolean }[] = [
-    { href: "/admin", label: "Overview", icon: LayoutDashboard },
-    { href: "/admin/community", label: "Community", icon: Sprout },
-    { href: "/admin/members", label: "Members", icon: Users },
-    { href: "/moderation", label: "Moderation", icon: Flag },
-    { href: "/admin/growth", label: "Growth", icon: TrendingUp, adminOnly: true },
-    { href: "/admin/retention", label: "Retention", icon: Repeat2, adminOnly: true },
-    { href: "/admin/experiments", label: "Changes", icon: FlaskConical, adminOnly: true },
-    { href: "/admin/manage?tab=feedback", label: "Feedback", icon: MessageSquarePlus, adminOnly: true },
-    { href: "/admin/manage?tab=terpbot", label: "TerpBot", icon: Bot, adminOnly: true },
-    { href: "/admin/system", label: "System", icon: Activity, adminOnly: true },
-    { href: "/admin/manage?tab=security", label: "Security", icon: ShieldAlert, adminOnly: true },
-    { href: "/admin/manage", label: "Manage", icon: Wrench, adminOnly: true },
+  const nav: { href: string; label: string; icon: string; adminOnly?: boolean }[] = [
+    { href: "/admin", label: "Overview", icon: "LayoutDashboard" },
+    { href: "/admin/community", label: "Community", icon: "Sprout" },
+    { href: "/admin/members", label: "Members", icon: "Users" },
+    { href: "/moderation", label: "Moderation", icon: "Flag" },
+    { href: "/admin/growth", label: "Growth", icon: "TrendingUp", adminOnly: true },
+    { href: "/admin/retention", label: "Retention", icon: "Repeat2", adminOnly: true },
+    { href: "/admin/experiments", label: "Changes", icon: "FlaskConical", adminOnly: true },
+    { href: "/admin/manage?tab=feedback", label: "Feedback", icon: "MessageSquarePlus", adminOnly: true },
+    { href: "/admin/manage?tab=terpbot", label: "TerpBot", icon: "Bot", adminOnly: true },
+    { href: "/admin/system", label: "System", icon: "Activity", adminOnly: true },
+    { href: "/admin/manage?tab=security", label: "Security", icon: "ShieldAlert", adminOnly: true },
+    { href: "/admin/manage", label: "Manage", icon: "Wrench", adminOnly: true },
   ]
 
   return (
