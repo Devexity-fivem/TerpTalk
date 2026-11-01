@@ -167,8 +167,15 @@ export default async function ForumPage() {
                     className="tt-edge-card tt-spotlight block p-4 hover:bg-secondary/50 transition-colors"
                   >
                     <div className="flex items-start gap-4">
-                      <div className="tt-brand-tile p-3 rounded-xl shrink-0">
-                        <MessageSquare className="w-6 h-6 text-primary" />
+                      <div
+                        className="tt-brand-tile p-3 rounded-xl shrink-0"
+                        style={category.color ? { boxShadow: `0 0 0 1px ${category.color}40, 0 4px 14px -4px ${category.color}55`, background: `linear-gradient(135deg, ${category.color}30, ${category.color}12)` } : undefined}
+                      >
+                        {category.icon ? (
+                          <span className="text-2xl leading-none" aria-hidden>{category.icon}</span>
+                        ) : (
+                          <MessageSquare className="w-6 h-6 text-primary" />
+                        )}
                       </div>
                       <div className="flex-1 min-w-0">
                         <h3 className="font-display font-semibold mb-1 wrap-break-word">{category.name}</h3>
