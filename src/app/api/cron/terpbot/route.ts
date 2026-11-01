@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { runCronTask } from "@/lib/cron-claim"
+import { runCronTask, isCronTargetHourCT } from "@/lib/cron-claim"
 import { postToGeneral, GROW_TIPS, sanitizeEcho } from "@/lib/terpbot"
 import { scanDormantThreads } from "@/lib/terpbot-assist"
 import { scanAnswerMatches } from "@/lib/answer-match"
@@ -59,6 +59,14 @@ export async function GET(request: NextRequest) {
       // Dev convenience: accept local tools but still reject empty UAs.
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
+  }
+
+  // Central-Time run window: vercel.json registers both the CST and CDT UTC
+  // hours for this path; only the invocation landing in the 8am CT hour does
+  // work. Manual/local runs (non vercel-cron UA) are not gated.
+  const cronUa = request.headers.get("user-agent") || ""
+  if (cronUa.startsWith("vercel-cron") && !isCronTargetHourCT(8)) {
+    return NextResponse.json({ skipped: "outside-central-time-window" })
   }
 
   const posted: string[] = []

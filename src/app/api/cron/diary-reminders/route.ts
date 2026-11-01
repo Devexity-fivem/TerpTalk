@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { runCronTask } from "@/lib/cron-claim"
+import { runCronTask, isCronTargetHourCT } from "@/lib/cron-claim"
 import { sendDiaryReminders } from "@/lib/diary-reminders"
 import { safeEqualSecret } from "@/lib/security"
 
@@ -28,6 +28,14 @@ export async function GET(request: NextRequest) {
     if (!ua.startsWith("vercel-cron") && !ua.startsWith("Mozilla") && !ua.includes("curl")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
+  }
+
+  // Central-Time run window: vercel.json registers both the CST and CDT UTC
+  // hours for this path; only the invocation landing in the 8am CT hour does
+  // work. Manual/local runs (non vercel-cron UA) are not gated.
+  const cronUa = request.headers.get("user-agent") || ""
+  if (cronUa.startsWith("vercel-cron") && !isCronTargetHourCT(8)) {
+    return NextResponse.json({ skipped: "outside-central-time-window" })
   }
 
   const posted: string[] = []
