@@ -48,7 +48,7 @@ export default function ProgressionPage() {
 
         <ProgressionPanel />
 
-        <div className="bg-card/80 rounded-2xl border border-border/70 p-4 mb-4">
+        <div className="tt-spotlight bg-card/80 rounded-2xl border border-border/70 p-4 mb-4">
           <div className="flex items-center gap-2 mb-3">
             <TrendingUp className="w-4 h-4 text-primary" />
             <h2 className="font-display text-lg font-semibold">Ways to grow</h2>
@@ -81,7 +81,7 @@ export default function ProgressionPage() {
           </p>
         </div>
 
-        <div className="bg-card/80 rounded-2xl border border-border/70 p-4 mb-4">
+        <div className="tt-spotlight bg-card/80 rounded-2xl border border-border/70 p-4 mb-4">
           <div className="flex items-center gap-2 mb-3">
             <ShieldCheck className="w-4 h-4 text-primary" />
             <h2 className="font-display text-lg font-semibold">Standing</h2>
@@ -102,7 +102,7 @@ export default function ProgressionPage() {
           </div>
         </div>
 
-        <div className="bg-card/80 rounded-2xl border border-border/70 p-4 mb-4">
+        <div className="tt-spotlight bg-card/80 rounded-2xl border border-border/70 p-4 mb-4">
           <div className="flex items-center gap-2 mb-3">
             <Target className="w-4 h-4 text-primary" />
             <h2 className="font-display text-lg font-semibold">Quests &amp; challenges</h2>
@@ -129,7 +129,7 @@ export default function ProgressionPage() {
           </div>
         </div>
 
-        <div className="bg-card/80 rounded-2xl border border-border/70 p-4 mb-4">
+        <div className="tt-spotlight bg-card/80 rounded-2xl border border-border/70 p-4 mb-4">
           <h2 className="font-display text-lg font-semibold mb-1">The Path to Master Cultivator</h2>
           <p className="text-xs text-muted-foreground mb-3">
             {REP_RANKS.length} ranks, {PROGRESSION_RUNGS.length} rungs total — every rank unlocks something
@@ -153,7 +153,7 @@ export default function ProgressionPage() {
           </div>
         </div>
 
-        <div className="bg-card/80 rounded-2xl border border-border/70 p-4 mb-4">
+        <div className="tt-spotlight bg-card/80 rounded-2xl border border-border/70 p-4 mb-4">
           <h2 className="font-display text-lg font-semibold mb-1">Garden Perks</h2>
           <p className="text-xs text-muted-foreground">
             Ranks and streaks unlock real things, not decorations. Reach Harvested rank — or keep a
@@ -164,7 +164,7 @@ export default function ProgressionPage() {
           </p>
         </div>
 
-        <div className="bg-card/80 rounded-2xl border border-border/70 p-4">
+        <div className="tt-spotlight bg-card/80 rounded-2xl border border-border/70 p-4">
           <div className="flex items-center gap-2 mb-3">
             <ShieldCheck className="w-4 h-4 text-primary" />
             <h2 className="font-display text-lg font-semibold">Fair play</h2>

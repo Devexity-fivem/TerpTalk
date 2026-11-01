@@ -63,7 +63,7 @@ export default async function SettingsPage() {
                 <section.icon className="w-4 h-4 text-primary" aria-hidden="true" />
                 {section.title}
               </h2>
-              <div className="bg-card/80 rounded-2xl border border-border/70 divide-y divide-border">
+              <div className="tt-spotlight bg-card/80 rounded-2xl border border-border/70 divide-y divide-border">
                 {section.items.map((item) => (
                   <Link
                     key={item.href + item.label}

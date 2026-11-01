@@ -71,7 +71,7 @@ export default async function PlantDoctorPage() {
         </div>
 
         {/* Community outcomes — aggregate-only stats from Plant Doctor threads */}
-        <div className="mt-8 bg-card/80 rounded-2xl border border-border/70 p-5">
+        <div className="mt-8 tt-spotlight bg-card/80 rounded-2xl border border-border/70 p-5">
           <div className="flex items-center gap-2 mb-3">
             <MessageSquare className="w-4 h-4 text-primary" />
             <h2 className="font-display font-semibold text-sm">Community outcomes</h2>

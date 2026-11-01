@@ -72,7 +72,7 @@ export default async function HashtagPage({
           description="Posts tagged by the community"
         />
 
-        <div className="tt-spotlight bg-card/80 rounded-2xl border border-border/70 divide-y divide-border/60">
+        <div className="tt-spotlight tt-spotlight bg-card/80 rounded-2xl border border-border/70 divide-y divide-border/60">
           {items.map((m) => (
             <MomentCard key={m.id} moment={m} />
           ))}

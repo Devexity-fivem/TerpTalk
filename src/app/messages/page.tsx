@@ -201,7 +201,7 @@ function MessagesInner() {
 
         <div className="grid md:grid-cols-3 gap-4 h-[70dvh] min-h-80">
           {/* Conversation list */}
-          <div className="bg-card/80 border border-border/70 rounded-2xl overflow-y-auto">
+          <div className="tt-spotlight bg-card/80 border border-border/70 rounded-2xl overflow-y-auto">
             {convos.length === 0 ? (
               <EmptyState
                 icon={MessageCircle}
@@ -253,7 +253,7 @@ function MessagesInner() {
           </div>
 
           {/* Thread view */}
-          <div className="md:col-span-2 bg-card/80 border border-border/70 rounded-2xl flex flex-col overflow-hidden">
+          <div className="md:col-span-2 tt-spotlight bg-card/80 border border-border/70 rounded-2xl flex flex-col overflow-hidden">
             {!withId ? (
               <div className="flex-1 flex items-center justify-center text-muted-foreground text-sm">
                 Select a conversation

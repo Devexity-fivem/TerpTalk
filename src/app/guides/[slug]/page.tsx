@@ -106,7 +106,7 @@ export default async function GuidePage({ params }: { params: Promise<{ slug: st
           { label: "Grow Guides", href: "/guides" },
           { label: guide.title },
         ]} />
-        <div className="bg-card/80 rounded-2xl border border-border/70 p-6 md:p-8">
+        <div className="tt-spotlight bg-card/80 rounded-2xl border border-border/70 p-6 md:p-8">
           <div className="flex items-center gap-2 text-xs text-muted-foreground mb-3">
             <BookOpen className="w-4 h-4 text-primary" />
             <span className="uppercase tracking-wide">{guide.topic}</span>

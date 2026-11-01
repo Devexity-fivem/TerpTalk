@@ -253,7 +253,7 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
         ]} />
 
         {/* Header */}
-        <div className="bg-card/80 rounded-2xl border border-border/70 p-6 mb-6">
+        <div className="tt-edge-card tt-spotlight bg-card/80 rounded-2xl border border-border/70 p-6 mb-6">
           <div className="flex items-start gap-4">
             {strain.breederImageUrl ? (
               <div className="shrink-0">
@@ -786,7 +786,7 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
         {/* No public grows yet — honest empty state with the supported
             prefill route (/diaries/new?strain=<id> selects this strain). */}
         {relatedDiaries.length === 0 && growStats.tier === "none" && (
-          <div className="bg-card/80 rounded-2xl border border-border/70 p-5 mb-6 text-center">
+          <div className="tt-spotlight bg-card/80 rounded-2xl border border-border/70 p-5 mb-6 text-center">
             <BookOpen className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
             <h3 className="font-display font-semibold text-sm mb-1">No public grows of {strain.name} yet</h3>
             <p className="text-xs text-muted-foreground mb-3">Be the first to document this strain for the community.</p>
@@ -886,7 +886,7 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
 
         {/* Discussions empty state — encourage first conversation */}
         {relatedThreads.length === 0 && (
-          <div className="bg-card/80 rounded-2xl border border-border/70 p-5 mb-6 text-center">
+          <div className="tt-spotlight bg-card/80 rounded-2xl border border-border/70 p-5 mb-6 text-center">
             <MessageSquare className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
             <h3 className="font-display font-semibold text-sm mb-1">No discussions yet</h3>
             <p className="text-xs text-muted-foreground mb-3">Be the first to start a conversation about {strain.name}.</p>
@@ -955,7 +955,7 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
           <div className="sticky top-20 space-y-4">
             {/* Quick stats */}
             {growStats.tier !== "none" && (
-              <div className="bg-card/80 rounded-2xl border border-border/70 p-4">
+              <div className="tt-spotlight bg-card/80 rounded-2xl border border-border/70 p-4">
                 <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Community data</h3>
                 <dl className="space-y-2 text-sm">
                   <div className="flex items-center justify-between">
@@ -993,7 +993,7 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
             )}
 
             {/* Related content counts */}
-            <div className="bg-card/80 rounded-2xl border border-border/70 p-4">
+            <div className="tt-spotlight bg-card/80 rounded-2xl border border-border/70 p-4">
               <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Content</h3>
               <div className="space-y-2 text-sm">
                 {relatedDiaries.length > 0 && (
@@ -1022,7 +1022,7 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
             </div>
 
             {/* Quick actions */}
-            <div className="bg-card/80 rounded-2xl border border-border/70 p-4 space-y-2">
+            <div className="tt-spotlight bg-card/80 rounded-2xl border border-border/70 p-4 space-y-2">
               <Link
                 href={`/diaries/new?strain=${strain.id}`}
                 className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-primary hover:bg-secondary/60 transition-colors w-full"
@@ -1045,7 +1045,7 @@ export default async function StrainPage({ params }: { params: Promise<{ id: str
 
             {/* Genetics info */}
             {strain.genetics && (
-              <div className="bg-card/80 rounded-2xl border border-border/70 p-4">
+              <div className="tt-spotlight bg-card/80 rounded-2xl border border-border/70 p-4">
                 <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">Genetics</h3>
                 <p className="text-sm text-muted-foreground line-clamp-4">{strain.genetics}</p>
               </div>

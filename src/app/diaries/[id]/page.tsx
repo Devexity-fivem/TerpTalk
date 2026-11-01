@@ -458,7 +458,7 @@ export default async function DiaryPage({
         ]} />
         {/* Header — overview card: lead photo first on mobile, media
             column on sm+; identity/meta on the left, actions at foot. */}
-        <div className="mb-5 bg-card/80 rounded-2xl border border-border/70 overflow-hidden">
+        <div className="tt-edge-card tt-spotlight mb-5 bg-card/80 rounded-2xl border border-border/70 overflow-hidden">
           <div className="flex flex-col sm:flex-row sm:items-stretch">
             {latestPhoto && (
               <a
@@ -839,7 +839,7 @@ export default async function DiaryPage({
 
         {/* Completeness nudge — owner only, encourages better records */}
         {completeness && !diary.harvested && completeness.percent < 100 && (
-          <div className="bg-card/80 rounded-2xl border border-border/70 p-4 mt-4">
+          <div className="tt-spotlight bg-card/80 rounded-2xl border border-border/70 p-4 mt-4">
             <div className="flex items-center justify-between text-sm mb-2">
               <span className="font-medium">Log completeness</span>
               <span className="text-muted-foreground text-xs">{completeness.percent}%</span>
@@ -854,7 +854,7 @@ export default async function DiaryPage({
         )}
 
         {/* Grow Setup Info */}
-        <details className="bg-card/80 rounded-2xl border border-border/70 mb-8 group">
+        <details className="tt-spotlight bg-card/80 rounded-2xl border border-border/70 mb-8 group">
           <summary className="p-4 text-sm font-semibold cursor-pointer flex items-center justify-between list-none marker:content-none">
             <span>Grow setup</span>
             <span aria-hidden="true" className="text-muted-foreground group-open:rotate-180 transition-transform">▼</span>
@@ -1100,7 +1100,7 @@ export default async function DiaryPage({
           )}
 
           {weeksMerged.length === 0 ? (
-            <div className="bg-card/80 rounded-2xl border border-border/70 p-8 text-center">
+            <div className="tt-spotlight bg-card/80 rounded-2xl border border-border/70 p-8 text-center">
               <Leaf className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
               <h3 className="font-display text-base font-semibold mb-1">No updates yet</h3>
               <p className="text-sm text-muted-foreground">Start documenting your grow journey with your first update!</p>
@@ -1268,7 +1268,7 @@ export default async function DiaryPage({
                       <Link
                         key={d.id}
                         href={diaryPath(d)}
-                        className="flex items-start gap-3 p-3 bg-card/80 rounded-2xl border border-border/70 hover:border-primary/40 transition-colors"
+                        className="flex items-start gap-3 p-3 tt-spotlight bg-card/80 rounded-2xl border border-border/70 hover:border-primary/40 transition-colors"
                       >
                         {d.updates[0]?.images[0]?.url ? (
                           // eslint-disable-next-line @next/next/no-img-element
@@ -1301,7 +1301,7 @@ export default async function DiaryPage({
                       <Link
                         key={d.id}
                         href={diaryPath(d)}
-                        className="flex items-start gap-3 p-3 bg-card/80 rounded-2xl border border-border/70 hover:border-primary/40 transition-colors"
+                        className="flex items-start gap-3 p-3 tt-spotlight bg-card/80 rounded-2xl border border-border/70 hover:border-primary/40 transition-colors"
                       >
                         {d.updates[0]?.images[0]?.url ? (
                           // eslint-disable-next-line @next/next/no-img-element
@@ -1332,7 +1332,7 @@ export default async function DiaryPage({
         <aside className="hidden lg:block" aria-label="Grow context">
           <div className="sticky top-20 space-y-4">
             {/* Grow summary card */}
-            <div className="bg-card/80 rounded-2xl border border-border/70 p-4">
+            <div className="tt-spotlight bg-card/80 rounded-2xl border border-border/70 p-4">
               <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Grow summary</h3>
               <dl className="space-y-2 text-sm">
                 <div className="flex items-center justify-between">
@@ -1383,7 +1383,7 @@ export default async function DiaryPage({
             </div>
 
             {/* Grower card — shared identity contract (popover + rank chip) */}
-            <div className="bg-card/80 rounded-2xl border border-border/70 p-4">
+            <div className="tt-spotlight bg-card/80 rounded-2xl border border-border/70 p-4">
               <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Grower</h3>
               <ProfileCard
                 username={diary.author.profile?.username}
@@ -1396,7 +1396,7 @@ export default async function DiaryPage({
 
             {/* Strain link */}
             {strainLink && (
-              <div className="bg-card/80 rounded-2xl border border-border/70 p-4">
+              <div className="tt-spotlight bg-card/80 rounded-2xl border border-border/70 p-4">
                 <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Strain</h3>
                 <Link
                   href={strainPath(strainLink)}
@@ -1409,7 +1409,7 @@ export default async function DiaryPage({
 
             {/* Discussion link */}
             {diary.discussion && !diary.discussion.deleted && (
-              <div className="bg-card/80 rounded-2xl border border-border/70 p-4">
+              <div className="tt-spotlight bg-card/80 rounded-2xl border border-border/70 p-4">
                 <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Discussion</h3>
                 <Link
                   href={`/forum/thread/${diary.discussion.slug}`}
@@ -1422,7 +1422,7 @@ export default async function DiaryPage({
 
             {/* Setup link */}
             {diary.setup && !diary.setup.deleted && (
-              <div className="bg-card/80 rounded-2xl border border-border/70 p-4">
+              <div className="tt-spotlight bg-card/80 rounded-2xl border border-border/70 p-4">
                 <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Setup</h3>
                 <Link
                   href={setupPath(diary.setup)}
@@ -1435,7 +1435,7 @@ export default async function DiaryPage({
 
             {/* Week jump — mini nav */}
             {weeksMerged.length > 1 && (
-              <div className="bg-card/80 rounded-2xl border border-border/70 p-4">
+              <div className="tt-spotlight bg-card/80 rounded-2xl border border-border/70 p-4">
                 <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Jump to week</h3>
                 <div className="flex flex-wrap gap-1">
                   {weeksMerged.map((w) => (

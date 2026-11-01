@@ -281,7 +281,7 @@ export default function ProfileClient({ initial }: { initial?: ProfileResponse |
       <div className="min-h-screen bg-background">
         <span className="sr-only" role="status">Loading profile…</span>
         <div className="max-w-4xl mx-auto px-4 py-8">
-          <div className="bg-card/80 rounded-2xl border border-border/70 p-4 mb-5 overflow-hidden">
+          <div className="tt-spotlight bg-card/80 rounded-2xl border border-border/70 p-4 mb-5 overflow-hidden">
             <div className="tt-spectrum-bar -mx-4 -mt-4 mb-4 h-1 opacity-60" />
             <div className="flex items-start gap-4">
               <Skeleton className="w-20 h-20 rounded-full shrink-0" />
@@ -302,7 +302,7 @@ export default function ProfileClient({ initial }: { initial?: ProfileResponse |
           </div>
           <div className="grid sm:grid-cols-2 gap-4">
             {[0, 1, 2, 3].map((i) => (
-              <div key={i} className="bg-card/80 rounded-2xl border border-border/70 p-4 space-y-3">
+              <div key={i} className="tt-spotlight bg-card/80 rounded-2xl border border-border/70 p-4 space-y-3">
                 <Skeleton className="h-5 w-32" />
                 <Skeleton className="h-4 w-full" />
                 <Skeleton className="h-4 w-3/4" />
@@ -734,7 +734,7 @@ function MemberProfile({ data, isSelf, username }: { data: ProfileResponse; isSe
     >
       <div className="max-w-4xl mx-auto px-4 py-6 sm:py-8">
         {/* ── Hero ─────────────────────────────────────────────────── */}
-        <div className="bg-card/80 rounded-2xl border border-border/70 mb-5 overflow-hidden">
+        <div className="tt-edge-card tt-spotlight bg-card/80 rounded-2xl border border-border/70 mb-5 overflow-hidden">
           {profile.profileSettings.bannerImage ? (
             <div className="relative h-28 sm:h-36 w-full">
               <BlobImage src={profile.profileSettings.bannerImage} alt="" fill sizes="896px" ariaHidden className="object-cover" />
@@ -1499,7 +1499,7 @@ function CollapsibleSectionCard({
   }
   const headingId = `${id}-title`
   return (
-    <section aria-labelledby={headingId} className="bg-card/80 rounded-2xl border border-border/70">
+    <section aria-labelledby={headingId} className="tt-spotlight bg-card/80 rounded-2xl border border-border/70">
       <button
         type="button"
         aria-expanded={open}
@@ -1673,7 +1673,7 @@ function BotProfile({ data }: { data: ProfileResponse }) {
     <div className="min-h-screen bg-background">
       <div className="max-w-4xl mx-auto px-4 py-8">
         {/* ── Hero ─────────────────────────────────────────────── */}
-        <div className="bg-card/80 rounded-2xl border border-border/70 mb-5 overflow-hidden">
+        <div className="tt-edge-card tt-spotlight bg-card/80 rounded-2xl border border-border/70 mb-5 overflow-hidden">
           <div className="tt-spectrum-bar h-1" />
           <div className="p-4 sm:p-5">
             <div className="flex items-start gap-4 flex-wrap">

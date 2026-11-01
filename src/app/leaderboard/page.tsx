@@ -319,7 +319,7 @@ export default async function LeaderboardPage({
         />
         <p className="text-xs text-muted-foreground mb-4 px-1">{activeTab.blurb}</p>
 
-        <div className="bg-card/80 rounded-2xl border border-border/70 overflow-hidden">
+        <div className="tt-spotlight bg-card/80 rounded-2xl border border-border/70 overflow-hidden">
           <div className="divide-y divide-border">
             {rows.length === 0 && (
               <EmptyState
@@ -410,7 +410,7 @@ export default async function LeaderboardPage({
 
         {/* Best New Growers — same week, accounts under 30 days */}
         {tab === "week" && weekly && weekly.newRows.length > 0 && (
-          <div className="mt-6 bg-card/80 rounded-2xl border border-border/70 overflow-hidden">
+          <div className="mt-6 tt-spotlight bg-card/80 rounded-2xl border border-border/70 overflow-hidden">
             <div className="px-4 py-3 border-b border-border">
               <h2 className="font-display text-sm font-semibold flex items-center gap-2">
                 <Sprout className="w-4 h-4 text-primary" /> Best New Growers

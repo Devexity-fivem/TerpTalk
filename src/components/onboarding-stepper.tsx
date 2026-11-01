@@ -259,7 +259,7 @@ export default function OnboardingStepper({
     }`
 
   const btnPrimary =
-    "min-h-12 px-6 rounded-lg bg-primary text-primary-foreground font-semibold hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+    "tt-cta min-h-12 px-6 rounded-lg bg-primary text-primary-foreground font-semibold hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
   const btnSecondary =
     "min-h-12 px-6 rounded-lg border border-border font-semibold hover:bg-secondary disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
   const btnGhost = "min-h-11 px-4 rounded-lg text-sm text-muted-foreground hover:text-foreground"
@@ -290,7 +290,7 @@ export default function OnboardingStepper({
 
         {/* Step 0 — Welcome */}
         {step === 0 && (
-          <div className="bg-card/80 border border-border/70 rounded-2xl p-8 text-center">
+          <div className="tt-spotlight bg-card/80 border border-border/70 rounded-2xl p-8 text-center">
             <div className="bg-primary/10 p-4 rounded-full inline-flex mb-4">
               <Leaf className="w-10 h-10 text-primary" />
             </div>
@@ -316,7 +316,7 @@ export default function OnboardingStepper({
 
         {/* Step 1 — Interests */}
         {step === 1 && (
-          <div className="bg-card/80 border border-border/70 rounded-2xl p-6 sm:p-8">
+          <div className="tt-spotlight bg-card/80 border border-border/70 rounded-2xl p-6 sm:p-8">
             <div className="text-center mb-6">
               <Sparkles className="w-8 h-8 text-primary mx-auto mb-3" />
               <h1 ref={headingRef} tabIndex={-1} className="font-display text-2xl font-bold mb-2 outline-none tracking-tight">What are you into?</h1>
@@ -392,7 +392,7 @@ export default function OnboardingStepper({
 
         {/* Step 2 — Profile */}
         {step === 2 && (
-          <div className="bg-card/80 border border-border/70 rounded-2xl p-6 sm:p-8">
+          <div className="tt-spotlight bg-card/80 border border-border/70 rounded-2xl p-6 sm:p-8">
             <div className="text-center mb-6">
               <User className="w-8 h-8 text-primary mx-auto mb-3" />
               <h1 ref={headingRef} tabIndex={-1} className="font-display text-2xl font-bold mb-2 outline-none tracking-tight">Make it yours</h1>
@@ -483,7 +483,7 @@ export default function OnboardingStepper({
 
         {/* Step 3 — Recovery phrase */}
         {step === 3 && (
-          <div className="bg-card/80 border border-border/70 rounded-2xl p-6 sm:p-8">
+          <div className="tt-spotlight bg-card/80 border border-border/70 rounded-2xl p-6 sm:p-8">
             <div className="text-center mb-6">
               <KeyRound className="w-8 h-8 text-primary mx-auto mb-3" />
               <h1 ref={headingRef} tabIndex={-1} className="font-display text-2xl font-bold mb-2 outline-none tracking-tight">Secure your account</h1>
@@ -568,7 +568,7 @@ export default function OnboardingStepper({
 
         {/* Step 4 — Suggested growers */}
         {step === 4 && (
-          <div className="bg-card/80 border border-border/70 rounded-2xl p-6 sm:p-8">
+          <div className="tt-spotlight bg-card/80 border border-border/70 rounded-2xl p-6 sm:p-8">
             <div className="text-center mb-6">
               <Users className="w-8 h-8 text-primary mx-auto mb-3" />
               <h1 ref={headingRef} tabIndex={-1} className="font-display text-2xl font-bold mb-2 outline-none tracking-tight">Growers to follow</h1>
@@ -617,7 +617,7 @@ export default function OnboardingStepper({
 
         {/* Step 5 — Done */}
         {step === 5 && (
-          <div className="bg-card/80 border border-border/70 rounded-2xl p-8 text-center">
+          <div className="tt-spotlight bg-card/80 border border-border/70 rounded-2xl p-8 text-center">
             <div className="bg-primary/10 p-4 rounded-full inline-flex mb-4">
               <Check className="w-10 h-10 text-primary" />
             </div>

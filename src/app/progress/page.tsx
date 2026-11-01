@@ -133,7 +133,7 @@ export default function ProgressPage() {
         />
 
         {/* Level card */}
-        <section aria-label="Level" className="bg-card/80 rounded-2xl border border-border/70 p-4 mb-4">
+        <section aria-label="Level" className="tt-spotlight bg-card/80 rounded-2xl border border-border/70 p-4 mb-4">
           <div className="flex items-baseline gap-2 mb-1">
             <span className="text-2xl font-bold">Grow Level {data.level}</span>
             <span className="text-sm text-muted-foreground">

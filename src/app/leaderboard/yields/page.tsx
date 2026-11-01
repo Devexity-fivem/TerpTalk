@@ -117,15 +117,15 @@ export default async function YieldLeaderboardPage() {
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
-          <div className="bg-card/80 border border-border/70 rounded-2xl p-4">
+          <div className="tt-spotlight bg-card/80 border border-border/70 rounded-2xl p-4">
             <div className="text-3xl font-bold text-primary">{totalHarvests}</div>
             <div className="text-sm text-muted-foreground">Community harvests</div>
           </div>
-          <div className="bg-card/80 border border-border/70 rounded-2xl p-4">
+          <div className="tt-spotlight bg-card/80 border border-border/70 rounded-2xl p-4">
             <div className="text-3xl font-bold text-primary">{rows.length}</div>
             <div className="text-sm text-muted-foreground">Strains represented</div>
           </div>
-          <div className="bg-card/80 border border-border/70 rounded-2xl p-4">
+          <div className="tt-spotlight bg-card/80 border border-border/70 rounded-2xl p-4">
             <div className="text-3xl font-bold text-primary">{toOz(totalGrams).toFixed(1)} oz</div>
             <div className="text-sm text-muted-foreground">Total reported yield</div>
           </div>
@@ -143,7 +143,7 @@ export default async function YieldLeaderboardPage() {
             {rows.map((row, i) => (
               <div
                 key={row.strain}
-                className="bg-card/80 border border-border/70 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center gap-4 hover:border-primary/40 transition-colors"
+                className="tt-spotlight bg-card/80 border border-border/70 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center gap-4 hover:border-primary/40 transition-colors"
               >
                 <div className="flex items-center gap-3 min-w-0">
                   <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary font-bold shrink-0">

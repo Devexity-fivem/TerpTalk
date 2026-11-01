@@ -91,7 +91,7 @@ export default async function SetupsPage({
         </div>
 
         {setups.length === 0 ? (
-          <div className="bg-card/80 rounded-2xl border border-border/70">
+          <div className="tt-spotlight bg-card/80 rounded-2xl border border-border/70">
             <EmptyState
               icon={Settings}
               title={total === 0 ? "No setups shared yet" : "No setups on this page"}
@@ -105,7 +105,7 @@ export default async function SetupsPage({
               {setups.map((setup) => (
                 <div
                   key={setup.id}
-                  className="bg-card/80 rounded-2xl border border-border/70 overflow-hidden hover:border-primary/50 transition-colors"
+                  className="tt-spotlight bg-card/80 rounded-2xl border border-border/70 overflow-hidden hover:border-primary/50 transition-colors"
                 >
                   <Link href={setupPath(setup)} className="block">
                     {setup.images.length > 0 ? (

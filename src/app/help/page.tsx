@@ -14,7 +14,7 @@ function Section({ title, items }: { title: string; items: QA[] }) {
   return (
     <section>
       <h2 className="font-display text-lg font-semibold text-foreground mb-2">{title}</h2>
-      <div className="bg-card/80 rounded-2xl border border-border/70 divide-y divide-border/60">
+      <div className="tt-spotlight bg-card/80 rounded-2xl border border-border/70 divide-y divide-border/60">
         {items.map(({ q, a }) => (
           <details key={q} className="group p-4">
             <summary className="cursor-pointer font-medium text-sm text-foreground list-none flex items-center justify-between gap-3">
@@ -230,7 +230,7 @@ export default function HelpPage() {
 
         <Link
           href="/plant-doctor"
-          className="tt-edge-card flex items-center gap-3 mb-8 bg-card/80 border border-border/70 rounded-2xl p-4 hover:border-primary/40 transition-all"
+          className="tt-edge-card flex items-center gap-3 mb-8 tt-spotlight bg-card/80 border border-border/70 rounded-2xl p-4 hover:border-primary/40 transition-all"
         >
           <Stethoscope className="w-6 h-6 text-primary shrink-0" />
           <div>

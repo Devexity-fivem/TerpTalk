@@ -7,6 +7,7 @@ import { useSession } from "next-auth/react"
 import { isAdmin } from "@/lib/roles"
 import { useRouter } from "next/navigation"
 import { ShieldCheck, Loader2, ImageIcon, Trash2, ChevronLeft, ChevronRight } from "@/lib/icons"
+import BlobImage from "@/components/ui/blob-image"
 
 interface MediaItem {
   id: string
@@ -137,7 +138,7 @@ export default function AdminMediaPage() {
           {items.map((item) => (
             <div key={`${item.type}-${item.id}`} className="bg-card rounded-xl border border-border p-3">
               <a href={item.url} target="_blank" rel="noopener noreferrer" className="block aspect-video bg-black/5 rounded-lg overflow-hidden mb-2">
-                <img src={item.url} alt={`${item.type} uploaded by @${item.author}`} className="w-full h-full object-contain" loading="lazy" />
+                <BlobImage src={item.url} alt={`${item.type} uploaded by @${item.author}`} className="w-full h-full object-contain" />
               </a>
               <div className="text-xs text-muted-foreground mb-1">{item.type} · @{item.author} · {new Date(item.createdAt).toLocaleDateString()}</div>
               <button

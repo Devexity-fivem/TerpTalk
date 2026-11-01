@@ -160,6 +160,9 @@ export default function CompleteProfilePage() {
             <div className="flex items-center gap-4">
               <div className="w-20 h-20 bg-secondary rounded-full flex items-center justify-center overflow-hidden">
                 {avatar ? (
+                  // Avatar preview is a local data URI — next/image can't
+                  // optimize it, so a plain <img> is correct here.
+                  // eslint-disable-next-line @next/next/no-img-element
                   <img src={avatar} alt="Avatar preview" className="w-full h-full object-cover" />
                 ) : (
                   <User className="w-10 h-10 text-muted-foreground" />

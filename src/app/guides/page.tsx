@@ -61,7 +61,7 @@ export default async function GuidesPage() {
         />
 
         {guides.length === 0 ? (
-          <div className="bg-card/80 rounded-2xl border border-border/70">
+          <div className="tt-spotlight bg-card/80 rounded-2xl border border-border/70">
             <EmptyState
               icon={BookOpen}
               title="No guides yet"
@@ -74,7 +74,7 @@ export default async function GuidesPage() {
               <h2 className="font-display text-sm font-semibold uppercase tracking-wide text-muted-foreground mb-3">{topic}</h2>
               <div className="grid sm:grid-cols-2 gap-4">
                 {guides.filter((g) => g.topic === topic).map((g) => (
-                  <Link key={g.id} href={`/guides/${g.slug}`} className="bg-card/80 border border-border/70 rounded-2xl p-5 hover:border-primary/50 transition-colors">
+                  <Link key={g.id} href={`/guides/${g.slug}`} className="tt-spotlight bg-card/80 border border-border/70 rounded-2xl p-5 hover:border-primary/50 transition-colors">
                     <h3 className="font-display font-semibold mb-1">{g.title}</h3>
                     <p className="text-sm text-muted-foreground line-clamp-2">{g.excerpt}</p>
                     <p className="text-xs text-muted-foreground mt-2 inline-flex items-center gap-1.5">

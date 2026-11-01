@@ -242,7 +242,7 @@ function NewThreadForm() {
         </div>
 
         {/* Form */}
-        <div className="bg-card/80 rounded-2xl border border-border/70 p-6">
+        <div className="tt-spotlight bg-card/80 rounded-2xl border border-border/70 p-6">
           <form onSubmit={handleSubmit} className="space-y-6">
             <div>
               <label htmlFor="category" className="block text-sm font-medium mb-2">
@@ -411,7 +411,7 @@ function NewThreadForm() {
               <button
                 type="submit"
                 disabled={loading}
-                className="flex-1 bg-primary text-primary-foreground py-3 rounded-full font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                className="tt-cta flex-1 bg-primary text-primary-foreground py-3 rounded-full font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
                 {loading ? (
                   <>

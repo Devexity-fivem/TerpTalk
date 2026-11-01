@@ -178,7 +178,7 @@ export default function AchievementsPage() {
                 <div
                   key={a.name ?? `hidden-${cat}-${i}`}
                   className={cn(
-                    "flex items-start gap-3 rounded-2xl border border-border/70 bg-card/80 p-3",
+                    "tt-spotlight flex items-start gap-3 rounded-2xl border border-border/70 bg-card/80 p-3",
                     !a.earned && "opacity-80"
                   )}
                 >
