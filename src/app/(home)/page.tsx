@@ -630,14 +630,14 @@ export default async function Home() {
       {spotlight && (
         <section className="tt-reveal px-4 sm:px-6 lg:px-8 pb-4">
           <div className="max-w-7xl mx-auto">
-            <div className="bg-card rounded-2xl border border-border p-6 sm:p-8 overflow-hidden relative">
-              <div className="absolute top-0 right-0 p-3">
+            <div className="tt-edge-card bg-card rounded-2xl border border-border overflow-hidden relative">
+              <div className="absolute top-0 right-0 p-3 z-10">
                 <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-primary/10 text-primary text-xs font-semibold uppercase tracking-wide">
                   <Sprout className="w-3.5 h-3.5" />
                   Grower Spotlight
                 </span>
               </div>
-              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-5">
+              <div className="flex flex-col sm:flex-row items-start sm:items-stretch gap-5 p-6 sm:p-8 sm:pr-0">
                 <Avatar src={spotlight.author.avatarUrl ?? undefined} size="xl" alt={spotlight.author.username} />
                 <div className="flex-1 min-w-0">
                   <h3 className="font-display text-2xl font-bold mb-1 tracking-tight">{spotlight.diary.title}</h3>
@@ -649,10 +649,26 @@ export default async function Home() {
                 </div>
                 <Link
                   href={diaryPath(spotlight.diary)}
-                  className="tt-cta inline-flex items-center gap-1.5 px-4 py-2 text-sm font-semibold rounded-full text-primary-foreground transition-all shrink-0"
+                  className="tt-cta inline-flex items-center gap-1.5 px-4 py-2 text-sm font-semibold rounded-full text-primary-foreground transition-all shrink-0 sm:mr-6"
                 >
                   Follow this grow <ArrowRight className="w-4 h-4" />
                 </Link>
+                {spotlight.diary.photo && (
+                  <Link
+                    href={diaryPath(spotlight.diary)}
+                    className="block shrink-0 sm:order-last sm:w-56 lg:w-64 sm:self-stretch -mx-6 -mb-6 sm:mx-0 sm:mb-0"
+                    aria-label={`Open ${spotlight.diary.title}`}
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={mediaProxyUrl("diary", spotlight.diary.photo)}
+                      alt={spotlight.diary.title}
+                      className="w-full aspect-[16/9] object-cover sm:aspect-auto sm:h-full"
+                      loading="lazy"
+                      decoding="async"
+                    />
+                  </Link>
+                )}
               </div>
             </div>
           </div>

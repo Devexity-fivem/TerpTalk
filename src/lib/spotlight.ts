@@ -33,6 +33,8 @@ export interface GrowerSpotlight {
     strain: string | null
     stage: string
     updatedAt: Date
+    /** Latest update image id — serialize through mediaProxyUrl("diary", id) */
+    photo: string | null
   }
   author: {
     id: string
@@ -79,6 +81,11 @@ export async function getGrowerSpotlight(now = new Date()): Promise<GrowerSpotli
       strain: true,
       stage: true,
       updatedAt: true,
+      updates: {
+        take: 1,
+        orderBy: { createdAt: "desc" },
+        select: { images: { take: 1, orderBy: { order: "asc" }, select: { id: true, url: true } } },
+      },
       author: {
         select: {
           id: true,
@@ -103,6 +110,7 @@ export async function getGrowerSpotlight(now = new Date()): Promise<GrowerSpotli
       strain: pick.strain,
       stage: pick.stage,
       updatedAt: pick.updatedAt,
+      photo: pick.updates[0]?.images[0]?.id ?? null,
     },
     author: {
       id: pick.author.id,
