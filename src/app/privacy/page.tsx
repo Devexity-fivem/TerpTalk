@@ -7,7 +7,7 @@ export const metadata = buildMetadata({
   pathname: "/privacy",
 })
 
-const LAST_UPDATED = "September 13, 2026"
+const LAST_UPDATED = "November 1, 2026"
 
 export default function PrivacyPage() {
   return (
@@ -47,7 +47,7 @@ export default function PrivacyPage() {
           </section>
           <section>
             <h2 className="font-display text-lg font-semibold text-foreground mb-2">Services we rely on</h2>
-            <p>TerpTalk runs on a small number of infrastructure providers that process data on our behalf: Vercel (hosting, image storage, anonymized analytics), a managed PostgreSQL database, and Pusher (delivers live chat and notifications in real time — message content passes through it to reach your browser). Uploaded photos are stored as public links — we strip location data (EXIF/GPS) from images automatically, but anyone with a photo&apos;s link can view it.</p>
+            <p>TerpTalk runs on a small number of infrastructure providers that process data on our behalf: Vercel (hosting, image storage, anonymized analytics), Supabase (our managed PostgreSQL database), and Pusher (delivers live chat and notifications in real time — message content passes through it to reach your browser). Uploaded photos are stored as public links — we strip location data (EXIF/GPS) from images automatically, but anyone with a photo&apos;s link can view it.</p>
           </section>
           <section>
             <h2 className="font-display text-lg font-semibold text-foreground mb-2">Your controls</h2>
