@@ -245,8 +245,8 @@ export default async function Home() {
           <div className="absolute right-[4%] top-24 h-70 w-70 rounded-full bg-spectrum/14 blur-[110px]" />
           <div className="absolute left-[6%] top-44 h-50 w-50 rounded-full bg-accent/10 blur-[100px]" />
         </div>
-        <div className="relative mx-auto grid max-w-7xl items-center gap-12 lg:grid-cols-[1.05fr_0.95fr] lg:gap-16">
-          <div className="text-center lg:text-left">
+        <div className="relative mx-auto flex max-w-7xl flex-col items-center gap-12 lg:gap-16">
+          <div className="text-center max-w-3xl">
             <div className="mb-7 inline-flex items-center gap-2 rounded-full border border-primary/25 bg-primary/10 px-4 py-1.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-primary">
               <CannabisLeaf className="h-3.5 w-3.5" />
               21+ growers&apos; commons
@@ -257,20 +257,20 @@ export default async function Home() {
                 together.
               </span>
             </h1>
-            <p className="text-lg sm:text-xl text-muted-foreground max-w-2xl mx-auto lg:mx-0 mb-4 leading-relaxed text-pretty">
+            <p className="text-lg sm:text-xl text-muted-foreground max-w-2xl mx-auto mb-4 leading-relaxed text-pretty">
               TerpTalk is a 21+ community built around cannabis cultivation. Ask questions, share your grow, compare genetics, troubleshoot problems, and learn from other growers.
             </p>
             {/* Primary and secondary actions (session-aware, client-side) */}
             <HeroCta />
             {chatTeaser && (
-              <div className="mt-5 flex justify-center lg:justify-start">
+              <div className="mt-5 flex justify-center">
                 <ChatTeaser {...chatTeaser} />
               </div>
             )}
           </div>
 
           {/* Community canopy — a live panel rendered from real site data. */}
-          <div className="relative">
+          <div className="relative w-full max-w-2xl">
             <div className="absolute -inset-6 rounded-[2.5rem] bg-primary/10 blur-2xl" />
             <div className="absolute -right-8 -top-8 h-44 w-44 rounded-full bg-spectrum/25 blur-3xl" />
             <div className="tt-holo-border overflow-hidden rounded-3xl border border-border/70 bg-card/80 shadow-2xl backdrop-blur-xl">

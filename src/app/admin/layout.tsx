@@ -45,30 +45,34 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   ]
 
   return (
-    <div className="min-h-screen bg-background">
-      <div className="tt-glass tt-hairline-b border-b border-border/60">
-        <div className="max-w-6xl mx-auto px-4">
-          <div className="flex items-center gap-2 py-3">
-            <div className="tt-brand-tile rounded-lg p-1">
-              <ShieldCheck className="w-4 h-4 text-primary shrink-0" />
-            </div>
-            <span className="tt-eyebrow">Command Center</span>
-            <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">
+    <div className="min-h-screen bg-background md:flex">
+      {/* Command rail — full-height sidebar on desktop, compact header +
+          horizontal scroll nav on mobile. */}
+      <aside className="tt-glass md:sticky md:top-0 md:h-screen md:w-60 md:shrink-0 md:border-r border-b md:border-b-0 border-border/60">
+        <div className="flex items-center gap-2 px-4 pt-4 pb-3">
+          <div className="tt-brand-tile rounded-lg p-1">
+            <ShieldCheck className="w-4 h-4 text-primary shrink-0" />
+          </div>
+          <div className="min-w-0">
+            <div className="tt-eyebrow">Command Center</div>
+            <span className="mt-1 inline-block rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">
               {admin ? "administrator" : staff.role.toLowerCase()}
             </span>
           </div>
+        </div>
+        <div className="md:hairline-t md:px-3">
           <Suspense fallback={
-            <nav className="flex gap-1 overflow-x-auto pb-2 -mx-1 px-1" aria-hidden>
+            <nav className="flex gap-1 overflow-x-auto pb-2 -mx-1 px-1 md:flex-col md:gap-0.5" aria-hidden>
               {nav.filter((n) => !n.adminOnly || admin).map((n) => (
-                <span key={n.href} className="px-3 py-1.5 rounded-lg text-[13px] font-medium text-muted-foreground whitespace-nowrap">{n.label}</span>
+                <span key={n.href} className="px-3 py-1.5 rounded-lg text-[13px] font-medium text-muted-foreground whitespace-nowrap md:py-2">{n.label}</span>
               ))}
             </nav>
           }>
             <AdminNav items={nav.filter((n) => !n.adminOnly || admin)} />
           </Suspense>
         </div>
-      </div>
-      {children}
+      </aside>
+      <main className="flex-1 min-w-0">{children}</main>
     </div>
   )
 }

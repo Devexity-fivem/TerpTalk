@@ -36,30 +36,62 @@ export default function AdminNav({ items }: { items: AdminNavItem[] }) {
     )
   }
 
+  const cls = (active: boolean, extra = "") =>
+    "relative flex items-center gap-2 rounded-xl text-[13px] font-medium transition-colors " +
+    (active
+      ? "bg-secondary text-foreground shadow-sm"
+      : "text-muted-foreground hover:text-foreground hover:bg-secondary/60") + extra
+
+  const indicator = (active: boolean, vertical: boolean) =>
+    active && (
+      <span
+        className={
+          vertical
+            ? "absolute left-0 inset-y-2 w-0.5 rounded-full tt-spectrum-bar"
+            : "tt-spectrum-bar absolute inset-x-3 -bottom-[9px] h-0.5 rounded-full"
+        }
+      />
+    )
+
   return (
-    <nav className="flex gap-1 overflow-x-auto pb-2 -mx-1 px-1" aria-label="Admin sections">
-      {items.map(({ href, label, icon: Icon }) => {
-        const active = isActive(href)
-        return (
-          <Link
-            key={href}
-            href={href}
-            aria-current={active ? "page" : undefined}
-            className={
-              "relative flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[13px] font-medium whitespace-nowrap transition-colors " +
-              (active
-                ? "text-foreground bg-secondary"
-                : "text-muted-foreground hover:text-foreground hover:bg-secondary/70")
-            }
-          >
-            <Icon className={active ? "w-3.5 h-3.5 text-primary" : "w-3.5 h-3.5"} />
-            {label}
-            {active && (
-              <span className="tt-spectrum-bar absolute inset-x-3 -bottom-[9px] h-0.5 rounded-full" />
-            )}
-          </Link>
-        )
-      })}
-    </nav>
+    <>
+      {/* Desktop — vertical sidebar */}
+      <nav className="hidden md:flex md:flex-col md:gap-0.5 md:py-2" aria-label="Admin sections">
+        {items.map(({ href, label, icon: Icon }) => {
+          const active = isActive(href)
+          return (
+            <Link
+              key={href}
+              href={href}
+              aria-current={active ? "page" : undefined}
+              className={cls(active, " pl-3 pr-3 py-2")}
+            >
+              {indicator(active, true)}
+              <Icon className={active ? "w-4 h-4 text-primary" : "w-4 h-4"} />
+              {label}
+            </Link>
+          )
+        })}
+      </nav>
+
+      {/* Mobile — horizontal scroll bar */}
+      <nav className="flex md:hidden gap-1 overflow-x-auto pb-2 -mx-1 px-1" aria-label="Admin sections">
+        {items.map(({ href, label, icon: Icon }) => {
+          const active = isActive(href)
+          return (
+            <Link
+              key={href}
+              href={href}
+              aria-current={active ? "page" : undefined}
+              className={cls(active, " px-3 py-1.5 whitespace-nowrap")}
+            >
+              {indicator(active, false)}
+              <Icon className={active ? "w-3.5 h-3.5 text-primary" : "w-3.5 h-3.5"} />
+              {label}
+            </Link>
+          )
+        })}
+      </nav>
+    </>
   )
 }
