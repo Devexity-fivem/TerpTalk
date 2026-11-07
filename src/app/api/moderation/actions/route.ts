@@ -347,26 +347,75 @@ export async function POST(request: Request) {
             break
           }
           case "MOMENT": {
-            const mm = await tx.moment.findUnique({ where: { id: targetId }, select: { id: true } })
+            const mm = await tx.moment.findUnique({ where: { id: targetId }, select: { id: true, repostOfId: true, authorId: true } })
             ok = !!(await tx.moment.updateMany({ where: { id: targetId, authorId: targetUserId }, data: { deleted: true } })).count
             if (ok && mm) {
               deletedLink = [`/m/${targetId}`]
               const imgs = await tx.momentImage.findMany({ where: { momentId: targetId }, select: { url: true } })
               await tx.momentImage.deleteMany({ where: { momentId: targetId } })
               deletedBlobUrls.push(...imgs.map((i) => i.url))
+              // V3 progression awards are sourced to the moment — MOMENT_POSTED
+              // plus standing from reactions/comments/reposts of it. Legacy
+              // rep never writes MOMENT sources; the intent self-completes.
+              repIntents.push( {
+                kind: "SOURCE", sourceType: "MOMENT", sourceId: targetId,
+                reason: "Content removed by staff", requestedBy: staff.id,
+              })
+              xpIntents.push( {
+                kind: "SOURCE", sourceType: "MOMENT", sourceId: targetId,
+                reason: "Content removed by staff", requestedBy: staff.id,
+              })
+              // A deleted repost/quote also *granted* REPOST_RECEIVED to the
+              // original author — claw it back only when the member has no
+              // other live repost of that target (quotes share the key).
+              if (mm.repostOfId) {
+                const remaining = await tx.moment.count({
+                  where: { authorId: mm.authorId, repostOfId: mm.repostOfId, deleted: false },
+                })
+                if (remaining === 0) {
+                  xpIntents.push( {
+                    kind: "KEY", eventKey: `repost:${mm.authorId}:moment:${mm.repostOfId}`,
+                    reason: "Content removed by staff", requestedBy: staff.id,
+                  })
+                }
+              }
             }
             break
           }
           case "MOMENT_COMMENT": {
-            // Same shape as SETUP_COMMENT: authorId-scoped, idempotent,
-            // no rep/XP to reverse, one notification sweep.
-            const c = await tx.momentComment.updateMany({
-              where: { id: targetId, authorId: targetUserId },
-              data: { deleted: true },
+            // Same shape as SETUP_COMMENT: authorId-scoped and idempotent.
+            // V3 COMMENT_RECEIVED *is* paid on moment comments (unlike setup
+            // comments) — keyed per (commenter, moment), so the standing is
+            // clawed back only when the commenter's last live comment on
+            // that moment is removed. COMMENT + MENTION notifications share
+            // the `#comment-<id>` link; one sweep clears them.
+            const mc = await tx.momentComment.findUnique({
+              where: { id: targetId },
+              select: { authorId: true, deleted: true, momentId: true, moment: { select: { authorId: true } } },
             })
+            // updateMany matches live AND already-deleted rows so a
+            // repeated action stays idempotent — the reversal check below
+            // only runs when this call actually performed the delete.
+            const c = mc
+              ? await tx.momentComment.updateMany({
+                  where: { id: targetId, authorId: targetUserId },
+                  data: { deleted: true },
+                })
+              : { count: 0 }
             ok = c.count > 0
-            if (ok) {
+            if (ok && mc) {
               await tx.notification.deleteMany({ where: commentLinkWhere(targetId) })
+              if (!mc.deleted && mc.authorId !== mc.moment.authorId) {
+                const remaining = await tx.momentComment.count({
+                  where: { momentId: mc.momentId, authorId: mc.authorId, deleted: false },
+                })
+                if (remaining === 0) {
+                  xpIntents.push( {
+                    kind: "KEY", eventKey: `comment:${mc.authorId}:moment:${mc.momentId}`,
+                    reason: "Content removed by staff", requestedBy: staff.id,
+                  })
+                }
+              }
             }
             break
           }

@@ -31,6 +31,13 @@ const SOURCES: Array<{ key: keyof typeof XP_TABLE; label: string; note: string }
   { key: "CONTEST_ENTRY", label: "Enter a contest", note: "Submit to Budshot of the Week or Diary of the Month." },
   { key: "CONTEST_WEEKLY_WIN", label: "Win Budshot of the Week", note: "Weekly community photo contest." },
   { key: "CONTEST_MONTHLY_WIN", label: "Win Diary of the Month", note: "Monthly grow diary contest." },
+  { key: "FOLLOWER_GAINED", label: "Gain a follower", note: "Someone chooses to follow your grows." },
+  { key: "COMMENT_RECEIVED", label: "Receive a comment", note: "On your posts, diary updates, or moments." },
+  { key: "REPOST_RECEIVED", label: "Get reposted", note: "Someone shares your moment with their circle." },
+  { key: "UPDATE_REACTION_RECEIVED", label: "Reactions on updates", note: "Reactions on your diary updates." },
+  { key: "POST_REACTION_RECEIVED", label: "Reactions on posts", note: "Reactions on your forum posts." },
+  { key: "DIARY_REACTION_RECEIVED", label: "Reactions on diaries", note: "Reactions on your grow diaries." },
+  { key: "MOMENT_REACTION_RECEIVED", label: "Reactions on moments", note: "Reactions on your feed moments." },
 ]
 
 export default function ProgressionPage() {

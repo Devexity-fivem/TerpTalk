@@ -7,6 +7,7 @@ import { checkMaintenance } from "@/lib/maintenance"
 import { revalidateTag } from "next/cache"
 import { deleteImages } from "@/lib/blob"
 import { invalidateNotificationsForLink } from "@/lib/notify"
+import { enqueueXpReversal, drainXpOne } from "@/lib/progression-outbox"
 import { getMomentForViewer, momentPath } from "@/lib/moments"
 
 type Ctx = { params: Promise<{ id: string }> }
@@ -32,16 +33,43 @@ export async function DELETE(_request: Request, { params }: Ctx) {
     const maintenance = await checkMaintenance()
     if (maintenance) return maintenance
     const { id } = await params
-    const m = await prisma.moment.findUnique({ where: { id }, select: { id: true, authorId: true, deleted: true } })
+    const m = await prisma.moment.findUnique({ where: { id }, select: { id: true, authorId: true, deleted: true, repostOfId: true } })
     if (!m || m.deleted) return NextResponse.json({ error: "Not found" }, { status: 404 })
     if (m.authorId !== session.user.id) return forbidden()
 
+    // Durable reversal intents — committed in the SAME transaction as the
+    // delete so a crash can't strand progression on removed content.
+    const reversalIds: string[] = []
     const urls = await prisma.$transaction(async (tx) => {
       await tx.moment.updateMany({ where: { id, deleted: false }, data: { deleted: true } })
       const imgs = await tx.momentImage.findMany({ where: { momentId: id }, select: { url: true } })
       await tx.momentImage.deleteMany({ where: { momentId: id } })
+      // SOURCE sweeps every award attributed to this moment: MOMENT_POSTED,
+      // plus the standing others earned from reactions, comments, and
+      // reposts/quotes of it.
+      reversalIds.push(await enqueueXpReversal(tx, {
+        kind: "SOURCE", sourceType: "MOMENT", sourceId: id,
+        reason: "Moment removed", requestedBy: session.user.id,
+      }))
+      // This row may itself be a repost/quote that GRANTED REPOST_RECEIVED
+      // to the original author under a deterministic key. Reverse it only
+      // when no other live repost by this member of the same target remains
+      // (a quote and a pure repost share the key — deleting one of two
+      // must not claw back the other's standing).
+      if (m.repostOfId) {
+        const remaining = await tx.moment.count({
+          where: { authorId: m.authorId, repostOfId: m.repostOfId, deleted: false },
+        })
+        if (remaining === 0) {
+          reversalIds.push(await enqueueXpReversal(tx, {
+            kind: "KEY", eventKey: `repost:${m.authorId}:moment:${m.repostOfId}`,
+            reason: "Repost removed", requestedBy: session.user.id,
+          }))
+        }
+      }
       return imgs.map((i) => i.url)
     })
+    for (const rid of reversalIds) await drainXpOne(rid).catch(() => false)
     await invalidateNotificationsForLink(momentPath(id))
     deleteImages(urls).catch(() => {})
     // Moments are a search type — a deleted one must stop matching.

@@ -236,6 +236,89 @@ async function main() {
     r.status === 200 ? pass("comment delete: own comment → 200") : fail("own delete", r.status)
   }
 
+  // ── D. progression reversal — V4 integrity ─────────────────────
+  // A dedicated member aged past the 24h standing-grantor floor so peer
+  // awards actually write ledger rows (fresh users get withheld at 0/0).
+  {
+    const revU = await createUser("rev")
+    rlUsers.push(revU.id)
+    await prisma.user.update({
+      where: { id: revU.id },
+      data: { createdAt: new Date(Date.now() - 25 * 3600 * 1000) },
+    })
+    const { cookie: revC } = await login(revU.username, revU.password)
+
+    // F-1: moment delete sweeps every award sourced to the moment.
+    const mr = await api("/api/moments", { method: "POST", body: { content: M("reversal post") }, cookie: revC })
+    const revPost = (mr.data?.moment as { id?: string } | undefined)?.id ?? ""
+    if (mr.status === 201 && revPost) {
+      const liveBefore = await prisma.progressionEvent.count({
+        where: { sourceType: "MOMENT", sourceId: revPost, reversedAt: null, reversalOfId: null },
+      })
+      const md = await api(`/api/moments/${revPost}`, { method: "DELETE", cookie: revC })
+      const liveAfter = await prisma.progressionEvent.count({
+        where: { sourceType: "MOMENT", sourceId: revPost, reversedAt: null, reversalOfId: null },
+      })
+      const revRows = await prisma.progressionEvent.count({
+        where: { sourceType: "MOMENT", sourceId: revPost, type: "REVERSAL" },
+      })
+      md.status === 200 && liveBefore > 0 && liveAfter === 0 && revRows > 0
+        ? pass("moment delete: sourced progression reversed")
+        : fail("moment delete reversal", { s: md.status, liveBefore, liveAfter, revRows })
+    } else fail("reversal fixture: moment create", { s: mr.status })
+
+    // F-2a: un-repost claws back REPOST_RECEIVED — keyed per reposter+target.
+    const repostKey = `repost:${revU.id}:moment:${postPub}`
+    const rp1 = await api(`/api/moments/${postPub}/repost`, { method: "POST", cookie: revC })
+    const rp2 = await api(`/api/moments/${postPub}/repost`, { method: "POST", cookie: revC })
+    const repostEv = await prisma.progressionEvent.findFirst({
+      where: { key: repostKey, reversalOfId: null },
+      select: { reversedAt: true, standing: true },
+    })
+    rp1.status === 200 && rp2.status === 200 && repostEv?.standing && repostEv.standing > 0 && repostEv.reversedAt
+      ? pass("un-repost: REPOST_RECEIVED reversed")
+      : fail("un-repost reversal", { s1: rp1.status, s2: rp2.status, ev: repostEv })
+
+    // F-2b: comment delete reverses COMMENT_RECEIVED only when the
+    // commenter's LAST live comment on the moment goes away. The keyed
+    // ledger row is seeded directly — a live award can't be produced here
+    // (standing:1 is floor-halved to 0 for a sub-Trusted grantor), and the
+    // behavior under test is the route's remaining-engagement check plus
+    // KEY reversal, not the award itself. Profile.standing is bumped to
+    // keep the cached-balance == ledger-sum invariant.
+    const commentKey = `comment:${revU.id}:moment:${postPub}`
+    await prisma.progressionEvent.create({
+      data: {
+        userId: author.id, type: "COMMENT_RECEIVED", xp: 0, standing: 1,
+        reason: "__test_comment_received", key: commentKey,
+        sourceType: "MOMENT", sourceId: postPub, actorId: revU.id, mastery: "COMMUNITY",
+      },
+    })
+    await prisma.profile.update({ where: { userId: author.id }, data: { standing: { increment: 1 } } })
+    const c1 = await api(`/api/moments/${postPub}/comments`, { method: "POST", body: { content: M("rev c1") }, cookie: revC })
+    const c2 = await api(`/api/moments/${postPub}/comments`, { method: "POST", body: { content: M("rev c2") }, cookie: revC })
+    const c1Id = (c1.data?.comment as { id?: string } | undefined)?.id ?? ""
+    const c2Id = (c2.data?.comment as { id?: string } | undefined)?.id ?? ""
+    if (c1Id && c2Id) {
+      await api(`/api/moments/comments/${c1Id}`, { method: "DELETE", cookie: revC })
+      const mid = await prisma.progressionEvent.findFirst({
+        where: { key: commentKey, reversalOfId: null },
+        select: { reversedAt: true },
+      })
+      mid && !mid.reversedAt
+        ? pass("comment delete: standing kept while another comment remains")
+        : fail("comment partial-delete reversal", mid)
+      await api(`/api/moments/comments/${c2Id}`, { method: "DELETE", cookie: revC })
+      const end = await prisma.progressionEvent.findFirst({
+        where: { key: commentKey, reversalOfId: null },
+        select: { reversedAt: true },
+      })
+      end?.reversedAt
+        ? pass("comment delete: COMMENT_RECEIVED reversed on last comment")
+        : fail("comment final-delete reversal", end)
+    } else fail("comment reversal fixtures", { s1: c1.status, s2: c2.status })
+  }
+
   // ── C2. comment delete rate limit — moment-comment-del:<uid>, 30/10min ──
   {
     const rl = await createUser("rl")

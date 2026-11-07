@@ -148,19 +148,21 @@ export const BADGE_REGISTRY: BadgeDefinition[] = [
   { name: "Ambassador", description: "Brought 25 new members to the community.", requirement: "Have 25 successful referrals.", rarity: r("epic"), category: "outreach", icon: "Users", progress: p("referrals", 25) },
   { name: "Founder", description: "Brought 50 new members to the community.", requirement: "Have 50 successful referrals.", rarity: r("legendary"), category: "outreach", icon: "Users", progress: p("referrals", 50) },
 
-  // ─── Milestones (reputation) ───
-  { name: "Sprout", description: "Reached 150 reputation.", requirement: "Earn 150 reputation.", rarity: r("common"), category: "milestones", icon: "Sprout", progress: p("reputation", 150) },
-  { name: "Rooted", description: "Reached 500 reputation.", requirement: "Earn 500 reputation.", rarity: r("common"), category: "milestones", icon: "Leaf", progress: p("reputation", 500) },
-  { name: "Grower", description: "Reached 1,500 reputation.", requirement: "Earn 1,500 reputation.", rarity: r("common"), category: "milestones", icon: "Leaf", progress: p("reputation", 1500) },
-  { name: "Cultivator", description: "Reached 3,500 reputation.", requirement: "Earn 3,500 reputation.", rarity: r("rare"), category: "milestones", icon: "Scissors", progress: p("reputation", 3500) },
-  { name: "Master Grower", description: "Reached 7,000 reputation.", requirement: "Earn 7,000 reputation.", rarity: r("epic"), category: "milestones", icon: "Crown", progress: p("reputation", 7000) },
-  { name: "Head Grower", description: "Reached 15,000 reputation.", requirement: "Earn 15,000 reputation.", rarity: r("legendary"), category: "milestones", icon: "Star", progress: p("reputation", 15000) },
-  { name: "Hash Maker", description: "Pressed to perfection — reached 30,000 reputation.", requirement: "Earn 30,000 reputation.", rarity: r("legendary"), category: "milestones", icon: "Sparkles", progress: p("reputation", 30000) },
-  { name: "Cannabis Deity", description: "A true deity of the grow room — reached 50,000 reputation.", requirement: "Earn 50,000 reputation.", rarity: r("legendary"), category: "milestones", icon: "Crown", progress: p("reputation", 50000) },
-  { name: "Top Contributor", description: "Reached 10,000 reputation points.", requirement: "Earn 10,000 reputation.", rarity: r("epic"), category: "milestones", icon: "TrendingUp", progress: p("reputation", 10000) },
-  { name: "Elite Harvest", description: "Trimmed a serious haul — reached 25,000 reputation.", requirement: "Earn 25,000 reputation.", rarity: r("epic"), category: "milestones", icon: "TrendingUp", progress: p("reputation", 25000) },
-  { name: "Legendary Harvest", description: "Your harvests are the stuff of legends — reached 50,000 reputation.", requirement: "Earn 50,000 reputation.", rarity: r("legendary"), category: "milestones", icon: "TrendingUp", progress: p("reputation", 50000) },
-  { name: "Mythic Harvest", description: "A once-in-a-lifetime haul — reached 100,000 reputation.", requirement: "Earn 100,000 reputation.", rarity: r("legendary"), category: "milestones", icon: "TrendingUp", progress: p("reputation", 100000) },
+  // ─── Milestones (growth XP) ───
+  // V4: measured on Profile.xp. The legacy reputation ledger is frozen —
+  // these badges were permanently unearnable while keyed to it.
+  { name: "Sprout", description: "Reached 150 XP.", requirement: "Earn 150 XP.", rarity: r("common"), category: "milestones", icon: "Sprout", progress: p("xp", 150) },
+  { name: "Rooted", description: "Reached 500 XP.", requirement: "Earn 500 XP.", rarity: r("common"), category: "milestones", icon: "Leaf", progress: p("xp", 500) },
+  { name: "Grower", description: "Reached 1,500 XP.", requirement: "Earn 1,500 XP.", rarity: r("common"), category: "milestones", icon: "Leaf", progress: p("xp", 1500) },
+  { name: "Cultivator", description: "Reached 3,500 XP.", requirement: "Earn 3,500 XP.", rarity: r("rare"), category: "milestones", icon: "Scissors", progress: p("xp", 3500) },
+  { name: "Master Grower", description: "Reached 7,000 XP.", requirement: "Earn 7,000 XP.", rarity: r("epic"), category: "milestones", icon: "Crown", progress: p("xp", 7000) },
+  { name: "Head Grower", description: "Reached 15,000 XP.", requirement: "Earn 15,000 XP.", rarity: r("legendary"), category: "milestones", icon: "Star", progress: p("xp", 15000) },
+  { name: "Hash Maker", description: "Pressed to perfection — reached 30,000 XP.", requirement: "Earn 30,000 XP.", rarity: r("legendary"), category: "milestones", icon: "Sparkles", progress: p("xp", 30000) },
+  { name: "Cannabis Deity", description: "A true deity of the grow room — reached 50,000 XP.", requirement: "Earn 50,000 XP.", rarity: r("legendary"), category: "milestones", icon: "Crown", progress: p("xp", 50000) },
+  { name: "Top Contributor", description: "Reached 10,000 XP.", requirement: "Earn 10,000 XP.", rarity: r("epic"), category: "milestones", icon: "TrendingUp", progress: p("xp", 10000) },
+  { name: "Elite Harvest", description: "Trimmed a serious haul — reached 25,000 XP.", requirement: "Earn 25,000 XP.", rarity: r("epic"), category: "milestones", icon: "TrendingUp", progress: p("xp", 25000) },
+  { name: "Legendary Harvest", description: "Your harvests are the stuff of legends — reached 50,000 XP.", requirement: "Earn 50,000 XP.", rarity: r("legendary"), category: "milestones", icon: "TrendingUp", progress: p("xp", 50000) },
+  { name: "Mythic Harvest", description: "A once-in-a-lifetime haul — reached 100,000 XP.", requirement: "Earn 100,000 XP.", rarity: r("legendary"), category: "milestones", icon: "TrendingUp", progress: p("xp", 100000) },
 
   // ─── Honours (event/staff-driven — no stat progress) ───
   { name: "Early Supporter", description: "One of the first to help build TerpTalk.", requirement: "Be among the first 250 registered members.", rarity: r("rare"), category: "honours", icon: "Star", progress: p("memberNumber", 250, "lte") },

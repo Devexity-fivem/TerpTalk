@@ -722,6 +722,7 @@ export interface UserStats {
   distinctAskers: number // threads' distinct authors where user's reply is the accepted answer
   likesGivenDistinct: number // distinct members the user has liked
   acceptsMarked: number // own threads where the user marked an accepted answer
+  xp: number // Progression V2+ growth XP — milestone badges measure this, not frozen reputation
 }
 
 // Badge rules — GENERATED from BADGE_REGISTRY progress specs so the grant
@@ -825,12 +826,12 @@ export async function getUserStats(userId: string, needed?: Set<keyof UserStats>
             where: { authorId: userId, deleted: false, acceptedAnswerId: { not: null } },
           })
         : 0,
-      want("memberNumber") || want("reputation") || want("chatMessages")
+      want("memberNumber") || want("reputation") || want("chatMessages") || want("xp")
         ? prisma.user.findUnique({
             where: { id: userId },
             select: {
               createdAt: true,
-              profile: { select: { reputation: true, chatMessageCount: true } },
+              profile: { select: { reputation: true, xp: true, chatMessageCount: true } },
             },
           })
         : null,
@@ -855,6 +856,7 @@ export async function getUserStats(userId: string, needed?: Set<keyof UserStats>
     acceptedAnswers,
     referrals: paidReferrals,
     reputation: user?.profile?.reputation ?? 0,
+    xp: user?.profile?.xp ?? 0,
     memberNumber,
     harvestedDiaries,
     growStreak: want("growStreak") ? (await getGrowStreak(userId)).streak : 0,

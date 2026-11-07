@@ -84,6 +84,7 @@ import {
   effectiveRank,
   hasUnlock,
   meetsUnlockSpec,
+  ACTOR_GRANTED_TYPES,
   profileSectionLimit,
   statSlotLimit,
   savedSearchLimit,
@@ -492,6 +493,24 @@ async function run() {
   assert.ok(hidden.length >= 3, "expected a small set of hidden discovery badges")
   for (const b of hidden) {
     assert.equal(b.requirement, "???", `hidden badge ${b.name} leaks its requirement`)
+  }
+
+  // V4 F-3 contract: actor-takedown sweeps must cover every event type a
+  // member can grant to someone else. The outbox fixpoint check uses the
+  // same list (FIXPOINT_ACTOR_TYPES === ACTOR_GRANTED_TYPES), so guarding
+  // this list guards both sides. Removing a type here silently strands
+  // standing granted by banned/deleted members.
+  for (const t of [
+    "ACCEPTED_ANSWER", "NEWCOMER_ACCEPT_BONUS", "REFERRAL",
+    "CONTEST_WEEKLY_WIN", "CONTEST_MONTHLY_WIN",
+    "FOLLOWER_GAINED", "COMMENT_RECEIVED", "REPOST_RECEIVED",
+    "MOMENT_REACTION_RECEIVED", "UPDATE_REACTION_RECEIVED",
+    "POST_REACTION_RECEIVED", "DIARY_REACTION_RECEIVED",
+  ]) {
+    assert.ok(
+      (ACTOR_GRANTED_TYPES as readonly string[]).includes(t),
+      `ACTOR_GRANTED_TYPES missing ${t} — actor sweeps would skip it`
+    )
   }
   for (const s of STAFF_AWARDED_BADGES) {
     assert.ok(registryNames.has(s), `staff-awarded badge "${s}" exists in registry`)

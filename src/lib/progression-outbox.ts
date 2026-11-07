@@ -8,6 +8,7 @@ import {
   reverseProgressionBySource,
   reverseProgressionByKey,
   reverseProgressionByActor,
+  ACTOR_GRANTED_TYPES,
 } from "@/lib/progression"
 import { logSecurityEvent } from "@/lib/security"
 
@@ -62,15 +63,10 @@ export async function drainXpMany(ids: string[]): Promise<void> {
   await Promise.allSettled(ids.map((id) => drainXpOne(id)))
 }
 
-// Actor sweeps may only claw back grants — the ACTOR_GRANTED_TYPES list in
-// progression.ts — mirrored here for the fixpoint proof.
-const FIXPOINT_ACTOR_TYPES = [
-  "ACCEPTED_ANSWER",
-  "NEWCOMER_ACCEPT_BONUS",
-  "REFERRAL",
-  "CONTEST_WEEKLY_WIN",
-  "CONTEST_MONTHLY_WIN",
-]
+// Actor sweeps may only claw back grants — ACTOR_GRANTED_TYPES in
+// progression.ts is the single source of truth, imported above so the
+// fixpoint proof can never drift from the executor's population.
+const FIXPOINT_ACTOR_TYPES = ACTOR_GRANTED_TYPES
 
 async function reversalComplete(row: {
   kind: string
@@ -98,7 +94,7 @@ async function reversalComplete(row: {
         actorId: row.actorId,
         reversedAt: null,
         reversalOfId: null,
-        type: { in: FIXPOINT_ACTOR_TYPES },
+        type: { in: [...FIXPOINT_ACTOR_TYPES] },
         createdAt: { lte: row.enqueuedAt },
       },
     })

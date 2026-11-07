@@ -8,6 +8,7 @@ import { checkMaintenance } from "@/lib/maintenance"
 import { notify } from "@/lib/notify"
 import { canViewMoment, momentPath } from "@/lib/moments"
 import { awardProgression } from "@/lib/progression"
+import { enqueueXpReversal, drainXpOne } from "@/lib/progression-outbox"
 
 type Ctx = { params: Promise<{ id: string }> }
 
@@ -46,6 +47,9 @@ export async function POST(request: Request, { params }: Ctx) {
       return NextResponse.json({ error: "Post not found" }, { status: 404 })
     }
 
+    // Durable reversal intent for the toggle-off path — committed inside
+    // the same transaction as the delete.
+    let reversalId: string | null = null
     const result = await prisma.$transaction(async (tx) => {
       await lockUserRow(tx, userId)
       const existing = await tx.moment.findFirst({
@@ -54,11 +58,28 @@ export async function POST(request: Request, { params }: Ctx) {
       })
       if (existing) {
         await tx.moment.update({ where: { id: existing.id }, data: { deleted: true } })
+        // REPOST_RECEIVED is keyed per (reposter, target) and shared with
+        // quote reposts — claw it back only when this was the member's
+        // last live repost of the target. Self-reposts never paid, so the
+        // key can't exist for them; the check is skipped to keep the
+        // outbox clean.
+        if (target.authorId !== userId) {
+          const remaining = await tx.moment.count({
+            where: { authorId: userId, repostOfId: id, deleted: false },
+          })
+          if (remaining === 0) {
+            reversalId = await enqueueXpReversal(tx, {
+              kind: "KEY", eventKey: `repost:${userId}:moment:${id}`,
+              reason: "Repost removed", requestedBy: userId,
+            })
+          }
+        }
         return { reposted: false as const }
       }
       await tx.moment.create({ data: { kind: "POST", content: "", visibility: "PUBLIC", authorId: userId, repostOfId: id } })
       return { reposted: true as const }
     })
+    if (reversalId) await drainXpOne(reversalId).catch(() => false)
     const count = await prisma.moment.count({ where: { repostOfId: id, deleted: false } })
 
     // V3: pure repost — standing to the original author, keyed so an

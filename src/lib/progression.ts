@@ -1256,14 +1256,31 @@ export async function reverseProgressionByKey(key: string, reason: string, actor
 }
 
 // Types whose actorId is the granting member — the only attribution an
-// account-takedown sweep may claw back. Fail-closed like the legacy list.
-const ACTOR_GRANTED_TYPES = new Set([
+// account-takedown sweep may claw back. Fail-closed: any type not listed
+// here is never swept. This is the SINGLE source of truth — the durable
+// outbox (progression-outbox.ts) imports it for its fixpoint completion
+// proof so the two lists can never drift apart again.
+//
+// V3 social grants are included: a banned/deleted member must not leave
+// standing they granted others through follows, reactions, comments, or
+// reposts. Self-earned types (MOMENT_POSTED, diary/thread XP, quest and
+// streak payouts) are excluded — their actorId is the earner, not a
+// granter, and takedown must not erase a member's own earned progress.
+export const ACTOR_GRANTED_TYPES = [
   "ACCEPTED_ANSWER",
   "NEWCOMER_ACCEPT_BONUS",
   "REFERRAL",
   "CONTEST_WEEKLY_WIN",
   "CONTEST_MONTHLY_WIN",
-])
+  // V3 peer-validated standing grants (recipient earns, actor grants).
+  "FOLLOWER_GAINED",
+  "COMMENT_RECEIVED",
+  "REPOST_RECEIVED",
+  "MOMENT_REACTION_RECEIVED",
+  "UPDATE_REACTION_RECEIVED",
+  "POST_REACTION_RECEIVED",
+  "DIARY_REACTION_RECEIVED",
+] as const
 
 export async function reverseProgressionBySource(
   sourceType: string,

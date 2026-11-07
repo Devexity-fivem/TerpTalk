@@ -46,13 +46,13 @@ export const DAILY_QUESTS: QuestDef[] = [
     mastery: "CULTIVATION",
   },
   {
-    slug: "spread-the-love",
-    title: "Spread the Love",
-    description: "Like posts or diaries from 3 different growers.",
-    icon: "💚",
-    reward: 5,
-    target: 3,
-    mastery: "COMMUNITY",
+    slug: "document-the-day",
+    title: "Document the Day",
+    description: "Post a diary update with a photo.",
+    icon: "🖼️",
+    reward: 8,
+    target: 1,
+    mastery: "RECORDS",
   },
   {
     slug: "judges-eye",
@@ -100,13 +100,13 @@ export const DAILY_QUESTS: QuestDef[] = [
     mastery: "KNOWLEDGE",
   },
   {
-    slug: "green-thumb",
-    title: "Green Thumb",
-    description: "Receive likes from 3 different growers today.",
-    icon: "👍",
+    slug: "tend-the-experiment",
+    title: "Tend the Experiment",
+    description: "Start or update a grow experiment.",
+    icon: "🧪",
     reward: 10,
-    target: 3,
-    mastery: "COMMUNITY",
+    target: 1,
+    mastery: "EXPERIMENTATION",
   },
   {
     slug: "check-the-setup",
@@ -190,17 +190,18 @@ async function countQuestProgress(userId: string, slug: string, since: Date, unt
         WHERE u."authorId" = ${userId}
           AND u."createdAt" >= ${since} AND u."createdAt" < ${until}
           AND d."deleted" = false`.then((r) => Number(r[0]?.n ?? 0))
-    case "spread-the-love":
-      // Likes GIVEN to distinct authors — prosocial, trivial payout.
-      return prisma.$queryRaw<{ n: bigint }[]>`
-        SELECT COUNT(DISTINCT COALESCE(p."authorId", d."authorId")) AS n
-        FROM "Reaction" r
-        LEFT JOIN "Post" p ON p."id" = r."postId"
-        LEFT JOIN "GrowDiary" d ON d."id" = r."diaryId"
-        WHERE r."userId" = ${userId} AND r."type" = 'LIKE'
-          AND r."createdAt" >= ${since} AND r."createdAt" < ${until}
-          AND COALESCE(p."authorId", d."authorId") IS NOT NULL
-          AND COALESCE(p."authorId", d."authorId") <> ${userId}`.then((r) => Number(r[0]?.n ?? 0))
+    case "document-the-day":
+      // A diary update carrying at least one photo — visual documentation,
+      // not just a text check-in. Same live-row semantics as
+      // tend-the-garden; the image requirement is what makes it Records.
+      return prisma.diaryUpdate.count({
+        where: {
+          authorId: userId,
+          createdAt: { gte: since, lt: until },
+          diary: { deleted: false },
+          images: { some: {} },
+        },
+      })
     case "judges-eye":
       return prisma.$queryRaw<{ n: bigint }[]>`
         SELECT (
@@ -235,19 +236,21 @@ async function countQuestProgress(userId: string, slug: string, since: Date, unt
           AND p."createdAt" >= ${since} AND p."createdAt" < ${until}
           AND p."deleted" = false AND t."deleted" = false
           AND LENGTH(p."content") >= 200`.then((r) => Number(r[0]?.n ?? 0))
-    case "green-thumb":
-      // Likes RECEIVED from distinct members — peer-validated. Reactions
-      // no longer write ledger events under V2, so count live Reaction
-      // rows on the member's own content.
-      return prisma.$queryRaw<{ n: bigint }[]>`
-        SELECT COUNT(DISTINCT r."userId") AS n
-        FROM "Reaction" r
-        LEFT JOIN "Post" p ON p."id" = r."postId"
-        LEFT JOIN "GrowDiary" d ON d."id" = r."diaryId"
-        WHERE r."type" = 'LIKE'
-          AND r."createdAt" >= ${since} AND r."createdAt" < ${until}
-          AND r."userId" <> ${userId}
-          AND COALESCE(p."authorId", d."authorId") = ${userId}`.then((r) => Number(r[0]?.n ?? 0))
+    case "tend-the-experiment":
+      // Creating OR touching an experiment today — starting one and
+      // following up on an active one both count as experiment care.
+      // updatedAt moves on status/outcome/conclusion writes, so a
+      // completion today qualifies even when the experiment is older.
+      return prisma.growExperiment.count({
+        where: {
+          authorId: userId,
+          diary: { deleted: false },
+          OR: [
+            { createdAt: { gte: since, lt: until } },
+            { updatedAt: { gte: since, lt: until } },
+          ],
+        },
+      })
     case "check-the-setup":
       return prisma.growSetup.count({
         where: { authorId: userId, deleted: false, createdAt: { gte: since, lt: until } },
@@ -374,7 +377,7 @@ export async function evaluateQuests(userId: string): Promise<string[]> {
           : `${paidTitles.length} quests complete`,
       content:
         (paidTitles.length === 1
-          ? `You finished "${paidTitles[0]}" — +${total} reputation.`
+          ? `You finished "${paidTitles[0]}" — +${total - (perfectPaid ? PERFECT_DAY_BONUS : 0)} XP.`
           : paidTitles.length > 1
             ? `You finished: ${paidTitles.join(", ")} — +${total - (perfectPaid ? PERFECT_DAY_BONUS : 0)} XP.`
             : "") +

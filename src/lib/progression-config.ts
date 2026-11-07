@@ -207,7 +207,7 @@ export const XP_TABLE: Record<string, XpSpec> = {
   UPDATE_REACTION_RECEIVED: { xp: 0, standing: 1, mastery: "COMMUNITY", peerGated: true, label: "Someone reacted to your grow update" },
   POST_REACTION_RECEIVED: { xp: 0, standing: 1, mastery: "COMMUNITY", peerGated: true, label: "Someone reacted to your reply" },
   DIARY_REACTION_RECEIVED: { xp: 0, standing: 1, mastery: "COMMUNITY", peerGated: true, label: "Someone reacted to your grow" },
-  FOLLOWER_GAINED: { xp: 0, standing: 3, mastery: "COMMUNITY", peerGated: true, label: "A grower followed you" },
+  FOLLOWER_GAINED: { xp: 0, standing: 2, mastery: "COMMUNITY", peerGated: true, label: "A grower followed you" },
   COMMENT_RECEIVED: { xp: 0, standing: 1, mastery: "COMMUNITY", peerGated: true, label: "Someone commented on your content" },
   REPOST_RECEIVED: { xp: 0, standing: 2, mastery: "COMMUNITY", peerGated: true, label: "Someone reposted your post" },
 
@@ -249,9 +249,10 @@ export const MEMBER_DRIVEN_XP_TYPES = new Set([
   "HARVEST_LOGGED", "GROW_COMPLETE", "SEASON_FINISHER",
   "STRUCTURED_CATEGORY", "METRIC_FIRST", "SETUP_SHOWCASE",
   "STRAIN_PHOTO", "STRAIN_SOURCED", "COVERAGE_MILESTONE", "HARVEST_REPORT",
-  "GUIDE_PUBLISHED", "GUIDE_IMPROVEMENT", "PROBLEM_RESOLVED",
+  "MOMENT_POSTED",
+  "PROBLEM_RESOLVED",
   "EXPERIMENT_CREATED", "HYPOTHESIS_DOC", "EXPERIMENT_COMPLETED",
-  "FAILURE_DOCUMENTED", "FOLLOWUPS_3", "REPLICATION",
+  "FAILURE_DOCUMENTED", "FOLLOWUPS_3",
 ])
 
 // REVERSAL/REINSTATE are included so the weekly sum is *net* — clawed-back

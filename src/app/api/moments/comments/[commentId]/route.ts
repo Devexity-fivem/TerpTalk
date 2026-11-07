@@ -6,6 +6,7 @@ import { unauthorized, forbidden, getClientIp, logSecurityEvent } from "@/lib/se
 import { checkMaintenance } from "@/lib/maintenance"
 import { rateLimit } from "@/lib/rate-limit"
 import { commentLinkWhere } from "@/lib/notify"
+import { enqueueXpReversal, drainXpOne } from "@/lib/progression-outbox"
 
 type Ctx = { params: Promise<{ commentId: string }> }
 
@@ -32,15 +33,33 @@ export async function DELETE(request: Request, { params }: Ctx) {
     const { commentId } = await params
     const c = await prisma.momentComment.findUnique({
       where: { id: commentId },
-      select: { id: true, authorId: true, deleted: true, moment: { select: { authorId: true } } },
+      select: { id: true, authorId: true, deleted: true, momentId: true, moment: { select: { authorId: true } } },
     })
     if (!c || c.deleted) return NextResponse.json({ error: "Not found" }, { status: 404 })
     if (c.authorId !== session.user.id && c.moment.authorId !== session.user.id) return forbidden()
 
+    // Durable reversal intent — committed in the same transaction as the
+    // delete. COMMENT_RECEIVED is keyed per (commenter, moment), not per
+    // comment: claw it back only when the commenter's LAST live comment on
+    // this moment is going away. Self-comments never paid, so the key
+    // can't exist for them.
+    let reversalId: string | null = null
     await prisma.$transaction(async (tx) => {
       await tx.momentComment.updateMany({ where: { id: commentId, deleted: false }, data: { deleted: true } })
       await tx.notification.deleteMany({ where: commentLinkWhere(commentId) })
+      if (c.authorId !== c.moment.authorId) {
+        const remaining = await tx.momentComment.count({
+          where: { momentId: c.momentId, authorId: c.authorId, deleted: false },
+        })
+        if (remaining === 0) {
+          reversalId = await enqueueXpReversal(tx, {
+            kind: "KEY", eventKey: `comment:${c.authorId}:moment:${c.momentId}`,
+            reason: "Comment removed", requestedBy: session.user.id,
+          })
+        }
+      }
     })
+    if (reversalId) await drainXpOne(reversalId).catch(() => false)
     return NextResponse.json({ deleted: true })
   } catch (error) {
     console.error("Moment comment delete error:", error)
