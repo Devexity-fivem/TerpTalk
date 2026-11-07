@@ -14,6 +14,7 @@ import { prisma } from "@/lib/prisma"
 import { resolveFeedScope, resolveAuthorFeedScope, getFeedPage } from "@/lib/feed"
 import { getStoryRail, getAuthorStories, getTrendingHashtags, hashtagSlug } from "@/lib/moments"
 import { getMemberHomeData } from "@/lib/member-home"
+import { reverseXpSourceDurable, reverseXpKeyDurable, drainPendingXpReversals } from "@/lib/progression-outbox"
 import type { FeedItem } from "@/lib/feed"
 
 const harnessOpts = {
@@ -317,6 +318,62 @@ async function main() {
         ? pass("comment delete: COMMENT_RECEIVED reversed on last comment")
         : fail("comment final-delete reversal", end)
     } else fail("comment reversal fixtures", { s1: c1.status, s2: c2.status })
+
+    // F-3 moderator path: staff CONTENT_DELETION on a repost moment must
+    // reverse the REPOST_RECEIVED it granted — exactly once, even though
+    // the action enqueues both a SOURCE intent (the repost row) and a KEY
+    // intent (the grant key). SOURCE and KEY populations are disjoint by
+    // construction (grant sourceId = target, not the repost row), and a
+    // second drain of the same event is a no-op on reversedAt.
+    const mod = await createUser("mod", { role: "MODERATOR" })
+    rlUsers.push(mod.id)
+    const { cookie: modC } = await login(mod.username, mod.password)
+    const rp3 = await api(`/api/moments/${postImg}/repost`, { method: "POST", cookie: revC })
+    const repostRow = await prisma.moment.findFirst({
+      where: { authorId: revU.id, repostOfId: postImg, deleted: false },
+      select: { id: true },
+    })
+    const repostKey2 = `repost:${revU.id}:moment:${postImg}`
+    const grantEv = await prisma.progressionEvent.findFirst({
+      where: { key: repostKey2, reversalOfId: null },
+      select: { id: true, standing: true, reversedAt: true },
+    })
+    if (rp3.status === 200 && repostRow && grantEv && !grantEv.reversedAt && (grantEv.standing ?? 0) > 0) {
+      const standingBefore = (await prisma.profile.findUnique({ where: { userId: author.id }, select: { standing: true } }))?.standing ?? 0
+      const mr = await api("/api/moderation/actions", {
+        method: "POST",
+        cookie: modC,
+        body: { actionType: "CONTENT_DELETION", targetType: "MOMENT", targetId: repostRow.id, targetUserId: revU.id, reason: "mv test" },
+      })
+      const grantAfter = await prisma.progressionEvent.findUnique({ where: { id: grantEv.id }, select: { reversedAt: true } })
+      const descendants = await prisma.progressionEvent.count({ where: { reversalOfId: grantEv.id } })
+      const standingAfter = (await prisma.profile.findUnique({ where: { userId: author.id }, select: { standing: true } }))?.standing ?? 0
+      mr.status === 200 && grantAfter?.reversedAt && descendants === 1 && standingBefore - standingAfter === grantEv.standing
+        ? pass("moderator moment delete: repost grant reversed exactly once")
+        : fail("moderator repost reversal", { s: mr.status, d: mr.data, rev: grantAfter?.reversedAt, desc: descendants, delta: standingBefore - standingAfter, grant: grantEv.standing })
+    } else fail("moderator repost fixture", { s: rp3.status, row: !!repostRow, ev: grantEv })
+
+    // SOURCE + KEY intents against the SAME event must deduct once.
+    // Seed an isolated event (fake source id so the source sweep can't
+    // touch real awards), enqueue both intent kinds, drain, and count
+    // reversal descendants — must be exactly 1 and standing nets to 0.
+    const dblKey = `repost:${revU.id}:moment:__test_src_dbl`
+    const dbl = await prisma.progressionEvent.create({
+      data: {
+        userId: author.id, type: "REPOST_RECEIVED", xp: 0, standing: 1,
+        reason: "__test_double_deduction", key: dblKey,
+        sourceType: "MOMENT", sourceId: "__test_src_dbl", actorId: revU.id, mastery: "COMMUNITY",
+      },
+    })
+    await prisma.profile.update({ where: { userId: author.id }, data: { standing: { increment: 1 } } })
+    await reverseXpSourceDurable("MOMENT", "__test_src_dbl", "__test source sweep", revU.id)
+    await reverseXpKeyDurable(dblKey, "__test key reversal", revU.id)
+    await drainPendingXpReversals(50)
+    const dblAfter = await prisma.progressionEvent.findUnique({ where: { id: dbl.id }, select: { reversedAt: true } })
+    const dblDesc = await prisma.progressionEvent.count({ where: { reversalOfId: dbl.id } })
+    dblAfter?.reversedAt && dblDesc === 1
+      ? pass("source+key intents: single deduction, idempotent")
+      : fail("double deduction", { rev: dblAfter?.reversedAt, desc: dblDesc })
   }
 
   // ── C2. comment delete rate limit — moment-comment-del:<uid>, 30/10min ──

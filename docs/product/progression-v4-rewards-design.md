@@ -95,7 +95,8 @@ No unlock was added that the code does not enforce; no free/safety-critical capa
 - **No reset required.** All changes are prospective: `FOLLOWER_GAINED` pays 2 for *new* follows; historical 3-standing grants stand (documented, accepted).
 - Badge repointing is prospective — badges check current `xp` on next `checkBadges` run; no grants are revoked.
 - Quest slug changes orphan at most 7 days of old-slug payouts; the daily reconcile sweep non-finally reverses any whose live-row criteria no longer hold.
-- `backup-progression.mts` now exports a consistent single-transaction snapshot with SHA-256 manifest + `--verify`; `reset-progression-v3.mts` requires `CONFIRM_RESET=yes` + `RESET_TARGET=<derived id>` and verifies all six affected tables post-wipe. Neither was executed.
+- `backup-progression.mts` exports a consistent snapshot — one interactive transaction at explicit `RepeatableRead` isolation, cursor pagination, backpressure-safe JSONL writers, SHA-256 manifest written last, `--verify` mode that rejects missing/corrupt/path-escaping entries.
+- `reset-progression-v3.mts` was **removed**: V4 requires no reset and a destructive utility is an unacceptable footgun. Any future reset must be rebuilt with `evaluateDestructiveDbTarget` (db-guard.mjs) — development-only, override-proof — as its gate. Neither script was executed against any database.
 
 ## 10. Explicit non-goals
 

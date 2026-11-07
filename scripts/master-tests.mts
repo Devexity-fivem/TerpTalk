@@ -74,6 +74,7 @@ const PURE_PHASE: Suite[] = [
   { id: "terpbot-parser", file: "scripts/terpbot-parser-tests.mts", runner: "tsx", cls: "A", label: "TerpBot NL parser + command registry + intent routing", tier: "fast" },
   { id: "terpbot-intelligence", file: "scripts/terpbot-intelligence-tests.mts", runner: "tsx", cls: "A", label: "TerpBot evidence engine + longitudinal context (candidates, scoring, episodes, timeline, baselines)", tier: "fast" },
   { id: "terpbot-decisions", file: "scripts/terpbot-decisions-tests.mts", runner: "tsx", cls: "A", label: "TerpBot decisions + assist triggers + knowledge validation", tier: "fast" },
+  { id: "ops-safety", file: "scripts/ops-safety-tests.mts", runner: "tsx", cls: "A", label: "Ops safety: destructive DB guard + backup manifest/stream verification", tier: "fast" },
 ]
 
 // Requires a healthy dev server at BASE_URL. Serial: suites share the dev DB

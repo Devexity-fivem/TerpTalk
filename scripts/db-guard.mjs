@@ -80,6 +80,44 @@ export function evaluateDbTarget(rawUrl, env = process.env) {
   return { allowed: false, reason: `unrecognized database host "${host.split(".")[0]}…"` }
 }
 
+/**
+ * Destructive-utility target check — strictly stronger than
+ * evaluateDbTarget. For ops scripts that can wipe or rewrite data
+ * (progression resets, restores, truncations).
+ *
+ * Differences from evaluateDbTarget:
+ *   - NEVER honors environment overrides. ALLOW_PRODUCTION_DB_TESTS,
+ *     ALLOW_UNRECOGNIZED_DB_TESTS and DB_GUARD_EXTRA_HOSTS are ignored —
+ *     an operator cannot type their way into a destructive run.
+ *   - Production markers refuse unconditionally.
+ *   - Only the documented dev Supabase project, the retired dev Neon
+ *     branch, and local Postgres are authorized.
+ *   - Anything else — including unparseable URLs — fails closed.
+ *
+ * @param {string|undefined|null} rawUrl
+ * @returns {{ allowed: boolean, reason: string }}
+ */
+export function evaluateDestructiveDbTarget(rawUrl) {
+  if (!rawUrl) return { allowed: false, reason: "no DATABASE_URL resolved" }
+  let host
+  try {
+    host = new URL(rawUrl).hostname
+  } catch {
+    return { allowed: false, reason: "unparseable DATABASE_URL — cannot verify target" }
+  }
+  if (!host) return { allowed: false, reason: "URL has no host" }
+  if (PROD_URL_MARKERS.some((m) => rawUrl.includes(m))) {
+    return { allowed: false, reason: "production database endpoint — destructive utilities are development-only" }
+  }
+  if (
+    SAFE_URL_MARKERS.some((m) => rawUrl.includes(m)) ||
+    SAFE_HOST_MARKERS.some((m) => host === m || host.startsWith(m) || host.endsWith(`.${m}`))
+  ) {
+    return { allowed: true, reason: "authorized development target" }
+  }
+  return { allowed: false, reason: `unrecognized database host "${host.split(".")[0]}…"` }
+}
+
 // Side effect — refuse early on import when the resolved target is not
 // positively authorized.
 const url = process.env.DATABASE_URL ?? (() => {

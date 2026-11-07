@@ -7,7 +7,8 @@ import { unauthorized, getClientIp, logSecurityEvent, getSecurityUser, isBannedR
 import { rateLimit } from "@/lib/rate-limit"
 import { checkMaintenance } from "@/lib/maintenance"
 import { notify } from "@/lib/notify"
-import { awardProgression, reverseProgressionByKey } from "@/lib/progression"
+import { awardProgression } from "@/lib/progression"
+import { enqueueXpReversal, drainXpOne } from "@/lib/progression-outbox"
 import { TERPBOT_USERNAME } from "@/lib/terpbot-constants"
 import { canViewDiary } from "@/lib/diary-visibility"
 import { eventSource } from "@/lib/event-sources"
@@ -66,10 +67,19 @@ export async function POST(request: Request) {
         where: { followerId_followingId: { followerId: session.user.id, followingId: userId } },
       })
       if (existing) {
-        await prisma.follow.delete({ where: { id: existing.id } })
         // V3: unfollow claws the standing back — the keyed reversal is
-        // idempotent so a follow that never paid is a no-op.
-        await reverseProgressionByKey(`follow:${session.user.id}:user:${userId}`, "Unfollowed", session.user.id)
+        // idempotent so a follow that never paid is a no-op. Delete and
+        // durable reversal intent commit in ONE transaction; the drain
+        // runs after commit.
+        let reversalId: string | null = null
+        await prisma.$transaction(async (tx) => {
+          await tx.follow.delete({ where: { id: existing.id } })
+          reversalId = await enqueueXpReversal(tx, {
+            kind: "KEY", eventKey: `follow:${session.user.id}:user:${userId}`,
+            reason: "Unfollowed", requestedBy: session.user.id,
+          })
+        })
+        if (reversalId) await drainXpOne(reversalId).catch(() => false)
         return NextResponse.json({ following: false })
       }
       try {

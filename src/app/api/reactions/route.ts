@@ -4,7 +4,8 @@ import { authOptions } from "@/lib/auth"
 import { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
 import { unauthorized, forbidden, getClientIp, logSecurityEvent, blockExistsBetween, isActiveAuthorRow } from "@/lib/security"
-import { progressionRateLimit, awardProgression, reverseProgressionByKey } from "@/lib/progression"
+import { progressionRateLimit, awardProgression } from "@/lib/progression"
+import { enqueueXpReversal, drainXpOne } from "@/lib/progression-outbox"
 import { checkMaintenance } from "@/lib/maintenance"
 import { notify, postDeepLink } from "@/lib/notify"
 import { canViewDiary } from "@/lib/diary-visibility"
@@ -184,9 +185,19 @@ export async function POST(request: Request) {
 
     if (existingReaction) {
       if (existingReaction.type === type) {
-        // Same type — toggle off
-        await prisma.reaction.delete({ where: { id: existingReaction.id } })
-        await reverseProgressionByKey(socialKey, "Reaction removed", session.user.id)
+        // Same type — toggle off. The reaction delete and its durable
+        // reversal intent commit in ONE transaction so a crash can't
+        // strand standing on a removed reaction; the outbox drain runs
+        // after commit and is idempotent on the shared key.
+        let reversalId: string | null = null
+        await prisma.$transaction(async (tx) => {
+          await tx.reaction.delete({ where: { id: existingReaction.id } })
+          reversalId = await enqueueXpReversal(tx, {
+            kind: "KEY", eventKey: socialKey,
+            reason: "Reaction removed", requestedBy: session.user.id,
+          })
+        })
+        if (reversalId) await drainXpOne(reversalId).catch(() => false)
         return NextResponse.json({ reaction: null, action: "removed" })
       }
       // Different type — switch reaction
