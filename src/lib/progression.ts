@@ -13,8 +13,8 @@
 //     grantor floor. Likes/reactions write nothing — callsites removed.
 //
 // Locked spec: docs/progression-v2-design.md (rev 3).
-import { randomUUID } from "node:crypto"
 import { Prisma } from "@prisma/client"
+import { keyedInteractionActive } from "@/lib/interaction-state"
 import { prisma, runTxWithRetry } from "@/lib/prisma"
 import { PROFILE_SECTION_BASE_LIMIT, SHOWN_STATS_BASE } from "@/lib/profile-settings"
 import {
@@ -111,7 +111,7 @@ export interface ProgressionAwardResult {
   oldXp?: number
   newXp?: number
   rungsCrossed?: { xp: number; label: string; rank: string }[]
-  skippedReason?: "bot" | "no-user" | "suspended" | "self" | "duplicate" | "capped" | "locked" | "withheld" | "dup" | "deferred" | "error"
+  skippedReason?: "bot" | "no-user" | "suspended" | "self" | "duplicate" | "capped" | "locked" | "withheld" | "dup" | "deferred" | "inactive" | "error"
 }
 
 type SubjectUser = {
@@ -139,38 +139,15 @@ const PEER_GATED_TYPES = new Set(
 )
 
 // ─── Keyed-reversal ordering ────────────────────────────────────────
-// A KEY reversal intent is enqueued when an interaction is removed, but
-// the drain is post-commit and may be delayed, retried, or crash. If the
-// same interaction is re-created before the intent drains,
-// awardProgression sees the still-unreversed event and returns
-// "duplicate" — and the stale intent would then strip the LIVE
-// interaction's grant.
-//
-// Fix: the duplicate path leaves a KEY_RESUMED marker event (0/0 audit
-// row) whenever a PENDING/RUNNING KEY intent exists for the key, then
-// re-reads the event — if the drain already reversed it, the normal
-// reinstate path runs instead. The outbox checks for markers newer than
-// the intent's enqueuedAt both before and after applying a KEY reversal:
-//   - marker first  → intent is superseded, completed without reversing.
-//   - marker during → reversal+reinstate pair nets to zero (audit kept).
-// Markers are append-only ledger rows: no intent is dropped silently.
-const KEY_RESUME_TAG = ":resumed:"
-
-function keyResumeMarkerKey(key: string): string {
-  return `${key}${KEY_RESUME_TAG}${randomUUID()}`
-}
-
-export async function keyResumeExists(
-  key: string,
-  after: Date,
-  db: Prisma.TransactionClient | typeof prisma = prisma
-): Promise<boolean> {
-  const found = await db.progressionEvent.findFirst({
-    where: { type: "KEY_RESUMED", key: { startsWith: `${key}${KEY_RESUME_TAG}` }, createdAt: { gt: after } },
-    select: { id: true },
-  })
-  return !!found
-}
+// A KEY reversal intent is enqueued inside the same transaction as the
+// interaction delete, but the outbox drain is post-commit and may be
+// delayed, retried, or crash — and an award request may itself be
+// delayed past a subsequent removal. Timestamps on award-side markers
+// cannot order these correctly, so correctness lives in the outbox:
+// drainXpOne reconciles every resolvable KEY intent against the LIVE
+// interaction row (src/lib/interaction-state.ts) before and after
+// reversing, and the reinstate path below refuses to restore a grant
+// whose interaction is already gone. See progression-outbox.ts.
 // Standing sources that fall under the per-source-type weekly cap.
 // V3: the social *_RECEIVED events join the capped set — like-rings get
 // throttled by the same ceiling that contains contests and referrals.
@@ -499,41 +476,16 @@ export async function awardProgression(
         select: { id: true, userId: true, xp: true, standing: true, reversedAt: true, reversalFinal: true, mastery: true },
       })
       if (existing) {
-        if (!existing.reversedAt) {
-          // Stale KEY-reversal guard — see "Keyed-reversal ordering" above.
-          // A duplicate keyed award means the interaction may have been
-          // re-created while a removal intent is still in flight. Always
-          // leave a resume marker: the outbox supersedes (or repairs)
-          // any KEY intent enqueued before the marker, so a stale drain
-          // can never strip the live grant. Markers are 0/0 audit rows —
-          // harmless when no intent exists (future intents compare
-          // enqueuedAt, which postdates them).
-          await prisma.progressionEvent.create({
-            data: {
-              userId,
-              type: "KEY_RESUMED",
-              xp: 0,
-              standing: 0,
-              reason: "Duplicate keyed award — resume marker",
-              key: keyResumeMarkerKey(opts.key),
-              actorId: opts.actorId ?? null,
-            },
-          })
-          // The event may have been reversed between the first read and
-          // now (drain completed + intent deleted in that window). Re-read
-          // once: a reversal that already committed takes the normal
-          // reinstate path instead of stranding the live interaction.
-          const refreshed = await prisma.progressionEvent.findUnique({
-            where: { key: opts.key },
-            select: { id: true, userId: true, xp: true, standing: true, mastery: true, reversedAt: true, reversalFinal: true },
-          })
-          if (refreshed?.reversedAt) {
-            if (refreshed.reversalFinal) return { awarded: false, skippedReason: "locked" }
-            return await reinstateProgressionEvent(refreshed, subject)
-          }
-          return { awarded: false, skippedReason: "duplicate" }
-        }
+        if (!existing.reversedAt) return { awarded: false, skippedReason: "duplicate" }
         if (existing.reversalFinal) return { awarded: false, skippedReason: "locked" }
+        // A delayed award request must not reinstate a grant whose
+        // interaction has already been removed again — verify live
+        // state for resolvable keys (follow/react/repost/comment).
+        // Unknown key types keep the unconditional reinstate path.
+        if (opts.key) {
+          const active = await keyedInteractionActive(opts.key)
+          if (active === false) return { awarded: false, skippedReason: "inactive" }
+        }
         return await reinstateProgressionEvent(existing, subject)
       }
     }

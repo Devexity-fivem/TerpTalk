@@ -1372,7 +1372,7 @@ model ProgressionEvent {
   id            String    @id @default(cuid())
   userId        String    // recipient
   mastery       String?   // CULTIVATION | RECORDS | KNOWLEDGE | EXPERIMENTATION | COMMUNITY | null = SYSTEM
-  type          String    // XP_TABLE keys | REVERSAL | REINSTATE | STAFF_ADJUSTMENT | LEGACY_STANDING | MILESTONE | STANDING_RECOVERY | UNLOCK_FREEZE | KEY_RESUMED
+  type          String    // XP_TABLE keys | REVERSAL | REINSTATE | STAFF_ADJUSTMENT | LEGACY_STANDING | MILESTONE | STANDING_RECOVERY | UNLOCK_FREEZE
   xp            Int       @default(0)
   standing      Int       @default(0)
   reason        String

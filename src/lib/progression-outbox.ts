@@ -9,9 +9,9 @@ import {
   reverseProgressionByKey,
   reverseProgressionByActor,
   reinstateProgressionByKey,
-  keyResumeExists,
   ACTOR_GRANTED_TYPES,
 } from "@/lib/progression"
+import { keyedInteractionActive } from "@/lib/interaction-state"
 import { logSecurityEvent } from "@/lib/security"
 
 type Db = Prisma.TransactionClient | typeof prisma
@@ -140,25 +140,30 @@ export async function drainXpOne(id: string): Promise<boolean> {
     if (row.kind === "SOURCE" && row.sourceType && row.sourceId) {
       await reverseProgressionBySource(row.sourceType, row.sourceId, row.reason, row.requestedBy ?? undefined)
     } else if (row.kind === "KEY" && row.eventKey) {
-      // Ordering guard: a KEY_RESUMED marker newer than enqueuedAt proves
-      // the interaction was re-created after this intent was enqueued —
-      // the intent is stale and must not strip the live grant. The intent
-      // row is completed (audit preserved), never silently dropped.
-      if (await keyResumeExists(row.eventKey, row.enqueuedAt)) {
+      // Live-state reconciliation — the only authoritative answer to
+      // "is this interaction still active?" is the interaction row
+      // itself, never a timestamp written by a possibly-stale award
+      // request. Resolvers cover the re-creatable social keys
+      // (follow / react / repost / comment); unknown key types keep the
+      // legacy reverse-by-key path.
+      const active = await keyedInteractionActive(row.eventKey)
+      if (active === true) {
+        // The interaction is live, so this reversal is stale. Completing
+        // the intent without reversing is correct — and
+        // reinstateProgressionByKey also heals a reversal that committed
+        // before a crash or re-creation (no-op when already active), so
+        // a live interaction can never be left without its grant.
+        await reinstateProgressionByKey(row.eventKey)
         await prisma.pendingXpReversal.delete({ where: { id } }).catch(() => {})
         return true
       }
       await reverseProgressionByKey(row.eventKey, row.reason, row.requestedBy ?? undefined)
-      // A resume marker may have landed while the reversal was in flight.
-      // If so the reversal was stale — reinstate so the re-created
-      // interaction keeps its grant; reversal+reinstate rows keep the
-      // full audit trail.
-      if (await keyResumeExists(row.eventKey, row.enqueuedAt)) {
-        // Throws propagate to the outer catch → intent requeues for retry
-        // rather than being dropped with the grant still reversed.
+      // The interaction may have been re-created while the reversal was
+      // in flight — re-check LIVE state and repair if so. A resolver
+      // error propagates to the outer catch so the intent requeues
+      // rather than mutating on uncertain state.
+      if (active === false && (await keyedInteractionActive(row.eventKey)) === true) {
         await reinstateProgressionByKey(row.eventKey)
-        await prisma.pendingXpReversal.delete({ where: { id } }).catch(() => {})
-        return true
       }
     } else if (row.kind === "ACTOR" && row.actorId) {
       await reverseProgressionByActor(row.actorId, row.reason, { before: row.enqueuedAt, requestedBy: row.requestedBy ?? undefined })

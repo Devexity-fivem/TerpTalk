@@ -101,7 +101,7 @@ const HTTP_PHASE: Suite[] = ([
 const DB_PHASE: Suite[] = ([
   { id: "security", file: "scripts/security-tests.mts", runner: "tsx", cls: "A", label: "Security + platform lib-level (sessions, roles, uploads, links, cron, captcha, markdown)", tier: "full" },
   { id: "notifications", file: "scripts/notification-tests.mts", runner: "tsx", cls: "A", label: "Notification persistence + delivery", tier: "full" },
-  { id: "reputation", file: "scripts/reputation-tests.mts", runner: "tsx", cls: "A", label: "Reputation ledger + progression + quests + velocity anti-abuse", tier: "full" },
+  { id: "reputation", file: "scripts/reputation-tests.mts", runner: "tsx", cls: "A", label: "Reputation ledger + progression + quests + velocity anti-abuse", tier: "full", timeoutMs: 15 * 60_000 },
   { id: "reputation-referral", file: "scripts/reputation-referral-integrity-tests.mts", runner: "tsx", cls: "A", label: "Reputation referral integrity", tier: "full" },
   { id: "terpbot-pipeline", file: "scripts/terpbot-pipeline-tests.mts", runner: "tsx", cls: "A", label: "TerpBot pipeline (DB)", tier: "full" },
   { id: "self-service", file: "scripts/self-service-tests.mts", runner: "tsx", cls: "B", label: "Self-service + privacy controls (blocks, recovery, DM policy, visibility)", tier: "full" },

@@ -2039,26 +2039,29 @@ async function run() {
       assert.equal(new Set(keys).size, keys.length, "fallback: no duplicate keys")
     }
 
-    // ── V4: stale KEY-reversal ordering — follow + reaction lifecycles ──
+    // ── V4: interaction/reward lifecycle races — follow + reaction ──
     // Removal enqueues a durable KEY reversal whose drain is post-commit
-    // and may be delayed or crash. Re-creating the interaction first must
-    // not lose the grant: awardProgression leaves a KEY_RESUMED marker
-    // that lets the drain supersede (or repair) the stale intent. These
-    // drive the same lib calls the routes make — follow/reaction rows,
-    // awardProgression, enqueueXpReversal, drainXpOne.
+    // and may be delayed or crash, and an award request may itself be
+    // delayed past a subsequent removal. The outbox reconciles every
+    // resolvable KEY intent against the LIVE interaction row before and
+    // after reversing; the reinstate path refuses to restore a grant
+    // whose interaction is gone. These drive the same lib boundaries the
+    // routes use — interaction rows, awardProgression, enqueueXpReversal,
+    // drainXpOne — including delayed-award interleavings.
     const keyLedger = async (key: string) => {
       const orig = await prisma.progressionEvent.findUnique({ where: { key } })
-      const markers = await prisma.progressionEvent.findMany({
-        where: { key: { startsWith: `${key}:resumed:` } },
-        select: { id: true },
-      })
       const descendants = orig
         ? await prisma.progressionEvent.findMany({
             where: { reversalOfId: orig.id },
             select: { type: true, standing: true, reversedAt: true },
           })
         : []
-      return { orig, markers, descendants }
+      // Rows keyed under this award key or any `${key}:*` child — a
+      // duplicate award must not grow the ledger.
+      const keyedRows = await prisma.progressionEvent.count({
+        where: { OR: [{ key }, { key: { startsWith: `${key}:` } }] },
+      })
+      return { orig, descendants, keyedRows }
     }
 
     // FOLLOW lifecycle: delayed drain must not strip a re-created follow.
@@ -2094,7 +2097,7 @@ async function run() {
       await prisma.follow.create({ data: followRow })
       const aw2 = await doFollow()
       assert.ok(!aw2.awarded && aw2.skippedReason === "duplicate", "re-follow stays idempotent")
-      assert.equal((await keyLedger(key)).markers.length, 1, "resume marker recorded")
+      assert.equal((await keyLedger(key)).keyedRows, 1, "duplicate award writes no ledger rows")
 
       // The stale intent drains — superseded, live grant survives.
       assert.equal(await drainXpOne(intentId), true)
@@ -2179,6 +2182,281 @@ async function run() {
         await prisma.progressionEvent.count({ where: { key, reversedAt: null, reversalOfId: null } }),
         1,
         "exactly one active grant for the reaction key"
+      )
+    }
+
+    // ── Race matrix: delayed award vs subsequent removal ──
+    // The route order is mutation-commit → side effects → award. A
+    // re-creation request's award can therefore execute AFTER a second
+    // removal committed. Final reward state must always equal final
+    // interaction state, under both outbox drain orders.
+    const followPair = async (tag: string) => {
+      const follower = await mkPv2(`ord-${tag}-f`, 3)
+      const followed = await mkPv2(`ord-${tag}-u`)
+      await seedProgression(follower, 0, 100)
+      const key = `follow:${follower}:user:${followed}`
+      const row = { followerId: follower, followingId: followed }
+      const want = XP_TABLE.FOLLOWER_GAINED.standing
+      const doFollow = () =>
+        awardProgression(followed, "FOLLOWER_GAINED", "A grower followed you", {
+          actorId: follower, key, sourceType: "USER", sourceId: followed,
+        })
+      const remove = () =>
+        prisma.$transaction(async (tx) => {
+          await tx.follow.delete({ where: { followerId_followingId: row } })
+          return enqueueXpReversal(tx, { kind: "KEY", eventKey: key, reason: "Unfollowed", requestedBy: follower })
+        })
+      return { follower, followed, key, row, want, doFollow, remove }
+    }
+    const reactPair = async (tag: string) => {
+      const reactor = await mkPv2(`ord-${tag}-r`, 3)
+      const author = await mkPv2(`ord-${tag}-a`)
+      await seedProgression(reactor, 0, 100)
+      const moment = await prisma.moment.create({ data: { authorId: author, content: `race ${tag} ${RUN_TAG}` } })
+      const key = `react:${reactor}:moment:${moment.id}`
+      const row = { userId: reactor, momentId: moment.id }
+      const want = XP_TABLE.MOMENT_REACTION_RECEIVED.standing
+      const doReact = () =>
+        awardProgression(author, "MOMENT_REACTION_RECEIVED", "Someone reacted to your content", {
+          actorId: reactor, key, sourceType: "MOMENT", sourceId: moment.id,
+          meta: { reactionType: "LIKE" },
+        })
+      const remove = () =>
+        prisma.$transaction(async (tx) => {
+          await tx.reaction.delete({ where: { userId_momentId: row } })
+          return enqueueXpReversal(tx, { kind: "KEY", eventKey: key, reason: "Reaction removed", requestedBy: reactor })
+        })
+      return { reactor, author, moment, key, row, want, doReact, remove }
+    }
+    const standingOf = async (uid: string) => (await pv2Profile(uid))!.standing
+    const masteryDrift = async (uid: string) => {
+      const rows = await prisma.masteryProgress.findMany({ where: { userId: uid }, select: { mastery: true, xp: true } })
+      for (const r of rows) {
+        const agg = await prisma.progressionEvent.aggregate({
+          where: { userId: uid, mastery: r.mastery },
+          _sum: { xp: true },
+        })
+        assert.equal(r.xp, agg._sum.xp ?? 0, `mastery ${r.mastery} balance == ledger`)
+      }
+    }
+
+    // FOLLOW — removal wins: re-follow commits, a SECOND unfollow lands
+    // before the delayed award executes, then both intents drain.
+    for (const order of ["AB", "BA"] as const) {
+      const { followed, key, row, doFollow, remove } = await followPair(`rmw-${order}`)
+      await prisma.follow.create({ data: row })
+      assert.ok((await doFollow()).awarded)
+      const a = await remove()                              // U1 → intent A (drain delayed)
+      await prisma.follow.create({ data: row })             // R re-creates; award in flight
+      const b = await remove()                              // U2 commits BEFORE the award
+      const late = await doFollow()                         // delayed award finally runs
+      assert.ok(!late.awarded && late.skippedReason === "duplicate", "delayed award is idempotent")
+      for (const id of order === "AB" ? [a, b] : [b, a]) {
+        assert.equal(await drainXpOne(id), true)
+      }
+      assert.equal(await prisma.follow.count({ where: row }), 0, "no active follow remains")
+      const led = await keyLedger(key)
+      assert.ok(led.orig!.reversedAt, "grant is reversed")
+      assert.equal(await standingOf(followed), 0, "no reward retained")
+      assert.equal(await prisma.pendingXpReversal.count({ where: { eventKey: key } }), 0, "no stale intents")
+      await masteryDrift(followed)
+    }
+
+    // FOLLOW — reactivation wins: two stale intents drain while the
+    // re-created follow is active; the reward survives both orders.
+    for (const order of ["AB", "BA"] as const) {
+      const { followed, key, row, want, doFollow, remove } = await followPair(`rww-${order}`)
+      await prisma.follow.create({ data: row })
+      assert.ok((await doFollow()).awarded)
+      const a = await remove()                              // U1 → A
+      await prisma.follow.create({ data: row })             // R1
+      const b = await remove()                              // U2 → B
+      await prisma.follow.create({ data: row })             // R2 — active at end
+      await doFollow()                                      // latest delayed award → duplicate
+      for (const id of order === "AB" ? [a, b] : [b, a]) {
+        assert.equal(await drainXpOne(id), true)
+      }
+      assert.equal(await prisma.follow.count({ where: row }), 1, "follow still active")
+      const led = await keyLedger(key)
+      assert.equal(led.orig!.reversedAt, null, "stale intents cannot strip the live grant")
+      assert.equal(led.descendants.filter((d) => d.type === "REVERSAL").length, 0, "no reversal rows")
+      assert.equal(await standingOf(followed), want, "reward intact")
+      assert.equal(await prisma.pendingXpReversal.count({ where: { eventKey: key } }), 0)
+      await masteryDrift(followed)
+    }
+
+    // FOLLOW — heal: a drain reverses while the interaction is gone,
+    // then the re-created follow's award reinstates against live state.
+    {
+      const { followed, key, row, want, doFollow, remove } = await followPair("heal")
+      await prisma.follow.create({ data: row })
+      assert.ok((await doFollow()).awarded)
+      const a = await remove()
+      assert.equal(await drainXpOne(a), true)               // drains while gone → reverses
+      assert.ok((await keyLedger(key)).orig!.reversedAt, "grant reversed")
+      await prisma.follow.create({ data: row })             // re-follow
+      const re = await doFollow()
+      assert.ok(re.awarded && re.reinstated, "re-follow reinstates while interaction is live")
+      const led = await keyLedger(key)
+      assert.equal(led.orig!.reversedAt, null)
+      assert.equal(await standingOf(followed), want)
+      assert.equal(await prisma.follow.count({ where: row }), 1)
+      await masteryDrift(followed)
+    }
+
+    // FOLLOW — stale award cannot reinstate: the delayed award arrives
+    // after its interaction was removed again and the grant reversed.
+    {
+      const { followed, key, row, doFollow, remove } = await followPair("stale")
+      await prisma.follow.create({ data: row })
+      assert.ok((await doFollow()).awarded)
+      const a = await remove()                              // U1 → A
+      await prisma.follow.create({ data: row })             // R — award still in flight
+      assert.equal(await drainXpOne(a), true)               // live follow → A completes, no reversal
+      const b = await remove()                              // U2 → B
+      assert.equal(await drainXpOne(b), true)               // gone → reverses the grant
+      const late = await doFollow()                         // delayed award — grant reversed, follow gone
+      assert.ok(!late.awarded && late.skippedReason === "inactive", "stale award must not reinstate")
+      assert.equal(await prisma.follow.count({ where: row }), 0)
+      assert.ok((await keyLedger(key)).orig!.reversedAt, "grant stays reversed")
+      assert.equal(await standingOf(followed), 0)
+      await masteryDrift(followed)
+    }
+
+    // FOLLOW — crash/retry: a stale RUNNING claim is reclaimed and
+    // reconciles against live state instead of being lost.
+    {
+      const { followed, key, row, want, doFollow, remove } = await followPair("retry")
+      await prisma.follow.create({ data: row })
+      assert.ok((await doFollow()).awarded)
+      const a = await remove()                              // U1 → A, drain "crashed" mid-claim
+      await prisma.pendingXpReversal.update({
+        where: { id: a },
+        data: { status: "RUNNING", claimedAt: new Date(Date.now() - 11 * 60 * 1000) },
+      })
+      await prisma.follow.create({ data: row })             // interaction re-created before retry
+      assert.equal(await drainXpOne(a), true, "stale claim reclaimed")
+      const led = await keyLedger(key)
+      assert.equal(led.orig!.reversedAt, null, "reversal healed — grant active for live follow")
+      assert.equal(await standingOf(followed), want)
+      assert.equal(await prisma.pendingXpReversal.count({ where: { eventKey: key } }), 0)
+      await masteryDrift(followed)
+    }
+
+    // FOLLOW — crash between reversal-commit and intent completion: the
+    // retried drain sees the live interaction and repairs the grant.
+    {
+      const { followed, key, row, want, doFollow, remove } = await followPair("heal2")
+      await prisma.follow.create({ data: row })
+      assert.ok((await doFollow()).awarded)
+      const a = await remove()                              // U1 → A pending
+      // Simulate a drain that committed the reversal then crashed
+      // before completing the intent.
+      await reverseProgressionByKey(key, "Unfollowed", undefined)
+      await prisma.follow.create({ data: row })             // re-follow while intent pending
+      assert.equal(await drainXpOne(a), true)
+      const led = await keyLedger(key)
+      assert.equal(led.orig!.reversedAt, null, "retried drain reinstated the live grant")
+      assert.equal(await standingOf(followed), want)
+      assert.equal(await prisma.pendingXpReversal.count({ where: { eventKey: key } }), 0)
+      await masteryDrift(followed)
+    }
+
+    // FOLLOW — concurrent add/remove: racing toggle requests must
+    // converge so reward state equals interaction state.
+    for (let i = 0; i < 3; i++) {
+      const { followed, key, row, doFollow, remove } = await followPair(`cc-${i}`)
+      await prisma.follow.create({ data: row })
+      await doFollow()
+      await Promise.all([
+        remove().catch(() => null),
+        (async () => {
+          await prisma.follow.create({ data: row }).catch(() => {})
+          await doFollow()
+        })(),
+      ])
+      await drainPendingXpReversals()
+      const followExists = (await prisma.follow.count({ where: row })) === 1
+      const led = await keyLedger(key)
+      const grantActive = !!led.orig && led.orig.reversedAt === null
+      assert.equal(grantActive, followExists, `race ${i}: reward must match interaction state`)
+      assert.equal(await prisma.pendingXpReversal.count({ where: { eventKey: key } }), 0)
+      await masteryDrift(followed)
+    }
+
+    // REACTION — removal wins (both drain orders).
+    for (const order of ["AB", "BA"] as const) {
+      const { author, key, row, doReact, remove } = await reactPair(`rmw-${order}`)
+      await prisma.reaction.create({ data: { type: "LIKE", ...row } })
+      assert.ok((await doReact()).awarded)
+      const a = await remove()
+      await prisma.reaction.create({ data: { type: "LIKE", ...row } })
+      const b = await remove()
+      const late = await doReact()
+      assert.ok(!late.awarded && late.skippedReason === "duplicate")
+      for (const id of order === "AB" ? [a, b] : [b, a]) {
+        assert.equal(await drainXpOne(id), true)
+      }
+      assert.equal(await prisma.reaction.count({ where: row }), 0)
+      const led = await keyLedger(key)
+      assert.ok(led.orig!.reversedAt, "reaction grant reversed")
+      assert.equal(await standingOf(author), 0)
+      assert.equal(await prisma.pendingXpReversal.count({ where: { eventKey: key } }), 0)
+      await masteryDrift(author)
+    }
+
+    // REACTION — reactivation wins (both drain orders).
+    for (const order of ["AB", "BA"] as const) {
+      const { author, key, row, want, doReact, remove } = await reactPair(`rww-${order}`)
+      await prisma.reaction.create({ data: { type: "LIKE", ...row } })
+      assert.ok((await doReact()).awarded)
+      const a = await remove()
+      await prisma.reaction.create({ data: { type: "LIKE", ...row } })
+      const b = await remove()
+      await prisma.reaction.create({ data: { type: "LIKE", ...row } })
+      await doReact()
+      for (const id of order === "AB" ? [a, b] : [b, a]) {
+        assert.equal(await drainXpOne(id), true)
+      }
+      assert.equal(await prisma.reaction.count({ where: row }), 1)
+      const led = await keyLedger(key)
+      assert.equal(led.orig!.reversedAt, null, "stale intents cannot strip the live reaction")
+      assert.equal(await standingOf(author), want)
+      assert.equal(await prisma.pendingXpReversal.count({ where: { eventKey: key } }), 0)
+      await masteryDrift(author)
+    }
+
+    // REACTION — stale award cannot reinstate after re-removal.
+    {
+      const { author, key, row, doReact, remove } = await reactPair("stale")
+      await prisma.reaction.create({ data: { type: "LIKE", ...row } })
+      await doReact()
+      const a = await remove()
+      await prisma.reaction.create({ data: { type: "LIKE", ...row } })
+      assert.equal(await drainXpOne(a), true)               // live reaction → A completes
+      const b = await remove()
+      assert.equal(await drainXpOne(b), true)               // gone → reverses
+      const late = await doReact()
+      assert.ok(!late.awarded && late.skippedReason === "inactive", "stale award must not reinstate")
+      assert.equal(await prisma.reaction.count({ where: row }), 0)
+      assert.ok((await keyLedger(key)).orig!.reversedAt)
+      assert.equal(await standingOf(author), 0)
+      await masteryDrift(author)
+    }
+
+    // Duplicate retries with NO pending reversal must not grow the
+    // ledger — no marker rows, no phantom events.
+    {
+      const { followed, key, row, doFollow } = await followPair("dup")
+      await prisma.follow.create({ data: row })
+      await doFollow()
+      for (let i = 0; i < 5; i++) await doFollow()
+      const led = await keyLedger(key)
+      assert.equal(led.keyedRows, 1, "repeated duplicates write zero ledger rows")
+      assert.equal(
+        await prisma.progressionEvent.count({ where: { userId: followed, type: "KEY_RESUMED" } }),
+        0,
+        "no resume-marker rows are written"
       )
     }
 
